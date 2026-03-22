@@ -1,281 +1,436 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
-  import { Settings, RotateCcw, SkipForward } from 'lucide-svelte';
+  import { RotateCcw, SkipForward } from 'lucide-svelte';
 
-  // ── Clock ──────────────────────────────────────────────────────────────────
-  let clockStr = '';
-  function updateClock() {
-    const now = new Date();
-    const h = String(now.getHours()).padStart(2, '0');
-    const m = String(now.getMinutes()).padStart(2, '0');
-    clockStr = `${h}:${m}`;
-  }
-
-  // ── Settings ───────────────────────────────────────────────────────────────
-  let workMins  = 25;
-  let breakMins = 5;
-  let longMins  = 15;
-  let showSettings = false;
-
-  // ── Timer state ────────────────────────────────────────────────────────────
-  type Phase = 'work' | 'break' | 'longBreak';
-
-  let phase: Phase = 'work';
-  let running  = false;
-  let secondsLeft = workMins * 60;
-  let pomodorosDone = 0;
-  let interval: ReturnType<typeof setInterval> | null = null;
-
-  // SVG progress ring — r=28, circumference = 2π*28 ≈ 175.9
-  const R = 28;
-  const CIRC = 2 * Math.PI * R;
-
-  $: totalSeconds = phase === 'work' ? workMins * 60
-                  : phase === 'break' ? breakMins * 60
-                  : longMins * 60;
-  $: progress     = secondsLeft / totalSeconds;        // 1 → 0
-  $: dashOffset   = CIRC * (1 - progress);
-
-  $: mins = String(Math.floor(secondsLeft / 60)).padStart(2, '0');
-  $: secs = String(secondsLeft % 60).padStart(2, '0');
-
-  const PHASE_LABELS: Record<Phase, string> = {
-    work:      'TRABAJO',
-    break:     'DESCANSO',
-    longBreak: 'DESCANSO LARGO',
+  // ── Timezone ───────────────────────────────────────────────────────────────
+  const TZ_MAP: Record<string, string> = {
+    'chile':       'America/Santiago',
+    'españa':      'Europe/Madrid',
+    'mexico':      'America/Mexico_City',
+    'méxico':      'America/Mexico_City',
+    'argentina':   'America/Argentina/Buenos_Aires',
+    'colombia':    'America/Bogota',
+    'peru':        'America/Lima',
+    'perú':        'America/Lima',
+    'venezuela':   'America/Caracas',
+    'ecuador':     'America/Guayaquil',
+    'uruguay':     'America/Montevideo',
+    'brasil':      'America/Sao_Paulo',
+    'brazil':      'America/Sao_Paulo',
+    'usa':         'America/New_York',
+    'eeuu':        'America/New_York',
+    'uk':          'Europe/London',
+    'alemania':    'Europe/Berlin',
+    'francia':     'Europe/Paris',
+    'japon':       'Asia/Tokyo',
+    'japón':       'Asia/Tokyo',
+    'china':       'Asia/Shanghai',
+    'australia':   'Australia/Sydney',
+    'utc':         'UTC',
   };
 
-  function tick() {
-    if (secondsLeft > 0) {
-      secondsLeft--;
-    } else {
-      advance();
+  const TZ_PRESETS = [
+    ['🇨🇱 Chile',      'America/Santiago'],
+    ['🇪🇸 España',     'Europe/Madrid'],
+    ['🇲🇽 México',     'America/Mexico_City'],
+    ['🇦🇷 Argentina',  'America/Argentina/Buenos_Aires'],
+    ['🇨🇴 Colombia',   'America/Bogota'],
+    ['🇵🇪 Perú',       'America/Lima'],
+    ['🇧🇷 Brasil',     'America/Sao_Paulo'],
+    ['🌐 UTC',         'UTC'],
+  ] as const;
+
+  let timezone: string = 'UTC';
+  let showTzPicker = false;
+  let tzInput = '';
+  let tzError = '';
+
+  function initTimezone() {
+    const saved = localStorage.getItem('joidy-timezone');
+    if (saved) { timezone = saved; return; }
+    try {
+      timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    } catch { timezone = 'UTC'; }
+  }
+
+  function setTimezone(tz: string) {
+    try {
+      new Intl.DateTimeFormat(undefined, { timeZone: tz });
+      timezone = tz;
+      localStorage.setItem('joidy-timezone', tz);
+      showTzPicker = false;
+      tzInput = '';
+      tzError = '';
+      updateClock();
+    } catch {
+      tzError = 'Timezone inválido';
     }
   }
 
+  function applyTzInput() {
+    const raw = tzInput.trim().toLowerCase();
+    const mapped = TZ_MAP[raw];
+    setTimezone(mapped ?? tzInput.trim());
+  }
+
+  // ── Clock ──────────────────────────────────────────────────────────────────
+  let clockStr = '--:--:--';
+
+  function updateClock() {
+    try {
+      clockStr = new Date().toLocaleTimeString('es', {
+        timeZone: timezone,
+        hour:     '2-digit',
+        minute:   '2-digit',
+        second:   '2-digit',
+        hour12:   false,
+      });
+    } catch { clockStr = '--:--:--'; }
+  }
+
+  // ── Timer ──────────────────────────────────────────────────────────────────
+  type Phase = 'work' | 'break' | 'longBreak';
+
+  // Duration presets cycled with click
+  const WORK_PRESETS  = [25, 50, 90, 15, 5];
+  const BREAK_PRESETS = [5, 10, 15, 3];
+  let workIdx  = 0;
+  let breakIdx = 0;
+  $: workMins  = WORK_PRESETS[workIdx];
+  $: breakMins = BREAK_PRESETS[breakIdx];
+  const longMins = 15;
+
+  let phase: Phase = 'work';
+  let running = false;
+  let secondsLeft = 25 * 60;
+  let pomodorosDone = 0;
+  let clockInterval:  ReturnType<typeof setInterval> | null = null;
+  let timerInterval:  ReturnType<typeof setInterval> | null = null;
+
+  // Ring geometry — r=58, circ=2π×58≈364.4
+  const R    = 58;
+  const CIRC = 2 * Math.PI * R;
+
+  $: totalSec    = phase === 'work' ? workMins * 60 : phase === 'break' ? breakMins * 60 : longMins * 60;
+  $: progress    = secondsLeft / totalSec;
+  $: dashOffset  = CIRC * (1 - progress);
+  $: ringColor   = phase === 'work' ? 'var(--xp)' : 'var(--success)';
+  $: mins        = String(Math.floor(secondsLeft / 60)).padStart(2, '0');
+  $: secs        = String(secondsLeft % 60).padStart(2, '0');
+
+  const PHASE_LABEL: Record<Phase, string> = {
+    work: 'TRABAJO', break: 'DESCANSO', longBreak: 'DESCANSO LARGO',
+  };
+
+  function tick() {
+    if (secondsLeft > 0) { secondsLeft--; }
+    else { advance(); }
+  }
+
   function advance() {
-    stop();
+    stopTimer();
     if (phase === 'work') {
       pomodorosDone++;
       phase = pomodorosDone % 4 === 0 ? 'longBreak' : 'break';
     } else {
       phase = 'work';
     }
-    secondsLeft = totalSeconds;
-    // Auto-start next phase
-    start();
+    secondsLeft = totalSec;
+    startTimer();
   }
 
-  function start() {
-    if (interval) return;
-    running  = true;
-    interval = setInterval(tick, 1000);
+  function startTimer() {
+    if (timerInterval) return;
+    running = true;
+    timerInterval = setInterval(tick, 1000);
   }
 
-  function stop() {
-    if (interval) { clearInterval(interval); interval = null; }
+  function stopTimer() {
+    if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
     running = false;
   }
 
-  function toggle() { running ? stop() : start(); }
+  function toggle() { running ? stopTimer() : startTimer(); }
 
   function reset() {
-    stop();
-    phase       = 'work';
+    stopTimer();
+    phase = 'work';
     secondsLeft = workMins * 60;
     pomodorosDone = 0;
   }
 
   function skip() { advance(); }
 
-  // Rebuild timer when settings change (only if stopped)
-  function applySettings() {
-    if (!running) secondsLeft = (phase === 'work' ? workMins : phase === 'break' ? breakMins : longMins) * 60;
-    showSettings = false;
+  function cycleWork() {
+    if (running) return;
+    workIdx = (workIdx + 1) % WORK_PRESETS.length;
+    secondsLeft = workMins * 60;
   }
 
-  // Clock tick every 30s is enough
-  let clockInterval: ReturnType<typeof setInterval>;
+  function cycleBreak() {
+    if (running) return;
+    breakIdx = (breakIdx + 1) % BREAK_PRESETS.length;
+  }
+
   onMount(() => {
+    initTimezone();
     updateClock();
-    clockInterval = setInterval(updateClock, 30000);
+    clockInterval = setInterval(updateClock, 1000);
+    secondsLeft = workMins * 60;
   });
 
   onDestroy(() => {
-    stop();
-    clearInterval(clockInterval);
+    stopTimer();
+    if (clockInterval) clearInterval(clockInterval);
   });
 </script>
 
-<div class="pomodoro-widget">
-  <!-- Digital clock -->
-  <div class="clock mono">{clockStr}</div>
+<!-- svelte-ignore a11y-no-static-element-interactions -->
+<div class="pomodoro" on:keydown={(e) => e.key === 'Escape' && (showTzPicker = false)}>
 
-  <!-- Ring + countdown -->
-  <div class="ring-area">
-    <svg width="80" height="80" viewBox="0 0 80 80" class="ring-svg">
+  <!-- Clock row — click to pick timezone -->
+  <div class="clock-row">
+    {#if showTzPicker}
+      <div class="tz-picker">
+        <input
+          class="tz-input mono"
+          bind:value={tzInput}
+          placeholder="Chile, Europe/Madrid, UTC..."
+          on:keydown={(e) => e.key === 'Enter' && applyTzInput()}
+          autofocus
+        />
+        {#if tzError}<span class="tz-error">{tzError}</span>{/if}
+        <div class="tz-presets">
+          {#each TZ_PRESETS as [label, tz]}
+            <button class="tz-preset mono" on:click={() => setTimezone(tz)}>{label}</button>
+          {/each}
+        </div>
+        <button class="tz-close" on:click={() => showTzPicker = false}>✕</button>
+      </div>
+    {:else}
+      <!-- svelte-ignore a11y-click-events-have-key-events -->
+      <span class="clock mono" on:click={() => showTzPicker = true} title="Cambiar zona horaria">
+        {clockStr}
+      </span>
+    {/if}
+  </div>
+
+  <!-- Big ring -->
+  <div class="ring-wrap">
+    <svg width="150" height="150" viewBox="0 0 150 150" class="ring-svg">
       <!-- Background track -->
-      <circle cx="40" cy="40" r={R}
-        stroke="var(--border)" stroke-width="3" fill="none"/>
+      <circle cx="75" cy="75" r={R} stroke="var(--border)" stroke-width="4" fill="none"/>
       <!-- Progress arc -->
-      <circle cx="40" cy="40" r={R}
-        stroke={phase === 'work' ? 'var(--xp)' : 'var(--success)'}
-        stroke-width="3"
+      <circle cx="75" cy="75" r={R}
+        stroke={ringColor}
+        stroke-width="4"
         fill="none"
         stroke-linecap="round"
         stroke-dasharray={CIRC}
         stroke-dashoffset={dashOffset}
-        transform="rotate(-90 40 40)"
-        style="transition: stroke-dashoffset 900ms linear, stroke 400ms ease;"
+        transform="rotate(-90 75 75)"
+        style="transition: stroke-dashoffset 950ms linear, stroke 400ms ease;"
       />
-      <!-- Pomo dots (up to 4) -->
-      {#each Array(4) as _, i}
-        <circle
-          cx={40 + 22 * Math.cos((i * 90 - 45) * Math.PI / 180)}
-          cy={40 + 22 * Math.sin((i * 90 - 45) * Math.PI / 180)}
-          r="2"
-          fill={i < pomodorosDone % 4 ? 'var(--xp)' : 'var(--border)'}
-          style="transition: fill 300ms ease;"
-        />
-      {/each}
     </svg>
 
-    <div class="countdown-overlay">
-      <span class="countdown mono">{mins}:{secs}</span>
-      <span class="phase-label mono">{PHASE_LABELS[phase]}</span>
+    <!-- Overlay: timer + phase + dots -->
+    <div class="ring-overlay">
+      <span class="timer mono">{mins}:{secs}</span>
+      <span class="phase-lbl mono">{PHASE_LABEL[phase]}</span>
+      <div class="pomo-dots">
+        {#each Array(4) as _, i}
+          <span class="pdot" class:lit={i < pomodorosDone % 4}></span>
+        {/each}
+      </div>
     </div>
   </div>
 
-  <!-- Controls -->
-  <div class="controls">
-    <button
-      class="ctrl-btn primary"
-      class:active={running}
-      on:click={toggle}
-    >
+  <!-- Controls + duration hints — two compact rows -->
+  <div class="controls-row">
+    <button class="ctrl-main" class:active={running} on:click={toggle}>
       {running ? 'Pausar' : 'Iniciar'}
     </button>
+    <button class="ctrl-icon" on:click={reset} title="Reiniciar"><RotateCcw size={11}/></button>
+    <button class="ctrl-icon" on:click={skip}  title="Saltar"><SkipForward  size={11}/></button>
+  </div>
 
-    <button class="ctrl-icon" on:click={reset} title="Reiniciar">
-      <RotateCcw size={12} />
+  <div class="duration-row">
+    <button class="dur-chip mono" on:click={cycleWork}  title="Cambiar duración trabajo">
+      {workMins}min trabajo
     </button>
-
-    <button class="ctrl-icon" on:click={skip} title="Saltar fase">
-      <SkipForward size={12} />
-    </button>
-
-    <button
-      class="ctrl-icon"
-      class:active={showSettings}
-      on:click={() => showSettings = !showSettings}
-      title="Configurar"
-    >
-      <Settings size={12} />
+    <span class="dur-sep">·</span>
+    <button class="dur-chip mono" on:click={cycleBreak} title="Cambiar descanso">
+      {breakMins}min descanso
     </button>
   </div>
 
-  <!-- Settings panel -->
-  {#if showSettings}
-    <div class="settings-panel">
-      <label class="setting-row">
-        <span class="mono">trabajo</span>
-        <input type="number" min="1" max="60" bind:value={workMins} class="num-input mono"/>
-        <span class="mono unit">min</span>
-      </label>
-      <label class="setting-row">
-        <span class="mono">descanso</span>
-        <input type="number" min="1" max="30" bind:value={breakMins} class="num-input mono"/>
-        <span class="mono unit">min</span>
-      </label>
-      <label class="setting-row">
-        <span class="mono">largo</span>
-        <input type="number" min="5" max="60" bind:value={longMins} class="num-input mono"/>
-        <span class="mono unit">min</span>
-      </label>
-      <button class="apply-btn mono" on:click={applySettings}>aplicar</button>
-    </div>
-  {/if}
 </div>
 
 <style>
-  .pomodoro-widget {
+  .pomodoro {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 8px;
-    padding: 12px 0 8px;
+    gap: 6px;
+    padding: 14px 0 10px;
     border-top: 1px solid var(--border-light, var(--border));
     width: 100%;
   }
 
   /* ── Clock ── */
+  .clock-row {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    min-height: 28px;
+    align-items: center;
+  }
+
   .clock {
-    font-size: 28px;
+    font-size: 22px;
     font-weight: 300;
     color: var(--text-primary);
-    letter-spacing: 0.06em;
-    line-height: 1;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    transition: color var(--t-fast);
+  }
+  .clock:hover { color: var(--text-secondary); }
+
+  /* ── Timezone picker ── */
+  .tz-picker {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 0 12px;
+    position: relative;
+  }
+
+  .tz-input {
+    width: 100%;
+    background: var(--elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: 5px 10px;
+    font-size: 12px;
+    color: var(--text-primary);
+    outline: none;
+    text-align: center;
+  }
+  .tz-input:focus { border-color: var(--text-muted); }
+  .tz-input::placeholder { color: var(--text-muted); }
+
+  .tz-error { font-size: 10px; color: var(--error); font-family: var(--font-mono); }
+
+  .tz-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    justify-content: center;
+  }
+
+  .tz-preset {
+    padding: 2px 7px;
+    font-size: 10px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all var(--t-fast);
+  }
+  .tz-preset:hover { background: var(--elevated); color: var(--text-primary); }
+
+  .tz-close {
+    position: absolute;
+    top: 0;
+    right: 12px;
+    background: none;
+    border: none;
+    font-size: 12px;
+    color: var(--text-muted);
+    cursor: pointer;
   }
 
   /* ── Ring ── */
-  .ring-area {
+  .ring-wrap {
     position: relative;
-    width: 80px;
-    height: 80px;
+    width: 150px;
+    height: 150px;
+    flex-shrink: 0;
   }
 
   .ring-svg { display: block; }
 
-  .countdown-overlay {
+  .ring-overlay {
     position: absolute;
     inset: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 1px;
+    gap: 3px;
   }
 
-  .countdown {
-    font-size: 15px;
+  .timer {
+    font-size: 30px;
+    font-weight: 300;
     color: var(--text-primary);
     line-height: 1;
+    letter-spacing: 0.04em;
   }
 
-  .phase-label {
-    font-size: 7px;
+  .phase-lbl {
+    font-size: 8px;
     color: var(--text-muted);
-    letter-spacing: 0.06em;
+    letter-spacing: 0.1em;
   }
+
+  .pomo-dots {
+    display: flex;
+    gap: 5px;
+    margin-top: 2px;
+  }
+
+  .pdot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--border);
+    transition: background var(--t-normal);
+  }
+  .pdot.lit { background: var(--xp); }
 
   /* ── Controls ── */
-  .controls {
+  .controls-row {
     display: flex;
     align-items: center;
     gap: 6px;
   }
 
-  .ctrl-btn {
-    padding: 4px 14px;
-    font-size: 11px;
+  .ctrl-main {
+    padding: 5px 20px;
+    font-size: 12px;
     font-family: var(--font-sans);
-    border-radius: var(--r);
     border: 1px solid var(--border);
+    border-radius: var(--r);
     background: transparent;
     color: var(--text-secondary);
     cursor: pointer;
     transition: all var(--t-fast);
+    min-width: 80px;
   }
-  .ctrl-btn:hover  { background: var(--elevated); color: var(--text-primary); }
-  .ctrl-btn.active { border-color: var(--xp); color: var(--xp); }
-  .ctrl-btn.active:hover { background: color-mix(in srgb, var(--xp) 10%, transparent); }
+  .ctrl-main:hover  { background: var(--elevated); color: var(--text-primary); }
+  .ctrl-main.active { border-color: var(--xp); color: var(--xp); }
+  .ctrl-main.active:hover { background: color-mix(in srgb, var(--xp) 10%, transparent); }
 
   .ctrl-icon {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 26px;
-    height: 26px;
+    width: 28px;
+    height: 28px;
     background: transparent;
     border: 1px solid var(--border);
     border-radius: var(--r);
@@ -283,57 +438,29 @@
     cursor: pointer;
     transition: all var(--t-fast);
   }
-  .ctrl-icon:hover  { color: var(--text-secondary); background: var(--elevated); }
-  .ctrl-icon.active { border-color: var(--text-muted); color: var(--text-secondary); }
+  .ctrl-icon:hover { color: var(--text-secondary); background: var(--elevated); }
 
-  /* ── Settings panel ── */
-  .settings-panel {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    padding: 10px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--r);
-    width: 160px;
-  }
-
-  .setting-row {
+  /* ── Duration hints ── */
+  .duration-row {
     display: flex;
     align-items: center;
     gap: 6px;
-    font-size: 10px;
-    color: var(--text-secondary);
-    cursor: default;
   }
 
-  .setting-row span:first-child { flex: 1; }
-
-  .num-input {
-    width: 36px;
-    background: var(--elevated);
-    border: 1px solid var(--border);
-    border-radius: 2px;
-    padding: 2px 4px;
-    font-size: 11px;
-    color: var(--text-primary);
-    text-align: right;
-    outline: none;
-  }
-  .num-input:focus { border-color: var(--text-muted); }
-
-  .unit { color: var(--text-muted); }
-
-  .apply-btn {
-    align-self: flex-end;
-    padding: 3px 10px;
-    font-size: 10px;
-    background: var(--elevated);
-    border: 1px solid var(--border);
-    border-radius: var(--r);
-    color: var(--text-secondary);
+  .dur-chip {
+    font-size: 9px;
+    color: var(--text-muted);
+    background: transparent;
+    border: none;
     cursor: pointer;
-    transition: all var(--t-fast);
+    padding: 2px 4px;
+    border-radius: 2px;
+    transition: color var(--t-fast);
   }
-  .apply-btn:hover { border-color: var(--text-muted); color: var(--text-primary); }
+  .dur-chip:hover { color: var(--text-secondary); background: var(--elevated); }
+
+  .dur-sep {
+    font-size: 9px;
+    color: var(--text-disabled, var(--border));
+  }
 </style>
