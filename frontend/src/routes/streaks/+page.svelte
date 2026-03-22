@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { fly, fade, slide } from 'svelte/transition';
+  import { flip } from 'svelte/animate';
   import { Plus, Pencil, Trash2, Check, X, Flame } from 'lucide-svelte';
   import { api, type PersonalStreak } from '$lib/api';
 
@@ -35,6 +37,9 @@
     }
   });
 
+  // ── In-flight tracking (per-card loading state) ────────────────────────────
+  let busy = new Set<number>();
+
   // ── Actions ────────────────────────────────────────────────────────────────
   async function createStreak() {
     if (!newName.trim()) return;
@@ -50,13 +55,25 @@
   }
 
   async function checkin(id: number) {
-    const updated = await api.personalStreaks.checkin(id);
-    streaks = streaks.map(s => s.id === id ? updated : s);
+    if (busy.has(id)) return;
+    busy = new Set(busy).add(id);
+    try {
+      const updated = await api.personalStreaks.checkin(id);
+      streaks = streaks.map(s => s.id === id ? updated : s);
+    } finally {
+      busy.delete(id); busy = new Set(busy);
+    }
   }
 
   async function undo(id: number) {
-    const updated = await api.personalStreaks.undo(id);
-    streaks = streaks.map(s => s.id === id ? updated : s);
+    if (busy.has(id)) return;
+    busy = new Set(busy).add(id);
+    try {
+      const updated = await api.personalStreaks.undo(id);
+      streaks = streaks.map(s => s.id === id ? updated : s);
+    } finally {
+      busy.delete(id); busy = new Set(busy);
+    }
   }
 
   async function deleteStreak(id: number) {
@@ -117,7 +134,7 @@
 
   <!-- Create form -->
   {#if showCreate}
-    <div class="create-form">
+    <div class="create-form" transition:slide={{ duration: 200 }}>
       <div class="form-row">
         <div class="emoji-display">{newEmoji}</div>
         <input
@@ -166,8 +183,13 @@
     {#if pending.length > 0}
       <div class="section-label mono">pendientes hoy — {pending.length}</div>
       <div class="streaks-grid">
-        {#each pending as streak (streak.id)}
-          <div class="streak-card at-risk">
+        {#each pending as streak, i (streak.id)}
+          <div
+            class="streak-card at-risk"
+            animate:flip={{ duration: 240 }}
+            in:fly={{ y: 10, duration: 180, delay: i * 40 }}
+            out:fade={{ duration: 100 }}
+          >
             {#if editingId === streak.id}
               <!-- Edit mode -->
               <div class="edit-form">
@@ -201,7 +223,9 @@
               </div>
 
               <div class="streak-count-row">
-                <span class="streak-number">{streak.current_streak}</span>
+                {#key streak.current_streak}
+                  <span class="streak-number" in:fly={{ y: -10, duration: 200 }}>{streak.current_streak}</span>
+                {/key}
                 <div class="streak-count-meta">
                   <span class="streak-unit">días</span>
                   {#if streak.longest_streak > streak.current_streak}
@@ -211,14 +235,28 @@
               </div>
 
               <div class="dots-row">
-                {#each last14(streak) as day}
-                  <span class="dot" class:filled={day.checked} title={day.date}></span>
+                {#each last14(streak) as day, di}
+                  <span
+                    class="dot"
+                    class:filled={day.checked}
+                    style="transition-delay: {di * 15}ms"
+                    title={day.date}
+                  ></span>
                 {/each}
               </div>
 
-              <button class="checkin-btn" on:click={() => checkin(streak.id)}>
-                <Check size={12} />
-                Marcar hoy
+              <button
+                class="checkin-btn"
+                class:loading={busy.has(streak.id)}
+                on:click={() => checkin(streak.id)}
+                disabled={busy.has(streak.id)}
+              >
+                {#if busy.has(streak.id)}
+                  <span class="spinner"></span>
+                {:else}
+                  <Check size={12} />
+                  Marcar hoy
+                {/if}
               </button>
             {/if}
           </div>
@@ -230,8 +268,13 @@
     {#if done.length > 0}
       <div class="section-label mono" style="margin-top: {pending.length > 0 ? '24px' : '0'};">completadas hoy — {done.length}</div>
       <div class="streaks-grid">
-        {#each done as streak (streak.id)}
-          <div class="streak-card done">
+        {#each done as streak, i (streak.id)}
+          <div
+            class="streak-card done"
+            animate:flip={{ duration: 240 }}
+            in:fly={{ y: 10, duration: 180, delay: i * 40 }}
+            out:fade={{ duration: 100 }}
+          >
             {#if editingId === streak.id}
               <div class="edit-form">
                 <div class="form-row">
@@ -264,7 +307,9 @@
               </div>
 
               <div class="streak-count-row">
-                <span class="streak-number">{streak.current_streak}</span>
+                {#key streak.current_streak}
+                  <span class="streak-number" in:fly={{ y: -10, duration: 200 }}>{streak.current_streak}</span>
+                {/key}
                 <div class="streak-count-meta">
                   <span class="streak-unit">días</span>
                   {#if streak.longest_streak > streak.current_streak}
@@ -274,14 +319,28 @@
               </div>
 
               <div class="dots-row">
-                {#each last14(streak) as day}
-                  <span class="dot" class:filled={day.checked} title={day.date}></span>
+                {#each last14(streak) as day, di}
+                  <span
+                    class="dot"
+                    class:filled={day.checked}
+                    style="transition-delay: {di * 15}ms"
+                    title={day.date}
+                  ></span>
                 {/each}
               </div>
 
-              <button class="undo-btn" on:click={() => undo(streak.id)}>
-                <X size={11} />
-                Deshacer
+              <button
+                class="undo-btn"
+                class:loading={busy.has(streak.id)}
+                on:click={() => undo(streak.id)}
+                disabled={busy.has(streak.id)}
+              >
+                {#if busy.has(streak.id)}
+                  <span class="spinner"></span>
+                {:else}
+                  <X size={11} />
+                  Deshacer
+                {/if}
               </button>
             {/if}
           </div>
@@ -538,6 +597,7 @@
     display: flex;
     align-items: baseline;
     gap: 6px;
+    overflow: hidden;   /* clips the fly-in on number change */
   }
 
   .streak-number {
@@ -673,5 +733,44 @@
     border-radius: var(--r);
     color: var(--error);
     font-size: 12px;
+  }
+
+  /* ── Button press feel ── */
+  .checkin-btn:active:not(:disabled) { transform: scale(0.97); }
+  .undo-btn:active:not(:disabled)    { transform: scale(0.97); }
+  .new-btn:active                    { transform: scale(0.97); }
+
+  /* ── Loading state ── */
+  .checkin-btn.loading,
+  .undo-btn.loading {
+    opacity: 0.6;
+    cursor: default;
+  }
+
+  /* ── Spinner ── */
+  .spinner {
+    width: 10px;
+    height: 10px;
+    border: 1.5px solid currentColor;
+    border-top-color: transparent;
+    border-radius: 50%;
+    display: inline-block;
+    animation: spin 0.6s linear infinite;
+  }
+
+  /* ── At-risk card pulse on mount ── */
+  .streak-card.at-risk {
+    animation: card-appear 0.3s ease-out both;
+  }
+
+  /* ── Keyframes ── */
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  @keyframes card-appear {
+    from { box-shadow: 0 0 0 0 color-mix(in srgb, var(--xp) 30%, transparent); }
+    50%  { box-shadow: 0 0 0 4px color-mix(in srgb, var(--xp) 15%, transparent); }
+    to   { box-shadow: 0 0 0 0 transparent; }
   }
 </style>
