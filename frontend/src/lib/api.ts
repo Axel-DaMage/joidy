@@ -94,7 +94,7 @@ export interface AISuggestion { tag: string; confidence: number; is_new: boolean
 
 export const api = {
   notes: {
-    list:   (tag?: string) => req<Note[]>('GET', `/notes/${tag ? `?tag=${encodeURIComponent(tag)}` : ''}`),
+    list:   (tag?: string, limit = 1000) => req<Note[]>('GET', `/notes/?limit=${limit}${tag ? `&tag=${encodeURIComponent(tag)}` : ''}`),
     get:    (id: number)   => req<Note>('GET', `/notes/${id}`),
     create: (data: { title: string; content: string; tags: string[] }) =>
       req<Note & { gamification: GamificationResult }>('POST', '/notes/', data),

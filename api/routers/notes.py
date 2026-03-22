@@ -78,7 +78,7 @@ async def _trigger_embedding(note_id: int, content: str):
 @router.get("/")
 def list_notes(
     skip: int = 0,
-    limit: int = 50,
+    limit: int = 1000,
     tag: Optional[str] = None,
     source_path: Optional[str] = None,
     db: Session = Depends(get_db),
