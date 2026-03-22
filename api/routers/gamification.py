@@ -20,8 +20,17 @@ def get_stats(db: Session = Depends(get_db)):
         db.commit()
         db.refresh(stats)
 
-    stage_name = PLANT_STAGES[stats.plant_stage][1] if stats.plant_stage < len(PLANT_STAGES) else "tree"
+    stage_name = PLANT_STAGES[stats.plant_stage][1] if stats.plant_stage < len(PLANT_STAGES) else PLANT_STAGES[-1][1]
     next_stage_xp = PLANT_STAGES[stats.plant_stage + 1][0] if stats.plant_stage + 1 < len(PLANT_STAGES) else None
+
+    # Heal: active today but streak still at 0 (written by old buggy engine)
+    from datetime import date as _date
+    if stats.current_streak == 0 and stats.last_activity_date == _date.today():
+        stats.current_streak = 1
+        if stats.longest_streak < 1:
+            stats.longest_streak = 1
+        db.commit()
+        db.refresh(stats)
 
     return {
         "total_xp": stats.total_xp,

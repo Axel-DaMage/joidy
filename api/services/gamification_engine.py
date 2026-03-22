@@ -31,13 +31,13 @@ XP_TABLE = {
 }
 
 PLANT_STAGES = [
-    (0,     "seed"),
-    (300,   "sprout"),
-    (1200,  "seedling"),
-    (4000,  "young"),
-    (10000, "mature"),
-    (25000, "flowering"),
-    (60000, "tree"),
+    (0,     "semilla"),
+    (300,   "brote"),
+    (1200,  "plantón"),
+    (4000,  "joven"),
+    (10000, "madura"),
+    (25000, "floreciendo"),
+    (60000, "árbol"),
 ]
 
 STREAK_MILESTONES = {7, 30, 100, 365}
@@ -79,7 +79,10 @@ def _compute_streak(db: Session, stats: UserStats) -> tuple[int, bool]:
     today = date.today()
     last = stats.last_activity_date
 
-    if last is None or last == today:
+    if last is None:
+        return 1, True  # First-ever activity: start streak at 1
+
+    if last == today:
         return stats.current_streak, False
 
     days_since = (today - last).days
@@ -110,6 +113,13 @@ def process_event(
 
     # daily_activity is idempotent — only award XP once per day
     if event_type == "daily_activity" and stats.last_activity_date == today:
+        # Heal: if active today but streak is 0, it was written by the old buggy engine
+        if stats.current_streak == 0:
+            stats.current_streak = 1
+            if stats.longest_streak < 1:
+                stats.longest_streak = 1
+            db.commit()
+            db.refresh(stats)
         stage_idx, stage_name = _compute_plant_stage(stats.total_xp)
         return GamificationResult(
             xp_awarded=0,

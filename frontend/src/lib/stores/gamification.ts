@@ -5,20 +5,21 @@ export const totalXP       = writable(0);
 export const currentStreak = writable(0);
 export const longestStreak = writable(0);
 export const plantStage     = writable(0);
-export const plantStageName = writable<string>('seed');
+export const plantStageName = writable<string>('semilla');
 export const nextStageXP    = writable<number | null>(100);
 export const xpToNextStage  = writable<number | null>(100);
 export const lastActivity   = writable<string | null>(null);
 
 export const xpEvents = writable<{ amount: number; id: string; x?: number; y?: number }[]>([]);
 
+// Must match PLANT_STAGES thresholds in api/services/gamification_engine.py
+const STAGE_THRESHOLDS = [0, 300, 1200, 4000, 10000, 25000, 60000];
+
 export const plantProgress = derived(
-  [totalXP, nextStageXP],
-  ([$xp, $next]) => {
+  [totalXP, nextStageXP, plantStage],
+  ([$xp, $next, $stage]) => {
     if ($next === null) return 100;
-    const STAGES = [0, 100, 500, 1500, 4000, 10000, 25000];
-    const stage = get(plantStage);
-    const prev = STAGES[stage] ?? 0;
+    const prev = STAGE_THRESHOLDS[$stage] ?? 0;
     const range = ($next - prev) || 1;
     return Math.min(100, Math.round((($xp - prev) / range) * 100));
   }
