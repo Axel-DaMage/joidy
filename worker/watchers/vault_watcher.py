@@ -79,7 +79,7 @@ async def import_or_update_note(filepath: Path, client: httpx.AsyncClient):
         payload = {"title": title, "content": content, "tags": tags, "source": "obsidian", "source_path": str(filepath)}
 
         if existing:
-            await client.put(f"{settings.api_url}/notes/{existing['id']}", json={"title": title, "content": content, "tags": tags, "source_path": str(filepath)}, timeout=10.0)
+            await client.put(f"{settings.api_url}/notes/{existing['id']}", json={"title": title, "content": content, "tags": tags, "source": "obsidian", "source_path": str(filepath)}, timeout=10.0)
         else:
             await client.post(f"{settings.api_url}/notes/", json=payload, timeout=10.0)
 

@@ -1,5 +1,6 @@
 """Endpoints for triggering _joidy/ vault file writes."""
 
+from datetime import date
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
@@ -12,7 +13,7 @@ router = APIRouter(prefix="/vault", tags=["vault"])
 @router.post("/write-daily")
 def trigger_write_daily(db: Session = Depends(get_db)):
     ok = write_daily(db)
-    return {"status": "ok" if ok else "no_vault", "file": "_joidy/daily/today.md"}
+    return {"status": "ok" if ok else "no_vault", "file": f"_joidy/daily/{date.today().isoformat()}.md"}
 
 
 @router.post("/write-objectives")

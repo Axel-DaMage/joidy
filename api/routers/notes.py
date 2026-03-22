@@ -27,6 +27,7 @@ class NoteUpdate(BaseModel):
     content: Optional[str] = None
     tags: Optional[list[str]] = None
     source_path: Optional[str] = None
+    source: Optional[str] = None
 
 
 class NoteResponse(BaseModel):
@@ -141,6 +142,8 @@ async def update_note(
         note.title = data.title
     if data.source_path is not None:
         note.source_path = data.source_path
+    if data.source is not None:
+        note.source = data.source
     if data.content is not None:
         old_len = len(note.content)
         note.content = data.content
@@ -148,6 +151,7 @@ async def update_note(
             gami = process_event(db, "note_edited", {"note_id": note.id})
     if data.tags is not None:
         db.query(NoteTag).filter(NoteTag.note_id == note_id).delete()
+        db.flush()  # Ensure delete completes before inserting new tags (FK + PK conflict prevention)
         for tag_name in data.tags:
             tag = _get_or_create_tag(db, tag_name)
             db.add(NoteTag(note_id=note.id, tag_id=tag.id, source="manual"))

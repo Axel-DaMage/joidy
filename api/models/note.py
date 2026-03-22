@@ -30,7 +30,7 @@ class Tag(Base):
     color: Mapped[str] = mapped_column(String(20), default="#888888")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
-    notes: Mapped[list["NoteTag"]] = relationship("NoteTag", back_populates="tag")
+    notes: Mapped[list["NoteTag"]] = relationship("NoteTag", back_populates="tag", cascade="all, delete-orphan")
     children: Mapped[list["Tag"]] = relationship("Tag", back_populates="parent")
     parent: Mapped["Tag | None"] = relationship("Tag", back_populates="children", remote_side="Tag.id")
 
@@ -38,8 +38,8 @@ class Tag(Base):
 class NoteTag(Base):
     __tablename__ = "note_tags"
 
-    note_id: Mapped[int] = mapped_column(Integer, ForeignKey("notes.id"), primary_key=True)
-    tag_id: Mapped[int] = mapped_column(Integer, ForeignKey("tags.id"), primary_key=True)
+    note_id: Mapped[int] = mapped_column(Integer, ForeignKey("notes.id", ondelete="CASCADE"), primary_key=True)
+    tag_id: Mapped[int] = mapped_column(Integer, ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True)
     confidence: Mapped[float] = mapped_column(default=1.0)  # 1.0 = manual, <1.0 = AI suggested
     source: Mapped[str] = mapped_column(String(20), default="manual")  # manual | ai
 
