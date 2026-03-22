@@ -50,8 +50,8 @@ def _note_to_response(note: Note) -> dict:
         "source": note.source,
         "source_path": note.source_path,
         "tags": [nt.tag.name for nt in note.tags if nt.tag],
-        "created_at": note.created_at.isoformat(),
-        "updated_at": note.updated_at.isoformat(),
+        "created_at": note.created_at.isoformat() + "Z",
+        "updated_at": note.updated_at.isoformat() + "Z",
     }
 
 

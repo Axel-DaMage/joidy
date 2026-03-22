@@ -13,7 +13,7 @@
     const now = new Date();
     const diffMs = now.getTime() - d.getTime();
     const diffDays = Math.floor(diffMs / 86400000);
-    if (diffDays === 0) return 'hoy';
+    if (diffDays <= 0) return 'hoy';   // ≤0 handles timezone-naive UTC strings
     if (diffDays === 1) return 'ayer';
     if (diffDays < 7) return `hace ${diffDays} días`;
     return d.toLocaleDateString('es', { day: 'numeric', month: 'short' });

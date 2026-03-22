@@ -209,12 +209,14 @@
   <!-- ── Editor panel ──────────────────────────────────────────────────────── -->
   <div class="editor-panel">
     {#if showEditor}
-      <NoteEditor
-        note={editingNew ? null : selectedNote}
-        on:save={handleSave}
-        on:cancel={closeEditor}
-        on:delete={handleDelete}
-      />
+      {#key editingNew ? 'new' : selectedNote?.id}
+        <NoteEditor
+          note={editingNew ? null : selectedNote}
+          on:save={handleSave}
+          on:cancel={closeEditor}
+          on:delete={handleDelete}
+        />
+      {/key}
     {:else}
       <div class="empty-editor">
         <span class="caption">Selecciona una nota o crea una nueva</span>
