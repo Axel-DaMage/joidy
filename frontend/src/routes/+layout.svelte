@@ -15,8 +15,8 @@
   ];
 
   onMount(async () => {
-    await loadStats();
-    await pingActivity();
+    try { await loadStats(); } catch (e) { console.error('[layout] loadStats failed:', e); }
+    try { await pingActivity(); } catch (e) { console.error('[layout] pingActivity failed:', e); }
   });
 </script>
 

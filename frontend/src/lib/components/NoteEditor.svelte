@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
-  import { Eye, EyeOff, Save, Trash2, X, Plus } from 'lucide-svelte';
+  import { createEventDispatcher, onDestroy } from 'svelte';
+  import { Eye, EyeOff, Save, Trash2, X } from 'lucide-svelte';
   import TagChip from './TagChip.svelte';
   import { aiSuggestions, fetchAISuggestions } from '$lib/stores/notes';
   import type { Note } from '$lib/api';
@@ -22,10 +22,19 @@
     delete: void;
   }>();
 
+  // Escape HTML entities before markdown processing to prevent XSS
+  function escapeHtml(str: string): string {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
   // Simple markdown → HTML renderer (no dependency needed)
   function renderMarkdown(md: string): string {
-    return md
-      // Code blocks
+    return escapeHtml(md)
+      // Code blocks (restore escaped content inside code blocks)
       .replace(/```(\w*)\n?([\s\S]*?)```/g, '<pre><code class="lang-$1">$2</code></pre>')
       // Inline code
       .replace(/`([^`]+)`/g, '<code>$1</code>')
@@ -85,6 +94,8 @@
   function dismissSuggestion(tag: string) {
     aiSuggestions.update(s => s.filter(x => x.tag !== tag));
   }
+
+  onDestroy(() => clearTimeout(aiTimeout));
 
   async function handleSave() {
     if (!title.trim()) return;

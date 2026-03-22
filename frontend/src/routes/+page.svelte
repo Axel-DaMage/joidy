@@ -15,6 +15,7 @@
   $: isWilted = (() => {
     if (!$lastActivity) return false;
     const last = new Date($lastActivity);
+    if (isNaN(last.getTime())) return false;
     const diffDays = (Date.now() - last.getTime()) / 86400000;
     return diffDays > 2;
   })();

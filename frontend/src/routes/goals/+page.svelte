@@ -23,9 +23,12 @@
     [goals, tags] = await Promise.all([api.goals.list(), api.tags.list()]);
   });
 
+  let addError = '';
+
   async function addGoal() {
     if (!newTitle.trim()) return;
     saving = true;
+    addError = '';
     try {
       const g = await api.goals.create({
         title: newTitle.trim(),
@@ -36,6 +39,8 @@
       goals = [g, ...goals];
       newTitle = ''; newDescription = ''; newTargetNotes = 5; newTagId = null;
       showAddForm = false;
+    } catch (e) {
+      addError = 'Error al crear el objetivo. Intenta de nuevo.';
     } finally {
       saving = false;
     }
@@ -89,6 +94,9 @@
             {saving ? 'Guardando...' : 'Crear'}
           </button>
           <button class="btn btn-ghost" on:click={() => showAddForm = false}>Cancelar</button>
+          {#if addError}
+            <span style="font-size:11px; color: var(--error); margin-left: auto;">{addError}</span>
+          {/if}
         </div>
       </div>
     {/if}
