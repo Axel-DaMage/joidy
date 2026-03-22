@@ -1,9 +1,13 @@
 <script lang="ts">
   import { createEventDispatcher, onDestroy } from 'svelte';
   import { Eye, EyeOff, Save, Trash2, X } from 'lucide-svelte';
+  import { marked } from 'marked';
   import TagChip from './TagChip.svelte';
   import { aiSuggestions, fetchAISuggestions } from '$lib/stores/notes';
   import type { Note } from '$lib/api';
+
+  // Configure marked once — GFM enables tables, strikethrough, autolinks
+  marked.use({ gfm: true, breaks: true });
 
   export let note: Note | null = null;
 
@@ -22,44 +26,15 @@
     delete: void;
   }>();
 
-  // Escape HTML entities before markdown processing to prevent XSS
-  function escapeHtml(str: string): string {
-    return str
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
-  }
-
-  // Simple markdown → HTML renderer (no dependency needed)
+  // Markdown → HTML via marked (handles tables, blockquotes, lists, etc.)
   function renderMarkdown(md: string): string {
     if (!md.trim()) return '<p style="color:var(--text-muted);font-style:italic;">Escribe algo para ver el preview...</p>';
-    return escapeHtml(md)
-      // Code blocks (restore escaped content inside code blocks)
-      .replace(/```(\w*)\n?([\s\S]*?)```/g, '<pre><code class="lang-$1">$2</code></pre>')
-      // Inline code
-      .replace(/`([^`]+)`/g, '<code>$1</code>')
-      // Headers
-      .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-      .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-      .replace(/^# (.+)$/gm, '<h1>$1</h1>')
-      // Bold / italic
-      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*([^*]+)\*/g, '<em>$1</em>')
-      // Obsidian wiki-links → styled spans
-      .replace(/\[\[([^\]]+)\]\]/g, '<span class="wikilink">$1</span>')
-      // Checkboxes
-      .replace(/^- \[x\] (.+)$/gm, '<div class="task done">✓ $1</div>')
-      .replace(/^- \[ \] (.+)$/gm, '<div class="task">○ $1</div>')
-      // Unordered list
-      .replace(/^[-*] (.+)$/gm, '<li>$1</li>')
-      // Blockquote
-      .replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>')
-      // Horizontal rule
-      .replace(/^---$/gm, '<hr>')
-      // Wrap plain text lines in paragraphs
-      .replace(/\n\n+/g, '\n</p><p>\n')
-      .replace(/^(?!<[a-z/<])(.*\S.*)$/gm, '<p>$1</p>')
+
+    // Pre-process Obsidian wikilinks → HTML spans before marked runs
+    // (marked doesn't know about [[links]] and would render them as plain text)
+    const preprocessed = md.replace(/\[\[([^\]]+)\]\]/g, '<span class="wikilink">$1</span>');
+
+    return String(marked.parse(preprocessed));
   }
 
   $: wordCount = content.trim() ? content.trim().split(/\s+/).length : 0;
@@ -422,4 +397,65 @@
   .preview :global(.wikilink) { color: var(--xp); border-bottom: 1px solid color-mix(in srgb, var(--xp) 40%, transparent); cursor: pointer; font-size: 13px; }
   .preview :global(.task) { font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary); margin: 4px 0; }
   .preview :global(.task.done) { color: var(--success); }
+
+  /* ── Tables (GFM) ── */
+  .preview :global(table) {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 16px 0;
+    font-size: 13px;
+    font-family: var(--font-mono);
+  }
+  .preview :global(th) {
+    text-align: left;
+    padding: 6px 14px;
+    border-bottom: 1px solid var(--text-muted);
+    color: var(--text-secondary);
+    font-weight: 400;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+  .preview :global(td) {
+    padding: 5px 14px;
+    border-bottom: 1px solid var(--border-light, var(--border));
+    color: var(--text-primary);
+    vertical-align: top;
+  }
+  .preview :global(tr:last-child td) { border-bottom: none; }
+  .preview :global(tr:hover td) { background: var(--elevated); }
+
+  /* ── Task lists (marked renders - [x] as <input type="checkbox">) ── */
+  .preview :global(input[type="checkbox"]) {
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    border: 1px solid var(--text-muted);
+    border-radius: 2px;
+    margin-right: 6px;
+    vertical-align: middle;
+    position: relative;
+    flex-shrink: 0;
+  }
+  .preview :global(input[type="checkbox"]:checked) {
+    background: var(--success);
+    border-color: var(--success);
+  }
+  .preview :global(input[type="checkbox"]:checked::after) {
+    content: '✓';
+    position: absolute;
+    top: -2px;
+    left: 1px;
+    font-size: 9px;
+    color: var(--bg);
+  }
+  .preview :global(.task-list-item) { list-style: none; padding-left: 0; }
+  .preview :global(.task-list-item)::before { content: none; }
+
+  /* ── Strikethrough (GFM) ── */
+  .preview :global(del) { text-decoration: line-through; color: var(--text-muted); }
+
+  /* ── Links ── */
+  .preview :global(a) { color: var(--xp); text-decoration: none; border-bottom: 1px solid color-mix(in srgb, var(--xp) 35%, transparent); }
+  .preview :global(a:hover) { border-bottom-color: var(--xp); }
 </style>
