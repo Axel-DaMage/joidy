@@ -144,7 +144,9 @@ h4 { font-size: 14px; font-weight: 500; }
 
 .app-main {
   grid-area: main;
-  overflow: auto;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   background: var(--bg);
 }
 

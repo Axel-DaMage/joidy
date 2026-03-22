@@ -1,6 +1,5 @@
-import { PUBLIC_API_URL } from '$env/static/public';
-
-const BASE = (typeof PUBLIC_API_URL !== 'undefined' ? PUBLIC_API_URL : 'http://localhost:8000');
+// API base URL — configurable via VITE_API_URL env var, defaults to localhost:8000
+const BASE = (import.meta.env.VITE_API_URL as string) || 'http://localhost:8000';
 
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
@@ -135,13 +134,10 @@ export const api = {
   },
 
   ai: {
-    classify: (noteId: number, content: string, existingTags: string[]) =>
-      fetch(`http://localhost:8002/classify`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ note_id: noteId, content, existing_tags: existingTags })
-      }).then(r => r.json() as Promise<{ suggestions: AISuggestion[] }>),
-    usage: () => fetch('http://localhost:8002/usage').then(r => r.json()),
+    // AI is currently disabled — stub returns empty suggestions
+    classify: async (_noteId: number, _content: string, _existingTags: string[]) =>
+      ({ suggestions: [] as AISuggestion[] }),
+    usage: async () => ({ ai_enabled: false, estimated_cost_usd: 0 }),
   },
 
   github: {

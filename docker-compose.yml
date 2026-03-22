@@ -3,11 +3,12 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=http://localhost:${API_PORT:-8000}
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
     environment:
-      - PUBLIC_API_URL=http://localhost:${API_PORT:-8000}
-      - PUBLIC_APP_ENV=${APP_ENV:-development}
+      - VITE_API_URL=http://localhost:${API_PORT:-8000}
     depends_on:
       api:
         condition: service_healthy

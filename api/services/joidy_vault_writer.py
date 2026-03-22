@@ -120,13 +120,14 @@ def write_skills(db: Session) -> bool:
         lines.append(f"## {tag.name} ({_level_display(skill.level)} — {skill.note_count} notas)")
         _write_skill_children(skill.tag_id, skills, tags, lines, indent=1)
 
+    skills_text = "\n".join(lines) if lines else "Sin habilidades aún. Crea notas y agrega tags para comenzar."
     content = f"""---
 {JOIDY_HEADER}
 ---
 
 # Árbol de Habilidades
 
-{'chr(10).join(lines) if lines else 'Sin habilidades aún. Crea notas y agrega tags para comenzar.'}
+{skills_text}
 """
 
     filepath.write_text(content, encoding="utf-8")

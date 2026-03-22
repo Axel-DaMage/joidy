@@ -5,7 +5,6 @@
   import { Search, Plus, X } from 'lucide-svelte';
   import NoteCard from '$lib/components/NoteCard.svelte';
   import NoteEditor from '$lib/components/NoteEditor.svelte';
-  import TagChip from '$lib/components/TagChip.svelte';
   import { notes, notesLoading, loadNotes, createNote, updateNote, deleteNote, aiSuggestions } from '$lib/stores/notes';
   import type { Note } from '$lib/api';
 
@@ -83,8 +82,8 @@
           </button>
         {/if}
       </div>
-      <button class="btn btn-primary" style="padding: 4px 10px; font-size:12px;" on:click={openNew}>
-        <Plus size={12} /> Nueva
+      <button class="btn btn-primary" style="padding: 4px 10px; font-size:12px; white-space:nowrap;" on:click={openNew}>
+        <Plus size={12} />
       </button>
     </div>
 
@@ -105,17 +104,15 @@
     {/if}
   </aside>
 
-  <!-- Editor panel -->
+  <!-- Editor panel — full height, no padding wrapper -->
   <div class="editor-panel">
     {#if showEditor}
-      <div class="editor-container fade-in">
-        <NoteEditor
-          note={editingNew ? null : selectedNote}
-          on:save={handleSave}
-          on:cancel={closeEditor}
-          on:delete={handleDelete}
-        />
-      </div>
+      <NoteEditor
+        note={editingNew ? null : selectedNote}
+        on:save={handleSave}
+        on:cancel={closeEditor}
+        on:delete={handleDelete}
+      />
     {:else}
       <div class="empty-editor">
         <span class="caption">Selecciona una nota o crea una nueva</span>
@@ -127,8 +124,9 @@
 <style>
   .notes-page {
     display: grid;
-    grid-template-columns: 280px 1fr;
+    grid-template-columns: 260px 1fr;
     height: 100%;
+    overflow: hidden;
   }
 
   .notes-list {
@@ -136,6 +134,7 @@
     overflow-y: auto;
     display: flex;
     flex-direction: column;
+    height: 100%;
   }
 
   .list-toolbar {
@@ -169,18 +168,17 @@
     font-family: var(--font-sans);
     color: var(--text-primary);
     flex: 1;
+    min-width: 0;
   }
 
   .search-input::placeholder { color: var(--text-muted); }
 
   .editor-panel {
-    overflow-y: auto;
-    padding: var(--s5);
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
     background: var(--bg);
-  }
-
-  .editor-container {
-    max-width: 680px;
   }
 
   .empty-editor {

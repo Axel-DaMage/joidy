@@ -2,10 +2,12 @@ FROM node:22-slim AS base
 WORKDIR /app
 
 FROM base AS deps
-COPY package.json package-lock.json* ./
-RUN npm ci
+COPY package.json ./
+RUN npm install
 
 FROM deps AS build
+ARG VITE_API_URL=http://localhost:8000
+ENV VITE_API_URL=$VITE_API_URL
 COPY . .
 RUN npm run build
 

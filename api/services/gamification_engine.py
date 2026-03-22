@@ -127,10 +127,12 @@ def process_event(
         existing = db.query(StreakRecord).filter(StreakRecord.activity_date == today).first()
         if not existing:
             db.add(StreakRecord(activity_date=today, xp_earned=xp))
-            # Award daily activity bonus
-            stats.total_xp += XP_TABLE["daily_activity"]
-            xp += XP_TABLE["daily_activity"]
-            db.add(XPEvent(event_type="daily_activity", xp=XP_TABLE["daily_activity"]))
+            # Award daily activity bonus only if not already the daily_activity event
+            if event_type != "daily_activity":
+                daily_xp = XP_TABLE["daily_activity"]
+                stats.total_xp += daily_xp
+                xp += daily_xp
+                db.add(XPEvent(event_type="daily_activity", xp=daily_xp))
         if new_streak > stats.longest_streak:
             stats.longest_streak = new_streak
     else:

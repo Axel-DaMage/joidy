@@ -18,6 +18,8 @@ class NoteCreate(BaseModel):
     title: str
     content: str = ""
     tags: list[str] = []
+    source: str = "joidy"
+    source_path: Optional[str] = None
 
 
 class NoteUpdate(BaseModel):
@@ -44,6 +46,7 @@ def _note_to_response(note: Note) -> dict:
         "title": note.title,
         "content": note.content,
         "source": note.source,
+        "source_path": note.source_path,
         "tags": [nt.tag.name for nt in note.tags if nt.tag],
         "created_at": note.created_at.isoformat(),
         "updated_at": note.updated_at.isoformat(),
@@ -71,10 +74,18 @@ async def _trigger_embedding(note_id: int, content: str):
 
 
 @router.get("/")
-def list_notes(skip: int = 0, limit: int = 50, tag: Optional[str] = None, db: Session = Depends(get_db)):
+def list_notes(
+    skip: int = 0,
+    limit: int = 50,
+    tag: Optional[str] = None,
+    source_path: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
     query = db.query(Note)
     if tag:
         query = query.join(NoteTag).join(Tag).filter(Tag.name == tag.lower())
+    if source_path:
+        query = query.filter(Note.source_path == source_path)
     notes = query.order_by(Note.updated_at.desc()).offset(skip).limit(limit).all()
     return [_note_to_response(n) for n in notes]
 
@@ -93,7 +104,7 @@ async def create_note(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
-    note = Note(title=data.title, content=data.content, source="joidy")
+    note = Note(title=data.title, content=data.content, source=data.source, source_path=data.source_path)
     db.add(note)
     db.flush()
 
