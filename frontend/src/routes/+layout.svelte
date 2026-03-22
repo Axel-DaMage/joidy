@@ -2,7 +2,7 @@
   import '../app.css';
   import { page } from '$app/stores';
   import { onMount } from 'svelte';
-  import { Home, BookOpen, Network, Zap, Target, Settings } from 'lucide-svelte';
+  import { Home, BookOpen, Network, Zap, Target, Flame, Settings } from 'lucide-svelte';
   import StreakCounter from '$lib/components/StreakCounter.svelte';
   import SettingsPanel from '$lib/components/SettingsPanel.svelte';
   import { totalXP, currentStreak, plantStageName, loadStats, pingActivity } from '$lib/stores/gamification';
@@ -13,6 +13,7 @@
     { href: '/graph',   label: 'Grafo',     Icon: Network },
     { href: '/skills',  label: 'Skills',    Icon: Zap },
     { href: '/goals',   label: 'Objetivos', Icon: Target },
+    { href: '/streaks', label: 'Rachas',    Icon: Flame  },
   ];
 
   let settingsOpen = false;

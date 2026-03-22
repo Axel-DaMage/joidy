@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from database import init_db
-from routers import gamification, goals, notes, skills, tags, vault
+from routers import gamification, goals, notes, personal_streaks, skills, tags, vault
 from routers.integrations import github
 
 
@@ -29,6 +29,7 @@ app.include_router(tags.router)
 app.include_router(skills.router)
 app.include_router(goals.router)
 app.include_router(gamification.router)
+app.include_router(personal_streaks.router)
 app.include_router(github.router)
 app.include_router(vault.router)
 

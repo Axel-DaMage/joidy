@@ -90,6 +90,20 @@ export interface GraphData { nodes: GraphNode[]; edges: GraphEdge[]; }
 
 export interface AISuggestion { tag: string; confidence: number; is_new: boolean; }
 
+export interface StreakDay { date: string; checked: boolean; }
+
+export interface PersonalStreak {
+  id: number;
+  name: string;
+  emoji: string;
+  description: string;
+  current_streak: number;
+  longest_streak: number;
+  today_checked: boolean;
+  history: StreakDay[];
+  created_at: string;
+}
+
 // ── Notes ─────────────────────────────────────────────────────────────────────
 
 export const api = {
@@ -132,6 +146,17 @@ export const api = {
     complete: (id: number) =>
       req<{ goal: Goal; gamification: GamificationResult }>('POST', `/goals/${id}/complete`),
     delete:   (id: number) => req<void>('DELETE', `/goals/${id}`),
+  },
+
+  personalStreaks: {
+    list:     ()                  => req<PersonalStreak[]>('GET', '/personal-streaks/'),
+    create:   (data: { name: string; emoji: string; description: string }) =>
+      req<PersonalStreak>('POST', '/personal-streaks/', data),
+    update:   (id: number, data: { name?: string; emoji?: string; description?: string }) =>
+      req<PersonalStreak>('PUT', `/personal-streaks/${id}`, data),
+    delete:   (id: number)        => req<void>('DELETE', `/personal-streaks/${id}`),
+    checkin:  (id: number)        => req<PersonalStreak>('POST', `/personal-streaks/${id}/checkin`),
+    undo:     (id: number)        => req<PersonalStreak>('DELETE', `/personal-streaks/${id}/checkin`),
   },
 
   ai: {

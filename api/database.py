@@ -41,7 +41,7 @@ def get_db():
 
 def init_db():
     Path("/data/db").mkdir(parents=True, exist_ok=True)
-    from models import note, gamification, skill, goal  # noqa: F401
+    from models import note, gamification, skill, goal, personal_streaks  # noqa: F401
     Base.metadata.create_all(bind=engine)
     with engine.connect() as conn:
         conn.execute(text("""
