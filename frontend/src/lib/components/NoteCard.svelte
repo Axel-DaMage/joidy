@@ -25,7 +25,7 @@
 <div class="note-card" class:active on:click={() => dispatch('select', note)}>
   <div class="note-header">
     <span class="note-title truncate">{note.title}</span>
-    <span class="note-date caption">{formatDate(note.updated_at)}</span>
+    <span class="note-date caption">{formatDate(note.created_at)}</span>
   </div>
   {#if note.tags.length > 0}
     <div class="note-tags">

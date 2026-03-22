@@ -31,13 +31,13 @@ XP_TABLE = {
 }
 
 PLANT_STAGES = [
-    (0, "seed"),
-    (100, "sprout"),
-    (500, "seedling"),
-    (1500, "young"),
-    (4000, "mature"),
-    (10000, "flowering"),
-    (25000, "tree"),
+    (0,     "seed"),
+    (300,   "sprout"),
+    (1200,  "seedling"),
+    (4000,  "young"),
+    (10000, "mature"),
+    (25000, "flowering"),
+    (60000, "tree"),
 ]
 
 STREAK_MILESTONES = {7, 30, 100, 365}
@@ -105,13 +105,26 @@ def process_event(
     if metadata is None:
         metadata = {}
 
+    stats = _get_or_create_stats(db)
+    today = date.today()
+
+    # daily_activity is idempotent — only award XP once per day
+    if event_type == "daily_activity" and stats.last_activity_date == today:
+        stage_idx, stage_name = _compute_plant_stage(stats.total_xp)
+        return GamificationResult(
+            xp_awarded=0,
+            total_xp=stats.total_xp,
+            current_streak=stats.current_streak,
+            plant_stage=stage_idx,
+            plant_stage_name=stage_name,
+            message="",
+        )
+
     # Record XP event
     event = XPEvent(event_type=event_type, xp=xp, metadata_json=json.dumps(metadata))
     db.add(event)
 
-    stats = _get_or_create_stats(db)
     old_plant_stage = stats.plant_stage
-    today = date.today()
 
     # Add XP
     stats.total_xp += xp

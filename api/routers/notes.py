@@ -88,7 +88,7 @@ def list_notes(
         query = query.join(NoteTag).join(Tag).filter(Tag.name == tag.lower())
     if source_path:
         query = query.filter(Note.source_path == source_path)
-    notes = query.order_by(Note.updated_at.desc()).offset(skip).limit(limit).all()
+    notes = query.order_by(Note.created_at.desc()).offset(skip).limit(limit).all()
     return [_note_to_response(n) for n in notes]
 
 
@@ -116,7 +116,8 @@ async def create_note(
         db.add(note_tag)
         process_event(db, "tag_added")  # XP recorded in DB; final gami returned below
 
-    gami = process_event(db, "note_created", {"note_id": note.id})
+    event = "note_imported_obsidian" if data.source == "obsidian" else "note_created"
+    gami = process_event(db, event, {"note_id": note.id})
     db.commit()
     db.refresh(note)
 
