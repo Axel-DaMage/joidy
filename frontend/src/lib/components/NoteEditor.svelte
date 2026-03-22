@@ -33,6 +33,7 @@
 
   // Simple markdown → HTML renderer (no dependency needed)
   function renderMarkdown(md: string): string {
+    if (!md.trim()) return '<p style="color:var(--text-muted);font-style:italic;">Escribe algo para ver el preview...</p>';
     return escapeHtml(md)
       // Code blocks (restore escaped content inside code blocks)
       .replace(/```(\w*)\n?([\s\S]*?)```/g, '<pre><code class="lang-$1">$2</code></pre>')
@@ -56,9 +57,9 @@
       .replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>')
       // Horizontal rule
       .replace(/^---$/gm, '<hr>')
-      // Paragraphs (double newline)
-      .replace(/\n\n+/g, '</p><p>')
-      .replace(/^(?!<[a-z])/gm, '')
+      // Wrap plain text lines in paragraphs
+      .replace(/\n\n+/g, '\n</p><p>\n')
+      .replace(/^(?!<[a-z/<])(.*\S.*)$/gm, '<p>$1</p>')
   }
 
   $: wordCount = content.trim() ? content.trim().split(/\s+/).length : 0;

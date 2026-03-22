@@ -94,6 +94,33 @@ export function getFileIcon(title: string, content: string): string {
   return '📝';
 }
 
+// ── Flat node (pre-processed, avoids recursive component rendering) ───────────
+
+export interface FlatNode {
+  type: 'folder' | 'file';
+  name: string;
+  path: string;
+  icon: string;
+  depth: number;
+  note?: Note;
+  childCount: number;
+}
+
+export function flattenTree(nodes: TreeNode[], collapsed: Set<string>, depth = 0): FlatNode[] {
+  const result: FlatNode[] = [];
+  for (const node of nodes) {
+    if (node.type === 'folder') {
+      result.push({ type: 'folder', name: node.name, path: node.path, icon: node.icon, depth, childCount: node.children.length });
+      if (!collapsed.has(node.path)) {
+        result.push(...flattenTree(node.children, collapsed, depth + 1));
+      }
+    } else {
+      result.push({ type: 'file', name: node.name, path: node.path, icon: node.icon, depth, note: node.note, childCount: 0 });
+    }
+  }
+  return result;
+}
+
 // ── Tree builder ───────────────────────────────────────────────────────────────
 
 interface RawNode {
