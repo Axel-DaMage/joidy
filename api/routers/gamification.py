@@ -5,6 +5,8 @@ from database import get_db
 from models.gamification import StreakRecord, UserStats, XPEvent
 from services.gamification_engine import PLANT_STAGES, process_event
 
+
+
 router = APIRouter(prefix="/gamification", tags=["gamification"])
 
 
@@ -69,4 +71,13 @@ def get_recent_events(limit: int = 20, db: Session = Depends(get_db)):
 def ping_activity(db: Session = Depends(get_db)):
     """Called when user opens the app — awards daily XP if not already done today."""
     gami = process_event(db, "daily_activity")
-    return vars(gami)
+    # Reload full stats so the response includes next_stage_xp, xp_to_next_stage, etc.
+    stats = db.query(UserStats).filter_by(id=1).first()
+    next_stage_xp = PLANT_STAGES[gami.plant_stage + 1][0] if gami.plant_stage + 1 < len(PLANT_STAGES) else None
+    return {
+        **vars(gami),
+        "longest_streak": stats.longest_streak if stats else 0,
+        "next_stage_xp": next_stage_xp,
+        "xp_to_next_stage": (next_stage_xp - gami.total_xp) if next_stage_xp else None,
+        "last_activity_date": stats.last_activity_date.isoformat() if stats and stats.last_activity_date else None,
+    }

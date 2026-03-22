@@ -39,17 +39,19 @@ export async function pingActivity(): Promise<void> {
     applyStats({
       total_xp: result.total_xp,
       current_streak: result.current_streak,
-      longest_streak: get(longestStreak),
+      longest_streak: result.longest_streak ?? get(longestStreak),
       plant_stage: result.plant_stage,
       plant_stage_name: result.plant_stage_name,
-      next_stage_xp: get(nextStageXP),
-      xp_to_next_stage: get(xpToNextStage),
-      last_activity_date: null,
+      next_stage_xp: result.next_stage_xp ?? get(nextStageXP),
+      xp_to_next_stage: result.xp_to_next_stage ?? get(xpToNextStage),
+      last_activity_date: result.last_activity_date ?? null,
     });
     if (result.xp_awarded > 0) {
       showXPGain(result.xp_awarded);
     }
-  } catch (_) {}
+  } catch (e) {
+    console.error('[gamification] pingActivity failed:', e);
+  }
 }
 
 export function applyStats(stats: Partial<GamificationStats>): void {

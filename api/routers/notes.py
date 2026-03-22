@@ -26,6 +26,7 @@ class NoteUpdate(BaseModel):
     title: Optional[str] = None
     content: Optional[str] = None
     tags: Optional[list[str]] = None
+    source_path: Optional[str] = None
 
 
 class NoteResponse(BaseModel):
@@ -112,7 +113,7 @@ async def create_note(
         tag = _get_or_create_tag(db, tag_name)
         note_tag = NoteTag(note_id=note.id, tag_id=tag.id, source="manual")
         db.add(note_tag)
-        gami = process_event(db, "tag_added")
+        process_event(db, "tag_added")  # XP recorded in DB; final gami returned below
 
     gami = process_event(db, "note_created", {"note_id": note.id})
     db.commit()
@@ -138,6 +139,8 @@ async def update_note(
     gami = None
     if data.title is not None:
         note.title = data.title
+    if data.source_path is not None:
+        note.source_path = data.source_path
     if data.content is not None:
         old_len = len(note.content)
         note.content = data.content
@@ -167,6 +170,7 @@ def delete_note(note_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Note not found")
     db.delete(note)
     db.commit()
+    sync_skills(db)
 
 
 @router.post("/{note_id}/accept-tag")

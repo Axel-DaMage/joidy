@@ -22,6 +22,7 @@ export interface Note {
   title: string;
   content: string;
   source: string;
+  source_path: string | null;
   tags: string[];
   created_at: string;
   updated_at: string;

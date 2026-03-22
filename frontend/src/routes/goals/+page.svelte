@@ -19,8 +19,14 @@
   $: active = goals.filter(g => !g.is_completed);
   $: completed = goals.filter(g => g.is_completed);
 
+  let loadError = '';
   onMount(async () => {
-    [goals, tags] = await Promise.all([api.goals.list(), api.tags.list()]);
+    try {
+      [goals, tags] = await Promise.all([api.goals.list(), api.tags.list()]);
+    } catch (e) {
+      loadError = 'No se pudo cargar los objetivos.';
+      console.error('[goals] onMount failed:', e);
+    }
   });
 
   let addError = '';
@@ -60,6 +66,9 @@
 </script>
 
 <div class="goals-page">
+  {#if loadError}
+    <div style="padding:16px; color: var(--error); font-size:12px; font-family: var(--font-mono);">{loadError}</div>
+  {/if}
   <div class="goals-header">
     <div>
       <h3>Objetivos</h3>
