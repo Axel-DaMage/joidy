@@ -7,6 +7,9 @@ services:
         - VITE_API_URL=http://localhost:${API_PORT:-8000}
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/static:/app/static
     environment:
       - VITE_API_URL=http://localhost:${API_PORT:-8000}
     depends_on:

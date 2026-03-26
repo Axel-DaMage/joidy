@@ -1,6 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import { X, Moon, Sun, Database, GitBranch, Zap } from 'lucide-svelte';
+  import { X, Moon, Sun, Database, GitBranch, Zap, Palette, Plus, Minus } from 'lucide-svelte';
+  import { accentColors, MAX_COLORS } from '$lib/stores/settings';
 
   export let open = false;
 
@@ -12,6 +13,20 @@
     theme = theme === 'dark' ? 'light' : 'dark';
     document.documentElement.setAttribute('data-theme', theme === 'light' ? 'light' : 'dark');
   }
+
+  function onColorPicker(i: number, e: Event) {
+    accentColors.setColor(i, (e.target as HTMLInputElement).value);
+  }
+
+  function onHex(i: number, e: Event) {
+    const raw = (e.target as HTMLInputElement).value.trim();
+    const full = raw.startsWith('#') ? raw : '#' + raw;
+    if (/^#[0-9a-fA-F]{6}$/.test(full)) accentColors.setColor(i, full);
+  }
+
+  $: gradientPreview = $accentColors.length === 1
+    ? $accentColors[0]
+    : `linear-gradient(to right, ${$accentColors.join(', ')})`;
 
   function close() {
     dispatch('close');
@@ -53,6 +68,42 @@
               <span class:active={theme === 'light'}>claro</span>
             </button>
           </div>
+          <!-- Gradient preview bar -->
+          <div class="gradient-preview" style="background: {gradientPreview};"></div>
+
+          <!-- Per-color rows -->
+          <div class="color-list">
+            {#each $accentColors as color, i}
+              <div class="color-entry">
+                <span class="color-idx mono">{i + 1}</span>
+                <input
+                  type="color"
+                  class="color-swatch"
+                  value={color}
+                  on:input={(e) => onColorPicker(i, e)}
+                />
+                <input
+                  type="text"
+                  class="hex-input mono"
+                  maxlength="7"
+                  value={color}
+                  on:input={(e) => onHex(i, e)}
+                  placeholder="#c8a96e"
+                />
+                {#if $accentColors.length > 1}
+                  <button class="color-rm" on:click={() => accentColors.removeColor(i)} title="Quitar">
+                    <Minus size={10} />
+                  </button>
+                {/if}
+              </div>
+            {/each}
+          </div>
+
+          {#if $accentColors.length < MAX_COLORS}
+            <button class="add-color-btn mono" on:click={() => accentColors.addColor()}>
+              <Plus size={10} /> agregar color
+            </button>
+          {/if}
         </section>
 
         <!-- Vault -->
@@ -271,4 +322,89 @@
     padding: 1px 4px;
     border-radius: 2px;
   }
+
+  /* ── Accent gradient builder ── */
+  .gradient-preview {
+    height: 6px;
+    border-radius: 3px;
+    margin: 8px 0 10px;
+    transition: background 300ms ease;
+  }
+
+  .color-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .color-entry {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .color-idx {
+    font-size: 9px;
+    color: var(--text-disabled);
+    width: 10px;
+    text-align: right;
+  }
+
+  .color-swatch {
+    width: 26px;
+    height: 26px;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    background: none;
+    cursor: pointer;
+    padding: 2px;
+    flex-shrink: 0;
+  }
+
+  .hex-input {
+    flex: 1;
+    background: var(--elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: 4px 7px;
+    font-size: 11px;
+    color: var(--text-primary);
+    outline: none;
+    transition: border-color var(--t-fast);
+  }
+  .hex-input:focus { border-color: var(--text-muted); }
+
+  .color-rm {
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    color: var(--text-muted);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: color var(--t-fast), border-color var(--t-fast);
+  }
+  .color-rm:hover { color: var(--error); border-color: var(--error); }
+
+  .add-color-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 8px;
+    background: none;
+    border: 1px dashed var(--border);
+    border-radius: var(--r);
+    color: var(--text-muted);
+    font-size: 10px;
+    padding: 4px 10px;
+    cursor: pointer;
+    width: 100%;
+    justify-content: center;
+    transition: color var(--t-fast), border-color var(--t-fast);
+  }
+  .add-color-btn:hover { color: var(--text-secondary); border-color: var(--text-muted); }
 </style>

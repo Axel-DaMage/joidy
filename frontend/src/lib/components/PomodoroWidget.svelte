@@ -215,6 +215,12 @@
     {/if}
   </div>
 
+  <!-- Separator -->
+  <div class="separator"></div>
+
+  <!-- Phase title -->
+  <span class="phase-title mono">{PHASE_LABEL[phase]}</span>
+
   <!-- Big ring -->
   <div class="ring-wrap">
     <svg width="150" height="150" viewBox="0 0 150 150" class="ring-svg">
@@ -233,10 +239,9 @@
       />
     </svg>
 
-    <!-- Overlay: timer + phase + dots -->
+    <!-- Overlay: timer + dots only -->
     <div class="ring-overlay">
       <span class="timer mono">{mins}:{secs}</span>
-      <span class="phase-lbl mono">{PHASE_LABEL[phase]}</span>
       <div class="pomo-dots">
         {#each Array(4) as _, i}
           <span class="pdot" class:lit={i < pomodorosDone % 4}></span>
@@ -277,6 +282,22 @@
     width: 100%;
   }
 
+  /* ── Phase title ── */
+  .phase-title {
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-primary);
+    letter-spacing: 0.14em;
+  }
+
+  /* ── Separator ── */
+  .separator {
+    width: 80%;
+    height: 1px;
+    background: var(--border-light, var(--border));
+    margin: 2px 0;
+  }
+
   /* ── Clock ── */
   .clock-row {
     width: 100%;
@@ -289,12 +310,12 @@
   .clock {
     font-size: 22px;
     font-weight: 300;
-    color: var(--text-primary);
+    color: var(--text-secondary);
     letter-spacing: 0.08em;
     cursor: pointer;
     transition: color var(--t-fast);
   }
-  .clock:hover { color: var(--text-secondary); }
+  .clock:hover { color: var(--text-primary); }
 
   /* ── Timezone picker ── */
   .tz-picker {
@@ -374,17 +395,11 @@
   }
 
   .timer {
-    font-size: 30px;
+    font-size: 32px;
     font-weight: 300;
     color: var(--text-primary);
     line-height: 1;
     letter-spacing: 0.04em;
-  }
-
-  .phase-lbl {
-    font-size: 8px;
-    color: var(--text-muted);
-    letter-spacing: 0.1em;
   }
 
   .pomo-dots {

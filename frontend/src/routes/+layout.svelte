@@ -3,9 +3,9 @@
   import { page } from '$app/stores';
   import { onMount } from 'svelte';
   import { Home, BookOpen, Network, Zap, Target, Flame, Settings } from 'lucide-svelte';
-  import StreakCounter from '$lib/components/StreakCounter.svelte';
   import SettingsPanel from '$lib/components/SettingsPanel.svelte';
-  import { totalXP, currentStreak, plantStageName, loadStats, pingActivity } from '$lib/stores/gamification';
+  import { totalXP, loadStats, pingActivity } from '$lib/stores/gamification';
+  import { accentColors } from '$lib/stores/settings';
 
   const navItems = [
     { href: '/',        label: 'Dashboard', Icon: Home },
@@ -19,6 +19,7 @@
   let settingsOpen = false;
 
   onMount(async () => {
+    accentColors.init();
     try { await loadStats(); } catch (e) { console.error('[layout] loadStats failed:', e); }
     try { await pingActivity(); } catch (e) { console.error('[layout] pingActivity failed:', e); }
   });
@@ -27,13 +28,9 @@
 <div class="app-shell">
   <!-- Header -->
   <header class="app-header">
-    <span class="logo mono" style="font-size:15px; letter-spacing:0.12em; color: var(--text-primary); font-weight:500;">JOIDY</span>
+    <span class="logo mono">JOIDY</span>
     <div style="flex:1;"></div>
-    <StreakCounter />
-    <div class="xp-header mono" title="XP total">
-      <span style="color: var(--xp); font-size:13px;">{$totalXP.toLocaleString()}</span>
-      <span style="color: var(--text-muted); font-size:10px; margin-left:3px;">xp</span>
-    </div>
+    <span class="mono" style="font-size:13px; color: var(--xp);">{$totalXP.toLocaleString()} <span style="font-size:10px; color: var(--text-muted);">xp</span></span>
     <button
       class="btn btn-ghost btn-icon"
       title="Ajustes"
@@ -62,10 +59,6 @@
 
   <!-- Status bar -->
   <footer class="app-statusbar">
-    <span>◈ {$plantStageName}</span>
-    <span style="color: var(--border);">·</span>
-    <span>{$currentStreak} días de racha</span>
-    <span style="color: var(--border);">·</span>
     <span style="color: var(--text-muted);">joidy v0.1</span>
   </footer>
 </div>
@@ -73,6 +66,14 @@
 <SettingsPanel bind:open={settingsOpen} on:close={() => settingsOpen = false} />
 
 <style>
-  .logo { user-select: none; }
-  .xp-header { display: flex; align-items: baseline; }
+  .logo {
+    user-select: none;
+    font-size: 15px;
+    letter-spacing: 0.12em;
+    font-weight: 500;
+    background: var(--accent-gradient, var(--xp));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
 </style>

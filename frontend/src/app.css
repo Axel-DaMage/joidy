@@ -7,27 +7,28 @@
 
 /* ── Custom Properties ──────────────────────────────────────────────────────── */
 :root {
-  /* Base surfaces */
-  --bg:           #0a0a0a;
-  --surface:      #111111;
-  --elevated:     #1a1a1a;
-  --hover:        #242424;
-  --border:       #3a3a3a;
-  --border-light: #2a2a2a;
+  /* Base surfaces — AMOLED */
+  --bg:           #000000;
+  --surface:      #0a0a0a;
+  --elevated:     #141414;
+  --hover:        #1e1e1e;
+  --border:       #2e2e2e;
+  --border-light: #1a1a1a;
 
-  /* Text */
-  --text-primary:   #f0f0f0;
-  --text-secondary: #b0b0b0;
-  --text-muted:     #777777;
-  --text-disabled:  #404040;
+  /* Text — all white-range */
+  --text-primary:   #ffffff;
+  --text-secondary: #d0d0d0;
+  --text-muted:     #888888;
+  --text-disabled:  #444444;
 
   /* Accents — used sparingly */
-  --accent:     #e0e0e0;       /* Primary interactive elements */
-  --xp:         #c8a96e;       /* XP, streaks — only warm color */
-  --plant:      #2d4a2d;       /* Plant SVG strokes */
-  --plant-glow: #3d6a3d;       /* Plant highlight on active day */
-  --success:    #4a7a4a;       /* Completions */
-  --error:      #7a3a3a;       /* Errors only */
+  --accent:          #e0e0e0;   /* Primary interactive elements */
+  --xp:              #c8a96e;   /* Primary accent color (JS-overridden) */
+  --accent-gradient: #c8a96e;   /* Gradient or solid (JS-overridden) */
+  --plant:           #c8a96e;   /* Plant/module strokes — follows --xp */
+  --plant-glow:      #c8a96e;   /* Plant highlight */
+  --success:         #4a7a4a;   /* Completions */
+  --error:           #7a3a3a;   /* Errors only */
 
   /* Layout */
   --sidebar-w:  48px;
@@ -85,6 +86,8 @@ html, body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  padding: 0;
+  margin: 0;
 }
 
 #svelte { height: 100%; }
@@ -115,8 +118,11 @@ h4 { font-size: 14px; font-weight: 500; }
     "header header"
     "sidebar main"
     "statusbar statusbar";
-  height: 100vh;
+  height: calc(100vh - 16px);
+  margin: 8px;
   overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
 }
 
 .app-header {
@@ -128,6 +134,7 @@ h4 { font-size: 14px; font-weight: 500; }
   background: var(--surface);
   gap: var(--s4);
   z-index: 10;
+  border-radius: 8px 8px 0 0;
 }
 
 .app-sidebar {
@@ -139,7 +146,7 @@ h4 { font-size: 14px; font-weight: 500; }
   align-items: center;
   padding: var(--s3) 0;
   gap: var(--s2);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .app-main {
@@ -161,6 +168,7 @@ h4 { font-size: 14px; font-weight: 500; }
   font-size: 11px;
   font-family: var(--font-mono);
   color: var(--text-muted);
+  border-radius: 0 0 8px 8px;
 }
 
 /* ── Sidebar Nav ─────────────────────────────────────────────────────────────── */

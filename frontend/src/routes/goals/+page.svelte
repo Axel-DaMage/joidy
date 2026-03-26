@@ -112,7 +112,7 @@
 
     <!-- Active goals -->
     {#if active.length === 0 && !showAddForm}
-      <div class="empty-state caption">
+      <div class="empty-state">
         Sin objetivos activos. ¡Crea uno para comenzar!
       </div>
     {/if}
@@ -181,6 +181,7 @@
     flex-direction: column;
     height: 100%;
     overflow: hidden;
+    position: relative;
   }
 
   .goals-header {
@@ -269,9 +270,15 @@
   }
 
   .empty-state {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
     color: var(--text-muted);
     text-align: center;
-    padding: var(--s6);
+    pointer-events: none;
   }
 
   .completed-toggle {
