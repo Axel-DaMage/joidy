@@ -1,4 +1,4 @@
-.PHONY: setup dev prod stop restart logs build clean backup restore help
+.PHONY: setup dev dev-d prod stop restart logs build clean backup restore help migrate db-health test-api
 
 # ─────────────────────────────────────────────────
 # Joidy Makefile
@@ -80,3 +80,12 @@ shell-api: ## Open a shell in the api container
 
 shell-worker: ## Open a shell in the worker container
 	docker compose exec worker bash
+
+migrate: ## Run Alembic migrations up to head in api container
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm api sh -c "cd /app && alembic -c /app/alembic.ini upgrade head"
+
+db-health: ## Verify migration head and required core tables
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm api sh -c "cd /app && alembic -c /app/alembic.ini current && python scripts/verify_db_health.py"
+
+test-api: ## Run API unit tests for remediation scenarios
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm api sh -c "PYTHONPATH=/app python -m unittest tests.test_embedding_retry tests.test_gamification_config tests.test_tag_graph_service"

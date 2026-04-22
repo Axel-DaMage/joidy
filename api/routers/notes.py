@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from database import get_db, SessionLocal
 from models.note import EmbeddingFailure, Note, NoteTag, Tag
 from services.gamification_engine import process_event
+from services.embedding_retry import compute_retry_delay_seconds
 from services.skill_tree import sync_skills
 from services.tag_graph import rebuild_tag_cooccurrences
 from config import settings
@@ -113,9 +114,8 @@ def _record_embedding_failure(note_id: int, error_message: str) -> None:
 
         failure.attempts += 1
         failure.last_error = error_message[:2000]
-        delay = settings.embedding_retry_base_seconds * (2 ** max(0, failure.attempts - 1))
-        max_delay = 24 * 60 * 60
-        failure.next_retry_at = datetime.utcnow() + timedelta(seconds=min(delay, max_delay))
+        delay = compute_retry_delay_seconds(failure.attempts, settings.embedding_retry_base_seconds)
+        failure.next_retry_at = datetime.utcnow() + timedelta(seconds=delay)
         db.commit()
 
 
