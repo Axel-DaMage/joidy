@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models.note import NoteTag, Tag
+from models.note import NoteTag, Tag, TagCooccurrence
 
 router = APIRouter(prefix="/tags", tags=["tags"])
 
@@ -69,17 +69,15 @@ def get_tag_graph(db: Session = Depends(get_db)):
         if tag.parent_id:
             edges.append({"source": tag.parent_id, "target": tag.id, "type": "hierarchy"})
 
-    # Co-occurrence edges
-    tag_ids = [t.id for t in tags]
-    for i, t1 in enumerate(tag_ids):
-        for t2 in tag_ids[i + 1:]:
-            shared = (
-                db.query(NoteTag.note_id)
-                .filter(NoteTag.tag_id == t1)
-                .intersect(db.query(NoteTag.note_id).filter(NoteTag.tag_id == t2))
-                .count()
-            )
-            if shared >= 2:
-                edges.append({"source": t1, "target": t2, "type": "cooccurrence", "weight": shared})
+    cooccurrence_edges = db.query(TagCooccurrence).all()
+    for edge in cooccurrence_edges:
+        edges.append(
+            {
+                "source": edge.tag_a_id,
+                "target": edge.tag_b_id,
+                "type": "cooccurrence",
+                "weight": edge.weight,
+            }
+        )
 
     return {"nodes": nodes, "edges": edges}

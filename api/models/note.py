@@ -59,3 +59,22 @@ class NoteLink(Base):
 
     source_note: Mapped["Note"] = relationship("Note", foreign_keys=[source_note_id], backref="out_links")
     target_note: Mapped["Note"] = relationship("Note", foreign_keys=[target_note_id], backref="in_links")
+
+
+class TagCooccurrence(Base):
+    __tablename__ = "tag_cooccurrences"
+
+    tag_a_id: Mapped[int] = mapped_column(Integer, ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True)
+    tag_b_id: Mapped[int] = mapped_column(Integer, ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True)
+    weight: Mapped[int] = mapped_column(Integer, default=0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class EmbeddingFailure(Base):
+    __tablename__ = "embedding_failures"
+
+    note_id: Mapped[int] = mapped_column(Integer, ForeignKey("notes.id", ondelete="CASCADE"), primary_key=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    last_error: Mapped[str] = mapped_column(Text, default="")
+    next_retry_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())

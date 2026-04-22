@@ -9,14 +9,19 @@ Every mutation in the system calls process_event(), which:
 """
 
 import json
+import logging
+from functools import lru_cache
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
+from config import settings
 from models.gamification import StreakRecord, UserStats, XPEvent
 
-XP_TABLE = {
+logger = logging.getLogger(__name__)
+
+DEFAULT_XP_TABLE = {
     "note_created": 10,
     "note_edited": 5,
     "tag_added": 3,
@@ -29,6 +34,30 @@ XP_TABLE = {
     "streak_milestone_100": 100,
     "note_imported_obsidian": 2,
 }
+
+
+@lru_cache(maxsize=1)
+def get_xp_table() -> dict[str, int]:
+    if not settings.xp_table_json:
+        return dict(DEFAULT_XP_TABLE)
+
+    try:
+        parsed = json.loads(settings.xp_table_json)
+        if not isinstance(parsed, dict):
+            raise ValueError("XP_TABLE_JSON must be a JSON object")
+
+        merged = dict(DEFAULT_XP_TABLE)
+        for key, value in parsed.items():
+            if isinstance(key, str) and isinstance(value, int):
+                merged[key] = value
+        return merged
+    except Exception:
+        logger.exception("Invalid xp_table_json, falling back to defaults")
+        return dict(DEFAULT_XP_TABLE)
+
+
+def xp_for(event_type: str, fallback: int = 0) -> int:
+    return get_xp_table().get(event_type, fallback)
 
 PLANT_STAGES = [
     (0,     "semilla"),
@@ -104,7 +133,7 @@ def process_event(
     event_type: str,
     metadata: dict | None = None,
 ) -> GamificationResult:
-    xp = XP_TABLE.get(event_type, 0)
+    xp = xp_for(event_type, 0)
     if metadata is None:
         metadata = {}
 
@@ -152,7 +181,7 @@ def process_event(
             db.add(StreakRecord(activity_date=today, xp_earned=xp))
             # Award daily activity bonus only if not already the daily_activity event
             if event_type != "daily_activity":
-                daily_xp = XP_TABLE["daily_activity"]
+                daily_xp = xp_for("daily_activity", 15)
                 stats.total_xp += daily_xp
                 xp += daily_xp
                 db.add(XPEvent(event_type="daily_activity", xp=daily_xp))
@@ -168,7 +197,7 @@ def process_event(
     # Check streak milestones
     milestone_reached = None
     if is_new_day and new_streak in STREAK_MILESTONES:
-        milestone_xp = XP_TABLE.get(f"streak_milestone_{new_streak}", 100)
+        milestone_xp = xp_for(f"streak_milestone_{new_streak}", 100)
         stats.total_xp += milestone_xp
         xp += milestone_xp
         db.add(XPEvent(event_type=f"streak_milestone_{new_streak}", xp=milestone_xp))

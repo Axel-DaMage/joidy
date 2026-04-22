@@ -14,6 +14,9 @@ class Settings(BaseSettings):
 
     # Rate limiting (free tier: 15 RPM)
     max_requests_per_minute: int = 12  # Conservative, below 15 RPM limit
+    ai_retry_max_attempts: int = 5
+    ai_retry_base_delay_seconds: float = 1.0
+    ai_retry_max_delay_seconds: float = 30.0
 
 
 settings = Settings()

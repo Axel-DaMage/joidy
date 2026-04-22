@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     app_env: str = "development"
     github_token: str = ""
     github_username: str = ""
+    embedding_retry_max_attempts: int = 8
+    embedding_retry_base_seconds: int = 60
+    xp_table_json: str = ""
 
 
 settings = Settings()

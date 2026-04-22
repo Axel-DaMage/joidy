@@ -2,6 +2,8 @@
 Thin wrapper around google-generativeai with rate limiting.
 """
 
+import asyncio
+import logging
 import struct
 from typing import Optional
 
@@ -9,6 +11,9 @@ import google.generativeai as genai
 
 from config import settings
 from rate_limiter import get_limiter
+
+
+logger = logging.getLogger(__name__)
 
 
 def _setup():
@@ -24,10 +29,12 @@ async def embed_text(text: str) -> list[float]:
     limiter = get_limiter(settings.max_requests_per_minute)
     await limiter.acquire()
 
-    result = genai.embed_content(
-        model=settings.embedding_model,
-        content=text,
-        task_type="RETRIEVAL_DOCUMENT",
+    result = await _call_with_retry(
+        lambda: genai.embed_content(
+            model=settings.embedding_model,
+            content=text,
+            task_type="RETRIEVAL_DOCUMENT",
+        )
     )
     return result["embedding"]
 
@@ -44,12 +51,14 @@ async def classify_note(content: str, existing_tags: list[str]) -> list[dict]:
     prompt = _CLASSIFY_PROMPT.format(content=content[:2000], existing_tags=tags_context)
 
     model = genai.GenerativeModel(settings.llm_model)
-    response = model.generate_content(
-        prompt,
-        generation_config=genai.GenerationConfig(
-            temperature=0.2,
-            max_output_tokens=256,
-        ),
+    response = await _call_with_retry(
+        lambda: model.generate_content(
+            prompt,
+            generation_config=genai.GenerationConfig(
+                temperature=0.2,
+                max_output_tokens=256,
+            ),
+        )
     )
 
     return _parse_classification(response.text, existing_tags)
@@ -64,7 +73,7 @@ async def rag_query(question: str, context_chunks: list[str]) -> str:
     prompt = _RAG_PROMPT.format(question=question, context=context)
 
     model = genai.GenerativeModel(settings.llm_model)
-    response = model.generate_content(prompt)
+    response = await _call_with_retry(lambda: model.generate_content(prompt))
     return response.text
 
 
@@ -130,3 +139,29 @@ def _parse_classification(text: str, existing_tags: list[str]) -> list[dict]:
         return result
     except (json.JSONDecodeError, KeyError, ValueError):
         return []
+
+
+def _is_retryable_error(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    return "429" in msg or "resource exhausted" in msg or "rate limit" in msg
+
+
+async def _call_with_retry(func):
+    attempts = max(1, settings.ai_retry_max_attempts)
+    base = max(0.1, settings.ai_retry_base_delay_seconds)
+    cap = max(base, settings.ai_retry_max_delay_seconds)
+
+    for attempt in range(1, attempts + 1):
+        try:
+            return func()
+        except Exception as exc:
+            if not _is_retryable_error(exc) or attempt >= attempts:
+                raise
+            delay = min(cap, base * (2 ** (attempt - 1)))
+            logger.warning(
+                "Gemini call rate-limited. attempt=%s/%s delay=%.2fs",
+                attempt,
+                attempts,
+                delay,
+            )
+            await asyncio.sleep(delay)

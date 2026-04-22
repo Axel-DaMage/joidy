@@ -1,4 +1,6 @@
 import re
+import logging
+from datetime import datetime, timedelta
 from typing import Optional
 
 import httpx
@@ -6,13 +8,15 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from database import get_db
-from models.note import Note, NoteTag, Tag
+from database import get_db, SessionLocal
+from models.note import EmbeddingFailure, Note, NoteTag, Tag
 from services.gamification_engine import process_event
 from services.skill_tree import sync_skills
+from services.tag_graph import rebuild_tag_cooccurrences
 from config import settings
 
 router = APIRouter(prefix="/notes", tags=["notes"])
+logger = logging.getLogger(__name__)
 
 
 class NoteCreate(BaseModel):
@@ -89,12 +93,36 @@ def _sync_note_links(db: Session, source_note_id: int, content: str):
 async def _trigger_embedding(note_id: int, content: str):
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            await client.post(
+            response = await client.post(
                 f"{settings.ai_service_url}/embed",
                 json={"note_id": note_id, "content": content},
             )
-    except Exception:
-        pass  # Non-blocking — embedding happens async
+            response.raise_for_status()
+        _clear_embedding_failure(note_id)
+    except Exception as exc:
+        _record_embedding_failure(note_id, str(exc))
+        logger.exception("Embedding failed for note_id=%s", note_id)
+
+
+def _record_embedding_failure(note_id: int, error_message: str) -> None:
+    with SessionLocal() as db:
+        failure = db.query(EmbeddingFailure).filter(EmbeddingFailure.note_id == note_id).first()
+        if failure is None:
+            failure = EmbeddingFailure(note_id=note_id, attempts=0)
+            db.add(failure)
+
+        failure.attempts += 1
+        failure.last_error = error_message[:2000]
+        delay = settings.embedding_retry_base_seconds * (2 ** max(0, failure.attempts - 1))
+        max_delay = 24 * 60 * 60
+        failure.next_retry_at = datetime.utcnow() + timedelta(seconds=min(delay, max_delay))
+        db.commit()
+
+
+def _clear_embedding_failure(note_id: int) -> None:
+    with SessionLocal() as db:
+        db.query(EmbeddingFailure).filter(EmbeddingFailure.note_id == note_id).delete()
+        db.commit()
 
 
 @router.get("/")
@@ -142,6 +170,7 @@ async def create_note(
     gami = process_event(db, event, {"note_id": note.id})
     
     _sync_note_links(db, note.id, data.content)
+    rebuild_tag_cooccurrences(db)
     
     db.commit()
     db.refresh(note)
@@ -188,6 +217,9 @@ async def update_note(
     if data.content is not None:
         _sync_note_links(db, note.id, data.content)
 
+    if data.tags is not None:
+        rebuild_tag_cooccurrences(db)
+
     db.commit()
     db.refresh(note)
     sync_skills(db)
@@ -202,6 +234,7 @@ def delete_note(note_id: int, db: Session = Depends(get_db)):
     if not note:
         raise HTTPException(status_code=404, detail="Note not found")
     db.delete(note)
+    rebuild_tag_cooccurrences(db)
     db.commit()
     sync_skills(db)
 
@@ -216,6 +249,7 @@ def accept_ai_tag(note_id: int, tag_name: str, db: Session = Depends(get_db)):
     existing = db.query(NoteTag).filter(NoteTag.note_id == note_id, NoteTag.tag_id == tag.id).first()
     if not existing:
         db.add(NoteTag(note_id=note.id, tag_id=tag.id, source="ai", confidence=0.9))
+        rebuild_tag_cooccurrences(db)
 
     gami = process_event(db, "tag_accepted_ai", {"note_id": note_id, "tag": tag_name})
     db.commit()
@@ -233,3 +267,32 @@ def get_backlinks(note_id: int, db: Session = Depends(get_db)):
                                       .filter(NoteLink.target_note_id == note_id).all()
     
     return [_note_to_response(n) for n in backlinking_notes]
+
+
+@router.post("/embeddings/retry-failed")
+async def retry_failed_embeddings(
+    background_tasks: BackgroundTasks,
+    limit: int = 20,
+    db: Session = Depends(get_db),
+):
+    now = datetime.utcnow()
+    failures = (
+        db.query(EmbeddingFailure)
+        .filter(EmbeddingFailure.attempts < settings.embedding_retry_max_attempts)
+        .filter((EmbeddingFailure.next_retry_at.is_(None)) | (EmbeddingFailure.next_retry_at <= now))
+        .order_by(EmbeddingFailure.updated_at.asc())
+        .limit(max(1, min(limit, 200)))
+        .all()
+    )
+
+    queued = 0
+    for failure in failures:
+        note = db.query(Note).filter(Note.id == failure.note_id).first()
+        if not note:
+            db.delete(failure)
+            continue
+        background_tasks.add_task(_trigger_embedding, note.id, note.content)
+        queued += 1
+
+    db.commit()
+    return {"queued": queued, "remaining_failures": db.query(EmbeddingFailure).count()}
