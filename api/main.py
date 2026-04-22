@@ -4,12 +4,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from database import init_db
-from routers import gamification, goals, notes, personal_streaks, skills, tags, vault
+from logging_config import setup_logging
+from routers import ai, gamification, goals, notes, personal_streaks, skills, tags, vault
 from routers.integrations import github
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    setup_logging()
     init_db()
     yield
 
@@ -32,6 +34,7 @@ app.include_router(gamification.router)
 app.include_router(personal_streaks.router)
 app.include_router(github.router)
 app.include_router(vault.router)
+app.include_router(ai.router)
 
 
 @app.get("/health")

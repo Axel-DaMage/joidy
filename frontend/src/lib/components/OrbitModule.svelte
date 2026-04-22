@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { plantStage } from '$lib/stores/gamification';
+  import { globalLevel } from '$lib/stores/gamification';
 
   export let size = 200;
 
@@ -14,7 +14,9 @@
     ['Saturno',  42, 15.5, 3.5,  40, 45 ],
   ] as const;
 
-  $: visiblePlanets = PLANETS.slice(0, Math.max(1, $plantStage));
+  // 100 levels / 6 planets ≈ 16.6 levels per planet
+  $: planetCount = Math.min(6, Math.max(1, Math.floor(($globalLevel - 1) / (100 / 6)) + 1));
+  $: visiblePlanets = PLANETS.slice(0, planetCount);
 </script>
 
 <div class="orbit-wrap" style="width:{size}px; height:{size}px;">
@@ -25,24 +27,28 @@
 
     <!-- Orbit ellipses + planets -->
     {#each visiblePlanets as [name, rx, ry, pr, period], i}
-      <ellipse cx="50" cy="50" rx={rx} ry={ry}
-        stroke="var(--plant)" stroke-width="0.35" stroke-dasharray="2 1.5" opacity="0.25"/>
+      <!-- Draw orbit path -->
+      <path id="orbit-{i}"
+        d="M {50-rx},50 A {rx},{ry} 0 1,0 {50+rx},50 A {rx},{ry} 0 1,0 {50-rx},50"
+        stroke="var(--plant)" stroke-width="0.35" stroke-dasharray="2 1.5" fill="none" opacity="0.25"/>
 
-      <g class="planet-orbit"
-        style="transform-origin:50px 50px; animation-duration:{period}s; animation-delay:-{(period * 0.17 * i).toFixed(1)}s">
-        <g style="transform:translateX({rx}px)">
-          <circle cx="0" cy="0" r={pr} fill="var(--plant)" opacity="0.9"/>
-          {#if i === 5}
-            <!-- Saturn ring -->
-            <ellipse cx="0" cy="0" rx={pr + 2.5} ry="1.3"
-              stroke="var(--plant)" stroke-width="0.5" fill="none" opacity="0.55"/>
-          {/if}
-        </g>
+      <!-- Planet group following the path -->
+      <g>
+        <circle cx="0" cy="0" r={pr} fill="var(--plant)" opacity="0.9"/>
+        {#if i === 5}
+          <!-- Saturn ring -->
+          <ellipse cx="0" cy="0" rx={pr + 2.5} ry="1.3"
+            stroke="var(--plant)" stroke-width="0.5" fill="none" opacity="0.55"/>
+        {/if}
+        <!-- Native SVG path animation for perfect elliptical tracking without deformation -->
+        <animateMotion dur="{period}s" repeatCount="indefinite" begin="-{period * 0.17 * i}s">
+          <mpath href="#orbit-{i}"/>
+        </animateMotion>
       </g>
     {/each}
   </svg>
 
-  <div class="orbit-tag mono">{visiblePlanets.length} planeta{visiblePlanets.length !== 1 ? 's' : ''}</div>
+  <div class="orbit-tag mono">niv {$globalLevel} · {visiblePlanets.length} planeta{visiblePlanets.length !== 1 ? 's' : ''}</div>
 </div>
 
 <style>
@@ -60,10 +66,6 @@
     transform-origin: 50px 50px;
   }
 
-  .planet-orbit {
-    animation: orbit linear infinite;
-  }
-
   .orbit-tag {
     position: absolute;
     bottom: 2px;
@@ -73,11 +75,6 @@
     color: var(--text-muted);
     letter-spacing: 0.06em;
     white-space: nowrap;
-  }
-
-  @keyframes orbit {
-    from { transform: rotate(0deg);   }
-    to   { transform: rotate(360deg); }
   }
 
   @keyframes sun-glow {

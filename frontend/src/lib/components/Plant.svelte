@@ -1,12 +1,12 @@
 <script lang="ts">
-  import { plantStage, plantStageName } from '$lib/stores/gamification';
+  import { plantStageName, globalLevel } from '$lib/stores/gamification';
 
   // wilted if no activity for 3+ days — passed as prop
   export let wilted = false;
   export let size = 200;
 
-  // stage 0-6
-  $: stage = $plantStage;
+  // Map 1-100 level to 0-6 visual stages (100 / 7 ≈ 14.3)
+  $: stage = Math.min(6, Math.floor(($globalLevel - 1) / (100 / 7)));
   $: stageName = $plantStageName;
 </script>
 
@@ -14,7 +14,7 @@
   class="plant-container"
   class:wilted
   style="width:{size}px; height:{size}px;"
-  title="Etapa: {stageName}"
+  title="Etapa: {stageName} (Nivel {$globalLevel})"
 >
   <svg
     viewBox="0 0 100 120"

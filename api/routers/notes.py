@@ -1,3 +1,4 @@
+import re
 from typing import Optional
 
 import httpx
@@ -64,6 +65,27 @@ def _get_or_create_tag(db: Session, name: str) -> Tag:
     return tag
 
 
+def _sync_note_links(db: Session, source_note_id: int, content: str):
+    """Parse [[WikiLinks]] and update note_links table."""
+    from models.note import NoteLink, Note
+    
+    # 1. Clear existing links
+    db.query(NoteLink).filter(NoteLink.source_note_id == source_note_id).delete()
+    
+    # 2. Extract links
+    # Supports [[Title]] or [[Title|Alias]]
+    # Handles leading/trailing spaces in title
+    links = re.findall(r"\[\[\s*([^\]|]+?)\s*(?:\|[^\]]+)?\]\]", content)
+    
+    for title in set(links):
+        # Find target note by title (case-insensitive)
+        target = db.query(Note).filter(Note.title.ilike(title.strip())).first()
+        if target:
+            db.add(NoteLink(source_note_id=source_note_id, target_note_id=target.id))
+    
+    db.flush()
+
+
 async def _trigger_embedding(note_id: int, content: str):
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -118,6 +140,9 @@ async def create_note(
 
     event = "note_imported_obsidian" if data.source == "obsidian" else "note_created"
     gami = process_event(db, event, {"note_id": note.id})
+    
+    _sync_note_links(db, note.id, data.content)
+    
     db.commit()
     db.refresh(note)
 
@@ -160,6 +185,9 @@ async def update_note(
     if gami is None:
         gami = process_event(db, "note_edited", {"note_id": note.id})
 
+    if data.content is not None:
+        _sync_note_links(db, note.id, data.content)
+
     db.commit()
     db.refresh(note)
     sync_skills(db)
@@ -194,3 +222,14 @@ def accept_ai_tag(note_id: int, tag_name: str, db: Session = Depends(get_db)):
     sync_skills(db)
 
     return {"tag": tag_name, "gamification": vars(gami)}
+
+
+@router.get("/{note_id}/backlinks")
+def get_backlinks(note_id: int, db: Session = Depends(get_db)):
+    """Returns a list of notes that link to this one."""
+    from models.note import NoteLink, Note
+    
+    backlinking_notes = db.query(Note).join(NoteLink, NoteLink.source_note_id == Note.id)\
+                                      .filter(NoteLink.target_note_id == note_id).all()
+    
+    return [_note_to_response(n) for n in backlinking_notes]

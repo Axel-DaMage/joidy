@@ -25,6 +25,18 @@ export const plantProgress = derived(
   }
 );
 
+export const MAX_XP = 60000;
+
+export const globalProgress = derived(
+  totalXP,
+  $xp => Math.min(100, ($xp / MAX_XP) * 100)
+);
+
+export const globalLevel = derived(
+  globalProgress,
+  $prog => Math.min(100, Math.floor($prog) + 1)
+);
+
 export async function loadStats(): Promise<void> {
   try {
     const stats: GamificationStats = await api.gamification.stats();
@@ -74,12 +86,34 @@ export function showXPGain(amount: number, x?: number, y?: number): void {
   }, 2200);
 }
 
-export function applyGamificationResult(result: { xp_awarded: number; total_xp: number; current_streak: number; plant_stage: number; plant_stage_name: string }): void {
+export const notifications = writable<{ id: string; message: string; type: 'info' | 'success' | 'level' }[]>([]);
+
+export function showNotification(message: string, type: 'info' | 'success' | 'level' = 'info'): void {
+  const id = `notif-${Date.now()}`;
+  notifications.update(ns => [...ns, { id, message, type }]);
+  setTimeout(() => {
+    notifications.update(ns => ns.filter(n => n.id !== id));
+  }, 4000);
+}
+
+export function applyGamificationResult(result: any): void {
+  const prevStage = get(plantStage);
+  
   totalXP.set(result.total_xp);
   currentStreak.set(result.current_streak);
   plantStage.set(result.plant_stage);
   plantStageName.set(result.plant_stage_name);
+  
   if (result.xp_awarded > 0) {
     showXPGain(result.xp_awarded);
   }
+
+  if (result.plant_stage_changed || result.plant_stage > prevStage) {
+    showNotification(`🌱 ¡Tu planta ha evolucionado a ${result.plant_stage_name.toUpperCase()}!`, 'level');
+  }
+
+  if (result.streak_changed && result.current_streak > 0) {
+    showNotification(`🔥 ¡Racha de ${result.current_streak} días!`, 'success');
+  }
 }
+

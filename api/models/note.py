@@ -13,7 +13,7 @@ class Note(Base):
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     content: Mapped[str] = mapped_column(Text, default="")
     source: Mapped[str] = mapped_column(String(50), default="joidy")  # joidy | obsidian
-    source_path: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    source_path: Mapped[str | None] = mapped_column(String(1000), nullable=True, index=True)
     is_embedded: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
@@ -45,3 +45,17 @@ class NoteTag(Base):
 
     note: Mapped["Note"] = relationship("Note", back_populates="tags")
     tag: Mapped["Tag"] = relationship("Tag", back_populates="notes")
+
+
+class NoteLink(Base):
+    """Stores connections between notes (WikiLinks)."""
+    __tablename__ = "note_links"
+
+    source_note_id: Mapped[int] = mapped_column(Integer, ForeignKey("notes.id", ondelete="CASCADE"), primary_key=True)
+    target_note_id: Mapped[int] = mapped_column(Integer, ForeignKey("notes.id", ondelete="CASCADE"), primary_key=True)
+    
+    # Optional: context where the link was found
+    context_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    source_note: Mapped["Note"] = relationship("Note", foreign_keys=[source_note_id], backref="out_links")
+    target_note: Mapped["Note"] = relationship("Note", foreign_keys=[target_note_id], backref="in_links")

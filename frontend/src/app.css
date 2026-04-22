@@ -9,11 +9,11 @@
 :root {
   /* Base surfaces — AMOLED */
   --bg:           #000000;
-  --surface:      #0a0a0a;
-  --elevated:     #141414;
-  --hover:        #1e1e1e;
-  --border:       #2e2e2e;
-  --border-light: #1a1a1a;
+  --surface:      #000000;
+  --elevated:     #000000;
+  --hover:        #0c0c0c;
+  --border:       #1a1a1a;
+  --border-light: #111111;
 
   /* Text — all white-range */
   --text-primary:   #ffffff;
@@ -60,18 +60,18 @@
 }
 
 [data-theme='light'] {
-  --bg:           #fafafa;
+  --bg:           #ffffff;
   --surface:      #ffffff;
-  --elevated:     #f4f4f4;
-  --hover:        #eeeeee;
-  --border:       #e0e0e0;
-  --border-light: #ebebeb;
-  --text-primary:   #0a0a0a;
-  --text-secondary: #666666;
-  --text-muted:     #aaaaaa;
-  --text-disabled:  #cccccc;
-  --accent:     #1a1a1a;
-  --plant:      #3a6a3a;
+  --elevated:     #ffffff;
+  --hover:        #f0f0f0;
+  --border:       #000000;
+  --border-light: #cfcfcf;
+  --text-primary:   #000000;
+  --text-secondary: #222222;
+  --text-muted:     #666666;
+  --text-disabled:  #999999;
+  --accent:     #000000;
+  --plant:      #000000;
 }
 
 /* ── Reset & Base ────────────────────────────────────────────────────────────── */
@@ -88,6 +88,7 @@ html, body {
   -moz-osx-font-smoothing: grayscale;
   padding: 0;
   margin: 0;
+  overflow: hidden;
 }
 
 #svelte { height: 100%; }

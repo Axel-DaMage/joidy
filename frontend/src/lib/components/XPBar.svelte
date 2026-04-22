@@ -4,14 +4,19 @@
 
 <div class="xp-bar-wrapper">
   <div class="xp-meta">
-    <span class="label">XP</span>
-    <span class="xp-value mono">{$totalXP.toLocaleString()}</span>
-    {#if $nextStageXP}
-      <span class="xp-next muted">/ {$nextStageXP.toLocaleString()}</span>
-    {/if}
+    <div class="xp-badge">XP</div>
+    <div class="xp-stats">
+      <span class="xp-current">{$totalXP.toLocaleString()}</span>
+      {#if $nextStageXP}
+        <span class="xp-divider">/</span>
+        <span class="xp-next">{$nextStageXP.toLocaleString()}</span>
+      {/if}
+    </div>
   </div>
   <div class="progress-track">
-    <div class="progress-fill" style="width: {$plantProgress}%"></div>
+    <div class="progress-fill" style="width: {$plantProgress}%">
+      <div class="progress-glow"></div>
+    </div>
   </div>
 </div>
 
@@ -33,26 +38,95 @@
   .xp-bar-wrapper {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 10px;
     width: 100%;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: var(--r);
+    backdrop-filter: blur(5px);
   }
 
   .xp-meta {
     display: flex;
-    align-items: baseline;
-    gap: 6px;
+    justify-content: space-between;
+    align-items: center;
   }
 
-  .xp-value {
+  .xp-badge {
+    background: var(--xp);
+    color: #000;
+    font-size: 10px;
+    font-weight: 800;
+    padding: 2px 6px;
+    border-radius: 4px;
     font-family: var(--font-mono);
-    font-size: 13px;
-    color: var(--xp);
-    font-weight: 500;
   }
+
+  .xp-stats {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+  }
+
+  .xp-current {
+    font-family: var(--font-mono);
+    font-size: 16px;
+    color: var(--text-primary);
+    font-weight: 600;
+    text-shadow: 0 0 10px rgba(74, 222, 128, 0.3);
+  }
+
+  .xp-divider { color: var(--text-muted); font-size: 12px; }
 
   .xp-next {
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-muted);
+  }
+
+  .progress-track {
+    height: 6px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 3px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--xp-dark) 0%, var(--xp) 100%);
+    border-radius: 3px;
+    transition: width 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+    position: relative;
+  }
+
+  .progress-glow {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 20px;
+    height: 100%;
+    background: white;
+    box-shadow: 0 0 15px 5px white;
+    opacity: 0.3;
+  }
+
+  .xp-float {
+    position: fixed;
+    pointer-events: none;
+    color: var(--xp);
+    font-weight: 800;
+    font-family: var(--font-mono);
+    font-size: 18px;
+    z-index: 2000;
+    animation: xp-float-anim 1s ease-out forwards;
+    text-shadow: 0 0 10px rgba(74, 222, 128, 0.5);
+  }
+
+  @keyframes xp-float-anim {
+    0% { transform: translate(-50%, 0) scale(0.5); opacity: 0; }
+    20% { transform: translate(-50%, -20px) scale(1.2); opacity: 1; }
+    100% { transform: translate(-50%, -60px) scale(1); opacity: 0; }
   }
 </style>

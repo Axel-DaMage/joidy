@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { plantStage } from '$lib/stores/gamification';
+  import { globalLevel } from '$lib/stores/gamification';
 
   export let size = 200;
 
@@ -22,7 +22,8 @@
     [[1, 8, 28, 1, 3], [10, 10, 36, 1, 4], [20, 12, 46, 2, 5], [31, 9, 32, 1, 4], [40, 6, 55, 1, 6], [46, 20, 78, 3, 8], [67, 11, 50, 2, 5], [78, 13, 40, 2, 4], [87, 10, 30, 1, 3], [94, 5, 20, 1, 2]],
   ];
 
-  $: buildings = BUILDINGS_BY_STAGE[$plantStage] ?? BUILDINGS_BY_STAGE[0];
+  $: stageIdx = Math.min(6, Math.floor(($globalLevel - 1) / (100 / 7)));
+  $: buildings = BUILDINGS_BY_STAGE[stageIdx] ?? BUILDINGS_BY_STAGE[0];
 
   function windowsFor(x: number, bw: number, bh: number, cols: number, rows: number) {
     const wins: { x: number; y: number }[] = [];
@@ -69,7 +70,7 @@
     {/each}
   </svg>
 
-  <div class="city-tag mono">ciudad nivel {$plantStage}</div>
+  <div class="city-tag mono">ciudad nivel {$globalLevel}</div>
 </div>
 
 <style>

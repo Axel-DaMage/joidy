@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { fly } from 'svelte/transition';
-  import { Plus, ChevronLeft, ChevronRight, LayoutGrid, RotateCcw } from 'lucide-svelte';
+  import DynamicIcon from '$lib/components/DynamicIcon.svelte';
   import Plant          from '$lib/components/Plant.svelte';
   import GalaxyModule   from '$lib/components/GalaxyModule.svelte';
   import MountainModule from '$lib/components/MountainModule.svelte';
@@ -11,6 +11,7 @@
   import XPBar          from '$lib/components/XPBar.svelte';
   import NoteCard       from '$lib/components/NoteCard.svelte';
   import PomodoroWidget from '$lib/components/PomodoroWidget.svelte';
+  import TimeWidget from '$lib/components/TimeWidget.svelte';
   import Widget         from '$lib/components/Widget.svelte';
   import { totalXP, currentStreak, lastActivity } from '$lib/stores/gamification';
   import { notes, loadNotes } from '$lib/stores/notes';
@@ -79,67 +80,74 @@
       <Widget id={wid} panel="left" index={i} total={$dashboardLayout.left.length}>
 
         {#if wid === 'plant-carousel'}
-          <!-- Module navigation -->
-          <div class="module-nav">
-            <button class="nav-arrow" on:click={prevModule} title="Anterior"><ChevronLeft size={14}/></button>
-            <span class="module-label mono">{MODULES[moduleIdx].label.toUpperCase()}</span>
-            <button class="nav-arrow" on:click={nextModule} title="Siguiente"><ChevronRight size={14}/></button>
-          </div>
-
-          <!-- Module viewport -->
-          <div class="module-viewport">
-            {#key moduleIdx}
-              <div class="module-slide" in:fly={{ x: slideDir * 40, duration: 220, opacity: 0 }}>
-                {#if MODULES[moduleIdx].id === 'planta'}
-                  <Plant size={200} wilted={isWilted} />
-                {:else if MODULES[moduleIdx].id === 'galaxia'}
-                  <GalaxyModule size={200} />
-                {:else if MODULES[moduleIdx].id === 'montana'}
-                  <MountainModule size={200} />
-                {:else if MODULES[moduleIdx].id === 'ciudad'}
-                  <CityModule size={200} />
-                {:else if MODULES[moduleIdx].id === 'orbita'}
-                  <OrbitModule size={200} />
-                {/if}
-              </div>
-            {/key}
-          </div>
-
-          <!-- Dots -->
-          <div class="module-dots">
-            {#each MODULES as _, idx}
-              <button
-                class="dot" class:active={idx === moduleIdx}
-                on:click={() => { slideDir = idx > moduleIdx ? 1 : -1; moduleIdx = idx; }}
-                aria-label={MODULES[idx].label}
-              ></button>
-            {/each}
-          </div>
-
-          {#if isWilted}
-            <div class="wilt-notice">
-              <span style="font-size:11px; color: var(--text-muted);">Tu planta tiene sed. Escribe algo hoy.</span>
+          <div class="widget-centered">
+            <!-- Module navigation -->
+            <div class="module-nav">
+              <button class="nav-arrow" on:click={prevModule} title="Anterior"><DynamicIcon name="ChevronLeft" size={14}/></button>
+              <span class="module-label mono">{MODULES[moduleIdx].label.toUpperCase()}</span>
+              <button class="nav-arrow" on:click={nextModule} title="Siguiente"><DynamicIcon name="ChevronRight" size={14}/></button>
             </div>
-          {/if}
+
+            <!-- Module viewport -->
+            <div class="module-viewport">
+              {#key moduleIdx}
+                <div class="module-slide" in:fly={{ x: slideDir * 40, duration: 220, opacity: 0 }}>
+                  {#if MODULES[moduleIdx].id === 'planta'}
+                    <Plant size={160} wilted={isWilted} />
+                  {:else if MODULES[moduleIdx].id === 'galaxia'}
+                    <GalaxyModule size={160} />
+                  {:else if MODULES[moduleIdx].id === 'montana'}
+                    <MountainModule size={160} />
+                  {:else if MODULES[moduleIdx].id === 'ciudad'}
+                    <CityModule size={160} />
+                  {:else if MODULES[moduleIdx].id === 'orbita'}
+                    <OrbitModule size={160} />
+                  {/if}
+                </div>
+              {/key}
+            </div>
+
+            <!-- Dots -->
+            <div class="module-dots">
+              {#each MODULES as _, idx}
+                <button
+                  class="dot" class:active={idx === moduleIdx}
+                  on:click={() => { slideDir = idx > moduleIdx ? 1 : -1; moduleIdx = idx; }}
+                  aria-label={MODULES[idx].label}
+                ></button>
+              {/each}
+            </div>
+
+            {#if isWilted}
+              <div class="wilt-notice">
+                <span style="font-size:11px; color: var(--text-muted);">Tu planta tiene sed. Escribe algo hoy.</span>
+              </div>
+            {/if}
+          </div>
 
         {:else if wid === 'stats-xp'}
-          <div class="xp-section"><XPBar /></div>
-          <div class="stats-row">
-            <div class="stat">
-              <span class="stat-value mono">{$currentStreak}</span>
-              <span class="stat-label label">días</span>
-            </div>
-            <div class="stat-divider"></div>
-            <div class="stat">
-              <span class="stat-value mono">{$totalXP.toLocaleString()}</span>
-              <span class="stat-label label">xp</span>
-            </div>
-            <div class="stat-divider"></div>
-            <div class="stat">
-              <span class="stat-value mono">{$notes.length}</span>
-              <span class="stat-label label">notas</span>
+          <div class="widget-centered">
+            <!-- XPBar moved to footer -->
+            <div class="stats-row">
+              <div class="stat">
+                <span class="stat-value mono">{$currentStreak}</span>
+                <span class="stat-label label">días</span>
+              </div>
+              <div class="stat-divider"></div>
+              <div class="stat">
+                <span class="stat-value mono">{$totalXP.toLocaleString()}</span>
+                <span class="stat-label label">xp</span>
+              </div>
+              <div class="stat-divider"></div>
+              <div class="stat">
+                <span class="stat-value mono">{$notes.length}</span>
+                <span class="stat-label label">notas</span>
+              </div>
             </div>
           </div>
+
+        {:else if wid === 'time-widget'}
+          <TimeWidget />
 
         {:else if wid === 'pomodoro'}
           <PomodoroWidget />
@@ -215,33 +223,39 @@
           {/if}
 
         {:else if wid === 'plant-carousel'}
-          <div class="module-nav">
-            <button class="nav-arrow" on:click={prevModule}><ChevronLeft size={14}/></button>
-            <span class="module-label mono">{MODULES[moduleIdx].label.toUpperCase()}</span>
-            <button class="nav-arrow" on:click={nextModule}><ChevronRight size={14}/></button>
-          </div>
-          <div class="module-viewport">
-            {#key moduleIdx}
-              <div class="module-slide" in:fly={{ x: slideDir * 40, duration: 220, opacity: 0 }}>
-                {#if MODULES[moduleIdx].id === 'planta'}<Plant size={200} wilted={isWilted} />
-                {:else if MODULES[moduleIdx].id === 'galaxia'}<GalaxyModule size={200} />
-                {:else if MODULES[moduleIdx].id === 'montana'}<MountainModule size={200} />
-                {:else if MODULES[moduleIdx].id === 'ciudad'}<CityModule size={200} />
-                {:else if MODULES[moduleIdx].id === 'orbita'}<OrbitModule size={200} />
-                {/if}
-              </div>
-            {/key}
+          <div class="widget-centered">
+            <div class="module-nav">
+              <button class="nav-arrow" on:click={prevModule}><DynamicIcon name="ChevronLeft" size={14}/></button>
+              <span class="module-label mono">{MODULES[moduleIdx].label.toUpperCase()}</span>
+              <button class="nav-arrow" on:click={nextModule}><DynamicIcon name="ChevronRight" size={14}/></button>
+            </div>
+            <div class="module-viewport">
+              {#key moduleIdx}
+                <div class="module-slide" in:fly={{ x: slideDir * 40, duration: 220, opacity: 0 }}>
+                  {#if MODULES[moduleIdx].id === 'planta'}<Plant size={160} wilted={isWilted} />
+                  {:else if MODULES[moduleIdx].id === 'galaxia'}<GalaxyModule size={160} />
+                  {:else if MODULES[moduleIdx].id === 'montana'}<MountainModule size={160} />
+                  {:else if MODULES[moduleIdx].id === 'ciudad'}<CityModule size={160} />
+                  {:else if MODULES[moduleIdx].id === 'orbita'}<OrbitModule size={160} />
+                  {/if}
+                </div>
+              {/key}
+            </div>
           </div>
 
         {:else if wid === 'stats-xp'}
-          <div class="xp-section"><XPBar /></div>
-          <div class="stats-row">
-            <div class="stat"><span class="stat-value mono">{$currentStreak}</span><span class="stat-label label">días</span></div>
-            <div class="stat-divider"></div>
-            <div class="stat"><span class="stat-value mono">{$totalXP.toLocaleString()}</span><span class="stat-label label">xp</span></div>
-            <div class="stat-divider"></div>
-            <div class="stat"><span class="stat-value mono">{$notes.length}</span><span class="stat-label label">notas</span></div>
+          <div class="widget-centered">
+            <div class="stats-row">
+              <div class="stat"><span class="stat-value mono">{$currentStreak}</span><span class="stat-label label">días</span></div>
+              <div class="stat-divider"></div>
+              <div class="stat"><span class="stat-value mono">{$totalXP.toLocaleString()}</span><span class="stat-label label">xp</span></div>
+              <div class="stat-divider"></div>
+              <div class="stat"><span class="stat-value mono">{$notes.length}</span><span class="stat-label label">notas</span></div>
+            </div>
           </div>
+
+        {:else if wid === 'time-widget'}
+          <TimeWidget />
 
         {:else if wid === 'pomodoro'}
           <PomodoroWidget />
@@ -251,21 +265,6 @@
     {/each}
 
   </section>
-
-  <!-- Edit toggle button (bottom-left of left panel) -->
-  <button
-    class="edit-toggle"
-    class:active={$editMode}
-    on:click={() => editMode.update(v => !v)}
-    title={$editMode ? 'Salir del modo edición' : 'Editar layout'}
-  >
-    <LayoutGrid size={12} />
-  </button>
-
-  <!-- FAB: new note -->
-  <a href="/notes?new=1" class="fab btn btn-primary" title="Nueva nota">
-    <Plus size={16} />
-  </a>
 
 </div>
 
@@ -316,7 +315,7 @@
     padding: var(--s4) var(--s5) var(--s4);
     border-right: 1px solid var(--border);
     gap: 10px;
-    overflow-y: auto;
+    overflow: hidden;
   }
 
   /* ── Module navigation ── */
@@ -346,7 +345,7 @@
   .nav-arrow:active { transform: scale(0.93); }
 
   .module-viewport {
-    width: 220px; height: 220px;
+    width: 170px; height: 170px;
     position: relative; overflow: hidden;
     display: flex; align-items: center; justify-content: center;
   }
@@ -368,6 +367,15 @@
   .wilt-notice {
     padding: var(--s2) var(--s3);
     border: 1px solid var(--border); border-radius: var(--r); text-align: center;
+  }
+
+  .widget-centered {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 6px 0;
   }
 
   .xp-section { width: 100%; max-width: 240px; }
@@ -414,21 +422,7 @@
   .issue-title { font-size: 13px; }
   .issue-repo  { color: var(--text-muted); font-size: 10px; white-space: nowrap; }
 
-  /* ── Edit toggle ── */
-  .edit-toggle {
-    position: fixed;
-    bottom: calc(var(--statusbar-h) + 72px);
-    right: 32px;
-    width: 32px; height: 32px;
-    display: flex; align-items: center; justify-content: center;
-    background: var(--surface); border: 1px solid var(--border); border-radius: var(--r);
-    color: var(--text-muted); cursor: pointer; z-index: 40;
-    transition: all var(--t-fast);
-  }
-  .edit-toggle:hover  { border-color: var(--text-muted); color: var(--text-secondary); }
-  .edit-toggle.active { border-color: var(--xp); color: var(--xp); }
-
-  /* ── FAB ── */
+  /* ── Notes Grid ── */
   .fab {
     position: fixed;
     bottom: calc(var(--statusbar-h) + 24px); right: 32px;

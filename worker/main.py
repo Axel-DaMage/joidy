@@ -5,15 +5,21 @@ Joidy Worker — runs background tasks concurrently:
 """
 
 import asyncio
+import logging
 import signal
 import sys
 
+from logging_config import setup_logging
 from watchers.vault_watcher import watch_vault
 from tasks.joidy_daily_writer import schedule_daily_writes
 
 
+logger = logging.getLogger(__name__)
+
+
 async def main():
-    print("[worker] Joidy Worker starting...")
+    setup_logging()
+    logger.info("[worker] Joidy Worker starting...")
 
     tasks = [
         asyncio.create_task(watch_vault(), name="vault_watcher"),
@@ -21,7 +27,7 @@ async def main():
     ]
 
     def shutdown(sig):
-        print(f"\n[worker] Signal {sig.name} received, shutting down...")
+        logger.info("[worker] Signal %s received, shutting down...", sig.name)
         for task in tasks:
             task.cancel()
 
@@ -34,7 +40,7 @@ async def main():
     except asyncio.CancelledError:
         pass
     finally:
-        print("[worker] Stopped.")
+        logger.info("[worker] Stopped.")
 
 
 if __name__ == "__main__":

@@ -1,10 +1,14 @@
 <script lang="ts">
   import { createEventDispatcher, onDestroy } from 'svelte';
-  import { Eye, EyeOff, Save, Trash2, X } from 'lucide-svelte';
+  import { Eye, EyeOff, Save, Trash2, X, Palette, Search, Maximize } from 'lucide-svelte';
+  import * as L from 'lucide-svelte';
+  import DynamicIcon from './DynamicIcon.svelte';
   import { marked } from 'marked';
   import TagChip from './TagChip.svelte';
-  import { aiSuggestions, fetchAISuggestions } from '$lib/stores/notes';
-  import type { Note } from '$lib/api';
+  import { aiSuggestions, fetchAISuggestions, findNoteByTitle } from '$lib/stores/notes';
+  import { activeIconPack, showFrontmatter } from '$lib/stores/settings';
+  import { api, type Note } from '$lib/api';
+  import { goto } from '$app/navigation';
 
   // Configure marked once — GFM enables tables, strikethrough, autolinks
   marked.use({ gfm: true, breaks: true });
@@ -19,6 +23,37 @@
   let saved = false;
   let previewMode = false;
   let aiTimeout: ReturnType<typeof setTimeout>;
+  
+  let showIconSettings = false;
+  let customColor = '#ffffff';
+  let iconSearchTerm = '';
+  const ALL_ICONS = Object.keys(L).filter(k => /^[A-Z]/.test(k) && k !== 'default' && k !== 'createLucideIcon');
+  
+  let visibleLimit = 150;
+
+  $: filteredIconsAll = ALL_ICONS.filter(ic => ic.toLowerCase().includes(iconSearchTerm.toLowerCase()));
+  $: filteredIcons = filteredIconsAll.slice(0, visibleLimit);
+
+  // Reset limit when search term changes
+  $: if (iconSearchTerm !== undefined) {
+    visibleLimit = 150;
+  }
+
+  function handleIconScroll(e: Event) {
+    const target = e.currentTarget as HTMLElement;
+    if (target.scrollHeight - target.scrollTop - target.clientHeight < 120) {
+      if (visibleLimit < filteredIconsAll.length) {
+        visibleLimit += 150;
+      }
+    }
+  }
+
+  let backlinks: Note[] = [];
+
+  // Fetch backlinks on mount or when note changes
+  $: if (note) {
+    api.notes.backlinks(note.id).then(res => backlinks = res).catch(() => backlinks = []);
+  }
 
   const dispatch = createEventDispatcher<{
     save: { title: string; content: string; tags: string[] };
@@ -32,14 +67,47 @@
 
     // Pre-process Obsidian wikilinks → HTML spans before marked runs
     // (marked doesn't know about [[links]] and would render them as plain text)
-    const preprocessed = md.replace(/\[\[([^\]]+)\]\]/g, '<span class="wikilink">$1</span>');
+    const preprocessed = md.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (match, title, alias) => {
+      const display = alias || title;
+      return `<span class="wikilink" data-title="${title.trim()}">${display}</span>`;
+    });
 
     return String(marked.parse(preprocessed));
   }
 
-  $: wordCount = content.trim() ? content.trim().split(/\s+/).length : 0;
-  $: charCount = content.length;
-  $: renderedHtml = renderMarkdown(content);
+  function handlePreviewClick(e: MouseEvent) {
+    const target = e.target as HTMLElement;
+    if (target.classList.contains('wikilink')) {
+      const title = target.getAttribute('data-title');
+      if (title) {
+        const linkedNote = findNoteByTitle(title);
+        if (linkedNote) {
+          goto(`/notes?id=${linkedNote.id}`);
+        } else {
+          // Future: Option to create missing note
+          console.log('Note not found:', title);
+        }
+      }
+    }
+  }
+
+  $: rawFrontmatterMatch = content.match(/^---\n[\s\S]*?\n---/);
+  $: rawFrontmatter = rawFrontmatterMatch ? rawFrontmatterMatch[0] : '';
+  $: visibleEditorContent = $showFrontmatter ? content : content.replace(/^---\n[\s\S]*?\n---[\n]*/, '');
+
+  $: wordCount = visibleEditorContent.trim() ? visibleEditorContent.trim().split(/\s+/).length : 0;
+  $: charCount = visibleEditorContent.length;
+  $: renderedHtml = renderMarkdown(visibleEditorContent);
+
+  function updateVisibleContent(e: Event) {
+    const val = (e.currentTarget as HTMLTextAreaElement).value;
+    if (!$showFrontmatter && rawFrontmatter) {
+      content = rawFrontmatter + '\n\n' + val;
+    } else {
+      content = val;
+    }
+    onContentChange();
+  }
 
   function addTag(t: string) {
     const clean = t.trim().toLowerCase();
@@ -82,6 +150,30 @@
     setTimeout(() => (saved = false), 2000);
   }
 
+  function pickIcon(ic: string) {
+    updateFrontmatter('icon', ic);
+    updateFrontmatter('iconPack', $activeIconPack);
+  }
+
+  function updateFrontmatter(key: string, value: string) {
+    const m = content.match(/^---\n([\s\S]*?)\n---/);
+    if (m) {
+      let yaml = m[1];
+      const regex = new RegExp(`(?:^|\\n)${key}:.*`);
+      if (regex.test(yaml)) {
+        yaml = yaml.replace(regex, `\n${key}: ${value}`);
+      } else {
+        yaml += `\n${key}: ${value}`;
+      }
+      yaml = yaml.replace(/\n{2,}/g, '\n').trim();
+      content = content.replace(/^---\n[\s\S]*?\n---/, `---\n${yaml}\n---`);
+    } else {
+      content = `---\n${key}: ${value}\n---\n\n` + content;
+    }
+    onContentChange();
+    handleSave();
+  }
+
   function onKeydown(e: KeyboardEvent) {
     if ((e.ctrlKey || e.metaKey) && e.key === 's') {
       e.preventDefault();
@@ -91,25 +183,71 @@
       e.preventDefault();
       previewMode = !previewMode;
     }
+    if (e.key === 'Escape' && zenMode) {
+      e.preventDefault();
+      e.stopPropagation();
+      zenMode = false;
+    }
   }
+
+  let zenMode = false;
 </script>
 
 <svelte:window on:keydown={onKeydown} />
 
-<div class="editor-shell">
+<div class="editor-shell" class:zen-mode={zenMode}>
   <!-- Toolbar -->
+  {#if !zenMode}
   <div class="toolbar">
     <div class="toolbar-left">
-      {#if note}
-        <span class="note-source">{note.source === 'obsidian' ? '⬡ obsidian' : '◆ joidy'}</span>
-      {:else}
-        <span class="note-source">nueva nota</span>
-      {/if}
     </div>
 
     <div class="toolbar-right">
       <span class="stat">{wordCount} palabras</span>
-      <span class="stat">{charCount} chars</span>
+      <span class="stat">{charCount} caracteres</span>
+
+      <button
+        class="toolbar-btn icon-only"
+        class:active={zenMode}
+        on:click={() => zenMode = !zenMode}
+        title="Modo Zen (Esc para salir)"
+      >
+        <Maximize size={14} />
+      </button>
+
+      <div class="icon-flyout-container">
+        <button
+          class="toolbar-btn"
+          class:active={showIconSettings}
+          on:click={() => showIconSettings = !showIconSettings}
+          title="Personalizar Icono"
+        >
+          <Palette size={14} />
+        </button>
+        {#if showIconSettings}
+          <div class="icon-flyout">
+            <div class="flyout-header">
+              <Search size={12} color="var(--text-muted)" />
+              <input class="icon-search-input" bind:value={iconSearchTerm} placeholder="Buscar icono..." />
+            </div>
+            <div class="icon-grid" on:scroll={handleIconScroll}>
+              {#each filteredIcons as ic}
+                <button class="icon-grid-btn" on:click={() => pickIcon(ic)} title={ic}>
+                  <DynamicIcon name={ic} size={16} />
+                </button>
+              {/each}
+              {#if filteredIcons.length === 0}
+                <span class="no-icons-msg">No se encontraron iconos</span>
+              {/if}
+            </div>
+            <div class="color-picker-row">
+              <label for="icon-color">Color:</label>
+              <input type="color" id="icon-color" bind:value={customColor} on:change={(e) => updateFrontmatter('iconColor', e.currentTarget.value)} />
+              <button class="clear-btn" on:click={() => { updateFrontmatter('iconColor', ''); updateFrontmatter('icon', ''); updateFrontmatter('iconPack', ''); }}>Reset</button>
+            </div>
+          </div>
+        {/if}
+      </div>
 
       <button
         class="toolbar-btn"
@@ -129,7 +267,7 @@
         title="Guardar (Ctrl+S)"
       >
         <Save size={14} />
-        <span>{saved ? 'Guardado' : saving ? '...' : note ? 'Guardar' : 'Crear'}</span>
+        <span class="save-status">{saved ? 'Guardado' : saving ? '...' : note ? 'Guardar' : 'Crear'}</span>
       </button>
 
       {#if note}
@@ -143,6 +281,7 @@
       </button>
     </div>
   </div>
+  {/if}
 
   <!-- Title -->
   <div class="title-row">
@@ -180,14 +319,28 @@
   <div class="content-area">
     {#if previewMode}
       <!-- svelte-ignore a11y-no-static-element-interactions -->
-      <div class="preview" on:dblclick={() => previewMode = false}>
+      <div class="preview" on:dblclick={() => previewMode = false} on:click={handlePreviewClick}>
         {@html renderedHtml}
+
+        {#if backlinks.length > 0}
+          <div class="backlinks-section">
+            <h5 class="mono">BACKLINKS</h5>
+            <div class="backlinks-grid">
+              {#each backlinks as bl}
+                <button class="backlink-card" on:click={() => goto(`/notes?id=${bl.id}`)}>
+                  <span class="bl-title">{bl.title}</span>
+                  <span class="bl-meta mono">{bl.source === 'obsidian' ? '⬡' : '◆'}</span>
+                </button>
+              {/each}
+            </div>
+          </div>
+        {/if}
       </div>
     {:else}
       <textarea
         class="content-textarea"
-        bind:value={content}
-        on:input={onContentChange}
+        value={visibleEditorContent}
+        on:input={updateVisibleContent}
         placeholder="Escribe en markdown... (Ctrl+S para guardar, Ctrl+P para preview)"
         spellcheck="false"
       ></textarea>
@@ -200,8 +353,20 @@
     display: flex;
     flex-direction: column;
     height: 100%;
-    width: 100%;
-    overflow: hidden;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+  }
+
+  .editor-shell.zen-mode {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 9999;
+    border-left: none;
+    background: var(--bg);
+    padding-top: 40px;
   }
 
   /* ── Toolbar ── */
@@ -214,7 +379,122 @@
     background: var(--surface);
     flex-shrink: 0;
     gap: var(--s3);
+    position: relative;
+    z-index: 20;
   }
+
+  .icon-flyout-container {
+    position: relative;
+    display: flex;
+  }
+
+  .icon-flyout {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 5px;
+    width: 240px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: 10px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    z-index: 50;
+  }
+
+  .flyout-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border-light);
+  }
+
+  .icon-search-input {
+    background: transparent;
+    border: none;
+    outline: none;
+    font-size: 11px;
+    font-family: var(--font-sans);
+    color: var(--text-primary);
+    width: 100%;
+  }
+  .icon-search-input::placeholder { color: var(--text-muted); }
+
+  .icon-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 6px;
+    margin-bottom: 10px;
+    max-height: 165px;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+  
+  /* Scrollbar styles for the icon grid */
+  .icon-grid::-webkit-scrollbar { width: 4px; }
+  .icon-grid::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  .no-icons-msg {
+    grid-column: 1 / -1;
+    text-align: center;
+    font-size: 11px;
+    color: var(--text-muted);
+    padding: 10px 0;
+  }
+
+  .icon-grid-btn {
+    width: 100%;
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg);
+    border: 1px solid var(--border-light);
+    border-radius: 4px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all var(--t-fast);
+  }
+  .icon-grid-btn:hover {
+    background: var(--elevated);
+    border-color: var(--accent);
+    color: var(--text-primary);
+  }
+
+  .color-picker-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-family: var(--font-sans);
+  }
+
+  .color-picker-row input[type="color"] {
+    flex: 1;
+    height: 24px;
+    padding: 0;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    cursor: pointer;
+  }
+
+  .clear-btn {
+    font-size: 11px;
+    padding: 3px 8px;
+    background: transparent;
+    border: 1px solid var(--error);
+    border-radius: 3px;
+    color: var(--error);
+    cursor: pointer;
+    font-family: var(--font-mono);
+    transition: all var(--t-fast);
+  }
+  .clear-btn:hover { background: var(--error); color: var(--bg); }
+
 
   .toolbar-left {
     display: flex;
@@ -262,6 +542,12 @@
   .save-btn { border-color: var(--accent); color: var(--accent); }
   .save-btn:hover { background: var(--accent); color: var(--bg); }
   .save-btn.saved { background: var(--success); border-color: var(--success); color: var(--bg); }
+
+  .save-status {
+    display: inline-block;
+    min-width: 58px;
+    text-align: center;
+  }
 
   .danger-btn { color: var(--error); border-color: transparent; }
   .danger-btn:hover { border-color: var(--error); background: transparent; }
@@ -394,7 +680,24 @@
   .preview :global(hr) { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
   .preview :global(strong) { font-weight: 600; }
   .preview :global(p) { margin: 0 0 12px; }
-  .preview :global(.wikilink) { color: var(--xp); border-bottom: 1px solid color-mix(in srgb, var(--xp) 40%, transparent); cursor: pointer; font-size: 13px; }
+  .preview :global(.wikilink) { color: var(--xp); border-bottom: 1px solid color-mix(in srgb, var(--xp) 40%, transparent); cursor: pointer; transition: border-bottom-color var(--t-fast); }
+  .preview :global(.wikilink:hover) { border-bottom-color: var(--xp); }
+
+  .backlinks-section {
+    margin-top: 40px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+  }
+  .backlinks-section h5 { font-size: 10px; color: var(--text-muted); margin-bottom: 12px; letter-spacing: 0.1em; }
+  .backlinks-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+  .backlink-card {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 12px; background: var(--elevated); border: 1px solid var(--border);
+    border-radius: var(--r); cursor: pointer; transition: all var(--t-fast);
+  }
+  .backlink-card:hover { border-color: var(--text-secondary); background: var(--hover); }
+  .bl-title { font-size: 12px; color: var(--text-primary); }
+  .bl-meta { font-size: 10px; color: var(--text-muted); }
   .preview :global(.task) { font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary); margin: 4px 0; }
   .preview :global(.task.done) { color: var(--success); }
 

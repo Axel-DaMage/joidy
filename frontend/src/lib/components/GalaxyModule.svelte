@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { plantStage, plantProgress } from '$lib/stores/gamification';
+  import { globalProgress, globalLevel } from '$lib/stores/gamification';
 
   export let size = 200;
 
@@ -24,10 +24,11 @@
     'cúmulo estelar', 'galaxia espiral', 'universo conocido',
   ];
 
-  $: visibleCount = Math.max(3, Math.floor(($plantProgress / 100) * N));
+  $: visibleCount = Math.max(3, Math.floor(($globalProgress / 100) * N));
   $: stars        = ALL_STARS.slice(0, visibleCount);
-  $: stageLabel   = STAGE_LABELS[$plantStage] ?? STAGE_LABELS[6];
-  $: coreSize     = 2 + $plantStage * 0.6;
+  $: stageIdx     = Math.min(6, Math.floor(($globalLevel - 1) / (100 / 7)));
+  $: stageLabel   = STAGE_LABELS[stageIdx] ?? STAGE_LABELS[6];
+  $: coreSize     = 2 + stageIdx * 0.6;
 </script>
 
 <div class="galaxy-wrap" style="width:{size}px; height:{size}px;">
@@ -37,7 +38,7 @@
       <stop offset="0%"   stop-color="var(--plant-glow)" stop-opacity="0.35" />
       <stop offset="100%" stop-color="var(--plant-glow)" stop-opacity="0" />
     </radialGradient>
-    <ellipse cx="50" cy="60" rx="{12 + $plantStage * 3}" ry="{7 + $plantStage * 1.8}" fill="url(#core-glow)" />
+    <ellipse cx="50" cy="60" rx="{12 + stageIdx * 3}" ry="{7 + stageIdx * 1.8}" fill="url(#core-glow)" />
 
     <!-- Stars -->
     {#each stars as s, i}
@@ -53,7 +54,7 @@
     <circle cx="50" cy="60" r={coreSize} fill="var(--plant)" class="core-pulse" />
   </svg>
 
-  <div class="stage-tag mono">{stageLabel}</div>
+  <div class="stage-tag mono">{stageLabel} · niv {$globalLevel}</div>
 </div>
 
 <style>

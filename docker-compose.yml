@@ -74,6 +74,7 @@ services:
       - AI_SERVICE_URL=http://ai-service:8002
       - VAULT_PATH=/vault
       - APP_ENV=${APP_ENV:-development}
+      - PYTHONUNBUFFERED=1
     depends_on:
       api:
         condition: service_healthy

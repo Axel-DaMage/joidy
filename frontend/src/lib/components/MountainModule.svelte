@@ -1,22 +1,24 @@
 <script lang="ts">
-  import { plantStage, plantProgress } from '$lib/stores/gamification';
+  import { globalProgress, globalLevel } from '$lib/stores/gamification';
 
   export let size = 200;
 
-  // Climber moves from base (12, 102) to summit (50, 18) along the left face
-  $: t  = Math.min(1, $plantProgress / 100);
+  // Climber moves from base (12, 102) to summit (50, 18) along the left face OVER THE ENTIRE 1-100 levels!
+  $: t  = Math.min(1, $globalProgress / 100);
   $: cx = 12 + 38 * t;
   $: cy = 102 - 84 * t;
 
-  // Snow cap appears above 60% progress
-  $: showSnow = $plantProgress >= 60;
-  // Flag appears at stage 6
-  $: showFlag = $plantStage >= 6;
+  // Snow cap appears above 60% global progress (Level 60+)
+  $: showSnow = $globalProgress >= 60;
+  // Flag appears at Level 100
+  $: showFlag = $globalLevel >= 100;
 
   const ALTITUDE = [
     'base camp', '300m', '600m', 'zona de muerte', '1200m', 'cumbre cercana', '¡cima!'
   ];
-  $: altLabel = ALTITUDE[$plantStage] ?? ALTITUDE[6];
+  
+  $: stageIdx = Math.min(6, Math.floor(($globalLevel - 1) / (100 / 7)));
+  $: altLabel = ALTITUDE[stageIdx] ?? ALTITUDE[6];
 </script>
 
 <div class="mountain-wrap" style="width:{size}px; height:{size}px;">
@@ -64,7 +66,7 @@
     {/if}
   </svg>
 
-  <div class="alt-tag mono">{altLabel}</div>
+  <div class="alt-tag mono">{altLabel} · niv {$globalLevel}</div>
 </div>
 
 <style>

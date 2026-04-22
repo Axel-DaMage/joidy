@@ -4,6 +4,7 @@ import { writable } from 'svelte/store';
 export type WidgetId =
   | 'plant-carousel'
   | 'stats-xp'
+  | 'time-widget'
   | 'pomodoro'
   | 'recent-notes'
   | 'github-issues';
@@ -17,6 +18,7 @@ export interface WidgetMeta {
 export const WIDGET_REGISTRY: Record<WidgetId, WidgetMeta> = {
   'plant-carousel': { id: 'plant-carousel', label: 'Módulo visual', panel: 'left'  },
   'stats-xp':       { id: 'stats-xp',       label: 'Stats & XP',   panel: 'left'  },
+  'time-widget':    { id: 'time-widget',    label: 'Reloj',        panel: 'left'  },
   'pomodoro':       { id: 'pomodoro',        label: 'Pomodoro',     panel: 'left'  },
   'recent-notes':   { id: 'recent-notes',    label: 'Notas',        panel: 'right' },
   'github-issues':  { id: 'github-issues',   label: 'GitHub',       panel: 'right' },
@@ -29,7 +31,7 @@ export interface DashboardLayout {
 }
 
 const DEFAULT: DashboardLayout = {
-  left:  ['plant-carousel', 'stats-xp', 'pomodoro'],
+  left:  ['plant-carousel', 'stats-xp', 'time-widget', 'pomodoro'],
   right: ['recent-notes', 'github-issues'],
 };
 
@@ -41,7 +43,14 @@ function load(): DashboardLayout {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as DashboardLayout;
-      if (Array.isArray(parsed.left) && Array.isArray(parsed.right)) return parsed;
+      if (Array.isArray(parsed.left) && Array.isArray(parsed.right)) {
+        if (!parsed.left.includes('time-widget') && !parsed.right.includes('time-widget')) {
+          const pIdx = parsed.left.indexOf('pomodoro');
+          if (pIdx > -1) parsed.left.splice(pIdx, 0, 'time-widget');
+          else parsed.left.push('time-widget');
+        }
+        return parsed;
+      }
     }
   } catch { /* */ }
   return DEFAULT;
@@ -52,7 +61,10 @@ function save(l: DashboardLayout) {
 }
 
 function createLayoutStore() {
-  const { subscribe, update, set } = writable<DashboardLayout>(load());
+  // Always start with DEFAULT for SSR — don't touch localStorage at module init
+  // time or SvelteKit will produce a hydration mismatch (server=DEFAULT,
+  // client=saved). The real saved value is applied in init() via onMount.
+  const { subscribe, update, set } = writable<DashboardLayout>(DEFAULT);
 
   return {
     subscribe,

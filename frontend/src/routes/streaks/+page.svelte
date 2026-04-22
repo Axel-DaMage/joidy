@@ -1,56 +1,91 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { fly, fade, slide } from 'svelte/transition';
+  import { fly, fade, slide, scale } from 'svelte/transition';
   import { flip } from 'svelte/animate';
-  import { Plus, Pencil, Trash2, Check, X, Flame } from 'lucide-svelte';
-  import { api, type PersonalStreak } from '$lib/api';
+  import { Plus, Check, X, Flame, Settings, Snowflake, Search, ChevronRight } from 'lucide-svelte';
+  import StreakIcon from '$lib/components/StreakIcon.svelte';
+  import StreakCreateModal from '$lib/components/StreakCreateModal.svelte';
+  import StreakHeatmap from '$lib/components/StreakHeatmap.svelte';
+  import StreakStatsPanel from '$lib/components/StreakStatsPanel.svelte';
+  import { api, type PersonalStreak, type StreakStats } from '$lib/api';
 
   let streaks: PersonalStreak[] = [];
+  let stats: StreakStats | null = null;
   let loading = true;
   let error = '';
+  let mounted = false;
 
-  // ── Create form ────────────────────────────────────────────────────────────
-  let showCreate = false;
-  let newName = '';
-  let newEmoji = '🔥';
-  let newDesc = '';
-  let saving = false;
+  // ── Selection ─────────────────────────────────────────────────────────────
+  let selectedId: number | null = null;
+  $: selected = streaks.find(s => s.id === selectedId) || null;
 
-  // ── Edit form ──────────────────────────────────────────────────────────────
-  let editingId: number | null = null;
-  let editName = '';
-  let editEmoji = '';
-  let editDesc = '';
+  // ── Filter / Search ───────────────────────────────────────────────────────
+  let searchQuery = '';
 
-  // ── Emoji picker ───────────────────────────────────────────────────────────
-  const EMOJIS = ['🔥','💪','🏃','📚','🎸','🎹','🧘','🥗','💧','🛌','✍️','🎯','🗣️',
-                  '🚴','🏊','🧠','💻','🎨','🎬','☕','🍎','🌿','⚡','🔒','🌅'];
+  // ── Delete confirmation ───────────────────────────────────────────────────
+  let deleteConfirm: number | null = null;
+  let deleteConfirmName: string = '';
 
+  $: filteredStreaks = streaks.filter(s => {
+    if (s.is_archived) return false;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      return s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q);
+    }
+    return true;
+  });
+
+  $: pendingCount = filteredStreaks.filter(s => !s.today_checked && !s.is_archived).length;
+  $: doneCount = filteredStreaks.filter(s => s.today_checked).length;
+
+  // ── Modal ─────────────────────────────────────────────────────────────────
+  let showModal = false;
+  let editTarget: PersonalStreak | null = null;
+
+  // ── Check-in state ────────────────────────────────────────────────────────
+  let busy = new Set<number>();
+  let checkinNote = '';
+  let showCheckinExtra = false;
+
+  // ── Load ──────────────────────────────────────────────────────────────────
   onMount(async () => {
+    mounted = true;
     try {
-      streaks = await api.personalStreaks.list();
+      const [s, st] = await Promise.all([
+        api.personalStreaks.list(),
+        api.personalStreaks.stats(),
+      ]);
+      streaks = s;
+      stats = st;
     } catch (e) {
-      error = 'No se pudo cargar las rachas.';
+      error = 'Error de conexión con el sistema de rachas.';
       console.error('[streaks]', e);
     } finally {
       loading = false;
     }
   });
 
-  // ── In-flight tracking (per-card loading state) ────────────────────────────
-  let busy = new Set<number>();
-
-  // ── Actions ────────────────────────────────────────────────────────────────
-  async function createStreak() {
-    if (!newName.trim()) return;
-    saving = true;
+  // ── Actions ───────────────────────────────────────────────────────────────
+  async function handleSave(e: CustomEvent) {
+    const data = e.detail;
+    const targetId = editTarget?.id ?? null;
+    // Close modal immediately
+    showModal = false;
+    editTarget = null;
     try {
-      const s = await api.personalStreaks.create({ name: newName.trim(), emoji: newEmoji, description: newDesc });
-      streaks = [...streaks, s];
-      newName = ''; newEmoji = '🔥'; newDesc = '';
-      showCreate = false;
-    } finally {
-      saving = false;
+      if (targetId !== null) {
+        const updated = await api.personalStreaks.update(targetId, data);
+        streaks = streaks.map(s => s.id === targetId ? updated : s);
+      } else {
+        const created = await api.personalStreaks.create(data);
+        streaks = [...streaks, created];
+        // Force reactivity
+        streaks = streaks;
+        selectedId = created.id;
+      }
+      stats = await api.personalStreaks.stats();
+    } catch (e) {
+      console.error('[streaks] save error:', e);
     }
   }
 
@@ -58,8 +93,13 @@
     if (busy.has(id)) return;
     busy = new Set(busy).add(id);
     try {
-      const updated = await api.personalStreaks.checkin(id);
+      const updated = await api.personalStreaks.checkin(id, {
+        note: checkinNote || undefined,
+      });
       streaks = streaks.map(s => s.id === id ? updated : s);
+      checkinNote = '';
+      showCheckinExtra = false;
+      stats = await api.personalStreaks.stats();
     } finally {
       busy.delete(id); busy = new Set(busy);
     }
@@ -71,706 +111,812 @@
     try {
       const updated = await api.personalStreaks.undo(id);
       streaks = streaks.map(s => s.id === id ? updated : s);
+      stats = await api.personalStreaks.stats();
     } finally {
       busy.delete(id); busy = new Set(busy);
     }
   }
 
+  async function useFreeze(id: number) {
+    if (busy.has(id)) return;
+    busy = new Set(busy).add(id);
+    try {
+      const updated = await api.personalStreaks.freeze(id);
+      streaks = streaks.map(s => s.id === id ? updated : s);
+    } catch (e: any) {
+      console.error('[streaks] freeze error:', e);
+    } finally {
+      busy.delete(id); busy = new Set(busy);
+    }
+  }
+
+  let deleteTimeoutId: NodeJS.Timeout | null = null;
+
   async function deleteStreak(id: number) {
-    await api.personalStreaks.delete(id);
-    streaks = streaks.filter(s => s.id !== id);
+    if (deleteConfirm !== id) {
+      const streak = streaks.find(s => s.id === id);
+      deleteConfirm = id;
+      deleteConfirmName = streak?.name || 'Sin nombre';
+      return;
+    }
+    if (deleteTimeoutId) clearTimeout(deleteTimeoutId);
+    try {
+      await api.personalStreaks.delete(id);
+      streaks = streaks.filter(s => s.id !== id);
+      if (selectedId === id) selectedId = null;
+      stats = await api.personalStreaks.stats();
+      deleteConfirm = null;
+      deleteConfirmName = '';
+    } catch (e) {
+      console.error('[streaks] delete error:', e);
+      deleteConfirm = null;
+      deleteConfirmName = '';
+    }
   }
 
-  function startEdit(s: PersonalStreak) {
-    editingId = s.id;
-    editName = s.name;
-    editEmoji = s.emoji;
-    editDesc = s.description;
+  function cancelDelete() {
+    deleteConfirm = null;
+    deleteConfirmName = '';
   }
 
-  async function saveEdit() {
-    if (!editName.trim() || editingId === null) return;
-    const updated = await api.personalStreaks.update(editingId, {
-      name: editName.trim(),
-      emoji: editEmoji,
-      description: editDesc,
-    });
-    streaks = streaks.map(s => s.id === editingId ? updated : s);
-    editingId = null;
+  function openCreate() {
+    editTarget = null;
+    showModal = true;
   }
 
-  // ── Helpers ────────────────────────────────────────────────────────────────
-  // Show last 14 days as dots in mini-calendar
-  function last14(streak: PersonalStreak) {
-    return streak.history.slice(-14);
+  function openEdit(s: PersonalStreak) {
+    editTarget = s;
+    showModal = true;
   }
 
+  // ── Helpers ───────────────────────────────────────────────────────────────
   function streakLabel(n: number): string {
-    if (n === 0) return 'sin racha';
-    if (n === 1) return '1 día';
-    return `${n} días`;
+    if (n === 0) return '0';
+    return String(n);
   }
 
-  $: pending = streaks.filter(s => !s.today_checked);
-  $: done = streaks.filter(s => s.today_checked);
+  function freqLabel(s: PersonalStreak): string {
+    if (s.frequency === 'every_n' && s.frequency_days > 1) return `cada ${s.frequency_days}d`;
+    return 'diaria';
+  }
+
+  function cardThemeStyle(s: PersonalStreak): string {
+    const c = s.color || 'var(--xp)';
+    const t = s.theme || 'solid';
+    if (t === 'gradient') return `box-shadow: inset 0 0 0 1px color-mix(in srgb, ${c} 30%, transparent); border-color: color-mix(in srgb, ${c} 30%, transparent);`;
+    if (t === 'glow') return `box-shadow: 0 0 10px color-mix(in srgb, ${c} 10%, transparent), inset 0 0 0 1px color-mix(in srgb, ${c} 14%, transparent); border-color: color-mix(in srgb, ${c} 20%, transparent); background: var(--surface);`;
+    if (t === 'minimal') return `background: var(--bg); border: 1px solid color-mix(in srgb, ${c} 12%, var(--border)); opacity: 0.82;`;
+    return ``;
+  }
+
+  function detailThemeStyle(s: PersonalStreak): string {
+    const c = s.color || 'var(--xp)';
+    const t = s.theme || 'solid';
+    if (t === 'gradient') return `box-shadow: inset 0 0 0 1px color-mix(in srgb, ${c} 26%, transparent);`;
+    if (t === 'glow') return `box-shadow: 0 0 16px color-mix(in srgb, ${c} 12%, transparent);`;
+    if (t === 'minimal') return `opacity: 0.9;`;
+    return '';
+  }
+
+  // Completion detection
+  function isStreakCompleted(s: PersonalStreak): boolean {
+    if (!s.target_date) return false;
+    const today = new Date();
+    const targetDate = new Date(s.target_date);
+    return today >= targetDate;
+  }
+
+  function getDaysForCompletion(s: PersonalStreak): string {
+    if (!s.target_date || !s.start_date) return '';
+    const start = new Date(s.start_date);
+    const target = new Date(s.target_date);
+    const diffTime = Math.abs(target.getTime() - start.getTime());
+    const totalDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    return `${s.current_streak}/${totalDays}`;
+  }
 </script>
 
 <div class="streaks-page">
-  <!-- Header -->
-  <div class="page-header">
-    <div class="header-left">
-      <h1 class="page-title">Rachas</h1>
-      <span class="page-sub mono">
-        {#if loading}cargando...{:else}
-          {done.length}/{streaks.length} completadas hoy
+  {#if mounted}
+    <div class="streaks-layout" transition:fade>
+      <!-- ═══ LEFT PANEL: LIST ═══ -->
+      <div class="list-panel">
+        <!-- Header -->
+        <div class="list-header">
+          <div class="list-header-top">
+            <div>
+              <h1 class="list-title">Rachas</h1>
+              <span class="list-sub mono">
+                {#if loading}cargando...
+                {:else}{doneCount}/{filteredStreaks.length} hoy
+                {/if}
+              </span>
+            </div>
+            <button class="new-btn" on:click={openCreate}>
+              <Plus size={13} />
+            </button>
+          </div>
+
+          <!-- Search -->
+          <div class="search-row">
+            <Search size={12} />
+            <input
+              class="search-input"
+              bind:value={searchQuery}
+              placeholder="Buscar racha..."
+            />
+          </div>
+        </div>
+
+        <!-- Streak list -->
+        <div class="list-body">
+          {#if error}
+            <div class="error-msg">{error}</div>
+          {:else if loading}
+            <div class="empty-state mono">Cargando...</div>
+          {:else if filteredStreaks.length === 0}
+            <div class="empty-state">
+              <Flame size={24} style="opacity:.25; margin-bottom:8px;" />
+              <p>No hay rachas. ¡Crea una para comenzar!</p>
+              <button class="link-btn" on:click={openCreate}>Crear una nueva</button>
+            </div>
+          {:else}
+            {#each filteredStreaks as streak (streak.id)}
+              <div
+                class="streak-item"
+                class:theme-gradient={streak.theme === 'gradient'}
+                class:theme-glow={streak.theme === 'glow'}
+                class:theme-minimal={streak.theme === 'minimal'}
+                class:selected={selectedId === streak.id}
+                class:checked={streak.today_checked}
+                class:archived={streak.is_archived}
+                class:completed={isStreakCompleted(streak)}
+                style="--theme-ac: {streak.color || 'var(--xp)'};"
+                on:click={() => selectedId = streak.id}
+                on:keydown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    selectedId = streak.id;
+                  }
+                }}
+                role="button"
+                tabindex="0"
+                animate:flip={{ duration: 200 }}
+              >
+                <div class="item-icon">
+                  {#if streak.icon && streak.icon.length > 0}
+                    <StreakIcon name={streak.icon} size={18} color={streak.color || undefined} />
+                  {:else}
+                    <span class="item-emoji">{streak.emoji || '🔥'}</span>
+                  {/if}
+                </div>
+                <div class="item-info">
+                  <span class="item-name">{streak.name}</span>
+                  <span class="item-meta mono">
+                    {#if isStreakCompleted(streak)}
+                      Finalizado {getDaysForCompletion(streak)} días
+                    {:else}
+                      {freqLabel(streak)}
+                      {#if streak.target_date}
+                        · {streak.days_remaining}d left
+                      {/if}
+                    {/if}
+                  </span>
+                </div>
+                <div class="item-count" style="color: {streak.color || 'var(--xp)'};">
+                  <span class="item-num mono">{streakLabel(streak.current_streak)}</span>
+                  {#if streak.today_checked}
+                    <Check size={10} style="color: {streak.color || 'var(--xp)'};" />
+                  {/if}
+                </div>
+                <div class="item-actions">
+                  <button
+                    class="item-action-btn"
+                    on:click|stopPropagation={() => openEdit(streak)}
+                    title="Editar racha"
+                  >
+                    <Settings size={12} />
+                  </button>
+                  <button
+                    class="item-action-btn danger"
+                    on:click|stopPropagation={() => deleteStreak(streak.id)}
+                    title="Eliminar racha"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              </div>
+            {/each}
+          {/if}
+        </div>
+      </div>
+
+      <!-- ═══ RIGHT PANEL: DETAIL ═══ -->
+      <div class="detail-panel">
+        {#if selected}
+          <div
+            class="detail-content"
+            class:theme-gradient={selected.theme === 'gradient'}
+            class:theme-glow={selected.theme === 'glow'}
+            class:theme-minimal={selected.theme === 'minimal'}
+            class:completed={isStreakCompleted(selected)}
+            style="--theme-ac: {selected.color || 'var(--xp)'};"
+            transition:fade={{ duration: 150 }}
+          >
+            <div class="top-metrics">
+              <!-- Streak counter -->
+              <div class="counter-section">
+                <button
+                  class="counter-ring"
+                  style="--ring-color: {isStreakCompleted(selected) ? '#10b981' : (selected.color || 'var(--xp)')};"
+                  on:click={() => !selected.is_archived && !selected.today_checked && !isStreakCompleted(selected) && checkin(selected.id)}
+                  disabled={selected.is_archived || selected.today_checked || busy.has(selected.id) || isStreakCompleted(selected)}
+                  title={isStreakCompleted(selected) ? 'Racha completada' : (selected.today_checked ? 'Ya hiciste check-in hoy' : 'Hacer check-in')}
+                >
+                  {#if isStreakCompleted(selected)}
+                    <span class="counter-num mono" style="color: #10b981;">✓</span>
+                    <span class="counter-label mono">FINALIZADO</span>
+                  {:else}
+                    <span class="counter-num mono">{selected.current_streak}</span>
+                    <span class="counter-label mono">DÍAS</span>
+                  {/if}
+                </button>
+              </div>
+
+              <!-- Vertical stats panel -->
+              <div class="detail-stats">
+                <div class="dstat-row">
+                  <span class="dstat-lbl">Actual</span>
+                  <span class="dstat-val mono">{selected.current_streak}</span>
+                </div>
+                <div class="dstat-row">
+                  <span class="dstat-lbl">Mejor</span>
+                  <span class="dstat-val mono">{selected.longest_streak}</span>
+                </div>
+                <div class="dstat-row">
+                  <span class="dstat-lbl">Check-ins</span>
+                  <span class="dstat-val mono">{selected.total_checkins}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Activity calendar -->
+            <div class="heatmap-section">
+              <StreakHeatmap
+                history={selected.history}
+                color={selected.color || '#c8a96e'}
+                startDate={selected.start_date}
+              />
+            </div>
+
+            <!-- Footer: dates + actions, sticky at bottom -->
+            <div class="detail-footer">
+              <div class="dates-info">
+                {#if selected.start_date}
+                  <div class="date-item">
+                    <span class="date-label">Inicio</span>
+                    <span class="date-val mono">{new Date(selected.start_date).toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                  </div>
+                {/if}
+                {#if selected.target_date}
+                  <div class="date-item">
+                    <span class="date-label">Objetivo</span>
+                    <span class="date-val mono">{new Date(selected.target_date).toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                  </div>
+                {/if}
+                <div class="date-item">
+                  <span class="date-label">Creada</span>
+                  <span class="date-val mono">{new Date(selected.created_at).toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                </div>
+              </div>
+
+
+            </div>
+          </div>
+        {:else}
+          <!-- No selection state -->
+          <div class="no-selection">
+            {#if stats}
+              <StreakStatsPanel {stats} />
+            {/if}
+            <div class="no-sel-hint">
+              <ChevronRight size={14} />
+              <span>Selecciona una racha para ver detalles</span>
+            </div>
+          </div>
         {/if}
-      </span>
-    </div>
-    <button class="new-btn" on:click={() => { showCreate = !showCreate; }}>
-      <Plus size={13} />
-      <span>Nueva racha</span>
-    </button>
-  </div>
-
-  <!-- Create form -->
-  {#if showCreate}
-    <div class="create-form" transition:slide={{ duration: 200 }}>
-      <div class="form-row">
-        <div class="emoji-display">{newEmoji}</div>
-        <input
-          class="input name-input"
-          bind:value={newName}
-          placeholder="Nombre de la racha..."
-          on:keydown={(e) => e.key === 'Enter' && createStreak()}
-          autofocus
-        />
-      </div>
-      <div class="emoji-grid">
-        {#each EMOJIS as e}
-          <button
-            class="emoji-btn"
-            class:selected={newEmoji === e}
-            on:click={() => newEmoji = e}
-          >{e}</button>
-        {/each}
-      </div>
-      <input
-        class="input desc-input"
-        bind:value={newDesc}
-        placeholder="Descripción opcional..."
-      />
-      <div class="form-actions">
-        <button class="btn-cancel" on:click={() => showCreate = false}>Cancelar</button>
-        <button class="btn-save" on:click={createStreak} disabled={saving || !newName.trim()}>
-          {saving ? '...' : 'Crear'}
-        </button>
       </div>
     </div>
-  {/if}
-
-  {#if error}
-    <div class="error-msg">{error}</div>
-  {:else if loading}
-    <div class="empty-state mono">Cargando...</div>
-  {:else if streaks.length === 0}
-    <div class="empty-state">
-      <Flame size={28} style="opacity:.3; margin-bottom:12px;" />
-      <p>No tienes rachas todavía.</p>
-      <p class="mono" style="font-size:11px; margin-top:4px;">Crea una para empezar a llevar la cuenta.</p>
-    </div>
-  {:else}
-    <!-- Pending today -->
-    {#if pending.length > 0}
-      <div class="section-label mono">pendientes hoy — {pending.length}</div>
-      <div class="streaks-grid">
-        {#each pending as streak, i (streak.id)}
-          <div
-            class="streak-card at-risk"
-            animate:flip={{ duration: 240 }}
-            in:fly={{ y: 10, duration: 180, delay: i * 40 }}
-            out:fade={{ duration: 100 }}
-          >
-            {#if editingId === streak.id}
-              <!-- Edit mode -->
-              <div class="edit-form">
-                <div class="form-row">
-                  <div class="emoji-display small">{editEmoji}</div>
-                  <input class="input" bind:value={editName} on:keydown={(e) => e.key === 'Enter' && saveEdit()} autofocus />
-                </div>
-                <div class="emoji-grid small">
-                  {#each EMOJIS as e}
-                    <button class="emoji-btn" class:selected={editEmoji === e} on:click={() => editEmoji = e}>{e}</button>
-                  {/each}
-                </div>
-                <div class="edit-actions">
-                  <button class="icon-action" on:click={() => editingId = null} title="Cancelar"><X size={12} /></button>
-                  <button class="icon-action accent" on:click={saveEdit} title="Guardar"><Check size={12} /></button>
-                </div>
-              </div>
-            {:else}
-              <div class="card-top">
-                <span class="card-emoji">{streak.emoji}</span>
-                <div class="card-meta">
-                  <span class="card-name">{streak.name}</span>
-                  {#if streak.description}
-                    <span class="card-desc mono">{streak.description}</span>
-                  {/if}
-                </div>
-                <div class="card-actions">
-                  <button class="icon-action" on:click={() => startEdit(streak)} title="Editar"><Pencil size={11} /></button>
-                  <button class="icon-action danger" on:click={() => deleteStreak(streak.id)} title="Eliminar"><Trash2 size={11} /></button>
-                </div>
-              </div>
-
-              <div class="streak-count-row">
-                {#key streak.current_streak}
-                  <span class="streak-number" in:fly={{ y: -10, duration: 200 }}>{streak.current_streak}</span>
-                {/key}
-                <div class="streak-count-meta">
-                  <span class="streak-unit">días</span>
-                  {#if streak.longest_streak > streak.current_streak}
-                    <span class="best-label mono">mejor: {streak.longest_streak}</span>
-                  {/if}
-                </div>
-              </div>
-
-              <div class="dots-row">
-                {#each last14(streak) as day, di}
-                  <span
-                    class="dot"
-                    class:filled={day.checked}
-                    style="transition-delay: {di * 15}ms"
-                    title={day.date}
-                  ></span>
-                {/each}
-              </div>
-
-              <button
-                class="checkin-btn"
-                class:loading={busy.has(streak.id)}
-                on:click={() => checkin(streak.id)}
-                disabled={busy.has(streak.id)}
-              >
-                {#if busy.has(streak.id)}
-                  <span class="spinner"></span>
-                {:else}
-                  <Check size={12} />
-                  Marcar hoy
-                {/if}
-              </button>
-            {/if}
-          </div>
-        {/each}
-      </div>
-    {/if}
-
-    <!-- Done today -->
-    {#if done.length > 0}
-      <div class="section-label mono" style="margin-top: {pending.length > 0 ? '24px' : '0'};">completadas hoy — {done.length}</div>
-      <div class="streaks-grid">
-        {#each done as streak, i (streak.id)}
-          <div
-            class="streak-card done"
-            animate:flip={{ duration: 240 }}
-            in:fly={{ y: 10, duration: 180, delay: i * 40 }}
-            out:fade={{ duration: 100 }}
-          >
-            {#if editingId === streak.id}
-              <div class="edit-form">
-                <div class="form-row">
-                  <div class="emoji-display small">{editEmoji}</div>
-                  <input class="input" bind:value={editName} on:keydown={(e) => e.key === 'Enter' && saveEdit()} autofocus />
-                </div>
-                <div class="emoji-grid small">
-                  {#each EMOJIS as e}
-                    <button class="emoji-btn" class:selected={editEmoji === e} on:click={() => editEmoji = e}>{e}</button>
-                  {/each}
-                </div>
-                <div class="edit-actions">
-                  <button class="icon-action" on:click={() => editingId = null} title="Cancelar"><X size={12} /></button>
-                  <button class="icon-action accent" on:click={saveEdit} title="Guardar"><Check size={12} /></button>
-                </div>
-              </div>
-            {:else}
-              <div class="card-top">
-                <span class="card-emoji">{streak.emoji}</span>
-                <div class="card-meta">
-                  <span class="card-name">{streak.name}</span>
-                  {#if streak.description}
-                    <span class="card-desc mono">{streak.description}</span>
-                  {/if}
-                </div>
-                <div class="card-actions">
-                  <button class="icon-action" on:click={() => startEdit(streak)} title="Editar"><Pencil size={11} /></button>
-                  <button class="icon-action danger" on:click={() => deleteStreak(streak.id)} title="Eliminar"><Trash2 size={11} /></button>
-                </div>
-              </div>
-
-              <div class="streak-count-row">
-                {#key streak.current_streak}
-                  <span class="streak-number" in:fly={{ y: -10, duration: 200 }}>{streak.current_streak}</span>
-                {/key}
-                <div class="streak-count-meta">
-                  <span class="streak-unit">días</span>
-                  {#if streak.longest_streak > streak.current_streak}
-                    <span class="best-label mono">mejor: {streak.longest_streak}</span>
-                  {/if}
-                </div>
-              </div>
-
-              <div class="dots-row">
-                {#each last14(streak) as day, di}
-                  <span
-                    class="dot"
-                    class:filled={day.checked}
-                    style="transition-delay: {di * 15}ms"
-                    title={day.date}
-                  ></span>
-                {/each}
-              </div>
-
-              <button
-                class="undo-btn"
-                class:loading={busy.has(streak.id)}
-                on:click={() => undo(streak.id)}
-                disabled={busy.has(streak.id)}
-              >
-                {#if busy.has(streak.id)}
-                  <span class="spinner"></span>
-                {:else}
-                  <X size={11} />
-                  Deshacer
-                {/if}
-              </button>
-            {/if}
-          </div>
-        {/each}
-      </div>
-    {/if}
   {/if}
 </div>
 
+<!-- Delete confirmation modal -->
+{#if deleteConfirm !== null}
+  <div class="modal-backdrop" transition:fade={{ duration: 150 }}>
+    <div class="delete-modal" transition:scale={{ duration: 200 }}>
+      <div class="delete-modal-content">
+        <div class="delete-modal-icon">
+          <X size={32} />
+        </div>
+        <h2 class="delete-modal-title">Eliminar racha</h2>
+        <p class="delete-modal-text">
+          ¿Estás seguro de que quieres eliminar <strong>{deleteConfirmName}</strong>?
+        </p>
+        <p class="delete-modal-warning">Esta acción no se puede deshacer.</p>
+      </div>
+      <div class="delete-modal-buttons">
+        <button class="btn-cancel" on:click={cancelDelete}>Cancelar</button>
+        <button class="btn-danger" on:click={() => deleteStreak(deleteConfirm)}>Eliminar</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<StreakCreateModal
+  bind:open={showModal}
+  editStreak={editTarget}
+  on:close={() => { showModal = false; editTarget = null; }}
+  on:save={handleSave}
+/>
+
 <style>
   .streaks-page {
-    padding: 28px 32px;
-    max-width: 960px;
+    height: 100%; width: 100%; background: var(--bg);
+    overflow: hidden;
+  }
+
+  .streaks-layout {
+    display: grid;
+    grid-template-columns: 340px 1fr;
     height: 100%;
-    overflow-y: auto;
   }
 
-  /* ── Header ── */
-  .page-header {
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    margin-bottom: 24px;
+  /* ═══════════════════════════════════════════════════════════════════════════
+     LEFT PANEL
+     ═══════════════════════════════════════════════════════════════════════ */
+  .list-panel {
+    display: flex; flex-direction: column;
+    border-right: 1px solid var(--border);
+    height: 100%;
   }
 
-  .header-left { display: flex; align-items: baseline; gap: 14px; }
-
-  .page-title {
-    font-size: 20px;
-    font-weight: 400;
-    color: var(--text-primary);
-    margin: 0;
-  }
-
-  .page-sub {
-    font-size: 11px;
-    color: var(--text-muted);
-  }
-
-  .new-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 14px;
-    background: var(--accent);
-    color: var(--bg);
-    border: none;
-    border-radius: var(--r);
-    font-size: 12px;
-    font-family: var(--font-sans);
-    cursor: pointer;
-    transition: opacity var(--t-fast);
-  }
-  .new-btn:hover { opacity: 0.8; }
-
-  /* ── Create / Edit form ── */
-  .create-form {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--r);
-    padding: 16px;
-    margin-bottom: 24px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .form-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .emoji-display {
-    font-size: 24px;
-    width: 36px;
-    text-align: center;
+  .list-header {
+    padding: 20px 16px 12px;
+    display: flex; flex-direction: column; gap: 10px;
+    border-bottom: 1px solid var(--border-light);
     flex-shrink: 0;
   }
-  .emoji-display.small { font-size: 18px; width: 28px; }
 
-  .input {
-    flex: 1;
-    background: var(--elevated);
-    border: 1px solid var(--border);
-    border-radius: var(--r);
+  .list-header-top {
+    display: flex; align-items: flex-start; justify-content: space-between;
+  }
+
+  .list-title {
+    font-size: 20px; font-weight: 700; color: var(--text-primary);
+    letter-spacing: -0.02em;
+  }
+  .list-sub { font-size: 11px; color: var(--text-muted); }
+
+  .new-btn {
+    width: 32px; height: 32px;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--text-primary); color: var(--bg);
+    border: none; border-radius: 8px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .new-btn:hover { opacity: 0.85; transform: scale(1.05); }
+
+  /* Search */
+  .search-row {
+    display: flex; align-items: center; gap: 8px;
     padding: 6px 10px;
-    font-size: 13px;
-    font-family: var(--font-sans);
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 6px; color: var(--text-muted);
+    transition: border-color 0.15s;
+  }
+  .search-row:focus-within { border-color: var(--text-muted); }
+
+  .search-input {
+    flex: 1; background: none; border: none; outline: none;
+    color: var(--text-primary); font-size: 12px;
+  }
+
+  /* Category tabs */
+  .cat-tabs {
+    display: flex; gap: 2px; overflow: hidden;
+  }
+
+  .cat-tab {
+    display: flex; align-items: center; gap: 4px;
+    padding: 4px 8px; font-size: 10px;
+    background: none; border: 1px solid transparent;
+    border-radius: 4px; color: var(--text-disabled);
+    cursor: pointer; transition: all 0.15s;
+    white-space: nowrap; flex-shrink: 0;
+  }
+  .cat-tab:hover { color: var(--text-muted); }
+  .cat-tab.active { border-color: var(--border); color: var(--text-primary); background: var(--elevated); }
+  .cat-tab-label { display: none; }
+  .cat-tab.active .cat-tab-label { display: inline; }
+
+  .archive-toggle {
+    display: flex; align-items: center; gap: 5px;
+    padding: 3px 8px; font-size: 9px;
+    background: none; border: none; color: var(--text-disabled);
+    cursor: pointer; transition: color 0.15s;
+    font-family: var(--font-mono); letter-spacing: 0.03em;
+    align-self: flex-start;
+  }
+  .archive-toggle:hover { color: var(--text-muted); }
+  .archive-toggle.active { color: var(--text-secondary); }
+
+  /* List body */
+  .list-body {
+    flex: 1; overflow: hidden; padding: 8px;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+
+  .streak-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 6px; cursor: pointer;
+    transition: all 0.15s; text-align: left; width: 100%;
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+  }
+
+  .streak-item > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  .streak-item::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    z-index: 0;
+  }
+
+  .streak-item.theme-gradient {
+    border-color: color-mix(in srgb, var(--theme-ac) 30%, var(--border));
+  }
+
+  .streak-item.theme-gradient::before {
+    opacity: 1;
+    background:
+      linear-gradient(
+        125deg,
+        color-mix(in srgb, var(--theme-ac) 16%, transparent) 0%,
+        transparent 45%,
+        color-mix(in srgb, var(--theme-ac) 10%, transparent) 100%
+      );
+  }
+
+  .streak-item.theme-glow {
+    border-color: color-mix(in srgb, var(--theme-ac) 22%, var(--border));
+    box-shadow:
+      0 0 14px color-mix(in srgb, var(--theme-ac) 12%, transparent),
+      inset 0 0 0 1px color-mix(in srgb, var(--theme-ac) 14%, transparent);
+  }
+
+  .streak-item.theme-glow::before {
+    opacity: 1;
+    background:
+      radial-gradient(
+        120% 90% at 50% 50%,
+        color-mix(in srgb, var(--theme-ac) 12%, transparent) 0%,
+        transparent 70%
+      );
+  }
+
+  .streak-item.theme-minimal {
+    background: var(--bg);
+    border-color: color-mix(in srgb, var(--theme-ac) 12%, var(--border));
+    opacity: 0.88;
+  }
+
+  .streak-item:hover { background: var(--elevated); }
+  .streak-item.selected { background: var(--elevated); border-color: var(--text-muted); }
+  .streak-item.completed {
+    border-color: #10b981;
+    background: rgba(16, 185, 129, 0.05);
+  }
+  .streak-item.completed .item-count { color: #10b981 !important; }
+
+  .streak-item.archived { opacity: 0.5; }
+
+  .streak-item.theme-gradient:hover,
+  .streak-item.theme-glow:hover,
+  .streak-item.theme-minimal:hover {
+    background: var(--surface);
+  }
+
+  .streak-item.theme-gradient.selected,
+  .streak-item.theme-glow.selected {
+    border-color: color-mix(in srgb, var(--theme-ac) 40%, var(--text-muted));
+    background: var(--surface);
+  }
+
+  .streak-item.theme-minimal.selected {
+    border-color: color-mix(in srgb, var(--theme-ac) 20%, var(--text-muted));
+    background: var(--bg);
+  }
+
+  .streak-item.theme-minimal,
+  .detail-content.theme-minimal {
+    filter: saturate(0.9) brightness(0.95);
+  }
+
+  .detail-content.completed {
+    --theme-ac: #10b981;
+  }
+
+  .item-icon { font-size: 20px; flex-shrink: 0; width: 28px; text-align: center; }
+  .item-emoji { font-size: 20px; }
+
+  .item-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  .item-name { font-size: 13px; font-weight: 500; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .item-meta { font-size: 9px; color: var(--text-disabled); }
+
+  .item-count {
+    display: flex; align-items: center; gap: 4px; flex-shrink: 0;
+    padding-right: 26px;
+  }
+  .item-num { font-size: 18px; font-weight: 700; line-height: 1; }
+
+  .item-actions {
+    display: flex; flex-direction: column; gap: 3px;
+    position: absolute; top: 6px; right: 6px;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.15s;
+  }
+
+  .streak-item:hover .item-actions {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .item-action-btn {
+    width: 20px; height: 20px;
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid var(--border); border-radius: 5px;
+    background: var(--surface); color: var(--text-muted);
+    padding: 0; cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .item-action-btn:hover {
+    border-color: var(--text-muted);
     color: var(--text-primary);
-    outline: none;
   }
-  .input:focus { border-color: var(--text-muted); }
-  .input::placeholder { color: var(--text-muted); }
 
-  .name-input { font-size: 14px; }
-  .desc-input { font-size: 12px; font-family: var(--font-mono); }
-
-  .emoji-grid {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
+  .item-action-btn.danger:hover {
+    border-color: var(--error);
+    color: var(--error);
   }
-  .emoji-grid.small { gap: 3px; }
 
-  .emoji-btn {
-    font-size: 16px;
-    width: 30px;
-    height: 30px;
-    background: transparent;
-    border: 1px solid transparent;
-    border-radius: 4px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
+  .item-action-btn.confirm {
+    border-color: var(--error);
+    color: var(--error);
+    background: color-mix(in srgb, var(--error) 10%, var(--surface));
+  }
+
+  .error-msg { color: var(--error); padding: 15px; font-size: 13px; }
+  .empty-state {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    color: var(--text-muted); text-align: center;
+    padding: 40px 20px; gap: 4px; font-size: 12px;
+  }
+  .link-btn {
+    background: none; border: none; color: var(--xp);
+    font-size: 12px; cursor: pointer; margin-top: 8px;
+    text-decoration: underline;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════════════
+     RIGHT PANEL
+     ═══════════════════════════════════════════════════════════════════════ */
+  .detail-panel {
+    height: 100%; overflow: hidden;
+  }
+
+  .detail-content {
+    padding: 0 20px 2px;
+    display: flex; flex-direction: column; gap: 2px;
+    height: 100%;
+    overflow: hidden;
+    position: relative;
+    isolation: isolate;
+  }
+
+  /* Top metrics */
+  .top-metrics {
+    width: 100%;
+    max-width: 520px;
+    margin: 0 auto;
+    margin-top: -10px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    aspect-ratio: 2 / 0.72;
+    gap: 0;
+  }
+
+  /* Counter */
+  .counter-section {
+    display: flex; align-items: center; justify-content: center;
+    height: 100%;
+  }
+
+  .counter-ring {
+    display: flex; flex-direction: column; align-items: center;
     justify-content: center;
-    transition: all var(--t-fast);
+    width: 102px; height: 102px;
+    border-radius: 50%;
+    border: 2px solid var(--ring-color);
+    box-shadow: 0 0 30px color-mix(in srgb, var(--ring-color) 15%, transparent),
+                inset 0 0 20px color-mix(in srgb, var(--ring-color) 5%, transparent);
+    background: var(--surface);
+    cursor: pointer;
+    padding: 0;
+    appearance: none;
+    -webkit-appearance: none;
   }
-  .emoji-grid.small .emoji-btn { font-size: 14px; width: 26px; height: 26px; }
-  .emoji-btn:hover { background: var(--elevated); border-color: var(--border); }
-  .emoji-btn.selected { background: var(--elevated); border-color: var(--text-secondary); }
+  .counter-ring:disabled { cursor: default; opacity: 0.95; }
+  .counter-ring:focus-visible { outline: 1px solid var(--ring-color); outline-offset: 3px; }
 
-  .form-actions {
+  .counter-num {
+    font-size: 40px; font-weight: 700;
+    color: var(--text-primary); line-height: 1;
+  }
+  .counter-label {
+    font-size: 9px; color: var(--text-muted);
+    letter-spacing: 0.15em; margin-top: 2px;
+  }
+
+  /* Stats panel */
+  .detail-stats {
     display: flex;
-    justify-content: flex-end;
-    gap: 8px;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: center;
+    height: 100%;
+    gap: 0;
+    padding: 0 20px;
+    background: transparent;
+  }
+
+  .dstat-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 0;
+    min-height: 28px;
+  }
+  .dstat-row + .dstat-row { border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent); }
+  .dstat-val { font-size: 17px; font-weight: 600; color: var(--text-primary); line-height: 1; }
+  .dstat-lbl { font-size: 9px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+
+  /* Heatmap section */
+  .heatmap-section {
+    display: flex; flex-direction: column; gap: 4px;
+  }
+
+  .section-label {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 10px; color: var(--text-muted);
+    font-family: var(--font-mono); letter-spacing: 0.05em;
+  }
+
+  /* Footer (dates + actions) */
+  .detail-footer {
+    margin-top: auto;
+    display: flex; flex-direction: column; gap: 4px;
+    border-top: 1px solid var(--border-light);
+    padding-top: 4px;
+  }
+
+  /* Dates */
+  .dates-info {
+    display: flex; gap: 16px; flex-wrap: wrap; justify-content: center;
+  }
+
+  .date-item { display: flex; flex-direction: column; gap: 2px; align-items: center; }
+  .date-label { font-size: 9px; color: var(--text-disabled); text-transform: uppercase; letter-spacing: 0.05em; }
+  .date-val { font-size: 11px; color: var(--text-secondary); }
+
+
+
+  /* No selection */
+  .no-selection {
+    height: 100%;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 40px; gap: 24px;
+  }
+
+  .no-sel-hint {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12px; color: var(--text-disabled);
+    animation: pulse-hint 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-hint {
+    0%, 100% { opacity: 0.4; }
+    50%      { opacity: 0.8; }
+  }
+
+  /* Delete confirmation modal */
+  .modal-backdrop {
+    position: fixed; inset: 0; z-index: 300;
+    background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(4px);
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  .delete-modal {
+    width: 90%; max-width: 400px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    display: flex; flex-direction: column;
+  }
+
+  .delete-modal-content {
+    padding: 32px 24px 24px;
+    display: flex; flex-direction: column; gap: 12px;
+    align-items: center; text-align: center;
+  }
+
+  .delete-modal-icon {
+    color: var(--error); opacity: 0.8; display: flex;
+  }
+
+  .delete-modal-title {
+    font-size: 18px; font-weight: 600;
+    color: var(--text-primary); margin: 0;
+  }
+
+  .delete-modal-text {
+    font-size: 14px; color: var(--text-secondary);
+    margin: 0; line-height: 1.5;
+  }
+
+  .delete-modal-text strong {
+    color: var(--text-primary); font-weight: 600;
+  }
+
+  .delete-modal-warning {
+    font-size: 12px; color: var(--text-disabled);
+    margin: 0; line-height: 1.4; font-style: italic;
+  }
+
+  .delete-modal-buttons {
+    display: flex; gap: 8px; padding: 16px 24px;
+    border-top: 1px solid var(--border-light);
+    background: var(--elevated);
   }
 
   .btn-cancel {
-    padding: 5px 14px;
-    background: transparent;
-    border: 1px solid var(--border);
-    border-radius: var(--r);
-    color: var(--text-secondary);
-    font-size: 12px;
-    cursor: pointer;
+    flex: 1; padding: 10px 16px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 6px; color: var(--text-secondary);
+    font-size: 13px; font-weight: 500;
+    cursor: pointer; transition: all 0.15s;
   }
+  .btn-cancel:hover { border-color: var(--text-muted); color: var(--text-primary); }
 
-  .btn-save {
-    padding: 5px 14px;
-    background: var(--accent);
-    border: none;
-    border-radius: var(--r);
-    color: var(--bg);
-    font-size: 12px;
-    cursor: pointer;
-    transition: opacity var(--t-fast);
+  .btn-danger {
+    flex: 1; padding: 10px 16px;
+    background: var(--error); border: none;
+    border-radius: 6px; color: white;
+    font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: all 0.15s;
   }
-  .btn-save:hover { opacity: 0.8; }
-  .btn-save:disabled { opacity: 0.4; cursor: default; }
-
-  /* ── Section label ── */
-  .section-label {
-    font-size: 10px;
-    color: var(--text-muted);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    margin-bottom: 10px;
-  }
-
-  /* ── Grid ── */
-  .streaks-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-    gap: 12px;
-  }
-
-  /* ── Card ── */
-  .streak-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--r);
-    padding: 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    transition: border-color var(--t-fast);
-  }
-
-  .streak-card.at-risk {
-    border-color: var(--xp);
-  }
-
-  .streak-card.done {
-    border-color: var(--border);
-    opacity: 0.75;
-  }
-
-  .card-top {
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
-  }
-
-  .card-emoji {
-    font-size: 20px;
-    line-height: 1;
-    flex-shrink: 0;
-    margin-top: 1px;
-  }
-
-  .card-meta {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  .card-name {
-    font-size: 13px;
-    color: var(--text-primary);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .card-desc {
-    font-size: 10px;
-    color: var(--text-muted);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .card-actions {
-    display: flex;
-    gap: 3px;
-    flex-shrink: 0;
-    opacity: 0;
-    transition: opacity var(--t-fast);
-  }
-  .streak-card:hover .card-actions { opacity: 1; }
-
-  .icon-action {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 22px;
-    height: 22px;
-    background: transparent;
-    border: 1px solid transparent;
-    border-radius: 3px;
-    color: var(--text-muted);
-    cursor: pointer;
-    transition: all var(--t-fast);
-  }
-  .icon-action:hover { background: var(--elevated); color: var(--text-secondary); border-color: var(--border); }
-  .icon-action.danger:hover { color: var(--error); border-color: var(--error); }
-  .icon-action.accent:hover { color: var(--success); border-color: var(--success); }
-
-  /* ── Streak count ── */
-  .streak-count-row {
-    display: flex;
-    align-items: baseline;
-    gap: 6px;
-    overflow: hidden;   /* clips the fly-in on number change */
-  }
-
-  .streak-number {
-    font-size: 36px;
-    font-family: var(--font-mono);
-    font-weight: 400;
-    color: var(--text-primary);
-    line-height: 1;
-  }
-
-  .at-risk .streak-number { color: var(--xp); }
-
-  .streak-count-meta {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  .streak-unit {
-    font-size: 11px;
-    color: var(--text-muted);
-    font-family: var(--font-mono);
-  }
-
-  .best-label {
-    font-size: 10px;
-    color: var(--text-muted);
-    opacity: 0.6;
-  }
-
-  /* ── Dots ── */
-  .dots-row {
-    display: flex;
-    gap: 3px;
-    flex-wrap: wrap;
-  }
-
-  .dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--elevated);
-    border: 1px solid var(--border);
-    flex-shrink: 0;
-    transition: background var(--t-fast);
-  }
-
-  .dot.filled {
-    background: var(--text-secondary);
-    border-color: var(--text-secondary);
-  }
-
-  .at-risk .dot.filled {
-    background: var(--xp);
-    border-color: var(--xp);
-  }
-
-  .done .dot.filled {
-    background: var(--success);
-    border-color: var(--success);
-  }
-
-  /* ── Buttons ── */
-  .checkin-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 5px;
-    width: 100%;
-    padding: 7px 0;
-    background: color-mix(in srgb, var(--xp) 12%, transparent);
-    border: 1px solid var(--xp);
-    border-radius: var(--r);
-    color: var(--xp);
-    font-size: 11px;
-    font-family: var(--font-sans);
-    cursor: pointer;
-    transition: all var(--t-fast);
-    margin-top: auto;
-  }
-  .checkin-btn:hover {
-    background: var(--xp);
-    color: var(--bg);
-  }
-
-  .undo-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 5px;
-    width: 100%;
-    padding: 6px 0;
-    background: transparent;
-    border: 1px solid var(--border);
-    border-radius: var(--r);
-    color: var(--text-muted);
-    font-size: 11px;
-    font-family: var(--font-sans);
-    cursor: pointer;
-    transition: all var(--t-fast);
-    margin-top: auto;
-  }
-  .undo-btn:hover { border-color: var(--error); color: var(--error); }
-
-  /* ── Edit form inside card ── */
-  .edit-form {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .edit-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 4px;
-  }
-
-  /* ── States ── */
-  .empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 80px 0;
-    color: var(--text-muted);
-    font-size: 13px;
-    text-align: center;
-  }
-
-  .error-msg {
-    padding: 12px 16px;
-    border: 1px solid var(--error);
-    border-radius: var(--r);
-    color: var(--error);
-    font-size: 12px;
-  }
-
-  /* ── Button press feel ── */
-  .checkin-btn:active:not(:disabled) { transform: scale(0.97); }
-  .undo-btn:active:not(:disabled)    { transform: scale(0.97); }
-  .new-btn:active                    { transform: scale(0.97); }
-
-  /* ── Loading state ── */
-  .checkin-btn.loading,
-  .undo-btn.loading {
-    opacity: 0.6;
-    cursor: default;
-  }
-
-  /* ── Spinner ── */
-  .spinner {
-    width: 10px;
-    height: 10px;
-    border: 1.5px solid currentColor;
-    border-top-color: transparent;
-    border-radius: 50%;
-    display: inline-block;
-    animation: spin 0.6s linear infinite;
-  }
-
-  /* ── At-risk card pulse on mount ── */
-  .streak-card.at-risk {
-    animation: card-appear 0.3s ease-out both;
-  }
-
-  /* ── Keyframes ── */
-  @keyframes spin {
-    to { transform: rotate(360deg); }
-  }
-
-  @keyframes card-appear {
-    from { box-shadow: 0 0 0 0 color-mix(in srgb, var(--xp) 30%, transparent); }
-    50%  { box-shadow: 0 0 0 4px color-mix(in srgb, var(--xp) 15%, transparent); }
-    to   { box-shadow: 0 0 0 0 transparent; }
-  }
+  .btn-danger:hover { opacity: 0.9; }
 </style>

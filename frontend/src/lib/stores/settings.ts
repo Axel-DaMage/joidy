@@ -44,13 +44,17 @@ function applyColors(colors: string[]) {
 }
 
 function createAccentStore() {
-  const initial = loadColors();
-  const { subscribe, update } = writable<string[]>(initial);
+  // Start with DEFAULT for SSR — init() applies the real saved value client-side
+  const { subscribe, update } = writable<string[]>([...DEFAULT_COLORS]);
 
   return {
     subscribe,
 
-    init() { applyColors(initial); },
+    init() {
+      const saved = loadColors();
+      update(() => saved);
+      applyColors(saved);
+    },
 
     setColor(index: number, color: string) {
       if (!isValidHex(color)) return;
@@ -92,5 +96,60 @@ export const accentColor = {
   subscribe: derived(accentColors, c => c[0]).subscribe,
   init: () => accentColors.init(),
 };
+
+export type IconPack = 'lucide' | 'phosphor' | 'material';
+
+function createIconPackStore() {
+  // Start with 'lucide' for SSR — set() applies the real value client-side
+  const { subscribe, set } = writable<IconPack>('lucide');
+  return {
+    subscribe,
+    init() {
+      if (typeof localStorage !== 'undefined') {
+        const saved = (localStorage.getItem('joidy-icon-pack') as IconPack) || 'lucide';
+        set(saved);
+      }
+    },
+    set: (val: IconPack) => {
+      if (typeof localStorage !== 'undefined') localStorage.setItem('joidy-icon-pack', val);
+      set(val);
+    }
+  };
+}
+export const activeIconPack = createIconPackStore();
+
+function createBooleanStore(key: string, defaultValue: boolean = false) {
+  // Start with defaultValue for SSR — read localStorage only client-side
+  const { subscribe, set, update } = writable<boolean>(defaultValue);
+  let _initialized = false;
+  function ensureInit() {
+    if (_initialized || typeof localStorage === 'undefined') return;
+    _initialized = true;
+    const saved = localStorage.getItem(key);
+    if (saved !== null) set(saved === 'true');
+  }
+  return {
+    subscribe: (run: (v: boolean) => void, invalidate?: () => void) => {
+      ensureInit();
+      return subscribe(run, invalidate);
+    },
+    set: (val: boolean) => {
+      _initialized = true;
+      if (typeof localStorage !== 'undefined') localStorage.setItem(key, String(val));
+      set(val);
+    },
+    toggle: () => update(v => {
+      ensureInit();
+      const next = !v;
+      if (typeof localStorage !== 'undefined') localStorage.setItem(key, String(next));
+      return next;
+    })
+  };
+}
+
+export const showFrontmatter = createBooleanStore('joidy-show-frontmatter', false);
+export const showTrash       = createBooleanStore('joidy-show-trash', false);
+export const showHiddenFiles = createBooleanStore('joidy-show-hidden', false);
+export const writeInObsidian = createBooleanStore('joidy-write-obsidian', false);
 
 export { MAX_COLORS };

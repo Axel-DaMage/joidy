@@ -1,13 +1,19 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import { X, Moon, Sun, Database, GitBranch, Zap, Palette, Plus, Minus } from 'lucide-svelte';
-  import { accentColors, MAX_COLORS } from '$lib/stores/settings';
+  import DynamicIcon from '$lib/components/DynamicIcon.svelte';
+  import { accentColors, activeIconPack, showFrontmatter, showTrash, showHiddenFiles, writeInObsidian, type IconPack, MAX_COLORS } from '$lib/stores/settings';
 
   export let open = false;
 
   const dispatch = createEventDispatcher<{ close: void }>();
 
   let theme: 'dark' | 'light' = 'dark';
+
+  const ICON_PACKS: { value: IconPack, label: string }[] = [
+    { value: 'lucide', label: 'Lucide (Por Defecto)' },
+    { value: 'phosphor', label: 'Phosphor' },
+    { value: 'material', label: 'Material' }
+  ];
 
   function toggleTheme() {
     theme = theme === 'dark' ? 'light' : 'dark';
@@ -49,17 +55,17 @@
     <div class="panel">
       <div class="panel-header">
         <span class="mono" style="font-size:12px; letter-spacing:0.08em;">AJUSTES</span>
-        <button class="close-btn" on:click={close}><X size={14} /></button>
+        <button class="close-btn" on:click={close}><DynamicIcon name="X" size={14} /></button>
       </div>
 
       <div class="panel-body">
 
         <!-- Apariencia -->
         <section class="section">
-          <div class="section-title">Apariencia</div>
+          <div class="section-title" style="color: var(--xp, var(--accent));">Apariencia</div>
           <div class="row">
             <div class="row-label">
-              {#if theme === 'dark'}<Moon size={13} />{:else}<Sun size={13} />{/if}
+              {#if theme === 'dark'}<DynamicIcon name="Moon" size={13} />{:else}<DynamicIcon name="Sun" size={13} />{/if}
               <span>Tema</span>
             </div>
             <button class="toggle" on:click={toggleTheme}>
@@ -92,7 +98,7 @@
                 />
                 {#if $accentColors.length > 1}
                   <button class="color-rm" on:click={() => accentColors.removeColor(i)} title="Quitar">
-                    <Minus size={10} />
+                    <DynamicIcon name="Minus" size={10} />
                   </button>
                 {/if}
               </div>
@@ -101,66 +107,135 @@
 
           {#if $accentColors.length < MAX_COLORS}
             <button class="add-color-btn mono" on:click={() => accentColors.addColor()}>
-              <Plus size={10} /> agregar color
+              <DynamicIcon name="Plus" size={10} /> agregar color
             </button>
           {/if}
+
+          <!-- Icon Packs Selector -->
+          <div class="row" style="margin-top: 16px; flex-direction: column; align-items: stretch; gap: 8px;">
+            <div class="row-label"><span>Set de Iconos (Alternativa Emojis)</span></div>
+            <select class="setting-input mono" bind:value={$activeIconPack}>
+              {#each ICON_PACKS as pack}
+                <option value={pack.value}>{pack.label}</option>
+              {/each}
+            </select>
+            <p class="hint" style="margin-top: 2px;">Los iconos cambiarán en los conectores y notas.</p>
+          </div>
         </section>
 
         <!-- Vault -->
         <section class="section">
-          <div class="section-title">
-            <Database size={12} /> Obsidian Vault
+          <div class="section-title" style="color: var(--xp, var(--accent));">
+            <DynamicIcon name="Database" size={12} /> Obsidian Vault
           </div>
-          <div class="row">
-            <div class="row-label"><span>Ruta actual</span></div>
-            <code class="path-value">…/Sincronizacion</code>
+          <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
+            <div class="row-label"><span>Directorio del Vault (relativo a tilde ~)</span></div>
+            <div style="display: flex; align-items: center; gap: 2px; padding: 0 10px; background: var(--elevated); border: 1px solid var(--border); border-radius: var(--r); transition: border-color var(--t-fast);" class="input-wrapper">
+              <span class="mono" style="color: var(--text-disabled); font-size: 11px;">~</span>
+              <input type="text" class="setting-input mono" style="border: none; background: transparent; flex: 1; padding-left: 2px;" placeholder="/Documentos/ObsidianVault" />
+            </div>
           </div>
           <div class="row">
             <div class="row-label"><span>Carpeta Joidy</span></div>
             <code class="path-value">_joidy/</code>
           </div>
+          <div class="row">
+            <div class="row-label">
+              <DynamicIcon name="FolderRoot" size={13} />
+              <span>Escribir en Vault nativo</span>
+            </div>
+            <button class="toggle" on:click={() => writeInObsidian.toggle()}>
+              <span class:active={!$writeInObsidian}>aislado</span>
+              <span class="sep">/</span>
+              <span class:active={$writeInObsidian}>nativo</span>
+            </button>
+          </div>
           <p class="hint">
-            Joidy escribe en <code>_joidy/</code> exclusivamente.<br>
-            Nunca modifica tus notas de Obsidian.
+            {#if !$writeInObsidian}
+              Joidy escribe en <code>_joidy/</code>. No modifica notas nativas.
+            {:else}
+              Joidy creará las notas directamente en la raíz de tu Vault.
+            {/if}
           </p>
         </section>
 
         <!-- Integraciones -->
         <section class="section">
-          <div class="section-title">
-            <GitBranch size={12} /> Integraciones
+          <div class="section-title" style="color: var(--xp, var(--accent));">
+            <DynamicIcon name="GitBranch" size={12} /> Integraciones
           </div>
-          <div class="row">
+          <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
             <div class="row-label"><span>GitHub Token</span></div>
-            <span class="badge badge-off">no configurado</span>
+            <input type="text" class="setting-input mono" placeholder="ghp_..." />
           </div>
-          <div class="row">
+          <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
             <div class="row-label"><span>Telegram Bot</span></div>
-            <span class="badge badge-off">no configurado</span>
+            <input type="text" class="setting-input mono" placeholder="123456:ABC..." />
           </div>
-          <p class="hint">Configura en el archivo <code>.env</code> del proyecto.</p>
         </section>
 
         <!-- IA -->
         <section class="section">
-          <div class="section-title">
-            <Zap size={12} /> IA
+          <div class="section-title" style="color: var(--xp, var(--accent));">
+            <DynamicIcon name="Zap" size={12} /> IA
           </div>
-          <div class="row">
-            <div class="row-label"><span>Gemini API</span></div>
-            <span class="badge badge-off">deshabilitada</span>
+          <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
+            <div class="row-label"><span>Gemini API Key</span></div>
+            <input type="text" class="setting-input mono" placeholder="AIzaSy..." />
           </div>
           <p class="hint">
-            Agrega <code>GEMINI_API_KEY</code> en <code>.env</code> y reinicia para habilitar
-            auto-tagging y búsqueda semántica.
+            Habilita auto-tagging y búsqueda semántica.
           </p>
+        </section>
+
+        <!-- Avanzado -->
+        <section class="section">
+          <div class="section-title" style="color: var(--xp, var(--accent));">
+            <DynamicIcon name="Settings" size={12} /> Avanzado
+          </div>
+
+          <div class="row">
+            <div class="row-label">
+              <DynamicIcon name="Code" size={13} />
+              <span>Metadatos (YAML)</span>
+            </div>
+            <button class="toggle" on:click={() => showFrontmatter.toggle()}>
+              <span class:active={!$showFrontmatter}>oculto</span>
+              <span class="sep">/</span>
+              <span class:active={$showFrontmatter}>visible</span>
+            </button>
+          </div>
+
+          <div class="row">
+            <div class="row-label">
+              <DynamicIcon name="EyeOff" size={13} />
+              <span>Carpetas Ocultas ( .folder )</span>
+            </div>
+            <button class="toggle" on:click={() => showHiddenFiles.toggle()}>
+              <span class:active={!$showHiddenFiles}>oculto</span>
+              <span class="sep">/</span>
+              <span class:active={$showHiddenFiles}>visible</span>
+            </button>
+          </div>
+
+          <div class="row">
+            <div class="row-label">
+              <DynamicIcon name="Trash2" size={13} />
+              <span>Papelera Obsidian (.trash)</span>
+            </div>
+            <button class="toggle" on:click={() => showTrash.toggle()}>
+              <span class:active={!$showTrash}>oculto</span>
+              <span class="sep">/</span>
+              <span class:active={$showTrash}>visible</span>
+            </button>
+          </div>
         </section>
 
         <!-- Info -->
         <section class="section" style="border-bottom: none;">
           <div class="row">
             <div class="row-label"><span>Versión</span></div>
-            <span class="mono" style="font-size:11px; color: var(--text-muted);">v0.1.0</span>
+            <span class="mono" style="font-size:11px; color: var(--xp, var(--accent));">v0.1.0</span>
           </div>
           <div class="row">
             <div class="row-label"><span>Repositorio</span></div>
@@ -373,6 +448,23 @@
     transition: border-color var(--t-fast);
   }
   .hex-input:focus { border-color: var(--text-muted); }
+
+  .setting-input {
+    background: var(--elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: 6px 10px;
+    font-size: 11px;
+    color: var(--text-primary);
+    outline: none;
+    transition: border-color var(--t-fast);
+    width: 100%;
+  }
+  .setting-input:focus { outline: none; }
+  
+  .input-wrapper:focus-within {
+    border-color: var(--text-muted) !important;
+  }
 
   .color-rm {
     width: 22px;

@@ -1,5 +1,11 @@
-// API base URL — configurable via VITE_API_URL env var, defaults to localhost:8000
-const BASE = (import.meta.env.VITE_API_URL as string) || 'http://localhost:8000';
+// API base URL — browser uses VITE_API_URL (public), SSR uses INTERNAL_API_URL
+// (Docker internal network). This prevents network failures when SvelteKit
+// server-renders pages inside the container where localhost:PORT isn't mapped.
+import { browser } from '$app/environment';
+
+const BASE = browser
+  ? ((import.meta.env.VITE_API_URL as string) || 'http://localhost:8000')
+  : (import.meta.env.VITE_INTERNAL_API_URL as string || import.meta.env.VITE_API_URL as string || 'http://localhost:8000');
 
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
@@ -90,18 +96,49 @@ export interface GraphData { nodes: GraphNode[]; edges: GraphEdge[]; }
 
 export interface AISuggestion { tag: string; confidence: number; is_new: boolean; }
 
-export interface StreakDay { date: string; checked: boolean; }
+export interface StreakDay {
+  date: string;
+  checked: boolean;
+  note?: string;
+  mood?: number;
+}
 
 export interface PersonalStreak {
   id: number;
   name: string;
   emoji: string;
+  icon: string;
   description: string;
+  color: string;
+  theme: string;
+  category: string;
+  start_date: string | null;
+  target_date: string | null;
+  offset: number;
+  frequency: string;
+  frequency_days: number;
+  is_archived: boolean;
   current_streak: number;
   longest_streak: number;
+  best_streak: number;
+  total_checkins: number;
+  freeze_count: number;
+  freeze_used: number;
+  days_remaining: number | null;
+  completion_pct: number | null;
   today_checked: boolean;
   history: StreakDay[];
   created_at: string;
+}
+
+export interface StreakStats {
+  total_active: number;
+  total_archived: number;
+  longest_ever: number;
+  longest_name: string;
+  total_checkins: number;
+  checkin_rate: number;
+  days_tracked: number;
 }
 
 // ── Notes ─────────────────────────────────────────────────────────────────────
@@ -117,6 +154,7 @@ export const api = {
     delete: (id: number)   => req<void>('DELETE', `/notes/${id}`),
     acceptTag: (noteId: number, tag: string) =>
       req<{ tag: string; gamification: GamificationResult }>('POST', `/notes/${noteId}/accept-tag?tag_name=${encodeURIComponent(tag)}`),
+    backlinks: (id: number) => req<Note[]>('GET', `/notes/${id}/backlinks`),
   },
 
   tags: {
@@ -149,21 +187,41 @@ export const api = {
   },
 
   personalStreaks: {
-    list:     ()                  => req<PersonalStreak[]>('GET', '/personal-streaks/'),
-    create:   (data: { name: string; emoji: string; description: string }) =>
-      req<PersonalStreak>('POST', '/personal-streaks/', data),
-    update:   (id: number, data: { name?: string; emoji?: string; description?: string }) =>
-      req<PersonalStreak>('PUT', `/personal-streaks/${id}`, data),
+    list: (opts?: { include_archived?: boolean; category?: string }) => {
+      const params = new URLSearchParams();
+      if (opts?.include_archived) params.set('include_archived', 'true');
+      if (opts?.category) params.set('category', opts.category);
+      const qs = params.toString();
+      return req<PersonalStreak[]>('GET', `/personal-streaks/${qs ? '?' + qs : ''}`);
+    },
+    create: (data: {
+      name: string; emoji?: string; icon?: string; description?: string;
+      color?: string; theme?: string; category?: string;
+      start_date?: string | null; target_date?: string | null;
+      offset?: number; frequency?: string; frequency_days?: number;
+      freeze_count?: number;
+    }) => req<PersonalStreak>('POST', '/personal-streaks/', data),
+    update: (id: number, data: {
+      name?: string; emoji?: string; icon?: string; description?: string;
+      color?: string; theme?: string; category?: string;
+      start_date?: string | null; target_date?: string | null;
+      offset?: number; frequency?: string; frequency_days?: number;
+      is_archived?: boolean; freeze_count?: number;
+    }) => req<PersonalStreak>('PUT', `/personal-streaks/${id}`, data),
     delete:   (id: number)        => req<void>('DELETE', `/personal-streaks/${id}`),
-    checkin:  (id: number)        => req<PersonalStreak>('POST', `/personal-streaks/${id}/checkin`),
+    checkin:  (id: number, data?: { note?: string; mood?: number }) =>
+      req<PersonalStreak>('POST', `/personal-streaks/${id}/checkin`, data || {}),
     undo:     (id: number)        => req<PersonalStreak>('DELETE', `/personal-streaks/${id}/checkin`),
+    freeze:   (id: number)        => req<PersonalStreak>('POST', `/personal-streaks/${id}/freeze`),
+    stats:    ()                  => req<StreakStats>('GET', '/personal-streaks/stats'),
+    categories: ()                => req<string[]>('GET', '/personal-streaks/categories'),
+    history:  (id: number, days = 90) => req<{ date: string; note: string; mood: number | null; created_at: string }[]>('GET', `/personal-streaks/${id}/history?days=${days}`),
   },
 
   ai: {
-    // AI is currently disabled — stub returns empty suggestions
-    classify: async (_noteId: number, _content: string, _existingTags: string[]) =>
-      ({ suggestions: [] as AISuggestion[] }),
-    usage: async () => ({ ai_enabled: false, estimated_cost_usd: 0 }),
+    classify: (noteId: number, content: string, existingTags: string[]) =>
+      req<{ note_id: number; status: string; suggestions: AISuggestion[] }>('POST', '/ai/classify', { note_id: noteId, content, existing_tags: existingTags }),
+    usage: () => req<{ ai_enabled: boolean; estimated_cost_usd: number }>('GET', '/ai/usage'),
   },
 
   github: {

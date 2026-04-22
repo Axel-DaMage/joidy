@@ -59,3 +59,13 @@ export async function fetchAISuggestions(noteId: number, content: string, existi
     aiSuggestions.set([]);
   }
 }
+
+/** Returns the first note matching the title (case insensitive) */
+export function findNoteByTitle(title: string): Note | undefined {
+  let found: Note | undefined;
+  notes.subscribe(ns => {
+    found = ns.find(n => n.title.toLowerCase().trim() === title.toLowerCase().trim());
+  })();
+  return found;
+}
+

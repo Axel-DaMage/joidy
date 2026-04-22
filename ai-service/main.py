@@ -1,11 +1,8 @@
-"""
-Joidy AI Service — STUB MODE (AI disabled)
-All endpoints return empty/no-op responses.
-To enable AI: set GEMINI_API_KEY in .env and set AI_ENABLED=true
-"""
-
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+from typing import Optional
+from gemini_client import embed_text, classify_note, rag_query, embedding_to_bytes
+from config import settings
 
 app = FastAPI(title="Joidy AI Service", version="0.1.0")
 
@@ -28,29 +25,45 @@ class RAGRequest(BaseModel):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "joidy-ai", "ai_enabled": False}
+    return {
+        "status": "ok", 
+        "service": "joidy-ai", 
+        "ai_enabled": bool(settings.gemini_api_key)
+    }
 
 
 @app.post("/embed")
-def embed(req: EmbedRequest):
-    return {"status": "disabled", "note_id": req.note_id}
+async def embed(req: EmbedRequest):
+    if not settings.gemini_api_key:
+        return {"status": "disabled", "note_id": req.note_id}
+    
+    try:
+        vector = await embed_text(req.content)
+        return {
+            "status": "success", 
+            "note_id": req.note_id, 
+            "embedding": vector
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/classify")
-def classify(req: ClassifyRequest):
-    return {"status": "disabled", "note_id": req.note_id, "suggestions": []}
-
-
-@app.post("/search")
-def semantic_search(req: RAGRequest):
-    return {"results": []}
-
-
-@app.post("/rag")
-def ask(req: RAGRequest):
-    return {"answer": "IA no habilitada. Agrega GEMINI_API_KEY al .env para activarla.", "sources": []}
+async def classify(req: ClassifyRequest):
+    if not settings.gemini_api_key:
+        return {"status": "disabled", "note_id": req.note_id, "suggestions": []}
+    
+    try:
+        suggestions = await classify_note(req.content, req.existing_tags)
+        return {
+            "status": "success", 
+            "note_id": req.note_id, 
+            "suggestions": suggestions
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/usage")
 def usage():
-    return {"ai_enabled": False, "estimated_cost_usd": 0}
+    return {"ai_enabled": bool(settings.gemini_api_key), "estimated_cost_usd": 0}

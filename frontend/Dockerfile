@@ -3,7 +3,7 @@ WORKDIR /app
 
 FROM base AS deps
 COPY package.json ./
-RUN npm install
+RUN npm install --legacy-peer-deps
 
 FROM deps AS build
 ARG VITE_API_URL=http://localhost:8000
