@@ -1,4 +1,5 @@
 import sqlite3
+import logging
 from pathlib import Path
 
 DB_PATH = Path("/data/db/joidy.db")
@@ -10,6 +11,8 @@ REQUIRED_TABLES = {
     "tag_cooccurrences",
     "embedding_failures",
 }
+
+logger = logging.getLogger(__name__)
 
 
 def check_db_health() -> None:
@@ -27,8 +30,9 @@ def check_db_health() -> None:
     if missing:
         raise SystemExit(f"Missing tables: {missing}")
 
-    print("DB health OK")
+    logger.info("DB health OK")
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
     check_db_health()
