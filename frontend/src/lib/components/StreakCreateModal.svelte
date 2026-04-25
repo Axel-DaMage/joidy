@@ -1,9 +1,10 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import { fade, slide } from 'svelte/transition';
-  import { X, Calendar, Snowflake, Target, Clock } from 'lucide-svelte';
+  import { X, Calendar, Snowflake, Target, Clock, Archive } from 'lucide-svelte';
   import StreakIcon from '$lib/components/StreakIcon.svelte';
   import type { PersonalStreak } from '$lib/api';
+  import { liquidGlass } from '$lib/actions/liquidGlass';
 
   export let open = false;
   export let editStreak: PersonalStreak | null = null;
@@ -17,6 +18,7 @@
       offset: number; frequency: string; frequency_days: number;
       freeze_count: number;
     };
+    archive: void;
   }>();
 
   // ── Form state ──────────────────────────────────────────────────────────────
@@ -113,6 +115,10 @@
     { id: 'gradient', label: 'Gradiente' },
     { id: 'glow',     label: 'Glow' },
     { id: 'minimal',  label: 'Minimal' },
+    { id: 'lcd',      label: 'Retro LCD' },
+    { id: 'neon',     label: 'Neon' },
+    { id: 'glass',    label: 'Glass' },
+    { id: 'sketch',   label: 'Sketch' },
   ];
 
   // ── Sections ────────────────────────────────────────────────────────────────
@@ -171,6 +177,10 @@
     // Don't call close() here — let the parent close after it processes save
   }
 
+  function archive() {
+    dispatch('archive');
+  }
+
   function onBackdrop(e: MouseEvent) {
     if (e.target === e.currentTarget) close();
   }
@@ -210,7 +220,13 @@
           class:theme-gradient={theme === 'gradient'}
           class:theme-glow={theme === 'glow'}
           class:theme-minimal={theme === 'minimal'}
+          class:theme-lcd={theme === 'lcd'}
+          class:theme-neon={theme === 'neon'}
+          class:theme-glass={theme === 'glass'}
+          class:theme-sketch={theme === 'sketch'}
+          class:theme-solid={theme === 'solid' || !theme}
           style={previewStyle}
+          use:liquidGlass={{ enabled: theme === 'glass' }}
         >
           <div class="preview-icon">
             {#if useIcon && icon}
@@ -359,6 +375,16 @@
 
       <!-- Footer -->
       <div class="modal-footer">
+        {#if isEdit}
+          <button
+            class="btn-archive"
+            on:click={archive}
+            title={editStreak?.is_archived ? 'Desarchivar racha' : 'Archivar racha'}
+          >
+            <Archive size={14} />
+            {editStreak?.is_archived ? 'Desarchivar' : 'Archivar'}
+          </button>
+        {/if}
         <button class="btn-cancel" on:click={close}>Cancelar</button>
         <button class="btn-save" disabled={!canSave} on:click={save} style="--btn-color: {color};">
           {isEdit ? 'Actualizar' : 'Crear Racha'}
@@ -467,9 +493,50 @@
   }
 
   .preview-card.theme-minimal {
-    background: var(--bg);
-    border-color: color-mix(in srgb, var(--theme-ac) 12%, var(--border));
-    opacity: 0.86;
+    background: color-mix(in srgb, var(--theme-ac) 8%, transparent);
+    border: 1px solid transparent;
+  }
+
+  .preview-card.theme-lcd {
+    background: #111;
+    border: 1px solid #333;
+    box-shadow: 0 0 0 2px #333, inset 0 0 10px #000;
+  }
+  .preview-card.theme-lcd .preview-num {
+    font-family: 'Courier New', monospace;
+    color: #0f0;
+    text-shadow: 0 0 5px #0f0;
+  }
+  .preview-card.theme-lcd .preview-name {
+    color: #0f0; opacity: 0.8;
+  }
+
+  .preview-card.theme-neon {
+    background: #000;
+    border: 1px solid var(--theme-ac);
+    box-shadow: 0 0 10px color-mix(in srgb, var(--theme-ac) 25%, transparent);
+  }
+  .preview-card.theme-neon .preview-name,
+  .preview-card.theme-neon .preview-num {
+    text-shadow: 0 0 10px var(--theme-ac);
+  }
+
+  .preview-card.theme-glass {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0) 100%);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15), inset 0 1px 2px rgba(255, 255, 255, 0.5);
+  }
+  .preview-card.theme-solid {
+    background: transparent;
+    border: 1px solid var(--theme-ac);
+  }
+
+  .preview-card.theme-sketch {
+    background: transparent;
+    border: 1px dashed var(--theme-ac);
+    border-radius: 2px;
   }
 
   .preview-icon {
@@ -710,6 +777,15 @@
     transition: all 0.2s;
   }
   .btn-cancel:hover { background: var(--surface); }
+
+  .btn-archive {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 14px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 8px;
+    color: var(--text-secondary); font-size: 13px; font-weight: 500;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .btn-archive:hover { border-color: var(--text-muted); color: var(--text-primary); background: var(--elevated); }
 
   .btn-save {
     padding: 8px 20px; background: var(--btn-color, var(--text-primary));

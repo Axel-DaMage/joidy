@@ -3,11 +3,14 @@
   import { fly, fade, slide, scale } from 'svelte/transition';
   import { flip } from 'svelte/animate';
   import { Plus, Check, X, Flame, Settings, Snowflake, Search, ChevronRight } from 'lucide-svelte';
+    import { Archive, Shuffle, CheckCheck } from 'lucide-svelte';
   import StreakIcon from '$lib/components/StreakIcon.svelte';
   import StreakCreateModal from '$lib/components/StreakCreateModal.svelte';
   import StreakHeatmap from '$lib/components/StreakHeatmap.svelte';
   import StreakStatsPanel from '$lib/components/StreakStatsPanel.svelte';
   import { api, type PersonalStreak, type StreakStats } from '$lib/api';
+  import { loadUserSettings, patchUserSettings } from '$lib/utils/userSettings';
+  import { liquidGlass } from '$lib/actions/liquidGlass';
 
   let streaks: PersonalStreak[] = [];
   let stats: StreakStats | null = null;
@@ -15,19 +18,24 @@
   let error = '';
   let mounted = false;
 
+  // Resizable panel synced with notes
+  let panelWidth = 260;
+
   // ── Selection ─────────────────────────────────────────────────────────────
   let selectedId: number | null = null;
   $: selected = streaks.find(s => s.id === selectedId) || null;
 
   // ── Filter / Search ───────────────────────────────────────────────────────
   let searchQuery = '';
+  let showArchived = false;
 
   // ── Delete confirmation ───────────────────────────────────────────────────
   let deleteConfirm: number | null = null;
   let deleteConfirmName: string = '';
 
-  $: filteredStreaks = streaks.filter(s => {
-    if (s.is_archived) return false;
+  $: visibleStreaks = streaks.filter(s => showArchived ? s.is_archived : !s.is_archived);
+
+  $: filteredStreaks = visibleStreaks.filter(s => {
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       return s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q);
@@ -37,6 +45,7 @@
 
   $: pendingCount = filteredStreaks.filter(s => !s.today_checked && !s.is_archived).length;
   $: doneCount = filteredStreaks.filter(s => s.today_checked).length;
+  $: activeCheckinCandidates = streaks.filter(s => !s.is_archived && !s.today_checked && !isStreakCompleted(s));
 
   // ── Modal ─────────────────────────────────────────────────────────────────
   let showModal = false;
@@ -47,12 +56,23 @@
   let checkinNote = '';
   let showCheckinExtra = false;
 
+  function notifyStreaksUpdated() {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('joidy:streaks-updated'));
+    }
+  }
+
   // ── Load ──────────────────────────────────────────────────────────────────
   onMount(async () => {
     mounted = true;
+    
+    const savedNotesUi = loadUserSettings().notesUi;
+    if (savedNotesUi?.panelWidth !== undefined) {
+      panelWidth = Number(savedNotesUi.panelWidth);
+    }
     try {
       const [s, st] = await Promise.all([
-        api.personalStreaks.list(),
+        api.personalStreaks.list({ include_archived: true }),
         api.personalStreaks.stats(),
       ]);
       streaks = s;
@@ -84,8 +104,25 @@
         selectedId = created.id;
       }
       stats = await api.personalStreaks.stats();
+      notifyStreaksUpdated();
     } catch (e) {
       console.error('[streaks] save error:', e);
+    }
+  }
+
+  async function archiveStreak(id: number, archived: boolean) {
+    try {
+      const streak = streaks.find(s => s.id === id);
+      if (!streak) return;
+      const updated = await api.personalStreaks.update(id, { is_archived: archived });
+      streaks = streaks.map(s => s.id === id ? updated : s);
+      if (selectedId === id) selectedId = null;
+      stats = await api.personalStreaks.stats();
+      notifyStreaksUpdated();
+      showModal = false;
+      editTarget = null;
+    } catch (e) {
+      console.error('[streaks] archive error:', e);
     }
   }
 
@@ -93,16 +130,50 @@
     if (busy.has(id)) return;
     busy = new Set(busy).add(id);
     try {
+      const today = new Date();
+      const localDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      
       const updated = await api.personalStreaks.checkin(id, {
         note: checkinNote || undefined,
+        check_date: localDate
       });
       streaks = streaks.map(s => s.id === id ? updated : s);
       checkinNote = '';
       showCheckinExtra = false;
       stats = await api.personalStreaks.stats();
+      notifyStreaksUpdated();
     } finally {
       busy.delete(id); busy = new Set(busy);
     }
+  }
+
+  async function checkinAllCurrent() {
+    if (activeCheckinCandidates.length === 0) return;
+    try {
+      const today = new Date();
+      const localDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      
+      const results = await Promise.all(activeCheckinCandidates.map(s => api.personalStreaks.checkin(s.id, { check_date: localDate })));
+      const updatedById = new Map(results.map(s => [s.id, s]));
+      streaks = streaks.map(s => updatedById.get(s.id) ?? s);
+      stats = await api.personalStreaks.stats();
+      notifyStreaksUpdated();
+    } catch (e) {
+      console.error('[streaks] bulk checkin error:', e);
+    }
+  }
+
+  function openRandomStreak() {
+    if (filteredStreaks.length === 0) return;
+    const next = filteredStreaks[Math.floor(Math.random() * filteredStreaks.length)];
+    selectedId = next.id;
+  }
+
+  function toggleArchivedView() {
+    showArchived = !showArchived;
+    selectedId = null;
+    deleteConfirm = null;
+    deleteConfirmName = '';
   }
 
   async function undo(id: number) {
@@ -112,6 +183,7 @@
       const updated = await api.personalStreaks.undo(id);
       streaks = streaks.map(s => s.id === id ? updated : s);
       stats = await api.personalStreaks.stats();
+      notifyStreaksUpdated();
     } finally {
       busy.delete(id); busy = new Set(busy);
     }
@@ -123,6 +195,7 @@
     try {
       const updated = await api.personalStreaks.freeze(id);
       streaks = streaks.map(s => s.id === id ? updated : s);
+      notifyStreaksUpdated();
     } catch (e: any) {
       console.error('[streaks] freeze error:', e);
     } finally {
@@ -145,6 +218,7 @@
       streaks = streaks.filter(s => s.id !== id);
       if (selectedId === id) selectedId = null;
       stats = await api.personalStreaks.stats();
+      notifyStreaksUpdated();
       deleteConfirm = null;
       deleteConfirmName = '';
     } catch (e) {
@@ -176,8 +250,7 @@
   }
 
   function freqLabel(s: PersonalStreak): string {
-    if (s.frequency === 'every_n' && s.frequency_days > 1) return `cada ${s.frequency_days}d`;
-    return 'diaria';
+    return s.description?.trim() || (s.frequency === 'every_n' && s.frequency_days > 1 ? `cada ${s.frequency_days}d` : 'diaria');
   }
 
   function cardThemeStyle(s: PersonalStreak): string {
@@ -218,7 +291,7 @@
 
 <div class="streaks-page">
   {#if mounted}
-    <div class="streaks-layout" transition:fade>
+    <div class="streaks-layout" style="--panel-w: {panelWidth}px" transition:fade>
       <!-- ═══ LEFT PANEL: LIST ═══ -->
       <div class="list-panel">
         <!-- Header -->
@@ -228,13 +301,24 @@
               <h1 class="list-title">Rachas</h1>
               <span class="list-sub mono">
                 {#if loading}cargando...
+                {:else if showArchived}{filteredStreaks.length} archivadas
                 {:else}{doneCount}/{filteredStreaks.length} hoy
                 {/if}
               </span>
             </div>
-            <button class="new-btn" on:click={openCreate}>
-              <Plus size={13} />
-            </button>
+            <div class="header-actions">
+              <button
+                class="header-action-btn"
+                class:active={showArchived}
+                on:click={toggleArchivedView}
+                title={showArchived ? 'Volver a activas' : 'Ver archivadas'}
+              >
+                <Archive size={13} />
+              </button>
+              <button class="new-btn" on:click={openCreate}>
+                <Plus size={13} />
+              </button>
+            </div>
           </div>
 
           <!-- Search -->
@@ -267,6 +351,11 @@
                 class:theme-gradient={streak.theme === 'gradient'}
                 class:theme-glow={streak.theme === 'glow'}
                 class:theme-minimal={streak.theme === 'minimal'}
+                class:theme-lcd={streak.theme === 'lcd'}
+                class:theme-neon={streak.theme === 'neon'}
+                class:theme-glass={streak.theme === 'glass'}
+                class:theme-sketch={streak.theme === 'sketch'}
+                class:theme-solid={!streak.theme || streak.theme === 'solid'}
                 class:selected={selectedId === streak.id}
                 class:checked={streak.today_checked}
                 class:archived={streak.is_archived}
@@ -282,6 +371,7 @@
                 role="button"
                 tabindex="0"
                 animate:flip={{ duration: 200 }}
+                use:liquidGlass={{ enabled: streak.theme === 'glass' }}
               >
                 <div class="item-icon">
                   {#if streak.icon && streak.icon.length > 0}
@@ -297,14 +387,16 @@
                       Finalizado {getDaysForCompletion(streak)} días
                     {:else}
                       {freqLabel(streak)}
-                      {#if streak.target_date}
-                        · {streak.days_remaining}d left
-                      {/if}
                     {/if}
                   </span>
                 </div>
                 <div class="item-count" style="color: {streak.color || 'var(--xp)'};">
-                  <span class="item-num mono">{streakLabel(streak.current_streak)}</span>
+                  <div class="count-box">
+                    <span class="item-num mono">{streakLabel(streak.current_streak)}</span>
+                    {#if streak.target_date && !isStreakCompleted(streak)}
+                      <span class="item-rem mono">{streak.days_remaining}d</span>
+                    {/if}
+                  </div>
                   {#if streak.today_checked}
                     <Check size={10} style="color: {streak.color || 'var(--xp)'};" />
                   {/if}
@@ -331,36 +423,53 @@
         </div>
       </div>
 
+      <!-- ── Resize handle ─────────────────────────────────────────────────────── -->
+      <div class="resize-handle static"></div>
+
       <!-- ═══ RIGHT PANEL: DETAIL ═══ -->
       <div class="detail-panel">
         {#if selected}
           <div
             class="detail-content"
-            class:theme-gradient={selected.theme === 'gradient'}
-            class:theme-glow={selected.theme === 'glow'}
-            class:theme-minimal={selected.theme === 'minimal'}
             class:completed={isStreakCompleted(selected)}
             style="--theme-ac: {selected.color || 'var(--xp)'};"
             transition:fade={{ duration: 150 }}
           >
+            <button
+              class="detail-exit-btn"
+              on:click={() => selectedId = null}
+              title="Volver al menú"
+            >
+              <X size={14} />
+            </button>
+
             <div class="top-metrics">
               <!-- Streak counter -->
               <div class="counter-section">
-                <button
-                  class="counter-ring"
-                  style="--ring-color: {isStreakCompleted(selected) ? '#10b981' : (selected.color || 'var(--xp)')};"
-                  on:click={() => !selected.is_archived && !selected.today_checked && !isStreakCompleted(selected) && checkin(selected.id)}
-                  disabled={selected.is_archived || selected.today_checked || busy.has(selected.id) || isStreakCompleted(selected)}
-                  title={isStreakCompleted(selected) ? 'Racha completada' : (selected.today_checked ? 'Ya hiciste check-in hoy' : 'Hacer check-in')}
-                >
-                  {#if isStreakCompleted(selected)}
-                    <span class="counter-num mono" style="color: #10b981;">✓</span>
-                    <span class="counter-label mono">FINALIZADO</span>
-                  {:else}
-                    <span class="counter-num mono">{selected.current_streak}</span>
-                    <span class="counter-label mono">DÍAS</span>
-                  {/if}
-                </button>
+                <div class="counter-stack">
+                  <h2
+                    class="counter-title mono"
+                    style="--title-accent: {isStreakCompleted(selected) ? '#10b981' : (selected.color || 'var(--xp)')};"
+                    title={selected.name}
+                  >
+                    {selected.name}
+                  </h2>
+                  <button
+                    class="counter-ring"
+                    style="--ring-color: {isStreakCompleted(selected) ? '#10b981' : (selected.color || 'var(--xp)')};"
+                    on:click={() => !selected.is_archived && !selected.today_checked && !isStreakCompleted(selected) && checkin(selected.id)}
+                    disabled={selected.is_archived || selected.today_checked || busy.has(selected.id) || isStreakCompleted(selected)}
+                    title={isStreakCompleted(selected) ? 'Racha completada' : (selected.today_checked ? 'Ya hiciste check-in hoy' : 'Hacer check-in')}
+                  >
+                    {#if isStreakCompleted(selected)}
+                      <span class="counter-num mono" style="color: #10b981;">✓</span>
+                      <span class="counter-label mono">FINALIZADO</span>
+                    {:else}
+                      <span class="counter-num mono">{selected.current_streak}</span>
+                      <span class="counter-label mono">DÍAS</span>
+                    {/if}
+                  </button>
+                </div>
               </div>
 
               <!-- Vertical stats panel -->
@@ -386,6 +495,7 @@
                 history={selected.history}
                 color={selected.color || '#c8a96e'}
                 startDate={selected.start_date}
+                targetDate={selected.target_date}
               />
             </div>
 
@@ -417,6 +527,26 @@
           <!-- No selection state -->
           <div class="no-selection">
             {#if stats}
+              <div class="no-selection-actions">
+                <button
+                  class="action-pill"
+                  on:click={checkinAllCurrent}
+                  disabled={activeCheckinCandidates.length === 0}
+                  title="Hacer check-in de todas las rachas activas"
+                >
+                  <CheckCheck size={14} />
+                  <span>Check-in de todas</span>
+                </button>
+                <button
+                  class="action-pill"
+                  on:click={openRandomStreak}
+                  disabled={filteredStreaks.length === 0}
+                  title="Entrar a una racha random"
+                >
+                  <Shuffle size={14} />
+                  <span>Racha random</span>
+                </button>
+              </div>
               <StreakStatsPanel {stats} />
             {/if}
             <div class="no-sel-hint">
@@ -457,6 +587,7 @@
   editStreak={editTarget}
   on:close={() => { showModal = false; editTarget = null; }}
   on:save={handleSave}
+  on:archive={() => editTarget?.id != null && archiveStreak(editTarget.id, !editTarget.is_archived)}
 />
 
 <style>
@@ -467,7 +598,7 @@
 
   .streaks-layout {
     display: grid;
-    grid-template-columns: 340px 1fr;
+    grid-template-columns: var(--panel-w) 5px 1fr;
     height: 100%;
   }
 
@@ -476,7 +607,6 @@
      ═══════════════════════════════════════════════════════════════════════ */
   .list-panel {
     display: flex; flex-direction: column;
-    border-right: 1px solid var(--border);
     height: 100%;
   }
 
@@ -489,6 +619,12 @@
 
   .list-header-top {
     display: flex; align-items: flex-start; justify-content: space-between;
+  }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
 
   .list-title {
@@ -505,6 +641,16 @@
     cursor: pointer; transition: all 0.15s;
   }
   .new-btn:hover { opacity: 0.85; transform: scale(1.05); }
+
+  .header-action-btn {
+    width: 32px; height: 32px;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--surface); color: var(--text-primary);
+    border: 1px solid var(--border); border-radius: 8px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .header-action-btn:hover { background: var(--elevated); border-color: var(--text-muted); transform: scale(1.05); }
+  .header-action-btn.active { background: var(--elevated); border-color: var(--text-muted); }
 
   /* Search */
   .search-row {
@@ -615,13 +761,46 @@
   }
 
   .streak-item.theme-minimal {
-    background: var(--bg);
-    border-color: color-mix(in srgb, var(--theme-ac) 12%, var(--border));
-    opacity: 0.88;
+    background: color-mix(in srgb, var(--theme-ac) 8%, transparent);
+    border: 1px solid transparent;
+  }
+
+  .streak-item.theme-lcd {
+    background: #111; border: 1px solid #333; box-shadow: 0 0 0 1px #333, inset 0 0 10px #000;
+  }
+  .streak-item.theme-lcd .item-num {
+    font-family: var(--font-mono); color: #0f0 !important; text-shadow: 0 0 5px #0f0;
+  }
+  .streak-item.theme-lcd .item-name {
+    color: #0f0 !important; opacity: 0.8;
+  }
+
+  .streak-item.theme-neon {
+    background: #000; border: 1px solid var(--theme-ac);
+    box-shadow: 0 0 10px color-mix(in srgb, var(--theme-ac) 25%, transparent);
+  }
+  .streak-item.theme-neon .item-name, .streak-item.theme-neon .item-num {
+    text-shadow: 0 0 10px var(--theme-ac);
+  }
+
+  .streak-item.theme-glass {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0) 100%);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15), inset 0 1px 2px rgba(255, 255, 255, 0.5);
+  }
+  .streak-item.theme-solid {
+    background: transparent;
+    border: 1px solid var(--theme-ac);
+  }
+
+  .streak-item.theme-sketch {
+    border: 1px dashed var(--theme-ac); border-radius: 2px;
   }
 
   .streak-item:hover { background: var(--elevated); }
-  .streak-item.selected { background: var(--elevated); border-color: var(--text-muted); }
+  .streak-item.selected { background: var(--elevated); }
   .streak-item.completed {
     border-color: #10b981;
     background: rgba(16, 185, 129, 0.05);
@@ -638,17 +817,14 @@
 
   .streak-item.theme-gradient.selected,
   .streak-item.theme-glow.selected {
-    border-color: color-mix(in srgb, var(--theme-ac) 40%, var(--text-muted));
     background: var(--surface);
   }
 
   .streak-item.theme-minimal.selected {
-    border-color: color-mix(in srgb, var(--theme-ac) 20%, var(--text-muted));
     background: var(--bg);
   }
 
-  .streak-item.theme-minimal,
-  .detail-content.theme-minimal {
+  .streak-item.theme-minimal {
     filter: saturate(0.9) brightness(0.95);
   }
 
@@ -661,11 +837,19 @@
 
   .item-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
   .item-name { font-size: 13px; font-weight: 500; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .item-meta { font-size: 9px; color: var(--text-disabled); }
+  .item-meta { font-size: 9px; color: var(--text-disabled); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   .item-count {
-    display: flex; align-items: center; gap: 4px; flex-shrink: 0;
-    padding-right: 26px;
+    display: flex; align-items: center; gap: 6px; flex-shrink: 0;
+    padding-right: 24px;
+  }
+
+  .count-box {
+    display: flex; flex-direction: column; align-items: flex-end; line-height: 1;
+  }
+
+  .item-rem {
+    font-size: 8px; opacity: 0.6; margin-top: 1px;
   }
   .item-num { font-size: 18px; font-weight: 700; line-height: 1; }
 
@@ -735,15 +919,40 @@
     isolation: isolate;
   }
 
+  .detail-exit-btn {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s;
+    z-index: 3;
+  }
+
+  .detail-exit-btn:hover {
+    color: var(--text-primary);
+    border-color: var(--text-muted);
+    background: var(--elevated);
+    transform: scale(1.04);
+  }
+
   /* Top metrics */
   .top-metrics {
     width: 100%;
     max-width: 520px;
     margin: 0 auto;
-    margin-top: -10px;
+    margin-top: -8px;
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    aspect-ratio: 2 / 0.72;
+    aspect-ratio: 2 / 0.68;
     gap: 0;
   }
 
@@ -753,10 +962,32 @@
     height: 100%;
   }
 
+  .counter-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    width: min(220px, 100%);
+  }
+
+  .counter-title {
+    margin: 0;
+    width: 100%;
+    font-size: 10px;
+    line-height: 1.1;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--title-accent);
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
   .counter-ring {
     display: flex; flex-direction: column; align-items: center;
     justify-content: center;
-    width: 102px; height: 102px;
+    width: 96px; height: 96px;
     border-radius: 50%;
     border: 2px solid var(--ring-color);
     box-shadow: 0 0 30px color-mix(in srgb, var(--ring-color) 15%, transparent),
@@ -771,7 +1002,7 @@
   .counter-ring:focus-visible { outline: 1px solid var(--ring-color); outline-offset: 3px; }
 
   .counter-num {
-    font-size: 40px; font-weight: 700;
+    font-size: 36px; font-weight: 700;
     color: var(--text-primary); line-height: 1;
   }
   .counter-label {
@@ -805,7 +1036,14 @@
 
   /* Heatmap section */
   .heatmap-section {
-    display: flex; flex-direction: column; gap: 4px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    width: 100%;
+    flex: 1;
+    min-height: 0;
   }
 
   .section-label {
@@ -839,6 +1077,41 @@
     display: flex; flex-direction: column;
     align-items: center; justify-content: center;
     padding: 40px; gap: 24px;
+  }
+
+  .no-selection-actions {
+    width: min(360px, 100%);
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: -8px;
+  }
+
+  .action-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-primary);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .action-pill:hover {
+    background: var(--elevated);
+    border-color: var(--text-muted);
+    transform: translateY(-1px);
+  }
+
+  .action-pill:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    transform: none;
   }
 
   .no-sel-hint {
