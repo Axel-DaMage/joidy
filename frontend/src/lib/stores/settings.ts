@@ -2,7 +2,7 @@ import { writable, derived } from 'svelte/store';
 
 const COLORS_KEY     = 'joidy-accent-colors';
 const DEFAULT_COLORS = ['#c8a96e'];
-const MAX_COLORS     = 6;
+const MAX_COLORS     = 3;
 
 function isValidHex(v: string) {
   return /^#[0-9a-fA-F]{6}$/.test(v);
@@ -13,15 +13,21 @@ function computeGradient(colors: string[]): string {
   return `linear-gradient(to right, ${colors.join(', ')})`;
 }
 
+function normalizeColors(colors: unknown): string[] {
+  if (!Array.isArray(colors)) return [...DEFAULT_COLORS];
+  const normalized = colors
+    .filter((c): c is string => typeof c === 'string' && isValidHex(c))
+    .slice(0, MAX_COLORS);
+  return normalized.length >= 1 ? normalized : [...DEFAULT_COLORS];
+}
+
 function loadColors(): string[] {
   if (typeof localStorage === 'undefined') return [...DEFAULT_COLORS];
   try {
     const saved = localStorage.getItem(COLORS_KEY);
     if (saved) {
       const parsed: unknown = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length >= 1 && parsed.every(isValidHex)) {
-        return parsed as string[];
-      }
+      return normalizeColors(parsed);
     }
   } catch { /* ignore */ }
   return [...DEFAULT_COLORS];
@@ -35,12 +41,34 @@ function persist(colors: string[]) {
 
 function applyColors(colors: string[]) {
   if (typeof document === 'undefined') return;
-  const primary  = colors[0];
+  const primary = colors[0];
+  const secondary = colors.length > 1 ? colors[1] : `color-mix(in srgb, ${primary} 70%, var(--text-primary))`;
+  const tertiary = colors.length > 2 ? colors[2] : `color-mix(in srgb, ${secondary} 70%, var(--text-primary))`;
+  
+  const secondaryPlain = colors[1] ?? primary;
+  const tertiaryPlain = colors[2] ?? secondaryPlain;
   const gradient = computeGradient(colors);
-  document.documentElement.style.setProperty('--xp',              primary);
-  document.documentElement.style.setProperty('--plant',           primary);
-  document.documentElement.style.setProperty('--plant-glow',      primary);
+
+  document.documentElement.style.setProperty('--accent', primary);
   document.documentElement.style.setProperty('--accent-gradient', gradient);
+
+  document.documentElement.style.setProperty('--xp', primary);
+  document.documentElement.style.setProperty('--xp-2', secondaryPlain);
+  document.documentElement.style.setProperty('--xp-3', tertiaryPlain);
+  document.documentElement.style.setProperty('--xp-dark', secondaryPlain);
+
+  // Markdown Header Colors
+  document.documentElement.style.setProperty('--md-h1', primary);
+  document.documentElement.style.setProperty('--md-h2', `color-mix(in srgb, ${primary} 60%, ${secondary})`);
+  document.documentElement.style.setProperty('--md-h3', secondary);
+  document.documentElement.style.setProperty('--md-h4', `color-mix(in srgb, ${secondary} 60%, ${tertiary})`);
+  document.documentElement.style.setProperty('--md-h5', tertiary);
+  document.documentElement.style.setProperty('--md-h6', `color-mix(in srgb, ${tertiary} 70%, var(--text-primary))`);
+
+  document.documentElement.style.setProperty('--plant', primary);
+  document.documentElement.style.setProperty('--plant-secondary', secondaryPlain);
+  document.documentElement.style.setProperty('--plant-tertiary', tertiaryPlain);
+  document.documentElement.style.setProperty('--plant-glow', secondaryPlain);
 }
 
 function createAccentStore() {
@@ -53,12 +81,14 @@ function createAccentStore() {
     init() {
       const saved = loadColors();
       update(() => saved);
+      persist(saved);
       applyColors(saved);
     },
 
     setColor(index: number, color: string) {
       if (!isValidHex(color)) return;
       update(prev => {
+        if (index < 0 || index >= prev.length) return prev;
         const next = [...prev];
         next[index] = color;
         persist(next);
@@ -151,5 +181,7 @@ export const showFrontmatter = createBooleanStore('joidy-show-frontmatter', fals
 export const showTrash       = createBooleanStore('joidy-show-trash', false);
 export const showHiddenFiles = createBooleanStore('joidy-show-hidden', false);
 export const writeInObsidian = createBooleanStore('joidy-write-obsidian', false);
+export const use24HourClock  = createBooleanStore('joidy-use-24h-clock', true);
+export const hideTagsLine    = createBooleanStore('joidy-hide-tags-line', true);
 
 export { MAX_COLORS };

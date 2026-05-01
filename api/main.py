@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from database import init_db
 from logging_config import setup_logging
-from routers import ai, gamification, goals, notes, personal_streaks, skills, tags, vault
+from routers import ai, gamification, goals, notes, personal_streaks, skills, tags, vault, planning
 from routers.integrations import github
 
 
@@ -35,6 +35,7 @@ app.include_router(personal_streaks.router)
 app.include_router(github.router)
 app.include_router(vault.router)
 app.include_router(ai.router)
+app.include_router(planning.router)
 
 
 @app.get("/health")

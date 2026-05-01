@@ -32,6 +32,7 @@
   // ── Delete confirmation ───────────────────────────────────────────────────
   let deleteConfirm: number | null = null;
   let deleteConfirmName: string = '';
+  let deleteConfirmTheme = 'solid';
 
   $: visibleStreaks = streaks.filter(s => showArchived ? s.is_archived : !s.is_archived);
 
@@ -203,13 +204,14 @@
     }
   }
 
-  let deleteTimeoutId: NodeJS.Timeout | null = null;
+  let deleteTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
   async function deleteStreak(id: number) {
     if (deleteConfirm !== id) {
       const streak = streaks.find(s => s.id === id);
       deleteConfirm = id;
       deleteConfirmName = streak?.name || 'Sin nombre';
+      deleteConfirmTheme = streak?.theme || 'solid';
       return;
     }
     if (deleteTimeoutId) clearTimeout(deleteTimeoutId);
@@ -221,16 +223,19 @@
       notifyStreaksUpdated();
       deleteConfirm = null;
       deleteConfirmName = '';
+      deleteConfirmTheme = 'solid';
     } catch (e) {
       console.error('[streaks] delete error:', e);
       deleteConfirm = null;
       deleteConfirmName = '';
+      deleteConfirmTheme = 'solid';
     }
   }
 
   function cancelDelete() {
     deleteConfirm = null;
     deleteConfirmName = '';
+    deleteConfirmTheme = 'solid';
   }
 
   function openCreate() {
@@ -251,24 +256,6 @@
 
   function freqLabel(s: PersonalStreak): string {
     return s.description?.trim() || (s.frequency === 'every_n' && s.frequency_days > 1 ? `cada ${s.frequency_days}d` : 'diaria');
-  }
-
-  function cardThemeStyle(s: PersonalStreak): string {
-    const c = s.color || 'var(--xp)';
-    const t = s.theme || 'solid';
-    if (t === 'gradient') return `box-shadow: inset 0 0 0 1px color-mix(in srgb, ${c} 30%, transparent); border-color: color-mix(in srgb, ${c} 30%, transparent);`;
-    if (t === 'glow') return `box-shadow: 0 0 10px color-mix(in srgb, ${c} 10%, transparent), inset 0 0 0 1px color-mix(in srgb, ${c} 14%, transparent); border-color: color-mix(in srgb, ${c} 20%, transparent); background: var(--surface);`;
-    if (t === 'minimal') return `background: var(--bg); border: 1px solid color-mix(in srgb, ${c} 12%, var(--border)); opacity: 0.82;`;
-    return ``;
-  }
-
-  function detailThemeStyle(s: PersonalStreak): string {
-    const c = s.color || 'var(--xp)';
-    const t = s.theme || 'solid';
-    if (t === 'gradient') return `box-shadow: inset 0 0 0 1px color-mix(in srgb, ${c} 26%, transparent);`;
-    if (t === 'glow') return `box-shadow: 0 0 16px color-mix(in srgb, ${c} 12%, transparent);`;
-    if (t === 'minimal') return `opacity: 0.9;`;
-    return '';
   }
 
   // Completion detection
@@ -563,7 +550,15 @@
 <!-- Delete confirmation modal -->
 {#if deleteConfirm !== null}
   <div class="modal-backdrop" transition:fade={{ duration: 150 }}>
-    <div class="delete-modal" transition:scale={{ duration: 200 }}>
+    <div 
+      class="delete-modal" 
+      class:theme-sketch={deleteConfirmTheme === 'sketch'}
+      class:theme-glow={deleteConfirmTheme === 'glow'}
+      class:theme-gradient={deleteConfirmTheme === 'gradient'}
+      class:theme-neon={deleteConfirmTheme === 'neon'}
+      class:theme-lcd={deleteConfirmTheme === 'lcd'}
+      transition:scale={{ duration: 200 }}
+    >
       <div class="delete-modal-content">
         <div class="delete-modal-icon">
           <X size={32} />
@@ -576,7 +571,7 @@
       </div>
       <div class="delete-modal-buttons">
         <button class="btn-cancel" on:click={cancelDelete}>Cancelar</button>
-        <button class="btn-danger" on:click={() => deleteStreak(deleteConfirm)}>Eliminar</button>
+        <button class="btn-danger" on:click={() => deleteConfirm !== null && deleteStreak(deleteConfirm)}>Eliminar</button>
       </div>
     </div>
   </div>
@@ -766,13 +761,30 @@
   }
 
   .streak-item.theme-lcd {
-    background: #111; border: 1px solid #333; box-shadow: 0 0 0 1px #333, inset 0 0 10px #000;
+    background-color: var(--theme-ac);
+    background-image:
+      linear-gradient(rgba(0, 0, 0, 0.1) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 0, 0, 0.1) 1px, transparent 1px);
+    background-size: 3px 3px;
+    border: 1px solid color-mix(in srgb, var(--theme-ac) 70%, black);
+    box-shadow: inset 0 0 10px rgba(0,0,0,0.15);
   }
   .streak-item.theme-lcd .item-num {
-    font-family: var(--font-mono); color: #0f0 !important; text-shadow: 0 0 5px #0f0;
+    font-family: var(--font-mono); color: color-mix(in srgb, var(--theme-ac) 20%, black) !important; text-shadow: none; font-weight: 800;
   }
   .streak-item.theme-lcd .item-name {
-    color: #0f0 !important; opacity: 0.8;
+    color: color-mix(in srgb, var(--theme-ac) 20%, black) !important; opacity: 0.9; font-weight: 700;
+  }
+  .streak-item.theme-lcd .item-meta,
+  .streak-item.theme-lcd .item-rem {
+    color: color-mix(in srgb, var(--theme-ac) 20%, black) !important; opacity: 0.7; font-weight: 600;
+  }
+  .streak-item.theme-lcd .item-emoji,
+  .streak-item.theme-lcd .item-icon {
+    filter: grayscale(1) brightness(0) opacity(0.8);
+  }
+  .streak-item.theme-lcd .item-count :global(svg) {
+    color: color-mix(in srgb, var(--theme-ac) 20%, black) !important;
   }
 
   .streak-item.theme-neon {
@@ -784,11 +796,7 @@
   }
 
   .streak-item.theme-glass {
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0) 100%);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(255, 255, 255, 0.4);
-    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15), inset 0 1px 2px rgba(255, 255, 255, 0.5);
+    border: 1px solid transparent;
   }
   .streak-item.theme-solid {
     background: transparent;
@@ -797,6 +805,29 @@
 
   .streak-item.theme-sketch {
     border: 1px dashed var(--theme-ac); border-radius: 2px;
+  }
+
+  .streak-item.theme-sketch .item-action-btn {
+    border: 1px dashed var(--theme-ac);
+    border-radius: 2px;
+    background: transparent;
+  }
+
+  .streak-item.theme-sketch .item-action-btn:hover {
+    background: color-mix(in srgb, var(--theme-ac) 10%, transparent);
+  }
+
+  .streak-item.theme-glow .item-action-btn,
+  .streak-item.theme-gradient .item-action-btn,
+  .streak-item.theme-neon .item-action-btn {
+    border-color: transparent;
+    background: transparent;
+  }
+  .streak-item.theme-glow .item-action-btn:hover,
+  .streak-item.theme-gradient .item-action-btn:hover,
+  .streak-item.theme-neon .item-action-btn:hover {
+    border-color: transparent;
+    background: color-mix(in srgb, var(--theme-ac) 10%, transparent);
   }
 
   .streak-item:hover { background: var(--elevated); }
@@ -818,6 +849,32 @@
   .streak-item.theme-gradient.selected,
   .streak-item.theme-glow.selected {
     background: var(--surface);
+  }
+
+  .streak-item.theme-lcd:hover,
+  .streak-item.theme-lcd.selected {
+    background-color: color-mix(in srgb, var(--theme-ac) 95%, black);
+    background-image:
+      linear-gradient(rgba(0, 0, 0, 0.1) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 0, 0, 0.1) 1px, transparent 1px);
+    background-size: 3px 3px;
+    box-shadow: inset 0 0 15px rgba(0,0,0,0.25);
+  }
+
+  .streak-item.theme-lcd .item-action-btn {
+    border-color: color-mix(in srgb, var(--theme-ac) 70%, black);
+    background: transparent;
+    color: color-mix(in srgb, var(--theme-ac) 20%, black);
+  }
+  .streak-item.theme-lcd .item-action-btn:hover {
+    border-color: color-mix(in srgb, var(--theme-ac) 20%, black);
+    color: color-mix(in srgb, var(--theme-ac) 20%, black);
+    background: color-mix(in srgb, black 15%, transparent);
+  }
+  .streak-item.theme-lcd .item-action-btn.danger:hover {
+    border-color: color-mix(in srgb, var(--theme-ac) 20%, black);
+    color: color-mix(in srgb, var(--theme-ac) 20%, black);
+    background: color-mix(in srgb, black 30%, transparent);
   }
 
   .streak-item.theme-minimal.selected {
@@ -1192,4 +1249,100 @@
     cursor: pointer; transition: all 0.15s;
   }
   .btn-danger:hover { opacity: 0.9; }
+
+  /* Sketch theme for delete modal */
+  .delete-modal.theme-sketch {
+    border: 1px dashed var(--text-muted);
+    border-radius: 2px;
+  }
+  .delete-modal.theme-sketch .btn-danger,
+  .delete-modal.theme-sketch .btn-cancel {
+    border: 1px dashed var(--text-muted);
+    border-radius: 2px;
+    background: transparent;
+    color: var(--text-primary);
+  }
+  .delete-modal.theme-sketch .btn-danger {
+    border-color: var(--error);
+    color: var(--error);
+  }
+  .delete-modal.theme-sketch .btn-danger:hover {
+    background: color-mix(in srgb, var(--error) 10%, transparent);
+  }
+  .delete-modal.theme-sketch .btn-cancel:hover {
+    background: color-mix(in srgb, var(--text-muted) 10%, transparent);
+  }
+
+  /* Glow, Gradient & Neon theme for delete modal */
+  .delete-modal.theme-glow .btn-danger,
+  .delete-modal.theme-glow .btn-cancel,
+  .delete-modal.theme-gradient .btn-danger,
+  .delete-modal.theme-gradient .btn-cancel,
+  .delete-modal.theme-neon .btn-danger,
+  .delete-modal.theme-neon .btn-cancel {
+    border-color: transparent;
+    background: transparent;
+    color: var(--text-primary);
+  }
+  .delete-modal.theme-glow .btn-danger,
+  .delete-modal.theme-gradient .btn-danger,
+  .delete-modal.theme-neon .btn-danger {
+    color: var(--error);
+  }
+  .delete-modal.theme-glow .btn-danger:hover,
+  .delete-modal.theme-gradient .btn-danger:hover,
+  .delete-modal.theme-neon .btn-danger:hover {
+    border-color: transparent;
+    background: color-mix(in srgb, var(--error) 10%, transparent);
+  }
+  .delete-modal.theme-glow .btn-cancel:hover,
+  .delete-modal.theme-gradient .btn-cancel:hover,
+  .delete-modal.theme-neon .btn-cancel:hover {
+    border-color: transparent;
+    background: color-mix(in srgb, var(--text-muted) 10%, transparent);
+  }
+
+  /* LCD theme for delete modal */
+  .delete-modal.theme-lcd {
+    background-color: var(--theme-ac);
+    background-image:
+      linear-gradient(rgba(0, 0, 0, 0.1) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 0, 0, 0.1) 1px, transparent 1px);
+    background-size: 3px 3px;
+    border: 1px solid color-mix(in srgb, var(--theme-ac) 70%, black);
+    box-shadow: inset 0 0 10px rgba(0,0,0,0.15);
+  }
+  .delete-modal.theme-lcd .delete-modal-icon,
+  .delete-modal.theme-lcd .delete-modal-title,
+  .delete-modal.theme-lcd .delete-modal-text,
+  .delete-modal.theme-lcd .delete-modal-text strong,
+  .delete-modal.theme-lcd .delete-modal-warning {
+    color: color-mix(in srgb, var(--theme-ac) 20%, black);
+    text-shadow: none;
+    opacity: 1;
+  }
+  .delete-modal.theme-lcd .delete-modal-icon {
+    filter: grayscale(1) brightness(0) opacity(0.8);
+  }
+  .delete-modal.theme-lcd .delete-modal-buttons {
+    background: transparent;
+    border-top: 1px solid color-mix(in srgb, var(--theme-ac) 70%, black);
+  }
+  .delete-modal.theme-lcd .btn-danger,
+  .delete-modal.theme-lcd .btn-cancel {
+    border-color: color-mix(in srgb, var(--theme-ac) 70%, black);
+    background: transparent;
+    color: color-mix(in srgb, var(--theme-ac) 20%, black);
+    font-weight: 700;
+  }
+  .delete-modal.theme-lcd .btn-danger:hover {
+    border-color: color-mix(in srgb, var(--theme-ac) 20%, black);
+    background: color-mix(in srgb, black 30%, transparent);
+    color: color-mix(in srgb, var(--theme-ac) 20%, black);
+  }
+  .delete-modal.theme-lcd .btn-cancel:hover {
+    border-color: color-mix(in srgb, var(--theme-ac) 20%, black);
+    background: color-mix(in srgb, black 15%, transparent);
+    color: color-mix(in srgb, var(--theme-ac) 20%, black);
+  }
 </style>

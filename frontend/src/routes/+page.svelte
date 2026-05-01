@@ -15,8 +15,9 @@
   import Widget         from '$lib/components/Widget.svelte';
   import { totalXP, currentStreak, lastActivity } from '$lib/stores/gamification';
   import { notes, loadNotes } from '$lib/stores/notes';
-  import { dashboardLayout, editMode } from '$lib/stores/layout';
+  import { dashboardLayout } from '$lib/stores/layout';
   import { api } from '$lib/api';
+  import { loadUserSettings, patchUserSettings } from '$lib/utils/userSettings';
 
   // ── Module carousel ────────────────────────────────────────────────────────
   const MODULES = [
@@ -29,6 +30,7 @@
 
   let moduleIdx = 0;
   let slideDir  = 1;
+  let modulePrefsReady = false;
 
   function prevModule() { slideDir = -1; moduleIdx = (moduleIdx - 1 + MODULES.length) % MODULES.length; }
   function nextModule() { slideDir =  1; moduleIdx = (moduleIdx + 1) % MODULES.length; }
@@ -48,6 +50,13 @@
 
   onMount(async () => {
     dashboardLayout.init();
+
+    const savedNotesUi = loadUserSettings().notesUi;
+    if (savedNotesUi?.panelWidth !== undefined) {
+      panelWidth = Number(savedNotesUi.panelWidth);
+    }
+    modulePrefsReady = true;
+
     await loadNotes();
     try {
       const status = await api.github.status();
@@ -56,22 +65,23 @@
     } catch (_) {}
   });
 
+  $: if (modulePrefsReady && MODULES[moduleIdx]) {
+    patchUserSettings({
+      dashboard: {
+        moduleId: MODULES[moduleIdx].id,
+      }
+    });
+  }
+
   // Widget renderers per panel
   function leftWidgets(layout: typeof $dashboardLayout) { return layout.left; }
   function rightWidgets(layout: typeof $dashboardLayout) { return layout.right; }
+
+  // Resizable panel synced with notes
+  let panelWidth = 260;
 </script>
 
-<div class="dashboard">
-
-  <!-- ── Edit mode bar ─────────────────────────────────────────────────────── -->
-  {#if $editMode}
-    <div class="edit-bar" transition:fly={{ y: -20, duration: 160 }}>
-      <span class="mono edit-bar-title">MODO EDICIÓN</span>
-      <span class="edit-bar-hint">Usa las flechas de cada widget para moverlos</span>
-      <button class="btn-reset mono" on:click={dashboardLayout.reset}><RotateCcw size={10}/> reset</button>
-      <button class="btn-done"       on:click={() => editMode.set(false)}>Listo</button>
-    </div>
-  {/if}
+<div class="dashboard" style="--panel-w: {panelWidth}px">
 
   <!-- ── Left panel ─────────────────────────────────────────────────────────── -->
   <section class="plant-section">
@@ -187,6 +197,9 @@
 
   </section>
 
+  <!-- ── Resize handle ─────────────────────────────────────────────────────── -->
+  <div class="resize-handle static"></div>
+
   <!-- ── Right panel ────────────────────────────────────────────────────────── -->
   <section class="activity-section">
 
@@ -272,39 +285,9 @@
   /* ── Layout — identical to original ── */
   .dashboard {
     display: grid;
-    grid-template-columns: 320px 1fr;
+    grid-template-columns: var(--panel-w) 5px 1fr;
     height: 100%;
     position: relative;
-  }
-
-  /* ── Edit bar ── */
-  .edit-bar {
-    grid-column: 1 / -1;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 6px 16px;
-    background: color-mix(in srgb, var(--xp) 6%, var(--surface));
-    border-bottom: 1px solid color-mix(in srgb, var(--xp) 25%, var(--border));
-    font-size: 11px;
-  }
-
-  .edit-bar-title { font-size: 9px; letter-spacing: 0.12em; color: var(--xp); }
-  .edit-bar-hint  { color: var(--text-muted); }
-
-  .btn-reset {
-    display: flex; align-items: center; gap: 4px;
-    padding: 3px 8px; font-size: 10px;
-    background: transparent; color: var(--text-muted);
-    border: 1px solid var(--border); border-radius: 3px; cursor: pointer;
-  }
-  .btn-reset:hover { color: var(--text-secondary); }
-
-  .btn-done {
-    margin-left: auto;
-    padding: 3px 12px; font-size: 11px; font-family: var(--font-mono);
-    background: var(--xp); color: var(--bg);
-    border: none; border-radius: 3px; cursor: pointer; letter-spacing: 0.05em;
   }
 
   /* ── Left panel — identical to original ── */
@@ -313,9 +296,9 @@
     flex-direction: column;
     align-items: center;
     padding: var(--s4) var(--s5) var(--s4);
-    border-right: 1px solid var(--border);
     gap: 10px;
     overflow: hidden;
+    background: var(--bg);
   }
 
   /* ── Module navigation ── */
@@ -375,7 +358,7 @@
     align-items: center;
     gap: 8px;
     width: 100%;
-    padding: 6px 0;
+    padding: 10px 0;
   }
 
   .xp-section { width: 100%; max-width: 240px; }

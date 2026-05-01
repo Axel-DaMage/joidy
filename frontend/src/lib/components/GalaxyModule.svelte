@@ -44,14 +44,14 @@
     {#each stars as s, i}
       <circle
         cx={s.x} cy={s.y} r={s.r}
-        fill="var(--plant)"
+        fill={i % 3 === 0 ? 'var(--plant)' : i % 3 === 1 ? 'var(--plant-secondary)' : 'var(--plant-tertiary)'}
         opacity={s.op}
         style="transition: opacity 600ms ease {i * 8}ms"
       />
     {/each}
 
     <!-- Core star — always visible, pulses -->
-    <circle cx="50" cy="60" r={coreSize} fill="var(--plant)" class="core-pulse" />
+    <circle cx="50" cy="60" r={coreSize} fill="var(--plant-secondary)" class="core-pulse" />
   </svg>
 
   <div class="stage-tag mono">{stageLabel} · niv {$globalLevel}</div>

@@ -45,7 +45,7 @@
 <div class="city-wrap" style="width:{size}px; height:{size}px;">
   <svg viewBox="0 0 100 120" fill="none" xmlns="http://www.w3.org/2000/svg" class="city-svg">
     <!-- Moon / night atmosphere -->
-    <circle cx="82" cy="22" r="6" stroke="var(--plant)" stroke-width="0.6" fill="none" opacity="0.4"/>
+    <circle cx="82" cy="22" r="6" stroke="var(--plant-secondary)" stroke-width="0.6" fill="none" opacity="0.4"/>
     <circle cx="80" cy="21" r="5" fill="var(--bg)" />
 
     <!-- Ground -->
@@ -55,7 +55,7 @@
     {#each buildings as [bx, bw, bh, cols, rows], bi}
       <rect
         x={bx} y={100 - bh} width={bw} height={bh}
-        stroke="var(--plant)" stroke-width="0.8" fill="var(--bg)"
+        stroke={bi % 2 === 0 ? 'var(--plant)' : 'var(--plant-secondary)'} stroke-width="0.8" fill="var(--bg)"
         style="transition: height 600ms ease {bi * 80}ms, y 600ms ease {bi * 80}ms"
       />
       <!-- Windows -->
@@ -64,7 +64,7 @@
           x={w.x} y={w.y}
           width={(bw - 6) / cols * 0.55}
           height={(bh - 8) / rows * 0.5}
-          fill="var(--plant)" opacity="0.4"
+          fill="var(--plant-tertiary)" opacity="0.4"
         />
       {/each}
     {/each}

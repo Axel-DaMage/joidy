@@ -1,7 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
-  import { accentColors, activeIconPack, showFrontmatter, showTrash, showHiddenFiles, writeInObsidian, type IconPack, MAX_COLORS } from '$lib/stores/settings';
+  import { accentColors, activeIconPack, showFrontmatter, showTrash, showHiddenFiles, writeInObsidian, use24HourClock, hideTagsLine, type IconPack, MAX_COLORS } from '$lib/stores/settings';
 
   export let open = false;
 
@@ -74,8 +74,22 @@
               <span class:active={theme === 'light'}>claro</span>
             </button>
           </div>
+
+          <div class="row">
+            <div class="row-label">
+              <DynamicIcon name="Clock3" size={13} />
+              <span>Formato de hora</span>
+            </div>
+            <button class="toggle" on:click={() => use24HourClock.toggle()}>
+              <span class:active={$use24HourClock}>24h</span>
+              <span class="sep">/</span>
+              <span class:active={!$use24HourClock}>12h</span>
+            </button>
+          </div>
+
           <!-- Gradient preview bar -->
           <div class="gradient-preview" style="background: {gradientPreview};"></div>
+          <p class="color-limit-note mono">Máximo {MAX_COLORS} colores</p>
 
           <!-- Per-color rows -->
           <div class="color-list">
@@ -227,6 +241,18 @@
               <span class:active={!$showTrash}>oculto</span>
               <span class="sep">/</span>
               <span class:active={$showTrash}>visible</span>
+            </button>
+          </div>
+
+          <div class="row">
+            <div class="row-label">
+              <DynamicIcon name="Tag" size={13} />
+              <span>Ocultar línea # Tags</span>
+            </div>
+            <button class="toggle" on:click={() => hideTagsLine.toggle()}>
+              <span class:active={$hideTagsLine}>sí</span>
+              <span class="sep">/</span>
+              <span class:active={!$hideTagsLine}>no</span>
             </button>
           </div>
         </section>
@@ -406,6 +432,13 @@
     transition: background 300ms ease;
   }
 
+  .color-limit-note {
+    margin: -4px 0 10px;
+    font-size: 10px;
+    color: var(--text-disabled);
+    letter-spacing: 0.04em;
+  }
+
   .color-list {
     display: flex;
     flex-direction: column;
@@ -499,4 +532,9 @@
     transition: color var(--t-fast), border-color var(--t-fast);
   }
   .add-color-btn:hover { color: var(--text-secondary); border-color: var(--text-muted); }
+  .add-color-btn:focus-visible {
+    outline: none;
+    border-color: var(--xp);
+    color: var(--xp);
+  }
 </style>

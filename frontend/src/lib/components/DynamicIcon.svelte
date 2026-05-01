@@ -22,29 +22,8 @@
 
 
 
-  // ── Material ──
-  import MHome from 'svelte-material-icons/Home.svelte';
-  import MBook from 'svelte-material-icons/BookOpenOutline.svelte';
-  import MNet from 'svelte-material-icons/Network.svelte';
-  import MZap from 'svelte-material-icons/Flash.svelte';
-  import MTarget from 'svelte-material-icons/Target.svelte';
-  import MFlame from 'svelte-material-icons/Fire.svelte';
-  import MCog from 'svelte-material-icons/Cog.svelte';
-  import MGrid from 'svelte-material-icons/ViewGrid.svelte';
-  import MX from 'svelte-material-icons/Close.svelte';
-  import MMoon from 'svelte-material-icons/WeatherNight.svelte';
-  import MSun from 'svelte-material-icons/WeatherSunny.svelte';
-  import MDB from 'svelte-material-icons/Database.svelte';
-  import MGit from 'svelte-material-icons/SourceBranch.svelte';
-  import MPal from 'svelte-material-icons/Palette.svelte';
-  import MPlus from 'svelte-material-icons/Plus.svelte';
-  import MMinus from 'svelte-material-icons/Minus.svelte';
-  import MRot from 'svelte-material-icons/Refresh.svelte';
-  import MSkip from 'svelte-material-icons/SkipNext.svelte';
-  import MFile from 'svelte-material-icons/FileDocumentOutline.svelte';
-  import MLeft from 'svelte-material-icons/ChevronLeft.svelte';
-  import MRight from 'svelte-material-icons/ChevronRight.svelte';
-  
+  // Note: project uses Svelte 5; avoid svelte-material-icons (incompatible)
+  // We'll reuse Phosphor/ Lucide icons instead for the 'material' pack mapping.
   $: comp = getIconComponent(pack || $activeIconPack, name);
 
   function getIconComponent(pack: string, n: string) {
@@ -63,11 +42,12 @@
 
     if (pack === 'material') {
       const map: Record<string, any> = {
-        'Home': MHome, 'BookOpen': MBook, 'Network': MNet, 'Zap': MZap, 'Target': MTarget,
-        'Flame': MFlame, 'Settings': MCog, 'LayoutGrid': MGrid, 'X': MX, 'Moon': MMoon,
-        'Sun': MSun, 'Database': MDB, 'GitBranch': MGit, 'Palette': MPal, 'Plus': MPlus,
-        'Minus': MMinus, 'RotateCcw': MRot, 'SkipForward': MSkip, 'File': MFile,
-        'ChevronLeft': MLeft, 'ChevronRight': MRight,
+        // map common material names to phosphor equivalents
+        'Home': PHome, 'BookOpen': PBook, 'Network': PNet, 'Zap': PZap, 'Target': PTarget,
+        'Flame': PFlame, 'Settings': PCog, 'LayoutGrid': PGrid, 'X': PX, 'Moon': PMoon,
+        'Sun': PSun, 'Database': PDB, 'GitBranch': PGit, 'Palette': PPal, 'Plus': PPlus,
+        'Minus': PMinus, 'RotateCcw': PRot, 'SkipForward': PSkip, 'File': PFile,
+        'ChevronLeft': PLeft, 'ChevronRight': PRight,
       };
       return map[n] || (L as any)[n] || (L as any)['Circle'];
     }

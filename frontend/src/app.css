@@ -24,16 +24,21 @@
   /* Accents — used sparingly */
   --accent:          #e0e0e0;   /* Primary interactive elements */
   --xp:              #c8a96e;   /* Primary accent color (JS-overridden) */
+  --xp-2:            #9f8660;   /* Secondary accent color (JS-overridden) */
+  --xp-3:            #7e6a4d;   /* Tertiary accent color (JS-overridden) */
+  --xp-dark:         #9f8660;   /* Accent dark shade fallback */
   --accent-gradient: #c8a96e;   /* Gradient or solid (JS-overridden) */
   --plant:           #c8a96e;   /* Plant/module strokes — follows --xp */
-  --plant-glow:      #c8a96e;   /* Plant highlight */
-  --success:         #4a7a4a;   /* Completions */
-  --error:           #7a3a3a;   /* Errors only */
+  --plant-secondary: #9f8660;
+  --plant-tertiary:  #7e6a4d;
+  --plant-glow:      #9f8660;   /* Plant highlight */
+  --success:         #10b981;   /* Completions — emerald (matches streaks) */
+  --error:           #ef4444;   /* Failures — matches streaks red */
 
   /* Layout */
   --sidebar-w:  48px;
   --header-h:   48px;
-  --statusbar-h: 32px;
+  --statusbar-h: 36px;
 
   /* Typography */
   --font-sans: 'Geist', 'Helvetica Neue', system-ui, sans-serif;
@@ -71,7 +76,14 @@
   --text-muted:     #666666;
   --text-disabled:  #999999;
   --accent:     #000000;
+  --xp:         #000000;
+  --xp-2:       #333333;
+  --xp-3:       #555555;
+  --xp-dark:    #333333;
   --plant:      #000000;
+  --plant-secondary: #333333;
+  --plant-tertiary:  #555555;
+  --plant-glow: #333333;
 }
 
 /* ── Reset & Base ────────────────────────────────────────────────────────────── */
@@ -119,11 +131,10 @@ h4 { font-size: 14px; font-weight: 500; }
     "header header"
     "sidebar main"
     "statusbar statusbar";
-  height: calc(100vh - 16px);
-  margin: 8px;
+  height: 100vh;
+  margin: 0;
   overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  border: none;
 }
 
 .app-header {
@@ -135,7 +146,6 @@ h4 { font-size: 14px; font-weight: 500; }
   background: var(--surface);
   gap: var(--s4);
   z-index: 10;
-  border-radius: 8px 8px 0 0;
 }
 
 .app-sidebar {
@@ -169,7 +179,6 @@ h4 { font-size: 14px; font-weight: 500; }
   font-size: 11px;
   font-family: var(--font-mono);
   color: var(--text-muted);
-  border-radius: 0 0 8px 8px;
 }
 
 /* ── Sidebar Nav ─────────────────────────────────────────────────────────────── */
@@ -194,9 +203,11 @@ h4 { font-size: 14px; font-weight: 500; }
 }
 
 .nav-item.active {
-  background: var(--elevated);
-  color: var(--text-primary);
-  border-color: var(--border);
+  background: color-mix(in srgb, var(--xp) 14%, transparent);
+  color: var(--xp);
+  border-color: var(--xp);
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--xp) 28%, transparent);
 }
 
 .nav-item .tooltip {
@@ -246,15 +257,15 @@ h4 { font-size: 14px; font-weight: 500; }
 }
 
 .btn-primary {
-  background: var(--accent);
+  background: var(--xp);
   color: var(--bg);
-  border-color: var(--accent);
+  border-color: var(--xp);
 }
 
 .btn-primary:hover {
-  background: var(--text-primary);
+  background: var(--xp-2);
   color: var(--bg);
-  border-color: var(--text-primary);
+  border-color: var(--xp-2);
 }
 
 .btn-ghost {
@@ -301,7 +312,7 @@ h4 { font-size: 14px; font-weight: 500; }
 }
 
 .input:focus {
-  border-color: var(--text-secondary);
+  border-color: var(--xp-2);
 }
 
 .input::placeholder {
@@ -328,13 +339,20 @@ textarea.input {
   font-family: var(--font-mono);
   color: var(--text-secondary);
   background: transparent;
-  cursor: default;
+  cursor: pointer;
   transition: all var(--t-normal);
 }
 
+.tag-chip:hover {
+  background: var(--hover);
+  border-color: var(--text-muted);
+  color: var(--text-primary);
+}
+
 .tag-chip.ai {
-  border-color: var(--xp);
+  border-color: var(--xp-2);
   color: var(--xp);
+  background: color-mix(in srgb, var(--xp-2) 12%, transparent);
 }
 
 .tag-chip button {
@@ -362,7 +380,7 @@ textarea.input {
 
 .progress-fill {
   height: 100%;
-  background: var(--xp);
+  background: linear-gradient(90deg, var(--xp) 0%, var(--xp-2) 52%, var(--xp-3) 100%);
   border-radius: 1px;
   transition: width 600ms cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -440,3 +458,30 @@ textarea.input {
 .text-xp { color: var(--xp); font-family: var(--font-mono); }
 .text-success { color: var(--success); }
 .text-error { color: var(--error); }
+
+/* ── Global Resize Handle ────────────────────────────────────────────────────── */
+.resize-handle {
+  background: transparent;
+  border-left: 1px solid var(--border);
+  cursor: col-resize;
+  transition: border-color var(--t-fast), background var(--t-fast);
+  position: relative;
+  z-index: 10;
+}
+.resize-handle:hover,
+.dragging .resize-handle {
+  border-left-color: var(--text-muted);
+  background: color-mix(in srgb, var(--text-muted) 10%, transparent);
+}
+.resize-handle::after {
+  content: '';
+  position: absolute;
+  inset: 0 -4px;
+}
+.resize-handle.static {
+  cursor: default;
+}
+.resize-handle.static:hover {
+  background: transparent;
+  border-left-color: var(--border);
+}

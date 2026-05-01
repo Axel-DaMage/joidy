@@ -6,7 +6,7 @@ export default defineConfig({
   server: {
     port: 3000,
     host: '0.0.0.0',
-    allowedHosts: 'all',
+    allowedHosts: true,
     hmr: {
       // When running inside Docker, the browser connects to the host-mapped
       // port. Without this, Vite tries to connect the WS to the container's

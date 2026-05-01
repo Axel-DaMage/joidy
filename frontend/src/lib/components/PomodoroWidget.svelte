@@ -14,7 +14,6 @@
 
   $: progress    = $secondsLeft / $totalSec;
   $: dashOffset  = CIRC * (1 - progress);
-  $: ringColor   = $phase === 'work' ? 'var(--xp)' : 'var(--success)';
   $: mins        = String(Math.floor($secondsLeft / 60)).padStart(2, '0');
   $: secs        = String($secondsLeft % 60).padStart(2, '0');
 
@@ -32,18 +31,25 @@
   <!-- Big ring -->
   <div class="ring-wrap">
     <svg width="150" height="150" viewBox="0 0 150 150" class="ring-svg">
+      <defs>
+        <linearGradient id="pomodoroRingBlend" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="var(--xp)" />
+          <stop offset="52%" stop-color="var(--xp-2)" />
+          <stop offset="100%" stop-color="var(--xp-3)" />
+        </linearGradient>
+      </defs>
       <!-- Background track -->
       <circle cx="75" cy="75" r={R} stroke="var(--border)" stroke-width="4" fill="none"/>
       <!-- Progress arc -->
       <circle cx="75" cy="75" r={R}
-        stroke={ringColor}
+        stroke="url(#pomodoroRingBlend)"
         stroke-width="4"
         fill="none"
         stroke-linecap="round"
         stroke-dasharray={CIRC}
         stroke-dashoffset={dashOffset}
         transform="rotate(-90 75 75)"
-        style="transition: stroke-dashoffset 950ms linear, stroke 400ms ease;"
+        style="transition: stroke-dashoffset 950ms linear;"
       />
     </svg>
 
@@ -87,7 +93,6 @@
     align-items: center;
     gap: 6px;
     padding: 14px 0 10px;
-    border-top: 1px solid var(--border-light, var(--border));
     width: 100%;
   }
 
@@ -254,17 +259,17 @@
     padding: 5px 20px;
     font-size: 12px;
     font-family: var(--font-sans);
-    border: 1px solid var(--border);
+    border: 1px solid var(--xp);
     border-radius: var(--r);
-    background: transparent;
-    color: var(--text-secondary);
+    background: var(--xp);
+    color: var(--bg);
     cursor: pointer;
     transition: all var(--t-fast);
     min-width: 80px;
   }
-  .ctrl-main:hover  { background: var(--elevated); color: var(--text-primary); }
-  .ctrl-main.active { border-color: var(--xp); color: var(--xp); }
-  .ctrl-main.active:hover { background: color-mix(in srgb, var(--xp) 10%, transparent); }
+  .ctrl-main:hover  { background: var(--xp-2); border-color: var(--xp-2); }
+  .ctrl-main.active { background: var(--xp-2); border-color: var(--xp-2); color: var(--bg); }
+  .ctrl-main.active:hover { background: var(--xp-3); border-color: var(--xp-3); }
 
   .ctrl-icon {
     display: flex;
@@ -307,6 +312,7 @@
     font-size: 11px;
     outline: none;
     text-align: right;
+    appearance: textfield;
     -moz-appearance: textfield;
   }
   .dur-input::-webkit-outer-spin-button,

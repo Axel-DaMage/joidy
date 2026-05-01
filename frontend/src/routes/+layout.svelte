@@ -4,10 +4,11 @@
   import { onMount } from 'svelte';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
   import SettingsPanel from '$lib/components/SettingsPanel.svelte';
+  import { api } from '$lib/api';
   import { totalXP, loadStats, pingActivity, globalLevel, nextStageXP } from '$lib/stores/gamification';
   import { running, secondsLeft, phase } from '$lib/stores/pomodoro';
-  import { editMode } from '$lib/stores/layout';
-  import { accentColors, activeIconPack } from '$lib/stores/settings';
+  import { initPomodoroSettings } from '$lib/stores/pomodoro';
+  import { accentColors, activeIconPack, use24HourClock } from '$lib/stores/settings';
 
   const navItems = [
     { href: '/',        label: 'Dashboard', icon: 'Home' },
@@ -19,12 +20,85 @@
   ];
 
   let settingsOpen = false;
+  let now = new Date();
+  let pendingTasks = 0;
+  let pendingStreaks = 0;
 
-  onMount(async () => {
+  $: currentTime = now.toLocaleTimeString('es-CL', {
+    hour: $use24HourClock ? '2-digit' : 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: !$use24HourClock,
+  });
+
+  $: currentDate = now.toLocaleDateString('es-CL', {
+    weekday: 'short',
+    day: '2-digit',
+    month: 'short'
+  });
+
+  onMount(() => {
     accentColors.init();
     activeIconPack.init();
-    try { await loadStats(); } catch (e) { console.error('[layout] loadStats failed:', e); }
-    try { await pingActivity(); } catch (e) { console.error('[layout] pingActivity failed:', e); }
+    initPomodoroSettings();
+
+    const loadFooterStats = async () => {
+      try {
+        const goals = await api.goals.list();
+        pendingTasks = goals.filter((goal) => !goal.is_completed).length;
+      } catch (e) {
+        console.error('[layout] goals list failed:', e);
+      }
+
+      try {
+        const streaks = await api.personalStreaks.list({ include_archived: false });
+        pendingStreaks = streaks.filter((streak) => !streak.today_checked && !streak.is_archived).length;
+      } catch (e) {
+        console.error('[layout] personal streaks list failed:', e);
+      }
+    };
+
+    const init = async () => {
+      await loadFooterStats();
+      try { await loadStats(); } catch (e) { console.error('[layout] loadStats failed:', e); }
+      try { await pingActivity(); } catch (e) { console.error('[layout] pingActivity failed:', e); }
+    };
+
+    init().catch((e) => console.error('[layout] init failed:', e));
+
+    const handleStreaksUpdated = () => {
+      loadFooterStats().catch((e) => console.error('[layout] footer stats refresh failed:', e));
+    };
+
+    const handleWindowFocus = () => {
+      loadFooterStats().catch((e) => console.error('[layout] footer stats refresh failed:', e));
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        loadFooterStats().catch((e) => console.error('[layout] footer stats refresh failed:', e));
+      }
+    };
+
+    window.addEventListener('joidy:streaks-updated', handleStreaksUpdated);
+    window.addEventListener('focus', handleWindowFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    const clockInterval = setInterval(() => {
+      now = new Date();
+    }, 1000);
+
+    const statsInterval = setInterval(() => {
+      loadFooterStats().catch((e) => console.error('[layout] footer stats refresh failed:', e));
+    }, 15000);
+
+    return () => {
+      clearInterval(clockInterval);
+      clearInterval(statsInterval);
+      window.removeEventListener('joidy:streaks-updated', handleStreaksUpdated);
+      window.removeEventListener('focus', handleWindowFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   });
 </script>
 
@@ -69,43 +143,32 @@
   <!-- Status bar -->
   <footer class="app-statusbar">
     <span style="color: var(--text-muted);">joidy v0.1</span>
-    
+
+    <div class="status-live" title="Estado actual">
+      <span class="status-pill status-time mono">{currentTime}</span>
+      <span class="status-pill status-date">{currentDate}</span>
+      <span class="status-pill status-tasks">{pendingTasks} tareas</span>
+      {#if pendingStreaks > 0}
+        <span class="status-pill status-streak-alert" title="Rachas pendientes">
+          <DynamicIcon name="Flame" size={12} color="var(--xp)" />
+          <span>{pendingStreaks}</span>
+        </span>
+      {/if}
+    </div>
+
+    <div style="flex:1;"></div>
+
     <!-- Mini global Pomodoro -->
     <div class="mini-pomo" class:is-running={$running} class:is-break={$phase !== 'work'} title="Temporizador global">
       <span class="mono p-timer">{String(Math.floor($secondsLeft / 60)).padStart(2, '0')}:{String($secondsLeft % 60).padStart(2, '0')}</span>
       <span class="p-dot" class:beat={$running}></span>
     </div>
-
-    <div style="flex:1;"></div>
-    <button
-      class="edit-toggle"
-      class:active={$editMode}
-      on:click={() => editMode.update(v => !v)}
-      title={$editMode ? 'Salir del modo edición' : 'Editar layout'}
-    >
-      <DynamicIcon name="LayoutGrid" size={12} />
-    </button>
   </footer>
 </div>
 
 <SettingsPanel bind:open={settingsOpen} on:close={() => settingsOpen = false} />
 
 <style>
-  .edit-toggle {
-    background: none;
-    border: none;
-    color: var(--text-muted);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 4px;
-    border-radius: var(--r);
-    transition: color var(--t-fast);
-  }
-  .edit-toggle:hover { color: var(--text-secondary); }
-  .edit-toggle.active { color: var(--xp); }
-
   .logo {
     user-select: none;
     font-size: 15px;
@@ -121,7 +184,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-left: 20px;
+    margin-left: 0;
     padding: 2px 8px;
     border: 1px solid var(--border);
     border-radius: var(--r);
@@ -132,6 +195,56 @@
   .mini-pomo.is-running { color: var(--xp); border-color: var(--xp); background: color-mix(in srgb, var(--xp) 5%, transparent); }
   .mini-pomo.is-break { color: var(--success); border-color: var(--success); }
   .p-timer { font-size: 11px; }
+
+  .status-live {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-right: 12px;
+  }
+
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    line-height: 1;
+    color: var(--xp);
+    border: 1px solid color-mix(in srgb, var(--xp) 35%, var(--border));
+    background: color-mix(in srgb, var(--xp) 10%, transparent);
+    padding: 3px 7px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+
+  .status-time {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.04em;
+    line-height: 1;
+    min-width: 92px;
+    height: 20px;
+    padding: 0 8px;
+  }
+
+  .status-date {
+    text-transform: capitalize;
+  }
+
+  .status-streak-alert {
+    border-color: color-mix(in srgb, var(--xp) 65%, var(--border));
+    background: color-mix(in srgb, var(--xp) 18%, transparent);
+    font-weight: 600;
+  }
+
+  @media (max-width: 900px) {
+    .status-live {
+      display: none;
+    }
+  }
 
   .p-dot {
     width: 6px;

@@ -25,10 +25,6 @@
         <span class="stat-val mono">{stats.longest_ever}</span>
         <span class="stat-lbl">Récord</span>
       </div>
-      <div class="stat-block">
-        <span class="stat-val mono">{stats.checkin_rate}%</span>
-        <span class="stat-lbl">Tasa 30d</span>
-      </div>
     </div>
 
     {#if stats.longest_name}
@@ -71,7 +67,7 @@
 
   .stats-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 8px;
   }
 

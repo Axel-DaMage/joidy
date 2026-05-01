@@ -54,8 +54,8 @@
   }
 
   .xp-badge {
-    background: var(--xp);
-    color: #000;
+    background: var(--accent-gradient, var(--xp));
+    color: var(--bg);
     font-size: 10px;
     font-weight: 800;
     padding: 2px 6px;
@@ -74,7 +74,7 @@
     font-size: 16px;
     color: var(--text-primary);
     font-weight: 600;
-    text-shadow: 0 0 10px rgba(74, 222, 128, 0.3);
+    text-shadow: 0 0 10px color-mix(in srgb, var(--xp) 35%, transparent);
   }
 
   .xp-divider { color: var(--text-muted); font-size: 12px; }
@@ -95,7 +95,7 @@
 
   .progress-fill {
     height: 100%;
-    background: linear-gradient(90deg, var(--xp-dark) 0%, var(--xp) 100%);
+    background: linear-gradient(90deg, var(--xp-dark, var(--xp-2)) 0%, var(--xp) 55%, var(--xp-3) 100%);
     border-radius: 3px;
     transition: width 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
     position: relative;
@@ -121,7 +121,7 @@
     font-size: 18px;
     z-index: 2000;
     animation: xp-float-anim 1s ease-out forwards;
-    text-shadow: 0 0 10px rgba(74, 222, 128, 0.5);
+    text-shadow: 0 0 10px color-mix(in srgb, var(--xp) 45%, transparent);
   }
 
   @keyframes xp-float-anim {

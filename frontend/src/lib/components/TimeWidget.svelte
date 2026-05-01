@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
+  import { use24HourClock } from '$lib/stores/settings';
 
   // ── Timezone ───────────────────────────────────────────────────────────────
   const TZ_MAP: Record<string, string> = {
@@ -79,10 +80,10 @@
     try {
       clockStr = new Date().toLocaleTimeString('es', {
         timeZone: timezone,
-        hour:     '2-digit',
+        hour:     $use24HourClock ? '2-digit' : 'numeric',
         minute:   '2-digit',
         second:   '2-digit',
-        hour12:   false,
+        hour12:   !$use24HourClock,
       });
     } catch { clockStr = '--:--:--'; }
   }
@@ -98,6 +99,8 @@
   onDestroy(() => {
     if (clockInterval) clearInterval(clockInterval);
   });
+
+  $: $use24HourClock, updateClock();
 </script>
 
 <!-- svelte-ignore a11y-no-static-element-interactions -->
@@ -133,12 +136,14 @@
 
 <style>
   .time-widget {
+    display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     width: 100%;
     padding: 10px 0;
     border-top: 1px solid var(--border-light, var(--border));
+    border-bottom: 1px solid var(--border-light, var(--border));
   }
 
   .clock-row {
@@ -157,7 +162,7 @@
     cursor: pointer;
     transition: color var(--t-fast);
   }
-  .clock:hover { color: var(--text-primary); }
+  .clock:hover { color: var(--xp); }
 
   .tz-picker {
     display: flex;
@@ -186,7 +191,7 @@
     outline: none;
     text-align: center;
   }
-  .tz-input:focus { border-color: var(--text-muted); }
+  .tz-input:focus { border-color: var(--xp-2); }
   .tz-input::placeholder { color: var(--text-muted); }
 
   .tz-error { font-size: 10px; color: var(--error); font-family: var(--font-mono); }
@@ -209,6 +214,10 @@
     transition: all var(--t-fast);
   }
   .tz-preset:hover { background: var(--elevated); color: var(--text-primary); }
+  .tz-preset:hover {
+    border-color: color-mix(in srgb, var(--xp) 45%, var(--border));
+    color: var(--xp);
+  }
 
   .tz-close-ui {
     background: var(--elevated);
@@ -227,6 +236,7 @@
   }
   .tz-close-ui:hover {
     background: var(--hover);
-    color: var(--error);
+    border-color: color-mix(in srgb, var(--xp-2) 45%, var(--border));
+    color: var(--xp-2);
   }
 </style>

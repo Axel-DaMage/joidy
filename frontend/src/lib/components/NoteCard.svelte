@@ -1,6 +1,8 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
+  import { goto } from '$app/navigation';
   import TagChip from './TagChip.svelte';
+  import { findNoteByTitle } from '$lib/stores/notes';
   import type { Note } from '$lib/api';
 
   export let note: Note;
@@ -30,7 +32,12 @@
   {#if note.tags.length > 0}
     <div class="note-tags">
       {#each note.tags.slice(0, 4) as tag}
-        <TagChip {tag} />
+        <TagChip {tag} on:click={(e) => {
+          const linkedNote = findNoteByTitle(e.detail);
+          if (linkedNote) {
+            goto(`/notes?id=${linkedNote.id}`);
+          }
+        }} />
       {/each}
       {#if note.tags.length > 4}
         <span class="caption">+{note.tags.length - 4}</span>

@@ -99,4 +99,3 @@ function createLayoutStore() {
 }
 
 export const dashboardLayout = createLayoutStore();
-export const editMode        = writable(false);

@@ -16,6 +16,48 @@ router = APIRouter(prefix="/personal-streaks", tags=["personal-streaks"])
 CATEGORIES = ["general", "salud", "estudio", "fitness", "creatividad", "habito", "trabajo"]
 
 
+# ── Helpers ────────────────────────────────────────────────────────────────────
+
+def _backfill_streak_history(db: Session, streak: PersonalStreak):
+    """Generates missing check-ins from start_date up to yesterday."""
+    if not streak.start_date:
+        return
+    
+    today = date.today()
+    end_date = streak.created_at.date() if streak.created_at else today
+    current = streak.start_date
+    
+    # Get existing check-in dates to avoid duplicates
+    existing_dates = {c.check_date for c in streak.checkins}
+    
+    added_count = 0
+    while current < end_date:
+        if current not in existing_dates:
+            should_add = False
+            if streak.frequency == "daily" or not streak.frequency:
+                should_add = True
+            elif streak.frequency == "every_n":
+                days_since_start = (current - streak.start_date).days
+                if days_since_start % (streak.frequency_days or 1) == 0:
+                    should_add = True
+            
+            if should_add:
+                ci = StreakCheckIn(
+                    streak_id=streak.id,
+                    check_date=current,
+                    note="Auto-generado (Migración)"
+                )
+                db.add(ci)
+                added_count += 1
+        
+        current += timedelta(days=1)
+    
+    if added_count > 0:
+        streak.total_checkins = (streak.total_checkins or 0) + added_count
+        db.commit()
+        db.refresh(streak)
+
+
 # ── Streak computation ─────────────────────────────────────────────────────────
 
 def _compute_streak(checkin_dates: list[date], frequency: str = "daily", frequency_days: int = 1) -> tuple[int, int]:
@@ -83,7 +125,7 @@ def _compute_streak(checkin_dates: list[date], frequency: str = "daily", frequen
         return current, longest
 
 
-def _streak_to_dict(streak: PersonalStreak, days_history: int = 90) -> dict:
+def _streak_to_dict(streak: PersonalStreak, days_history: int = 365) -> dict:
     today = date.today()
     checkin_dates = [c.check_date for c in streak.checkins]
     checkin_map = {c.check_date: c for c in streak.checkins}
@@ -189,6 +231,7 @@ class StreakUpdate(BaseModel):
 class CheckInData(BaseModel):
     note: str = ""
     mood: Optional[int] = None
+    check_date: Optional[date] = None
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -286,6 +329,11 @@ def create_streak(data: StreakCreate, db: Session = Depends(get_db)):
     db.add(streak)
     db.commit()
     db.refresh(streak)
+
+    # Automatically backfill if start_date is in the past
+    if streak.start_date and streak.start_date < date.today():
+        _backfill_streak_history(db, streak)
+
     return _streak_to_dict(streak)
 
 
@@ -297,7 +345,7 @@ def update_streak(streak_id: int, data: StreakUpdate, db: Session = Depends(get_
 
     updatable = [
         "name", "emoji", "icon", "description", "color", "theme", "category",
-        "start_date", "target_date", "offset", "frequency", "frequency_days",
+        "target_date", "frequency", "frequency_days",
         "is_archived", "freeze_count",
     ]
     for field in updatable:
@@ -311,6 +359,11 @@ def update_streak(streak_id: int, data: StreakUpdate, db: Session = Depends(get_
 
     db.commit()
     db.refresh(streak)
+
+    # If start_date was moved back, backfill again
+    if streak.start_date and streak.start_date < date.today():
+        _backfill_streak_history(db, streak)
+
     return _streak_to_dict(streak)
 
 
@@ -332,7 +385,7 @@ def checkin(streak_id: int, data: CheckInData = None, db: Session = Depends(get_
     if not streak:
         raise HTTPException(status_code=404, detail="Streak not found")
 
-    today = date.today()
+    today = data.check_date or date.today()
     existing = db.query(StreakCheckIn).filter(
         StreakCheckIn.streak_id == streak_id,
         StreakCheckIn.check_date == today,

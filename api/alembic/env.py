@@ -15,7 +15,14 @@ database_url = os.getenv("DATABASE_URL")
 if database_url:
     config.set_main_option("sqlalchemy.url", database_url)
 
-target_metadata = None
+from database import Base
+from models.goal import Goal
+from models.note import Note
+from models.skill import Skill
+from models.personal_streaks import PersonalStreak
+from models.gamification import UserStats
+
+target_metadata = Base.metadata
 
 
 def run_migrations_offline() -> None:

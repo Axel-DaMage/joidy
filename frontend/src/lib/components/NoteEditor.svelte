@@ -1,12 +1,12 @@
 <script lang="ts">
   import { createEventDispatcher, onDestroy } from 'svelte';
-  import { Eye, EyeOff, Save, Trash2, X, Palette, Search, Maximize } from 'lucide-svelte';
+  import { Eye, EyeOff, Save, Trash2, X, Palette, Search, Maximize, ChevronLeft, ChevronRight } from 'lucide-svelte';
   import * as L from 'lucide-svelte';
   import DynamicIcon from './DynamicIcon.svelte';
   import { marked } from 'marked';
   import TagChip from './TagChip.svelte';
   import { aiSuggestions, fetchAISuggestions, findNoteByTitle } from '$lib/stores/notes';
-  import { activeIconPack, showFrontmatter } from '$lib/stores/settings';
+  import { activeIconPack, showFrontmatter, hideTagsLine } from '$lib/stores/settings';
   import { api, type Note } from '$lib/api';
   import { goto } from '$app/navigation';
 
@@ -14,10 +14,46 @@
   marked.use({ gfm: true, breaks: true });
 
   export let note: Note | null = null;
+  export let momentary = false;
+  export let hasPrev = false;
+  export let hasNext = false;
+
+  function extractTagsFromContent(text: string): string[] {
+    const extracted = new Set<string>();
+    
+    // Match line like: # Tags: [[tag1]] [[tag2]]
+    const lineRegex = /^#\s*Tags?:\s*(.*)$/gim;
+    let lineMatch;
+    while ((lineMatch = lineRegex.exec(text)) !== null) {
+      const lineTags = lineMatch[1];
+      const tagRegex = /\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g;
+      let tagMatch;
+      while ((tagMatch = tagRegex.exec(lineTags)) !== null) {
+        extracted.add(tagMatch[1].trim().toLowerCase());
+      }
+    }
+    
+    // Match individual #Tag: [[tag]]
+    const regex = /#Tag:\s*\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/gi;
+    let match;
+    while ((match = regex.exec(text)) !== null) {
+      extracted.add(match[1].trim().toLowerCase());
+    }
+    
+    return Array.from(extracted);
+  }
+
+  function escapeRegExp(string: string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
 
   let title = note?.title ?? '';
   let content = note?.content ?? '';
   let tags: string[] = note?.tags ?? [];
+  let previousContentTags = extractTagsFromContent(content);
+  for (const t of previousContentTags) {
+    if (!tags.includes(t)) tags.push(t);
+  }
   let tagInput = '';
   let saving = false;
   let saved = false;
@@ -59,15 +95,24 @@
     save: { title: string; content: string; tags: string[] };
     cancel: void;
     delete: void;
+    click: string;
+    prev: void;
+    next: void;
   }>();
 
   // Markdown → HTML via marked (handles tables, blockquotes, lists, etc.)
   function renderMarkdown(md: string): string {
     if (!md.trim()) return '<p style="color:var(--text-muted);font-style:italic;">Escribe algo para ver el preview...</p>';
 
+    // Hide tags line from preview if requested
+    let preprocessed = md;
+    if ($hideTagsLine && tags.length > 0) {
+      preprocessed = preprocessed.replace(/^#\s*Tags?:\s*.*$/gim, '');
+    }
+
     // Pre-process Obsidian wikilinks → HTML spans before marked runs
     // (marked doesn't know about [[links]] and would render them as plain text)
-    const preprocessed = md.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (match, title, alias) => {
+    preprocessed = preprocessed.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (match, title, alias) => {
       const display = alias || title;
       return `<span class="wikilink" data-title="${title.trim()}">${display}</span>`;
     });
@@ -93,7 +138,20 @@
 
   $: rawFrontmatterMatch = content.match(/^---\n[\s\S]*?\n---/);
   $: rawFrontmatter = rawFrontmatterMatch ? rawFrontmatterMatch[0] : '';
-  $: visibleEditorContent = $showFrontmatter ? content : content.replace(/^---\n[\s\S]*?\n---[\n]*/, '');
+
+  $: tagsLineMatch = content.match(/^#\s*Tags?:\s*.*$/im);
+  $: currentTagsLine = tagsLineMatch ? tagsLineMatch[0] : '';
+
+  $: visibleEditorContent = (() => {
+    let val = content;
+    if (!$showFrontmatter && rawFrontmatter) {
+      val = val.replace(/^---\n[\s\S]*?\n---[\n]*/, '');
+    }
+    if ($hideTagsLine && tags.length > 0 && currentTagsLine) {
+      val = val.replace(/^#\s*Tags?:\s*.*$/im, '').trim();
+    }
+    return val;
+  })();
 
   $: wordCount = visibleEditorContent.trim() ? visibleEditorContent.trim().split(/\s+/).length : 0;
   $: charCount = visibleEditorContent.length;
@@ -101,21 +159,87 @@
 
   function updateVisibleContent(e: Event) {
     const val = (e.currentTarget as HTMLTextAreaElement).value;
-    if (!$showFrontmatter && rawFrontmatter) {
-      content = rawFrontmatter + '\n\n' + val;
-    } else {
-      content = val;
+    let nextContent = val;
+
+    if ($hideTagsLine && tags.length > 0 && currentTagsLine) {
+      if (!nextContent.includes(currentTagsLine)) {
+        nextContent = nextContent.trim() + '\n\n' + currentTagsLine;
+      }
     }
+
+    if (!$showFrontmatter && rawFrontmatter) {
+      nextContent = rawFrontmatter + '\n\n' + nextContent.trim();
+    }
+    
+    content = nextContent;
+    
+    const currentContentTags = extractTagsFromContent(content);
+    const added = currentContentTags.filter(t => !previousContentTags.includes(t));
+    const removed = previousContentTags.filter(t => !currentContentTags.includes(t));
+    
+    let tagsChanged = false;
+    let newTags = [...tags];
+    
+    for (const a of added) {
+      if (!newTags.includes(a)) {
+        newTags.push(a);
+        tagsChanged = true;
+      }
+    }
+    
+    for (const r of removed) {
+      if (newTags.includes(r)) {
+        newTags = newTags.filter(x => x !== r);
+        tagsChanged = true;
+      }
+    }
+    
+    if (tagsChanged) tags = newTags;
+    previousContentTags = currentContentTags;
+
     onContentChange();
   }
 
   function addTag(t: string) {
     const clean = t.trim().toLowerCase();
-    if (clean && !tags.includes(clean)) tags = [...tags, clean];
+    if (clean && !tags.includes(clean)) {
+      tags = [...tags, clean];
+      const currentContentTags = extractTagsFromContent(content);
+      if (!currentContentTags.includes(clean)) {
+        const tagsLineMatch = content.match(/^#\s*Tags?:\s*(.*)$/im);
+        if (tagsLineMatch) {
+          content = content.replace(/^#\s*Tags?:\s*(.*)$/im, `# Tags: $1 [[${clean}]]`);
+        } else {
+          const prefix = content.endsWith('\n') ? '' : '\n';
+          content += `${prefix}\n# Tags: [[${clean}]]`;
+        }
+        previousContentTags.push(clean);
+      }
+    }
     tagInput = '';
   }
 
-  function removeTag(t: string) { tags = tags.filter(x => x !== t); }
+  function removeTag(t: string) {
+    tags = tags.filter(x => x !== t);
+    
+    // Remove individual #Tag: [[t]]
+    const regex1 = new RegExp(`\\n?\\s*#Tag:\\s*\\[\\[${escapeRegExp(t)}(?:\\|[^\\]]+)?\\]\\]`, 'gi');
+    content = content.replace(regex1, '');
+    
+    // Remove from # Tags: [[...]] line
+    const regex2 = new RegExp(`\\[\\[${escapeRegExp(t)}(?:\\|[^\\]]+)?\\]\\]\\s*`, 'gi');
+    content = content.split('\n').map(line => {
+      if (/^#\s*Tags?:\s*/i.test(line)) {
+        let newLine = line.replace(regex2, '').trim();
+        // if only "# Tags:" is left, remove the line
+        if (/^#\s*Tags?:\s*$/i.test(newLine)) return '';
+        return newLine;
+      }
+      return line;
+    }).join('\n');
+    
+    previousContentTags = previousContentTags.filter(x => x !== t);
+  }
 
   function onTagKeydown(e: KeyboardEvent) {
     if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag(tagInput); }
@@ -188,9 +312,88 @@
       e.stopPropagation();
       zenMode = false;
     }
+    if (e.altKey && e.key === 'ArrowLeft' && hasPrev) {
+      e.preventDefault();
+      dispatch('prev');
+    }
+    if (e.altKey && e.key === 'ArrowRight' && hasNext) {
+      e.preventDefault();
+      dispatch('next');
+    }
   }
 
   let zenMode = false;
+  let backdropEl: HTMLElement;
+  let textareaEl: HTMLTextAreaElement;
+
+  function syncScroll() {
+    if (backdropEl && textareaEl) {
+      backdropEl.scrollTop = textareaEl.scrollTop;
+      backdropEl.scrollLeft = textareaEl.scrollLeft;
+    }
+  }
+
+  function highlightMarkdown(text: string): string {
+    if (!text) return '';
+    let html = text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    
+    // Multiline code blocks
+    html = html.replace(/^(`{3,})(.*)$/gm, '<span style="color: var(--text-muted);">$1$2</span>');
+    
+    // Headers
+    html = html.replace(/^(#{1,6})(\s+.+)$/gm, (match, hashes, rest) => {
+      const level = hashes.length;
+      return `<span style="color: var(--md-h${level}); font-weight: 500;">${hashes}${rest}</span>`;
+    });
+
+    // Blockquotes
+    html = html.replace(/^(&gt;\s*)(.*)$/gm, '<span style="color: var(--text-secondary); border-left: 2px solid var(--border); padding-left: 6px; font-style: italic;">$1$2</span>');
+    
+    // Lists (unordered and ordered)
+    html = html.replace(/^(\s*)([-*+]|\d+\.)(\s+)/gm, '$1<span style="color: var(--md-h1, var(--xp)); font-weight: bold;">$2</span>$3');
+
+    // Bold + Italic
+    html = html.replace(/(\*\*\*|___)([^\s](?:.*?[^\s])?)\1/g, '<span style="font-weight: bold; font-style: italic; color: var(--md-h2, var(--xp));">$1$2$1</span>');
+
+    // Bold
+    html = html.replace(/(\*\*|__)([^\s](?:.*?[^\s])?)\1/g, '<span style="font-weight: bold; color: var(--text-primary);">$1$2$1</span>');
+    
+    // Italic (using negative lookbehinds/lookaheads to prevent matching bold borders)
+    html = html.replace(/(?<!\*)\*([^\s\*](?:.*?[^\s\*])?)\*(?!\*)/g, '<span style="font-style: italic; color: var(--text-secondary);">*$1*</span>');
+    html = html.replace(/(?<!_)_([^\s_](?:.*?[^\s_])?)_(?!_)/g, '<span style="font-style: italic; color: var(--text-secondary);">_$1_</span>');
+    
+    // Strikethrough
+    html = html.replace(/(~~)([^\s](?:.*?[^\s])?)\1/g, '<span style="text-decoration: line-through; opacity: 0.6;">$1$2$1</span>');
+    
+    // Inline code
+    html = html.replace(/(`)(.*?)\1/g, '<span style="background: var(--elevated); color: var(--md-h1, var(--xp)); border-radius: 3px; padding: 0 2px;">$1$2$1</span>');
+    
+    // Links (standard markdown)
+    html = html.replace(/(\[)([^\]]+)(\])(\()([^\)]+)(\))/g, '<span style="color: var(--text-muted)">$1</span><span style="color: var(--md-h2, var(--xp))">$2</span><span style="color: var(--text-muted)">$3$4</span><span style="color: var(--text-muted); text-decoration: underline;">$5</span><span style="color: var(--text-muted)">$6</span>');
+
+    // Tags line
+    html = html.replace(/^(#\s*Tags?:\s*)(.*)$/gim, '<span style="opacity: 0.3; font-size: 0.9em;">$1$2</span>');
+
+    // Obsidian Wikilinks & Tags
+    html = html.replace(/(#Tag:\s*)?(\[\[)([^\]]+)(\]\])/g, (match, tagPrefix, openBracket, content, closeBracket) => {
+      if (tagPrefix) {
+         return `<span style="opacity: 0.3; font-size: 0.9em;">${tagPrefix}${openBracket}${content}${closeBracket}</span>`;
+      }
+      return `<span style="color: var(--text-muted)">${openBracket}</span><span style="color: var(--md-h2, var(--xp))">${content}</span><span style="color: var(--text-muted)">${closeBracket}</span>`;
+    });
+    
+    // Ensure trailing newlines render correctly
+    if (html.endsWith('\n')) {
+      html += '<br/>';
+    }
+    
+    return html;
+  }
+
+  $: editorHighlightedHtml = highlightMarkdown(visibleEditorContent);
 </script>
 
 <svelte:window on:keydown={onKeydown} />
@@ -200,6 +403,16 @@
   {#if !zenMode}
   <div class="toolbar">
     <div class="toolbar-left">
+      {#if !momentary && note}
+      <div class="nav-controls toolbar-nav">
+        <button class="toolbar-btn icon-only" disabled={!hasPrev} on:click={() => dispatch('prev')} title="Nota anterior (Alt + ←)">
+          <ChevronLeft size={14} />
+        </button>
+        <button class="toolbar-btn icon-only" disabled={!hasNext} on:click={() => dispatch('next')} title="Siguiente nota (Alt + →)">
+          <ChevronRight size={14} />
+        </button>
+      </div>
+      {/if}
     </div>
 
     <div class="toolbar-right">
@@ -296,7 +509,12 @@
   <!-- Tags bar -->
   <div class="tags-bar">
     {#each tags as tag}
-      <TagChip {tag} removable on:remove={(e) => removeTag(e.detail)} />
+      <TagChip {tag} removable on:remove={(e) => removeTag(e.detail)} on:click={(e) => {
+        const linkedNote = findNoteByTitle(e.detail);
+        if (linkedNote) {
+          goto(`/notes?id=${linkedNote.id}`);
+        }
+      }} />
     {/each}
     <input
       class="tag-input"
@@ -337,13 +555,20 @@
         {/if}
       </div>
     {:else}
-      <textarea
-        class="content-textarea"
-        value={visibleEditorContent}
-        on:input={updateVisibleContent}
-        placeholder="Escribe en markdown... (Ctrl+S para guardar, Ctrl+P para preview)"
-        spellcheck="false"
-      ></textarea>
+      <div class="editor-container">
+        <div class="backdrop" bind:this={backdropEl} aria-hidden="true">
+          <div class="highlights">{@html editorHighlightedHtml}</div>
+        </div>
+        <textarea
+          class="content-textarea"
+          bind:this={textareaEl}
+          value={visibleEditorContent}
+          on:input={updateVisibleContent}
+          on:scroll={syncScroll}
+          placeholder="Escribe en markdown... (Ctrl+S para guardar, Ctrl+P para preview)"
+          spellcheck="false"
+        ></textarea>
+      </div>
     {/if}
   </div>
 </div>
@@ -354,7 +579,6 @@
     flex-direction: column;
     height: 100%;
     background: var(--surface);
-    border-left: 1px solid var(--border);
   }
 
   .editor-shell.zen-mode {
@@ -559,6 +783,15 @@
     flex-shrink: 0;
   }
 
+  .toolbar-nav {
+    margin-bottom: 0 !important;
+  }
+
+  .nav-controls {
+    display: flex;
+    gap: 4px;
+  }
+
   .title-input {
     width: 100%;
     background: transparent;
@@ -640,8 +873,40 @@
     display: flex;
   }
 
-  .content-textarea {
+  .editor-container {
+    position: relative;
     flex: 1;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .backdrop {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    pointer-events: none;
+    background: transparent;
+  }
+
+  .highlights {
+    padding: 24px;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    color: var(--text-primary);
+    tab-size: 2;
+  }
+
+  .content-textarea {
+    position: absolute;
+    top: 0;
+    left: 0;
     width: 100%;
     height: 100%;
     background: transparent;
@@ -652,10 +917,20 @@
     font-size: 14px;
     font-family: var(--font-mono);
     line-height: 1.7;
-    color: var(--text-primary);
+    color: transparent;
+    caret-color: var(--text-primary);
+    white-space: pre-wrap;
+    word-wrap: break-word;
     tab-size: 2;
+    overflow-y: auto;
   }
   .content-textarea::placeholder { color: var(--text-muted); }
+
+  /* Style selection to be visible over transparent text */
+  .content-textarea::selection {
+    background: color-mix(in srgb, var(--xp) 30%, transparent);
+    color: transparent;
+  }
 
   /* ── Preview ── */
   .preview {
@@ -668,10 +943,13 @@
     color: var(--text-primary);
   }
 
-  .preview :global(h1) { font-size: 20px; font-weight: 400; margin: 0 0 12px; color: var(--text-primary); }
-  .preview :global(h2) { font-size: 16px; font-weight: 400; margin: 16px 0 8px; color: var(--text-primary); border-bottom: 1px solid var(--border); padding-bottom: 4px; }
-  .preview :global(h3) { font-size: 14px; font-weight: 400; margin: 12px 0 6px; color: var(--text-secondary); }
-  .preview :global(code) { font-family: var(--font-mono); font-size: 12px; background: var(--elevated); padding: 1px 5px; border-radius: 2px; color: var(--xp); }
+  .preview :global(h1) { font-size: 20px; font-weight: 500; margin: 0 0 12px; color: var(--md-h1, var(--text-primary)); }
+  .preview :global(h2) { font-size: 16px; font-weight: 500; margin: 16px 0 8px; color: var(--md-h2, var(--text-primary)); border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+  .preview :global(h3) { font-size: 14px; font-weight: 500; margin: 12px 0 6px; color: var(--md-h3, var(--text-secondary)); }
+  .preview :global(h4) { font-size: 13px; font-weight: 500; margin: 10px 0 4px; color: var(--md-h4, var(--text-secondary)); }
+  .preview :global(h5) { font-size: 12px; font-weight: 600; margin: 8px 0 2px; color: var(--md-h5, var(--text-muted)); }
+  .preview :global(h6) { font-size: 11px; font-weight: 700; margin: 8px 0 2px; color: var(--md-h6, var(--text-muted)); text-transform: uppercase; }
+  .preview :global(code) { font-family: var(--font-mono); font-size: 12px; background: var(--elevated); padding: 1px 5px; border-radius: 2px; color: var(--md-h1, var(--xp)); }
   .preview :global(pre) { background: var(--elevated); border: 1px solid var(--border); border-radius: var(--r); padding: 16px; overflow-x: auto; margin: 12px 0; }
   .preview :global(pre code) { background: none; padding: 0; color: var(--text-primary); }
   .preview :global(blockquote) { border-left: 2px solid var(--border); margin: 0; padding: 4px 12px; color: var(--text-secondary); font-style: italic; }

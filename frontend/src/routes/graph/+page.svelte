@@ -6,18 +6,19 @@
   let containerEl: HTMLDivElement;
   let w = 800, h = 600;
 
-  onMount(async () => {
-    await loadGraph();
-    if (containerEl) {
-      const ro = new ResizeObserver(entries => {
-        for (const e of entries) {
-          w = e.contentRect.width;
-          h = e.contentRect.height;
-        }
-      });
-      ro.observe(containerEl);
-      return () => ro.disconnect();
-    }
+  onMount(() => {
+    void loadGraph();
+    if (!containerEl) return;
+
+    const ro = new ResizeObserver(entries => {
+      for (const e of entries) {
+        w = e.contentRect.width;
+        h = e.contentRect.height;
+      }
+    });
+
+    ro.observe(containerEl);
+    return () => ro.disconnect();
   });
 </script>
 

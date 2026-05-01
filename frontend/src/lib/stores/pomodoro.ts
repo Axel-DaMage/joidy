@@ -1,4 +1,5 @@
 import { writable, get, derived } from 'svelte/store';
+import { loadUserSettings, patchUserSettings } from '$lib/utils/userSettings';
 
 export type Phase = 'work' | 'break' | 'longBreak';
 
@@ -10,6 +11,7 @@ export const phase = writable<Phase>('work');
 export const running = writable(false);
 export const secondsLeft = writable(25 * 60);
 export const pomodorosDone = writable(0);
+let pomodoroPrefsReady = false;
 
 // Derived purely for total seconds based on current phase and presets
 export const totalSec = derived(
@@ -23,10 +25,43 @@ export const totalSec = derived(
 
 workMins.subscribe(val => {
   if (!get(running) && get(phase) === 'work') secondsLeft.set(val * 60);
+  if (pomodoroPrefsReady) persistPomodoroPrefs();
 });
 breakMins.subscribe(val => {
   if (!get(running) && get(phase) === 'break') secondsLeft.set(val * 60);
+  if (pomodoroPrefsReady) persistPomodoroPrefs();
 });
+
+function clampInt(value: unknown, min: number, max: number, fallback: number): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, Math.round(n)));
+}
+
+function persistPomodoroPrefs() {
+  patchUserSettings({
+    pomodoro: {
+      workMins: get(workMins),
+      breakMins: get(breakMins),
+    }
+  });
+}
+
+export function initPomodoroSettings() {
+  const saved = loadUserSettings().pomodoro;
+  if (saved) {
+    const w = clampInt(saved.workMins, 1, 180, 25);
+    const b = clampInt(saved.breakMins, 1, 120, 5);
+    workMins.set(w);
+    breakMins.set(b);
+    if (!get(running)) {
+      const currentPhase = get(phase);
+      if (currentPhase === 'work') secondsLeft.set(w * 60);
+      if (currentPhase === 'break') secondsLeft.set(b * 60);
+    }
+  }
+  pomodoroPrefsReady = true;
+}
 
 let timerInterval: ReturnType<typeof setInterval> | null = null;
 let beepAudio: HTMLAudioElement | null = null;

@@ -71,8 +71,10 @@
   function calculateDaysBetween(fromDate: string, toDate: string): number {
     const from = new Date(fromDate);
     const to = new Date(toDate);
-    const diffTime = Math.abs(to.getTime() - from.getTime());
-    return Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    // Use Math.max(0, ...) to ensure we don't have negative offset if date is in the future
+    const diffTime = to.getTime() - from.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    return Math.max(0, diffDays);
   }
 
   $: {
@@ -113,9 +115,9 @@
   const THEMES = [
     { id: 'solid',    label: 'Sólido' },
     { id: 'gradient', label: 'Gradiente' },
-    { id: 'glow',     label: 'Glow' },
+    { id: 'glow',     label: 'Radiante' },
     { id: 'minimal',  label: 'Minimal' },
-    { id: 'lcd',      label: 'Retro LCD' },
+    { id: 'lcd',      label: 'Retro' },
     { id: 'neon',     label: 'Neon' },
     { id: 'glass',    label: 'Glass' },
     { id: 'sketch',   label: 'Sketch' },
@@ -349,7 +351,7 @@
             <div class="field-row">
               <div class="field half">
                 <label><Calendar size={11} /> Fecha de inicio</label>
-                <input type="date" bind:value={startDate} />
+                <input type="date" bind:value={startDate} disabled={isEdit} />
               </div>
               <div class="field half">
                 <label><Target size={11} /> Fecha objetivo <span class="optional">(op.)</span></label>
@@ -360,8 +362,8 @@
             <div class="field-row">
               <div class="field half">
                 <label><Clock size={11} /> Días desde inicio</label>
-                <input type="number" bind:value={offset} min="0" disabled={!isEdit} placeholder="Calculado automáticamente" />
-                <span class="field-hint">{isEdit ? 'Editar días iniciales' : 'Se calcula automáticamente desde la fecha de inicio'}</span>
+                <input type="number" bind:value={offset} min="0" disabled={isEdit} placeholder="Calculado automáticamente" />
+                <span class="field-hint">{isEdit ? 'Este valor no se puede modificar una vez creada la racha' : 'Se calcula automáticamente desde la fecha de inicio'}</span>
               </div>
               <div class="field half">
                 <label><Snowflake size={11} /> Freezes (escudos)</label>
@@ -374,7 +376,13 @@
       </div>
 
       <!-- Footer -->
-      <div class="modal-footer">
+      <div 
+        class="modal-footer" 
+        class:theme-sketch={theme === 'sketch'}
+        class:theme-glow={theme === 'glow'}
+        class:theme-gradient={theme === 'gradient'}
+        class:theme-neon={theme === 'neon'}
+      >
         {#if isEdit}
           <button
             class="btn-archive"
@@ -498,17 +506,33 @@
   }
 
   .preview-card.theme-lcd {
-    background: #111;
-    border: 1px solid #333;
-    box-shadow: 0 0 0 2px #333, inset 0 0 10px #000;
+    background-color: var(--theme-ac);
+    background-image:
+      linear-gradient(rgba(0, 0, 0, 0.1) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 0, 0, 0.1) 1px, transparent 1px);
+    background-size: 3px 3px;
+    border: 1px solid color-mix(in srgb, var(--theme-ac) 70%, black);
+    box-shadow: inset 0 0 10px rgba(0,0,0,0.15);
   }
   .preview-card.theme-lcd .preview-num {
-    font-family: 'Courier New', monospace;
-    color: #0f0;
-    text-shadow: 0 0 5px #0f0;
+    font-family: var(--font-mono);
+    color: color-mix(in srgb, var(--theme-ac) 20%, black) !important;
+    text-shadow: none;
+    font-weight: 800;
   }
   .preview-card.theme-lcd .preview-name {
-    color: #0f0; opacity: 0.8;
+    color: color-mix(in srgb, var(--theme-ac) 20%, black) !important;
+    opacity: 0.9;
+    font-weight: 700;
+  }
+  .preview-card.theme-lcd .preview-meta {
+    color: color-mix(in srgb, var(--theme-ac) 20%, black) !important;
+    opacity: 0.7;
+    font-weight: 600;
+  }
+  .preview-card.theme-lcd .preview-icon,
+  .preview-card.theme-lcd .preview-emoji {
+    filter: grayscale(1) brightness(0) opacity(0.8);
   }
 
   .preview-card.theme-neon {
@@ -522,11 +546,7 @@
   }
 
   .preview-card.theme-glass {
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0) 100%);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(255, 255, 255, 0.4);
-    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15), inset 0 1px 2px rgba(255, 255, 255, 0.5);
+    border: 1px solid transparent;
   }
   .preview-card.theme-solid {
     background: transparent;
@@ -795,6 +815,62 @@
   }
   .btn-save:hover { opacity: 0.9; transform: translateY(-1px); }
   .btn-save:disabled { opacity: 0.3; pointer-events: none; }
+
+  /* Sketch theme for modal footer */
+  .modal-footer.theme-sketch .btn-save,
+  .modal-footer.theme-sketch .btn-cancel,
+  .modal-footer.theme-sketch .btn-archive {
+    border: 1px dashed var(--text-muted);
+    border-radius: 2px;
+    background: transparent;
+    color: var(--text-primary);
+  }
+  .modal-footer.theme-sketch .btn-save {
+    border-color: var(--btn-color, var(--text-primary));
+    color: var(--btn-color, var(--text-primary));
+  }
+  .modal-footer.theme-sketch .btn-save:hover {
+    background: color-mix(in srgb, var(--btn-color, var(--text-primary)) 10%, transparent);
+  }
+  .modal-footer.theme-sketch .btn-cancel:hover,
+  .modal-footer.theme-sketch .btn-archive:hover {
+    background: color-mix(in srgb, var(--text-muted) 10%, transparent);
+  }
+
+  /* Glow, Gradient & Neon theme for modal footer */
+  .modal-footer.theme-glow .btn-save,
+  .modal-footer.theme-glow .btn-cancel,
+  .modal-footer.theme-glow .btn-archive,
+  .modal-footer.theme-gradient .btn-save,
+  .modal-footer.theme-gradient .btn-cancel,
+  .modal-footer.theme-gradient .btn-archive,
+  .modal-footer.theme-neon .btn-save,
+  .modal-footer.theme-neon .btn-cancel,
+  .modal-footer.theme-neon .btn-archive {
+    border-color: transparent;
+    background: transparent;
+    color: var(--text-primary);
+  }
+  .modal-footer.theme-glow .btn-save,
+  .modal-footer.theme-gradient .btn-save,
+  .modal-footer.theme-neon .btn-save {
+    color: var(--btn-color, var(--text-primary));
+  }
+  .modal-footer.theme-glow .btn-save:hover,
+  .modal-footer.theme-gradient .btn-save:hover,
+  .modal-footer.theme-neon .btn-save:hover {
+    border-color: transparent;
+    background: color-mix(in srgb, var(--btn-color, var(--text-primary)) 10%, transparent);
+  }
+  .modal-footer.theme-glow .btn-cancel:hover,
+  .modal-footer.theme-glow .btn-archive:hover,
+  .modal-footer.theme-gradient .btn-cancel:hover,
+  .modal-footer.theme-gradient .btn-archive:hover,
+  .modal-footer.theme-neon .btn-cancel:hover,
+  .modal-footer.theme-neon .btn-archive:hover {
+    border-color: transparent;
+    background: color-mix(in srgb, var(--text-muted) 10%, transparent);
+  }
 
   @media (max-width: 640px) {
     .modal-panel {

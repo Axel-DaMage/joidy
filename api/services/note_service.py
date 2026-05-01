@@ -7,6 +7,7 @@ from models.note import Note, NoteLink, NoteTag, Tag
 from services.gamification_engine import process_event
 from services.skill_tree import sync_skills
 from services.tag_graph import rebuild_tag_cooccurrences
+from services.goal_service import sync_goals_from_note
 
 
 def note_to_response(note: Note) -> dict:
@@ -67,6 +68,7 @@ def create_note(
     gami = process_event(db, event, {"note_id": note.id})
 
     sync_note_links(db, note.id, content)
+    sync_goals_from_note(db, note.id, content)
     rebuild_tag_cooccurrences(db)
 
     db.commit()
@@ -114,6 +116,7 @@ def update_note(
 
     if content is not None:
         sync_note_links(db, note.id, content)
+        sync_goals_from_note(db, note.id, content)
     if tags is not None:
         rebuild_tag_cooccurrences(db)
 

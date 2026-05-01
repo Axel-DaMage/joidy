@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { Search, Plus, X, List, FolderTree, ChevronRight, FileEdit, FolderPlus, ChevronsUpDown, ArrowUpDown } from 'lucide-svelte';
@@ -9,6 +9,7 @@
   import { notes, notesLoading, loadNotes, createNote, updateNote, deleteNote, aiSuggestions } from '$lib/stores/notes';
   import { buildTree, flattenTree, type SortMode } from '$lib/utils/fileTree';
   import { showHiddenFiles, showTrash } from '$lib/stores/settings';
+  import { loadUserSettings, patchUserSettings } from '$lib/utils/userSettings';
   import type { Note } from '$lib/api';
 
   // ── State ────────────────────────────────────────────────────────────────────
@@ -22,6 +23,98 @@
   let sortMode: SortMode = 'edit-new';
   let showSortMenu = false;
   let allCollapsed = false;
+  let notesPrefsReady = false;
+  let listScrollEl: HTMLDivElement | null = null;
+  let treeScrollTop = 0;
+  let listScrollTop = 0;
+  let lastRestoredViewMode: 'tree' | 'list' = 'tree';
+
+  const SORT_MODES: SortMode[] = ['az', 'za', 'edit-new', 'edit-old', 'create-new', 'create-old'];
+  const RECENT_TITLE_SCROLL_MIN_CHARS = 34;
+
+  function autoScrollTitle(node: HTMLSpanElement, title = '') {
+    const textEl = node.querySelector<HTMLSpanElement>('.recent-name-text');
+    if (!textEl) return;
+
+    let frameId = 0;
+    let resizeObserver: ResizeObserver | null = null;
+
+    const update = () => {
+      const safeTitle = (title || textEl.textContent || '').trim();
+      const overflowPx = Math.ceil(textEl.scrollWidth - node.clientWidth);
+      const shouldScroll = safeTitle.length >= RECENT_TITLE_SCROLL_MIN_CHARS && overflowPx > 6;
+
+      textEl.classList.toggle('is-overflowing', shouldScroll);
+
+      if (shouldScroll) {
+        textEl.style.setProperty('--scroll-distance', `${overflowPx}px`);
+        const durationSec = Math.min(14, Math.max(6, overflowPx / 22 + 4));
+        textEl.style.setProperty('--scroll-duration', `${durationSec}s`);
+      } else {
+        textEl.style.removeProperty('--scroll-distance');
+        textEl.style.removeProperty('--scroll-duration');
+      }
+    };
+
+    const scheduleUpdate = () => {
+      cancelAnimationFrame(frameId);
+      frameId = requestAnimationFrame(update);
+    };
+
+    scheduleUpdate();
+
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(scheduleUpdate);
+      resizeObserver.observe(node);
+      resizeObserver.observe(textEl);
+    }
+    window.addEventListener('resize', scheduleUpdate);
+
+    return {
+      update(newTitle = '') {
+        title = newTitle;
+        scheduleUpdate();
+      },
+      destroy() {
+        cancelAnimationFrame(frameId);
+        resizeObserver?.disconnect();
+        window.removeEventListener('resize', scheduleUpdate);
+      }
+    };
+  }
+
+  function isSortMode(value: unknown): value is SortMode {
+    return typeof value === 'string' && SORT_MODES.includes(value as SortMode);
+  }
+
+  function persistNotesPrefs() {
+    const currentScroll = listScrollEl?.scrollTop ?? 0;
+    const nextTreeScrollTop = viewMode === 'tree' ? currentScroll : treeScrollTop;
+    const nextListScrollTop = viewMode === 'list' ? currentScroll : listScrollTop;
+
+    treeScrollTop = nextTreeScrollTop;
+    listScrollTop = nextListScrollTop;
+
+    patchUserSettings({
+      notesUi: {
+        panelWidth,
+        sortMode,
+        viewMode,
+        allCollapsed,
+        collapsedPaths: Array.from(collapsed),
+        search,
+        selectedNoteId: selectedNote?.id ?? null,
+        treeScrollTop: nextTreeScrollTop,
+        listScrollTop: nextListScrollTop,
+      }
+    });
+  }
+
+  function setSortMode(mode: SortMode) {
+    sortMode = mode;
+    showSortMenu = false;
+    if (notesPrefsReady) persistNotesPrefs();
+  }
 
   function handleCreateFolder() {
     alert('Próximamente: Las carpetas están enlazadas a la raíz de tu sistema de archivos.');
@@ -36,6 +129,7 @@
       collapsed.clear();
     }
     collapsed = collapsed;
+    if (notesPrefsReady) persistNotesPrefs();
   }
 
   // Resizable panel
@@ -46,9 +140,27 @@
 
   // Tree collapse state — Set of collapsed folder paths
   let collapsed = new Set<string>();
+  $: collapsedSignature = Array.from(collapsed).sort().join('|');
 
   $: showNew = $page.url.searchParams.get('new') === '1';
   $: selectedId = $page.url.searchParams.get('id');
+  $: urlSearch = $page.url.searchParams.get('search');
+
+  // Handle URL changes reactively
+  $: if (urlSearch !== null) {
+    search = urlSearch;
+  }
+
+  $: if (selectedId && $notes.length > 0) {
+    const n = $notes.find(n => String(n.id) === selectedId);
+    if (n && selectedNote?.id !== n.id) {
+      openNote(n);
+    }
+  } else if (!selectedId && showEditor && !editingNew) {
+    // If we were viewing a note and ID cleared, close editor
+    showEditor = false;
+    selectedNote = null;
+  }
 
   // Flat filtered list for list mode
   $: filtered = $notes.filter(n =>
@@ -57,18 +169,121 @@
     n.tags.some(t => t.includes(search.toLowerCase()))
   );
 
+  $: editorNote = editingNew
+    ? (isMomentary ? ({ ...momentaryDraft, id: -1, source: 'momentary' } as Note) : null)
+    : selectedNote;
+
   // Tree → flat list (no recursive component, avoids Svelte 5 HMR issues)
   $: tree = buildTree($notes, viewMode === 'tree' ? search : '', $showTrash, $showHiddenFiles, sortMode);
   $: flatNodes = flattenTree(tree, collapsed);
+  let historyStack: number[] = [];
+  let historyIndex = -1;
+  let isNavigatingHistory = false;
+
+  async function addToHistory(id: number) {
+    if (isNavigatingHistory) return;
+    
+    // Check if we are just moving to an adjacent item (e.g. browser back/forward)
+    if (historyIndex > 0 && historyStack[historyIndex - 1] === id) {
+      historyIndex--;
+      return;
+    }
+    if (historyIndex >= 0 && historyIndex < historyStack.length - 1 && historyStack[historyIndex + 1] === id) {
+      historyIndex++;
+      return;
+    }
+
+    // If it's the same as current, do nothing
+    if (historyIndex >= 0 && historyStack[historyIndex] === id) return;
+    
+    // New branch: clear forward history and push
+    const newStack = historyStack.slice(0, historyIndex + 1);
+    historyStack = [...newStack, id].slice(-50);
+    historyIndex = historyStack.length - 1;
+  }
+
+  $: hasPrev = historyIndex > 0;
+  $: hasNext = historyIndex < historyStack.length - 1;
+
+  async function goToPrev() {
+    if (hasPrev) {
+      isNavigatingHistory = true;
+      historyIndex--;
+      const id = historyStack[historyIndex];
+      const n = $notes.find(n => n.id === id);
+      if (n) openNote(n);
+      await tick();
+      isNavigatingHistory = false;
+    }
+  }
+
+  async function goToNext() {
+    if (hasNext) {
+      isNavigatingHistory = true;
+      historyIndex++;
+      const id = historyStack[historyIndex];
+      const n = $notes.find(n => n.id === id);
+      if (n) openNote(n);
+      await tick();
+      isNavigatingHistory = false;
+    }
+  }
+
+  $: if (notesPrefsReady) {
+    viewMode;
+    sortMode;
+    panelWidth;
+    allCollapsed;
+    collapsedSignature;
+    search;
+    selectedNote?.id;
+    persistNotesPrefs();
+  }
+
+  $: if (notesPrefsReady && viewMode !== lastRestoredViewMode) {
+    lastRestoredViewMode = viewMode;
+    tick().then(() => {
+      if (!listScrollEl) return;
+      listScrollEl.scrollTop = viewMode === 'tree' ? treeScrollTop : listScrollTop;
+    });
+  }
 
   onMount(async () => {
-    const saved = localStorage.getItem('notes-panel-w');
-    if (saved) panelWidth = Math.max(MIN_W, Math.min(MAX_W, parseInt(saved)));
+    const saved = loadUserSettings().notesUi;
+    if (saved?.panelWidth !== undefined) {
+      panelWidth = Math.max(MIN_W, Math.min(MAX_W, Number(saved.panelWidth)));
+    }
+    if (isSortMode(saved?.sortMode)) {
+      sortMode = saved.sortMode;
+    }
+    if (saved?.viewMode === 'tree' || saved?.viewMode === 'list') {
+      viewMode = saved.viewMode;
+      lastRestoredViewMode = saved.viewMode;
+    }
+    if (typeof saved?.search === 'string') {
+      search = saved.search;
+    }
+    if (Array.isArray(saved?.collapsedPaths)) {
+      collapsed = new Set(saved.collapsedPaths.filter((p) => typeof p === 'string'));
+    }
+    allCollapsed = Boolean(saved?.allCollapsed);
+    treeScrollTop = Number.isFinite(Number(saved?.treeScrollTop)) ? Number(saved?.treeScrollTop) : 0;
+    listScrollTop = Number.isFinite(Number(saved?.listScrollTop)) ? Number(saved?.listScrollTop) : 0;
+    notesPrefsReady = true;
+
     await loadNotes();
     if (showNew) openNew();
     if (selectedId) {
       const n = $notes.find(n => String(n.id) === selectedId);
       if (n) openNote(n);
+    } else if (typeof saved?.selectedNoteId === 'number') {
+      const n = $notes.find(note => note.id === saved.selectedNoteId);
+      if (n) openNote(n);
+    }
+
+    await tick();
+    if (listScrollEl) {
+      listScrollEl.scrollTop = viewMode === 'tree' ? treeScrollTop : listScrollTop;
     }
   });
 
@@ -83,7 +298,7 @@
     }
     function onUp() {
       dragging = false;
-      localStorage.setItem('notes-panel-w', String(panelWidth));
+      if (notesPrefsReady) persistNotesPrefs();
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     }
@@ -96,11 +311,23 @@
     if (collapsed.has(path)) collapsed.delete(path);
     else collapsed.add(path);
     collapsed = collapsed; // trigger reactivity
+    if (notesPrefsReady) persistNotesPrefs();
+  }
+
+  function onListScroll() {
+    if (!notesPrefsReady || !listScrollEl) return;
+    if (viewMode === 'tree') treeScrollTop = listScrollEl.scrollTop;
+    else listScrollTop = listScrollEl.scrollTop;
+    persistNotesPrefs();
   }
 
   // ── Note actions ─────────────────────────────────────────────────────────────
   function openNote(note: Note) {
+    if (selectedId !== String(note.id)) {
+      goto(`/notes?id=${note.id}`, { keepFocus: true, noScroll: true });
+    }
     selectedNote = note;
+    addToHistory(note.id);
     showEditor = true;
     editingNew = false;
     aiSuggestions.set([]);
@@ -243,14 +470,14 @@
           </button>
           {#if showSortMenu}
             <div class="sort-menu" on:click|stopPropagation>
-              <button class="sort-btn" class:active={sortMode==='az'} on:click={() => {sortMode='az'; showSortMenu=false}}>Ordenar por nombre (A-Z)</button>
-              <button class="sort-btn" class:active={sortMode==='za'} on:click={() => {sortMode='za'; showSortMenu=false}}>Ordenar por nombre (Z-A)</button>
+              <button class="sort-btn" class:active={sortMode==='az'} on:click={() => setSortMode('az')}>Ordenar por nombre (A-Z)</button>
+              <button class="sort-btn" class:active={sortMode==='za'} on:click={() => setSortMode('za')}>Ordenar por nombre (Z-A)</button>
               <div class="sort-divider"></div>
-              <button class="sort-btn" class:active={sortMode==='edit-new'} on:click={() => {sortMode='edit-new'; showSortMenu=false}}>Editar (más reciente) {#if sortMode==='edit-new'}✓{/if}</button>
-              <button class="sort-btn" class:active={sortMode==='edit-old'} on:click={() => {sortMode='edit-old'; showSortMenu=false}}>Editar (más antiguo) {#if sortMode==='edit-old'}✓{/if}</button>
+              <button class="sort-btn" class:active={sortMode==='edit-new'} on:click={() => setSortMode('edit-new')}>Editar (más reciente) {#if sortMode==='edit-new'}✓{/if}</button>
+              <button class="sort-btn" class:active={sortMode==='edit-old'} on:click={() => setSortMode('edit-old')}>Editar (más antiguo) {#if sortMode==='edit-old'}✓{/if}</button>
               <div class="sort-divider"></div>
-              <button class="sort-btn" class:active={sortMode==='create-new'} on:click={() => {sortMode='create-new'; showSortMenu=false}}>Creado (nuevo-antiguo) {#if sortMode==='create-new'}✓{/if}</button>
-              <button class="sort-btn" class:active={sortMode==='create-old'} on:click={() => {sortMode='create-old'; showSortMenu=false}}>Creado (antiguo-nuevo) {#if sortMode==='create-old'}✓{/if}</button>
+              <button class="sort-btn" class:active={sortMode==='create-new'} on:click={() => setSortMode('create-new')}>Creado (nuevo-antiguo) {#if sortMode==='create-new'}✓{/if}</button>
+              <button class="sort-btn" class:active={sortMode==='create-old'} on:click={() => setSortMode('create-old')}>Creado (antiguo-nuevo) {#if sortMode==='create-old'}✓{/if}</button>
             </div>
           {/if}
         </div>
@@ -278,7 +505,7 @@
       {#if search}<span class="sep">·</span><span>{filtered.length} resultados</span>{/if}
     </div>
 
-    <div class="list-scroll">
+    <div class="list-scroll" bind:this={listScrollEl} on:scroll={onListScroll}>
       {#if $notesLoading}
         <div class="empty-msg">Cargando...</div>
 
@@ -339,11 +566,15 @@
     {#if showEditor}
       {#key editingNew ? (isMomentary ? 'momentary' : 'new') : selectedNote?.id}
         <NoteEditor
-          note={editingNew ? (isMomentary ? { ...momentaryDraft, id: -1, source: 'momentary' } as any : null) : selectedNote}
+          note={editorNote}
           momentary={isMomentary}
+          {hasPrev}
+          {hasNext}
           on:save={handleSave}
           on:cancel={closeEditor}
           on:delete={handleDelete}
+          on:prev={goToPrev}
+          on:next={goToNext}
         />
       {/key}
     {:else}
@@ -379,7 +610,9 @@
               {#each $notes.slice(0, 3) as note}
                 <button class="recent-item" on:click={() => openNote(note)}>
                   <DynamicIcon name="File" size={12} color="var(--text-disabled)" />
-                  <span class="recent-name">{note.title}</span>
+                  <span class="recent-name" use:autoScrollTitle={note.title}>
+                    <span class="recent-name-text">{note.title}</span>
+                  </span>
                   <span class="recent-time">{new Date(note.updated_at).toLocaleDateString()}</span>
                 </button>
               {/each}
@@ -633,15 +866,7 @@
   }
 
   /* ── Resize handle ── */
-  .resize-handle {
-    background: var(--border-light); cursor: col-resize;
-    transition: background var(--t-fast); position: relative; z-index: 1;
-  }
-  .resize-handle:hover,
-  .notes-page.dragging .resize-handle { background: var(--text-muted); }
-  .resize-handle::after {
-    content: ''; position: absolute; inset: 0 -4px;
-  }
+  /* Moved to app.css for global consistency */
 
   .editor-panel {
     display: flex; flex-direction: column;
@@ -665,9 +890,8 @@
     padding: 12px 18px; border-radius: var(--r);
     background: var(--surface); border: 1px solid var(--border);
     transition: all var(--t-fast);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
   }
-  .dash-search:focus-within { border-color: var(--accent); transform: translateY(-1px); }
+  .dash-search:focus-within { border-color: var(--xp); transform: translateY(-1px); }
   .dash-search input {
     border: none; background: transparent; outline: none;
     color: var(--text-primary); font-family: var(--font-sans); font-size: 14px; flex: 1;
@@ -680,8 +904,9 @@
   .dash-widget {
     background: var(--surface); border: 1px solid var(--border-light); border-radius: var(--r);
     padding: 24px; display: flex; flex-direction: column; gap: 18px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    min-width: 0;
   }
+  .quick-note-widget { min-width: 0; overflow: hidden; }
   .dash-action-buttons {
     display: flex; flex-direction: column; gap: 10px;
   }
@@ -695,11 +920,28 @@
     height: 42px;
   }
   .primary-dash-btn {
-    background: var(--accent); border: none; color: var(--bg); font-weight: 600;
+    background: var(--xp); border-color: var(--xp); color: var(--bg); font-weight: 600;
   }
-  .primary-dash-btn:hover { background: var(--accent); opacity: 0.9; transform: translateY(-1px); }
+  .primary-dash-btn:hover { background: var(--xp-2); border-color: var(--xp-2); transform: translateY(-1px); }
+
+  .secondary-dash-btn {
+    background: color-mix(in srgb, var(--xp-2) 16%, transparent);
+    border-color: color-mix(in srgb, var(--xp-2) 45%, transparent);
+    color: var(--text-primary);
+  }
+  .secondary-dash-btn:hover { background: color-mix(in srgb, var(--xp-2) 28%, transparent); border-color: var(--xp-2); }
   
-  .secondary-dash-btn:hover { background: var(--elevated); border-color: var(--accent); color: var(--accent); }
+  .momentary-btn {
+    background: color-mix(in srgb, var(--xp-3) 14%, transparent);
+    border-color: color-mix(in srgb, var(--xp-3) 45%, transparent);
+    color: var(--text-secondary);
+    border-style: solid;
+  }
+  .momentary-btn:hover {
+    background: color-mix(in srgb, var(--xp-3) 24%, transparent);
+    border-color: var(--xp-3);
+    color: var(--text-primary);
+  }
 
   .dash-divider {
     height: 1px; background: var(--border-light); margin: 5px 0;
@@ -712,9 +954,30 @@
     display: flex; align-items: center; gap: 10px; padding: 8px 12px;
     background: var(--bg); border: 1px solid var(--border-light); border-radius: 6px;
     cursor: pointer; transition: all var(--t-fast); text-align: left;
+    min-width: 0; width: 100%;
   }
-  .recent-item:hover { border-color: var(--accent); background: var(--surface); }
-  .recent-name { flex: 1; font-size: 12px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .recent-item:hover { border-color: var(--border); background: var(--surface); }
+  .recent-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    font-size: 12px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+  }
+  .recent-name-text {
+    display: inline-block;
+    white-space: nowrap;
+    transform: translateX(0);
+    will-change: transform;
+  }
+  .recent-name-text.is-overflowing {
+    animation: recent-name-marquee var(--scroll-duration, 8s) ease-in-out infinite alternate;
+  }
+  @keyframes recent-name-marquee {
+    from { transform: translateX(0); }
+    to { transform: translateX(calc(var(--scroll-distance, 0px) * -1)); }
+  }
   .recent-time { font-size: 10px; color: var(--text-disabled); font-family: var(--font-mono); }
 
 
@@ -764,12 +1027,12 @@
     display: flex; align-items: center; justify-content: center;
     font-family: var(--font-mono);
   }
-  .calc-btn:hover { background: var(--border-light); color: var(--text-primary); border-color: var(--accent); }
+  .calc-btn:hover { background: var(--border-light); color: var(--text-primary); border-color: var(--border); }
   .calc-btn.sm { color: var(--text-muted); font-size: 10px; }
   .calc-btn.num { color: var(--text-primary); font-weight: 500; font-size: 13px; }
-  .calc-btn.op { background: rgba(var(--accent-rgb), 0.05); color: var(--accent); font-size: 14px; }
-  .calc-btn.clear { background: var(--accent); color: var(--bg); font-weight: 600; border: none; }
-  .calc-btn.equals { background: var(--accent); color: var(--bg); font-weight: 600; font-size: 14px; border: none; }
+  .calc-btn.op { background: color-mix(in srgb, var(--xp-2) 16%, transparent); color: var(--xp-2); font-size: 14px; }
+  .calc-btn.clear { background: var(--xp); color: var(--bg); font-weight: 600; border-color: var(--xp); }
+  .calc-btn.equals { background: var(--xp-3); color: var(--bg); font-weight: 600; font-size: 14px; border-color: var(--xp-3); }
   .calc-btn.equals:hover { opacity: 0.8; transform: translateY(-1px); }
   .calc-btn:active { transform: scale(0.95); }
 
@@ -778,13 +1041,5 @@
     border: 1px solid var(--border-light); border-radius: 4px; padding: 10px;
     color: var(--text-primary); font-family: var(--font-sans); font-size: 13px;
     outline: none; transition: border-color var(--t-fast);
-  }
-  .momentary-btn {
-    border-style: dashed;
-    color: var(--text-muted);
-  }
-  .momentary-btn:hover {
-    color: var(--accent);
-    border-style: solid;
   }
 </style>

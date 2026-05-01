@@ -22,23 +22,23 @@
 <div class="orbit-wrap" style="width:{size}px; height:{size}px;">
   <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" class="orbit-svg">
     <!-- Sun glow -->
-    <circle cx="50" cy="50" r="9"  fill="var(--plant)" opacity="0.08"/>
-    <circle cx="50" cy="50" r="5"  fill="var(--plant)" class="sun-pulse"/>
+    <circle cx="50" cy="50" r="9"  fill="var(--plant-secondary)" opacity="0.08"/>
+    <circle cx="50" cy="50" r="5"  fill="var(--plant-secondary)" class="sun-pulse"/>
 
     <!-- Orbit ellipses + planets -->
     {#each visiblePlanets as [name, rx, ry, pr, period], i}
       <!-- Draw orbit path -->
       <path id="orbit-{i}"
         d="M {50-rx},50 A {rx},{ry} 0 1,0 {50+rx},50 A {rx},{ry} 0 1,0 {50-rx},50"
-        stroke="var(--plant)" stroke-width="0.35" stroke-dasharray="2 1.5" fill="none" opacity="0.25"/>
+        stroke={i % 2 === 0 ? 'var(--plant)' : 'var(--plant-secondary)'} stroke-width="0.35" stroke-dasharray="2 1.5" fill="none" opacity="0.25"/>
 
       <!-- Planet group following the path -->
       <g>
-        <circle cx="0" cy="0" r={pr} fill="var(--plant)" opacity="0.9"/>
+        <circle cx="0" cy="0" r={pr} fill={i % 3 === 0 ? 'var(--plant)' : i % 3 === 1 ? 'var(--plant-secondary)' : 'var(--plant-tertiary)'} opacity="0.9"/>
         {#if i === 5}
           <!-- Saturn ring -->
           <ellipse cx="0" cy="0" rx={pr + 2.5} ry="1.3"
-            stroke="var(--plant)" stroke-width="0.5" fill="none" opacity="0.55"/>
+            stroke="var(--plant-tertiary)" stroke-width="0.5" fill="none" opacity="0.55"/>
         {/if}
         <!-- Native SVG path animation for perfect elliptical tracking without deformation -->
         <animateMotion dur="{period}s" repeatCount="indefinite" begin="-{period * 0.17 * i}s">

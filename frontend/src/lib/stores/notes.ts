@@ -60,11 +60,15 @@ export async function fetchAISuggestions(noteId: number, content: string, existi
   }
 }
 
-/** Returns the first note matching the title (case insensitive) */
+/** Returns the first note matching the title or path (case insensitive) */
 export function findNoteByTitle(title: string): Note | undefined {
   let found: Note | undefined;
+  const clean = title.toLowerCase().trim();
   notes.subscribe(ns => {
-    found = ns.find(n => n.title.toLowerCase().trim() === title.toLowerCase().trim());
+    found = ns.find(n => 
+      n.title.toLowerCase().trim() === clean ||
+      (n.source_path && n.source_path.toLowerCase().includes(clean))
+    );
   })();
   return found;
 }

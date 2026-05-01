@@ -9,7 +9,10 @@
   export let height = 600;
 
   let svgEl: SVGSVGElement;
-  let simulation: d3.Simulation<any, undefined>;
+  interface SimNode extends SkillNode { x?: number; y?: number; fx?: number | null; fy?: number | null; }
+  interface SimLink extends d3.SimulationLinkDatum<SimNode> { source: SimNode | string | number; target: SimNode | string | number; }
+
+  let simulation: d3.Simulation<SimNode, undefined>;
   let tooltip = { visible: false, x: 0, y: 0, node: null as SkillNode | null };
 
   const COLORS = {
@@ -41,7 +44,7 @@
     // Zoom behavior
     const zoom = d3.zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.5, 3])
-      .on('zoom', (e) => g.attr('transform', e.transform));
+      .on('zoom', (e: d3.D3ZoomEvent<SVGSVGElement, unknown>) => g.attr('transform', e.transform.toString()));
     svg.call(zoom);
 
     // Filters for glow
@@ -52,14 +55,14 @@
       filter.append('feComposite').attr('in', 'SourceGraphic').attr('in2', 'blur').attr('operator', 'over');
     });
 
-    const nodes = data.nodes.map(d => ({ ...d }));
-    const links = data.edges.map(d => ({
-      source: nodes.find(n => n.id === (typeof d.source === 'number' ? d.source : (d.source as any).id)),
-      target: nodes.find(n => n.id === (typeof d.target === 'number' ? d.target : (d.target as any).id)),
-    })).filter(l => l.source && l.target);
+    const nodes: SimNode[] = data.nodes.map((d) => ({ ...d }));
+    const links = data.edges.map((d): SimLink => ({
+      source: nodes.find(n => n.id === (typeof d.source === 'number' ? d.source : (d.source as SimNode).id)) as SimNode,
+      target: nodes.find(n => n.id === (typeof d.target === 'number' ? d.target : (d.target as SimNode).id)) as SimNode,
+    })).filter((l): l is SimLink => Boolean(l.source && l.target));
 
-    simulation = d3.forceSimulation(nodes as any)
-      .force('link', d3.forceLink(links).id((d: any) => d.id).distance(100).strength(0.5))
+    simulation = d3.forceSimulation<SimNode>(nodes)
+      .force('link', d3.forceLink<SimNode, SimLink>(links).id((d: SimNode) => d.id).distance(100).strength(0.5))
       .force('charge', d3.forceManyBody().strength(-300))
       .force('center', d3.forceCenter(width / 2, height / 2))
       .force('collision', d3.forceCollide().radius(40));
@@ -74,66 +77,68 @@
       .attr('stroke-opacity', 0.4);
 
     // Nodes
-    const node = g.append('g')
+    const node: any = g.append('g')
       .selectAll('g')
-      .data(nodes, (d: any) => d.id) // STABLE ID JOIN
-      .join('g')
+      .data(nodes as any, (d: any) => d.id) // STABLE ID JOIN
+      .join('g') as any;
+
+    node
       .style('cursor', 'pointer')
-      .on('mouseover', (e, d: any) => {
+      .on('mouseover', (e: MouseEvent, d: SimNode) => {
         tooltip = { visible: true, x: e.pageX, y: e.pageY, node: d };
       })
       .on('mouseout', () => tooltip.visible = false)
-      .call(d3.drag<any, any>()
+      .call((d3.drag<SVGGElement, SimNode>()
         .on('start', dragstarted)
         .on('drag', dragged)
-        .on('end', dragended) as any
+        .on('end', dragended)) as any
       );
 
     // Node outer circle (Glow)
     node.append('circle')
-      .attr('r', d => nodeSize(d.level) + 4)
+      .attr('r', (d: any) => nodeSize(d.level) + 4)
       .attr('fill', 'none')
-      .attr('stroke', d => (COLORS as any)[d.level])
+      .attr('stroke', (d: any) => (COLORS as any)[d.level])
       .attr('stroke-width', 2)
-      .style('filter', d => `url(#glow-${d.level})`)
-      .style('opacity', d => d.level === 'locked' ? 0.2 : 0.6);
+      .style('filter', (d: any) => `url(#glow-${d.level})`)
+      .style('opacity', (d: any) => d.level === 'locked' ? 0.2 : 0.6);
 
     // Node inner circle
     node.append('circle')
-      .attr('r', d => nodeSize(d.level))
+      .attr('r', (d: any) => nodeSize(d.level))
       .attr('fill', 'var(--bg)')
-      .attr('stroke', d => (COLORS as any)[d.level])
+      .attr('stroke', (d: any) => (COLORS as any)[d.level])
       .attr('stroke-width', 2);
 
     // Labels
     node.append('text')
-      .attr('dy', d => nodeSize(d.level) + 16)
+      .attr('dy', (d: any) => nodeSize(d.level) + 16)
       .attr('text-anchor', 'middle')
       .attr('font-size', '10px')
       .attr('font-family', 'var(--font-mono)')
       .attr('fill', 'var(--text-primary)')
-      .text(d => d.name.toUpperCase());
+      .text((d: any) => d.name.toUpperCase());
 
     simulation.on('tick', () => {
       link
-        .attr('x1', (d: any) => d.source.x)
-        .attr('y1', (d: any) => d.source.y)
-        .attr('x2', (d: any) => d.target.x)
-        .attr('y2', (d: any) => d.target.y);
+        .attr('x1', (d: d3.SimulationLinkDatum<SimNode>) => (d.source as SimNode).x ?? 0)
+        .attr('y1', (d: d3.SimulationLinkDatum<SimNode>) => (d.source as SimNode).y ?? 0)
+        .attr('x2', (d: d3.SimulationLinkDatum<SimNode>) => (d.target as SimNode).x ?? 0)
+        .attr('y2', (d: d3.SimulationLinkDatum<SimNode>) => (d.target as SimNode).y ?? 0);
 
-      node.attr('transform', (d: any) => `translate(${d.x},${d.y})`);
+      node.attr('transform', (d: SimNode) => `translate(${d.x ?? 0},${d.y ?? 0})`);
     });
 
-    function dragstarted(event: any) {
+    function dragstarted(event: d3.D3DragEvent<SVGGElement, SimNode, SimNode>) {
       if (!event.active) simulation.alphaTarget(0.3).restart();
       event.subject.fx = event.subject.x;
       event.subject.fy = event.subject.y;
     }
-    function dragged(event: any) {
+    function dragged(event: d3.D3DragEvent<SVGGElement, SimNode, SimNode>) {
       event.subject.fx = event.x;
       event.subject.fy = event.y;
     }
-    function dragended(event: any) {
+    function dragended(event: d3.D3DragEvent<SVGGElement, SimNode, SimNode>) {
       if (!event.active) simulation.alphaTarget(0);
       event.subject.fx = null;
       event.subject.fy = null;

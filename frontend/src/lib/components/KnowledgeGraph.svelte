@@ -12,6 +12,7 @@
   let showLabels = true;
 
   interface SimNode extends GraphNode { x?: number; y?: number; fx?: number | null; fy?: number | null; }
+  interface SimLink extends d3.SimulationLinkDatum<SimNode> { type: GraphEdge['type']; weight: number; }
 
   function render(nodes: GraphNode[], edges: GraphEdge[]) {
     if (!svgEl || nodes.length === 0) return;
@@ -23,14 +24,14 @@
     // Zoom
     const zoom = d3.zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.2, 4])
-      .on('zoom', (event) => g.attr('transform', event.transform.toString()));
+      .on('zoom', (event: d3.D3ZoomEvent<SVGSVGElement, unknown>) => g.attr('transform', event.transform.toString()));
     svg.call(zoom);
 
     // Simulation
     const simNodes: SimNode[] = nodes.map(n => ({ ...n }));
     const nodeMap = new Map(simNodes.map(n => [n.id, n]));
 
-    const simLinks = edges.map(e => ({
+    const simLinks: SimLink[] = edges.map((e: GraphEdge) => ({
       source: nodeMap.get(typeof e.source === 'number' ? e.source : (e.source as SimNode).id) as SimNode,
       target: nodeMap.get(typeof e.target === 'number' ? e.target : (e.target as SimNode).id) as SimNode,
       type: e.type,
@@ -38,10 +39,10 @@
     })).filter(l => l.source && l.target);
 
     const simulation = d3.forceSimulation(simNodes)
-      .force('link', d3.forceLink(simLinks).id((d: SimNode) => d.id).distance(80).strength(0.4))
+      .force('link', d3.forceLink<SimNode, SimLink>(simLinks).id((d: SimNode) => d.id).distance(80).strength(0.4))
       .force('charge', d3.forceManyBody().strength(-200).theta(0.9))
       .force('center', d3.forceCenter(width / 2, height / 2))
-      .force('collision', d3.forceCollide().radius((d: SimNode) => nodeRadius(d) + 8));
+      .force('collision', d3.forceCollide().radius((d: any) => nodeRadius(d) + 8));
 
     // Edges
     const link = g.append('g').attr('class', 'links')
@@ -60,17 +61,17 @@
       .join('g')
       .attr('class', 'node')
       .style('cursor', 'pointer')
-      .call(
+      .call((
         d3.drag<SVGGElement, SimNode>()
-          .on('start', (event, d) => { if (!event.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
-          .on('drag', (event, d) => { d.fx = event.x; d.fy = event.y; })
-          .on('end', (event, d) => { if (!event.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; })
-      )
-      .on('click', (event, d) => {
+          .on('start', (event: d3.D3DragEvent<SVGGElement, SimNode, SimNode>, d: SimNode) => { if (!event.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+          .on('drag', (event: d3.D3DragEvent<SVGGElement, SimNode, SimNode>, d: SimNode) => { d.fx = event.x; d.fy = event.y; })
+          .on('end', (event: d3.D3DragEvent<SVGGElement, SimNode, SimNode>, d: SimNode) => { if (!event.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; })
+      ) as any)
+      .on('click', (event: MouseEvent, d: SimNode) => {
         event.stopPropagation();
         selectedTag.update(t => t === d.id ? null : d.id);
       })
-      .on('mouseover', (event, d) => {
+      .on('mouseover', (event: MouseEvent, d: SimNode) => {
         tooltip = { visible: true, x: event.pageX + 10, y: event.pageY - 10, text: `${d.name} · ${d.note_count} notas` };
       })
       .on('mouseout', () => { tooltip = { ...tooltip, visible: false }; });
@@ -94,10 +95,10 @@
 
     simulation.on('tick', () => {
       link
-        .attr('x1', d => (d.source as SimNode).x ?? 0)
-        .attr('y1', d => (d.source as SimNode).y ?? 0)
-        .attr('x2', d => (d.target as SimNode).x ?? 0)
-        .attr('y2', d => (d.target as SimNode).y ?? 0);
+        .attr('x1', (d: d3.SimulationLinkDatum<SimNode>) => (d.source as SimNode).x ?? 0)
+        .attr('y1', (d: d3.SimulationLinkDatum<SimNode>) => (d.source as SimNode).y ?? 0)
+        .attr('x2', (d: d3.SimulationLinkDatum<SimNode>) => (d.target as SimNode).x ?? 0)
+        .attr('y2', (d: d3.SimulationLinkDatum<SimNode>) => (d.target as SimNode).y ?? 0);
 
       node.attr('transform', (d: SimNode) => `translate(${d.x ?? 0},${d.y ?? 0})`);
     });

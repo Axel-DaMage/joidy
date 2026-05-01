@@ -1,4 +1,6 @@
-.PHONY: setup dev dev-d prod stop restart logs build clean backup restore help migrate db-health test-api
+.PHONY: setup dev dev-d dev-reset prod stop restart logs build clean backup restore help migrate db-health test-api
+
+COMPOSE_PROJECT ?= joidy
 
 # ─────────────────────────────────────────────────
 # Joidy Makefile
@@ -29,12 +31,19 @@ setup: ## First-time setup: copy .env, create data directories
 dev: ## Start all services in development mode (with hot reload)
 	@if [ ! -f .env ]; then echo "Run 'make setup' first"; exit 1; fi
 	@mkdir -p data/db data/uploads data/vault
-	docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+	docker compose -p $(COMPOSE_PROJECT) -f docker-compose.yml -f docker-compose.dev.yml up --build
 
 dev-d: ## Start all services in development mode (detached)
 	@if [ ! -f .env ]; then echo "Run 'make setup' first"; exit 1; fi
 	@mkdir -p data/db data/uploads data/vault
-	docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build -d
+	docker compose -p $(COMPOSE_PROJECT) -f docker-compose.yml -f docker-compose.dev.yml up --build -d
+
+dev-reset: ## Recreate all services in development mode from scratch (one command)
+	@if [ ! -f .env ]; then echo "Run 'make setup' first"; exit 1; fi
+	@mkdir -p data/db data/uploads data/vault
+	docker compose -p $(COMPOSE_PROJECT) -f docker-compose.yml -f docker-compose.dev.yml down --remove-orphans --volumes
+	docker compose -p $(COMPOSE_PROJECT) -f docker-compose.yml -f docker-compose.dev.yml up --build -d --force-recreate --remove-orphans --wait
+	@echo "✓ Services recreated. Use 'make logs' to follow output."
 
 prod: ## Start all services in production mode
 	@if [ ! -f .env ]; then echo "Run 'make setup' first"; exit 1; fi

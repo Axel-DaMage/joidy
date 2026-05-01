@@ -56,12 +56,16 @@ export interface GamificationResult {
   xp_awarded: number;
   total_xp: number;
   current_streak: number;
+  longest_streak?: number;
   plant_stage: number;
   plant_stage_name: string;
   plant_stage_changed: boolean;
   streak_changed: boolean;
   milestone_reached: number | null;
   message: string;
+  next_stage_xp?: number | null;
+  xp_to_next_stage?: number | null;
+  last_activity_date?: string | null;
 }
 
 export interface Skill {
@@ -81,13 +85,24 @@ export interface Goal {
   id: number;
   title: string;
   description: string;
-  target_notes: number;
+  temporality: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'ANNUAL';
+  measurement_type: 'COUNT' | 'BOOLEAN' | 'PERCENT';
+  target_value: number;
+  current_value: number;
+  state: 'ACTIVE' | 'COMPLETED' | 'FAILED' | 'PAUSED' | 'CANCELLED';
+  fail_config: 'STATIC' | 'ROLLOVER' | 'SNOWBALL';
+  fail_emoji: string;
+  color: string;
+  theme: string;
+  note_id: number | null;
   tag_id: number | null;
-  progress: number;
+  parent_id: number | null;
   progress_pct: number;
+  pending_removal: boolean;
   is_completed: boolean;
   completed_at: string | null;
   created_at: string;
+  updated_at: string;
 }
 
 export interface GraphNode { id: number; name: string; note_count: number; parent_id: number | null; }
@@ -178,12 +193,20 @@ export const api = {
 
   goals: {
     list:     ()                    => req<Goal[]>('GET', '/goals/'),
-    create:   (data: { title: string; description?: string; target_notes?: number; tag_id?: number | null }) =>
+    create:   (data: { title: string; description?: string; temporality?: string; measurement_type?: string; target_value?: number; fail_config?: string; fail_emoji?: string; color?: string; theme?: string; tag_id?: number | null; note_id?: number | null; parent_id?: number | null }) =>
       req<Goal>('POST', '/goals/', data),
     update:   (id: number, data: Partial<Goal>) => req<Goal>('PUT', `/goals/${id}`, data),
     complete: (id: number) =>
       req<{ goal: Goal; gamification: GamificationResult }>('POST', `/goals/${id}/complete`),
     delete:   (id: number) => req<void>('DELETE', `/goals/${id}`),
+    streak:   () => req<{ current_streak: number; best_streak: number }>('GET', '/goals/streak'),
+    resolveRemoval: (id: number, action: 'delete' | 'manual' | 'cancel') =>
+      req<Goal | { status: string }>('POST', `/goals/${id}/resolve-removal`, { action }),
+  },
+
+  planning: {
+    getAssignments: (date: string) => req<{ date: string; goal_ids: number[] }>('GET', `/planning/assignments?date=${encodeURIComponent(date)}`),
+    setAssignments: (date: string, goal_ids: number[]) => req<{ date: string; goal_ids: number[] }>('POST', '/planning/assignments', { date, goal_ids }),
   },
 
   personalStreaks: {
@@ -209,7 +232,7 @@ export const api = {
       is_archived?: boolean; freeze_count?: number;
     }) => req<PersonalStreak>('PUT', `/personal-streaks/${id}`, data),
     delete:   (id: number)        => req<void>('DELETE', `/personal-streaks/${id}`),
-    checkin:  (id: number, data?: { note?: string; mood?: number }) =>
+    checkin:  (id: number, data?: { note?: string; mood?: number; check_date?: string }) =>
       req<PersonalStreak>('POST', `/personal-streaks/${id}/checkin`, data || {}),
     undo:     (id: number)        => req<PersonalStreak>('DELETE', `/personal-streaks/${id}/checkin`),
     freeze:   (id: number)        => req<PersonalStreak>('POST', `/personal-streaks/${id}/freeze`),
