@@ -106,6 +106,7 @@
 		flex: 1;
 		min-height: 0;
 		padding: 4px;
+		align-content: start;
 	}
 
 	.icon-btn {
