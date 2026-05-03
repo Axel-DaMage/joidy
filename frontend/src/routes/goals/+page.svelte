@@ -3,9 +3,10 @@
   import { Plus, Check, ChevronDown, Calendar, BarChart, Clock, Layout, Pause, Play, Ban, Pencil, X, Flame, ChevronRight, TrendingUp, TrendingDown, PieChart, Activity, Target, Trophy, Settings, Palette } from 'lucide-svelte';
   import { api, type Goal, type Tag, type Note } from '$lib/api';
   import { applyGamificationResult, showXPGain } from '$lib/stores/gamification';
+  import { getCachedData, setCachedData } from '$lib/utils/userSettings';
   import StreakIcon from '$lib/components/StreakIcon.svelte';
-
   import StreakHeatmap from '$lib/components/StreakHeatmap.svelte';
+  import IconPicker from '$lib/components/IconPicker.svelte';
 
   let goals: Goal[] = [];
   let tags: Tag[] = [];
@@ -28,24 +29,7 @@
     '🥇','🥈','🥉','🏆','🎖️','🏅','⭐','🌟','✨','💫','🎊','🎉','🎁'
   ]));
 
-  const ICON_OPTIONS = Array.from(new Set([
-    'Flame', 'Zap', 'Activity', 'Heart', 'Pill', 'Droplet', 'Cloud',
-    'BookOpen', 'Book', 'Bookmark', 'FileText', 'Layers', 'Grid',
-    'Palette', 'Pen', 'PenTool', 'Music', 'Music2', 'Music3', 'Music4',
-    'Briefcase', 'Code', 'Code2', 'Cpu', 'Database', 'HardDrive', 'Monitor',
-    'Dumbbell', 'Bike', 'Target', 'Trophy', 'Award', 'Medal',
-    'Leaf', 'Flower', 'Clover', 'Sprout', 'Tree', 'CloudRain', 'Sun',
-    'Plane', 'Map', 'Navigation', 'Compass', 'Anchor', 'Waves',
-    'MessageSquare', 'MessageCircle', 'Send', 'Phone', 'Share', 'Share2',
-    'Clock', 'Watch', 'Timer', 'Hourglass', 'Calendar', 'CalendarDays', 'Moon',
-    'Star', 'Smile', 'Eye', 'Lightbulb', 'Shield', 'Lock', 'Unlock', 'Key',
-    'Wifi', 'Settings', 'Bell', 'BellOff', 'Volume2', 'VolumeX', 'Mic', 'MicOff',
-    'Camera', 'Video', 'Play', 'Pause', 'SkipBack', 'SkipForward',
-    'ThumbsUp', 'ThumbsDown', 'Hand', 'CheckCircle', 'AlertCircle', 'HelpCircle',
-    'Info', 'Package', 'Gift', 'Inbox', 'Layout', 'LayoutGrid', 'Columns',
-    'Brain', 'Gauge', 'Sliders', 'Gamepad2', 'Coffee', 'Pencil', 'GraduationCap'
-  ]));
-
+  const TEMPORALITIES: Goal['temporality'][] = ['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL'];
   const COLOR_PRESETS = [
     { name: 'Gold',      hex: '#c8a96e' },
     { name: 'Esmeralda', hex: '#10b981' },
@@ -60,8 +44,6 @@
     { name: 'Teal',      hex: '#14b8a6' },
     { name: 'Blanco',    hex: '#e2e8f0' },
   ];
-
-  const TEMPORALITIES: Goal['temporality'][] = ['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL'];
 
   // New goal form
   let newTitle = '';
@@ -142,6 +124,11 @@
   let streakData = { current_streak: 0, best_streak: 0 };
 
   onMount(async () => {
+    const cachedGoals = getCachedData<Goal[]>('goals');
+    const cachedTags = getCachedData<Tag[]>('tags');
+    if (cachedGoals) goals = cachedGoals;
+    if (cachedTags) tags = cachedTags;
+    
     try {
       [goals, tags, notes, streakData] = await Promise.all([
         api.goals.list(),
@@ -149,6 +136,8 @@
         api.notes.list(),
         api.goals.streak()
       ]);
+      setCachedData('goals', goals);
+      setCachedData('tags', tags);
       // restore UI state (keep planning tab and selected date)
       try {
         const savedTab = localStorage.getItem('goals.currentTab');
@@ -163,8 +152,10 @@
         // ignore storage errors
       }
     } catch (e) {
-      loadError = 'No se pudo cargar los objetivos.';
-      console.error('[goals] onMount failed:', e);
+      if (goals.length === 0) {
+        loadError = 'No se pudo cargar los objetivos.';
+        console.error('[goals] onMount failed:', e);
+      }
     }
   });
 
@@ -261,8 +252,42 @@
   let selectedPlanningDate: string = todayIso;
   let assignments: Record<string, number[]> = {};
 
+  function getNormalizedDate(date: string, temporality: Goal['temporality']): string {
+    if (!date) return date;
+    const d = new Date(date + 'T12:00:00');
+    if (temporality === 'DAILY') return date;
+    if (temporality === 'WEEKLY') {
+      const day = d.getDay();
+      const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+      const monday = new Date(d.setDate(diff));
+      return monday.toISOString().split('T')[0];
+    }
+    if (temporality === 'MONTHLY') return date.substring(0, 7) + '-01';
+    if (temporality === 'ANNUAL') return date.substring(0, 4) + '-01-01';
+    return date;
+  }
+
+  function getGoalStatusOnDate(goal: Goal, dateStr: string) {
+    const normDate = getNormalizedDate(dateStr, goal.temporality);
+    
+    if (goal.completed_at) {
+      const compDate = getNormalizedDate(goal.completed_at.split('T')[0], goal.temporality);
+      if (compDate === normDate) return 'COMPLETED';
+    }
+    
+    if (goal.state === 'FAILED' && goal.updated_at) {
+      const failDate = getNormalizedDate(goal.updated_at.split('T')[0], goal.temporality);
+      if (failDate === normDate) return 'FAILED';
+    }
+    
+    return 'PENDING';
+  }
+
   function isAssigned(goalId: number, date: string) {
-    return assignments[date] && assignments[date].includes(goalId);
+    const goal = goals.find(g => g.id === goalId);
+    if (!goal) return false;
+    const normDate = getNormalizedDate(date, goal.temporality);
+    return assignments[normDate] && assignments[normDate].includes(goalId);
   }
 
   // persist current tab and selected planning date in localStorage
@@ -272,28 +297,47 @@
 
   $: if (selectedPlanningDate) {
     try { if (typeof localStorage !== 'undefined') localStorage.setItem('goals.selectedPlanningDate', selectedPlanningDate); } catch (e) {}
-    // load assignments for the newly selected date
+    // load assignments for the newly selected date and its periods
     loadAssignmentsForDate(selectedPlanningDate);
   }
 
   async function loadAssignmentsForDate(date: string) {
     if (!date) return;
-    try {
-      const res = await api.planning.getAssignments(date);
-      assignments = { ...assignments, [date]: res.goal_ids };
-    } catch (e) {
-      // If 404 or no assignments, ensure empty array
-      assignments = { ...assignments, [date]: [] };
-    }
+    const datesToLoad = [
+      date,
+      getNormalizedDate(date, 'WEEKLY'),
+      getNormalizedDate(date, 'MONTHLY'),
+      getNormalizedDate(date, 'ANNUAL')
+    ];
+    const uniqueDates = Array.from(new Set(datesToLoad));
+    
+    const fetchedResults = await Promise.all(uniqueDates.map(async (d) => {
+      try {
+        const res = await api.planning.getAssignments(d);
+        return { date: d, ids: res.goal_ids };
+      } catch (e) {
+        return { date: d, ids: [] };
+      }
+    }));
+
+    assignments = {
+      ...assignments,
+      ...Object.fromEntries(fetchedResults.map(r => [r.date, r.ids]))
+    };
   }
 
   async function assignGoalToDate(goalId: number, date: string) {
     if (!date) return;
+    const goal = goals.find(g => g.id === goalId);
+    if (!goal) return;
+    
+    const normDate = getNormalizedDate(date, goal.temporality);
     assignments = { ...assignments };
-    if (!assignments[date]) assignments[date] = [];
-    if (!assignments[date].includes(goalId)) assignments[date].push(goalId);
+    if (!assignments[normDate]) assignments[normDate] = [];
+    if (!assignments[normDate].includes(goalId)) assignments[normDate].push(goalId);
+    
     try {
-      await api.planning.setAssignments(date, assignments[date]);
+      await api.planning.setAssignments(normDate, assignments[normDate]);
     } catch (e) {
       console.error('Error saving assignment:', e);
     }
@@ -301,10 +345,15 @@
 
   async function unassignGoalFromDate(goalId: number, date: string) {
     if (!date) return;
-    if (!assignments[date]) return;
-    assignments = { ...assignments, [date]: assignments[date].filter(id => id !== goalId) };
+    const goal = goals.find(g => g.id === goalId);
+    if (!goal) return;
+    
+    const normDate = getNormalizedDate(date, goal.temporality);
+    if (!assignments[normDate]) return;
+    
+    assignments = { ...assignments, [normDate]: assignments[normDate].filter(id => id !== goalId) };
     try {
-      await api.planning.setAssignments(date, assignments[date]);
+      await api.planning.setAssignments(normDate, assignments[normDate]);
     } catch (e) {
       console.error('Error saving assignment removal:', e);
     }
@@ -510,11 +559,9 @@
             <div class="goal-main">
               <div class="goal-title">
                 {#if goal.fail_emoji}
-                  {#if ICON_OPTIONS.includes(goal.fail_emoji)}
-                    <span class="emoji-badge" style="display:flex; align-items:center; margin-right:8px;"><StreakIcon name={goal.fail_emoji} size={16} color={goal.color || 'var(--text-muted)'} /></span>
-                  {:else}
-                    <span class="emoji-badge" style="margin-right:8px;">{goal.fail_emoji}</span>
-                  {/if}
+                  <span class="emoji-badge" style="display:flex; align-items:center; margin-right:8px;">
+                    <StreakIcon name={goal.fail_emoji} size={16} color={goal.color || 'var(--text-muted)'} />
+                  </span>
                 {/if}
                 {goal.title}
                 {#if goal.state === 'PAUSED'}
@@ -584,59 +631,9 @@
     {/if}
 
     {#if currentTab === 'planning'}
-      <div class="tab-content fade-in history-layout planning-3col">
-        <!-- Left: Assigned for selected date (or copy of list if none) -->
+      <div class="tab-content fade-in planning-3col">
+        <!-- Left: All Goals List (click => assign to selectedPlanningDate) -->
         <div class="planning-left-col history-detail-col">
-          <div class="history-detail-header">
-            <div class="history-detail-date" style="text-transform:none;">Asignados · {selectedPlanningDate}</div>
-          </div>
-
-          <div class="history-goal-list" style="width:100%">
-            {#if assignments[selectedPlanningDate] && assignments[selectedPlanningDate].length > 0}
-              {#each assignments[selectedPlanningDate].map(id => goals.find(g => g.id === id)).filter((g): g is Goal => Boolean(g)) as g (g.id)}
-                <div class="history-goal-item assigned" style="border-left-color: {g.color || 'var(--success)'}; display:flex; align-items:center; justify-content:space-between;">
-                  <div class="hgi-info">
-                    <div class="hgi-title">{g.title}</div>
-                    <div class="hgi-meta"><span class="config-badge">{g.temporality}</span></div>
-                  </div>
-                  <div style="display:flex; gap:6px;">
-                    <button class="btn btn-ghost" on:click={() => unassignGoalFromDate(g.id, selectedPlanningDate)} title="Quitar">×</button>
-                  </div>
-                </div>
-              {/each}
-            {:else}
-              <!-- If none assigned, show a copy of the full list -->
-              {#each goals.filter(g => g.state !== 'CANCELLED') as goal (goal.id)}
-                <div class="history-goal-item" style="width:100%; display:flex; text-align:left;">
-                  <div class="hgi-info">
-                    <div class="hgi-title">{goal.title}</div>
-                    <div class="hgi-meta"><span class="config-badge">{goal.temporality}</span></div>
-                  </div>
-                </div>
-              {/each}
-            {/if}
-          </div>
-        </div>
-
-        <!-- Center: Calendar (fixed year view, allow future months) -->
-        <div class="planning-center-col history-calendar-col">
-          <div class="history-cal-header">
-            <span class="section-title" style="margin:0;">Calendario</span>
-            <span class="history-hint">Selecciona un día (puedes navegar futuro)</span>
-          </div>
-          <div class="history-heatmap-wrap">
-            <StreakHeatmap
-              history={historyData}
-              color="var(--success)"
-              selectedDate={selectedPlanningDate}
-              onselect={(date) => selectedPlanningDate = date}
-              maxFutureMonths={12}
-            />
-          </div>
-        </div>
-
-        <!-- Right: All Goals List (click => assign to selectedPlanningDate) -->
-        <div class="planning-right-col history-detail-col">
           <div class="history-detail-header">
             <div class="history-detail-date" style="text-transform:none;">Lista de Objetivos</div>
           </div>
@@ -657,6 +654,69 @@
                 </button>
               {/if}
             {/each}
+          </div>
+        </div>
+
+        <!-- Center: Calendar (fixed year view, allow future months) -->
+        <div class="planning-center-col history-detail-col">
+          <div class="history-detail-header">
+            <span class="section-title" style="margin:0;">Calendario</span>
+          </div>
+          <div class="history-heatmap-wrap">
+            <StreakHeatmap
+              history={historyData}
+              color="var(--success)"
+              selectedDate={selectedPlanningDate}
+              onselect={(date) => selectedPlanningDate = date}
+              maxFutureMonths={12}
+              hideTabs={true}
+            />
+          </div>
+        </div>
+
+        <!-- Right: Assigned for selected date -->
+        <div class="planning-right-col history-detail-col">
+          <div class="history-detail-header">
+            <div class="history-detail-date" style="text-transform:none;">Asignados · {selectedPlanningDate}</div>
+          </div>
+
+          <div class="history-goal-list" style="width:100%">
+            {#each ['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL'] as temp}
+              {@const normDate = getNormalizedDate(selectedPlanningDate, temp as 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'ANNUAL')}
+              {@const assignedIds = assignments[normDate] || []}
+              {@const filteredGoals = assignedIds.map(id => goals.find(g => g.id === id)).filter((g): g is Goal => g !== undefined && Boolean(g) && g.temporality === temp)}
+              
+              {#if filteredGoals.length > 0}
+                <div class="planning-section-header">
+                  {temp === 'DAILY' ? 'Día' : temp === 'WEEKLY' ? 'Semana' : temp === 'MONTHLY' ? 'Mes' : 'Año'}
+                </div>
+                {#each filteredGoals as g (g.id)}
+                  {@const status = getGoalStatusOnDate(g, selectedPlanningDate)}
+                  <div class="history-goal-item assigned" class:status-completed={status === 'COMPLETED'} class:status-failed={status === 'FAILED'} style="border-left-color: {status === 'FAILED' ? 'var(--error)' : (g.color || 'var(--success)')}; display:flex; align-items:center; justify-content:space-between;">
+                    <div class="hgi-info">
+                      <div class="hgi-title">{g.title}</div>
+                      <div class="hgi-meta">
+                        <span class="config-badge">{g.temporality}</span>
+                        {#if status === 'COMPLETED'}
+                          <span class="status-badge success">Completado</span>
+                        {:else if status === 'FAILED'}
+                          <span class="status-badge error">Fallido</span>
+                        {/if}
+                      </div>
+                    </div>
+                    <div style="display:flex; gap:6px;">
+                      <button class="btn btn-ghost" on:click={() => unassignGoalFromDate(g.id, selectedPlanningDate)} title="Quitar">×</button>
+                    </div>
+                  </div>
+                {/each}
+              {/if}
+            {/each}
+
+            {#if !(['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL'] as const).some(temp => (assignments[getNormalizedDate(selectedPlanningDate, temp as 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'ANNUAL')] || []).some(id => goals.find(g => g.id === id)?.temporality === temp))}
+              <div class="history-detail-empty" style="padding: 2rem; border: 1px dashed var(--border); border-radius: var(--r); margin: 1rem;">
+                <span class="history-detail-msg" style="font-size: 12px; text-align: center; display: block;">No hay objetivos asignados para este periodo.</span>
+              </div>
+            {/if}
           </div>
         </div>
       </div>
@@ -708,11 +768,7 @@
                 {#each goalsForDate.completed as g (g.id)}
                   <div class="history-goal-item completed" style="border-left-color: {g.color || 'var(--success)'};">
                     <div class="hgi-icon-left">
-                      {#if ICON_OPTIONS.includes(g.fail_emoji)}
-                        <StreakIcon name={g.fail_emoji} size={16} color={g.color || 'var(--success)'} />
-                      {:else}
-                        <span style="font-size:16px;">{g.fail_emoji}</span>
-                      {/if}
+                      <StreakIcon name={g.fail_emoji} size={16} color={g.color || 'var(--success)'} />
                     </div>
                     <div class="hgi-info">
                       <div class="hgi-title">{g.title}</div>
@@ -735,11 +791,7 @@
                 {#each goalsForDate.failed as g (g.id)}
                   <div class="history-goal-item failed">
                     <div class="hgi-icon-left">
-                      {#if ICON_OPTIONS.includes(g.fail_emoji)}
-                        <StreakIcon name={g.fail_emoji} size={16} color="var(--error)" />
-                      {:else}
-                        <span style="font-size:16px;">{g.fail_emoji}</span>
-                      {/if}
+                      <StreakIcon name={g.fail_emoji} size={16} color="var(--error)" />
                     </div>
                     <div class="hgi-info">
                       <div class="hgi-title">{g.title}</div>
@@ -1024,12 +1076,8 @@
                       {/each}
                     </div>
                   {:else}
-                    <div class="icon-grid ng-large-grid">
-                      {#each ICON_OPTIONS as ic}
-                        <button class="lucide-btn" class:selected={newFailIcon === ic} on:click={() => newFailIcon = ic} title={ic}>
-                          <StreakIcon name={ic} size={16} color={newGoalColor} />
-                        </button>
-                      {/each}
+                    <div class="field ng-large-grid">
+                      <IconPicker selected={newFailIcon} color={newGoalColor} onSelect={(ic) => newFailIcon = ic} />
                     </div>
                   {/if}
                 </div>
@@ -1121,13 +1169,13 @@
             <div class="goal-card preview-card-live" style="border-color: {newGoalColor}; background: color-mix(in srgb, {newGoalColor} 5%, var(--surface));">
               <div class="goal-main">
                 <div class="goal-title">
-                  {#if ICON_OPTIONS.includes(useFailIcon ? newFailIcon : newFailEmoji)}
-                    <span class="emoji-badge" style="display:flex; align-items:center; margin-right:8px;">
-                      <StreakIcon name={useFailIcon ? newFailIcon : newFailEmoji} size={16} color={newGoalColor} />
-                    </span>
-                  {:else}
-                    <span class="emoji-badge" style="margin-right:8px;">{newFailEmoji}</span>
-                  {/if}
+                  <span class="emoji-badge" style="display:flex; align-items:center; margin-right:8px;">
+                    {#if useFailIcon}
+                      <StreakIcon name={newFailIcon} size={16} color={newGoalColor} />
+                    {:else}
+                      {newFailEmoji}
+                    {/if}
+                  </span>
                   {newTitle || 'Nombre del Objetivo...'}
                 </div>
               </div>
@@ -1307,14 +1355,40 @@
     width: 100%;
     transition: max-width 0.3s ease;
   }
-  /* Planning 3-col layout */
+  /* Planning 3-col layout - One Page Style */
   .planning-3col {
-    display: grid;
-    grid-template-columns: 360px minmax(520px, 780px) 360px;
-    gap: 20px;
-    align-items: start;
+    display: grid !important;
+    grid-template-columns: 1fr 1.4fr 1fr;
+    gap: var(--s4);
+    height: calc(100vh - 160px);
     width: 100%;
     max-width: none;
+    align-items: stretch;
+  }
+
+  .planning-left-col,
+  .planning-center-col,
+  .planning-right-col {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden; /* Header stays fixed, list scrolls */
+  }
+
+  .planning-left-col .history-goal-list,
+  .planning-right-col .history-goal-list,
+  .planning-center-col .history-heatmap-wrap {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--s3);
+  }
+
+  .planning-center-col .history-heatmap-wrap {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding-top: var(--s5);
   }
 
   @media (max-width: 1100px) {
@@ -1331,18 +1405,27 @@
   }
 
   /* Left/Right columns sizing and scroll behaviour */
-  .planning-left-col,
-  .planning-right-col {
-    max-height: 68vh;
-    overflow-y: auto;
-    background: transparent;
+  .planning-section-header {
+    font-size: 10px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    letter-spacing: 0.1em;
+    padding: 16px 16px 8px;
+    border-bottom: 1px solid var(--border-light);
+    margin-bottom: 8px;
+    background: rgba(255,255,255,0.02);
   }
 
-  .planning-center-col {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
+  .status-badge {
+    font-size: 9px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    font-weight: 600;
+    margin-left: 8px;
   }
+  .status-badge.success { background: rgba(16, 185, 129, 0.1); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.2); }
+  .status-badge.error { background: rgba(239, 68, 68, 0.1); color: var(--error); border: 1px solid rgba(239, 68, 68, 0.2); }
 
   .history-heatmap-wrap {
     width: 100%;
@@ -1352,8 +1435,9 @@
   .goals-body.full-width {
     max-width: none;
     margin: 0;
-    padding: var(--s4) var(--s6);
-    overflow-y: hidden;
+    padding: var(--s3) var(--s4);
+    overflow: hidden;
+    height: calc(100vh - 80px);
   }
   /* ── New Goal Centered Modal ── */
   .new-goal-backdrop {

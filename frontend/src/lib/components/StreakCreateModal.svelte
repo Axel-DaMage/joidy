@@ -1,10 +1,11 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import { fade, slide } from 'svelte/transition';
   import { X, Calendar, Snowflake, Target, Clock, Archive } from 'lucide-svelte';
   import StreakIcon from '$lib/components/StreakIcon.svelte';
+  import IconPicker from '$lib/components/IconPicker.svelte';
   import type { PersonalStreak } from '$lib/api';
   import { liquidGlass } from '$lib/actions/liquidGlass';
+  import { getContrastColor } from '$lib/stores/settings';
 
   export let open = false;
   export let editStreak: PersonalStreak | null = null;
@@ -83,24 +84,6 @@
       offset = calculateDaysBetween(startDate, today);
     }
   }
-
-  const ICON_OPTIONS = Array.from(new Set([
-    'Flame', 'Zap', 'Activity', 'Heart', 'Pill', 'Droplet', 'Cloud',
-    'BookOpen', 'Book', 'Bookmark', 'FileText', 'Layers', 'Grid',
-    'Palette', 'Pen', 'PenTool', 'Music', 'Music2', 'Music3', 'Music4',
-    'Briefcase', 'Code', 'Code2', 'Cpu', 'Database', 'HardDrive', 'Monitor',
-    'Dumbbell', 'Bike', 'Target', 'Trophy', 'Award', 'Medal',
-    'Leaf', 'Flower', 'Clover', 'Sprout', 'Tree', 'CloudRain', 'Sun',
-    'Plane', 'Map', 'Navigation', 'Compass', 'Anchor', 'Waves',
-    'MessageSquare', 'MessageCircle', 'Send', 'Phone', 'Share', 'Share2',
-    'Clock', 'Watch', 'Timer', 'Hourglass', 'Calendar', 'CalendarDays', 'Moon',
-    'Star', 'Smile', 'Eye', 'Lightbulb', 'Shield', 'Lock', 'Unlock', 'Key',
-    'Wifi', 'Settings', 'Bell', 'BellOff', 'Volume2', 'VolumeX', 'Mic', 'MicOff',
-    'Camera', 'Video', 'Play', 'Pause', 'SkipBack', 'SkipForward',
-    'ThumbsUp', 'ThumbsDown', 'Hand', 'CheckCircle', 'AlertCircle', 'HelpCircle',
-    'Info', 'Package', 'Gift', 'Inbox', 'Layout', 'LayoutGrid', 'Columns',
-    'Brain', 'Gauge', 'Sliders', 'Gamepad2', 'Coffee', 'Pencil', 'GraduationCap'
-  ]));
 
   const CATEGORIES = [
     { id: 'general',     label: 'General',     icon: 'Layers' },
@@ -205,190 +188,131 @@
 <svelte:window on:keydown={onKey} />
 
 {#if open}
-  <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-  <div class="modal-backdrop" on:click={onBackdrop} transition:fade={{ duration: 150 }}>
-    <div class="modal-panel" transition:slide={{ duration: 200 }}>
-
-      <!-- Header -->
+  <div class="modal-backdrop" on:click={onBackdrop}>
+    <div class="modal-panel">
       <div class="modal-header">
         <span class="modal-title mono">{isEdit ? 'EDITAR RACHA' : 'NUEVA RACHA'}</span>
         <button class="close-btn" on:click={close}><X size={14} /></button>
       </div>
 
       <div class="modal-body">
-        <!-- Preview Card -->
-        <div
-          class="preview-card"
-          class:theme-gradient={theme === 'gradient'}
-          class:theme-glow={theme === 'glow'}
-          class:theme-minimal={theme === 'minimal'}
-          class:theme-lcd={theme === 'lcd'}
-          class:theme-neon={theme === 'neon'}
-          class:theme-glass={theme === 'glass'}
-          class:theme-sketch={theme === 'sketch'}
-          class:theme-solid={theme === 'solid' || !theme}
-          style={previewStyle}
-          use:liquidGlass={{ enabled: theme === 'glass' }}
-        >
+        <div class="preview-card" class:theme-gradient={theme === 'gradient'} style={previewStyle}>
           <div class="preview-icon">
             {#if useIcon && icon}
-              <StreakIcon name={icon} size={18} color={color} />
+              <StreakIcon name={icon} size={24} />
             {:else}
-              <span class="preview-emoji">{emoji || '🔥'}</span>
+              <span class="preview-emoji">{emoji}</span>
             {/if}
           </div>
           <div class="preview-info">
-            <span class="preview-name">{name || 'Nombre...'}</span>
-            <span class="preview-meta mono">{previewFreqLabel()}</span>
-          </div>
-          <div class="preview-count">
-            <span class="preview-num mono">{offset || 0}</span>
+            <span class="preview-name">{name || 'Nombre de la racha'}</span>
+            <span class="preview-meta mono">{name ? previewFreqLabel() : 'frecuencia'}</span>
           </div>
         </div>
 
-        <!-- Section tabs -->
-        <div class="section-tabs">
-          <button class="sec-tab" class:active={activeSection === 'basics'} on:click={() => activeSection = 'basics'}>Básico</button>
-          <button class="sec-tab" class:active={activeSection === 'appearance'} on:click={() => activeSection = 'appearance'}>Apariencia</button>
-          <button class="sec-tab" class:active={activeSection === 'advanced'} on:click={() => activeSection = 'advanced'}>Avanzado</button>
+        <div class="field">
+          <label>Nombre</label>
+          <input bind:value={name} placeholder="Ej: Meditación, Lectura, Ejercicio..." autofocus />
         </div>
 
-        <!-- BASICS -->
-        {#if activeSection === 'basics'}
-          <div class="section-content" in:fade={{ duration: 180 }} out:fade={{ duration: 80 }}>
-            <div class="field">
-              <label>Nombre</label>
-              <input bind:value={name} placeholder="Ej: Meditación, Lectura, Ejercicio..." autofocus />
-            </div>
+        <div class="field">
+          <label>Descripción <span class="optional">(opcional)</span></label>
+          <input bind:value={description} placeholder="Mi motivación, mi meta..." />
+        </div>
 
-            <div class="field">
-              <label>Descripción <span class="optional">(opcional)</span></label>
-              <input bind:value={description} placeholder="Mi motivación, mi meta..." />
-            </div>
+        <div class="field">
+          <label>Frecuencia</label>
+          <div class="freq-row">
+            <button class="freq-btn" class:selected={frequency === 'daily'} on:click={() => { frequency = 'daily'; frequencyDays = 1; }}>Diaria</button>
+            <button class="freq-btn" class:selected={frequency === 'weekly'} on:click={() => { frequency = 'weekly'; frequencyDays = 1; }}>Semanal</button>
+            <button class="freq-btn" class:selected={frequency === 'monthly'} on:click={() => { frequency = 'monthly'; frequencyDays = 1; }}>Mensual</button>
+            <button class="freq-btn" class:selected={frequency === 'every_n'} on:click={() => { frequency = 'every_n'; }}>cada N</button>
+          </div>
+        </div>
 
-            <div class="field">
-              <label>Frecuencia</label>
-              <div class="freq-row">
-                <button class="freq-btn" class:selected={frequency === 'daily'} on:click={() => { frequency = 'daily'; frequencyDays = 1; }}>
-                  Diaria
-                </button>
-                <button class="freq-btn" class:selected={frequency === 'every_n'} on:click={() => { frequency = 'every_n'; frequencyDays = 2; }}>
-                  Cada N días
-                </button>
-              </div>
-              {#if frequency === 'every_n'}
-                <div class="freq-n-row" transition:slide={{ duration: 150 }}>
-                  <span class="freq-label">Cada</span>
-                  <input type="number" class="freq-input" bind:value={frequencyDays} min="2" max="30" />
-                  <span class="freq-label">días</span>
-                </div>
-              {/if}
-            </div>
+        {#if frequency === 'every_n'}
+          <div class="freq-n-row">
+            <span class="freq-n-label">Cada</span>
+            <input type="number" bind:value={frequencyDays} min="1" max="365" class="freq-n-input" />
+            <span class="freq-n-label">días</span>
           </div>
         {/if}
 
-        <!-- APPEARANCE -->
-        {#if activeSection === 'appearance'}
-          <div class="section-content" in:fade={{ duration: 180 }} out:fade={{ duration: 80 }}>
-            <div class="field">
-              <label>Icono</label>
-              <div class="icon-toggle-row">
-                <button class="icon-type-btn" class:selected={!useIcon} on:click={() => useIcon = false}>Emoji</button>
-                <button class="icon-type-btn" class:selected={useIcon} on:click={() => { useIcon = true; if (!icon) icon = 'Flame'; }}>Icono</button>
-              </div>
-            </div>
+        <div class="field">
+          <label>Icono</label>
+          <div class="icon-toggle-row">
+            <button class="icon-type-btn" class:selected={!useIcon} on:click={() => useIcon = false}>Emoji</button>
+            <button class="icon-type-btn" class:selected={useIcon} on:click={() => { useIcon = true; if (!icon) icon = 'Flame'; }}>Icono</button>
+          </div>
+        </div>
 
-            {#if !useIcon}
-              <div class="emoji-grid">
-                {#each EMOJIS as e}
-                  <button class="emoji-btn" class:selected={emoji === e} on:click={() => emoji = e}>{e}</button>
-                {/each}
-              </div>
-            {:else}
-              <div class="icon-grid">
-                {#each ICON_OPTIONS as ic}
-                  <button class="lucide-btn" class:selected={icon === ic} on:click={() => icon = ic} title={ic}>
-                    <StreakIcon name={ic} size={16} color={color} />
-                  </button>
-                {/each}
-              </div>
-            {/if}
-
-            <div class="field">
-              <label>Color</label>
-              <div class="color-presets">
-                {#each COLOR_PRESETS as c}
-                  <button
-                    class="color-dot"
-                    class:selected={color === c.hex}
-                    style="background: {c.hex};"
-                    on:click={() => color = c.hex}
-                    title={c.name}
-                  ></button>
-                {/each}
-                <div class="color-custom">
-                  <input type="color" bind:value={color} class="color-picker" />
-                </div>
-              </div>
+        {#if !useIcon}
+          <div class="field">
+            <div class="emoji-grid">
+              {#each EMOJIS as e}
+                <button class="emoji-btn" class:selected={emoji === e} on:click={() => emoji = e}>{e}</button>
+              {/each}
             </div>
-
-            <div class="field">
-              <label>Tema visual</label>
-              <div class="theme-row">
-                {#each THEMES as t}
-                  <button class="theme-btn" class:selected={theme === t.id} on:click={() => theme = t.id}>
-                    {t.label}
-                  </button>
-                {/each}
-              </div>
-            </div>
+          </div>
+        {:else}
+          <div class="field">
+            <IconPicker selected={icon} color={color} onSelect={(ic) => icon = ic} />
           </div>
         {/if}
 
-        <!-- ADVANCED -->
-        {#if activeSection === 'advanced'}
-          <div class="section-content" in:fade={{ duration: 180 }} out:fade={{ duration: 80 }}>
-            <div class="field-row">
-              <div class="field half">
-                <label><Calendar size={11} /> Fecha de inicio</label>
-                <input type="date" bind:value={startDate} disabled={isEdit} />
-              </div>
-              <div class="field half">
-                <label><Target size={11} /> Fecha objetivo <span class="optional">(op.)</span></label>
-                <input type="date" bind:value={targetDate} />
-              </div>
-            </div>
-
-            <div class="field-row">
-              <div class="field half">
-                <label><Clock size={11} /> Días desde inicio</label>
-                <input type="number" bind:value={offset} min="0" disabled={isEdit} placeholder="Calculado automáticamente" />
-                <span class="field-hint">{isEdit ? 'Este valor no se puede modificar una vez creada la racha' : 'Se calcula automáticamente desde la fecha de inicio'}</span>
-              </div>
-              <div class="field half">
-                <label><Snowflake size={11} /> Freezes (escudos)</label>
-                <input type="number" bind:value={freezeCount} min="0" max="30" />
-                <span class="field-hint">Protegen tu racha si fallas un día.</span>
-              </div>
-            </div>
+        <div class="field">
+          <label>Color</label>
+          <div class="color-grid">
+            {#each COLOR_PRESETS as c}
+              <button
+                class="color-btn"
+                class:selected={color === c.hex}
+                style="--btn-color: {c.hex}; background: {c.hex};"
+                on:click={() => color = c.hex}
+              />
+            {/each}
           </div>
-        {/if}
+        </div>
+
+        <div class="field">
+          <label>Tema visual</label>
+          <div class="theme-grid">
+            {#each THEMES as t}
+              <button class="theme-btn" class:selected={theme === t.id} on:click={() => theme = t.id}>
+                {t.label}
+              </button>
+            {/each}
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field half">
+            <label><Calendar size={11} /> Fecha de inicio</label>
+            <input type="date" bind:value={startDate} disabled={isEdit} />
+          </div>
+          <div class="field half">
+            <label><Target size={11} /> Fecha objetivo <span class="optional">(op.)</span></label>
+            <input type="date" bind:value={targetDate} />
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field half">
+            <label><Clock size={11} /> Días desde inicio</label>
+            <input type="number" bind:value={offset} min="0" disabled={isEdit} placeholder="Calculado automáticamente" />
+            <span class="field-hint">{isEdit ? 'Este valor no se puede modificar una vez creada la racha' : 'Se calcula automáticamente desde la fecha de inicio'}</span>
+          </div>
+          <div class="field half">
+            <label><Snowflake size={11} /> Freezes (escudos)</label>
+            <input type="number" bind:value={freezeCount} min="0" max="30" />
+            <span class="field-hint">Protegen tu racha si fallas un día.</span>
+          </div>
+        </div>
       </div>
 
-      <!-- Footer -->
-      <div 
-        class="modal-footer" 
-        class:theme-sketch={theme === 'sketch'}
-        class:theme-glow={theme === 'glow'}
-        class:theme-gradient={theme === 'gradient'}
-        class:theme-neon={theme === 'neon'}
-      >
+      <div class="modal-footer" class:theme-sketch={theme === 'sketch'} class:theme-glow={theme === 'glow'} class:theme-gradient={theme === 'gradient'} class:theme-neon={theme === 'neon'}>
         {#if isEdit}
-          <button
-            class="btn-archive"
-            on:click={archive}
-            title={editStreak?.is_archived ? 'Desarchivar racha' : 'Archivar racha'}
-          >
+          <button class="btn-archive" on:click={archive} title={editStreak?.is_archived ? 'Desarchivar racha' : 'Archivar racha'}>
             <Archive size={14} />
             {editStreak?.is_archived ? 'Desarchivar' : 'Archivar'}
           </button>
@@ -436,7 +360,7 @@
   .close-btn:hover { color: var(--text-primary); }
 
   .modal-body {
-    overflow: visible;
+    overflow-y: auto;
     padding: 20px;
     display: flex; flex-direction: column; gap: 16px;
   }

@@ -2,14 +2,16 @@
   import { onMount, tick } from 'svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
-  import { Search, Plus, X, List, FolderTree, ChevronRight, FileEdit, FolderPlus, ChevronsUpDown, ArrowUpDown } from 'lucide-svelte';
+  import { Search, Plus, X, List, FolderTree, ChevronRight, FileEdit, FolderPlus, ChevronsUpDown, ArrowUpDown, Settings } from 'lucide-svelte';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
   import NoteEditor from '$lib/components/NoteEditor.svelte';
   import NoteCard from '$lib/components/NoteCard.svelte';
-  import { notes, notesLoading, loadNotes, createNote, updateNote, deleteNote, aiSuggestions } from '$lib/stores/notes';
+  import IconPicker from '$lib/components/IconPicker.svelte';
+  import { notes, notesLoading, loadNotes, createNote, updateNote, deleteNote, aiSuggestions, notesLoadedOnce } from '$lib/stores/notes';
   import { buildTree, flattenTree, type SortMode } from '$lib/utils/fileTree';
   import { showHiddenFiles, showTrash } from '$lib/stores/settings';
   import { loadUserSettings, patchUserSettings } from '$lib/utils/userSettings';
+  import { captureSnapshot, getSnapshot } from '$lib/stores/pageSnapshots';
   import type { Note } from '$lib/api';
 
   // ── State ────────────────────────────────────────────────────────────────────
@@ -18,6 +20,17 @@
   let showEditor = false;
   let editingNew = false;
   let viewMode: 'tree' | 'list' = 'tree';
+
+  // Folder customization
+  let editingFolder: string | null = null;
+  let folderColor = '#c8a96e';
+  let folderIcon = 'Folder';
+
+  async function openFolderCustomizer(node: { path: string; color?: string | null; icon?: string | null }) {
+    editingFolder = node.path;
+    folderColor = node.color || '#c8a96e';
+    folderIcon = node.icon || 'Folder';
+  }
 
   // ── Explorer toolbar state ───────────────────────────────────────────────────
   let sortMode: SortMode = 'edit-new';
@@ -271,21 +284,44 @@
     listScrollTop = Number.isFinite(Number(saved?.listScrollTop)) ? Number(saved?.listScrollTop) : 0;
     notesPrefsReady = true;
 
-    await loadNotes();
-    if (showNew) openNew();
-    if (selectedId) {
-      const n = $notes.find(n => String(n.id) === selectedId);
-      if (n) openNote(n);
-    } else if (typeof saved?.selectedNoteId === 'number') {
-      const n = $notes.find(note => note.id === saved.selectedNoteId);
-      if (n) openNote(n);
+    const snap = getSnapshot('/notes');
+    if (snap) {
+      search = snap.state.search ?? '';
+      viewMode = snap.state.viewMode ?? 'tree';
+      sortMode = snap.state.sortMode ?? 'edit-new';
+      allCollapsed = snap.state.allCollapsed ?? false;
+      if (snap.state.collapsedPaths) collapsed = new Set(snap.state.collapsedPaths);
+      if (snap.state.selectedNoteId) selectedId = snap.state.selectedNoteId;
     }
 
-    await tick();
-    if (listScrollEl) {
-      listScrollEl.scrollTop = viewMode === 'tree' ? treeScrollTop : listScrollTop;
-    }
+    loadNotes();
+
+    requestAnimationFrame(async () => {
+      await tick();
+      if (showNew) openNew();
+      if (selectedId) {
+        const n = $notes.find(n => String(n.id) === selectedId);
+        if (n) openNote(n);
+      } else if (typeof saved?.selectedNoteId === 'number') {
+        const n = $notes.find(note => note.id === saved.selectedNoteId);
+        if (n) openNote(n);
+      }
+      await tick();
+      if (listScrollEl) {
+        const snapScroll = snap?.scrollPositions;
+        listScrollEl.scrollTop = snapScroll?.['notes-list'] ?? (viewMode === 'tree' ? treeScrollTop : listScrollTop);
+      }
+    });
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
   });
+
+  function handleBeforeUnload() {
+    captureSnapshot('/notes', 
+      { search, viewMode, sortMode, allCollapsed, collapsedPaths: Array.from(collapsed), selectedNoteId: selectedNote?.id },
+      [{ id: 'notes-list', scrollTop: listScrollEl?.scrollTop ?? 0 }]
+    );
+  }
 
   // ── Resize ───────────────────────────────────────────────────────────────────
   function startResize(e: MouseEvent) {
@@ -527,6 +563,9 @@
                   </span>
                   <div class="t-icon"><DynamicIcon name={node.icon} size={13} color={node.color} pack={node.pack} /></div>
                   <span class="t-name folder-name">{node.name}</span>
+                  <button class="folder-settings-btn" title="Personalizar carpeta" on:click|stopPropagation={() => openFolderCustomizer(node)}>
+                    <Settings size={10} />
+                  </button>
                   <span class="t-count">{node.childCount}</span>
                 </div>
               {:else}
@@ -556,6 +595,33 @@
       {/if}
     </div>
   </aside>
+
+  <!-- Folder customize modal -->
+  {#if editingFolder}
+    <div class="folder-modal-backdrop" on:click={() => editingFolder = null}>
+      <div class="folder-modal" on:click|stopPropagation>
+        <h3 class="folder-modal-title">Personalizar carpeta</h3>
+        
+        <!-- Color bar -->
+        <div class="folder-color-row">
+          <span class="folder-label mono">Color</span>
+          <input type="color" class="folder-color-input" bind:value={folderColor} />
+          <input type="text" class="folder-hex-input mono" maxlength="7" bind:value={folderColor} />
+        </div>
+        
+        <!-- Icon picker -->
+        <div class="folder-icon-row">
+          <span class="folder-label mono">Icono</span>
+          <IconPicker selected={folderIcon} color={folderColor} onSelect={(ic) => folderIcon = ic} />
+        </div>
+        
+        <div class="folder-modal-btns">
+          <button on:click={() => editingFolder = null}>Cancelar</button>
+          <button on:click={() => { editingFolder = null; }}>Guardar</button>
+        </div>
+      </div>
+    </div>
+  {/if}
 
   <!-- ── Resize handle ─────────────────────────────────────────────────────── -->
   <!-- svelte-ignore a11y-no-static-element-interactions -->
@@ -810,8 +876,8 @@
   .new-btn {
     display: flex; align-items: center; justify-content: center;
     width: 26px; height: 26px; flex-shrink: 0;
-    background: var(--accent); border: none; border-radius: var(--r);
-    color: var(--bg); cursor: pointer; transition: opacity var(--t-fast);
+    background: var(--accent); border: 1px solid var(--accent); border-radius: var(--r);
+    color: var(--accent-contrast-text, var(--bg)); cursor: pointer;
   }
   .new-btn:hover { opacity: 0.8; }
 
@@ -920,7 +986,7 @@
     height: 42px;
   }
   .primary-dash-btn {
-    background: var(--xp); border-color: var(--xp); color: var(--bg); font-weight: 600;
+    background: var(--xp); border-color: var(--xp); color: var(--xp-contrast-text, var(--bg)); font-weight: 600;
   }
   .primary-dash-btn:hover { background: var(--xp-2); border-color: var(--xp-2); transform: translateY(-1px); }
 
@@ -1031,8 +1097,8 @@
   .calc-btn.sm { color: var(--text-muted); font-size: 10px; }
   .calc-btn.num { color: var(--text-primary); font-weight: 500; font-size: 13px; }
   .calc-btn.op { background: color-mix(in srgb, var(--xp-2) 16%, transparent); color: var(--xp-2); font-size: 14px; }
-  .calc-btn.clear { background: var(--xp); color: var(--bg); font-weight: 600; border-color: var(--xp); }
-  .calc-btn.equals { background: var(--xp-3); color: var(--bg); font-weight: 600; font-size: 14px; border-color: var(--xp-3); }
+  .calc-btn.clear { background: var(--xp); color: var(--xp-contrast-text, var(--bg)); font-weight: 600; border-color: var(--xp); }
+  .calc-btn.equals { background: var(--xp-3); color: var(--xp-contrast-text, var(--bg)); font-weight: 600; font-size: 14px; border-color: var(--xp-3); }
   .calc-btn.equals:hover { opacity: 0.8; transform: translateY(-1px); }
   .calc-btn:active { transform: scale(0.95); }
 
@@ -1041,5 +1107,129 @@
     border: 1px solid var(--border-light); border-radius: 4px; padding: 10px;
     color: var(--text-primary); font-family: var(--font-sans); font-size: 13px;
     outline: none; transition: border-color var(--t-fast);
+  }
+
+  /* Folder settings button */
+  .folder-settings-btn {
+    display: none;
+    padding: 2px;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 3px;
+    margin-left: 4px;
+  }
+  .folder-row:hover .folder-settings-btn {
+    display: flex;
+  }
+  .folder-settings-btn:hover {
+    color: var(--accent);
+    background: var(--border-light);
+  }
+
+  /* Folder customize modal */
+  .folder-modal-backdrop {
+    position: fixed; top: 50px; bottom: 50px; left: 0; right: 0;
+    z-index: 200;
+    background: rgba(0,0,0,0.6); backdrop-filter: blur(2px);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .folder-modal {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 20px;
+    display: flex; flex-direction: column; gap: 14px;
+    width: 100%;
+    height: 100%;
+    max-width: 800px;
+    min-height: 0;
+  }
+  .folder-modal-title {
+    font-size: 14px; font-weight: 600; color: var(--text-primary);
+    margin: 0;
+  }
+  .folder-label {
+    font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .folder-color-row {
+    display: flex; align-items: center; gap: 8px; width: 100%;
+  }
+  .folder-color-input {
+    flex: 1; height: 28px; border: 1px solid var(--border);
+    border-radius: 4px; cursor: pointer; padding: 0; background: none;
+  }
+  .folder-color-input::-webkit-color-swatch-wrapper {
+    padding: 0;
+  }
+  .folder-color-input::-webkit-color-swatch {
+    border: none; border-radius: 3px;
+  }
+  .folder-hex-input {
+    width: 60px; padding: 6px 8px; border: 1px solid var(--border);
+    border-radius: 4px; background: var(--bg); color: var(--text-primary);
+    font-size: 11px; text-align: center;
+    text-transform: uppercase;
+  }
+  .folder-icon-row {
+    display: flex; flex-direction: column; gap: 8px;
+    flex: 1;
+    min-height: 0;
+  }
+  .folder-icon-header {
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .folder-search-row {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 10px;
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 6px;
+  }
+  .folder-search-input {
+    background: transparent; border: none; outline: none;
+    font-size: 12px; color: var(--text-primary); width: 100%;
+  }
+  .folder-search-input::placeholder { color: var(--text-muted); }
+  .no-icons-msg {
+    grid-column: 1 / -1; text-align: center; color: var(--text-muted);
+    font-size: 12px; padding: 20px;
+  }
+  .folder-icon-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+    gap: 6px;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    align-content: start;
+  }
+  .folder-icon-btn {
+    width: 40px; height: 40px;
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid var(--border-light); border-radius: 6px; background: var(--bg);
+    color: var(--text-muted); cursor: pointer; transition: all var(--t-fast);
+  }
+  .folder-icon-btn:hover {
+    border-color: var(--border); color: var(--text-primary);
+  }
+  .folder-icon-btn.selected {
+    border-color: var(--xp); color: var(--xp); background: color-mix(in srgb, var(--xp) 12%, transparent);
+  }
+  .folder-modal-btns {
+    display: flex; gap: 8px; margin-top: 6px;
+  }
+  .folder-modal-btns button {
+    flex: 1; padding: 8px; border-radius: 5px; font-size: 12px;
+    cursor: pointer; border: 1px solid var(--border);
+    background: var(--bg); color: var(--text-secondary);
+  }
+  .folder-modal-btns button:first-child:hover {
+    border-color: var(--text-muted); color: var(--text-primary);
+  }
+  .folder-modal-btns button:last-child {
+    background: var(--xp); border-color: var(--xp);
+    color: var(--xp-contrast-text, var(--bg));
+  }
+  .folder-modal-btns button:last-child:hover {
+    opacity: 0.85;
   }
 </style>
