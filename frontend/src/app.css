@@ -55,9 +55,9 @@
   --s8: 64px;
 
   /* Transitions */
-  --t-fast:   100ms ease-out;
-  --t-normal: 150ms ease-out;
-  --t-slow:   300ms ease-out;
+  --t-fast:   50ms ease-out;
+  --t-normal: 80ms ease-out;
+  --t-slow:   120ms ease-out;
 
   /* Border radius */
   --r: 4px;
@@ -258,8 +258,14 @@ h4 { font-size: 14px; font-weight: 500; }
 
 .btn-primary {
   background: var(--xp);
-  color: var(--bg);
+  color: var(--xp-contrast-text, var(--bg));
   border-color: var(--xp);
+}
+
+.btn-primary:hover {
+  background: var(--xp-2);
+  color: var(--xp-contrast-text, var(--bg));
+  border-color: var(--xp-2);
 }
 
 .btn-primary:hover {
@@ -484,4 +490,10 @@ textarea.input {
 .resize-handle.static:hover {
   background: transparent;
   border-left-color: var(--border);
+}
+
+/* Global Implicit Keyboard Navigation Focus */
+:focus-visible {
+  outline: 2px solid var(--xp);
+  outline-offset: 2px;
 }

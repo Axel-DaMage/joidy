@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from config import settings
 from models.gamification import StreakRecord, UserStats, XPEvent
+from services.response_cache import clear_api_caches
 
 logger = logging.getLogger(__name__)
 
@@ -210,6 +211,7 @@ def process_event(
 
     db.commit()
     db.refresh(stats)
+    clear_api_caches()
 
     return GamificationResult(
         xp_awarded=xp,

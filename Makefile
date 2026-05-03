@@ -98,3 +98,6 @@ db-health: ## Verify migration head and required core tables
 
 test-api: ## Run API unit tests for remediation scenarios
 	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm api sh -c "PYTHONPATH=/app python -m unittest tests.test_embedding_retry tests.test_gamification_config tests.test_tag_graph_service"
+
+fix-permissions: ## Fix project permissions (run once with sudo make fix-permissions)
+	sudo bash scripts/fix-permissions.sh

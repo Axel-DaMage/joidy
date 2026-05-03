@@ -12,6 +12,7 @@ import asyncio
 import logging
 import re
 from datetime import datetime
+from dataclasses import dataclass
 from pathlib import Path
 
 import httpx
@@ -24,6 +25,13 @@ logger = logging.getLogger(__name__)
 
 JOIDY_DIR = "_joidy"
 DEBOUNCE_SECONDS = 2.0
+QUEUE_FLUSH_INTERVAL = 0.5
+
+
+@dataclass(frozen=True)
+class VaultEvent:
+    path: str
+    change_type: Change
 
 
 def _is_joidy_file(path: str) -> bool:
@@ -78,7 +86,7 @@ async def delete_note_by_path(path: str, client: httpx.AsyncClient):
             await asyncio.sleep(1 * (attempt + 1))
 
 
-async def import_or_update_note(filepath: Path, client: httpx.AsyncClient):
+async def import_or_update_note(filepath: Path, client: httpx.AsyncClient, *, bulk_import: bool = False):
     try:
         if not filepath.exists():
             return
@@ -107,19 +115,18 @@ async def import_or_update_note(filepath: Path, client: httpx.AsyncClient):
                 if attempt == 2: raise
                 await asyncio.sleep(1)
         
-        # Rename detection: if not found by path, try by title
-        if not existing:
-            r_title = await client.get(f"{settings.api_url}/notes/", params={"limit": 5}) # Search by title is not direct, but we can check recent
-            # For simplicity, we assume if path is new, it's a new or rename.
-            # A more robust check would be an API endpoint `GET /notes/find?title=...`
-            pass
-
         payload = {"title": title, "content": content, "tags": tags, "source": "obsidian", "source_path": str(filepath)}
+        headers = {"X-Bulk-Import": "1"} if bulk_import else None
 
         if existing:
-            await client.put(f"{settings.api_url}/notes/{existing['id']}", json={"title": title, "content": content, "tags": tags, "source": "obsidian", "source_path": str(filepath)}, timeout=10.0)
+            await client.put(
+                f"{settings.api_url}/notes/{existing['id']}",
+                json={"title": title, "content": content, "tags": tags, "source": "obsidian", "source_path": str(filepath)},
+                headers=headers,
+                timeout=10.0,
+            )
         else:
-            await client.post(f"{settings.api_url}/notes/", json=payload, timeout=10.0)
+            await client.post(f"{settings.api_url}/notes/", json=payload, headers=headers, timeout=10.0)
 
         logger.info("[vault] Synced: %s", filepath.name)
 
@@ -131,9 +138,46 @@ async def initial_scan(vault_path: Path, client: httpx.AsyncClient):
     """On startup, import all .md files not in _joidy/."""
     md_files = [p for p in vault_path.rglob("*.md") if not _is_joidy_file(str(p))]
     logger.info("[vault] Initial scan: %s markdown files found", len(md_files))
-    for filepath in md_files:
-        await import_or_update_note(filepath, client)
-        await asyncio.sleep(0.1)  # Don't hammer the API
+
+    semaphore = asyncio.Semaphore(8)
+
+    async def process_file(filepath: Path):
+        async with semaphore:
+            await import_or_update_note(filepath, client, bulk_import=True)
+
+    await asyncio.gather(*(process_file(filepath) for filepath in md_files))
+    await client.post(f"{settings.api_url}/notes/rebuild-derived", timeout=30.0)
+
+
+async def _consume_vault_events(
+    queue: asyncio.Queue[VaultEvent],
+    client: httpx.AsyncClient,
+):
+    while True:
+        try:
+            first_event = await queue.get()
+            pending: dict[str, Change] = {first_event.path: first_event.change_type}
+
+            while True:
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=QUEUE_FLUSH_INTERVAL)
+                    pending[event.path] = event.change_type
+                except asyncio.TimeoutError:
+                    break
+
+            await asyncio.sleep(DEBOUNCE_SECONDS)
+
+            async def process(path: str, change_type: Change):
+                if change_type == Change.deleted:
+                    await delete_note_by_path(path, client)
+                else:
+                    await import_or_update_note(Path(path), client)
+
+            await asyncio.gather(*(process(path, change_type) for path, change_type in pending.items()))
+        except asyncio.TimeoutError:
+            continue
+        except asyncio.CancelledError:
+            return
 
 
 async def watch_vault():
@@ -144,25 +188,20 @@ async def watch_vault():
 
     logger.info("[vault] Watching: %s", vault_path)
 
-    # Pending debounce: path → asyncio.Task
-    pending: dict[str, asyncio.Task] = {}
-
     async with httpx.AsyncClient() as client:
         # Initial scan on startup
         await initial_scan(vault_path, client)
 
-        async for changes in awatch(str(vault_path)):
-            for change_type, path in changes:
-                if not path.endswith(".md"):
-                    continue
-                if _is_joidy_file(path):
-                    continue  # Never import _joidy/ files
-                async def process(p=path, ct=change_type):
-                    await asyncio.sleep(DEBOUNCE_SECONDS)
-                    if ct == Change.deleted:
-                        await delete_note_by_path(p, client)
-                    else:
-                        await import_or_update_note(Path(p), client)
-                    pending.pop(p, None)
+        queue: asyncio.Queue[VaultEvent] = asyncio.Queue()
+        consumer = asyncio.create_task(_consume_vault_events(queue, client), name="vault_event_consumer")
 
-                pending[path] = asyncio.create_task(process())
+        try:
+            async for changes in awatch(str(vault_path)):
+                for change_type, path in changes:
+                    if not path.endswith(".md"):
+                        continue
+                    if _is_joidy_file(path):
+                        continue  # Never import _joidy/ files
+                    await queue.put(VaultEvent(path=path, change_type=change_type))
+        finally:
+            consumer.cancel()

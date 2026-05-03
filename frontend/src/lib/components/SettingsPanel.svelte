@@ -34,6 +34,73 @@
     ? $accentColors[0]
     : `linear-gradient(to right, ${$accentColors.join(', ')})`;
 
+  let offsetPx = 0;
+  let isDragging = false;
+  let startX = 0;
+  let baseColors: string[] = [];
+
+  function getFloatedColors(): string[] {
+    if (baseColors.length < 2) return $accentColors;
+    const n = baseColors.length;
+    const pxPerColor = 120;
+    const fullShift = offsetPx / pxPerColor;
+    const result: string[] = [];
+    for (let i = 0; i < n; i++) {
+      const targetIdx = i + fullShift;
+      const lo = Math.floor(targetIdx);
+      const hi = lo + 1;
+      const t = targetIdx - lo;
+      const loIdx = ((lo % n) + n) % n;
+      const hiIdx = ((hi % n) + n) % n;
+      result.push(lerp(baseColors[loIdx], baseColors[hiIdx], t));
+    }
+    return result;
+  }
+
+  function lerp(c1: string, c2: string, t: number): string {
+    const r1 = parseInt(c1.slice(1,3), 16);
+    const g1 = parseInt(c1.slice(3,5), 16);
+    const b1 = parseInt(c1.slice(5,7), 16);
+    const r2 = parseInt(c2.slice(1,3), 16);
+    const g2 = parseInt(c2.slice(3,5), 16);
+    const b2 = parseInt(c2.slice(5,7), 16);
+    const r = Math.round(r1 + (r2 - r1) * t);
+    const g = Math.round(g1 + (g2 - g1) * t);
+    const b = Math.round(b1 + (b2 - b1) * t);
+    return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
+  }
+
+  function onGradientMouseDown(e: MouseEvent) {
+    isDragging = true;
+    startX = e.clientX;
+    baseColors = [...$accentColors];
+    window.addEventListener('mousemove', onGradientMouseMove);
+    window.addEventListener('mouseup', onGradientMouseUp);
+  }
+
+  function onGradientMouseMove(e: MouseEvent) {
+    if (!isDragging) return;
+    offsetPx = e.clientX - startX;
+  }
+
+  function onGradientMouseUp() {
+    isDragging = false;
+    const pxPerColor = 120;
+    const steps = Math.round(offsetPx / pxPerColor);
+    if (steps !== 0 && baseColors.length > 0) {
+      const n = baseColors.length;
+      const rotated: string[] = [];
+      for (let i = 0; i < n; i++) {
+        rotated.push(baseColors[(i + steps) % n]);
+      }
+      rotated.forEach((c, i) => accentColors.setColor(i, c));
+    }
+    offsetPx = 0;
+    baseColors = [];
+    window.removeEventListener('mousemove', onGradientMouseMove);
+    window.removeEventListener('mouseup', onGradientMouseUp);
+  }
+
   function close() {
     dispatch('close');
   }
@@ -88,7 +155,13 @@
           </div>
 
           <!-- Gradient preview bar -->
-          <div class="gradient-preview" style="background: {gradientPreview};"></div>
+          <!-- svelte-ignore a11y-no-static-element-interactions -->
+          <div 
+            class="gradient-preview" 
+            style="background: {gradientPreview}; cursor: grab;"
+            on:mousedown={onGradientMouseDown}
+            class:dragging={isDragging}
+          ></div>
           <p class="color-limit-note mono">Máximo {MAX_COLORS} colores</p>
 
           <!-- Per-color rows -->
@@ -426,10 +499,32 @@
 
   /* ── Accent gradient builder ── */
   .gradient-preview {
-    height: 6px;
-    border-radius: 3px;
+    height: 24px;
+    border-radius: 4px;
     margin: 8px 0 10px;
     transition: background 300ms ease;
+    overflow-x: auto;
+    overflow-y: hidden;
+    white-space: nowrap;
+    scrollbar-width: thin;
+    scrollbar-color: var(--text-disabled) transparent;
+  }
+
+  .gradient-preview::-webkit-scrollbar {
+    height: 4px;
+  }
+
+  .gradient-preview::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .gradient-preview::-webkit-scrollbar-thumb {
+    background: var(--text-disabled);
+    border-radius: 2px;
+  }
+
+  .gradient-preview.dragging {
+    cursor: grabbing;
   }
 
   .color-limit-note {

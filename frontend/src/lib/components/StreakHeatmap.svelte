@@ -12,6 +12,8 @@
     onselect = (_date: string) => {},
     /** allow navigating N months into the future (0 = only up to current month) */
     maxFutureMonths = 0,
+    /** If true, hide the view selection tabs */
+    hideTabs = false,
   }: {
     history?: StreakDay[];
     color?: string;
@@ -20,10 +22,25 @@
     selectedDate?: string | null;
     onselect?: (date: string) => void;
     maxFutureMonths?: number;
+    hideTabs?: boolean;
   } = $props();
 
   type ViewMode = "week" | "month" | "year";
-  let view: ViewMode = $state("year");
+
+  function getInitialView(): ViewMode {
+    if (typeof localStorage === 'undefined') return "year";
+    const saved = localStorage.getItem('goals.historyView');
+    if (saved === 'week' || saved === 'month' || saved === 'year') return saved;
+    return "year";
+  }
+
+  let view: ViewMode = $state(getInitialView());
+
+  $effect(() => {
+    if (typeof localStorage !== 'undefined' && view) {
+      localStorage.setItem('goals.historyView', view);
+    }
+  });
 
   const today = new Date();
 
@@ -143,7 +160,10 @@
   function shiftYearMonth(offset: number) {
     const nextCursor = new Date(yearCursor.getFullYear(), yearCursor.getMonth() + offset, 1);
     if (monthKey(nextCursor) < monthKey(minYearMonth)) return;
-    if (monthKey(nextCursor) > monthKey(currentMonthStart)) return;
+    
+    const maxFuture = (maxFutureMonths && !Number.isNaN(maxFutureMonths)) ? maxFutureMonths : 0;
+    if (monthKey(nextCursor) > monthKey(currentMonthStart) + maxFuture) return;
+    
     yearCursor = nextCursor;
   }
 
@@ -165,7 +185,7 @@
   const monthGrid = $derived(getMonthGrid(dayDataMap));
   const yearGrid = $derived(getMonthGrid(dayDataMap, yearCursor));
   const canGoPrev = $derived(monthKey(yearCursor) > monthKey(minYearMonth));
-  const canGoNext = $derived(() => {
+  const canGoNext = $derived.by(() => {
     if (maxFutureMonths && !Number.isNaN(maxFutureMonths)) {
       return monthKey(yearCursor) < monthKey(currentMonthStart) + Math.max(0, maxFutureMonths);
     }
@@ -179,11 +199,13 @@
 <svelte:window onkeydown={handleYearKeyboardNav} />
 
 <div class="activity" style="--ac: {color};">
-  <div class="tabs">
-    <button class="tab" class:on={view === "week"} onclick={() => (view = "week")}>Semana</button>
-    <button class="tab" class:on={view === "month"} onclick={() => (view = "month")}>Mes</button>
-    <button class="tab" class:on={view === "year"} onclick={() => (view = "year")}>Año</button>
-  </div>
+  {#if !hideTabs}
+    <div class="tabs">
+      <button class="tab" class:on={view === "week"} onclick={() => (view = "week")}>Semana</button>
+      <button class="tab" class:on={view === "month"} onclick={() => (view = "month")}>Mes</button>
+      <button class="tab" class:on={view === "year"} onclick={() => (view = "year")}>Año</button>
+    </div>
+  {/if}
 
   <div class="view-title-row">
     {#if view === "week"}
@@ -191,7 +213,23 @@
     {:else if view === "month"}
       <span class="title">{MONTH_LABEL}</span>
     {:else}
+      <button
+        class="nav-btn"
+        class:disabled={!canGoPrev}
+        onclick={() => shiftYearMonth(-1)}
+        disabled={!canGoPrev}
+      >
+        ‹
+      </button>
       <span class="title">{YEAR_LABEL}</span>
+      <button
+        class="nav-btn"
+        class:disabled={!canGoNext}
+        onclick={() => shiftYearMonth(1)}
+        disabled={!canGoNext}
+      >
+        ›
+      </button>
     {/if}
   </div>
 
@@ -279,15 +317,6 @@
       </div>
     {:else}
       <div class="year-wrap">
-        <button
-          class="nav-btn nav-side nav-prev"
-          class:disabled={!canGoPrev}
-          onclick={() => shiftYearMonth(-1)}
-          aria-label="Mes anterior"
-          disabled={!canGoPrev}
-        >
-          ‹
-        </button>
         <div class="month-wrap">
           <div class="mhdr">
             {#each DAY_NAMES as label}
@@ -327,15 +356,6 @@
             </div>
           </div>
         </div>
-        <button
-          class="nav-btn nav-side nav-next"
-          class:disabled={!canGoNext}
-          onclick={() => shiftYearMonth(1)}
-          aria-label="Mes siguiente"
-          disabled={!canGoNext}
-        >
-          ›
-        </button>
       </div>
     {/if}
   </div>
@@ -396,18 +416,21 @@
   }
 
   .view-title-row {
-    min-height: 18px;
+    min-height: 32px;
     display: flex;
     align-items: center;
     justify-content: center;
+    gap: 16px;
+    width: 100%;
   }
 
   .title {
-    font-size: 12px;
+    font-size: 13px;
     font-family: var(--font-mono);
     color: var(--ac);
-    letter-spacing: 0.08em;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
+    font-weight: 600;
   }
 
   .week-wrap,
@@ -602,37 +625,25 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 30px;
-    height: 30px;
-    border: 1px solid var(--border-light);
+    width: 28px;
+    height: 28px;
+    border: 1px solid var(--border);
     border-radius: 4px;
-    background: var(--surface);
+    background: var(--surface-sub);
     color: var(--text-muted);
-    font-size: 18px;
+    font-size: 16px;
     line-height: 1;
     cursor: pointer;
-    transition: color 0.15s, border-color 0.15s;
+    transition: all 0.2s;
   }
 
-  .nav-side {
-    position: absolute;
-    top: 50%;
-    transform: translateY(-50%);
-    z-index: 2;
-  }
-
-  .nav-prev { left: 0; transform: translate(-145%, -50%); }
-  .nav-next { right: 0; transform: translate(145%, -50%); }
-
-  .nav-btn:hover { color: var(--ac); border-color: var(--ac); }
+  .nav-btn:hover { color: var(--ac); border-color: var(--ac); background: var(--surface-hover); }
 
   .nav-btn.disabled,
   .nav-btn:disabled {
-    opacity: 0.35;
+    opacity: 0.2;
     cursor: not-allowed;
     color: var(--text-disabled);
     border-color: var(--border);
   }
-
-  .nav-btn:disabled:hover { color: var(--text-disabled); border-color: var(--border); }
 </style>

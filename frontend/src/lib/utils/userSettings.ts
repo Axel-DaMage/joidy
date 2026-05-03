@@ -25,6 +25,34 @@ export interface UserSettings {
 
 const KEY = 'joidy-user-settings-v1';
 
+const CACHE_KEYS = {
+  notes: 'joidy_data_notes',
+  streaks: 'joidy_data_streaks',
+  goals: 'joidy_data_goals',
+  stats: 'joidy_data_stats',
+  tags: 'joidy_data_tags',
+} as const;
+
+export function getCachedData<T>(key: keyof typeof CACHE_KEYS): T | null {
+  if (typeof sessionStorage === 'undefined') return null;
+  try {
+    const raw = sessionStorage.getItem(CACHE_KEYS[key]);
+    if (!raw) return null;
+    const cached = JSON.parse(raw) as { data: T; ts: number };
+    if (Date.now() - cached.ts > 300000) return null;
+    return cached.data;
+  } catch {
+    return null;
+  }
+}
+
+export function setCachedData<T>(key: keyof typeof CACHE_KEYS, data: T): void {
+  if (typeof sessionStorage === 'undefined') return;
+  try {
+    sessionStorage.setItem(CACHE_KEYS[key], JSON.stringify({ data, ts: Date.now() }));
+  } catch {}
+}
+
 export function loadUserSettings(): UserSettings {
   if (typeof localStorage === 'undefined') return {};
   try {

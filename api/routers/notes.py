@@ -1,8 +1,8 @@
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Header
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from database import get_db
 from models.note import EmbeddingFailure, Note, NoteTag, Tag
@@ -13,6 +13,7 @@ from services.note_service import (
     delete_note as delete_note_service,
     list_backlinks as list_backlinks_service,
     note_to_response,
+    rebuild_derived_data as rebuild_note_derived_data,
     update_note as update_note_service,
 )
 
@@ -47,6 +48,10 @@ class NoteResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+def _is_truthy_header(value: str | None) -> bool:
+    return value is not None and value.lower() in {"1", "true", "yes", "on"}
+
+
 @router.get("/")
 def list_notes(
     skip: int = 0,
@@ -55,7 +60,7 @@ def list_notes(
     source_path: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
-    query = db.query(Note)
+    query = db.query(Note).options(selectinload(Note.tags).selectinload(NoteTag.tag))
     if tag:
         query = query.join(NoteTag).join(Tag).filter(Tag.name == tag.lower())
     if source_path:
@@ -66,16 +71,22 @@ def list_notes(
 
 @router.get("/{note_id}")
 def get_note(note_id: int, db: Session = Depends(get_db)):
-    note = db.query(Note).filter(Note.id == note_id).first()
+    note = (
+        db.query(Note)
+        .options(selectinload(Note.tags).selectinload(NoteTag.tag))
+        .filter(Note.id == note_id)
+        .first()
+    )
     if not note:
         raise HTTPException(status_code=404, detail="Note not found")
     return note_to_response(note)
 
 
 @router.post("/", status_code=201)
-async def create_note(
+def create_note(
     data: NoteCreate,
     background_tasks: BackgroundTasks,
+    x_bulk_import: str | None = Header(default=None, alias="X-Bulk-Import"),
     db: Session = Depends(get_db),
 ):
     note, gami = create_note_service(
@@ -85,16 +96,18 @@ async def create_note(
         tags=data.tags,
         source=data.source,
         source_path=data.source_path,
+        rebuild_derived_data=not _is_truthy_header(x_bulk_import),
     )
     background_tasks.add_task(trigger_embedding, note.id, note.content)
     return {**note_to_response(note), "gamification": vars(gami)}
 
 
 @router.put("/{note_id}")
-async def update_note(
+def update_note(
     note_id: int,
     data: NoteUpdate,
     background_tasks: BackgroundTasks,
+    x_bulk_import: str | None = Header(default=None, alias="X-Bulk-Import"),
     db: Session = Depends(get_db),
 ):
     note, gami = update_note_service(
@@ -105,11 +118,18 @@ async def update_note(
         tags=data.tags,
         source_path=data.source_path,
         source=data.source,
+        rebuild_derived_data=not _is_truthy_header(x_bulk_import),
     )
     if note is None or gami is None:
         raise HTTPException(status_code=404, detail="Note not found")
     background_tasks.add_task(trigger_embedding, note.id, note.content)
     return {**note_to_response(note), "gamification": vars(gami)}
+
+
+@router.post("/rebuild-derived", status_code=202)
+def rebuild_derived(db: Session = Depends(get_db)):
+    rebuild_note_derived_data(db)
+    return {"status": "ok"}
 
 
 @router.delete("/{note_id}", status_code=204)
@@ -134,7 +154,7 @@ def get_backlinks(note_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/embeddings/retry-failed")
-async def retry_failed_embeddings(
+def retry_failed_embeddings(
     background_tasks: BackgroundTasks,
     limit: int = 20,
     db: Session = Depends(get_db),

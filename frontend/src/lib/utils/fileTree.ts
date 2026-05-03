@@ -152,7 +152,16 @@ interface RawNode {
 
 export type SortMode = 'az' | 'za' | 'edit-new' | 'edit-old' | 'create-new' | 'create-old';
 
-export function buildTree(notes: Note[], search = '', showTrash = false, showHidden = false, sortMode: SortMode = 'az'): TreeNode[] {
+export interface FolderMetaMap { [path: string]: { icon: string; color: string } }
+
+export function buildTree(
+  notes: Note[], 
+  search = '', 
+  showTrash = false, 
+  showHidden = false, 
+  sortMode: SortMode = 'az',
+  folderMeta: FolderMetaMap = {}
+): TreeNode[] {
   const root: Record<string, RawNode> = {};
 
   const filtered = search
@@ -190,30 +199,34 @@ export function buildTree(notes: Note[], search = '', showTrash = false, showHid
     }
   }
 
-  return rawToTreeNodes(root, '', sortMode);
+  return rawToTreeNodes(root, '', sortMode, folderMeta);
 }
 
-function rawToTreeNodes(map: Record<string, RawNode>, parentPath: string, sortMode: SortMode): TreeNode[] {
+function rawToTreeNodes(map: Record<string, RawNode>, parentPath: string, sortMode: SortMode, folderMeta: FolderMetaMap): TreeNode[] {
   return Object.entries(map)
     .map(([key, raw]) => {
       const path = parentPath ? `${parentPath}/${key}` : key;
       if (raw.type === 'folder') {
-        const children = rawToTreeNodes(raw.children, path, sortMode);
+        const children = rawToTreeNodes(raw.children, path, sortMode, folderMeta);
+        const meta = folderMeta[path];
         return {
           type: 'folder' as const,
           name: raw.name,
           path,
-          icon: getFolderIcon(raw.name),
+          icon: meta?.icon || getFolderIcon(raw.name),
+          color: meta?.color,
           children,
         };
       } else {
         const fm = raw.note ? extractFrontmatter(raw.note.content) : { icon: null, color: null, pack: null };
+        const key = raw.note?.source_path || path;
+        const fileMeta = folderMeta[key];
         return {
           type: 'file' as const,
           name: raw.name,
           path,
-          icon: fm.icon || getFileIcon(raw.note?.title ?? '', raw.note?.content ?? ''),
-          color: fm.color || undefined,
+          icon: fileMeta?.icon || fm.icon || getFileIcon(raw.note?.title ?? '', raw.note?.content ?? ''),
+          color: fileMeta?.color || fm.color || undefined,
           pack: fm.pack || undefined,
           note: raw.note,
           children: [],

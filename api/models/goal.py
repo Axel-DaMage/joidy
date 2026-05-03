@@ -46,6 +46,7 @@ class Goal(Base):
     
     target_value: Mapped[float] = mapped_column(Float, default=1.0)
     current_value: Mapped[float] = mapped_column(Float, default=0.0)
+    max_assignment_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     
     state: Mapped[GoalState] = mapped_column(Enum(GoalState), default=GoalState.ACTIVE)
     fail_config: Mapped[GoalFailConfig] = mapped_column(Enum(GoalFailConfig), default=GoalFailConfig.STATIC)
@@ -63,6 +64,8 @@ class Goal(Base):
     is_completed: Mapped[bool] = mapped_column(Boolean, default=False)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     
+    source_path: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 

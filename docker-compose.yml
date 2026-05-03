@@ -34,6 +34,10 @@ services:
       - APP_ENV=${APP_ENV:-development}
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}
       - GITHUB_USERNAME=${GITHUB_USERNAME:-}
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID:-}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET:-}
+      - WEB_CONCURRENCY=${WEB_CONCURRENCY:-2}
+      - UVICORN_TIMEOUT_KEEP_ALIVE=${UVICORN_TIMEOUT_KEEP_ALIVE:-5}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s

@@ -4,11 +4,13 @@
   import { onMount } from 'svelte';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
   import SettingsPanel from '$lib/components/SettingsPanel.svelte';
-  import { api } from '$lib/api';
+  import { api, type Goal, type PersonalStreak } from '$lib/api';
   import { totalXP, loadStats, pingActivity, globalLevel, nextStageXP } from '$lib/stores/gamification';
   import { running, secondsLeft, phase } from '$lib/stores/pomodoro';
   import { initPomodoroSettings } from '$lib/stores/pomodoro';
   import { accentColors, activeIconPack, use24HourClock } from '$lib/stores/settings';
+  import { getCachedData, setCachedData } from '$lib/utils/userSettings';
+  import { initKeyboardNavigation } from '$lib/utils/keyboardNavigation';
 
   const navItems = [
     { href: '/',        label: 'Dashboard', icon: 'Home' },
@@ -41,11 +43,22 @@
     accentColors.init();
     activeIconPack.init();
     initPomodoroSettings();
+    initKeyboardNavigation();
 
     const loadFooterStats = async () => {
+      const cachedGoals = getCachedData<Goal[]>('goals');
+      const cachedStreaks = getCachedData<PersonalStreak[]>('streaks');
+      if (cachedGoals) {
+        pendingTasks = cachedGoals.filter((goal: Goal) => !goal.is_completed).length;
+      }
+      if (cachedStreaks) {
+        pendingStreaks = cachedStreaks.filter((streak: PersonalStreak) => !streak.today_checked && !streak.is_archived).length;
+      }
+      
       try {
         const goals = await api.goals.list();
         pendingTasks = goals.filter((goal) => !goal.is_completed).length;
+        setCachedData('goals', goals);
       } catch (e) {
         console.error('[layout] goals list failed:', e);
       }
@@ -53,18 +66,18 @@
       try {
         const streaks = await api.personalStreaks.list({ include_archived: false });
         pendingStreaks = streaks.filter((streak) => !streak.today_checked && !streak.is_archived).length;
+        setCachedData('streaks', streaks);
       } catch (e) {
         console.error('[layout] personal streaks list failed:', e);
       }
     };
 
     const init = async () => {
-      await loadFooterStats();
-      try { await loadStats(); } catch (e) { console.error('[layout] loadStats failed:', e); }
-      try { await pingActivity(); } catch (e) { console.error('[layout] pingActivity failed:', e); }
+      loadFooterStats().catch(() => {});
+      loadStats().catch(() => {});
+      pingActivity().catch(() => {});
     };
-
-    init().catch((e) => console.error('[layout] init failed:', e));
+    requestAnimationFrame(() => init());
 
     const handleStreaksUpdated = () => {
       loadFooterStats().catch((e) => console.error('[layout] footer stats refresh failed:', e));

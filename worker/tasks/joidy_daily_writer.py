@@ -19,9 +19,11 @@ async def write_joidy_files():
     """Call the API to trigger writing of all _joidy/ files."""
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
-            await client.post(f"{settings.api_url}/vault/write-daily")
-            await client.post(f"{settings.api_url}/vault/write-objectives")
-            await client.post(f"{settings.api_url}/vault/write-skills")
+            await asyncio.gather(
+                client.post(f"{settings.api_url}/vault/write-daily"),
+                client.post(f"{settings.api_url}/vault/write-objectives"),
+                client.post(f"{settings.api_url}/vault/write-skills"),
+            )
             logger.info("[writer] _joidy/ files updated at %s", datetime.now().isoformat())
         except Exception as e:
             logger.exception("[writer] Failed to write _joidy/ files: %s", e)

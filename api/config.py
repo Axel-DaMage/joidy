@@ -9,8 +9,16 @@ class Settings(BaseSettings):
     worker_url: str = "http://worker:8001"
     secret_key: str = "dev_secret_change_me"
     app_env: str = "development"
+    
+    # GitHub Integration (OAuth - Device Flow)
+    github_client_id: str = ""
+    github_client_secret: str = ""
+    github_oauth_web_url: str = ""
     github_token: str = ""
     github_username: str = ""
+    github_webhook_url: str = ""
+    
+    # AI & Embeddings
     embedding_retry_max_attempts: int = 8
     embedding_retry_base_seconds: int = 60
     xp_table_json: str = ""

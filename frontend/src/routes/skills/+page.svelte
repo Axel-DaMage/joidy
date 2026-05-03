@@ -201,7 +201,7 @@
   [data-level='apprentice'] { color: var(--text-secondary); border: 1px solid var(--border); }
   [data-level='journeyman'] { color: var(--text-secondary); border: 1px solid var(--border); }
   [data-level='expert'] { color: var(--accent); border: 1px solid var(--text-secondary); }
-  [data-level='master'] { color: var(--bg); background: var(--accent); border: 1px solid var(--accent); }
+  [data-level='master'] { color: var(--accent-contrast-text, var(--bg)); background: var(--accent); border: 1px solid var(--accent); }
   [data-level='locked'] { color: var(--text-muted); border: 1px dashed var(--border); opacity: 0.5; }
 
   .legend {

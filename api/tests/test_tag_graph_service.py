@@ -5,7 +5,7 @@ import unittest
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
-from services.tag_graph import rebuild_tag_cooccurrences
+from services.tag_graph import rebuild_tag_cooccurrences, sync_tag_cooccurrences_for_tags
 
 
 class TagGraphServiceTests(unittest.TestCase):
@@ -52,6 +52,22 @@ class TagGraphServiceTests(unittest.TestCase):
             ).fetchall()
 
         self.assertEqual(rows, [(1, 2, 2)])
+
+    def test_incremental_sync_updates_only_affected_pairs(self) -> None:
+        with self.engine.begin() as conn:
+            conn.execute(text("INSERT INTO note_tags (note_id, tag_id) VALUES (4, 1), (4, 2)"))
+
+        with self.SessionLocal() as db:
+            sync_tag_cooccurrences_for_tags(db, {1, 2})
+            db.commit()
+            rows = db.execute(
+                text(
+                    "SELECT tag_a_id, tag_b_id, weight "
+                    "FROM tag_cooccurrences ORDER BY tag_a_id, tag_b_id"
+                )
+            ).fetchall()
+
+        self.assertEqual(rows, [(1, 2, 3)])
 
 
 if __name__ == "__main__":

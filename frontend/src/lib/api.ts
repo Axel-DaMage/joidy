@@ -85,6 +85,7 @@ export interface Goal {
   id: number;
   title: string;
   description: string;
+  source_path: string | null;
   temporality: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'ANNUAL';
   measurement_type: 'COUNT' | 'BOOLEAN' | 'PERCENT';
   target_value: number;
@@ -97,6 +98,7 @@ export interface Goal {
   note_id: number | null;
   tag_id: number | null;
   parent_id: number | null;
+  max_assignment_days: number | null;
   progress_pct: number;
   pending_removal: boolean;
   is_completed: boolean;
@@ -193,7 +195,8 @@ export const api = {
 
   goals: {
     list:     ()                    => req<Goal[]>('GET', '/goals/'),
-    create:   (data: { title: string; description?: string; temporality?: string; measurement_type?: string; target_value?: number; fail_config?: string; fail_emoji?: string; color?: string; theme?: string; tag_id?: number | null; note_id?: number | null; parent_id?: number | null }) =>
+    get:      (id: number)        => req<Goal>('GET', `/goals/${id}`),
+    create:   (data: { title: string; description?: string; temporality?: string; measurement_type?: string; target_value?: number; fail_config?: string; fail_emoji?: string; color?: string; theme?: string; tag_id?: number | null; note_id?: number | null; parent_id?: number | null; max_assignment_days?: number | null }) =>
       req<Goal>('POST', '/goals/', data),
     update:   (id: number, data: Partial<Goal>) => req<Goal>('PUT', `/goals/${id}`, data),
     complete: (id: number) =>
@@ -202,6 +205,9 @@ export const api = {
     streak:   () => req<{ current_streak: number; best_streak: number }>('GET', '/goals/streak'),
     resolveRemoval: (id: number, action: 'delete' | 'manual' | 'cancel') =>
       req<Goal | { status: string }>('POST', `/goals/${id}/resolve-removal`, { action }),
+    getContent:  (id: number) => req<{ title: string; content: string; temporality?: string; measurement_type?: string; state?: string; fail_config?: string; fail_emoji?: string; color?: string }>('GET', `/goals/${id}/content`),
+    saveContent: (id: number, data: { title: string; content: string; temporality?: string; measurement_type?: string; target_value?: number; state?: string; fail_config?: string; fail_emoji?: string; color?: string; theme?: string; note_id?: number | null; tag_id?: number | null; parent_id?: number | null; max_assignment_days?: number | null; description?: string }) =>
+      req<Goal>('POST', `/goals/${id}/content`, data),
   },
 
   planning: {
@@ -247,8 +253,10 @@ export const api = {
     usage: () => req<{ ai_enabled: boolean; estimated_cost_usd: number }>('GET', '/ai/usage'),
   },
 
-  github: {
+github: {
     status: () => req<{ connected: boolean; username: string | null }>('GET', '/integrations/github/status'),
-    issues: () => req<{ id: number; number: number; title: string; repo: string; url: string; labels: string[]; updated_at: string }[]>('GET', '/integrations/github/issues'),
+    issues: (filter: string = 'all') => req<{ issues: { id: number; number: number; title: string; repo: string; url: string; state: string; updated_at: string; author?: string }[]; stats: { total: number; open: number; closed: number }; filter: string }>('GET', `/integrations/github/issues?filter=${filter}`),
+    pulls: (filter: string = 'all') => req<{ pulls: { id: number; number: number; title: string; repo: string; url: string; state: string; draft: boolean; updated_at: string; author?: string }[]; stats: { total: number; open: number; closed: number; draft: number }; filter: string }>('GET', `/integrations/github/pulls?filter=${filter}`),
+    repos: () => req<{ repos: { id: number; name: string; full_name: string; color: string }[] }>('GET', '/integrations/github/repos'),
   },
 };

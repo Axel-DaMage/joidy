@@ -262,13 +262,13 @@
     border: 1px solid var(--xp);
     border-radius: var(--r);
     background: var(--xp);
-    color: var(--bg);
+    color: var(--xp-contrast-text, var(--bg));
     cursor: pointer;
     transition: all var(--t-fast);
     min-width: 80px;
   }
   .ctrl-main:hover  { background: var(--xp-2); border-color: var(--xp-2); }
-  .ctrl-main.active { background: var(--xp-2); border-color: var(--xp-2); color: var(--bg); }
+  .ctrl-main.active { background: var(--xp-2); border-color: var(--xp-2); color: var(--xp-contrast-text, var(--bg)); }
   .ctrl-main.active:hover { background: var(--xp-3); border-color: var(--xp-3); }
 
   .ctrl-icon {

@@ -1,4 +1,5 @@
-import { writable } from 'svelte/store';
+import { writable, get } from 'svelte/store';
+import { browser } from '$app/environment';
 import { api, type Note, type AISuggestion } from '$lib/api';
 import { applyGamificationResult } from './gamification';
 
@@ -6,16 +7,65 @@ export const notes        = writable<Note[]>([]);
 export const currentNote  = writable<Note | null>(null);
 export const aiSuggestions = writable<AISuggestion[]>([]);
 export const notesLoading  = writable(false);
+export const notesLoadedOnce = writable(false);
 
-export async function loadNotes(tag?: string): Promise<void> {
-  notesLoading.set(true);
+let notesLoaded = false;
+let lastTag: string | undefined = undefined;
+let pendingLoad = false;
+let cacheLoadDone = false;
+
+const CACHE_KEY = 'joidy_notes_cache';
+
+function saveNotesCache(data: Note[]) {
+  if (!browser) return;
+  try {
+    sessionStorage.setItem(CACHE_KEY, JSON.stringify({ data, ts: Date.now() }));
+  } catch {}
+}
+
+function loadNotesCache(): Note[] | null {
+  if (!browser) return null;
+  try {
+    const raw = sessionStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const cached = JSON.parse(raw);
+    if (!cached.data || !Array.isArray(cached.data)) return null;
+    if (Date.now() - cached.ts > 300000) return null;
+    return cached.data;
+  } catch {
+    return null;
+  }
+}
+
+export async function loadNotes(tag?: string, force = false): Promise<void> {
+  if (pendingLoad) return;
+  if (!force && notesLoaded && get(notes).length > 0 && lastTag === tag) return;
+  
+  if (!force && !cacheLoadDone) {
+    const cached = loadNotesCache();
+    if (cached && cached.length > 0) {
+      notes.set(cached);
+      notesLoaded = true;
+      cacheLoadDone = true;
+    }
+  }
+  
+  pendingLoad = true;
+  notesLoading.set(get(notes).length === 0);
+  lastTag = tag;
+  
   try {
     const data = await api.notes.list(tag);
     notes.set(data);
+    saveNotesCache(data);
+    notesLoaded = true;
+    cacheLoadDone = true;
+    notesLoadedOnce.set(true);
   } catch (e) {
     console.error('[notes] Failed to load:', e);
   } finally {
     notesLoading.set(false);
+    pendingLoad = false;
   }
 }
 

@@ -2,10 +2,12 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from database import get_db
 from models.note import NoteTag, Tag, TagCooccurrence
+from services.response_cache import clear_api_caches, register_cache_clearer, ttl_cache
 
 router = APIRouter(prefix="/tags", tags=["tags"])
 
@@ -15,17 +17,30 @@ class TagCreate(BaseModel):
     parent_id: Optional[int] = None
 
 
+@ttl_cache(ignore_params={"db"})
+def _tags_with_note_counts(db: Session):
+    return (
+        db.query(Tag, func.count(NoteTag.tag_id).label("note_count"))
+        .outerjoin(NoteTag, NoteTag.tag_id == Tag.id)
+        .group_by(Tag.id)
+        .order_by(Tag.name)
+        .all()
+    )
+
+
+register_cache_clearer(_tags_with_note_counts.cache_clear)  # type: ignore[attr-defined]
+
+
 @router.get("/")
 def list_tags(db: Session = Depends(get_db)):
-    tags = db.query(Tag).order_by(Tag.name).all()
     return [
         {
-            "id": t.id,
-            "name": t.name,
-            "parent_id": t.parent_id,
-            "note_count": db.query(NoteTag).filter(NoteTag.tag_id == t.id).count(),
+            "id": tag.id,
+            "name": tag.name,
+            "parent_id": tag.parent_id,
+            "note_count": note_count,
         }
-        for t in tags
+        for tag, note_count in _tags_with_note_counts(db)
     ]
 
 
@@ -38,6 +53,7 @@ def create_tag(data: TagCreate, db: Session = Depends(get_db)):
     db.add(tag)
     db.commit()
     db.refresh(tag)
+    clear_api_caches()
     return {"id": tag.id, "name": tag.name, "parent_id": tag.parent_id}
 
 
@@ -48,22 +64,21 @@ def set_parent(tag_id: int, parent_id: Optional[int], db: Session = Depends(get_
         raise HTTPException(status_code=404, detail="Tag not found")
     tag.parent_id = parent_id
     db.commit()
+    clear_api_caches()
     return {"id": tag.id, "name": tag.name, "parent_id": tag.parent_id}
 
 
-@router.get("/graph")
-def get_tag_graph(db: Session = Depends(get_db)):
+@ttl_cache(ignore_params={"db"})
+def _cached_tag_graph(db: Session):
     """Returns nodes + edges for the knowledge graph."""
-    tags = db.query(Tag).all()
     nodes = []
     edges = []
 
-    for tag in tags:
-        count = db.query(NoteTag).filter(NoteTag.tag_id == tag.id).count()
+    for tag, note_count in _tags_with_note_counts(db):
         nodes.append({
             "id": tag.id,
             "name": tag.name,
-            "note_count": count,
+            "note_count": note_count,
             "parent_id": tag.parent_id,
         })
         if tag.parent_id:
@@ -81,3 +96,11 @@ def get_tag_graph(db: Session = Depends(get_db)):
         )
 
     return {"nodes": nodes, "edges": edges}
+
+
+register_cache_clearer(_cached_tag_graph.cache_clear)  # type: ignore[attr-defined]
+
+
+@router.get("/graph")
+def get_tag_graph(db: Session = Depends(get_db)):
+    return _cached_tag_graph(db)

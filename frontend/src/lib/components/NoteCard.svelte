@@ -3,12 +3,15 @@
   import { goto } from '$app/navigation';
   import TagChip from './TagChip.svelte';
   import { findNoteByTitle } from '$lib/stores/notes';
+  import { folderMetaStore, updateFolderMeta } from '$lib/stores/settings';
+  import { Settings } from 'lucide-svelte';
   import type { Note } from '$lib/api';
+  import DynamicIcon from './DynamicIcon.svelte';
 
   export let note: Note;
   export let active = false;
 
-  const dispatch = createEventDispatcher<{ select: Note; delete: number }>();
+  const dispatch = createEventDispatcher<{ select: Note; delete: number; customize: { path: string; icon: string | null; color: string | null; note?: Note } }>();
 
   function formatDate(iso: string): string {
     const d = new Date(iso);
@@ -20,14 +23,38 @@
     if (diffDays < 7) return `hace ${diffDays} días`;
     return d.toLocaleDateString('es', { day: 'numeric', month: 'short' });
   }
+
+  function getFileMeta() {
+    const key = note.source_path || `note-${note.id}`;
+    const meta = $folderMetaStore[key] || {};
+    return { icon: meta.icon || 'File', color: meta.color };
+  }
+
+  function getMetaKey(): string {
+    return note.source_path || `note-${note.id}`;
+  }
+
+  function onCustomize(e: Event) {
+    e.stopPropagation();
+    dispatch('customize', { 
+      path: getMetaKey(), 
+      icon: getFileMeta().icon, 
+      color: getFileMeta().color,
+      note: note
+    });
+  }
 </script>
 
 <!-- svelte-ignore a11y-click-events-have-key-events -->
 <!-- svelte-ignore a11y-no-static-element-interactions -->
 <div class="note-card" class:active on:click={() => dispatch('select', note)}>
   <div class="note-header">
+    <div class="note-icon"><DynamicIcon name={getFileMeta().icon} size={12} color={getFileMeta().color} /></div>
     <span class="note-title truncate">{note.title}</span>
     <span class="note-date caption">{formatDate(note.created_at)}</span>
+    <button type="button" class="note-settings-btn" title="Personalizar" on:click={onCustomize}>
+      <Settings size={10} />
+    </button>
   </div>
   {#if note.tags.length > 0}
     <div class="note-tags">
@@ -44,10 +71,8 @@
       {/if}
     </div>
   {/if}
-  {#if note.source === 'obsidian'}
-    <span class="source-badge caption">obsidian</span>
-  {/if}
-</div>
+
+  </div>
 
 <style>
   .note-card {
@@ -61,10 +86,29 @@
   .note-card:hover { background: var(--elevated); }
   .note-card.active { background: var(--elevated); border-left: 2px solid var(--text-secondary); }
 
+  .note-settings-btn {
+    display: none;
+    padding: 2px;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 3px;
+    margin-left: auto;
+  }
+
+  .note-card:hover .note-settings-btn {
+    display: flex;
+  }
+
+  .note-settings-btn:hover {
+    color: var(--accent);
+    background: var(--border-light);
+  }
+
   .note-header {
     display: flex;
     align-items: baseline;
-    justify-content: space-between;
     gap: var(--s3);
     margin-bottom: 4px;
   }
@@ -78,6 +122,36 @@
   .note-date {
     flex-shrink: 0;
   }
+
+  .note-icon {
+    flex-shrink: 0;
+    margin-right: 4px;
+  }
+
+  .note-settings-btn {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: none;
+    padding: 2px;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 3px;
+  }
+
+  .note-card:hover .note-settings-btn {
+    display: flex;
+  }
+
+  .note-settings-btn:hover {
+    color: var(--accent);
+    background: var(--border-light);
+  }
+
+
 
   .note-tags {
     display: flex;

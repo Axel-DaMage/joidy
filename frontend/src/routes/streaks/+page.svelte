@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { fly, fade, slide, scale } from 'svelte/transition';
-  import { flip } from 'svelte/animate';
+  import { scale } from 'svelte/transition';
   import { Plus, Check, X, Flame, Settings, Snowflake, Search, ChevronRight } from 'lucide-svelte';
     import { Archive, Shuffle, CheckCheck } from 'lucide-svelte';
   import StreakIcon from '$lib/components/StreakIcon.svelte';
@@ -9,8 +8,9 @@
   import StreakHeatmap from '$lib/components/StreakHeatmap.svelte';
   import StreakStatsPanel from '$lib/components/StreakStatsPanel.svelte';
   import { api, type PersonalStreak, type StreakStats } from '$lib/api';
-  import { loadUserSettings, patchUserSettings } from '$lib/utils/userSettings';
+  import { loadUserSettings, patchUserSettings, getCachedData, setCachedData } from '$lib/utils/userSettings';
   import { liquidGlass } from '$lib/actions/liquidGlass';
+  import { captureSnapshot, getSnapshot } from '$lib/stores/pageSnapshots';
 
   let streaks: PersonalStreak[] = [];
   let stats: StreakStats | null = null;
@@ -71,6 +71,20 @@
     if (savedNotesUi?.panelWidth !== undefined) {
       panelWidth = Number(savedNotesUi.panelWidth);
     }
+
+    const snap = getSnapshot('/streaks');
+    if (snap) {
+      selectedId = snap.state.selectedId ?? null;
+      showArchived = snap.state.showArchived ?? false;
+      searchQuery = snap.state.searchQuery ?? '';
+    }
+    
+    const cached = getCachedData<PersonalStreak[]>('streaks');
+    const cachedStats = getCachedData<StreakStats>('stats');
+    if (cached) streaks = cached;
+    if (cachedStats) stats = cachedStats;
+    if (cached) loading = false;
+    
     try {
       const [s, st] = await Promise.all([
         api.personalStreaks.list({ include_archived: true }),
@@ -78,13 +92,27 @@
       ]);
       streaks = s;
       stats = st;
+      setCachedData('streaks', s);
+      setCachedData('stats', st);
     } catch (e) {
-      error = 'Error de conexión con el sistema de rachas.';
-      console.error('[streaks]', e);
+      if (!cached || !cachedStats) {
+        error = 'Error de conexión con el sistema de rachas.';
+        console.error('[streaks]', e);
+      }
     } finally {
-      loading = false;
+      if (selectedId && !streaks.find(s => s.id === selectedId)) selectedId = streaks[0]?.id ?? null;
     }
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
   });
+
+  function handleBeforeUnload() {
+    const scrollEl = document.getElementById('streaks-list');
+    captureSnapshot('/streaks',
+      { selectedId, showArchived, searchQuery },
+      [{ id: 'streaks-list', scrollTop: scrollEl?.scrollTop ?? 0 }]
+    );
+  }
 
   // ── Actions ───────────────────────────────────────────────────────────────
   async function handleSave(e: CustomEvent) {
@@ -278,7 +306,7 @@
 
 <div class="streaks-page">
   {#if mounted}
-    <div class="streaks-layout" style="--panel-w: {panelWidth}px" transition:fade>
+    <div class="streaks-layout" style="--panel-w: {panelWidth}px">
       <!-- ═══ LEFT PANEL: LIST ═══ -->
       <div class="list-panel">
         <!-- Header -->
@@ -357,7 +385,6 @@
                 }}
                 role="button"
                 tabindex="0"
-                animate:flip={{ duration: 200 }}
                 use:liquidGlass={{ enabled: streak.theme === 'glass' }}
               >
                 <div class="item-icon">
@@ -420,7 +447,6 @@
             class="detail-content"
             class:completed={isStreakCompleted(selected)}
             style="--theme-ac: {selected.color || 'var(--xp)'};"
-            transition:fade={{ duration: 150 }}
           >
             <button
               class="detail-exit-btn"
@@ -548,8 +574,9 @@
 </div>
 
 <!-- Delete confirmation modal -->
+<svelte:window on:keydown={(e) => e.key === 'Escape' && (deleteConfirm = null)} />
 {#if deleteConfirm !== null}
-  <div class="modal-backdrop" transition:fade={{ duration: 150 }}>
+  <div class="modal-backdrop">
     <div 
       class="delete-modal" 
       class:theme-sketch={deleteConfirmTheme === 'sketch'}
@@ -631,9 +658,9 @@
   .new-btn {
     width: 32px; height: 32px;
     display: flex; align-items: center; justify-content: center;
-    background: var(--text-primary); color: var(--bg);
-    border: none; border-radius: 8px;
-    cursor: pointer; transition: all 0.15s;
+    background: var(--xp); color: var(--xp-contrast-text, var(--bg));
+    border: 1px solid var(--xp); border-radius: 8px;
+    cursor: pointer;
   }
   .new-btn:hover { opacity: 0.85; transform: scale(1.05); }
 

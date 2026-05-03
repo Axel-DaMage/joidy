@@ -1,14 +1,16 @@
 <script lang="ts">
   import { createEventDispatcher, onDestroy } from 'svelte';
-  import { Eye, EyeOff, Save, Trash2, X, Palette, Search, Maximize, ChevronLeft, ChevronRight } from 'lucide-svelte';
+  import { Eye, EyeOff, Save, Trash2, X, Settings, Search, Maximize, ChevronLeft, ChevronRight } from 'lucide-svelte';
   import * as L from 'lucide-svelte';
   import DynamicIcon from './DynamicIcon.svelte';
+  import IconPicker from './IconPicker.svelte';
   import { marked } from 'marked';
   import TagChip from './TagChip.svelte';
   import { aiSuggestions, fetchAISuggestions, findNoteByTitle } from '$lib/stores/notes';
   import { activeIconPack, showFrontmatter, hideTagsLine } from '$lib/stores/settings';
   import { api, type Note } from '$lib/api';
   import { goto } from '$app/navigation';
+  import { extractFrontmatter } from '$lib/utils/fileTree';
 
   // Configure marked once — GFM enables tables, strikethrough, autolinks
   marked.use({ gfm: true, breaks: true });
@@ -62,26 +64,10 @@
   
   let showIconSettings = false;
   let customColor = '#ffffff';
-  let iconSearchTerm = '';
-  const ALL_ICONS = Object.keys(L).filter(k => /^[A-Z]/.test(k) && k !== 'default' && k !== 'createLucideIcon');
-  
-  let visibleLimit = 150;
 
-  $: filteredIconsAll = ALL_ICONS.filter(ic => ic.toLowerCase().includes(iconSearchTerm.toLowerCase()));
-  $: filteredIcons = filteredIconsAll.slice(0, visibleLimit);
-
-  // Reset limit when search term changes
-  $: if (iconSearchTerm !== undefined) {
-    visibleLimit = 150;
-  }
-
-  function handleIconScroll(e: Event) {
-    const target = e.currentTarget as HTMLElement;
-    if (target.scrollHeight - target.scrollTop - target.clientHeight < 120) {
-      if (visibleLimit < filteredIconsAll.length) {
-        visibleLimit += 150;
-      }
-    }
+  $: if (note?.content) {
+    const fm = extractFrontmatter(note.content);
+    customColor = fm.color || '#ffffff';
   }
 
   let backlinks: Note[] = [];
@@ -428,40 +414,6 @@
         <Maximize size={14} />
       </button>
 
-      <div class="icon-flyout-container">
-        <button
-          class="toolbar-btn"
-          class:active={showIconSettings}
-          on:click={() => showIconSettings = !showIconSettings}
-          title="Personalizar Icono"
-        >
-          <Palette size={14} />
-        </button>
-        {#if showIconSettings}
-          <div class="icon-flyout">
-            <div class="flyout-header">
-              <Search size={12} color="var(--text-muted)" />
-              <input class="icon-search-input" bind:value={iconSearchTerm} placeholder="Buscar icono..." />
-            </div>
-            <div class="icon-grid" on:scroll={handleIconScroll}>
-              {#each filteredIcons as ic}
-                <button class="icon-grid-btn" on:click={() => pickIcon(ic)} title={ic}>
-                  <DynamicIcon name={ic} size={16} />
-                </button>
-              {/each}
-              {#if filteredIcons.length === 0}
-                <span class="no-icons-msg">No se encontraron iconos</span>
-              {/if}
-            </div>
-            <div class="color-picker-row">
-              <label for="icon-color">Color:</label>
-              <input type="color" id="icon-color" bind:value={customColor} on:change={(e) => updateFrontmatter('iconColor', e.currentTarget.value)} />
-              <button class="clear-btn" on:click={() => { updateFrontmatter('iconColor', ''); updateFrontmatter('icon', ''); updateFrontmatter('iconPack', ''); }}>Reset</button>
-            </div>
-          </div>
-        {/if}
-      </div>
-
       <button
         class="toolbar-btn"
         class:active={previewMode}
@@ -571,6 +523,34 @@
       </div>
     {/if}
   </div>
+
+  <!-- Icon customize modal -->
+  {#if showIconSettings}
+    <!-- svelte-ignore a11y-click-events-have-key-events -->
+    <!-- svelte-ignore a11y-no-static-element-interactions -->
+    <div class="folder-modal-backdrop" on:click={() => showIconSettings = false}>
+      <div class="folder-modal" on:click|stopPropagation>
+        <h3 class="folder-modal-title">Personalizar icono</h3>
+        
+        <!-- Color bar -->
+        <div class="folder-color-row">
+          <span class="folder-label mono">Color</span>
+          <input type="color" class="folder-color-input" bind:value={customColor} on:change={(e) => updateFrontmatter('iconColor', e.currentTarget.value)} />
+          <input type="text" class="folder-hex-input mono" maxlength="7" bind:value={customColor} on:change={(e) => updateFrontmatter('iconColor', e.currentTarget.value)} />
+        </div>
+        
+        <!-- Icon picker -->
+        <div class="folder-icon-row">
+          <IconPicker color={customColor} onSelect={(ic) => { pickIcon(ic); showIconSettings = false; }} />
+        </div>
+        
+        <div class="folder-modal-btns">
+          <button on:click={() => { updateFrontmatter('iconColor', ''); updateFrontmatter('icon', ''); updateFrontmatter('iconPack', ''); customColor = '#ffffff'; showIconSettings = false; }}>Reset</button>
+          <button on:click={() => showIconSettings = false}>Cerrar</button>
+        </div>
+      </div>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -607,117 +587,71 @@
     z-index: 20;
   }
 
-  .icon-flyout-container {
-    position: relative;
-    display: flex;
+  /* Icon customize modal */
+  .folder-modal-backdrop {
+    position: fixed; top: 50px; bottom: 50px; left: 0; right: 0;
+    z-index: 200;
+    background: rgba(0,0,0,0.6); backdrop-filter: blur(2px);
+    display: flex; align-items: center; justify-content: center;
   }
-
-  .icon-flyout {
-    position: absolute;
-    top: 100%;
-    right: 0;
-    margin-top: 5px;
-    width: 240px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--r);
-    padding: 10px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-    z-index: 50;
-  }
-
-  .flyout-header {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin-bottom: 8px;
-    padding-bottom: 8px;
-    border-bottom: 1px solid var(--border-light);
-  }
-
-  .icon-search-input {
-    background: transparent;
-    border: none;
-    outline: none;
-    font-size: 11px;
-    font-family: var(--font-sans);
-    color: var(--text-primary);
+  .folder-modal {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 20px;
+    display: flex; flex-direction: column; gap: 14px;
     width: 100%;
+    height: 100%;
+    max-width: 800px;
+    min-height: 0;
   }
-  .icon-search-input::placeholder { color: var(--text-muted); }
-
-  .icon-grid {
-    display: grid;
-    grid-template-columns: repeat(6, 1fr);
-    gap: 6px;
-    margin-bottom: 10px;
-    max-height: 165px;
-    overflow-y: auto;
-    padding-right: 4px;
+  .folder-modal-title {
+    font-size: 14px; font-weight: 600; color: var(--text-primary);
+    margin: 0;
   }
-  
-  /* Scrollbar styles for the icon grid */
-  .icon-grid::-webkit-scrollbar { width: 4px; }
-  .icon-grid::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-
-  .no-icons-msg {
-    grid-column: 1 / -1;
-    text-align: center;
-    font-size: 11px;
-    color: var(--text-muted);
-    padding: 10px 0;
+  .folder-label {
+    font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;
   }
-
-  .icon-grid-btn {
-    width: 100%;
-    aspect-ratio: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--bg);
-    border: 1px solid var(--border-light);
-    border-radius: 4px;
-    color: var(--text-secondary);
-    cursor: pointer;
-    transition: all var(--t-fast);
+  .folder-color-row {
+    display: flex; align-items: center; gap: 8px; width: 100%;
   }
-  .icon-grid-btn:hover {
-    background: var(--elevated);
-    border-color: var(--accent);
-    color: var(--text-primary);
+  .folder-color-input {
+    flex: 1; height: 28px; border: 1px solid var(--border);
+    border-radius: 4px; cursor: pointer; padding: 0; background: none;
   }
-
-  .color-picker-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    font-size: 12px;
-    color: var(--text-secondary);
-    font-family: var(--font-sans);
-  }
-
-  .color-picker-row input[type="color"] {
-    flex: 1;
-    height: 24px;
+  .folder-color-input::-webkit-color-swatch-wrapper {
     padding: 0;
-    border: none;
-    border-radius: 4px;
-    background: transparent;
-    cursor: pointer;
   }
-
-  .clear-btn {
-    font-size: 11px;
-    padding: 3px 8px;
-    background: transparent;
-    border: 1px solid var(--error);
-    border-radius: 3px;
-    color: var(--error);
-    cursor: pointer;
-    font-family: var(--font-mono);
-    transition: all var(--t-fast);
+  .folder-color-input::-webkit-color-swatch {
+    border: none; border-radius: 3px;
   }
-  .clear-btn:hover { background: var(--error); color: var(--bg); }
+  .folder-hex-input {
+    width: 75px; padding: 6px 8px; border: 1px solid var(--border);
+    border-radius: 4px; background: var(--bg); color: var(--text-primary);
+    font-size: 11px; text-align: center;
+    text-transform: uppercase;
+  }
+  .folder-icon-row {
+    display: flex; flex-direction: column; gap: 8px;
+    flex: 1;
+    min-height: 0;
+  }
+  .folder-modal-btns {
+    display: flex; gap: 10px; justify-content: flex-end;
+  }
+  .folder-modal-btns button {
+    padding: 8px 16px; border-radius: 4px; font-size: 12px;
+    cursor: pointer; border: 1px solid var(--border); background: var(--surface);
+    color: var(--text-secondary); transition: all var(--t-fast);
+  }
+  .folder-modal-btns button:hover {
+    background: var(--elevated); color: var(--text-primary);
+  }
+  .folder-modal-btns button:last-child {
+    background: var(--accent); color: var(--accent-contrast-text, var(--bg));
+    border-color: var(--accent);
+  }
+  .folder-modal-btns button:last-child:hover {
+    opacity: 0.9;
+  }
 
 
   .toolbar-left {
@@ -764,8 +698,8 @@
   .toolbar-btn:disabled { opacity: 0.4; cursor: default; }
 
   .save-btn { border-color: var(--accent); color: var(--accent); }
-  .save-btn:hover { background: var(--accent); color: var(--bg); }
-  .save-btn.saved { background: var(--success); border-color: var(--success); color: var(--bg); }
+  .save-btn:hover { background: var(--accent); color: var(--accent-contrast-text, var(--bg)); }
+  .save-btn.saved { background: var(--success); border-color: var(--success); color: var(--text-primary); }
 
   .save-status {
     display: inline-block;
@@ -777,12 +711,6 @@
   .danger-btn:hover { border-color: var(--error); background: transparent; }
 
   /* ── Title ── */
-  .title-row {
-    padding: 20px 24px 12px;
-    border-bottom: 1px solid var(--border-light, var(--border));
-    flex-shrink: 0;
-  }
-
   .toolbar-nav {
     margin-bottom: 0 !important;
   }
@@ -793,7 +721,7 @@
   }
 
   .title-input {
-    width: 100%;
+    flex: 1;
     background: transparent;
     border: none;
     outline: none;
@@ -804,6 +732,15 @@
     line-height: 1.3;
   }
   .title-input::placeholder { color: var(--text-muted); }
+
+  .title-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--border-light, var(--border));
+    flex-shrink: 0;
+  }
 
   /* ── Tags bar ── */
   .tags-bar {

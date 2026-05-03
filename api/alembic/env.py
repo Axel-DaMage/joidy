@@ -21,6 +21,7 @@ from models.note import Note
 from models.skill import Skill
 from models.personal_streaks import PersonalStreak
 from models.gamification import UserStats
+from models.github import GitHubRepo, GitHubItem, GitHubEvent
 
 target_metadata = Base.metadata
 

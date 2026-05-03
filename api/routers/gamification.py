@@ -4,14 +4,15 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models.gamification import StreakRecord, UserStats, XPEvent
 from services.gamification_engine import PLANT_STAGES, process_event
+from services.response_cache import clear_api_caches, register_cache_clearer, ttl_cache
 
 
 
 router = APIRouter(prefix="/gamification", tags=["gamification"])
 
 
-@router.get("/stats")
-def get_stats(db: Session = Depends(get_db)):
+@ttl_cache(ignore_params={"db"})
+def _cached_stats(db: Session):
     stats = db.query(UserStats).filter(UserStats.id == 1).first()
     if not stats:
         # Auto-create on first access
@@ -44,6 +45,14 @@ def get_stats(db: Session = Depends(get_db)):
     }
 
 
+register_cache_clearer(_cached_stats.cache_clear)  # type: ignore[attr-defined]
+
+
+@router.get("/stats")
+def get_stats(db: Session = Depends(get_db)):
+    return _cached_stats(db)
+
+
 @router.get("/streak-history")
 def get_streak_history(days: int = 30, db: Session = Depends(get_db)):
     records = (
@@ -58,8 +67,8 @@ def get_streak_history(days: int = 30, db: Session = Depends(get_db)):
     ]
 
 
-@router.get("/recent-events")
-def get_recent_events(limit: int = 20, db: Session = Depends(get_db)):
+@ttl_cache(ignore_params={"db"})
+def _cached_recent_events(limit: int = 20, db: Session = Depends(get_db)):
     events = (
         db.query(XPEvent)
         .order_by(XPEvent.created_at.desc())
@@ -76,10 +85,23 @@ def get_recent_events(limit: int = 20, db: Session = Depends(get_db)):
     ]
 
 
+def get_recent_events(limit: int = 20, db: Session = Depends(get_db)):
+    return _cached_recent_events(limit=limit, db=db)
+
+
+register_cache_clearer(_cached_recent_events.cache_clear)  # type: ignore[attr-defined]
+
+
+@router.get("/recent-events")
+def get_recent_events_route(limit: int = 20, db: Session = Depends(get_db)):
+    return get_recent_events(limit=limit, db=db)
+
+
 @router.post("/ping")
 def ping_activity(db: Session = Depends(get_db)):
     """Called when user opens the app — awards daily XP if not already done today."""
     gami = process_event(db, "daily_activity")
+    clear_api_caches()
     # Reload full stats so the response includes next_stage_xp, xp_to_next_stage, etc.
     stats = db.query(UserStats).filter_by(id=1).first()
     next_stage_xp = PLANT_STAGES[gami.plant_stage + 1][0] if gami.plant_stage + 1 < len(PLANT_STAGES) else None

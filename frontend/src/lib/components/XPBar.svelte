@@ -55,7 +55,7 @@
 
   .xp-badge {
     background: var(--accent-gradient, var(--xp));
-    color: var(--bg);
+    color: var(--accent-contrast-text, var(--bg));
     font-size: 10px;
     font-weight: 800;
     padding: 2px 6px;

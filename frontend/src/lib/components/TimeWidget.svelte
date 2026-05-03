@@ -104,7 +104,9 @@
 </script>
 
 <!-- svelte-ignore a11y-no-static-element-interactions -->
-<div class="time-widget" on:keydown={(e) => e.key === 'Escape' && (showTzPicker = false)}>
+<svelte:window on:keydown={(e) => e.key === 'Escape' && (showTzPicker = false)} />
+
+<div class="time-widget">
   <div class="clock-row">
     {#if showTzPicker}
       <div class="tz-picker">

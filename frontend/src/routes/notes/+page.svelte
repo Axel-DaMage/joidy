@@ -9,7 +9,7 @@
   import IconPicker from '$lib/components/IconPicker.svelte';
   import { notes, notesLoading, loadNotes, createNote, updateNote, deleteNote, aiSuggestions, notesLoadedOnce } from '$lib/stores/notes';
   import { buildTree, flattenTree, type SortMode } from '$lib/utils/fileTree';
-  import { showHiddenFiles, showTrash } from '$lib/stores/settings';
+  import { showHiddenFiles, showTrash, folderMetaStore, updateFolderMeta } from '$lib/stores/settings';
   import { loadUserSettings, patchUserSettings } from '$lib/utils/userSettings';
   import { captureSnapshot, getSnapshot } from '$lib/stores/pageSnapshots';
   import type { Note } from '$lib/api';
@@ -26,10 +26,12 @@
   let folderColor = '#c8a96e';
   let folderIcon = 'Folder';
 
-  async function openFolderCustomizer(node: { path: string; color?: string | null; icon?: string | null }) {
+  let editingFolderNote: Note | null = null;
+  async function openFolderCustomizer(node: { path: string; color?: string | null; icon?: string | null; note?: Note }) {
     editingFolder = node.path;
     folderColor = node.color || '#c8a96e';
     folderIcon = node.icon || 'Folder';
+    editingFolderNote = node.note || null;
   }
 
   // ── Explorer toolbar state ───────────────────────────────────────────────────
@@ -187,7 +189,7 @@
     : selectedNote;
 
   // Tree → flat list (no recursive component, avoids Svelte 5 HMR issues)
-  $: tree = buildTree($notes, viewMode === 'tree' ? search : '', $showTrash, $showHiddenFiles, sortMode);
+  $: tree = buildTree($notes, viewMode === 'tree' ? search : '', $showTrash, $showHiddenFiles, sortMode, $folderMetaStore);
   $: flatNodes = flattenTree(tree, collapsed);
   let historyStack: number[] = [];
   let historyIndex = -1;
@@ -578,6 +580,9 @@
                 >
                   <div class="t-icon file-icon"><DynamicIcon name={node.icon} size={11} color={node.color} pack={node.pack} /></div>
                   <span class="t-name file-name">{node.name}</span>
+                  <button class="folder-settings-btn" title="Personalizar nota" on:click|stopPropagation={() => openFolderCustomizer({ path: node.note?.source_path || node.path, icon: node.icon, color: node.color, note: node.note })}>
+                    <Settings size={10} />
+                  </button>
                 </div>
               {/if}
             {/each}
@@ -589,7 +594,7 @@
           <div class="empty-msg">{search ? 'Sin resultados.' : 'Sin notas.'}</div>
         {:else}
           {#each filtered as note}
-            <NoteCard {note} active={selectedNote?.id === note.id} on:select={(e) => openNote(e.detail)} />
+            <NoteCard {note} active={selectedNote?.id === note.id} on:select={(e) => openNote(e.detail)} on:customize={(e) => openFolderCustomizer(e.detail)} />
           {/each}
         {/if}
       {/if}
@@ -617,7 +622,34 @@
         
         <div class="folder-modal-btns">
           <button on:click={() => editingFolder = null}>Cancelar</button>
-          <button on:click={() => { editingFolder = null; }}>Guardar</button>
+          <button on:click={async () => { 
+            if (editingFolder) {
+              updateFolderMeta(editingFolder, { icon: folderIcon, color: folderColor });
+              if (editingFolderNote) {
+                let content = editingFolderNote.content;
+                const match = content.match(/^---\n([\s\S]*?)\n---/);
+                if (match) {
+                  let yaml = match[1];
+                  if (yaml.match(/(?:^|\n)icon:\s*([^\n]*)/)) {
+                    yaml = yaml.replace(/((?:^|\n)icon:\s*)([^\n]*)/, `$1${folderIcon}`);
+                  } else {
+                    yaml += `\nicon: ${folderIcon}`;
+                  }
+                  if (yaml.match(/(?:^|\n)iconColor:\s*([^\n]*)/)) {
+                    yaml = yaml.replace(/((?:^|\n)iconColor:\s*)([^\n]*)/, `$1${folderColor}`);
+                  } else {
+                    yaml += `\niconColor: ${folderColor}`;
+                  }
+                  content = content.replace(/^---\n([\s\S]*?)\n---/, `---\n${yaml}\n---`);
+                } else {
+                  content = `---\nicon: ${folderIcon}\niconColor: ${folderColor}\n---\n\n${content}`;
+                }
+                await updateNote(editingFolderNote.id, { content });
+              }
+            }
+            editingFolder = null; 
+            editingFolderNote = null;
+          }}>Guardar</button>
         </div>
       </div>
     </div>
@@ -1120,7 +1152,8 @@
     border-radius: 3px;
     margin-left: 4px;
   }
-  .folder-row:hover .folder-settings-btn {
+  .folder-row:hover .folder-settings-btn,
+  .file-row:hover .folder-settings-btn {
     display: flex;
   }
   .folder-settings-btn:hover {

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { globalProgress, globalLevel } from '$lib/stores/gamification';
+  import { accentColors } from '$lib/stores/settings';
 
   export let size = 200;
 
@@ -19,25 +20,30 @@
   
   $: stageIdx = Math.min(6, Math.floor(($globalLevel - 1) / (100 / 7)));
   $: altLabel = ALTITUDE[stageIdx] ?? ALTITUDE[6];
+
+  $: colors = $accentColors;
+  $: c1 = colors[0] || 'var(--plant)';
+  $: c2 = colors[1] || colors[0] || 'var(--plant-2)';
+  $: c3 = colors[2] || colors[1] || colors[0] || 'var(--plant-3)';
 </script>
 
 <div class="mountain-wrap" style="width:{size}px; height:{size}px;">
   <svg viewBox="0 0 100 120" fill="none" xmlns="http://www.w3.org/2000/svg" class="mountain-svg">
     <!-- Ground -->
-    <line x1="5" y1="104" x2="95" y2="104" stroke="var(--plant)" stroke-width="0.6" opacity="0.4"/>
+    <line x1="5" y1="104" x2="95" y2="104" stroke={c1} stroke-width="0.6" opacity="0.4"/>
 
     <!-- Secondary peak (right) -->
     <path d="M 60,104 L 80,55 L 95,104"
-      stroke="var(--plant)" stroke-width="1" fill="none" stroke-linejoin="round" opacity="0.35"/>
+      stroke={c2} stroke-width="1" fill="none" stroke-linejoin="round" opacity="0.35"/>
 
     <!-- Main mountain -->
     <path d="M 5,104 L 50,18 L 90,104"
-      stroke="var(--plant)" stroke-width="1.4" fill="none" stroke-linejoin="round"/>
+      stroke={c1} stroke-width="1.4" fill="none" stroke-linejoin="round"/>
 
     <!-- Snow cap -->
     {#if showSnow}
       <path d="M 50,18 L 39,42 L 61,42 Z"
-        stroke="var(--plant)" stroke-width="0.8" fill="none" opacity="0.6"
+        stroke={c3} stroke-width="0.8" fill="none" opacity="0.6"
         style="transition: opacity 500ms ease;"/>
     {/if}
 
@@ -49,20 +55,20 @@
         <line
           x1={tx - 3} y1={ty}
           x2={tx}     y2={ty}
-          stroke="var(--plant)" stroke-width="0.7" opacity="0.5"
+          stroke={c2} stroke-width="0.7" opacity="0.5"
         />
       {/if}
     {/each}
 
     <!-- Climber (small filled circle + tiny cross for body) -->
-    <circle cx={cx} cy={cy} r="2.2" fill="var(--plant)" class="climber" />
-    <line x1={cx} y1={cy + 2.5} x2={cx} y2={cy + 5} stroke="var(--plant)" stroke-width="0.8"/>
-    <line x1={cx - 2} y1={cy + 3.5} x2={cx + 2} y2={cy + 3.5} stroke="var(--plant)" stroke-width="0.7"/>
+    <circle cx={cx} cy={cy} r="2.2" fill={c3} class="climber" />
+    <line x1={cx} y1={cy + 2.5} x2={cx} y2={cy + 5} stroke={c3} stroke-width="0.8"/>
+    <line x1={cx - 2} y1={cy + 3.5} x2={cx + 2} y2={cy + 3.5} stroke={c3} stroke-width="0.7"/>
 
     <!-- Summit flag -->
     {#if showFlag}
-      <line x1="50" y1="18" x2="50" y2="10" stroke="var(--plant)" stroke-width="0.9"/>
-      <polygon points="50,10 56,13 50,16" fill="var(--plant)" opacity="0.8"/>
+      <line x1="50" y1="18" x2="50" y2="10" stroke={c1} stroke-width="0.9"/>
+      <polygon points="50,10 56,13 50,16" fill={c1} opacity="0.8"/>
     {/if}
   </svg>
 
