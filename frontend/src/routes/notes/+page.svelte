@@ -1165,7 +1165,7 @@
     border: none; border-radius: 3px;
   }
   .folder-hex-input {
-    width: 60px; padding: 6px 8px; border: 1px solid var(--border);
+    width: 75px; padding: 6px 8px; border: 1px solid var(--border);
     border-radius: 4px; background: var(--bg); color: var(--text-primary);
     font-size: 11px; text-align: center;
     text-transform: uppercase;
