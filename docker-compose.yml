@@ -26,6 +26,7 @@ services:
     volumes:
       - ./data/db:/data/db
       - ./data/uploads:/data/uploads
+      - ./.env:/app/.env
     environment:
       - DATABASE_URL=sqlite:////data/db/joidy.db
       - AI_SERVICE_URL=http://ai-service:8002

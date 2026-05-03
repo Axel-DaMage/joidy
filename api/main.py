@@ -11,7 +11,7 @@ from starlette.responses import Response
 
 from database import init_db
 from logging_config import setup_logging
-from routers import ai, gamification, goals, notes, personal_streaks, skills, tags, vault, planning
+from routers import ai, config, gamification, goals, notes, personal_streaks, skills, tags, vault, planning
 from routers.integrations import github
 
 
@@ -50,6 +50,7 @@ app.add_middleware(
 )
 
 app.include_router(notes.router)
+app.include_router(config.router)
 app.include_router(tags.router)
 app.include_router(skills.router)
 app.include_router(goals.router)

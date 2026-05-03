@@ -1,13 +1,79 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, onMount } from 'svelte';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
   import { accentColors, activeIconPack, showFrontmatter, showTrash, showHiddenFiles, writeInObsidian, use24HourClock, hideTagsLine, type IconPack, MAX_COLORS } from '$lib/stores/settings';
+  import { api } from '$lib/api';
 
   export let open = false;
 
   const dispatch = createEventDispatcher<{ close: void }>();
 
   let theme: 'dark' | 'light' = 'dark';
+
+  let configLoaded = false;
+  let configSaving = false;
+  let configMessage = '';
+
+  let systemConfig = {
+    gemini_api_key: '',
+    obsidian_vault_path: '',
+    github_token: '',
+    github_username: '',
+    telegram_bot_token: '',
+    telegram_allowed_user_id: '',
+  };
+
+  let configuredKeys: string[] = [];
+
+  onMount(async () => {
+    if (open) {
+      await loadConfig();
+    }
+  });
+
+  $: if (open && !configLoaded) {
+    loadConfig();
+  }
+
+  async function loadConfig() {
+    try {
+      const config = await api.config.get();
+      configuredKeys = config.configured_keys;
+      systemConfig = {
+        gemini_api_key: config.gemini_api_key || '',
+        obsidian_vault_path: config.obsidian_vault_path || '',
+        github_token: '',
+        github_username: config.github_username || '',
+        telegram_bot_token: '',
+        telegram_allowed_user_id: '',
+      };
+      configLoaded = true;
+    } catch (e) {
+      console.error('Failed to load config:', e);
+      configLoaded = true;
+    }
+  }
+
+  async function saveConfig() {
+    configSaving = true;
+    configMessage = '';
+    try {
+      const result = await api.config.update(systemConfig);
+      configMessage = result.message;
+      configuredKeys = Object.entries(systemConfig)
+        .filter(([k, v]) => v && k !== 'github_token' && k !== 'telegram_bot_token' && k !== 'telegram_allowed_user_id')
+        .map(([k, v]) => k);
+      setTimeout(() => configMessage = '', 3000);
+    } catch (e: any) {
+      configMessage = 'Error: ' + (e.message || 'Failed to save');
+    } finally {
+      configSaving = false;
+    }
+  }
+
+  function isConfigured(key: string): boolean {
+    return configuredKeys.includes(key);
+  }
 
   const ICON_PACKS: { value: IconPack, label: string }[] = [
     { value: 'lucide', label: 'Lucide (Por Defecto)' },
@@ -216,10 +282,13 @@
             <DynamicIcon name="Database" size={12} /> Obsidian Vault
           </div>
           <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
-            <div class="row-label"><span>Directorio del Vault (relativo a tilde ~)</span></div>
+            <div class="row-label">
+              <span>Directorio del Vault</span>
+              {#if isConfigured('obsidian_vault_path')}<span class="configured-badge">✓</span>{/if}
+            </div>
             <div style="display: flex; align-items: center; gap: 2px; padding: 0 10px; background: var(--elevated); border: 1px solid var(--border); border-radius: var(--r); transition: border-color var(--t-fast);" class="input-wrapper">
               <span class="mono" style="color: var(--text-disabled); font-size: 11px;">~</span>
-              <input type="text" class="setting-input mono" style="border: none; background: transparent; flex: 1; padding-left: 2px;" placeholder="/Documentos/ObsidianVault" />
+              <input type="text" class="setting-input mono" style="border: none; background: transparent; flex: 1; padding-left: 2px;" placeholder="/Documentos/ObsidianVault" bind:value={systemConfig.obsidian_vault_path} />
             </div>
           </div>
           <div class="row">
@@ -252,12 +321,25 @@
             <DynamicIcon name="GitBranch" size={12} /> Integraciones
           </div>
           <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
-            <div class="row-label"><span>GitHub Token</span></div>
-            <input type="text" class="setting-input mono" placeholder="ghp_..." />
+            <div class="row-label">
+              <span>GitHub Token</span>
+              {#if isConfigured('github_token')}<span class="configured-badge">✓</span>{/if}
+            </div>
+            <input type="password" class="setting-input mono" placeholder="ghp_..." bind:value={systemConfig.github_token} />
           </div>
           <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
-            <div class="row-label"><span>Telegram Bot</span></div>
-            <input type="text" class="setting-input mono" placeholder="123456:ABC..." />
+            <div class="row-label">
+              <span>Telegram Bot</span>
+              {#if isConfigured('telegram_bot_token')}<span class="configured-badge">✓</span>{/if}
+            </div>
+            <input type="text" class="setting-input mono" placeholder="123456:ABC..." bind:value={systemConfig.telegram_bot_token} />
+          </div>
+          <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
+            <div class="row-label">
+              <span>Telegram User ID</span>
+              {#if isConfigured('telegram_allowed_user_id')}<span class="configured-badge">✓</span>{/if}
+            </div>
+            <input type="text" class="setting-input mono" placeholder="Tu ID de usuario" bind:value={systemConfig.telegram_allowed_user_id} />
           </div>
         </section>
 
@@ -267,12 +349,33 @@
             <DynamicIcon name="Zap" size={12} /> IA
           </div>
           <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
-            <div class="row-label"><span>Gemini API Key</span></div>
-            <input type="text" class="setting-input mono" placeholder="AIzaSy..." />
+            <div class="row-label">
+              <span>Gemini API Key</span>
+              {#if isConfigured('gemini_api_key')}<span class="configured-badge">✓</span>{/if}
+            </div>
+            <input type="password" class="setting-input mono" placeholder="AIzaSy..." bind:value={systemConfig.gemini_api_key} />
           </div>
           <p class="hint">
             Habilita auto-tagging y búsqueda semántica.
           </p>
+        </section>
+
+        <!-- Guardar Config -->
+        <section class="section">
+          <button
+            class="save-config-btn"
+            on:click={saveConfig}
+            disabled={configSaving}
+          >
+            {#if configSaving}
+              Guardando...
+            {:else}
+              <DynamicIcon name="Save" size={12} /> Guardar Configuración
+            {/if}
+          </button>
+          {#if configMessage}
+            <p class="config-message">{configMessage}</p>
+          {/if}
         </section>
 
         <!-- Avanzado -->
@@ -631,5 +734,37 @@
     outline: none;
     border-color: var(--xp);
     color: var(--xp);
+  }
+
+  .configured-badge {
+    font-size: 10px;
+    color: var(--success);
+    margin-left: 4px;
+  }
+
+  .save-config-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    padding: 10px 16px;
+    background: var(--accent, var(--xp));
+    border: none;
+    border-radius: var(--r);
+    color: #fff;
+    font-size: 12px;
+    font-family: var(--font-mono);
+    cursor: pointer;
+    transition: opacity var(--t-fast);
+  }
+  .save-config-btn:hover:not(:disabled) { opacity: 0.9; }
+  .save-config-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .config-message {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-top: 8px;
+    text-align: center;
   }
 </style>

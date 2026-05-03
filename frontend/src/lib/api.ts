@@ -259,4 +259,27 @@ github: {
     pulls: (filter: string = 'all') => req<{ pulls: { id: number; number: number; title: string; repo: string; url: string; state: string; draft: boolean; updated_at: string; author?: string }[]; stats: { total: number; open: number; closed: number; draft: number }; filter: string }>('GET', `/integrations/github/pulls?filter=${filter}`),
     repos: () => req<{ repos: { id: number; name: string; full_name: string; color: string }[] }>('GET', '/integrations/github/repos'),
   },
+
+  config: {
+    get: () => req<{
+      gemini_api_key: string | null;
+      obsidian_vault_path: string | null;
+      github_username: string | null;
+      app_env: string | null;
+      configured_keys: string[];
+    }>('GET', '/config/'),
+    update: (data: {
+      gemini_api_key?: string;
+      obsidian_vault_path?: string;
+      github_token?: string;
+      github_username?: string;
+      github_client_id?: string;
+      github_client_secret?: string;
+      telegram_bot_token?: string;
+      telegram_allowed_user_id?: string;
+    }) => req<{ status: string; message: string }>('POST', '/config/', data),
+    keys: () => req<{
+      keys: { key: string; env_key: string; public: boolean; description: string }[];
+    }>('GET', '/config/keys'),
+  },
 };

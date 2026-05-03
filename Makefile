@@ -1,6 +1,13 @@
-.PHONY: setup dev dev-d dev-reset prod stop restart logs build clean backup restore help migrate db-health test-api
+.PHONY: setup dev dev-d dev-reset prod stop restart logs build clean backup restore help migrate db-health test-api start doctor install-deps
 
 COMPOSE_PROJECT ?= joidy
+PLATFORM := $(shell uname -s | tr '[:upper:]' '[:lower:]')
+
+RED := \033[0;31m
+GREEN := \033[0;32m
+YELLOW := \033[0;33m
+BLUE := \033[0;34m
+NC := \033[0m
 
 # ─────────────────────────────────────────────────
 # Joidy Makefile
@@ -8,25 +15,42 @@ COMPOSE_PROJECT ?= joidy
 # ─────────────────────────────────────────────────
 
 help: ## Show this help
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
+	@echo ""
+	@echo "$(BLUE)Joidy - Personal Knowledge Management System$(NC)"
+	@echo ""
+	@echo "$(YELLOW)Quick Start (Linux/Mac):$(NC)"
+	@echo "  make start            🚀 Setup + start all services (interactive)"
+	@echo "  make doctor           Verify prerequisites"
+	@echo "  make install-deps     Check Docker installation"
+	@echo ""
+	@echo "$(YELLOW)Basic Commands:$(NC)"
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-15s %s\n", $$1, $$2}'
+	@echo ""
+	@echo "$(YELLOW)Windows Users:$(NC)"
+	@echo "  Use start.ps1 instead of make start"
+	@echo "  Run: powershell -ExecutionPolicy Bypass -File start.ps1"
+	@echo "────────────────────────────────────────────────────"
 
 setup: ## First-time setup: copy .env, create data directories
-	@echo "── Joidy Setup ──────────────────────────────"
+	@echo ""
+	@echo "── $(BLUE)Joidy Setup$(NC) ────────────────────────────────"
+	@mkdir -p data/db data/uploads data/vault
 	@if [ ! -f .env ]; then \
 		cp .env.example .env; \
-		echo "✓ Created .env from .env.example"; \
-		echo "  → Edit .env and add your GEMINI_API_KEY"; \
-		echo "  → Set OBSIDIAN_VAULT_PATH to your vault folder"; \
+		echo "$(GREEN)✓$(NC) Created .env from .env.example"; \
+		echo ""; \
+		echo "$(YELLOW)Next steps:$(NC)"; \
+		echo "  1. Edit .env with your API keys"; \
+		echo "     - GEMINI_API_KEY: get free at https://aistudio.google.com/"; \
+		echo "     - OBSIDIAN_VAULT_PATH: absolute path to your vault"; \
+		echo "  2. Run: make dev"; \
 	else \
-		echo "✓ .env already exists"; \
+		echo "$(GREEN)✓$(NC) .env already exists"; \
+		echo "  Run 'make doctor' to check your configuration"; \
 	fi
-	@mkdir -p data/db data/uploads data/vault
-	@echo "✓ Created data directories"
 	@echo ""
-	@echo "Next steps:"
-	@echo "  1. Edit .env with your API keys"
-	@echo "  2. Run: make dev"
-	@echo "─────────────────────────────────────────────"
+	@echo "Or use 'make start' for a guided setup + start!"
+	@echo "────────────────────────────────────────────────────"
 
 dev: ## Start all services in development mode (with hot reload)
 	@if [ ! -f .env ]; then echo "Run 'make setup' first"; exit 1; fi
@@ -101,3 +125,163 @@ test-api: ## Run API unit tests for remediation scenarios
 
 fix-permissions: ## Fix project permissions (run once with sudo make fix-permissions)
 	sudo bash scripts/fix-permissions.sh
+
+# ─────────────────────────────────────────────────
+# Quick Start Commands (Linux/Mac)
+# ─────────────────────────────────────────────────
+
+install-deps: ## Check and show Docker installation instructions
+	@echo ""
+	@echo "── $(BLUE)Checking Docker...$(NC) ────────────────────────────"
+	@if command -v docker &> /dev/null; then \
+		echo "$(GREEN)✓$(NC) Docker is installed"; \
+		docker --version; \
+	else \
+		echo "$(RED)✗$(NC) Docker is not installed"; \
+		echo ""; \
+		echo "$(YELLOW)Install Docker:$(NC)"; \
+		echo "  macOS:  https://docs.docker.com/desktop/install/mac-install/"; \
+		echo "  Linux:  https://docs.docker.com/engine/install/"; \
+		echo "  Windows: https://docs.docker.com/desktop/install/windows-install/"; \
+	fi
+	@echo ""
+	@if command -v docker compose &> /dev/null; then \
+		echo "$(GREEN)✓$(NC) Docker Compose is available"; \
+	elif docker compose version &> /dev/null; then \
+		echo "$(GREEN)✓$(NC) Docker Compose (plugin) is available"; \
+	else \
+		echo "$(RED)✗$(NC) Docker Compose is not available"; \
+	fi
+	@echo ""
+
+doctor: ## Verify all prerequisites are met
+	@echo "── $(BLUE)Joidy Doctor$(NC) ────────────────────────────────────"
+	@echo ""
+	@echo "Checking prerequisites..."
+	@echo ""
+	@EXIT_CODE=0; \
+	if ! command -v docker &> /dev/null; then \
+		echo "$(RED)✗$(NC) Docker not found"; \
+		EXIT_CODE=1; \
+	else \
+		echo "$(GREEN)✓$(NC) Docker: $$(docker --version | head -n1)"; \
+	fi; \
+	if ! (command -v docker compose &> /dev/null || docker compose version &> /dev/null); then \
+		echo "$(RED)✗$(NC) Docker Compose not found"; \
+		EXIT_CODE=1; \
+	fi; \
+	echo ""; \
+	if [ ! -f .env ]; then \
+		echo "$(YELLOW)⚠$(NC) .env file not found"; \
+		echo "  Run: make setup"; \
+		EXIT_CODE=1; \
+	else \
+		echo "$(GREEN)✓$(NC) .env exists"; \
+	fi; \
+	echo ""; \
+	@source .env 2>/dev/null; \
+	if [ -z "$$GEMINI_API_KEY" ] || [ "$$GEMINI_API_KEY" = "your_gemini_api_key_here" ]; then \
+		echo "$(YELLOW)⚠$(NC) GEMINI_API_KEY not configured"; \
+		echo "  Get free key at: https://aistudio.google.com/"; \
+		EXIT_CODE=1; \
+	else \
+		echo "$(GREEN)✓$(NC) GEMINI_API_KEY configured"; \
+	fi; \
+	if [ -z "$$OBSIDIAN_VAULT_PATH" ] || [ "$$OBSIDIAN_VAULT_PATH" = "/path/to/your/obsidian/vault" ]; then \
+		echo "$(YELLOW)⚠$(NC) OBSIDIAN_VAULT_PATH not configured"; \
+		EXIT_CODE=1; \
+	else \
+		echo "$(GREEN)✓$(NC) OBSIDIAN_VAULT_PATH: $$OBSIDIAN_VAULT_PATH"; \
+		if [ -d "$$OBSIDIAN_VAULT_PATH" ]; then \
+			echo "$(GREEN)  ✓ Vault directory exists$(NC)"; \
+		else \
+			echo "$(YELLOW)  ⚠ Vault directory does not exist yet$(NC)"; \
+		fi; \
+	fi; \
+	echo ""; \
+	if [ -d "./data/db" ]; then \
+		echo "$(GREEN)✓$(NC) data/db directory exists"; \
+	else \
+		echo "$(YELLOW)⚠$(NC) data/db directory not found"; \
+	fi; \
+	echo ""; \
+	if [ $$EXIT_CODE -eq 0 ]; then \
+		echo "$(GREEN)All checks passed! Run 'make dev' to start.$(NC)"; \
+	else \
+		echo "$(YELLOW)Please fix the issues above before starting.$(NC)"; \
+	fi; \
+	exit $$EXIT_CODE
+
+start: ## 🚀 Quick start: setup + start all services
+	@echo ""
+	@echo "── $(BLUE)Joidy Quick Start$(NC) ────────────────────────────────"
+	@echo ""
+	@if ! command -v docker &> /dev/null; then \
+		echo "$(RED)Docker is not installed.$(NC)"; \
+		echo ""; \
+		echo "$(YELLOW)Please install Docker first:$(NC)"; \
+		echo "  macOS:  https://docs.docker.com/desktop/install/mac-install/"; \
+		echo "  Linux:  https://docs.docker.com/engine/install/"; \
+		echo "  Windows: Use 'start.ps1' script instead"; \
+		echo ""; \
+		exit 1; \
+	fi
+	@if ! (command -v docker compose &> /dev/null || docker compose version &> /dev/null); then \
+		echo "$(RED)Docker Compose is not available.$(NC)"; \
+		exit 1; \
+	fi
+	@echo "Step 1: Setting up environment..."
+	@mkdir -p data/db data/uploads data/vault
+	@if [ ! -f .env ]; then \
+		cp .env.example .env; \
+		echo "  ✓ Created .env from .env.example"; \
+	fi
+	@if [ ! -f .env ]; then \
+		echo "$(RED)Failed to create .env$(NC)"; \
+		exit 1; \
+	fi
+	@source .env 2>/dev/null; \
+	if [ -z "$$GEMINI_API_KEY" ] || [ "$$GEMINI_API_KEY" = "your_gemini_api_key_here" ]; then \
+		echo ""; \
+		echo "$(YELLOW)⚠ GEMINI_API_KEY not set in .env$(NC)"; \
+		echo "  Get your free key at: https://aistudio.google.com/"; \
+		echo "  Then edit .env and add your key"; \
+		echo ""; \
+		echo "$(BLUE)Continue without AI features? (y/N)$(NC): "; \
+		read -r CONTINUE; \
+		if [ "$$CONTINUE" != "y" ] && [ "$$CONTINUE" != "Y" ]; then \
+			echo "Aborted."; \
+			exit 1; \
+		fi; \
+	fi
+	@if [ -z "$$OBSIDIAN_VAULT_PATH" ] || [ "$$OBSIDIAN_VAULT_PATH" = "/path/to/your/obsidian/vault" ]; then \
+		echo ""; \
+		echo "$(YELLOW)⚠ OBSIDIAN_VAULT_PATH not set in .env$(NC)"; \
+		echo "  Enter the absolute path to your Obsidian vault:"; \
+		echo "  (e.g., /home/username/Documents/Obsidian)"; \
+		echo ""; \
+		echo "$(BLUE)Vault path (or press Enter to skip):$(NC) "; \
+		read -r VAULT_PATH; \
+		if [ -n "$$VAULT_PATH" ]; then \
+			sed -i "s|^OBSIDIAN_VAULT_PATH=.*|OBSIDIAN_VAULT_PATH=$$VAULT_PATH|" .env; \
+			echo "  ✓ Updated OBSIDIAN_VAULT_PATH in .env"; \
+		fi; \
+	fi
+	@source .env 2>/dev/null; \
+	if [ -z "$$SECRET_KEY" ] || [ "$$SECRET_KEY" = "change_this_to_a_random_secret_key" ]; then \
+		NEW_SECRET=$$(openssl rand -hex 32 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null || echo "dev_secret_$$(date +%s)"); \
+		sed -i "s|^SECRET_KEY=.*|SECRET_KEY=$$NEW_SECRET|" .env; \
+		echo "  ✓ Generated new SECRET_KEY"; \
+	fi
+	@echo ""
+	@echo "Step 2: Starting services..."
+	@docker compose -p $(COMPOSE_PROJECT) -f docker-compose.yml -f docker-compose.dev.yml up --build -d
+	@echo ""
+	@echo "── $(GREEN)Joidy is running!$(NC) ───────────────────────────────"
+	@echo ""
+	@echo "$(GREEN)  Web App:$(NC)   http://localhost:3000"
+	@echo "$(GREEN)  API Docs:$(NC)  http://localhost:8000/docs"
+	@echo ""
+	@echo "To view logs:  make logs"
+	@echo "To stop:       make stop"
+	@echo "────────────────────────────────────────────────────"
