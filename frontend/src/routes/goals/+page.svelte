@@ -1,19 +1,24 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Plus, Check, ChevronDown, Calendar, BarChart, Clock, Layout, Pause, Play, Ban, Pencil, X, Flame, ChevronRight, TrendingUp, TrendingDown, PieChart, Activity, Target, Trophy, Settings, Palette } from 'lucide-svelte';
+  import { page } from '$app/stores';
+  import { goto } from '$app/navigation';
+  import { Plus, Check, ChevronDown, Calendar, BarChart, Clock, Layout, Pause, Play, Ban, Pencil, X, Flame, ChevronRight, ChevronLeft, TrendingUp, TrendingDown, PieChart, Activity, Target, Trophy, Settings, Palette, Hexagon, Filter, AlertTriangle, FileEdit } from 'lucide-svelte';
   import { api, type Goal, type Tag, type Note } from '$lib/api';
   import { applyGamificationResult, showXPGain } from '$lib/stores/gamification';
   import { getCachedData, setCachedData } from '$lib/utils/userSettings';
   import StreakIcon from '$lib/components/StreakIcon.svelte';
   import StreakHeatmap from '$lib/components/StreakHeatmap.svelte';
   import IconPicker from '$lib/components/IconPicker.svelte';
+  import GoalEditor from '$lib/components/GoalEditor.svelte';
 
-  let goals: Goal[] = [];
-  let tags: Tag[] = [];
-  let notes: Note[] = [];
-  let currentTab: 'today' | 'planning' | 'history' | 'analytics' = 'today';
-  let currentPlanningTab: 'WEEKLY' | 'MONTHLY' | 'ANNUAL' = 'ANNUAL';
-  let showAddForm = false;
+  let goals = $state<Goal[]>([]);
+  let tags = $state<Tag[]>([]);
+  let notes = $state<Note[]>([]);
+  let currentTab = $state<'today' | 'planning' | 'history' | 'analytics' | 'editor'>('today');
+  let currentPlanningTab = $state<'WEEKLY' | 'MONTHLY' | 'ANNUAL'>('ANNUAL');
+  let showAddForm = $state(false);
+  let editorGoal: Goal | null = $state(null);
+  let editorContent: string = $state('');
 
   const EMOJIS = Array.from(new Set([
     '🔴','❌','⚠️','📉','⛔','🌧️','🔥','💪','🏃','🚴','🏊','🏋️','🤸','🧘',
@@ -46,27 +51,28 @@
   ];
 
   // New goal form
-  let newTitle = '';
-  let newDescription = '';
-  let newTargetValue = 1;
-  let newTemporality: Goal['temporality'] = 'DAILY';
-  let newMeasurement: Goal['measurement_type'] = 'COUNT';
-  let newFailConfig: Goal['fail_config'] = 'STATIC';
-  let newFailEmoji = '🔴';
-  let newFailIcon = 'Activity';
-  let newGoalColor = '#c8a96e';
-  let useFailIcon = false;
-  let newTagId: number | null = null;
-  let newNoteId: number | null = null;
-  let saving = false;
-  let ngActiveSection: 'basics' | 'appearance' | 'advanced' = 'basics';
+  let newTitle = $state('');
+  let newDescription = $state('');
+  let newTargetValue = $state(1);
+  let newTemporality = $state<Goal['temporality']>('DAILY');
+  let newMeasurement = $state<Goal['measurement_type']>('COUNT');
+  let newFailConfig = $state<Goal['fail_config']>('STATIC');
+  let newFailEmoji = $state('🔴');
+  let newFailIcon = $state('Activity');
+  let newGoalColor = $state('#c8a96e');
+  let newMaxAssignmentDays = $state<number | null>(null);
+  let useFailIcon = $state(false);
+  let newTagId = $state<number | null>(null);
+  let newNoteId = $state<number | null>(null);
+  let saving = $state(false);
+  let ngActiveSection = $state<'basics' | 'appearance' | 'advanced'>('basics');
 
-  $: dailyGoals = goals.filter(g => g.temporality === 'DAILY' && g.state !== 'CANCELLED');
-  $: planningGoals = goals.filter(g => g.state !== 'CANCELLED');
-  $: pendingGoals = goals.filter(g => g.pending_removal);
+  let dailyGoals = $derived(goals.filter(g => g.temporality === 'DAILY' && g.state !== 'CANCELLED'));
+  let planningGoals = $derived(goals.filter(g => g.state !== 'CANCELLED'));
+  let pendingGoals = $derived(goals.filter(g => g.pending_removal));
 
-  let historyData: any[] = [];
-  $: {
+  let historyData = $state<any[]>([]);
+  $effect(() => {
     const dataMap = new Map();
     // Procesar completados
     for (const g of goals) {
@@ -92,13 +98,13 @@
       }
     }
     historyData = Array.from(dataMap.values());
-  }
+  });
 
   // ── History tab state ──
   const _now = new Date();
-  let selectedHistoryDate: string | null = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}-${String(_now.getDate()).padStart(2, '0')}`;
+  let selectedHistoryDate = $state<string | null>(`${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}-${String(_now.getDate()).padStart(2, '0')}`);
 
-  $: goalsForDate = (() => {
+  let goalsForDate = $derived.by(() => {
     if (!selectedHistoryDate) return { completed: [], failed: [] };
     const completed = goals.filter(g =>
       (g.state === 'COMPLETED' || g.is_completed) &&
@@ -109,7 +115,7 @@
       g.updated_at?.startsWith(selectedHistoryDate!)
     );
     return { completed, failed };
-  })();
+  });
 
   function formatHistoryDate(iso: string | null): string {
     if (!iso) return '';
@@ -120,8 +126,8 @@
     return `${DAYS[date.getDay()]}, ${d} de ${MONTHS[m-1]} de ${y}`;
   }
 
-  let loadError = '';
-  let streakData = { current_streak: 0, best_streak: 0 };
+  let loadError = $state('');
+  let streakData = $state({ current_streak: 0, best_streak: 0 });
 
   onMount(async () => {
     const cachedGoals = getCachedData<Goal[]>('goals');
@@ -144,6 +150,8 @@
         if (savedTab) currentTab = savedTab as typeof currentTab;
         const savedDate = localStorage.getItem('goals.selectedPlanningDate');
         if (savedDate) selectedPlanningDate = savedDate;
+        const savedHistoryDate = localStorage.getItem('goals.selectedHistoryDate');
+        if (savedHistoryDate) selectedHistoryDate = savedHistoryDate;
         // if we are on planning, pre-load assignments for the selected date
         if (currentTab === 'planning' && selectedPlanningDate) {
           await loadAssignmentsForDate(selectedPlanningDate);
@@ -159,7 +167,7 @@
     }
   });
 
-  let addError = '';
+  let addError = $state('');
 
   async function addGoal() {
     if (!newTitle.trim()) return;
@@ -177,11 +185,13 @@
         color: newGoalColor,
         tag_id: newTagId,
         note_id: newNoteId,
+        max_assignment_days: newMaxAssignmentDays,
       });
       goals = [g, ...goals];
       showAddForm = false;
       newTitle = ''; newTargetValue = 1;
       newTagId = null; newNoteId = null;
+      newMaxAssignmentDays = null;
     } catch (e) {
       addError = 'Error al crear el objetivo.';
     } finally {
@@ -227,17 +237,68 @@
   }
 
   // ── Edit goal modal state ──
-  let editingGoal: Goal | null = null;
-  let editTitle = '';
-  let editDescription = '';
-  let editTargetValue = 1;
-  let editFailConfig: Goal['fail_config'] = 'STATIC';
-  let editMeasurement: Goal['measurement_type'] = 'COUNT';
-  let editColor = '#c8a96e';
-  let editSaving = false;
+  let editingGoal = $state<Goal | null>(null);
+  let editTitle = $state('');
+  let editDescription = $state('');
+  let editTargetValue = $state(1);
+  let editFailConfig = $state<Goal['fail_config']>('STATIC');
+  let editMeasurement = $state<Goal['measurement_type']>('COUNT');
+  let editColor = $state('#c8a96e');
+  let editMaxAssignmentDays = $state<number | null>(null);
+  let editSaving = $state(false);
 
   // ── Analytics expandable state ──
-  let showPerformanceChart = true;
+  let showPerformanceChart = $state(true);
+
+  // ── Dashboard State ──
+  let activeWidgetIndex = $state(0);
+  const widgetTitles = [
+    'Predicción y Tendencia',
+    'Actividad por Día',
+    'Distribución de Éxito',
+    'Deuda de Objetivos',
+    'Embudo de Retención'
+  ];
+
+  let upcomingTasks = $derived.by(() => {
+    const futureAssignments: { date: string, goal: Goal }[] = [];
+    const sortedDates = Object.keys(assignments).filter(d => d >= todayIso).sort();
+    
+    for (const date of sortedDates) {
+      for (const id of assignments[date]) {
+        const goal = goals.find(g => g.id === id);
+        if (goal && goal.state !== 'COMPLETED' && goal.state !== 'FAILED') {
+          if (!futureAssignments.some(a => a.goal.id === id && a.date === date)) {
+            futureAssignments.push({ date, goal });
+          }
+        }
+      }
+    }
+    return futureAssignments.slice(0, 5);
+  });
+
+  let currentWeekDates = $derived.by(() => {
+    const dates = [];
+    const today = new Date();
+    const day = today.getDay();
+    const diff = today.getDate() - day + (day === 0 ? -6 : 1);
+    const monday = new Date(new Date().setDate(diff));
+    
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      const dateStr = d.toISOString().split('T')[0];
+      const isToday = dateStr === todayIso;
+      const hData = historyData.find(h => h.date === dateStr);
+      dates.push({
+        dateStr,
+        isToday,
+        dayName: ['L', 'M', 'X', 'J', 'V', 'S', 'D'][i],
+        hasActivity: hData?.checked || false
+      });
+    }
+    return dates;
+  });
 
   // ── Hierarchical planning helpers ──
   function getParentGoals(goalList: Goal[]) {
@@ -249,8 +310,8 @@
 
   // Planning assignment state (frontend-only mapping date -> goal ids)
   const todayIso = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}-${String(_now.getDate()).padStart(2, '0')}`;
-  let selectedPlanningDate: string = todayIso;
-  let assignments: Record<string, number[]> = {};
+  let selectedPlanningDate = $state(todayIso);
+  let assignments = $state<Record<string, number[]>>({});
 
   function getNormalizedDate(date: string, temporality: Goal['temporality']): string {
     if (!date) return date;
@@ -266,6 +327,21 @@
     if (temporality === 'ANNUAL') return date.substring(0, 4) + '-01-01';
     return date;
   }
+
+  let listSortBy = $state<'recent' | 'alpha' | 'state'>('recent');
+
+  let filteredUnassignedGoals = $derived.by(() => {
+    let unassigned = goals.filter(g => g.state !== 'CANCELLED' && !isAssigned(g.id, selectedPlanningDate));
+    if (listSortBy === 'alpha') {
+      unassigned.sort((a, b) => a.title.localeCompare(b.title));
+    } else if (listSortBy === 'state') {
+      const stateOrder: Record<string, number> = { 'ACTIVE': 1, 'PAUSED': 2, 'COMPLETED': 3, 'FAILED': 4 };
+      unassigned.sort((a, b) => (stateOrder[a.state] || 9) - (stateOrder[b.state] || 9));
+    } else {
+      unassigned.sort((a, b) => b.id - a.id);
+    }
+    return unassigned;
+  });
 
   function getGoalStatusOnDate(goal: Goal, dateStr: string) {
     const normDate = getNormalizedDate(dateStr, goal.temporality);
@@ -291,15 +367,29 @@
   }
 
   // persist current tab and selected planning date in localStorage
-  $: try {
+  $effect(() => {
     if (typeof localStorage !== 'undefined') localStorage.setItem('goals.currentTab', currentTab);
-  } catch (e) {}
+  });
 
-  $: if (selectedPlanningDate) {
-    try { if (typeof localStorage !== 'undefined') localStorage.setItem('goals.selectedPlanningDate', selectedPlanningDate); } catch (e) {}
-    // load assignments for the newly selected date and its periods
-    loadAssignmentsForDate(selectedPlanningDate);
-  }
+  $effect(() => {
+    if (selectedPlanningDate) {
+      if (typeof localStorage !== 'undefined') localStorage.setItem('goals.selectedPlanningDate', selectedPlanningDate);
+      loadAssignmentsForDate(selectedPlanningDate);
+    }
+    // Preload upcoming assignments for dashboard
+    const today = new Date();
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(today);
+      d.setDate(today.getDate() + i);
+      loadAssignmentsForDate(d.toISOString().split('T')[0]);
+    }
+  });
+
+  $effect(() => {
+    if (selectedHistoryDate && typeof localStorage !== 'undefined') {
+      localStorage.setItem('goals.selectedHistoryDate', selectedHistoryDate);
+    }
+  });
 
   async function loadAssignmentsForDate(date: string) {
     if (!date) return;
@@ -374,57 +464,61 @@
   }
 
   function openEditModal(goal: Goal) {
-    editingGoal = goal;
-    editTitle = goal.title;
-    editDescription = goal.description || '';
-    editTargetValue = goal.target_value;
-    editFailConfig = goal.fail_config;
-    editMeasurement = goal.measurement_type;
-    editColor = goal.color || '#c8a96e';
+    currentTab = 'editor';
+    editorGoal = goal;
+    api.goals.getContent(goal.id).then(res => {
+      editorContent = res?.content || goal.description || '';
+    });
   }
 
   // ── Advanced Analytics Calculations ──
-  $: completedGoalsCount = goals.filter(g => g.state === 'COMPLETED').length;
-  $: failedGoalsCount = goals.filter(g => g.state === 'FAILED').length;
-  $: successRate = (completedGoalsCount + failedGoalsCount) > 0 
+  let completedGoalsCount = $derived(goals.filter(g => g.state === 'COMPLETED' || g.is_completed).length);
+  let failedGoalsCount = $derived(goals.filter(g => g.state === 'FAILED').length);
+  let successRate = $derived((completedGoalsCount + failedGoalsCount) > 0 
     ? Math.round((completedGoalsCount / (completedGoalsCount + failedGoalsCount)) * 100) 
-    : 0;
+    : 0);
 
-  $: completionsByDay = (() => {
+  let completionsByDay = $derived.by(() => {
     const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
     const counts = [0, 0, 0, 0, 0, 0, 0];
-    goals.filter(g => g.state === 'COMPLETED' && g.completed_at).forEach(g => {
-      const d = new Date(g.completed_at!);
+    goals.filter(g => (g.state === 'COMPLETED' || g.is_completed) && g.completed_at).forEach(g => {
+      const dateParts = g.completed_at!.split('T')[0].split('-');
+      const d = new Date(Number(dateParts[0]), Number(dateParts[1]) - 1, Number(dateParts[2]));
       counts[d.getDay()]++;
     });
     return days.map((label, i) => ({ label, value: counts[i] }));
-  })();
+  });
 
-  $: topTagsBySuccess = (() => {
+  let topTagsBySuccess = $derived.by(() => {
     const tagMap = new Map();
-    goals.filter(g => g.state === 'COMPLETED' && g.tag_id).forEach(g => {
-      const tagName = tags.find(t => t.id === g.tag_id)?.name || 'Sin Tag';
-      tagMap.set(tagName, (tagMap.get(tagName) || 0) + 1);
+    goals.filter(g => (g.state === 'COMPLETED' || g.is_completed) && (g.tag_id || g.note_id)).forEach(g => {
+      let name = 'Sin Etiqueta';
+      if (g.tag_id) {
+        name = tags.find(t => t.id === g.tag_id)?.name || 'Sin Etiqueta';
+      } else if (g.note_id) {
+        name = notes.find(n => n.id === g.note_id)?.title || 'Nota';
+      }
+      tagMap.set(name, (tagMap.get(name) || 0) + 1);
     });
     return Array.from(tagMap.entries())
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 5);
-  })();
+  });
 
-  $: progressOverview = (() => {
+  let progressOverview = $derived.by(() => {
     return ['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL'].map(temp => {
       const tempGoals = goals.filter(g => g.temporality === temp);
       const avgProgress = tempGoals.length > 0 
-        ? Math.round(tempGoals.reduce((acc, g) => acc + g.progress_pct, 0) / tempGoals.length)
+        ? Math.round(tempGoals.reduce((acc, g) => acc + (g.state === 'COMPLETED' || g.is_completed ? 100 : (g.progress_pct || 0)), 0) / tempGoals.length)
         : 0;
-      const completed = tempGoals.filter(g => g.state === 'COMPLETED').length;
+      const completed = tempGoals.filter(g => g.state === 'COMPLETED' || g.is_completed).length;
       const failed = tempGoals.filter(g => g.state === 'FAILED').length;
       return { temp, avgProgress, count: tempGoals.length, completed, failed };
     });
-  })();
+  });
 
-  $: prediction = (() => {
+  let prediction = $derived.by(() => {
     const now = new Date();
     const last7Days = historyData.filter(d => {
       const date = new Date(d.date);
@@ -444,20 +538,22 @@
     const percentChange = prev7Days > 0 ? Math.round(((last7Days - prev7Days) / prev7Days) * 100) : (last7Days > 0 ? 100 : 0);
     
     return { trend, percentChange, estimateNextMonth: Math.round(last7Days * 4), last7Days, prev7Days };
-  })();
+  });
 
-  $: candleData = (() => {
+  let candleData = $derived.by(() => {
     let currentPrice = 1000;
     const results: { date: string; open: number; close: number; high: number; low: number }[] = [];
     const last30Days = [];
     for (let i = 29; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
-      last30Days.push(d.toISOString().split('T')[0]);
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      last30Days.push(`${d.getFullYear()}-${m}-${day}`);
     }
 
     last30Days.forEach((date: string) => {
-      const comps = goals.filter(g => g.state === 'COMPLETED' && g.completed_at?.startsWith(date)).length;
+      const comps = goals.filter(g => (g.state === 'COMPLETED' || g.is_completed) && g.completed_at?.startsWith(date)).length;
       const fails = goals.filter(g => g.state === 'FAILED' && g.updated_at?.startsWith(date)).length;
       
       const open = currentPrice;
@@ -469,14 +565,75 @@
       currentPrice = close;
     });
     return results;
-  })();
+  });
 
-  $: candleScale = (() => {
+  let candleScale = $derived.by(() => {
     const allVals = candleData.flatMap(c => [c.high, c.low]);
     const min = Math.min(...allVals) - 10;
     const max = Math.max(...allVals) + 10;
     return { min, max, range: max - min };
-  })();
+  });
+
+  let activityByHour = $derived.by(() => {
+    const counts = new Array(24).fill(0);
+    goals.forEach(g => {
+      if ((g.state === 'COMPLETED' || g.is_completed) && g.completed_at) {
+        const hour = new Date(g.completed_at).getHours();
+        if(!isNaN(hour)) counts[hour]++;
+      }
+    });
+    const maxVal = Math.max(...counts) || 1;
+    return counts.map((c, i) => ({
+      hour: i,
+      label: `${i.toString().padStart(2, '0')}:00`,
+      val: c,
+      pct: c / maxVal
+    }));
+  });
+
+  let radarData = $derived.by(() => {
+    const categories = topTagsBySuccess.slice(0, 6);
+    while(categories.length > 0 && categories.length < 3) {
+      categories.push({name: '', count: 0});
+    }
+    if(categories.length === 0) return [];
+    const maxVal = Math.max(...categories.map(c => c.count)) || 1;
+    return categories.map((c, i) => {
+      const angle = (Math.PI * 2 * i) / categories.length - Math.PI / 2;
+      return {
+        name: c.name,
+        value: c.count,
+        pct: c.count / maxVal,
+        x: 50 + 40 * Math.cos(angle),
+        y: 50 + 40 * Math.sin(angle),
+        labelX: 50 + 50 * Math.cos(angle),
+        labelY: 50 + 50 * Math.sin(angle)
+      };
+    });
+  });
+
+  let debtData = $derived.by(() => {
+    const dGoals = goals.filter(g => (g.fail_config === 'ROLLOVER' || g.fail_config === 'SNOWBALL') && g.state === 'ACTIVE');
+    const total = dGoals.reduce((acc, g) => acc + Math.max(0, g.target_value - g.current_value), 0);
+    return {
+      goals: dGoals.map(g => ({ title: g.title, debt: Math.max(0, g.target_value - g.current_value) })).sort((a,b)=>b.debt-a.debt).slice(0, 5),
+      total
+    };
+  });
+
+  let funnelData = $derived.by(() => {
+    const total = goals.length || 1;
+    const completed = goals.filter(g => g.state === 'COMPLETED' || g.is_completed).length;
+    const failed = goals.filter(g => g.state === 'FAILED').length;
+    const active = goals.filter(g => g.state === 'ACTIVE').length;
+    const cancelled = goals.filter(g => g.state === 'CANCELLED' || g.state === 'PAUSED').length;
+    return [
+      { label: 'Iniciados', value: total, color: 'var(--text-disabled)' },
+      { label: 'Activos', value: active, color: 'var(--xp)' },
+      { label: 'Completados', value: completed, color: 'var(--success)' },
+      { label: 'Abandonados', value: cancelled + failed, color: 'var(--error)' }
+    ];
+  });
 
   function getY(val: number) {
     return 150 - ((val - candleScale.min) / candleScale.range) * 150;
@@ -493,6 +650,7 @@
         fail_config: editFailConfig,
         measurement_type: editMeasurement,
         color: editColor,
+        max_assignment_days: editMaxAssignmentDays,
       });
       goals = goals.map(g => g.id === editingGoal!.id ? result : g);
       editingGoal = null;
@@ -502,7 +660,38 @@
       editSaving = false;
     }
   }
-</script>
+
+  function getGoalColor(goal: Goal): string {
+    const colorMap: Record<string, string> = {
+      'DAILY': '#fbbf24',
+      'WEEKLY': '#22d3d3',
+      'MONTHLY': '#60a5fa',
+      'ANNUAL': '#3b82f6',
+      'ACTIVE': '#fbbf24',
+      'COMPLETED': '#10b981',
+      'PAUSED': '#ef4444',
+      'CANCELLED': '#ef4444',
+    };
+
+    if (goal.state === 'ACTIVE' || goal.state === 'PAUSED' || goal.state === 'CANCELLED') {
+      return colorMap[goal.state] || goal.color || 'var(--border)';
+    }
+    if (goal.state === 'COMPLETED' || goal.is_completed) {
+      return colorMap['COMPLETED'];
+    }
+    if (goal.temporality) {
+      return colorMap[goal.temporality];
+    }
+    return goal.color || 'var(--border)';
+  }
+</script> 
+
+<svelte:window on:keydown={(e) => {
+  if (e.key === 'Escape') {
+    showAddForm = false;
+    editingGoal = null;
+  }
+}} />
 
 <div class="goals-page">
   {#if loadError}
@@ -511,6 +700,9 @@
 
   <div class="goals-header">
     <div class="tabs">
+      <button class="tab" class:active={currentTab === 'editor'} on:click={() => currentTab = 'editor'}>
+        <Pencil size={14} /> Editor
+      </button>
       <button class="tab" class:active={currentTab === 'today'} on:click={() => currentTab = 'today'}>
         <Layout size={14} /> Dashboard
       </button>
@@ -524,61 +716,53 @@
         <BarChart size={14} /> Analytics
       </button>
     </div>
-    <button class="btn btn-primary" on:click={() => showAddForm = !showAddForm}>
-      <Plus size={13} /> Nuevo objetivo
-    </button>
   </div>
 
-  <div class="goals-body" class:full-width={currentTab === 'analytics' || currentTab === 'history' || currentTab === 'planning'}>
+  <div class="goals-body" class:full-width={currentTab === 'analytics' || currentTab === 'history' || currentTab === 'planning' || currentTab === 'today' || currentTab === 'editor'}>
 
 
     {#if currentTab === 'today'}
-      <div class="tab-content fade-in">
-        <!-- Quick Metrics Dashboard -->
-        <div class="metrics-grid">
-          <div class="metric-card">
-            <span class="metric-value">{dailyGoals.filter(g => g.state === 'COMPLETED').length}</span>
-            <span class="metric-label">Completados Hoy</span>
-          </div>
-          <div class="metric-card">
-            <span class="metric-value">{dailyGoals.length > 0 ? Math.round((dailyGoals.filter(g => g.state === 'COMPLETED').length / dailyGoals.length) * 100) : 0}%</span>
-            <span class="metric-label">Tasa de Disciplina</span>
-          </div>
-          <div class="metric-card">
-            <span class="metric-value">{goals.filter(g => g.state === 'FAILED').length}</span>
-            <span class="metric-label">Objetivos Fallidos</span>
-          </div>
-        </div>
-
-        <h3 class="section-title" style="margin-top: var(--s4);">Objetivos del Día</h3>
+      <div class="tab-content fade-in" style="display: grid; grid-template-columns: 1fr 300px; gap: 24px; max-width: 1200px; margin: 0 auto; width: 100%;">
+        <div class="dashboard-main-col" style="display: flex; flex-direction: column;">
+          <h3 class="section-title" style="margin-top: 0;">Objetivos del Día</h3>
         {#if dailyGoals.length === 0}
           <div class="empty-state">No hay objetivos diarios activos.</div>
         {/if}
         {#each dailyGoals as goal (goal.id)}
-          <div class="goal-card" class:completed={goal.state === 'COMPLETED'} class:failed={goal.state === 'FAILED'} class:paused={goal.state === 'PAUSED'}>
+          <div class="goal-card" class:completed={goal.state === 'COMPLETED'} class:failed={goal.state === 'FAILED'} class:paused={goal.state === 'PAUSED'} style="border-left: 3px solid {getGoalColor(goal)}">
             <div class="goal-main">
               <div class="goal-title">
-                {#if goal.fail_emoji}
-                  <span class="emoji-badge" style="display:flex; align-items:center; margin-right:8px;">
-                    <StreakIcon name={goal.fail_emoji} size={16} color={goal.color || 'var(--text-muted)'} />
-                  </span>
-                {/if}
-                {goal.title}
+                <button
+                  class="btn btn-ghost"
+                  style="font-size: inherit; font-weight: inherit; padding: 0; margin: 0; height: auto; color: inherit;"
+                  title="Editar en el editor"
+                  on:click|stopPropagation={() => goto(`/goals/${goal.id}`)}
+                >
+                  {#if goal.fail_emoji}
+                    <span class="emoji-badge" style="display:flex; align-items:center; margin-right:8px;">
+                      <StreakIcon name={goal.fail_emoji} size={16} color={getGoalColor(goal)} />
+                    </span>
+                  {/if}
+                  {goal.title}
+                </button>
                 {#if goal.state === 'PAUSED'}
                   <span class="state-badge paused-badge">PAUSADO</span>
                 {/if}
               </div>
               <div class="goal-meta">
                 {#if goal.note_id}
-                  <span class="tag-chip">{notes.find(n => n.id === goal.note_id)?.title || 'Nota vinculada'}</span>
+                  <span class="tag-chip" style="background: {getGoalColor(goal)}20; border: 1px solid {getGoalColor(goal)}; color: {getGoalColor(goal)};">{notes.find(n => n.id === goal.note_id)?.title || 'Nota vinculada'}</span>
                 {:else if goal.tag_id}
-                  <span class="tag-chip">{tags.find(t => t.id === goal.tag_id)?.name}</span>
+                  <span class="tag-chip" style="background: {getGoalColor(goal)}20; border: 1px solid {getGoalColor(goal)}; color: {getGoalColor(goal)};">{tags.find(t => t.id === goal.tag_id)?.name}</span>
                 {/if}
                 {#if goal.fail_config !== 'STATIC'}
                   <span class="config-badge">{formatFailConfig(goal.fail_config)}</span>
                 {/if}
                 {#if goal.measurement_type !== 'COUNT'}
                   <span class="config-badge" style="background:transparent; border: 1px solid var(--border);">{goal.measurement_type}</span>
+                {/if}
+                {#if goal.max_assignment_days}
+                  <span class="config-badge" style="background: rgba(59, 130, 246, 0.1); color: var(--text-muted); border: 1px solid rgba(59, 130, 246, 0.2);">Límite: {goal.max_assignment_days}d</span>
                 {/if}
               </div>
               {#if goal.description}
@@ -627,7 +811,151 @@
             </div>
           </div>
         {/each}
+
+        <!-- Next Assigned Tasks -->
+        <h3 class="section-title" style="margin-top: 24px;">Próximos Asignados</h3>
+        <div class="history-goal-list" style="width:100%">
+          {#if upcomingTasks.length === 0}
+            <div class="empty-state">No hay tareas próximas planificadas.</div>
+          {/if}
+          {#each upcomingTasks as task}
+            {@const g = task.goal}
+            <button class="history-goal-item assigned" style="border-left-color: {getGoalColor(g)}; display:flex; align-items:center; background: transparent; border: none; width: 100%;" on:click={() => goto(`/goals/${g.id}`)}>
+              <div class="hgi-info" style="flex: 1;">
+                <div class="hgi-title">{g.title}</div>
+                <div class="hgi-meta">
+                  <span class="config-badge">{task.date}</span>
+                  <span class="config-badge" style="margin-left: 8px; background: {getGoalColor(g)}20; border: 1px solid {getGoalColor(g)}; color: {getGoalColor(g)};">{g.temporality}</span>
+                </div>
+              </div>
+            </button>
+          {/each}
+        </div>
       </div>
+
+      <!-- Dashboard Right Column -->
+      <div class="dashboard-side-col" style="display: flex; flex-direction: column; gap: 16px;">
+        <button class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px;" on:click={() => showAddForm = !showAddForm}>
+          <Plus size={16} /> Nuevo Objetivo
+        </button>
+
+        <div class="dash-card">
+          <div class="dash-card-header">
+            <Calendar size={14} />
+            <span>Mapa de la Semana</span>
+          </div>
+          <div style="display: flex; gap: 6px; justify-content: space-between; margin-top: 12px;">
+            {#each currentWeekDates as day}
+              <button 
+                class="week-day-box" 
+                title={day.dateStr}
+                on:click={() => {
+                  currentTab = 'history';
+                  selectedHistoryDate = day.dateStr;
+                }}
+                style="flex: 1; aspect-ratio: 1; border-radius: 4px; border: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; background: {day.hasActivity ? 'var(--success)' : 'var(--surface)'}; color: {day.hasActivity ? 'var(--bg)' : 'var(--text-muted)'}; opacity: {day.isToday ? '1' : '0.8'}; {day.isToday ? 'box-shadow: 0 0 0 2px var(--border);' : ''}"
+              >
+                <span style="font-size: 10px; font-weight: bold; margin-bottom: 2px;">{day.dayName}</span>
+                <span style="font-size: 12px; font-weight: {day.isToday ? 'bold' : 'normal'};">{day.dateStr.split('-')[2]}</span>
+              </button>
+            {/each}
+          </div>
+        </div>
+
+        <div class="dash-card" style="aspect-ratio: 1; display: flex; flex-direction: column; padding: 0; overflow: hidden;">
+          <div class="widget-header" style="display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid var(--border-light); background: var(--bg-card);">
+            <button class="btn btn-ghost text-muted" style="padding: 4px;" on:click={() => activeWidgetIndex = (activeWidgetIndex - 1 + 5) % 5}><ChevronLeft size={14}/></button>
+            <span class="widget-title" style="font-size: 12px; font-weight: 600; text-align: center; flex: 1;">{widgetTitles[activeWidgetIndex]}</span>
+            <button class="btn btn-ghost text-muted" style="padding: 4px;" on:click={() => activeWidgetIndex = (activeWidgetIndex + 1) % 5}><ChevronRight size={14}/></button>
+          </div>
+          <div class="widget-content" style="flex: 1; position: relative; padding: 16px; overflow: hidden; display: flex; align-items: center; justify-content: center;">
+            {#if activeWidgetIndex === 0}
+              <div class="prediction-hero" style="width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center;">
+                <div class="prediction-stats-row" style="margin-top: 0; justify-content: space-around;">
+                  <div class="trend-summary">
+                    <div class="trend-icon-wrap {prediction.trend.toLowerCase()}">
+                      {#if prediction.trend === 'UP'} <TrendingUp size={14} /> {:else} <TrendingDown size={14} /> {/if}
+                      <span class="trend-pct">{prediction.percentChange > 0 ? '+' : ''}{prediction.percentChange}%</span>
+                    </div>
+                    <span class="trend-label">Disciplina</span>
+                  </div>
+                  <div class="prediction-estimate">
+                    <span class="pred-lab">Próx. 30d</span>
+                    <span class="pred-val">~{prediction.estimateNextMonth}✓</span>
+                  </div>
+                </div>
+              </div>
+            {:else if activeWidgetIndex === 1}
+              <div class="weekday-chart" style="width: 100%; height: 100%; padding-top: 10px;">
+                {#each completionsByDay as day}
+                  {@const maxVal = Math.max(...completionsByDay.map(d => d.value)) || 1}
+                  {@const intensity = day.value > 0 ? Math.max(30, (day.value / maxVal) * 100) : 0}
+                  <div class="day-col">
+                    <span class="day-val" style="color: {day.value > 0 ? 'var(--text-primary)' : 'var(--text-disabled)'}">{day.value}</span>
+                    <div class="day-bar-wrap" style="height: 60px;">
+                      <div class="day-bar" style="height: {day.value > 0 ? Math.max(8, intensity) : 0}%; background: {day.value > 0 ? `color-mix(in srgb, var(--xp) ${intensity}%, transparent)` : 'transparent'}; border: {day.value === 0 ? '1px dashed var(--border)' : 'none'};"></div>
+                    </div>
+                    <span class="day-label">{day.label[0]}</span>
+                  </div>
+                {/each}
+              </div>
+            {:else if activeWidgetIndex === 2}
+              <div class="radar-container" style="width: 100%; height: 100%;">
+                {#if radarData.length === 0}
+                  <div class="empty-state mini">Sin datos suficientes</div>
+                {:else}
+                  <svg viewBox="0 0 100 100" class="radar-svg" style="max-height: 100%; margin: 0 auto; display: block;">
+                    {#each [20, 40, 60, 80, 100] as r}
+                      <polygon points={radarData.map(d => `${50 + (r/100)*40*Math.cos(d.angle)},${50 + (r/100)*40*Math.sin(d.angle)}`).join(' ')} fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="0.5" />
+                    {/each}
+                    <polygon points={radarData.map(d => `${50 + d.pct*40*Math.cos(d.angle)},${50 + d.pct*40*Math.sin(d.angle)}`).join(' ')} fill="var(--xp)" fill-opacity="0.3" stroke="var(--xp)" stroke-width="1" stroke-linejoin="round" />
+                    {#each radarData as d}
+                      <circle cx={50 + d.pct*40*Math.cos(d.angle)} cy={50 + d.pct*40*Math.sin(d.angle)} r="1.5" fill="var(--surface)" stroke="var(--xp)" stroke-width="1" />
+                    {/each}
+                  </svg>
+                {/if}
+              </div>
+            {:else if activeWidgetIndex === 3}
+              <div class="debt-content" style="width: 100%; height: 100%; display: flex; flex-direction: column;">
+                <div class="debt-total" style="padding-bottom: 8px;">
+                  <span class="debt-val" style="font-size: 24px;">{debtData.total}</span>
+                  <span class="debt-lab">Pendientes</span>
+                </div>
+                <div class="debt-list" style="flex: 1; overflow: hidden;">
+                  {#if debtData.goals.length === 0}
+                     <div class="empty-state mini">Cero deudas.</div>
+                  {:else}
+                    {#each debtData.goals.slice(0,3) as d}
+                      <div class="debt-item" style="margin-bottom: 8px;">
+                        <span class="debt-title" style="font-size: 11px;">{d.title}</span>
+                        <div class="debt-bar-wrap" style="height: 4px; margin-top: 4px;">
+                          <div class="debt-bar" style="width: {(d.debt / (debtData.goals[0]?.debt || 1)) * 100}%"></div>
+                        </div>
+                      </div>
+                    {/each}
+                  {/if}
+                </div>
+              </div>
+            {:else if activeWidgetIndex === 4}
+              <div class="funnel-chart" style="width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; gap: 8px;">
+                {#each funnelData.slice(0,3) as f}
+                  <div class="funnel-row" style="margin-bottom: 0;">
+                    <div class="funnel-label-col" style="flex: 1; display: flex; justify-content: space-between;">
+                      <span class="funnel-name" style="font-size: 11px;">{f.label}</span>
+                      <span class="funnel-val" style="color: {f.color}; font-size: 11px;">{f.value}</span>
+                    </div>
+                    <div class="funnel-bar-col" style="flex: 2; height: 6px;">
+                      <div class="funnel-bar" style="width: {(f.value / (funnelData[0]?.value || 1)) * 100}%; background: {f.color};"></div>
+                    </div>
+                  </div>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        </div>
+
+      </div>
+    </div>
     {/if}
 
     {#if currentTab === 'planning'}
@@ -637,22 +965,38 @@
           <div class="history-detail-header">
             <div class="history-detail-date" style="text-transform:none;">Lista de Objetivos</div>
           </div>
+          <div style="padding: 0 var(--s3) 8px; display: flex; justify-content: flex-end; border-bottom: 1px solid var(--border-light); margin-bottom: 8px;">
+            <select class="input" style="padding: 2px 8px; font-size: 11px; height: auto;" bind:value={listSortBy}>
+              <option value="recent">Orden: Reciente</option>
+              <option value="alpha">Orden: Alfabético</option>
+              <option value="state">Orden: Estado</option>
+            </select>
+          </div>
 
           <div class="history-goal-list" style="width: 100%;">
-            {#each goals.filter(g => g.state !== 'CANCELLED') as goal (goal.id)}
-              {#if !isAssigned(goal.id, selectedPlanningDate)}
-                <button
-                  class="history-goal-item"
-                  style="width: 100%; border-left: 3px solid var(--border); display: flex; text-align: left;"
-                  on:click={() => assignGoalToDate(goal.id, selectedPlanningDate)}
-                  title="Asignar al día seleccionado"
-                >
-                  <div class="hgi-info">
-                    <div class="hgi-title">{goal.title}</div>
-                    <div class="hgi-meta"><span class="config-badge">{goal.temporality}</span></div>
+            {#each filteredUnassignedGoals as goal (goal.id)}
+              <button
+                class="history-goal-item assigned"
+                style="width: 100%; border-left-color: {getGoalColor(goal)}; display: flex; align-items:center; justify-content:space-between; text-align: left;"
+                on:click={() => assignGoalToDate(goal.id, selectedPlanningDate)}
+                title="Asignar al día seleccionado"
+              >
+                <div class="hgi-info">
+                  <div class="hgi-title" style="color: var(--text-primary);">{goal.title}</div>
+                  <div class="hgi-meta">
+                    <span class="config-badge" style="background: {getGoalColor(goal)}20; border: 1px solid {getGoalColor(goal)}; color: {getGoalColor(goal)};">{goal.temporality}</span>
+                    {#if goal.state === 'PAUSED'}
+                      <span class="status-badge" style="background: rgba(255,255,255,0.05); color: var(--text-muted); border: 1px solid rgba(255,255,255,0.1);">Pausado</span>
+                    {/if}
+                    {#if goal.max_assignment_days}
+                      <span class="config-badge" style="margin-left: 8px; background: rgba(59, 130, 246, 0.1); color: var(--text-muted); border: 1px solid rgba(59, 130, 246, 0.2);">Límite: {goal.max_assignment_days}d</span>
+                    {/if}
                   </div>
-                </button>
-              {/if}
+                </div>
+                <div style="display:flex; gap:6px;">
+                  <span class="btn btn-ghost text-muted" title="Asignar"><ChevronRight size={14} /></span>
+                </div>
+              </button>
             {/each}
           </div>
         </div>
@@ -668,8 +1012,7 @@
               color="var(--success)"
               selectedDate={selectedPlanningDate}
               onselect={(date) => selectedPlanningDate = date}
-              maxFutureMonths={12}
-              hideTabs={true}
+              maxFutureMonths={1200}
             />
           </div>
         </div>
@@ -692,20 +1035,23 @@
                 </div>
                 {#each filteredGoals as g (g.id)}
                   {@const status = getGoalStatusOnDate(g, selectedPlanningDate)}
-                  <div class="history-goal-item assigned" class:status-completed={status === 'COMPLETED'} class:status-failed={status === 'FAILED'} style="border-left-color: {status === 'FAILED' ? 'var(--error)' : (g.color || 'var(--success)')}; display:flex; align-items:center; justify-content:space-between;">
-                    <div class="hgi-info">
+                  <div class="history-goal-item assigned" class:status-completed={status === 'COMPLETED'} class:status-failed={status === 'FAILED'} style="border-left-color: {status === 'FAILED' ? '#ef4444' : (status === 'COMPLETED' ? '#10b981' : getGoalColor(g))}; display:flex; align-items:center;">
+                    <div style="display:flex; gap:6px; margin-right: 8px;">
+                      <button class="btn btn-ghost text-muted" style="padding: 4px;" on:click={() => unassignGoalFromDate(g.id, selectedPlanningDate)} title="Quitar"><ChevronLeft size={14} /></button>
+                    </div>
+                    <div class="hgi-info" style="flex: 1;">
                       <div class="hgi-title">{g.title}</div>
                       <div class="hgi-meta">
-                        <span class="config-badge">{g.temporality}</span>
+                        <span class="config-badge" style="background: {getGoalColor(g)}20; border: 1px solid {getGoalColor(g)}; color: {getGoalColor(g)};">{g.temporality}</span>
                         {#if status === 'COMPLETED'}
                           <span class="status-badge success">Completado</span>
                         {:else if status === 'FAILED'}
                           <span class="status-badge error">Fallido</span>
                         {/if}
+                        {#if g.max_assignment_days}
+                          <span class="config-badge" style="margin-left: 8px; background: rgba(59, 130, 246, 0.1); color: var(--text-muted); border: 1px solid rgba(59, 130, 246, 0.2);">Límite: {g.max_assignment_days}d</span>
+                        {/if}
                       </div>
-                    </div>
-                    <div style="display:flex; gap:6px;">
-                      <button class="btn btn-ghost" on:click={() => unassignGoalFromDate(g.id, selectedPlanningDate)} title="Quitar">×</button>
                     </div>
                   </div>
                 {/each}
@@ -766,18 +1112,18 @@
               <div class="history-section-label success"><Check size={12} /> Completados ({goalsForDate.completed.length})</div>
               <div class="history-goal-list">
                 {#each goalsForDate.completed as g (g.id)}
-                  <div class="history-goal-item completed" style="border-left-color: {g.color || 'var(--success)'};">
+                  <div class="history-goal-item completed" style="border-left-color: {getGoalColor(g)};">
                     <div class="hgi-icon-left">
-                      <StreakIcon name={g.fail_emoji} size={16} color={g.color || 'var(--success)'} />
+                      <StreakIcon name={g.fail_emoji} size={16} color={getGoalColor(g)} />
                     </div>
                     <div class="hgi-info">
                       <div class="hgi-title">{g.title}</div>
                       <div class="hgi-meta">
-                        <span class="config-badge">{g.temporality}</span>
+                        <span class="config-badge" style="background: {getGoalColor(g)}20; border: 1px solid {getGoalColor(g)}; color: {getGoalColor(g)};">{g.temporality}</span>
                         <div class="hgi-bar">
-                          <div class="hgi-bar-fill" style="width:100%; background:{g.color || 'var(--success)'};"></div>
+                          <div class="hgi-bar-fill" style="width:100%; background:{getGoalColor(g)};"></div>
                         </div>
-                        <span class="hgi-pct" style="color: {g.color || 'var(--success)'};">100%</span>
+                        <span class="hgi-pct" style="color: {getGoalColor(g)};">100%</span>
                       </div>
                     </div>
                   </div>
@@ -789,18 +1135,18 @@
               <div class="history-section-label failed"><X size={12} /> Fallidos ({goalsForDate.failed.length})</div>
               <div class="history-goal-list">
                 {#each goalsForDate.failed as g (g.id)}
-                  <div class="history-goal-item failed">
+                  <div class="history-goal-item failed" style="border-left-color: #ef4444;">
                     <div class="hgi-icon-left">
-                      <StreakIcon name={g.fail_emoji} size={16} color="var(--error)" />
+                      <StreakIcon name={g.fail_emoji} size={16} color="#ef4444" />
                     </div>
                     <div class="hgi-info">
                       <div class="hgi-title">{g.title}</div>
                       <div class="hgi-meta">
-                        <span class="config-badge">{g.temporality}</span>
+                        <span class="config-badge" style="background: #ef444420; border: 1px solid #ef4444; color: #ef4444;">{g.temporality}</span>
                         <div class="hgi-bar">
-                          <div class="hgi-bar-fill" style="width:{g.progress_pct}%; background: var(--error);"></div>
+                          <div class="hgi-bar-fill" style="width:{g.progress_pct}%; background: #ef4444;"></div>
                         </div>
-                        <span class="hgi-pct" style="color:var(--error);">{g.progress_pct}%</span>
+                        <span class="hgi-pct" style="color:#ef4444;">{g.progress_pct}%</span>
                       </div>
                     </div>
                   </div>
@@ -815,31 +1161,33 @@
     {#if currentTab === 'analytics'}
       <div class="tab-content fade-in full-height-dashboard">
         <!-- Main Stats Bar -->
-        <div class="dashboard-grid">
-          
-          <div class="dash-card stats-summary">
-            <div class="dash-card-header">
-              <Trophy size={16} />
-              <span>Resumen de Logros</span>
+        <div class="stats-top-bar">
+          <div class="stb-item">
+            <Trophy size={16} class="text-xp" />
+            <div style="display:flex; flex-direction:column; gap:2px;">
+              <span class="stb-val text-success">{completedGoalsCount}</span>
+              <span class="stb-label">Completados</span>
             </div>
-            <div class="stats-row">
-              <div class="stat-item">
-                <span class="stat-val" style="color: var(--success);">{completedGoalsCount}</span>
-                <span class="stat-lab">Completados</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-val" style="color: var(--error);">{failedGoalsCount}</span>
-                <span class="stat-lab">Fallidos</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-val">{successRate}%</span>
-                <span class="stat-lab">Efectividad</span>
-              </div>
+          </div>
+          <div class="stb-item">
+            <X size={16} class="text-error" />
+            <div style="display:flex; flex-direction:column; gap:2px;">
+              <span class="stb-val text-error">{failedGoalsCount}</span>
+              <span class="stb-label">Fallidos</span>
             </div>
-            <div class="success-meter">
+          </div>
+          <div class="stb-item" style="flex: 1; flex-direction: column; align-items: stretch; justify-content: center; gap: 8px;">
+            <div style="display:flex; justify-content:space-between; align-items: flex-end;">
+              <span class="stb-label">Efectividad Global</span>
+              <span class="stb-val" style="line-height: 1;">{successRate}%</span>
+            </div>
+            <div class="success-meter" style="margin-top: 0;">
               <div class="meter-fill" style="width: {successRate}%"></div>
             </div>
           </div>
+        </div>
+
+        <div class="dashboard-grid">
 
           <div class="dash-card prediction-card">
             <div class="dash-card-header">
@@ -913,9 +1261,11 @@
             <div class="weekday-chart">
               {#each completionsByDay as day}
                 {@const maxVal = Math.max(...completionsByDay.map(d => d.value)) || 1}
+                {@const intensity = day.value > 0 ? Math.max(30, (day.value / maxVal) * 100) : 0}
                 <div class="day-col">
+                  <span class="day-val" style="color: {day.value > 0 ? 'var(--text-primary)' : 'var(--text-disabled)'}">{day.value}</span>
                   <div class="day-bar-wrap">
-                    <div class="day-bar" style="height: {(day.value / maxVal) * 100}%" title="{day.value} completados"></div>
+                    <div class="day-bar" style="height: {day.value > 0 ? Math.max(8, intensity) : 0}%; background: {day.value > 0 ? `color-mix(in srgb, var(--xp) ${intensity}%, transparent)` : 'transparent'}; border: {day.value === 0 ? '1px dashed var(--border)' : 'none'};"></div>
                   </div>
                   <span class="day-label">{day.label}</span>
                 </div>
@@ -933,7 +1283,9 @@
                 <div class="temp-row">
                   <div class="temp-info">
                     <span class="temp-name">{p.temp}</span>
-                    <span class="temp-stats">{p.completed} ✓ / {p.failed} ✗</span>
+                    <span class="temp-stats">
+                      <span class="text-success">{p.completed} ✓</span> / <span class="text-error">{p.failed} ✗</span>
+                    </span>
                   </div>
                   <div class="temp-bar-container">
                     <div class="temp-bar" style="width: {p.avgProgress}%"></div>
@@ -944,54 +1296,98 @@
             </div>
           </div>
 
-          <div class="dash-card tags-card">
+          <div class="dash-card hourly-card">
             <div class="dash-card-header">
-              <PieChart size={16} />
-              <span>Top Categorías</span>
+              <Clock size={16} />
+              <span>Actividad Horaria</span>
             </div>
-            <div class="tags-list">
-              {#if topTagsBySuccess.length === 0}
-                <div class="empty-state mini">Sin datos de etiquetas</div>
-              {:else}
-                {#each topTagsBySuccess as tag, i}
-                  {@const maxTag = topTagsBySuccess[0].count}
-                  <div class="tag-row">
-                    <div class="tag-rank">{i + 1}</div>
-                    <div class="tag-name-wrap">
-                      <span class="tag-name">{tag.name}</span>
-                      <div class="tag-bar-wrap">
-                        <div class="tag-bar" style="width: {(tag.count / maxTag) * 100}%"></div>
-                      </div>
-                    </div>
-                    <span class="tag-count">{tag.count}</span>
+            <div class="hourly-chart">
+              {#each activityByHour as hour}
+                <div class="hour-col" title="{hour.label}: {hour.val} completados">
+                  <div class="hour-bar-wrap">
+                    <div class="hour-bar" style="height: {hour.pct * 100}%; opacity: {Math.max(0.15, hour.pct)};"></div>
                   </div>
-                {/each}
+                  {#if hour.hour % 4 === 0}
+                    <span class="hour-label">{hour.hour}h</span>
+                  {/if}
+                </div>
+              {/each}
+            </div>
+          </div>
+
+          <div class="dash-card radar-card">
+            <div class="dash-card-header">
+              <Hexagon size={16} />
+              <span>Radar de Foco</span>
+            </div>
+            <div class="radar-container">
+              {#if radarData.length === 0}
+                <div class="empty-state mini">Sin datos suficientes</div>
+              {:else}
+                <svg viewBox="0 0 100 100" class="radar-svg">
+                  {#each [20, 40, 60, 80, 100] as r}
+                    <polygon points={radarData.map(d => `${50 + (r/100)*40*Math.cos(d.angle)},${50 + (r/100)*40*Math.sin(d.angle)}`).join(' ')} fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="0.5" />
+                  {/each}
+                  {#each radarData as d}
+                    <line x1="50" y1="50" x2={50 + 40*Math.cos(d.angle)} y2={50 + 40*Math.sin(d.angle)} stroke="rgba(255,255,255,0.05)" stroke-width="0.5" />
+                    <text x={d.labelX} y={d.labelY} font-size="4" fill="var(--text-muted)" text-anchor="middle" dominant-baseline="middle" font-family="var(--font-mono)">
+                      {d.name.substring(0,8)}
+                    </text>
+                  {/each}
+                  <polygon points={radarData.map(d => `${50 + d.pct*40*Math.cos(d.angle)},${50 + d.pct*40*Math.sin(d.angle)}`).join(' ')} fill="var(--xp)" fill-opacity="0.3" stroke="var(--xp)" stroke-width="1" stroke-linejoin="round" />
+                  {#each radarData as d}
+                    <circle cx={50 + d.pct*40*Math.cos(d.angle)} cy={50 + d.pct*40*Math.sin(d.angle)} r="1.5" fill="var(--surface)" stroke="var(--xp)" stroke-width="1" />
+                  {/each}
+                </svg>
               {/if}
             </div>
           </div>
 
-          <div class="dash-card summary-card">
+          <div class="dash-card debt-card">
             <div class="dash-card-header">
-              <BarChart size={16} />
-              <span>Estado Operativo</span>
+              <Flame size={16} class="text-error" />
+              <span>Deuda Acumulada</span>
             </div>
-            <div class="projection-content">
-              <div class="proj-item">
-                <span class="proj-label">Activos</span>
-                <span class="proj-val">{goals.filter(g => g.state === 'ACTIVE').length}</span>
+            <div class="debt-content">
+              <div class="debt-total">
+                <span class="debt-val">{debtData.total}</span>
+                <span class="debt-lab">Pendientes</span>
               </div>
-              <div class="proj-item">
-                <span class="proj-label">Pausados</span>
-                <span class="proj-val">{goals.filter(g => g.state === 'PAUSED').length}</span>
+              <div class="debt-list">
+                {#if debtData.goals.length === 0}
+                   <div class="empty-state mini">Cero deudas. ¡Excelente!</div>
+                {:else}
+                  {#each debtData.goals as d}
+                    <div class="debt-item">
+                      <span class="debt-title">{d.title}</span>
+                      <div class="debt-bar-wrap">
+                        <div class="debt-bar" style="width: {(d.debt / (debtData.goals[0]?.debt || 1)) * 100}%"></div>
+                      </div>
+                      <span class="debt-count">{d.debt}</span>
+                    </div>
+                  {/each}
+                {/if}
               </div>
-              <div class="proj-item">
-                <span class="proj-label">Frecuencia</span>
-                <span class="proj-val">{prediction.last7Days} <small>/ sem</small></span>
-              </div>
-              <div class="proj-item">
-                <span class="proj-label">Disciplina</span>
-                <span class="proj-val" style="color: {successRate > 70 ? 'var(--success)' : 'var(--warning)'}">{successRate > 80 ? 'Alta' : successRate > 50 ? 'Media' : 'Baja'}</span>
-              </div>
+            </div>
+          </div>
+
+          <div class="dash-card funnel-card">
+            <div class="dash-card-header">
+              <Filter size={16} />
+              <span>Conversión y Abandono</span>
+            </div>
+            <div class="funnel-chart">
+              {#each funnelData as f}
+                <div class="funnel-row">
+                  <div class="funnel-label-col">
+                    <span class="funnel-name">{f.label}</span>
+                    <span class="funnel-val" style="color: {f.color}">{f.value}</span>
+                  </div>
+                  <div class="funnel-bar-col">
+                    <div class="funnel-bar" style="width: {(f.value / (funnelData[0]?.value || 1)) * 100}%; background: {f.color};"></div>
+                  </div>
+                </div>
+              {/each}
             </div>
           </div>
 
@@ -1002,7 +1398,7 @@
 
   <!-- ── New Goal Slide-Down Panel ── -->
   {#if showAddForm}
-    <div class="new-goal-backdrop" on:click|self={() => showAddForm = false} on:keydown={(e) => e.key === 'Escape' && (showAddForm = false)} role="dialog" tabindex="-1">
+    <div class="new-goal-backdrop" on:click|self={() => showAddForm = false} role="dialog" tabindex="-1">
       <div class="new-goal-panel slide-down">
         <div class="new-goal-header">
           <div class="new-goal-title-row">
@@ -1116,6 +1512,10 @@
                     <label class="label">Meta a Alcanzar</label>
                     <input class="input w-full" type="number" bind:value={newTargetValue} min="1" disabled={newMeasurement === 'BOOLEAN'} />
                   </div>
+                  <div class="form-field" style="width: 140px;">
+                    <label class="label">Límite días <span class="optional">(Opc)</span></label>
+                    <input class="input w-full" type="number" bind:value={newMaxAssignmentDays} min="1" placeholder="Ilimitado" />
+                  </div>
                 </div>
 
                 <div class="form-field">
@@ -1209,7 +1609,7 @@
   {/if}
 
   {#if editingGoal}
-    <div class="modal-overlay" on:click|self={() => editingGoal = null} on:keydown={(e) => e.key === 'Escape' && (editingGoal = null)} role="dialog" tabindex="-1">
+    <div class="modal-overlay" on:click|self={() => editingGoal = null} role="dialog" tabindex="-1">
       <div class="modal-card fade-in">
         <div class="modal-header">
           <h3 class="section-title" style="margin:0;">Editar Objetivo</h3>
@@ -1235,6 +1635,10 @@
           <div class="form-field" style="width:120px;">
             <label class="label">Meta</label>
             <input class="input w-full" type="number" bind:value={editTargetValue} min="1" />
+          </div>
+          <div class="form-field" style="width:100px;">
+            <label class="label">Límite (días)</label>
+            <input class="input w-full" type="number" bind:value={editMaxAssignmentDays} min="1" placeholder="∞" />
           </div>
         </div>
         <div class="form-row">
@@ -1292,6 +1696,70 @@
           </div>
         {/each}
       </div>
+    </div>
+  {/if}
+
+  {#if currentTab === 'editor'}
+    <div class="tab-content fade-in" style="padding: 30px; height: 100%; box-sizing: border-box;">
+      {#if editorGoal}
+        <GoalEditor
+          goal={editorGoal}
+          content={editorContent}
+          on:save={async (e) => {
+            await api.goals.saveContent(editorGoal!.id, {
+              title: e.detail.title,
+              content: e.detail.content,
+              temporality: editorGoal!.temporality,
+              measurement_type: editorGoal!.measurement_type,
+              target_value: editorGoal!.target_value,
+              state: editorGoal!.state,
+              fail_config: editorGoal!.fail_config,
+              fail_emoji: editorGoal!.fail_emoji,
+              color: editorGoal!.color,
+              theme: editorGoal!.theme,
+              note_id: editorGoal!.note_id,
+              tag_id: editorGoal!.tag_id,
+              parent_id: editorGoal!.parent_id,
+              max_assignment_days: editorGoal!.max_assignment_days,
+              description: e.detail.content,
+            });
+            goals = await api.goals.list();
+            editorGoal = null;
+          }}
+          on:cancel={() => editorGoal = null}
+        />
+      {:else}
+        <div style="height: 100%; display: flex; flex-direction: column;">
+          <h3 class="section-title" style="margin: 0 0 30px 0; text-align: center;">Editor de Objetivos</h3>
+          <div style="flex: 1; overflow: auto;">
+            {#if goals.length === 0}
+              <div class="empty-state">No hay objetivos. Crea uno desde Dashboard.</div>
+            {:else}
+              <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; height: 100%;">
+                {#each goals as goal (goal.id)}
+                  <button
+                    class="goal-card"
+                    style="text-align: left; cursor: pointer; height: fit-content; border-left: 3px solid {getGoalColor(goal)};"
+                    on:click={async () => {
+                      const res = await api.goals.getContent(goal.id);
+                      editorGoal = goal;
+                      editorContent = res?.content || goal.description || '';
+                    }}
+                  >
+                    <div class="goal-main">
+                      <div class="goal-title">{goal.title}</div>
+                      <div class="goal-meta">
+                        <span class="tag-chip" style="background: {getGoalColor(goal)}20; border: 1px solid {getGoalColor(goal)}; color: {getGoalColor(goal)};">{goal.temporality}</span>
+                        <span class="tag-chip" style="background: {getGoalColor(goal)}20; border: 1px solid {getGoalColor(goal)}; color: {getGoalColor(goal)};">{goal.state}</span>
+                      </div>
+                    </div>
+                  </button>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        </div>
+      {/if}
     </div>
   {/if}
 </div>
@@ -2136,16 +2604,17 @@
   /* Advanced Dashboard Styles */
   .full-height-dashboard {
     height: calc(100vh - 150px);
-    overflow: hidden;
+    overflow-y: auto;
     padding-bottom: var(--s4);
+    display: flex;
+    flex-direction: column;
   }
   .dashboard-grid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    grid-template-rows: repeat(2, 1fr);
+    grid-template-columns: repeat(4, 1fr);
+    grid-auto-rows: minmax(180px, auto);
     gap: var(--s3);
-    margin-top: var(--s3);
-    height: 100%;
+    flex: 1;
   }
   .dash-card {
     background: var(--surface);
@@ -2175,28 +2644,32 @@
     font-family: var(--font-mono);
   }
   
-  /* Stats Summary */
-  .stats-summary {
-    grid-column: span 1;
-  }
-  .stats-row {
+  /* Stats Top Bar */
+  .stats-top-bar {
     display: flex;
-    justify-content: space-between;
-    padding: var(--s1) 0;
+    align-items: center;
+    gap: var(--s6);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: var(--s4) var(--s5);
+    margin-bottom: var(--s3);
   }
-  .stat-item {
+  .stb-item {
     display: flex;
-    flex-direction: column;
-    gap: 2px;
+    align-items: center;
+    gap: 12px;
   }
-  .stat-val {
+  .stb-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .stb-val {
     font-size: 18px;
     font-weight: 700;
     font-family: var(--font-mono);
-  }
-  .stat-lab {
-    font-size: 9px;
-    color: var(--text-muted);
   }
   .success-meter {
     height: 4px;
@@ -2316,9 +2789,14 @@
   }
   .day-bar {
     width: 100%;
-    background: var(--primary);
+    background: var(--success);
     border-radius: 5px;
     transition: height 0.5s ease-out;
+  }
+  .day-val {
+    font-size: 10px;
+    font-weight: 700;
+    font-family: var(--font-mono);
   }
   .day-label {
     font-size: 8px;
@@ -2364,7 +2842,7 @@
   }
   .temp-bar {
     height: 100%;
-    background: var(--primary);
+    background: var(--success);
     border-radius: 5px;
     transition: width 0.5s;
   }
@@ -2742,6 +3220,166 @@
     flex-shrink: 0;
     min-width: 32px;
     text-align: right;
+  }
+
+
+  /* Advanced Analytics Styles */
+  .dash-card { grid-column: span 2; }
+  .radar-card { grid-column: span 1; }
+  .funnel-card { grid-column: span 1; }
+  
+  .hourly-chart {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    height: 100%;
+    padding-top: var(--s2);
+  }
+  .hour-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    flex: 1;
+  }
+  .hour-bar-wrap {
+    flex: 1;
+    width: 10px;
+    background: rgba(255,255,255,0.02);
+    border-radius: 5px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+  }
+  .hour-bar {
+    width: 100%;
+    background: linear-gradient(0deg, transparent, var(--xp));
+    border-radius: 5px;
+    transition: height 0.5s;
+  }
+  .hour-label {
+    font-size: 8px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+  }
+
+  .radar-container {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--s2);
+  }
+  .radar-svg {
+    width: 100%;
+    height: 100%;
+    max-height: 180px;
+    overflow: visible;
+  }
+
+  .debt-content {
+    display: flex;
+    gap: var(--s4);
+    height: 100%;
+    align-items: center;
+  }
+  .debt-total {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    border-radius: 50%;
+    width: 80px;
+    height: 80px;
+    flex-shrink: 0;
+  }
+  .debt-val {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--error);
+    font-family: var(--font-mono);
+    line-height: 1;
+  }
+  .debt-lab {
+    font-size: 9px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+  }
+  .debt-list {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .debt-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .debt-title {
+    font-size: 11px;
+    color: var(--text-primary);
+    width: 80px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .debt-bar-wrap {
+    flex: 1;
+    height: 6px;
+    background: var(--border);
+    border-radius: 3px;
+  }
+  .debt-bar {
+    height: 100%;
+    background: var(--error);
+    border-radius: 3px;
+  }
+  .debt-count {
+    font-size: 11px;
+    font-weight: 700;
+    font-family: var(--font-mono);
+    color: var(--error);
+  }
+
+  .funnel-chart {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s2);
+    height: 100%;
+    justify-content: center;
+  }
+  .funnel-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .funnel-label-col {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+  }
+  .funnel-name {
+    color: var(--text-muted);
+    text-transform: uppercase;
+    font-size: 9px;
+    letter-spacing: 0.05em;
+  }
+  .funnel-val {
+    font-weight: 700;
+    font-family: var(--font-mono);
+  }
+  .funnel-bar-col {
+    height: 8px;
+    background: var(--border);
+    border-radius: 4px;
+  }
+  .funnel-bar {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.5s;
   }
 
 </style>
