@@ -17,7 +17,7 @@ export interface WidgetMeta {
 
 export const WIDGET_REGISTRY: Record<WidgetId, WidgetMeta> = {
   'plant-carousel': { id: 'plant-carousel', label: 'Módulo visual', panel: 'left'  },
-  'stats-xp':       { id: 'stats-xp',       label: 'Stats & XP',   panel: 'left'  },
+  'stats-xp':       { id: 'stats-xp',       label: 'Estadísticas y XP',   panel: 'left'  },
   'time-widget':    { id: 'time-widget',    label: 'Reloj',        panel: 'left'  },
   'pomodoro':       { id: 'pomodoro',        label: 'Pomodoro',     panel: 'left'  },
   'recent-notes':   { id: 'recent-notes',    label: 'Notas',        panel: 'right' },

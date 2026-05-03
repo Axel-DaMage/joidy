@@ -133,10 +133,10 @@
   {/if}
 
   <div class="graph-controls">
-    <button class="btn btn-ghost btn-icon" title="Toggle labels" on:click={() => { showLabels = !showLabels; sim?.stop(); sim = render($graphData.nodes, $graphData.edges) as d3.Simulation<SimNode, undefined> | undefined; }}>
+    <button class="btn btn-ghost btn-icon" title="Alternar etiquetas" on:click={() => { showLabels = !showLabels; sim?.stop(); sim = render($graphData.nodes, $graphData.edges) as d3.Simulation<SimNode, undefined> | undefined; }}>
       <span style="font-size:10px; font-family: var(--font-mono);">Aa</span>
     </button>
-    <button class="btn btn-ghost btn-icon" title="Reset view" on:click={() => { d3.select(svgEl).transition().call(d3.zoom<SVGSVGElement, unknown>().transform as never, d3.zoomIdentity); }}>
+    <button class="btn btn-ghost btn-icon" title="Restablecer vista" on:click={() => { d3.select(svgEl).transition().call(d3.zoom<SVGSVGElement, unknown>().transform as never, d3.zoomIdentity); }}>
       <span style="font-size:11px;">⊙</span>
     </button>
   </div>

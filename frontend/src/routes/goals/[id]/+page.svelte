@@ -29,7 +29,7 @@
         goalContent = goal?.description || '';
       }
     } catch (e) {
-      loadError = e instanceof Error ? e.message : 'Error loading goal';
+      loadError = e instanceof Error ? e.message : 'Error al cargar objetivo';
     } finally {
       loading = false;
     }

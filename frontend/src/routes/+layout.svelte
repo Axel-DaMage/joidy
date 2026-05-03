@@ -13,10 +13,10 @@
   import { initKeyboardNavigation } from '$lib/utils/keyboardNavigation';
 
   const navItems = [
-    { href: '/',        label: 'Dashboard', icon: 'Home' },
+    { href: '/',        label: 'Inicio',    icon: 'Home' },
     { href: '/notes',   label: 'Notas',     icon: 'BookOpen' },
     { href: '/graph',   label: 'Grafo',     icon: 'Network' },
-    { href: '/skills',  label: 'Skills',    icon: 'Zap' },
+    { href: '/skills',  label: 'Habilidades', icon: 'Zap' },
     { href: '/goals',   label: 'Objetivos', icon: 'Target' },
     { href: '/streaks', label: 'Rachas',    icon: 'Flame'  },
   ];

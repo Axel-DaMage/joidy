@@ -421,7 +421,7 @@
         title="Alternar preview (Ctrl+P)"
       >
         {#if previewMode}<EyeOff size={14} />{:else}<Eye size={14} />{/if}
-        <span>{previewMode ? 'Editor' : 'Preview'}</span>
+        <span>{previewMode ? 'Editor' : 'Vista previa'}</span>
       </button>
 
       <button
@@ -472,7 +472,7 @@
       class="tag-input"
       bind:value={tagInput}
       on:keydown={onTagKeydown}
-      placeholder="+ tag..."
+      placeholder="+ etiqueta..."
     />
     {#if $aiSuggestions.length > 0}
       <span class="ai-label">ia:</span>
@@ -494,7 +494,7 @@
 
         {#if backlinks.length > 0}
           <div class="backlinks-section">
-            <h5 class="mono">BACKLINKS</h5>
+            <h5 class="mono">ENLACES ENTRANTES</h5>
             <div class="backlinks-grid">
               {#each backlinks as bl}
                 <button class="backlink-card" on:click={() => goto(`/notes?id=${bl.id}`)}>
@@ -545,7 +545,7 @@
         </div>
         
         <div class="folder-modal-btns">
-          <button on:click={() => { updateFrontmatter('iconColor', ''); updateFrontmatter('icon', ''); updateFrontmatter('iconPack', ''); customColor = '#ffffff'; showIconSettings = false; }}>Reset</button>
+          <button on:click={() => { updateFrontmatter('iconColor', ''); updateFrontmatter('icon', ''); updateFrontmatter('iconPack', ''); customColor = '#ffffff'; showIconSettings = false; }}>Restablecer</button>
           <button on:click={() => showIconSettings = false}>Cerrar</button>
         </div>
       </div>

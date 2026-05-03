@@ -37,7 +37,7 @@
     <div class="skill-stats">
       {#if topSkill}
         <div class="skill-stat">
-          <span class="label">mejor skill</span>
+          <span class="label">mejor habilidad</span>
           <span class="mono" style="color: var(--text-primary); font-size:13px;">{topSkill.tag_name}</span>
           <span class="caption" style="color: var(--text-secondary);">{topSkill.note_count} notas</span>
         </div>

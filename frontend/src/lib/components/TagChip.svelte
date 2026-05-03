@@ -16,10 +16,10 @@
 >
   {tag}
   {#if isAI}
-    <span class="ai-badge">ai</span>
+    <span class="ai-badge" title="Sugerencia de IA">ia</span>
   {/if}
   {#if removable}
-    <button on:click|stopPropagation={() => dispatch('remove', tag)} aria-label="Remove tag {tag}">×</button>
+    <button on:click|stopPropagation={() => dispatch('remove', tag)} aria-label="Eliminar etiqueta {tag}">×</button>
   {/if}
 </span>
 

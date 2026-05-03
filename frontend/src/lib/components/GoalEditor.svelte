@@ -134,7 +134,7 @@
         title="Alternar preview (Ctrl+P)"
       >
         {#if previewMode}<EyeOff size={14} />{:else}<Eye size={14} />{/if}
-        <span>{previewMode ? 'Editor' : 'Preview'}</span>
+        <span>{previewMode ? 'Editor' : 'Vista previa'}</span>
       </button>
 
       <button

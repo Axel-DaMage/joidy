@@ -35,6 +35,19 @@
   ]));
 
   const TEMPORALITIES: Goal['temporality'][] = ['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL'];
+  const TEMPORALITY_LABELS: Record<string, string> = {
+    'DAILY': 'Diario',
+    'WEEKLY': 'Semanal',
+    'MONTHLY': 'Mensual',
+    'ANNUAL': 'Anual'
+  };
+  const STATE_LABELS: Record<string, string> = {
+    'ACTIVE': 'Activo',
+    'PAUSED': 'Pausado',
+    'COMPLETED': 'Completado',
+    'FAILED': 'Fallido',
+    'CANCELLED': 'Cancelado'
+  };
   const COLOR_PRESETS = [
     { name: 'Gold',      hex: '#c8a96e' },
     { name: 'Esmeralda', hex: '#10b981' },
@@ -704,7 +717,7 @@
         <Pencil size={14} /> Editor
       </button>
       <button class="tab" class:active={currentTab === 'today'} on:click={() => currentTab = 'today'}>
-        <Layout size={14} /> Dashboard
+        <Layout size={14} /> Inicio
       </button>
       <button class="tab" class:active={currentTab === 'planning'} on:click={() => currentTab = 'planning'}>
         <Clock size={14} /> Planificación
@@ -713,7 +726,7 @@
         <Calendar size={14} /> Historial
       </button>
       <button class="tab" class:active={currentTab === 'analytics'} on:click={() => currentTab = 'analytics'}>
-        <BarChart size={14} /> Analytics
+        <BarChart size={14} /> Análisis
       </button>
     </div>
   </div>
@@ -825,7 +838,7 @@
                 <div class="hgi-title">{g.title}</div>
                 <div class="hgi-meta">
                   <span class="config-badge">{task.date}</span>
-                  <span class="config-badge" style="margin-left: 8px; background: {getGoalColor(g)}20; border: 1px solid {getGoalColor(g)}; color: {getGoalColor(g)};">{g.temporality}</span>
+                  <span class="config-badge" style="margin-left: 8px; background: {getGoalColor(g)}20; border: 1px solid {getGoalColor(g)}; color: {getGoalColor(g)};">{TEMPORALITY_LABELS[g.temporality] || g.temporality}</span>
                 </div>
               </div>
             </button>
@@ -1042,7 +1055,7 @@
                     <div class="hgi-info" style="flex: 1;">
                       <div class="hgi-title">{g.title}</div>
                       <div class="hgi-meta">
-                        <span class="config-badge" style="background: {getGoalColor(g)}20; border: 1px solid {getGoalColor(g)}; color: {getGoalColor(g)};">{g.temporality}</span>
+                        <span class="config-badge" style="background: {getGoalColor(g)}20; border: 1px solid {getGoalColor(g)}; color: {getGoalColor(g)};">{TEMPORALITY_LABELS[g.temporality] || g.temporality}</span>
                         {#if status === 'COMPLETED'}
                           <span class="status-badge success">Completado</span>
                         {:else if status === 'FAILED'}
@@ -1119,7 +1132,7 @@
                     <div class="hgi-info">
                       <div class="hgi-title">{g.title}</div>
                       <div class="hgi-meta">
-                        <span class="config-badge" style="background: {getGoalColor(g)}20; border: 1px solid {getGoalColor(g)}; color: {getGoalColor(g)};">{g.temporality}</span>
+                        <span class="config-badge" style="background: {getGoalColor(g)}20; border: 1px solid {getGoalColor(g)}; color: {getGoalColor(g)};">{TEMPORALITY_LABELS[g.temporality] || g.temporality}</span>
                         <div class="hgi-bar">
                           <div class="hgi-bar-fill" style="width:100%; background:{getGoalColor(g)};"></div>
                         </div>
@@ -1142,7 +1155,7 @@
                     <div class="hgi-info">
                       <div class="hgi-title">{g.title}</div>
                       <div class="hgi-meta">
-                        <span class="config-badge" style="background: #ef444420; border: 1px solid #ef4444; color: #ef4444;">{g.temporality}</span>
+                        <span class="config-badge" style="background: #ef444420; border: 1px solid #ef4444; color: #ef4444;">{TEMPORALITY_LABELS[g.temporality] || g.temporality}</span>
                         <div class="hgi-bar">
                           <div class="hgi-bar-fill" style="width:{g.progress_pct}%; background: #ef4444;"></div>
                         </div>
@@ -1749,8 +1762,8 @@
                     <div class="goal-main">
                       <div class="goal-title">{goal.title}</div>
                       <div class="goal-meta">
-                        <span class="tag-chip" style="background: {getGoalColor(goal)}20; border: 1px solid {getGoalColor(goal)}; color: {getGoalColor(goal)};">{goal.temporality}</span>
-                        <span class="tag-chip" style="background: {getGoalColor(goal)}20; border: 1px solid {getGoalColor(goal)}; color: {getGoalColor(goal)};">{goal.state}</span>
+                        <span class="tag-chip" style="background: {getGoalColor(goal)}20; border: 1px solid {getGoalColor(goal)}; color: {getGoalColor(goal)};">{TEMPORALITY_LABELS[goal.temporality] || goal.temporality}</span>
+                        <span class="tag-chip" style="background: {getGoalColor(goal)}20; border: 1px solid {getGoalColor(goal)}; color: {getGoalColor(goal)};">{STATE_LABELS[goal.state] || goal.state}</span>
                       </div>
                     </div>
                   </button>
