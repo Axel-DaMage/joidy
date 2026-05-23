@@ -2,7 +2,7 @@ import re
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 
@@ -21,6 +21,8 @@ from services.joidy_vault_writer import (
 )
 
 router = APIRouter(prefix="/goals", tags=["goals"])
+
+from routers.websocket import notify_xp_gained, notify_streak_updated
 
 
 class GoalCreate(BaseModel):
@@ -291,7 +293,11 @@ def save_goal_content(goal_id: int, data: GoalContent, db: Session = Depends(get
 
 
 @router.post("/{goal_id}/complete")
-def complete_goal(goal_id: int, db: Session = Depends(get_db)):
+def complete_goal(
+    goal_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
     goal = db.query(Goal).filter(Goal.id == goal_id).first()
     if not goal:
         raise HTTPException(status_code=404, detail="Goal not found")
@@ -301,6 +307,13 @@ def complete_goal(goal_id: int, db: Session = Depends(get_db)):
     goal.current_value = get_goal_progress(goal, db)
     gami = process_event(db, "goal_completed", {"goal_id": goal_id, "title": goal.title})
     db.commit()
+
+    # Broadcast WebSocket notifications in the background
+    if gami and gami.xp_awarded > 0:
+        background_tasks.add_task(notify_xp_gained, gami.xp_awarded, gami.total_xp)
+    if gami and gami.streak_changed:
+        background_tasks.add_task(notify_streak_updated, gami.current_streak)
+
     return {"goal": _serialize_goal(goal, db), "gamification": vars(gami)}
 
 

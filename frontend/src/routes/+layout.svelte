@@ -17,6 +17,7 @@
   import TutorialOverlay from '$lib/components/TutorialOverlay.svelte';
   import { achievements } from '$lib/stores/achievements';
   import { initConnectionStore } from '$lib/stores/connection';
+  import { loadNotes } from '$lib/stores/notes';
 
   const navItems = [
     { href: '/',        label: 'Inicio',    icon: 'Home' },
@@ -61,6 +62,56 @@
     achievements.init();
     devMode.init();
     const cleanupConnection = initConnectionStore();
+
+    // Connect to WebSocket for real-time notifications
+    let ws: WebSocket | null = null;
+    let wsReconnectTimeout: any = null;
+
+    const connectWS = () => {
+      if (typeof window === 'undefined') return;
+      
+      const apiBase = (import.meta.env.VITE_API_URL as string) || 'http://localhost:8000';
+      const wsProto = apiBase.startsWith('https') ? 'wss:' : 'ws:';
+      const wsUrl = `${apiBase.replace(/^https?:/, wsProto)}/ws`;
+
+      logger.info('[layout] Connecting to WebSocket:', wsUrl);
+      ws = new WebSocket(wsUrl);
+
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          logger.info('[layout] WebSocket message received:', msg);
+          
+          if (msg.type === 'note_created') {
+            showNotification(`Nueva nota creada: "${msg.title}"`, 'success');
+            loadNotes(undefined, true).catch(() => {});
+          } else if (msg.type === 'note_updated') {
+            showNotification(`Nota actualizada: "${msg.title}"`, 'info');
+            loadNotes(undefined, true).catch(() => {});
+          } else if (msg.type === 'xp_gained') {
+            showNotification(`¡+${msg.xp} XP!`, 'level');
+            loadStats().catch(() => {});
+          } else if (msg.type === 'streak_updated') {
+            showNotification(`¡Racha de ${msg.streak} días! 🔥`, 'info');
+            loadStats().catch(() => {});
+          }
+        } catch (e) {
+          logger.error('[layout] Error parsing WebSocket message:', e);
+        }
+      };
+
+      ws.onclose = () => {
+        logger.warn('[layout] WebSocket connection closed, reconnecting in 5s...');
+        wsReconnectTimeout = setTimeout(connectWS, 5000);
+      };
+
+      ws.onerror = (err) => {
+        logger.error('[layout] WebSocket error:', err);
+        ws?.close();
+      };
+    };
+
+    connectWS();
 
     // Register service worker for PWA
     if ('serviceWorker' in navigator) {
@@ -147,6 +198,13 @@
       window.removeEventListener('joidy:open-settings', handleOpenSettings);
       window.removeEventListener('focus', handleWindowFocus);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+
+      // Clean up WebSocket connection
+      if (ws) {
+        ws.onclose = null; // Prevent reconnect loop
+        ws.close();
+      }
+      if (wsReconnectTimeout) clearTimeout(wsReconnectTimeout);
     };
   });
 </script>

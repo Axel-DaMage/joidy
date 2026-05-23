@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, BackgroundTasks
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -6,9 +6,9 @@ from models.gamification import StreakRecord, UserStats, XPEvent
 from services.gamification_engine import PLANT_STAGES, process_event
 from services.response_cache import clear_api_caches, register_cache_clearer, ttl_cache
 
-
-
 router = APIRouter(prefix="/gamification", tags=["gamification"])
+
+from routers.websocket import notify_xp_gained, notify_streak_updated
 
 
 @ttl_cache(ignore_params={"db"})
@@ -98,10 +98,20 @@ def get_recent_events_route(limit: int = 20, db: Session = Depends(get_db)):
 
 
 @router.post("/ping")
-def ping_activity(db: Session = Depends(get_db)):
+def ping_activity(
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
     """Called when user opens the app — awards daily XP if not already done today."""
     gami = process_event(db, "daily_activity")
     clear_api_caches()
+    
+    # Broadcast WebSocket notifications in the background
+    if gami and gami.xp_awarded > 0:
+        background_tasks.add_task(notify_xp_gained, gami.xp_awarded, gami.total_xp)
+    if gami and gami.streak_changed:
+        background_tasks.add_task(notify_streak_updated, gami.current_streak)
+
     # Reload full stats so the response includes next_stage_xp, xp_to_next_stage, etc.
     stats = db.query(UserStats).filter_by(id=1).first()
     next_stage_xp = PLANT_STAGES[gami.plant_stage + 1][0] if gami.plant_stage + 1 < len(PLANT_STAGES) else None
