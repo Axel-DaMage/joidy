@@ -82,6 +82,8 @@
   // Fetch backlinks on mount or when note changes
   $: if (note) {
     api.notes.backlinks(note.id).then(res => backlinks = res).catch(() => backlinks = []);
+  } else {
+    backlinks = [];
   }
 
   const dispatch = createEventDispatcher<{

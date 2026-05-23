@@ -193,6 +193,7 @@ def _process_goal_failure(db: Session, goal: Goal, now: datetime):
     goal.state = GoalState.FAILED
     goal.current_value = progress
     
+    new_goal = None
     if goal.fail_config == GoalFailConfig.ROLLOVER:
         new_goal = Goal(
             title=goal.title,
@@ -231,6 +232,17 @@ def _process_goal_failure(db: Session, goal: Goal, now: datetime):
             parent_id=goal.parent_id or goal.id,
         )
         db.add(new_goal)
+
+    if new_goal:
+        db.flush()
+        try:
+            from services.joidy_vault_writer import get_objectives_dir, _write_goal_file
+            obj_dir = get_objectives_dir()
+            if obj_dir:
+                _write_goal_file(db, new_goal, obj_dir)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning("Failed to write rolled-over goal file: %s", e)
 
 
 def get_goal_streak(db: Session) -> dict:

@@ -4,7 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import func as sqlfunc
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from database import get_db
 from models.personal_streaks import PersonalStreak, StreakCheckIn
@@ -245,7 +245,7 @@ def list_categories():
 @router.get("/stats")
 def global_stats(db: Session = Depends(get_db)):
     """Global streak statistics."""
-    all_streaks = db.query(PersonalStreak).all()
+    all_streaks = db.query(PersonalStreak).options(selectinload(PersonalStreak.checkins)).all()
     active = [s for s in all_streaks if not s.is_archived]
     archived = [s for s in all_streaks if s.is_archived]
 
@@ -301,7 +301,7 @@ def list_streaks(
     category: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
-    q = db.query(PersonalStreak)
+    q = db.query(PersonalStreak).options(selectinload(PersonalStreak.checkins))
     if not include_archived:
         q = q.filter(PersonalStreak.is_archived == False)
     if category and category != "all":

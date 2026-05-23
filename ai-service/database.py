@@ -41,6 +41,10 @@ def store_embedding(note_id: int, embedding: list[float]):
             "INSERT OR REPLACE INTO note_embeddings (note_id, embedding) VALUES (?, ?)",  # type: ignore
             (note_id, blob),
         )
+        conn.execute(
+            "UPDATE notes SET is_embedded = 1 WHERE id = ?",  # type: ignore
+            (note_id,),
+        )
         conn.commit()
 
 

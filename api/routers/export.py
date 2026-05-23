@@ -128,7 +128,9 @@ def export_notes_zip(db: Session = Depends(get_db)):
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
         for note in notes:
             safe_title = "".join(c for c in note.title if c.isalnum() or c in " -_").strip()[:50]
-            filename = f"{safe_title}.md"
+            if not safe_title:
+                safe_title = "unnamed"
+            filename = f"{note.id}_{safe_title}.md"
             zf.writestr(filename, note_to_markdown(note).encode("utf-8"))
 
     buffer.seek(0)

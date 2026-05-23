@@ -64,6 +64,11 @@ async def embed(req: EmbedRequest):
     try:
         client = get_embedding_client()
         vector = await client.embed(req.content)
+        
+        # Save vector embedding to shared SQLite database
+        from database import store_embedding
+        store_embedding(req.note_id, vector)
+
         return {
             "status": "success",
             "note_id": req.note_id,
@@ -107,10 +112,30 @@ async def rag(req: RAGRequest):
         return {"status": "disabled", "answer": "No AI provider configured"}
 
     try:
-        client = get_llm_client()
+        # 1. Get embedding for the question
+        emb_client = get_embedding_client()
+        question_vector = await emb_client.embed(req.question)
+
+        # 2. Find similar note IDs from SQLite vector database
+        from database import find_similar_notes, engine
+        similar = find_similar_notes(question_vector, limit=req.top_k)
+
+        # 3. Retrieve note titles & contents to build LLM context
         context_chunks = []
+        with engine.connect() as conn:
+            for item in similar:
+                nid = item["note_id"]
+                # Use raw SQL to fetch from the shared SQLite DB
+                row = conn.execute(
+                    "SELECT title, content FROM notes WHERE id = ?",  # type: ignore
+                    (nid,),
+                ).fetchone()
+                if row:
+                    context_chunks.append(f"Nota: {row[0]}\nContenido: {row[1]}")
+
+        client = get_llm_client()
         answer = await client.generate(
-            prompt=RAG_PROMPT.format(question=req.question, context="\n\n---\n\n".join(context_chunks[:5])),
+            prompt=RAG_PROMPT.format(question=req.question, context="\n\n---\n\n".join(context_chunks)),
             temperature=0.2,
             max_tokens=512,
         )

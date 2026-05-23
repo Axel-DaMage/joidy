@@ -58,7 +58,16 @@ class NoteCreate(BaseModel):
     def validate_tags(cls, v: list[str]) -> list[str]:
         if len(v) > 50:
             raise ValueError("Maximum 50 tags per note")
-        return [t.strip().lower() for t in v if t.strip() and len(t.strip()) <= 100]
+        seen = set()
+        deduped = []
+        for t in v:
+            if not isinstance(t, str):
+                continue
+            cleaned = t.strip().lower()
+            if cleaned and len(cleaned) <= 100 and cleaned not in seen:
+                seen.add(cleaned)
+                deduped.append(cleaned)
+        return deduped
 
     @field_validator("source")
     @classmethod
@@ -103,7 +112,16 @@ class NoteUpdate(BaseModel):
             return v
         if len(v) > 50:
             raise ValueError("Maximum 50 tags per note")
-        return [t.strip().lower() for t in v if t.strip() and len(t.strip()) <= 100]
+        seen = set()
+        deduped = []
+        for t in v:
+            if not isinstance(t, str):
+                continue
+            cleaned = t.strip().lower()
+            if cleaned and len(cleaned) <= 100 and cleaned not in seen:
+                seen.add(cleaned)
+                deduped.append(cleaned)
+        return deduped
 
     @field_validator("source")
     @classmethod
