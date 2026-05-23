@@ -63,6 +63,14 @@
 - [ ] **Sincronización en tiempo real avanzada**: Detección bidireccional instantánea de conflictos de escritura.
 - [ ] **Editor WYSIWYG**: Editor enriquecido para edición visual directa de Markdown.
 
+### 3.4 Mejoras Estructurales y UX del Frontend (Nuevas)
+- [ ] **Interceptor Global de Errores en `api.ts`**: Manejar automáticamente token expirado (401), errores de red y propagación de toasts amigables a nivel de aplicación.
+- [ ] **Indicador de Conectividad en Tiempo Real**: Vincular las stores `isOnline` y `wasOffline` a un banner o píldora de estado premium y glassmorphic en la barra de herramientas principal.
+- [ ] **Optimización de VirtualList Dinámica**: Refactorizar `VirtualList.svelte` para admitir alturas de elemento dinámicas/variables (mediante ResizeObserver) para evitar solapamientos en notas con títulos largos.
+- [ ] **Filtros Interactivos y Agrupamiento en el Grafo**: Agregar un panel lateral dentro de `/graph` para aislar nodos por etiquetas, buscar notas directamente y activar físicas avanzadas de repulsión.
+- [ ] **Accesibilidad y Foco en Modales**: Implementar "focus trapping" completo en `Modal.svelte` y mejorar atributos ARIA en los widgets interactivos del dashboard.
+- [ ] **Migración Consistente a Runas Svelte 5**: Estandarizar la reactividad migrando paulatinamente los stores personalizados de Svelte 4 a runas nativas (`$state`, `$derived`, `$effect`) en componentes de alta frecuencia.
+
 ---
 
 ## 🧪 4. Control de Calidad y Cobertura
