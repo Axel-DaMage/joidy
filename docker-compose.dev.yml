@@ -19,9 +19,11 @@ services:
       - ./api:/app
       - ./data/db:/data/db
       - ./data/uploads:/data/uploads
+      - ${OBSIDIAN_VAULT_PATH:-./data/vault}:/vault
     environment:
       - APP_ENV=development
       - WEB_CONCURRENCY=1
+      - VAULT_PATH=/vault
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
   ai-service:

@@ -108,7 +108,7 @@ def _cached_tag_graph(db: Session):
             edges.append({"source": tag.parent_id, "target": tag.id, "type": "hierarchy", "weight": 1})
 
     # Notes as nodes (positive IDs)
-    notes = db.query(Note).filter(Note.is_embedded == False).all()
+    notes = db.query(Note).all()
     note_links = db.query(NoteLink).all()
     note_tag_relations = db.query(NoteTag).all()
 

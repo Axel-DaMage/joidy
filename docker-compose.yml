@@ -27,6 +27,7 @@ services:
       - ./data/db:/data/db
       - ./data/uploads:/data/uploads
       - ./.env:/app/.env
+      - ${OBSIDIAN_VAULT_PATH:-./data/vault}:/vault
     environment:
       - DATABASE_URL=sqlite:////data/db/joidy.db
       - AI_SERVICE_URL=http://ai-service:8002
@@ -39,6 +40,7 @@ services:
       - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET:-}
       - WEB_CONCURRENCY=${WEB_CONCURRENCY:-2}
       - UVICORN_TIMEOUT_KEEP_ALIVE=${UVICORN_TIMEOUT_KEEP_ALIVE:-5}
+      - VAULT_PATH=/vault
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
