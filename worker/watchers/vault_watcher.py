@@ -168,16 +168,33 @@ async def _consume_vault_events(
             await asyncio.sleep(DEBOUNCE_SECONDS)
 
             async def process(path: str, change_type: Change):
-                if change_type == Change.deleted:
-                    await delete_note_by_path(path, client)
-                else:
-                    await import_or_update_note(Path(path), client)
+                try:
+                    if change_type == Change.deleted:
+                        await delete_note_by_path(path, client)
+                    else:
+                        await import_or_update_note(Path(path), client)
+                except Exception:
+                    logger.exception("[vault] Failed to process %s (%s)", path, change_type)
 
+            # return_exceptions=False but individual errors are caught above
             await asyncio.gather(*(process(path, change_type) for path, change_type in pending.items()))
         except asyncio.TimeoutError:
             continue
         except asyncio.CancelledError:
+            # Drain remaining queue items before exiting
+            drained = 0
+            while not queue.empty():
+                try:
+                    queue.get_nowait()
+                    drained += 1
+                except asyncio.QueueEmpty:
+                    break
+            if drained:
+                logger.info("[vault] Drained %d orphaned events on shutdown", drained)
             return
+        except Exception:
+            logger.exception("[vault] Unexpected error in event consumer")
+            await asyncio.sleep(1)  # Prevent tight error loop
 
 
 async def watch_vault():
@@ -205,3 +222,8 @@ async def watch_vault():
                     await queue.put(VaultEvent(path=path, change_type=change_type))
         finally:
             consumer.cancel()
+            try:
+                await asyncio.wait_for(consumer, timeout=5.0)
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                pass
+            logger.info("[vault] Watcher stopped cleanly")

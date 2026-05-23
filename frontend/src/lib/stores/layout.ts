@@ -5,6 +5,7 @@ export type WidgetId =
   | 'plant-carousel'
   | 'stats-xp'
   | 'time-widget'
+  | 'weather-widget'
   | 'pomodoro'
   | 'recent-notes'
   | 'github-issues';
@@ -19,6 +20,7 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetMeta> = {
   'plant-carousel': { id: 'plant-carousel', label: 'Módulo visual', panel: 'left'  },
   'stats-xp':       { id: 'stats-xp',       label: 'Estadísticas y XP',   panel: 'left'  },
   'time-widget':    { id: 'time-widget',    label: 'Reloj',        panel: 'left'  },
+  'weather-widget': { id: 'weather-widget', label: 'Clima',         panel: 'left'  },
   'pomodoro':       { id: 'pomodoro',        label: 'Pomodoro',     panel: 'left'  },
   'recent-notes':   { id: 'recent-notes',    label: 'Notas',        panel: 'right' },
   'github-issues':  { id: 'github-issues',   label: 'GitHub',       panel: 'right' },
@@ -60,15 +62,22 @@ function save(l: DashboardLayout) {
   if (typeof localStorage !== 'undefined') localStorage.setItem(KEY, JSON.stringify(l));
 }
 
+let _initialized = false;
+
 function createLayoutStore() {
-  // Always start with DEFAULT for SSR — don't touch localStorage at module init
-  // time or SvelteKit will produce a hydration mismatch (server=DEFAULT,
-  // client=saved). The real saved value is applied in init() via onMount.
   const { subscribe, update, set } = writable<DashboardLayout>(DEFAULT);
 
   return {
     subscribe,
-    init() { set(load()); },
+    init() {
+      if (_initialized) return;
+      _initialized = true;
+      set(load());
+    },
+
+    reload() {
+      set(load());
+    },
 
     // Move widget up/down within its panel
     move(panel: 'left' | 'right', fromIdx: number, toIdx: number) {

@@ -1,6 +1,8 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount } from 'svelte';
+  import { afterNavigate } from '$app/navigation';
   import { goto } from '$app/navigation';
+  import { dev } from '$app/environment';
   import { fly } from 'svelte/transition';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
   import Plant          from '$lib/components/Plant.svelte';
@@ -12,14 +14,18 @@
   import NoteCard       from '$lib/components/NoteCard.svelte';
   import PomodoroWidget from '$lib/components/PomodoroWidget.svelte';
   import TimeWidget from '$lib/components/TimeWidget.svelte';
+  import WeatherWidget from '$lib/components/WeatherWidget.svelte';
   import Widget         from '$lib/components/Widget.svelte';
-  import { totalXP, currentStreak, lastActivity } from '$lib/stores/gamification';
+  import GithubWidget from '$lib/components/GithubWidget.svelte';
+  import { totalXP, currentStreak, lastActivity, nextStageXP } from '$lib/stores/gamification';
   import { notes, loadNotes, notesLoadedOnce } from '$lib/stores/notes';
   import { dashboardLayout } from '$lib/stores/layout';
   import { accentColors } from '$lib/stores/settings';
   import { api } from '$lib/api';
   import { loadUserSettings, patchUserSettings } from '$lib/utils/userSettings';
   import { captureSnapshot, getSnapshot } from '$lib/stores/pageSnapshots';
+  import { routeCache } from '$lib/stores/routeCache';
+  import { logger } from '$lib/utils/logger';
 
   // ── Module carousel ────────────────────────────────────────────────────────
   const MODULES = [
@@ -47,16 +53,70 @@
   let prStats = { open: 0, total: 0 };
   let ghFilter = 'created';
   let ghType = 'all';
+  const GH_ITEM_LIMIT = 9;
+  const GH_CACHE_KEY = 'joidy_github_cache_v1';
+  const GH_CACHE_TTL_MS = 1000 * 60 * 10;
 
-  function getPrBadgeInfo(pr: any): { icon: string; color: string } {
-    if (pr.merged_at) return { icon: 'GitMerge', color: '#8250DF' };
-    if (pr.state === 'open') return { icon: 'GitPullRequest', color: '#238636' };
-    return { icon: 'XCircle', color: '#F85149' };
+  type GithubCache = {
+    connected: boolean;
+    filter: string;
+    type: string;
+    issues: { id: number; number: number; title: string; repo: string; url: string }[];
+    prs: { id: number; number: number; title: string; repo: string; url: string }[];
+    issueStats: { open: number; total: number };
+    prStats: { open: number; total: number };
+    repoColors: Record<string, string>;
+    ts: number;
+  };
+
+  function readGithubCache(): GithubCache | null {
+    try {
+      if (typeof localStorage === 'undefined') return null;
+      const raw = localStorage.getItem(GH_CACHE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as GithubCache;
+      if (!parsed || typeof parsed !== 'object') return null;
+      if (!isGithubCacheFresh(parsed)) {
+        localStorage.removeItem(GH_CACHE_KEY);
+        return null;
+      }
+      return parsed;
+    } catch {
+      return null;
+    }
   }
 
-  function getIssueInfo(issue: any): { icon: string; color: string } {
-    if (issue.state === 'open') return { icon: 'CircleDot', color: '#238636' };
-    return { icon: 'Circle', color: '#8250DF' };
+  function writeGithubCache(cache: GithubCache) {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      localStorage.setItem(GH_CACHE_KEY, JSON.stringify(cache));
+    } catch {
+      // Ignore cache write failures (private mode, quota, etc.)
+    }
+  }
+
+  function applyGithubCache(cache: GithubCache) {
+    githubConnected = cache.connected;
+    ghFilter = cache.filter || ghFilter;
+    ghType = cache.type || ghType;
+    githubIssues = Array.isArray(cache.issues) ? cache.issues : [];
+    githubPRs = Array.isArray(cache.prs) ? cache.prs : [];
+    issueStats = cache.issueStats || { open: 0, total: 0 };
+    prStats = cache.prStats || { open: 0, total: 0 };
+    repoColors = cache.repoColors || {};
+  }
+
+  function isGithubCacheFresh(cache: GithubCache) {
+    return Date.now() - cache.ts < GH_CACHE_TTL_MS;
+  }
+
+  function clearGithubCache() {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      localStorage.removeItem(GH_CACHE_KEY);
+    } catch {
+      // Ignore clear failures
+    }
   }
 
   async function loadGitHubData(filter: string = 'created') {
@@ -67,13 +127,23 @@
         api.github.issues(filter),
         api.github.pulls(filter)
       ]);
-      githubIssues = (issuesRes.issues || []).slice(0, 5);
+      githubIssues = (issuesRes.issues || []).slice(0, GH_ITEM_LIMIT);
       issueStats = issuesRes.stats || { open: 0, total: 0 };
-      githubPRs = (pullsRes.pulls || []).slice(0, 5);
+      githubPRs = (pullsRes.pulls || []).slice(0, GH_ITEM_LIMIT);
       prStats = pullsRes.stats || { open: 0, total: 0 };
-      console.log('GitHub loaded:', { githubIssues, issueStats, filter });
+      writeGithubCache({
+        connected: githubConnected,
+        filter,
+        type: ghType,
+        issues: githubIssues,
+        prs: githubPRs,
+        issueStats,
+        prStats,
+        repoColors,
+        ts: Date.now()
+      });
     } catch (e) { 
-      console.error('GitHub error:', e); 
+      logger.error('GitHub error:', e); 
       githubIssues = [];
       githubPRs = [];
     } finally {
@@ -97,9 +167,20 @@
     return (Date.now() - last.getTime()) / 86400000 > 2;
   })();
 
+  let githubStatusChecked = false;
+  let ttiMeasured = false;
+
   $: recentNotes = $notes.slice(0, 5);
 
   onMount(() => {
+    if (typeof performance !== 'undefined') {
+      performance.mark('dashboard-mount');
+    }
+    const cached = readGithubCache();
+    if (cached) {
+      applyGithubCache(cached);
+    }
+
     const snap = getSnapshot('/');
     if (snap) {
       moduleIdx = snap.state.moduleIdx ?? 0;
@@ -107,6 +188,10 @@
     }
     
     dashboardLayout.init();
+
+    afterNavigate(() => {
+      dashboardLayout.reload();
+    });
 
     const savedNotesUi = loadUserSettings().notesUi;
     if (savedNotesUi?.panelWidth !== undefined) {
@@ -123,11 +208,27 @@
         const status = await api.github.status();
         githubConnected = status.connected;
         if (githubConnected) {
-          await loadGitHubData('created');
-          const reposRes = await api.github.repos();
+          const [reposRes] = await Promise.all([
+            api.github.repos(),
+            (!cached || !isGithubCacheFresh(cached)) ? loadGitHubData(ghFilter) : Promise.resolve()
+          ]);
           repoColors = Object.fromEntries((reposRes.repos || []).map((r: any) => [r.full_name, r.color || '#6366F1']));
+          writeGithubCache({
+            connected: githubConnected,
+            filter: ghFilter,
+            type: ghType,
+            issues: githubIssues,
+            prs: githubPRs,
+            issueStats,
+            prStats,
+            repoColors,
+            ts: Date.now()
+          });
+        } else {
+          clearGithubCache();
         }
-      } catch (e) { console.error('GitHub error:', e); }
+      } catch (e) { logger.error('GitHub error:', e); }
+      finally { githubStatusChecked = true; }
     });
 
     window.addEventListener('beforeunload', handleBeforeUnload);
@@ -146,6 +247,27 @@
         moduleId: MODULES[moduleIdx].id,
       }
     });
+  }
+
+  $: if (!ttiMeasured && githubStatusChecked && $notesLoadedOnce) {
+    ttiMeasured = true;
+    if (typeof performance !== 'undefined') {
+      performance.mark('dashboard-interactive');
+      performance.measure('dashboard-tti', 'dashboard-mount', 'dashboard-interactive');
+      const entry = performance.getEntriesByName('dashboard-tti').slice(-1)[0];
+      if (entry) {
+        try {
+          if (typeof localStorage !== 'undefined') {
+            localStorage.setItem('joidy_dashboard_tti_ms', Math.round(entry.duration).toString());
+          }
+        } catch {
+          // Ignore storage failures
+        }
+        if (dev) {
+          logger.info(`Dashboard TTI: ${Math.round(entry.duration)}ms`);
+        }
+      }
+    }
   }
 
   // Widget renderers per panel
@@ -220,8 +342,13 @@
               </div>
               <div class="stat-divider"></div>
               <div class="stat">
-                <span class="stat-value mono">{$totalXP.toLocaleString()}</span>
-                <span class="stat-label label">xp</span>
+                {#if $nextStageXP}
+                  <span class="stat-value mono">{$totalXP.toLocaleString()}</span>
+                  <span class="stat-label label">xp</span>
+                {:else}
+<span class="stat-value mono" style="color: var(--text-primary);">MAX</span>
+                  <span class="stat-label label">xp</span>
+                {/if}
               </div>
               <div class="stat-divider"></div>
               <div class="stat">
@@ -233,6 +360,9 @@
 
         {:else if wid === 'time-widget'}
           <TimeWidget />
+
+        {:else if wid === 'weather-widget'}
+          <WeatherWidget />
 
         {:else if wid === 'pomodoro'}
           <PomodoroWidget />
@@ -253,67 +383,21 @@
           </div>
 
         {:else if wid === 'github-issues'}
-          {#if githubConnected}
-            <div class="section-header">
-              <h4 style="color: {$accentColors[1]}">GitHub</h4>
-              {#if !githubLoading}
-                <div class="gh-filters">
-                  <div class="gh-filter">
-                    <button class="filter-btn" class:active={ghType === 'all'} on:click={() => setGhType('all')}>Todo</button>
-                    <button class="filter-btn" class:active={ghType === 'issues'} on:click={() => setGhType('issues')}>Issues</button>
-                    <button class="filter-btn" class:active={ghType === 'prs'} on:click={() => setGhType('prs')}>PRs</button>
-                  </div>
-                  <span class="gh-filter-divider">|</span>
-                  <div class="gh-filter">
-                    <button class="filter-btn" class:active={ghFilter === 'created'} on:click={() => setGhFilter('created')}>Creados</button>
-                    <button class="filter-btn" class:active={ghFilter === 'assigned'} on:click={() => setGhFilter('assigned')}>Asignados</button>
-                  </div>
-                </div>
-              {/if}
-            </div>
-            {#if githubLoading}
-              <div class="empty-state"><span class="caption">Cargando...</span></div>
-            {:else if githubIssues.length > 0 || githubPRs.length > 0}
-              <div class="github-list">
-                {#if ghType === 'all' || ghType === 'prs'}
-                  {#each githubPRs as pr}
-                    {@const prInfo = getPrBadgeInfo(pr)}
-                    <a href={pr.url} target="_blank" rel="noopener" class="gh-item" style="--repo-color: {repoColors[pr.repo] || $accentColors[1]}">
-                      <span class="gh-badge-icon"><DynamicIcon name={prInfo.icon} size={14} color={prInfo.color} /></span>
-                      <div class="gh-info">
-                        <span class="gh-title truncate">{pr.title}</span>
-                        <span class="gh-meta mono">{pr.repo} #{pr.number}</span>
-                      </div>
-                    </a>
-                  {/each}
-                {/if}
-                {#if ghType === 'all' || ghType === 'issues'}
-                  {#each githubIssues as issue}
-                    {@const issueInfo = getIssueInfo(issue)}
-                    <a href={issue.url} target="_blank" rel="noopener" class="gh-item" style="--repo-color: {repoColors[issue.repo] || $accentColors[1]}">
-                      <span class="gh-badge-icon"><DynamicIcon name={issueInfo.icon} size={14} color={issueInfo.color} /></span>
-                      <div class="gh-info">
-                        <span class="gh-title truncate">{issue.title}</span>
-                        <span class="gh-meta mono">{issue.repo} #{issue.number}</span>
-                      </div>
-                    </a>
-                  {/each}
-                {/if}
-              </div>
-            {:else}
-              <div class="github-summary" style="padding: 20px;">
-                <div class="stat"><span class="stat-value mono">{issueStats.open + prStats.open}</span><span class="stat-label label">open</span></div>
-                <div class="stat-divider"></div>
-                <div class="stat"><span class="stat-value mono">{issueStats.total}</span><span class="stat-label label">issues</span></div>
-                <div class="stat-divider"></div>
-                <div class="stat"><span class="stat-value mono">{prStats.total}</span><span class="stat-label label">prs</span></div>
-              </div>
-              <div class="empty-state success">✓ Sin pendientes</div>
-            {/if}
-          {:else}
-            <div class="section-header"><h4 style="color: {$accentColors[1]}">GitHub</h4></div>
-            <div class="empty-state"><span class="caption">Conecta GitHub</span></div>
-          {/if}
+          <GithubWidget
+            accentColor={$accentColors[1]}
+            {githubConnected}
+            {githubLoading}
+            {githubIssues}
+            {githubPRs}
+            {repoColors}
+            {issueStats}
+            {prStats}
+            {ghFilter}
+            {ghType}
+            itemLimit={GH_ITEM_LIMIT}
+            onSetFilter={setGhFilter}
+            onSetType={setGhType}
+          />
         {/if}
 
       </Widget>
@@ -347,57 +431,21 @@
           <hr class="section-divider" />
 
         {:else if wid === 'github-issues'}
-          {#if githubConnected}
-            {#if githubLoading}
-              <div class="section-header"><h4 style="color: {$accentColors[1]}">GitHub</h4></div>
-              <div class="empty-state"><span class="caption">Cargando...</span></div>
-            {:else if githubIssues.length > 0 || githubPRs.length > 0}
-              <div class="section-header">
-                <h4 style="color: {$accentColors[1]}">GitHub</h4>
-                <div class="gh-filters">
-                  <div class="gh-filter" style="gap:4px">
-                    <button class="filter-btn" class:active={ghType === 'all'} on:click={() => setGhType('all')}>Todo</button>
-                    <button class="filter-btn" class:active={ghType === 'issues'} on:click={() => setGhType('issues')}>Issues</button>
-                    <button class="filter-btn" class:active={ghType === 'prs'} on:click={() => setGhType('prs')}>PRs</button>
-                  </div>
-                  <span class="gh-filter-divider">|</span>
-                  <div class="gh-filter" style="gap:4px">
-                    <button class="filter-btn" class:active={ghFilter === 'created'} on:click={() => setGhFilter('created')}>Creados</button>
-                    <button class="filter-btn" class:active={ghFilter === 'assigned'} on:click={() => setGhFilter('assigned')}>Asignados</button>
-                  </div>
-                </div>
-              </div>
-              <div class="github-list">
-                {#if ghType === 'all' || ghType === 'prs'}
-                  {#each githubPRs as pr}
-                    {@const prInfo = getPrBadgeInfo(pr)}
-                    <a href={pr.url} target="_blank" rel="noopener" class="gh-item" style="--repo-color: {repoColors[pr.repo] || $accentColors[1]}">
-                      <span class="gh-badge-icon"><DynamicIcon name={prInfo.icon} size={14} color={prInfo.color} /></span>
-                      <div class="gh-info">
-                        <span class="gh-title truncate">{pr.title}</span>
-                        <span class="gh-meta mono">{pr.repo} #{pr.number}</span>
-                      </div>
-                    </a>
-                  {/each}
-                {/if}
-                {#if ghType === 'all' || ghType === 'issues'}
-                  {#each githubIssues as issue}
-                    {@const issueInfo = getIssueInfo(issue)}
-                    <a href={issue.url} target="_blank" rel="noopener" class="gh-item" style="--repo-color: {repoColors[issue.repo] || $accentColors[1]}">
-                      <span class="gh-badge-icon"><DynamicIcon name={issueInfo.icon} size={14} color={issueInfo.color} /></span>
-                      <div class="gh-info">
-                        <span class="gh-title truncate">{issue.title}</span>
-                        <span class="gh-meta mono">{issue.repo} #{issue.number}</span>
-                      </div>
-                    </a>
-                  {/each}
-                {/if}
-              </div>
-            {:else}
-              <div class="section-header"><h4 style="color: {$accentColors[1]}">GitHub</h4></div>
-              <div class="empty-state"><span class="caption">Sin issues</span></div>
-            {/if}
-          {/if}
+          <GithubWidget
+            accentColor={$accentColors[1]}
+            {githubConnected}
+            {githubLoading}
+            {githubIssues}
+            {githubPRs}
+            {repoColors}
+            {issueStats}
+            {prStats}
+            {ghFilter}
+            {ghType}
+            itemLimit={GH_ITEM_LIMIT}
+            onSetFilter={setGhFilter}
+            onSetType={setGhType}
+          />
 
         {:else if wid === 'plant-carousel'}
           <div class="widget-centered">
@@ -425,7 +473,7 @@
             <div class="stats-row">
               <div class="stat"><span class="stat-value mono">{$currentStreak}</span><span class="stat-label label">días</span></div>
               <div class="stat-divider"></div>
-              <div class="stat"><span class="stat-value mono">{$totalXP.toLocaleString()}</span><span class="stat-label label">xp</span></div>
+              <div class="stat">{#if $nextStageXP}<span class="stat-value mono">{$totalXP.toLocaleString()}</span><span class="stat-label label">xp</span>{:else}<span class="stat-value mono" style="color: var(--text-primary);">MAX</span><span class="stat-label label">xp</span>{/if}</div>
               <div class="stat-divider"></div>
               <div class="stat"><span class="stat-value mono">{$notes.length}</span><span class="stat-label label">notas</span></div>
             </div>
@@ -541,20 +589,14 @@
     display: flex; flex-direction: column; overflow-y: auto;
   }
 
-  .section-header {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: var(--s4) var(--s5);
-    border-bottom: 1px solid var(--border-light);
-    position: sticky; top: 0; background: var(--bg); z-index: 1;
-  }
-
-  .section-header h4 {
-    color: var(--text-secondary); font-weight: 400; font-size: 12px; letter-spacing: 0.04em;
-  }
-
   .recent-notes { flex: 1; }
 
-  .section-divider { border: none; border-top: 1px solid var(--border-light); margin: 0; }
+  .section-divider {
+    border: 0;
+    height: 1px;
+    margin: 0;
+    background: var(--border-light);
+  }
 
   .empty-state { padding: var(--s6) var(--s5); color: var(--text-muted); text-align: center; }
 
@@ -587,52 +629,5 @@
     background: var(--surface);
   }
 
-  .gh-filter {
-    display: flex; gap: 6px;
-  }
-  .gh-filters {
-    display: flex; flex-direction: row; gap: 8px; align-items: center;
-  }
-  .gh-filter-divider {
-    color: var(--border); font-size: 12px;
-  }
-  .filter-btn {
-    font-size: 10px; padding: 4px 10px; border-radius: 4px;
-    background: transparent; border: 1px solid var(--border-light);
-    color: var(--text-muted); cursor: pointer; transition: all var(--t-fast);
-    min-width: 60px; height: 24px; display: flex; align-items: center; justify-content: center;
-  }
-  .filter-btn:hover { border-color: var(--border); color: var(--text-secondary); }
-.filter-btn.active {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: var(--accent-contrast-text, white);
-  }
-
-  .github-list { display: flex; flex-direction: column; }
-  .gh-item {
-    display: flex; align-items: center; gap: 8px;
-    padding: 8px 12px; border-bottom: 1px solid var(--border-light);
-    text-decoration: none; color: var(--text-primary);
-  }
-  .gh-item:hover { background: var(--elevated); }
-  .gh-badge {
-    font-size: 10px; padding: 2px 5px; border-radius: 4px;
-    font-weight: 600; min-width: 24px; text-align: center;
-  }
-  .gh-badge.pr { background: #238636; color: white; }
-  .gh-badge.pr.open { background: #238636; color: white; }
-  .gh-badge.pr.closed { background: #F85149; color: white; }
-  .gh-badge.pr.merged { background: #8250DF; color: white; }
-  .gh-badge.issue { background: var(--border-light); color: var(--text-secondary); }
-  .gh-badge-icon { display: flex; align-items: center; justify-content: center; min-width: 24px; }
-  .gh-info { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-  .gh-title { flex: 1; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .gh-meta { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
-  .github-summary { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 16px; }
-  .stat { display: flex; flex-direction: column; align-items: center; gap: 2px; }
-  .stat-value { font-size: 18px; font-weight: 600; }
-  .stat-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; }
-  .stat-divider { width: 1px; height: 30px; background: var(--border-light); }
   .empty-state.success { color: #238636; text-align: center; padding: 12px; }
 </style>

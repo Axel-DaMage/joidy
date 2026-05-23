@@ -12,6 +12,7 @@ ENV_FILE = Path(__file__).parent.parent.parent / ".env"
 CONFIG_KEYS = {
     "gemini_api_key": "GEMINI_API_KEY",
     "obsidian_vault_path": "OBSIDIAN_VAULT_PATH",
+    "daily_notes_folder": "DAILY_NOTES_FOLDER",
     "github_token": "GITHUB_TOKEN",
     "github_username": "GITHUB_USERNAME",
     "github_client_id": "GITHUB_CLIENT_ID",
@@ -25,6 +26,7 @@ CONFIG_KEYS = {
 PUBLIC_KEYS = {
     "gemini_api_key": False,
     "obsidian_vault_path": True,
+    "daily_notes_folder": True,
     "github_token": False,
     "github_username": True,
     "github_client_id": False,
@@ -59,6 +61,7 @@ def write_env(env_vars: dict) -> None:
 class ConfigResponse(BaseModel):
     gemini_api_key: Optional[str] = None
     obsidian_vault_path: Optional[str] = None
+    daily_notes_folder: Optional[str] = None
     github_username: Optional[str] = None
     app_env: Optional[str] = None
     configured_keys: list[str]
@@ -67,6 +70,7 @@ class ConfigResponse(BaseModel):
 class ConfigUpdate(BaseModel):
     gemini_api_key: Optional[str] = None
     obsidian_vault_path: Optional[str] = None
+    daily_notes_folder: Optional[str] = None
     github_token: Optional[str] = None
     github_username: Optional[str] = None
     github_client_id: Optional[str] = None
@@ -136,6 +140,7 @@ def get_key_description(key: str) -> str:
     descriptions = {
         "gemini_api_key": "API key for Google Gemini AI",
         "obsidian_vault_path": "Absolute path to your Obsidian vault",
+        "daily_notes_folder": "Relative folder inside your vault for daily notes",
         "github_token": "GitHub Personal Access Token",
         "github_username": "GitHub username",
         "github_client_id": "GitHub OAuth App client ID",
@@ -146,3 +151,25 @@ def get_key_description(key: str) -> str:
         "app_env": "Application environment (development/production)",
     }
     return descriptions.get(key, "")
+
+
+class GamificationConfig(BaseModel):
+    xp_table: dict
+    plant_stages: list[dict]
+    streak_milestones: list[int]
+
+
+@router.get("/gamification", response_model=GamificationConfig)
+def get_gamification_config():
+    from api.services.gamification_engine import (
+        get_xp_table, PLANT_STAGES, STREAK_MILESTONES
+    )
+    xp_table = get_xp_table()
+    return GamificationConfig(
+        xp_table=xp_table,
+        plant_stages=[
+            {"stage": i, "name": stage["name"], "xp_required": stage["xp_required"]}
+            for i, stage in enumerate(PLANT_STAGES)
+        ],
+        streak_milestones=STREAK_MILESTONES
+    )

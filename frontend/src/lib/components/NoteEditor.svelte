@@ -8,9 +8,10 @@
   import TagChip from './TagChip.svelte';
   import { aiSuggestions, fetchAISuggestions, findNoteByTitle } from '$lib/stores/notes';
   import { activeIconPack, showFrontmatter, hideTagsLine } from '$lib/stores/settings';
+  import { logger } from '$lib/utils/logger';
   import { api, type Note } from '$lib/api';
   import { goto } from '$app/navigation';
-  import { extractFrontmatter } from '$lib/utils/fileTree';
+  import { extractFrontmatter, getFileIcon } from '$lib/utils/fileTree';
 
   // Configure marked once — GFM enables tables, strikethrough, autolinks
   marked.use({ gfm: true, breaks: true });
@@ -19,6 +20,7 @@
   export let momentary = false;
   export let hasPrev = false;
   export let hasNext = false;
+  export let initialTitle = '';
 
   function extractTagsFromContent(text: string): string[] {
     const extracted = new Set<string>();
@@ -49,7 +51,7 @@
     return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
-  let title = note?.title ?? '';
+  let title = note?.title ?? initialTitle;
   let content = note?.content ?? '';
   let tags: string[] = note?.tags ?? [];
   let previousContentTags = extractTagsFromContent(content);
@@ -65,10 +67,15 @@
   let showIconSettings = false;
   let customColor = '#ffffff';
 
-  $: if (note?.content) {
-    const fm = extractFrontmatter(note.content);
+  $: {
+    const fm = extractFrontmatter(content || note?.content || '');
     customColor = fm.color || '#ffffff';
   }
+
+  $: iconMeta = extractFrontmatter(content || note?.content || '');
+  $: noteIcon = iconMeta.icon || (note ? getFileIcon(note.title, content || note.content || '') : 'File');
+  $: noteIconColor = iconMeta.color || undefined;
+  $: noteIconPack = iconMeta.pack || undefined;
 
   let backlinks: Note[] = [];
 
@@ -116,7 +123,7 @@
           goto(`/notes?id=${linkedNote.id}`);
         } else {
           // Future: Option to create missing note
-          console.log('Note not found:', title);
+          logger.log('Note not found:', title);
         }
       }
     }
@@ -142,6 +149,8 @@
   $: wordCount = visibleEditorContent.trim() ? visibleEditorContent.trim().split(/\s+/).length : 0;
   $: charCount = visibleEditorContent.length;
   $: renderedHtml = renderMarkdown(visibleEditorContent);
+  $: lineCount = Math.max(1, visibleEditorContent.split('\n').length);
+  $: lineNumbers = Array.from({ length: lineCount }, (_, i) => i + 1);
 
   function updateVisibleContent(e: Event) {
     const val = (e.currentTarget as HTMLTextAreaElement).value;
@@ -311,11 +320,15 @@
   let zenMode = false;
   let backdropEl: HTMLElement;
   let textareaEl: HTMLTextAreaElement;
+  let lineGutterEl: HTMLElement;
 
   function syncScroll() {
     if (backdropEl && textareaEl) {
       backdropEl.scrollTop = textareaEl.scrollTop;
       backdropEl.scrollLeft = textareaEl.scrollLeft;
+    }
+    if (lineGutterEl && textareaEl) {
+      lineGutterEl.scrollTop = textareaEl.scrollTop;
     }
   }
 
@@ -450,6 +463,14 @@
 
   <!-- Title -->
   <div class="title-row">
+    <button
+      class="note-icon-btn"
+      title="Personalizar icono"
+      type="button"
+      on:click={() => showIconSettings = true}
+    >
+      <DynamicIcon name={noteIcon} size={16} color={noteIconColor} pack={noteIconPack} />
+    </button>
     <input
       class="title-input"
       bind:value={title}
@@ -508,6 +529,11 @@
       </div>
     {:else}
       <div class="editor-container">
+        <div class="line-gutter" bind:this={lineGutterEl} aria-hidden="true">
+          {#each lineNumbers as line}
+            <div class="line-number">{line}</div>
+          {/each}
+        </div>
         <div class="backdrop" bind:this={backdropEl} aria-hidden="true">
           <div class="highlights">{@html editorHighlightedHtml}</div>
         </div>
@@ -571,6 +597,25 @@
     border-left: none;
     background: var(--bg);
     padding-top: 40px;
+  }
+
+  .note-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--text-muted);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .note-icon-btn:hover {
+    background: var(--elevated);
+    color: var(--text-primary);
   }
 
   /* ── Toolbar ── */
@@ -818,6 +863,29 @@
     overflow: hidden;
   }
 
+  .line-gutter {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 44px;
+    height: 100%;
+    padding: 24px 0;
+    background: var(--surface);
+    border-right: 1px solid var(--border-light, var(--border));
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-muted);
+    text-align: right;
+    overflow: hidden;
+    pointer-events: none;
+  }
+
+  .line-number {
+    height: 1.7em;
+    line-height: 1.7;
+    padding-right: 10px;
+  }
+
   .backdrop {
     position: absolute;
     top: 0;
@@ -830,7 +898,7 @@
   }
 
   .highlights {
-    padding: 24px;
+    padding: 24px 24px 24px 60px;
     font-family: var(--font-mono);
     font-size: 14px;
     line-height: 1.7;
@@ -850,7 +918,7 @@
     border: none;
     outline: none;
     resize: none;
-    padding: 24px;
+    padding: 24px 24px 24px 60px;
     font-size: 14px;
     font-family: var(--font-mono);
     line-height: 1.7;

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import { Eye, EyeOff, Save, Trash2, X, Maximize, ChevronLeft, ChevronRight } from 'lucide-svelte';
+  import { Eye, EyeOff, Save, Trash2, X, Maximize, ChevronLeft, ChevronRight, Settings } from 'lucide-svelte';
   import { marked } from 'marked';
   import { api, type Goal } from '$lib/api';
 
@@ -13,6 +13,7 @@
     save: { title: string; content: string };
     cancel: void;
     delete: void;
+    edit: void;
   }>();
 
   let title = goal?.title ?? '';
@@ -29,6 +30,8 @@
   $: wordCount = visibleContent.trim() ? visibleContent.trim().split(/\s+/).length : 0;
   $: charCount = visibleContent.length;
   $: renderedHtml = renderMarkdown(visibleContent);
+  $: lineCount = Math.max(1, visibleContent.split('\n').length);
+  $: lineNumbers = Array.from({ length: lineCount }, (_, i) => i + 1);
 
   function renderMarkdown(md: string): string {
     if (!md.trim()) return '<p style="color:var(--text-muted);font-style:italic;">Escribe algo para ver el preview...</p>';
@@ -148,6 +151,11 @@
         <span class="save-status">{saved ? 'Guardado' : saving ? '...' : 'Guardar'}</span>
       </button>
 
+      <button class="toolbar-btn" on:click={() => dispatch('edit')} title="Editar ajustes del objetivo">
+        <Settings size={14} />
+        <span>Ajustes</span>
+      </button>
+
       <button class="toolbar-btn" on:click={() => dispatch('cancel')} title="Cerrar">
         <X size={14} />
       </button>
@@ -171,6 +179,11 @@
       </div>
     {:else}
       <div class="editor-container">
+        <div class="line-gutter" aria-hidden="true">
+          {#each lineNumbers as line}
+            <div class="line-number">{line}</div>
+          {/each}
+        </div>
         <div class="backdrop" bind:this={backdropEl} aria-hidden="true">
           <div class="highlights">{@html editorHighlightedHtml}</div>
         </div>
@@ -194,6 +207,9 @@
     flex-direction: column;
     height: 100%;
     background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    overflow: hidden;
   }
 
   .editor-shell.zen-mode {
@@ -203,7 +219,8 @@
     width: 100vw;
     height: 100vh;
     z-index: 9999;
-    border-left: none;
+    border: none;
+    border-radius: 0;
     background: var(--bg);
     padding-top: 40px;
   }
@@ -297,6 +314,29 @@
     overflow: hidden;
   }
 
+  .line-gutter {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 44px;
+    height: 100%;
+    padding: 24px 0;
+    background: var(--surface);
+    border-right: 1px solid var(--border-light, var(--border));
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-muted);
+    text-align: right;
+    overflow: hidden;
+    pointer-events: none;
+  }
+
+  .line-number {
+    height: 1.7em;
+    line-height: 1.7;
+    padding-right: 10px;
+  }
+
   .backdrop {
     position: absolute;
     top: 0;
@@ -309,7 +349,7 @@
   }
 
   .highlights {
-    padding: 24px;
+    padding: 24px 24px 24px 60px;
     font-family: var(--font-mono);
     font-size: 14px;
     line-height: 1.7;
@@ -329,7 +369,7 @@
     border: none;
     outline: none;
     resize: none;
-    padding: 24px;
+    padding: 24px 24px 24px 60px;
     font-size: 14px;
     font-family: var(--font-mono);
     line-height: 1.7;

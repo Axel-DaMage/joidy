@@ -6,6 +6,8 @@
   export let color: string | undefined = undefined;
   export let pack: string | undefined = undefined;
 
+  const emojiRegex = /\p{Extended_Pictographic}/u;
+
   // ── Lucide ──
   import * as L from 'lucide-svelte';
   
@@ -17,13 +19,15 @@
     Target as PTarget, Fire as PFlame, Gear as PCog, GridFour as PGrid,
     X as PX, Moon as PMoon, Sun as PSun, Database as PDB, GitBranch as PGit,
     Palette as PPal, Plus as PPlus, Minus as PMinus, ArrowCounterClockwise as PRot,
-    FastForward as PSkip, File as PFile, CaretLeft as PLeft, CaretRight as PRight
+    FastForward as PSkip, File as PFile, CaretLeft as PLeft, CaretRight as PRight,
+    Wrench as PWrench
   } from 'phosphor-svelte';
 
 
 
   // Note: project uses Svelte 5; avoid svelte-material-icons (incompatible)
   // We'll reuse Phosphor/ Lucide icons instead for the 'material' pack mapping.
+  $: isEmoji = emojiRegex.test(name);
   $: comp = getIconComponent(pack || $activeIconPack, name);
 
   function getIconComponent(pack: string, n: string) {
@@ -35,7 +39,7 @@
         'Flame': PFlame, 'Settings': PCog, 'LayoutGrid': PGrid, 'X': PX, 'Moon': PMoon,
         'Sun': PSun, 'Database': PDB, 'GitBranch': PGit, 'Palette': PPal, 'Plus': PPlus,
         'Minus': PMinus, 'RotateCcw': PRot, 'SkipForward': PSkip, 'File': PFile,
-        'ChevronLeft': PLeft, 'ChevronRight': PRight,
+        'ChevronLeft': PLeft, 'ChevronRight': PRight, 'Wrench': PWrench,
       };
       return map[n] || (L as any)[n] || (L as any)['Circle'];
     }
@@ -47,7 +51,7 @@
         'Flame': PFlame, 'Settings': PCog, 'LayoutGrid': PGrid, 'X': PX, 'Moon': PMoon,
         'Sun': PSun, 'Database': PDB, 'GitBranch': PGit, 'Palette': PPal, 'Plus': PPlus,
         'Minus': PMinus, 'RotateCcw': PRot, 'SkipForward': PSkip, 'File': PFile,
-        'ChevronLeft': PLeft, 'ChevronRight': PRight,
+        'ChevronLeft': PLeft, 'ChevronRight': PRight, 'Wrench': PWrench,
       };
       return map[n] || (L as any)[n] || (L as any)['Circle'];
     }
@@ -58,4 +62,13 @@
   }
 </script>
 
-<svelte:component this={comp} size="{size}" width="{size}" height="{size}" color={color} style="width: {size}px; height: {size}px; color: {color ? color : 'inherit'}; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;" />
+{#if isEmoji}
+  <span
+    style="width: {size}px; height: {size}px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: {size}px; line-height: 1;"
+    aria-hidden="true"
+  >
+    {name}
+  </span>
+{:else}
+  <svelte:component this={comp} size="{size}" width="{size}" height="{size}" color={color} style="width: {size}px; height: {size}px; color: {color ? color : 'inherit'}; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;" />
+{/if}

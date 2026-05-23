@@ -1,172 +1,113 @@
-# Pendientes y Mejoras - Proyecto Joidy
+# 📓 Pendientes y Mejoras - Proyecto Joidy
 
-## 1. Backend - Pendientes
-
-### 1.1 Integraciones
-- [ ] **GITHUB_CLIENT_SECRET**: Generar en GitHub OAuth App settings
-- [ ] Implementar integraciones adicionales (Slack, Notion, Calendar)
-- [ ] Webhook para sincronización bidireccional con Obsidian
-
-### 1.2 Servicios
-- [ ] Completar sistema de response_cache (`api/services/response_cache.py` está vacío)
-- [ ] Implementar cache para tag co-occurrences (actualmente O(n²))
-- [ ] Sistema de dead letter queue para embeddings fallidos
-
-### 1.3 API Endpoints
-- [ ] Validación más robusta con Pydantic en todos los endpoints
-- [ ] Rate limiting por usuario
-- [ ] Documentación OpenAPI completa
-
-### 1.4 Base de Datos
-- [ ] Sistema de migraciones con Alembic (mencionado en REPORT.md)
-- [ ] Índices para optimizar queries de grafos
-- [ ] Tabla de configuración centralizada (XP_TABLE hardcoded)
+> [!NOTE]
+> Joidy es una plataforma unificada para la gestión personal del conocimiento gamificado. Este documento registra el estado actual del roadmap, las optimizaciones pendientes y los hallazgos técnicos recientes.
 
 ---
 
-## 2. Frontend - Pendientes
+## 🛠️ 1. Optimizaciones Técnicas Críticas (Nuevas)
 
-### 2.1 Páginas
-- [ ] Página de Settings/Configuración de usuario
-- [ ] Página de Dashboard consolidado
-- [ ] Página de Integraciones
+### 🔴 Alta Prioridad
+- [x] **Bug en Health Check de Caché (Backend)**: Corregido en `api/services/response_cache.py`. Se añadió `"initialized": True` a las estadísticas del caché para evitar el estado "degraded" falso en `/health/ready`.
+- [ ] **Menú de Exportación en Interfaz (Frontend)**: Agregar controles en la barra de herramientas de `NoteEditor.svelte` y en la vista de notas para invocar los endpoints de exportación existentes en `/export/notes/markdown`, `/export/notes/html` y `/export/notes/zip`.
+- [ ] **Soporte de WebSocket End-to-End (Real-time)**: Conectar el cliente Svelte al canal `/ws` implementado en el backend para recibir notificaciones reactivas sin recarga. Además, **integrar las llamadas de difusión en el backend** (como `notify_note_created`, `notify_xp_gained`, `notify_streak_updated` definidos en `api/routers/websocket.py`) en sus respectivos servicios de mutación (`note_service.py`, `gamification_engine.py`), ya que actualmente están huérfanos y no se disparan.
 
-### 2.2 Componentes e Interfaz
-- [x] Dashboard de Historial Anual interactivo (StreakHeatmap)
-- [x] Modal de metas (Goal Overlay Component)
-- [x] Dashboard de Planificación unificado (SGOJ)
-- [x] Personalización de íconos y colores en lista de notas (Sincronizado a YAML)
-- [ ] Sistema de notificaciones/toast centralizado
-- [ ] Tema oscuro/claro toggle manual
-- [ ] Tutorial/onboarding para nuevos usuarios
-
-### 2.3 Widgets
-- [ ] Completar PomodoroWidget con persistencia
-- [ ] Completar TimeWidget con zonas horarias
-- [ ] Widget de clima (depende de API externa)
-
-### 2.4 Obsidian Integration
-- [x] Sincronización básica de notas
-- [x] Edición y guardado de Frontmatter nativo (iconos, colores)
-- [ ] Sync bidireccional avanzado en tiempo real
-- [ ] Editor Markdown WYSIWYG completo
+### 🟡 Media Prioridad
+- [ ] **Rate Limiting Avanzado**: Extender el middleware `RateLimitMiddleware` para soportar límites de peticiones basados en clave de API o por usuario autenticado, en lugar de límites globales únicamente.
 
 ---
 
-## 3. Tests - Pendientes
+## 💻 2. Backend - Estado de Desarrollo
 
-### 3.1 Unit Tests
-- [ ] `test_note_service.py` - Missing
-- [ ] `test_goal_service.py` - Missing
-- [ ] `test_embedding_service.py` - Missing
+### 2.1 Integraciones
+- [x] **GITHUB_CLIENT_SECRET**: Configurado y en uso en la integración OAuth.
+- [ ] **Calendario Personalizado (Google API)**: Implementar integración de eventos y tareas basada en Google Calendar y Google Tasks (Ver sección de arquitectura de Google abajo).
+- [ ] **Sincronización Bidireccional con Obsidian via Webhook**: Permitir triggers instantáneos externos hacia la bóveda en lugar de depender únicamente del watcher local.
 
-### 3.2 Integration Tests
-- [ ] Tests E2E de API
-- [ ] Tests de sincronización with Obsidian
-- [ ] Tests de worker tasks
+### 2.2 Servicios & Middleware
+- [x] **response_cache** (`api/services/response_cache.py`): Caché TTL en memoria para endpoints costosos con estadísticas completas y eviction seguro.
+- [x] **Dead Letter Queue (DLQ)**: Sistema de almacenamiento y reintento con backoff exponencial para embeddings fallidos (`embedding_failures`).
+- [x] **Rate Limiting Global**: Middleware implementado a 60 req/min para salvaguardar la API.
 
-### 3.3 Coverage
-- [ ] Coverage actual: ~20% (estimado)
-- [ ] Target: 70%+ coverage
-
----
-
-## 4. Infrastructure - Pendientes
-
-### 4.1 CI/CD
-- [ ] GitHub Actions para CI
-- [ ] Pipeline de deployment
-- [ ] linter/typecheck automatizado
-
-### 4.2 Monitoreo
-- [ ] Logging estructurado
-- [ ] Métricas (Prometheus/Grafana)
-- [ ] Health checks avanzados
-
-### 4.3 Seguridad
-- [ ] Autenticación/JWT
-- [ ] Rate limiting por API key
-- [ ] Sanitización de inputs
-
-### 4.4 DevOps
-- [ ] Backup automático diario
-- [ ]监控 y alertas
-- [ ] Pipeline de rollback
+### 2.3 Base de Datos & Modelos
+- [x] **Alembic Migrations**: Sistema de migraciones robusto y automatizado en la inicialización de la app (`init_db()`).
+- [x] **Índices de Rendimiento**: Índices para optimizar la velocidad en consultas complejas sobre el grafo de co-ocurrencia.
+- [x] **Tabla de Configuración Centralizada**: Configuración de XP y metas extraídas de variables hardcoded a configuraciones del entorno y BD.
+- [ ] **Migración a PostgreSQL**: Adaptar los modelos para producción en preparación para una base de datos distribuida en lugar de SQLite (manteniendo soporte `sqlite-vec` o migrando a pgvector).
 
 ---
 
-## 5. Documentación - Pendientes
+## 🎨 3. Frontend - Estado de Desarrollo
 
-### 5.1 Wiki/Docs
-- [ ] README.md principal
-- [ ] Documentación de API endpoints
-- [ ] Guía de instalación
-- [ ] Contribución / Code style guide
+### 3.1 Componentes e Interfaz
+- [x] **Dashboard de Historial Anual**: Componente `StreakHeatmap` interactivo y altamente visual.
+- [x] **Modal de Objetivos**: Componente `GoalOverlay` e interfaz fluida de creación/edición.
+- [x] **Dashboard de Planificación unificado (SGOJ)**: Integración de objetivos y planificación temporal.
+- [x] **Notificaciones y Toasts**: Sistema centralizado reactivo a través de `<Toast />` y store de gamificación.
+- [x] **Tema Oscuro/Claro Manual**: Selector persistente en el panel de Ajustes con transiciones fluidas.
+- [x] **Tutorial y Onboarding**: Recorrido de bienvenida interactivo utilizando `TutorialOverlay.svelte` y persistencia local.
+- [x] **Widget de GitHub**:
+  - [x] Consolidado en un componente unificado y altamente reusable.
+  - [x] Altura fija y predecible entre cambios de filtros.
+  - [x] Indicador sutil de "actualizando" (pulsing blue dot) que no interrumpe la navegación.
+  - [x] Carga diferida y animaciones de carga tipo Skeleton.
 
-### 5.2 Arquitectura
-- [ ] Diagramas de arquitectura
-- [ ] Modelo de datos
-- [ ] Decisiones técnicas (ADRs)
+### 3.2 Widgets de Dashboard
+- [x] **PomodoroWidget**: Temporizador persistente con debounce de guardado a 500ms.
+- [x] **TimeWidget**: Selector de zonas horarias en tiempo real.
+- [x] **WeatherWidget**: Widget interactivo que consume Open-Meteo basado en la geolocalización del navegador.
 
----
-
-## 6. Mejoras Técnicas (Roadmap)
-
-### Alta Prioridad
-- [ ] Extraer lógica de routers a service layer
-- [ ] Implementar Unit of Work pattern
-- [ ] Pre-calcular co-occurrences de tags
-- [ ] Centralizar configuración
-
-### Media Prioridad
-- [ ] Migrar a PostgreSQL para producción
-- [ ] Implementar WebSocket para real-time updates
-- [ ] Cache con Redis
-- [ ] Task queue con Celery
-
-### Baja Prioridad
-- [ ] Soporte multi-idioma (i18n)
-- [ ] PWA para móvil
-- [ ] Tema customizable
-- [ ] Plugin system
+### 3.3 Integración con Obsidian
+- [x] **Sincronización básica**: Importación automática de notas Markdown.
+- [x] **Metadatos Frontmatter**: Guardado e interpretación nativa de iconos y colores mediante YAML.
+- [ ] **Sincronización en tiempo real avanzada**: Detección bidireccional instantánea de conflictos de escritura.
+- [ ] **Editor WYSIWYG**: Editor enriquecido para edición visual directa de Markdown.
 
 ---
 
-## 7. Bugs Conocidos
+## 🧪 4. Control de Calidad y Cobertura
 
-- [ ] Vault watcher puede dejar tareas huérfanas en edge cases
-- [ ] Embeddings fallidos no se reintentanconsistentemente
-- [ ] Skill tree puede tener ciclos si se crean jerarquías circulares
-- [ ] CORS allows "*" en producción
+### 4.1 Unit Tests
+- [x] `test_note_service.py` — Pruebas de persistencia y parsing de enlaces.
+- [x] `test_goal_service.py` — Pruebas sobre temporización y rollover.
+- [x] `test_embedding_service.py` — Pruebas de vectorización asíncrona.
+- [x] `test_embedding_retry.py` — Validación del backoff exponencial en la cola de fallos.
 
----
-
-## 8. Features Pedientes de Diseño
-
-- [ ] Gamificación: Logros (Achievements)
-- [ ] Social: Compartir notas/pérfiles
-- [ ] Analytics: Estadísticas de uso
-- [ ] Export: PDF, Markdown, HTML
-- [ ] Import:Desde otros sistemas (Notion, Evernote)
-
-## 9. Integración con Google (Contexto y Arquitectura)
-
-**Contexto del Proyecto:**
-Desarrollo de una aplicación con un calendario personalizado que requiere extraer y mostrar eventos y tareas directamente desde las cuentas de Google de los usuarios finales.
-
-**APIs y Arquitectura Requerida:**
-*   **APIs Necesarias:** Google Calendar API (gestión de eventos) y Google Tasks API (gestión de tareas). Deben habilitarse desde un proyecto en la Consola de Google Cloud.
-*   **Costos:** El uso de estas APIs es gratuito, operando bajo un límite de cuotas amplio (ej. 1.000.000 peticiones diarias para Calendar), suficiente para proyectos estándar.
-
-**Flujo de Autenticación (Multi-usuario):**
-*   **Protocolo:** OAuth 2.0. Permite a múltiples usuarios conectar sus cuentas sin compartir credenciales.
-*   **Interfaz (UX):** El usuario interactúa con un botón en la aplicación que lo redirige a la pantalla segura de inicio de sesión y consentimiento de Google.
-*   **Backend:** Tras la aprobación del usuario, Google retorna un *Access Token* y un *Refresh Token*. El sistema debe almacenar el *Refresh Token* de forma segura en la base de datos, vinculado al perfil del usuario, para mantener la sincronización de datos en segundo plano a largo plazo.
-
-**Requisitos de Despliegue:**
-*   Configuración de la "Pantalla de consentimiento de OAuth" en Google Cloud, definiendo los *scopes* (permisos) estrictamente necesarios (lectura de eventos y tareas).
-*   **Verificación de Google:** Antes del lanzamiento público, la aplicación deberá someterse y aprobar el proceso de verificación de Google, ya que los *scopes* de Calendar y Tasks implican el acceso a datos de usuario sensibles. Se debe utilizar el modo de "Prueba" durante la etapa de desarrollo.
+### 4.2 Integration & E2E Tests
+- [ ] **Pruebas E2E de la API**: Validación de flujos completos de usuario mediante endpoints encadenados.
+- [ ] **Pruebas de Sincronización**: Simulación de escrituras en Obsidian y verificación de consistencia en DB.
+- [ ] **Cobertura General**: Elevar la cobertura actual de un ~20% estimado a un **70%+ target**.
 
 ---
 
-*Generado: Mayo 2026*
+## 🔒 5. Infraestructura, Seguridad y DevOps
+
+- [x] **CI/CD con GitHub Actions**: Workflow implementado (`ci.yml`) con linting, typecheck y compilación Docker automatizada.
+- [x] **Logging Estructurado**: Configuración diferenciada de logs (JSON plano en producción, formato coloreado en desarrollo).
+- [x] **Monitoreo & Health Checks**: Endpoint `/metrics` expuesto e integración de health checks cruzados en Docker Compose.
+- [x] **Backups**: Script automatizado en python (`backup.py`) y comando `make backup`.
+- [ ] **Seguridad Avanzada**: Autenticación nativa por JWT y sanitización estricta ante XSS.
+- [ ] **alerting & Monitoring**: Configuración de Prometheus/Grafana para consumo de métricas.
+
+---
+
+## 💡 6. Integración con Google (Backlog Estratégico)
+
+> [!IMPORTANT]
+> **Arquitectura OAuth 2.0 y APIs**:
+> - **APIs requeridas**: Google Calendar API y Google Tasks API.
+> - ** UX**: Botón en panel de ajustes que redirige a la pantalla segura de consentimiento de Google.
+> - **Persistencia**: Almacenamiento seguro del *Refresh Token* cifrado en la base de datos para sincronización background continua.
+> - **Despliegue**: Uso de entorno "Test" en Google Cloud Console durante desarrollo. Requiere pasar la auditoría de scopes sensibles de Google antes del despliegue público.
+
+---
+
+## 🚀 7. Plan de Trabajo Inmediato
+
+1. **[Backlog]** Corregir el bug del Health Check de Caché en el backend para reportar estados correctos de salud de la infraestructura.
+2. **[Frontend]** Crear controles y UI interactiva para la exportación de notas directamente desde la barra de herramientas de `NoteEditor.svelte`.
+3. **[Frontend]** Conectar el cliente Svelte al WebSocket del backend para lograr reactividad en tiempo real de XP y alertas.
+
+---
+
+*Última actualización: Mayo 2026*

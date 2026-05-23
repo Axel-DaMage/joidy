@@ -254,22 +254,13 @@
               title={day.iso}
             >
               <div class="wd-num-wrap">
-                {#if day.failed && day.emoji}
-                  <span class="wd-emoji" class:on={day.failed}>
-                    {#if isIcon(day.emoji)}
-                      <StreakIcon name={day.emoji} size={20} color="var(--bg)" />
-                    {:else}
-                      {day.emoji}
-                    {/if}
-                  </span>
-                {:else}
-                  <span class="wd-num"
-                    class:today-num={day.isToday}
-                    class:checked-num={day.checked && !day.isToday}
-                    class:target-num={day.isTarget}
-                    class:selected-num={day.isSelected && !day.isToday && !day.checked}
-                  >{day.dayNum}</span>
-                {/if}
+                <span class="wd-num"
+                  class:today-num={day.isToday}
+                  class:checked-num={day.checked && !day.isToday}
+                  class:failed-num={day.failed && !day.checked && !day.isToday}
+                  class:target-num={day.isTarget}
+                  class:selected-num={day.isSelected && !day.isToday && !day.checked && !day.failed}
+                >{day.dayNum}</span>
               </div>
             </button>
           {/each}
@@ -298,17 +289,7 @@
                 disabled={!cell.inMonth}
               >
                 {#if cell.inMonth}
-                  {#if cell.failed && cell.emoji}
-                    <span class="mday-emoji" class:on={cell.failed} title="Fallido">
-                      {#if isIcon(cell.emoji)}
-                        <StreakIcon name={cell.emoji} size={20} color="var(--bg)" />
-                      {:else}
-                        {cell.emoji}
-                      {/if}
-                    </span>
-                  {:else}
-                    <span class="mday" class:on={cell.checked} class:mtoday={cell.isToday} class:mtarget={cell.isTarget} class:mselected={cell.isSelected && !cell.isToday && !cell.checked}>{cell.dayNum}</span>
-                  {/if}
+                  <span class="mday" class:on={cell.checked && !cell.isToday} class:mtoday={cell.isToday} class:mfailed={cell.failed && !cell.checked && !cell.isToday} class:mtarget={cell.isTarget} class:mselected={cell.isSelected && !cell.isToday && !cell.checked && !cell.failed}>{cell.dayNum}</span>
                 {/if}
               </button>
             {/each}
@@ -339,17 +320,7 @@
                   disabled={!cell.inMonth}
                 >
                   {#if cell.inMonth}
-                    {#if cell.failed && cell.emoji}
-                      <span class="mday-emoji" class:on={cell.failed} title="Fallido">
-                        {#if isIcon(cell.emoji)}
-                          <StreakIcon name={cell.emoji} size={20} color="var(--bg)" />
-                        {:else}
-                          {cell.emoji}
-                        {/if}
-                      </span>
-                    {:else}
-                      <span class="mday" class:on={cell.checked} class:mtoday={cell.isToday} class:mtarget={cell.isTarget} class:mselected={cell.isSelected && !cell.isToday && !cell.checked}>{cell.dayNum}</span>
-                    {/if}
+                    <span class="mday" class:on={cell.checked && !cell.isToday} class:mtoday={cell.isToday} class:mfailed={cell.failed && !cell.checked && !cell.isToday} class:mtarget={cell.isTarget} class:mselected={cell.isSelected && !cell.isToday && !cell.checked && !cell.failed}>{cell.dayNum}</span>
                   {/if}
                 </button>
               {/each}
@@ -527,16 +498,41 @@
     z-index: 1;
   }
 
-  .wd-num.today-num,
+  .week-col.today {
+    border-color: #fbbf24 !important;
+    z-index: 4;
+  }
+  .week-col.today.selected {
+    border-color: #fbbf24 !important;
+    box-shadow: 0 0 0 2px #fbbf24 !important;
+    z-index: 5;
+  }
+
   .wd-num.checked-num,
-  .mday.on,
-  .mday.mtoday {
+  .mday.on {
     background: var(--ac);
     color: var(--bg);
+    font-weight: 600;
+  }
+
+  .wd-num.failed-num,
+  .mday.mfailed {
+    background: var(--error);
+    color: var(--bg);
+    font-weight: 600;
+  }
+
+  /* Today always wins */
+  .wd-num.today-num,
+  .mday.mtoday {
+    background: #fbbf24 !important;
+    color: #000 !important;
+    font-weight: 700 !important;
   }
 
   .wd-num.today-num, .mday.mtoday { font-weight: 700; }
   .wd-num.checked-num, .mday.on { font-weight: 600; }
+  .wd-num.failed-num, .mday.mfailed { font-weight: 600; }
 
   .wd-num.selected-num,
   .mday.mselected {
@@ -586,7 +582,9 @@
 
   .mcell.checked { box-shadow: inset 0 0 0 1px var(--ac); z-index: 1; }
   .mcell.failed:not(.checked) { box-shadow: inset 0 0 0 1px var(--error); }
+  .mcell.today { box-shadow: inset 0 0 0 1px #fbbf24 !important; z-index: 4; }
   .mcell.selected { box-shadow: inset 0 0 0 2px var(--ac) !important; z-index: 3; }
+  .mcell.today.selected { box-shadow: inset 0 0 0 2px #fbbf24 !important; z-index: 5; }
 
   .mcell.empty {
     background: #000;

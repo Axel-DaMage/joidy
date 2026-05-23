@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from models.note import Note, NoteLink, NoteTag, Tag
 from services.gamification_engine import process_event
+from services.sanitizer import sanitize_content, sanitize_tag, sanitize_title
 from services.skill_tree import sync_skills, sync_skills_for_tags
 from services.tag_graph import rebuild_tag_cooccurrences, sync_tag_cooccurrences_for_tags
 from services.goal_service import sync_goals_from_note
@@ -83,6 +84,9 @@ def create_note(
     source_path: Optional[str],
     rebuild_derived_data: bool = True,
 ):
+    title = sanitize_title(title)
+    content = sanitize_content(content)
+    tags = [sanitize_tag(t) for t in tags if sanitize_tag(t)]
     note = Note(title=title, content=content, source=source, source_path=source_path)
     db.add(note)
     db.flush()
@@ -129,23 +133,29 @@ def update_note(
         return None, None
 
     gami = None
+    touched_tag_ids: set[int] = set()
+
     if title is not None:
-        note.title = title
+        note.title = sanitize_title(title)
     if source_path is not None:
         note.source_path = source_path
     if source is not None:
         note.source = source
     if content is not None:
+        content = sanitize_content(content)
         old_len = len(note.content)
         note.content = content
         if abs(len(content) - old_len) > 50:
             gami = process_event(db, "note_edited", {"note_id": note.id})
     if tags is not None:
-        touched_tag_ids: set[int] = {tag_id for tag_id, in db.query(NoteTag.tag_id).filter(NoteTag.note_id == note_id).all()}
+        touched_tag_ids = {tag_id for tag_id, in db.query(NoteTag.tag_id).filter(NoteTag.note_id == note_id).all()}
         db.query(NoteTag).filter(NoteTag.note_id == note_id).delete()
         db.flush()
         for tag_name in tags:
-            tag = get_or_create_tag(db, tag_name)
+            clean_tag = sanitize_tag(tag_name)
+            if not clean_tag:
+                continue
+            tag = get_or_create_tag(db, clean_tag)
             db.add(NoteTag(note_id=note.id, tag_id=tag.id, source="manual"))
             touched_tag_ids.add(tag.id)
 
@@ -161,7 +171,7 @@ def update_note(
 
     db.commit()
     db.refresh(note)
-    if rebuild_derived_data:
+    if rebuild_derived_data and touched_tag_ids:
         sync_skills_for_tags(db, touched_tag_ids)
     if content is not None:
         write_to_vault(note)

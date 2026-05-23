@@ -2,6 +2,7 @@ import { writable, get } from 'svelte/store';
 import { browser } from '$app/environment';
 import { api, type Note, type AISuggestion } from '$lib/api';
 import { applyGamificationResult } from './gamification';
+import { logger } from '$lib/utils/logger';
 
 export const notes        = writable<Note[]>([]);
 export const currentNote  = writable<Note | null>(null);
@@ -62,21 +63,21 @@ export async function loadNotes(tag?: string, force = false): Promise<void> {
     cacheLoadDone = true;
     notesLoadedOnce.set(true);
   } catch (e) {
-    console.error('[notes] Failed to load:', e);
+    logger.error('[notes] Failed to load:', e);
   } finally {
     notesLoading.set(false);
     pendingLoad = false;
   }
 }
 
-export async function createNote(title: string, content: string, tags: string[]): Promise<Note | null> {
+export async function createNote(title: string, content: string, tags: string[], sourcePath?: string | null): Promise<Note | null> {
   try {
-    const result = await api.notes.create({ title, content, tags });
+    const result = await api.notes.create({ title, content, tags, source_path: sourcePath ?? undefined });
     notes.update(ns => [result, ...ns]);
     applyGamificationResult(result.gamification);
     return result;
   } catch (e) {
-    console.error('[notes] Failed to create:', e);
+    logger.error('[notes] Failed to create:', e);
     return null;
   }
 }
@@ -87,7 +88,7 @@ export async function updateNote(id: number, data: Partial<{ title: string; cont
     notes.update(ns => ns.map(n => (n.id === id ? result : n)));
     applyGamificationResult(result.gamification);
   } catch (e) {
-    console.error('[notes] Failed to update:', e);
+    logger.error('[notes] Failed to update:', e);
   }
 }
 
@@ -97,7 +98,7 @@ export async function deleteNote(id: number): Promise<void> {
     notes.update(ns => ns.filter(n => n.id !== id));
     currentNote.update(n => (n?.id === id ? null : n));
   } catch (e) {
-    console.error('[notes] Failed to delete:', e);
+    logger.error('[notes] Failed to delete:', e);
   }
 }
 
@@ -122,4 +123,38 @@ export function findNoteByTitle(title: string): Note | undefined {
   })();
   return found;
 }
+
+export const noteSearchQuery = writable('');
+export const noteSearchTag = writable<string | null>(null);
+export const noteSortBy = writable<'updated' | 'created' | 'title'>('updated');
+export const noteSortAsc = writable(false);
+
+export const filteredNotes = {
+  subscribe: (run: (value: Note[]) => void) => {
+    return noteSearchQuery.subscribe(query => {
+      noteSearchTag.subscribe(tag => {
+        noteSortBy.subscribe(sortBy => {
+          noteSortAsc.subscribe(sortAsc => {
+            const allNotes = get(notes);
+            const q = query.toLowerCase().trim();
+            const filtered = allNotes.filter(n => {
+              const matchesQuery = !q || n.title.toLowerCase().includes(q) || n.content.toLowerCase().includes(q);
+              const matchesTag = !tag || n.tags.includes(tag);
+              return matchesQuery && matchesTag;
+            });
+
+            const sorted = [...filtered].sort((a, b) => {
+              let cmp = 0;
+              if (sortBy === 'title') cmp = a.title.localeCompare(b.title);
+              else if (sortBy === 'created') cmp = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+              else cmp = new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime();
+              return sortAsc ? cmp : -cmp;
+            });
+            run(sorted);
+          })();
+        });
+      })();
+    });
+  }
+};
 

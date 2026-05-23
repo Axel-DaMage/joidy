@@ -400,6 +400,38 @@ textarea.input {
   margin: var(--s4) 0;
 }
 
+.divider-light {
+  height: 1px;
+  background: var(--border-light);
+  margin: var(--s2) 0;
+}
+
+/* ── Section Headers ───────────────────────────────────────────────────────────── */
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--s4) var(--s5);
+  border-bottom: 1px solid var(--border-light);
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  z-index: 1;
+}
+
+.section-header h3,
+.section-header h4 {
+  color: var(--text-secondary);
+  font-weight: 400;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  margin: 0;
+}
+
+.section-header h3 {
+  font-size: 14px;
+}
+
 /* ── Scrollbar ───────────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }

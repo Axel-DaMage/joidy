@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     worker_url: str = "http://worker:8001"
     secret_key: str = "dev_secret_change_me"
     app_env: str = "development"
+    cors_allowed_origins: str = ""  # Comma-separated origins for production (e.g. "https://joidy.app,https://www.joidy.app")
     
     # GitHub Integration (OAuth - Device Flow)
     github_client_id: str = ""
@@ -22,6 +23,9 @@ class Settings(BaseSettings):
     embedding_retry_max_attempts: int = 8
     embedding_retry_base_seconds: int = 60
     xp_table_json: str = ""
+
+    # Authentication
+    auth_password: str = ""  # Password for single-user auth (optional)
 
 
 settings = Settings()

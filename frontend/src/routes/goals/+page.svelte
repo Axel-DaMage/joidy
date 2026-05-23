@@ -2,23 +2,62 @@
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
-  import { Plus, Check, ChevronDown, Calendar, BarChart, Clock, Layout, Pause, Play, Ban, Pencil, X, Flame, ChevronRight, ChevronLeft, TrendingUp, TrendingDown, PieChart, Activity, Target, Trophy, Settings, Palette, Hexagon, Filter, AlertTriangle, FileEdit } from 'lucide-svelte';
-  import { api, type Goal, type Tag, type Note } from '$lib/api';
+  import { Plus, Check, ChevronDown, Calendar, BarChart, Clock, Layout, Pause, Play, Ban, Pencil, X, Flame, ChevronRight, ChevronLeft, TrendingUp, TrendingDown, PieChart, Activity, Target, Trophy, Settings, Palette, Hexagon, Filter, AlertTriangle, FileEdit, Tag, FileText, Search, Pin, PinOff } from 'lucide-svelte';
+  import { api, type Goal, type Tag as TagType, type Note } from '$lib/api';
+  import { use24HourClock } from '$lib/stores/settings';
   import { applyGamificationResult, showXPGain } from '$lib/stores/gamification';
   import { getCachedData, setCachedData } from '$lib/utils/userSettings';
+  import { logger } from '$lib/utils/logger';
   import StreakIcon from '$lib/components/StreakIcon.svelte';
   import StreakHeatmap from '$lib/components/StreakHeatmap.svelte';
   import IconPicker from '$lib/components/IconPicker.svelte';
-  import GoalEditor from '$lib/components/GoalEditor.svelte';
 
   let goals = $state<Goal[]>([]);
-  let tags = $state<Tag[]>([]);
+  let tags = $state<TagType[]>([]);
   let notes = $state<Note[]>([]);
-  let currentTab = $state<'today' | 'planning' | 'history' | 'analytics' | 'editor'>('today');
+  // XP events from gamification — used for real activity timestamps
+  let xpEvents = $state<{ type: string; xp: number; at: string }[]>([]);
+  let currentTab = $state<'today' | 'planning' | 'history' | 'analytics' | 'editor'>('editor');
   let currentPlanningTab = $state<'WEEKLY' | 'MONTHLY' | 'ANNUAL'>('ANNUAL');
   let showAddForm = $state(false);
-  let editorGoal: Goal | null = $state(null);
-  let editorContent: string = $state('');
+  let goalSearchQuery = $state('');
+  let goalFilterState = $state<string | null>(null);
+  let pinnedGoals = $state<Set<number>>(new Set());
+
+  function filteredGoals(goals: Goal[], query: string, filter: string | null, pinned: Set<number>) {
+    let result = goals;
+    if (query) {
+      const q = query.toLowerCase();
+      result = result.filter(g => 
+        g.title.toLowerCase().includes(q) || 
+        (g.description && g.description.toLowerCase().includes(q))
+      );
+    }
+    if (filter) {
+      if (filter === 'COMPLETED') {
+        result = result.filter(g => g.state === 'COMPLETED' || g.is_completed);
+      } else if (filter === 'PINNED') {
+        result = result.filter(g => pinned.has(g.id));
+      } else {
+        result = result.filter(g => g.state === filter);
+      }
+    }
+    return [...result].sort((a, b) => {
+      const aPinned = pinned.has(a.id) ? 0 : 1;
+      const bPinned = pinned.has(b.id) ? 0 : 1;
+      return aPinned - bPinned;
+    });
+  }
+
+  function togglePinned(goalId: number) {
+    const newPinned = new Set(pinnedGoals);
+    if (newPinned.has(goalId)) {
+      newPinned.delete(goalId);
+    } else {
+      newPinned.add(goalId);
+    }
+    pinnedGoals = newPinned;
+  }
 
   const EMOJIS = Array.from(new Set([
     '🔴','❌','⚠️','📉','⛔','🌧️','🔥','💪','🏃','🚴','🏊','🏋️','🤸','🧘',
@@ -80,7 +119,11 @@
   let saving = $state(false);
   let ngActiveSection = $state<'basics' | 'appearance' | 'advanced'>('basics');
 
-  let dailyGoals = $derived(goals.filter(g => g.temporality === 'DAILY' && g.state !== 'CANCELLED'));
+  let _todayStr = $derived.by(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  });
+  let dailyGoals = $derived(goals.filter(g => g.state !== 'CANCELLED' && isAssigned(g.id, _todayStr)));
   let planningGoals = $derived(goals.filter(g => g.state !== 'CANCELLED'));
   let pendingGoals = $derived(goals.filter(g => g.pending_removal));
 
@@ -143,39 +186,41 @@
   let streakData = $state({ current_streak: 0, best_streak: 0 });
 
   onMount(async () => {
+    // restore UI state immediately to prevent flash
+    try {
+      const savedTab = localStorage.getItem('goals.currentTab');
+      if (savedTab) currentTab = savedTab as typeof currentTab;
+      const savedDate = localStorage.getItem('goals.selectedPlanningDate');
+      if (savedDate) selectedPlanningDate = savedDate;
+      const savedHistoryDate = localStorage.getItem('goals.selectedHistoryDate');
+      if (savedHistoryDate) selectedHistoryDate = savedHistoryDate;
+      // if we are on planning, pre-load assignments for the selected date
+      if (currentTab === 'planning' && selectedPlanningDate) {
+        loadAssignmentsForDate(selectedPlanningDate).catch(logger.error);
+      }
+    } catch (e) {
+      // ignore storage errors
+    }
+
     const cachedGoals = getCachedData<Goal[]>('goals');
-    const cachedTags = getCachedData<Tag[]>('tags');
+    const cachedTags = getCachedData<TagType[]>('tags');
     if (cachedGoals) goals = cachedGoals;
     if (cachedTags) tags = cachedTags;
     
     try {
-      [goals, tags, notes, streakData] = await Promise.all([
+      [goals, tags, notes, streakData, xpEvents] = await Promise.all([
         api.goals.list(),
         api.tags.list(),
         api.notes.list(),
-        api.goals.streak()
+        api.goals.streak(),
+        api.gamification.events(500)
       ]);
       setCachedData('goals', goals);
       setCachedData('tags', tags);
-      // restore UI state (keep planning tab and selected date)
-      try {
-        const savedTab = localStorage.getItem('goals.currentTab');
-        if (savedTab) currentTab = savedTab as typeof currentTab;
-        const savedDate = localStorage.getItem('goals.selectedPlanningDate');
-        if (savedDate) selectedPlanningDate = savedDate;
-        const savedHistoryDate = localStorage.getItem('goals.selectedHistoryDate');
-        if (savedHistoryDate) selectedHistoryDate = savedHistoryDate;
-        // if we are on planning, pre-load assignments for the selected date
-        if (currentTab === 'planning' && selectedPlanningDate) {
-          await loadAssignmentsForDate(selectedPlanningDate);
-        }
-      } catch (e) {
-        // ignore storage errors
-      }
     } catch (e) {
       if (goals.length === 0) {
         loadError = 'No se pudo cargar los objetivos.';
-        console.error('[goals] onMount failed:', e);
+        logger.error('[goals] onMount failed:', e);
       }
     }
   });
@@ -224,7 +269,7 @@
       const result = await api.goals.update(id, { state });
       goals = goals.map(g => g.id === id ? result : g);
     } catch (e) {
-      console.error('Error al actualizar estado:', e);
+      logger.error('Error al actualizar estado:', e);
     }
   }
 
@@ -245,7 +290,7 @@
       const result = await api.goals.update(id, { temporality });
       goals = goals.map(g => g.id === id ? result : g);
     } catch (e) {
-      console.error('Error al actualizar temporalidad:', e);
+      logger.error('Error al actualizar temporalidad:', e);
     }
   }
 
@@ -442,7 +487,7 @@
     try {
       await api.planning.setAssignments(normDate, assignments[normDate]);
     } catch (e) {
-      console.error('Error saving assignment:', e);
+      logger.error('Error saving assignment:', e);
     }
   }
 
@@ -458,7 +503,7 @@
     try {
       await api.planning.setAssignments(normDate, assignments[normDate]);
     } catch (e) {
-      console.error('Error saving assignment removal:', e);
+      logger.error('Error saving assignment removal:', e);
     }
   }
 
@@ -472,16 +517,12 @@
         goals = goals.map(g => g.id === goalId ? (result as Goal) : g);
       }
     } catch (e) {
-      console.error('Error al resolver objetivo huérfano:', e);
+      logger.error('Error al resolver objetivo huérfano:', e);
     }
   }
 
-  function openEditModal(goal: Goal) {
-    currentTab = 'editor';
-    editorGoal = goal;
-    api.goals.getContent(goal.id).then(res => {
-      editorContent = res?.content || goal.description || '';
-    });
+  function openGoalEditor(goal: Goal) {
+    goto(`/goals/${goal.id}`);
   }
 
   // ── Advanced Analytics Calculations ──
@@ -521,7 +562,7 @@
 
   let progressOverview = $derived.by(() => {
     return ['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL'].map(temp => {
-      const tempGoals = goals.filter(g => g.temporality === temp);
+      const tempGoals = goals.filter(g => g.temporality === temp && g.state !== 'CANCELLED');
       const avgProgress = tempGoals.length > 0 
         ? Math.round(tempGoals.reduce((acc, g) => acc + (g.state === 'COMPLETED' || g.is_completed ? 100 : (g.progress_pct || 0)), 0) / tempGoals.length)
         : 0;
@@ -532,31 +573,41 @@
   });
 
   let prediction = $derived.by(() => {
-    const now = new Date();
-    const last7Days = historyData.filter(d => {
-      const date = new Date(d.date);
-      const diffTime = Math.abs(now.getTime() - date.getTime());
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      return diffDays <= 7 && d.checked;
-    }).length;
+    const nowMs = Date.now();
+    const MS_PER_DAY = 1000 * 60 * 60 * 24;
+    const last7Start = nowMs - (7 * MS_PER_DAY);
+    const prev7Start = nowMs - (14 * MS_PER_DAY);
 
-    const prev7Days = historyData.filter(d => {
-      const date = new Date(d.date);
-      const diffTime = Math.abs(now.getTime() - date.getTime());
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      return diffDays > 7 && diffDays <= 14 && d.checked;
-    }).length;
+    const completionEvents = xpEvents.filter(e => e.type === 'goal_completed');
 
-    const trend = last7Days >= prev7Days ? 'UP' : 'DOWN';
-    const percentChange = prev7Days > 0 ? Math.round(((last7Days - prev7Days) / prev7Days) * 100) : (last7Days > 0 ? 100 : 0);
-    
-    return { trend, percentChange, estimateNextMonth: Math.round(last7Days * 4), last7Days, prev7Days };
+    const countCompletionsInRange = (startMs: number, endMs: number) => {
+      if (completionEvents.length > 0) {
+        return completionEvents.filter(e => {
+          const t = new Date(e.at).getTime();
+          return t >= startMs && t < endMs;
+        }).length;
+      }
+      return goals.filter(g =>
+        (g.state === 'COMPLETED' || g.is_completed) && g.completed_at &&
+        new Date(g.completed_at).getTime() >= startMs &&
+        new Date(g.completed_at).getTime() < endMs
+      ).length;
+    };
+
+    const last7 = countCompletionsInRange(last7Start, nowMs);
+    const prev7 = countCompletionsInRange(prev7Start, last7Start);
+
+    const trend = last7 >= prev7 ? 'UP' : 'DOWN';
+    const percentChange = prev7 > 0
+      ? Math.round(((last7 - prev7) / prev7) * 100)
+      : (last7 > 0 ? 100 : 0);
+
+    return { trend, percentChange, estimateNextMonth: Math.round(last7 * 4), last7Days: last7, prev7Days: prev7 };
   });
 
   let candleData = $derived.by(() => {
-    let currentPrice = 1000;
     const results: { date: string; open: number; close: number; high: number; low: number }[] = [];
-    const last30Days = [];
+    const last30Days: string[] = [];
     for (let i = 29; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
@@ -565,42 +616,138 @@
       last30Days.push(`${d.getFullYear()}-${m}-${day}`);
     }
 
+    const windowStart = new Date(`${last30Days[0]}T00:00:00`);
+    const completedBefore = goals.filter(g =>
+      (g.state === 'COMPLETED' || g.is_completed) && g.completed_at && new Date(g.completed_at) < windowStart
+    ).length;
+    const failedBefore = goals.filter(g =>
+      g.state === 'FAILED' && g.updated_at && new Date(g.updated_at) < windowStart
+    ).length;
+
+    let currentScore = completedBefore - failedBefore;
+
     last30Days.forEach((date: string) => {
       const comps = goals.filter(g => (g.state === 'COMPLETED' || g.is_completed) && g.completed_at?.startsWith(date)).length;
       const fails = goals.filter(g => g.state === 'FAILED' && g.updated_at?.startsWith(date)).length;
-      
-      const open = currentPrice;
-      const close = currentPrice + (comps * 10) - (fails * 15);
-      const high = Math.max(open, close) + (comps > 0 ? 5 : 2);
-      const low = Math.min(open, close) - (fails > 0 ? 5 : 2);
-      
+
+      const open = currentScore;
+      const close = currentScore + comps - fails;
+      const high = Math.max(open, close);
+      const low = Math.min(open, close);
+
       results.push({ date, open, close, high, low });
-      currentPrice = close;
+      currentScore = close;
     });
     return results;
   });
 
   let candleScale = $derived.by(() => {
     const allVals = candleData.flatMap(c => [c.high, c.low]);
-    const min = Math.min(...allVals) - 10;
-    const max = Math.max(...allVals) + 10;
+    if (allVals.length === 0) return { min: 0, max: 0, range: 0 };
+    const min = Math.min(...allVals);
+    const max = Math.max(...allVals);
     return { min, max, range: max - min };
   });
 
-  let activityByHour = $derived.by(() => {
-    const counts = new Array(24).fill(0);
-    goals.forEach(g => {
-      if ((g.state === 'COMPLETED' || g.is_completed) && g.completed_at) {
-        const hour = new Date(g.completed_at).getHours();
-        if(!isNaN(hour)) counts[hour]++;
+  let activityTab = $state<'horas' | 'dias'>('horas');
+  let activityDayOfWeek = $state(new Date().getDay());
+  const daysOfWeek = ['Domingos', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábados'];
+
+  function prevActivityDay() {
+    activityDayOfWeek = (activityDayOfWeek - 1 + 7) % 7;
+  }
+  function nextActivityDay() {
+    activityDayOfWeek = (activityDayOfWeek + 1) % 7;
+  }
+
+  function formatHourLabel(hour: number) {
+    const safeHour = ((hour % 24) + 24) % 24;
+    if ($use24HourClock) {
+      return `${String(safeHour).padStart(2, '0')}:00`;
+    }
+    const d = new Date(2020, 0, 1, safeHour, 0, 0, 0);
+    return d.toLocaleTimeString('es-CL', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+  }
+
+  function formatHourRange(startHour: number, endHour: number) {
+    return `${formatHourLabel(startHour)} - ${formatHourLabel(endHour)}`;
+  }
+
+  // Activity charts use XP events (written at exact user-action time) instead of
+  // goals[*].completed_at which is set by the backend evaluate_active_goals() batch
+  // call — meaning all goals get the same timestamp (the moment the page loaded).
+  let activityBinnedByHour = $derived.by(() => {
+    const bins = new Array(8).fill(0);
+    // Use goal_completed XP events for real user-action timestamps
+    const completionEvents = xpEvents.filter(e => e.type === 'goal_completed');
+    completionEvents.forEach(e => {
+      const d = new Date(e.at);
+      if (d.getDay() === activityDayOfWeek) {
+        const hour = d.getHours();
+        if (!isNaN(hour)) {
+          const binIndex = Math.floor(hour / 3);
+          if (binIndex >= 0 && binIndex < 8) bins[binIndex]++;
+        }
       }
     });
-    const maxVal = Math.max(...counts) || 1;
-    return counts.map((c, i) => ({
-      hour: i,
-      label: `${i.toString().padStart(2, '0')}:00`,
+    // Fallback: if no XP events exist yet, try goals completed_at (legacy)
+    if (completionEvents.length === 0) {
+      goals.forEach(g => {
+        if ((g.state === 'COMPLETED' || g.is_completed) && g.completed_at) {
+          const d = new Date(g.completed_at);
+          if (d.getDay() === activityDayOfWeek) {
+            const hour = d.getHours();
+            if (!isNaN(hour)) {
+              const binIndex = Math.floor(hour / 3);
+              if (binIndex >= 0 && binIndex < 8) bins[binIndex]++;
+            }
+          }
+        }
+      });
+    }
+    return bins.map((c, i) => {
+      const startHour = i * 3;
+      const endHour = (startHour + 3) % 24;
+      return {
+        hour: startHour,
+        label: formatHourLabel(startHour),
+        rangeLabel: formatHourRange(startHour, endHour),
+        val: c,
+        pct: Math.min(1, c / 5)
+      };
+    });
+  });
+
+  let activityByDay = $derived.by(() => {
+    const days = new Array(7).fill(0);
+    const completionEvents = xpEvents.filter(e => e.type === 'goal_completed');
+    completionEvents.forEach(e => {
+      const d = new Date(e.at);
+      const day = d.getDay();
+      if (!isNaN(day) && day >= 0 && day < 7) {
+        days[day]++;
+      }
+    });
+    // Fallback: if no XP events exist yet, use goals completed_at
+    if (completionEvents.length === 0) {
+      goals.forEach(g => {
+        if ((g.state === 'COMPLETED' || g.is_completed) && g.completed_at) {
+          const d = new Date(g.completed_at);
+          const day = d.getDay();
+          if (!isNaN(day) && day >= 0 && day < 7) {
+            days[day]++;
+          }
+        }
+      });
+    }
+    return days.map((c, i) => ({
+      label: daysOfWeek[i].substring(0, 3),
       val: c,
-      pct: c / maxVal
+      pct: Math.min(1, c / 5)
     }));
   });
 
@@ -620,7 +767,8 @@
         x: 50 + 40 * Math.cos(angle),
         y: 50 + 40 * Math.sin(angle),
         labelX: 50 + 50 * Math.cos(angle),
-        labelY: 50 + 50 * Math.sin(angle)
+        labelY: 50 + 50 * Math.sin(angle),
+        angle
       };
     });
   });
@@ -648,9 +796,13 @@
     ];
   });
 
-  function getY(val: number) {
-    return 150 - ((val - candleScale.min) / candleScale.range) * 150;
+  function getY(val: number): number {
+    if (!isFinite(val) || candleScale.range === 0) return 75;
+    const y = 150 - ((val - candleScale.min) / candleScale.range) * 150;
+    return isFinite(y) ? Math.max(0, Math.min(150, y)) : 75;
   }
+
+  let candleHasData = $derived(candleData.some(c => c.close !== c.open || c.high !== c.low));
 
   async function saveEdit() {
     if (!editingGoal) return;
@@ -668,7 +820,7 @@
       goals = goals.map(g => g.id === editingGoal!.id ? result : g);
       editingGoal = null;
     } catch (e) {
-      console.error('Error al editar:', e);
+      logger.error('Error al editar:', e);
     } finally {
       editSaving = false;
     }
@@ -699,7 +851,7 @@
   }
 </script> 
 
-<svelte:window on:keydown={(e) => {
+<svelte:window onkeydown={(e) => {
   if (e.key === 'Escape') {
     showAddForm = false;
     editingGoal = null;
@@ -713,19 +865,19 @@
 
   <div class="goals-header">
     <div class="tabs">
-      <button class="tab" class:active={currentTab === 'editor'} on:click={() => currentTab = 'editor'}>
+      <button class="tab" class:active={currentTab === 'editor'} onclick={() => currentTab = 'editor'}>
         <Pencil size={14} /> Editor
       </button>
-      <button class="tab" class:active={currentTab === 'today'} on:click={() => currentTab = 'today'}>
+      <button class="tab" class:active={currentTab === 'today'} onclick={() => currentTab = 'today'}>
         <Layout size={14} /> Inicio
       </button>
-      <button class="tab" class:active={currentTab === 'planning'} on:click={() => currentTab = 'planning'}>
+      <button class="tab" class:active={currentTab === 'planning'} onclick={() => currentTab = 'planning'}>
         <Clock size={14} /> Planificación
       </button>
-      <button class="tab" class:active={currentTab === 'history'} on:click={() => currentTab = 'history'}>
+      <button class="tab" class:active={currentTab === 'history'} onclick={() => currentTab = 'history'}>
         <Calendar size={14} /> Historial
       </button>
-      <button class="tab" class:active={currentTab === 'analytics'} on:click={() => currentTab = 'analytics'}>
+      <button class="tab" class:active={currentTab === 'analytics'} onclick={() => currentTab = 'analytics'}>
         <BarChart size={14} /> Análisis
       </button>
     </div>
@@ -735,21 +887,26 @@
 
 
     {#if currentTab === 'today'}
-      <div class="tab-content fade-in" style="display: grid; grid-template-columns: 1fr 300px; gap: 24px; max-width: 1200px; margin: 0 auto; width: 100%;">
-        <div class="dashboard-main-col" style="display: flex; flex-direction: column;">
-          <h3 class="section-title" style="margin-top: 0;">Objetivos del Día</h3>
+      <div class="tab-content fade-in today-layout">
+        <div class="dashboard-main-col">
+          <div class="today-header">
+            <h3 class="section-title" style="margin: 0;">Objetivos del Día</h3>
+            <button class="btn btn-primary new-goal-cta new-goal-cta-inline" onclick={() => showAddForm = !showAddForm}>
+              <Plus size={16} /> Nuevo Objetivo
+            </button>
+          </div>
         {#if dailyGoals.length === 0}
-          <div class="empty-state">No hay objetivos diarios activos.</div>
+          <div class="empty-state">No hay objetivos activos asignados para hoy.</div>
         {/if}
         {#each dailyGoals as goal (goal.id)}
-          <div class="goal-card" class:completed={goal.state === 'COMPLETED'} class:failed={goal.state === 'FAILED'} class:paused={goal.state === 'PAUSED'} style="border-left: 3px solid {getGoalColor(goal)}">
+          <div class="goal-card" class:completed={goal.state === 'COMPLETED' || goal.is_completed} class:failed={goal.state === 'FAILED'} class:paused={goal.state === 'PAUSED'} style="border-left: 3px solid {getGoalColor(goal)}">
             <div class="goal-main">
               <div class="goal-title">
                 <button
                   class="btn btn-ghost"
                   style="font-size: inherit; font-weight: inherit; padding: 0; margin: 0; height: auto; color: inherit;"
                   title="Editar en el editor"
-                  on:click|stopPropagation={() => goto(`/goals/${goal.id}`)}
+                  onclick={(e) => { e.stopPropagation(); goto(`/goals/${goal.id}`); }}
                 >
                   {#if goal.fail_emoji}
                     <span class="emoji-badge" style="display:flex; align-items:center; margin-right:8px;">
@@ -763,6 +920,12 @@
                 {/if}
               </div>
               <div class="goal-meta">
+                <span class="tag-chip" style="background: {getGoalColor(goal)}20; border: 1px solid {getGoalColor(goal)}; color: {getGoalColor(goal)};">{TEMPORALITY_LABELS[goal.temporality] || goal.temporality}</span>
+                {#if goal.state === 'COMPLETED' || goal.is_completed}
+                  <span class="status-badge success" style="background: rgba(16, 185, 129, 0.1); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.2);">Completado</span>
+                {:else if goal.state === 'FAILED'}
+                  <span class="status-badge error" style="background: rgba(239, 68, 68, 0.1); color: var(--error); border: 1px solid rgba(239, 68, 68, 0.2);">Fallido</span>
+                {/if}
                 {#if goal.note_id}
                   <span class="tag-chip" style="background: {getGoalColor(goal)}20; border: 1px solid {getGoalColor(goal)}; color: {getGoalColor(goal)};">{notes.find(n => n.id === goal.note_id)?.title || 'Nota vinculada'}</span>
                 {:else if goal.tag_id}
@@ -785,7 +948,9 @@
             <div class="goal-progress">
               <div class="progress-meta">
                 <span class="mono caption">
-                  {#if goal.measurement_type === 'BOOLEAN'}
+                  {#if goal.state === 'COMPLETED' || goal.is_completed}
+                    {goal.target_value}/{goal.target_value}
+                  {:else if goal.measurement_type === 'BOOLEAN'}
                     {goal.current_value >= 1 ? 'Sí' : 'No'}
                   {:else if goal.measurement_type === 'PERCENT'}
                     {goal.current_value}%
@@ -793,32 +958,32 @@
                     {goal.current_value}/{goal.target_value}
                   {/if}
                 </span>
-                <span class="caption">{goal.progress_pct}%</span>
+                <span class="caption">{(goal.state === 'COMPLETED' || goal.is_completed) ? 100 : goal.progress_pct}%</span>
               </div>
               <div class="progress-track" style="height: 4px;">
-                <div class="progress-fill" style="width:{goal.progress_pct}%"></div>
+                <div class="progress-fill" style="width:{(goal.state === 'COMPLETED' || goal.is_completed) ? 100 : goal.progress_pct}%"></div>
               </div>
             </div>
             <div class="goal-actions">
               {#if goal.state === 'ACTIVE'}
-                <button class="btn btn-ghost text-muted" title="Pausar" on:click={() => updateGoalState(goal.id, 'PAUSED')}>
+                <button class="btn btn-ghost text-muted" title="Pausar" onclick={() => updateGoalState(goal.id, 'PAUSED')}>
                   <Pause size={14} />
                 </button>
-                <button class="btn btn-ghost text-success" title="Completar" on:click={() => completeGoal(goal.id)}>
+                <button class="btn btn-ghost text-success" title="Completar" onclick={() => completeGoal(goal.id)}>
                   <Check size={14} />
                 </button>
               {:else if goal.state === 'PAUSED'}
-                <button class="btn btn-ghost text-muted" title="Reanudar" on:click={() => updateGoalState(goal.id, 'ACTIVE')}>
+                <button class="btn btn-ghost text-muted" title="Reanudar" onclick={() => updateGoalState(goal.id, 'ACTIVE')}>
                   <Play size={14} />
                 </button>
               {/if}
               {#if goal.state !== 'COMPLETED' && goal.state !== 'FAILED'}
-                <button class="btn btn-ghost text-muted" title="Cancelar" on:click={() => updateGoalState(goal.id, 'CANCELLED')}>
+                <button class="btn btn-ghost text-muted" title="Cancelar" onclick={() => updateGoalState(goal.id, 'CANCELLED')}>
                   <Ban size={14} />
                 </button>
               {/if}
-              <button class="btn btn-ghost text-muted" title="Eliminar" on:click={() => deleteGoal(goal.id)}>×</button>
-              <button class="btn btn-ghost text-muted" title="Editar" on:click={() => openEditModal(goal)}>
+              <button class="btn btn-ghost text-muted" title="Eliminar" onclick={() => deleteGoal(goal.id)}>×</button>
+              <button class="btn btn-ghost text-muted" title="Editar" onclick={() => openGoalEditor(goal)}>
                 <Pencil size={13} />
               </button>
             </div>
@@ -833,12 +998,19 @@
           {/if}
           {#each upcomingTasks as task}
             {@const g = task.goal}
-            <button class="history-goal-item assigned" style="border-left-color: {getGoalColor(g)}; display:flex; align-items:center; background: transparent; border: none; width: 100%;" on:click={() => goto(`/goals/${g.id}`)}>
-              <div class="hgi-info" style="flex: 1;">
-                <div class="hgi-title">{g.title}</div>
-                <div class="hgi-meta">
+            <button class="goal-card" style="text-align: left; cursor: pointer; height: fit-content; border-left: 3px solid {getGoalColor(g)}; display:flex; align-items:center; width: 100%;" onclick={() => goto(`/goals/${g.id}`)}>
+              <div class="goal-main" style="flex: 1;">
+                <div class="goal-title">
+                  {#if g.fail_emoji}
+                    <span class="emoji-badge" style="display:flex; align-items:center; margin-right:8px;">
+                      <StreakIcon name={g.fail_emoji} size={16} color={getGoalColor(g)} />
+                    </span>
+                  {/if}
+                  {g.title}
+                </div>
+                <div class="goal-meta">
                   <span class="config-badge">{task.date}</span>
-                  <span class="config-badge" style="margin-left: 8px; background: {getGoalColor(g)}20; border: 1px solid {getGoalColor(g)}; color: {getGoalColor(g)};">{TEMPORALITY_LABELS[g.temporality] || g.temporality}</span>
+                  <span class="tag-chip" style="background: {getGoalColor(g)}20; border: 1px solid {getGoalColor(g)}; color: {getGoalColor(g)};">{TEMPORALITY_LABELS[g.temporality] || g.temporality}</span>
                 </div>
               </div>
             </button>
@@ -847,12 +1019,9 @@
       </div>
 
       <!-- Dashboard Right Column -->
-      <div class="dashboard-side-col" style="display: flex; flex-direction: column; gap: 16px;">
-        <button class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px;" on:click={() => showAddForm = !showAddForm}>
-          <Plus size={16} /> Nuevo Objetivo
-        </button>
+      <div class="dashboard-side-col">
 
-        <div class="dash-card">
+        <div class="dash-card week-map-card">
           <div class="dash-card-header">
             <Calendar size={14} />
             <span>Mapa de la Semana</span>
@@ -862,11 +1031,11 @@
               <button 
                 class="week-day-box" 
                 title={day.dateStr}
-                on:click={() => {
+                onclick={() => {
                   currentTab = 'history';
                   selectedHistoryDate = day.dateStr;
                 }}
-                style="flex: 1; aspect-ratio: 1; border-radius: 4px; border: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; background: {day.hasActivity ? 'var(--success)' : 'var(--surface)'}; color: {day.hasActivity ? 'var(--bg)' : 'var(--text-muted)'}; opacity: {day.isToday ? '1' : '0.8'}; {day.isToday ? 'box-shadow: 0 0 0 2px var(--border);' : ''}"
+                style="flex: 1; aspect-ratio: 1; border-radius: 4px; border: 1px solid {day.isToday ? '#fbbf24' : 'var(--border)'}; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; background: {day.isToday ? '#fbbf24' : (day.hasActivity ? 'var(--success)' : 'var(--surface)')}; color: {day.isToday ? '#000' : (day.hasActivity ? 'var(--bg)' : 'var(--text-muted)')}; opacity: 1; {day.isToday ? 'box-shadow: 0 0 0 2px #fbbf24;' : ''}"
               >
                 <span style="font-size: 10px; font-weight: bold; margin-bottom: 2px;">{day.dayName}</span>
                 <span style="font-size: 12px; font-weight: {day.isToday ? 'bold' : 'normal'};">{day.dateStr.split('-')[2]}</span>
@@ -877,9 +1046,9 @@
 
         <div class="dash-card" style="aspect-ratio: 1; display: flex; flex-direction: column; padding: 0; overflow: hidden;">
           <div class="widget-header" style="display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid var(--border-light); background: var(--bg-card);">
-            <button class="btn btn-ghost text-muted" style="padding: 4px;" on:click={() => activeWidgetIndex = (activeWidgetIndex - 1 + 5) % 5}><ChevronLeft size={14}/></button>
+            <button class="btn btn-ghost text-muted" style="padding: 4px;" onclick={() => activeWidgetIndex = (activeWidgetIndex - 1 + 5) % 5}><ChevronLeft size={14}/></button>
             <span class="widget-title" style="font-size: 12px; font-weight: 600; text-align: center; flex: 1;">{widgetTitles[activeWidgetIndex]}</span>
-            <button class="btn btn-ghost text-muted" style="padding: 4px;" on:click={() => activeWidgetIndex = (activeWidgetIndex + 1) % 5}><ChevronRight size={14}/></button>
+            <button class="btn btn-ghost text-muted" style="padding: 4px;" onclick={() => activeWidgetIndex = (activeWidgetIndex + 1) % 5}><ChevronRight size={14}/></button>
           </div>
           <div class="widget-content" style="flex: 1; position: relative; padding: 16px; overflow: hidden; display: flex; align-items: center; justify-content: center;">
             {#if activeWidgetIndex === 0}
@@ -989,15 +1158,22 @@
           <div class="history-goal-list" style="width: 100%;">
             {#each filteredUnassignedGoals as goal (goal.id)}
               <button
-                class="history-goal-item assigned"
-                style="width: 100%; border-left-color: {getGoalColor(goal)}; display: flex; align-items:center; justify-content:space-between; text-align: left;"
-                on:click={() => assignGoalToDate(goal.id, selectedPlanningDate)}
+                class="goal-card"
+                style="text-align: left; cursor: pointer; height: fit-content; border-left: 3px solid {getGoalColor(goal)}; display: flex; align-items:center; justify-content:space-between; width: 100%;"
+                onclick={() => assignGoalToDate(goal.id, selectedPlanningDate)}
                 title="Asignar al día seleccionado"
               >
-                <div class="hgi-info">
-                  <div class="hgi-title" style="color: var(--text-primary);">{goal.title}</div>
-                  <div class="hgi-meta">
-                    <span class="config-badge" style="background: {getGoalColor(goal)}20; border: 1px solid {getGoalColor(goal)}; color: {getGoalColor(goal)};">{goal.temporality}</span>
+                <div class="goal-main" style="flex:1;">
+                  <div class="goal-title">
+                    {#if goal.fail_emoji}
+                      <span class="emoji-badge" style="display:flex; align-items:center; margin-right:8px;">
+                        <StreakIcon name={goal.fail_emoji} size={16} color={getGoalColor(goal)} />
+                      </span>
+                    {/if}
+                    {goal.title}
+                  </div>
+                  <div class="goal-meta">
+                    <span class="tag-chip" style="background: {getGoalColor(goal)}20; border: 1px solid {getGoalColor(goal)}; color: {getGoalColor(goal)};">{TEMPORALITY_LABELS[goal.temporality] || goal.temporality}</span>
                     {#if goal.state === 'PAUSED'}
                       <span class="status-badge" style="background: rgba(255,255,255,0.05); color: var(--text-muted); border: 1px solid rgba(255,255,255,0.1);">Pausado</span>
                     {/if}
@@ -1048,14 +1224,21 @@
                 </div>
                 {#each filteredGoals as g (g.id)}
                   {@const status = getGoalStatusOnDate(g, selectedPlanningDate)}
-                  <div class="history-goal-item assigned" class:status-completed={status === 'COMPLETED'} class:status-failed={status === 'FAILED'} style="border-left-color: {status === 'FAILED' ? '#ef4444' : (status === 'COMPLETED' ? '#10b981' : getGoalColor(g))}; display:flex; align-items:center;">
+                  <div class="goal-card" class:completed={status === 'COMPLETED'} class:failed={status === 'FAILED'} style="border-left: 3px solid {status === 'FAILED' ? '#ef4444' : (status === 'COMPLETED' ? '#10b981' : getGoalColor(g))}; display:flex; align-items:center;">
                     <div style="display:flex; gap:6px; margin-right: 8px;">
-                      <button class="btn btn-ghost text-muted" style="padding: 4px;" on:click={() => unassignGoalFromDate(g.id, selectedPlanningDate)} title="Quitar"><ChevronLeft size={14} /></button>
+                      <button class="btn btn-ghost text-muted" style="padding: 4px;" onclick={() => unassignGoalFromDate(g.id, selectedPlanningDate)} title="Quitar"><ChevronLeft size={14} /></button>
                     </div>
-                    <div class="hgi-info" style="flex: 1;">
-                      <div class="hgi-title">{g.title}</div>
-                      <div class="hgi-meta">
-                        <span class="config-badge" style="background: {getGoalColor(g)}20; border: 1px solid {getGoalColor(g)}; color: {getGoalColor(g)};">{TEMPORALITY_LABELS[g.temporality] || g.temporality}</span>
+                    <div class="goal-main" style="flex: 1;">
+                      <div class="goal-title">
+                        {#if g.fail_emoji}
+                          <span class="emoji-badge" style="display:flex; align-items:center; margin-right:8px;">
+                            <StreakIcon name={g.fail_emoji} size={16} color={status === 'FAILED' ? '#ef4444' : (status === 'COMPLETED' ? '#10b981' : getGoalColor(g))} />
+                          </span>
+                        {/if}
+                        {g.title}
+                      </div>
+                      <div class="goal-meta">
+                        <span class="tag-chip" style="background: {getGoalColor(g)}20; border: 1px solid {getGoalColor(g)}; color: {getGoalColor(g)};">{TEMPORALITY_LABELS[g.temporality] || g.temporality}</span>
                         {#if status === 'COMPLETED'}
                           <span class="status-badge success">Completado</span>
                         {:else if status === 'FAILED'}
@@ -1125,18 +1308,27 @@
               <div class="history-section-label success"><Check size={12} /> Completados ({goalsForDate.completed.length})</div>
               <div class="history-goal-list">
                 {#each goalsForDate.completed as g (g.id)}
-                  <div class="history-goal-item completed" style="border-left-color: {getGoalColor(g)};">
-                    <div class="hgi-icon-left">
-                      <StreakIcon name={g.fail_emoji} size={16} color={getGoalColor(g)} />
+                  <div class="goal-card completed" style="border-left: 3px solid {getGoalColor(g)}; width: 100%;">
+                    <div class="goal-main">
+                      <div class="goal-title">
+                        {#if g.fail_emoji}
+                          <span class="emoji-badge" style="display:flex; align-items:center; margin-right:8px;">
+                            <StreakIcon name={g.fail_emoji} size={16} color={getGoalColor(g)} />
+                          </span>
+                        {/if}
+                        {g.title}
+                      </div>
+                      <div class="goal-meta">
+                        <span class="tag-chip" style="background: {getGoalColor(g)}20; border: 1px solid {getGoalColor(g)}; color: {getGoalColor(g)};">{TEMPORALITY_LABELS[g.temporality] || g.temporality}</span>
+                      </div>
                     </div>
-                    <div class="hgi-info">
-                      <div class="hgi-title">{g.title}</div>
-                      <div class="hgi-meta">
-                        <span class="config-badge" style="background: {getGoalColor(g)}20; border: 1px solid {getGoalColor(g)}; color: {getGoalColor(g)};">{TEMPORALITY_LABELS[g.temporality] || g.temporality}</span>
-                        <div class="hgi-bar">
-                          <div class="hgi-bar-fill" style="width:100%; background:{getGoalColor(g)};"></div>
-                        </div>
-                        <span class="hgi-pct" style="color: {getGoalColor(g)};">100%</span>
+                    <div class="goal-progress" style="width: 100px;">
+                      <div class="progress-meta">
+                        <span class="mono caption"></span>
+                        <span class="caption" style="color: {getGoalColor(g)};">100%</span>
+                      </div>
+                      <div class="progress-track" style="height: 4px;">
+                        <div class="progress-fill" style="width: 100%; background: {getGoalColor(g)};"></div>
                       </div>
                     </div>
                   </div>
@@ -1148,18 +1340,27 @@
               <div class="history-section-label failed"><X size={12} /> Fallidos ({goalsForDate.failed.length})</div>
               <div class="history-goal-list">
                 {#each goalsForDate.failed as g (g.id)}
-                  <div class="history-goal-item failed" style="border-left-color: #ef4444;">
-                    <div class="hgi-icon-left">
-                      <StreakIcon name={g.fail_emoji} size={16} color="#ef4444" />
+                  <div class="goal-card failed" style="border-left: 3px solid #ef4444; width: 100%;">
+                    <div class="goal-main">
+                      <div class="goal-title">
+                        {#if g.fail_emoji}
+                          <span class="emoji-badge" style="display:flex; align-items:center; margin-right:8px;">
+                            <StreakIcon name={g.fail_emoji} size={16} color="#ef4444" />
+                          </span>
+                        {/if}
+                        {g.title}
+                      </div>
+                      <div class="goal-meta">
+                        <span class="tag-chip" style="background: #ef444420; border: 1px solid #ef4444; color: #ef4444;">{TEMPORALITY_LABELS[g.temporality] || g.temporality}</span>
+                      </div>
                     </div>
-                    <div class="hgi-info">
-                      <div class="hgi-title">{g.title}</div>
-                      <div class="hgi-meta">
-                        <span class="config-badge" style="background: #ef444420; border: 1px solid #ef4444; color: #ef4444;">{TEMPORALITY_LABELS[g.temporality] || g.temporality}</span>
-                        <div class="hgi-bar">
-                          <div class="hgi-bar-fill" style="width:{g.progress_pct}%; background: #ef4444;"></div>
-                        </div>
-                        <span class="hgi-pct" style="color:#ef4444;">{g.progress_pct}%</span>
+                    <div class="goal-progress" style="width: 100px;">
+                      <div class="progress-meta">
+                        <span class="mono caption"></span>
+                        <span class="caption" style="color: #ef4444;">{g.progress_pct}%</span>
+                      </div>
+                      <div class="progress-track" style="height: 4px;">
+                        <div class="progress-fill" style="width: {g.progress_pct}%; background: #ef4444;"></div>
                       </div>
                     </div>
                   </div>
@@ -1206,48 +1407,84 @@
             <div class="dash-card-header">
               <TrendingUp size={16} />
               <span>Predicción y Tendencia</span>
+              <span class="pred-period-badge">30 días</span>
             </div>
             <div class="prediction-hero">
               <div class="candle-chart-container">
-                <svg viewBox="0 0 500 150" class="candle-svg">
-                  <!-- Grid Lines -->
-                  {#each [0, 0.25, 0.5, 0.75, 1] as p}
-                    <line x1="0" y1={p * 150} x2="480" y2={p * 150} stroke="rgba(255,255,255,0.03)" stroke-width="1" />
-                    <text x="485" y={p * 150 + 4} font-size="8" fill="var(--text-muted)" font-family="var(--font-mono)">
-                      {Math.round(candleScale.max - p * candleScale.range)}
-                    </text>
-                  {/each}
+                {#if !candleHasData}
+                  <div class="candle-empty-state">
+                    <TrendingUp size={24} style="opacity:0.2" />
+                    <span>Sin datos suficientes aún</span>
+                    <small>Completa o falla objetivos para ver la tendencia</small>
+                  </div>
+                {:else}
+                  <svg viewBox="0 0 520 155" class="candle-svg" preserveAspectRatio="xMidYMid meet">
+                    <defs>
+                      <linearGradient id="trendAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="{prediction.trend === 'UP' ? 'var(--success)' : 'var(--error)'}" stop-opacity="0.18" />
+                        <stop offset="100%" stop-color="{prediction.trend === 'UP' ? 'var(--success)' : 'var(--error)'}" stop-opacity="0" />
+                      </linearGradient>
+                    </defs>
 
-                  <!-- Trend Line (Moving Average simulated) -->
-                  <path 
-                    d={candleData.map((c, i) => `${i === 0 ? 'M' : 'L'} ${(i/29)*470} ${getY((c.open+c.close)/2)}`).join(' ')} 
-                    fill="none" 
-                    stroke="rgba(255,255,255,0.1)" 
-                    stroke-width="1"
-                  />
+                    <!-- Horizontal grid lines -->
+                    {#each [0, 0.33, 0.66, 1] as p}
+                      <line x1="0" y1={p * 150} x2="475" y2={p * 150} stroke="rgba(255,255,255,0.04)" stroke-width="1" />
+                      <text x="480" y={p * 150 + 4} font-size="6" fill="var(--text-muted)" font-family="var(--font-mono)" text-anchor="start">
+                        {Math.round(candleScale.max - p * candleScale.range)}
+                      </text>
+                    {/each}
 
-                  {#each candleData as candle, i}
-                    {@const x = (i / 29) * 470}
-                    {@const yOpen = getY(candle.open)}
-                    {@const yClose = getY(candle.close)}
-                    {@const yHigh = getY(candle.high)}
-                    {@const yLow = getY(candle.low)}
-                    {@const isUp = candle.close >= candle.open}
-                    {@const color = isUp ? 'var(--success)' : 'var(--error)'}
-                    
-                    <!-- Wick -->
-                    <line x1={x + 4} y1={yHigh} x2={x + 4} y2={yLow} stroke={color} stroke-width="1" opacity="0.4" />
-                    <!-- Body -->
-                    <rect 
-                      x={x} 
-                      y={Math.min(yOpen, yClose)} 
-                      width="6" 
-                      height={Math.max(1.5, Math.abs(yOpen - yClose))} 
-                      fill={color} 
-                      rx="0.5"
+                    <!-- Gradient area fill under trend line -->
+                    <path
+                      d={[
+                        ...candleData.map((c, i) => `${i === 0 ? 'M' : 'L'} ${(i / 29) * 470} ${getY((c.open + c.close) / 2)}`),
+                        `L ${470} 150`,
+                        `L 0 150`,
+                        'Z'
+                      ].join(' ')}
+                      fill="url(#trendAreaGrad)"
                     />
-                  {/each}
-                </svg>
+
+                    <!-- Smooth trend line -->
+                    <path
+                      d={candleData.map((c, i) => `${i === 0 ? 'M' : 'L'} ${(i / 29) * 470} ${getY((c.open + c.close) / 2)}`).join(' ')}
+                      fill="none"
+                      stroke="{prediction.trend === 'UP' ? 'var(--success)' : 'var(--error)'}"
+                      stroke-width="1.5"
+                      opacity="0.6"
+                    />
+
+                    <!-- Candle bodies -->
+                    {#each candleData as candle, i}
+                      {@const x = (i / 29) * 470}
+                      {@const yOpen = getY(candle.open)}
+                      {@const yClose = getY(candle.close)}
+                      {@const yHigh = getY(candle.high)}
+                      {@const yLow = getY(candle.low)}
+                      {@const isUp = candle.close >= candle.open}
+                      {@const color = isUp ? 'var(--success)' : 'var(--error)'}
+                      <!-- Wick -->
+                      <line x1={x + 3.5} y1={yHigh} x2={x + 3.5} y2={yLow} stroke={color} stroke-width="0.8" opacity="0.35" />
+                      <!-- Body -->
+                      <rect
+                        x={x}
+                        y={Math.min(yOpen, yClose)}
+                        width="6"
+                        height={Math.max(1.5, Math.abs(yOpen - yClose))}
+                        fill={color}
+                        opacity="0.75"
+                        rx="0.5"
+                      />
+                    {/each}
+
+                    <!-- Last day marker -->
+                    {#if candleData.length > 0}
+                      {@const lastX = 470}
+                      {@const lastY = getY((candleData[candleData.length - 1].open + candleData[candleData.length - 1].close) / 2)}
+                      <circle cx={lastX} cy={lastY} r="3" fill="{prediction.trend === 'UP' ? 'var(--success)' : 'var(--error)'}" opacity="0.9" />
+                    {/if}
+                  </svg>
+                {/if}
               </div>
 
               <div class="prediction-stats-row">
@@ -1256,11 +1493,17 @@
                     {#if prediction.trend === 'UP'} <TrendingUp size={14} /> {:else} <TrendingDown size={14} /> {/if}
                     <span class="trend-pct">{prediction.percentChange > 0 ? '+' : ''}{prediction.percentChange}%</span>
                   </div>
-                  <span class="trend-label">Ratio Disciplina</span>
+                  <span class="trend-label">vs semana anterior</span>
                 </div>
-                <div class="prediction-estimate">
-                  <span class="pred-lab">Próx. 30d</span>
-                  <span class="pred-val">~{prediction.estimateNextMonth}✓</span>
+                <div class="prediction-kpis">
+                  <div class="pred-kpi">
+                    <span class="pred-lab">Últ. 7d</span>
+                    <span class="pred-val">{prediction.last7Days} ✓</span>
+                  </div>
+                  <div class="pred-kpi">
+                    <span class="pred-lab">Próx. 30d</span>
+                    <span class="pred-val">~{prediction.estimateNextMonth} ✓</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1289,98 +1532,76 @@
           <div class="dash-card temporality-card">
             <div class="dash-card-header">
               <Target size={16} />
-              <span>Progreso por Periodo</span>
+              <span>Efectividad por Periodo</span>
             </div>
             <div class="temporality-rows">
               {#each progressOverview as p}
                 <div class="temp-row">
                   <div class="temp-info">
-                    <span class="temp-name">{p.temp}</span>
+                    <span class="temp-name">{TEMPORALITY_LABELS[p.temp] || p.temp}</span>
                     <span class="temp-stats">
                       <span class="text-success">{p.completed} ✓</span> / <span class="text-error">{p.failed} ✗</span>
                     </span>
                   </div>
-                  <div class="temp-bar-container">
-                    <div class="temp-bar" style="width: {p.avgProgress}%"></div>
-                    <span class="temp-perc">{p.avgProgress}%</span>
-                  </div>
-                </div>
-              {/each}
-            </div>
-          </div>
-
-          <div class="dash-card hourly-card">
-            <div class="dash-card-header">
-              <Clock size={16} />
-              <span>Actividad Horaria</span>
-            </div>
-            <div class="hourly-chart">
-              {#each activityByHour as hour}
-                <div class="hour-col" title="{hour.label}: {hour.val} completados">
-                  <div class="hour-bar-wrap">
-                    <div class="hour-bar" style="height: {hour.pct * 100}%; opacity: {Math.max(0.15, hour.pct)};"></div>
-                  </div>
-                  {#if hour.hour % 4 === 0}
-                    <span class="hour-label">{hour.hour}h</span>
-                  {/if}
-                </div>
-              {/each}
-            </div>
-          </div>
-
-          <div class="dash-card radar-card">
-            <div class="dash-card-header">
-              <Hexagon size={16} />
-              <span>Radar de Foco</span>
-            </div>
-            <div class="radar-container">
-              {#if radarData.length === 0}
-                <div class="empty-state mini">Sin datos suficientes</div>
-              {:else}
-                <svg viewBox="0 0 100 100" class="radar-svg">
-                  {#each [20, 40, 60, 80, 100] as r}
-                    <polygon points={radarData.map(d => `${50 + (r/100)*40*Math.cos(d.angle)},${50 + (r/100)*40*Math.sin(d.angle)}`).join(' ')} fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="0.5" />
-                  {/each}
-                  {#each radarData as d}
-                    <line x1="50" y1="50" x2={50 + 40*Math.cos(d.angle)} y2={50 + 40*Math.sin(d.angle)} stroke="rgba(255,255,255,0.05)" stroke-width="0.5" />
-                    <text x={d.labelX} y={d.labelY} font-size="4" fill="var(--text-muted)" text-anchor="middle" dominant-baseline="middle" font-family="var(--font-mono)">
-                      {d.name.substring(0,8)}
-                    </text>
-                  {/each}
-                  <polygon points={radarData.map(d => `${50 + d.pct*40*Math.cos(d.angle)},${50 + d.pct*40*Math.sin(d.angle)}`).join(' ')} fill="var(--xp)" fill-opacity="0.3" stroke="var(--xp)" stroke-width="1" stroke-linejoin="round" />
-                  {#each radarData as d}
-                    <circle cx={50 + d.pct*40*Math.cos(d.angle)} cy={50 + d.pct*40*Math.sin(d.angle)} r="1.5" fill="var(--surface)" stroke="var(--xp)" stroke-width="1" />
-                  {/each}
-                </svg>
-              {/if}
-            </div>
-          </div>
-
-          <div class="dash-card debt-card">
-            <div class="dash-card-header">
-              <Flame size={16} class="text-error" />
-              <span>Deuda Acumulada</span>
-            </div>
-            <div class="debt-content">
-              <div class="debt-total">
-                <span class="debt-val">{debtData.total}</span>
-                <span class="debt-lab">Pendientes</span>
-              </div>
-              <div class="debt-list">
-                {#if debtData.goals.length === 0}
-                   <div class="empty-state mini">Cero deudas. ¡Excelente!</div>
-                {:else}
-                  {#each debtData.goals as d}
-                    <div class="debt-item">
-                      <span class="debt-title">{d.title}</span>
-                      <div class="debt-bar-wrap">
-                        <div class="debt-bar" style="width: {(d.debt / (debtData.goals[0]?.debt || 1)) * 100}%"></div>
-                      </div>
-                      <span class="debt-count">{d.debt}</span>
+                  <div class="temp-bar-wrapper" style="display: flex; align-items: center; gap: 8px;">
+                    <div class="temp-bar-container" style="flex: 1;">
+                      {#if (p.completed + p.failed) > 0}
+                        <div class="temp-bar" style="width: {(p.completed / (p.completed + p.failed)) * 100}%; background: var(--success);"></div>
+                        <div class="temp-bar" style="width: {(p.failed / (p.completed + p.failed)) * 100}%; background: var(--error);"></div>
+                      {/if}
                     </div>
-                  {/each}
+                    <span class="temp-perc-out">{(p.completed + p.failed) > 0 ? Math.round((p.completed / (p.completed + p.failed)) * 100) : 0}%</span>
+                  </div>
+                </div>
+              {/each}
+            </div>
+          </div>
+
+          <div class="dash-card hourly-card" style="padding: 20px; display: flex; flex-direction: column;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 12px;">
+              <div class="dash-card-header" style="flex-shrink: 0;">
+                <Activity size={16} />
+                <span>Momentos de más actividad</span>
+              </div>
+              
+              <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                <div class="activity-tabs" style="display: flex; gap: 8px;">
+                  <button class="activity-tab {activityTab === 'horas' ? 'active' : ''}" onclick={() => activityTab = 'horas'}>Horas</button>
+                  <button class="activity-tab {activityTab === 'dias' ? 'active' : ''}" onclick={() => activityTab = 'dias'}>Días</button>
+                </div>
+                
+                {#if activityTab === 'horas'}
+                  <div class="activity-day-selector" style="display: flex; justify-content: center; align-items: center; gap: 8px; background: var(--surface); padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border);">
+                    <button class="icon-btn" onclick={prevActivityDay} style="background: none; border: none; cursor: pointer; color: var(--text-muted); display: flex; align-items: center; padding: 4px;"><ChevronLeft size={16} /></button>
+                    <span style="font-size: 0.75rem; color: var(--text-secondary); min-width: 80px; text-align: center; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; font-family: var(--font-mono);">{daysOfWeek[activityDayOfWeek]}</span>
+                    <button class="icon-btn" onclick={nextActivityDay} style="background: none; border: none; cursor: pointer; color: var(--text-muted); display: flex; align-items: center; padding: 4px;"><ChevronRight size={16} /></button>
+                  </div>
                 {/if}
               </div>
+            </div>
+
+            <div class="hourly-chart" style="display: flex; align-items: flex-end; gap: 2px; height: 160px; width: 100%; flex: 1;">
+              {#if activityTab === 'horas'}
+                {#each activityBinnedByHour as bin}
+                  <div class="hour-col" title="{bin.rangeLabel}: {bin.val} completados" style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%;">
+                    <span class="bar-value" style="font-size: 0.75rem; font-weight: 700; color: {bin.val > 0 ? 'var(--text-primary)' : 'transparent'};">{bin.val}</span>
+                    <div class="hour-bar-wrap" style="flex: 1; width: 100%; display: flex; align-items: flex-end; background: none;">
+                      <div class="hour-bar" style="height: {bin.val > 0 ? Math.max(6, bin.pct * 100) : 0}%; width: 100%; background: {bin.val > 0 ? 'var(--xp)' : 'var(--border)'}; border-radius: 4px 4px 0 0; opacity: {bin.val > 0 ? '1' : '0.3'};"></div>
+                    </div>
+                    <span class="hour-label" style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-mono);">{bin.label}</span>
+                  </div>
+                {/each}
+              {:else}
+                {#each activityByDay as day}
+                  <div class="hour-col" title="{day.label}: {day.val} completados" style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%;">
+                    <span class="bar-value" style="font-size: 0.75rem; font-weight: 700; color: {day.val > 0 ? 'var(--text-primary)' : 'transparent'};">{day.val}</span>
+                    <div class="hour-bar-wrap" style="flex: 1; width: 100%; display: flex; align-items: flex-end; background: none;">
+                      <div class="hour-bar" style="height: {day.val > 0 ? Math.max(6, day.pct * 100) : 0}%; width: 100%; background: {day.val > 0 ? 'var(--xp)' : 'var(--border)'}; border-radius: 4px 4px 0 0; opacity: {day.val > 0 ? '1' : '0.3'};"></div>
+                    </div>
+                    <span class="hour-label" style="font-size: 0.85rem; color: var(--text-muted); font-weight: 500;">{day.label}</span>
+                  </div>
+                {/each}
+              {/if}
             </div>
           </div>
 
@@ -1411,7 +1632,7 @@
 
   <!-- ── New Goal Slide-Down Panel ── -->
   {#if showAddForm}
-    <div class="new-goal-backdrop" on:click|self={() => showAddForm = false} role="dialog" tabindex="-1">
+    <div class="new-goal-backdrop" onclick={(e) => { if (e.target === e.currentTarget) showAddForm = false; }} role="dialog" tabindex="-1">
       <div class="new-goal-panel slide-down">
         <div class="new-goal-header">
           <div class="new-goal-title-row">
@@ -1423,7 +1644,7 @@
               <span class="new-goal-sub">Define un nuevo hábito o meta a seguir</span>
             </div>
           </div>
-          <button class="history-close-btn" on:click={() => showAddForm = false} title="Cerrar">
+          <button class="history-close-btn" onclick={() => showAddForm = false} title="Cerrar">
             <X size={15} />
           </button>
         </div>
@@ -1431,9 +1652,9 @@
         <div class="new-goal-body">
           <!-- Section Tabs -->
           <div class="ng-tabs-container">
-            <button class="ng-tab" class:active={ngActiveSection === 'basics'} on:click={() => ngActiveSection = 'basics'}>Básico</button>
-            <button class="ng-tab" class:active={ngActiveSection === 'appearance'} on:click={() => ngActiveSection = 'appearance'}>Apariencia</button>
-            <button class="ng-tab" class:active={ngActiveSection === 'advanced'} on:click={() => ngActiveSection = 'advanced'}>Avanzado</button>
+            <button class="ng-tab" class:active={ngActiveSection === 'basics'} onclick={() => ngActiveSection = 'basics'}>Básico</button>
+            <button class="ng-tab" class:active={ngActiveSection === 'appearance'} onclick={() => ngActiveSection = 'appearance'}>Apariencia</button>
+            <button class="ng-tab" class:active={ngActiveSection === 'advanced'} onclick={() => ngActiveSection = 'advanced'}>Avanzado</button>
           </div>
 
           <div class="ng-content-area">
@@ -1451,15 +1672,15 @@
                     placeholder="Motivación, detalles o reglas de este objetivo..." 
                     maxlength="63" 
                     rows="2"
-                    on:keydown={(e) => e.key === 'Enter' && e.preventDefault()}
-                    on:input={(e) => newDescription = e.currentTarget.value.replace(/\n/g, '')}
+                    onkeydown={(e) => e.key === 'Enter' && e.preventDefault()}
+                    oninput={(e) => newDescription = e.currentTarget.value.replace(/\n/g, '')}
                   ></textarea>
                 </div>
                 <div class="form-field">
                   <label class="label">Frecuencia de Repetición</label>
                   <div class="ng-freq-grid">
                     {#each TEMPORALITIES as temp}
-                      <button class="ng-freq-btn" class:active={newTemporality === temp} on:click={() => newTemporality = temp}>
+                      <button class="ng-freq-btn" class:active={newTemporality === temp} onclick={() => newTemporality = temp}>
                         {temp === 'DAILY' ? 'Diario' : temp === 'WEEKLY' ? 'Semanal' : temp === 'MONTHLY' ? 'Mensual' : 'Anual'}
                       </button>
                     {/each}
@@ -1474,18 +1695,18 @@
                   <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
                     <label class="label" style="margin:0;">Icono / Emoji de Fallo</label>
                     <div class="icon-toggle-row">
-                      <button class="icon-type-btn" class:selected={!useFailIcon} on:click={() => useFailIcon = false}>Emoji</button>
-                      <button class="icon-type-btn" class:selected={useFailIcon} on:click={() => useFailIcon = true}>Icono</button>
+                      <button class="icon-type-btn" class:selected={!useFailIcon} onclick={() => useFailIcon = false}>Emoji</button>
+                      <button class="icon-type-btn" class:selected={useFailIcon} onclick={() => useFailIcon = true}>Icono</button>
                     </div>
                   </div>
                   {#if !useFailIcon}
                     <div class="emoji-grid ng-large-grid">
                       {#each EMOJIS as e}
-                        <button class="emoji-btn" class:selected={newFailEmoji === e} on:click={() => newFailEmoji = e}>{e}</button>
+                        <button class="emoji-btn" class:selected={newFailEmoji === e} onclick={() => newFailEmoji = e}>{e}</button>
                       {/each}
                     </div>
                   {:else}
-                    <div class="field ng-large-grid">
+                    <div class="field ng-large-grid" style="display: flex; flex-direction: column; height: 280px; padding: 8px; border: 1px solid var(--border); border-radius: var(--r); background: var(--surface-hover); overflow: hidden;">
                       <IconPicker selected={newFailIcon} color={newGoalColor} onSelect={(ic) => newFailIcon = ic} />
                     </div>
                   {/if}
@@ -1499,8 +1720,8 @@
                         class="color-dot"
                         class:selected={newGoalColor === c.hex}
                         style="background: {c.hex}; color: {c.hex};"
-                        on:click={() => newGoalColor = c.hex}
-                      ></button>
+                        onclick={() => newGoalColor = c.hex}
+                      >&nbsp;</button>
                     {/each}
                     <div class="color-custom" style="background: {newGoalColor};">
                       <input type="color" bind:value={newGoalColor} class="color-picker" />
@@ -1534,15 +1755,15 @@
                 <div class="form-field">
                   <label class="label">Política de Incumplimiento (Fallo)</label>
                   <div class="ng-fail-options">
-                    <button class="ng-fail-btn" class:active={newFailConfig === 'STATIC'} on:click={() => newFailConfig = 'STATIC'}>
+                    <button class="ng-fail-btn" class:active={newFailConfig === 'STATIC'} onclick={() => newFailConfig = 'STATIC'}>
                       <strong>Estático</strong>
                       <span>Se reinicia a cero cada periodo</span>
                     </button>
-                    <button class="ng-fail-btn" class:active={newFailConfig === 'ROLLOVER'} on:click={() => newFailConfig = 'ROLLOVER'}>
+                    <button class="ng-fail-btn" class:active={newFailConfig === 'ROLLOVER'} onclick={() => newFailConfig = 'ROLLOVER'}>
                       <strong>Traspaso</strong>
                       <span>La meta pendiente pasa al siguiente día</span>
                     </button>
-                    <button class="ng-fail-btn" class:active={newFailConfig === 'SNOWBALL'} on:click={() => newFailConfig = 'SNOWBALL'}>
+                    <button class="ng-fail-btn" class:active={newFailConfig === 'SNOWBALL'} onclick={() => newFailConfig = 'SNOWBALL'}>
                       <strong>Acumulativo</strong>
                       <span>La deuda se acumula exponencialmente</span>
                     </button>
@@ -1611,8 +1832,8 @@
             <span></span>
           {/if}
           <div class="new-goal-actions">
-            <button class="btn btn-ghost" on:click={() => showAddForm = false}>Cancelar</button>
-            <button class="btn btn-primary" on:click={addGoal} disabled={saving || !newTitle.trim()}>
+            <button class="btn btn-ghost" onclick={() => showAddForm = false}>Cancelar</button>
+            <button class="btn btn-primary" onclick={addGoal} disabled={saving || !newTitle.trim()}>
               {saving ? 'Guardando...' : 'Crear objetivo'}
             </button>
           </div>
@@ -1622,11 +1843,11 @@
   {/if}
 
   {#if editingGoal}
-    <div class="modal-overlay" on:click|self={() => editingGoal = null} role="dialog" tabindex="-1">
+    <div class="modal-overlay" onclick={(e) => { if (e.target === e.currentTarget) editingGoal = null; }} role="dialog" tabindex="-1">
       <div class="modal-card fade-in">
         <div class="modal-header">
           <h3 class="section-title" style="margin:0;">Editar Objetivo</h3>
-          <button class="btn btn-ghost" on:click={() => editingGoal = null}><X size={16} /></button>
+          <button class="btn btn-ghost" onclick={() => editingGoal = null}><X size={16} /></button>
         </div>
         <div class="form-field">
           <label class="label">Título</label>
@@ -1671,10 +1892,10 @@
           </div>
         </div>
         <div class="form-actions">
-          <button class="btn btn-primary" on:click={saveEdit} disabled={editSaving || !editTitle.trim()}>
+          <button class="btn btn-primary" onclick={saveEdit} disabled={editSaving || !editTitle.trim()}>
             {editSaving ? 'Guardando...' : 'Guardar cambios'}
           </button>
-          <button class="btn btn-ghost" on:click={() => editingGoal = null}>Cancelar</button>
+          <button class="btn btn-ghost" onclick={() => editingGoal = null}>Cancelar</button>
         </div>
       </div>
     </div>
@@ -1696,13 +1917,13 @@
               <span class="removal-meta">{pg.temporality} · {formatFailConfig(pg.fail_config)}</span>
             </div>
             <div class="removal-actions">
-              <button class="btn btn-ghost removal-btn manual" title="Mantener como progreso manual" on:click={() => resolveRemoval(pg.id, 'manual')}>
+              <button class="btn btn-ghost removal-btn manual" title="Mantener como progreso manual" onclick={() => resolveRemoval(pg.id, 'manual')}>
                 Manual
               </button>
-              <button class="btn btn-ghost removal-btn cancel" title="Cancelar (archivar sin penalización)" on:click={() => resolveRemoval(pg.id, 'cancel')}>
+              <button class="btn btn-ghost removal-btn cancel" title="Cancelar (archivar sin penalización)" onclick={() => resolveRemoval(pg.id, 'cancel')}>
                 Cancelar
               </button>
-              <button class="btn btn-ghost removal-btn delete" title="Eliminar permanentemente" on:click={() => resolveRemoval(pg.id, 'delete')}>
+              <button class="btn btn-ghost removal-btn delete" title="Eliminar permanentemente" onclick={() => resolveRemoval(pg.id, 'delete')}>
                 Eliminar
               </button>
             </div>
@@ -1713,66 +1934,150 @@
   {/if}
 
   {#if currentTab === 'editor'}
-    <div class="tab-content fade-in" style="padding: 30px; height: 100%; box-sizing: border-box;">
-      {#if editorGoal}
-        <GoalEditor
-          goal={editorGoal}
-          content={editorContent}
-          on:save={async (e) => {
-            await api.goals.saveContent(editorGoal!.id, {
-              title: e.detail.title,
-              content: e.detail.content,
-              temporality: editorGoal!.temporality,
-              measurement_type: editorGoal!.measurement_type,
-              target_value: editorGoal!.target_value,
-              state: editorGoal!.state,
-              fail_config: editorGoal!.fail_config,
-              fail_emoji: editorGoal!.fail_emoji,
-              color: editorGoal!.color,
-              theme: editorGoal!.theme,
-              note_id: editorGoal!.note_id,
-              tag_id: editorGoal!.tag_id,
-              parent_id: editorGoal!.parent_id,
-              max_assignment_days: editorGoal!.max_assignment_days,
-              description: e.detail.content,
-            });
-            goals = await api.goals.list();
-            editorGoal = null;
-          }}
-          on:cancel={() => editorGoal = null}
-        />
-      {:else}
-        <div style="height: 100%; display: flex; flex-direction: column;">
-          <h3 class="section-title" style="margin: 0 0 30px 0; text-align: center;">Editor de Objetivos</h3>
-          <div style="flex: 1; overflow: auto;">
-            {#if goals.length === 0}
-              <div class="empty-state">No hay objetivos. Crea uno desde Dashboard.</div>
-            {:else}
-              <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; height: 100%;">
-                {#each goals as goal (goal.id)}
-                  <button
-                    class="goal-card"
-                    style="text-align: left; cursor: pointer; height: fit-content; border-left: 3px solid {getGoalColor(goal)};"
-                    on:click={async () => {
-                      const res = await api.goals.getContent(goal.id);
-                      editorGoal = goal;
-                      editorContent = res?.content || goal.description || '';
-                    }}
-                  >
-                    <div class="goal-main">
-                      <div class="goal-title">{goal.title}</div>
-                      <div class="goal-meta">
-                        <span class="tag-chip" style="background: {getGoalColor(goal)}20; border: 1px solid {getGoalColor(goal)}; color: {getGoalColor(goal)};">{TEMPORALITY_LABELS[goal.temporality] || goal.temporality}</span>
-                        <span class="tag-chip" style="background: {getGoalColor(goal)}20; border: 1px solid {getGoalColor(goal)}; color: {getGoalColor(goal)};">{STATE_LABELS[goal.state] || goal.state}</span>
-                      </div>
-                    </div>
-                  </button>
-                {/each}
-              </div>
-            {/if}
+    <div class="tab-content fade-in editor-tab">
+      <div class="editor-header">
+        <h3 class="editor-title">Editor de Objetivos</h3>
+        <div class="editor-controls">
+          <div class="search-box">
+            <Search size={16} />
+            <input 
+              type="text" 
+              placeholder="Buscar objetivos..." 
+              bind:value={goalSearchQuery}
+            />
+          </div>
+          <div class="filter-buttons">
+            <button 
+              class="filter-btn" 
+              class:active={goalFilterState === null}
+              onclick={() => goalFilterState = null}
+            >Todos</button>
+            <button 
+              class="filter-btn" 
+              class:active={goalFilterState === 'PINNED'}
+              onclick={() => goalFilterState = 'PINNED'}
+            >Fijados</button>
+            <button 
+              class="filter-btn" 
+              class:active={goalFilterState === 'ACTIVE'}
+              onclick={() => goalFilterState = 'ACTIVE'}
+            >Activos</button>
+            <button 
+              class="filter-btn" 
+              class:active={goalFilterState === 'COMPLETED'}
+              onclick={() => goalFilterState = 'COMPLETED'}
+            >Completados</button>
+            <button 
+              class="filter-btn" 
+              class:active={goalFilterState === 'PAUSED'}
+              onclick={() => goalFilterState = 'PAUSED'}
+            >Pausados</button>
+            <button 
+              class="filter-btn" 
+              class:active={goalFilterState === 'FAILED'}
+              onclick={() => goalFilterState = 'FAILED'}
+            >Fallidos</button>
           </div>
         </div>
-      {/if}
+      </div>
+      <div class="editor-grid-container">
+        {#if filteredGoals(goals, goalSearchQuery, goalFilterState, pinnedGoals).length === 0}
+          <div class="empty-state">No hay objetivos que coincidan con los filtros.</div>
+        {:else}
+          <div class="editor-grid">
+            {#each filteredGoals(goals, goalSearchQuery, goalFilterState, pinnedGoals) as goal (goal.id)}
+              <div
+                class="goal-editor-card"
+                class:completed={goal.state === 'COMPLETED' || goal.is_completed}
+                class:failed={goal.state === 'FAILED'}
+                class:paused={goal.state === 'PAUSED'}
+                style="--goal-color: {getGoalColor(goal)}"
+                role="button"
+                tabindex="0"
+                onclick={() => openGoalEditor(goal)}
+                onkeydown={(e) => e.key === 'Enter' && openGoalEditor(goal)}
+              >
+                <div class="card-header">
+                  <div class="card-header-left">
+                    <div class="goal-icon">
+                      {#if goal.fail_emoji}
+                        <StreakIcon name={goal.fail_emoji} size={24} color={getGoalColor(goal)} />
+                      {:else}
+                        <Target size={20} color={getGoalColor(goal)} />
+                      {/if}
+                    </div>
+                    <button 
+                      class="pin-btn" 
+                      class:pinned={pinnedGoals.has(goal.id)}
+                      onclick={(e) => { e.stopPropagation(); togglePinned(goal.id); }}
+                      title={pinnedGoals.has(goal.id) ? 'Desfijar' : 'Fijar'}
+                    >
+                      {#if pinnedGoals.has(goal.id)}
+                        <Pin size={14} fill="currentColor" />
+                      {:else}
+                        <PinOff size={14} />
+                      {/if}
+                    </button>
+                  </div>
+                  <div class="goal-state-indicator" class:active={goal.state === 'ACTIVE'} class:completed={goal.state === 'COMPLETED' || goal.is_completed} class:paused={goal.state === 'PAUSED'} class:failed={goal.state === 'FAILED'}>
+                    {STATE_LABELS[goal.state] || goal.state}
+                  </div>
+                </div>
+                <div class="card-title">{goal.title}</div>
+                {#if goal.description}
+                  <div class="card-description">{goal.description.substring(0, 80)}{goal.description.length > 80 ? '...' : ''}</div>
+                {/if}
+                <div class="card-meta">
+                  <div class="meta-item">
+                    <Clock size={12} />
+                    <span>{TEMPORALITY_LABELS[goal.temporality] || goal.temporality}</span>
+                  </div>
+                  {#if goal.tag_id}
+                    <div class="meta-item">
+                      <Tag size={12} />
+                      <span>{tags.find(t => t.id === goal.tag_id)?.name || 'Etiqueta'}</span>
+                    </div>
+                  {:else if goal.note_id}
+                    <div class="meta-item">
+                      <FileText size={12} />
+                      <span>{notes.find(n => n.id === goal.note_id)?.title?.substring(0, 12) || 'Nota'}</span>
+                    </div>
+                  {/if}
+                  {#if goal.fail_config !== 'STATIC'}
+                    <div class="meta-item config">
+                      <Settings size={12} />
+                      <span>{formatFailConfig(goal.fail_config)}</span>
+                    </div>
+                  {/if}
+                </div>
+                <div class="card-progress">
+                  <div class="progress-info">
+                    <span class="progress-text">
+                      {#if goal.measurement_type === 'BOOLEAN'}
+                        {goal.current_value >= 1 ? 'Completado' : 'Pendiente'}
+                      {:else if goal.measurement_type === 'PERCENT'}
+                        {goal.current_value}%
+                      {:else}
+                        {goal.current_value} / {goal.target_value}
+                      {/if}
+                    </span>
+                    <span class="progress-pct">{(goal.state === 'COMPLETED' || goal.is_completed) ? 100 : goal.progress_pct}%</span>
+                  </div>
+                  <div class="progress-bar">
+                    <div class="progress-fill" style="width: {(goal.state === 'COMPLETED' || goal.is_completed) ? 100 : goal.progress_pct}%"></div>
+                  </div>
+                </div>
+                <div class="card-footer">
+                  <span class="goal-id">#{goal.id}</span>
+                  {#if goal.created_at}
+                    <span class="goal-date">Creado: {goal.created_at.split('T')[0]}</span>
+                  {/if}
+                </div>
+              </div>
+            {/each}
+          </div>
+        {/if}
+      </div>
     </div>
   {/if}
 </div>
@@ -1916,9 +2221,70 @@
   .goals-body.full-width {
     max-width: none;
     margin: 0;
-    padding: var(--s3) var(--s4);
+    padding: 0 var(--s3) var(--s3);
     overflow: hidden;
-    height: calc(100vh - 80px);
+    min-height: 0;
+  }
+
+  .today-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 24px;
+    max-width: 1200px;
+    margin: 0 auto;
+    width: 100%;
+    align-items: start;
+  }
+
+  .dashboard-main-col {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 0;
+  }
+
+  .today-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding-top: 12px;
+    margin-bottom: 4px;
+    border-top: 1px solid var(--border);
+  }
+
+  .new-goal-cta-inline {
+    height: 36px;
+    padding: 0 14px;
+    white-space: nowrap;
+  }
+
+  .week-map-card {
+    margin-top: 12px;
+  }
+
+  .dashboard-side-col {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    width: 320px;
+  }
+
+  .dashboard-side-col > .dash-card,
+  .dashboard-side-col > .btn {
+    width: 100%;
+  }
+
+  .new-goal-cta {
+    justify-content: center;
+    padding: 12px;
+  }
+  .editor-tab {
+    padding: var(--s3);
+    height: 100%;
+    box-sizing: border-box;
+    border: 1px solid var(--border-light);
+    border-radius: var(--r);
   }
   /* ── New Goal Centered Modal ── */
   .new-goal-backdrop {
@@ -1930,7 +2296,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: var(--s4);
+    padding: 20px;
   }
   .new-goal-panel {
     background: var(--surface);
@@ -1938,8 +2304,9 @@
     box-shadow: 0 24px 80px rgba(0,0,0,0.6);
     display: flex;
     flex-direction: column;
-    max-height: 90vh;
-    width: 620px;
+    height: calc(100vh - 40px);
+    max-height: calc(100vh - 40px);
+    width: min(720px, 100%);
     border-radius: 16px;
     overflow: hidden;
   }
@@ -1984,6 +2351,7 @@
     display: flex;
     flex-direction: column;
     gap: var(--s4);
+    min-height: 0;
   }
 
   .ng-bottom-preview {
@@ -2026,7 +2394,10 @@
   .ng-tab.active { background: var(--surface); color: var(--text-primary); box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
 
   .ng-content-area {
-    min-height: 380px;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
   }
 
   .ng-section-fade {
@@ -2034,6 +2405,8 @@
     flex-direction: column;
     gap: var(--s4);
     animation: ngFadeIn 0.3s ease;
+    flex: 1;
+    min-height: 0;
   }
   @keyframes ngFadeIn {
     from { opacity: 0; transform: translateY(4px); }
@@ -2276,6 +2649,9 @@
   .goal-card.completed {
     opacity: 0.6;
     border-color: var(--success);
+  }
+  .today-layout .goal-card.completed {
+    opacity: 1;
   }
   .goal-card.failed {
     border-color: var(--error);
@@ -2616,30 +2992,36 @@
 
   /* Advanced Dashboard Styles */
   .full-height-dashboard {
-    height: calc(100vh - 150px);
-    overflow-y: auto;
-    padding-bottom: var(--s4);
+    height: calc(100vh - 56px - 44px - var(--s3) * 2);
+    overflow: hidden;
     display: flex;
     flex-direction: column;
+    gap: var(--s2);
   }
   .dashboard-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    grid-auto-rows: minmax(180px, auto);
-    gap: var(--s3);
+    grid-template-rows: 1fr 1fr 1fr;
+    grid-template-areas:
+      "pred pred pred temp"
+      "pred pred pred funnel"
+      "hourly hourly hourly weekday";
+    gap: var(--s2);
     flex: 1;
+    min-height: 0;
   }
   .dash-card {
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--r);
-    padding: var(--s3);
+    padding: var(--s2) var(--s3);
     display: flex;
     flex-direction: column;
-    gap: var(--s2);
+    gap: var(--s1);
     backdrop-filter: blur(10px);
     transition: transform 0.2s, border-color 0.2s;
-    min-height: 0; /* Allow shrinking */
+    min-height: 0;
+    overflow: hidden;
   }
   .dash-card:hover {
     border-color: var(--primary);
@@ -2665,8 +3047,9 @@
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--r);
-    padding: var(--s4) var(--s5);
-    margin-bottom: var(--s3);
+    padding: var(--s2) var(--s4);
+    margin-bottom: 0;
+    flex-shrink: 0;
   }
   .stb-item {
     display: flex;
@@ -2700,8 +3083,7 @@
 
   /* Prediction Card Styles */
   .prediction-card {
-    grid-column: span 2;
-    background: var(--surface);
+    /* grid-area: pred is set in Advanced Analytics Styles below */
   }
   .prediction-hero {
     display: flex;
@@ -2709,15 +3091,19 @@
     gap: var(--s2);
     flex: 1;
     min-height: 0;
+    overflow: hidden;
   }
   .candle-chart-container {
     flex: 1;
-    min-height: 100px;
+    min-height: 80px;
     background: rgba(0,0,0,0.15);
     border-radius: var(--r-sm, 8px);
-    padding: var(--s3);
+    padding: var(--s2) var(--s3);
     position: relative;
     overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
   .candle-svg {
     width: 100%;
@@ -2764,12 +3150,52 @@
     color: var(--text-secondary);
   }
 
-  .candle-svg rect {
-    filter: drop-shadow(0 0 2px rgba(0,0,0,0.2));
+  .candle-svg {
+    filter: drop-shadow(0 0 2px rgba(0,0,0,0.15));
   }
   .candle-svg rect:hover {
-    filter: brightness(1.3);
+    filter: brightness(1.25);
     cursor: crosshair;
+  }
+  .candle-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    color: var(--text-disabled);
+    font-size: 11px;
+    height: 100%;
+    text-align: center;
+  }
+  .candle-empty-state small {
+    font-size: 9px;
+    color: var(--text-disabled);
+    max-width: 180px;
+    line-height: 1.4;
+  }
+  .pred-period-badge {
+    margin-left: auto;
+    font-size: 9px;
+    padding: 2px 6px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    color: var(--text-disabled);
+    text-transform: none;
+    font-weight: 400;
+    letter-spacing: 0;
+  }
+  .prediction-kpis {
+    display: flex;
+    gap: var(--s4);
+  }
+  .pred-kpi {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    align-items: flex-end;
   }
 
   /* Weekday Chart */
@@ -2780,8 +3206,9 @@
     display: flex;
     justify-content: space-between;
     align-items: flex-end;
+    flex: 1;
+    min-height: 0;
     height: 100%;
-    max-height: 80px;
     padding: var(--s2) 0;
   }
   .day-col {
@@ -2790,10 +3217,12 @@
     align-items: center;
     gap: 4px;
     flex: 1;
+    height: 100%;
   }
   .day-bar-wrap {
+    flex: 1;
     width: 10px;
-    height: 100%;
+    min-height: 0;
     background: var(--border);
     border-radius: 5px;
     display: flex;
@@ -2824,7 +3253,10 @@
   .temporality-rows {
     display: flex;
     flex-direction: column;
+    justify-content: space-between;
+    height: 100%;
     gap: var(--s2);
+    padding-bottom: 8px;
   }
   .temp-row {
     display: flex;
@@ -2855,17 +3287,15 @@
   }
   .temp-bar {
     height: 100%;
-    background: var(--success);
-    border-radius: 5px;
     transition: width 0.5s;
   }
-  .temp-perc {
-    position: absolute;
-    right: 6px;
-    font-size: 8px;
+  .temp-perc-out {
+    font-size: 10px;
     font-weight: 700;
-    color: #fff;
-    text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    min-width: 28px;
+    text-align: right;
   }
 
   /* Tags List */
@@ -2931,6 +3361,7 @@
   }
   .proj-item {
     border-radius: var(--r);
+    margin-top: auto;
     display: flex;
     flex-direction: column;
     gap: 4px;
@@ -2947,14 +3378,20 @@
     color: var(--text-primary);
   }
 
-  @media (max-width: 1024px) {
+  @media (max-width: 900px) {
+    .full-height-dashboard { height: auto; overflow-y: auto; }
     .dashboard-grid {
       grid-template-columns: 1fr 1fr;
+      grid-template-rows: unset;
+      grid-template-areas: unset;
     }
-  }
-  @media (max-width: 640px) {
-    .dashboard-grid {
-      grid-template-columns: 1fr;
+    .prediction-card, .weekday-card, .temporality-card,
+    .hourly-card, .funnel-card {
+      grid-area: unset;
+      grid-column: span 2;
+    }
+    .weekday-card, .temporality-card, .funnel-card {
+      grid-column: span 1;
     }
   }
 
@@ -3237,9 +3674,11 @@
 
 
   /* Advanced Analytics Styles */
-  .dash-card { grid-column: span 2; }
-  .radar-card { grid-column: span 1; }
-  .funnel-card { grid-column: span 1; }
+  .prediction-card  { grid-area: pred; }
+  .weekday-card     { grid-area: weekday; }
+  .temporality-card { grid-area: temp; }
+  .hourly-card      { grid-area: hourly; }
+  .funnel-card      { grid-area: funnel; }
   
   .hourly-chart {
     display: flex;
@@ -3264,6 +3703,29 @@
     flex-direction: column;
     justify-content: flex-end;
   }
+  .hourly-card { padding: 20px; }
+  .activity-header h3 { margin: 0 0 16px 0; font-size: 1.1rem; color: var(--text-primary); }
+  .activity-tabs { display: flex; gap: 8px; }
+  .activity-tab {
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    background: var(--surface);
+    color: var(--text-muted);
+    transition: all 0.2s;
+  }
+  .activity-tab:hover {
+    background: var(--elevated);
+    color: var(--text-secondary);
+  }
+  .activity-tab.active {
+    background: color-mix(in srgb, var(--xp) 15%, transparent);
+    color: var(--xp);
+    border-color: var(--xp);
+  }
+  
   .hour-bar {
     width: 100%;
     background: linear-gradient(0deg, transparent, var(--xp));
@@ -3393,6 +3855,336 @@
     height: 100%;
     border-radius: 4px;
     transition: width 0.5s;
+  }
+
+  /* Editor de Objetivos - Nuevo Diseño */
+  .editor-tab {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  .editor-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+
+  .editor-title {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+  }
+
+  .editor-controls {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .search-box {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    background: var(--surface-hover);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-muted);
+  }
+
+  .search-box input {
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-size: 13px;
+    outline: none;
+    width: 180px;
+  }
+
+  .search-box input::placeholder {
+    color: var(--text-muted);
+  }
+
+  .filter-buttons {
+    display: flex;
+    gap: 6px;
+  }
+
+  .filter-btn {
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .filter-btn:hover {
+    background: var(--surface-hover);
+    color: var(--text-primary);
+  }
+
+  .filter-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--bg);
+    font-weight: 500;
+  }
+
+  .editor-grid-container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+  }
+
+  .editor-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 20px;
+    width: 100%;
+  }
+
+  .goal-editor-card {
+    background: var(--surface);
+    border: 2px solid var(--goal-color);
+    border-radius: 12px;
+    padding: 20px;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    text-align: left;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .goal-editor-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  }
+
+  .goal-editor-card.completed {
+    opacity: 0.7;
+    border-color: var(--success);
+  }
+
+  .goal-editor-card.failed {
+    border-color: var(--error);
+    background: rgba(239, 68, 68, 0.03);
+  }
+
+  .goal-editor-card.paused {
+    border-style: dashed;
+    opacity: 0.6;
+  }
+
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+
+  .card-header-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .pin-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    background: var(--surface-hover);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .pin-btn:hover {
+    background: var(--surface-active);
+    color: var(--accent);
+  }
+
+  .pin-btn.pinned {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--bg);
+  }
+
+  .goal-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--goal-color) 15%, transparent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .goal-state-indicator {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 4px 8px;
+    border-radius: 4px;
+    background: var(--surface-hover);
+    color: var(--text-muted);
+  }
+
+  .goal-state-indicator.active {
+    background: rgba(251, 191, 36, 0.15);
+    color: #fbbf24;
+  }
+
+  .goal-state-indicator.completed {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--success);
+  }
+
+  .goal-state-indicator.paused {
+    background: rgba(245, 158, 11, 0.15);
+    color: var(--warning);
+  }
+
+  .goal-state-indicator.failed {
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--error);
+  }
+
+  .card-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .card-description {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.5;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .card-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 4px;
+  }
+
+  .meta-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    color: var(--text-muted);
+    padding: 4px 8px;
+    background: var(--surface-hover);
+    border-radius: 4px;
+  }
+
+  .meta-item.config {
+    background: rgba(59, 130, 246, 0.1);
+    color: #3b82f6;
+  }
+
+  .card-progress {
+    margin-top: 8px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-light);
+  }
+
+  .progress-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+
+  .progress-text {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+  }
+
+  .progress-pct {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--goal-color);
+    font-family: var(--font-mono);
+  }
+
+  .progress-bar {
+    height: 6px;
+    background: var(--border);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .card-progress .progress-fill {
+    height: 100%;
+    background: var(--goal-color);
+    border-radius: 3px;
+    transition: width 0.3s ease;
+  }
+
+  .card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 10px;
+    color: var(--text-disabled);
+    margin-top: 4px;
+  }
+
+  .goal-id {
+    font-family: var(--font-mono);
+    font-weight: 600;
+  }
+
+  .goal-date {
+    font-size: 10px;
+  }
+
+  @media (max-width: 768px) {
+    .editor-header {
+      flex-direction: column;
+      gap: 12px;
+      align-items: flex-start;
+    }
+    .editor-stats {
+      flex-wrap: wrap;
+    }
+    .editor-grid {
+      grid-template-columns: 1fr;
+    }
   }
 
 </style>

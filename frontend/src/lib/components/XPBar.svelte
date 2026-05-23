@@ -10,6 +10,9 @@
       {#if $nextStageXP}
         <span class="xp-divider">/</span>
         <span class="xp-next">{$nextStageXP.toLocaleString()}</span>
+      {:else}
+        <span class="xp-divider">/</span>
+        <span class="xp-next">MAX</span>
       {/if}
     </div>
   </div>

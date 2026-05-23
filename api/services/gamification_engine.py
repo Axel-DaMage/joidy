@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from config import settings
 from models.gamification import StreakRecord, UserStats, XPEvent
+from models.config import SystemConfig
 from services.response_cache import clear_api_caches
 
 logger = logging.getLogger(__name__)
@@ -36,31 +37,7 @@ DEFAULT_XP_TABLE = {
     "note_imported_obsidian": 2,
 }
 
-
-@lru_cache(maxsize=1)
-def get_xp_table() -> dict[str, int]:
-    if not settings.xp_table_json:
-        return dict(DEFAULT_XP_TABLE)
-
-    try:
-        parsed = json.loads(settings.xp_table_json)
-        if not isinstance(parsed, dict):
-            raise ValueError("XP_TABLE_JSON must be a JSON object")
-
-        merged = dict(DEFAULT_XP_TABLE)
-        for key, value in parsed.items():
-            if isinstance(key, str) and isinstance(value, int):
-                merged[key] = value
-        return merged
-    except Exception:
-        logger.exception("Invalid xp_table_json, falling back to defaults")
-        return dict(DEFAULT_XP_TABLE)
-
-
-def xp_for(event_type: str, fallback: int = 0) -> int:
-    return get_xp_table().get(event_type, fallback)
-
-PLANT_STAGES = [
+DEFAULT_PLANT_STAGES = [
     (0,     "semilla"),
     (300,   "brote"),
     (1200,  "plantón"),
@@ -69,6 +46,105 @@ PLANT_STAGES = [
     (25000, "floreciendo"),
     (60000, "árbol"),
 ]
+
+
+def load_config_from_db(db: Session) -> dict[str, str]:
+    """Load config from database, returns key-value dict."""
+    try:
+        configs = db.query(SystemConfig).all()
+        return {c.key: c.value for c in configs}
+    except Exception:
+        logger.warning("Failed to load system_config from DB, using defaults")
+        return {}
+
+
+def get_xp_table_from_db(db: Session) -> dict[str, int]:
+    """Get XP table from database config."""
+    config = load_config_from_db(db)
+    result = {}
+    for key, default_value in DEFAULT_XP_TABLE.items():
+        db_key = f"xp_{key}"
+        try:
+            result[key] = int(config.get(db_key, default_value))
+        except (ValueError, TypeError):
+            result[key] = default_value
+    return result
+
+
+def get_plant_stages_from_db(db: Session) -> list[tuple[int, str]]:
+    """Get plant stages from database config."""
+    config = load_config_from_db(db)
+    stages = []
+    for i in range(7):
+        key = f"plant_stage_{i}"
+        try:
+            threshold = int(config.get(key, DEFAULT_PLANT_STAGES[i][0]))
+            name = config.get(f"plant_stage_{i}_name", DEFAULT_PLANT_STAGES[i][1])
+            stages.append((threshold, name))
+        except (ValueError, TypeError, IndexError):
+            stages.append(DEFAULT_PLANT_STAGES[i])
+    return sorted(stages, key=lambda x: x[0])
+
+
+_xp_table_cache: dict[str, int] | None = None
+_plant_stages_cache: list[tuple[int, str]] | None = None
+
+
+def get_xp_table(db: Session | None = None) -> dict[str, int]:
+    """Get XP table - from DB if available, else env var, else defaults."""
+    global _xp_table_cache
+
+    # Try env var override first (for quick testing)
+    if settings.xp_table_json:
+        try:
+            parsed = json.loads(settings.xp_table_json)
+            if isinstance(parsed, dict):
+                merged = dict(DEFAULT_XP_TABLE)
+                for key, value in parsed.items():
+                    if isinstance(key, str) and isinstance(value, int):
+                        merged[key] = value
+                _xp_table_cache = merged
+                return merged
+        except Exception:
+            pass
+
+    # Try database config
+    if db:
+        try:
+            config = get_xp_table_from_db(db)
+            _xp_table_cache = config
+            return config
+        except Exception:
+            pass
+
+    # Fallback to cached defaults
+    if _xp_table_cache is None:
+        _xp_table_cache = dict(DEFAULT_XP_TABLE)
+    return _xp_table_cache
+
+
+def get_plant_stages(db: Session | None = None) -> list[tuple[int, str]]:
+    """Get plant stages - from DB if available, else defaults."""
+    global _plant_stages_cache
+
+    if db:
+        try:
+            stages = get_plant_stages_from_db(db)
+            _plant_stages_cache = stages
+            return stages
+        except Exception:
+            pass
+
+    if _plant_stages_cache is None:
+        _plant_stages_cache = list(DEFAULT_PLANT_STAGES)
+    return _plant_stages_cache
+
+
+def xp_for(event_type: str, db: Session | None = None, fallback: int = 0) -> int:
+    return get_xp_table(db).get(event_type, fallback)
+
+
+PLANT_STAGES = DEFAULT_PLANT_STAGES  # Default fallback
 
 STREAK_MILESTONES = {7, 30, 100, 365}
 GRACE_PERIOD_DAYS = 1  # One missed day forgiven per week
@@ -97,12 +173,13 @@ def _get_or_create_stats(db: Session) -> UserStats:
     return stats
 
 
-def _compute_plant_stage(total_xp: int) -> tuple[int, str]:
+def _compute_plant_stage(total_xp: int, db: Session | None = None) -> tuple[int, str]:
+    stages = get_plant_stages(db)
     stage_idx = 0
-    for i, (threshold, name) in enumerate(PLANT_STAGES):
+    for i, (threshold, name) in enumerate(stages):
         if total_xp >= threshold:
             stage_idx = i
-    return stage_idx, PLANT_STAGES[stage_idx][1]
+    return stage_idx, stages[stage_idx][1]
 
 
 def _compute_streak(db: Session, stats: UserStats) -> tuple[int, bool]:
@@ -134,12 +211,30 @@ def process_event(
     event_type: str,
     metadata: dict | None = None,
 ) -> GamificationResult:
-    xp = xp_for(event_type, 0)
+    xp = xp_for(event_type, db, 0)
     if metadata is None:
         metadata = {}
 
     stats = _get_or_create_stats(db)
     today = date.today()
+
+    # Check if already at max XP
+    stages = get_plant_stages(db)
+    max_xp = stages[-1][0] if stages else DEFAULT_PLANT_STAGES[-1][0]
+
+    if stats.total_xp >= max_xp:
+        stage_idx, stage_name = _compute_plant_stage(stats.total_xp, db)
+        return GamificationResult(
+            xp_awarded=0,
+            total_xp=stats.total_xp,
+            current_streak=stats.current_streak,
+            plant_stage=stage_idx,
+            plant_stage_name=stage_name,
+            plant_stage_changed=False,
+            streak_changed=False,
+            milestone_reached=None,
+            message="¡Ya has alcanzado el máximo de XP! 🌟",
+        )
 
     # daily_activity is idempotent — only award XP once per day
     if event_type == "daily_activity" and stats.last_activity_date == today:
@@ -150,7 +245,7 @@ def process_event(
                 stats.longest_streak = 1
             db.commit()
             db.refresh(stats)
-        stage_idx, stage_name = _compute_plant_stage(stats.total_xp)
+        stage_idx, stage_name = _compute_plant_stage(stats.total_xp, db)
         return GamificationResult(
             xp_awarded=0,
             total_xp=stats.total_xp,
@@ -182,7 +277,7 @@ def process_event(
             db.add(StreakRecord(activity_date=today, xp_earned=xp))
             # Award daily activity bonus only if not already the daily_activity event
             if event_type != "daily_activity":
-                daily_xp = xp_for("daily_activity", 15)
+                daily_xp = xp_for("daily_activity", db, 15)
                 stats.total_xp += daily_xp
                 xp += daily_xp
                 db.add(XPEvent(event_type="daily_activity", xp=daily_xp))
@@ -198,14 +293,14 @@ def process_event(
     # Check streak milestones
     milestone_reached = None
     if is_new_day and new_streak in STREAK_MILESTONES:
-        milestone_xp = xp_for(f"streak_milestone_{new_streak}", 100)
+        milestone_xp = xp_for(f"streak_milestone_{new_streak}", db, 100)
         stats.total_xp += milestone_xp
         xp += milestone_xp
         db.add(XPEvent(event_type=f"streak_milestone_{new_streak}", xp=milestone_xp))
         milestone_reached = new_streak
 
     # Update plant stage
-    new_stage, new_stage_name = _compute_plant_stage(stats.total_xp)
+    new_stage, new_stage_name = _compute_plant_stage(stats.total_xp, db)
     stats.plant_stage = new_stage
     plant_stage_changed = new_stage != old_plant_stage
 

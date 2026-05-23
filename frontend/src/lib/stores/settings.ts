@@ -200,6 +200,16 @@ export const writeInObsidian = createBooleanStore('joidy-write-obsidian', false)
 export const use24HourClock  = createBooleanStore('joidy-use-24h-clock', true);
 export const hideTagsLine    = createBooleanStore('joidy-hide-tags-line', true);
 
+export const darkMode = createBooleanStore('joidy-dark-mode', true);
+
+export function initTheme() {
+  darkMode.subscribe(dark => {
+    if (typeof document !== 'undefined') {
+      document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+    }
+  })();
+}
+
 export interface FolderMeta { icon: string; color: string; }
 type FolderMetaMap = Record<string, FolderMeta>;
 const FOLDER_META_KEY = 'joidy-folder-meta';
@@ -227,5 +237,44 @@ export function updateFolderMeta(path: string, meta: FolderMeta) {
     return next;
   });
 }
+
+// ── Developer Mode ───────────────────────────────────────────────────────────
+const DEV_MODE_KEY = 'joidy-dev-mode';
+
+function loadDevMode(): boolean {
+  if (typeof window === 'undefined') return false;
+  return localStorage.getItem(DEV_MODE_KEY) === 'true';
+}
+
+function persistDevMode(enabled: boolean) {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(DEV_MODE_KEY, String(enabled));
+}
+
+function createDevModeStore() {
+  const { subscribe, set, update } = writable<boolean>(loadDevMode());
+
+  return {
+    subscribe,
+    enable: () => {
+      persistDevMode(true);
+      set(true);
+    },
+    disable: () => {
+      persistDevMode(false);
+      set(false);
+    },
+    toggle: () => {
+      update(v => {
+        const newVal = !v;
+        persistDevMode(newVal);
+        return newVal;
+      });
+    },
+    init: () => set(loadDevMode()),
+  };
+}
+
+export const devMode = createDevModeStore();
 
 export { MAX_COLORS };

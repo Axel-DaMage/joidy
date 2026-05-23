@@ -1,22 +1,39 @@
 <script lang="ts">
-  import { createEventDispatcher, onMount } from 'svelte';
+  import { createEventDispatcher, onMount, onDestroy } from 'svelte';
+  import { browser } from '$app/environment';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
-  import { accentColors, activeIconPack, showFrontmatter, showTrash, showHiddenFiles, writeInObsidian, use24HourClock, hideTagsLine, type IconPack, MAX_COLORS } from '$lib/stores/settings';
+  import { accentColors, activeIconPack, showFrontmatter, showTrash, showHiddenFiles, writeInObsidian, use24HourClock, hideTagsLine, darkMode, devMode, type IconPack, MAX_COLORS } from '$lib/stores/settings';
   import { api } from '$lib/api';
+  import { logger } from '$lib/utils/logger';
 
   export let open = false;
 
   const dispatch = createEventDispatcher<{ close: void }>();
 
-  let theme: 'dark' | 'light' = 'dark';
+  
 
   let configLoaded = false;
   let configSaving = false;
   let configMessage = '';
 
+  let githubConnected = false;
+  let githubUsername = '';
+
+  let googleCalendarConnected = false;
+  let googleCalendarEmail = '';
+  let googleTasksConnected = false;
+  let googleTasksEmail = '';
+  let googleContactsConnected = false;
+  let googleContactsEmail = '';
+  let stravaConnected = false;
+  let stravaName = '';
+  let gmailConnected = false;
+  let gmailEmail = '';
+
   let systemConfig = {
     gemini_api_key: '',
     obsidian_vault_path: '',
+    daily_notes_folder: '',
     github_token: '',
     github_username: '',
     telegram_bot_token: '',
@@ -35,6 +52,25 @@
     loadConfig();
   }
 
+  function handleKeydown(e: KeyboardEvent) {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      e.preventDefault();
+      saveConfig();
+    }
+  }
+
+  onMount(() => {
+    if (browser) {
+      window.addEventListener('keydown', handleKeydown);
+    }
+  });
+
+  onDestroy(() => {
+    if (browser) {
+      window.removeEventListener('keydown', handleKeydown);
+    }
+  });
+
   async function loadConfig() {
     try {
       const config = await api.config.get();
@@ -42,17 +78,42 @@
       systemConfig = {
         gemini_api_key: config.gemini_api_key || '',
         obsidian_vault_path: config.obsidian_vault_path || '',
+        daily_notes_folder: config.daily_notes_folder || '',
         github_token: '',
         github_username: config.github_username || '',
         telegram_bot_token: '',
         telegram_allowed_user_id: '',
       };
       configLoaded = true;
+      await checkGithubStatus();
     } catch (e) {
-      console.error('Failed to load config:', e);
+      logger.error('Failed to load config:', e);
       configLoaded = true;
     }
   }
+
+  async function checkGithubStatus() {
+    try {
+      const status = await api.github.status();
+      githubConnected = status.connected;
+      githubUsername = status.username || '';
+      // TESTING: force to false to see the "Enlazar" button
+      githubConnected = false;
+    } catch (e) {
+      githubConnected = false;
+      githubUsername = '';
+    }
+  }
+
+  async function openGithubLink() {
+    window.open('https://github.com/Axel-DaMage/joidy', '_blank');
+  }
+
+  async function openGoogleCalendarLink() { window.open('https://calendar.google.com', '_blank'); }
+  async function openGoogleTasksLink() { window.open('https://tasksboard.com', '_blank'); }
+  async function openGoogleContactsLink() { window.open('https://contacts.google.com', '_blank'); }
+  async function openStravaLink() { window.open('https://strava.com', '_blank'); }
+  async function openGmailLink() { window.open('https://mail.google.com', '_blank'); }
 
   async function saveConfig() {
     configSaving = true;
@@ -82,8 +143,7 @@
   ];
 
   function toggleTheme() {
-    theme = theme === 'dark' ? 'light' : 'dark';
-    document.documentElement.setAttribute('data-theme', theme === 'light' ? 'light' : 'dark');
+    darkMode.toggle();
   }
 
   function onColorPicker(i: number, e: Event) {
@@ -198,13 +258,13 @@
           <div class="section-title" style="color: var(--xp, var(--accent));">Apariencia</div>
           <div class="row">
             <div class="row-label">
-              {#if theme === 'dark'}<DynamicIcon name="Moon" size={13} />{:else}<DynamicIcon name="Sun" size={13} />{/if}
+              {#if $darkMode}<DynamicIcon name="Moon" size={13} />{:else}<DynamicIcon name="Sun" size={13} />{/if}
               <span>Tema</span>
             </div>
             <button class="toggle" on:click={toggleTheme}>
-              <span class:active={theme === 'dark'}>oscuro</span>
-              <span class="sep">/</span>
-              <span class:active={theme === 'light'}>claro</span>
+              <span class:active={$darkMode}>oscuro</span>
+              <span class="divider">|</span>
+              <span class:active={!$darkMode}>claro</span>
             </button>
           </div>
 
@@ -274,6 +334,61 @@
             </select>
             <p class="hint" style="margin-top: 2px;">Los iconos cambiarán en los conectores y notas.</p>
           </div>
+</section>
+
+        <!-- Avanzado -->
+        <section class="section">
+          <div class="section-title" style="color: var(--xp, var(--accent));">
+            <DynamicIcon name="Settings" size={12} /> Avanzado
+          </div>
+
+          <div class="row">
+            <div class="row-label">
+              <DynamicIcon name="Code" size={13} />
+              <span>Metadatos (YAML)</span>
+            </div>
+            <button class="toggle" on:click={() => showFrontmatter.toggle()}>
+              <span class:active={!$showFrontmatter}>oculto</span>
+              <span class="sep">/</span>
+              <span class:active={$showFrontmatter}>visible</span>
+            </button>
+          </div>
+
+          <div class="row">
+            <div class="row-label">
+              <DynamicIcon name="EyeOff" size={13} />
+              <span>Carpetas Ocultas</span>
+            </div>
+            <button class="toggle" on:click={() => showHiddenFiles.toggle()}>
+              <span class:active={!$showHiddenFiles}>oculto</span>
+              <span class="sep">/</span>
+              <span class:active={$showHiddenFiles}>visible</span>
+            </button>
+          </div>
+
+          <div class="row">
+            <div class="row-label">
+              <DynamicIcon name="Trash2" size={13} />
+              <span>Mostrar Papelera</span>
+            </div>
+            <button class="toggle" on:click={() => showTrash.toggle()}>
+              <span class:active={!$showTrash}>oculto</span>
+              <span class="sep">/</span>
+              <span class:active={$showTrash}>visible</span>
+            </button>
+          </div>
+
+          <div class="row">
+            <div class="row-label">
+              <DynamicIcon name="Tag" size={13} />
+              <span>Línea de Etiquetas</span>
+            </div>
+            <button class="toggle" on:click={() => hideTagsLine.toggle()}>
+              <span class:active={$hideTagsLine}>oculta</span>
+              <span class="sep">/</span>
+              <span class:active={!$hideTagsLine}>visible</span>
+            </button>
+          </div>
         </section>
 
         <!-- Vault -->
@@ -286,14 +401,20 @@
               <span>Directorio del Vault</span>
               {#if isConfigured('obsidian_vault_path')}<span class="configured-badge">✓</span>{/if}
             </div>
-            <div style="display: flex; align-items: center; gap: 2px; padding: 0 10px; background: var(--elevated); border: 1px solid var(--border); border-radius: var(--r); transition: border-color var(--t-fast);" class="input-wrapper">
+            <div style="display: flex; align-items: center; gap: 2px; padding: 0 10px; background: var(--elevated); border: 1px solid var(--border); border-radius: var(--r);" class="input-wrapper">
               <span class="mono" style="color: var(--text-disabled); font-size: 11px;">~</span>
               <input type="text" class="setting-input mono" style="border: none; background: transparent; flex: 1; padding-left: 2px;" placeholder="/Documentos/ObsidianVault" bind:value={systemConfig.obsidian_vault_path} />
             </div>
           </div>
-          <div class="row">
-            <div class="row-label"><span>Carpeta Joidy</span></div>
-            <code class="path-value">_joidy/</code>
+          <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
+            <div class="row-label">
+              <span>Carpeta de notas diarias</span>
+              {#if isConfigured('daily_notes_folder')}<span class="configured-badge">✓</span>{/if}
+            </div>
+            <div style="display: flex; align-items: center; gap: 2px; padding: 0 10px; background: var(--elevated); border: 1px solid var(--border); border-radius: var(--r);" class="input-wrapper">
+              <span class="mono" style="color: var(--text-disabled); font-size: 11px;">~</span>
+              <input type="text" class="setting-input mono" style="border: none; background: transparent; flex: 1; padding-left: 2px;" placeholder="Ejemplo/Daily" bind:value={systemConfig.daily_notes_folder} />
+            </div>
           </div>
           <div class="row">
             <div class="row-label">
@@ -320,35 +441,52 @@
           <div class="section-title" style="color: var(--xp, var(--accent));">
             <DynamicIcon name="GitBranch" size={12} /> Integraciones
           </div>
-          <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
+          <div class="row">
             <div class="row-label">
-              <span>GitHub Token</span>
-              {#if isConfigured('github_token')}<span class="configured-badge">✓</span>{/if}
+              <span>GitHub</span>
+              {#if githubConnected}<span class="configured-badge">✓</span>{/if}
             </div>
-            <input type="password" class="setting-input mono" placeholder="ghp_..." bind:value={systemConfig.github_token} />
+            {#if githubConnected}
+              <span class="mono" style="font-size:12px; color: var(--xp);">{githubUsername}</span>
+            {:else}
+              <button class="link-btn" on:click={openGithubLink}>Enlazar</button>
+            {/if}
           </div>
-          <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
-            <div class="row-label">
-              <span>Telegram Bot</span>
-              {#if isConfigured('telegram_bot_token')}<span class="configured-badge">✓</span>{/if}
+          <div class="row">
+            <div class="row-label disabled">
+              <span>Google Calendar</span>
             </div>
-            <input type="text" class="setting-input mono" placeholder="123456:ABC..." bind:value={systemConfig.telegram_bot_token} />
+            <button class="link-btn disabled">Pronto</button>
           </div>
-          <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
-            <div class="row-label">
-              <span>Telegram User ID</span>
-              {#if isConfigured('telegram_allowed_user_id')}<span class="configured-badge">✓</span>{/if}
+          <div class="row">
+            <div class="row-label disabled">
+              <span>Google Tasks</span>
             </div>
-            <input type="text" class="setting-input mono" placeholder="Tu ID de usuario" bind:value={systemConfig.telegram_allowed_user_id} />
+            <button class="link-btn disabled">Pronto</button>
           </div>
-        </section>
+          <div class="row">
+            <div class="row-label disabled">
+              <span>Google Contacts</span>
+            </div>
+            <button class="link-btn disabled">Pronto</button>
+          </div>
+          <div class="row">
+            <div class="row-label disabled">
+              <span>Strava</span>
+            </div>
+            <button class="link-btn disabled">Pronto</button>
+          </div>
+          <div class="row">
+            <div class="row-label disabled">
+              <span>Gmail</span>
+            </div>
+            <button class="link-btn disabled">Pronto</button>
+          </div>
 
-        <!-- IA -->
-        <section class="section">
-          <div class="section-title" style="color: var(--xp, var(--accent));">
+          <div class="section-subtitle" style="color: var(--xp, var(--accent)); margin-top: 16px;">
             <DynamicIcon name="Zap" size={12} /> IA
           </div>
-          <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
+          <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px; margin-top: 8px;">
             <div class="row-label">
               <span>Gemini API Key</span>
               {#if isConfigured('gemini_api_key')}<span class="configured-badge">✓</span>{/if}
@@ -360,97 +498,52 @@
           </p>
         </section>
 
-        <!-- Guardar Config -->
+        <!-- Repositorio -->
         <section class="section">
-          <button
-            class="save-config-btn"
-            on:click={saveConfig}
-            disabled={configSaving}
-          >
-            {#if configSaving}
-              Guardando...
-            {:else}
-              <DynamicIcon name="Save" size={12} /> Guardar Configuración
-            {/if}
-          </button>
-          {#if configMessage}
-            <p class="config-message">{configMessage}</p>
-          {/if}
-        </section>
-
-        <!-- Avanzado -->
-        <section class="section">
-          <div class="section-title" style="color: var(--xp, var(--accent));">
-            <DynamicIcon name="Settings" size={12} /> Avanzado
-          </div>
-
-          <div class="row">
-            <div class="row-label">
-              <DynamicIcon name="Code" size={13} />
-              <span>Metadatos (YAML)</span>
-            </div>
-            <button class="toggle" on:click={() => showFrontmatter.toggle()}>
-              <span class:active={!$showFrontmatter}>oculto</span>
-              <span class="sep">/</span>
-              <span class:active={$showFrontmatter}>visible</span>
-            </button>
-          </div>
-
-          <div class="row">
-            <div class="row-label">
-              <DynamicIcon name="EyeOff" size={13} />
-              <span>Carpetas Ocultas ( .folder )</span>
-            </div>
-            <button class="toggle" on:click={() => showHiddenFiles.toggle()}>
-              <span class:active={!$showHiddenFiles}>oculto</span>
-              <span class="sep">/</span>
-              <span class:active={$showHiddenFiles}>visible</span>
-            </button>
-          </div>
-
-          <div class="row">
-            <div class="row-label">
-              <DynamicIcon name="Trash2" size={13} />
-              <span>Papelera Obsidian (.trash)</span>
-            </div>
-            <button class="toggle" on:click={() => showTrash.toggle()}>
-              <span class:active={!$showTrash}>oculto</span>
-              <span class="sep">/</span>
-              <span class:active={$showTrash}>visible</span>
-            </button>
-          </div>
-
-          <div class="row">
-            <div class="row-label">
-              <DynamicIcon name="Tag" size={13} />
-              <span>Ocultar línea # Tags</span>
-            </div>
-            <button class="toggle" on:click={() => hideTagsLine.toggle()}>
-              <span class:active={$hideTagsLine}>sí</span>
-              <span class="sep">/</span>
-              <span class:active={!$hideTagsLine}>no</span>
-            </button>
-          </div>
-        </section>
-
-        <!-- Info -->
-        <section class="section" style="border-bottom: none;">
-          <div class="row">
-            <div class="row-label"><span>Versión</span></div>
-            <span class="mono" style="font-size:11px; color: var(--xp, var(--accent));">v0.1.0</span>
-          </div>
           <div class="row">
             <div class="row-label"><span>Repositorio</span></div>
-            <a
-              href="https://github.com/Axel-DaMage/joidy"
-              target="_blank"
-              rel="noopener"
-              class="mono"
-              style="font-size:11px; color: var(--text-secondary);"
-            >github.com/Axel-DaMage/joidy</a>
+            <a href="https://github.com/Axel-DaMage/joidy" target="_blank" rel="noopener" class="mono" style="font-size:11px; color: var(--text-secondary);">github.com/Axel-DaMage/joidy</a>
           </div>
         </section>
 
+        <!-- Desarrollador -->
+        <section class="section">
+          <div class="section-title" style="color: var(--xp, var(--accent));">
+            <DynamicIcon name="Code" size={12} /> Desarrollador
+          </div>
+          <div class="row">
+            <div class="row-label">
+              <DynamicIcon name="Wrench" size={13} />
+              <span>Modo Desarrollo</span>
+            </div>
+            <button class="toggle" on:click={() => devMode.toggle()}>
+              <span class:active={!$devMode}>off</span>
+              <span class="sep">/</span>
+              <span class:active={$devMode}>on</span>
+            </button>
+          </div>
+          <p class="hint">
+            Activa para mostrar páginas en desarrollo y contenido avanzado.
+          </p>
+        </section>
+
+      </div>
+
+      <div class="panel-footer">
+        <button
+          class="save-config-btn fixed-save"
+          on:click={saveConfig}
+          disabled={configSaving}
+        >
+          {#if configSaving}
+            Guardando...
+          {:else}
+            <DynamicIcon name="Save" size={12} /> Guardar
+          {/if}
+        </button>
+        {#if configMessage}
+          <span class="config-message-footer">{configMessage}</span>
+        {/if}
       </div>
     </div>
   </div>
@@ -475,6 +568,7 @@
     display: flex;
     flex-direction: column;
     animation: slideIn 150ms ease-out;
+    position: relative;
   }
 
   @keyframes slideIn {
@@ -508,6 +602,32 @@
     flex: 1;
     overflow-y: auto;
     padding: 8px 0;
+    padding-bottom: 60px;
+  }
+
+  .panel-footer {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 12px 20px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .save-config-btn.fixed-save {
+    width: 100%;
+    padding: 10px 16px;
+  }
+
+  .config-message-footer {
+    font-size: 11px;
+    color: var(--text-secondary);
+    white-space: nowrap;
   }
 
   .section {
@@ -525,6 +645,17 @@
     letter-spacing: 0.1em;
     text-transform: uppercase;
     margin-bottom: 12px;
+  }
+
+  .section-subtitle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
   }
 
   .row {
@@ -552,12 +683,37 @@
     color: var(--text-muted);
     cursor: pointer;
     display: flex;
+    align-items: center;
     gap: 4px;
+    white-space: nowrap;
     transition: border-color var(--t-fast);
   }
   .toggle:hover { border-color: var(--text-muted); }
   .toggle .active { color: var(--text-primary); }
-  .toggle .sep { color: var(--border); }
+  .toggle .sep, .toggle .divider { color: var(--border); }
+
+  .link-btn {
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: var(--r);
+    font-size: 11px;
+    cursor: pointer;
+    font-family: var(--font-mono);
+  }
+  .link-btn:hover { opacity: 0.9; }
+
+  .link-btn.disabled {
+    background: var(--border);
+    color: var(--text-muted);
+    cursor: not-allowed;
+  }
+  .link-btn.disabled:hover { opacity: 0.6; }
+
+  .row-label.disabled {
+    color: var(--text-muted);
+  }
 
   .badge {
     font-size: 10px;

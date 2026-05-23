@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models.personal_streaks import PersonalStreak, StreakCheckIn
+from services.personal_streak_service import backfill_streak_history, compute_streak, calculate_streak_stats
 
 router = APIRouter(prefix="/personal-streaks", tags=["personal-streaks"])
 
@@ -129,7 +130,7 @@ def _streak_to_dict(streak: PersonalStreak, days_history: int = 365) -> dict:
     today = date.today()
     checkin_dates = [c.check_date for c in streak.checkins]
     checkin_map = {c.check_date: c for c in streak.checkins}
-    current, longest = _compute_streak(checkin_dates, streak.frequency or "daily", streak.frequency_days or 1)
+    current, longest = compute_streak(checkin_dates, streak.frequency or "daily", streak.frequency_days or 1)
 
     # Apply offset
     effective_current = current + streak.offset
@@ -255,7 +256,7 @@ def global_stats(db: Session = Depends(get_db)):
 
     for s in all_streaks:
         checkin_dates = [c.check_date for c in s.checkins]
-        _, longest = _compute_streak(checkin_dates, s.frequency or "daily", s.frequency_days or 1)
+        _, longest = compute_streak(checkin_dates, s.frequency or "daily", s.frequency_days or 1)
         effective = longest + s.offset
         if effective > longest_ever:
             longest_ever = effective
@@ -332,7 +333,7 @@ def create_streak(data: StreakCreate, db: Session = Depends(get_db)):
 
     # Automatically backfill if start_date is in the past
     if streak.start_date and streak.start_date < date.today():
-        _backfill_streak_history(db, streak)
+        backfill_streak_history(db, streak)
 
     return _streak_to_dict(streak)
 
@@ -362,7 +363,7 @@ def update_streak(streak_id: int, data: StreakUpdate, db: Session = Depends(get_
 
     # If start_date was moved back, backfill again
     if streak.start_date and streak.start_date < date.today():
-        _backfill_streak_history(db, streak)
+        backfill_streak_history(db, streak)
 
     return _streak_to_dict(streak)
 

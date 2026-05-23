@@ -1,5 +1,9 @@
 import { writable, derived, get } from 'svelte/store';
-import { api, type GamificationStats } from '$lib/api';
+import { api, type GamificationStats, type GamificationResult as GamificationResultType } from '$lib/api';
+import { logger } from '$lib/utils/logger';
+import { routeCache } from './routeCache';
+
+const GAMIFICATION_CACHE_KEY = '/dashboard/gamification';
 
 export const totalXP       = writable(0);
 export const currentStreak = writable(0);
@@ -38,18 +42,25 @@ export const globalLevel = derived(
 );
 
 export async function loadStats(): Promise<void> {
+  // Try cache first for instant display
+  const cached = routeCache.get<GamificationStats>(GAMIFICATION_CACHE_KEY);
+  if (cached) {
+    applyStats(cached);
+  }
+
   try {
     const stats: GamificationStats = await api.gamification.stats();
     applyStats(stats);
+    routeCache.set(GAMIFICATION_CACHE_KEY, stats);
   } catch (e) {
-    console.error('[gamification] Failed to load stats:', e);
+    logger.error('[gamification] Failed to load stats:', e);
   }
 }
 
 export async function pingActivity(): Promise<void> {
   try {
     const result = await api.gamification.ping();
-    applyStats({
+    const stats: Partial<GamificationStats> = {
       total_xp: result.total_xp,
       current_streak: result.current_streak,
       longest_streak: result.longest_streak ?? get(longestStreak),
@@ -58,13 +69,28 @@ export async function pingActivity(): Promise<void> {
       next_stage_xp: result.next_stage_xp ?? get(nextStageXP),
       xp_to_next_stage: result.xp_to_next_stage ?? get(xpToNextStage),
       last_activity_date: result.last_activity_date ?? null,
-    });
+    };
+    applyStats(stats);
+    routeCache.set(GAMIFICATION_CACHE_KEY, { ...getFullStats(), ...stats } as GamificationStats);
     if (result.xp_awarded > 0) {
       showXPGain(result.xp_awarded);
     }
   } catch (e) {
-    console.error('[gamification] pingActivity failed:', e);
+    logger.error('[gamification] pingActivity failed:', e);
   }
+}
+
+function getFullStats(): GamificationStats {
+  return {
+    total_xp: get(totalXP),
+    current_streak: get(currentStreak),
+    longest_streak: get(longestStreak),
+    plant_stage: get(plantStage),
+    plant_stage_name: get(plantStageName),
+    next_stage_xp: get(nextStageXP),
+    xp_to_next_stage: get(xpToNextStage),
+    last_activity_date: get(lastActivity),
+  };
 }
 
 export function applyStats(stats: Partial<GamificationStats>): void {
@@ -96,7 +122,11 @@ export function showNotification(message: string, type: 'info' | 'success' | 'le
   }, 4000);
 }
 
-export function applyGamificationResult(result: any): void {
+export function dismissNotification(id: string): void {
+  notifications.update(ns => ns.filter(n => n.id !== id));
+}
+
+export function applyGamificationResult(result: GamificationResultType): void {
   const prevStage = get(plantStage);
   
   totalXP.set(result.total_xp);

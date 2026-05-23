@@ -107,8 +107,17 @@ export interface Goal {
   updated_at: string;
 }
 
-export interface GraphNode { id: number; name: string; note_count: number; parent_id: number | null; }
-export interface GraphEdge { source: number; target: number; type: 'hierarchy' | 'cooccurrence'; weight?: number; }
+export interface GraphNode {
+  id: number;
+  type: 'tag' | 'note';
+  name?: string;
+  title?: string;
+  note_count?: number;
+  parent_id?: number | null;
+  path?: string;
+  group: string;
+}
+export interface GraphEdge { source: number; target: number; type: 'hierarchy' | 'cooccurrence' | 'linked' | 'tagged'; weight?: number; }
 export interface GraphData { nodes: GraphNode[]; edges: GraphEdge[]; }
 
 export interface AISuggestion { tag: string; confidence: number; is_new: boolean; }
@@ -164,7 +173,7 @@ export const api = {
   notes: {
     list:   (tag?: string, limit = 1000) => req<Note[]>('GET', `/notes/?limit=${limit}${tag ? `&tag=${encodeURIComponent(tag)}` : ''}`),
     get:    (id: number)   => req<Note>('GET', `/notes/${id}`),
-    create: (data: { title: string; content: string; tags: string[] }) =>
+    create: (data: { title: string; content: string; tags: string[]; source_path?: string | null; source?: string }) =>
       req<Note & { gamification: GamificationResult }>('POST', '/notes/', data),
     update: (id: number, data: Partial<{ title: string; content: string; tags: string[] }>) =>
       req<Note & { gamification: GamificationResult }>('PUT', `/notes/${id}`, data),
@@ -264,6 +273,7 @@ github: {
     get: () => req<{
       gemini_api_key: string | null;
       obsidian_vault_path: string | null;
+      daily_notes_folder: string | null;
       github_username: string | null;
       app_env: string | null;
       configured_keys: string[];
@@ -271,6 +281,7 @@ github: {
     update: (data: {
       gemini_api_key?: string;
       obsidian_vault_path?: string;
+      daily_notes_folder?: string;
       github_token?: string;
       github_username?: string;
       github_client_id?: string;
@@ -281,5 +292,24 @@ github: {
     keys: () => req<{
       keys: { key: string; env_key: string; public: boolean; description: string }[];
     }>('GET', '/config/keys'),
+    gamification: () => req<{
+      xp_table: Record<string, number>;
+      plant_stages: { stage: number; name: string; xp_required: number }[];
+      streak_milestones: number[];
+    }>('GET', '/config/gamification'),
+  },
+  stats: {
+    system: () => req<{
+      notes: number;
+      tags: number;
+      goals: number;
+      skills: number;
+      total_xp: number;
+      current_streak: number;
+      xp_events_week: number;
+    }>('GET', '/stats/system'),
+    activity: (days = 30) => req<{
+      days: { date: string; notes_created: number; xp_events: number }[];
+    }>('GET', `/stats/activity?days=${days}`),
   },
 };

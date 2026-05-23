@@ -1,5 +1,6 @@
 import { writable } from 'svelte/store';
 import { api, type GraphData } from '$lib/api';
+import { logger } from '$lib/utils/logger';
 
 export const graphData    = writable<GraphData>({ nodes: [], edges: [] });
 export const graphLoading = writable(false);
@@ -11,7 +12,7 @@ export async function loadGraph(): Promise<void> {
     const data = await api.tags.graph();
     graphData.set(data);
   } catch (e) {
-    console.error('[graph] Failed to load:', e);
+    logger.error('[graph] Failed to load:', e);
   } finally {
     graphLoading.set(false);
   }

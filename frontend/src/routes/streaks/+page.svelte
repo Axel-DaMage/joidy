@@ -11,6 +11,7 @@
   import { loadUserSettings, patchUserSettings, getCachedData, setCachedData } from '$lib/utils/userSettings';
   import { liquidGlass } from '$lib/actions/liquidGlass';
   import { captureSnapshot, getSnapshot } from '$lib/stores/pageSnapshots';
+  import { logger } from '$lib/utils/logger';
 
   let streaks: PersonalStreak[] = [];
   let stats: StreakStats | null = null;
@@ -97,7 +98,7 @@
     } catch (e) {
       if (!cached || !cachedStats) {
         error = 'Error de conexión con el sistema de rachas.';
-        console.error('[streaks]', e);
+        logger.error('[streaks]', e);
       }
     } finally {
       if (selectedId && !streaks.find(s => s.id === selectedId)) selectedId = streaks[0]?.id ?? null;
@@ -135,7 +136,7 @@
       stats = await api.personalStreaks.stats();
       notifyStreaksUpdated();
     } catch (e) {
-      console.error('[streaks] save error:', e);
+      logger.error('[streaks] save error:', e);
     }
   }
 
@@ -151,7 +152,7 @@
       showModal = false;
       editTarget = null;
     } catch (e) {
-      console.error('[streaks] archive error:', e);
+      logger.error('[streaks] archive error:', e);
     }
   }
 
@@ -188,7 +189,7 @@
       stats = await api.personalStreaks.stats();
       notifyStreaksUpdated();
     } catch (e) {
-      console.error('[streaks] bulk checkin error:', e);
+      logger.error('[streaks] bulk checkin error:', e);
     }
   }
 
@@ -226,7 +227,7 @@
       streaks = streaks.map(s => s.id === id ? updated : s);
       notifyStreaksUpdated();
     } catch (e: any) {
-      console.error('[streaks] freeze error:', e);
+      logger.error('[streaks] freeze error:', e);
     } finally {
       busy.delete(id); busy = new Set(busy);
     }
@@ -253,7 +254,7 @@
       deleteConfirmName = '';
       deleteConfirmTheme = 'solid';
     } catch (e) {
-      console.error('[streaks] delete error:', e);
+      logger.error('[streaks] delete error:', e);
       deleteConfirm = null;
       deleteConfirmName = '';
       deleteConfirmTheme = 'solid';

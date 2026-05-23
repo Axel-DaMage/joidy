@@ -38,6 +38,10 @@ make shell-worker   # Exec into worker container (bash)
 make db-health       # Verify DB tables exist and migrations applied
 ```
 
+### Debug Endpoints
+- **API debug:** `http://localhost:8000/debug` — Detailed system info (DB stats, cache, gamification, recent errors)
+- **Health check:** `http://localhost:8000/health/ready` — Comprehensive service health
+
 ### Database & Migrations
 ```bash
 make migrate         # Run Alembic migrations to head (in api container)
@@ -237,6 +241,32 @@ docker compose exec api alembic -c /app/alembic.ini upgrade head
 - Docker Compose environment overrides
 - Command-line arguments (e.g., `API_PORT=8001 make dev`)
 
+### Frontend Debug Tools (Dev Mode Only)
+When **Dev Mode** is enabled in Settings, the frontend logs additional debug information:
+
+**Module:** `frontend/src/lib/utils/debug.ts`
+- `debugLog()`, `debugWarn()`, `debugError()` — logging only when dev mode is ON
+- `debugGroup()` / `debugGroupEnd()` — group related log messages
+- `captureAndLog()` — captures errors with stack traces
+- Auto-captures uncaught errors and unhandled promise rejections
+
+**Usage:**
+```ts
+import { debugLog, debugError } from '$lib/utils/debug';
+
+debugLog('Variable state:', someVariable);
+debugError('Something went wrong:', errorObject);
+```
+
+The endpoint `/debug` in the API provides:
+- Timestamp, Python version, platform info
+- DB stats (notes, tags, skills, goals, embedding failures)
+- Cache stats
+- Recent embedding failures
+- Gamification stats (XP, streak, plant stage)
+
+Access: `http://localhost:8000/debug`
+
 ## Key Files for Reference
 
 | File | Purpose |
@@ -280,3 +310,41 @@ For frontend:
 4. **Vault path must be absolute** — On host machine, not relative
 5. **API must be healthy before other services start** — `depends_on: condition: service_healthy` in docker-compose
 6. **GEMINI_API_KEY required** — AI features disabled without it, but API still works
+
+## Development Mode (Active)
+
+The project is currently in **Development Mode**. This means:
+
+- **Features under development** are hidden by default
+- **Enable dev mode** in Settings (Ajustes) → toggle "Modo Desarrollo" to ON
+- **Pages in development** show "En Construcción" to regular users
+- **With dev mode ON**, these pages show "En Desarrollo" with access to the actual implementation
+
+### Workflow
+
+1. **Default state (Production)**: Users see "En Construcción" on:
+   - Habilidades (/skills)
+   - Grafo de Notas (/graph)
+   - IA (/ai)
+   - Gmail (/gmail)
+   - Contactos (/contactos)
+   - Strava (/strava)
+   - Spotify (/spotify)
+
+2. **Dev Mode ON**: All features are visible and functional
+
+3. **Development approach**:
+   - All new work happens directly (no feature branches needed)
+   - Keep dev mode ON while implementing features
+   - Only push to production when explicitly told to do so
+   - The agent will indicate when work is ready for "Production"
+
+### Checking Dev Mode Status
+
+The frontend stores this in localStorage under `joidy-dev-mode`. To verify:
+- Open browser DevTools → Application → Local Storage
+- Or check the Settings panel toggle
+
+---
+
+**IMPORTANT**: Continue working in Development Mode until instructed otherwise. Do not create separate branches for new features — work directly in the main codebase.

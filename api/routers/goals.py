@@ -1,8 +1,9 @@
+import re
 from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -23,6 +24,7 @@ router = APIRouter(prefix="/goals", tags=["goals"])
 
 
 class GoalCreate(BaseModel):
+    """Schema for creating a new goal."""
     title: str
     description: str = ""
     temporality: GoalTemporality = GoalTemporality.DAILY
@@ -37,6 +39,42 @@ class GoalCreate(BaseModel):
     tag_id: Optional[int] = None
     parent_id: Optional[int] = None
     max_assignment_days: Optional[int] = None
+
+    @field_validator("title")
+    @classmethod
+    def title_not_empty(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("Title cannot be empty")
+        if len(v) > 500:
+            raise ValueError("Title must be 500 characters or fewer")
+        return v
+
+    @field_validator("target_value")
+    @classmethod
+    def target_positive(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError("Target value must be positive")
+        return v
+
+    @field_validator("color")
+    @classmethod
+    def validate_color(cls, v: str) -> str:
+        if not re.match(r'^#[0-9a-fA-F]{3,8}$', v.strip()):
+            return "#c8a96e"
+        return v.strip()
+
+    @field_validator("fail_emoji")
+    @classmethod
+    def validate_emoji(cls, v: str) -> str:
+        return v[:20] if v else "🔴"
+
+    @field_validator("description")
+    @classmethod
+    def validate_description(cls, v: str) -> str:
+        if len(v) > 10_000:
+            raise ValueError("Description must be 10,000 characters or fewer")
+        return v
 
 
 class GoalUpdate(BaseModel):
@@ -168,8 +206,6 @@ def update_goal(goal_id: int, data: GoalUpdate, db: Session = Depends(get_db)):
 
     return _serialize_goal(goal, db)
 
-
-@router.get("/{goal_id}/content")
 
 
 @router.get("/{goal_id}")

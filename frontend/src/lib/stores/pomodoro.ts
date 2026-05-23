@@ -1,5 +1,6 @@
 import { writable, get, derived } from 'svelte/store';
 import { loadUserSettings, patchUserSettings } from '$lib/utils/userSettings';
+import { showNotification } from './gamification';
 
 export type Phase = 'work' | 'break' | 'longBreak';
 
@@ -23,13 +24,22 @@ export const totalSec = derived(
   }
 );
 
+let persistTimeout: ReturnType<typeof setTimeout> | null = null;
+
+function debouncedPersist() {
+  if (persistTimeout) clearTimeout(persistTimeout);
+  persistTimeout = setTimeout(() => {
+    if (pomodoroPrefsReady) persistPomodoroPrefs();
+  }, 500);
+}
+
 workMins.subscribe(val => {
   if (!get(running) && get(phase) === 'work') secondsLeft.set(val * 60);
-  if (pomodoroPrefsReady) persistPomodoroPrefs();
+  debouncedPersist();
 });
 breakMins.subscribe(val => {
   if (!get(running) && get(phase) === 'break') secondsLeft.set(val * 60);
-  if (pomodoroPrefsReady) persistPomodoroPrefs();
+  debouncedPersist();
 });
 
 function clampInt(value: unknown, min: number, max: number, fallback: number): number {
@@ -110,8 +120,10 @@ export function advance() {
     const done = get(pomodorosDone) + 1;
     pomodorosDone.set(done);
     phase.set(done % 4 === 0 ? 'longBreak' : 'break');
+    showNotification('¡Pomodoro completado! Hora de descansar.', 'success');
   } else {
     phase.set('work');
+    showNotification('¡Descanso terminado! A trabajar.', 'info');
   }
 
   secondsLeft.set(get(totalSec));

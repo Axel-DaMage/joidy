@@ -56,7 +56,7 @@
 		flex-direction: column;
 		gap: 12px;
 		height: 100%;
-		min-height: 300px;
+		min-height: 0;
 	}
 
 	.search-box {
@@ -129,9 +129,9 @@
 	}
 
 	.icon-btn.active {
-		background: var(--accent);
-		color: black;
-		border-color: var(--accent);
+		background: rgba(255, 255, 255, 0.15);
+		color: white;
+		border-color: rgba(255, 255, 255, 0.4);
 	}
 
 	.loading-trigger {

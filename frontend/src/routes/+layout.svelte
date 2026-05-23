@@ -4,13 +4,19 @@
   import { onMount } from 'svelte';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
   import SettingsPanel from '$lib/components/SettingsPanel.svelte';
+  import Toast from '$lib/components/Toast.svelte';
   import { api, type Goal, type PersonalStreak } from '$lib/api';
-  import { totalXP, loadStats, pingActivity, globalLevel, nextStageXP } from '$lib/stores/gamification';
+  import { totalXP, loadStats, pingActivity, globalLevel, nextStageXP, showNotification } from '$lib/stores/gamification';
   import { running, secondsLeft, phase } from '$lib/stores/pomodoro';
   import { initPomodoroSettings } from '$lib/stores/pomodoro';
-  import { accentColors, activeIconPack, use24HourClock } from '$lib/stores/settings';
+  import { accentColors, activeIconPack, use24HourClock, initTheme, devMode } from '$lib/stores/settings';
   import { getCachedData, setCachedData } from '$lib/utils/userSettings';
   import { initKeyboardNavigation } from '$lib/utils/keyboardNavigation';
+  import { logger } from '$lib/utils/logger';
+  import { onboarding } from '$lib/stores/onboarding';
+  import TutorialOverlay from '$lib/components/TutorialOverlay.svelte';
+  import { achievements } from '$lib/stores/achievements';
+  import { initConnectionStore } from '$lib/stores/connection';
 
   const navItems = [
     { href: '/',        label: 'Inicio',    icon: 'Home' },
@@ -18,13 +24,19 @@
     { href: '/graph',   label: 'Grafo',     icon: 'Network' },
     { href: '/skills',  label: 'Habilidades', icon: 'Zap' },
     { href: '/goals',   label: 'Objetivos', icon: 'Target' },
-    { href: '/streaks', label: 'Rachas',    icon: 'Flame'  },
+    { href: '/streaks', label: 'Rachas',    icon: 'Flame' },
+    { href: '/ai',      label: 'IA',         icon: 'Brain' },
+    { href: '/gmail',   label: 'Gmail',     icon: 'Mail' },
+    { href: '/contactos', label: 'Contactos', icon: 'Users' },
+    { href: '/strava',  label: 'Strava',    icon: 'Activity' },
+    { href: '/spotify', label: 'Spotify',   icon: 'Music' },
   ];
 
   let settingsOpen = false;
   let now = new Date();
   let pendingTasks = 0;
   let pendingStreaks = 0;
+  let streaksNotified = false;
 
   $: currentTime = now.toLocaleTimeString('es-CL', {
     hour: $use24HourClock ? '2-digit' : 'numeric',
@@ -42,8 +54,20 @@
   onMount(() => {
     accentColors.init();
     activeIconPack.init();
+    initTheme();
     initPomodoroSettings();
     initKeyboardNavigation();
+    onboarding.init();
+    achievements.init();
+    devMode.init();
+    const cleanupConnection = initConnectionStore();
+
+    // Register service worker for PWA
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/service-worker.js').catch((err) => {
+        logger.warn('SW registration failed:', err);
+      });
+    }
 
     const loadFooterStats = async () => {
       const cachedGoals = getCachedData<Goal[]>('goals');
@@ -60,15 +84,21 @@
         pendingTasks = goals.filter((goal) => !goal.is_completed).length;
         setCachedData('goals', goals);
       } catch (e) {
-        console.error('[layout] goals list failed:', e);
+        logger.error('[layout] goals list failed:', e);
       }
 
       try {
         const streaks = await api.personalStreaks.list({ include_archived: false });
-        pendingStreaks = streaks.filter((streak) => !streak.today_checked && !streak.is_archived).length;
+        const newPendingStreaks = streaks.filter((streak) => !streak.today_checked && !streak.is_archived).length;
+        pendingStreaks = newPendingStreaks;
         setCachedData('streaks', streaks);
+        
+        if (newPendingStreaks > 0 && !streaksNotified) {
+          streaksNotified = true;
+          showNotification(`Tienes ${newPendingStreaks} rachas pendientes hoy!`, 'info');
+        }
       } catch (e) {
-        console.error('[layout] personal streaks list failed:', e);
+        logger.error('[layout] personal streaks list failed:', e);
       }
     };
 
@@ -80,20 +110,25 @@
     requestAnimationFrame(() => init());
 
     const handleStreaksUpdated = () => {
-      loadFooterStats().catch((e) => console.error('[layout] footer stats refresh failed:', e));
+      loadFooterStats().catch((e) => logger.error('[layout] footer stats refresh failed:', e));
+    };
+
+    const handleOpenSettings = () => {
+      settingsOpen = true;
     };
 
     const handleWindowFocus = () => {
-      loadFooterStats().catch((e) => console.error('[layout] footer stats refresh failed:', e));
+      loadFooterStats().catch((e) => logger.error('[layout] footer stats refresh failed:', e));
     };
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        loadFooterStats().catch((e) => console.error('[layout] footer stats refresh failed:', e));
+        loadFooterStats().catch((e) => logger.error('[layout] footer stats refresh failed:', e));
       }
     };
 
     window.addEventListener('joidy:streaks-updated', handleStreaksUpdated);
+    window.addEventListener('joidy:open-settings', handleOpenSettings);
     window.addEventListener('focus', handleWindowFocus);
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
@@ -102,13 +137,14 @@
     }, 1000);
 
     const statsInterval = setInterval(() => {
-      loadFooterStats().catch((e) => console.error('[layout] footer stats refresh failed:', e));
+      loadFooterStats().catch((e) => logger.error('[layout] footer stats refresh failed:', e));
     }, 15000);
 
     return () => {
       clearInterval(clockInterval);
       clearInterval(statsInterval);
       window.removeEventListener('joidy:streaks-updated', handleStreaksUpdated);
+      window.removeEventListener('joidy:open-settings', handleOpenSettings);
       window.removeEventListener('focus', handleWindowFocus);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
@@ -122,8 +158,12 @@
     <div style="flex:1;"></div>
     <span class="mono" style="font-size:13px; color: var(--xp); display: flex; align-items: center; gap: 8px;">
       <span>
-        {$totalXP.toLocaleString()} 
-        <span style="font-size:10px; color: var(--text-muted);">/ {$nextStageXP ? $nextStageXP.toLocaleString() : 'MAX'} xp</span>
+        {#if $nextStageXP}
+          {$totalXP.toLocaleString()}
+          <span style="font-size:10px; color: var(--text-muted);">/ {$nextStageXP.toLocaleString()} xp</span>
+        {:else}
+          <span style="font-size:12px; font-weight: 700;">MAX</span>
+        {/if}
       </span>
       <span style="font-size:11px; color: var(--text-primary); background: var(--surface); border: 1px solid var(--border); padding: 2px 6px; border-radius: 4px;">NVL {$globalLevel}</span>
     </span>
@@ -155,7 +195,7 @@
 
   <!-- Status bar -->
   <footer class="app-statusbar">
-    <span style="color: var(--text-muted);">joidy v0.1</span>
+    <span style="color: var(--text-muted); cursor: pointer;" title="Click para notificación de prueba" on:click={() => { showNotification('Notificación de prueba - Info', 'info'); setTimeout(() => showNotification('Notificación de prueba - Success', 'success'), 600); setTimeout(() => showNotification('Notificación de prueba - Level up!', 'level'), 1200); }}>joidy v0.1</span>
 
     <div class="status-live" title="Estado actual">
       <span class="status-pill status-time mono">{currentTime}</span>
@@ -180,6 +220,8 @@
 </div>
 
 <SettingsPanel bind:open={settingsOpen} on:close={() => settingsOpen = false} />
+<Toast />
+<TutorialOverlay />
 
 <style>
   .logo {

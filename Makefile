@@ -282,6 +282,18 @@ start: ## 🚀 Quick start: setup + start all services
 	@echo "$(GREEN)  Web App:$(NC)   http://localhost:3000"
 	@echo "$(GREEN)  API Docs:$(NC)  http://localhost:8000/docs"
 	@echo ""
-	@echo "To view logs:  make logs"
+@echo "To view logs:  make logs"
 	@echo "To stop:       make stop"
 	@echo "────────────────────────────────────────────────────"
+
+backup: ## Create a database backup
+	@mkdir -p data/backups
+	@docker compose exec -T api python /app/scripts/backup.py
+
+restore: ## Restore from a backup file
+	@echo "Available backups:"
+	@ls -la data/backups/ 2>/dev/null || echo "No backups found"
+	@echo ""
+	@echo "Usage: cp data/backups/joidy_YYYYMMDD_HHMMSS.tar.gz /tmp/ && docker compose exec -T api sh -c 'cd /data && tar -xzf /tmp/joidy_*.tar.gz -C .'"
+
+.PHONY: backup restore

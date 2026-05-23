@@ -7,6 +7,7 @@
   import { Settings } from 'lucide-svelte';
   import type { Note } from '$lib/api';
   import DynamicIcon from './DynamicIcon.svelte';
+  import { extractFrontmatter, getFileIcon } from '$lib/utils/fileTree';
 
   export let note: Note;
   export let active = false;
@@ -27,7 +28,12 @@
   function getFileMeta() {
     const key = note.source_path || `note-${note.id}`;
     const meta = $folderMetaStore[key] || {};
-    return { icon: meta.icon || 'File', color: meta.color };
+    const fm = extractFrontmatter(note.content || '');
+    return {
+      icon: meta.icon || fm.icon || getFileIcon(note.title, note.content || ''),
+      color: meta.color || fm.color || undefined,
+      pack: fm.pack || undefined,
+    };
   }
 
   function getMetaKey(): string {
@@ -43,13 +49,15 @@
       note: note
     });
   }
+
+  $: meta = getFileMeta();
 </script>
 
 <!-- svelte-ignore a11y-click-events-have-key-events -->
 <!-- svelte-ignore a11y-no-static-element-interactions -->
 <div class="note-card" class:active on:click={() => dispatch('select', note)}>
   <div class="note-header">
-    <div class="note-icon"><DynamicIcon name={getFileMeta().icon} size={12} color={getFileMeta().color} /></div>
+    <div class="note-icon"><DynamicIcon name={meta.icon} size={12} color={meta.color} pack={meta.pack} /></div>
     <span class="note-title truncate">{note.title}</span>
     <span class="note-date caption">{formatDate(note.created_at)}</span>
     <button type="button" class="note-settings-btn" title="Personalizar" on:click={onCustomize}>

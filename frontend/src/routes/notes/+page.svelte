@@ -7,12 +7,13 @@
   import NoteEditor from '$lib/components/NoteEditor.svelte';
   import NoteCard from '$lib/components/NoteCard.svelte';
   import IconPicker from '$lib/components/IconPicker.svelte';
+  import VirtualList from '$lib/components/VirtualList.svelte';
   import { notes, notesLoading, loadNotes, createNote, updateNote, deleteNote, aiSuggestions, notesLoadedOnce } from '$lib/stores/notes';
-  import { buildTree, flattenTree, type SortMode } from '$lib/utils/fileTree';
+  import { buildTree, flattenTree, extractFrontmatter, getFileIcon, type SortMode } from '$lib/utils/fileTree';
   import { showHiddenFiles, showTrash, folderMetaStore, updateFolderMeta } from '$lib/stores/settings';
   import { loadUserSettings, patchUserSettings } from '$lib/utils/userSettings';
   import { captureSnapshot, getSnapshot } from '$lib/stores/pageSnapshots';
-  import type { Note } from '$lib/api';
+  import { api, type Note } from '$lib/api';
 
   // ── State ────────────────────────────────────────────────────────────────────
   let search = '';
@@ -20,6 +21,9 @@
   let showEditor = false;
   let editingNew = false;
   let viewMode: 'tree' | 'list' = 'tree';
+  let dailySourcePath: string | null = null;
+  let dailyInitialTitle = '';
+  let dailyNotesConfigured = false;
 
   // Folder customization
   let editingFolder: string | null = null;
@@ -147,6 +151,15 @@
     if (notesPrefsReady) persistNotesPrefs();
   }
 
+  function getNoteVisual(note: Note) {
+    const fm = extractFrontmatter(note.content || '');
+    return {
+      icon: fm.icon || getFileIcon(note.title, note.content || ''),
+      color: fm.color || undefined,
+      pack: fm.pack || undefined,
+    };
+  }
+
   // Resizable panel
   const MIN_W = 160;
   const MAX_W = 520;
@@ -264,6 +277,13 @@
   }
 
   onMount(async () => {
+    try {
+      const config = await api.config.get();
+      dailyNotesConfigured = Boolean(config.obsidian_vault_path?.trim() && config.daily_notes_folder?.trim());
+    } catch {
+      dailyNotesConfigured = false;
+    }
+
     const saved = loadUserSettings().notesUi;
     if (saved?.panelWidth !== undefined) {
       panelWidth = Math.max(MIN_W, Math.min(MAX_W, Number(saved.panelWidth)));
@@ -376,6 +396,8 @@
     showEditor = true;
     editingNew = true;
     isMomentary = false;
+    dailySourcePath = null;
+    dailyInitialTitle = '';
     aiSuggestions.set([]);
   }
 
@@ -384,20 +406,52 @@
     showEditor = true;
     editingNew = true;
     isMomentary = true;
+    dailySourcePath = null;
+    dailyInitialTitle = '';
   }
 
-  function openDaily() {
+  function normalizeVaultFolder(path: string): string {
+    return path.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+  }
+
+  function buildDailySourcePath(vaultPath: string, folder: string, fileName: string): string {
+    const cleanVault = vaultPath.replace(/[\\/]+$/, '');
+    const cleanFolder = normalizeVaultFolder(folder);
+    return `${cleanVault}/${cleanFolder}/${fileName}`;
+  }
+
+  function openSettingsForDaily() {
+    window.dispatchEvent(new CustomEvent('joidy:open-settings'));
+  }
+
+  async function openDaily() {
+    if (!dailyNotesConfigured) {
+      openSettingsForDaily();
+      return;
+    }
+
+    const config = await api.config.get();
+
+    const vaultPath = (config.obsidian_vault_path || '').trim();
+    const dailyFolder = (config.daily_notes_folder || '').trim();
+
+    if (!vaultPath || !dailyFolder) return;
+
     const today = new Date().toISOString().split('T')[0];
     selectedNote = null;
     showEditor = true;
     editingNew = true;
     isMomentary = false; // Usually daily notes are real
-    // We would pre-fill title here if NoteEditor allowed it easily via props
+    dailyInitialTitle = today;
+    dailySourcePath = buildDailySourcePath(vaultPath, dailyFolder, `${today}.md`);
+    aiSuggestions.set([]);
   }
 
   function closeEditor() {
     showEditor = false;
     selectedNote = null;
+    dailySourcePath = null;
+    dailyInitialTitle = '';
     goto('/notes');
   }
 
@@ -408,7 +462,8 @@
       return; 
     }
     if (editingNew) {
-      const n = await createNote(title, content, tags);
+      if (dailyInitialTitle && !dailySourcePath) return;
+      const n = await createNote(title, content, tags, dailySourcePath);
       if (n) { selectedNote = n; editingNew = false; }
     } else if (selectedNote) {
       await updateNote(selectedNote.id, { title, content, tags });
@@ -550,6 +605,41 @@
       {:else if viewMode === 'tree'}
         {#if flatNodes.length === 0}
           <div class="empty-msg">{search ? 'Sin resultados.' : 'Sin notas.'}</div>
+        {:else if flatNodes.length > 50}
+          <VirtualList items={flatNodes} itemHeight={26} getKey={(n, i) => n.path ?? i} let:item let:index>
+            {#if item.type === 'folder'}
+              <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+              <div
+                class="tree-row folder-row"
+                style="padding-left: {8 + item.depth * 14}px"
+                on:click={() => toggleFolder(item.path)}
+              >
+                <span class="chevron" class:open={!collapsed.has(item.path)}>
+                  <ChevronRight size={11} />
+                </span>
+                <div class="t-icon"><DynamicIcon name={item.icon} size={13} color={item.color} pack={item.pack} /></div>
+                <span class="t-name folder-name">{item.name}</span>
+                <button class="folder-settings-btn" title="Personalizar carpeta" on:click|stopPropagation={() => openFolderCustomizer(item)}>
+                  <Settings size={10} />
+                </button>
+                <span class="t-count">{item.childCount}</span>
+              </div>
+            {:else}
+              <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+              <div
+                class="tree-row file-row"
+                class:active={item.note?.id === selectedNote?.id}
+                style="padding-left: {20 + item.depth * 14}px"
+                on:click={() => item.note && openNote(item.note)}
+              >
+                <div class="t-icon file-icon"><DynamicIcon name={item.icon} size={11} color={item.color} pack={item.pack} /></div>
+                <span class="t-name file-name">{item.name}</span>
+                <button class="folder-settings-btn" title="Personalizar nota" on:click|stopPropagation={() => openFolderCustomizer({ path: item.note?.source_path || item.path, icon: item.icon, color: item.color, note: item.note })}>
+                  <Settings size={10} />
+                </button>
+              </div>
+            {/if}
+          </VirtualList>
         {:else}
           <div class="tree-wrap">
             {#each flatNodes as node (node.path)}
@@ -592,6 +682,10 @@
       {:else}
         {#if filtered.length === 0}
           <div class="empty-msg">{search ? 'Sin resultados.' : 'Sin notas.'}</div>
+        {:else if filtered.length > 50}
+          <VirtualList items={filtered} itemHeight={52} let:item let:index>
+            <NoteCard note={item} active={selectedNote?.id === item.id} on:select={(e) => openNote(e.detail)} on:customize={(e) => openFolderCustomizer(e.detail)} />
+          </VirtualList>
         {:else}
           {#each filtered as note}
             <NoteCard {note} active={selectedNote?.id === note.id} on:select={(e) => openNote(e.detail)} on:customize={(e) => openFolderCustomizer(e.detail)} />
@@ -666,6 +760,7 @@
         <NoteEditor
           note={editorNote}
           momentary={isMomentary}
+          initialTitle={dailyInitialTitle}
           {hasPrev}
           {hasNext}
           on:save={handleSave}
@@ -694,8 +789,11 @@
               <button class="dash-btn primary-dash-btn" on:click={openNew}>
                 <FileEdit size={16} /> Crear nota nueva
               </button>
-              <button class="dash-btn secondary-dash-btn" on:click={openDaily}>
-                <DynamicIcon name="Calendar" size={16} /> Nota Diaria
+              <button class={`dash-btn secondary-dash-btn daily-note-btn ${dailyNotesConfigured ? '' : 'daily-note-muted'}`} on:click={openDaily}>
+                <span class="daily-note-main">
+                  <DynamicIcon name="Calendar" size={16} /> Nota Diaria
+                </span>
+                <span class="daily-note-hint">Configurar ruta de nota diaria</span>
               </button>
               <button class="dash-btn secondary-dash-btn momentary-btn" on:click={openMomentary}>
                 <Plus size={16} /> Nota Momentánea
@@ -706,8 +804,9 @@
             <div class="dash-widget-title"><DynamicIcon name="History" size={13}/> Recientes</div>
             <div class="recent-list">
               {#each $notes.slice(0, 3) as note}
+                {@const vis = getNoteVisual(note)}
                 <button class="recent-item" on:click={() => openNote(note)}>
-                  <DynamicIcon name="File" size={12} color="var(--text-disabled)" />
+                  <DynamicIcon name={vis.icon} size={12} color={vis.color || 'var(--text-disabled)'} pack={vis.pack} />
                   <span class="recent-name" use:autoScrollTitle={note.title}>
                     <span class="recent-name-text">{note.title}</span>
                   </span>
@@ -1028,6 +1127,48 @@
     color: var(--text-primary);
   }
   .secondary-dash-btn:hover { background: color-mix(in srgb, var(--xp-2) 28%, transparent); border-color: var(--xp-2); }
+  .daily-note-btn {
+    height: auto;
+    min-height: 42px;
+    padding: 10px 20px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+  .daily-note-main {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .daily-note-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    background: color-mix(in srgb, var(--xp-2) 10%, transparent);
+    border-color: color-mix(in srgb, var(--xp-2) 25%, transparent);
+    color: var(--text-disabled);
+    transform: none;
+  }
+  .daily-note-btn:disabled:hover {
+    background: color-mix(in srgb, var(--xp-2) 10%, transparent);
+    border-color: color-mix(in srgb, var(--xp-2) 25%, transparent);
+    transform: none;
+  }
+  .daily-note-muted {
+    opacity: 0.45;
+    cursor: pointer;
+    background: color-mix(in srgb, var(--xp-2) 10%, transparent);
+    border-color: color-mix(in srgb, var(--xp-2) 25%, transparent);
+    color: var(--text-disabled);
+  }
+  .daily-note-muted:hover {
+    background: color-mix(in srgb, var(--xp-2) 18%, transparent);
+    border-color: color-mix(in srgb, var(--xp-2) 35%, transparent);
+  }
+  .daily-note-hint {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+  }
   
   .momentary-btn {
     background: color-mix(in srgb, var(--xp-3) 14%, transparent);
