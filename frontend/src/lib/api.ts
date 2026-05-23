@@ -312,4 +312,9 @@ github: {
       days: { date: string; notes_created: number; xp_events: number }[];
     }>('GET', `/stats/activity?days=${days}`),
   },
+  export: {
+    markdownUrl: () => `${BASE}/export/notes/markdown`,
+    htmlUrl: () => `${BASE}/export/notes/html`,
+    zipUrl: () => `${BASE}/export/notes/zip`
+  },
 };

@@ -9,7 +9,7 @@
 
 ### 🔴 Alta Prioridad
 - [x] **Bug en Health Check de Caché (Backend)**: Corregido en `api/services/response_cache.py`. Se añadió `"initialized": True` a las estadísticas del caché para evitar el estado "degraded" falso en `/health/ready`.
-- [ ] **Menú de Exportación en Interfaz (Frontend)**: Agregar controles en la barra de herramientas de `NoteEditor.svelte` y en la vista de notas para invocar los endpoints de exportación existentes en `/export/notes/markdown`, `/export/notes/html` y `/export/notes/zip`.
+- [x] **Menú de Exportación en Interfaz (Frontend)**: Agregar controles en la barra de herramientas de `NoteEditor.svelte` y en la vista de notas para invocar los endpoints de exportación existentes en `/export/notes/markdown`, `/export/notes/html` y `/export/notes/zip`.
 - [ ] **Soporte de WebSocket End-to-End (Real-time)**: Conectar el cliente Svelte al canal `/ws` implementado en el backend para recibir notificaciones reactivas sin recarga. Además, **integrar las llamadas de difusión en el backend** (como `notify_note_created`, `notify_xp_gained`, `notify_streak_updated` definidos en `api/routers/websocket.py`) en sus respectivos servicios de mutación (`note_service.py`, `gamification_engine.py`), ya que actualmente están huérfanos y no se disparan.
 
 ### 🟡 Media Prioridad

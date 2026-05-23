@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher, onDestroy } from 'svelte';
-  import { Eye, EyeOff, Save, Trash2, X, Settings, Search, Maximize, ChevronLeft, ChevronRight } from 'lucide-svelte';
+  import { Eye, EyeOff, Save, Trash2, X, Settings, Search, Maximize, ChevronLeft, ChevronRight, Download } from 'lucide-svelte';
   import * as L from 'lucide-svelte';
   import DynamicIcon from './DynamicIcon.svelte';
   import IconPicker from './IconPicker.svelte';
@@ -12,6 +12,8 @@
   import { api, type Note } from '$lib/api';
   import { goto } from '$app/navigation';
   import { extractFrontmatter, getFileIcon } from '$lib/utils/fileTree';
+  import { downloadMarkdown, downloadHTML, copyNoteAsMarkdown } from '$lib/utils/export';
+  import { showNotification } from '$lib/stores/gamification';
 
   // Configure marked once — GFM enables tables, strikethrough, autolinks
   marked.use({ gfm: true, breaks: true });
@@ -66,6 +68,7 @@
   
   let showIconSettings = false;
   let customColor = '#ffffff';
+  let showExportMenu = false;
 
   $: {
     const fm = extractFrontmatter(content || note?.content || '');
@@ -451,6 +454,42 @@
       </button>
 
       {#if note}
+        <div style="position: relative; display: inline-block;">
+          <button
+            class="toolbar-btn"
+            class:active={showExportMenu}
+            on:click={() => showExportMenu = !showExportMenu}
+            title="Exportar nota"
+          >
+            <Download size={14} />
+            <span>Exportar</span>
+          </button>
+          
+          {#if showExportMenu}
+            <!-- Backdrop to close dropdown on outside click -->
+            <!-- svelte-ignore a11y-no-static-element-interactions -->
+            <div 
+              style="position: fixed; inset: 0; z-index: 998; cursor: default;" 
+              on:click={() => showExportMenu = false}
+            ></div>
+            
+            <div class="export-dropdown-menu">
+              <button class="dropdown-item" on:click={() => { downloadMarkdown(note); showExportMenu = false; }}>
+                <span class="dropdown-icon">⬡</span>
+                <span>Descargar Markdown</span>
+              </button>
+              <button class="dropdown-item" on:click={() => { downloadHTML(note); showExportMenu = false; }}>
+                <span class="dropdown-icon">◆</span>
+                <span>Descargar HTML</span>
+              </button>
+              <button class="dropdown-item" on:click={async () => { if (note) { const ok = await copyNoteAsMarkdown(note); if (ok) showNotification('¡Nota copiada al portapapeles!', 'success'); } showExportMenu = false; }}>
+                <span class="dropdown-icon">⚡</span>
+                <span>Copiar Markdown</span>
+              </button>
+            </div>
+          {/if}
+        </div>
+
         <button class="toolbar-btn danger-btn" on:click={() => dispatch('delete')} title="Eliminar nota">
           <Trash2 size={14} />
         </button>
@@ -1046,4 +1085,47 @@
   /* ── Links ── */
   .preview :global(a) { color: var(--xp); text-decoration: none; border-bottom: 1px solid color-mix(in srgb, var(--xp) 35%, transparent); }
   .preview :global(a:hover) { border-bottom-color: var(--xp); }
+
+  /* ── Export Dropdown ── */
+  .export-dropdown-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    width: 180px;
+    background: var(--surface);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: 4px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+    z-index: 999;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 6px 10px;
+    background: transparent;
+    border: none;
+    border-radius: var(--r-sm, 4px);
+    color: var(--text-secondary);
+    font-size: 11px;
+    text-align: left;
+    cursor: pointer;
+    transition: all var(--t-fast);
+  }
+  .dropdown-item:hover {
+    background: var(--elevated);
+    color: var(--text-primary);
+  }
+  .dropdown-icon {
+    font-size: 12px;
+    color: var(--xp);
+    width: 14px;
+    text-align: center;
+  }
 </style>
