@@ -1,4 +1,6 @@
 from abc import ABC, abstractmethod
+import json
+import re
 from typing import Optional
 
 
@@ -27,7 +29,6 @@ class BaseLLMClient(ABC):
         """Generate text response."""
         pass
 
-    @abstractmethod
     async def classify(
         self,
         content: str,
@@ -35,10 +36,34 @@ class BaseLLMClient(ABC):
         classify_prompt: str,
     ) -> list[dict]:
         """
-        Classify content and return tag suggestions.
-        Returns: [{"tag": str, "confidence": float, "is_new": bool}, ...]
+        Classify content and return tag suggestions by delegating to generate() and parse_classification().
         """
-        pass
+        prompt = classify_prompt.format(
+            content=content[:2000],
+            existing_tags=", ".join(existing_tags) if existing_tags else "ninguno aún"
+        )
+        result = await self.generate(prompt, temperature=0.2, max_tokens=256)
+        return parse_classification(result, existing_tags)
+
+
+def parse_classification(text: str, existing_tags: list[str]) -> list[dict]:
+    """Helper to parse JSON array of tag suggestions from LLM text response."""
+    match = re.search(r"\[.*\]", text, re.DOTALL)
+    if not match:
+        return []
+    try:
+        suggestions = json.loads(match.group())
+        result = []
+        for s in suggestions:
+            if isinstance(s, dict) and "tag" in s and "confidence" in s:
+                result.append({
+                    "tag": str(s["tag"]).lower().strip(),
+                    "confidence": float(s.get("confidence", 0.5)),
+                    "is_new": s.get("is_new", s["tag"] not in existing_tags),
+                })
+        return result
+    except (json.JSONDecodeError, KeyError, ValueError):
+        return []
 
 
 class EmbeddingClient(ABC):

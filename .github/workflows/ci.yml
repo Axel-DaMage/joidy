@@ -25,11 +25,11 @@ jobs:
           pip install -r requirements.txt
 
       - name: Check Python syntax
-        run: python -m py_compile $(find . -name "*.py" -type f | head -20)
+        run: python -m compileall api ai-service worker
 
       - name: Run tests
         working-directory: api
-        run: python -m pytest tests/ -v --tb=short 2>/dev/null || true
+        run: python -m unittest discover -s tests
 
   frontend-check:
     name: Frontend Typecheck

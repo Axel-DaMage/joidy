@@ -120,8 +120,20 @@ migrate: ## Run Alembic migrations up to head in api container
 db-health: ## Verify migration head and required core tables
 	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm api sh -c "cd /app && alembic -c /app/alembic.ini current && python scripts/verify_db_health.py"
 
-test-api: ## Run API unit tests for remediation scenarios
-	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm api sh -c "PYTHONPATH=/app python -m unittest tests.test_embedding_retry tests.test_gamification_config tests.test_tag_graph_service"
+test-api: ## Run all API unit tests via unittest discover
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm api sh -c "PYTHONPATH=/app python -m unittest discover -s tests"
+
+test-frontend: ## Run frontend typechecking (svelte-check) inside Docker
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm frontend npm run check
+
+test: test-api test-frontend ## Run all test suites (API + Frontend)
+
+lint-api: ## Check syntax of all Python services (api, ai-service, worker) inside Docker
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm api python -m compileall -q /app
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm ai-service python -m compileall -q /app
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm worker python -m compileall -q /app
+
+lint: lint-api ## Run all linters and code checkers
 
 fix-permissions: ## Fix project permissions (run once with sudo make fix-permissions)
 	sudo bash scripts/fix-permissions.sh

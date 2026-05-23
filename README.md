@@ -149,6 +149,34 @@ make db-health
 
 ---
 
+## 🎖️ Calidad de Código
+
+El proyecto Joidy mantiene una arquitectura robusta de microservicios. A continuación se presenta un análisis honesto y riguroso de la calidad del código, categorizado por áreas utilizando el sistema de grados (SSS, S, A, B, C, F):
+
+### 🛡️ Seguridad — Grado: C (Mejorable)
+*   **Puntos Fuertes:** Implementación de utilidades globales de sanitización XSS (`sanitizer.py`) en notas y middleware de Rate Limiting global limitado a 60 req/min.
+*   **Debilidades Críticas:** **El sistema de autenticación JWT (`auth_service.py` / `routers/auth.py`) está completamente implementado pero no está integrado ni enforced en ningún endpoint de la API.** Cualquiera puede interactuar con el backend sin credenciales. Adicionalmente, CORS está configurado con comodín (`*`) por defecto en entornos que no sean estrictamente de producción.
+
+### 🌐 DevOps e Infraestructura — Grado: S (Excelente)
+*   **Puntos Fuertes:** Orquestación impecable mediante Docker Compose con perfiles de desarrollo independientes. Inicialización interactiva mediante `Makefile` y `start.ps1` que detectan variables de entorno faltantes de forma amigable. Scripts automatizados para la realización de copias de seguridad de base de datos (`backup.py`) y endpoints integrados de salud y métricas `/health/ready` cruzados listos para producción.
+
+### 🧠 Servicio de IA (AI & RAG) — Grado: S (Excelente)
+*   **Puntos Fuertes:** Estructura desacoplada y escalable bajo un patrón Factory (`ClientFactory`) con soporte nativo para 6 proveedores (Gemini, OpenAI, Anthropic, Cohere, Ollama, OpenRouter). Robustez extrema con reintentos automáticos ante rate-limits y cola de fallos con backoff exponencial. Búsqueda semántica (RAG) integrada con base de datos vectorial de alto rendimiento local (`sqlite-vec`).
+*   **Optimización Reciente:** Se ha eliminado código heredado obsoleto (`gemini_client.py`) y se ha unificado la lógica de clasificación y parseo de JSON en la clase abstracta base `BaseLLMClient`, eliminando redundancia en todos los conectores.
+
+### ⚙️ Backend (API y Lógica) — Grado: A (Muy Alto)
+*   **Puntos Fuertes:** Arquitectura orientada a servicios limpia. Los controladores (`routers`) únicamente parsean esquemas Pydantic y delegan el flujo de negocio completo a la capa de servicios (`services/`). Motor de gamificación altamente estructurado que procesa eventos de XP, cálculo de rachas diarias y lógica avanzada de fallas (Rollover y Snowball) en los objetivos.
+*   **Debilidades:** Duplicidad menor en validaciones personalizadas de esquemas Pydantic y la persistencia actual en SQLite (lo que requiere una futura migración a PostgreSQL/pgvector para escenarios distribuidos reales).
+
+### 🎨 Frontend (Interfaz y UX) — Grado: A (Muy Alto)
+*   **Puntos Fuertes:** Interfaz web premium construida con SvelteKit y TypeScript. Estructuración consistente de stores reactivas globales, transiciones fluidas de color (Dark/Light mode manual persistente) y componentes complejos e independientes de alta usabilidad (Pomodoro, StreakHeatmap, widgets de tiempo, tutorial interactivo con onboarding).
+*   **Debilidades:** Requiere culminar la migración progresiva del estado reactivo clásico de Svelte 4 a runas nativas de Svelte 5 (`$state`, `$effect`) en los widgets más pesados, e implementar control de foco ("focus trapping") en modales avanzados.
+
+### 🔄 Worker (Procesos en Background) — Grado: A (Muy Alto)
+*   **Puntos Fuertes:** Monitoreo y watcher asíncrono debilitado en 2 segundos (`watchfiles`) para prevenir lecturas parciales durante la edición interactiva en Obsidian. Flush reactivo de la cola de eventos y generación automatizada del resumen del diario directamente en formato Markdown en el vault del usuario.
+
+---
+
 ## Licencia
 
 MIT
