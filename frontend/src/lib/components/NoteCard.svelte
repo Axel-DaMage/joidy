@@ -11,6 +11,7 @@
 
   export let note: Note;
   export let active = false;
+  export let showTags = true;
 
   const dispatch = createEventDispatcher<{ select: Note; delete: number; customize: { path: string; icon: string | null; color: string | null; note?: Note } }>();
 
@@ -64,7 +65,7 @@
       <Settings size={10} />
     </button>
   </div>
-  {#if note.tags.length > 0}
+  {#if showTags && note.tags.length > 0}
     <div class="note-tags">
       {#each note.tags.slice(0, 4) as tag}
         <TagChip {tag} on:click={(e) => {

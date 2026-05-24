@@ -25,7 +25,6 @@ from services.note_service import (
 
 router = APIRouter(prefix="/notes", tags=["notes"])
 
-from routers.websocket import notify_note_created, notify_note_updated, notify_xp_gained, notify_streak_updated
 
 ALLOWED_SOURCES = {"joidy", "obsidian", "api", "import"}
 
@@ -199,13 +198,6 @@ def create_note(
         rebuild_derived_data=not _is_truthy_header(x_bulk_import),
     )
     background_tasks.add_task(trigger_embedding, note.id, note.content)
-    
-    # Broadcast WebSocket notifications in the background
-    background_tasks.add_task(notify_note_created, note.id, note.title)
-    if gami and gami.xp_awarded > 0:
-        background_tasks.add_task(notify_xp_gained, gami.xp_awarded, gami.total_xp)
-    if gami and gami.streak_changed:
-        background_tasks.add_task(notify_streak_updated, gami.current_streak)
 
     return {**note_to_response(note), "gamification": vars(gami)}
 
@@ -231,13 +223,6 @@ def update_note(
     if note is None or gami is None:
         raise HTTPException(status_code=404, detail="Note not found")
     background_tasks.add_task(trigger_embedding, note.id, note.content)
-    
-    # Broadcast WebSocket notifications in the background
-    background_tasks.add_task(notify_note_updated, note.id, note.title)
-    if gami and gami.xp_awarded > 0:
-        background_tasks.add_task(notify_xp_gained, gami.xp_awarded, gami.total_xp)
-    if gami and gami.streak_changed:
-        background_tasks.add_task(notify_streak_updated, gami.current_streak)
 
     return {**note_to_response(note), "gamification": vars(gami)}
 
@@ -265,13 +250,6 @@ def accept_ai_tag(
     tag, gami = accept_ai_tag_service(db, note_id, tag_name)
     if tag is None or gami is None:
         raise HTTPException(status_code=404, detail="Note not found")
-    
-    # Broadcast WebSocket notifications in the background
-    if gami and gami.xp_awarded > 0:
-        background_tasks.add_task(notify_xp_gained, gami.xp_awarded, gami.total_xp)
-    if gami and gami.streak_changed:
-        background_tasks.add_task(notify_streak_updated, gami.current_streak)
-
     return {"tag": tag_name, "gamification": vars(gami)}
 
 

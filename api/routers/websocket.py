@@ -6,6 +6,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from typing import Set
 import json
 import logging
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -99,3 +100,43 @@ async def notify_streak_updated(streak: int):
         "type": "streak_updated",
         "streak": streak,
     })
+
+
+def broadcast_note_created(note_id: int, title: str):
+    """Synchronous trigger to broadcast note creation."""
+    try:
+        loop = asyncio.get_running_loop()
+        if loop.is_running():
+            loop.create_task(notify_note_created(note_id, title))
+    except RuntimeError:
+        pass
+
+
+def broadcast_note_updated(note_id: int, title: str):
+    """Synchronous trigger to broadcast note update."""
+    try:
+        loop = asyncio.get_running_loop()
+        if loop.is_running():
+            loop.create_task(notify_note_updated(note_id, title))
+    except RuntimeError:
+        pass
+
+
+def broadcast_xp_gained(xp: int, total_xp: int):
+    """Synchronous trigger to broadcast XP gain."""
+    try:
+        loop = asyncio.get_running_loop()
+        if loop.is_running():
+            loop.create_task(notify_xp_gained(xp, total_xp))
+    except RuntimeError:
+        pass
+
+
+def broadcast_streak_updated(streak: int):
+    """Synchronous trigger to broadcast streak update."""
+    try:
+        loop = asyncio.get_running_loop()
+        if loop.is_running():
+            loop.create_task(notify_streak_updated(streak))
+    except RuntimeError:
+        pass

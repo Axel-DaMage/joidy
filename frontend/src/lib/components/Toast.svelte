@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { notifications, dismissNotification } from '$lib/stores/gamification';
+  import { notifications, dismissNotification } from '$lib/stores/notifications';
   import { fly } from 'svelte/transition';
   import DynamicIcon from './DynamicIcon.svelte';
 </script>
@@ -13,7 +13,7 @@
         on:click={() => dismissNotification(notif.id)}
       >
         <DynamicIcon 
-          name={notif.type === 'success' ? 'CheckCircle' : notif.type === 'level' ? 'TrendingUp' : 'Info'} 
+          name={notif.type === 'success' ? 'CheckCircle' : notif.type === 'level' ? 'TrendingUp' : notif.type === 'error' ? 'AlertTriangle' : 'Info'} 
           size={16} 
         />
         <span class="toast-message">{notif.message}</span>
@@ -78,5 +78,13 @@
   }
   .toast-level :global(svg) {
     color: var(--xp, #f59e0b);
+  }
+
+  .toast-error {
+    border-color: var(--error, #ef4444);
+    background: color-mix(in srgb, var(--error, #ef4444) 10%, var(--elevated, #1a1a1a));
+  }
+  .toast-error :global(svg) {
+    color: var(--error, #ef4444);
   }
 </style>

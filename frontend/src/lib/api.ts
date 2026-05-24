@@ -2,23 +2,42 @@
 // (Docker internal network). This prevents network failures when SvelteKit
 // server-renders pages inside the container where localhost:PORT isn't mapped.
 import { browser } from '$app/environment';
+import { showNotification } from './stores/notifications';
+import { session } from './stores/session';
 
 const BASE = browser
   ? ((import.meta.env.VITE_API_URL as string) || 'http://localhost:8000')
   : (import.meta.env.VITE_INTERNAL_API_URL as string || import.meta.env.VITE_API_URL as string || 'http://localhost:8000');
 
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    method,
-    headers: body ? { 'Content-Type': 'application/json' } : {},
-    body: body ? JSON.stringify(body) : undefined
-  });
-  if (!res.ok) {
-    const err = await res.text().catch(() => res.statusText);
-    throw new Error(`API ${method} ${path} → ${res.status}: ${err}`);
+  try {
+    const res = await fetch(`${BASE}${path}`, {
+      method,
+      headers: body ? { 'Content-Type': 'application/json' } : {},
+      body: body ? JSON.stringify(body) : undefined
+    });
+
+    if (res.status === 401) {
+      session.logout();
+      showNotification('Sesión expirada. Por favor, vuelve a iniciar sesión.', 'error');
+      throw new Error(`API ${method} ${path} → 401 Unauthorized`);
+    }
+
+    if (!res.ok) {
+      const err = await res.text().catch(() => res.statusText);
+      const errorMsg = err || res.statusText || 'Error desconocido';
+      showNotification(`Error del servidor (${res.status}): ${errorMsg}`, 'error');
+      throw new Error(`API ${method} ${path} → ${res.status}: ${err}`);
+    }
+
+    if (res.status === 204) return undefined as T;
+    return res.json();
+  } catch (error: any) {
+    if (error.name === 'TypeError' || error.message.includes('Failed to fetch') || error.message.includes('fetch failed')) {
+      showNotification('Error de red. No se pudo conectar con el servidor.', 'error');
+    }
+    throw error;
   }
-  if (res.status === 204) return undefined as T;
-  return res.json();
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────

@@ -94,18 +94,17 @@ def _cached_tag_graph(db: Session):
     edges = []
 
     # Tags as nodes (negative IDs to distinguish from notes)
-    tag_node_offset = 1
     for tag, note_count in _tags_with_note_counts(db):
         nodes.append({
-            "id": tag.id,
+            "id": -tag.id,
             "type": "tag",
             "name": tag.name,
             "note_count": note_count,
-            "parent_id": tag.parent_id,
+            "parent_id": -tag.parent_id if tag.parent_id else None,
             "group": "tag",
         })
         if tag.parent_id:
-            edges.append({"source": tag.parent_id, "target": tag.id, "type": "hierarchy", "weight": 1})
+            edges.append({"source": -tag.parent_id, "target": -tag.id, "type": "hierarchy", "weight": 1})
 
     # Notes as nodes (positive IDs)
     notes = db.query(Note).all()
@@ -134,7 +133,7 @@ def _cached_tag_graph(db: Session):
     for nt in note_tag_relations:
         edges.append({
             "source": nt.note_id,
-            "target": nt.tag_id,
+            "target": -nt.tag_id,
             "type": "tagged",
             "weight": 1,
         })
@@ -143,8 +142,8 @@ def _cached_tag_graph(db: Session):
     cooccurrence_edges = db.query(TagCooccurrence).all()
     for edge in cooccurrence_edges:
         edges.append({
-            "source": edge.tag_a_id,
-            "target": edge.tag_b_id,
+            "source": -edge.tag_a_id,
+            "target": -edge.tag_b_id,
             "type": "cooccurrence",
             "weight": edge.weight,
         })

@@ -46,17 +46,21 @@
     if (filterType === 'tags') filteredNodes = nodes.filter(n => getNodeType(n) === 'tag');
 
     let nodeIds = new Set(filteredNodes.map(n => n.id));
-    let filteredEdges = edges.filter(e => nodeIds.has(e.source as number) && nodeIds.has(e.target as number));
+    const getEdgeSourceId = (e: any) => typeof e.source === 'object' ? e.source.id : e.source;
+    const getEdgeTargetId = (e: any) => typeof e.target === 'object' ? e.target.id : e.target;
+    let filteredEdges = edges.filter(e => nodeIds.has(getEdgeSourceId(e)) && nodeIds.has(getEdgeTargetId(e)));
 
     if (!showOrphans) {
       const degree = new Map<number, number>();
       filteredEdges.forEach((e) => {
-        degree.set(e.source as number, (degree.get(e.source as number) ?? 0) + 1);
-        degree.set(e.target as number, (degree.get(e.target as number) ?? 0) + 1);
+        const s = getEdgeSourceId(e);
+        const t = getEdgeTargetId(e);
+        degree.set(s, (degree.get(s) ?? 0) + 1);
+        degree.set(t, (degree.get(t) ?? 0) + 1);
       });
       filteredNodes = filteredNodes.filter(n => (degree.get(n.id) ?? 0) > 0);
       nodeIds = new Set(filteredNodes.map(n => n.id));
-      filteredEdges = filteredEdges.filter(e => nodeIds.has(e.source as number) && nodeIds.has(e.target as number));
+      filteredEdges = filteredEdges.filter(e => nodeIds.has(getEdgeSourceId(e)) && nodeIds.has(getEdgeTargetId(e)));
     }
 
     graph.graphData({ nodes: filteredNodes, links: filteredEdges });
@@ -188,6 +192,14 @@
       .onNodeClick((node: GraphNode) => {
         selectedTag.set(node.id);
       })
+      .onNodeDblClick((node: GraphNode) => {
+        const nodeType = getNodeType(node);
+        if (nodeType === 'note') {
+          window.location.href = `/notes?q=${encodeURIComponent(node.title || '')}`;
+        } else if (nodeType === 'tag') {
+          window.location.href = `/notes?tag=${encodeURIComponent(node.name || '')}`;
+        }
+      })
       .onNodeHover((node: GraphNode | null) => {
         hoveredNode = node;
       });
@@ -234,7 +246,7 @@
           type="search"
           placeholder="Buscar nodos..."
           bind:value={searchQuery}
-          on:input={() => { applySearchFilter(); }}
+          on:input={() => { applyStyling(); }}
         />
         {#if searchQuery.trim().length > 0}
           <button class="search-clear" on:click={clearHighlights} aria-label="Limpiar busqueda">×</button>

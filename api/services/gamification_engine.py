@@ -308,6 +308,16 @@ def process_event(
     db.refresh(stats)
     clear_api_caches()
 
+    # Centralized WebSocket broadcasts for gamification
+    try:
+        from routers.websocket import broadcast_xp_gained, broadcast_streak_updated
+        if xp > 0:
+            broadcast_xp_gained(xp, stats.total_xp)
+        if streak_changed:
+            broadcast_streak_updated(new_streak)
+    except Exception as e:
+        logger.error(f"Failed to broadcast gamification event: {e}")
+
     return GamificationResult(
         xp_awarded=xp,
         total_xp=stats.total_xp,

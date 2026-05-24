@@ -22,7 +22,7 @@ from services.joidy_vault_writer import (
 
 router = APIRouter(prefix="/goals", tags=["goals"])
 
-from routers.websocket import notify_xp_gained, notify_streak_updated
+
 
 
 class GoalCreate(BaseModel):
@@ -307,12 +307,6 @@ def complete_goal(
     goal.current_value = get_goal_progress(goal, db)
     gami = process_event(db, "goal_completed", {"goal_id": goal_id, "title": goal.title})
     db.commit()
-
-    # Broadcast WebSocket notifications in the background
-    if gami and gami.xp_awarded > 0:
-        background_tasks.add_task(notify_xp_gained, gami.xp_awarded, gami.total_xp)
-    if gami and gami.streak_changed:
-        background_tasks.add_task(notify_streak_updated, gami.current_streak)
 
     return {"goal": _serialize_goal(goal, db), "gamification": vars(gami)}
 

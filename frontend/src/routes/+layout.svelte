@@ -2,6 +2,8 @@
   import '../app.css';
   import { page } from '$app/stores';
   import { onMount } from 'svelte';
+  import { fade } from 'svelte/transition';
+  import { isOnline, wasOffline } from '$lib/stores/connection';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
   import SettingsPanel from '$lib/components/SettingsPanel.svelte';
   import Toast from '$lib/components/Toast.svelte';
@@ -207,6 +209,17 @@
       if (wsReconnectTimeout) clearTimeout(wsReconnectTimeout);
     };
   });
+  let showConnectedPill = false;
+  let pillTimeout: any = null;
+
+  $: if ($isOnline && $wasOffline) {
+    showConnectedPill = true;
+    wasOffline.set(false);
+    if (pillTimeout) clearTimeout(pillTimeout);
+    pillTimeout = setTimeout(() => {
+      showConnectedPill = false;
+    }, 4000);
+  }
 </script>
 
 <div class="app-shell">
@@ -214,6 +227,19 @@
   <header class="app-header">
     <span class="logo mono">JOIDY</span>
     <div style="flex:1;"></div>
+
+    <!-- Connectivity Indicator -->
+    {#if !$isOnline}
+      <div class="connectivity-pill offline" transition:fade={{ duration: 150 }}>
+        <span class="pulse-dot red"></span>
+        <span>Sin conexión</span>
+      </div>
+    {:else if showConnectedPill}
+      <div class="connectivity-pill online" transition:fade={{ duration: 150 }}>
+        <span class="pulse-dot green"></span>
+        <span>Conectado</span>
+      </div>
+    {/if}
     <span class="mono" style="font-size:13px; color: var(--xp); display: flex; align-items: center; gap: 8px;">
       <span>
         {#if $nextStageXP}
@@ -372,5 +398,58 @@
   @keyframes p-beat {
     0%, 100% { opacity: 0.3; transform: scale(0.9); }
     50%      { opacity: 1; transform: scale(1.1); box-shadow: 0 0 5px currentColor; }
+  }
+
+  /* Connectivity Pill & Pulse Dot Styles */
+  .connectivity-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 4px 10px;
+    border-radius: 99px;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    transition: all 0.2s ease-in-out;
+    margin-right: 12px;
+  }
+  .connectivity-pill.offline {
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: var(--error, #ef4444);
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.1);
+  }
+  .connectivity-pill.online {
+    background: rgba(34, 197, 94, 0.1);
+    border: 1px solid rgba(34, 197, 94, 0.3);
+    color: var(--success, #22c55e);
+    box-shadow: 0 0 10px rgba(34, 197, 94, 0.1);
+  }
+  
+  .pulse-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+  .pulse-dot.red {
+    background-color: var(--error, #ef4444);
+    animation: red-pulse 1.5s infinite;
+  }
+  .pulse-dot.green {
+    background-color: var(--success, #22c55e);
+    animation: green-pulse 1.5s infinite;
+  }
+  
+  @keyframes red-pulse {
+    0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+    70% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+  }
+  @keyframes green-pulse {
+    0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4); }
+    70% { box-shadow: 0 0 0 6px rgba(34, 197, 94, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
   }
 </style>

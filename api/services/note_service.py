@@ -114,6 +114,12 @@ def create_note(
         write_to_vault(note)
     clear_api_caches()
 
+    try:
+        from routers.websocket import broadcast_note_created
+        broadcast_note_created(note.id, note.title)
+    except Exception:
+        pass
+
     return note, gami
 
 
@@ -176,6 +182,12 @@ def update_note(
     if content is not None:
         write_to_vault(note)
     clear_api_caches()
+
+    try:
+        from routers.websocket import broadcast_note_updated
+        broadcast_note_updated(note.id, note.title)
+    except Exception:
+        pass
 
     return note, gami
 

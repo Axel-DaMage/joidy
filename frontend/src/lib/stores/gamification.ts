@@ -112,19 +112,7 @@ export function showXPGain(amount: number, x?: number, y?: number): void {
   }, 2200);
 }
 
-export const notifications = writable<{ id: string; message: string; type: 'info' | 'success' | 'level' }[]>([]);
-
-export function showNotification(message: string, type: 'info' | 'success' | 'level' = 'info'): void {
-  const id = `notif-${Date.now()}`;
-  notifications.update(ns => [...ns, { id, message, type }]);
-  setTimeout(() => {
-    notifications.update(ns => ns.filter(n => n.id !== id));
-  }, 4000);
-}
-
-export function dismissNotification(id: string): void {
-  notifications.update(ns => ns.filter(n => n.id !== id));
-}
+export { notifications, showNotification, dismissNotification } from './notifications';
 
 export function applyGamificationResult(result: GamificationResultType): void {
   const prevStage = get(plantStage);

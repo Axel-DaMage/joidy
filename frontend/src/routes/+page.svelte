@@ -325,11 +325,7 @@
               {/each}
             </div>
 
-            {#if isWilted}
-              <div class="wilt-notice">
-                <span style="font-size:11px; color: var(--text-muted);">Tu planta tiene sed. Escribe algo hoy.</span>
-              </div>
-            {/if}
+
           </div>
 
         {:else if wid === 'stats-xp'}
@@ -377,7 +373,7 @@
               <div class="empty-state"><span class="caption">No hay notas aún.</span></div>
             {:else}
               {#each recentNotes as note}
-                <NoteCard {note} on:select={() => goto(`/notes?id=${note.id}`)} />
+                <NoteCard {note} showTags={false} on:select={() => goto(`/notes?id=${note.id}`)} />
               {/each}
             {/if}
           </div>
@@ -424,7 +420,7 @@
               <div class="empty-state"><span class="caption">No hay notas aún.</span></div>
             {:else}
               {#each recentNotes as note}
-                <NoteCard {note} on:select={() => goto(`/notes?id=${note.id}`)} />
+                <NoteCard {note} showTags={false} on:select={() => goto(`/notes?id=${note.id}`)} />
               {/each}
             {/if}
           </div>

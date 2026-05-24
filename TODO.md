@@ -10,10 +10,10 @@
 ### 🔴 Alta Prioridad
 - [x] **Bug en Health Check de Caché (Backend)**: Corregido en `api/services/response_cache.py`. Se añadió `"initialized": True` a las estadísticas del caché para evitar el estado "degraded" falso en `/health/ready`.
 - [x] **Menú de Exportación en Interfaz (Frontend)**: Agregar controles en la barra de herramientas de `NoteEditor.svelte` y en la vista de notas para invocar los endpoints de exportación existentes en `/export/notes/markdown`, `/export/notes/html` y `/export/notes/zip`.
-- [ ] **Soporte de WebSocket End-to-End (Real-time)**: Conectar el cliente Svelte al canal `/ws` implementado en el backend para recibir notificaciones reactivas sin recarga. Además, **integrar las llamadas de difusión en el backend** (como `notify_note_created`, `notify_xp_gained`, `notify_streak_updated` definidos en `api/routers/websocket.py`) en sus respectivos servicios de mutación (`note_service.py`, `gamification_engine.py`), ya que actualmente están huérfanos y no se disparan.
+- [x] **Soporte de WebSocket End-to-End (Real-time)**: Conectar el cliente Svelte al canal `/ws` implementado en el backend para recibir notificaciones reactivas sin recarga. Además, **integrar las llamadas de difusión en el backend** (como `notify_note_created`, `notify_xp_gained`, `notify_streak_updated` definidos en `api/routers/websocket.py`) en sus respectivos servicios de mutación (`note_service.py`, `gamification_engine.py`), ya que actualmente están huérfanos y no se disparan.
 
 ### 🟡 Media Prioridad
-- [ ] **Rate Limiting Avanzado**: Extender el middleware `RateLimitMiddleware` para soportar límites de peticiones basados en clave de API o por usuario autenticado, en lugar de límites globales únicamente.
+- [x] **Rate Limiting Avanzado**: Extender el middleware `RateLimitMiddleware` para soportar límites de peticiones basados en clave de API o por usuario autenticado, en lugar de límites globales únicamente.
 
 ---
 
@@ -64,8 +64,8 @@
 - [ ] **Editor WYSIWYG**: Editor enriquecido para edición visual directa de Markdown.
 
 ### 3.4 Mejoras Estructurales y UX del Frontend (Nuevas)
-- [ ] **Interceptor Global de Errores en `api.ts`**: Manejar automáticamente token expirado (401), errores de red y propagación de toasts amigables a nivel de aplicación.
-- [ ] **Indicador de Conectividad en Tiempo Real**: Vincular las stores `isOnline` y `wasOffline` a un banner o píldora de estado premium y glassmorphic en la barra de herramientas principal.
+- [x] **Interceptor Global de Errores en `api.ts`**: Manejar automáticamente token expirado (401), errores de red y propagación de toasts amigables a nivel de aplicación.
+- [x] **Indicador de Conectividad en Tiempo Real**: Vincular las stores `isOnline` y `wasOffline` a un banner o píldora de estado premium y glassmorphic en la barra de herramientas principal.
 - [ ] **Optimización de VirtualList Dinámica**: Refactorizar `VirtualList.svelte` para admitir alturas de elemento dinámicas/variables (mediante ResizeObserver) para evitar solapamientos en notas con títulos largos.
 - [ ] **Filtros Interactivos y Agrupamiento en el Grafo**: Agregar un panel lateral dentro de `/graph` para aislar nodos por etiquetas, buscar notas directamente y activar físicas avanzadas de repulsión.
 - [ ] **Accesibilidad y Foco en Modales**: Implementar "focus trapping" completo en `Modal.svelte` y mejorar atributos ARIA en los widgets interactivos del dashboard.
