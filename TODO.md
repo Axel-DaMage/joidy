@@ -110,11 +110,11 @@
 
 ---
 
-## 🚀 7. Plan de Trabajo Inmediato
+## 🚀 7. Plan de Trabajo Inmediato (Próximos Pasos)
 
-1. **[Backlog]** Corregir el bug del Health Check de Caché en el backend para reportar estados correctos de salud de la infraestructura.
-2. **[Frontend]** Crear controles y UI interactiva para la exportación de notas directamente desde la barra de herramientas de `NoteEditor.svelte`.
-3. **[Frontend]** Conectar el cliente Svelte al WebSocket del backend para lograr reactividad en tiempo real de XP y alertas.
+1. **[Seguridad - Alta Prioridad]**: Reemplazar la autenticación simple actual por un flujo completo JWT multiusuario con tokens seguros y almacenamiento cifrado en base de datos.
+2. **[Calidad de Código & Automatización]**: Integrar un pipeline de formateo automático y análisis estático en el backend (`Ruff` + `Black`) para unificar el estilo de código del monorepo y evitar regresiones.
+3. **[Frontend UX]**: Refactorizar el componente `VirtualList.svelte` con `ResizeObserver` para soportar alturas de elementos dinámicas en la lista de notas, optimizando la fluidez de navegación.
 
 ---
 

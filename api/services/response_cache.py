@@ -53,6 +53,7 @@ class _TTLCache:
 
     def decorator(self, ignore_params: set[str] | None = None) -> Callable[[F], F]:
         ignore_params = ignore_params or set()
+        ignore_params.add("db")  # Defensive: always ignore standard database sessions in cache keys
 
         def wrap(func: F) -> F:
             values: dict[tuple[Any, ...], tuple[float, Any]] = {}
