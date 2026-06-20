@@ -1,0 +1,38 @@
+# Environment & secrets
+.env
+.env.local
+
+# Data directory (user data, never in git)
+data/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+dist/
+build/
+*.egg
+.pytest_cache/
+.mypy_cache/
+
+# Node / SvelteKit
+node_modules/
+.svelte-kit/
+frontend/.svelte-kit/
+frontend/build/
+frontend/node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+*.pid
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo

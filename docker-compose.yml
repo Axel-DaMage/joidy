@@ -1,0 +1,105 @@
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=http://localhost:${API_PORT:-8000}
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/static:/app/static
+    environment:
+      - VITE_API_URL=http://localhost:${API_PORT:-8000}
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    ports:
+      - "${API_PORT:-8000}:8000"
+    volumes:
+      - ./data/db:/data/db
+      - ./data/uploads:/data/uploads
+      - ./.env:/app/.env
+      - ${OBSIDIAN_VAULT_PATH:-./data/vault}:/vault
+    environment:
+      - DATABASE_URL=sqlite:////data/db/joidy.db
+      - AI_SERVICE_URL=http://ai-service:8002
+      - WORKER_URL=http://worker:8001
+      - SECRET_KEY=${SECRET_KEY:-dev_secret_change_me}
+      - APP_ENV=${APP_ENV:-development}
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - GITHUB_USERNAME=${GITHUB_USERNAME:-}
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID:-}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET:-}
+      - WEB_CONCURRENCY=${WEB_CONCURRENCY:-2}
+      - UVICORN_TIMEOUT_KEEP_ALIVE=${UVICORN_TIMEOUT_KEEP_ALIVE:-5}
+      - VAULT_PATH=/vault
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  ai-service:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+    ports:
+      - "${AI_SERVICE_PORT:-8002}:8002"
+    volumes:
+      - ./data/db:/data/db
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - COHERE_API_KEY=${COHERE_API_KEY:-}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - LLM_MODEL=${LLM_MODEL:-gemini:gemini-2.0-flash}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-gemini:models/text-embedding-004}
+      - DATABASE_URL=sqlite:////data/db/joidy.db
+      - APP_ENV=${APP_ENV:-development}
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ./worker
+      dockerfile: Dockerfile
+    ports:
+      - "${WORKER_PORT:-8001}:8001"
+    volumes:
+      - ./data/db:/data/db
+      - ${OBSIDIAN_VAULT_PATH:-./data/vault}:/vault
+    environment:
+      - DATABASE_URL=sqlite:////data/db/joidy.db
+      - API_URL=http://api:8000
+      - AI_SERVICE_URL=http://ai-service:8002
+      - VAULT_PATH=/vault
+      - APP_ENV=${APP_ENV:-development}
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+networks:
+  default:
+    name: joidy_network

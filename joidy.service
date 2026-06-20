@@ -1,0 +1,15 @@
+[Unit]
+Description=Joidy Docker Services
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/home/d4mag3/Documents/Repos/Joidy
+ExecStart=/bin/bash /home/d4mag3/Documents/Repos/Joidy/scripts/joidy_startup.sh
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
