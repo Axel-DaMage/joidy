@@ -1,4 +1,21 @@
 services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=joidy
+      - POSTGRES_PASSWORD=joidy
+      - POSTGRES_DB=joidy
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U joidy -d joidy"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
   frontend:
     build:
       context: ./frontend
@@ -29,7 +46,7 @@ services:
       - ./.env:/app/.env
       - ${OBSIDIAN_VAULT_PATH:-./data/vault}:/vault
     environment:
-      - DATABASE_URL=sqlite:////data/db/joidy.db
+      - DATABASE_URL=postgresql://joidy:joidy@postgres:5432/joidy
       - AI_SERVICE_URL=http://ai-service:8002
       - WORKER_URL=http://worker:8001
       - SECRET_KEY=${SECRET_KEY:-dev_secret_change_me}
@@ -41,6 +58,9 @@ services:
       - WEB_CONCURRENCY=${WEB_CONCURRENCY:-2}
       - UVICORN_TIMEOUT_KEEP_ALIVE=${UVICORN_TIMEOUT_KEEP_ALIVE:-5}
       - VAULT_PATH=/vault
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health/ready"]
       interval: 10s
@@ -66,9 +86,11 @@ services:
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       - LLM_MODEL=${LLM_MODEL:-gemini:gemini-2.0-flash}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-gemini:models/text-embedding-004}
-      - DATABASE_URL=sqlite:////data/db/joidy.db
+      - DATABASE_URL=postgresql://joidy:joidy@postgres:5432/joidy
       - APP_ENV=${APP_ENV:-development}
     depends_on:
+      postgres:
+        condition: service_healthy
       api:
         condition: service_healthy
     healthcheck:
@@ -89,13 +111,15 @@ services:
       - ./data/db:/data/db
       - ${OBSIDIAN_VAULT_PATH:-./data/vault}:/vault
     environment:
-      - DATABASE_URL=sqlite:////data/db/joidy.db
+      - DATABASE_URL=postgresql://joidy:joidy@postgres:5432/joidy
       - API_URL=http://api:8000
       - AI_SERVICE_URL=http://ai-service:8002
       - VAULT_PATH=/vault
       - APP_ENV=${APP_ENV:-development}
       - PYTHONUNBUFFERED=1
     depends_on:
+      postgres:
+        condition: service_healthy
       api:
         condition: service_healthy
     restart: unless-stopped
@@ -103,3 +127,7 @@ services:
 networks:
   default:
     name: joidy_network
+
+volumes:
+  postgres_data:
+

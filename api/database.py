@@ -1,31 +1,18 @@
 import logging
 from pathlib import Path
 
-import sqlite_vec
 from alembic import command
 from alembic.config import Config
 from config import settings
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 logger = logging.getLogger(__name__)
 
 
-def _setup_sqlite(dbapi_connection, connection_record):
-    dbapi_connection.enable_load_extension(True)
-    sqlite_vec.load(dbapi_connection)
-    dbapi_connection.enable_load_extension(False)
-    dbapi_connection.execute("PRAGMA journal_mode=WAL")
-    dbapi_connection.execute("PRAGMA foreign_keys=ON")
-    dbapi_connection.execute("PRAGMA synchronous=NORMAL")
-
-
 engine = create_engine(
     settings.database_url,
-    connect_args={"check_same_thread": False},
 )
-
-event.listen(engine, "connect", _setup_sqlite)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -44,6 +31,9 @@ def get_db():
 
 def init_db():
     Path("/data/db").mkdir(parents=True, exist_ok=True)
+    with engine.connect() as conn:
+        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        conn.commit()
     _run_migrations()
 
 

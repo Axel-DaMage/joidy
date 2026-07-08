@@ -1,9 +1,15 @@
 from datetime import datetime
 
 from database import Base
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+class NoteEmbedding(Base):
+    __tablename__ = "note_embeddings"
+
+    note_id: Mapped[int] = mapped_column(Integer, ForeignKey("notes.id", ondelete="CASCADE"), primary_key=True)
+    embedding = mapped_column(Vector(768)) # Using Gemini embedding size by default, or adapt if necessary
 
 class Note(Base):
     __tablename__ = "notes"
