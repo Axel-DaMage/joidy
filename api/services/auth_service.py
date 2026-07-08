@@ -7,11 +7,15 @@ from datetime import datetime, timedelta
 
 import jwt
 from config import settings
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 logger = logging.getLogger(__name__)
 
 ALGORITHM = "HS256"
 TOKEN_EXPIRE_HOURS = 24 * 7  # 1 week
+
+security = HTTPBearer(auto_error=False)
 
 
 def create_access_token(user_id: int, username: str = "user") -> str:
@@ -51,3 +55,26 @@ def get_current_user_id(token: str) -> int | None:
     if payload:
         return int(payload.get("sub", 0))
     return None
+
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> int | None:
+    """Dependency to get current user from Bearer token."""
+    # Allow bypass if disabled in dev mode, etc. if required.
+    # But usually, if there's no auth_password or secret_key, it's open.
+    # To enforce:
+    if not settings.secret_key or not settings.auth_password:
+        return 1 # Fallback to user 1 if auth is not configured
+    
+    if not credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    user_id = get_current_user_id(credentials.credentials)
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return user_id

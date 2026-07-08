@@ -3,6 +3,7 @@ from database import get_db
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
 from models.note import EmbeddingFailure, Note, NoteTag, Tag
 from pydantic import BaseModel, field_validator
+from services.sanitizer import sanitize_title, sanitize_content
 from services.embedding_service import (
     get_dead_letter_entries,
     get_retryable_embedding_notes,
@@ -50,19 +51,12 @@ class NoteCreate(BaseModel):
     @field_validator("title")
     @classmethod
     def title_not_empty(cls, v: str) -> str:
-        v = v.strip()
-        if not v:
-            raise ValueError("Title cannot be empty")
-        if len(v) > 500:
-            raise ValueError("Title must be 500 characters or fewer")
-        return v
+        return sanitize_title(v)
 
     @field_validator("content")
     @classmethod
     def content_max_length(cls, v: str) -> str:
-        if len(v) > 500_000:
-            raise ValueError("Content must be 500,000 characters or fewer")
-        return v
+        return sanitize_content(v)
 
     @field_validator("tags")
     @classmethod
@@ -102,19 +96,14 @@ class NoteUpdate(BaseModel):
     def title_not_empty(cls, v: str | None) -> str | None:
         if v is None:
             return v
-        v = v.strip()
-        if not v:
-            raise ValueError("Title cannot be empty")
-        if len(v) > 500:
-            raise ValueError("Title must be 500 characters or fewer")
-        return v
+        return sanitize_title(v)
 
     @field_validator("content")
     @classmethod
     def content_max_length(cls, v: str | None) -> str | None:
-        if v is not None and len(v) > 500_000:
-            raise ValueError("Content must be 500,000 characters or fewer")
-        return v
+        if v is None:
+            return v
+        return sanitize_content(v)
 
     @field_validator("tags")
     @classmethod

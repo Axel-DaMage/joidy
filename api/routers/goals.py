@@ -11,6 +11,7 @@ from models.goal import (
     GoalTemporality,
 )
 from pydantic import BaseModel, field_validator
+from services.sanitizer import sanitize_title, sanitize_content, sanitize_color, sanitize_emoji
 from services.gamification_engine import process_event
 from services.goal_service import (
     evaluate_active_goals,
@@ -52,12 +53,7 @@ class GoalCreate(BaseModel):
     @field_validator("title")
     @classmethod
     def title_not_empty(cls, v: str) -> str:
-        v = v.strip()
-        if not v:
-            raise ValueError("Title cannot be empty")
-        if len(v) > 500:
-            raise ValueError("Title must be 500 characters or fewer")
-        return v
+        return sanitize_title(v)
 
     @field_validator("target_value")
     @classmethod
@@ -69,21 +65,17 @@ class GoalCreate(BaseModel):
     @field_validator("color")
     @classmethod
     def validate_color(cls, v: str) -> str:
-        if not re.match(r'^#[0-9a-fA-F]{3,8}$', v.strip()):
-            return "#c8a96e"
-        return v.strip()
+        return sanitize_color(v)
 
     @field_validator("fail_emoji")
     @classmethod
     def validate_emoji(cls, v: str) -> str:
-        return v[:20] if v else "🔴"
+        return sanitize_emoji(v)
 
     @field_validator("description")
     @classmethod
     def validate_description(cls, v: str) -> str:
-        if len(v) > 10_000:
-            raise ValueError("Description must be 10,000 characters or fewer")
-        return v
+        return sanitize_content(v)
 
 
 class GoalUpdate(BaseModel):
@@ -102,6 +94,42 @@ class GoalUpdate(BaseModel):
     tag_id: int | None = None
     max_assignment_days: int | None = None
     content: str | None = None
+
+    @field_validator("title")
+    @classmethod
+    def title_not_empty(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        return sanitize_title(v)
+
+    @field_validator("description")
+    @classmethod
+    def validate_description(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        return sanitize_content(v)
+
+    @field_validator("color")
+    @classmethod
+    def validate_color(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        return sanitize_color(v)
+
+    @field_validator("fail_emoji")
+    @classmethod
+    def validate_emoji(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        return sanitize_emoji(v)
+
+    @field_validator("content")
+    @classmethod
+    def validate_content(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        return sanitize_content(v)
+
 
 
 class GoalContent(BaseModel):

@@ -27,6 +27,8 @@ from routers import (
     websocket,
 )
 from routers.integrations import github
+from services.auth_service import get_current_user
+from fastapi import Depends
 from services.response_cache import get_cache_stats
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -105,21 +107,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(notes.router)
-app.include_router(config.router)
-app.include_router(tags.router)
-app.include_router(skills.router)
-app.include_router(goals.router)
-app.include_router(gamification.router)
-app.include_router(personal_streaks.router)
-app.include_router(github.router)
-app.include_router(vault.router)
-app.include_router(ai.router)
-app.include_router(planning.router)
-app.include_router(websocket.router)
+app.include_router(notes.router, dependencies=[Depends(get_current_user)])
+app.include_router(config.router, dependencies=[Depends(get_current_user)])
+app.include_router(tags.router, dependencies=[Depends(get_current_user)])
+app.include_router(skills.router, dependencies=[Depends(get_current_user)])
+app.include_router(goals.router, dependencies=[Depends(get_current_user)])
+app.include_router(gamification.router, dependencies=[Depends(get_current_user)])
+app.include_router(personal_streaks.router, dependencies=[Depends(get_current_user)])
+app.include_router(github.router, dependencies=[Depends(get_current_user)])
+app.include_router(vault.router, dependencies=[Depends(get_current_user)])
+app.include_router(ai.router, dependencies=[Depends(get_current_user)])
+app.include_router(planning.router, dependencies=[Depends(get_current_user)])
+app.include_router(websocket.router, dependencies=[Depends(get_current_user)])
 app.include_router(auth.router)
-app.include_router(export.router)
-app.include_router(stats.router)
+app.include_router(export.router, dependencies=[Depends(get_current_user)])
+app.include_router(stats.router, dependencies=[Depends(get_current_user)])
 
 
 @app.get("/health")

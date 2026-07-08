@@ -5,16 +5,22 @@ Prevents XSS, injection, and data corruption in user-supplied inputs.
 """
 
 import re
+import bleach
 
-# Dangerous HTML tags/attributes pattern
-_SCRIPT_PATTERN = re.compile(
-    r"<\s*script[^>]*>.*?</\s*script\s*>",
-    re.IGNORECASE | re.DOTALL,
-)
-_EVENT_HANDLER_PATTERN = re.compile(
-    r"\bon\w+\s*=\s*[\"'][^\"']*[\"']",
-    re.IGNORECASE,
-)
+# Allowed HTML tags for markdown content (if markdown is rendered to HTML on backend, or just to strip HTML).
+# Often markdown contains basic formatting.
+ALLOWED_TAGS = [
+    'a', 'abbr', 'acronym', 'b', 'blockquote', 'code',
+    'em', 'i', 'li', 'ol', 'strong', 'ul', 'p', 'br',
+    'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'span', 'div', 'pre', 'hr', 'img'
+]
+ALLOWED_ATTRIBUTES = {
+    'a': ['href', 'title'],
+    'abbr': ['title'],
+    'acronym': ['title'],
+    'img': ['src', 'alt', 'title'],
+    '*': ['class']
+}
 
 # Max lengths per field type
 MAX_TITLE_LENGTH = 500
@@ -24,10 +30,10 @@ MAX_DESCRIPTION_LENGTH = 10_000
 
 
 def sanitize_html(text: str) -> str:
-    """Remove dangerous HTML constructs while preserving markdown."""
-    text = _SCRIPT_PATTERN.sub("", text)
-    text = _EVENT_HANDLER_PATTERN.sub("", text)
-    return text
+    """Remove dangerous HTML constructs while preserving markdown using bleach."""
+    if not text:
+        return text
+    return bleach.clean(text, tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRIBUTES, strip=True)
 
 
 def sanitize_title(title: str) -> str:
