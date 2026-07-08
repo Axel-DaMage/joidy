@@ -7,12 +7,10 @@ Joidy Worker — runs background tasks concurrently:
 import asyncio
 import logging
 import signal
-import sys
 
 from logging_config import setup_logging
-from watchers.vault_watcher import watch_vault
 from tasks.joidy_daily_writer import schedule_daily_writes
-
+from watchers.vault_watcher import watch_vault
 
 logger = logging.getLogger(__name__)
 

@@ -1,11 +1,11 @@
 """Endpoints for triggering _joidy/ vault file writes."""
 
 from datetime import date
-from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
 
 from database import get_db
+from fastapi import APIRouter, Depends
 from services.joidy_vault_writer import write_daily, write_objectives, write_skills
+from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/vault", tags=["vault"])
 

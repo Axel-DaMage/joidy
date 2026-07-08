@@ -5,11 +5,10 @@ Skills are auto-generated from tags, no manual configuration needed.
 
 from datetime import datetime
 
-from sqlalchemy import func
-from sqlalchemy.orm import Session
-
 from models.note import NoteTag, Tag
 from models.skill import Skill, compute_skill_level
+from sqlalchemy import func
+from sqlalchemy.orm import Session
 
 
 def sync_skills_for_tags(db: Session, tag_ids: set[int]) -> list[dict]:

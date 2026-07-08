@@ -1,23 +1,36 @@
+import logging
 from contextlib import asynccontextmanager
 from time import perf_counter
-import logging
 
+from config import settings
+from database import init_db
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from logging_config import setup_logging
+from middleware.metrics import MetricsMiddleware, get_metrics_collector
+from middleware.rate_limit import RateLimitMiddleware
+from routers import (
+    ai,
+    auth,
+    config,
+    export,
+    gamification,
+    goals,
+    notes,
+    personal_streaks,
+    planning,
+    skills,
+    stats,
+    tags,
+    vault,
+    websocket,
+)
+from routers.integrations import github
+from services.response_cache import get_cache_stats
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
-
-from database import init_db
-from config import settings
-from logging_config import setup_logging
-from routers import ai, auth, config, gamification, goals, notes, personal_streaks, skills, tags, vault, planning, websocket, export, stats
-from routers.integrations import github
-from services.response_cache import get_cache_stats
-from middleware.rate_limit import RateLimitMiddleware
-from middleware.metrics import MetricsMiddleware, get_metrics_collector
-
 
 logger = logging.getLogger(__name__)
 
@@ -117,8 +130,8 @@ def health():
 @app.get("/health/ready")
 def health_ready():
     """Comprehensive health check for orchestration (Kubernetes, Docker)."""
-    from sqlalchemy import text
     from database import engine
+    from sqlalchemy import text
 
     checks = {"database": "unknown", "cache": "unknown", "ai_service": "unknown"}
 
@@ -184,8 +197,8 @@ def debug_info():
 
     # Database info
     try:
-        from sqlalchemy import text
         from database import engine
+        from sqlalchemy import text
 
         with engine.connect() as conn:
             result = conn.execute(text("""

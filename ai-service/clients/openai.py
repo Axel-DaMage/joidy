@@ -1,11 +1,10 @@
 import asyncio
 import logging
-from typing import Optional
 
+from config import settings
 from openai import AsyncOpenAI
 
 from .base import BaseLLMClient, EmbeddingClient
-from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +35,7 @@ class OpenAIClient(BaseLLMClient, EmbeddingClient):
         prompt: str,
         temperature: float = 0.2,
         max_tokens: int = 256,
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
     ) -> str:
         messages = []
         if system_prompt:

@@ -1,14 +1,14 @@
 import logging
-from typing import Optional
 
-from .base import BaseLLMClient, EmbeddingClient
-from .gemini import GeminiClient
-from .openai import OpenAIClient
-from .anthropic import AnthropicClient
-from .ollama import OllamaClient
-from .openrouter import OpenRouterClient
-from .cohere import CohereClient
 from config import settings
+
+from .anthropic import AnthropicClient
+from .base import BaseLLMClient, EmbeddingClient
+from .cohere import CohereClient
+from .gemini import GeminiClient
+from .ollama import OllamaClient
+from .openai import OpenAIClient
+from .openrouter import OpenRouterClient
 
 logger = logging.getLogger(__name__)
 
@@ -16,8 +16,8 @@ logger = logging.getLogger(__name__)
 class ClientFactory:
     """Factory for creating LLM and embedding clients based on model configuration."""
 
-    _llm_client: Optional[BaseLLMClient] = None
-    _embedding_client: Optional[EmbeddingClient] = None
+    _llm_client: BaseLLMClient | None = None
+    _embedding_client: EmbeddingClient | None = None
 
     @classmethod
     def parse_model_string(cls, model: str) -> tuple[str, str]:
@@ -90,7 +90,7 @@ class ClientFactory:
             if "ollama" in available:
                 cls._embedding_client = OllamaClient(base_url=settings.provider_config["ollama"]["base_url"], model="nomic-embed-text")
             else:
-                raise ValueError(f"No embedding provider available")
+                raise ValueError("No embedding provider available")
         else:
             raise ValueError(f"Unknown provider: {provider}")
 

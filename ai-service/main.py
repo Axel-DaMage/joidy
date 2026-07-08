@@ -1,9 +1,8 @@
+from clients import get_embedding_client, get_llm_client
+from clients.prompts import CLASSIFY_PROMPT, RAG_PROMPT
+from config import settings
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from clients import get_llm_client, get_embedding_client
-from clients.prompts import CLASSIFY_PROMPT, RAG_PROMPT
-from clients.gemini import embedding_to_bytes
-from config import settings
 
 app = FastAPI(title="Joidy AI Service", version="0.2.0")
 
@@ -64,7 +63,7 @@ async def embed(req: EmbedRequest):
     try:
         client = get_embedding_client()
         vector = await client.embed(req.content)
-        
+
         # Save vector embedding to shared SQLite database
         from database import store_embedding
         store_embedding(req.note_id, vector)
@@ -117,7 +116,7 @@ async def rag(req: RAGRequest):
         question_vector = await emb_client.embed(req.question)
 
         # 2. Find similar note IDs from SQLite vector database
-        from database import find_similar_notes, engine
+        from database import engine, find_similar_notes
         similar = find_similar_notes(question_vector, limit=req.top_k)
 
         # 3. Retrieve note titles & contents to build LLM context

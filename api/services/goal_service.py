@@ -1,10 +1,16 @@
 import re
-from typing import List, Optional
-from sqlalchemy.orm import Session
-from sqlalchemy import func as sqlfunc
-from models.goal import Goal, GoalTemporality, GoalMeasurement, GoalState, GoalFailConfig
-from models.note import Note, NoteTag
 from datetime import datetime, timedelta
+
+from models.goal import (
+    Goal,
+    GoalFailConfig,
+    GoalMeasurement,
+    GoalState,
+    GoalTemporality,
+)
+from models.note import Note, NoteTag
+from sqlalchemy.orm import Session
+
 
 def _parse_temporality(text: str) -> GoalTemporality:
     if not text:
@@ -30,7 +36,7 @@ def _parse_fail_config(text: str) -> GoalFailConfig:
         return GoalFailConfig.SNOWBALL
     return GoalFailConfig.STATIC
 
-def parse_goals_from_content(content: str) -> List[dict]:
+def parse_goals_from_content(content: str) -> list[dict]:
     """
     Parses lines like: # Objetivo: [Meta] [Unidad] @Periodo %Modo_Falla
     Returns a list of dicts with extracted data.
@@ -43,22 +49,22 @@ def parse_goals_from_content(content: str) -> List[dict]:
     # (?:\s+%(\w+))? optionally matches %Modo_Falla
     pattern = r"#\s*Objetivo:\s*(.*?)(?:\s+@(\w+))?(?:\s+%(\w+))?(?=$|\n|\r)"
     matches = re.finditer(pattern, content, re.IGNORECASE)
-    
+
     for match in matches:
         title = match.group(1).strip() if match.group(1) else "Unnamed Goal"
         period = match.group(2)
         fail_mode = match.group(3)
-        
+
         # Simple heuristic to extract numbers from title for target_value
         # Example: "5 notas", target = 5. "10 pages", target = 10.
         target_value = 1.0
         measurement_type = GoalMeasurement.BOOLEAN
-        
+
         num_match = re.search(r'\b(\d+(?:\.\d+)?)\b', title)
         if num_match:
             target_value = float(num_match.group(1))
             measurement_type = GoalMeasurement.COUNT
-            
+
         goals.append({
             "title": title,
             "temporality": _parse_temporality(period),
@@ -77,17 +83,17 @@ def sync_goals_from_note(db: Session, note_id: int, content: str):
     (Bidirectional implies keeping them in sync, for now we will recreate or update based on title)
     """
     parsed_goals = parse_goals_from_content(content)
-    
+
     # Get existing goals linked to this note
     existing_goals = db.query(Goal).filter(Goal.note_id == note_id).all()
     existing_by_title = {g.title: g for g in existing_goals}
-    
+
     # Update or Create
     processed_titles = set()
     for pdata in parsed_goals:
         title = pdata["title"]
         processed_titles.add(title)
-        
+
         if title in existing_by_title:
             g = existing_by_title[title]
             g.temporality = pdata["temporality"]
@@ -107,7 +113,7 @@ def sync_goals_from_note(db: Session, note_id: int, content: str):
                 note_id=note_id
             )
             db.add(new_goal)
-            
+
     # Flag goals that were removed from the note content as pending_removal
     # instead of silently cancelling — the user decides via the Modal de Consistencia
     for g in existing_goals:
@@ -117,7 +123,7 @@ def sync_goals_from_note(db: Session, note_id: int, content: str):
     db.flush()
 
 
-def resolve_pending_removal(db: Session, goal_id: int, action: str) -> Optional[Goal]:
+def resolve_pending_removal(db: Session, goal_id: int, action: str) -> Goal | None:
     """
     Resolve a pending_removal goal.
     action: 'delete' — remove the goal entirely
@@ -138,7 +144,7 @@ def resolve_pending_removal(db: Session, goal_id: int, action: str) -> Optional[
         goal.state = GoalState.CANCELLED
     elif action == "manual":
         goal.note_id = None  # Unlink from note, keep as manual goal
-    
+
     db.flush()
     return goal
 
@@ -157,7 +163,7 @@ def evaluate_active_goals(db: Session):
     active_goals = db.query(Goal).filter(
         Goal.state == GoalState.ACTIVE  # Skip PAUSED — frozen goals don't expire
     ).all()
-    
+
     for goal in active_goals:
         expired = False
         if goal.temporality == GoalTemporality.DAILY:
@@ -173,7 +179,7 @@ def evaluate_active_goals(db: Session):
         elif goal.temporality == GoalTemporality.ANNUAL:
             if now.year != goal.created_at.year:
                 expired = True
-                
+
         if expired:
             _process_goal_failure(db, goal, now)
 
@@ -182,17 +188,17 @@ def evaluate_active_goals(db: Session):
 
 def _process_goal_failure(db: Session, goal: Goal, now: datetime):
     progress = get_goal_progress(goal, db)
-    
+
     if progress >= goal.target_value:
         goal.state = GoalState.COMPLETED
         goal.is_completed = True
         goal.completed_at = now
         goal.current_value = progress
         return
-        
+
     goal.state = GoalState.FAILED
     goal.current_value = progress
-    
+
     new_goal = None
     if goal.fail_config == GoalFailConfig.ROLLOVER:
         new_goal = Goal(
@@ -236,7 +242,7 @@ def _process_goal_failure(db: Session, goal: Goal, now: datetime):
     if new_goal:
         db.flush()
         try:
-            from services.joidy_vault_writer import get_objectives_dir, _write_goal_file
+            from services.joidy_vault_writer import _write_goal_file, get_objectives_dir
             obj_dir = get_objectives_dir()
             if obj_dir:
                 _write_goal_file(db, new_goal, obj_dir)

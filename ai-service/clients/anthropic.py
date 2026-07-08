@@ -1,11 +1,10 @@
 import asyncio
 import logging
-from typing import Optional
 
 import anthropic
+from config import settings
 
 from .base import BaseLLMClient
-from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +29,7 @@ class AnthropicClient(BaseLLMClient):
         prompt: str,
         temperature: float = 0.2,
         max_tokens: int = 256,
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
     ) -> str:
         response = await _call_with_retry(
             self._client.messages.create,

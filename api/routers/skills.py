@@ -1,11 +1,10 @@
-from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
-
 from database import get_db
+from fastapi import APIRouter, Depends
 from models.note import Tag
 from models.skill import Skill
-from services.skill_tree import get_skill_tree, sync_skills
 from services.response_cache import clear_api_caches, register_cache_clearer, ttl_cache
+from services.skill_tree import get_skill_tree, sync_skills
+from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/skills", tags=["skills"])
 

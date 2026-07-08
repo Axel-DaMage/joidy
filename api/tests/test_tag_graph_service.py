@@ -2,10 +2,12 @@ import os
 import tempfile
 import unittest
 
+from services.tag_graph import (
+    rebuild_tag_cooccurrences,
+    sync_tag_cooccurrences_for_tags,
+)
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
-
-from services.tag_graph import rebuild_tag_cooccurrences, sync_tag_cooccurrences_for_tags
 
 
 class TagGraphServiceTests(unittest.TestCase):

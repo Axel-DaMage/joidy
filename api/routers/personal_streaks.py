@@ -1,14 +1,14 @@
 from datetime import date, timedelta
-from typing import Optional
-
-from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
-from sqlalchemy import func as sqlfunc
-from sqlalchemy.orm import Session, selectinload
 
 from database import get_db
+from fastapi import APIRouter, Depends, HTTPException, Query
 from models.personal_streaks import PersonalStreak, StreakCheckIn
-from services.personal_streak_service import backfill_streak_history, compute_streak, calculate_streak_stats
+from pydantic import BaseModel
+from services.personal_streak_service import (
+    backfill_streak_history,
+    compute_streak,
+)
+from sqlalchemy.orm import Session, selectinload
 
 router = APIRouter(prefix="/personal-streaks", tags=["personal-streaks"])
 
@@ -23,14 +23,14 @@ def _backfill_streak_history(db: Session, streak: PersonalStreak):
     """Generates missing check-ins from start_date up to yesterday."""
     if not streak.start_date:
         return
-    
+
     today = date.today()
     end_date = streak.created_at.date() if streak.created_at else today
     current = streak.start_date
-    
+
     # Get existing check-in dates to avoid duplicates
     existing_dates = {c.check_date for c in streak.checkins}
-    
+
     added_count = 0
     while current < end_date:
         if current not in existing_dates:
@@ -41,7 +41,7 @@ def _backfill_streak_history(db: Session, streak: PersonalStreak):
                 days_since_start = (current - streak.start_date).days
                 if days_since_start % (streak.frequency_days or 1) == 0:
                     should_add = True
-            
+
             if should_add:
                 ci = StreakCheckIn(
                     streak_id=streak.id,
@@ -50,9 +50,9 @@ def _backfill_streak_history(db: Session, streak: PersonalStreak):
                 )
                 db.add(ci)
                 added_count += 1
-        
+
         current += timedelta(days=1)
-    
+
     if added_count > 0:
         streak.total_checkins = (streak.total_checkins or 0) + added_count
         db.commit()
@@ -103,7 +103,7 @@ def _compute_streak(checkin_dates: list[date], frequency: str = "daily", frequen
         # Daily: original logic
         current = 0
         cursor = today
-        
+
         # If today is not checked in, we should check yesterday.
         # The user still has time today to maintain the streak.
         if cursor not in dates_set:
@@ -204,8 +204,8 @@ class StreakCreate(BaseModel):
     color: str = ""
     theme: str = "solid"
     category: str = "general"
-    start_date: Optional[date] = None
-    target_date: Optional[date] = None
+    start_date: date | None = None
+    target_date: date | None = None
     offset: int = 0
     frequency: str = "daily"
     frequency_days: int = 1
@@ -213,26 +213,26 @@ class StreakCreate(BaseModel):
 
 
 class StreakUpdate(BaseModel):
-    name: Optional[str] = None
-    emoji: Optional[str] = None
-    icon: Optional[str] = None
-    description: Optional[str] = None
-    color: Optional[str] = None
-    theme: Optional[str] = None
-    category: Optional[str] = None
-    start_date: Optional[date] = None
-    target_date: Optional[date] = None
-    offset: Optional[int] = None
-    frequency: Optional[str] = None
-    frequency_days: Optional[int] = None
-    is_archived: Optional[bool] = None
-    freeze_count: Optional[int] = None
+    name: str | None = None
+    emoji: str | None = None
+    icon: str | None = None
+    description: str | None = None
+    color: str | None = None
+    theme: str | None = None
+    category: str | None = None
+    start_date: date | None = None
+    target_date: date | None = None
+    offset: int | None = None
+    frequency: str | None = None
+    frequency_days: int | None = None
+    is_archived: bool | None = None
+    freeze_count: int | None = None
 
 
 class CheckInData(BaseModel):
     note: str = ""
-    mood: Optional[int] = None
-    check_date: Optional[date] = None
+    mood: int | None = None
+    check_date: date | None = None
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -298,7 +298,7 @@ def global_stats(db: Session = Depends(get_db)):
 @router.get("/")
 def list_streaks(
     include_archived: bool = Query(False),
-    category: Optional[str] = Query(None),
+    category: str | None = Query(None),
     db: Session = Depends(get_db),
 ):
     q = db.query(PersonalStreak).options(selectinload(PersonalStreak.checkins))

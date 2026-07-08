@@ -4,9 +4,8 @@ Gemini 2.0 Flash: $0.075/1M input tokens, $0.30/1M output tokens.
 text-embedding-004: Free tier.
 """
 
-import json
 import sqlite3
-from datetime import datetime, date
+from datetime import date
 from pathlib import Path
 
 DB_PATH = Path("/data/db/joidy.db")

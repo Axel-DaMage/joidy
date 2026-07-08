@@ -2,11 +2,10 @@
 JWT Authentication Service.
 """
 
-import jwt
 import logging
 from datetime import datetime, timedelta
-from typing import Optional
 
+import jwt
 from config import settings
 
 logger = logging.getLogger(__name__)
@@ -29,7 +28,7 @@ def create_access_token(user_id: int, username: str = "user") -> str:
     return jwt.encode(to_encode, settings.secret_key, algorithm=ALGORITHM)
 
 
-def verify_token(token: str) -> Optional[dict]:
+def verify_token(token: str) -> dict | None:
     """Verify and decode a JWT token."""
     if not settings.secret_key:
         logger.warning("SECRET_KEY not configured, token verification skipped")
@@ -46,7 +45,7 @@ def verify_token(token: str) -> Optional[dict]:
         return None
 
 
-def get_current_user_id(token: str) -> Optional[int]:
+def get_current_user_id(token: str) -> int | None:
     """Extract user ID from token."""
     payload = verify_token(token)
     if payload:

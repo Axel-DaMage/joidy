@@ -2,10 +2,9 @@
 Authentication endpoints.
 """
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
-
 from config import settings
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 from services.auth_service import create_access_token
 
 router = APIRouter(prefix="/auth", tags=["auth"])

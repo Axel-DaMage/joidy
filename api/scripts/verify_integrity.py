@@ -1,5 +1,5 @@
-import sqlite3
 import logging
+import sqlite3
 from pathlib import Path
 
 DB_PATH = Path("/data/db/joidy.db")
@@ -12,7 +12,7 @@ def check_integrity():
 
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    
+
     logger.info("--- Auditoria de Integridad de Joidy ---")
 
     # 1. Check orphaned note_links

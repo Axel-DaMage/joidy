@@ -1,7 +1,8 @@
 """Personal Streaks Service — extracted from routers for better separation of concerns."""
 from datetime import date, timedelta
-from sqlalchemy.orm import Session
+
 from models.personal_streaks import PersonalStreak, StreakCheckIn
+from sqlalchemy.orm import Session
 
 
 def backfill_streak_history(db: Session, streak: PersonalStreak) -> None:

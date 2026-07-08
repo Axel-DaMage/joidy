@@ -1,12 +1,9 @@
-import sqlite3
 import struct
-from pathlib import Path
 
 import sqlite_vec
+from config import settings
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
-
-from config import settings
 
 
 def _setup_sqlite(dbapi_connection, connection_record):

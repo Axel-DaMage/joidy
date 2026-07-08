@@ -1,8 +1,8 @@
-from datetime import datetime, date
-from sqlalchemy import Date, DateTime, ForeignKey, Integer
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from datetime import date, datetime
 
 from database import Base
+from sqlalchemy import Date, DateTime, ForeignKey, Integer
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 
 class PlanningAssignment(Base):

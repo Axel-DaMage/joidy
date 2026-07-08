@@ -1,11 +1,8 @@
-import asyncio
 import logging
-from typing import Optional
 
 import aiohttp
 
 from .base import BaseLLMClient
-from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +29,7 @@ class OpenRouterClient(BaseLLMClient):
         prompt: str,
         temperature: float = 0.2,
         max_tokens: int = 256,
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
     ) -> str:
         headers = {
             "Authorization": f"Bearer {self._api_key}",

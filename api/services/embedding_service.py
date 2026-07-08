@@ -1,15 +1,12 @@
 import logging
 from datetime import datetime, timedelta
-from typing import Literal
 
 import httpx
-from sqlalchemy.orm import Session
-
 from config import settings
 from database import SessionLocal
 from models.note import EmbeddingFailure, Note
 from services.embedding_retry import compute_retry_delay_seconds
-
+from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 

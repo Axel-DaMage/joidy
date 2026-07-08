@@ -1,8 +1,8 @@
 import os
-import tempfile
-import unittest
 import sys
+import tempfile
 import types
+import unittest
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker

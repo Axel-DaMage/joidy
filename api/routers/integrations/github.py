@@ -1,24 +1,22 @@
-import httpx
 import asyncio
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Depends, Query
-from pydantic import BaseModel, Field
-from sqlalchemy import select
-from sqlalchemy.orm import Session
-
+import httpx
 from config import settings
 from database import get_db
+from fastapi import APIRouter, Depends, HTTPException, Query
 from models.github import (
-    GitHubRepo,
-    GitHubItem,
     GitHubEvent,
-    GitHubRepoStatus,
-    GitHubItemType,
     GitHubEventType,
+    GitHubItem,
+    GitHubItemType,
+    GitHubRepo,
 )
+from pydantic import BaseModel, Field
 from services import github_service as gh_svc
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/integrations/github", tags=["integrations"])
 
@@ -214,9 +212,9 @@ async def get_my_issues(
     try:
         user = await _fetch("/user")
         username = user.get("login", "")
-        
+
         repos = await _fetch("/user/repos", {"per_page": 30, "sort": "updated"})
-        
+
         async def fetch_issues_for_repo(repo: dict) -> list:
             try:
                 query_state = "all" if filter in ["created", "assigned"] else state
@@ -225,7 +223,7 @@ async def get_my_issues(
                     params["creator"] = username
                 elif filter == "assigned":
                     params["assignee"] = username
-                
+
                 issues = await _fetch(f"/repos/{repo['full_name']}/issues", params)
                 for i in issues:
                     if "/pull/" in i.get("html_url", ""):
@@ -235,7 +233,7 @@ async def get_my_issues(
             except Exception as e:
                 print(f"Error fetching issues for {repo.get('full_name')}: {e}")
                 return []
-        
+
         results = await asyncio.gather(*[fetch_issues_for_repo(repo) for repo in repos[:15]], return_exceptions=True)
         all_issues = []
         for r in results:
@@ -244,14 +242,14 @@ async def get_my_issues(
             for i in r:
                 if "/pull/" not in i.get("html_url", ""):
                     all_issues.append(i)
-        
+
         if filter == "all":
             filtered_by_user = [i for i in all_issues if i.get("user", {}).get("login") == username]
             if len(filtered_by_user) > 0:
                 all_issues = filtered_by_user
-        
+
         all_issues.sort(key=lambda x: x.get("created_at", ""), reverse=True)
-        
+
         return {
             "issues": [
                 {
@@ -293,9 +291,9 @@ async def get_my_pulls(
     try:
         user = await _fetch("/user")
         username = user.get("login", "")
-        
+
         repos = await _fetch("/user/repos", {"per_page": 30, "sort": "updated"})
-        
+
         async def fetch_pulls_for_repo(repo: dict) -> list:
             if not repo.get("permissions", {}).get("pull", False):
                 return []
@@ -306,7 +304,7 @@ async def get_my_pulls(
                     params["creator"] = username
                 elif filter == "assigned":
                     params["assignee"] = username
-                
+
                 pulls = await _fetch(f"/repos/{repo['full_name']}/pulls", params)
                 for p in pulls:
                     p["_repo_full_name"] = repo["full_name"]
@@ -314,19 +312,19 @@ async def get_my_pulls(
             except Exception as e:
                 print(f"Error fetching pulls for {repo.get('full_name')}: {e}")
                 return []
-        
+
         results = await asyncio.gather(*[fetch_pulls_for_repo(repo) for repo in repos[:15]], return_exceptions=True)
         all_pulls = []
         for r in results:
             if isinstance(r, Exception):
                 continue
             all_pulls.extend(r)
-        
+
         if filter == "all":
             filtered_by_user = [p for p in all_pulls if p.get("user", {}).get("login") == username]
             if len(filtered_by_user) > 0:
                 all_pulls = filtered_by_user
-        
+
         all_pulls.sort(key=lambda x: x.get("created_at", ""), reverse=True)
         return {
             "pulls": [
@@ -784,7 +782,7 @@ async def start_device_flow():
         )
 
     device_auth_url = "https://github.com/login/device/code"
-    
+
     async with httpx.AsyncClient(timeout=30.0) as client:
         r = await client.post(
             device_auth_url,
@@ -825,7 +823,7 @@ async def poll_device_code(
         )
 
     token_url = "https://github.com/login/oauth/access_token"
-    
+
     async with httpx.AsyncClient(timeout=30.0) as client:
         r = await client.post(
             token_url,
@@ -873,7 +871,7 @@ async def revoke_token(
     Revoca un token de acceso GitHub.
     """
     revoke_url = "https://github.com/login/oauth/revoke"
-    
+
     async with httpx.AsyncClient(timeout=30.0) as client:
         r = await client.post(
             revoke_url,

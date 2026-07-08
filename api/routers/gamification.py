@@ -1,10 +1,9 @@
-from fastapi import APIRouter, Depends, BackgroundTasks
-from sqlalchemy.orm import Session
-
 from database import get_db
+from fastapi import APIRouter, BackgroundTasks, Depends
 from models.gamification import StreakRecord, UserStats, XPEvent
 from services.gamification_engine import PLANT_STAGES, process_event
 from services.response_cache import clear_api_caches, register_cache_clearer, ttl_cache
+from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/gamification", tags=["gamification"])
 

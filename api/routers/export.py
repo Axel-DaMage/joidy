@@ -5,14 +5,12 @@ Export endpoints for notes.
 import io
 import zipfile
 from datetime import datetime
-from typing import List
-
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
 
 from database import get_db
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from models.note import Note
+from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/export", tags=["export"])
 

@@ -1,36 +1,34 @@
 from datetime import datetime
-from typing import List, Optional
-
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
-from sqlalchemy.orm import Session
 
 from database import get_db
+from fastapi import APIRouter, Depends, HTTPException
 from models.planning import PlanningAssignment
+from pydantic import BaseModel
 from services.response_cache import clear_api_caches, register_cache_clearer, ttl_cache
+from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/planning", tags=["planning"])
 
 
 class AssignmentsIn(BaseModel):
     date: str
-    goal_ids: List[int]
+    goal_ids: list[int]
 
 
 class AssignmentsOut(BaseModel):
     date: str
-    goal_ids: List[int]
+    goal_ids: list[int]
 
 
 @ttl_cache(ignore_params={"db"})
-def _cached_assignments(date: Optional[str] = None, db: Session = Depends(get_db)):
+def _cached_assignments(date: str | None = None, db: Session = Depends(get_db)):
     if not date:
         raise HTTPException(status_code=400, detail="date is required")
     try:
         date_obj = datetime.strptime(date, "%Y-%m-%d").date()
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
-    
+
     rows = db.query(PlanningAssignment).filter(PlanningAssignment.date == date_obj).all()
     return {"date": date, "goal_ids": [r.goal_id for r in rows]}
 
@@ -39,7 +37,7 @@ register_cache_clearer(_cached_assignments.cache_clear)  # type: ignore[attr-def
 
 
 @router.get("/assignments")
-def get_assignments(date: Optional[str] = None, db: Session = Depends(get_db)):
+def get_assignments(date: str | None = None, db: Session = Depends(get_db)):
     return _cached_assignments(date=date, db=db)
 
 

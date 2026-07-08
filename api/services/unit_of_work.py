@@ -3,11 +3,11 @@ Unit of Work pattern for database operations.
 Provides transactional grouping of multiple operations.
 """
 
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Generator
-from sqlalchemy.orm import Session
 
 from database import SessionLocal
+from sqlalchemy.orm import Session
 
 
 class UnitOfWork:

@@ -1,24 +1,31 @@
 import re
 from datetime import datetime
-from typing import Optional
-
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
-from pydantic import BaseModel, field_validator
-from sqlalchemy.orm import Session
 
 from database import get_db
-from models.goal import Goal, GoalTemporality, GoalMeasurement, GoalState, GoalFailConfig
-from models.note import NoteTag
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from models.goal import (
+    Goal,
+    GoalFailConfig,
+    GoalMeasurement,
+    GoalState,
+    GoalTemporality,
+)
+from pydantic import BaseModel, field_validator
 from services.gamification_engine import process_event
-from services.goal_service import get_goal_progress, evaluate_active_goals, get_goal_streak, resolve_pending_removal
+from services.goal_service import (
+    evaluate_active_goals,
+    get_goal_progress,
+    get_goal_streak,
+    resolve_pending_removal,
+)
 from services.joidy_vault_writer import (
-    get_objectives_dir,
     _write_goal_file,
-    slugify,
+    delete_goal_file,
+    get_objectives_dir,
     read_goal_file,
     update_goal_file,
-    delete_goal_file,
 )
+from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/goals", tags=["goals"])
 
@@ -37,10 +44,10 @@ class GoalCreate(BaseModel):
     fail_emoji: str = "🔴"
     color: str = "#c8a96e"
     theme: str = "solid"
-    note_id: Optional[int] = None
-    tag_id: Optional[int] = None
-    parent_id: Optional[int] = None
-    max_assignment_days: Optional[int] = None
+    note_id: int | None = None
+    tag_id: int | None = None
+    parent_id: int | None = None
+    max_assignment_days: int | None = None
 
     @field_validator("title")
     @classmethod
@@ -80,21 +87,21 @@ class GoalCreate(BaseModel):
 
 
 class GoalUpdate(BaseModel):
-    title: Optional[str] = None
-    description: Optional[str] = None
-    temporality: Optional[GoalTemporality] = None
-    measurement_type: Optional[GoalMeasurement] = None
-    target_value: Optional[float] = None
-    current_value: Optional[float] = None
-    state: Optional[GoalState] = None
-    fail_config: Optional[GoalFailConfig] = None
-    fail_emoji: Optional[str] = None
-    color: Optional[str] = None
-    theme: Optional[str] = None
-    note_id: Optional[int] = None
-    tag_id: Optional[int] = None
-    max_assignment_days: Optional[int] = None
-    content: Optional[str] = None
+    title: str | None = None
+    description: str | None = None
+    temporality: GoalTemporality | None = None
+    measurement_type: GoalMeasurement | None = None
+    target_value: float | None = None
+    current_value: float | None = None
+    state: GoalState | None = None
+    fail_config: GoalFailConfig | None = None
+    fail_emoji: str | None = None
+    color: str | None = None
+    theme: str | None = None
+    note_id: int | None = None
+    tag_id: int | None = None
+    max_assignment_days: int | None = None
+    content: str | None = None
 
 
 class GoalContent(BaseModel):
@@ -108,10 +115,10 @@ class GoalContent(BaseModel):
     fail_emoji: str = "🔴"
     color: str = "#c8a96e"
     theme: str = "solid"
-    note_id: Optional[int] = None
-    tag_id: Optional[int] = None
-    parent_id: Optional[int] = None
-    max_assignment_days: Optional[int] = None
+    note_id: int | None = None
+    tag_id: int | None = None
+    parent_id: int | None = None
+    max_assignment_days: int | None = None
     description: str = ""
 
 

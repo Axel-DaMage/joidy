@@ -1,8 +1,16 @@
-from datetime import date, datetime
-from sqlalchemy import Column, Integer, String, Date, DateTime, Boolean, ForeignKey, UniqueConstraint, func
-from sqlalchemy.orm import relationship
-
 from database import Base
+from sqlalchemy import (
+    Boolean,
+    Column,
+    Date,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    UniqueConstraint,
+    func,
+)
+from sqlalchemy.orm import relationship
 
 
 class PersonalStreak(Base):

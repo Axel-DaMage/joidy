@@ -1,7 +1,6 @@
-from abc import ABC, abstractmethod
 import json
 import re
-from typing import Optional
+from abc import ABC, abstractmethod
 
 
 class BaseLLMClient(ABC):
@@ -24,7 +23,7 @@ class BaseLLMClient(ABC):
         prompt: str,
         temperature: float = 0.2,
         max_tokens: int = 256,
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
     ) -> str:
         """Generate text response."""
         pass

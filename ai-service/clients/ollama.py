@@ -1,11 +1,8 @@
-import asyncio
 import logging
-from typing import Optional
 
 import aiohttp
 
 from .base import BaseLLMClient, EmbeddingClient
-from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +36,7 @@ class OllamaClient(BaseLLMClient, EmbeddingClient):
         prompt: str,
         temperature: float = 0.2,
         max_tokens: int = 256,
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
     ) -> str:
         full_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
         async with aiohttp.ClientSession() as session:

@@ -1,22 +1,18 @@
-import httpx
 import logging
 import secrets
-from datetime import datetime
 from typing import Any
 
-from sqlalchemy import select
-from sqlalchemy.orm import Session
-
+import httpx
 from config import settings
 from models.github import (
-    GitHubRepo,
-    GitHubItem,
     GitHubEvent,
-    GitHubRepoStatus,
-    GitHubItemType,
-    GitHubSyncStatus,
     GitHubEventType,
+    GitHubItem,
+    GitHubItemType,
+    GitHubRepo,
 )
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 

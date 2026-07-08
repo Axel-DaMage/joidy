@@ -11,15 +11,12 @@ to avoid reading files while Obsidian is still writing them.
 import asyncio
 import logging
 import re
-from datetime import datetime
 from dataclasses import dataclass
 from pathlib import Path
 
 import httpx
-from watchfiles import awatch, Change
-
 from config import settings
-
+from watchfiles import Change, awatch
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +111,7 @@ async def import_or_update_note(filepath: Path, client: httpx.AsyncClient, *, bu
             except Exception:
                 if attempt == 2: raise
                 await asyncio.sleep(1)
-        
+
         payload = {"title": title, "content": content, "tags": tags, "source": "obsidian", "source_path": str(filepath)}
         headers = {"X-Bulk-Import": "1"} if bulk_import else None
 
@@ -162,7 +159,7 @@ async def _consume_vault_events(
                 try:
                     event = await asyncio.wait_for(queue.get(), timeout=QUEUE_FLUSH_INTERVAL)
                     pending[event.path] = event.change_type
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     break
 
             await asyncio.sleep(DEBOUNCE_SECONDS)
@@ -178,7 +175,7 @@ async def _consume_vault_events(
 
             # return_exceptions=False but individual errors are caught above
             await asyncio.gather(*(process(path, change_type) for path, change_type in pending.items()))
-        except asyncio.TimeoutError:
+        except TimeoutError:
             continue
         except asyncio.CancelledError:
             # Drain remaining queue items before exiting
@@ -224,6 +221,6 @@ async def watch_vault():
             consumer.cancel()
             try:
                 await asyncio.wait_for(consumer, timeout=5.0)
-            except (asyncio.TimeoutError, asyncio.CancelledError):
+            except (TimeoutError, asyncio.CancelledError):
                 pass
             logger.info("[vault] Watcher stopped cleanly")

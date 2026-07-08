@@ -1,9 +1,8 @@
 from datetime import datetime
 
+from database import Base
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-
-from database import Base
 
 
 class Note(Base):
@@ -53,7 +52,7 @@ class NoteLink(Base):
 
     source_note_id: Mapped[int] = mapped_column(Integer, ForeignKey("notes.id", ondelete="CASCADE"), primary_key=True)
     target_note_id: Mapped[int] = mapped_column(Integer, ForeignKey("notes.id", ondelete="CASCADE"), primary_key=True)
-    
+
     # Optional: context where the link was found
     context_text: Mapped[str | None] = mapped_column(Text, nullable=True)
 

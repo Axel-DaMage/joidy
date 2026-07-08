@@ -1,6 +1,5 @@
 """Unit tests for goal_service — goal parsing, sync, failure handling, streaks."""
 
-import os
 import sys
 import types
 import unittest
@@ -16,16 +15,19 @@ if "sqlite_vec" not in sys.modules:
     sys.modules["sqlite_vec"] = _stub
 
 from database import Base
-from models.goal import Goal, GoalTemporality, GoalMeasurement, GoalState, GoalFailConfig
-from models.note import Note, NoteTag, Tag
-from models.gamification import UserStats, XPEvent, StreakRecord
-from models.skill import Skill
+from models.goal import (
+    Goal,
+    GoalFailConfig,
+    GoalMeasurement,
+    GoalState,
+    GoalTemporality,
+)
+from models.note import Note
 from services.goal_service import (
-    parse_goals_from_content,
-    sync_goals_from_note,
-    resolve_pending_removal,
-    get_goal_progress,
     get_goal_streak,
+    parse_goals_from_content,
+    resolve_pending_removal,
+    sync_goals_from_note,
 )
 
 

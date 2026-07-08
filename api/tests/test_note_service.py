@@ -1,9 +1,7 @@
 """Unit tests for note_service — core note CRUD and tag/link sync logic."""
 
-import os
 import sys
 import types
-import tempfile
 import unittest
 
 from sqlalchemy import create_engine, text
@@ -16,17 +14,15 @@ if "sqlite_vec" not in sys.modules:
     sys.modules["sqlite_vec"] = _stub
 
 from database import Base
-from models.note import Note, NoteTag, NoteLink, Tag, TagCooccurrence, EmbeddingFailure
-from models.gamification import UserStats, XPEvent, StreakRecord
-from models.skill import Skill
+from models.note import Note, NoteLink, NoteTag
 from services.note_service import (
     create_note,
-    update_note,
     delete_note,
     get_or_create_tag,
+    list_backlinks,
     note_to_response,
     sync_note_links,
-    list_backlinks,
+    update_note,
 )
 
 

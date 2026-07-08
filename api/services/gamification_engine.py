@@ -10,16 +10,14 @@ Every mutation in the system calls process_event(), which:
 
 import json
 import logging
-from functools import lru_cache
-from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
-
-from sqlalchemy.orm import Session
+from dataclasses import dataclass
+from datetime import date
 
 from config import settings
-from models.gamification import StreakRecord, UserStats, XPEvent
 from models.config import SystemConfig
+from models.gamification import StreakRecord, UserStats, XPEvent
 from services.response_cache import clear_api_caches
+from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
@@ -310,7 +308,7 @@ def process_event(
 
     # Centralized WebSocket broadcasts for gamification
     try:
-        from routers.websocket import broadcast_xp_gained, broadcast_streak_updated
+        from routers.websocket import broadcast_streak_updated, broadcast_xp_gained
         if xp > 0:
             broadcast_xp_gained(xp, stats.total_xp)
         if streak_changed:

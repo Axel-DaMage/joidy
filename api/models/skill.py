@@ -1,10 +1,8 @@
 from datetime import datetime
 
+from database import Base
 from sqlalchemy import DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-
-from database import Base
-
 
 SKILL_LEVELS = {
     "apprentice": (3, 9),

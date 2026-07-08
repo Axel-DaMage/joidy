@@ -1,12 +1,11 @@
 import asyncio
 import logging
 import struct
-from typing import Optional
 
 import google.generativeai as genai
+from config import settings
 
 from .base import BaseLLMClient, EmbeddingClient
-from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +37,7 @@ class GeminiClient(BaseLLMClient, EmbeddingClient):
         prompt: str,
         temperature: float = 0.2,
         max_tokens: int = 256,
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
     ) -> str:
         model = genai.GenerativeModel(self._model)
         response = await _call_with_retry(

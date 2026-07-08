@@ -5,9 +5,8 @@ Per-user rate limiting middleware using sliding window.
 import time
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Optional
 
-from fastapi import Request, HTTPException
+from fastapi import HTTPException, Request
 from starlette.middleware.base import BaseHTTPMiddleware
 
 
@@ -83,7 +82,7 @@ def get_rate_limiter() -> UserRateLimiter:
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
-    def __init__(self, app, limiter: Optional[UserRateLimiter] = None):
+    def __init__(self, app, limiter: UserRateLimiter | None = None):
         super().__init__(app)
         self.limiter = limiter or _default_limiter
 

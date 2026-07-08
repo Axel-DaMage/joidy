@@ -6,7 +6,6 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
@@ -16,12 +15,6 @@ if database_url:
     config.set_main_option("sqlalchemy.url", database_url)
 
 from database import Base
-from models.goal import Goal
-from models.note import Note
-from models.skill import Skill
-from models.personal_streaks import PersonalStreak
-from models.gamification import UserStats
-from models.github import GitHubRepo, GitHubItem, GitHubEvent
 
 target_metadata = Base.metadata
 

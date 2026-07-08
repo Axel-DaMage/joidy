@@ -1,12 +1,13 @@
-from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 
 from database import get_db
-from models.note import Note, NoteTag, Tag as TagModel
+from fastapi import APIRouter, Depends
+from models.gamification import UserStats, XPEvent
 from models.goal import Goal
+from models.note import Note
+from models.note import Tag as TagModel
 from models.skill import Skill
-from models.gamification import UserStats, XPEvent, StreakRecord
+from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/stats", tags=["stats"])
 

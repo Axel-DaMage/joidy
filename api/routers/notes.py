@@ -1,11 +1,8 @@
-from typing import Optional
-
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Header, Query
-from pydantic import BaseModel, field_validator, model_validator
-from sqlalchemy.orm import Session, selectinload
 
 from database import get_db
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
 from models.note import EmbeddingFailure, Note, NoteTag, Tag
+from pydantic import BaseModel, field_validator
 from services.embedding_service import (
     get_dead_letter_entries,
     get_retryable_embedding_notes,
@@ -15,13 +12,26 @@ from services.embedding_service import (
 )
 from services.note_service import (
     accept_ai_tag as accept_ai_tag_service,
+)
+from services.note_service import (
     create_note as create_note_service,
+)
+from services.note_service import (
     delete_note as delete_note_service,
+)
+from services.note_service import (
     list_backlinks as list_backlinks_service,
+)
+from services.note_service import (
     note_to_response,
+)
+from services.note_service import (
     rebuild_derived_data as rebuild_note_derived_data,
+)
+from services.note_service import (
     update_note as update_note_service,
 )
+from sqlalchemy.orm import Session, selectinload
 
 router = APIRouter(prefix="/notes", tags=["notes"])
 
@@ -35,7 +45,7 @@ class NoteCreate(BaseModel):
     content: str = ""
     tags: list[str] = []
     source: str = "joidy"
-    source_path: Optional[str] = None
+    source_path: str | None = None
 
     @field_validator("title")
     @classmethod
@@ -81,11 +91,11 @@ class NoteCreate(BaseModel):
 
 class NoteUpdate(BaseModel):
     """Schema for updating an existing note."""
-    title: Optional[str] = None
-    content: Optional[str] = None
-    tags: Optional[list[str]] = None
-    source_path: Optional[str] = None
-    source: Optional[str] = None
+    title: str | None = None
+    content: str | None = None
+    tags: list[str] | None = None
+    source_path: str | None = None
+    source: str | None = None
 
     @field_validator("title")
     @classmethod
@@ -155,8 +165,8 @@ def _is_truthy_header(value: str | None) -> bool:
 def list_notes(
     skip: int = 0,
     limit: int = 1000,
-    tag: Optional[str] = None,
-    source_path: Optional[str] = None,
+    tag: str | None = None,
+    source_path: str | None = None,
     db: Session = Depends(get_db),
 ):
     query = db.query(Note).options(selectinload(Note.tags).selectinload(NoteTag.tag))

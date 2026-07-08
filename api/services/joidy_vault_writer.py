@@ -7,13 +7,11 @@ import os
 from datetime import date, datetime
 from pathlib import Path
 
-from sqlalchemy.orm import Session
-
 from models.gamification import StreakRecord, UserStats
 from models.goal import Goal
 from models.note import NoteTag, Tag
 from models.skill import Skill
-
+from sqlalchemy.orm import Session
 
 JOIDY_DIR = "_joidy"
 JOIDY_HEADER = "joidy_managed: true"
@@ -278,8 +276,9 @@ def write_readme(vault_path: Path) -> None:
 
 
 def _get_notes_created_today(db: Session, today: date) -> list:
-    from models.note import Note
     from datetime import datetime
+
+    from models.note import Note
     start = datetime.combine(today, datetime.min.time())
     end = datetime.combine(today, datetime.max.time())
     return db.query(Note).filter(Note.created_at >= start, Note.created_at <= end).all()
@@ -287,7 +286,8 @@ def _get_notes_created_today(db: Session, today: date) -> list:
 
 def _get_top_tags_week(db: Session) -> list:
     from datetime import timedelta
-    from models.note import Note, NoteTag, Tag
+
+    from models.note import Note, Tag
     week_ago = datetime.utcnow() - timedelta(days=7)
     results = (
         db.query(Tag.name, Tag.id)

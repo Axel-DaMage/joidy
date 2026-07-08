@@ -1,8 +1,6 @@
-import os
 from pathlib import Path
-from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/config", tags=["config"])
@@ -41,7 +39,7 @@ PUBLIC_KEYS = {
 def read_env() -> dict:
     env_vars = {}
     if ENV_FILE.exists():
-        with open(ENV_FILE, "r") as f:
+        with open(ENV_FILE) as f:
             for line in f:
                 line = line.strip()
                 if line and not line.startswith("#") and "=" in line:
@@ -59,25 +57,25 @@ def write_env(env_vars: dict) -> None:
 
 
 class ConfigResponse(BaseModel):
-    gemini_api_key: Optional[str] = None
-    obsidian_vault_path: Optional[str] = None
-    daily_notes_folder: Optional[str] = None
-    github_username: Optional[str] = None
-    app_env: Optional[str] = None
+    gemini_api_key: str | None = None
+    obsidian_vault_path: str | None = None
+    daily_notes_folder: str | None = None
+    github_username: str | None = None
+    app_env: str | None = None
     configured_keys: list[str]
 
 
 class ConfigUpdate(BaseModel):
-    gemini_api_key: Optional[str] = None
-    obsidian_vault_path: Optional[str] = None
-    daily_notes_folder: Optional[str] = None
-    github_token: Optional[str] = None
-    github_username: Optional[str] = None
-    github_client_id: Optional[str] = None
-    github_client_secret: Optional[str] = None
-    telegram_bot_token: Optional[str] = None
-    telegram_allowed_user_id: Optional[str] = None
-    secret_key: Optional[str] = None
+    gemini_api_key: str | None = None
+    obsidian_vault_path: str | None = None
+    daily_notes_folder: str | None = None
+    github_token: str | None = None
+    github_username: str | None = None
+    github_client_id: str | None = None
+    github_client_secret: str | None = None
+    telegram_bot_token: str | None = None
+    telegram_allowed_user_id: str | None = None
+    secret_key: str | None = None
 
 
 @router.get("", response_model=ConfigResponse)
@@ -162,7 +160,9 @@ class GamificationConfig(BaseModel):
 @router.get("/gamification", response_model=GamificationConfig)
 def get_gamification_config():
     from api.services.gamification_engine import (
-        get_xp_table, PLANT_STAGES, STREAK_MILESTONES
+        PLANT_STAGES,
+        STREAK_MILESTONES,
+        get_xp_table,
     )
     xp_table = get_xp_table()
     return GamificationConfig(

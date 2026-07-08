@@ -11,15 +11,14 @@ Adds database indices to optimize:
 - XP events temporal queries
 - Embedding failure retry scheduling
 """
-from typing import Sequence, Union
-from alembic import op
-import sqlalchemy as sa
+from collections.abc import Sequence
 
+from alembic import op
 
 revision: str = '20260507_graph_indices'
-down_revision: Union[str, None] = '20260504_add_source_path_to_goals'
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = '20260504_add_source_path_to_goals'
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:

@@ -1,16 +1,17 @@
 import os
 import re
-from typing import Optional
-
-from sqlalchemy.orm import Session, selectinload
 
 from models.note import Note, NoteLink, NoteTag, Tag
 from services.gamification_engine import process_event
-from services.sanitizer import sanitize_content, sanitize_tag, sanitize_title
-from services.skill_tree import sync_skills, sync_skills_for_tags
-from services.tag_graph import rebuild_tag_cooccurrences, sync_tag_cooccurrences_for_tags
 from services.goal_service import sync_goals_from_note
 from services.response_cache import clear_api_caches
+from services.sanitizer import sanitize_content, sanitize_tag, sanitize_title
+from services.skill_tree import sync_skills, sync_skills_for_tags
+from services.tag_graph import (
+    rebuild_tag_cooccurrences,
+    sync_tag_cooccurrences_for_tags,
+)
+from sqlalchemy.orm import Session, selectinload
 
 
 def rebuild_derived_data(db: Session) -> None:
@@ -81,7 +82,7 @@ def create_note(
     content: str,
     tags: list[str],
     source: str,
-    source_path: Optional[str],
+    source_path: str | None,
     rebuild_derived_data: bool = True,
 ):
     title = sanitize_title(title)
@@ -127,11 +128,11 @@ def update_note(
     db: Session,
     note_id: int,
     *,
-    title: Optional[str] = None,
-    content: Optional[str] = None,
-    tags: Optional[list[str]] = None,
-    source_path: Optional[str] = None,
-    source: Optional[str] = None,
+    title: str | None = None,
+    content: str | None = None,
+    tags: list[str] | None = None,
+    source_path: str | None = None,
+    source: str | None = None,
     rebuild_derived_data: bool = True,
 ):
     note = db.query(Note).filter(Note.id == note_id).first()

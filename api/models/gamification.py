@@ -1,9 +1,8 @@
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, Float, Integer, String, func
-from sqlalchemy.orm import Mapped, mapped_column
-
 from database import Base
+from sqlalchemy import Date, DateTime, Integer, String, func
+from sqlalchemy.orm import Mapped, mapped_column
 
 
 class XPEvent(Base):

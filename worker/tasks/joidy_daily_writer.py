@@ -4,13 +4,11 @@ Runs once at startup, then every day at midnight.
 """
 
 import asyncio
-from datetime import date, datetime, timedelta
 import logging
+from datetime import datetime, timedelta
 
 import httpx
-
 from config import settings
-
 
 logger = logging.getLogger(__name__)
 

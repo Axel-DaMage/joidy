@@ -1,20 +1,18 @@
-from typing import Optional
-
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
-from sqlalchemy import func
-from sqlalchemy.orm import Session
 
 from database import get_db
-from models.note import Note, NoteTag, Tag, TagCooccurrence, NoteLink
+from fastapi import APIRouter, Depends, HTTPException
+from models.note import Note, NoteLink, NoteTag, Tag, TagCooccurrence
+from pydantic import BaseModel
 from services.response_cache import clear_api_caches, register_cache_clearer, ttl_cache
+from sqlalchemy import func
+from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/tags", tags=["tags"])
 
 
 class TagCreate(BaseModel):
     name: str
-    parent_id: Optional[int] = None
+    parent_id: int | None = None
 
 
 @ttl_cache(ignore_params={"db"})
@@ -58,7 +56,7 @@ def create_tag(data: TagCreate, db: Session = Depends(get_db)):
 
 
 @router.put("/{tag_id}/parent")
-def set_parent(tag_id: int, parent_id: Optional[int], db: Session = Depends(get_db)):
+def set_parent(tag_id: int, parent_id: int | None, db: Session = Depends(get_db)):
     tag = db.query(Tag).filter(Tag.id == tag_id).first()
     if not tag:
         raise HTTPException(status_code=404, detail="Tag not found")
@@ -91,6 +89,7 @@ def set_parent(tag_id: int, parent_id: Optional[int], db: Session = Depends(get_
 def _cached_tag_graph(db: Session):
     """Returns nodes + edges for the knowledge graph (tags + notes)."""
     import re
+
     from sqlalchemy.orm import selectinload
 
     nodes = []

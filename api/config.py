@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     secret_key: str = "dev_secret_change_me"
     app_env: str = "development"
     cors_allowed_origins: str = ""  # Comma-separated origins for production (e.g. "https://joidy.app,https://www.joidy.app")
-    
+
     # GitHub Integration (OAuth - Device Flow)
     github_client_id: str = ""
     github_client_secret: str = ""
@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     github_token: str = ""
     github_username: str = ""
     github_webhook_url: str = ""
-    
+
     # AI & Embeddings
     embedding_retry_max_attempts: int = 8
     embedding_retry_base_seconds: int = 60

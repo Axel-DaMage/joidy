@@ -1,11 +1,10 @@
 """Unit tests for embedding_service — retry logic, dead letter queue, failure tracking."""
 
-import os
 import sys
 import types
 import unittest
 from datetime import datetime, timedelta
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -17,16 +16,12 @@ if "sqlite_vec" not in sys.modules:
     sys.modules["sqlite_vec"] = _stub
 
 from database import Base
-from models.note import Note, EmbeddingFailure
-from models.gamification import UserStats, XPEvent, StreakRecord
-from models.skill import Skill
+from models.note import EmbeddingFailure, Note
 from services.embedding_service import (
-    get_retryable_embedding_notes,
     get_dead_letter_entries,
-    reset_dead_letter_entry,
+    get_retryable_embedding_notes,
     purge_dead_letters,
-    record_embedding_failure,
-    clear_embedding_failure,
+    reset_dead_letter_entry,
 )
 
 

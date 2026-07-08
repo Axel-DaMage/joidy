@@ -5,8 +5,6 @@ Prevents XSS, injection, and data corruption in user-supplied inputs.
 """
 
 import re
-from html import escape as html_escape
-
 
 # Dangerous HTML tags/attributes pattern
 _SCRIPT_PATTERN = re.compile(

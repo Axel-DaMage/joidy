@@ -2,11 +2,11 @@
 WebSocket endpoints for real-time updates.
 """
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from typing import Set
+import asyncio
 import json
 import logging
-import asyncio
+
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +17,7 @@ class ConnectionManager:
     """Manages active WebSocket connections."""
 
     def __init__(self):
-        self.active_connections: Set[WebSocket] = set()
+        self.active_connections: set[WebSocket] = set()
 
     async def connect(self, websocket: WebSocket):
         await websocket.accept()

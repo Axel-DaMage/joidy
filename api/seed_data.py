@@ -1,11 +1,16 @@
-import os
 import random
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta
 
 from database import SessionLocal
-from models.goal import Goal, GoalTemporality, GoalMeasurement, GoalState, GoalFailConfig
+from models.goal import (
+    Goal,
+    GoalFailConfig,
+    GoalMeasurement,
+    GoalState,
+    GoalTemporality,
+)
 from models.planning import PlanningAssignment
-from models.note import Note, Tag
+
 
 def seed():
     db = SessionLocal()
@@ -16,19 +21,19 @@ def seed():
 
     print("Generating goals and streaks...")
     today = datetime.utcnow()
-    
+
     # 1. Past 180 days streak (Heatmap)
     for i in range(180, -1, -1):
         day_date = today - timedelta(days=i)
-        
+
         # 85% chance to complete goals this day
         completed_today = random.random() < 0.85
-        
+
         num_goals = random.randint(1, 3)
         for g in range(num_goals):
             state = GoalState.COMPLETED if completed_today else GoalState.FAILED
             is_completed = completed_today
-            
+
             goal = Goal(
                 title=f"Objetivo de Prueba {i}-{g+1}",
                 description="Dato generado automáticamente.",
@@ -45,7 +50,7 @@ def seed():
             )
             db.add(goal)
             db.flush()
-            
+
             if completed_today or random.random() < 0.5:
                 assign = PlanningAssignment(
                     date=day_date.date(),
@@ -53,7 +58,7 @@ def seed():
                     created_at=day_date - timedelta(hours=12)
                 )
                 db.add(assign)
-                
+
     # 2. Add some active current goals
     temps = [GoalTemporality.DAILY, GoalTemporality.WEEKLY, GoalTemporality.MONTHLY, GoalTemporality.ANNUAL]
     for _ in range(40):
@@ -71,7 +76,7 @@ def seed():
         )
         db.add(goal)
         db.flush()
-        
+
         # Assign many to today or upcoming days
         if random.random() < 0.7:
             offset = random.randint(0, 5)

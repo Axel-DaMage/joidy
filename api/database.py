@@ -1,14 +1,12 @@
-from pathlib import Path
 import logging
-from alembic import command
-from alembic.config import Config
+from pathlib import Path
 
 import sqlite_vec
+from alembic import command
+from alembic.config import Config
+from config import settings
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
-
-from config import settings
-
 
 logger = logging.getLogger(__name__)
 
