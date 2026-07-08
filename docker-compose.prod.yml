@@ -1,0 +1,42 @@
+# Production overrides for docker-compose.yml
+# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+services:
+  frontend:
+    # No source volume mounts, use the baked image
+    volumes: []
+    environment:
+      - NODE_ENV=production
+      - VITE_INTERNAL_API_URL=http://api:8000
+    restart: always
+
+  api:
+    # Drop source volume mounts, only keep data mounts
+    volumes:
+      - ./data/db:/data/db
+      - ./data/uploads:/data/uploads
+      - ./.env:/app/.env
+      - ${OBSIDIAN_VAULT_PATH:-./data/vault}:/vault
+    environment:
+      - APP_ENV=production
+      - WEB_CONCURRENCY=4
+    restart: always
+    # In production, use the standard command from Dockerfile
+    command: []
+
+  ai-service:
+    volumes:
+      - ./data/db:/data/db
+    environment:
+      - APP_ENV=production
+    restart: always
+    command: []
+
+  worker:
+    volumes:
+      - ./data/db:/data/db
+      - ${OBSIDIAN_VAULT_PATH:-./data/vault}:/vault
+    environment:
+      - APP_ENV=production
+    restart: always
+    command: []
