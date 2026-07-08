@@ -34,7 +34,7 @@ services:
 
   worker:
     volumes:
-      - ./worker:/app
+      - ./worker:/app/worker
       - ./data/db:/data/db
       - ${OBSIDIAN_VAULT_PATH:-./data/vault}:/vault
-    command: python main.py
+    command: watchfiles "python -m worker.main" /app/worker

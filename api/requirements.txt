@@ -13,3 +13,5 @@ pgvector>=0.3.0
 pyjwt==2.13.0
 bleach==6.1.0
 passlib[bcrypt]==1.7.4
+pytest
+pytest-cov

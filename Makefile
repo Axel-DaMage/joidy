@@ -120,8 +120,8 @@ migrate: ## Run Alembic migrations up to head in api container
 db-health: ## Verify migration head and required core tables
 	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm api sh -c "cd /app && alembic -c /app/alembic.ini current && python scripts/verify_db_health.py"
 
-test-api: ## Run all API unit tests via unittest discover
-	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm api sh -c "PYTHONPATH=/app python -m unittest discover -s tests"
+test-api: ## Run all API unit tests via pytest
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm api sh -c "PYTHONPATH=/app pytest --cov=api --cov-report=term-missing"
 
 test-frontend: ## Run frontend typechecking (svelte-check) inside Docker
 	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm frontend npm run check
