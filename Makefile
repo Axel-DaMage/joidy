@@ -1,4 +1,4 @@
-.PHONY: setup dev dev-d dev-reset prod stop restart logs build clean backup restore help migrate db-health test-api start doctor install-deps
+.PHONY: setup dev dev-d dev-reset prod stop restart logs logs-api logs-ai logs-worker build clean backup restore shell-api shell-worker migrate db-health test-api test-frontend test lint lint-api fix-permissions install-deps doctor start
 
 COMPOSE_PROJECT ?= joidy
 PLATFORM := $(shell uname -s | tr '[:upper:]' '[:lower:]')
@@ -128,10 +128,9 @@ test-frontend: ## Run frontend typechecking (svelte-check) inside Docker
 
 test: test-api test-frontend ## Run all test suites (API + Frontend)
 
-lint-api: ## Check syntax of all Python services (api, ai-service, worker) inside Docker
-	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm api python -m compileall -q /app
-	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm ai-service python -m compileall -q /app
-	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm worker python -m compileall -q /app
+lint-api: ## Check syntax of all Python services using ruff
+	ruff check .
+	ruff format --check .
 
 lint: lint-api ## Run all linters and code checkers
 
@@ -182,6 +181,22 @@ doctor: ## Verify all prerequisites are met
 		echo "$(RED)✗$(NC) Docker Compose not found"; \
 		EXIT_CODE=1; \
 	fi; \
+	if ! command -v make &> /dev/null; then \
+		echo "$(RED)✗$(NC) make not found"; \
+		EXIT_CODE=1; \
+	else \
+		echo "$(GREEN)✓$(NC) make found"; \
+	fi; \
+	if ! command -v python3 &> /dev/null; then \
+		echo "$(YELLOW)⚠$(NC) python3 not found (optional, but recommended)"; \
+	else \
+		echo "$(GREEN)✓$(NC) python3 found"; \
+	fi; \
+	if ! command -v npm &> /dev/null; then \
+		echo "$(YELLOW)⚠$(NC) npm not found (optional, but recommended for frontend)"; \
+	else \
+		echo "$(GREEN)✓$(NC) npm found"; \
+	fi; \
 	echo ""; \
 	if [ ! -f .env ]; then \
 		echo "$(YELLOW)⚠$(NC) .env file not found"; \
@@ -191,7 +206,7 @@ doctor: ## Verify all prerequisites are met
 		echo "$(GREEN)✓$(NC) .env exists"; \
 	fi; \
 	echo ""; \
-	@source .env 2>/dev/null; \
+	. .env 2>/dev/null || true; \
 	if [ -z "$$GEMINI_API_KEY" ] || [ "$$GEMINI_API_KEY" = "your_gemini_api_key_here" ]; then \
 		echo "$(YELLOW)⚠$(NC) GEMINI_API_KEY not configured"; \
 		echo "  Get free key at: https://aistudio.google.com/"; \
@@ -252,34 +267,35 @@ start: ## 🚀 Quick start: setup + start all services
 		echo "$(RED)Failed to create .env$(NC)"; \
 		exit 1; \
 	fi
-	@source .env 2>/dev/null; \
+	@. .env 2>/dev/null || true; \
 	if [ -z "$$GEMINI_API_KEY" ] || [ "$$GEMINI_API_KEY" = "your_gemini_api_key_here" ]; then \
 		echo ""; \
 		echo "$(YELLOW)⚠ GEMINI_API_KEY not set in .env$(NC)"; \
 		echo "  Get your free key at: https://aistudio.google.com/"; \
 		echo "  Then edit .env and add your key"; \
 		echo ""; \
-		echo "$(BLUE)Continue without AI features? (y/N)$(NC): "; \
+		echo -n "$(BLUE)Continue without AI features? (y/N)$(NC): "; \
 		read -r CONTINUE; \
 		if [ "$$CONTINUE" != "y" ] && [ "$$CONTINUE" != "Y" ]; then \
 			echo "Aborted."; \
 			exit 1; \
 		fi; \
 	fi
-	@if [ -z "$$OBSIDIAN_VAULT_PATH" ] || [ "$$OBSIDIAN_VAULT_PATH" = "/path/to/your/obsidian/vault" ]; then \
+	@. .env 2>/dev/null || true; \
+	if [ -z "$$OBSIDIAN_VAULT_PATH" ] || [ "$$OBSIDIAN_VAULT_PATH" = "/path/to/your/obsidian/vault" ]; then \
 		echo ""; \
 		echo "$(YELLOW)⚠ OBSIDIAN_VAULT_PATH not set in .env$(NC)"; \
 		echo "  Enter the absolute path to your Obsidian vault:"; \
 		echo "  (e.g., /home/username/Documents/Obsidian)"; \
 		echo ""; \
-		echo "$(BLUE)Vault path (or press Enter to skip):$(NC) "; \
+		echo -n "$(BLUE)Vault path (or press Enter to skip):$(NC) "; \
 		read -r VAULT_PATH; \
 		if [ -n "$$VAULT_PATH" ]; then \
 			sed -i "s|^OBSIDIAN_VAULT_PATH=.*|OBSIDIAN_VAULT_PATH=$$VAULT_PATH|" .env; \
 			echo "  ✓ Updated OBSIDIAN_VAULT_PATH in .env"; \
 		fi; \
 	fi
-	@source .env 2>/dev/null; \
+	@. .env 2>/dev/null || true; \
 	if [ -z "$$SECRET_KEY" ] || [ "$$SECRET_KEY" = "change_this_to_a_random_secret_key" ]; then \
 		NEW_SECRET=$$(openssl rand -hex 32 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null || echo "dev_secret_$$(date +%s)"); \
 		sed -i "s|^SECRET_KEY=.*|SECRET_KEY=$$NEW_SECRET|" .env; \
@@ -294,18 +310,6 @@ start: ## 🚀 Quick start: setup + start all services
 	@echo "$(GREEN)  Web App:$(NC)   http://localhost:3000"
 	@echo "$(GREEN)  API Docs:$(NC)  http://localhost:8000/docs"
 	@echo ""
-@echo "To view logs:  make logs"
+	@echo "To view logs:  make logs"
 	@echo "To stop:       make stop"
 	@echo "────────────────────────────────────────────────────"
-
-backup: ## Create a database backup
-	@mkdir -p data/backups
-	@docker compose exec -T api python /app/scripts/backup.py
-
-restore: ## Restore from a backup file
-	@echo "Available backups:"
-	@ls -la data/backups/ 2>/dev/null || echo "No backups found"
-	@echo ""
-	@echo "Usage: cp data/backups/joidy_YYYYMMDD_HHMMSS.tar.gz /tmp/ && docker compose exec -T api sh -c 'cd /data && tar -xzf /tmp/joidy_*.tar.gz -C .'"
-
-.PHONY: backup restore

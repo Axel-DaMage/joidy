@@ -8,11 +8,14 @@ charset = utf-8
 trim_trailing_whitespace = true
 insert_final_newline = true
 
+[*.{js,ts,svelte,json,html,css}]
+indent_size = 2
+
 [*.{yml,yaml}]
 indent_size = 2
 
-[*.{json,jsonc}]
-indent_size = 2
+[*.py]
+indent_size = 4
 
 [Makefile]
 indent_style = tab
