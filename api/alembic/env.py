@@ -15,6 +15,7 @@ if database_url:
     config.set_main_option("sqlalchemy.url", database_url)
 
 from database import Base
+from models import config as _m_config, gamification as _m_gamification, github as _m_github, goal as _m_goal, note as _m_note, personal_streaks as _m_personal_streaks, planning as _m_planning, skill as _m_skill
 
 target_metadata = Base.metadata
 
