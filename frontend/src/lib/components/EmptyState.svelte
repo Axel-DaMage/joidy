@@ -1,12 +1,21 @@
 <script lang="ts">
   import DynamicIcon from './DynamicIcon.svelte';
 
-  export let icon: string = 'Inbox';
-  export let title: string = 'No hay datos';
-  export let description: string = '';
-  export let action: string | null = null;
-  export let actionHref: string = '';
-  export let onAction: (() => void) | null = null;
+  let {
+    icon = 'Inbox',
+    title = 'No hay datos',
+    description = '',
+    action = null,
+    actionHref = '',
+    onAction = null
+  }: {
+    icon?: string;
+    title?: string;
+    description?: string;
+    action?: string | null;
+    actionHref?: string;
+    onAction?: (() => void) | null;
+  } = $props();
 </script>
 
 <div class="empty-state">
@@ -21,7 +30,7 @@
     {#if actionHref}
       <a href={actionHref} class="empty-action">{action}</a>
     {:else if onAction}
-      <button class="empty-action" on:click={onAction}>{action}</button>
+      <button class="empty-action" onclick={onAction}>{action}</button>
     {/if}
   {/if}
 </div>
