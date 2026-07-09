@@ -5,6 +5,11 @@ FROM base AS deps
 COPY package.json ./
 RUN npm install --legacy-peer-deps
 
+FROM deps AS development
+COPY . .
+EXPOSE 3000
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+
 FROM deps AS build
 ARG VITE_API_URL=http://localhost:8000
 ENV VITE_API_URL=$VITE_API_URL
@@ -17,8 +22,3 @@ COPY --from=build /app/package.json .
 ENV NODE_ENV=production
 EXPOSE 3000
 CMD ["node", "build"]
-
-FROM deps AS development
-COPY . .
-EXPOSE 3000
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
