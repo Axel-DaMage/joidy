@@ -31,3 +31,35 @@ def db_session():
     yield session
     session.close()
     engine.dispose()
+
+@pytest.fixture
+def client(db_session):
+    def override_get_db():
+        yield db_session
+
+    def override_get_current_user():
+        return 1  # Fake user ID for tests
+
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_current_user] = override_get_current_user
+
+    with TestClient(app) as test_client:
+        yield test_client
+
+    app.dependency_overrides.clear()
+
+@pytest.fixture
+def client(db_session):
+    def override_get_db():
+        yield db_session
+
+    def override_get_current_user():
+        return 1  # Fake user ID for tests
+
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_current_user] = override_get_current_user
+
+    with TestClient(app) as test_client:
+        yield test_client
+
+    app.dependency_overrides.clear()
