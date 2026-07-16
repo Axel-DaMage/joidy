@@ -437,6 +437,8 @@
     }
 
     const module = await import('force-graph');
+    if (!containerEl) return; // Prevent crash if unmounted during import
+    
     ForceGraph = module.default;
     graph = ForceGraph()(containerEl)
       .width(width)
