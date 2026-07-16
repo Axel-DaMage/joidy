@@ -1,7 +1,5 @@
 <script lang="ts">
   import { createEventDispatcher, onDestroy } from 'svelte';
-  import { Eye, EyeOff, Save, Trash2, X, Settings, Search, Maximize, ChevronLeft, ChevronRight, Download } from 'lucide-svelte';
-  import * as L from 'lucide-svelte';
   import DynamicIcon from './DynamicIcon.svelte';
   import IconPicker from './IconPicker.svelte';
   import { marked } from 'marked';
@@ -491,12 +489,12 @@
         </div>
 
         <button class="toolbar-btn danger-btn" on:click={() => dispatch('delete')} title="Eliminar nota">
-          <Trash2 size={14} />
+          <DynamicIcon name="Trash2" size={14} />
         </button>
       {/if}
 
       <button class="toolbar-btn" on:click={() => dispatch('cancel')} title="Cerrar">
-        <X size={14} />
+        <DynamicIcon name="X" size={14} />
       </button>
     </div>
   </div>
