@@ -142,7 +142,7 @@ async def initial_scan(vault_path: Path, client: httpx.AsyncClient):
         async with semaphore:
             await import_or_update_note(filepath, client, bulk_import=True)
 
-    await asyncio.gather(*(process_file(filepath) for filepath in md_files))
+    await asyncio.gather(*(process_file(filepath) for filepath in md_files), return_exceptions=True)
     await client.post(f"{settings.api_url}/notes/rebuild-derived", timeout=30.0)
 
 
@@ -173,8 +173,7 @@ async def _consume_vault_events(
                 except Exception:
                     logger.exception("[vault] Failed to process %s (%s)", path, change_type)
 
-            # return_exceptions=False but individual errors are caught above
-            await asyncio.gather(*(process(path, change_type) for path, change_type in pending.items()))
+            await asyncio.gather(*(process(path, change_type) for path, change_type in pending.items()), return_exceptions=True)
         except TimeoutError:
             continue
         except asyncio.CancelledError:
@@ -203,24 +202,37 @@ async def watch_vault():
     logger.info("[vault] Watching: %s", vault_path)
 
     async with httpx.AsyncClient() as client:
-        # Initial scan on startup
-        await initial_scan(vault_path, client)
-
-        queue: asyncio.Queue[VaultEvent] = asyncio.Queue()
-        consumer = asyncio.create_task(_consume_vault_events(queue, client), name="vault_event_consumer")
-
+        consumer = None
         try:
-            async for changes in awatch(str(vault_path)):
-                for change_type, path in changes:
-                    if not path.endswith(".md"):
-                        continue
-                    if _is_joidy_file(path):
-                        continue  # Never import _joidy/ files
-                    await queue.put(VaultEvent(path=path, change_type=change_type))
+            await initial_scan(vault_path, client)
+
+            queue: asyncio.Queue[VaultEvent] = asyncio.Queue(maxsize=1000)
+            consumer = asyncio.create_task(_consume_vault_events(queue, client), name="vault_event_consumer")
+
+            max_retries = 5
+            retry_delay = 1.0
+            for attempt in range(max_retries):
+                try:
+                    async for changes in awatch(str(vault_path)):
+                        retry_delay = 1.0
+                        for change_type, path in changes:
+                            if not path.endswith(".md"):
+                                continue
+                            if _is_joidy_file(path):
+                                continue
+                            await queue.put(VaultEvent(path=path, change_type=change_type))
+                    break
+                except Exception as e:
+                    logger.error("[vault] Watcher error (attempt %d/%d): %s", attempt + 1, max_retries, e)
+                    if attempt == max_retries - 1:
+                        raise
+                    await asyncio.sleep(retry_delay)
+                    retry_delay = min(retry_delay * 2, 60.0)
         finally:
-            consumer.cancel()
-            try:
-                await asyncio.wait_for(consumer, timeout=5.0)
-            except (TimeoutError, asyncio.CancelledError):
-                pass
+            if consumer is not None:
+                consumer.cancel()
+                try:
+                    await asyncio.wait_for(consumer, timeout=5.0)
+                except (TimeoutError, asyncio.CancelledError):
+                    pass
             logger.info("[vault] Watcher stopped cleanly")

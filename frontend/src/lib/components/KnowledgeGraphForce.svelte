@@ -237,6 +237,7 @@
     graph
       .nodeRelSize(3.2)
       .nodeCanvasObject((node: GraphNode, ctx: CanvasRenderingContext2D, scale: number) => {
+        if (!Number.isFinite(node.x) || !Number.isFinite(node.y)) return;
         const label = getNodeLabel(node);
         const isNote = node.type === 'note';
         const isTag = node.type === 'tag';

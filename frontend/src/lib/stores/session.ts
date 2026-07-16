@@ -5,6 +5,7 @@ export interface UserSession {
   username: string;
   email?: string;
   avatar?: string;
+  token?: string;
   preferences: {
     theme: 'dark' | 'light';
     timezone: string;
@@ -73,3 +74,28 @@ export const isAuthenticated = {
     return session.subscribe(s => run(!!s));
   }
 };
+
+export function getToken(): string | null {
+  if (typeof localStorage === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    const s = JSON.parse(raw) as UserSession;
+    return s.token ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveToken(token: string) {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (!raw) return;
+    const s = JSON.parse(raw) as UserSession;
+    s.token = token;
+    localStorage.setItem(SESSION_KEY, JSON.stringify(s));
+  } catch {
+    // ignore
+  }
+}

@@ -30,6 +30,7 @@ def _cached_list_skills(db: Session):
 register_cache_clearer(_cached_list_skills.cache_clear)  # type: ignore[attr-defined]
 
 
+@router.get("/")
 def list_skills(db: Session = Depends(get_db)):
     return _cached_list_skills(db)
 

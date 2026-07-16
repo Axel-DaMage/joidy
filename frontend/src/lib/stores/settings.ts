@@ -194,7 +194,7 @@ function createBooleanStore(key: string, defaultValue: boolean = false) {
 }
 
 export const showFrontmatter = createBooleanStore('joidy-show-frontmatter', false);
-export const showTrash       = createBooleanStore('joidy-show-trash', false);
+export const showTrash       = createBooleanStore('joidy-show-trash', true);
 export const showHiddenFiles = createBooleanStore('joidy-show-hidden', false);
 export const writeInObsidian = createBooleanStore('joidy-write-obsidian', false);
 export const use24HourClock  = createBooleanStore('joidy-use-24h-clock', true);

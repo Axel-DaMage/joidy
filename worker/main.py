@@ -14,6 +14,8 @@ from watchers.vault_watcher import watch_vault
 
 logger = logging.getLogger(__name__)
 
+SHUTDOWN_TIMEOUT = 15.0
+
 
 async def main():
     setup_logging()
@@ -35,9 +37,13 @@ async def main():
 
     try:
         await asyncio.gather(*tasks, return_exceptions=True)
-    except asyncio.CancelledError:
-        pass
     finally:
+        remaining = [t for t in tasks if not t.done()]
+        if remaining:
+            _, pending = await asyncio.wait(remaining, timeout=SHUTDOWN_TIMEOUT)
+            for t in pending:
+                t.cancel()
+                logger.warning("[worker] Task %s forcefully cancelled after timeout", t.get_name())
         logger.info("[worker] Stopped.")
 
 

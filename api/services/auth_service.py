@@ -58,11 +58,8 @@ def get_current_user_id(token: str) -> int | None:
 
 def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> int | None:
     """Dependency to get current user from Bearer token."""
-    # Allow bypass if disabled in dev mode, etc. if required.
-    # But usually, if there's no auth_password or secret_key, it's open.
-    # To enforce:
-    if not settings.secret_key or not settings.auth_password:
-        return 1 # Fallback to user 1 if auth is not configured
+    if not settings.auth_password:
+        return 1
     
     if not credentials:
         raise HTTPException(

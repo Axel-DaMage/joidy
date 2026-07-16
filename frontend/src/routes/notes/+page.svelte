@@ -20,7 +20,7 @@
   let selectedNote: Note | null = null;
   let showEditor = false;
   let editingNew = false;
-  let viewMode: 'tree' | 'list' = 'tree';
+  let viewMode: 'tree' | 'list' = 'list';
   let dailySourcePath: string | null = null;
   let dailyInitialTitle = '';
   let dailyNotesConfigured = false;
