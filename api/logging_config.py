@@ -73,9 +73,9 @@ def setup_logging() -> None:
     root = logging.getLogger()
     root.setLevel(logging.INFO)
 
-    # Avoid duplicate handlers on reload.
-    if root.handlers:
-        return
+    # Clear existing handlers (like those from uvicorn) so we don't get duplicates or bypassed logging
+    for handler in root.handlers[:]:
+        root.removeHandler(handler)
 
     # Console handler
     stream = logging.StreamHandler(sys.stdout)
