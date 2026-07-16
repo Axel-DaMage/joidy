@@ -482,8 +482,13 @@
   }
 
   async function handleDelete() {
+    if (!deleteConfirm) {
+      deleteConfirm = true;
+      return;
+    }
     if (selectedNote) {
       await deleteNote(selectedNote.id);
+      deleteConfirm = false;
       closeEditor();
     }
   }
@@ -555,7 +560,7 @@
   }
 </script>
 
-<svelte:window on:click={() => { if (showSortMenu) showSortMenu = false; }} />
+<svelte:window on:click={() => { if (showSortMenu) showSortMenu = false; }} on:keydown={(e) => e.key === 'Escape' && (deleteConfirm = false)} />
 
 <div
   class="notes-page"
