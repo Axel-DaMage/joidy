@@ -408,10 +408,10 @@
       {#if !momentary && note}
       <div class="nav-controls toolbar-nav">
         <button class="toolbar-btn icon-only" disabled={!hasPrev} on:click={() => dispatch('prev')} title="Nota anterior (Alt + ←)">
-          <ChevronLeft size={14} />
+          <DynamicIcon name="ChevronLeft" size={14} />
         </button>
         <button class="toolbar-btn icon-only" disabled={!hasNext} on:click={() => dispatch('next')} title="Siguiente nota (Alt + →)">
-          <ChevronRight size={14} />
+          <DynamicIcon name="ChevronRight" size={14} />
         </button>
       </div>
       {/if}
@@ -427,7 +427,7 @@
         on:click={() => zenMode = !zenMode}
         title="Modo Zen (Esc para salir)"
       >
-        <Maximize size={14} />
+        <DynamicIcon name="Maximize" size={14} />
       </button>
 
       <button
@@ -436,7 +436,7 @@
         on:click={() => previewMode = !previewMode}
         title="Alternar preview (Ctrl+P)"
       >
-        {#if previewMode}<EyeOff size={14} />{:else}<Eye size={14} />{/if}
+        {#if previewMode}<DynamicIcon name="EyeOff" size={14} />{:else}<DynamicIcon name="Eye" size={14} />{/if}
         <span>{previewMode ? 'Editor' : 'Vista previa'}</span>
       </button>
 
@@ -447,7 +447,7 @@
         disabled={saving || !title.trim()}
         title="Guardar (Ctrl+S)"
       >
-        <Save size={14} />
+        <DynamicIcon name="Save" size={14} />
         <span class="save-status">{saved ? 'Guardado' : saving ? '...' : note ? 'Guardar' : 'Crear'}</span>
       </button>
 
@@ -459,7 +459,7 @@
             on:click={() => showExportMenu = !showExportMenu}
             title="Exportar nota"
           >
-            <Download size={14} />
+            <DynamicIcon name="Download" size={14} />
             <span>Exportar</span>
           </button>
           
