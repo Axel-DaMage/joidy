@@ -853,10 +853,10 @@
 
 <svelte:window onkeydown={(e) => {
   if (e.key === 'Escape') {
+    if (deleteConfirm !== null) { deleteConfirm = null; return; }
     showAddForm = false;
     editingGoal = null;
   }
-}} />
 
 <div class="goals-page">
   {#if loadError}

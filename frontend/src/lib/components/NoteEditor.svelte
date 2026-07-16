@@ -5,6 +5,7 @@
   import DynamicIcon from './DynamicIcon.svelte';
   import IconPicker from './IconPicker.svelte';
   import { marked } from 'marked';
+  import DOMPurify from 'dompurify';
   import TagChip from './TagChip.svelte';
   import { aiSuggestions, fetchAISuggestions, findNoteByTitle } from '$lib/stores/notes';
   import { activeIconPack, showFrontmatter, hideTagsLine } from '$lib/stores/settings';
@@ -17,6 +18,18 @@
 
   // Configure marked once — GFM enables tables, strikethrough, autolinks
   marked.use({ gfm: true, breaks: true });
+
+  // Configure DOMPurify for safe markdown rendering
+  DOMPurify.setConfig({
+    ALLOWED_TAGS: [
+      'p', 'br', 'strong', 'em', 'a', 'ul', 'ol', 'li',
+      'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+      'pre', 'code', 'blockquote',
+      'table', 'thead', 'tbody', 'tr', 'th', 'td',
+      'span', 'div', 'hr', 'img', 'del', 'ins', 'sup', 'sub',
+    ],
+    ALLOWED_ATTR: ['href', 'target', 'rel', 'src', 'alt', 'class', 'data-title'],
+  });
 
   export let note: Note | null = null;
   export let momentary = false;
@@ -115,7 +128,7 @@
       return `<span class="wikilink" data-title="${title.trim()}">${display}</span>`;
     });
 
-    return String(marked.parse(preprocessed));
+    return DOMPurify.sanitize(String(marked.parse(preprocessed)));
   }
 
   function handlePreviewClick(e: MouseEvent) {
