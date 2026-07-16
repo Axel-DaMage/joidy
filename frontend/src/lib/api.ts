@@ -6,8 +6,8 @@ import { showNotification } from './stores/notifications';
 import { session, getToken } from './stores/session';
 
 const BASE = browser
-  ? ((import.meta.env.VITE_API_URL as string) || 'http://localhost:8000')
-  : (import.meta.env.VITE_INTERNAL_API_URL as string || import.meta.env.VITE_API_URL as string || 'http://localhost:8000');
+  ? `${window.location.protocol}//${window.location.hostname}:8000`
+  : (import.meta.env.VITE_INTERNAL_API_URL as string || 'http://api:8000');
 
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
   try {
@@ -195,6 +195,13 @@ export interface StreakStats {
 // ── Notes ─────────────────────────────────────────────────────────────────────
 
 export const api = {
+  auth: {
+    login: (password: string, username = 'user') => 
+      req<{ access_token: string; token_type: string }>('POST', `/auth/login?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`),
+    status: () => 
+      req<{ enabled: boolean; has_password: boolean }>('GET', '/auth/status')
+  },
+  
   notes: {
     list:   (tag?: string, limit = 1000) => req<Note[]>('GET', `/notes/?limit=${limit}${tag ? `&tag=${encodeURIComponent(tag)}` : ''}`),
     get:    (id: number)   => req<Note>('GET', `/notes/${id}`),

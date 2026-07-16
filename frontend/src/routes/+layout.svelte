@@ -7,7 +7,9 @@
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
   import SettingsPanel from '$lib/components/SettingsPanel.svelte';
   import Toast from '$lib/components/Toast.svelte';
+  import Login from '$lib/components/Login.svelte';
   import { api, type Goal, type PersonalStreak } from '$lib/api';
+  import { session, isAuthenticated } from '$lib/stores/session';
   import { totalXP, loadStats, pingActivity, globalLevel, nextStageXP, showNotification } from '$lib/stores/gamification';
   import { running, secondsLeft, phase } from '$lib/stores/pomodoro';
   import { initPomodoroSettings } from '$lib/stores/pomodoro';
@@ -54,7 +56,10 @@
     month: 'short'
   });
 
+  let mounted = false;
+
   onMount(() => {
+    mounted = true;
     accentColors.init();
     activeIconPack.init();
     initTheme();
@@ -72,9 +77,9 @@
     const connectWS = () => {
       if (typeof window === 'undefined') return;
       
-      const apiBase = (import.meta.env.VITE_API_URL as string) || 'http://localhost:8000';
-      const wsProto = apiBase.startsWith('https') ? 'wss:' : 'ws:';
-      const wsUrl = `${apiBase.replace(/^https?:/, wsProto)}/ws`;
+      const host = window.location.hostname;
+      const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${wsProto}//${host}:8000/ws`;
 
       logger.info('[layout] Connecting to WebSocket:', wsUrl);
       ws = new WebSocket(wsUrl);
@@ -222,6 +227,13 @@
   }
 </script>
 
+{#if !mounted}
+  <!-- Render blank or loading during SSR to prevent hydration mismatch -->
+  <div style="min-height: 100vh; background: var(--bg);"></div>
+{:else if !$isAuthenticated}
+  <Login />
+  <Toast />
+{:else}
 <div class="app-shell">
   <!-- Header -->
   <header class="app-header">
@@ -306,6 +318,7 @@
 <SettingsPanel bind:open={settingsOpen} on:close={() => settingsOpen = false} />
 <Toast />
 <TutorialOverlay />
+{/if}
 
 <style>
   .logo {
