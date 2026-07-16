@@ -1,7 +1,5 @@
 <script lang="ts">
   import { createEventDispatcher, onDestroy } from 'svelte';
-  import { Eye, EyeOff, Save, Trash2, X, Settings, Search, Maximize, ChevronLeft, ChevronRight, Download } from 'lucide-svelte';
-  import * as L from 'lucide-svelte';
   import DynamicIcon from './DynamicIcon.svelte';
   import IconPicker from './IconPicker.svelte';
   import { marked } from 'marked';
@@ -410,7 +408,7 @@
       {#if !momentary && note}
       <div class="nav-controls toolbar-nav">
         <button class="toolbar-btn icon-only" disabled={!hasPrev} on:click={() => dispatch('prev')} title="Nota anterior (Alt + ←)">
-          <ChevronLeft size={14} />
+          <DynamicIcon name="ChevronLeft" size={14} />
         </button>
         <button class="toolbar-btn icon-only" disabled={!hasNext} on:click={() => dispatch('next')} title="Siguiente nota (Alt + →)">
           <ChevronRight size={14} />
