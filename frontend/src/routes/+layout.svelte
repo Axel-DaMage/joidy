@@ -265,7 +265,7 @@
 
     const statsInterval = setInterval(() => {
       loadFooterStats().catch((e) => logger.error('[layout] footer stats refresh failed:', e));
-    }, 15000);
+    }, 60000);
 
     return () => {
       clearInterval(clockInterval);
