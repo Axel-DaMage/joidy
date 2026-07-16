@@ -24,6 +24,7 @@
   let dailySourcePath: string | null = null;
   let dailyInitialTitle = '';
   let dailyNotesConfigured = false;
+  let deleteConfirm = false;
 
   // Folder customization
   let editingFolder: string | null = null;
