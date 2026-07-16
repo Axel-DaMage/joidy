@@ -16,8 +16,9 @@ from services.gamification_engine import process_event
 from services.goal_service import (
     evaluate_active_goals,
     get_goal_progress,
+    get_bulk_goal_progress,
     get_goal_streak,
-    resolve_pending_removal,
+    sync_goals_from_note,
 )
 from services.joidy_vault_writer import (
     _write_goal_file,
@@ -152,8 +153,8 @@ class GoalContent(BaseModel):
 
 
 
-def _serialize_goal(goal: Goal, db: Session) -> dict:
-    progress = get_goal_progress(goal, db)
+def _serialize_goal(goal: Goal, db: Session, precalculated_progress: float | None = None) -> dict:
+    progress = precalculated_progress if precalculated_progress is not None else get_goal_progress(goal, db)
     return {
         "id": goal.id,
         "title": goal.title,
@@ -185,7 +186,8 @@ def _serialize_goal(goal: Goal, db: Session) -> dict:
 def list_goals(db: Session = Depends(get_db)):
     evaluate_active_goals(db)
     goals = db.query(Goal).order_by(Goal.is_completed, Goal.created_at.desc()).all()
-    return [_serialize_goal(g, db) for g in goals]
+    progress_map = get_bulk_goal_progress(goals, db)
+    return [_serialize_goal(g, db, precalculated_progress=progress_map.get(g.id)) for g in goals]
 
 
 @router.get("/streak")

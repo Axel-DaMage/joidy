@@ -158,6 +158,33 @@ def get_goal_progress(goal: Goal, db: Session) -> float:
     return goal.current_value
 
 
+def get_bulk_goal_progress(goals: list[Goal], db: Session) -> dict[int, float]:
+    """Bulk retrieve goal progress to prevent N+1 queries."""
+    result = {}
+    count_goals = [g for g in goals if g.tag_id and g.measurement_type == GoalMeasurement.COUNT]
+    
+    if count_goals:
+        goal_ids = [g.id for g in count_goals]
+        from sqlalchemy import func
+        from models.note import Note, NoteTag
+        
+        stmt = (
+            db.query(Goal.id, func.count(Note.id))
+            .outerjoin(NoteTag, NoteTag.tag_id == Goal.tag_id)
+            .outerjoin(Note, (Note.id == NoteTag.note_id) & (Note.created_at >= Goal.created_at))
+            .filter(Goal.id.in_(goal_ids))
+            .group_by(Goal.id)
+        )
+        for goal_id, count in stmt.all():
+            result[goal_id] = float(count)
+            
+    for g in goals:
+        if g.id not in result:
+            result[g.id] = g.current_value
+            
+    return result
+
+
 def evaluate_active_goals(db: Session):
     now = datetime.utcnow()
     active_goals = db.query(Goal).filter(
