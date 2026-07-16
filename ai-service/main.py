@@ -1,3 +1,4 @@
+from circuit_breaker import llm_circuit_breaker, emb_circuit_breaker, CircuitBreakerError
 from clients import get_embedding_client, get_llm_client
 from clients.prompts import CLASSIFY_PROMPT, RAG_PROMPT
 from config import settings
@@ -62,7 +63,7 @@ async def embed(req: EmbedRequest):
 
     try:
         client = get_embedding_client()
-        vector = await client.embed(req.content)
+        vector = await emb_circuit_breaker.call(client.embed, req.content)
 
         # Save vector embedding to shared SQLite database
         from database import store_embedding
@@ -74,6 +75,8 @@ async def embed(req: EmbedRequest):
             "embedding": vector,
             "provider": client.provider_name,
         }
+    except CircuitBreakerError as e:
+        return {"status": "circuit_open", "note_id": req.note_id, "error": str(e)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -85,13 +88,15 @@ async def classify(req: ClassifyRequest):
 
     try:
         client = get_llm_client()
-        suggestions = await client.classify(req.content, req.existing_tags, CLASSIFY_PROMPT)
+        suggestions = await llm_circuit_breaker.call(client.classify, req.content, req.existing_tags, CLASSIFY_PROMPT)
         return {
             "status": "success",
             "note_id": req.note_id,
             "suggestions": suggestions,
             "provider": client.provider_name,
         }
+    except CircuitBreakerError as e:
+        return {"status": "circuit_open", "note_id": req.note_id, "suggestions": [], "error": str(e)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -113,7 +118,7 @@ async def rag(req: RAGRequest):
     try:
         # 1. Get embedding for the question
         emb_client = get_embedding_client()
-        question_vector = await emb_client.embed(req.question)
+        question_vector = await emb_circuit_breaker.call(emb_client.embed, req.question)
 
         # 2. Find similar note IDs from SQLite vector database
         from database import engine, find_similar_notes
@@ -133,7 +138,8 @@ async def rag(req: RAGRequest):
                     context_chunks.append(f"Nota: {row[0]}\nContenido: {row[1]}")
 
         client = get_llm_client()
-        answer = await client.generate(
+        answer = await llm_circuit_breaker.call(
+            client.generate,
             prompt=RAG_PROMPT.format(question=req.question, context="\n\n---\n\n".join(context_chunks)),
             temperature=0.2,
             max_tokens=512,
@@ -143,5 +149,7 @@ async def rag(req: RAGRequest):
             "answer": answer,
             "provider": client.provider_name,
         }
+    except CircuitBreakerError as e:
+        return {"status": "circuit_open", "answer": "El proveedor de IA se encuentra temporalmente no disponible.", "error": str(e)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
