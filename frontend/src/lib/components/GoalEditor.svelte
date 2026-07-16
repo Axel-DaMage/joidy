@@ -2,9 +2,24 @@
   import { createEventDispatcher } from 'svelte';
   import { Eye, EyeOff, Save, Trash2, X, Maximize, ChevronLeft, ChevronRight, Settings } from 'lucide-svelte';
   import { marked } from 'marked';
+  import hljs from 'highlight.js';
+  import 'highlight.js/styles/github-dark.css';
   import { api, type Goal } from '$lib/api';
 
-  marked.use({ gfm: true, breaks: true });
+  const renderer = new marked.Renderer();
+  renderer.code = ({ text, lang }: { text: string; lang?: string }) => {
+    const language = lang && hljs.getLanguage(lang) ? lang : '';
+    let highlighted: string;
+    try {
+      highlighted = language
+        ? hljs.highlight(text, { language }).value
+        : hljs.highlightAuto(text).value;
+    } catch {
+      highlighted = text;
+    }
+    return `<pre><code class="hljs language-${language || 'auto'}">${highlighted}</code></pre>`;
+  };
+  marked.use({ gfm: true, breaks: true, renderer });
 
   export let goal: Goal | null = null;
   export let content: string = '';
