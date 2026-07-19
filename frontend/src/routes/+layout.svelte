@@ -1,5 +1,6 @@
 <script lang="ts">
   import '../app.css';
+  import { browser } from '$app/environment';
   import { page } from '$app/stores';
   import { onMount } from 'svelte';
   import { fade } from 'svelte/transition';
@@ -169,6 +170,28 @@
     };
     requestAnimationFrame(() => init());
 
+    // Global error handlers
+    const handleOnerror = (
+      _event: Event | string,
+      _source?: string,
+      _lineno?: number,
+      _colno?: number,
+      error?: Error
+    ) => {
+      const msg = error?.message || String(error) || 'Error global';
+      console.error('[Global onerror]', error);
+      showNotification(`Error inesperado: ${msg}`, 'error');
+    };
+    window.onerror = handleOnerror;
+
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const reason = event.reason;
+      const msg = reason?.message || String(reason) || 'Promesa rechazada';
+      console.error('[Unhandled rejection]', reason);
+      showNotification(`Error inesperado: ${msg}`, 'error');
+    };
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+
     const handleStreaksUpdated = () => {
       loadFooterStats().catch((e) => logger.error('[layout] footer stats refresh failed:', e));
     };
@@ -207,6 +230,7 @@
       window.removeEventListener('joidy:open-settings', handleOpenSettings);
       window.removeEventListener('focus', handleWindowFocus);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
 
       // Clean up WebSocket connection
       if (ws) {
