@@ -24,6 +24,7 @@
   let dailySourcePath: string | null = null;
   let dailyInitialTitle = '';
   let dailyNotesConfigured = false;
+  let deleteConfirm = false;
 
   // Folder customization
   let editingFolder: string | null = null;
@@ -481,8 +482,13 @@
   }
 
   async function handleDelete() {
+    if (!deleteConfirm) {
+      deleteConfirm = true;
+      return;
+    }
     if (selectedNote) {
       await deleteNote(selectedNote.id);
+      deleteConfirm = false;
       closeEditor();
     }
   }
@@ -554,7 +560,7 @@
   }
 </script>
 
-<svelte:window on:click={() => { if (showSortMenu) showSortMenu = false; }} />
+<svelte:window on:click={() => { if (showSortMenu) showSortMenu = false; }} on:keydown={(e) => e.key === 'Escape' && (deleteConfirm = false)} />
 
 <div
   class="notes-page"
@@ -765,6 +771,16 @@
 
   <!-- ── Editor panel ──────────────────────────────────────────────────────── -->
   <div class="editor-panel">
+    {#if deleteConfirm}
+      <div class="delete-confirm-bar">
+        <span class="delete-confirm-text">¿Eliminar esta nota?</span>
+        <span class="delete-confirm-hint">Esta acción no se puede deshacer.</span>
+        <div class="delete-confirm-actions">
+          <button class="btn-cancel" on:click={() => deleteConfirm = false}>Cancelar</button>
+          <button class="btn-danger" on:click={handleDelete}>Eliminar</button>
+        </div>
+      </div>
+    {/if}
     {#if showEditor}
       {#key editingNew ? (isMomentary ? 'momentary' : 'new') : selectedNote?.id}
         <NoteEditor
@@ -1414,6 +1430,57 @@
     color: var(--xp-contrast-text, var(--bg));
   }
   .folder-modal-btns button:last-child:hover {
+    opacity: 0.85;
+  }
+
+  /* ── Delete confirmation bar ── */
+  .delete-confirm-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .delete-confirm-text {
+    font-size: 13px;
+    color: var(--text-primary);
+    font-weight: 500;
+  }
+  .delete-confirm-hint {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    flex: 1;
+  }
+  .delete-confirm-actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .delete-confirm-actions .btn-cancel,
+  .delete-confirm-actions .btn-danger {
+    padding: 6px 14px;
+    border-radius: var(--r);
+    font-size: 12px;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text-secondary);
+    font-family: var(--font-sans);
+    transition: all var(--t-fast);
+  }
+  .delete-confirm-actions .btn-cancel:hover {
+    border-color: var(--text-muted);
+    color: var(--text-primary);
+  }
+  .delete-confirm-actions .btn-danger {
+    background: var(--error, #ef4444);
+    border-color: var(--error, #ef4444);
+    color: #fff;
+  }
+  .delete-confirm-actions .btn-danger:hover {
     opacity: 0.85;
   }
 </style>

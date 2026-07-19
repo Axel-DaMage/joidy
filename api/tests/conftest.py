@@ -1,3 +1,4 @@
+from sqlalchemy import pool
 import sys
 import types
 
@@ -10,12 +11,18 @@ if "sqlite_vec" not in sys.modules:
     _stub.load = lambda _conn: None
     sys.modules["sqlite_vec"] = _stub
 
-from database import Base
-
+from database import Base, get_db
+from main import app
+from fastapi.testclient import TestClient
+from services.auth_service import get_current_user
 
 @pytest.fixture
 def db_session():
-    engine = create_engine("sqlite:///:memory:")
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=pool.StaticPool
+    )
     Base.metadata.create_all(engine)
     with engine.begin() as conn:
         try:
@@ -31,22 +38,6 @@ def db_session():
     yield session
     session.close()
     engine.dispose()
-
-@pytest.fixture
-def client(db_session):
-    def override_get_db():
-        yield db_session
-
-    def override_get_current_user():
-        return 1  # Fake user ID for tests
-
-    app.dependency_overrides[get_db] = override_get_db
-    app.dependency_overrides[get_current_user] = override_get_current_user
-
-    with TestClient(app) as test_client:
-        yield test_client
-
-    app.dependency_overrides.clear()
 
 @pytest.fixture
 def client(db_session):

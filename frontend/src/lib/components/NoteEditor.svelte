@@ -6,6 +6,8 @@
   import IconPicker from './IconPicker.svelte';
   import { marked } from 'marked';
   import DOMPurify from 'dompurify';
+  import hljs from 'highlight.js';
+  import 'highlight.js/styles/github-dark.css';
   import TagChip from './TagChip.svelte';
   import { aiSuggestions, fetchAISuggestions, findNoteByTitle } from '$lib/stores/notes';
   import { activeIconPack, showFrontmatter, hideTagsLine } from '$lib/stores/settings';
@@ -16,8 +18,22 @@
   import { downloadMarkdown, downloadHTML, copyNoteAsMarkdown } from '$lib/utils/export';
   import { showNotification } from '$lib/stores/gamification';
 
-  // Configure marked once — GFM enables tables, strikethrough, autolinks
-  marked.use({ gfm: true, breaks: true });
+  // Configure marked with GFM and syntax highlighting via highlight.js
+  const renderer = new marked.Renderer();
+  renderer.code = (code: string, infostring: string | undefined, _escaped: boolean) => {
+    const lang = infostring || '';
+    const language = lang && hljs.getLanguage(lang) ? lang : '';
+    let highlighted: string;
+    try {
+      highlighted = language
+        ? hljs.highlight(code, { language }).value
+        : hljs.highlightAuto(code).value;
+    } catch {
+      highlighted = code;
+    }
+    return `<pre><code class="hljs language-${language || 'auto'}">${highlighted}</code></pre>`;
+  };
+  marked.use({ gfm: true, breaks: true, renderer });
 
   // Configure DOMPurify for safe markdown rendering
   DOMPurify.setConfig({
