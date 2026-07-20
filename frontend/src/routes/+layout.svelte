@@ -1,5 +1,6 @@
 <script lang="ts">
   import '../app.css';
+  import { browser } from '$app/environment';
   import { page } from '$app/stores';
   import { onMount } from 'svelte';
   import { fade } from 'svelte/transition';
@@ -23,18 +24,20 @@
   import { initConnectionStore } from '$lib/stores/connection';
   import { loadNotes } from '$lib/stores/notes';
 
-  const navItems = [
-    { href: '/',        label: 'Inicio',    icon: 'Home' },
-    { href: '/notes',   label: 'Notas',     icon: 'BookOpen' },
-    { href: '/graph',   label: 'Grafo',     icon: 'Network' },
-    { href: '/skills',  label: 'Habilidades', icon: 'Zap' },
-    { href: '/goals',   label: 'Objetivos', icon: 'Target' },
-    { href: '/streaks', label: 'Rachas',    icon: 'Flame' },
-    { href: '/ai',      label: 'IA',         icon: 'Brain' },
-    { href: '/gmail',   label: 'Gmail',     icon: 'Mail' },
-    { href: '/contactos', label: 'Contactos', icon: 'Users' },
-    { href: '/strava',  label: 'Strava',    icon: 'Activity' },
-    { href: '/spotify', label: 'Spotify',   icon: 'Music' },
+  type NavItemStatus = 'ready' | 'dev' | 'placeholder';
+
+  const navItems: { href: string; label: string; icon: string; status: NavItemStatus }[] = [
+    { href: '/',        label: 'Inicio',      icon: 'Home',     status: 'ready' },
+    { href: '/notes',   label: 'Notas',       icon: 'BookOpen', status: 'ready' },
+    { href: '/graph',   label: 'Grafo',       icon: 'Network',  status: 'dev' },
+    { href: '/skills',  label: 'Habilidades', icon: 'Zap',      status: 'dev' },
+    { href: '/goals',   label: 'Objetivos',   icon: 'Target',   status: 'ready' },
+    { href: '/streaks', label: 'Rachas',      icon: 'Flame',    status: 'ready' },
+    { href: '/ai',      label: 'IA',          icon: 'Brain',    status: 'placeholder' },
+    { href: '/gmail',   label: 'Gmail',       icon: 'Mail',     status: 'placeholder' },
+    { href: '/contactos', label: 'Contactos', icon: 'Users',    status: 'placeholder' },
+    { href: '/strava',  label: 'Strava',      icon: 'Activity', status: 'placeholder' },
+    { href: '/spotify', label: 'Spotify',     icon: 'Music',    status: 'placeholder' },
   ];
 
   let settingsOpen = false;
@@ -219,6 +222,28 @@
     };
     requestAnimationFrame(() => init());
 
+    // Global error handlers
+    const handleOnerror = (
+      _event: Event | string,
+      _source?: string,
+      _lineno?: number,
+      _colno?: number,
+      error?: Error
+    ) => {
+      const msg = error?.message || String(error) || 'Error global';
+      console.error('[Global onerror]', error);
+      showNotification(`Error inesperado: ${msg}`, 'error');
+    };
+    window.onerror = handleOnerror;
+
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const reason = event.reason;
+      const msg = reason?.message || String(reason) || 'Promesa rechazada';
+      console.error('[Unhandled rejection]', reason);
+      showNotification(`Error inesperado: ${msg}`, 'error');
+    };
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+
     const handleStreaksUpdated = () => {
       loadFooterStats().catch((e) => logger.error('[layout] footer stats refresh failed:', e));
     };
@@ -275,6 +300,7 @@
       window.removeEventListener('focus', handleWindowFocus);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('online', handleOnline);
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
 
       // Clean up WebSocket connection
       if (ws) {
@@ -345,10 +371,15 @@
 
   <!-- Sidebar -->
   <nav class="app-sidebar">
-    {#each navItems as { href, label, icon }}
+    {#each navItems as { href, label, icon, status }}
       {@const active = $page.url.pathname === href || ($page.url.pathname.startsWith(href) && href !== '/')}
-      <a {href} class="nav-item" class:active title={label}>
+      <a {href} class="nav-item" class:active class:nav-dev={status === 'dev'} class:nav-placeholder={status === 'placeholder'} title={label}>
         <DynamicIcon name={icon} size={16} />
+        {#if status === 'dev'}
+          <span class="nav-dev-dot" title="Requiere Dev Mode"></span>
+        {:else if status === 'placeholder'}
+          <span class="nav-placeholder-badge">Pronto</span>
+        {/if}
         <span class="tooltip">{label}</span>
       </a>
     {/each}
@@ -534,5 +565,42 @@
     0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4); }
     70% { box-shadow: 0 0 0 6px rgba(34, 197, 94, 0); }
     100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+  }
+
+  .nav-dev-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--warning, #f59e0b);
+    flex-shrink: 0;
+    animation: dev-dot-pulse 2s infinite;
+  }
+  @keyframes dev-dot-pulse {
+    0%, 100% { opacity: 0.6; }
+    50%      { opacity: 1; box-shadow: 0 0 4px var(--warning, #f59e0b); }
+  }
+  .nav-item.nav-dev .tooltip::after {
+    content: ' (dev)';
+    font-size: 10px;
+    color: var(--warning, #f59e0b);
+  }
+
+  .nav-placeholder-badge {
+    font-size: 9px;
+    line-height: 1;
+    padding: 1px 4px;
+    border-radius: 3px;
+    background: var(--surface);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    font-style: italic;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .nav-item.nav-placeholder {
+    opacity: 0.55;
+  }
+  .nav-item.nav-placeholder:hover {
+    opacity: 0.8;
   }
 </style>

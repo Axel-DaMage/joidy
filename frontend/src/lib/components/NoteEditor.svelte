@@ -5,6 +5,9 @@
   import DynamicIcon from './DynamicIcon.svelte';
   import IconPicker from './IconPicker.svelte';
   import { marked } from 'marked';
+  import DOMPurify from 'dompurify';
+  import hljs from 'highlight.js';
+  import 'highlight.js/styles/github-dark.css';
   import TagChip from './TagChip.svelte';
   import { aiSuggestions, fetchAISuggestions, findNoteByTitle } from '$lib/stores/notes';
   import { activeIconPack, showFrontmatter, hideTagsLine } from '$lib/stores/settings';
@@ -15,8 +18,34 @@
   import { downloadMarkdown, downloadHTML, copyNoteAsMarkdown } from '$lib/utils/export';
   import { showNotification } from '$lib/stores/gamification';
 
-  // Configure marked once — GFM enables tables, strikethrough, autolinks
-  marked.use({ gfm: true, breaks: true });
+  // Configure marked with GFM and syntax highlighting via highlight.js
+  const renderer = new marked.Renderer();
+  renderer.code = (code: string, infostring: string | undefined, _escaped: boolean) => {
+    const lang = infostring || '';
+    const language = lang && hljs.getLanguage(lang) ? lang : '';
+    let highlighted: string;
+    try {
+      highlighted = language
+        ? hljs.highlight(code, { language }).value
+        : hljs.highlightAuto(code).value;
+    } catch {
+      highlighted = code;
+    }
+    return `<pre><code class="hljs language-${language || 'auto'}">${highlighted}</code></pre>`;
+  };
+  marked.use({ gfm: true, breaks: true, renderer });
+
+  // Configure DOMPurify for safe markdown rendering
+  DOMPurify.setConfig({
+    ALLOWED_TAGS: [
+      'p', 'br', 'strong', 'em', 'a', 'ul', 'ol', 'li',
+      'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+      'pre', 'code', 'blockquote',
+      'table', 'thead', 'tbody', 'tr', 'th', 'td',
+      'span', 'div', 'hr', 'img', 'del', 'ins', 'sup', 'sub',
+    ],
+    ALLOWED_ATTR: ['href', 'target', 'rel', 'src', 'alt', 'class', 'data-title'],
+  });
 
   export let note: Note | null = null;
   export let momentary = false;
@@ -115,7 +144,7 @@
       return `<span class="wikilink" data-title="${title.trim()}">${display}</span>`;
     });
 
-    return String(marked.parse(preprocessed));
+    return DOMPurify.sanitize(String(marked.parse(preprocessed)));
   }
 
   function handlePreviewClick(e: MouseEvent) {

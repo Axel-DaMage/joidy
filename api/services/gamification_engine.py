@@ -162,12 +162,18 @@ class GamificationResult:
     message: str = ""
 
 
+
 def _get_or_create_stats(db: Session) -> UserStats:
     stats = db.query(UserStats).filter(UserStats.id == 1).first()
     if not stats:
-        stats = UserStats(id=1)
-        db.add(stats)
-        db.flush()
+        try:
+            with db.begin_nested():
+                stats = UserStats(id=1)
+                db.add(stats)
+                db.flush()
+        except IntegrityError:
+            # Another concurrent request already created it
+            stats = db.query(UserStats).filter(UserStats.id == 1).one()
     return stats
 
 

@@ -23,6 +23,7 @@
   let goalSearchQuery = $state('');
   let goalFilterState = $state<string | null>(null);
   let pinnedGoals = $state<Set<number>>(new Set());
+  let deleteConfirm = $state<number | null>(null);
 
   function filteredGoals(goals: Goal[], query: string, filter: string | null, pinned: Set<number>) {
     let result = goals;
@@ -274,8 +275,13 @@
   }
 
   async function deleteGoal(id: number) {
+    if (deleteConfirm !== id) {
+      deleteConfirm = id;
+      return;
+    }
     await api.goals.delete(id);
     goals = goals.filter(g => g.id !== id);
+    deleteConfirm = null;
   }
 
   function formatFailConfig(config: string) {
@@ -853,6 +859,7 @@
 
 <svelte:window onkeydown={(e) => {
   if (e.key === 'Escape') {
+    if (deleteConfirm !== null) { deleteConfirm = null; return; }
     showAddForm = false;
     editingGoal = null;
   }
@@ -982,7 +989,12 @@
                   <Ban size={14} />
                 </button>
               {/if}
-              <button class="btn btn-ghost text-muted" title="Eliminar" onclick={() => deleteGoal(goal.id)}>×</button>
+              {#if deleteConfirm === goal.id}
+                <button class="btn btn-ghost text-danger" onclick={() => deleteGoal(goal.id)}>¿Eliminar?</button>
+                <button class="btn btn-ghost text-muted" onclick={() => deleteConfirm = null}>Cancelar</button>
+              {:else}
+                <button class="btn btn-ghost text-muted" title="Eliminar" onclick={() => deleteGoal(goal.id)}>×</button>
+              {/if}
               <button class="btn btn-ghost text-muted" title="Editar" onclick={() => openGoalEditor(goal)}>
                 <Pencil size={13} />
               </button>
