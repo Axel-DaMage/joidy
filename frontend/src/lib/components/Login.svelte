@@ -2,9 +2,10 @@
   import { api } from '$lib/api';
   import { session, saveToken } from '$lib/stores/session';
   import { showNotification } from '$lib/stores/notifications';
+  import { logger } from '$lib/utils/logger';
 
   let password = '';
-  let username = 'user';
+  let username = $session?.username || 'user';
   let loading = false;
 
   async function handleLogin() {
@@ -12,6 +13,7 @@
     try {
       const res = await api.auth.login(password, username);
       saveToken(res.access_token);
+
       session.login({
         id: '1',
         username,
@@ -19,6 +21,14 @@
         preferences: { theme: 'dark', timezone: 'UTC', language: 'es' },
         createdAt: new Date().toISOString()
       });
+
+      try {
+        const status = await api.auth.status();
+        logger.info('Auth status confirmed:', status);
+      } catch {
+        logger.warn('Auth status check failed, using fallback session data');
+      }
+
       showNotification('Inicio de sesión exitoso', 'success');
       setTimeout(() => {
         window.location.reload();
