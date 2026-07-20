@@ -45,6 +45,8 @@
   let pendingTasks = 0;
   let pendingStreaks = 0;
   let streaksNotified = false;
+  let lastFooterStatsFetch = 0;
+  let lastStatsLoad = 0;
 
   $: currentTime = now.toLocaleTimeString('es-CL', {
     hour: $use24HourClock ? '2-digit' : 'numeric',
@@ -76,9 +78,20 @@
     // Connect to WebSocket for real-time notifications
     let ws: WebSocket | null = null;
     let wsReconnectTimeout: any = null;
+    let wsRetryDelay = 1000;
 
     const connectWS = () => {
       if (typeof window === 'undefined') return;
+
+      if (!navigator.onLine) {
+        logger.info('[layout] Offline, skipping WebSocket reconnect');
+        return;
+      }
+
+      if (document.visibilityState === 'hidden') {
+        logger.info('[layout] Tab hidden, skipping WebSocket reconnect');
+        return;
+      }
       
       const host = window.location.hostname;
       const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -86,6 +99,11 @@
 
       logger.info('[layout] Connecting to WebSocket:', wsUrl);
       ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        logger.info('[layout] WebSocket connected');
+        wsRetryDelay = 1000;
+      };
 
       ws.onmessage = (event) => {
         try {
@@ -111,8 +129,11 @@
       };
 
       ws.onclose = () => {
-        logger.warn('[layout] WebSocket connection closed, reconnecting in 5s...');
-        wsReconnectTimeout = setTimeout(connectWS, 5000);
+        if (wsReconnectTimeout) clearTimeout(wsReconnectTimeout);
+        const delay = Math.min(wsRetryDelay, 60000);
+        logger.warn(`[layout] WebSocket connection closed, reconnecting in ${delay}ms...`);
+        wsReconnectTimeout = setTimeout(connectWS, delay);
+        wsRetryDelay = Math.min(wsRetryDelay * 2, 60000);
       };
 
       ws.onerror = (err) => {
@@ -130,7 +151,13 @@
       });
     }
 
-    const loadFooterStats = async () => {
+    const loadFooterStats = async (force = false) => {
+      if (document.visibilityState !== 'visible') return;
+
+      const now = Date.now();
+      if (!force && now - lastFooterStatsFetch < 30000) return;
+      lastFooterStatsFetch = now;
+
       const cachedGoals = getCachedData<Goal[]>('goals');
       const cachedStreaks = getCachedData<PersonalStreak[]>('streaks');
       if (cachedGoals) {
@@ -163,10 +190,35 @@
       }
     };
 
+    const throttledPing = async () => {
+      const lastPing = localStorage.getItem('joidy-last-ping');
+      if (lastPing) {
+        const elapsed = Date.now() - parseInt(lastPing, 10);
+        if (elapsed < 6 * 60 * 60 * 1000) return;
+      }
+      try {
+        await pingActivity();
+        localStorage.setItem('joidy-last-ping', Date.now().toString());
+      } catch (e) {
+        logger.error('[layout] pingActivity failed:', e);
+      }
+    };
+
+    const throttledLoadStats = async () => {
+      const now = Date.now();
+      if (now - lastStatsLoad < 5 * 60 * 1000) return;
+      lastStatsLoad = now;
+      try {
+        await loadStats();
+      } catch (e) {
+        logger.error('[layout] loadStats failed:', e);
+      }
+    };
+
     const init = async () => {
       loadFooterStats().catch(() => {});
-      loadStats().catch(() => {});
-      pingActivity().catch(() => {});
+      throttledLoadStats();
+      throttledPing();
     };
     requestAnimationFrame(() => init());
 
@@ -201,15 +253,32 @@
     };
 
     const handleWindowFocus = () => {
-      loadFooterStats().catch((e) => logger.error('[layout] footer stats refresh failed:', e));
+      if (document.visibilityState === 'visible') {
+        loadFooterStats(true).catch((e) => logger.error('[layout] footer stats refresh failed:', e));
+      }
     };
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        loadFooterStats().catch((e) => logger.error('[layout] footer stats refresh failed:', e));
+        if (Date.now() - lastFooterStatsFetch > 60000) {
+          loadFooterStats(true).catch((e) => logger.error('[layout] footer stats refresh failed:', e));
+        }
+        if (!ws || (ws.readyState !== WebSocket.OPEN && ws.readyState !== WebSocket.CONNECTING)) {
+          if (wsReconnectTimeout) clearTimeout(wsReconnectTimeout);
+          wsRetryDelay = 1000;
+          connectWS();
+        }
       }
     };
 
+    const handleOnline = () => {
+      logger.info('[layout] Back online, reconnecting WebSocket...');
+      if (wsReconnectTimeout) clearTimeout(wsReconnectTimeout);
+      wsRetryDelay = 1000;
+      connectWS();
+    };
+
+    window.addEventListener('online', handleOnline);
     window.addEventListener('joidy:streaks-updated', handleStreaksUpdated);
     window.addEventListener('joidy:open-settings', handleOpenSettings);
     window.addEventListener('focus', handleWindowFocus);
@@ -221,7 +290,7 @@
 
     const statsInterval = setInterval(() => {
       loadFooterStats().catch((e) => logger.error('[layout] footer stats refresh failed:', e));
-    }, 15000);
+    }, 60000);
 
     return () => {
       clearInterval(clockInterval);
@@ -230,6 +299,7 @@
       window.removeEventListener('joidy:open-settings', handleOpenSettings);
       window.removeEventListener('focus', handleWindowFocus);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('online', handleOnline);
       window.removeEventListener('unhandledrejection', handleUnhandledRejection);
 
       // Clean up WebSocket connection
