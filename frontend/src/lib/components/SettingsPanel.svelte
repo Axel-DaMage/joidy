@@ -436,7 +436,7 @@
           </p>
         </section>
 
-        <!-- Integraciones -->
+                <!-- Integraciones -->
         <section class="section">
           <div class="section-title" style="color: var(--xp, var(--accent));">
             <DynamicIcon name="GitBranch" size={12} /> Integraciones
@@ -454,42 +454,56 @@
           </div>
           <div class="row">
             <div class="row-label disabled">
+              <span>Google Contacts</span>
+              <span class="badge badge-off" style="margin-left:4px">En desarrollo (#43)</span>
+            </div>
+            <button class="link-btn disabled">Futura integración</button>
+          </div>
+          <div class="row">
+            <div class="row-label disabled">
+              <span>Strava</span>
+              <span class="badge badge-off" style="margin-left:4px">En desarrollo (#44)</span>
+            </div>
+            <button class="link-btn disabled">Futura integración</button>
+          </div>
+          <div class="row">
+            <div class="row-label disabled">
+              <span>Gmail</span>
+              <span class="badge badge-off" style="margin-left:4px">En desarrollo (#42)</span>
+            </div>
+            <button class="link-btn disabled">Futura integración</button>
+          </div>
+          <div class="row">
+            <div class="row-label disabled">
+              <span>Spotify</span>
+              <span class="badge badge-off" style="margin-left:4px">En desarrollo (#45)</span>
+            </div>
+            <button class="link-btn disabled">Futura integración</button>
+          </div>
+          <div class="row">
+            <div class="row-label disabled">
               <span>Google Calendar</span>
             </div>
-            <button class="link-btn disabled">Pronto</button>
+            <button class="link-btn disabled">Futura integración</button>
           </div>
           <div class="row">
             <div class="row-label disabled">
               <span>Google Tasks</span>
             </div>
-            <button class="link-btn disabled">Pronto</button>
+            <button class="link-btn disabled">Futura integración</button>
           </div>
-          <div class="row">
-            <div class="row-label disabled">
-              <span>Google Contacts</span>
-            </div>
-            <button class="link-btn disabled">Pronto</button>
-          </div>
-          <div class="row">
-            <div class="row-label disabled">
-              <span>Strava</span>
-            </div>
-            <button class="link-btn disabled">Pronto</button>
-          </div>
-          <div class="row">
-            <div class="row-label disabled">
-              <span>Gmail</span>
-            </div>
-            <button class="link-btn disabled">Pronto</button>
-          </div>
+        </section>
 
-          <div class="section-subtitle" style="color: var(--xp, var(--accent)); margin-top: 16px;">
+        <!-- IA -->
+        <section class="section">
+          <div class="section-title" style="color: var(--xp, var(--accent));">
             <DynamicIcon name="Zap" size={12} /> IA
           </div>
-          <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px; margin-top: 8px;">
+          <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
             <div class="row-label">
               <span>Gemini API Key</span>
               {#if isConfigured('gemini_api_key')}<span class="configured-badge">✓</span>{/if}
+              <span class="badge badge-off" style="margin-left:auto">En desarrollo (#41)</span>
             </div>
             <input type="password" class="setting-input mono" placeholder="AIzaSy..." bind:value={systemConfig.gemini_api_key} />
           </div>

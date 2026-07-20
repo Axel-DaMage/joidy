@@ -54,6 +54,20 @@ Optional: `GITHUB_CLIENT_ID/SECRET/TOKEN/USERNAME`, `TELEGRAM_BOT_TOKEN`,
 
 Port overrides: `FRONTEND_PORT`, `API_PORT`, `AI_SERVICE_PORT`, `WORKER_PORT`.
 
+
+## Integrations Status
+
+| Integration | Backend | Frontend | Issue |
+|-------------|---------|----------|-------|
+| **Gemini AI** | ✅ `ai-service` | ⚠️ Placeholder UI | #41 |
+| **GitHub** | ✅ `auth/github` | ⚠️ Fake OAuth | #46 |
+| **Gmail** | ❌ None | ❌ None | #42 |
+| **Contacts** | ❌ None | ❌ None | #43 |
+| **Strava** | ❌ None | ❌ None | #44 |
+| **Spotify** | ❌ None | ❌ None | #45 |
+| **G Calendar**| ❌ None | ❌ None | #2 |
+| **G Tasks** | ❌ None | ❌ None | #2 |
+
 ## Architecture
 
 ### API (`api/`)
