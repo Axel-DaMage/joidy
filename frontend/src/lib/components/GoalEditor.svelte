@@ -2,6 +2,7 @@
   import { createEventDispatcher } from 'svelte';
   import { Eye, EyeOff, Save, Trash2, X, Maximize, ChevronLeft, ChevronRight, Settings } from 'lucide-svelte';
   import { marked } from 'marked';
+  import DOMPurify from 'dompurify';
   import hljs from 'highlight.js';
   import 'highlight.js/styles/github-dark.css';
   import { api, type Goal } from '$lib/api';
@@ -21,6 +22,17 @@
     return `<pre><code class="hljs language-${language || 'auto'}">${highlighted}</code></pre>`;
   };
   marked.use({ gfm: true, breaks: true, renderer });
+
+  DOMPurify.setConfig({
+    ALLOWED_TAGS: [
+      'p', 'br', 'strong', 'em', 'a', 'ul', 'ol', 'li',
+      'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+      'pre', 'code', 'blockquote',
+      'table', 'thead', 'tbody', 'tr', 'th', 'td',
+      'span', 'div', 'hr', 'img', 'del', 'ins', 'sup', 'sub',
+    ],
+    ALLOWED_ATTR: ['href', 'target', 'rel', 'src', 'alt', 'class', 'data-title'],
+  });
 
   export let goal: Goal | null = null;
   export let content: string = '';
@@ -51,7 +63,7 @@
 
   function renderMarkdown(md: string): string {
     if (!md.trim()) return '<p style="color:var(--text-muted);font-style:italic;">Escribe algo para ver el preview...</p>';
-    return String(marked.parse(md));
+    return DOMPurify.sanitize(String(marked.parse(md)));
   }
 
   function updateContent(e: Event) {
