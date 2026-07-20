@@ -5,117 +5,51 @@
 
 ---
 
-## 🛠️ 1. Optimizaciones Técnicas Críticas (Nuevas)
-
-### 🔴 Alta Prioridad
-- [x] **Bug en Health Check de Caché (Backend)**: Corregido en `api/services/response_cache.py`. Se añadió `"initialized": True` a las estadísticas del caché para evitar el estado "degraded" falso en `/health/ready`.
-- [x] **Menú de Exportación en Interfaz (Frontend)**: Agregar controles en la barra de herramientas de `NoteEditor.svelte` y en la vista de notas para invocar los endpoints de exportación existentes en `/export/notes/markdown`, `/export/notes/html` y `/export/notes/zip`.
-- [x] **Soporte de WebSocket End-to-End (Real-time)**: Conectar el cliente Svelte al canal `/ws` implementado en el backend para recibir notificaciones reactivas sin recarga. Además, **integrar las llamadas de difusión en el backend** (como `notify_note_created`, `notify_xp_gained`, `notify_streak_updated` definidos en `api/routers/websocket.py`) en sus respectivos servicios de mutación (`note_service.py`, `gamification_engine.py`), ya que actualmente están huérfanos y no se disparan.
-
-### 🟡 Media Prioridad
-- [x] **Rate Limiting Avanzado**: Extender el middleware `RateLimitMiddleware` para soportar límites de peticiones basados en clave de API o por usuario autenticado, en lugar de límites globales únicamente.
-
----
-
-## 💻 2. Backend - Estado de Desarrollo
-
-### 2.1 Integraciones
-- [x] **GITHUB_CLIENT_SECRET**: Configurado y en uso en la integración OAuth.
-- [ ] **Calendario Personalizado (Google API)**: Implementar integración de eventos y tareas basada en Google Calendar y Google Tasks (Ver sección de arquitectura de Google abajo).
-- [ ] **Sincronización Bidireccional con Obsidian via Webhook**: Permitir triggers instantáneos externos hacia la bóveda en lugar de depender únicamente del watcher local.
-
-### 2.2 Servicios & Middleware
-- [x] **response_cache** (`api/services/response_cache.py`): Caché TTL en memoria para endpoints costosos con estadísticas completas y eviction seguro.
-- [x] **Dead Letter Queue (DLQ)**: Sistema de almacenamiento y reintento con backoff exponencial para embeddings fallidos (`embedding_failures`).
-- [x] **Rate Limiting Global**: Middleware implementado a 60 req/min para salvaguardar la API.
-
-### 2.3 Base de Datos & Modelos
-- [x] **Alembic Migrations**: Sistema de migraciones robusto y automatizado en la inicialización de la app (`init_db()`).
-- [x] **Índices de Rendimiento**: Índices para optimizar la velocidad en consultas complejas sobre el grafo de co-ocurrencia.
-- [x] **Tabla de Configuración Centralizada**: Configuración de XP y metas extraídas de variables hardcoded a configuraciones del entorno y BD.
-- [ ] **Migración a PostgreSQL**: Adaptar los modelos para producción en preparación para una base de datos distribuida en lugar de SQLite (manteniendo soporte `sqlite-vec` o migrando a pgvector).
+## 🏆 1. Logros Recientes (Completados)
+- [x] **Rate Limiting Avanzado**: Extender el middleware `RateLimitMiddleware` (PR #27 / Issue #27).
+- [x] **Soporte de WebSocket End-to-End (Real-time)**: Conexión de Svelte a `/ws` y notificaciones reactivas (PR #27).
+- [x] **Menú de Exportación en Interfaz (Frontend)**: Controles para exportar markdown/html/zip en `NoteEditor.svelte` (PR #27).
+- [x] **Bug en Health Check de Caché (Backend)**: Corregido en `api/services/response_cache.py` (PR #27).
+- [x] **VirtualList dinámica**: Refactorizado para admitir alturas variables (Issue #7).
+- [x] **Migración Consistente a Runas Svelte 5**: Reactividad nativa en componentes (Issue #10).
+- [x] **Seguridad JWT**: Autenticación nativa por JWT (Issue #14).
+- [x] **Ruff + Black**: Pipeline de formateo automático y análisis estático (Issue #16).
+- [x] **Dashboard de Historial Anual**: Componente `StreakHeatmap` interactivo.
+- [x] **Modal de Objetivos**: Componente `GoalOverlay`.
+- [x] **Dashboard de Planificación unificado (SGOJ)**.
+- [x] **Tema Oscuro/Claro Manual**.
+- [x] **Widget de GitHub**.
 
 ---
 
-## 🎨 3. Frontend - Estado de Desarrollo
+## 🛠️ 2. Backlog Estratégico & Tareas Abiertas
 
-### 3.1 Componentes e Interfaz
-- [x] **Dashboard de Historial Anual**: Componente `StreakHeatmap` interactivo y altamente visual.
-- [x] **Modal de Objetivos**: Componente `GoalOverlay` e interfaz fluida de creación/edición.
-- [x] **Dashboard de Planificación unificado (SGOJ)**: Integración de objetivos y planificación temporal.
-- [x] **Notificaciones y Toasts**: Sistema centralizado reactivo a través de `<Toast />` y store de gamificación.
-- [x] **Tema Oscuro/Claro Manual**: Selector persistente en el panel de Ajustes con transiciones fluidas.
-- [x] **Tutorial y Onboarding**: Recorrido de bienvenida interactivo utilizando `TutorialOverlay.svelte` y persistencia local.
-- [x] **Widget de GitHub**:
-  - [x] Consolidado en un componente unificado y altamente reusable.
-  - [x] Altura fija y predecible entre cambios de filtros.
-  - [x] Indicador sutil de "actualizando" (pulsing blue dot) que no interrumpe la navegación.
-  - [x] Carga diferida y animaciones de carga tipo Skeleton.
+### 2.1 Integraciones & Backend
+- [ ] **Calendario Personalizado (Google API)**: Implementar Google Calendar y Tasks (#2).
+- [ ] **Sincronización Bidireccional con Obsidian via Webhook**: Triggers instantáneos externos (#3).
+- [ ] **Migración a PostgreSQL**: Adaptar los modelos para producción (#4).
+- [ ] **Integración de IA (chat/asistente)**: (#41)
+- [ ] **Integración de Gmail**: (#42)
+- [ ] **Integración de Contactos (Google)**: (#43)
+- [ ] **Integración de Strava**: (#44)
+- [ ] **Integración de Spotify**: (#45)
+- [ ] **GitHub OAuth real**: (#46)
+- [ ] **UI de Dead Letter Queue**: Gestión de embeddings fallidos (#49).
+- [ ] **Alerting & Monitoring**: Prometheus/Grafana (#15).
 
-### 3.2 Widgets de Dashboard
-- [x] **PomodoroWidget**: Temporizador persistente con debounce de guardado a 500ms.
-- [x] **TimeWidget**: Selector de zonas horarias en tiempo real.
-- [x] **WeatherWidget**: Widget interactivo que consume Open-Meteo basado en la geolocalización del navegador.
+### 2.2 Frontend & UX
+- [ ] **WYSIWYG Editor**: Editor enriquecido Markdown (#6).
+- [ ] **Filtros Interactivos y Agrupamiento en el Grafo**: (#8).
+- [ ] **Accesibilidad y Foco en Modales (Focus Trapping)**: (#9).
+- [ ] **Creación de carpetas en notas**: (#47).
+- [ ] **Quitar dev-mode gating**: (#48).
+- [ ] **Mejora WeatherWidget UX**: (#50).
+- [ ] **Indicadores en navegación**: (#51).
 
-### 3.3 Integración con Obsidian
-- [x] **Sincronización básica**: Importación automática de notas Markdown.
-- [x] **Metadatos Frontmatter**: Guardado e interpretación nativa de iconos y colores mediante YAML.
-- [ ] **Sincronización en tiempo real avanzada**: Detección bidireccional instantánea de conflictos de escritura.
-- [ ] **Editor WYSIWYG**: Editor enriquecido para edición visual directa de Markdown.
-
-### 3.4 Mejoras Estructurales y UX del Frontend (Nuevas)
-- [x] **Interceptor Global de Errores en `api.ts`**: Manejar automáticamente token expirado (401), errores de red y propagación de toasts amigables a nivel de aplicación.
-- [x] **Indicador de Conectividad en Tiempo Real**: Vincular las stores `isOnline` y `wasOffline` a un banner o píldora de estado premium y glassmorphic en la barra de herramientas principal.
-- [ ] **Optimización de VirtualList Dinámica**: Refactorizar `VirtualList.svelte` para admitir alturas de elemento dinámicas/variables (mediante ResizeObserver) para evitar solapamientos en notas con títulos largos.
-- [ ] **Filtros Interactivos y Agrupamiento en el Grafo**: Agregar un panel lateral dentro de `/graph` para aislar nodos por etiquetas, buscar notas directamente y activar físicas avanzadas de repulsión.
-- [ ] **Accesibilidad y Foco en Modales**: Implementar "focus trapping" completo en `Modal.svelte` y mejorar atributos ARIA en los widgets interactivos del dashboard.
-- [ ] **Migración Consistente a Runas Svelte 5**: Estandarizar la reactividad migrando paulatinamente los stores personalizados de Svelte 4 a runas nativas (`$state`, `$derived`, `$effect`) en componentes de alta frecuencia.
+### 2.3 Control de Calidad y Tests
+- [ ] **Tests de integración / E2E API**: (#11).
+- [ ] **Pruebas de Sincronización**: (#12).
+- [ ] **Mejorar Cobertura General**: (#13).
 
 ---
-
-## 🧪 4. Control de Calidad y Cobertura
-
-### 4.1 Unit Tests
-- [x] `test_note_service.py` — Pruebas de persistencia y parsing de enlaces.
-- [x] `test_goal_service.py` — Pruebas sobre temporización y rollover.
-- [x] `test_embedding_service.py` — Pruebas de vectorización asíncrona.
-- [x] `test_embedding_retry.py` — Validación del backoff exponencial en la cola de fallos.
-
-### 4.2 Integration & E2E Tests
-- [ ] **Pruebas E2E de la API**: Validación de flujos completos de usuario mediante endpoints encadenados.
-- [ ] **Pruebas de Sincronización**: Simulación de escrituras en Obsidian y verificación de consistencia en DB.
-- [ ] **Cobertura General**: Elevar la cobertura actual de un ~20% estimado a un **70%+ target**.
-
----
-
-## 🔒 5. Infraestructura, Seguridad y DevOps
-
-- [x] **CI/CD con GitHub Actions**: Workflow implementado (`ci.yml`) con linting, typecheck y compilación Docker automatizada.
-- [x] **Logging Estructurado**: Configuración diferenciada de logs (JSON plano en producción, formato coloreado en desarrollo).
-- [x] **Monitoreo & Health Checks**: Endpoint `/metrics` expuesto e integración de health checks cruzados en Docker Compose.
-- [x] **Backups**: Script automatizado en python (`backup.py`) y comando `make backup`.
-- [ ] **Seguridad Avanzada**: Autenticación nativa por JWT y sanitización estricta ante XSS.
-- [ ] **alerting & Monitoring**: Configuración de Prometheus/Grafana para consumo de métricas.
-
----
-
-## 💡 6. Integración con Google (Backlog Estratégico)
-
-> [!IMPORTANT]
-> **Arquitectura OAuth 2.0 y APIs**:
-> - **APIs requeridas**: Google Calendar API y Google Tasks API.
-> - ** UX**: Botón en panel de ajustes que redirige a la pantalla segura de consentimiento de Google.
-> - **Persistencia**: Almacenamiento seguro del *Refresh Token* cifrado en la base de datos para sincronización background continua.
-> - **Despliegue**: Uso de entorno "Test" en Google Cloud Console durante desarrollo. Requiere pasar la auditoría de scopes sensibles de Google antes del despliegue público.
-
----
-
-## 🚀 7. Plan de Trabajo Inmediato (Próximos Pasos)
-
-1. **[Seguridad - Alta Prioridad]**: Reemplazar la autenticación simple actual por un flujo completo JWT multiusuario con tokens seguros y almacenamiento cifrado en base de datos.
-2. **[Calidad de Código & Automatización]**: Integrar un pipeline de formateo automático y análisis estático en el backend (`Ruff` + `Black`) para unificar el estilo de código del monorepo y evitar regresiones.
-3. **[Frontend UX]**: Refactorizar el componente `VirtualList.svelte` con `ResizeObserver` para soportar alturas de elementos dinámicas en la lista de notas, optimizando la fluidez de navegación.
-
----
-
-*Última actualización: Mayo 2026*
+*Última actualización: Julio 2026*
