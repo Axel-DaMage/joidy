@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { createEventDispatcher, onDestroy } from 'svelte';
-  import { Eye, EyeOff, Save, Trash2, X, Settings, Search, Maximize, ChevronLeft, ChevronRight, Download } from 'lucide-svelte';
+  import { createEventDispatcher, onDestroy, tick } from 'svelte';
+  import { Eye, EyeOff, Save, Trash2, X, Settings, Search, Maximize, ChevronLeft, ChevronRight, Download, Bold, Italic, Strikethrough, Heading1, Heading2, Heading3, List, ListOrdered, Link, Quote, Code } from 'lucide-svelte';
   import * as L from 'lucide-svelte';
   import DynamicIcon from './DynamicIcon.svelte';
   import IconPicker from './IconPicker.svelte';
@@ -366,6 +366,59 @@
     }
   }
 
+  interface FormatSpec { prefix: string; suffix: string; block?: string; multiline?: boolean }
+  const FORMATTERS: Record<string, FormatSpec> = {
+    bold:       { prefix: '**', suffix: '**' },
+    italic:     { prefix: '_', suffix: '_' },
+    strikethrough: { prefix: '~~', suffix: '~~' },
+    h1:         { prefix: '# ', suffix: '', block: '# ' },
+    h2:         { prefix: '## ', suffix: '', block: '## ' },
+    h3:         { prefix: '### ', suffix: '', block: '### ' },
+    ul:         { prefix: '- ', suffix: '', block: '- ', multiline: true },
+    ol:         { prefix: '1. ', suffix: '', block: '1. ', multiline: true },
+    link:       { prefix: '[', suffix: '](url)' },
+    quote:      { prefix: '> ', suffix: '', block: '> ', multiline: true },
+    code:       { prefix: '```\n', suffix: '\n```', block: '```\n' },
+  };
+
+  function formatMarkdown(type: string) {
+    if (!textareaEl) return;
+    const { selectionStart, selectionEnd } = textareaEl;
+    const selected = content.substring(selectionStart, selectionEnd);
+    const fmt = FORMATTERS[type];
+    if (!fmt) return;
+
+    let insertion: string;
+    let cursorOffset = 0;
+
+    if (fmt.multiline && selected) {
+      const lines = selected.split('\n').map(l => fmt.block + l).join('\n');
+      insertion = lines;
+    } else if (fmt.block && !selected) {
+      insertion = fmt.block;
+    } else if (selected) {
+      insertion = fmt.prefix + selected + fmt.suffix;
+      cursorOffset = 0;
+    } else {
+      insertion = fmt.prefix + fmt.suffix;
+      cursorOffset = fmt.prefix.length;
+    }
+
+    const before = content.substring(0, selectionStart);
+    const after = content.substring(selectionEnd);
+    content = before + insertion + after;
+
+    tick().then(() => {
+      const pos = selectionStart + (fmt.block && !selected ? fmt.block.length : insertion.length - (fmt.suffix ? insertion.length - fmt.prefix.length : 0));
+      textareaEl.focus();
+      if (!selected && fmt.suffix) {
+        textareaEl.setSelectionRange(selectionStart + fmt.prefix.length, selectionStart + fmt.prefix.length);
+      } else {
+        textareaEl.setSelectionRange(pos, pos);
+      }
+    });
+  }
+
   function highlightMarkdown(text: string): string {
     if (!text) return '';
     let html = text
@@ -446,6 +499,53 @@
         </button>
       </div>
       {/if}
+
+      <div class="format-divider"></div>
+
+      <div class="format-toolbar">
+        <button class="toolbar-btn icon-only" on:click={() => formatMarkdown('bold')} title="Negrita (Ctrl+B)">
+          <Bold size={13} />
+        </button>
+        <button class="toolbar-btn icon-only" on:click={() => formatMarkdown('italic')} title="Cursiva (Ctrl+I)">
+          <Italic size={13} />
+        </button>
+        <button class="toolbar-btn icon-only" on:click={() => formatMarkdown('strikethrough')} title="Tachado">
+          <Strikethrough size={13} />
+        </button>
+
+        <div class="format-divider"></div>
+
+        <button class="toolbar-btn icon-only" on:click={() => formatMarkdown('h1')} title="Título 1">
+          <Heading1 size={13} />
+        </button>
+        <button class="toolbar-btn icon-only" on:click={() => formatMarkdown('h2')} title="Título 2">
+          <Heading2 size={13} />
+        </button>
+        <button class="toolbar-btn icon-only" on:click={() => formatMarkdown('h3')} title="Título 3">
+          <Heading3 size={13} />
+        </button>
+
+        <div class="format-divider"></div>
+
+        <button class="toolbar-btn icon-only" on:click={() => formatMarkdown('ul')} title="Lista desordenada">
+          <List size={13} />
+        </button>
+        <button class="toolbar-btn icon-only" on:click={() => formatMarkdown('ol')} title="Lista ordenada">
+          <ListOrdered size={13} />
+        </button>
+
+        <div class="format-divider"></div>
+
+        <button class="toolbar-btn icon-only" on:click={() => formatMarkdown('link')} title="Enlace">
+          <Link size={13} />
+        </button>
+        <button class="toolbar-btn icon-only" on:click={() => formatMarkdown('quote')} title="Cita">
+          <Quote size={13} />
+        </button>
+        <button class="toolbar-btn icon-only" on:click={() => formatMarkdown('code')} title="Bloque de código">
+          <Code size={13} />
+        </button>
+      </div>
     </div>
 
     <div class="toolbar-right">
@@ -779,6 +879,20 @@
     display: flex;
     align-items: center;
     gap: var(--s2);
+  }
+
+  .format-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .format-divider {
+    width: 1px;
+    height: 18px;
+    background: var(--border);
+    margin: 0 4px;
+    flex-shrink: 0;
   }
 
   .note-source {
