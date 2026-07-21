@@ -9,6 +9,10 @@ on:
         description: 'Version tag (e.g. v1.0.0)'
         required: false
         default: ''
+      pkgrel:
+        description: 'AUR package release number'
+        required: false
+        default: '1'
 
 jobs:
   docker:
@@ -71,6 +75,7 @@ jobs:
       - name: Update AUR PKGBUILD
         run: |
           VERSION="${{ inputs.version || github.ref_name }}"
+          PKGREL="${{ inputs.pkgrel || '1' }}"
           VERSION_CLEAN="${VERSION#v}"
           VERSION_PKGBUILD="$(echo "${VERSION_CLEAN}" | sed 's/-/_/g')"
           SHA=$(curl -sL "https://github.com/Axel-DaMage/joidy/archive/refs/tags/${VERSION}.tar.gz" | sha256sum | cut -d' ' -f1)
@@ -85,14 +90,14 @@ jobs:
             echo "pkgname=joidy"
             echo "pkgver=${VERSION_PKGBUILD}"
             echo "_tag=${VERSION_CLEAN}"
-            echo "pkgrel=1"
+            echo "pkgrel=${PKGREL}"
             echo 'pkgdesc="Personal knowledge management with gamification"'
             echo "arch=('any')"
             echo 'url="https://joidy-web.vercel.app"'
             echo "license=('GPL3')"
             echo "depends=('docker' 'docker-compose')"
             echo 'source=("https://github.com/Axel-DaMage/joidy/archive/v${_tag}.tar.gz")'
-            echo "sha256sums=('SKIP')"
+            echo "sha256sums=('${SHA}')"
             echo ""
             echo "package() {"
             echo '  cd "${srcdir}/joidy-${_tag}"'
@@ -105,14 +110,14 @@ jobs:
             echo "pkgbase = joidy"
             echo "pkgdesc = Personal knowledge management with gamification"
             echo "pkgver = ${VERSION_PKGBUILD}"
-            echo "pkgrel = 1"
+            echo "pkgrel = ${PKGREL}"
             echo "url = https://joidy-web.vercel.app"
             echo "arch = any"
             echo "license = GPL3"
             echo "depends = docker"
             echo "depends = docker-compose"
             echo "source = https://github.com/Axel-DaMage/joidy/archive/v${VERSION}.tar.gz"
-            echo "sha256sums = SKIP"
+            echo "sha256sums = ${SHA}"
             echo "pkgname = joidy"
           } > .SRCINFO
           git config user.name "github-actions"
