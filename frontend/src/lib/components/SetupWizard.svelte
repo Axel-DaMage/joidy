@@ -77,8 +77,8 @@
         
         <form on:submit|preventDefault={handleSetup}>
           <div class="field">
-            <label for="vault">Ruta Absoluta (Ej. /home/user/Documents/Vault)</label>
-            <input id="vault" type="text" bind:value={vaultPath} class="input mono" placeholder="/Ruta/a/tu/vault" />
+            <label for="vault">Ruta Absoluta (Ej. home/user/Documents/Vault)</label>
+            <input id="vault" type="text" bind:value={vaultPath} class="input mono" placeholder="home/usuario/Documents/Vault" />
           </div>
           
           <div class="actions">
