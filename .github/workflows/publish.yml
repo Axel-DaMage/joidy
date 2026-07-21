@@ -1,0 +1,97 @@
+name: Publish
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  docker:
+    name: Docker Hub
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [api, frontend, ai-service, worker]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@v3
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ secrets.DOCKERHUB_USERNAME }}/joidy-${{ matrix.service }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
+      - uses: docker/build-push-action@v5
+        with:
+          context: ./${{ matrix.service }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  npm:
+    name: npm / bun
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - name: Publish
+        run: |
+          cd joidy-cli
+          npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  homebrew:
+    name: Homebrew
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Update homebrew-tap formula
+        run: |
+          VERSION="${{ github.ref_name }}"
+          SHA=$(curl -sL "https://github.com/Axel-DaMage/joidy/archive/refs/tags/${VERSION}.tar.gz" | sha256sum | cut -d' ' -f1)
+          git clone https://x-access-token:${{ secrets.GH_PAT }}@github.com/Axel-DaMage/homebrew-tap.git
+          cd homebrew-tap
+          sed -i "s|url \".*\"|url \"https://github.com/Axel-DaMage/joidy/archive/refs/tags/${VERSION}.tar.gz\"|" Formula/joidy.rb
+          sed -i "s|sha256 \".*\"|sha256 \"${SHA}\"|" Formula/joidy.rb
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add Formula/joidy.rb
+          git commit -m "joidy ${VERSION}"
+          git push
+
+  aur:
+    name: AUR
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update AUR PKGBUILD
+        run: |
+          VERSION="${{ github.ref_name }}"
+          VERSION_CLEAN="${VERSION#v}"
+          SHA=$(curl -sL "https://github.com/Axel-DaMage/joidy/archive/refs/tags/${VERSION}.tar.gz" | sha256sum | cut -d' ' -f1)
+          mkdir -p ~/.ssh
+          echo "${{ secrets.AUR_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan aur.archlinux.org >> ~/.ssh/known_hosts
+          git clone ssh://aur@aur.archlinux.org/joidy.git
+          cd joidy
+          sed -i "s|pkgver=.*|pkgver=${VERSION_CLEAN}|" PKGBUILD
+          sed -i "s|sha256sums=('.*')|sha256sums=('${SHA}')|" PKGBUILD
+          sed -i "s|pkgrel=.*|pkgrel=1|" PKGBUILD
+          makepkg --printsrcinfo > .SRCINFO
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add PKGBUILD .SRCINFO
+          git commit -m "update to ${VERSION}"
+          git push

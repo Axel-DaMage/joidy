@@ -14,23 +14,64 @@
   </a>
 </p>
 
-Personal knowledge management system with gamification. Manage notes, goals, streaks, and skills through a web dashboard with AI-powered features.
+<p align="center">
+  <a href="https://joidy-web.vercel.app/">Web App</a>
+  &middot;
+  <a href="#docker">Docker</a>
+  &middot;
+  <a href="#curl">curl</a>
+  &middot;
+  <a href="#npm--bun">npm / bun</a>
+  &middot;
+  <a href="#homebrew">Homebrew</a>
+  &middot;
+  <a href="#aur">AUR</a>
+</p>
 
-Try it live at **[joidy-web.vercel.app](https://joidy-web.vercel.app/)**.
+Personal knowledge management system with gamification. Manage notes, goals, streaks, and skills through a web dashboard with AI-powered features.
 
 ---
 
 ## Installation
 
+### Docker
+
 ```bash
 git clone https://github.com/Axel-DaMage/joidy.git
 cd joidy
 cp .env.example .env
-# Edit .env with your credentials
 docker compose up -d
 ```
 
-That is it. Docker Compose pulls all images from Docker Hub automatically.
+### curl
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Axel-DaMage/joidy/main/scripts/install.sh | bash
+```
+
+### npm / bun
+
+```bash
+npx @joidy-app/cli up
+# or
+bunx @joidy-app/cli up
+```
+
+### Homebrew
+
+```bash
+brew tap Axel-DaMage/homebrew-tap
+brew install joidy
+joidy up
+```
+
+### AUR
+
+```bash
+yay -S joidy
+# or
+paru -S joidy
+```
 
 ---
 
