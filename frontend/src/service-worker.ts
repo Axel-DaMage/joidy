@@ -31,6 +31,15 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(event.request.url);
 
+  // Bypass service worker for non-HTTP protocols, Vite dev paths, and WebSockets
+  if (!url.protocol.startsWith('http') || 
+      url.pathname.startsWith('/@') || 
+      url.pathname.startsWith('/node_modules/') || 
+      url.pathname.startsWith('/src/') ||
+      url.pathname === '/ws') {
+    return;
+  }
+
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(networkFirst(event.request));
     return;
