@@ -75,11 +75,11 @@ jobs:
           sed -i "s|pkgrel=.*|pkgrel=1|" PKGBUILD
           {
             echo "pkgbase = joidy"
+            echo "pkgname = joidy"
             echo "pkgdesc = Personal knowledge management with gamification"
             echo "pkgver = ${VERSION_CLEAN}"
             echo "pkgrel = 1"
             echo "url = https://joidy-web.vercel.app"
-            echo "install = "
             echo "arch = any"
             echo "license = GPL3"
             echo "depends = docker"
