@@ -7,12 +7,12 @@ arch=('any')
 url="https://joidy-web.vercel.app"
 license=('GPL3')
 depends=('docker' 'docker-compose')
-makedepends=('git')
-source=("${url}/archive/v${pkgver}.tar.gz")
+source=("https://github.com/Axel-DaMage/joidy/archive/v${pkgver}.tar.gz")
 sha256sums=('SKIP')
 
 package() {
-  install -Dm755 "${srcdir}/joidy/bin/joidy" "${pkgdir}/usr/bin/joidy"
-  install -Dm644 "${srcdir}/joidy/docker-compose.yml" "${pkgdir}/usr/share/joidy/docker-compose.yml"
-  install -Dm644 "${srcdir}/joidy/.env.example" "${pkgdir}/usr/share/joidy/.env.example"
+  cd "${srcdir}/joidy-${pkgver}"
+  install -Dm755 bin/joidy "${pkgdir}/usr/bin/joidy"
+  install -Dm644 docker-compose.yml "${pkgdir}/usr/share/joidy/docker-compose.yml"
+  install -Dm644 .env.example "${pkgdir}/usr/share/joidy/.env.example"
 }

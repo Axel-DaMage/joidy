@@ -4,7 +4,7 @@
   "description": "Joidy - personal knowledge management with gamification",
   "license": "GPL-3.0-only",
   "bin": {
-    "joidy": "./bin/joidy.js"
+    "joidy": "bin/joidy.js"
   },
   "publishConfig": {
     "access": "public"

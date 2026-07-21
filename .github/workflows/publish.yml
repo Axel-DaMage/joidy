@@ -48,7 +48,8 @@ jobs:
       - name: Publish
         run: |
           cd joidy-cli
-          npm publish
+          TAG=$(echo "${{ github.ref_name }}" | grep -oP 'alpha|beta|rc' || echo "latest")
+          npm publish --access public --tag "$TAG"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
