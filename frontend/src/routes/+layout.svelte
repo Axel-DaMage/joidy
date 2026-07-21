@@ -7,6 +7,7 @@
   import { isOnline, wasOffline } from '$lib/stores/connection';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
   import SettingsPanel from '$lib/components/SettingsPanel.svelte';
+  import CommandPalette from '$lib/components/CommandPalette.svelte';
   import Toast from '$lib/components/Toast.svelte';
   import Login from '$lib/components/Login.svelte';
   import { api, type Goal, type PersonalStreak } from '$lib/api';
@@ -417,6 +418,7 @@
 </div>
 
 <SettingsPanel bind:open={settingsOpen} on:close={() => settingsOpen = false} />
+<CommandPalette />
 <Toast />
 <TutorialOverlay />
 {/if}
