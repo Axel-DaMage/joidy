@@ -161,7 +161,7 @@ class GamificationConfig(BaseModel):
 
 @router.get("/gamification", response_model=GamificationConfig, dependencies=[Depends(get_current_user)])
 def get_gamification_config():
-    from api.services.gamification_engine import (
+    from services.gamification_engine import (
         PLANT_STAGES,
         STREAK_MILESTONES,
         get_xp_table,
@@ -170,8 +170,8 @@ def get_gamification_config():
     return GamificationConfig(
         xp_table=xp_table,
         plant_stages=[
-            {"stage": i, "name": stage["name"], "xp_required": stage["xp_required"]}
-            for i, stage in enumerate(PLANT_STAGES)
+            {"stage": i, "name": name, "xp_required": xp}
+            for i, (xp, name) in enumerate(PLANT_STAGES)
         ],
         streak_milestones=STREAK_MILESTONES
     )

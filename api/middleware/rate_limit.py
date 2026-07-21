@@ -90,13 +90,15 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         allowed, limit = self.limiter.check_rate_limit(request)
         if not allowed:
             remaining = self.limiter.get_remaining(request, limit)
-            raise HTTPException(
+            return JSONResponse(
                 status_code=429,
-                detail={
-                    "error": "Rate limit exceeded",
-                    "message": f"Maximum {limit} requests per minute",
-                    "remaining": remaining,
-                    "retry_after": 60,
+                content={
+                    "detail": {
+                        "error": "Rate limit exceeded",
+                        "message": f"Maximum {limit} requests per minute",
+                        "remaining": remaining,
+                        "retry_after": 60,
+                    }
                 }
             )
 

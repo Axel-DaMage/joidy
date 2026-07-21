@@ -16,7 +16,7 @@ class LoginResponse(BaseModel):
 
 
 @router.post("/login", response_model=LoginResponse)
-def login(username: str = "user", password: str = ""):
+def login(password: str = "", username: str = "user"):
     """Simple login endpoint.
 
     For a personal app, we use a simple single-user auth.
@@ -25,7 +25,6 @@ def login(username: str = "user", password: str = ""):
     if not settings.secret_key:
         raise HTTPException(status_code=500, detail="Server not configured for auth")
 
-    # Simple single-user password check
     expected_password = settings.auth_password or ""
     if expected_password and password != expected_password:
         raise HTTPException(status_code=401, detail="Invalid credentials")

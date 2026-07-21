@@ -31,6 +31,9 @@ Thumbs.db
 # Docker
 *.pid
 
+# Playwright artifacts
+.playwright-mcp/
+
 # Editor
 .vscode/
 .idea/
