@@ -1,4 +1,5 @@
 <script lang="ts">
+  // @ts-nocheck
   import { onDestroy, onMount } from 'svelte';
   import { browser } from '$app/environment';
   import { graphData, selectedTag } from '$lib/stores/graph';

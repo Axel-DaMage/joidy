@@ -112,7 +112,8 @@ export function showXPGain(amount: number, x?: number, y?: number): void {
   }, 2200);
 }
 
-export { notifications, showNotification, dismissNotification } from './notifications';
+import { notifications, showNotification, dismissNotification } from './notifications';
+export { notifications, showNotification, dismissNotification };
 
 export function applyGamificationResult(result: GamificationResultType): void {
   const prevStage = get(plantStage);

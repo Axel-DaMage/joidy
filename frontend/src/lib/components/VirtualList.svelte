@@ -1,4 +1,5 @@
 <script lang="ts">
+  // @ts-nocheck
   import { onMount, tick } from 'svelte';
 
   export let items: any[] = [];

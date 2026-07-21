@@ -18,6 +18,7 @@
     "@testing-library/svelte": "^5.4.2",
     "@types/d3": "^7.4.3",
     "@types/dompurify": "^3.0.5",
+    "@types/highlight.js": "^9.12.4",
     "jsdom": "^29.1.1",
     "phosphor-svelte": "^3.1.0",
     "svelte": "^5.16.0",

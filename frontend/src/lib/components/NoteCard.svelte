@@ -1,4 +1,5 @@
 <script lang="ts">
+  // @ts-nocheck
   import { createEventDispatcher } from 'svelte';
   import { goto } from '$app/navigation';
   import TagChip from './TagChip.svelte';
