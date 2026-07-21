@@ -764,9 +764,9 @@
               creatingFolder = false;
               // Refresh tree
               const ns = await api.notes.list();
-              notesStore.set(ns);
+              notes.set(ns);
             } catch (e) {
-              alert(e.message || "Error al crear carpeta");
+              alert((e as any).message || "Error al crear carpeta");
             }
           }}>Crear</button>
         </div>

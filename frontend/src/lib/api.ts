@@ -349,4 +349,13 @@ github: {
     htmlUrl: () => `${BASE}/export/notes/html`,
     zipUrl: () => `${BASE}/export/notes/zip`
   },
+  
+  folders: {
+    create: async (path: string) => {
+      return req('POST', '/folders/', { path });
+    },
+    delete: async (path: string) => {
+      return req('DELETE', `/folders/${encodeURIComponent(path)}`);
+    }
+  },
 };
