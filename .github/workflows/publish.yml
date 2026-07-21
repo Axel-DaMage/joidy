@@ -71,7 +71,7 @@ jobs:
           ssh-keyscan aur.archlinux.org >> ~/.ssh/known_hosts
           git clone ssh://aur@aur.archlinux.org/joidy.git
           cd joidy
-          cp "${{ github.workspace }}/aur/PKGBUILD" PKGBUILD
+          cp "${GITHUB_WORKSPACE}/aur/PKGBUILD" PKGBUILD
           sed -i "s|pkgver=.*|pkgver=${VERSION_PKGBUILD}|" PKGBUILD
           sed -i "s|_tag=.*|_tag=${VERSION_CLEAN}|" PKGBUILD
           sed -i "s|sha256sums=('.*')|sha256sums=('${SHA}')|" PKGBUILD
