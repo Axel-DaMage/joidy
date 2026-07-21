@@ -4,6 +4,11 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g. v1.0.0)'
+        required: false
+        default: ''
 
 jobs:
   docker:
@@ -39,11 +44,12 @@ jobs:
   homebrew:
     name: Homebrew
     runs-on: ubuntu-latest
+    if: github.event_name == 'release' || inputs.version != ''
     steps:
       - uses: actions/checkout@v4
       - name: Update homebrew-tap formula
         run: |
-          VERSION="${{ github.ref_name }}"
+          VERSION="${{ inputs.version || github.ref_name }}"
           SHA=$(curl -sL "https://github.com/Axel-DaMage/joidy/archive/refs/tags/${VERSION}.tar.gz" | sha256sum | cut -d' ' -f1)
           git clone https://x-access-token:${{ secrets.GH_PAT }}@github.com/Axel-DaMage/homebrew-tap.git
           cd homebrew-tap
@@ -58,10 +64,11 @@ jobs:
   aur:
     name: AUR
     runs-on: ubuntu-latest
+    if: github.event_name == 'release' || inputs.version != ''
     steps:
       - name: Update AUR PKGBUILD
         run: |
-          VERSION="${{ github.ref_name }}"
+          VERSION="${{ inputs.version || github.ref_name }}"
           VERSION_CLEAN="${VERSION#v}"
           VERSION_PKGBUILD="$(echo "${VERSION_CLEAN}" | sed 's/-/_/g')"
           SHA=$(curl -sL "https://github.com/Axel-DaMage/joidy/archive/refs/tags/${VERSION}.tar.gz" | sha256sum | cut -d' ' -f1)
