@@ -36,11 +36,7 @@
     { href: '/skills',  label: 'Habilidades', icon: 'Zap',      status: 'dev' },
     { href: '/goals',   label: 'Objetivos',   icon: 'Target',   status: 'ready' },
     { href: '/streaks', label: 'Rachas',      icon: 'Flame',    status: 'ready' },
-    { href: '/ai',      label: 'IA',          icon: 'Brain',    status: 'placeholder' },
-    { href: '/gmail',   label: 'Gmail',       icon: 'Mail',     status: 'placeholder' },
-    { href: '/contactos', label: 'Contactos', icon: 'Users',    status: 'placeholder' },
-    { href: '/strava',  label: 'Strava',      icon: 'Activity', status: 'placeholder' },
-    { href: '/spotify', label: 'Spotify',     icon: 'Music',    status: 'placeholder' },
+    { href: '/integraciones', label: 'Integraciones', icon: 'Puzzle', status: 'ready' },
   ];
 
   let settingsOpen = false;
