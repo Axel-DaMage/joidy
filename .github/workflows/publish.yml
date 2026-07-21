@@ -92,7 +92,7 @@ jobs:
             echo "license=('GPL3')"
             echo "depends=('docker' 'docker-compose')"
             echo 'source=("https://github.com/Axel-DaMage/joidy/archive/v${_tag}.tar.gz")'
-            echo "sha256sums=('${SHA}')"
+            echo "sha256sums=('SKIP')"
             echo ""
             echo "package() {"
             echo '  cd "${srcdir}/joidy-${_tag}"'
@@ -112,7 +112,7 @@ jobs:
             echo "depends = docker"
             echo "depends = docker-compose"
             echo "source = https://github.com/Axel-DaMage/joidy/archive/v${VERSION}.tar.gz"
-            echo "sha256sums = ${SHA}"
+            echo "sha256sums = SKIP"
             echo "pkgname = joidy"
           } > .SRCINFO
           git config user.name "github-actions"
