@@ -1,173 +1,176 @@
-# Joidy
+<p align="center">
+  <a href="https://joidy-web.vercel.app/">
+    <img src="https://img.shields.io/badge/JOIDY-v1.0.0--alpha-8B5CF6?style=for-the-badge" alt="Joidy">
+  </a>
+</p>
 
-> Tu sistema personal de gestion del conocimiento con gamificacion.
+<p align="center">
+  <a href="https://joidy-web.vercel.app/">
+    <img src="https://img.shields.io/badge/Web_App-Vercel-000000?style=for-the-badge&logo=vercel" alt="Web App">
+  </a>
+  <a href="https://github.com/Axel-DaMage/joidy/actions/workflows/ci.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/Axel-DaMage/joidy/ci.yml?style=for-the-badge&logo=github" alt="CI">
+  </a>
+  <a href="LICENSE">
+    <img src="https://img.shields.io/badge/License-GPL_v3-181717?style=for-the-badge" alt="License">
+  </a>
+  <a href="https://github.com/Axel-DaMage/joidy/releases">
+    <img src="https://img.shields.io/github/v/release/Axel-DaMage/joidy?style=for-the-badge&logo=docker" alt="Release">
+  </a>
+</p>
 
-[![CI](https://github.com/d4mag3/Joidy/actions/workflows/ci.yml/badge.svg)](https://github.com/d4mag3/Joidy/actions/workflows/ci.yml)
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-[![Python 3.12](https://img.shields.io/badge/Python-3.12-blue.svg)](https://www.python.org/downloads/release/python-312/)
-[![SvelteKit](https://img.shields.io/badge/SvelteKit-Svelte-ff3e00.svg)](https://kit.svelte.dev/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-009688.svg)](https://fastapi.tiangolo.com/)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python" alt="Python">
+  <img src="https://img.shields.io/badge/SvelteKit-5-FF3E00?style=for-the-badge&logo=svelte" alt="SvelteKit">
+  <img src="https://img.shields.io/badge/FastAPI-0.115-009688?style=for-the-badge&logo=fastapi" alt="FastAPI">
+  <img src="https://img.shields.io/badge/PostgreSQL-16-4169E1?style=for-the-badge&logo=postgresql" alt="PostgreSQL">
+  <img src="https://img.shields.io/badge/Docker-Compose-2496ED?style=for-the-badge&logo=docker" alt="Docker">
+</p>
 
-Joidy es un monorepo Docker que combina:
+Personal knowledge management system with gamification. Manage notes, goals, streaks, and skills through a web dashboard with AI-powered features.
 
-- **Frontend** — Interfaz web construida con SvelteKit
-- **API** — Backend REST con FastAPI
-- **AI Service** — Embeddings y clasificacion con Gemini
-- **Worker** — Tareas en background (sincronizacion con Obsidian, resumenes diarios)
+Try it live at **[joidy-web.vercel.app](https://joidy-web.vercel.app/)**.
 
 ---
 
-## Quick Start
+## Installation
 
-### Linux / macOS
+### Docker Hub (recommended)
 
 ```bash
-make start
+docker pull d4mag3/joidy-api:latest
+docker pull d4mag3/joidy-frontend:latest
+docker pull d4mag3/joidy-ai-service:latest
+docker pull d4mag3/joidy-worker:latest
 ```
 
-### Windows
+Or clone and run locally:
 
-```powershell
-powershell -ExecutionPolicy Bypass -File start.ps1
+```bash
+git clone https://github.com/Axel-DaMage/joidy.git
+cd joidy
+cp .env.example .env
+# Edit .env with your credentials
+docker compose up -d
 ```
 
-Esto creara los directorios necesarios, configurara `.env` interactivamente e iniciara todos los servicios.
+### Quick Start
+
+| Platform | Command |
+|----------|---------|
+| Linux / macOS | `make start` |
+| Windows | `powershell -ExecutionPolicy Bypass -File start.ps1` |
+
+`make start` creates required directories, configures `.env` interactively, and launches all services.
+
+Verify setup: `make doctor` (Linux/macOS) or `.\start.ps1 -Check` (Windows).
 
 ---
 
-## Prerrequisitos
+## Requirements
 
-| Requisito | Notas |
-|-----------|-------|
-| **Docker** | [Instalar Docker Desktop](https://docs.docker.com/desktop/install/) |
-| **Docker Compose** | Incluido en Docker Desktop |
-
-Verifica tu setup con:
-
-- **Linux/Mac:** `make doctor`
-- **Windows:** `.\start.ps1 -Check`
+- Docker + Docker Compose
 
 ---
 
-## Configuracion
+## Configuration
 
-### Variables Obligatorias
+Edit `.env` after running setup:
 
-Edita el archivo `.env` despues de ejecutar el setup:
+| Variable | Description | Source |
+|----------|-------------|--------|
+| `GEMINI_API_KEY` | AI service key | [Google AI Studio](https://aistudio.google.com/app/apikey) |
+| `OBSIDIAN_VAULT_PATH` | Path to your Obsidian vault | e.g. `/home/user/Documents/Obsidian` |
+| `SECRET_KEY` | Session signing key | Auto-generated on first setup |
 
-| Variable | Descripcion | Como obtenerla |
-|----------|-------------|----------------|
-| `GEMINI_API_KEY` | Clave para IA | [Google AI Studio](https://aistudio.google.com/app/apikey) |
-| `OBSIDIAN_VAULT_PATH` | Ruta absoluta a tu boveda de Obsidian | Ej: `/home/usuario/Documents/Obsidian` |
-| `SECRET_KEY` | Clave de sesion (se genera automaticamente) | Se genera en primer setup |
-
-### Variables Opcionales
+Optional:
 
 ```env
-# GitHub (sincronizacion)
-GITHUB_TOKEN=
+GITHUB_TOKEN=          # GitHub sync
 GITHUB_USERNAME=
-
-# Telegram (notificaciones)
-TELEGRAM_BOT_TOKEN=
+TELEGRAM_BOT_TOKEN=    # Notifications
 TELEGRAM_ALLOWED_USER_ID=
 ```
 
 ---
 
-## Comandos
+## Usage
 
-### Linux / macOS (Makefile)
+### Services
 
-| Comando | Descripcion |
+| Service | URL |
+|---------|-----|
+| Web App | http://localhost:3000 |
+| API Docs | http://localhost:8000/docs |
+| AI Service | http://localhost:8002 |
+
+### Commands (Linux/macOS)
+
+| Command | Description |
 |---------|-------------|
-| `make start` | Setup + iniciar servicios (modo interactivo) |
-| `make doctor` | Verificar que todo este configurado correctamente |
-| `make dev` | Iniciar servicios en modo desarrollo |
-| `make stop` | Detener todos los servicios |
-| `make logs` | Ver logs en tiempo real |
-| `make dev-reset` | Reiniciar todo desde cero |
-| `make test` | Ejecutar todos los tests |
-| `make migrate` | Ejecutar migraciones de base de datos |
+| `make dev` | Start services with hot reload |
+| `make stop` | Stop all services |
+| `make logs` | View logs in real time |
+| `make dev-reset` | Full reset (remove volumes, recreate) |
+| `make test` | Run all tests |
+| `make migrate` | Run database migrations |
 
-### Windows (PowerShell)
+### Commands (Windows)
 
-| Script | Descripcion |
-|--------|-------------|
-| `.\start.ps1` | Quick start interactivo |
-| `docker compose up -d` | Iniciar servicios |
-| `docker compose down` | Detener servicios |
+Use `docker compose up -d` / `docker compose down`.
 
 ---
 
-## Acceso a la App
-
-| Servicio | URL |
-|----------|-----|
-| **Web App** | http://localhost:3000 |
-| **API Docs** | http://localhost:8000/docs |
-| **AI Service** | http://localhost:8002 |
-
----
-
-## Solucion de Problemas
-
-### "Docker not found"
-Asegurate de tener Docker Desktop instalado y ejecutandose.
-
-### "Port already in use"
-Edita `.env` para cambiar los puertos:
-
-```env
-FRONTEND_PORT=3001
-API_PORT=8001
-```
-
-### "La base de datos no inicia"
-Ejecuta las migraciones:
-
-```bash
-make migrate
-```
-
-### Verificar estado de servicios
-
-```bash
-make db-health
-```
-
----
-
-## Estructura del Proyecto
+## Architecture
 
 ```
 .
-├── api/              # FastAPI backend
-├── ai-service/       # Servicio de IA (Gemini)
-├── worker/           # Tareas background
-├── frontend/         # SvelteKit web app
-├── data/             # Datos (DB, uploads, vault)
+├── api/              FastAPI REST backend
+├── ai-service/       AI service (Gemini, OpenAI, etc.)
+├── worker/           Background tasks (Obsidian sync, daily summaries)
+├── frontend/         SvelteKit web application
+├── data/             Database, uploads, vault
 ├── docker-compose.yml
-├── Makefile          # Comandos (Linux/Mac)
-├── start.ps1         # Script (Windows)
-└── .env              # Configuracion (no commits)
+└── Makefile
 ```
 
 ---
 
-## Contribuir
+## Integrations
 
-Las contribuciones son bienvenidas. Revisa la [Guia de Contribucion](CONTRIBUTING.md) para detalles sobre el flujo de trabajo, estandares de codigo y proceso de PR.
-
-Busca issues etiquetados como [`good-first-issue`](https://github.com/d4mag3/Joidy/issues?q=is%3Aissue+is%3Aopen+label%3Agood-first-issue) para empezar.
+| Service | Status |
+|---------|--------|
+| Gemini AI | Active (ai-service) |
+| GitHub | Active (sync, issues, PRs) |
+| Obsidian | Active (vault sync) |
+| Gmail | Planned |
+| Google Calendar | Planned |
+| Strava | Planned |
+| Spotify | Planned |
 
 ---
 
-## Licencia
+## Troubleshooting
 
-Distribuido bajo **GNU General Public License v3.0**. Ver [LICENSE](LICENSE) para mas informacion.
+| Problem | Solution |
+|---------|----------|
+| Docker not found | Install Docker Desktop and ensure it is running |
+| Port conflict | Override ports in `.env`: `FRONTEND_PORT=3001`, `API_PORT=8001` |
+| Database not starting | Run `make migrate` |
+| Service health | `make db-health` |
 
 ---
 
-Creado por [D4MAG3_WIZ4RD](https://github.com/d4mag3). Gracias a todos los [contribuyentes](https://github.com/d4mag3/Joidy/graphs/contributors) y a la comunidad [HackTheWorld-Team](https://github.com/HackTheWorld-Team).
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Look for issues labeled [`good-first-issue`](https://github.com/Axel-DaMage/joidy/issues?q=is%3Aissue+is%3Aopen+label%3Agood-first-issue) to get started.
+
+---
+
+## License
+
+GNU General Public License v3.0. See [LICENSE](LICENSE).
+
+---
+
+Created by [D4MAG3_WIZ4RD](https://github.com/d4mag3). Contributors welcome.
