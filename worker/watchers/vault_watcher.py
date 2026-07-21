@@ -31,6 +31,19 @@ class VaultEvent:
     change_type: Change
 
 
+async def get_auth_token(client: httpx.AsyncClient) -> str:
+    if not settings.auth_password:
+        return ""
+    try:
+        r = await client.post(f"{settings.api_url}/auth/login", params={"password": settings.auth_password})
+        if r.status_code == 200:
+            return r.json().get("access_token", "")
+    except Exception as e:
+        logger.error("[vault] Failed to get auth token: %s", e)
+    return ""
+
+auth_token = ""
+
 def _is_joidy_file(path: str) -> bool:
     return JOIDY_DIR in Path(path).parts
 
@@ -64,16 +77,16 @@ def _extract_tags_from_content(content: str, frontmatter: dict) -> list[str]:
     return list(set(t.lower() for t in tags if t))
 
 
-async def delete_note_by_path(path: str, client: httpx.AsyncClient):
+async def delete_note_by_path(path: str, client: httpx.AsyncClient, token: str):
     """Find and delete a note by its source_path with retries."""
     for attempt in range(3):
         try:
-            r = await client.get(f"{settings.api_url}/notes/", params={"source_path": path})
+            r = await client.get(f"{settings.api_url}/notes/", params={"source_path": path}, headers={"Authorization": f"Bearer {token}"} if token else None)
             if r.status_code == 200:
                 notes = r.json()
                 for n in notes:
                     if n.get("source_path") == path:
-                        await client.delete(f"{settings.api_url}/notes/{n['id']}")
+                        await client.delete(f"{settings.api_url}/notes/{n['id']}", headers={"Authorization": f"Bearer {token}"} if token else None)
                         logger.info("[vault] Deleted: %s", Path(path).name)
                         return
             break # Success or not found
@@ -83,7 +96,7 @@ async def delete_note_by_path(path: str, client: httpx.AsyncClient):
             await asyncio.sleep(1 * (attempt + 1))
 
 
-async def import_or_update_note(filepath: Path, client: httpx.AsyncClient, *, bulk_import: bool = False):
+async def import_or_update_note(filepath: Path, client: httpx.AsyncClient, token: str, *, bulk_import: bool = False):
     try:
         if not filepath.exists():
             return
@@ -99,6 +112,7 @@ async def import_or_update_note(filepath: Path, client: httpx.AsyncClient, *, bu
                 r = await client.get(
                     f"{settings.api_url}/notes/",
                     params={"source_path": str(filepath)},
+                    headers={"Authorization": f"Bearer {token}"} if token else None,
                     timeout=10.0,
                 )
                 if r.status_code == 200:
@@ -113,17 +127,18 @@ async def import_or_update_note(filepath: Path, client: httpx.AsyncClient, *, bu
                 await asyncio.sleep(1)
 
         payload = {"title": title, "content": content, "tags": tags, "source": "obsidian", "source_path": str(filepath)}
-        headers = {"X-Bulk-Import": "1"} if bulk_import else None
+        headers = {"X-Bulk-Import": "1"} if bulk_import else {}
+        if token: headers["Authorization"] = f"Bearer {token}"
 
         if existing:
-            await client.put(
+            res = await client.put(
                 f"{settings.api_url}/notes/{existing['id']}",
                 json={"title": title, "content": content, "tags": tags, "source": "obsidian", "source_path": str(filepath)},
                 headers=headers,
                 timeout=10.0,
             )
         else:
-            await client.post(f"{settings.api_url}/notes/", json=payload, headers=headers, timeout=10.0)
+            res = await client.post(f"{settings.api_url}/notes/", json=payload, headers=headers, timeout=10.0); res.raise_for_status()
 
         logger.info("[vault] Synced: %s", filepath.name)
 
@@ -131,7 +146,7 @@ async def import_or_update_note(filepath: Path, client: httpx.AsyncClient, *, bu
         logger.exception("[vault] Error syncing %s: %s", filepath, e)
 
 
-async def initial_scan(vault_path: Path, client: httpx.AsyncClient):
+async def initial_scan(vault_path: Path, client: httpx.AsyncClient, token: str):
     """On startup, import all .md files not in _joidy/."""
     md_files = [p for p in vault_path.rglob("*.md") if not _is_joidy_file(str(p))]
     logger.info("[vault] Initial scan: %s markdown files found", len(md_files))
@@ -140,15 +155,16 @@ async def initial_scan(vault_path: Path, client: httpx.AsyncClient):
 
     async def process_file(filepath: Path):
         async with semaphore:
-            await import_or_update_note(filepath, client, bulk_import=True)
+            await import_or_update_note(filepath, client, token, bulk_import=True)
 
     await asyncio.gather(*(process_file(filepath) for filepath in md_files), return_exceptions=True)
-    await client.post(f"{settings.api_url}/notes/rebuild-derived", timeout=30.0)
+    await client.post(f"{settings.api_url}/notes/rebuild-derived", headers={"Authorization": f"Bearer {token}"} if token else None, timeout=30.0)
 
 
 async def _consume_vault_events(
     queue: asyncio.Queue[VaultEvent],
     client: httpx.AsyncClient,
+    token: str,
 ):
     while True:
         try:
@@ -167,9 +183,9 @@ async def _consume_vault_events(
             async def process(path: str, change_type: Change):
                 try:
                     if change_type == Change.deleted:
-                        await delete_note_by_path(path, client)
+                        await delete_note_by_path(path, client, token)
                     else:
-                        await import_or_update_note(Path(path), client)
+                        await import_or_update_note(Path(path), client, token)
                 except Exception:
                     logger.exception("[vault] Failed to process %s (%s)", path, change_type)
 
@@ -204,10 +220,11 @@ async def watch_vault():
     async with httpx.AsyncClient() as client:
         consumer = None
         try:
-            await initial_scan(vault_path, client)
+            token = await get_auth_token(client)
+            await initial_scan(vault_path, client, token)
 
             queue: asyncio.Queue[VaultEvent] = asyncio.Queue(maxsize=1000)
-            consumer = asyncio.create_task(_consume_vault_events(queue, client), name="vault_event_consumer")
+            consumer = asyncio.create_task(_consume_vault_events(queue, client, token), name="vault_event_consumer")
 
             max_retries = 5
             retry_delay = 1.0

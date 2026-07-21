@@ -109,6 +109,7 @@ services:
       - "${WORKER_PORT:-8001}:8001"
     volumes:
       - ./data/db:/data/db
+      - ./.env:/app/.env
       - ${OBSIDIAN_VAULT_PATH:-./data/vault}:/vault
     environment:
       - DATABASE_URL=postgresql://joidy:joidy@postgres:5432/joidy

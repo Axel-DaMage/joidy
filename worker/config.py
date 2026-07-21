@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     ai_service_url: str = "http://ai-service:8002"
     vault_path: str = "/vault"
     app_env: str = "development"
+    auth_password: str | None = None
 
 
 settings = Settings()
