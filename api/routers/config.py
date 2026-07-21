@@ -2,6 +2,8 @@ from pathlib import Path
 
 from fastapi import APIRouter
 from pydantic import BaseModel
+from services.auth_service import get_current_user
+from fastapi import Depends
 
 router = APIRouter(prefix="/config", tags=["config"])
 
@@ -78,7 +80,7 @@ class ConfigUpdate(BaseModel):
     secret_key: str | None = None
 
 
-@router.get("", response_model=ConfigResponse)
+@router.get("", response_model=ConfigResponse, dependencies=[Depends(get_current_user)])
 def get_config():
     env_vars = read_env()
     configured = []
@@ -102,7 +104,7 @@ def get_config():
     )
 
 
-@router.post("")
+@router.post("", dependencies=[Depends(get_current_user)])
 def update_config(update: ConfigUpdate):
     env_vars = read_env()
 
@@ -119,7 +121,7 @@ def update_config(update: ConfigUpdate):
     return {"status": "ok", "message": "Configuration updated. Some changes may require a restart."}
 
 
-@router.get("/keys")
+@router.get("/keys", dependencies=[Depends(get_current_user)])
 def get_available_keys():
     return {
         "keys": [
@@ -157,7 +159,7 @@ class GamificationConfig(BaseModel):
     streak_milestones: list[int]
 
 
-@router.get("/gamification", response_model=GamificationConfig)
+@router.get("/gamification", response_model=GamificationConfig, dependencies=[Depends(get_current_user)])
 def get_gamification_config():
     from api.services.gamification_engine import (
         PLANT_STAGES,
@@ -173,3 +175,44 @@ def get_gamification_config():
         ],
         streak_milestones=STREAK_MILESTONES
     )
+
+import secrets
+
+class SetupRequest(BaseModel):
+    auth_password: str
+    obsidian_vault_path: str | None = None
+
+@router.get("/setup-status")
+def setup_status():
+    env_vars = read_env()
+    has_password = bool(env_vars.get("AUTH_PASSWORD"))
+    has_secret = bool(env_vars.get("SECRET_KEY"))
+    
+    needs_setup = not (has_password and has_secret)
+    return {"needs_setup": needs_setup}
+
+@router.post("/setup")
+def perform_setup(req: SetupRequest):
+    env_vars = read_env()
+    
+    if env_vars.get("AUTH_PASSWORD") and env_vars.get("SECRET_KEY"):
+        return {"status": "error", "message": "Setup already completed"}
+        
+    env_vars["AUTH_PASSWORD"] = req.auth_password
+    if req.obsidian_vault_path:
+        env_vars["OBSIDIAN_VAULT_PATH"] = req.obsidian_vault_path
+        
+    if not env_vars.get("SECRET_KEY"):
+        env_vars["SECRET_KEY"] = secrets.token_urlsafe(32)
+        
+    write_env(env_vars)
+    
+    # Reload settings in memory
+    from config import settings
+    settings.auth_password = req.auth_password
+    if req.obsidian_vault_path:
+        settings.vault_path = req.obsidian_vault_path
+    settings.secret_key = env_vars["SECRET_KEY"]
+    
+    return {"status": "ok", "message": "Setup completed"}
+
