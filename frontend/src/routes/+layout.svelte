@@ -424,7 +424,7 @@
         {#if status === 'dev'}
           <span class="nav-dev-dot" title="Requiere Dev Mode"></span>
         {:else if status === 'placeholder'}
-          <span class="nav-placeholder-badge">Pronto</span>
+          <!-- Pronto badge removed -->
         {/if}
         <span class="tooltip">{label}</span>
       </a>
