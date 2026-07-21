@@ -4,6 +4,7 @@
   import { goto } from '$app/navigation';
   import { Search, Plus, X, List, FolderTree, ChevronRight, FileEdit, FolderPlus, ChevronsUpDown, ArrowUpDown, Settings } from 'lucide-svelte';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
+  import ScientificCalculator from '$lib/components/ScientificCalculator.svelte';
   import NoteEditor from '$lib/components/NoteEditor.svelte';
   import NoteCard from '$lib/components/NoteCard.svelte';
   import IconPicker from '$lib/components/IconPicker.svelte';
@@ -505,62 +506,6 @@
   // ── Dashboard Empty State ──
   let isMomentary = false;
   let momentaryDraft = { title: 'Borrador Efímero', content: '', tags: [] as string[] };
-  let calcInput = '';
-  let calcResult = '0';
-  let lastResult = '';
-  function evaluateCalc() {
-    try {
-      if (!calcInput.trim()) { calcResult = '0'; return; }
-      
-      let expr = calcInput
-        .replace(/sin\(/g, 'Math.sin(')
-        .replace(/cos\(/g, 'Math.cos(')
-        .replace(/tan\(/g, 'Math.tan(')
-        .replace(/log\(/g, 'Math.log10(')
-        .replace(/ln\(/g, 'Math.log(')
-        .replace(/√\(/g, 'Math.sqrt(')
-        .replace(/π/g, 'Math.PI')
-        .replace(/e/g, 'Math.E')
-        .replace(/\^/g, '**')
-        .replace(/(\d+)!/g, (match, n) => {
-          let f = 1; for(let i=1; i<=+n; i++) f*=i; return f+'';
-        })
-        .replace(/Ans/g, lastResult || '0')
-        .replace(/÷/g, '/')
-        .replace(/×/g, '*');
-      
-      const sanitize = expr.replace(/[^0-9+\-*/(). Math[a-z0-9]!]/g, '');
-      const res = new Function('return ' + sanitize)();
-      if (typeof res === 'number') {
-        calcResult = Number(res.toFixed(8)).toString();
-      } else {
-        calcResult = res + '';
-      }
-    } catch {
-      calcResult = '...';
-    }
-  }
-
-  function addCalc(val: string) {
-    if (val === '=') { 
-      evaluateCalc(); 
-      if (calcResult !== '...') lastResult = calcResult;
-      return; 
-    }
-    if (val === 'AC') { calcInput = ''; calcResult = '0'; return; }
-    if (val === 'Ans') { calcInput += 'Ans'; evaluateCalc(); return; }
-    if (val === 'x!') { calcInput += '!'; evaluateCalc(); return; }
-    if (val === 'xy') { calcInput += '^'; evaluateCalc(); return; }
-    if (val === '√') { calcInput += '√('; evaluateCalc(); return; }
-    
-    // Auto-parenthesis for functions
-    if (['sin', 'cos', 'tan', 'log', 'ln'].includes(val)) {
-      calcInput += val + '(';
-    } else {
-      calcInput += val;
-    }
-    evaluateCalc();
-  }
 
   function quickNoteFromScratch() {
     openNew();
@@ -904,67 +849,11 @@
             </div>
           </div>
 
-          <!-- Scientific Calculator -->
-          <div class="dash-widget scientific-calc">
+          <div class="dash-widget">
             <div class="dash-widget-title" style="margin-bottom: 5px;">
               <DynamicIcon name="Calculator" size={13}/> Calculadora
             </div>
-            <div class="calc-display">
-              <div class="calc-history"><DynamicIcon name="History" size={10} /></div>
-              <input
-                class="calc-input"
-                bind:value={calcInput}
-                on:input={evaluateCalc}
-                placeholder="0"
-              />
-              <div class="calc-res">{calcResult}</div>
-            </div>
-            <div class="calc-grid">
-              <!-- Row 1 -->
-              <button class="calc-btn sm" on:click={() => {}}>Deg</button>
-              <button class="calc-btn sm" on:click={() => addCalc('x!')}>x!</button>
-              <button class="calc-btn sm" on:click={() => addCalc('(')}>(</button>
-              <button class="calc-btn sm" on:click={() => addCalc(')')}>)</button>
-              <button class="calc-btn sm" on:click={() => addCalc('%')}>%</button>
-              <button class="calc-btn sm clear" on:click={() => addCalc('AC')}>AC</button>
-              <button class="calc-btn op" on:click={() => addCalc('÷')}>÷</button>
-              
-              <!-- Row 2 -->
-              <button class="calc-btn sm" on:click={() => addCalc('inv')}>Inv</button>
-              <button class="calc-btn sm" on:click={() => addCalc('sin')}>sin</button>
-              <button class="calc-btn sm" on:click={() => addCalc('ln')}>ln</button>
-              <button class="calc-btn num" on:click={() => addCalc('7')}>7</button>
-              <button class="calc-btn num" on:click={() => addCalc('8')}>8</button>
-              <button class="calc-btn num" on:click={() => addCalc('9')}>9</button>
-              <button class="calc-btn op" on:click={() => addCalc('×')}>×</button>
-
-              <!-- Row 3 -->
-              <button class="calc-btn sm" on:click={() => addCalc('π')}>π</button>
-              <button class="calc-btn sm" on:click={() => addCalc('cos')}>cos</button>
-              <button class="calc-btn sm" on:click={() => addCalc('log')}>log</button>
-              <button class="calc-btn num" on:click={() => addCalc('4')}>4</button>
-              <button class="calc-btn num" on:click={() => addCalc('5')}>5</button>
-              <button class="calc-btn num" on:click={() => addCalc('6')}>6</button>
-              <button class="calc-btn op" on:click={() => addCalc('-')}>-</button>
-
-              <!-- Row 4 -->
-              <button class="calc-btn sm" on:click={() => addCalc('e')}>e</button>
-              <button class="calc-btn sm" on:click={() => addCalc('tan')}>tan</button>
-              <button class="calc-btn sm" on:click={() => addCalc('√')}>√</button>
-              <button class="calc-btn num" on:click={() => addCalc('1')}>1</button>
-              <button class="calc-btn num" on:click={() => addCalc('2')}>2</button>
-              <button class="calc-btn num" on:click={() => addCalc('3')}>3</button>
-              <button class="calc-btn op" on:click={() => addCalc('+')}>+</button>
-
-              <!-- Row 5 -->
-              <button class="calc-btn sm" on:click={() => addCalc('Ans')}>Ans</button>
-              <button class="calc-btn sm" on:click={() => addCalc('EXP')}>EXP</button>
-              <button class="calc-btn sm" on:click={() => addCalc('xy')}>x<sup>y</sup></button>
-              <button class="calc-btn num" on:click={() => addCalc('0')}>0</button>
-              <button class="calc-btn num" on:click={() => addCalc('.')}>.</button>
-              <button class="calc-btn equals" on:click={() => addCalc('=')}>=</button>
-              <div></div> <!-- Spacing for grid alignment if needed, or leave empty -->
-            </div>
+            <ScientificCalculator />
           </div>
         </div>
       </div>
@@ -1307,61 +1196,6 @@
   }
   .recent-time { font-size: 10px; color: var(--text-disabled); font-family: var(--font-mono); }
 
-
-  /* ── Scientific Calculator (Joidy Styled) ── */
-  .scientific-calc { 
-    gap: 12px; 
-    background: var(--surface);
-    border: 1px solid var(--border);
-    min-width: 0; /* Strict containment */
-    overflow: hidden;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-  }
-  .calc-display {
-    background: var(--bg); border: 1px solid var(--border); border-radius: var(--r);
-    padding: 12px; display: flex; flex-direction: column; align-items: flex-end;
-    min-width: 0; width: 100%;
-    overflow: hidden;
-  }
-  .calc-history { color: var(--text-disabled); cursor: pointer; align-self: flex-start; margin-bottom: -15px; }
-  .calc-input {
-    width: 100%; border: none; color: var(--text-secondary); background: transparent;
-    font-size: 13px; text-align: right; outline: none; margin-bottom: 2px;
-    font-family: var(--font-mono);
-  }
-  .calc-res {
-    font-size: 32px; color: var(--accent); font-weight: 600; font-family: var(--font-mono);
-    min-height: 40px;
-    width: 100%;
-    text-align: right;
-    white-space: nowrap;
-    overflow-x: auto;
-    overflow-y: hidden;
-  }
-  /* Hide scrollbar for cleaner look */
-  .calc-res::-webkit-scrollbar { display: none; }
-  .calc-grid {
-    display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px;
-    flex: 1; /* Grow to fill space */
-    grid-auto-rows: 1fr; /* All rows equal height */
-  }
-  .calc-btn {
-    height: 100%; width: 100%; border: 1px solid var(--border-light); border-radius: 4px;
-    background: var(--elevated); color: var(--text-secondary); cursor: pointer;
-    font-size: 11px; transition: all var(--t-fast);
-    display: flex; align-items: center; justify-content: center;
-    font-family: var(--font-mono);
-  }
-  .calc-btn:hover { background: var(--border-light); color: var(--text-primary); border-color: var(--border); }
-  .calc-btn.sm { color: var(--text-muted); font-size: 10px; }
-  .calc-btn.num { color: var(--text-primary); font-weight: 500; font-size: 13px; }
-  .calc-btn.op { background: color-mix(in srgb, var(--xp-2) 16%, transparent); color: var(--xp-2); font-size: 14px; }
-  .calc-btn.clear { background: var(--xp); color: var(--xp-contrast-text, var(--bg)); font-weight: 600; border-color: var(--xp); }
-  .calc-btn.equals { background: var(--xp-3); color: var(--xp-contrast-text, var(--bg)); font-weight: 600; font-size: 14px; border-color: var(--xp-3); }
-  .calc-btn.equals:hover { opacity: 0.8; transform: translateY(-1px); }
-  .calc-btn:active { transform: scale(0.95); }
 
   .scratchpad {
     width: 100%; height: 100px; resize: none; background: var(--bg);
