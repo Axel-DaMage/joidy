@@ -36,23 +36,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  npm:
-    name: npm / bun
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          registry-url: https://registry.npmjs.org
-      - name: Publish
-        run: |
-          cd joidy-cli
-          TAG=$(echo "${{ github.ref_name }}" | grep -oP 'alpha|beta|rc' || echo "latest")
-          npm publish --access public --tag "$TAG"
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
   homebrew:
     name: Homebrew
     runs-on: ubuntu-latest

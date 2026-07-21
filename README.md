@@ -21,8 +21,6 @@
   &middot;
   <a href="#curl">curl</a>
   &middot;
-  <a href="#npm--bun">npm / bun</a>
-  &middot;
   <a href="#homebrew">Homebrew</a>
   &middot;
   <a href="#aur">AUR</a>
@@ -47,14 +45,6 @@ docker compose up -d
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Axel-DaMage/joidy/main/scripts/install.sh | bash
-```
-
-### npm / bun
-
-```bash
-npx @joidy-app/cli up
-# or
-bunx @joidy-app/cli up
 ```
 
 ### Homebrew
