@@ -7,7 +7,7 @@ from fastapi import Depends
 
 router = APIRouter(prefix="/config", tags=["config"])
 
-ENV_FILE = Path(__file__).parent.parent.parent / ".env"
+ENV_FILE = Path("/app/.env") if Path("/app").exists() else Path(__file__).parent.parent.parent / ".env"
 
 CONFIG_KEYS = {
     "gemini_api_key": "GEMINI_API_KEY",
@@ -208,11 +208,12 @@ def perform_setup(req: SetupRequest):
     write_env(env_vars)
     
     # Reload settings in memory
+    import os
     from config import settings
     settings.auth_password = req.auth_password
-    if req.obsidian_vault_path:
-        settings.vault_path = req.obsidian_vault_path
     settings.secret_key = env_vars["SECRET_KEY"]
+    if req.obsidian_vault_path:
+        os.environ["OBSIDIAN_VAULT_PATH"] = req.obsidian_vault_path
     
     return {"status": "ok", "message": "Setup completed"}
 
