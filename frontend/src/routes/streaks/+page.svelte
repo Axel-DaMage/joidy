@@ -1,15 +1,14 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { scale } from 'svelte/transition';
-  import { Plus, Check, X, Flame, Settings, Snowflake, Search, ChevronRight } from 'lucide-svelte';
+  import { Plus, X, Flame, Snowflake, Search, ChevronRight } from 'lucide-svelte';
     import { Archive, Shuffle, CheckCheck } from 'lucide-svelte';
-  import StreakIcon from '$lib/components/StreakIcon.svelte';
+  import StreakListItem from '$lib/components/StreakListItem.svelte';
   import StreakCreateModal from '$lib/components/StreakCreateModal.svelte';
   import StreakHeatmap from '$lib/components/StreakHeatmap.svelte';
   import StreakStatsPanel from '$lib/components/StreakStatsPanel.svelte';
   import { api, type PersonalStreak, type StreakStats } from '$lib/api';
   import { loadUserSettings, patchUserSettings, getCachedData, setCachedData } from '$lib/utils/userSettings';
-  import { liquidGlass } from '$lib/actions/liquidGlass';
   import { captureSnapshot, getSnapshot } from '$lib/stores/pageSnapshots';
   import { logger } from '$lib/utils/logger';
 
@@ -362,77 +361,17 @@
             </div>
           {:else}
             {#each filteredStreaks as streak (streak.id)}
-              <div
-                class="streak-item"
-                class:theme-gradient={streak.theme === 'gradient'}
-                class:theme-glow={streak.theme === 'glow'}
-                class:theme-minimal={streak.theme === 'minimal'}
-                class:theme-lcd={streak.theme === 'lcd'}
-                class:theme-neon={streak.theme === 'neon'}
-                class:theme-glass={streak.theme === 'glass'}
-                class:theme-sketch={streak.theme === 'sketch'}
-                class:theme-solid={!streak.theme || streak.theme === 'solid'}
-                class:selected={selectedId === streak.id}
-                class:checked={streak.today_checked}
-                class:archived={streak.is_archived}
-                class:completed={isStreakCompleted(streak)}
-                style="--theme-ac: {streak.color || 'var(--xp)'};"
-                on:click={() => selectedId = streak.id}
-                on:keydown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    selectedId = streak.id;
-                  }
-                }}
-                role="button"
-                tabindex="0"
-                use:liquidGlass={{ enabled: streak.theme === 'glass' }}
-              >
-                <div class="item-icon">
-                  {#if streak.icon && streak.icon.length > 0}
-                    <StreakIcon name={streak.icon} size={18} color={streak.color || undefined} />
-                  {:else}
-                    <span class="item-emoji">{streak.emoji || '🔥'}</span>
-                  {/if}
-                </div>
-                <div class="item-info">
-                  <span class="item-name">{streak.name}</span>
-                  <span class="item-meta mono">
-                    {#if isStreakCompleted(streak)}
-                      Finalizado {getDaysForCompletion(streak)} días
-                    {:else}
-                      {freqLabel(streak)}
-                    {/if}
-                  </span>
-                </div>
-                <div class="item-count" style="color: {streak.color || 'var(--xp)'};">
-                  <div class="count-box">
-                    <span class="item-num mono">{streakLabel(streak.current_streak)}</span>
-                    {#if streak.target_date && !isStreakCompleted(streak)}
-                      <span class="item-rem mono">{streak.days_remaining}d</span>
-                    {/if}
-                  </div>
-                  {#if streak.today_checked}
-                    <Check size={10} style="color: {streak.color || 'var(--xp)'};" />
-                  {/if}
-                </div>
-                <div class="item-actions">
-                  <button
-                    class="item-action-btn"
-                    on:click|stopPropagation={() => openEdit(streak)}
-                    title="Editar racha"
-                  >
-                    <Settings size={12} />
-                  </button>
-                  <button
-                    class="item-action-btn danger"
-                    on:click|stopPropagation={() => deleteStreak(streak.id)}
-                    title="Eliminar racha"
-                  >
-                    <X size={12} />
-                  </button>
-                </div>
-              </div>
+              <StreakListItem
+                {streak}
+                selected={selectedId === streak.id}
+                {streakLabel}
+                {freqLabel}
+                {isStreakCompleted}
+                {getDaysForCompletion}
+                on:select={(e) => selectedId = e.detail}
+                on:edit={(e) => openEdit(e.detail)}
+                on:delete={(e) => deleteStreak(e.detail)}
+              />
             {/each}
           {/if}
         </div>
