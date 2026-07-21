@@ -1,5 +1,4 @@
 pkgbase = joidy
-pkgname = joidy
 pkgdesc = Personal knowledge management with gamification
 pkgver = 1.0.0
 pkgrel = 1
@@ -10,3 +9,4 @@ depends = docker
 depends = docker-compose
 source = https://github.com/Axel-DaMage/joidy/archive/v1.0.0.tar.gz
 sha256sums = SKIP
+pkgname = joidy
