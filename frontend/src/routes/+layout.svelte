@@ -23,6 +23,7 @@
   import { achievements } from '$lib/stores/achievements';
   import { initConnectionStore } from '$lib/stores/connection';
   import { loadNotes } from '$lib/stores/notes';
+  import { deferredPrompt, showInstallBanner, isAppInstalled } from '$lib/stores/pwa';
 
   type NavItemStatus = 'ready' | 'dev' | 'placeholder';
 
@@ -151,6 +152,10 @@
       });
     }
 
+    window.addEventListener('appinstalled', () => {
+      showNotification("¡Joidy instalado! Ahora puedes acceder desde tu escritorio.", "success");
+    });
+
     const loadFooterStats = async (force = false) => {
       if (document.visibilityState !== 'visible') return;
 
@@ -278,6 +283,20 @@
       connectWS();
     };
 
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt.set(e);
+      
+      if (!$isAppInstalled) {
+        const visits = parseInt(localStorage.getItem('joidy-visits') || '0');
+        localStorage.setItem('joidy-visits', (visits + 1).toString());
+        
+        if (visits >= 1 && localStorage.getItem('joidy-pwa-dismissed') !== 'true') {
+          showInstallBanner.set(true);
+        }
+      }
+    });
+
     window.addEventListener('online', handleOnline);
     window.addEventListener('joidy:streaks-updated', handleStreaksUpdated);
     window.addEventListener('joidy:open-settings', handleOpenSettings);
@@ -334,6 +353,32 @@
   <!-- Header -->
   <header class="app-header">
     <span class="logo mono">JOIDY</span>
+    
+    {#if $showInstallBanner}
+      <div class="pwa-banner" transition:fade={{ duration: 150 }}>
+        <DynamicIcon name="DownloadCloud" size={13} />
+        <span>Instala Joidy para acceso rápido</span>
+        <div class="pwa-actions">
+          <button class="pwa-btn pwa-install" on:click={async () => {
+            if ($deferredPrompt) {
+              $deferredPrompt.prompt();
+              const { outcome } = await $deferredPrompt.userChoice;
+              if (outcome === 'accepted') {
+                showInstallBanner.set(false);
+              }
+              deferredPrompt.set(null);
+            }
+          }}>Instalar</button>
+          <button class="pwa-btn pwa-dismiss" on:click={() => {
+            showInstallBanner.set(false);
+            localStorage.setItem('joidy-pwa-dismissed', 'true');
+          }}>
+            <DynamicIcon name="X" size={12} />
+          </button>
+        </div>
+      </div>
+    {/if}
+
     <div style="flex:1;"></div>
 
     <!-- Connectivity Indicator -->
@@ -422,6 +467,47 @@
 {/if}
 
 <style>
+  .pwa-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: color-mix(in srgb, var(--xp) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--xp) 30%, var(--border));
+    padding: 4px 12px;
+    border-radius: 99px;
+    margin-left: 20px;
+    font-size: 11px;
+    color: var(--xp);
+  }
+  .pwa-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 4px;
+  }
+  .pwa-btn {
+    background: none;
+    border: none;
+    color: currentColor;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: background 0.2s;
+  }
+  .pwa-btn:hover {
+    background: color-mix(in srgb, var(--xp) 20%, transparent);
+  }
+  .pwa-install {
+    font-weight: 600;
+    text-decoration: underline;
+  }
+  .pwa-dismiss {
+    padding: 2px;
+  }
+
   .logo {
     user-select: none;
     font-size: 15px;

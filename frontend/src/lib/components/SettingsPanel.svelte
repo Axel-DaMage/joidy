@@ -5,6 +5,7 @@
   import { accentColors, activeIconPack, showFrontmatter, showTrash, showHiddenFiles, writeInObsidian, use24HourClock, hideTagsLine, darkMode, devMode, type IconPack, MAX_COLORS } from '$lib/stores/settings';
   import { api } from '$lib/api';
   import { logger } from '$lib/utils/logger';
+  import { deferredPrompt, isAppInstalled, showInstallBanner } from '$lib/stores/pwa';
 
   export let open = false;
 
@@ -511,6 +512,28 @@
             Habilita auto-tagging y búsqueda semántica.
           </p>
         </section>
+
+        <!-- Aplicación (PWA) -->
+        {#if $deferredPrompt && !$isAppInstalled}
+          <section class="section">
+            <div class="section-title" style="color: var(--xp, var(--accent));">
+              <DynamicIcon name="DownloadCloud" size={12} /> Aplicación
+            </div>
+            <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
+              <p class="hint" style="margin-top: 0;">Instala Joidy en tu dispositivo para acceso rápido y sin conexión.</p>
+              <button class="save-config-btn" style="background: var(--xp);" on:click={async () => {
+                $deferredPrompt.prompt();
+                const { outcome } = await $deferredPrompt.userChoice;
+                if (outcome === 'accepted') {
+                  showInstallBanner.set(false);
+                }
+                deferredPrompt.set(null);
+              }}>
+                <DynamicIcon name="Download" size={12} /> Instalar Joidy
+              </button>
+            </div>
+          </section>
+        {/if}
 
         <!-- Repositorio -->
         <section class="section">

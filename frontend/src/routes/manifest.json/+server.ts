@@ -9,6 +9,7 @@ export function GET() {
     display: "standalone",
     background_color: "#000000",
     theme_color: "#c8a96e",
+    categories: ["productivity", "notes"],
     icons: [
       {
         src: "/favicon.png",
