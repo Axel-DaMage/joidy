@@ -130,7 +130,7 @@ app.add_middleware(
 app.add_middleware(CorsSafetyMiddleware)
 
 app.include_router(notes.router, dependencies=[Depends(get_current_user)])
-app.include_router(config.router, dependencies=[Depends(get_current_user)])
+app.include_router(config.router)
 app.include_router(tags.router, dependencies=[Depends(get_current_user)])
 app.include_router(skills.router, dependencies=[Depends(get_current_user)])
 app.include_router(goals.router, dependencies=[Depends(get_current_user)])
