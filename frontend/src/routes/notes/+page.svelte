@@ -32,6 +32,11 @@
   let folderIcon = 'Folder';
 
   let editingFolderNote: Note | null = null;
+  let creatingFolder = false;
+  let newFolderName = "";
+  let newFolderParent = "";
+  let newFolderIcon = "Folder";
+  let newFolderColor = "#c8a96e";
   async function openFolderCustomizer(node: { path: string; color?: string | null; icon?: string | null; note?: Note }) {
     editingFolder = node.path;
     folderColor = node.color || '#c8a96e';
@@ -136,8 +141,12 @@
     if (notesPrefsReady) persistNotesPrefs();
   }
 
-  function handleCreateFolder() {
-    alert('Próximamente: Las carpetas están enlazadas a la raíz de tu sistema de archivos.');
+    function handleCreateFolder() {
+    creatingFolder = true;
+    newFolderName = "";
+    newFolderParent = "";
+    newFolderIcon = "Folder";
+    newFolderColor = "#c8a96e";
   }
 
   function toggleCollapseAll() {
@@ -712,6 +721,59 @@
   </aside>
 
   <!-- Folder customize modal -->
+  <!-- Create folder modal -->
+  {#if creatingFolder}
+    <div class="folder-modal-backdrop" on:click={() => creatingFolder = false}>
+      <div class="folder-modal" on:click|stopPropagation>
+        <h3 class="folder-modal-title">Crear carpeta</h3>
+        
+        <div style="display:flex; flex-direction:column; gap:4px; margin-bottom:12px;">
+          <span class="folder-label mono">Nombre</span>
+          <input type="text" class="input mono" bind:value={newFolderName} placeholder="Nueva Carpeta" style="width:100%; box-sizing:border-box;" />
+        </div>
+        
+        <div style="display:flex; flex-direction:column; gap:4px; margin-bottom:12px;">
+          <span class="folder-label mono">Ubicación (Padre)</span>
+          <select class="input mono" bind:value={newFolderParent} style="width:100%; box-sizing:border-box;">
+            <option value="">(Raíz)</option>
+            {#each flatNodes.filter(n => n.type === 'folder') as f}
+              <option value={f.path}>{f.path}</option>
+            {/each}
+          </select>
+        </div>
+
+        <div class="folder-color-row">
+          <span class="folder-label mono">Color</span>
+          <input type="color" class="folder-color-input" bind:value={newFolderColor} />
+          <input type="text" class="folder-hex-input mono" maxlength="7" bind:value={newFolderColor} />
+        </div>
+        
+        <div class="folder-icon-row">
+          <span class="folder-label mono">Icono</span>
+          <IconPicker selected={newFolderIcon} color={newFolderColor} onSelect={(ic) => newFolderIcon = ic} />
+        </div>
+        
+        <div class="folder-modal-btns">
+          <button on:click={() => creatingFolder = false}>Cancelar</button>
+          <button class="primary" disabled={!newFolderName.trim()} on:click={async () => {
+            if (!newFolderName.trim()) return;
+            const targetPath = newFolderParent ? `${newFolderParent}/${newFolderName.trim()}` : newFolderName.trim();
+            try {
+              await api.folders.create(targetPath);
+              updateFolderMeta(targetPath, { icon: newFolderIcon, color: newFolderColor });
+              creatingFolder = false;
+              // Refresh tree
+              const ns = await api.notes.list();
+              notesStore.set(ns);
+            } catch (e) {
+              alert(e.message || "Error al crear carpeta");
+            }
+          }}>Crear</button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
   {#if editingFolder}
     <div class="folder-modal-backdrop" on:click={() => editingFolder = null}>
       <div class="folder-modal" on:click|stopPropagation>

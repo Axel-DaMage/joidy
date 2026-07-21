@@ -11,6 +11,7 @@ from logging_config import setup_logging
 from middleware.metrics import MetricsMiddleware, get_metrics_collector
 from middleware.rate_limit import RateLimitMiddleware
 from routers import (
+    folders,
     ai,
     auth,
     config,
@@ -137,6 +138,7 @@ app.include_router(gamification.router, dependencies=[Depends(get_current_user)]
 app.include_router(personal_streaks.router, dependencies=[Depends(get_current_user)])
 app.include_router(github.router, dependencies=[Depends(get_current_user)])
 app.include_router(vault.router, dependencies=[Depends(get_current_user)])
+app.include_router(folders.router, dependencies=[Depends(get_current_user)])
 app.include_router(ai.router, dependencies=[Depends(get_current_user)])
 app.include_router(planning.router, dependencies=[Depends(get_current_user)])
 app.include_router(websocket.router)
