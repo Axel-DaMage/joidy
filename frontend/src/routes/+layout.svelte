@@ -10,6 +10,7 @@
   import CommandPalette from '$lib/components/CommandPalette.svelte';
   import Toast from '$lib/components/Toast.svelte';
   import Login from '$lib/components/Login.svelte';
+  import SetupWizard from '$lib/components/SetupWizard.svelte';
   import { api, type Goal, type PersonalStreak } from '$lib/api';
   import { session, isAuthenticated } from '$lib/stores/session';
   import { totalXP, loadStats, pingActivity, globalLevel, nextStageXP, showNotification } from '$lib/stores/gamification';
@@ -64,9 +65,23 @@
   });
 
   let mounted = false;
+  let needsSetup = false;
+  let checkingSetup = true;
 
   onMount(() => {
     mounted = true;
+    
+    // Check setup status
+    api.config.setupStatus()
+      .then(res => {
+        needsSetup = res.needs_setup;
+        checkingSetup = false;
+      })
+      .catch(err => {
+        logger.error('Failed to check setup status:', err);
+        checkingSetup = false;
+      });
+
     accentColors.init();
     activeIconPack.init();
     initTheme();
@@ -343,9 +358,12 @@
   }
 </script>
 
-{#if !mounted}
-  <!-- Render blank or loading during SSR to prevent hydration mismatch -->
+{#if !mounted || checkingSetup}
+  <!-- Render blank or loading during SSR or setup check -->
   <div style="min-height: 100vh; background: var(--bg);"></div>
+{:else if needsSetup}
+  <SetupWizard />
+  <Toast />
 {:else if !$isAuthenticated}
   <Login />
   <Toast />

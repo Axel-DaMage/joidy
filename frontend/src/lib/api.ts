@@ -302,6 +302,10 @@ github: {
   },
 
   config: {
+    setupStatus: () => req<{ needs_setup: boolean }>('GET', '/config/setup-status'),
+    setup: (auth_password: string, obsidian_vault_path?: string) => 
+      req<{ status: string; message: string }>('POST', '/config/setup', { auth_password, obsidian_vault_path }),
+
     get: () => req<{
       gemini_api_key: string | null;
       obsidian_vault_path: string | null;
