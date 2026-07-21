@@ -1,7 +1,8 @@
-# Development overrides: hot reload, source mounts, verbose logging
 services:
   frontend:
     build:
+      context: ./frontend
+      dockerfile: Dockerfile
       target: development
     volumes:
       - ./frontend:/app
@@ -9,32 +10,40 @@ services:
     environment:
       - NODE_ENV=development
       - VITE_API_URL=http://localhost:${API_PORT:-8000}
-      # For SvelteKit SSR running inside Docker, localhost:PORT doesn't exist.
-      # This URL is used server-side only; the browser still uses VITE_API_URL.
       - VITE_INTERNAL_API_URL=http://api:8000
     command: npm run dev -- --host 0.0.0.0 --port 3000
 
   api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
     volumes:
       - ./api:/app
       - ./data/db:/data/db
       - ./data/uploads:/data/uploads
+      - ./.env:/app/.env
       - ${OBSIDIAN_VAULT_PATH:-./data/vault}:/vault
     environment:
       - APP_ENV=development
-      - WEB_CONCURRENCY=1
       - VAULT_PATH=/vault
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
   ai-service:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
     volumes:
       - ./ai-service:/app
       - ./data/db:/data/db
     command: uvicorn main:app --host 0.0.0.0 --port 8002 --reload
 
   worker:
+    build:
+      context: ./worker
+      dockerfile: Dockerfile
     volumes:
       - ./worker:/app
       - ./data/db:/data/db
+      - ./.env:/app/.env
       - ${OBSIDIAN_VAULT_PATH:-./data/vault}:/vault
     command: watchfiles "python main.py" /app
