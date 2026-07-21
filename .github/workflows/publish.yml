@@ -58,8 +58,10 @@ jobs:
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add Formula/joidy.rb
-          git commit -m "joidy ${VERSION}"
-          git push
+          git diff --quiet HEAD || {
+            git commit -m "joidy ${VERSION}"
+            git push
+          }
 
   aur:
     name: AUR
@@ -117,4 +119,4 @@ jobs:
           git config user.email "github-actions@github.com"
           git add PKGBUILD .SRCINFO
           git commit -m "update to ${VERSION}"
-          git push --force origin master
+          git push origin master
