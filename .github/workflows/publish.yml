@@ -73,7 +73,20 @@ jobs:
           sed -i "s|pkgver=.*|pkgver=${VERSION_CLEAN}|" PKGBUILD
           sed -i "s|sha256sums=('.*')|sha256sums=('${SHA}')|" PKGBUILD
           sed -i "s|pkgrel=.*|pkgrel=1|" PKGBUILD
-          makepkg --printsrcinfo > .SRCINFO
+          {
+            echo "pkgbase = joidy"
+            echo "pkgdesc = Personal knowledge management with gamification"
+            echo "pkgver = ${VERSION_CLEAN}"
+            echo "pkgrel = 1"
+            echo "url = https://joidy-web.vercel.app"
+            echo "install = "
+            echo "arch = any"
+            echo "license = GPL3"
+            echo "depends = docker"
+            echo "depends = docker-compose"
+            echo "source = https://github.com/Axel-DaMage/joidy/archive/v${VERSION}.tar.gz"
+            echo "sha256sums = ${SHA}"
+          } > .SRCINFO
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add PKGBUILD .SRCINFO
