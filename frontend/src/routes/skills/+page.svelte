@@ -4,14 +4,24 @@
   import { api, type Skill, type SkillTree as SkillTreeData } from '$lib/api';
   import { logger } from '$lib/utils/logger';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
+  import { Search, X } from 'lucide-svelte';
 
   let skills: Skill[] = [];
   let treeData: SkillTreeData = { nodes: [], edges: [] };
   let loading = true;
+  let searchQuery = $state('');
+  let levelFilter = $state<string | null>(null);
 
   const LEVEL_LABELS: Record<string, string> = {
     locked: 'Bloqueado', apprentice: 'Aprendiz', journeyman: 'Oficial', expert: 'Experto', master: 'Maestro'
   };
+  const LEVEL_ORDER = ['locked', 'apprentice', 'journeyman', 'expert', 'master'];
+
+  $: filteredSkills = skills.filter(s => {
+    if (searchQuery && !s.tag_name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    if (levelFilter && s.level !== levelFilter) return false;
+    return true;
+  });
 
   $: topSkill = skills.sort((a, b) => b.note_count - a.note_count)[0];
   $: totalUnlocked = skills.filter(s => s.level !== 'locked').length;
@@ -66,19 +76,54 @@
     <aside class="skills-list">
       <div class="skills-list-header label">Habilidades</div>
 
-      {#each skills as skill}
-        <div class="skill-row">
-          <div class="skill-info">
-            <span class="skill-name">{skill.tag_name}</span>
-            <span class="skill-count caption">{skill.note_count} notas</span>
-          </div>
-          <span class="level-badge" data-level={skill.level}>
-            {LEVEL_LABELS[skill.level] ?? skill.level}
-          </span>
+      <div class="skills-search">
+        <div class="search-wrap">
+          <Search size={12} class="search-icon" />
+          <input
+            class="search-input"
+            type="text"
+            placeholder="Buscar habilidad..."
+            bind:value={searchQuery}
+          />
+          {#if searchQuery}
+            <button class="search-clear" onclick={() => searchQuery = ''}>
+              <X size={12} />
+            </button>
+          {/if}
         </div>
-      {:else}
-        <div class="caption" style="padding: 24px 16px; color: var(--text-muted);">Sin habilidades aún.</div>
-      {/each}
+      </div>
+
+      <div class="level-filters">
+        <button
+          class="level-filter-btn"
+          class:active={levelFilter === null}
+          onclick={() => levelFilter = null}
+        >Todas</button>
+        {#each LEVEL_ORDER as level}
+          <button
+            class="level-filter-btn"
+            class:active={levelFilter === level}
+            data-level={level}
+            onclick={() => levelFilter = levelFilter === level ? null : level}
+          >{LEVEL_LABELS[level]}</button>
+        {/each}
+      </div>
+
+      <div class="skills-scroll">
+        {#each filteredSkills as skill}
+          <div class="skill-row">
+            <div class="skill-info">
+              <span class="skill-name">{skill.tag_name}</span>
+              <span class="skill-count caption">{skill.note_count} notas</span>
+            </div>
+            <span class="level-badge" data-level={skill.level}>
+              {LEVEL_LABELS[skill.level] ?? skill.level}
+            </span>
+          </div>
+        {:else}
+          <div class="caption" style="padding: 24px 16px; color: var(--text-muted);">Sin habilidades aún.</div>
+        {/each}
+      </div>
     </aside>
   </div>
 
@@ -154,15 +199,115 @@
 
   .skills-list {
     border-left: 1px solid var(--border);
-    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
   }
 
   .skills-list-header {
     padding: var(--s3) var(--s4);
     border-bottom: 1px solid var(--border-light);
-    position: sticky;
-    top: 0;
-    background: var(--bg);
+    flex-shrink: 0;
+  }
+
+  .skills-search {
+    padding: var(--s2) var(--s4);
+    border-bottom: 1px solid var(--border-light);
+    flex-shrink: 0;
+  }
+
+  .search-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .search-icon {
+    position: absolute;
+    left: 8px;
+    color: var(--text-muted);
+    pointer-events: none;
+  }
+
+  .search-input {
+    width: 100%;
+    padding: 5px 28px 5px 26px;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    background: var(--surface);
+    color: var(--text-primary);
+    font-size: 12px;
+    font-family: var(--font-sans);
+    outline: none;
+  }
+
+  .search-input:focus {
+    border-color: var(--accent);
+  }
+
+  .search-clear {
+    position: absolute;
+    right: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: var(--r-sm);
+  }
+
+  .search-clear:hover {
+    color: var(--text-primary);
+    background: var(--elevated);
+  }
+
+  .level-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    padding: var(--s2) var(--s4);
+    border-bottom: 1px solid var(--border-light);
+    flex-shrink: 0;
+  }
+
+  .level-filter-btn {
+    font-size: 9px;
+    font-family: var(--font-mono);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.1s;
+  }
+
+  .level-filter-btn:hover {
+    border-color: var(--text-muted);
+    color: var(--text-primary);
+  }
+
+  .level-filter-btn.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+  }
+
+  .level-filter-btn[data-level='locked'].active {
+    border-color: var(--text-muted);
+    color: var(--text-muted);
+    opacity: 0.6;
+  }
+
+  .skills-scroll {
+    overflow-y: auto;
+    flex: 1;
   }
 
   .skill-row {
