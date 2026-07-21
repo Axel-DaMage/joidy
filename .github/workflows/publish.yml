@@ -71,26 +71,27 @@ jobs:
           ssh-keyscan aur.archlinux.org >> ~/.ssh/known_hosts
           git clone ssh://aur@aur.archlinux.org/joidy.git
           cd joidy
-          printf '%%s\n' \
-            "# Maintainer: Joidy App <https://github.com/Axel-DaMage/joidy>" \
-            "pkgname=joidy" \
-            "pkgver=${VERSION_PKGBUILD}" \
-            "_tag=${VERSION_CLEAN}" \
-            "pkgrel=1" \
-            'pkgdesc="Personal knowledge management with gamification"' \
-            "arch=('any')" \
-            'url="https://joidy-web.vercel.app"' \
-            "license=('GPL3')" \
-            "depends=('docker' 'docker-compose')" \
-            'source=("https://github.com/Axel-DaMage/joidy/archive/v${_tag}.tar.gz")' \
-            "sha256sums=('${SHA}')" \
-            "" \
-            "package() {" \
-            '  cd "${srcdir}/joidy-${_tag}"' \
-            '  install -Dm755 bin/joidy "${pkgdir}/usr/bin/joidy"' \
-            '  install -Dm644 docker-compose.yml "${pkgdir}/usr/share/joidy/docker-compose.yml"' \
-            '  install -Dm644 .env.example "${pkgdir}/usr/share/joidy/.env.example"' \
-            "}" > PKGBUILD
+          {
+            echo '# Maintainer: Joidy App <https://github.com/Axel-DaMage/joidy>'
+            echo "pkgname=joidy"
+            echo "pkgver=${VERSION_PKGBUILD}"
+            echo "_tag=${VERSION_CLEAN}"
+            echo "pkgrel=1"
+            echo 'pkgdesc="Personal knowledge management with gamification"'
+            echo "arch=('any')"
+            echo 'url="https://joidy-web.vercel.app"'
+            echo "license=('GPL3')"
+            echo "depends=('docker' 'docker-compose')"
+            echo 'source=("https://github.com/Axel-DaMage/joidy/archive/v${_tag}.tar.gz")'
+            echo "sha256sums=('${SHA}')"
+            echo ""
+            echo "package() {"
+            echo '  cd "${srcdir}/joidy-${_tag}"'
+            echo '  install -Dm755 bin/joidy "${pkgdir}/usr/bin/joidy"'
+            echo '  install -Dm644 docker-compose.yml "${pkgdir}/usr/share/joidy/docker-compose.yml"'
+            echo '  install -Dm644 .env.example "${pkgdir}/usr/share/joidy/.env.example"'
+            echo "}"
+          } > PKGBUILD
           {
             echo "pkgbase = joidy"
             echo "pkgdesc = Personal knowledge management with gamification"
