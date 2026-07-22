@@ -8,7 +8,7 @@
   import NoteCard from '$lib/components/NoteCard.svelte';
   import IconPicker from '$lib/components/IconPicker.svelte';
   import VirtualList from '$lib/components/VirtualList.svelte';
-  import { notes, notesLoading, loadNotes, createNote, updateNote, deleteNote, aiSuggestions, notesLoadedOnce } from '$lib/stores/notes';
+  import { notes, notesLoading, loadNotes, createNote, updateNote, deleteNote, aiSuggestions, notesLoadedOnce, selectedNoteIds, bulkMode, toggleNoteSelection, selectAllNotes, clearNoteSelection, deleteSelectedNotes, tagSelectedNotes, untagSelectedNotes } from '$lib/stores/notes';
   import { buildTree, flattenTree, extractFrontmatter, getFileIcon, type SortMode } from '$lib/utils/fileTree';
   import { showHiddenFiles, showTrash, folderMetaStore, updateFolderMeta } from '$lib/stores/settings';
   import { loadUserSettings, patchUserSettings } from '$lib/utils/userSettings';
@@ -616,12 +616,41 @@
           </button>
         {/if}
       </div>
+      <button class="toolbar-btn bulk-toggle" class:active={$bulkMode} on:click={() => { bulkMode.set(!$bulkMode); clearNoteSelection(); }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+      </button>
     </div>
 
     <div class="list-meta">
-      <span>{$notes.length} notas</span>
+      <span>{ $bulkMode ? `${$selectedNoteIds.size} seleccionadas` : `${$notes.length} notas` }</span>
       {#if search}<span class="sep">·</span><span>{filtered.length} resultados</span>{/if}
+      {#if $bulkMode}
+        <button class="toolbar-btn select-all" on:click={$selectedNoteIds.size === filtered.length ? clearNoteSelection : selectAllNotes}>
+          {$selectedNoteIds.size === filtered.length ? 'Deseleccionar todo' : 'Seleccionar todo'}
+        </button>
+      {/if}
     </div>
+
+    {#if $bulkMode && $selectedNoteIds.size > 0}
+      <div class="bulk-actions">
+        <span class="bulk-count">{$selectedNoteIds.size} nota{if $selectedNoteIds.size !== 1}s{/if}</span>
+        <button class="bulk-btn danger" on:click={() => { if (confirm(`¿Eliminar ${$selectedNoteIds.size} nota(s)?`)) deleteSelectedNotes(); }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          Eliminar
+        </button>
+        <button class="bulk-btn" on:click={() => { const t = prompt('Tags a añadir (separadas por coma):'); if (t) tagSelectedNotes(t.split(',').map(s => s.trim()).filter(Boolean)); }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+          Etiquetar
+        </button>
+        <button class="bulk-btn" on:click={() => { const t = prompt('Tags a quitar (separadas por coma):'); if (t) untagSelectedNotes(t.split(',').map(s => s.trim()).filter(Boolean)); }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/><line x1="15" y1="9" x2="9" y2="15"/></svg>
+          Desetiquetar
+        </button>
+        <button class="bulk-btn" on:click={() => clearNoteSelection()}>
+          Cancelar
+        </button>
+      </div>
+    {/if}
 
     <div class="list-scroll" bind:this={listScrollEl} on:scroll={onListScroll}>
       {#if $notesLoading}
@@ -709,11 +738,11 @@
           <div class="empty-msg">{search ? 'Sin resultados.' : 'Sin notas.'}</div>
         {:else if filtered.length > 50}
           <VirtualList items={filtered} itemHeight={52} let:item let:index>
-            <NoteCard note={item} active={selectedNote?.id === item.id} on:select={(e) => openNote(e.detail)} on:customize={(e) => openFolderCustomizer(e.detail)} />
+            <NoteCard note={item} active={selectedNote?.id === item.id} selected={$selectedNoteIds.has(item.id)} bulkMode={$bulkMode} on:select={(e) => openNote(e.detail)} on:toggleSelect={(e) => toggleNoteSelection(e.detail)} on:customize={(e) => openFolderCustomizer(e.detail)} />
           </VirtualList>
         {:else}
           {#each filtered as note}
-            <NoteCard {note} active={selectedNote?.id === note.id} on:select={(e) => openNote(e.detail)} on:customize={(e) => openFolderCustomizer(e.detail)} />
+            <NoteCard {note} active={selectedNote?.id === note.id} selected={$selectedNoteIds.has(note.id)} bulkMode={$bulkMode} on:select={(e) => openNote(e.detail)} on:toggleSelect={(e) => toggleNoteSelection(e.detail)} on:customize={(e) => openFolderCustomizer(e.detail)} />
           {/each}
         {/if}
       {/if}
@@ -1099,6 +1128,40 @@
     color: var(--accent-contrast-text, var(--bg)); cursor: pointer;
   }
   .new-btn:hover { opacity: 0.8; }
+
+  .toolbar-btn {
+    display: flex; align-items: center; gap: 4px;
+    padding: 4px 8px;
+    background: none; border: 1px solid var(--border); border-radius: var(--r);
+    color: var(--text-muted); cursor: pointer; font-size: 11px; font-family: var(--font-sans);
+    transition: all var(--t-fast); flex-shrink: 0;
+  }
+  .toolbar-btn:hover { color: var(--text-primary); border-color: var(--text-muted); }
+  .toolbar-btn.active { color: var(--accent); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+
+  .bulk-actions {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+    background: var(--elevated);
+    flex-shrink: 0;
+  }
+
+  .bulk-count {
+    font-size: 11px; font-family: var(--font-mono); color: var(--text-primary);
+    margin-right: auto;
+  }
+
+  .bulk-btn {
+    display: flex; align-items: center; gap: 4px;
+    padding: 4px 8px;
+    background: none; border: 1px solid var(--border); border-radius: var(--r);
+    color: var(--text-muted); cursor: pointer; font-size: 11px;
+    transition: all var(--t-fast);
+  }
+  .bulk-btn:hover { color: var(--text-primary); border-color: var(--text-muted); }
+  .bulk-btn.danger { color: #f85149; border-color: #f8514940; }
+  .bulk-btn.danger:hover { border-color: #f85149; background: #f8514910; }
 
   .list-meta {
     display: flex; align-items: center; gap: 6px;
