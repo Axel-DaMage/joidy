@@ -18,6 +18,7 @@
   import Widget         from '$lib/components/Widget.svelte';
   import GithubWidget from '$lib/components/GithubWidget.svelte';
   import { totalXP, currentStreak, lastActivity, nextStageXP } from '$lib/stores/gamification';
+  import ActivityProgress from '$lib/components/ActivityProgress.svelte';
   import { notes, loadNotes, notesLoadedOnce } from '$lib/stores/notes';
   import { dashboardLayout } from '$lib/stores/layout';
   import { accentColors } from '$lib/stores/settings';
@@ -330,7 +331,6 @@
 
         {:else if wid === 'stats-xp'}
           <div class="widget-centered">
-            <!-- XPBar moved to footer -->
             <div class="stats-row">
               <div class="stat">
                 <span class="stat-value mono">{$currentStreak}</span>
@@ -353,6 +353,9 @@
               </div>
             </div>
           </div>
+
+        {:else if wid === 'activity-progress'}
+          <ActivityProgress />
 
         {:else if wid === 'time-widget'}
           <TimeWidget />
@@ -480,6 +483,9 @@
 
         {:else if wid === 'pomodoro'}
           <PomodoroWidget />
+
+        {:else if wid === 'activity-progress'}
+          <ActivityProgress />
         {/if}
 
       </Widget>
