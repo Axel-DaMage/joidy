@@ -393,6 +393,18 @@
     graph.zoomToFit(500, 50);
   }
 
+  function zoomIn() {
+    if (!graph) return;
+    const cur = graph.zoom();
+    graph.zoom(Math.min(cur * 1.3, 8), 300);
+  }
+
+  function zoomOut() {
+    if (!graph) return;
+    const cur = graph.zoom();
+    graph.zoom(Math.max(cur / 1.3, 0.1), 300);
+  }
+
   function clearHighlights() {
     hoveredNode = null;
     selectedTag.set(null);
@@ -449,6 +461,12 @@
       .onNodeClick(handleNodeClick)
       .onNodeHover((node: GraphNode | null) => {
         hoveredNode = node;
+      })
+      .minimap('#graph-minimap', {
+        width: 160,
+        height: 120,
+        center: [0, 0],
+        zoom: 0.05,
       });
 
     applyStyling();
@@ -751,18 +769,27 @@
       </div>
     </div>
 
-    <!-- PERSISTENT RIGHT TOOLBAR CONTROLS (FIT AND ZOOM VIEWS) -->
+    <!-- PERSISTENT RIGHT TOOLBAR CONTROLS (FIT, ZOOM, MINIMAP) -->
     <div class="graph-quick-actions">
-      <button class="quick-btn" title="Ajustar grafo a pantalla" on:click={zoomToFit}>
+      <button class="quick-btn" title="Acercar" on:click={zoomIn}>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="action-icon"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+      </button>
+      <button class="quick-btn" title="Alejar" on:click={zoomOut}>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="action-icon"><circle cx="12" cy="12" r="10"></circle><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+      </button>
+      <button class="quick-btn" title="Ajustar a pantalla" on:click={zoomToFit}>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="action-icon"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="9" x2="15" y2="15"></line><line x1="15" y1="9" x2="9" y2="15"></line></svg>
       </button>
-      <button class="quick-btn" title="Centrar grafo" on:click={resetView}>
+      <button class="quick-btn" title="Centrar" on:click={resetView}>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="action-icon"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle></svg>
       </button>
-      <button class="quick-btn" title="Limpiar selecciones y filtros" on:click={clearHighlights}>
+      <button class="quick-btn" title="Limpiar selección" on:click={clearHighlights}>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="action-icon"><path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"></path><line x1="18" y1="9" x2="12" y2="15"></line><line x1="12" y1="9" x2="18" y2="15"></line></svg>
       </button>
     </div>
+
+    <!-- MINIMAP -->
+    <div class="graph-minimap" id="graph-minimap"></div>
   {/if}
 </div>
 
@@ -1248,5 +1275,30 @@
     background: transparent;
     border: none;
     cursor: pointer;
+  }
+
+  /* Minimap */
+  .graph-minimap {
+    position: absolute;
+    bottom: 16px;
+    right: 16px;
+    z-index: 1000;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    border: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+    opacity: 0.7;
+    transition: opacity 0.2s;
+    pointer-events: all;
+  }
+
+  .graph-minimap:hover {
+    opacity: 1;
+  }
+
+  .graph-minimap canvas {
+    display: block;
+    width: 160px !important;
+    height: 120px !important;
   }
 </style>
