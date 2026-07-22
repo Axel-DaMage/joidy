@@ -27,6 +27,7 @@ make db-health       # Verify DB tables + migrations applied
 make migrate         # Alembic upgrade head (in api container)
 make test            # test-api + test-frontend
 make test-api        # PYTHONPATH=/app python -m unittest discover -s tests
+make test-frontend   # cd frontend && npx playwright test
 make lint            # python -m compileall on all Python services
 ```
 
@@ -60,7 +61,7 @@ Port overrides: `FRONTEND_PORT`, `API_PORT`, `AI_SERVICE_PORT`, `WORKER_PORT`.
 | Integration | Backend | Frontend | Issue |
 |-------------|---------|----------|-------|
 | **Gemini AI** | ✅ `ai-service` | ⚠️ Placeholder UI | #41 |
-| **GitHub** | ✅ `auth/github` | ⚠️ Fake OAuth | #46 |
+| **GitHub** | ✅ `auth/github` | ✅ Unified integrations page | #120 |
 | **Gmail** | ❌ None | ❌ None | #42 |
 | **Contacts** | ❌ None | ❌ None | #43 |
 | **Strava** | ❌ None | ❌ None | #44 |
@@ -93,9 +94,11 @@ Factory pattern (`clients/`) for 6 providers (Gemini, OpenAI, Anthropic, Cohere,
 Two concurrent asyncio tasks: `watch_vault()` (watches `/vault/*.md`, 2s debounce) + `schedule_daily_writes()` (writes _joidy/ files at midnight).
 
 ### Frontend (`frontend/src/`)
-- `routes/`: SvelteKit pages (notes, goals, graph, skills, streaks, ai, etc.)
-- `lib/stores/`: 19 Svelte stores (notes, gamification, pomodoro, graph, settings, etc.)
+- `routes/`: SvelteKit pages (notes, goals, graph, skills, streaks, ai, integrations, etc.)
+- `lib/stores/`: 20 Svelte stores (notes, gamification, pomodoro, graph, settings, etc.)
+- `lib/actions/`: Svelte actions (focusTrap, liquidGlass)
 - `lib/api.ts`: API client wrapper
+- `lib/components/`: Reusable Svelte components (Modal, DynamicIcon, GoalCard, StreakListItem, Calculator, etc.)
 - `lib/utils/debug.ts`: `debugLog()` / `debugWarn()` / `debugError()` — only logs when Dev Mode ON
 - Dev Mode is stored in localStorage key `joidy-dev-mode`, toggled in Settings. Pages under development show "En Construccion" unless dev mode is ON.
 
