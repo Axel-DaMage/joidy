@@ -9,7 +9,9 @@
   import IconPicker from '$lib/components/IconPicker.svelte';
   import VirtualList from '$lib/components/VirtualList.svelte';
   import { notes, notesLoading, loadNotes, createNote, updateNote, deleteNote, aiSuggestions, notesLoadedOnce } from '$lib/stores/notes';
-  import { buildTree, flattenTree, extractFrontmatter, getFileIcon, type SortMode } from '$lib/utils/fileTree';
+  import { buildTree, flattenTree, extractFrontmatter, getFileIcon, type SortMode, type FlatNode } from '$lib/utils/fileTree';
+  import TreeContextMenu from '$lib/components/TreeContextMenu.svelte';
+  import FolderPicker from '$lib/components/FolderPicker.svelte';
   import { showHiddenFiles, showTrash, folderMetaStore, updateFolderMeta } from '$lib/stores/settings';
   import { loadUserSettings, patchUserSettings } from '$lib/utils/userSettings';
   import { captureSnapshot, getSnapshot } from '$lib/stores/pageSnapshots';
@@ -33,6 +35,78 @@
 
   let editingFolderNote: Note | null = null;
   let creatingFolder = false;
+
+  // ── Context menu ─────────────────────────────────────────────────────────────
+  let ctxMenu: { x: number; y: number; node: import('$lib/utils/fileTree').FlatNode } | null = null;
+  let renamingNode: import('$lib/utils/fileTree').FlatNode | null = null;
+  let renameValue = '';
+  let movingNode: import('$lib/utils/fileTree').FlatNode | null = null;
+
+  function handleContextMenu(e: MouseEvent, node: import('$lib/utils/fileTree').FlatNode) {
+    e.preventDefault();
+    e.stopPropagation();
+    ctxMenu = { x: e.clientX, y: e.clientY, node };
+  }
+
+  function handleRename() {
+    if (!ctxMenu) return;
+    renamingNode = ctxMenu.node;
+    renameValue = ctxMenu.node.name;
+    ctxMenu = null;
+  }
+
+  async function confirmRename() {
+    if (!renamingNode || !renameValue.trim()) { renamingNode = null; return; }
+    const node = renamingNode;
+    renamingNode = null;
+    if (node.type === 'file' && node.note) {
+      await updateNote(node.note.id, { title: renameValue.trim() });
+    }
+  }
+
+  function handleMove() {
+    if (!ctxMenu) return;
+    movingNode = ctxMenu.node;
+    ctxMenu = null;
+  }
+
+  async function confirmMove(targetPath: string) {
+    const node = movingNode;
+    if (!node || !node.note) { movingNode = null; return; }
+    const note = node.note;
+    movingNode = null;
+    const newPath = targetPath ? `${targetPath}/${node.name}` : node.name;
+    await api.notes.update(note.id, { source_path: newPath });
+    await loadNotes();
+  }
+
+  function handleDeleteNote() {
+    if (!ctxMenu || !ctxMenu.node.note) { ctxMenu = null; return; }
+    const note = ctxMenu.node.note;
+    ctxMenu = null;
+    if (confirm(`¿Eliminar "${note.title}"?`)) {
+      deleteNote(note.id);
+    }
+  }
+
+  function handleNewNoteInFolder() {
+    if (!ctxMenu) return;
+    ctxMenu = null;
+    openNew();
+  }
+
+  function handleDeleteFolder() {
+    if (!ctxMenu) return;
+    const menu = ctxMenu;
+    const path = menu.node.path;
+    ctxMenu = null;
+    if (confirm(`¿Eliminar carpeta "${menu.node.name}" y todas sus notas?`)) {
+      // Delete notes in this folder
+      const ids = $notes.filter(n => n.source_path && n.source_path.includes(path)).map(n => n.id);
+      Promise.all(ids.map(id => deleteNote(id))).then(() => loadNotes());
+    }
+  }
+
   let newFolderName = "";
   let newFolderParent = "";
   let newFolderIcon = "Folder";
@@ -631,40 +705,42 @@
         {#if flatNodes.length === 0}
           <div class="empty-msg">{search ? 'Sin resultados.' : 'Sin notas.'}</div>
         {:else if flatNodes.length > 50}
-          <VirtualList items={flatNodes} itemHeight={26} getKey={(n, i) => n.path ?? i} let:item let:index>
-            {#if item.type === 'folder'}
-              <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-              <div
-                class="tree-row folder-row"
-                style="padding-left: {8 + item.depth * 14}px"
-                on:click={() => toggleFolder(item.path)}
-              >
-                <span class="chevron" class:open={!collapsed.has(item.path)}>
-                  <ChevronRight size={11} />
-                </span>
-                <div class="t-icon"><DynamicIcon name={item.icon} size={13} color={item.color} pack={item.pack} /></div>
-                <span class="t-name folder-name">{item.name}</span>
-                <button class="folder-settings-btn" title="Personalizar carpeta" on:click|stopPropagation={() => openFolderCustomizer(item)}>
-                  <Settings size={10} />
-                </button>
-                <span class="t-count">{item.childCount}</span>
-              </div>
-            {:else}
-              <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-              <div
-                class="tree-row file-row"
-                class:active={item.note?.id === selectedNote?.id}
-                style="padding-left: {20 + item.depth * 14}px"
-                on:click={() => item.note && openNote(item.note)}
-              >
-                <div class="t-icon file-icon"><DynamicIcon name={item.icon} size={11} color={item.color} pack={item.pack} /></div>
-                <span class="t-name file-name">{item.name}</span>
-                <button class="folder-settings-btn" title="Personalizar nota" on:click|stopPropagation={() => openFolderCustomizer({ path: item.note?.source_path || item.path, icon: item.icon, color: item.color, note: item.note })}>
-                  <Settings size={10} />
-                </button>
-              </div>
-            {/if}
-          </VirtualList>
+            <VirtualList items={flatNodes} itemHeight={26} getKey={(n, i) => n.path ?? i} let:item let:index>
+              {#if item.type === 'folder'}
+                <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+                <div
+                  class="tree-row folder-row"
+                  style="padding-left: {8 + item.depth * 14}px"
+                  on:click={() => toggleFolder(item.path)}
+                  on:contextmenu={(e) => handleContextMenu(e, item)}
+                >
+                  <span class="chevron" class:open={!collapsed.has(item.path)}>
+                    <ChevronRight size={11} />
+                  </span>
+                  <div class="t-icon"><DynamicIcon name={item.icon} size={13} color={item.color} pack={item.pack} /></div>
+                  <span class="t-name folder-name">{item.name}</span>
+                  <button class="folder-settings-btn" title="Personalizar carpeta" on:click|stopPropagation={() => openFolderCustomizer(item)}>
+                    <Settings size={10} />
+                  </button>
+                  <span class="t-count">{item.childCount}</span>
+                </div>
+              {:else}
+                <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+                <div
+                  class="tree-row file-row"
+                  class:active={item.note?.id === selectedNote?.id}
+                  style="padding-left: {20 + item.depth * 14}px"
+                  on:click={() => item.note && openNote(item.note)}
+                  on:contextmenu={(e) => handleContextMenu(e, item)}
+                >
+                  <div class="t-icon file-icon"><DynamicIcon name={item.icon} size={11} color={item.color} pack={item.pack} /></div>
+                  <span class="t-name file-name">{item.name}</span>
+                  <button class="folder-settings-btn" title="Personalizar nota" on:click|stopPropagation={() => openFolderCustomizer({ path: item.note?.source_path || item.path, icon: item.icon, color: item.color, note: item.note })}>
+                    <Settings size={10} />
+                  </button>
+                </div>
+              {/if}
+            </VirtualList>
         {:else}
           <div class="tree-wrap">
             {#each flatNodes as node (node.path)}
@@ -674,6 +750,7 @@
                   class="tree-row folder-row"
                   style="padding-left: {8 + node.depth * 14}px"
                   on:click={() => toggleFolder(node.path)}
+                  on:contextmenu={(e) => handleContextMenu(e, node)}
                 >
                   <span class="chevron" class:open={!collapsed.has(node.path)}>
                     <ChevronRight size={11} />
@@ -692,6 +769,7 @@
                   class:active={node.note?.id === selectedNote?.id}
                   style="padding-left: {20 + node.depth * 14}px"
                   on:click={() => node.note && openNote(node.note)}
+                  on:contextmenu={(e) => handleContextMenu(e, node)}
                 >
                   <div class="t-icon file-icon"><DynamicIcon name={node.icon} size={11} color={node.color} pack={node.pack} /></div>
                   <span class="t-name file-name">{node.name}</span>
@@ -772,6 +850,40 @@
         </div>
       </div>
     </div>
+  {/if}
+
+  {#key ctxMenu}
+    {#if ctxMenu}
+      <TreeContextMenu x={ctxMenu.x} y={ctxMenu.y} node={ctxMenu.node}
+        on:close={() => ctxMenu = null}
+        on:rename={handleRename}
+        on:move={handleMove}
+        on:deleteNote={handleDeleteNote}
+        on:newNoteInFolder={handleNewNoteInFolder}
+        on:deleteFolder={handleDeleteFolder}
+      />
+    {/if}
+  {/key}
+
+  {#if renamingNode}
+    <div class="folder-modal-backdrop" on:click={() => renamingNode = null}>
+      <div class="folder-modal" on:click|stopPropagation>
+        <h3 class="folder-modal-title">Renombrar</h3>
+        <input type="text" class="input mono" bind:value={renameValue} style="width:100%; box-sizing:border-box; margin-bottom:12px;" on:keydown={(e) => e.key === 'Enter' && confirmRename()} />
+        <div class="folder-modal-btns">
+          <button on:click={() => renamingNode = null}>Cancelar</button>
+          <button class="primary" disabled={!renameValue.trim()} on:click={confirmRename}>Guardar</button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  {#if movingNode}
+    <FolderPicker
+      flatNodes={flatNodes}
+      on:close={() => movingNode = null}
+      on:select={(e) => confirmMove(e.detail)}
+    />
   {/if}
 
   {#if editingFolder}
