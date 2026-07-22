@@ -182,6 +182,14 @@ export interface PersonalStreak {
   created_at: string;
 }
 
+export interface EmbeddingFailure {
+  note_id: number;
+  attempts: number;
+  last_error: string;
+  updated_at: string | null;
+  note_title?: string | null;
+}
+
 export interface StreakStats {
   total_active: number;
   total_archived: number;
@@ -354,6 +362,12 @@ github: {
     zipUrl: () => `${BASE}/export/notes/zip`
   },
   
+  embeddings: {
+    deadLetters: (limit = 50) => req<EmbeddingFailure[]>('GET', `/notes/embeddings/dead-letters?limit=${limit}`),
+    resetDeadLetter: (noteId: number) => req<{ status: string; note_id: number }>('POST', `/notes/embeddings/dead-letters/${noteId}/reset`),
+    purgeDeadLetters: () => req<{ purged: number }>('DELETE', '/notes/embeddings/dead-letters'),
+  },
+
   folders: {
     create: async (path: string) => {
       return req('POST', '/folders/', { path });
