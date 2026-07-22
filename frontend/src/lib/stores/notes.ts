@@ -9,6 +9,8 @@ export const currentNote  = writable<Note | null>(null);
 export const aiSuggestions = writable<AISuggestion[]>([]);
 export const notesLoading  = writable(false);
 export const notesLoadedOnce = writable(false);
+export const selectedNoteIds = writable<Set<number>>(new Set());
+export const bulkMode = writable(false);
 
 let notesLoaded = false;
 let lastTag: string | undefined = undefined;
@@ -99,6 +101,59 @@ export async function deleteNote(id: number): Promise<void> {
     currentNote.update(n => (n?.id === id ? null : n));
   } catch (e) {
     logger.error('[notes] Failed to delete:', e);
+  }
+}
+
+export function toggleNoteSelection(id: number) {
+  selectedNoteIds.update(s => {
+    const next = new Set(s);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    return next;
+  });
+}
+
+export function selectAllNotes() {
+  selectedNoteIds.update(() => new Set(get(notes).map(n => n.id)));
+}
+
+export function clearNoteSelection() {
+  selectedNoteIds.update(() => new Set());
+}
+
+export async function deleteSelectedNotes(): Promise<void> {
+  const ids = Array.from(get(selectedNoteIds));
+  if (ids.length === 0) return;
+  try {
+    await api.notes.bulkDelete(ids);
+    notes.update(ns => ns.filter(n => !ids.includes(n.id)));
+    currentNote.update(n => (n && ids.includes(n.id)) ? null : n);
+    clearNoteSelection();
+  } catch (e) {
+    logger.error('[notes] Failed to bulk delete:', e);
+  }
+}
+
+export async function tagSelectedNotes(tags: string[]): Promise<void> {
+  const ids = Array.from(get(selectedNoteIds));
+  if (ids.length === 0 || tags.length === 0) return;
+  try {
+    await api.notes.bulkTag(ids, tags);
+    notes.update(ns => ns.map(n => ids.includes(n.id) ? { ...n, tags: [...new Set([...n.tags, ...tags])] } : n));
+  } catch (e) {
+    logger.error('[notes] Failed to bulk tag:', e);
+  }
+}
+
+export async function untagSelectedNotes(tags: string[]): Promise<void> {
+  const ids = Array.from(get(selectedNoteIds));
+  if (ids.length === 0 || tags.length === 0) return;
+  try {
+    await api.notes.bulkUntag(ids, tags);
+    const tagSet = new Set(tags.map(t => t.toLowerCase().trim()));
+    notes.update(ns => ns.map(n => ids.includes(n.id) ? { ...n, tags: n.tags.filter(t => !tagSet.has(t.toLowerCase().trim())) } : n));
+  } catch (e) {
+    logger.error('[notes] Failed to bulk untag:', e);
   }
 }
 

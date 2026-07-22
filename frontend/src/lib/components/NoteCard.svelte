@@ -13,8 +13,10 @@
   export let note: Note;
   export let active = false;
   export let showTags = true;
+  export let selected = false;
+  export let bulkMode = false;
 
-  const dispatch = createEventDispatcher<{ select: Note; delete: number; customize: { path: string; icon: string | null; color: string | null; note?: Note } }>();
+  const dispatch = createEventDispatcher<{ select: Note; delete: number; customize: { path: string; icon: string | null; color: string | null; note?: Note }; toggleSelect: number }>();
 
   function formatDate(iso: string): string {
     const d = new Date(iso);
@@ -57,14 +59,30 @@
 
 <!-- svelte-ignore a11y-click-events-have-key-events -->
 <!-- svelte-ignore a11y-no-static-element-interactions -->
-<div class="note-card" class:active on:click={() => dispatch('select', note)}>
+<div
+  class="note-card"
+  class:active
+  class:bulk-selected={selected}
+  on:click={() => bulkMode ? dispatch('toggleSelect', note.id) : dispatch('select', note)}
+>
   <div class="note-header">
+    {#if bulkMode}
+      <input
+        type="checkbox"
+        class="note-checkbox"
+        checked={selected}
+        on:click|stopPropagation
+        on:change={() => dispatch('toggleSelect', note.id)}
+      />
+    {/if}
     <div class="note-icon"><DynamicIcon name={meta.icon} size={12} color={meta.color} pack={meta.pack} /></div>
     <span class="note-title truncate">{note.title}</span>
     <span class="note-date caption">{formatDate(note.created_at)}</span>
-    <button type="button" class="note-settings-btn" title="Personalizar" on:click={onCustomize}>
-      <Settings size={10} />
-    </button>
+    {#if !bulkMode}
+      <button type="button" class="note-settings-btn" title="Personalizar" on:click={onCustomize}>
+        <Settings size={10} />
+      </button>
+    {/if}
   </div>
   {#if showTags && note.tags.length > 0}
     <div class="note-tags">
@@ -82,8 +100,6 @@
     </div>
   {/if}
 
-  </div>
-
 <style>
   .note-card {
     padding: var(--s3) var(--s4);
@@ -95,30 +111,11 @@
 
   .note-card:hover { background: var(--elevated); }
   .note-card.active { background: var(--elevated); border-left: 2px solid var(--text-secondary); }
-
-  .note-settings-btn {
-    display: none;
-    padding: 2px;
-    background: transparent;
-    border: none;
-    color: var(--text-muted);
-    cursor: pointer;
-    border-radius: 3px;
-    margin-left: auto;
-  }
-
-  .note-card:hover .note-settings-btn {
-    display: flex;
-  }
-
-  .note-settings-btn:hover {
-    color: var(--accent);
-    background: var(--border-light);
-  }
+  .note-card.bulk-selected { background: var(--elevated); border-left: 2px solid var(--accent); }
 
   .note-header {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: var(--s3);
     margin-bottom: 4px;
   }
@@ -127,6 +124,7 @@
     font-size: 13px;
     color: var(--text-primary);
     font-weight: 400;
+    flex: 1;
   }
 
   .note-date {
@@ -138,11 +136,16 @@
     margin-right: 4px;
   }
 
+  .note-checkbox {
+    flex-shrink: 0;
+    width: 14px;
+    height: 14px;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+
   .note-settings-btn {
-    position: absolute;
-    right: 8px;
-    top: 50%;
-    transform: translateY(-50%);
+    flex-shrink: 0;
     display: none;
     padding: 2px;
     background: transparent;
