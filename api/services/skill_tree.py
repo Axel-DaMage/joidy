@@ -7,6 +7,7 @@ from datetime import datetime
 
 from models.note import NoteTag, Tag
 from models.skill import Skill, compute_skill_level
+from repositories import SkillRepository, TagRepository
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -22,7 +23,7 @@ def sync_skills_for_tags(db: Session, tag_ids: set[int]) -> list[dict]:
         .group_by(NoteTag.tag_id)
         .all()
     )
-    skills_by_tag = {skill.tag_id: skill for skill in db.query(Skill).filter(Skill.tag_id.in_(tag_ids)).all()}
+    skills_by_tag = {skill.tag_id: skill for skill in SkillRepository(db)._db.query(Skill).filter(Skill.tag_id.in_(tag_ids)).all()}
 
     updated = []
     for tag_id in tag_ids:
@@ -65,7 +66,7 @@ def sync_skills(db: Session) -> list[dict]:
         .group_by(NoteTag.tag_id)
         .all()
     )
-    skills_by_tag = {skill.tag_id: skill for skill in db.query(Skill).all()}
+    skills_by_tag = {skill.tag_id: skill for skill in SkillRepository(db).list()}
 
     updated = []
     for tag_id, skill in skills_by_tag.items():
@@ -102,8 +103,8 @@ def sync_skills(db: Session) -> list[dict]:
 
 def get_skill_tree(db: Session) -> dict:
     """Return skill tree as nested structure for D3 visualization."""
-    skills = db.query(Skill).all()
-    tags = {t.id: t for t in db.query(Tag).all()}
+    skills = SkillRepository(db).list()
+    tags = {t.id: t for t in TagRepository(db).list()}
 
     nodes = []
     edges = []
