@@ -13,6 +13,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from config import settings
+from middleware.correlation_id import CorrelationLogFilter
 
 
 class JSONFormatter(logging.Formatter):
@@ -57,7 +58,9 @@ class DevFormatter(logging.Formatter):
         color = self.COLORS.get(record.levelname, "")
         reset = self.RESET
         timestamp = datetime.now().strftime("%H:%M:%S")
-        return f"{color}{timestamp} {record.levelname:8s}{reset} [{record.name}] {record.getMessage()}"
+        cid = get_correlation_id()
+        prefix = f" [{cid[:8]}]" if cid else ""
+        return f"{color}{timestamp} {record.levelname:8s}{reset}{prefix} [{record.name}] {record.getMessage()}"
 
 
 def setup_logging() -> None:
@@ -83,6 +86,7 @@ def setup_logging() -> None:
         stream.setFormatter(JSONFormatter())
     else:
         stream.setFormatter(DevFormatter())
+    stream.addFilter(CorrelationLogFilter())
     root.addHandler(stream)
 
     # File handler — always JSON for machine parsing
@@ -93,6 +97,7 @@ def setup_logging() -> None:
         encoding="utf-8",
     )
     file_handler.setFormatter(JSONFormatter())
+    file_handler.addFilter(CorrelationLogFilter())
     root.addHandler(file_handler)
 
     # Reduce noise from third-party libraries

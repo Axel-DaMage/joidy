@@ -40,3 +40,6 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+
+# Deepwork progress files (local state only)
+.slim/deepwork/

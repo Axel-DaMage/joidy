@@ -11,7 +11,15 @@ from sqlalchemy.orm import Session
 logger = logging.getLogger(__name__)
 
 
-async def trigger_embedding(note_id: int, content: str) -> None:
+# ponytail: background tasks need own session; sync callers can pass one
+def _session_or_none(db: Session | None) -> Session:
+    return db if db is not None else SessionLocal()
+
+
+async def trigger_embedding(
+    note_id: int, content: str, db: Session | None = None
+) -> None:
+    _db = _session_or_none(db)
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
@@ -19,44 +27,45 @@ async def trigger_embedding(note_id: int, content: str) -> None:
                 json={"note_id": note_id, "content": content},
             )
             response.raise_for_status()
-        clear_embedding_failure(note_id)
+        clear_embedding_failure(_db, note_id)
     except Exception as exc:
-        record_embedding_failure(note_id, str(exc))
+        record_embedding_failure(_db, note_id, str(exc))
         logger.exception("Embedding failed for note_id=%s", note_id)
+    finally:
+        if db is None:
+            _db.close()
 
 
-def record_embedding_failure(note_id: int, error_message: str) -> None:
-    with SessionLocal() as db:
-        failure = db.query(EmbeddingFailure).filter(EmbeddingFailure.note_id == note_id).first()
-        if failure is None:
-            failure = EmbeddingFailure(note_id=note_id, attempts=0)
-            db.add(failure)
+def record_embedding_failure(db: Session, note_id: int, error_message: str) -> None:
+    failure = db.query(EmbeddingFailure).filter(EmbeddingFailure.note_id == note_id).first()
+    if failure is None:
+        failure = EmbeddingFailure(note_id=note_id, attempts=0)
+        db.add(failure)
 
-        failure.attempts += 1
-        failure.last_error = error_message[:2000]
+    failure.attempts += 1
+    failure.last_error = error_message[:2000]
 
-        max_attempts = settings.embedding_retry_max_attempts
-        if failure.attempts >= max_attempts:
-            # Move to dead letter — won't be retried automatically
-            failure.next_retry_at = None
-            logger.warning(
-                "Embedding for note_id=%s moved to dead letter after %d attempts: %s",
-                note_id, failure.attempts, error_message[:200],
-            )
-        else:
-            delay = compute_retry_delay_seconds(failure.attempts, settings.embedding_retry_base_seconds)
-            failure.next_retry_at = datetime.utcnow() + timedelta(seconds=delay)
-            logger.info(
-                "Embedding retry scheduled for note_id=%s attempt=%d delay=%ds",
-                note_id, failure.attempts, delay,
-            )
-        db.commit()
+    max_attempts = settings.embedding_retry_max_attempts
+    if failure.attempts >= max_attempts:
+        # Move to dead letter — won't be retried automatically
+        failure.next_retry_at = None
+        logger.warning(
+            "Embedding for note_id=%s moved to dead letter after %d attempts: %s",
+            note_id, failure.attempts, error_message[:200],
+        )
+    else:
+        delay = compute_retry_delay_seconds(failure.attempts, settings.embedding_retry_base_seconds)
+        failure.next_retry_at = datetime.utcnow() + timedelta(seconds=delay)
+        logger.info(
+            "Embedding retry scheduled for note_id=%s attempt=%d delay=%ds",
+            note_id, failure.attempts, delay,
+        )
+    db.commit()
 
 
-def clear_embedding_failure(note_id: int) -> None:
-    with SessionLocal() as db:
-        db.query(EmbeddingFailure).filter(EmbeddingFailure.note_id == note_id).delete()
-        db.commit()
+def clear_embedding_failure(db: Session, note_id: int) -> None:
+    db.query(EmbeddingFailure).filter(EmbeddingFailure.note_id == note_id).delete()
+    db.commit()
 
 
 def get_retryable_embedding_notes(db: Session, limit: int = 20) -> list[Note]:
