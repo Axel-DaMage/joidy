@@ -10,6 +10,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from logging_config import setup_logging
 from middleware.metrics import MetricsMiddleware, get_metrics_collector
 from middleware.rate_limit import RateLimitMiddleware
+from middleware.request_id import RequestIdMiddleware
 from routers import (
     folders,
     ai,
@@ -128,6 +129,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.add_middleware(CorsSafetyMiddleware)
+app.add_middleware(RequestIdMiddleware)
 
 app.include_router(notes.router, dependencies=[Depends(get_current_user)])
 app.include_router(config.router)

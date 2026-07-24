@@ -5,22 +5,26 @@ Runs once at startup, then every day at midnight.
 
 import asyncio
 import logging
+import uuid
 from datetime import datetime, timedelta
 
 import httpx
 from config import settings
+from logging_config import get_correlation_id, set_correlation_id
 
 logger = logging.getLogger(__name__)
 
 
 async def write_joidy_files():
     """Call the API to trigger writing of all _joidy/ files."""
+    cid = set_correlation_id(f"writer-{uuid.uuid4().hex[:12]}")
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
+            headers = {"X-Request-ID": cid}
             await asyncio.gather(
-                client.post(f"{settings.api_url}/vault/write-daily"),
-                client.post(f"{settings.api_url}/vault/write-objectives"),
-                client.post(f"{settings.api_url}/vault/write-skills"),
+                client.post(f"{settings.api_url}/vault/write-daily", headers=headers),
+                client.post(f"{settings.api_url}/vault/write-objectives", headers=headers),
+                client.post(f"{settings.api_url}/vault/write-skills", headers=headers),
             )
             logger.info("[writer] _joidy/ files updated at %s", datetime.now().isoformat())
         except Exception as e:

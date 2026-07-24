@@ -1,11 +1,39 @@
+import logging
+from contextlib import asynccontextmanager
+
 from circuit_breaker import llm_circuit_breaker, emb_circuit_breaker, CircuitBreakerError
 from clients import get_embedding_client, get_llm_client
 from clients.prompts import CLASSIFY_PROMPT, RAG_PROMPT
 from config import settings
 from fastapi import FastAPI, HTTPException
+from logging_config import get_correlation_id, set_correlation_id, setup_logging
 from pydantic import BaseModel
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
 
-app = FastAPI(title="Joidy AI Service", version="0.2.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    setup_logging()
+    logging.getLogger(__name__).info("[ai-service] Starting up")
+    yield
+    logging.getLogger(__name__).info("[ai-service] Shutting down")
+
+
+app = FastAPI(title="Joidy AI Service", version="0.2.0", lifespan=lifespan)
+
+
+class CorrelationMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        set_correlation_id(request.headers.get("X-Request-ID", ""))
+        response = await call_next(request)
+        cid = get_correlation_id()
+        if cid:
+            response.headers["X-Request-ID"] = cid
+        return response
+
+
+app.add_middleware(CorrelationMiddleware)
 
 
 class EmbedRequest(BaseModel):
