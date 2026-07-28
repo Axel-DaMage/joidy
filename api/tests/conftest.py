@@ -14,6 +14,7 @@ if "sqlite_vec" not in sys.modules:
 from database import Base, get_db
 from main import app
 from fastapi.testclient import TestClient
+from middleware.rate_limit import _default_limiter
 from services.auth_service import get_current_user
 
 @pytest.fixture
@@ -39,6 +40,12 @@ def db_session():
     session.close()
     engine.dispose()
 
+@pytest.fixture(autouse=True, scope="session")
+def _disable_rate_limits():
+    _default_limiter.requests_per_minute = 10_000
+    _default_limiter.auth_requests_per_minute = 10_000
+
+
 @pytest.fixture
 def client(db_session):
     def override_get_db():
@@ -47,6 +54,7 @@ def client(db_session):
     def override_get_current_user():
         return 1  # Fake user ID for tests
 
+    original_overrides = dict(app.dependency_overrides)
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_current_user] = override_get_current_user
 
@@ -54,3 +62,4 @@ def client(db_session):
         yield test_client
 
     app.dependency_overrides.clear()
+    app.dependency_overrides.update(original_overrides)

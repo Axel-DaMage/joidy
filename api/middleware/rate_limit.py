@@ -8,6 +8,7 @@ from dataclasses import dataclass
 
 from fastapi import HTTPException, Request
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
 
 
 @dataclass
