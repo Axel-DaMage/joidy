@@ -941,13 +941,26 @@
   .item-actions {
     display: flex; flex-direction: column; gap: 3px;
     position: absolute; top: 6px; right: 6px;
-    opacity: 0; pointer-events: none;
     transition: opacity 0.15s;
   }
 
-  .streak-item:hover .item-actions {
-    opacity: 1;
-    pointer-events: auto;
+  @media (hover: hover) {
+    .item-actions {
+      opacity: 0; pointer-events: none;
+    }
+    .streak-item:hover .item-actions {
+      opacity: 1;
+      pointer-events: auto;
+    }
+  }
+
+  @media (hover: none) {
+    .item-actions {
+      opacity: 0.5;
+    }
+    .item-action-btn {
+      width: 24px; height: 24px;
+    }
   }
 
   .item-action-btn {
