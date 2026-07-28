@@ -7,7 +7,7 @@ pydantic-settings==2.6.1
 httpx==0.28.1
 python-multipart==0.0.32
 aiofiles==24.1.0
-gitpython==3.1.50
+gitpython==3.1.54
 psycopg2-binary>=2.9.9
 pgvector>=0.3.0
 pyjwt==2.13.0
