@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { createEventDispatcher, onDestroy } from 'svelte';
-  import { Eye, EyeOff, Save, Trash2, X, Settings, Search, Maximize, ChevronLeft, ChevronRight, Download } from 'lucide-svelte';
+  import { createEventDispatcher, onDestroy, onMount } from 'svelte';
+  import { Eye, EyeOff, Save, Trash2, X, Settings, Search, Maximize, ChevronLeft, ChevronRight, Download, RotateCcw } from 'lucide-svelte';
   import * as L from 'lucide-svelte';
   import DynamicIcon from './DynamicIcon.svelte';
   import IconPicker from './IconPicker.svelte';
@@ -17,6 +17,9 @@
   import { extractFrontmatter, getFileIcon } from '$lib/utils/fileTree';
   import { downloadMarkdown, downloadHTML, copyNoteAsMarkdown } from '$lib/utils/export';
   import { showNotification } from '$lib/stores/gamification';
+
+  const AUTOSAVE_DELAY = 2000;
+  const DRAFT_PREFIX = 'joidy-draft-';
 
   // Configure marked with GFM and syntax highlighting via highlight.js
   const renderer = new marked.Renderer();
@@ -94,6 +97,12 @@
   let saved = false;
   let previewMode = false;
   let aiTimeout: ReturnType<typeof setTimeout>;
+  let autosaveTimer: ReturnType<typeof setTimeout> | undefined;
+  let hasUnsavedChanges = false;
+  let showRecoveryPrompt = false;
+  let recoveredDraft: { title: string; content: string; tags: string[] } | null = null;
+
+  $: draftKey = note ? `${DRAFT_PREFIX}${note.id}` : null;
   
   let showIconSettings = false;
   let customColor = '#ffffff';
@@ -276,6 +285,7 @@
   }
 
   function onContentChange() {
+    triggerAutosave();
     if (!note || content.length < 20) return;
     clearTimeout(aiTimeout);
     aiTimeout = setTimeout(() => {
@@ -292,7 +302,70 @@
     aiSuggestions.update(s => s.filter(x => x.tag !== tag));
   }
 
-  onDestroy(() => clearTimeout(aiTimeout));
+  function saveDraft() {
+    if (!draftKey || !title.trim()) return;
+    try {
+      localStorage.setItem(draftKey, JSON.stringify({ title: title.trim(), content, tags, savedAt: Date.now() }));
+    } catch { }
+  }
+
+  function clearDraft() {
+    if (draftKey) {
+      try { localStorage.removeItem(draftKey); } catch { }
+    }
+  }
+
+  function triggerAutosave() {
+    hasUnsavedChanges = true;
+    clearTimeout(autosaveTimer);
+    autosaveTimer = setTimeout(() => {
+      if (title.trim()) {
+        saveDraft();
+        handleSave();
+      }
+      hasUnsavedChanges = false;
+    }, AUTOSAVE_DELAY);
+  }
+
+  onMount(() => {
+    if (draftKey) {
+      try {
+        const raw = localStorage.getItem(draftKey);
+        if (raw) {
+          const draft = JSON.parse(raw);
+          if (draft && draft.content && draft.content !== content) {
+            recoveredDraft = draft;
+            showRecoveryPrompt = true;
+          }
+        }
+      } catch { }
+    }
+  });
+
+  function applyDraft() {
+    if (recoveredDraft) {
+      title = recoveredDraft.title;
+      content = recoveredDraft.content;
+      tags = recoveredDraft.tags;
+      showRecoveryPrompt = false;
+      recoveredDraft = null;
+      triggerAutosave();
+    }
+  }
+
+  function dismissDraft() {
+    showRecoveryPrompt = false;
+    recoveredDraft = null;
+    if (draftKey) clearDraft();
+  }
+
+  onDestroy(() => {
+    clearTimeout(aiTimeout);
+    clearTimeout(autosaveTimer);
+    if (draftKey && title.trim()) {
+      saveDraft();
+    }
+  });
 
   async function handleSave() {
     if (!title.trim()) return;
@@ -300,6 +373,8 @@
     dispatch('save', { title: title.trim(), content, tags });
     saving = false;
     saved = true;
+    clearDraft();
+    hasUnsavedChanges = false;
     setTimeout(() => (saved = false), 2000);
   }
 
@@ -432,6 +507,15 @@
 <svelte:window on:keydown={onKeydown} />
 
 <div class="editor-shell" class:zen-mode={zenMode}>
+  {#if showRecoveryPrompt}
+    <div class="recovery-banner">
+      <RotateCcw size={12} />
+      <span>¿Recuperar borrador no guardado?</span>
+      <button class="recovery-btn" onclick={applyDraft}>Recuperar</button>
+      <button class="recovery-btn secondary" onclick={dismissDraft}>Descartar</button>
+    </div>
+  {/if}
+
   <!-- Toolbar -->
   {#if !zenMode}
   <div class="toolbar">
@@ -481,6 +565,10 @@
         <Save size={14} />
         <span class="save-status">{saved ? 'Guardado' : saving ? '...' : note ? 'Guardar' : 'Crear'}</span>
       </button>
+
+      {#if hasUnsavedChanges && !saved}
+        <span class="unsaved-indicator" title="Cambios sin guardar">·</span>
+      {/if}
 
       {#if note}
         <div style="position: relative; display: inline-block;">
@@ -546,6 +634,7 @@
       bind:value={title}
       placeholder="Título de la nota..."
       on:keydown={(e) => e.key === 'Enter' && handleSave()}
+      oninput={triggerAutosave}
     />
   </div>
 
@@ -1156,5 +1245,57 @@
     color: var(--xp);
     width: 14px;
     text-align: center;
+  }
+
+  /* ── Recovery Banner ── */
+  .recovery-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    background: color-mix(in srgb, #fbbf24 12%, var(--surface));
+    border-bottom: 1px solid color-mix(in srgb, #fbbf24 30%, var(--border));
+    font-size: 12px;
+    color: var(--text-primary);
+  }
+
+  .recovery-btn {
+    padding: 3px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm, 4px);
+    background: var(--elevated);
+    color: var(--text-primary);
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.1s;
+  }
+
+  .recovery-btn:hover {
+    background: var(--bg-card);
+    border-color: var(--text-muted);
+  }
+
+  .recovery-btn.secondary {
+    background: transparent;
+    color: var(--text-muted);
+  }
+
+  .recovery-btn.secondary:hover {
+    color: var(--error);
+    border-color: var(--error);
+  }
+
+  /* ── Unsaved Indicator ── */
+  .unsaved-indicator {
+    color: #fbbf24;
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1;
+    animation: pulse-dot 1.5s ease-in-out infinite;
+  }
+
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
   }
 </style>
