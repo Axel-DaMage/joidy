@@ -21,6 +21,9 @@ from services.note_service import (
     delete_note as delete_note_service,
 )
 from services.note_service import (
+    get_or_create_tag,
+)
+from services.note_service import (
     list_backlinks as list_backlinks_service,
 )
 from services.note_service import (
@@ -32,6 +35,8 @@ from services.note_service import (
 from services.note_service import (
     update_note as update_note_service,
 )
+from services.skill_tree import sync_skills_for_tags
+from services.tag_graph import sync_tag_cooccurrences_for_tags
 from sqlalchemy.orm import Session, selectinload
 
 router = APIRouter(prefix="/notes", tags=["notes"])
@@ -146,6 +151,15 @@ class NoteResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class BulkIds(BaseModel):
+    ids: list[int]
+
+
+class BulkTagRequest(BaseModel):
+    ids: list[int]
+    tags: list[str]
+
+
 def _is_truthy_header(value: str | None) -> bool:
     return value is not None and value.lower() in {"1", "true", "yes", "on"}
 
@@ -230,6 +244,60 @@ def update_note(
 def rebuild_derived(db: Session = Depends(get_db)):
     rebuild_note_derived_data(db)
     return {"status": "ok"}
+
+
+@router.post("/bulk-delete", status_code=200)
+def bulk_delete(data: BulkIds, db: Session = Depends(get_db)):
+    deleted = 0
+    for nid in data.ids:
+        if delete_note_service(db, nid):
+            deleted += 1
+    return {"deleted": deleted, "total": len(data.ids)}
+
+
+@router.post("/bulk-tag", status_code=200)
+def bulk_tag(data: BulkTagRequest, db: Session = Depends(get_db)):
+    touched_tags: set[int] = set()
+    added = 0
+    for nid in data.ids:
+        note = db.query(Note).filter(Note.id == nid).first()
+        if not note:
+            continue
+        existing = {nt.tag_id for nt in note.tags}
+        for tag_name in data.tags:
+            tag = get_or_create_tag(db, tag_name)
+            if tag.id not in existing:
+                db.add(NoteTag(note_id=nid, tag_id=tag.id))
+                touched_tags.add(tag.id)
+                added += 1
+    if touched_tags:
+        sync_tag_cooccurrences_for_tags(db, touched_tags)
+        sync_skills_for_tags(db, touched_tags)
+    db.commit()
+    return {"added": added, "notes": len(data.ids), "tags": data.tags}
+
+
+@router.post("/bulk-untag", status_code=200)
+def bulk_untag(data: BulkTagRequest, db: Session = Depends(get_db)):
+    removed = 0
+    touched_tags: set[int] = set()
+    for nid in data.ids:
+        for tag_name in data.tags:
+            tag = db.query(Tag).filter(Tag.name == tag_name.lower().strip()).first()
+            if not tag:
+                continue
+            nt = db.query(NoteTag).filter(
+                NoteTag.note_id == nid, NoteTag.tag_id == tag.id
+            ).first()
+            if nt:
+                db.delete(nt)
+                touched_tags.add(tag.id)
+                removed += 1
+    if touched_tags:
+        sync_tag_cooccurrences_for_tags(db, touched_tags)
+        sync_skills_for_tags(db, touched_tags)
+    db.commit()
+    return {"removed": removed, "notes": len(data.ids), "tags": data.tags}
 
 
 @router.delete("/{note_id}", status_code=204)
