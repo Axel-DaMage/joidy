@@ -21,11 +21,11 @@
 </script>
 
 <div class="ai-page">
-  <h2><DynamicIcon icon="Brain" /> Inteligencia Artificial</h2>
+  <h2><DynamicIcon name="Brain" /> Inteligencia Artificial</h2>
 
   <div class="ai-grid">
     <Card padding="md">
-      <h3><DynamicIcon icon="Activity" /> Estado del servicio</h3>
+      <h3><DynamicIcon name="Activity" /> Estado del servicio</h3>
       {#if loadingUsage}
         <p class="muted">Verificando...</p>
       {:else if usage}

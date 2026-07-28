@@ -59,7 +59,7 @@
 
 <Card padding="md">
   <div class="dlq-header">
-    <h3><DynamicIcon icon="AlertTriangle" /> Embeddings fallidos</h3>
+    <h3><DynamicIcon name="AlertTriangle" /> Embeddings fallidos</h3>
     {#if failures.length > 0}
       <button class="btn-sm btn-danger" onclick={purgeAll} disabled={purging}>
         {purging ? 'Purgando...' : 'Purgar todos'}
