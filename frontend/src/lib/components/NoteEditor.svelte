@@ -101,8 +101,50 @@
   let hasUnsavedChanges = false;
   let showRecoveryPrompt = false;
   let recoveredDraft: { title: string; content: string; tags: string[] } | null = null;
+  let historyStack: string[] = [content || ''];
+  let historyIndex = 0;
+  let historyLock = false;
+  let saveTimeout: ReturnType<typeof setTimeout>;
 
   $: draftKey = note ? `${DRAFT_PREFIX}${note.id}` : null;
+
+  function pushSnapshot() {
+    if (historyLock) return;
+    const cur = content;
+    if (historyStack[historyIndex] === cur) return;
+    historyStack = historyStack.slice(0, historyIndex + 1);
+    historyStack.push(cur);
+    if (historyStack.length > 100) historyStack.shift();
+    historyIndex = historyStack.length - 1;
+  }
+
+  function scheduleSnapshot() {
+    clearTimeout(saveTimeout);
+    saveTimeout = setTimeout(pushSnapshot, 600);
+  }
+
+  function handleUndo() {
+    if (historyIndex <= 0) return;
+    historyIndex--;
+    historyLock = true;
+    content = historyStack[historyIndex];
+    tags = extractTagsFromContent(content) || note?.tags?.slice() || [];
+    historyLock = false;
+  }
+
+  function handleRedo() {
+    if (historyIndex >= historyStack.length - 1) return;
+    historyIndex++;
+    historyLock = true;
+    content = historyStack[historyIndex];
+    tags = extractTagsFromContent(content) || note?.tags?.slice() || [];
+    historyLock = false;
+  }
+
+  $: if (note) {
+    historyStack = [note.content || ''];
+    historyIndex = 0;
+  }
   
   let showIconSettings = false;
   let customColor = '#ffffff';
@@ -197,6 +239,7 @@
 
   function updateVisibleContent(e: Event) {
     const val = (e.currentTarget as HTMLTextAreaElement).value;
+    scheduleSnapshot();
     let nextContent = val;
 
     if ($hideTagsLine && tags.length > 0 && currentTagsLine) {
@@ -362,6 +405,7 @@
   onDestroy(() => {
     clearTimeout(aiTimeout);
     clearTimeout(autosaveTimer);
+    clearTimeout(saveTimeout);
     if (draftKey && title.trim()) {
       saveDraft();
     }
@@ -410,6 +454,19 @@
     if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
       e.preventDefault();
       previewMode = !previewMode;
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+      if (e.shiftKey) {
+        e.preventDefault();
+        handleRedo();
+      } else {
+        e.preventDefault();
+        handleUndo();
+      }
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+      e.preventDefault();
+      handleRedo();
     }
     if (e.key === 'Escape' && zenMode) {
       e.preventDefault();
