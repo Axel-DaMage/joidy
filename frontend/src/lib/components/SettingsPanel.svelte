@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
+  import { goto } from '$app/navigation';
   import { browser } from '$app/environment';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
   import { accentColors, activeIconPack, showFrontmatter, showTrash, showHiddenFiles, writeInObsidian, use24HourClock, hideTagsLine, darkMode, devMode, type IconPack, MAX_COLORS } from '$lib/stores/settings';
@@ -98,8 +99,7 @@
       const status = await api.github.status();
       githubConnected = status.connected;
       githubUsername = status.username || '';
-      // TESTING: force to false to see the "Enlazar" button
-      githubConnected = false;
+  
     } catch (e) {
       githubConnected = false;
       githubUsername = '';
@@ -107,7 +107,7 @@
   }
 
   async function openGithubLink() {
-    window.open('https://github.com/Axel-DaMage/joidy', '_blank');
+    goto('/integraciones');
   }
 
   async function openGoogleCalendarLink() { window.open('https://calendar.google.com', '_blank'); }
