@@ -277,12 +277,6 @@
 
   // Resizable panel synced with notes
   let panelWidth = 260;
-</script>
-
-<div class="dashboard" style="--panel-w: {panelWidth}px">
-
-  <!-- ── Left panel ─────────────────────────────────────────────────────────── -->
-  <section class="plant-section">
 
   function handleWidgetDrop(e: CustomEvent<{ id: WidgetId; fromPanel: 'left' | 'right'; fromIdx: number; toPanel: 'left' | 'right'; toIdx: number }>) {
     const { id, fromPanel, toPanel, toIdx } = e.detail;
@@ -292,6 +286,12 @@
       dashboardLayout.switchPanel(id, fromPanel);
     }
   }
+</script>
+
+<div class="dashboard" style="--panel-w: {panelWidth}px">
+
+  <!-- ── Left panel ─────────────────────────────────────────────────────────── -->
+  <section class="plant-section">
 
     {#each $dashboardLayout.left as wid, i (wid)}
       <Widget id={wid} panel="left" index={i} total={$dashboardLayout.left.length} layout={$dashboardLayout} on:drop={handleWidgetDrop}>

@@ -25,7 +25,7 @@
     { id: 'tasks', label: 'Google Tasks', icon: 'CheckSquare', color: '#F9AB00', description: 'Tareas de Google', status: 'planned', configurable: false },
   ]);
 
-  let githubStatus = $state<{ connected: boolean; username: string } | null>(null);
+  let githubStatus = $state<{ connected: boolean; username: string | null } | null>(null);
 
   onMount(async () => {
     try {

@@ -99,6 +99,7 @@
       {/if}
     </div>
   {/if}
+</div>
 
 <style>
   .note-card {

@@ -17,17 +17,17 @@
   };
   const LEVEL_ORDER = ['locked', 'apprentice', 'journeyman', 'expert', 'master'];
 
-  $: filteredSkills = skills.filter(s => {
+  let filteredSkills = $derived(skills.filter(s => {
     if (searchQuery && !s.tag_name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
     if (levelFilter && s.level !== levelFilter) return false;
     return true;
-  });
+  }));
 
-  $: topSkill = skills.sort((a, b) => b.note_count - a.note_count)[0];
-  $: totalUnlocked = skills.filter(s => s.level !== 'locked').length;
-  $: recentlyUnlocked = skills.filter(s => s.first_unlocked_at).sort((a, b) =>
+  let topSkill = $derived([...skills].sort((a, b) => b.note_count - a.note_count)[0]);
+  let totalUnlocked = $derived(skills.filter(s => s.level !== 'locked').length);
+  let recentlyUnlocked = $derived(skills.filter(s => s.first_unlocked_at).sort((a, b) =>
     new Date(b.first_unlocked_at!).getTime() - new Date(a.first_unlocked_at!).getTime()
-  ).slice(0, 3);
+  ).slice(0, 3));
 
   onMount(async () => {
     try {
