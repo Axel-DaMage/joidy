@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 JOIDY_DIR = "_joidy"
 DEBOUNCE_SECONDS = 2.0
 QUEUE_FLUSH_INTERVAL = 0.5
+MAX_AUTH_RETRIES = 5
 
 
 @dataclass(frozen=True)
@@ -33,18 +34,52 @@ class VaultEvent:
     change_type: Change
 
 
-async def get_auth_token(client: httpx.AsyncClient) -> str:
+_auth_token: str = ""
+_auth_lock = asyncio.Lock()
+
+
+async def get_auth_token(client: httpx.AsyncClient, *, force: bool = False) -> str:
+    """Get or refresh the API auth token with retries.
+
+    Caches the token locally. Use `force=True` to bypass the cache and fetch a
+    new token, e.g. after a 401 response.
+    """
+    global _auth_token
+
     if not settings.auth_password:
         return ""
-    try:
-        r = await client.post(f"{settings.api_url}/auth/login", params={"password": settings.auth_password}, headers={"X-Request-ID": get_correlation_id()})
-        if r.status_code == 200:
-            return r.json().get("access_token", "")
-    except Exception as e:
-        logger.error("[vault] Failed to get auth token: %s", e)
-    return ""
 
-auth_token = ""
+    async with _auth_lock:
+        if not force and _auth_token:
+            return _auth_token
+
+        for attempt in range(MAX_AUTH_RETRIES):
+            try:
+                cid = get_correlation_id()
+                r = await client.post(
+                    f"{settings.api_url}/auth/login",
+                    params={"password": settings.auth_password},
+                    headers={"X-Request-ID": cid},
+                    timeout=10.0,
+                )
+                if r.status_code == 200:
+                    _auth_token = r.json().get("access_token", "")
+                    if _auth_token:
+                        logger.info("[vault] Auth token refreshed")
+                        return _auth_token
+                    logger.warning("[vault] Auth response missing access_token")
+                else:
+                    logger.warning("[vault] Auth login returned %s", r.status_code)
+            except Exception as e:
+                logger.error("[vault] Failed to get auth token (attempt %d/%d): %s", attempt + 1, MAX_AUTH_RETRIES, e)
+
+            if attempt < MAX_AUTH_RETRIES - 1:
+                wait = min(2 ** attempt, 30.0)
+                logger.info("[vault] Retrying auth in %.1fs", wait)
+                await asyncio.sleep(wait)
+
+        _auth_token = ""
+        return ""
 
 def _is_joidy_file(path: str) -> bool:
     return JOIDY_DIR in Path(path).parts
@@ -83,16 +118,24 @@ async def delete_note_by_path(path: str, client: httpx.AsyncClient, token: str):
     """Find and delete a note by its source_path with retries."""
     for attempt in range(3):
         try:
+            current_token = await get_auth_token(client)
             cid = get_correlation_id()
             headers = {"X-Request-ID": cid}
-            if token:
-                headers["Authorization"] = f"Bearer {token}"
+            if current_token:
+                headers["Authorization"] = f"Bearer {current_token}"
             r = await client.get(f"{settings.api_url}/notes/", params={"source_path": path}, headers=headers)
+            if r.status_code == 401:
+                logger.warning("[vault] Auth expired while deleting %s, refreshing token", Path(path).name)
+                await get_auth_token(client, force=True)
+                continue
             if r.status_code == 200:
                 notes = r.json()
                 for n in notes:
                     if n.get("source_path") == path:
-                        await client.delete(f"{settings.api_url}/notes/{n['id']}", headers=headers)
+                        del_res = await client.delete(f"{settings.api_url}/notes/{n['id']}", headers=headers)
+                        if del_res.status_code == 401:
+                            await get_auth_token(client, force=True)
+                            continue
                         logger.info("[vault] Deleted: %s", Path(path).name)
                         return
             break # Success or not found
@@ -111,20 +154,25 @@ async def import_or_update_note(filepath: Path, client: httpx.AsyncClient, token
         title = frontmatter.get("title") or filepath.stem.replace("-", " ").replace("_", " ").title()
         tags = _extract_tags_from_content(content, frontmatter)
 
-        # Check if note already exists by source_path (with retry)
+        # Check if note already exists by source_path (with retry + auth refresh)
         existing = None
         for attempt in range(3):
             try:
+                current_token = await get_auth_token(client)
                 cid = get_correlation_id()
                 headers = {"X-Request-ID": cid}
-                if token:
-                    headers["Authorization"] = f"Bearer {token}"
+                if current_token:
+                    headers["Authorization"] = f"Bearer {current_token}"
                 r = await client.get(
                     f"{settings.api_url}/notes/",
                     params={"source_path": str(filepath)},
                     headers=headers,
                     timeout=10.0,
                 )
+                if r.status_code == 401:
+                    logger.warning("[vault] Auth expired while checking %s, refreshing token", filepath.name)
+                    await get_auth_token(client, force=True)
+                    continue
                 if r.status_code == 200:
                     notes = r.json()
                     for n in notes:
@@ -137,22 +185,33 @@ async def import_or_update_note(filepath: Path, client: httpx.AsyncClient, token
                 await asyncio.sleep(1)
 
         payload = {"title": title, "content": content, "tags": tags, "source": "obsidian", "source_path": str(filepath)}
-        cid = get_correlation_id()
-        headers = {"X-Request-ID": cid}
-        if bulk_import:
-            headers["X-Bulk-Import"] = "1"
-        if token:
-            headers["Authorization"] = f"Bearer {token}"
 
-        if existing:
-            res = await client.put(
-                f"{settings.api_url}/notes/{existing['id']}",
-                json={"title": title, "content": content, "tags": tags, "source": "obsidian", "source_path": str(filepath)},
-                headers=headers,
-                timeout=10.0,
-            )
-        else:
-            res = await client.post(f"{settings.api_url}/notes/", json=payload, headers=headers, timeout=10.0); res.raise_for_status()
+        for attempt in range(2):
+            current_token = await get_auth_token(client)
+            cid = get_correlation_id()
+            headers = {"X-Request-ID": cid}
+            if bulk_import:
+                headers["X-Bulk-Import"] = "1"
+            if current_token:
+                headers["Authorization"] = f"Bearer {current_token}"
+
+            if existing:
+                res = await client.put(
+                    f"{settings.api_url}/notes/{existing['id']}",
+                    json={"title": title, "content": content, "tags": tags, "source": "obsidian", "source_path": str(filepath)},
+                    headers=headers,
+                    timeout=10.0,
+                )
+            else:
+                res = await client.post(f"{settings.api_url}/notes/", json=payload, headers=headers, timeout=10.0)
+
+            if res.status_code == 401:
+                logger.warning("[vault] Auth expired while syncing %s, refreshing token", filepath.name)
+                await get_auth_token(client, force=True)
+                continue
+
+            res.raise_for_status()
+            break
 
         logger.info("[vault] Synced: %s", filepath.name)
 
@@ -172,10 +231,19 @@ async def initial_scan(vault_path: Path, client: httpx.AsyncClient, token: str):
             await import_or_update_note(filepath, client, token, bulk_import=True)
 
     await asyncio.gather(*(process_file(filepath) for filepath in md_files), return_exceptions=True)
-    headers = {"X-Request-ID": get_correlation_id()}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-    await client.post(f"{settings.api_url}/notes/rebuild-derived", headers=headers, timeout=30.0)
+
+    for attempt in range(2):
+        current_token = await get_auth_token(client)
+        headers = {"X-Request-ID": get_correlation_id()}
+        if current_token:
+            headers["Authorization"] = f"Bearer {current_token}"
+        r = await client.post(f"{settings.api_url}/notes/rebuild-derived", headers=headers, timeout=30.0)
+        if r.status_code == 401:
+            logger.warning("[vault] Auth expired while rebuilding derived, refreshing token")
+            await get_auth_token(client, force=True)
+            continue
+        r.raise_for_status()
+        break
 
 
 async def _consume_vault_events(
@@ -239,6 +307,9 @@ async def watch_vault():
         consumer = None
         try:
             token = await get_auth_token(client)
+            if settings.auth_password and not token:
+                logger.error("[vault] Could not get auth token; aborting vault sync")
+                return
             await initial_scan(vault_path, client, token)
 
             queue: asyncio.Queue[VaultEvent] = asyncio.Queue(maxsize=1000)
