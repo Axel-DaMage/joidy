@@ -16,6 +16,7 @@ from datetime import date
 from config import settings
 from models.config import SystemConfig
 from models.gamification import StreakRecord, UserStats, XPEvent
+from repositories import ConfigRepository, StreakRecordRepository, UserStatsRepository, XPEventRepository
 from services.response_cache import clear_api_caches
 from sqlalchemy.orm import Session
 
@@ -49,8 +50,7 @@ DEFAULT_PLANT_STAGES = [
 def load_config_from_db(db: Session) -> dict[str, str]:
     """Load config from database, returns key-value dict."""
     try:
-        configs = db.query(SystemConfig).all()
-        return {c.key: c.value for c in configs}
+        return ConfigRepository(db).get_all_as_dict()
     except Exception:
         logger.warning("Failed to load system_config from DB, using defaults")
         return {}
@@ -164,17 +164,7 @@ class GamificationResult:
 
 
 def _get_or_create_stats(db: Session) -> UserStats:
-    stats = db.query(UserStats).filter(UserStats.id == 1).first()
-    if not stats:
-        try:
-            with db.begin_nested():
-                stats = UserStats(id=1)
-                db.add(stats)
-                db.flush()
-        except IntegrityError:
-            # Another concurrent request already created it
-            stats = db.query(UserStats).filter(UserStats.id == 1).one()
-    return stats
+    return UserStatsRepository(db).get_or_create()
 
 
 def _compute_plant_stage(total_xp: int, db: Session | None = None) -> tuple[int, str]:
@@ -261,7 +251,7 @@ def process_event(
 
     # Record XP event
     event = XPEvent(event_type=event_type, xp=xp, metadata_json=json.dumps(metadata))
-    db.add(event)
+    XPEventRepository(db).add(event)
 
     old_plant_stage = stats.plant_stage
 
@@ -276,21 +266,19 @@ def process_event(
         stats.current_streak = new_streak
         stats.last_activity_date = today
         # Record activity for this day
-        existing = db.query(StreakRecord).filter(StreakRecord.activity_date == today).first()
+        existing = StreakRecordRepository(db).get_today()
         if not existing:
-            db.add(StreakRecord(activity_date=today, xp_earned=xp))
+            StreakRecordRepository(db).add(StreakRecord(activity_date=today, xp_earned=xp))
             # Award daily activity bonus only if not already the daily_activity event
             if event_type != "daily_activity":
                 daily_xp = xp_for("daily_activity", db, 15)
                 stats.total_xp += daily_xp
                 xp += daily_xp
-                db.add(XPEvent(event_type="daily_activity", xp=daily_xp))
+                XPEventRepository(db).add(XPEvent(event_type="daily_activity", xp=daily_xp))
         if new_streak > stats.longest_streak:
             stats.longest_streak = new_streak
     else:
-        existing_streak_record = db.query(StreakRecord).filter(
-            StreakRecord.activity_date == today
-        ).first()
+        existing_streak_record = StreakRecordRepository(db).get_today()
         if existing_streak_record:
             existing_streak_record.xp_earned += xp
 
@@ -300,7 +288,7 @@ def process_event(
         milestone_xp = xp_for(f"streak_milestone_{new_streak}", db, 100)
         stats.total_xp += milestone_xp
         xp += milestone_xp
-        db.add(XPEvent(event_type=f"streak_milestone_{new_streak}", xp=milestone_xp))
+        XPEventRepository(db).add(XPEvent(event_type=f"streak_milestone_{new_streak}", xp=milestone_xp))
         milestone_reached = new_streak
 
     # Update plant stage

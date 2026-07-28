@@ -1,7 +1,8 @@
 """
-Structured logging configuration for Joidy Worker.
+Structured logging configuration for Joidy AI Service.
 
-Mirrors the API logging config: JSON in production, colored human-readable in development.
+In production (APP_ENV=production): outputs JSON-formatted log lines for machine parsing.
+In development: outputs human-readable colored output with correlation IDs.
 """
 
 import json
@@ -29,12 +30,6 @@ def set_correlation_id(cid: str | None = None) -> str:
     return cid
 
 
-class CorrelationLogFilter(logging.Filter):
-    def filter(self, record: logging.LogRecord) -> bool:
-        record.request_id = get_correlation_id()
-        return True
-
-
 class JSONFormatter(logging.Formatter):
     """Structured JSON log formatter for production environments."""
 
@@ -44,7 +39,7 @@ class JSONFormatter(logging.Formatter):
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
-            "service": "worker",
+            "service": "ai-service",
             "module": record.module,
             "function": record.funcName,
             "line": record.lineno,
@@ -53,7 +48,7 @@ class JSONFormatter(logging.Formatter):
         if record.exc_info and record.exc_info[0]:
             log_entry["exception"] = self.formatException(record.exc_info)
 
-        for key in ("request_id", "file_path", "note_id", "change_type"):
+        for key in ("request_id", "note_id", "provider", "duration_ms"):
             if hasattr(record, key):
                 log_entry[key] = getattr(record, key)
 
@@ -76,13 +71,21 @@ class DevFormatter(logging.Formatter):
         color = self.COLORS.get(record.levelname, "")
         reset = self.RESET
         timestamp = datetime.now().strftime("%H:%M:%S")
-        cid = getattr(record, "request_id", "")
-        cid_part = f" [{cid[:8]}]" if cid else ""
-        return f"{color}{timestamp} {record.levelname:8s}{reset}{cid_part} [{record.name}] {record.getMessage()}"
+        cid = get_correlation_id()
+        prefix = f" [{cid[:8]}]" if cid else ""
+        return f"{color}{timestamp} {record.levelname:8s}{reset}{prefix} [{record.name}] {record.getMessage()}"
+
+
+class CorrelationLogFilter(logging.Filter):
+    """Attaches the current correlation ID to every log record."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.request_id = get_correlation_id()
+        return True
 
 
 def setup_logging() -> None:
-    """Configure worker logging for console + rotating file."""
+    """Configure AI service logging for console + rotating file."""
     log_dir = Path("/data/logs")
     log_dir.mkdir(parents=True, exist_ok=True)
 
@@ -91,27 +94,27 @@ def setup_logging() -> None:
     root = logging.getLogger()
     root.setLevel(logging.INFO)
 
-    # Avoid duplicate handlers on reload.
-    if root.handlers:
-        return
+    for handler in root.handlers[:]:
+        root.removeHandler(handler)
 
+    # Console handler
     stream = logging.StreamHandler(sys.stdout)
-    stream.addFilter(CorrelationLogFilter())
     if is_production:
         stream.setFormatter(JSONFormatter())
     else:
         stream.setFormatter(DevFormatter())
+    stream.addFilter(CorrelationLogFilter())
     root.addHandler(stream)
 
+    # File handler — always JSON
     file_handler = RotatingFileHandler(
-        log_dir / "worker.log",
+        log_dir / "ai-service.log",
         maxBytes=5_000_000,
         backupCount=5,
         encoding="utf-8",
     )
-    file_handler.addFilter(CorrelationLogFilter())
     file_handler.setFormatter(JSONFormatter())
+    file_handler.addFilter(CorrelationLogFilter())
     root.addHandler(file_handler)
 
     logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("watchfiles").setLevel(logging.WARNING)

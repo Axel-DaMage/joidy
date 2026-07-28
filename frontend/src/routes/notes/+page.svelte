@@ -4,12 +4,15 @@
   import { goto } from '$app/navigation';
   import { Search, Plus, X, List, FolderTree, ChevronRight, FileEdit, FolderPlus, ChevronsUpDown, ArrowUpDown, Settings } from 'lucide-svelte';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
+  import ScientificCalculator from '$lib/components/ScientificCalculator.svelte';
   import NoteEditor from '$lib/components/NoteEditor.svelte';
   import NoteCard from '$lib/components/NoteCard.svelte';
   import IconPicker from '$lib/components/IconPicker.svelte';
   import VirtualList from '$lib/components/VirtualList.svelte';
-  import { notes, notesLoading, loadNotes, createNote, updateNote, deleteNote, aiSuggestions, notesLoadedOnce } from '$lib/stores/notes';
-  import { buildTree, flattenTree, extractFrontmatter, getFileIcon, type SortMode } from '$lib/utils/fileTree';
+  import { notes, notesLoading, loadNotes, createNote, updateNote, deleteNote, aiSuggestions, notesLoadedOnce, selectedNoteIds, bulkMode, toggleNoteSelection, selectAllNotes, clearNoteSelection, deleteSelectedNotes, tagSelectedNotes, untagSelectedNotes } from '$lib/stores/notes';
+  import { buildTree, flattenTree, extractFrontmatter, getFileIcon, type SortMode, type FlatNode } from '$lib/utils/fileTree';
+  import TreeContextMenu from '$lib/components/TreeContextMenu.svelte';
+  import FolderPicker from '$lib/components/FolderPicker.svelte';
   import { showHiddenFiles, showTrash, folderMetaStore, updateFolderMeta } from '$lib/stores/settings';
   import { loadUserSettings, patchUserSettings } from '$lib/utils/userSettings';
   import { captureSnapshot, getSnapshot } from '$lib/stores/pageSnapshots';
@@ -33,6 +36,78 @@
 
   let editingFolderNote: Note | null = null;
   let creatingFolder = false;
+
+  // ── Context menu ─────────────────────────────────────────────────────────────
+  let ctxMenu: { x: number; y: number; node: import('$lib/utils/fileTree').FlatNode } | null = null;
+  let renamingNode: import('$lib/utils/fileTree').FlatNode | null = null;
+  let renameValue = '';
+  let movingNode: import('$lib/utils/fileTree').FlatNode | null = null;
+
+  function handleContextMenu(e: MouseEvent, node: import('$lib/utils/fileTree').FlatNode) {
+    e.preventDefault();
+    e.stopPropagation();
+    ctxMenu = { x: e.clientX, y: e.clientY, node };
+  }
+
+  function handleRename() {
+    if (!ctxMenu) return;
+    renamingNode = ctxMenu.node;
+    renameValue = ctxMenu.node.name;
+    ctxMenu = null;
+  }
+
+  async function confirmRename() {
+    if (!renamingNode || !renameValue.trim()) { renamingNode = null; return; }
+    const node = renamingNode;
+    renamingNode = null;
+    if (node.type === 'file' && node.note) {
+      await updateNote(node.note.id, { title: renameValue.trim() });
+    }
+  }
+
+  function handleMove() {
+    if (!ctxMenu) return;
+    movingNode = ctxMenu.node;
+    ctxMenu = null;
+  }
+
+  async function confirmMove(targetPath: string) {
+    const node = movingNode;
+    if (!node || !node.note) { movingNode = null; return; }
+    const note = node.note;
+    movingNode = null;
+    const newPath = targetPath ? `${targetPath}/${node.name}` : node.name;
+    await api.notes.update(note.id, { source_path: newPath });
+    await loadNotes();
+  }
+
+  function handleDeleteNote() {
+    if (!ctxMenu || !ctxMenu.node.note) { ctxMenu = null; return; }
+    const note = ctxMenu.node.note;
+    ctxMenu = null;
+    if (confirm(`¿Eliminar "${note.title}"?`)) {
+      deleteNote(note.id);
+    }
+  }
+
+  function handleNewNoteInFolder() {
+    if (!ctxMenu) return;
+    ctxMenu = null;
+    openNew();
+  }
+
+  function handleDeleteFolder() {
+    if (!ctxMenu) return;
+    const menu = ctxMenu;
+    const path = menu.node.path;
+    ctxMenu = null;
+    if (confirm(`¿Eliminar carpeta "${menu.node.name}" y todas sus notas?`)) {
+      // Delete notes in this folder
+      const ids = $notes.filter(n => n.source_path && n.source_path.includes(path)).map(n => n.id);
+      Promise.all(ids.map(id => deleteNote(id))).then(() => loadNotes());
+    }
+  }
+
   let newFolderName = "";
   let newFolderParent = "";
   let newFolderIcon = "Folder";
@@ -505,62 +580,6 @@
   // ── Dashboard Empty State ──
   let isMomentary = false;
   let momentaryDraft = { title: 'Borrador Efímero', content: '', tags: [] as string[] };
-  let calcInput = '';
-  let calcResult = '0';
-  let lastResult = '';
-  function evaluateCalc() {
-    try {
-      if (!calcInput.trim()) { calcResult = '0'; return; }
-      
-      let expr = calcInput
-        .replace(/sin\(/g, 'Math.sin(')
-        .replace(/cos\(/g, 'Math.cos(')
-        .replace(/tan\(/g, 'Math.tan(')
-        .replace(/log\(/g, 'Math.log10(')
-        .replace(/ln\(/g, 'Math.log(')
-        .replace(/√\(/g, 'Math.sqrt(')
-        .replace(/π/g, 'Math.PI')
-        .replace(/e/g, 'Math.E')
-        .replace(/\^/g, '**')
-        .replace(/(\d+)!/g, (match, n) => {
-          let f = 1; for(let i=1; i<=+n; i++) f*=i; return f+'';
-        })
-        .replace(/Ans/g, lastResult || '0')
-        .replace(/÷/g, '/')
-        .replace(/×/g, '*');
-      
-      const sanitize = expr.replace(/[^0-9+\-*/(). Math[a-z0-9]!]/g, '');
-      const res = new Function('return ' + sanitize)();
-      if (typeof res === 'number') {
-        calcResult = Number(res.toFixed(8)).toString();
-      } else {
-        calcResult = res + '';
-      }
-    } catch {
-      calcResult = '...';
-    }
-  }
-
-  function addCalc(val: string) {
-    if (val === '=') { 
-      evaluateCalc(); 
-      if (calcResult !== '...') lastResult = calcResult;
-      return; 
-    }
-    if (val === 'AC') { calcInput = ''; calcResult = '0'; return; }
-    if (val === 'Ans') { calcInput += 'Ans'; evaluateCalc(); return; }
-    if (val === 'x!') { calcInput += '!'; evaluateCalc(); return; }
-    if (val === 'xy') { calcInput += '^'; evaluateCalc(); return; }
-    if (val === '√') { calcInput += '√('; evaluateCalc(); return; }
-    
-    // Auto-parenthesis for functions
-    if (['sin', 'cos', 'tan', 'log', 'ln'].includes(val)) {
-      calcInput += val + '(';
-    } else {
-      calcInput += val;
-    }
-    evaluateCalc();
-  }
 
   function quickNoteFromScratch() {
     openNew();
@@ -616,12 +635,41 @@
           </button>
         {/if}
       </div>
+      <button class="toolbar-btn bulk-toggle" class:active={$bulkMode} on:click={() => { bulkMode.set(!$bulkMode); clearNoteSelection(); }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+      </button>
     </div>
 
     <div class="list-meta">
-      <span>{$notes.length} notas</span>
+      <span>{ $bulkMode ? `${$selectedNoteIds.size} seleccionadas` : `${$notes.length} notas` }</span>
       {#if search}<span class="sep">·</span><span>{filtered.length} resultados</span>{/if}
+      {#if $bulkMode}
+        <button class="toolbar-btn select-all" on:click={$selectedNoteIds.size === filtered.length ? clearNoteSelection : selectAllNotes}>
+          {$selectedNoteIds.size === filtered.length ? 'Deseleccionar todo' : 'Seleccionar todo'}
+        </button>
+      {/if}
     </div>
+
+    {#if $bulkMode && $selectedNoteIds.size > 0}
+      <div class="bulk-actions">
+        <span class="bulk-count">{$selectedNoteIds.size} nota{if $selectedNoteIds.size !== 1}s{/if}</span>
+        <button class="bulk-btn danger" on:click={() => { if (confirm(`¿Eliminar ${$selectedNoteIds.size} nota(s)?`)) deleteSelectedNotes(); }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          Eliminar
+        </button>
+        <button class="bulk-btn" on:click={() => { const t = prompt('Tags a añadir (separadas por coma):'); if (t) tagSelectedNotes(t.split(',').map(s => s.trim()).filter(Boolean)); }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+          Etiquetar
+        </button>
+        <button class="bulk-btn" on:click={() => { const t = prompt('Tags a quitar (separadas por coma):'); if (t) untagSelectedNotes(t.split(',').map(s => s.trim()).filter(Boolean)); }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/><line x1="15" y1="9" x2="9" y2="15"/></svg>
+          Desetiquetar
+        </button>
+        <button class="bulk-btn" on:click={() => clearNoteSelection()}>
+          Cancelar
+        </button>
+      </div>
+    {/if}
 
     <div class="list-scroll" bind:this={listScrollEl} on:scroll={onListScroll}>
       {#if $notesLoading}
@@ -631,40 +679,42 @@
         {#if flatNodes.length === 0}
           <div class="empty-msg">{search ? 'Sin resultados.' : 'Sin notas.'}</div>
         {:else if flatNodes.length > 50}
-          <VirtualList items={flatNodes} itemHeight={26} getKey={(n, i) => n.path ?? i} let:item let:index>
-            {#if item.type === 'folder'}
-              <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-              <div
-                class="tree-row folder-row"
-                style="padding-left: {8 + item.depth * 14}px"
-                on:click={() => toggleFolder(item.path)}
-              >
-                <span class="chevron" class:open={!collapsed.has(item.path)}>
-                  <ChevronRight size={11} />
-                </span>
-                <div class="t-icon"><DynamicIcon name={item.icon} size={13} color={item.color} pack={item.pack} /></div>
-                <span class="t-name folder-name">{item.name}</span>
-                <button class="folder-settings-btn" title="Personalizar carpeta" on:click|stopPropagation={() => openFolderCustomizer(item)}>
-                  <Settings size={10} />
-                </button>
-                <span class="t-count">{item.childCount}</span>
-              </div>
-            {:else}
-              <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-              <div
-                class="tree-row file-row"
-                class:active={item.note?.id === selectedNote?.id}
-                style="padding-left: {20 + item.depth * 14}px"
-                on:click={() => item.note && openNote(item.note)}
-              >
-                <div class="t-icon file-icon"><DynamicIcon name={item.icon} size={11} color={item.color} pack={item.pack} /></div>
-                <span class="t-name file-name">{item.name}</span>
-                <button class="folder-settings-btn" title="Personalizar nota" on:click|stopPropagation={() => openFolderCustomizer({ path: item.note?.source_path || item.path, icon: item.icon, color: item.color, note: item.note })}>
-                  <Settings size={10} />
-                </button>
-              </div>
-            {/if}
-          </VirtualList>
+            <VirtualList items={flatNodes} itemHeight={26} getKey={(n, i) => n.path ?? i} let:item let:index>
+              {#if item.type === 'folder'}
+                <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+                <div
+                  class="tree-row folder-row"
+                  style="padding-left: {8 + item.depth * 14}px"
+                  on:click={() => toggleFolder(item.path)}
+                  on:contextmenu={(e) => handleContextMenu(e, item)}
+                >
+                  <span class="chevron" class:open={!collapsed.has(item.path)}>
+                    <ChevronRight size={11} />
+                  </span>
+                  <div class="t-icon"><DynamicIcon name={item.icon} size={13} color={item.color} pack={item.pack} /></div>
+                  <span class="t-name folder-name">{item.name}</span>
+                  <button class="folder-settings-btn" title="Personalizar carpeta" on:click|stopPropagation={() => openFolderCustomizer(item)}>
+                    <Settings size={10} />
+                  </button>
+                  <span class="t-count">{item.childCount}</span>
+                </div>
+              {:else}
+                <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+                <div
+                  class="tree-row file-row"
+                  class:active={item.note?.id === selectedNote?.id}
+                  style="padding-left: {20 + item.depth * 14}px"
+                  on:click={() => item.note && openNote(item.note)}
+                  on:contextmenu={(e) => handleContextMenu(e, item)}
+                >
+                  <div class="t-icon file-icon"><DynamicIcon name={item.icon} size={11} color={item.color} pack={item.pack} /></div>
+                  <span class="t-name file-name">{item.name}</span>
+                  <button class="folder-settings-btn" title="Personalizar nota" on:click|stopPropagation={() => openFolderCustomizer({ path: item.note?.source_path || item.path, icon: item.icon, color: item.color, note: item.note })}>
+                    <Settings size={10} />
+                  </button>
+                </div>
+              {/if}
+            </VirtualList>
         {:else}
           <div class="tree-wrap">
             {#each flatNodes as node (node.path)}
@@ -674,6 +724,7 @@
                   class="tree-row folder-row"
                   style="padding-left: {8 + node.depth * 14}px"
                   on:click={() => toggleFolder(node.path)}
+                  on:contextmenu={(e) => handleContextMenu(e, node)}
                 >
                   <span class="chevron" class:open={!collapsed.has(node.path)}>
                     <ChevronRight size={11} />
@@ -692,6 +743,7 @@
                   class:active={node.note?.id === selectedNote?.id}
                   style="padding-left: {20 + node.depth * 14}px"
                   on:click={() => node.note && openNote(node.note)}
+                  on:contextmenu={(e) => handleContextMenu(e, node)}
                 >
                   <div class="t-icon file-icon"><DynamicIcon name={node.icon} size={11} color={node.color} pack={node.pack} /></div>
                   <span class="t-name file-name">{node.name}</span>
@@ -709,11 +761,11 @@
           <div class="empty-msg">{search ? 'Sin resultados.' : 'Sin notas.'}</div>
         {:else if filtered.length > 50}
           <VirtualList items={filtered} itemHeight={52} let:item let:index>
-            <NoteCard note={item} active={selectedNote?.id === item.id} on:select={(e) => openNote(e.detail)} on:customize={(e) => openFolderCustomizer(e.detail)} />
+            <NoteCard note={item} active={selectedNote?.id === item.id} selected={$selectedNoteIds.has(item.id)} bulkMode={$bulkMode} on:select={(e) => openNote(e.detail)} on:toggleSelect={(e) => toggleNoteSelection(e.detail)} on:customize={(e) => openFolderCustomizer(e.detail)} />
           </VirtualList>
         {:else}
           {#each filtered as note}
-            <NoteCard {note} active={selectedNote?.id === note.id} on:select={(e) => openNote(e.detail)} on:customize={(e) => openFolderCustomizer(e.detail)} />
+            <NoteCard {note} active={selectedNote?.id === note.id} selected={$selectedNoteIds.has(note.id)} bulkMode={$bulkMode} on:select={(e) => openNote(e.detail)} on:toggleSelect={(e) => toggleNoteSelection(e.detail)} on:customize={(e) => openFolderCustomizer(e.detail)} />
           {/each}
         {/if}
       {/if}
@@ -772,6 +824,40 @@
         </div>
       </div>
     </div>
+  {/if}
+
+  {#key ctxMenu}
+    {#if ctxMenu}
+      <TreeContextMenu x={ctxMenu.x} y={ctxMenu.y} node={ctxMenu.node}
+        on:close={() => ctxMenu = null}
+        on:rename={handleRename}
+        on:move={handleMove}
+        on:deleteNote={handleDeleteNote}
+        on:newNoteInFolder={handleNewNoteInFolder}
+        on:deleteFolder={handleDeleteFolder}
+      />
+    {/if}
+  {/key}
+
+  {#if renamingNode}
+    <div class="folder-modal-backdrop" on:click={() => renamingNode = null}>
+      <div class="folder-modal" on:click|stopPropagation>
+        <h3 class="folder-modal-title">Renombrar</h3>
+        <input type="text" class="input mono" bind:value={renameValue} style="width:100%; box-sizing:border-box; margin-bottom:12px;" on:keydown={(e) => e.key === 'Enter' && confirmRename()} />
+        <div class="folder-modal-btns">
+          <button on:click={() => renamingNode = null}>Cancelar</button>
+          <button class="primary" disabled={!renameValue.trim()} on:click={confirmRename}>Guardar</button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  {#if movingNode}
+    <FolderPicker
+      flatNodes={flatNodes}
+      on:close={() => movingNode = null}
+      on:select={(e) => confirmMove(e.detail)}
+    />
   {/if}
 
   {#if editingFolder}
@@ -904,67 +990,11 @@
             </div>
           </div>
 
-          <!-- Scientific Calculator -->
-          <div class="dash-widget scientific-calc">
+          <div class="dash-widget">
             <div class="dash-widget-title" style="margin-bottom: 5px;">
               <DynamicIcon name="Calculator" size={13}/> Calculadora
             </div>
-            <div class="calc-display">
-              <div class="calc-history"><DynamicIcon name="History" size={10} /></div>
-              <input
-                class="calc-input"
-                bind:value={calcInput}
-                on:input={evaluateCalc}
-                placeholder="0"
-              />
-              <div class="calc-res">{calcResult}</div>
-            </div>
-            <div class="calc-grid">
-              <!-- Row 1 -->
-              <button class="calc-btn sm" on:click={() => {}}>Deg</button>
-              <button class="calc-btn sm" on:click={() => addCalc('x!')}>x!</button>
-              <button class="calc-btn sm" on:click={() => addCalc('(')}>(</button>
-              <button class="calc-btn sm" on:click={() => addCalc(')')}>)</button>
-              <button class="calc-btn sm" on:click={() => addCalc('%')}>%</button>
-              <button class="calc-btn sm clear" on:click={() => addCalc('AC')}>AC</button>
-              <button class="calc-btn op" on:click={() => addCalc('÷')}>÷</button>
-              
-              <!-- Row 2 -->
-              <button class="calc-btn sm" on:click={() => addCalc('inv')}>Inv</button>
-              <button class="calc-btn sm" on:click={() => addCalc('sin')}>sin</button>
-              <button class="calc-btn sm" on:click={() => addCalc('ln')}>ln</button>
-              <button class="calc-btn num" on:click={() => addCalc('7')}>7</button>
-              <button class="calc-btn num" on:click={() => addCalc('8')}>8</button>
-              <button class="calc-btn num" on:click={() => addCalc('9')}>9</button>
-              <button class="calc-btn op" on:click={() => addCalc('×')}>×</button>
-
-              <!-- Row 3 -->
-              <button class="calc-btn sm" on:click={() => addCalc('π')}>π</button>
-              <button class="calc-btn sm" on:click={() => addCalc('cos')}>cos</button>
-              <button class="calc-btn sm" on:click={() => addCalc('log')}>log</button>
-              <button class="calc-btn num" on:click={() => addCalc('4')}>4</button>
-              <button class="calc-btn num" on:click={() => addCalc('5')}>5</button>
-              <button class="calc-btn num" on:click={() => addCalc('6')}>6</button>
-              <button class="calc-btn op" on:click={() => addCalc('-')}>-</button>
-
-              <!-- Row 4 -->
-              <button class="calc-btn sm" on:click={() => addCalc('e')}>e</button>
-              <button class="calc-btn sm" on:click={() => addCalc('tan')}>tan</button>
-              <button class="calc-btn sm" on:click={() => addCalc('√')}>√</button>
-              <button class="calc-btn num" on:click={() => addCalc('1')}>1</button>
-              <button class="calc-btn num" on:click={() => addCalc('2')}>2</button>
-              <button class="calc-btn num" on:click={() => addCalc('3')}>3</button>
-              <button class="calc-btn op" on:click={() => addCalc('+')}>+</button>
-
-              <!-- Row 5 -->
-              <button class="calc-btn sm" on:click={() => addCalc('Ans')}>Ans</button>
-              <button class="calc-btn sm" on:click={() => addCalc('EXP')}>EXP</button>
-              <button class="calc-btn sm" on:click={() => addCalc('xy')}>x<sup>y</sup></button>
-              <button class="calc-btn num" on:click={() => addCalc('0')}>0</button>
-              <button class="calc-btn num" on:click={() => addCalc('.')}>.</button>
-              <button class="calc-btn equals" on:click={() => addCalc('=')}>=</button>
-              <div></div> <!-- Spacing for grid alignment if needed, or leave empty -->
-            </div>
+            <ScientificCalculator />
           </div>
         </div>
       </div>
@@ -1099,6 +1129,40 @@
     color: var(--accent-contrast-text, var(--bg)); cursor: pointer;
   }
   .new-btn:hover { opacity: 0.8; }
+
+  .toolbar-btn {
+    display: flex; align-items: center; gap: 4px;
+    padding: 4px 8px;
+    background: none; border: 1px solid var(--border); border-radius: var(--r);
+    color: var(--text-muted); cursor: pointer; font-size: 11px; font-family: var(--font-sans);
+    transition: all var(--t-fast); flex-shrink: 0;
+  }
+  .toolbar-btn:hover { color: var(--text-primary); border-color: var(--text-muted); }
+  .toolbar-btn.active { color: var(--accent); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+
+  .bulk-actions {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+    background: var(--elevated);
+    flex-shrink: 0;
+  }
+
+  .bulk-count {
+    font-size: 11px; font-family: var(--font-mono); color: var(--text-primary);
+    margin-right: auto;
+  }
+
+  .bulk-btn {
+    display: flex; align-items: center; gap: 4px;
+    padding: 4px 8px;
+    background: none; border: 1px solid var(--border); border-radius: var(--r);
+    color: var(--text-muted); cursor: pointer; font-size: 11px;
+    transition: all var(--t-fast);
+  }
+  .bulk-btn:hover { color: var(--text-primary); border-color: var(--text-muted); }
+  .bulk-btn.danger { color: #f85149; border-color: #f8514940; }
+  .bulk-btn.danger:hover { border-color: #f85149; background: #f8514910; }
 
   .list-meta {
     display: flex; align-items: center; gap: 6px;
@@ -1307,61 +1371,6 @@
   }
   .recent-time { font-size: 10px; color: var(--text-disabled); font-family: var(--font-mono); }
 
-
-  /* ── Scientific Calculator (Joidy Styled) ── */
-  .scientific-calc { 
-    gap: 12px; 
-    background: var(--surface);
-    border: 1px solid var(--border);
-    min-width: 0; /* Strict containment */
-    overflow: hidden;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-  }
-  .calc-display {
-    background: var(--bg); border: 1px solid var(--border); border-radius: var(--r);
-    padding: 12px; display: flex; flex-direction: column; align-items: flex-end;
-    min-width: 0; width: 100%;
-    overflow: hidden;
-  }
-  .calc-history { color: var(--text-disabled); cursor: pointer; align-self: flex-start; margin-bottom: -15px; }
-  .calc-input {
-    width: 100%; border: none; color: var(--text-secondary); background: transparent;
-    font-size: 13px; text-align: right; outline: none; margin-bottom: 2px;
-    font-family: var(--font-mono);
-  }
-  .calc-res {
-    font-size: 32px; color: var(--accent); font-weight: 600; font-family: var(--font-mono);
-    min-height: 40px;
-    width: 100%;
-    text-align: right;
-    white-space: nowrap;
-    overflow-x: auto;
-    overflow-y: hidden;
-  }
-  /* Hide scrollbar for cleaner look */
-  .calc-res::-webkit-scrollbar { display: none; }
-  .calc-grid {
-    display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px;
-    flex: 1; /* Grow to fill space */
-    grid-auto-rows: 1fr; /* All rows equal height */
-  }
-  .calc-btn {
-    height: 100%; width: 100%; border: 1px solid var(--border-light); border-radius: 4px;
-    background: var(--elevated); color: var(--text-secondary); cursor: pointer;
-    font-size: 11px; transition: all var(--t-fast);
-    display: flex; align-items: center; justify-content: center;
-    font-family: var(--font-mono);
-  }
-  .calc-btn:hover { background: var(--border-light); color: var(--text-primary); border-color: var(--border); }
-  .calc-btn.sm { color: var(--text-muted); font-size: 10px; }
-  .calc-btn.num { color: var(--text-primary); font-weight: 500; font-size: 13px; }
-  .calc-btn.op { background: color-mix(in srgb, var(--xp-2) 16%, transparent); color: var(--xp-2); font-size: 14px; }
-  .calc-btn.clear { background: var(--xp); color: var(--xp-contrast-text, var(--bg)); font-weight: 600; border-color: var(--xp); }
-  .calc-btn.equals { background: var(--xp-3); color: var(--xp-contrast-text, var(--bg)); font-weight: 600; font-size: 14px; border-color: var(--xp-3); }
-  .calc-btn.equals:hover { opacity: 0.8; transform: translateY(-1px); }
-  .calc-btn:active { transform: scale(0.95); }
 
   .scratchpad {
     width: 100%; height: 100px; resize: none; background: var(--bg);

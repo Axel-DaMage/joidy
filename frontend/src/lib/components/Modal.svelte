@@ -2,6 +2,7 @@
   import { fade, scale } from 'svelte/transition';
   import { uiModal, closeModal } from '$lib/stores/ui';
   import DynamicIcon from './DynamicIcon.svelte';
+  import { focusTrap } from '$lib/actions/focusTrap';
 
   export let title = '';
   export let size: 'sm' | 'md' | 'lg' = 'md';
@@ -16,14 +17,22 @@
 <svelte:window on:keydown={handleKeydown} />
 
 {#if $uiModal.isOpen}
-  <div class="modal-overlay" transition:fade={{ duration: 150 }} on:click|self={closeModal}>
+  <div
+    class="modal-overlay"
+    role="dialog"
+    aria-modal="true"
+    aria-label={title || 'Diálogo'}
+    transition:fade={{ duration: 150 }}
+    on:click|self={closeModal}
+  >
     <div
       class="modal modal-{size}"
       transition:scale={{ duration: 200, start: 0.95 }}
+      use:focusTrap
     >
       <div class="modal-header">
         <h3 class="modal-title">{title}</h3>
-        <button class="modal-close" on:click={closeModal}>
+        <button class="modal-close" autofocus on:click={closeModal}>
           <DynamicIcon name="X" size={18} />
         </button>
       </div>

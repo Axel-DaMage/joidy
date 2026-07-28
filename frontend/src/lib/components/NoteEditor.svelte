@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { createEventDispatcher, onDestroy } from 'svelte';
-  import { Eye, EyeOff, Save, Trash2, X, Settings, Search, Maximize, ChevronLeft, ChevronRight, Download } from 'lucide-svelte';
+  import { createEventDispatcher, onDestroy, onMount, tick } from 'svelte';
+  import { Eye, EyeOff, Save, Trash2, X, Settings, Search, Maximize, ChevronLeft, ChevronRight, Download, RotateCcw, Bold, Italic, Strikethrough, Heading1, Heading2, Heading3, List, ListOrdered, Link, Quote, Code } from 'lucide-svelte';
   import * as L from 'lucide-svelte';
   import DynamicIcon from './DynamicIcon.svelte';
   import IconPicker from './IconPicker.svelte';
@@ -17,6 +17,9 @@
   import { extractFrontmatter, getFileIcon } from '$lib/utils/fileTree';
   import { downloadMarkdown, downloadHTML, copyNoteAsMarkdown } from '$lib/utils/export';
   import { showNotification } from '$lib/stores/gamification';
+
+  const AUTOSAVE_DELAY = 2000;
+  const DRAFT_PREFIX = 'joidy-draft-';
 
   // Configure marked with GFM and syntax highlighting via highlight.js
   const renderer = new marked.Renderer();
@@ -94,6 +97,54 @@
   let saved = false;
   let previewMode = false;
   let aiTimeout: ReturnType<typeof setTimeout>;
+  let autosaveTimer: ReturnType<typeof setTimeout> | undefined;
+  let hasUnsavedChanges = false;
+  let showRecoveryPrompt = false;
+  let recoveredDraft: { title: string; content: string; tags: string[] } | null = null;
+  let historyStack: string[] = [content || ''];
+  let historyIndex = 0;
+  let historyLock = false;
+  let saveTimeout: ReturnType<typeof setTimeout>;
+
+  $: draftKey = note ? `${DRAFT_PREFIX}${note.id}` : null;
+
+  function pushSnapshot() {
+    if (historyLock) return;
+    const cur = content;
+    if (historyStack[historyIndex] === cur) return;
+    historyStack = historyStack.slice(0, historyIndex + 1);
+    historyStack.push(cur);
+    if (historyStack.length > 100) historyStack.shift();
+    historyIndex = historyStack.length - 1;
+  }
+
+  function scheduleSnapshot() {
+    clearTimeout(saveTimeout);
+    saveTimeout = setTimeout(pushSnapshot, 600);
+  }
+
+  function handleUndo() {
+    if (historyIndex <= 0) return;
+    historyIndex--;
+    historyLock = true;
+    content = historyStack[historyIndex];
+    tags = extractTagsFromContent(content) || note?.tags?.slice() || [];
+    historyLock = false;
+  }
+
+  function handleRedo() {
+    if (historyIndex >= historyStack.length - 1) return;
+    historyIndex++;
+    historyLock = true;
+    content = historyStack[historyIndex];
+    tags = extractTagsFromContent(content) || note?.tags?.slice() || [];
+    historyLock = false;
+  }
+
+  $: if (note) {
+    historyStack = [note.content || ''];
+    historyIndex = 0;
+  }
   
   let showIconSettings = false;
   let customColor = '#ffffff';
@@ -188,6 +239,7 @@
 
   function updateVisibleContent(e: Event) {
     const val = (e.currentTarget as HTMLTextAreaElement).value;
+    scheduleSnapshot();
     let nextContent = val;
 
     if ($hideTagsLine && tags.length > 0 && currentTagsLine) {
@@ -276,6 +328,7 @@
   }
 
   function onContentChange() {
+    triggerAutosave();
     if (!note || content.length < 20) return;
     clearTimeout(aiTimeout);
     aiTimeout = setTimeout(() => {
@@ -292,7 +345,71 @@
     aiSuggestions.update(s => s.filter(x => x.tag !== tag));
   }
 
-  onDestroy(() => clearTimeout(aiTimeout));
+  function saveDraft() {
+    if (!draftKey || !title.trim()) return;
+    try {
+      localStorage.setItem(draftKey, JSON.stringify({ title: title.trim(), content, tags, savedAt: Date.now() }));
+    } catch { }
+  }
+
+  function clearDraft() {
+    if (draftKey) {
+      try { localStorage.removeItem(draftKey); } catch { }
+    }
+  }
+
+  function triggerAutosave() {
+    hasUnsavedChanges = true;
+    clearTimeout(autosaveTimer);
+    autosaveTimer = setTimeout(() => {
+      if (title.trim()) {
+        saveDraft();
+        handleSave();
+      }
+      hasUnsavedChanges = false;
+    }, AUTOSAVE_DELAY);
+  }
+
+  onMount(() => {
+    if (draftKey) {
+      try {
+        const raw = localStorage.getItem(draftKey);
+        if (raw) {
+          const draft = JSON.parse(raw);
+          if (draft && draft.content && draft.content !== content) {
+            recoveredDraft = draft;
+            showRecoveryPrompt = true;
+          }
+        }
+      } catch { }
+    }
+  });
+
+  function applyDraft() {
+    if (recoveredDraft) {
+      title = recoveredDraft.title;
+      content = recoveredDraft.content;
+      tags = recoveredDraft.tags;
+      showRecoveryPrompt = false;
+      recoveredDraft = null;
+      triggerAutosave();
+    }
+  }
+
+  function dismissDraft() {
+    showRecoveryPrompt = false;
+    recoveredDraft = null;
+    if (draftKey) clearDraft();
+  }
+
+  onDestroy(() => {
+    clearTimeout(aiTimeout);
+    clearTimeout(autosaveTimer);
+    clearTimeout(saveTimeout);
+    if (draftKey && title.trim()) {
+      saveDraft();
+    }
+  });
 
   async function handleSave() {
     if (!title.trim()) return;
@@ -300,6 +417,8 @@
     dispatch('save', { title: title.trim(), content, tags });
     saving = false;
     saved = true;
+    clearDraft();
+    hasUnsavedChanges = false;
     setTimeout(() => (saved = false), 2000);
   }
 
@@ -336,6 +455,19 @@
       e.preventDefault();
       previewMode = !previewMode;
     }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+      if (e.shiftKey) {
+        e.preventDefault();
+        handleRedo();
+      } else {
+        e.preventDefault();
+        handleUndo();
+      }
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+      e.preventDefault();
+      handleRedo();
+    }
     if (e.key === 'Escape' && zenMode) {
       e.preventDefault();
       e.stopPropagation();
@@ -364,6 +496,59 @@
     if (lineGutterEl && textareaEl) {
       lineGutterEl.scrollTop = textareaEl.scrollTop;
     }
+  }
+
+  interface FormatSpec { prefix: string; suffix: string; block?: string; multiline?: boolean }
+  const FORMATTERS: Record<string, FormatSpec> = {
+    bold:       { prefix: '**', suffix: '**' },
+    italic:     { prefix: '_', suffix: '_' },
+    strikethrough: { prefix: '~~', suffix: '~~' },
+    h1:         { prefix: '# ', suffix: '', block: '# ' },
+    h2:         { prefix: '## ', suffix: '', block: '## ' },
+    h3:         { prefix: '### ', suffix: '', block: '### ' },
+    ul:         { prefix: '- ', suffix: '', block: '- ', multiline: true },
+    ol:         { prefix: '1. ', suffix: '', block: '1. ', multiline: true },
+    link:       { prefix: '[', suffix: '](url)' },
+    quote:      { prefix: '> ', suffix: '', block: '> ', multiline: true },
+    code:       { prefix: '```\n', suffix: '\n```', block: '```\n' },
+  };
+
+  function formatMarkdown(type: string) {
+    if (!textareaEl) return;
+    const { selectionStart, selectionEnd } = textareaEl;
+    const selected = content.substring(selectionStart, selectionEnd);
+    const fmt = FORMATTERS[type];
+    if (!fmt) return;
+
+    let insertion: string;
+    let cursorOffset = 0;
+
+    if (fmt.multiline && selected) {
+      const lines = selected.split('\n').map(l => fmt.block + l).join('\n');
+      insertion = lines;
+    } else if (fmt.block && !selected) {
+      insertion = fmt.block;
+    } else if (selected) {
+      insertion = fmt.prefix + selected + fmt.suffix;
+      cursorOffset = 0;
+    } else {
+      insertion = fmt.prefix + fmt.suffix;
+      cursorOffset = fmt.prefix.length;
+    }
+
+    const before = content.substring(0, selectionStart);
+    const after = content.substring(selectionEnd);
+    content = before + insertion + after;
+
+    tick().then(() => {
+      const pos = selectionStart + (fmt.block && !selected ? fmt.block.length : insertion.length - (fmt.suffix ? insertion.length - fmt.prefix.length : 0));
+      textareaEl.focus();
+      if (!selected && fmt.suffix) {
+        textareaEl.setSelectionRange(selectionStart + fmt.prefix.length, selectionStart + fmt.prefix.length);
+      } else {
+        textareaEl.setSelectionRange(pos, pos);
+      }
+    });
   }
 
   function highlightMarkdown(text: string): string {
@@ -432,6 +617,15 @@
 <svelte:window on:keydown={onKeydown} />
 
 <div class="editor-shell" class:zen-mode={zenMode}>
+  {#if showRecoveryPrompt}
+    <div class="recovery-banner">
+      <RotateCcw size={12} />
+      <span>¿Recuperar borrador no guardado?</span>
+      <button class="recovery-btn" onclick={applyDraft}>Recuperar</button>
+      <button class="recovery-btn secondary" onclick={dismissDraft}>Descartar</button>
+    </div>
+  {/if}
+
   <!-- Toolbar -->
   {#if !zenMode}
   <div class="toolbar">
@@ -446,6 +640,53 @@
         </button>
       </div>
       {/if}
+
+      <div class="format-divider"></div>
+
+      <div class="format-toolbar">
+        <button class="toolbar-btn icon-only" on:click={() => formatMarkdown('bold')} title="Negrita (Ctrl+B)">
+          <Bold size={13} />
+        </button>
+        <button class="toolbar-btn icon-only" on:click={() => formatMarkdown('italic')} title="Cursiva (Ctrl+I)">
+          <Italic size={13} />
+        </button>
+        <button class="toolbar-btn icon-only" on:click={() => formatMarkdown('strikethrough')} title="Tachado">
+          <Strikethrough size={13} />
+        </button>
+
+        <div class="format-divider"></div>
+
+        <button class="toolbar-btn icon-only" on:click={() => formatMarkdown('h1')} title="Título 1">
+          <Heading1 size={13} />
+        </button>
+        <button class="toolbar-btn icon-only" on:click={() => formatMarkdown('h2')} title="Título 2">
+          <Heading2 size={13} />
+        </button>
+        <button class="toolbar-btn icon-only" on:click={() => formatMarkdown('h3')} title="Título 3">
+          <Heading3 size={13} />
+        </button>
+
+        <div class="format-divider"></div>
+
+        <button class="toolbar-btn icon-only" on:click={() => formatMarkdown('ul')} title="Lista desordenada">
+          <List size={13} />
+        </button>
+        <button class="toolbar-btn icon-only" on:click={() => formatMarkdown('ol')} title="Lista ordenada">
+          <ListOrdered size={13} />
+        </button>
+
+        <div class="format-divider"></div>
+
+        <button class="toolbar-btn icon-only" on:click={() => formatMarkdown('link')} title="Enlace">
+          <Link size={13} />
+        </button>
+        <button class="toolbar-btn icon-only" on:click={() => formatMarkdown('quote')} title="Cita">
+          <Quote size={13} />
+        </button>
+        <button class="toolbar-btn icon-only" on:click={() => formatMarkdown('code')} title="Bloque de código">
+          <Code size={13} />
+        </button>
+      </div>
     </div>
 
     <div class="toolbar-right">
@@ -481,6 +722,10 @@
         <Save size={14} />
         <span class="save-status">{saved ? 'Guardado' : saving ? '...' : note ? 'Guardar' : 'Crear'}</span>
       </button>
+
+      {#if hasUnsavedChanges && !saved}
+        <span class="unsaved-indicator" title="Cambios sin guardar">·</span>
+      {/if}
 
       {#if note}
         <div style="position: relative; display: inline-block;">
@@ -546,6 +791,7 @@
       bind:value={title}
       placeholder="Título de la nota..."
       on:keydown={(e) => e.key === 'Enter' && handleSave()}
+      oninput={triggerAutosave}
     />
   </div>
 
@@ -779,6 +1025,20 @@
     display: flex;
     align-items: center;
     gap: var(--s2);
+  }
+
+  .format-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .format-divider {
+    width: 1px;
+    height: 18px;
+    background: var(--border);
+    margin: 0 4px;
+    flex-shrink: 0;
   }
 
   .note-source {
@@ -1156,5 +1416,57 @@
     color: var(--xp);
     width: 14px;
     text-align: center;
+  }
+
+  /* ── Recovery Banner ── */
+  .recovery-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    background: color-mix(in srgb, #fbbf24 12%, var(--surface));
+    border-bottom: 1px solid color-mix(in srgb, #fbbf24 30%, var(--border));
+    font-size: 12px;
+    color: var(--text-primary);
+  }
+
+  .recovery-btn {
+    padding: 3px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm, 4px);
+    background: var(--elevated);
+    color: var(--text-primary);
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.1s;
+  }
+
+  .recovery-btn:hover {
+    background: var(--bg-card);
+    border-color: var(--text-muted);
+  }
+
+  .recovery-btn.secondary {
+    background: transparent;
+    color: var(--text-muted);
+  }
+
+  .recovery-btn.secondary:hover {
+    color: var(--error);
+    border-color: var(--error);
+  }
+
+  /* ── Unsaved Indicator ── */
+  .unsaved-indicator {
+    color: #fbbf24;
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1;
+    animation: pulse-dot 1.5s ease-in-out infinite;
+  }
+
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
   }
 </style>

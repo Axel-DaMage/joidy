@@ -182,6 +182,14 @@ export interface PersonalStreak {
   created_at: string;
 }
 
+export interface EmbeddingFailure {
+  note_id: number;
+  attempts: number;
+  last_error: string;
+  updated_at: string | null;
+  note_title?: string | null;
+}
+
 export interface StreakStats {
   total_active: number;
   total_archived: number;
@@ -207,9 +215,12 @@ export const api = {
     get:    (id: number)   => req<Note>('GET', `/notes/${id}`),
     create: (data: { title: string; content: string; tags: string[]; source_path?: string | null; source?: string }) =>
       req<Note & { gamification: GamificationResult }>('POST', '/notes/', data),
-    update: (id: number, data: Partial<{ title: string; content: string; tags: string[] }>) =>
+    update: (id: number, data: Partial<{ title: string; content: string; tags: string[]; source_path: string | null }>) =>
       req<Note & { gamification: GamificationResult }>('PUT', `/notes/${id}`, data),
     delete: (id: number)   => req<void>('DELETE', `/notes/${id}`),
+    bulkDelete: (ids: number[]) => req<{ deleted: number; total: number }>('POST', '/notes/bulk-delete', { ids }),
+    bulkTag: (ids: number[], tags: string[]) => req<{ added: number; notes: number; tags: string[] }>('POST', '/notes/bulk-tag', { ids, tags }),
+    bulkUntag: (ids: number[], tags: string[]) => req<{ removed: number; notes: number; tags: string[] }>('POST', '/notes/bulk-untag', { ids, tags }),
     acceptTag: (noteId: number, tag: string) =>
       req<{ tag: string; gamification: GamificationResult }>('POST', `/notes/${noteId}/accept-tag?tag_name=${encodeURIComponent(tag)}`),
     backlinks: (id: number) => req<Note[]>('GET', `/notes/${id}/backlinks`),
@@ -354,6 +365,12 @@ github: {
     zipUrl: () => `${BASE}/export/notes/zip`
   },
   
+  embeddings: {
+    deadLetters: (limit = 50) => req<EmbeddingFailure[]>('GET', `/notes/embeddings/dead-letters?limit=${limit}`),
+    resetDeadLetter: (noteId: number) => req<{ status: string; note_id: number }>('POST', `/notes/embeddings/dead-letters/${noteId}/reset`),
+    purgeDeadLetters: () => req<{ purged: number }>('DELETE', '/notes/embeddings/dead-letters'),
+  },
+
   folders: {
     create: async (path: string) => {
       return req('POST', '/folders/', { path });

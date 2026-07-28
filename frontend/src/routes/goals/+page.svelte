@@ -10,6 +10,7 @@
   import { logger } from '$lib/utils/logger';
   import StreakIcon from '$lib/components/StreakIcon.svelte';
   import StreakHeatmap from '$lib/components/StreakHeatmap.svelte';
+  import GoalCard from '$lib/components/GoalCard.svelte';
   import IconPicker from '$lib/components/IconPicker.svelte';
 
   let goals = $state<Goal[]>([]);
@@ -611,49 +612,27 @@
     return { trend, percentChange, estimateNextMonth: Math.round(last7 * 4), last7Days: last7, prev7Days: prev7 };
   });
 
-  let candleData = $derived.by(() => {
-    const results: { date: string; open: number; close: number; high: number; low: number }[] = [];
-    const last30Days: string[] = [];
-    for (let i = 29; i >= 0; i--) {
+  let dailyActivity = $derived.by(() => {
+    const results: { date: string; label: string; completed: number; failed: number }[] = [];
+    for (let i = 13; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
       const m = String(d.getMonth() + 1).padStart(2, '0');
       const day = String(d.getDate()).padStart(2, '0');
-      last30Days.push(`${d.getFullYear()}-${m}-${day}`);
+      const dateStr = `${d.getFullYear()}-${m}-${day}`;
+      const comps = goals.filter(g => (g.state === 'COMPLETED' || g.is_completed) && g.completed_at?.startsWith(dateStr)).length;
+      const fails = goals.filter(g => g.state === 'FAILED' && g.updated_at?.startsWith(dateStr)).length;
+      results.push({
+        date: dateStr,
+        label: `${d.getDate()}/${d.getMonth() + 1}`,
+        completed: comps,
+        failed: fails,
+      });
     }
-
-    const windowStart = new Date(`${last30Days[0]}T00:00:00`);
-    const completedBefore = goals.filter(g =>
-      (g.state === 'COMPLETED' || g.is_completed) && g.completed_at && new Date(g.completed_at) < windowStart
-    ).length;
-    const failedBefore = goals.filter(g =>
-      g.state === 'FAILED' && g.updated_at && new Date(g.updated_at) < windowStart
-    ).length;
-
-    let currentScore = completedBefore - failedBefore;
-
-    last30Days.forEach((date: string) => {
-      const comps = goals.filter(g => (g.state === 'COMPLETED' || g.is_completed) && g.completed_at?.startsWith(date)).length;
-      const fails = goals.filter(g => g.state === 'FAILED' && g.updated_at?.startsWith(date)).length;
-
-      const open = currentScore;
-      const close = currentScore + comps - fails;
-      const high = Math.max(open, close);
-      const low = Math.min(open, close);
-
-      results.push({ date, open, close, high, low });
-      currentScore = close;
-    });
     return results;
   });
 
-  let candleScale = $derived.by(() => {
-    const allVals = candleData.flatMap(c => [c.high, c.low]);
-    if (allVals.length === 0) return { min: 0, max: 0, range: 0 };
-    const min = Math.min(...allVals);
-    const max = Math.max(...allVals);
-    return { min, max, range: max - min };
-  });
+  let maxDaily = $derived(Math.max(1, ...dailyActivity.flatMap(d => [d.completed, d.failed])));
 
   let activityTab = $state<'horas' | 'dias'>('horas');
   let activityDayOfWeek = $state(new Date().getDay());
@@ -802,13 +781,7 @@
     ];
   });
 
-  function getY(val: number): number {
-    if (!isFinite(val) || candleScale.range === 0) return 75;
-    const y = 150 - ((val - candleScale.min) / candleScale.range) * 150;
-    return isFinite(y) ? Math.max(0, Math.min(150, y)) : 75;
-  }
 
-  let candleHasData = $derived(candleData.some(c => c.close !== c.open || c.high !== c.low));
 
   async function saveEdit() {
     if (!editingGoal) return;
@@ -1056,7 +1029,7 @@
           </div>
         </div>
 
-        <div class="dash-card" style="aspect-ratio: 1; display: flex; flex-direction: column; padding: 0; overflow: hidden;">
+        <div class="dash-card" style="min-height: 280px; display: flex; flex-direction: column; padding: 0; overflow: hidden;">
           <div class="widget-header" style="display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid var(--border-light); background: var(--bg-card);">
             <button class="btn btn-ghost text-muted" style="padding: 4px;" onclick={() => activeWidgetIndex = (activeWidgetIndex - 1 + 5) % 5}><ChevronLeft size={14}/></button>
             <span class="widget-title" style="font-size: 12px; font-weight: 600; text-align: center; flex: 1;">{widgetTitles[activeWidgetIndex]}</span>
@@ -1422,80 +1395,53 @@
               <span class="pred-period-badge">30 días</span>
             </div>
             <div class="prediction-hero">
-              <div class="candle-chart-container">
-                {#if !candleHasData}
-                  <div class="candle-empty-state">
+              <div class="bar-chart-container">
+                {#if dailyActivity.every(d => d.completed === 0 && d.failed === 0)}
+                  <div class="bar-empty-state">
                     <TrendingUp size={24} style="opacity:0.2" />
                     <span>Sin datos suficientes aún</span>
-                    <small>Completa o falla objetivos para ver la tendencia</small>
+                    <small>Completa o falla objetivos para ver la actividad</small>
                   </div>
                 {:else}
-                  <svg viewBox="0 0 520 155" class="candle-svg" preserveAspectRatio="xMidYMid meet">
+                  <svg viewBox="0 0 420 130" class="bar-svg" preserveAspectRatio="xMidYMid meet">
                     <defs>
-                      <linearGradient id="trendAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stop-color="{prediction.trend === 'UP' ? 'var(--success)' : 'var(--error)'}" stop-opacity="0.18" />
-                        <stop offset="100%" stop-color="{prediction.trend === 'UP' ? 'var(--success)' : 'var(--error)'}" stop-opacity="0" />
+                      <linearGradient id="compGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="var(--success)" stop-opacity="0.7" />
+                        <stop offset="100%" stop-color="var(--success)" stop-opacity="0.2" />
+                      </linearGradient>
+                      <linearGradient id="failGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="var(--error)" stop-opacity="0.7" />
+                        <stop offset="100%" stop-color="var(--error)" stop-opacity="0.2" />
                       </linearGradient>
                     </defs>
 
-                    <!-- Horizontal grid lines -->
-                    {#each [0, 0.33, 0.66, 1] as p}
-                      <line x1="0" y1={p * 150} x2="475" y2={p * 150} stroke="rgba(255,255,255,0.04)" stroke-width="1" />
-                      <text x="480" y={p * 150 + 4} font-size="6" fill="var(--text-muted)" font-family="var(--font-mono)" text-anchor="start">
-                        {Math.round(candleScale.max - p * candleScale.range)}
-                      </text>
+                    {#each dailyActivity as day, i}
+                      {@const barW = 420 / dailyActivity.length}
+                      {@const barX = i * barW}
+                      {@const compH = (day.completed / maxDaily) * 100}
+                      {@const failH = (day.failed / maxDaily) * 100}
+                      {@const compY = 115 - compH}
+                      {@const failY = 115 - compH - failH}
+
+                      {#if day.failed > 0}
+                        <rect x={barX + 2} y={failY} width={barW * 0.35} height={failH} fill="url(#failGrad)" rx="2" />
+                      {/if}
+                      {#if day.completed > 0}
+                        <rect x={barX + barW * 0.5 + 1} y={compY} width={barW * 0.35} height={compH} fill="url(#compGrad)" rx="2" />
+                      {/if}
+
+                      {#if i % 2 === 0 || i === dailyActivity.length - 1}
+                        <text x={barX + barW / 2} y="124" font-size="6" fill="var(--text-muted)" text-anchor="middle" font-family="var(--font-mono)">{day.label}</text>
+                      {/if}
                     {/each}
 
-                    <!-- Gradient area fill under trend line -->
-                    <path
-                      d={[
-                        ...candleData.map((c, i) => `${i === 0 ? 'M' : 'L'} ${(i / 29) * 470} ${getY((c.open + c.close) / 2)}`),
-                        `L ${470} 150`,
-                        `L 0 150`,
-                        'Z'
-                      ].join(' ')}
-                      fill="url(#trendAreaGrad)"
-                    />
-
-                    <!-- Smooth trend line -->
-                    <path
-                      d={candleData.map((c, i) => `${i === 0 ? 'M' : 'L'} ${(i / 29) * 470} ${getY((c.open + c.close) / 2)}`).join(' ')}
-                      fill="none"
-                      stroke="{prediction.trend === 'UP' ? 'var(--success)' : 'var(--error)'}"
-                      stroke-width="1.5"
-                      opacity="0.6"
-                    />
-
-                    <!-- Candle bodies -->
-                    {#each candleData as candle, i}
-                      {@const x = (i / 29) * 470}
-                      {@const yOpen = getY(candle.open)}
-                      {@const yClose = getY(candle.close)}
-                      {@const yHigh = getY(candle.high)}
-                      {@const yLow = getY(candle.low)}
-                      {@const isUp = candle.close >= candle.open}
-                      {@const color = isUp ? 'var(--success)' : 'var(--error)'}
-                      <!-- Wick -->
-                      <line x1={x + 3.5} y1={yHigh} x2={x + 3.5} y2={yLow} stroke={color} stroke-width="0.8" opacity="0.35" />
-                      <!-- Body -->
-                      <rect
-                        x={x}
-                        y={Math.min(yOpen, yClose)}
-                        width="6"
-                        height={Math.max(1.5, Math.abs(yOpen - yClose))}
-                        fill={color}
-                        opacity="0.75"
-                        rx="0.5"
-                      />
-                    {/each}
-
-                    <!-- Last day marker -->
-                    {#if candleData.length > 0}
-                      {@const lastX = 470}
-                      {@const lastY = getY((candleData[candleData.length - 1].open + candleData[candleData.length - 1].close) / 2)}
-                      <circle cx={lastX} cy={lastY} r="3" fill="{prediction.trend === 'UP' ? 'var(--success)' : 'var(--error)'}" opacity="0.9" />
-                    {/if}
+                    <line x1="0" y1="115" x2="420" y2="115" stroke="var(--border)" stroke-width="0.5" opacity="0.3" />
                   </svg>
+
+                  <div class="bar-legend">
+                    <span class="legend-item"><span class="legend-dot" style="background:var(--success)"></span> Completados</span>
+                    <span class="legend-item"><span class="legend-dot" style="background:var(--error)"></span> Fallados</span>
+                  </div>
                 {/if}
               </div>
 
@@ -1998,94 +1944,18 @@
         {:else}
           <div class="editor-grid">
             {#each filteredGoals(goals, goalSearchQuery, goalFilterState, pinnedGoals) as goal (goal.id)}
-              <div
-                class="goal-editor-card"
-                class:completed={goal.state === 'COMPLETED' || goal.is_completed}
-                class:failed={goal.state === 'FAILED'}
-                class:paused={goal.state === 'PAUSED'}
-                style="--goal-color: {getGoalColor(goal)}"
-                role="button"
-                tabindex="0"
-                onclick={() => openGoalEditor(goal)}
-                onkeydown={(e) => e.key === 'Enter' && openGoalEditor(goal)}
-              >
-                <div class="card-header">
-                  <div class="card-header-left">
-                    <div class="goal-icon">
-                      {#if goal.fail_emoji}
-                        <StreakIcon name={goal.fail_emoji} size={24} color={getGoalColor(goal)} />
-                      {:else}
-                        <Target size={20} color={getGoalColor(goal)} />
-                      {/if}
-                    </div>
-                    <button 
-                      class="pin-btn" 
-                      class:pinned={pinnedGoals.has(goal.id)}
-                      onclick={(e) => { e.stopPropagation(); togglePinned(goal.id); }}
-                      title={pinnedGoals.has(goal.id) ? 'Desfijar' : 'Fijar'}
-                    >
-                      {#if pinnedGoals.has(goal.id)}
-                        <Pin size={14} fill="currentColor" />
-                      {:else}
-                        <PinOff size={14} />
-                      {/if}
-                    </button>
-                  </div>
-                  <div class="goal-state-indicator" class:active={goal.state === 'ACTIVE'} class:completed={goal.state === 'COMPLETED' || goal.is_completed} class:paused={goal.state === 'PAUSED'} class:failed={goal.state === 'FAILED'}>
-                    {STATE_LABELS[goal.state] || goal.state}
-                  </div>
-                </div>
-                <div class="card-title">{goal.title}</div>
-                {#if goal.description}
-                  <div class="card-description">{goal.description.substring(0, 80)}{goal.description.length > 80 ? '...' : ''}</div>
-                {/if}
-                <div class="card-meta">
-                  <div class="meta-item">
-                    <Clock size={12} />
-                    <span>{TEMPORALITY_LABELS[goal.temporality] || goal.temporality}</span>
-                  </div>
-                  {#if goal.tag_id}
-                    <div class="meta-item">
-                      <Tag size={12} />
-                      <span>{tags.find(t => t.id === goal.tag_id)?.name || 'Etiqueta'}</span>
-                    </div>
-                  {:else if goal.note_id}
-                    <div class="meta-item">
-                      <FileText size={12} />
-                      <span>{notes.find(n => n.id === goal.note_id)?.title?.substring(0, 12) || 'Nota'}</span>
-                    </div>
-                  {/if}
-                  {#if goal.fail_config !== 'STATIC'}
-                    <div class="meta-item config">
-                      <Settings size={12} />
-                      <span>{formatFailConfig(goal.fail_config)}</span>
-                    </div>
-                  {/if}
-                </div>
-                <div class="card-progress">
-                  <div class="progress-info">
-                    <span class="progress-text">
-                      {#if goal.measurement_type === 'BOOLEAN'}
-                        {goal.current_value >= 1 ? 'Completado' : 'Pendiente'}
-                      {:else if goal.measurement_type === 'PERCENT'}
-                        {goal.current_value}%
-                      {:else}
-                        {goal.current_value} / {goal.target_value}
-                      {/if}
-                    </span>
-                    <span class="progress-pct">{(goal.state === 'COMPLETED' || goal.is_completed) ? 100 : goal.progress_pct}%</span>
-                  </div>
-                  <div class="progress-bar">
-                    <div class="progress-fill" style="width: {(goal.state === 'COMPLETED' || goal.is_completed) ? 100 : goal.progress_pct}%"></div>
-                  </div>
-                </div>
-                <div class="card-footer">
-                  <span class="goal-id">#{goal.id}</span>
-                  {#if goal.created_at}
-                    <span class="goal-date">Creado: {goal.created_at.split('T')[0]}</span>
-                  {/if}
-                </div>
-              </div>
+              <GoalCard
+                {goal}
+                pinned={pinnedGoals.has(goal.id)}
+                {tags}
+                {notes}
+                {getGoalColor}
+                {TEMPORALITY_LABELS}
+                {STATE_LABELS}
+                {formatFailConfig}
+                onTogglePin={(id) => togglePinned(id)}
+                onClick={(g) => openGoalEditor(g)}
+              />
             {/each}
           </div>
         {/if}
@@ -3967,218 +3837,6 @@
     grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
     gap: 20px;
     width: 100%;
-  }
-
-  .goal-editor-card {
-    background: var(--surface);
-    border: 2px solid var(--goal-color);
-    border-radius: 12px;
-    padding: 20px;
-    cursor: pointer;
-    transition: all 0.25s ease;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    text-align: left;
-    position: relative;
-    overflow: hidden;
-  }
-
-  .goal-editor-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-  }
-
-  .goal-editor-card.completed {
-    opacity: 0.7;
-    border-color: var(--success);
-  }
-
-  .goal-editor-card.failed {
-    border-color: var(--error);
-    background: rgba(239, 68, 68, 0.03);
-  }
-
-  .goal-editor-card.paused {
-    border-style: dashed;
-    opacity: 0.6;
-  }
-
-  .card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-  }
-
-  .card-header-left {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .pin-btn {
-    width: 28px;
-    height: 28px;
-    border-radius: 6px;
-    background: var(--surface-hover);
-    border: 1px solid var(--border);
-    color: var(--text-muted);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: all 0.2s ease;
-  }
-
-  .pin-btn:hover {
-    background: var(--surface-active);
-    color: var(--accent);
-  }
-
-  .pin-btn.pinned {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: var(--bg);
-  }
-
-  .goal-icon {
-    width: 44px;
-    height: 44px;
-    border-radius: 10px;
-    background: color-mix(in srgb, var(--goal-color) 15%, transparent);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .goal-state-indicator {
-    font-size: 10px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    padding: 4px 8px;
-    border-radius: 4px;
-    background: var(--surface-hover);
-    color: var(--text-muted);
-  }
-
-  .goal-state-indicator.active {
-    background: rgba(251, 191, 36, 0.15);
-    color: #fbbf24;
-  }
-
-  .goal-state-indicator.completed {
-    background: rgba(16, 185, 129, 0.15);
-    color: var(--success);
-  }
-
-  .goal-state-indicator.paused {
-    background: rgba(245, 158, 11, 0.15);
-    color: var(--warning);
-  }
-
-  .goal-state-indicator.failed {
-    background: rgba(239, 68, 68, 0.15);
-    color: var(--error);
-  }
-
-  .card-title {
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--text-primary);
-    line-height: 1.4;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-
-  .card-description {
-    font-size: 12px;
-    color: var(--text-muted);
-    line-height: 1.5;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-
-  .card-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 4px;
-  }
-
-  .meta-item {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 11px;
-    color: var(--text-muted);
-    padding: 4px 8px;
-    background: var(--surface-hover);
-    border-radius: 4px;
-  }
-
-  .meta-item.config {
-    background: rgba(59, 130, 246, 0.1);
-    color: #3b82f6;
-  }
-
-  .card-progress {
-    margin-top: 8px;
-    padding-top: 12px;
-    border-top: 1px solid var(--border-light);
-  }
-
-  .progress-info {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 8px;
-  }
-
-  .progress-text {
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--text-primary);
-    font-family: var(--font-mono);
-  }
-
-  .progress-pct {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--goal-color);
-    font-family: var(--font-mono);
-  }
-
-  .progress-bar {
-    height: 6px;
-    background: var(--border);
-    border-radius: 3px;
-    overflow: hidden;
-  }
-
-  .card-progress .progress-fill {
-    height: 100%;
-    background: var(--goal-color);
-    border-radius: 3px;
-    transition: width 0.3s ease;
-  }
-
-  .card-footer {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 10px;
-    color: var(--text-disabled);
-    margin-top: 4px;
-  }
-
-  .goal-id {
-    font-family: var(--font-mono);
-    font-weight: 600;
   }
 
   .goal-date {

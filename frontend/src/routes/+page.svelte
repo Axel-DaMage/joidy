@@ -18,8 +18,9 @@
   import Widget         from '$lib/components/Widget.svelte';
   import GithubWidget from '$lib/components/GithubWidget.svelte';
   import { totalXP, currentStreak, lastActivity, nextStageXP } from '$lib/stores/gamification';
+  import ActivityProgress from '$lib/components/ActivityProgress.svelte';
   import { notes, loadNotes, notesLoadedOnce } from '$lib/stores/notes';
-  import { dashboardLayout } from '$lib/stores/layout';
+  import { dashboardLayout, type WidgetId } from '$lib/stores/layout';
   import { accentColors } from '$lib/stores/settings';
   import { api } from '$lib/api';
   import { loadUserSettings, patchUserSettings } from '$lib/utils/userSettings';
@@ -283,8 +284,17 @@
   <!-- ── Left panel ─────────────────────────────────────────────────────────── -->
   <section class="plant-section">
 
+  function handleWidgetDrop(e: CustomEvent<{ id: WidgetId; fromPanel: 'left' | 'right'; fromIdx: number; toPanel: 'left' | 'right'; toIdx: number }>) {
+    const { id, fromPanel, toPanel, toIdx } = e.detail;
+    if (fromPanel === toPanel) {
+      dashboardLayout.move(fromPanel, e.detail.fromIdx, toIdx);
+    } else {
+      dashboardLayout.switchPanel(id, fromPanel);
+    }
+  }
+
     {#each $dashboardLayout.left as wid, i (wid)}
-      <Widget id={wid} panel="left" index={i} total={$dashboardLayout.left.length}>
+      <Widget id={wid} panel="left" index={i} total={$dashboardLayout.left.length} layout={$dashboardLayout} on:drop={handleWidgetDrop}>
 
         {#if wid === 'plant-carousel'}
           <div class="widget-centered">
@@ -330,7 +340,6 @@
 
         {:else if wid === 'stats-xp'}
           <div class="widget-centered">
-            <!-- XPBar moved to footer -->
             <div class="stats-row">
               <div class="stat">
                 <span class="stat-value mono">{$currentStreak}</span>
@@ -353,6 +362,9 @@
               </div>
             </div>
           </div>
+
+        {:else if wid === 'activity-progress'}
+          <ActivityProgress />
 
         {:else if wid === 'time-widget'}
           <TimeWidget />
@@ -408,7 +420,7 @@
   <section class="activity-section">
 
     {#each $dashboardLayout.right as wid, i (wid)}
-      <Widget id={wid} panel="right" index={i} total={$dashboardLayout.right.length}>
+      <Widget id={wid} panel="right" index={i} total={$dashboardLayout.right.length} layout={$dashboardLayout} on:drop={handleWidgetDrop}>
 
         {#if wid === 'recent-notes'}
           <div class="section-header">
@@ -480,6 +492,9 @@
 
         {:else if wid === 'pomodoro'}
           <PomodoroWidget />
+
+        {:else if wid === 'activity-progress'}
+          <ActivityProgress />
         {/if}
 
       </Widget>

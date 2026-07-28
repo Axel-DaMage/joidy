@@ -11,11 +11,13 @@ to avoid reading files while Obsidian is still writing them.
 import asyncio
 import logging
 import re
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
 import httpx
 from config import settings
+from logging_config import get_correlation_id, set_correlation_id
 from watchfiles import Change, awatch
 
 logger = logging.getLogger(__name__)
@@ -35,7 +37,7 @@ async def get_auth_token(client: httpx.AsyncClient) -> str:
     if not settings.auth_password:
         return ""
     try:
-        r = await client.post(f"{settings.api_url}/auth/login", params={"password": settings.auth_password})
+        r = await client.post(f"{settings.api_url}/auth/login", params={"password": settings.auth_password}, headers={"X-Request-ID": get_correlation_id()})
         if r.status_code == 200:
             return r.json().get("access_token", "")
     except Exception as e:
@@ -81,12 +83,16 @@ async def delete_note_by_path(path: str, client: httpx.AsyncClient, token: str):
     """Find and delete a note by its source_path with retries."""
     for attempt in range(3):
         try:
-            r = await client.get(f"{settings.api_url}/notes/", params={"source_path": path}, headers={"Authorization": f"Bearer {token}"} if token else None)
+            cid = get_correlation_id()
+            headers = {"X-Request-ID": cid}
+            if token:
+                headers["Authorization"] = f"Bearer {token}"
+            r = await client.get(f"{settings.api_url}/notes/", params={"source_path": path}, headers=headers)
             if r.status_code == 200:
                 notes = r.json()
                 for n in notes:
                     if n.get("source_path") == path:
-                        await client.delete(f"{settings.api_url}/notes/{n['id']}", headers={"Authorization": f"Bearer {token}"} if token else None)
+                        await client.delete(f"{settings.api_url}/notes/{n['id']}", headers=headers)
                         logger.info("[vault] Deleted: %s", Path(path).name)
                         return
             break # Success or not found
@@ -109,10 +115,14 @@ async def import_or_update_note(filepath: Path, client: httpx.AsyncClient, token
         existing = None
         for attempt in range(3):
             try:
+                cid = get_correlation_id()
+                headers = {"X-Request-ID": cid}
+                if token:
+                    headers["Authorization"] = f"Bearer {token}"
                 r = await client.get(
                     f"{settings.api_url}/notes/",
                     params={"source_path": str(filepath)},
-                    headers={"Authorization": f"Bearer {token}"} if token else None,
+                    headers=headers,
                     timeout=10.0,
                 )
                 if r.status_code == 200:
@@ -127,8 +137,12 @@ async def import_or_update_note(filepath: Path, client: httpx.AsyncClient, token
                 await asyncio.sleep(1)
 
         payload = {"title": title, "content": content, "tags": tags, "source": "obsidian", "source_path": str(filepath)}
-        headers = {"X-Bulk-Import": "1"} if bulk_import else {}
-        if token: headers["Authorization"] = f"Bearer {token}"
+        cid = get_correlation_id()
+        headers = {"X-Request-ID": cid}
+        if bulk_import:
+            headers["X-Bulk-Import"] = "1"
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
 
         if existing:
             res = await client.put(
@@ -158,7 +172,10 @@ async def initial_scan(vault_path: Path, client: httpx.AsyncClient, token: str):
             await import_or_update_note(filepath, client, token, bulk_import=True)
 
     await asyncio.gather(*(process_file(filepath) for filepath in md_files), return_exceptions=True)
-    await client.post(f"{settings.api_url}/notes/rebuild-derived", headers={"Authorization": f"Bearer {token}"} if token else None, timeout=30.0)
+    headers = {"X-Request-ID": get_correlation_id()}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    await client.post(f"{settings.api_url}/notes/rebuild-derived", headers=headers, timeout=30.0)
 
 
 async def _consume_vault_events(
@@ -210,6 +227,7 @@ async def _consume_vault_events(
 
 
 async def watch_vault():
+    set_correlation_id(f"worker-{uuid.uuid4().hex[:12]}")
     vault_path = Path(settings.vault_path)
     if not vault_path.exists():
         logger.warning("[vault] Vault path %s does not exist - skipping file watch", vault_path)

@@ -2,6 +2,7 @@
 from datetime import date, timedelta
 
 from models.personal_streaks import PersonalStreak, StreakCheckIn
+from repositories import PersonalStreakRepository, StreakCheckInRepository
 from sqlalchemy.orm import Session
 
 
@@ -33,7 +34,7 @@ def backfill_streak_history(db: Session, streak: PersonalStreak) -> None:
                     check_date=current,
                     note="Auto-generado (Migración)"
                 )
-                db.add(ci)
+                StreakCheckInRepository(db).add(ci)
                 added_count += 1
 
         current += timedelta(days=1)
