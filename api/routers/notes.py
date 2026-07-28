@@ -277,7 +277,13 @@ def retry_failed_embeddings(
 @router.get("/embeddings/dead-letters")
 def list_dead_letters(limit: int = 50, db: Session = Depends(get_db)):
     """List embedding failures that exceeded max retry attempts."""
-    return get_dead_letter_entries(db, limit=limit)
+    from models.note import Note
+    entries = get_dead_letter_entries(db, limit=limit)
+    note_ids = [e["note_id"] for e in entries]
+    notes = {n.id: n.title for n in db.query(Note.id, Note.title).filter(Note.id.in_(note_ids)).all()} if note_ids else {}
+    for e in entries:
+        e["note_title"] = notes.get(e["note_id"])
+    return entries
 
 
 @router.post("/embeddings/dead-letters/{note_id}/reset")
