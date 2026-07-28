@@ -215,7 +215,7 @@ export const api = {
     get:    (id: number)   => req<Note>('GET', `/notes/${id}`),
     create: (data: { title: string; content: string; tags: string[]; source_path?: string | null; source?: string }) =>
       req<Note & { gamification: GamificationResult }>('POST', '/notes/', data),
-    update: (id: number, data: Partial<{ title: string; content: string; tags: string[] }>) =>
+    update: (id: number, data: Partial<{ title: string; content: string; tags: string[]; source_path: string | null }>) =>
       req<Note & { gamification: GamificationResult }>('PUT', `/notes/${id}`, data),
     delete: (id: number)   => req<void>('DELETE', `/notes/${id}`),
     acceptTag: (noteId: number, tag: string) =>
