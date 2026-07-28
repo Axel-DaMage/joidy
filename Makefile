@@ -123,10 +123,13 @@ db-health: ## Verify migration head and required core tables
 test-api: ## Run all API unit tests via pytest
 	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm api sh -c "PYTHONPATH=/app pytest --cov=api --cov-report=term-missing"
 
-test-frontend: ## Run frontend typechecking (svelte-check) inside Docker
+test-frontend: ## Run frontend tests (vitest) inside Docker
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm frontend npm run test
+
+test-frontend-check: ## Run frontend typechecking (svelte-check) inside Docker
 	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm frontend npm run check
 
-test: test-api test-frontend ## Run all test suites (API + Frontend)
+test: test-api test-frontend test-frontend-check ## Run all test suites (API + Frontend + typecheck)
 
 lint-api: ## Check syntax of all Python services using ruff
 	ruff check .
