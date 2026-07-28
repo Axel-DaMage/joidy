@@ -114,7 +114,7 @@ Two concurrent asyncio tasks: `watch_vault()` (watches `/vault/*.md`, 2s debounc
 
 ## Known Issues (from TODO.md / code audit)
 1. CORS allows `*` in non-production — needs config
-2. Auth JWT implemented but not enforced on any endpoint
+2. Auth JWT is now enforced on all data/mutation endpoints (except `/auth/*`, `/config`, and `/ws`)
 3. Embedding retry has edge cases (`EmbeddingFailure` table)
 4. Skill tree can have cycles if circular parent created manually
 5. Response cache is a placeholder
