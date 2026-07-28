@@ -11,6 +11,7 @@ from models.github import (
     GitHubItemType,
     GitHubRepo,
 )
+from repositories import GitHubEventRepository, GitHubItemRepository, GitHubRepoRepository, GoalRepository
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -169,9 +170,8 @@ def create_repo_in_db(db: Session, full_name: str, description: str | None = Non
         raise ValueError(f"Invalid repo full_name: {full_name}")
     owner, name = parts
     repo_data = {"name": name, "full_name": full_name, "description": description}
-    return db.execute(
-        select(GitHubRepo).where(GitHubRepo.full_name == full_name)
-    ).scalar_one_or_none() or GitHubRepo(**repo_data)
+    repo = GitHubRepoRepository(db).find_by_full_name(full_name)
+    return repo or GitHubRepo(**repo_data)
 
 
 def sync_repos_to_db(db: Session) -> list[GitHubRepo]:
@@ -183,7 +183,7 @@ def sync_issues_to_db(db: Session, repo_id: int, repo_full_name: str) -> list[Gi
 
 
 def link_goal_to_issue(db: Session, goal_id: int, item_id: int) -> GitHubItem | None:
-    item = db.get(GitHubItem, item_id)
+    item = GitHubItemRepository(db).get(item_id)
     if item:
         item.goal_id = goal_id
         db.commit()
@@ -191,7 +191,7 @@ def link_goal_to_issue(db: Session, goal_id: int, item_id: int) -> GitHubItem | 
 
 
 def unlink_goal_from_issue(db: Session, item_id: int) -> GitHubItem | None:
-    item = db.get(GitHubItem, item_id)
+    item = GitHubItemRepository(db).get(item_id)
     if item:
         item.goal_id = None
         db.commit()

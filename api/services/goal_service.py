@@ -9,6 +9,7 @@ from models.goal import (
     GoalTemporality,
 )
 from models.note import Note, NoteTag
+from repositories import GoalRepository
 from sqlalchemy.orm import Session
 
 
@@ -85,7 +86,7 @@ def sync_goals_from_note(db: Session, note_id: int, content: str):
     parsed_goals = parse_goals_from_content(content)
 
     # Get existing goals linked to this note
-    existing_goals = db.query(Goal).filter(Goal.note_id == note_id).all()
+    existing_goals = GoalRepository(db).get_by_note(note_id)
     existing_by_title = {g.title: g for g in existing_goals}
 
     # Update or Create
@@ -112,7 +113,7 @@ def sync_goals_from_note(db: Session, note_id: int, content: str):
                 state=GoalState.ACTIVE,
                 note_id=note_id
             )
-            db.add(new_goal)
+            GoalRepository(db).add(new_goal)
 
     # Flag goals that were removed from the note content as pending_removal
     # instead of silently cancelling — the user decides via the Modal de Consistencia
@@ -130,14 +131,14 @@ def resolve_pending_removal(db: Session, goal_id: int, action: str) -> Goal | No
             'manual' — keep the goal but unlink it from the note (convert to manual tracking)
             'cancel' — cancel the goal (archive without penalty)
     """
-    goal = db.query(Goal).filter(Goal.id == goal_id).first()
+    goal = GoalRepository(db).get(goal_id)
     if not goal:
         return None
 
     goal.pending_removal = False
 
     if action == "delete":
-        db.delete(goal)
+        GoalRepository(db).delete(goal)
         db.flush()
         return None
     elif action == "cancel":
@@ -187,9 +188,7 @@ def get_bulk_goal_progress(goals: list[Goal], db: Session) -> dict[int, float]:
 
 def evaluate_active_goals(db: Session):
     now = datetime.utcnow()
-    active_goals = db.query(Goal).filter(
-        Goal.state == GoalState.ACTIVE  # Skip PAUSED — frozen goals don't expire
-    ).all()
+    active_goals = GoalRepository(db).get_active()
 
     for goal in active_goals:
         expired = False
@@ -244,7 +243,7 @@ def _process_goal_failure(db: Session, goal: Goal, now: datetime):
             tag_id=goal.tag_id,
             parent_id=goal.parent_id or goal.id,
         )
-        db.add(new_goal)
+        GoalRepository(db).add(new_goal)
     elif goal.fail_config == GoalFailConfig.SNOWBALL:
         shortfall = goal.target_value - progress
         new_target = goal.target_value + shortfall
@@ -264,7 +263,7 @@ def _process_goal_failure(db: Session, goal: Goal, now: datetime):
             tag_id=goal.tag_id,
             parent_id=goal.parent_id or goal.id,
         )
-        db.add(new_goal)
+        GoalRepository(db).add(new_goal)
 
     if new_goal:
         db.flush()
