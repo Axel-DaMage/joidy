@@ -611,49 +611,27 @@
     return { trend, percentChange, estimateNextMonth: Math.round(last7 * 4), last7Days: last7, prev7Days: prev7 };
   });
 
-  let candleData = $derived.by(() => {
-    const results: { date: string; open: number; close: number; high: number; low: number }[] = [];
-    const last30Days: string[] = [];
-    for (let i = 29; i >= 0; i--) {
+  let dailyActivity = $derived.by(() => {
+    const results: { date: string; label: string; completed: number; failed: number }[] = [];
+    for (let i = 13; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
       const m = String(d.getMonth() + 1).padStart(2, '0');
       const day = String(d.getDate()).padStart(2, '0');
-      last30Days.push(`${d.getFullYear()}-${m}-${day}`);
+      const dateStr = `${d.getFullYear()}-${m}-${day}`;
+      const comps = goals.filter(g => (g.state === 'COMPLETED' || g.is_completed) && g.completed_at?.startsWith(dateStr)).length;
+      const fails = goals.filter(g => g.state === 'FAILED' && g.updated_at?.startsWith(dateStr)).length;
+      results.push({
+        date: dateStr,
+        label: `${d.getDate()}/${d.getMonth() + 1}`,
+        completed: comps,
+        failed: fails,
+      });
     }
-
-    const windowStart = new Date(`${last30Days[0]}T00:00:00`);
-    const completedBefore = goals.filter(g =>
-      (g.state === 'COMPLETED' || g.is_completed) && g.completed_at && new Date(g.completed_at) < windowStart
-    ).length;
-    const failedBefore = goals.filter(g =>
-      g.state === 'FAILED' && g.updated_at && new Date(g.updated_at) < windowStart
-    ).length;
-
-    let currentScore = completedBefore - failedBefore;
-
-    last30Days.forEach((date: string) => {
-      const comps = goals.filter(g => (g.state === 'COMPLETED' || g.is_completed) && g.completed_at?.startsWith(date)).length;
-      const fails = goals.filter(g => g.state === 'FAILED' && g.updated_at?.startsWith(date)).length;
-
-      const open = currentScore;
-      const close = currentScore + comps - fails;
-      const high = Math.max(open, close);
-      const low = Math.min(open, close);
-
-      results.push({ date, open, close, high, low });
-      currentScore = close;
-    });
     return results;
   });
 
-  let candleScale = $derived.by(() => {
-    const allVals = candleData.flatMap(c => [c.high, c.low]);
-    if (allVals.length === 0) return { min: 0, max: 0, range: 0 };
-    const min = Math.min(...allVals);
-    const max = Math.max(...allVals);
-    return { min, max, range: max - min };
-  });
+  let maxDaily = $derived(Math.max(1, ...dailyActivity.flatMap(d => [d.completed, d.failed])));
 
   let activityTab = $state<'horas' | 'dias'>('horas');
   let activityDayOfWeek = $state(new Date().getDay());
@@ -802,13 +780,7 @@
     ];
   });
 
-  function getY(val: number): number {
-    if (!isFinite(val) || candleScale.range === 0) return 75;
-    const y = 150 - ((val - candleScale.min) / candleScale.range) * 150;
-    return isFinite(y) ? Math.max(0, Math.min(150, y)) : 75;
-  }
 
-  let candleHasData = $derived(candleData.some(c => c.close !== c.open || c.high !== c.low));
 
   async function saveEdit() {
     if (!editingGoal) return;
@@ -1056,7 +1028,7 @@
           </div>
         </div>
 
-        <div class="dash-card" style="aspect-ratio: 1; display: flex; flex-direction: column; padding: 0; overflow: hidden;">
+        <div class="dash-card" style="min-height: 280px; display: flex; flex-direction: column; padding: 0; overflow: hidden;">
           <div class="widget-header" style="display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid var(--border-light); background: var(--bg-card);">
             <button class="btn btn-ghost text-muted" style="padding: 4px;" onclick={() => activeWidgetIndex = (activeWidgetIndex - 1 + 5) % 5}><ChevronLeft size={14}/></button>
             <span class="widget-title" style="font-size: 12px; font-weight: 600; text-align: center; flex: 1;">{widgetTitles[activeWidgetIndex]}</span>
@@ -1422,80 +1394,53 @@
               <span class="pred-period-badge">30 días</span>
             </div>
             <div class="prediction-hero">
-              <div class="candle-chart-container">
-                {#if !candleHasData}
-                  <div class="candle-empty-state">
+              <div class="bar-chart-container">
+                {#if dailyActivity.every(d => d.completed === 0 && d.failed === 0)}
+                  <div class="bar-empty-state">
                     <TrendingUp size={24} style="opacity:0.2" />
                     <span>Sin datos suficientes aún</span>
-                    <small>Completa o falla objetivos para ver la tendencia</small>
+                    <small>Completa o falla objetivos para ver la actividad</small>
                   </div>
                 {:else}
-                  <svg viewBox="0 0 520 155" class="candle-svg" preserveAspectRatio="xMidYMid meet">
+                  <svg viewBox="0 0 420 130" class="bar-svg" preserveAspectRatio="xMidYMid meet">
                     <defs>
-                      <linearGradient id="trendAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stop-color="{prediction.trend === 'UP' ? 'var(--success)' : 'var(--error)'}" stop-opacity="0.18" />
-                        <stop offset="100%" stop-color="{prediction.trend === 'UP' ? 'var(--success)' : 'var(--error)'}" stop-opacity="0" />
+                      <linearGradient id="compGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="var(--success)" stop-opacity="0.7" />
+                        <stop offset="100%" stop-color="var(--success)" stop-opacity="0.2" />
+                      </linearGradient>
+                      <linearGradient id="failGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="var(--error)" stop-opacity="0.7" />
+                        <stop offset="100%" stop-color="var(--error)" stop-opacity="0.2" />
                       </linearGradient>
                     </defs>
 
-                    <!-- Horizontal grid lines -->
-                    {#each [0, 0.33, 0.66, 1] as p}
-                      <line x1="0" y1={p * 150} x2="475" y2={p * 150} stroke="rgba(255,255,255,0.04)" stroke-width="1" />
-                      <text x="480" y={p * 150 + 4} font-size="6" fill="var(--text-muted)" font-family="var(--font-mono)" text-anchor="start">
-                        {Math.round(candleScale.max - p * candleScale.range)}
-                      </text>
+                    {#each dailyActivity as day, i}
+                      {@const barW = 420 / dailyActivity.length}
+                      {@const barX = i * barW}
+                      {@const compH = (day.completed / maxDaily) * 100}
+                      {@const failH = (day.failed / maxDaily) * 100}
+                      {@const compY = 115 - compH}
+                      {@const failY = 115 - compH - failH}
+
+                      {#if day.failed > 0}
+                        <rect x={barX + 2} y={failY} width={barW * 0.35} height={failH} fill="url(#failGrad)" rx="2" />
+                      {/if}
+                      {#if day.completed > 0}
+                        <rect x={barX + barW * 0.5 + 1} y={compY} width={barW * 0.35} height={compH} fill="url(#compGrad)" rx="2" />
+                      {/if}
+
+                      {#if i % 2 === 0 || i === dailyActivity.length - 1}
+                        <text x={barX + barW / 2} y="124" font-size="6" fill="var(--text-muted)" text-anchor="middle" font-family="var(--font-mono)">{day.label}</text>
+                      {/if}
                     {/each}
 
-                    <!-- Gradient area fill under trend line -->
-                    <path
-                      d={[
-                        ...candleData.map((c, i) => `${i === 0 ? 'M' : 'L'} ${(i / 29) * 470} ${getY((c.open + c.close) / 2)}`),
-                        `L ${470} 150`,
-                        `L 0 150`,
-                        'Z'
-                      ].join(' ')}
-                      fill="url(#trendAreaGrad)"
-                    />
-
-                    <!-- Smooth trend line -->
-                    <path
-                      d={candleData.map((c, i) => `${i === 0 ? 'M' : 'L'} ${(i / 29) * 470} ${getY((c.open + c.close) / 2)}`).join(' ')}
-                      fill="none"
-                      stroke="{prediction.trend === 'UP' ? 'var(--success)' : 'var(--error)'}"
-                      stroke-width="1.5"
-                      opacity="0.6"
-                    />
-
-                    <!-- Candle bodies -->
-                    {#each candleData as candle, i}
-                      {@const x = (i / 29) * 470}
-                      {@const yOpen = getY(candle.open)}
-                      {@const yClose = getY(candle.close)}
-                      {@const yHigh = getY(candle.high)}
-                      {@const yLow = getY(candle.low)}
-                      {@const isUp = candle.close >= candle.open}
-                      {@const color = isUp ? 'var(--success)' : 'var(--error)'}
-                      <!-- Wick -->
-                      <line x1={x + 3.5} y1={yHigh} x2={x + 3.5} y2={yLow} stroke={color} stroke-width="0.8" opacity="0.35" />
-                      <!-- Body -->
-                      <rect
-                        x={x}
-                        y={Math.min(yOpen, yClose)}
-                        width="6"
-                        height={Math.max(1.5, Math.abs(yOpen - yClose))}
-                        fill={color}
-                        opacity="0.75"
-                        rx="0.5"
-                      />
-                    {/each}
-
-                    <!-- Last day marker -->
-                    {#if candleData.length > 0}
-                      {@const lastX = 470}
-                      {@const lastY = getY((candleData[candleData.length - 1].open + candleData[candleData.length - 1].close) / 2)}
-                      <circle cx={lastX} cy={lastY} r="3" fill="{prediction.trend === 'UP' ? 'var(--success)' : 'var(--error)'}" opacity="0.9" />
-                    {/if}
+                    <line x1="0" y1="115" x2="420" y2="115" stroke="var(--border)" stroke-width="0.5" opacity="0.3" />
                   </svg>
+
+                  <div class="bar-legend">
+                    <span class="legend-item"><span class="legend-dot" style="background:var(--success)"></span> Completados</span>
+                    <span class="legend-item"><span class="legend-dot" style="background:var(--error)"></span> Fallados</span>
+                  </div>
                 {/if}
               </div>
 
