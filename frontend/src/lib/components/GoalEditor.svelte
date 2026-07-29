@@ -202,7 +202,7 @@
 
   <div class="content-area">
     {#if previewMode}
-      <div class="preview" on:dblclick={() => previewMode = false}>
+      <div class="preview" on:dblclick={() => previewMode = false} role="button" tabindex="-1">
         {@html renderedHtml}
       </div>
     {:else}
