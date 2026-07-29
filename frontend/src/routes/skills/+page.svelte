@@ -6,9 +6,9 @@
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
   import { Search, X } from 'lucide-svelte';
 
-  let skills: Skill[] = [];
-  let treeData: SkillTreeData = { nodes: [], edges: [] };
-  let loading = true;
+  let skills: Skill[] = $state([]);
+  let treeData: SkillTreeData = $state({ nodes: [], edges: [] });
+  let loading = $state(true);
   let searchQuery = $state('');
   let levelFilter = $state<string | null>(null);
 
