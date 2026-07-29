@@ -89,13 +89,24 @@
     return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
-  let title = $state(note?.title ?? initialTitle);
-  let content = $state(note?.content ?? '');
-  let tags = $state<string[]>(note?.tags ?? []);
-  let previousContentTags = $state<string[]>(extractTagsFromContent(content));
-  for (const t of previousContentTags) {
-    if (!tags.includes(t)) tags.push(t);
-  }
+  let title = $state('');
+  let content = $state('');
+  let tags = $state<string[]>([]);
+  let previousContentTags = $state<string[]>([]);
+
+  $effect(() => {
+    if (note) {
+      title = note.title ?? initialTitle;
+      content = note.content ?? '';
+      tags = [...(note.tags || [])];
+      previousContentTags = extractTagsFromContent(content);
+      for (const t of previousContentTags) {
+        if (!tags.includes(t)) tags.push(t);
+      }
+      historyStack = [content || ''];
+      historyIndex = 0;
+    }
+  });
   let tagInput = $state('');
   let saving = $state(false);
   let saved = $state(false);
@@ -105,7 +116,7 @@
   let hasUnsavedChanges = $state(false);
   let showRecoveryPrompt = $state(false);
   let recoveredDraft = $state<{ title: string; content: string; tags: string[] } | null>(null);
-  let historyStack = $state<string[]>([content || '']);
+  let historyStack = $state<string[]>(['']);
   let historyIndex = $state(0);
   let historyLock = $state(false);
   let saveTimeout: ReturnType<typeof setTimeout>;
@@ -145,13 +156,6 @@
     historyLock = false;
   }
 
-  $effect(() => {
-    if (note) {
-      historyStack = [note.content || ''];
-      historyIndex = 0;
-    }
-  });
-  
   let showIconSettings = $state(false);
   let customColor = $state('#ffffff');
   let showExportMenu = $state(false);
