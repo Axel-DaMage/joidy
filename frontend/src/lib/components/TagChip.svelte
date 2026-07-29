@@ -11,6 +11,7 @@
   class="tag-chip" 
   class:ai={isAI} 
   on:click|stopPropagation={() => dispatch('click', tag)}
+  on:keydown={(e) => e.key === 'Enter' && dispatch('click', tag)}
   role="button"
   tabindex="0"
 >
