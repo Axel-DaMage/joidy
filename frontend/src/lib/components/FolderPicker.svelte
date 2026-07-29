@@ -16,8 +16,8 @@
   $: folders = flatNodes.filter(n => n.type === 'folder' && (!search || n.path.toLowerCase().includes(search.toLowerCase())));
 </script>
 
-<div class="folder-picker-backdrop" on:click={() => dispatch('close')}>
-  <div class="folder-picker" on:click|stopPropagation>
+<div class="folder-picker-backdrop" on:click={() => dispatch('close')} role="button" tabindex="-1" on:keydown={(e) => e.key === 'Enter' && dispatch('close')}>
+  <div class="folder-picker" on:click={(e) => e.stopPropagation()} role="button" tabindex="-1" on:keydown={(e) => e.stopPropagation()}>
     <h3 class="folder-modal-title">Mover nota a carpeta</h3>
 
     <input type="text" class="input mono" bind:value={search} placeholder="Buscar carpeta..." style="width:100%; box-sizing:border-box; margin-bottom:8px;" />
