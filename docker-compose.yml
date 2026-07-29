@@ -45,6 +45,7 @@ services:
       - "${AI_SERVICE_PORT:-8002}:8002"
     volumes:
       - ./data/db:/data/db
+      - ./.env:/app/.env:ro
     environment:
       - DATABASE_URL=postgresql://joidy:joidy@postgres:5432/joidy
       - APP_ENV=${APP_ENV:-production}
