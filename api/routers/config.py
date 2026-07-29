@@ -118,7 +118,12 @@ def update_config(update: ConfigUpdate):
 
     write_env(env_vars)
 
-    return {"status": "ok", "message": "Configuration updated. Some changes may require a restart."}
+    # Update in-memory settings so services see the new values immediately
+    for short_key, value in update_data.items():
+        if value is not None and hasattr(settings, short_key):
+            setattr(settings, short_key, value)
+
+    return {"status": "ok", "message": "Configuration updated."}
 
 
 @router.get("/keys", dependencies=[Depends(get_current_user)])

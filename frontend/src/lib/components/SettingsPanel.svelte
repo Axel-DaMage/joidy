@@ -1,12 +1,12 @@
 <script lang="ts">
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
-  import { goto } from '$app/navigation';
   import { browser } from '$app/environment';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
   import { accentColors, activeIconPack, showFrontmatter, showTrash, showHiddenFiles, writeInObsidian, use24HourClock, hideTagsLine, darkMode, devMode, type IconPack, MAX_COLORS } from '$lib/stores/settings';
   import { api } from '$lib/api';
   import { logger } from '$lib/utils/logger';
   import { deferredPrompt, isAppInstalled, showInstallBanner } from '$lib/stores/pwa';
+  import { showNotification } from '$lib/stores/notifications';
 
   export let open = false;
 
@@ -20,6 +20,14 @@
 
   let githubConnected = false;
   let githubUsername = '';
+  let githubAuthLoading = false;
+  let githubAuthError = '';
+  let githubUserCode = '';
+  let githubVerificationUri = '';
+  let githubDeviceCode = '';
+  let githubPollInterval = 5;
+  let githubExpiresAt = 0;
+  let githubPollTimer: ReturnType<typeof setTimeout> | null = null;
 
   let googleCalendarConnected = false;
   let googleCalendarEmail = '';
@@ -106,8 +114,88 @@
     }
   }
 
-  async function openGithubLink() {
-    goto('/integraciones');
+  function clearGithubAuth() {
+    githubAuthLoading = false;
+    githubAuthError = '';
+    githubUserCode = '';
+    githubVerificationUri = '';
+    githubDeviceCode = '';
+    githubPollInterval = 5;
+    githubExpiresAt = 0;
+    if (githubPollTimer) {
+      clearTimeout(githubPollTimer);
+      githubPollTimer = null;
+    }
+  }
+
+  async function startGithubAuth() {
+    githubAuthLoading = true;
+    githubAuthError = '';
+    try {
+      const data = await api.github.startDeviceAuth();
+      githubDeviceCode = data.device_code;
+      githubUserCode = data.user_code;
+      githubVerificationUri = data.verification_uri;
+      githubPollInterval = data.interval || 5;
+      githubExpiresAt = Date.now() + (data.expires_in || 900) * 1000;
+      if (githubVerificationUri) {
+        window.open(githubVerificationUri, '_blank');
+      }
+      await pollGithubDeviceCode();
+    } catch (e: any) {
+      githubAuthError = e.message || 'Error iniciando autenticación con GitHub';
+      githubAuthLoading = false;
+    }
+  }
+
+  async function pollGithubDeviceCode() {
+    if (!githubDeviceCode) {
+      clearGithubAuth();
+      return;
+    }
+    if (Date.now() >= githubExpiresAt) {
+      githubAuthError = 'El código de verificación expiró. Intenta de nuevo.';
+      githubAuthLoading = false;
+      return;
+    }
+    try {
+      const result = await api.github.pollDeviceCode(githubDeviceCode);
+      if (result.status === 'authorized') {
+        await api.config.update({ github_token: result.access_token, github_username: '' });
+        await checkGithubStatus();
+        clearGithubAuth();
+        showNotification('GitHub conectado correctamente', 'success');
+        return;
+      }
+      if (result.status === 'denied') {
+        githubAuthError = 'Acceso denegado. No se concedieron permisos.';
+        githubAuthLoading = false;
+        return;
+      }
+      if (result.status === 'expired') {
+        githubAuthError = 'El código expiró. Intenta de nuevo.';
+        githubAuthLoading = false;
+        return;
+      }
+      if (result.status === 'slowdown') {
+        githubPollInterval += 5;
+      }
+      githubPollTimer = setTimeout(pollGithubDeviceCode, githubPollInterval * 1000);
+    } catch (e: any) {
+      githubAuthError = e.message || 'Error verificando autorización de GitHub';
+      githubAuthLoading = false;
+    }
+  }
+
+  async function disconnectGithub() {
+    try {
+      await api.github.revoke();
+    } catch (e) {
+      // Ignorar errores de revoke; de todos modos borramos el token
+    }
+    await api.config.update({ github_token: '', github_username: '' });
+    await checkGithubStatus();
+    showNotification('GitHub desconectado', 'info');
   }
 
   async function openGoogleCalendarLink() { window.open('https://calendar.google.com', '_blank'); }
@@ -120,10 +208,13 @@
     configSaving = true;
     configMessage = '';
     try {
-      const result = await api.config.update(systemConfig);
+      // No enviamos github_token ni github_username desde el formulario general;
+      // esos se manejan con el flujo OAuth dedicado.
+      const { github_token, github_username, ...configToSave } = systemConfig;
+      const result = await api.config.update(configToSave);
       configMessage = result.message;
-      configuredKeys = Object.entries(systemConfig)
-        .filter(([k, v]) => v && k !== 'github_token' && k !== 'telegram_bot_token' && k !== 'telegram_allowed_user_id')
+      configuredKeys = Object.entries(configToSave)
+        .filter(([k, v]) => v && k !== 'telegram_bot_token' && k !== 'telegram_allowed_user_id')
         .map(([k, v]) => k);
       setTimeout(() => configMessage = '', 3000);
     } catch (e: any) {
@@ -447,12 +538,33 @@
               <span>GitHub</span>
               {#if githubConnected}<span class="configured-badge">✓</span>{/if}
             </div>
-            {#if githubConnected}
-              <span class="mono" style="font-size:12px; color: var(--xp);">{githubUsername}</span>
+            {#if githubAuthLoading}
+              <span class="mono" style="font-size:12px; color: var(--text-muted);">
+                {#if githubUserCode}
+                  Código: <code style="margin-left:4px;">{githubUserCode}</code>
+                {:else}
+                  Conectando…
+                {/if}
+              </span>
+            {:else if githubConnected}
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span class="mono" style="font-size:12px; color: var(--xp);">{githubUsername}</span>
+                <button class="link-btn" on:click={disconnectGithub} style="background:var(--border); color:var(--text-secondary);">Desconectar</button>
+              </div>
             {:else}
-              <button class="link-btn" on:click={openGithubLink}>Enlazar</button>
+              <button class="link-btn" on:click={startGithubAuth} disabled={githubAuthLoading}>Enlazar</button>
             {/if}
           </div>
+          {#if githubAuthLoading && githubUserCode}
+            <p class="hint">
+              Abre <a href={githubVerificationUri} target="_blank">{githubVerificationUri}</a> e introduce el código <code>{githubUserCode}</code> para autorizar a Joidy.
+              {#if githubAuthError}
+                <br /><span style="color:var(--danger)">{githubAuthError}</span>
+              {/if}
+            </p>
+          {:else if githubAuthError && !githubAuthLoading}
+            <p class="hint" style="color:var(--danger)">{githubAuthError}</p>
+          {/if}
           <div class="row">
             <div class="row-label disabled">
               <span>Google Contacts</span>
