@@ -753,10 +753,12 @@
           
           {#if showExportMenu}
             <!-- Backdrop to close dropdown on outside click -->
-            <!-- svelte-ignore a11y-no-static-element-interactions -->
-            <div 
-              style="position: fixed; inset: 0; z-index: 998; cursor: default;" 
+            <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+            <div
+              style="position: fixed; inset: 0; z-index: 998; cursor: default;"
               onclick={() => showExportMenu = false}
+              role="presentation"
+              tabindex="-1"
             ></div>
             
             <div class="export-dropdown-menu">
@@ -837,8 +839,14 @@
   <!-- Content area -->
   <div class="content-area">
     {#if previewMode}
-      <!-- svelte-ignore a11y-no-static-element-interactions -->
-      <div class="preview" ondblclick={() => previewMode = false} onclick={handlePreviewClick}>
+      <div
+        class="preview"
+        ondblclick={() => previewMode = false}
+        onclick={handlePreviewClick}
+        onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), previewMode = false)}
+        role="button"
+        tabindex="0"
+      >
         {@html renderedHtml}
 
         {#if backlinks.length > 0}
@@ -880,10 +888,9 @@
 
   <!-- Icon customize modal -->
   {#if showIconSettings}
-    <!-- svelte-ignore a11y-click-events-have-key-events -->
-    <!-- svelte-ignore a11y-no-static-element-interactions -->
-    <div class="folder-modal-backdrop" onclick={() => showIconSettings = false}>
-      <div class="folder-modal" onclick={(e) => e.stopPropagation()}>
+    <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+    <div class="folder-modal-backdrop" onclick={() => showIconSettings = false} role="presentation" tabindex="-1">
+      <div class="folder-modal" onclick={(e) => e.stopPropagation()} role="presentation" tabindex="-1">
         <h3 class="folder-modal-title">Personalizar icono</h3>
         
         <!-- Color bar -->
