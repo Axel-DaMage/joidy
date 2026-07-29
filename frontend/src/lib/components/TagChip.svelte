@@ -3,15 +3,38 @@
   export let tag: string;
   export let removable = false;
   export let isAI = false;
+  export let onremove: ((tag: string) => void) | undefined = undefined;
+  export let onclick: ((tag: string) => void) | undefined = undefined;
 
   const dispatch = createEventDispatcher<{ remove: string; click: string }>();
+
+  function handleClick(e: MouseEvent) {
+    e.stopPropagation();
+    dispatch('click', tag);
+    if (onclick) onclick(tag);
+  }
+
+  function handleKeydown(e: KeyboardEvent) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+      dispatch('click', tag);
+      if (onclick) onclick(tag);
+    }
+  }
+
+  function handleRemove(e: MouseEvent) {
+    e.stopPropagation();
+    dispatch('remove', tag);
+    if (onremove) onremove(tag);
+  }
 </script>
 
 <span 
   class="tag-chip" 
   class:ai={isAI} 
-  on:click|stopPropagation={() => dispatch('click', tag)}
-  on:keydown={(e) => e.key === 'Enter' && dispatch('click', tag)}
+  on:click={handleClick}
+  on:keydown={handleKeydown}
   role="button"
   tabindex="0"
 >
@@ -20,7 +43,7 @@
     <span class="ai-badge" title="Sugerencia de IA">ia</span>
   {/if}
   {#if removable}
-    <button on:click|stopPropagation={() => dispatch('remove', tag)} aria-label="Eliminar etiqueta {tag}">×</button>
+    <button on:click={handleRemove} aria-label="Eliminar etiqueta {tag}">×</button>
   {/if}
 </span>
 

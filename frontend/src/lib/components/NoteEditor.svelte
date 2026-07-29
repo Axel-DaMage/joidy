@@ -50,11 +50,15 @@
     ALLOWED_ATTR: ['href', 'target', 'rel', 'src', 'alt', 'class', 'data-title'],
   });
 
-  export let note: Note | null = null;
-  export let momentary = false;
-  export let hasPrev = false;
-  export let hasNext = false;
-  export let initialTitle = '';
+  interface NoteEditorProps {
+    note?: Note | null;
+    momentary?: boolean;
+    hasPrev?: boolean;
+    hasNext?: boolean;
+    initialTitle?: string;
+  }
+
+  let { note = null, momentary = false, hasPrev = false, hasNext = false, initialTitle = '' }: NoteEditorProps = $props();
 
   function extractTagsFromContent(text: string): string[] {
     const extracted = new Set<string>();
@@ -85,28 +89,28 @@
     return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
-  let title = note?.title ?? initialTitle;
-  let content = note?.content ?? '';
-  let tags: string[] = note?.tags ?? [];
-  let previousContentTags = extractTagsFromContent(content);
+  let title = $state(note?.title ?? initialTitle);
+  let content = $state(note?.content ?? '');
+  let tags = $state<string[]>(note?.tags ?? []);
+  let previousContentTags = $state<string[]>(extractTagsFromContent(content));
   for (const t of previousContentTags) {
     if (!tags.includes(t)) tags.push(t);
   }
-  let tagInput = '';
-  let saving = false;
-  let saved = false;
-  let previewMode = false;
+  let tagInput = $state('');
+  let saving = $state(false);
+  let saved = $state(false);
+  let previewMode = $state(false);
   let aiTimeout: ReturnType<typeof setTimeout>;
   let autosaveTimer: ReturnType<typeof setTimeout> | undefined;
-  let hasUnsavedChanges = false;
-  let showRecoveryPrompt = false;
-  let recoveredDraft: { title: string; content: string; tags: string[] } | null = null;
-  let historyStack: string[] = [content || ''];
-  let historyIndex = 0;
-  let historyLock = false;
+  let hasUnsavedChanges = $state(false);
+  let showRecoveryPrompt = $state(false);
+  let recoveredDraft = $state<{ title: string; content: string; tags: string[] } | null>(null);
+  let historyStack = $state<string[]>([content || '']);
+  let historyIndex = $state(0);
+  let historyLock = $state(false);
   let saveTimeout: ReturnType<typeof setTimeout>;
 
-  $: draftKey = note ? `${DRAFT_PREFIX}${note.id}` : null;
+  let draftKey = $derived(note ? `${DRAFT_PREFIX}${note.id}` : null);
 
   function pushSnapshot() {
     if (historyLock) return;
@@ -141,33 +145,37 @@
     historyLock = false;
   }
 
-  $: if (note) {
-    historyStack = [note.content || ''];
-    historyIndex = 0;
-  }
+  $effect(() => {
+    if (note) {
+      historyStack = [note.content || ''];
+      historyIndex = 0;
+    }
+  });
   
-  let showIconSettings = false;
-  let customColor = '#ffffff';
-  let showExportMenu = false;
+  let showIconSettings = $state(false);
+  let customColor = $state('#ffffff');
+  let showExportMenu = $state(false);
 
-  $: {
+  $effect(() => {
     const fm = extractFrontmatter(content || note?.content || '');
     customColor = fm.color || '#ffffff';
-  }
+  });
 
-  $: iconMeta = extractFrontmatter(content || note?.content || '');
-  $: noteIcon = iconMeta.icon || (note ? getFileIcon(note.title, content || note.content || '') : 'File');
-  $: noteIconColor = iconMeta.color || undefined;
-  $: noteIconPack = iconMeta.pack || undefined;
+  let iconMeta = $derived(extractFrontmatter(content || note?.content || ''));
+  let noteIcon = $derived(iconMeta.icon || (note ? getFileIcon(note.title, content || note.content || '') : 'File'));
+  let noteIconColor = $derived(iconMeta.color || undefined);
+  let noteIconPack = $derived(iconMeta.pack || undefined);
 
-  let backlinks: Note[] = [];
+  let backlinks = $state<Note[]>([]);
 
   // Fetch backlinks on mount or when note changes
-  $: if (note) {
-    api.notes.backlinks(note.id).then(res => backlinks = res).catch(() => backlinks = []);
-  } else {
-    backlinks = [];
-  }
+  $effect(() => {
+    if (note) {
+      api.notes.backlinks(note.id).then(res => backlinks = res).catch(() => backlinks = []);
+    } else {
+      backlinks = [];
+    }
+  });
 
   const dispatch = createEventDispatcher<{
     save: { title: string; content: string; tags: string[] };
@@ -214,13 +222,13 @@
     }
   }
 
-  $: rawFrontmatterMatch = content.match(/^---\n[\s\S]*?\n---/);
-  $: rawFrontmatter = rawFrontmatterMatch ? rawFrontmatterMatch[0] : '';
+  let rawFrontmatterMatch = $derived(content.match(/^---\n[\s\S]*?\n---/));
+  let rawFrontmatter = $derived(rawFrontmatterMatch ? rawFrontmatterMatch[0] : '');
 
-  $: tagsLineMatch = content.match(/^#\s*Tags?:\s*.*$/im);
-  $: currentTagsLine = tagsLineMatch ? tagsLineMatch[0] : '';
+  let tagsLineMatch = $derived(content.match(/^#\s*Tags?:\s*.*$/im));
+  let currentTagsLine = $derived(tagsLineMatch ? tagsLineMatch[0] : '');
 
-  $: visibleEditorContent = (() => {
+  let visibleEditorContent = $derived((() => {
     let val = content;
     if (!$showFrontmatter && rawFrontmatter) {
       val = val.replace(/^---\n[\s\S]*?\n---[\n]*/, '');
@@ -229,13 +237,13 @@
       val = val.replace(/^#\s*Tags?:\s*.*$/im, '').trim();
     }
     return val;
-  })();
+  })());
 
-  $: wordCount = visibleEditorContent.trim() ? visibleEditorContent.trim().split(/\s+/).length : 0;
-  $: charCount = visibleEditorContent.length;
-  $: renderedHtml = renderMarkdown(visibleEditorContent);
-  $: lineCount = Math.max(1, visibleEditorContent.split('\n').length);
-  $: lineNumbers = Array.from({ length: lineCount }, (_, i) => i + 1);
+  let wordCount = $derived(visibleEditorContent.trim() ? visibleEditorContent.trim().split(/\s+/).length : 0);
+  let charCount = $derived(visibleEditorContent.length);
+  let renderedHtml = $derived(renderMarkdown(visibleEditorContent));
+  let lineCount = $derived(Math.max(1, visibleEditorContent.split('\n').length));
+  let lineNumbers = $derived(Array.from({ length: lineCount }, (_, i) => i + 1));
 
   function updateVisibleContent(e: Event) {
     const val = (e.currentTarget as HTMLTextAreaElement).value;
@@ -483,10 +491,10 @@
     }
   }
 
-  let zenMode = false;
-  let backdropEl: HTMLElement;
-  let textareaEl: HTMLTextAreaElement;
-  let lineGutterEl: HTMLElement;
+  let zenMode = $state(false);
+  let backdropEl = $state<HTMLElement | undefined>();
+  let textareaEl = $state<HTMLTextAreaElement | undefined>();
+  let lineGutterEl = $state<HTMLElement | undefined>();
 
   function syncScroll() {
     if (backdropEl && textareaEl) {
@@ -542,11 +550,11 @@
 
     tick().then(() => {
       const pos = selectionStart + (fmt.block && !selected ? fmt.block.length : insertion.length - (fmt.suffix ? insertion.length - fmt.prefix.length : 0));
-      textareaEl.focus();
+      textareaEl?.focus();
       if (!selected && fmt.suffix) {
-        textareaEl.setSelectionRange(selectionStart + fmt.prefix.length, selectionStart + fmt.prefix.length);
+        textareaEl?.setSelectionRange(selectionStart + fmt.prefix.length, selectionStart + fmt.prefix.length);
       } else {
-        textareaEl.setSelectionRange(pos, pos);
+        textareaEl?.setSelectionRange(pos, pos);
       }
     });
   }
@@ -611,10 +619,10 @@
     return html;
   }
 
-  $: editorHighlightedHtml = highlightMarkdown(visibleEditorContent);
+  let editorHighlightedHtml = $derived(highlightMarkdown(visibleEditorContent));
 </script>
 
-<svelte:window on:keydown={onKeydown} />
+<svelte:window onkeydown={onKeydown} />
 
 <div class="editor-shell" class:zen-mode={zenMode}>
   {#if showRecoveryPrompt}
@@ -632,10 +640,10 @@
     <div class="toolbar-left">
       {#if !momentary && note}
       <div class="nav-controls toolbar-nav">
-        <button class="toolbar-btn icon-only" disabled={!hasPrev} on:click={() => dispatch('prev')} title="Nota anterior (Alt + ←)">
+        <button class="toolbar-btn icon-only" disabled={!hasPrev} onclick={() => dispatch('prev')} title="Nota anterior (Alt + ←)">
           <ChevronLeft size={14} />
         </button>
-        <button class="toolbar-btn icon-only" disabled={!hasNext} on:click={() => dispatch('next')} title="Siguiente nota (Alt + →)">
+        <button class="toolbar-btn icon-only" disabled={!hasNext} onclick={() => dispatch('next')} title="Siguiente nota (Alt + →)">
           <ChevronRight size={14} />
         </button>
       </div>
@@ -644,46 +652,46 @@
       <div class="format-divider"></div>
 
       <div class="format-toolbar">
-        <button class="toolbar-btn icon-only" on:click={() => formatMarkdown('bold')} title="Negrita (Ctrl+B)">
+        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('bold')} title="Negrita (Ctrl+B)">
           <Bold size={13} />
         </button>
-        <button class="toolbar-btn icon-only" on:click={() => formatMarkdown('italic')} title="Cursiva (Ctrl+I)">
+        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('italic')} title="Cursiva (Ctrl+I)">
           <Italic size={13} />
         </button>
-        <button class="toolbar-btn icon-only" on:click={() => formatMarkdown('strikethrough')} title="Tachado">
+        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('strikethrough')} title="Tachado">
           <Strikethrough size={13} />
         </button>
 
         <div class="format-divider"></div>
 
-        <button class="toolbar-btn icon-only" on:click={() => formatMarkdown('h1')} title="Título 1">
+        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('h1')} title="Título 1">
           <Heading1 size={13} />
         </button>
-        <button class="toolbar-btn icon-only" on:click={() => formatMarkdown('h2')} title="Título 2">
+        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('h2')} title="Título 2">
           <Heading2 size={13} />
         </button>
-        <button class="toolbar-btn icon-only" on:click={() => formatMarkdown('h3')} title="Título 3">
+        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('h3')} title="Título 3">
           <Heading3 size={13} />
         </button>
 
         <div class="format-divider"></div>
 
-        <button class="toolbar-btn icon-only" on:click={() => formatMarkdown('ul')} title="Lista desordenada">
+        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('ul')} title="Lista desordenada">
           <List size={13} />
         </button>
-        <button class="toolbar-btn icon-only" on:click={() => formatMarkdown('ol')} title="Lista ordenada">
+        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('ol')} title="Lista ordenada">
           <ListOrdered size={13} />
         </button>
 
         <div class="format-divider"></div>
 
-        <button class="toolbar-btn icon-only" on:click={() => formatMarkdown('link')} title="Enlace">
+        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('link')} title="Enlace">
           <Link size={13} />
         </button>
-        <button class="toolbar-btn icon-only" on:click={() => formatMarkdown('quote')} title="Cita">
+        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('quote')} title="Cita">
           <Quote size={13} />
         </button>
-        <button class="toolbar-btn icon-only" on:click={() => formatMarkdown('code')} title="Bloque de código">
+        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('code')} title="Bloque de código">
           <Code size={13} />
         </button>
       </div>
@@ -696,7 +704,7 @@
       <button
         class="toolbar-btn icon-only"
         class:active={zenMode}
-        on:click={() => zenMode = !zenMode}
+        onclick={() => zenMode = !zenMode}
         title="Modo Zen (Esc para salir)"
       >
         <Maximize size={14} />
@@ -705,7 +713,7 @@
       <button
         class="toolbar-btn"
         class:active={previewMode}
-        on:click={() => previewMode = !previewMode}
+        onclick={() => previewMode = !previewMode}
         title="Alternar preview (Ctrl+P)"
       >
         {#if previewMode}<EyeOff size={14} />{:else}<Eye size={14} />{/if}
@@ -715,7 +723,7 @@
       <button
         class="toolbar-btn save-btn"
         class:saved
-        on:click={handleSave}
+        onclick={handleSave}
         disabled={saving || !title.trim()}
         title="Guardar (Ctrl+S)"
       >
@@ -732,7 +740,7 @@
           <button
             class="toolbar-btn"
             class:active={showExportMenu}
-            on:click={() => showExportMenu = !showExportMenu}
+            onclick={() => showExportMenu = !showExportMenu}
             title="Exportar nota"
           >
             <Download size={14} />
@@ -744,19 +752,19 @@
             <!-- svelte-ignore a11y-no-static-element-interactions -->
             <div 
               style="position: fixed; inset: 0; z-index: 998; cursor: default;" 
-              on:click={() => showExportMenu = false}
+              onclick={() => showExportMenu = false}
             ></div>
             
             <div class="export-dropdown-menu">
-              <button class="dropdown-item" on:click={() => { downloadMarkdown(note); showExportMenu = false; }}>
+              <button class="dropdown-item" onclick={() => { downloadMarkdown(note); showExportMenu = false; }}>
                 <span class="dropdown-icon">⬡</span>
                 <span>Descargar Markdown</span>
               </button>
-              <button class="dropdown-item" on:click={() => { downloadHTML(note); showExportMenu = false; }}>
+              <button class="dropdown-item" onclick={() => { downloadHTML(note); showExportMenu = false; }}>
                 <span class="dropdown-icon">◆</span>
                 <span>Descargar HTML</span>
               </button>
-              <button class="dropdown-item" on:click={async () => { if (note) { const ok = await copyNoteAsMarkdown(note); if (ok) showNotification('¡Nota copiada al portapapeles!', 'success'); } showExportMenu = false; }}>
+              <button class="dropdown-item" onclick={async () => { if (note) { const ok = await copyNoteAsMarkdown(note); if (ok) showNotification('¡Nota copiada al portapapeles!', 'success'); } showExportMenu = false; }}>
                 <span class="dropdown-icon">⚡</span>
                 <span>Copiar Markdown</span>
               </button>
@@ -764,12 +772,12 @@
           {/if}
         </div>
 
-        <button class="toolbar-btn danger-btn" on:click={() => dispatch('delete')} title="Eliminar nota">
+        <button class="toolbar-btn danger-btn" onclick={() => dispatch('delete')} title="Eliminar nota">
           <Trash2 size={14} />
         </button>
       {/if}
 
-      <button class="toolbar-btn" on:click={() => dispatch('cancel')} title="Cerrar">
+      <button class="toolbar-btn" onclick={() => dispatch('cancel')} title="Cerrar">
         <X size={14} />
       </button>
     </div>
@@ -782,7 +790,7 @@
       class="note-icon-btn"
       title="Personalizar icono"
       type="button"
-      on:click={() => showIconSettings = true}
+      onclick={() => showIconSettings = true}
     >
       <DynamicIcon name={noteIcon} size={16} color={noteIconColor} pack={noteIconPack} />
     </button>
@@ -790,7 +798,7 @@
       class="title-input"
       bind:value={title}
       placeholder="Título de la nota..."
-      on:keydown={(e) => e.key === 'Enter' && handleSave()}
+      onkeydown={(e) => e.key === 'Enter' && handleSave()}
       oninput={triggerAutosave}
     />
   </div>
@@ -798,8 +806,8 @@
   <!-- Tags bar -->
   <div class="tags-bar">
     {#each tags as tag}
-      <TagChip {tag} removable on:remove={(e) => removeTag(e.detail)} on:click={(e) => {
-        const linkedNote = findNoteByTitle(e.detail);
+      <TagChip {tag} removable onremove={removeTag} onclick={(tag) => {
+        const linkedNote = findNoteByTitle(tag);
         if (linkedNote) {
           goto(`/notes?id=${linkedNote.id}`);
         }
@@ -808,16 +816,16 @@
     <input
       class="tag-input"
       bind:value={tagInput}
-      on:keydown={onTagKeydown}
+      onkeydown={onTagKeydown}
       placeholder="+ etiqueta..."
     />
     {#if $aiSuggestions.length > 0}
       <span class="ai-label">ia:</span>
       {#each $aiSuggestions as s}
-        <button class="suggestion-chip" on:click={() => acceptSuggestion(s.tag)}>
+        <button class="suggestion-chip" onclick={() => acceptSuggestion(s.tag)}>
           {s.tag} <span class="conf">{Math.round(s.confidence * 100)}%</span>
         </button>
-        <button class="dismiss-btn" on:click={() => dismissSuggestion(s.tag)}>×</button>
+        <button class="dismiss-btn" onclick={() => dismissSuggestion(s.tag)}>×</button>
       {/each}
     {/if}
   </div>
@@ -826,7 +834,7 @@
   <div class="content-area">
     {#if previewMode}
       <!-- svelte-ignore a11y-no-static-element-interactions -->
-      <div class="preview" on:dblclick={() => previewMode = false} on:click={handlePreviewClick}>
+      <div class="preview" ondblclick={() => previewMode = false} onclick={handlePreviewClick}>
         {@html renderedHtml}
 
         {#if backlinks.length > 0}
@@ -834,7 +842,7 @@
             <h5 class="mono">ENLACES ENTRANTES</h5>
             <div class="backlinks-grid">
               {#each backlinks as bl}
-                <button class="backlink-card" on:click={() => goto(`/notes?id=${bl.id}`)}>
+                <button class="backlink-card" onclick={() => goto(`/notes?id=${bl.id}`)}>
                   <span class="bl-title">{bl.title}</span>
                   <span class="bl-meta mono">{bl.source === 'obsidian' ? '⬡' : '◆'}</span>
                 </button>
@@ -857,8 +865,8 @@
           class="content-textarea"
           bind:this={textareaEl}
           value={visibleEditorContent}
-          on:input={updateVisibleContent}
-          on:scroll={syncScroll}
+          oninput={updateVisibleContent}
+          onscroll={syncScroll}
           placeholder="Escribe en markdown... (Ctrl+S para guardar, Ctrl+P para preview)"
           spellcheck="false"
         ></textarea>
@@ -870,15 +878,15 @@
   {#if showIconSettings}
     <!-- svelte-ignore a11y-click-events-have-key-events -->
     <!-- svelte-ignore a11y-no-static-element-interactions -->
-    <div class="folder-modal-backdrop" on:click={() => showIconSettings = false}>
-      <div class="folder-modal" on:click|stopPropagation>
+    <div class="folder-modal-backdrop" onclick={() => showIconSettings = false}>
+      <div class="folder-modal" onclick={(e) => e.stopPropagation()}>
         <h3 class="folder-modal-title">Personalizar icono</h3>
         
         <!-- Color bar -->
         <div class="folder-color-row">
           <span class="folder-label mono">Color</span>
-          <input type="color" class="folder-color-input" bind:value={customColor} on:change={(e) => updateFrontmatter('iconColor', e.currentTarget.value)} />
-          <input type="text" class="folder-hex-input mono" maxlength="7" bind:value={customColor} on:change={(e) => updateFrontmatter('iconColor', e.currentTarget.value)} />
+          <input type="color" class="folder-color-input" bind:value={customColor} onchange={(e) => updateFrontmatter('iconColor', e.currentTarget.value)} />
+          <input type="text" class="folder-hex-input mono" maxlength="7" bind:value={customColor} onchange={(e) => updateFrontmatter('iconColor', e.currentTarget.value)} />
         </div>
         
         <!-- Icon picker -->
@@ -887,8 +895,8 @@
         </div>
         
         <div class="folder-modal-btns">
-          <button on:click={() => { updateFrontmatter('iconColor', ''); updateFrontmatter('icon', ''); updateFrontmatter('iconPack', ''); customColor = '#ffffff'; showIconSettings = false; }}>Restablecer</button>
-          <button on:click={() => showIconSettings = false}>Cerrar</button>
+          <button onclick={() => { updateFrontmatter('iconColor', ''); updateFrontmatter('icon', ''); updateFrontmatter('iconPack', ''); customColor = '#ffffff'; showIconSettings = false; }}>Restablecer</button>
+          <button onclick={() => showIconSettings = false}>Cerrar</button>
         </div>
       </div>
     </div>
