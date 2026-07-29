@@ -114,10 +114,11 @@ app.add_middleware(RateLimitMiddleware)
 
 def _get_cors_origins() -> list[str]:
     """Return allowed CORS origins based on environment."""
+    if settings.cors_allowed_origins:
+        return [o.strip() for o in settings.cors_allowed_origins.split(",") if o.strip()]
     if settings.app_env == "production":
-        origins = settings.cors_allowed_origins
-        return [o.strip() for o in origins.split(",") if o.strip()] if origins else []
-    return ["*"]  # Development: allow all
+        return []
+    return ["*"]  # Development fallback: allow all
 
 
 _cors_origins = _get_cors_origins()
