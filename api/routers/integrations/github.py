@@ -205,9 +205,9 @@ async def remove_repo_from_db(repo_id: int, db: Session = Depends(get_db)):
 
 @router.get("/issues")
 async def get_my_issues(
-    state: str = Query("open", regex="^(open|closed|all)$"),
+    state: str = Query("open", pattern="^(open|closed|all)$"),
     per_page: int = Query(30, le=100),
-    filter: str = Query("created", regex="^(all|created|assigned)$"),
+    filter: str = Query("created", pattern="^(all|created|assigned)$"),
 ):
     try:
         user = await _fetch("/user")
@@ -284,9 +284,9 @@ async def get_my_issues(
 
 @router.get("/pulls")
 async def get_my_pulls(
-    state: str = Query("open", regex="^(open|closed|all)$"),
+    state: str = Query("open", pattern="^(open|closed|all)$"),
     per_page: int = Query(30, le=100),
-    filter: str = Query("created", regex="^(all|created|assigned)$"),
+    filter: str = Query("created", pattern="^(all|created|assigned)$"),
 ):
     try:
         user = await _fetch("/user")
@@ -363,7 +363,7 @@ async def get_my_pulls(
 async def get_repo_issues(
     owner: str,
     repo: str,
-    state: str = Query("open", regex="^(open|closed|all)$"),
+    state: str = Query("open", pattern="^(open|closed|all)$"),
     per_page: int = Query(30, le=100),
 ):
     issues = await _fetch(
@@ -443,7 +443,7 @@ async def update_issue(
     issue_number: int,
     title: str | None = Query(None),
     body: str | None = Query(None),
-    state: str | None = Query(None, regex="^(open|closed)$"),
+    state: str | None = Query(None, pattern="^(open|closed)$"),
     labels: list[str] | None = Query(None),
 ):
     data: dict[str, Any] = {}
@@ -499,7 +499,7 @@ async def add_comment(
 async def get_pulls(
     owner: str,
     repo: str,
-    state: str = Query("open", regex="^(open|closed|all)$"),
+    state: str = Query("open", pattern="^(open|closed|all)$"),
     per_page: int = Query(30, le=100),
 ):
     pulls = await _fetch(
