@@ -34,7 +34,7 @@ make lint            # python -m compileall on all Python services
 Single test:
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm api \
-  sh -c "PYTHONPATH=/app python -m unittest tests.test_embedding_retry"
+  sh -c "PYTHONPATH=/app python -m pytest tests/test_embedding_retry.py"
 ```
 
 Frontend typecheck:
@@ -106,7 +106,7 @@ Two concurrent asyncio tasks: `watch_vault()` (watches `/vault/*.md`, 2s debounc
 `api/services/gamification_engine.py`: XP events (note_created +10, note_edited +5, daily_activity +15, goal_completed +50), streaks (7/30/100/365d → +100 XP), plant stages (0→semilla, 300→brote, 1200→planton, 4000→joven, 10000→madura, 25000→floreciendo, 60000→arbol). Grace period: 1 missed day/week.
 
 ## Testing Quirks
-- No pytest — uses `unittest` (`python -m unittest discover -s tests`)
+- Uses `pytest` for API tests (`pytest` discover under `tests/`), with `unittest` style fixtures in `conftest.py`
 - Single test: `PYTHONPATH=/app python -m unittest tests.test_file`
 - No lint/formatter configured (no ruff, black, eslint, prettier)
 - No pre-commit hooks
