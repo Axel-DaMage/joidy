@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import httpx
 from config import settings
@@ -55,7 +55,7 @@ def record_embedding_failure(db: Session, note_id: int, error_message: str) -> N
         )
     else:
         delay = compute_retry_delay_seconds(failure.attempts, settings.embedding_retry_base_seconds)
-        failure.next_retry_at = datetime.utcnow() + timedelta(seconds=delay)
+        failure.next_retry_at = datetime.now(timezone.utc) + timedelta(seconds=delay)
         logger.info(
             "Embedding retry scheduled for note_id=%s attempt=%d delay=%ds",
             note_id, failure.attempts, delay,
@@ -70,7 +70,7 @@ def clear_embedding_failure(db: Session, note_id: int) -> None:
 
 def get_retryable_embedding_notes(db: Session, limit: int = 20) -> list[Note]:
     """Get notes whose embeddings failed but are still retryable (not dead-lettered)."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     max_attempts = settings.embedding_retry_max_attempts
     failures = (
         db.query(EmbeddingFailure)
@@ -119,7 +119,7 @@ def reset_dead_letter_entry(db: Session, note_id: int) -> bool:
     if not failure:
         return False
     failure.attempts = 0
-    failure.next_retry_at = datetime.utcnow()
+    failure.next_retry_at = datetime.now(timezone.utc)
     db.commit()
     logger.info("Dead letter entry reset for note_id=%s", note_id)
     return True

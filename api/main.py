@@ -211,10 +211,10 @@ def debug_info():
     """Debug endpoint with detailed system information."""
     import os
     import sys
-    from datetime import datetime
+    from datetime import datetime, timezone
 
     debug_data = {
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "python_version": sys.version,
         "platform": os.name,
         "env": {

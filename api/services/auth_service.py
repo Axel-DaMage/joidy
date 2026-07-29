@@ -3,7 +3,7 @@ JWT Authentication Service.
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import jwt
 from config import settings
@@ -23,7 +23,7 @@ def create_access_token(user_id: int, username: str = "user") -> str:
     if not settings.secret_key:
         raise ValueError("SECRET_KEY not configured")
 
-    expire = datetime.utcnow() + timedelta(hours=TOKEN_EXPIRE_HOURS)
+    expire = datetime.now(timezone.utc) + timedelta(hours=TOKEN_EXPIRE_HOURS)
     to_encode = {
         "sub": str(user_id),
         "username": username,

@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx
@@ -706,7 +706,7 @@ async def sync_repo(repo_id: int, db: Session = Depends(get_db)):
             existing.body = issue_data.get("body", "")
             existing.state = issue_data.get("state", "open")
             existing.labels = labels_str
-            existing.updated_at = datetime.utcnow()
+            existing.updated_at = datetime.now(timezone.utc)
         else:
             item = GitHubItem(
                 repo_id=repo_id,
@@ -725,12 +725,12 @@ async def sync_repo(repo_id: int, db: Session = Depends(get_db)):
                 labels=labels_str,
                 url=issue_data.get("url", ""),
                 html_url=issue_data.get("html_url", ""),
-                synced_at=datetime.utcnow(),
+                synced_at=datetime.now(timezone.utc),
             )
             db.add(item)
         synced_count += 1
 
-    repo.last_synced_at = datetime.utcnow()
+    repo.last_synced_at = datetime.now(timezone.utc)
     db.commit()
 
     return {

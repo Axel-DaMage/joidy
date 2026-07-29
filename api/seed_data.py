@@ -1,5 +1,5 @@
 import random
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from database import SessionLocal
 from models.goal import (
@@ -20,7 +20,7 @@ def seed():
     db.commit()
 
     print("Generating goals and streaks...")
-    today = datetime.utcnow()
+    today = datetime.now(timezone.utc)
 
     # 1. Past 180 days streak (Heatmap)
     for i in range(180, -1, -1):

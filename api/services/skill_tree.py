@@ -3,7 +3,7 @@ Skill Tree Service — derives the RPG skill tree from note/tag data.
 Skills are auto-generated from tags, no manual configuration needed.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from models.note import NoteTag, Tag
 from models.skill import Skill, compute_skill_level
@@ -36,7 +36,7 @@ def sync_skills_for_tags(db: Session, tag_ids: set[int]) -> list[dict]:
                 continue
             skill = Skill(tag_id=tag_id, note_count=count, level=new_level)
             if new_level != "locked":
-                skill.first_unlocked_at = datetime.utcnow()
+                skill.first_unlocked_at = datetime.now(timezone.utc)
             db.add(skill)
             updated.append({"tag_id": tag_id, "level": new_level, "new": True})
             continue
@@ -50,7 +50,7 @@ def sync_skills_for_tags(db: Session, tag_ids: set[int]) -> list[dict]:
         skill.level = new_level
 
         if prev_level == "locked" and new_level != "locked":
-            skill.first_unlocked_at = datetime.utcnow()
+            skill.first_unlocked_at = datetime.now(timezone.utc)
             updated.append({"tag_id": tag_id, "level": new_level, "new": False, "unlocked": True})
         else:
             updated.append({"tag_id": tag_id, "level": new_level, "new": False})
@@ -82,7 +82,7 @@ def sync_skills(db: Session) -> list[dict]:
         skill.level = new_level
 
         if prev_level == "locked" and new_level != "locked":
-            skill.first_unlocked_at = datetime.utcnow()
+            skill.first_unlocked_at = datetime.now(timezone.utc)
             updated.append({"tag_id": tag_id, "level": new_level, "new": False, "unlocked": True})
         else:
             updated.append({"tag_id": tag_id, "level": new_level, "new": False})
@@ -93,7 +93,7 @@ def sync_skills(db: Session) -> list[dict]:
         new_level = compute_skill_level(count)
         skill = Skill(tag_id=tag_id, note_count=count, level=new_level)
         if new_level != "locked":
-            skill.first_unlocked_at = datetime.utcnow()
+            skill.first_unlocked_at = datetime.now(timezone.utc)
         db.add(skill)
         updated.append({"tag_id": tag_id, "level": new_level, "new": True})
 

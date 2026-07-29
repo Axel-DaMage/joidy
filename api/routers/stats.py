@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from database import get_db
 from fastapi import APIRouter, Depends
@@ -15,7 +15,7 @@ router = APIRouter(prefix="/stats", tags=["stats"])
 @router.get("/system")
 def get_system_stats(db: Session = Depends(get_db)):
     """Get system-wide statistics."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     week_ago = now - timedelta(days=7)
 
     notes_count = db.query(Note).count()
@@ -45,7 +45,7 @@ def get_activity_stats(
     db: Session = Depends(get_db)
 ):
     """Get activity statistics for the last N days."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     since = now - timedelta(days=days)
 
     daily_stats = []
