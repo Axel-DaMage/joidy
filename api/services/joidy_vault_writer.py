@@ -4,7 +4,7 @@ Joidy NEVER modifies files outside of _joidy/.
 """
 
 import os
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 from models.gamification import StreakRecord, UserStats
@@ -276,7 +276,7 @@ def write_readme(vault_path: Path) -> None:
 
 
 def _get_notes_created_today(db: Session, today: date) -> list:
-    from datetime import datetime
+    from datetime import datetime, timezone
 
     from models.note import Note
     start = datetime.combine(today, datetime.min.time())
@@ -285,10 +285,10 @@ def _get_notes_created_today(db: Session, today: date) -> list:
 
 
 def _get_top_tags_week(db: Session) -> list:
-    from datetime import timedelta
+    from datetime import timedelta, timezone
 
     from models.note import Note, Tag
-    week_ago = datetime.utcnow() - timedelta(days=7)
+    week_ago = datetime.now(timezone.utc) - timedelta(days=7)
     results = (
         db.query(Tag.name, Tag.id)
         .join(NoteTag, NoteTag.tag_id == Tag.id)

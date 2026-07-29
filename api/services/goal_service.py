@@ -1,5 +1,5 @@
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from models.goal import (
     Goal,
@@ -187,7 +187,7 @@ def get_bulk_goal_progress(goals: list[Goal], db: Session) -> dict[int, float]:
 
 
 def evaluate_active_goals(db: Session):
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     active_goals = GoalRepository(db).get_active()
 
     for goal in active_goals:
@@ -302,7 +302,7 @@ def get_goal_streak(db: Session) -> dict:
         return {"current_streak": 0, "best_streak": 0}
 
     # Current streak: count backwards from today
-    today = datetime.utcnow().date()
+    today = datetime.now(timezone.utc).date()
     current_streak = 0
     day = today
     while day in completion_dates:

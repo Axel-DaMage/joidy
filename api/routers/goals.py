@@ -1,5 +1,5 @@
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 
 from database import get_db
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
@@ -340,7 +340,7 @@ def complete_goal(
         raise HTTPException(status_code=404, detail="Goal not found")
     goal.is_completed = True
     goal.state = GoalState.COMPLETED
-    goal.completed_at = datetime.utcnow()
+    goal.completed_at = datetime.now(timezone.utc)
     goal.current_value = get_goal_progress(goal, db)
     gami = process_event(db, "goal_completed", {"goal_id": goal_id, "title": goal.title})
     db.commit()

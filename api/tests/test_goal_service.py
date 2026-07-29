@@ -3,7 +3,7 @@
 import sys
 import types
 import unittest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
@@ -207,7 +207,7 @@ class TestGetGoalStreak(GoalServiceTestBase):
 
     def test_consecutive_days(self) -> None:
         with self.Session() as db:
-            today = datetime.utcnow()
+            today = datetime.now(timezone.utc)
             for i in range(3):
                 g = Goal(
                     title=f"G{i}", state=GoalState.COMPLETED,

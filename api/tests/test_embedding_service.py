@@ -3,7 +3,7 @@
 import sys
 import types
 import unittest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 from sqlalchemy import create_engine
@@ -45,7 +45,7 @@ class TestGetRetryableNotes(EmbeddingServiceTestBase):
             failure = EmbeddingFailure(
                 note_id=note.id, attempts=2,
                 last_error="timeout",
-                next_retry_at=datetime.utcnow() - timedelta(seconds=1),
+                next_retry_at=datetime.now(timezone.utc) - timedelta(seconds=1),
             )
             db.add(failure)
             db.commit()
@@ -80,7 +80,7 @@ class TestGetRetryableNotes(EmbeddingServiceTestBase):
             failure = EmbeddingFailure(
                 note_id=note.id, attempts=1,
                 last_error="temp",
-                next_retry_at=datetime.utcnow() + timedelta(hours=1),
+                next_retry_at=datetime.now(timezone.utc) + timedelta(hours=1),
             )
             db.add(failure)
             db.commit()
@@ -94,7 +94,7 @@ class TestGetRetryableNotes(EmbeddingServiceTestBase):
             failure = EmbeddingFailure(
                 note_id=99999, attempts=1,
                 last_error="orphan",
-                next_retry_at=datetime.utcnow() - timedelta(seconds=1),
+                next_retry_at=datetime.now(timezone.utc) - timedelta(seconds=1),
             )
             db.add(failure)
             db.commit()

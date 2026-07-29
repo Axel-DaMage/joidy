@@ -8,7 +8,7 @@ domain-specific query methods. Injected via FastAPI Depends.
 from __future__ import annotations
 
 from collections.abc import Generator
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Generic, TypeVar
 
 from fastapi import Depends
@@ -100,7 +100,7 @@ class NoteRepository(BaseRepository[Note]):
         )
 
     def get_recent(self, days: int = 7) -> list[Note]:
-        since = datetime.utcnow() - timedelta(days=days)
+        since = datetime.now(timezone.utc) - timedelta(days=days)
         return (
             self._db.query(Note)
             .filter(Note.created_at >= since)
@@ -180,7 +180,7 @@ class EmbeddingFailureRepository(BaseRepository[EmbeddingFailure]):
         )
 
     def get_retryable(self, limit: int = 20) -> list[EmbeddingFailure]:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         return (
             self._db.query(EmbeddingFailure)
             .filter(
@@ -192,7 +192,7 @@ class EmbeddingFailureRepository(BaseRepository[EmbeddingFailure]):
         )
 
     def get_dead_letters(self, limit: int = 50) -> list[EmbeddingFailure]:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         return (
             self._db.query(EmbeddingFailure)
             .filter(
@@ -204,7 +204,7 @@ class EmbeddingFailureRepository(BaseRepository[EmbeddingFailure]):
         )
 
     def count_dead_letters(self) -> int:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         return (
             self._db.query(EmbeddingFailure)
             .filter(

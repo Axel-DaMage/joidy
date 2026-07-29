@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from database import get_db
 from fastapi import APIRouter, Depends, HTTPException
@@ -53,7 +53,7 @@ def set_assignments(data: AssignmentsIn, db: Session = Depends(get_db)):
     db.query(PlanningAssignment).filter(PlanningAssignment.date == date_obj).delete()
     # Insert new
     for gid in data.goal_ids:
-        pa = PlanningAssignment(date=date_obj, goal_id=gid, created_at=datetime.utcnow())
+        pa = PlanningAssignment(date=date_obj, goal_id=gid, created_at=datetime.now(timezone.utc))
         db.add(pa)
     db.commit()
     clear_api_caches()
