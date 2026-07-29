@@ -10,7 +10,7 @@
   class:clickable
   on:click
   role={clickable ? 'button' : undefined}
-  tabindex={clickable ? 0 : undefined}
+  tabindex={clickable ? 0 : -1}
   on:keydown={(e) => clickable && e.key === 'Enter' && e.currentTarget.click()}
 >
   <slot />
