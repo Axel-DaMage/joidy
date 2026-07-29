@@ -18,7 +18,7 @@ class UserLimit:
 
 
 class UserRateLimiter:
-    def __init__(self, requests_per_minute: int = 60, auth_requests_per_minute: int = 120):
+    def __init__(self, requests_per_minute: int = 60, auth_requests_per_minute: int = 5000):
         self.requests_per_minute = requests_per_minute
         self.auth_requests_per_minute = auth_requests_per_minute
         self.window_size = 60.0
@@ -74,8 +74,8 @@ class UserRateLimiter:
         return max(0, limit - len(user_limit.requests))
 
 
-# Default: 60 requests per minute per IP, 120 per authenticated key/token
-_default_limiter = UserRateLimiter(requests_per_minute=60, auth_requests_per_minute=120)
+# Default: 60 requests per minute per IP, 5000 per authenticated key/token
+_default_limiter = UserRateLimiter(requests_per_minute=60, auth_requests_per_minute=5000)
 
 
 def get_rate_limiter() -> UserRateLimiter:

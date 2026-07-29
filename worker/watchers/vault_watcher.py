@@ -186,7 +186,7 @@ async def import_or_update_note(filepath: Path, client: httpx.AsyncClient, token
 
         payload = {"title": title, "content": content, "tags": tags, "source": "obsidian", "source_path": str(filepath)}
 
-        for attempt in range(2):
+        for attempt in range(5):
             current_token = await get_auth_token(client)
             cid = get_correlation_id()
             headers = {"X-Request-ID": cid}
@@ -210,6 +210,12 @@ async def import_or_update_note(filepath: Path, client: httpx.AsyncClient, token
                 await get_auth_token(client, force=True)
                 continue
 
+            if res.status_code in (429, 500, 503):
+                wait = 2 ** attempt
+                logger.warning("[vault] %s syncing %s (attempt %d/%d), retrying in %ss", res.status_code, filepath.name, attempt + 1, 5, wait)
+                await asyncio.sleep(wait)
+                continue
+
             res.raise_for_status()
             break
 
@@ -224,7 +230,7 @@ async def initial_scan(vault_path: Path, client: httpx.AsyncClient, token: str):
     md_files = [p for p in vault_path.rglob("*.md") if not _is_joidy_file(str(p))]
     logger.info("[vault] Initial scan: %s markdown files found", len(md_files))
 
-    semaphore = asyncio.Semaphore(8)
+    semaphore = asyncio.Semaphore(4)
 
     async def process_file(filepath: Path):
         async with semaphore:
