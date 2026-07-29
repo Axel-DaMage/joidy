@@ -9,7 +9,7 @@
   class:hoverable
   class:clickable
   on:click
-  role={clickable ? 'button' : undefined}
+  role={clickable ? 'button' : 'presentation'}
   tabindex={clickable ? 0 : -1}
   on:keydown={(e) => clickable && e.key === 'Enter' && e.currentTarget.click()}
 >
