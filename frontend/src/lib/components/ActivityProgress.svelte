@@ -70,7 +70,7 @@
 
 <div class="activity-progress">
   {#if loading}
-    <div class="loading-pulse" />
+    <div class="loading-pulse"></div>
   {:else}
     <div class="week-strip">
       {#each weekDays as day}

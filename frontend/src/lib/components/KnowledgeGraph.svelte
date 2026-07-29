@@ -466,8 +466,8 @@
 </script>
 
 <div class="graph-wrapper" style="width:100%; height:100%; position:relative; min-height: 400px;">
-  <canvas bind:this={canvasEl} width={width} height={height} style="position:absolute; top:0; left:0; z-index:1;" />
-  <svg bind:this={svgEl} width={width} height={height} style="position:absolute; top:0; left:0; z-index:2; background:transparent;" />
+  <canvas bind:this={canvasEl} width={width} height={height} style="position:absolute; top:0; left:0; z-index:1;"></canvas>
+  <svg bind:this={svgEl} width={width} height={height} style="position:absolute; top:0; left:0; z-index:2; background:transparent;"></svg>
 
   {#if tooltip.visible}
     <div class="tooltip" style="position:fixed; left:{tooltip.x}px; top:{tooltip.y}px; z-index:100;">
