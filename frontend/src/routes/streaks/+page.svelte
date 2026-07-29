@@ -1325,4 +1325,27 @@
     background: color-mix(in srgb, black 15%, transparent);
     color: color-mix(in srgb, var(--theme-ac) 20%, black);
   }
+
+  @media (max-width: 768px) {
+    .streak-item {
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 10px;
+    }
+
+    .streak-item .item-count {
+      padding-right: 0;
+      margin-left: auto;
+    }
+
+    .streak-item .item-actions {
+      position: static;
+      opacity: 1 !important;
+      pointer-events: auto !important;
+      flex-direction: row;
+      width: 100%;
+      justify-content: flex-end;
+      gap: 6px;
+    }
+  }
 </style>
