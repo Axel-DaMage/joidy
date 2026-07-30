@@ -20,8 +20,15 @@ def rebuild_derived_data(db: Session) -> None:
     sync_skills(db)
 
 
-def write_to_vault(note: Note) -> bool:
-    """Write note content back to the vault file if source_path is set."""
+def write_to_vault(note: Note, from_vault: bool = False) -> bool:
+    """Write note content back to the vault file if source_path is set.
+
+    Avoids writing when the update came from the vault watcher (which would
+    trigger a feedback loop) and skips no-op writes where the file already
+    has the same content.
+    """
+    if from_vault:
+        return False
     if not note.source_path:
         return False
     vault_path = os.environ.get("VAULT_PATH", "")
@@ -32,6 +39,13 @@ def write_to_vault(note: Note) -> bool:
         full_path = os.path.abspath(note.source_path)
         if not full_path.startswith(vault):
             return False
+        if os.path.exists(full_path):
+            try:
+                current = open(full_path, "r", encoding="utf-8").read()
+            except Exception:
+                current = None
+            if current is not None and current == note.content:
+                return True
         with open(full_path, "w", encoding="utf-8") as f:
             f.write(note.content)
         return True
@@ -84,6 +98,7 @@ def create_note(
     source: str,
     source_path: str | None,
     rebuild_derived_data: bool = True,
+    from_vault: bool = False,
 ):
     title = sanitize_title(title)
     content = sanitize_content(content)
@@ -112,7 +127,7 @@ def create_note(
     if rebuild_derived_data:
         sync_skills_for_tags(db, touched_tag_ids)
     if source_path:
-        write_to_vault(note)
+        write_to_vault(note, from_vault=from_vault)
     clear_api_caches()
 
     try:
@@ -134,6 +149,7 @@ def update_note(
     source_path: str | None = None,
     source: str | None = None,
     rebuild_derived_data: bool = True,
+    from_vault: bool = False,
 ):
     note = db.query(Note).filter(Note.id == note_id).first()
     if note is None:
@@ -181,7 +197,7 @@ def update_note(
     if rebuild_derived_data and touched_tag_ids:
         sync_skills_for_tags(db, touched_tag_ids)
     if content is not None:
-        write_to_vault(note)
+        write_to_vault(note, from_vault=from_vault)
     clear_api_caches()
 
     try:
