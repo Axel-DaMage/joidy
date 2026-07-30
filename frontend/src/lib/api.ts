@@ -12,7 +12,8 @@ const BASE = browser
 
 let isHandlingLogout = false;
 
-async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
+async function req<T>(method: string, path: string, body?: unknown, opts?: { silent?: boolean }): Promise<T> {
+  const silent = opts?.silent ?? false;
   try {
     const token = getToken();
     const headers: Record<string, string> = {};
@@ -36,15 +37,17 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
 
     if (!res.ok) {
       const err = await res.text().catch(() => res.statusText);
-      const errorMsg = err || res.statusText || 'Error desconocido';
-      showNotification(`Error del servidor (${res.status}): ${errorMsg}`, 'error');
+      if (!silent) {
+        const errorMsg = err || res.statusText || 'Error desconocido';
+        showNotification(`Error del servidor (${res.status}): ${errorMsg}`, 'error');
+      }
       throw new Error(`API ${method} ${path} → ${res.status}: ${err}`);
     }
 
     if (res.status === 204) return undefined as T;
     return res.json();
   } catch (error: any) {
-    if (error.name === 'TypeError' || error.message.includes('Failed to fetch') || error.message.includes('fetch failed')) {
+    if (!silent && (error.name === 'TypeError' || error.message.includes('Failed to fetch') || error.message.includes('fetch failed'))) {
       showNotification('Error de red. No se pudo conectar con el servidor.', 'error');
     }
     throw error;
@@ -307,7 +310,7 @@ export const api = {
 
   ai: {
     classify: (noteId: number, content: string, existingTags: string[]) =>
-      req<{ note_id: number; status: string; suggestions: AISuggestion[] }>('POST', '/ai/classify', { note_id: noteId, content, existing_tags: existingTags }),
+      req<{ note_id: number; status: string; suggestions: AISuggestion[] }>('POST', '/ai/classify', { note_id: noteId, content, existing_tags: existingTags }, { silent: true }),
     usage: () => req<{ ai_enabled: boolean; estimated_cost_usd: number }>('GET', '/ai/usage'),
   },
 

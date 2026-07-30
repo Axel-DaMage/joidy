@@ -3,6 +3,7 @@
   import SkillTree from '$lib/components/SkillTree.svelte';
   import { api, type Skill, type SkillTree as SkillTreeData } from '$lib/api';
   import { logger } from '$lib/utils/logger';
+  import { displayTagName } from '$lib/utils/format';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
   import { Search, X } from 'lucide-svelte';
 
@@ -51,7 +52,7 @@
       {#if topSkill}
         <div class="skill-stat">
           <span class="label">mejor habilidad</span>
-          <span class="mono" style="color: var(--text-primary); font-size:13px;">{topSkill.tag_name}</span>
+          <span class="mono" style="color: var(--text-primary); font-size:13px;">{displayTagName(topSkill.tag_name)}</span>
           <span class="caption" style="color: var(--text-secondary);">{topSkill.note_count} notas</span>
         </div>
       {/if}
@@ -113,7 +114,7 @@
         {#each filteredSkills as skill}
           <div class="skill-row">
             <div class="skill-info">
-              <span class="skill-name">{skill.tag_name}</span>
+              <span class="skill-name">{displayTagName(skill.tag_name)}</span>
               <span class="skill-count caption">{skill.note_count} notas</span>
             </div>
             <span class="level-badge" data-level={skill.level}>

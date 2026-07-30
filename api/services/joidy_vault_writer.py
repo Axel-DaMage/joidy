@@ -7,6 +7,7 @@ import os
 from datetime import date, datetime, timezone
 from pathlib import Path
 
+from config import settings
 from models.gamification import StreakRecord, UserStats
 from models.goal import Goal
 from models.note import NoteTag, Tag
@@ -19,7 +20,7 @@ OBJECTIVES_DIR = "Objetivos"
 
 
 def get_vault_path() -> Path | None:
-    vault = os.environ.get("VAULT_PATH", "")
+    vault = settings.obsidian_vault_path
     if not vault:
         return None
     p = Path(vault)

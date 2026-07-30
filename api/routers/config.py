@@ -226,6 +226,7 @@ def perform_setup(req: SetupRequest):
     settings.secret_key = env_vars["SECRET_KEY"]
     if req.obsidian_vault_path:
         os.environ["OBSIDIAN_VAULT_PATH"] = req.obsidian_vault_path
+        settings.obsidian_vault_path = req.obsidian_vault_path
     
     return {"status": "ok", "message": "Setup completed"}
 

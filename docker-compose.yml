@@ -29,6 +29,8 @@ services:
       - WORKER_URL=http://worker:8001
       - APP_ENV=${APP_ENV:-production}
       - UPLOAD_DIR=/data/uploads
+      - OBSIDIAN_VAULT_PATH=/vault
+      - VAULT_PATH=/vault
     depends_on:
       postgres:
         condition: service_healthy

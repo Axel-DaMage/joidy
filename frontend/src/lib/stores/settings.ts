@@ -202,12 +202,15 @@ export const hideTagsLine    = createBooleanStore('joidy-hide-tags-line', true);
 
 export const darkMode = createBooleanStore('joidy-dark-mode', true);
 
-export function initTheme() {
-  darkMode.subscribe(dark => {
+export function initTheme(): (() => void) | void {
+  // Return the unsubscribe function so the caller can clean it up.
+  // Previously the subscription was auto-unsubscribed immediately via `()`,
+  // which meant theme changes after init were never applied (#265).
+  return darkMode.subscribe(dark => {
     if (typeof document !== 'undefined') {
       document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
     }
-  })();
+  });
 }
 
 export interface FolderMeta { icon: string; color: string; }

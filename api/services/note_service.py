@@ -1,6 +1,7 @@
 import os
 import re
 
+from config import settings
 from models.note import Note, NoteLink, NoteTag, Tag
 from services.gamification_engine import process_event
 from services.goal_service import sync_goals_from_note
@@ -31,7 +32,7 @@ def write_to_vault(note: Note, from_vault: bool = False) -> bool:
         return False
     if not note.source_path:
         return False
-    vault_path = os.environ.get("VAULT_PATH", "")
+    vault_path = settings.obsidian_vault_path
     if not vault_path:
         return False
     try:

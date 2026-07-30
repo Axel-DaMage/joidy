@@ -2,6 +2,7 @@ import os
 import shutil
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from config import settings
 from services.auth_service import get_current_user
 
 router = APIRouter(prefix="/folders", tags=["folders"])
@@ -25,7 +26,7 @@ def create_folder(
     folder: FolderCreate,
     user: dict = Depends(get_current_user),
 ):
-    vault = os.environ.get("OBSIDIAN_VAULT_PATH")
+    vault = settings.obsidian_vault_path
     if not vault:
         raise HTTPException(status_code=400, detail="OBSIDIAN_VAULT_PATH not set")
 
@@ -45,7 +46,7 @@ def delete_folder(
     path: str,
     user: dict = Depends(get_current_user),
 ):
-    vault = os.environ.get("OBSIDIAN_VAULT_PATH")
+    vault = settings.obsidian_vault_path
     if not vault:
         raise HTTPException(status_code=400, detail="OBSIDIAN_VAULT_PATH not set")
 

@@ -42,3 +42,14 @@ export function clamp(value: number, min: number, max: number): number {
 export function randomId(prefix = ''): string {
   return prefix + Math.random().toString(36).slice(2, 11);
 }
+
+/**
+ * Returns a human-readable display name for a tag.
+ * Tags whose name is a bare hex color code (e.g. "ef4444", "c8a96e") are
+ * replaced with a fallback label so the UI never shows a raw color code (#260).
+ */
+export function displayTagName(name: string | undefined | null): string {
+  if (!name) return 'Sin nombre';
+  if (/^[0-9a-f]{6}$/.test(name)) return 'Sin nombre';
+  return name;
+}

@@ -301,7 +301,7 @@ class TestWriteToVault(NoteServiceTestBase):
 
             Path(note.source_path).write_text("same content", encoding="utf-8")
             try:
-                with patch.dict("os.environ", {"VAULT_PATH": "/tmp"}):
+                with patch("services.note_service.settings.obsidian_vault_path", "/tmp"):
                     result = write_to_vault(note, from_vault=False)
                     self.assertTrue(result)
                     mtime_after_first = Path(note.source_path).stat().st_mtime

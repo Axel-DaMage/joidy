@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import * as d3 from 'd3';
   import type { SkillTree, SkillNode } from '$lib/api';
+  import { displayTagName } from '$lib/utils/format';
   import { Star, Hash, Zap, Shield, Sparkles } from 'lucide-svelte';
 
   export let data: SkillTree = { nodes: [], edges: [] };
@@ -117,7 +118,7 @@
       .attr('font-size', '10px')
       .attr('font-family', 'var(--font-mono)')
       .attr('fill', 'var(--text-primary)')
-      .text((d: any) => d.name.toUpperCase());
+      .text((d: any) => displayTagName(d.name).toUpperCase());
 
     simulation.on('tick', () => {
       link
@@ -179,7 +180,7 @@
         <span class="level-tag" style="background: {COLORS[tooltip.node.level as keyof typeof COLORS]}">
           {tooltip.node.level.toUpperCase()}
         </span>
-        <h4>{tooltip.node.name}</h4>
+        <h4>{displayTagName(tooltip.node.name)}</h4>
       </div>
       <div class="tooltip-body">
         <div class="stat"><Zap size={10}/> {tooltip.node.note_count} Notas</div>

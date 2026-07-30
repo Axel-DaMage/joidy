@@ -81,7 +81,7 @@
 
     accentColors.init();
     activeIconPack.init();
-    initTheme();
+    const cleanupTheme = initTheme();
     initPomodoroSettings();
     initKeyboardNavigation();
     initPushNotifications();
@@ -365,6 +365,7 @@
       }
       if (wsReconnectTimeout) clearTimeout(wsReconnectTimeout);
       if (pillTimeout) clearTimeout(pillTimeout);
+      if (cleanupTheme) cleanupTheme();
     };
   });
   let showConnectedPill = false;

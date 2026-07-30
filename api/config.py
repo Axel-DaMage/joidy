@@ -42,6 +42,7 @@ class Settings(BaseSettings):
 
     # Obsidian
     obsidian_webhook_secret: str | None = None  # Optional secret for /webhook/obsidian
+    obsidian_vault_path: str = "/vault"  # Container-internal mount path of the Obsidian vault
 
     # Google OAuth (Calendar, Tasks, Gmail, Contacts)
     google_client_id: str = ""
