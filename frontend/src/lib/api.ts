@@ -310,6 +310,9 @@ github: {
     issues: (filter: string = 'all') => req<{ issues: { id: number; number: number; title: string; repo: string; url: string; state: string; updated_at: string; author?: string }[]; stats: { total: number; open: number; closed: number }; filter: string }>('GET', `/integrations/github/issues?filter=${filter}`),
     pulls: (filter: string = 'all') => req<{ pulls: { id: number; number: number; title: string; repo: string; url: string; state: string; draft: boolean; updated_at: string; author?: string }[]; stats: { total: number; open: number; closed: number; draft: number }; filter: string }>('GET', `/integrations/github/pulls?filter=${filter}`),
     repos: () => req<{ repos: { id: number; name: string; full_name: string; color: string }[] }>('GET', '/integrations/github/repos'),
+    startDeviceAuth: () => req<{ device_code: string; user_code: string; verification_uri: string; verification_uri_secondary?: string; expires_in: number; interval: number }>('GET', '/integrations/github/oauth/device/start'),
+    pollDeviceCode: (device_code: string) => req<{ status: 'authorized'; access_token: string; token_type: string; scope: string } | { status: 'pending' | 'slowdown' | 'expired' | 'denied'; message: string }>('POST', `/integrations/github/oauth/device/polling?device_code=${encodeURIComponent(device_code)}`),
+    revoke: () => req<{ status: string }>('POST', '/integrations/github/oauth/revoke'),
   },
 
   config: {

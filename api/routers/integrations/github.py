@@ -865,11 +865,15 @@ async def poll_device_code(
 
 @router.post("/oauth/revoke")
 async def revoke_token(
-    token: str = Query(..., description="Token to revoke"),
+    token: str | None = Query(None, description="Token to revoke; defaults to the configured token"),
 ):
     """
-    Revoca un token de acceso GitHub.
+    Revoca el token de acceso GitHub configurado.
     """
+    token = token or settings.github_token
+    if not token:
+        raise HTTPException(status_code=400, detail="No GitHub token to revoke")
+
     revoke_url = "https://github.com/login/oauth/revoke"
 
     async with httpx.AsyncClient(timeout=30.0) as client:
