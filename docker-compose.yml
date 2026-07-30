@@ -28,6 +28,7 @@ services:
       - AI_SERVICE_URL=http://ai-service:8002
       - WORKER_URL=http://worker:8001
       - APP_ENV=${APP_ENV:-production}
+      - UPLOAD_DIR=/data/uploads
     depends_on:
       postgres:
         condition: service_healthy
