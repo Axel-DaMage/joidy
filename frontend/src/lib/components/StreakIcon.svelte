@@ -9,7 +9,7 @@
 
   $: isEmoji = emojiRegex.test(name);
 
-  let lucideComp: any = $state(Circle);
+  let lucideComp: any = Circle;
 
   async function loadIcon(n: string) {
     const mod = await import('lucide-svelte');

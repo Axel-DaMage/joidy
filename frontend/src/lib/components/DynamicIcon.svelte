@@ -21,8 +21,8 @@
 
   $: isEmoji = emojiRegex.test(name);
 
-  let lucideComp: any = $state(Circle);
-  let phosphorComp = $state<any>(null);
+  let lucideComp: any = Circle;
+  let phosphorComp: any = null;
 
   async function loadLucide(n: string) {
     const mod = await import('lucide-svelte');
@@ -33,8 +33,8 @@
     loadLucide(name);
   }
 
-  function getIconComponent(pack: string, n: string) {
-    if (pack === 'phosphor' || pack === 'material') {
+  function getIconComponent(packName: string, n: string) {
+    if (packName === 'phosphor' || packName === 'material') {
       const map: Record<string, any> = {
         'Home': PHome, 'BookOpen': PBook, 'Network': PNet, 'Zap': PZap, 'Target': PTarget,
         'Flame': PFlame, 'Settings': PCog, 'LayoutGrid': PGrid, 'X': PX, 'Moon': PMoon,
