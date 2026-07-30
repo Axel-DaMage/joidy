@@ -40,5 +40,8 @@ class Settings(BaseSettings):
     # Authentication
     auth_password: str = ""  # Password for single-user auth (optional)
 
+    # Obsidian
+    obsidian_webhook_secret: str | None = None  # Optional secret for /webhook/obsidian
+
 
 settings = Settings()
