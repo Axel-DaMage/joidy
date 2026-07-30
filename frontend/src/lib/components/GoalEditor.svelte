@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, onDestroy } from 'svelte';
   import { Eye, EyeOff, Save, Trash2, X, Maximize, ChevronLeft, ChevronRight, Settings } from 'lucide-svelte';
   import { marked } from 'marked';
   import DOMPurify from 'dompurify';
@@ -49,6 +49,14 @@
   let saved = false;
   let previewMode = false;
   let zenMode = false;
+
+  // Sync zen mode with body class to hide layout chrome (#270)
+  $: if (typeof document !== 'undefined') {
+    document.body.classList.toggle('zen-mode-active', zenMode);
+  }
+  onDestroy(() => {
+    if (typeof document !== 'undefined') document.body.classList.remove('zen-mode-active');
+  });
 
   $: if (goal) {
     title = goal.title;
@@ -432,7 +440,7 @@
   .preview :global(ul) { margin: 0 0 12px; padding-left: 20px; }
   .preview :global(li) { margin: 4px 0; }
   .preview :global(code) { font-family: var(--font-mono); font-size: 12px; background: var(--elevated); padding: 1px 5px; border-radius: 2px; color: var(--md-h1, var(--xp)); }
-  .preview :global(pre) { background: var(--elevated); border: 1px solid var(--border); border-radius: var(--r); padding: 16px; overflow-x: auto; margin: 12px 0; }
+  .preview :global(pre) { background: var(--elevated); border: 1px solid var(--border); border-radius: var(--r); padding: 16px; overflow-x: auto; margin: 12px 0; white-space: pre; }
   .preview :global(blockquote) { border-left: 2px solid var(--border); margin: 0; padding: 4px 12px; color: var(--text-secondary); font-style: italic; }
   .preview :global(strong) { font-weight: 600; }
   .preview :global(em) { font-style: italic; }

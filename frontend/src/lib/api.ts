@@ -36,12 +36,24 @@ async function req<T>(method: string, path: string, body?: unknown, opts?: { sil
     }
 
     if (!res.ok) {
-      const err = await res.text().catch(() => res.statusText);
-      if (!silent) {
-        const errorMsg = err || res.statusText || 'Error desconocido';
-        showNotification(`Error del servidor (${res.status}): ${errorMsg}`, 'error');
+      const raw = await res.text().catch(() => res.statusText);
+      // Parse JSON error bodies to extract a human-readable message instead
+      // of showing raw JSON like {"detail":"VAPID not configured"} (#252).
+      let userMsg = raw || res.statusText || 'Error desconocido';
+      try {
+        const parsed = JSON.parse(raw);
+        userMsg = parsed.detail || parsed.message || parsed.error || raw;
+      } catch { /* not JSON, use raw text */ }
+
+      // Map non-actionable server errors to friendlier messages
+      if (res.status === 502 || res.status === 503) {
+        userMsg = 'El servicio no está disponible temporalmente.';
       }
-      throw new Error(`API ${method} ${path} → ${res.status}: ${err}`);
+
+      if (!silent) {
+        showNotification(userMsg, 'error');
+      }
+      throw new Error(`API ${method} ${path} → ${res.status}: ${raw}`);
     }
 
     if (res.status === 204) return undefined as T;

@@ -1,6 +1,6 @@
 # Joidy — Agent Instructions
 
-4 Docker services, SQLite + `sqlite-vec`, GPL v3.
+4 Docker services, PostgreSQL 16 + `pgvector`, GPL v3.
 
 ## Services & Ports
 
@@ -11,7 +11,9 @@
 | `ai-service` | `ai-service/` | FastAPI + Gemini | 8002 |
 | `worker` | `worker/` | Python asyncio | 8001 |
 
-DB: `./data/db/joidy.db` (SQLite with WAL, shared across services).
+DB: PostgreSQL 16 (pgvector) in `postgres` container, volume `postgres_data`.
+`DATABASE_URL=postgresql://joidy:joidy@postgres:5432/joidy`
+(`data/db/joidy.db` is a stale SQLite file from legacy setup — not used.)
 
 ## Essential Commands
 
@@ -78,7 +80,7 @@ main.py → routers/*.py → services/*.py → models/*.py
 - **routers/**: HTTP endpoints, Pydantic validation only
 - **services/**: Business logic + DB ops
 - **models/**: SQLAlchemy ORM
-- **alembic/versions/**: 10 migration files (`make migrate`)
+- **alembic/versions/**: 12 migration files (`make migrate`)
 - **tests/**: 7 test files (unittest)
 
 Internal comms:
@@ -125,7 +127,7 @@ Two concurrent asyncio tasks: `watch_vault()` (watches `/vault/*.md`, 2s debounc
 - Never commit `.env` or `data/` (in `.gitignore`)
 - API must be healthy before other services start (`depends_on: condition: service_healthy`)
 - AI features disabled without `GEMINI_API_KEY`; API still works
-- Database is shared across all services (single SQLite file)
+- Database is shared across all services (single PostgreSQL database via `DATABASE_URL`)
 - Config via Pydantic `Settings` from `.env`; no hardcoded values
 - `svelte-kit sync` runs on `postinstall` — can fail if `.svelte-kit/` has root-owned files
 - Vite HMR in Docker: `server.hmr.clientPort: 3000` + `host: localhost` (in `vite.config.ts`)

@@ -503,6 +503,21 @@
   }
 
   let zenMode = $state(false);
+
+  // Sync zen mode with a body class so the layout (nav, header, footer, sidebar)
+  // can be hidden via CSS — not just covered by an overlay (#270).
+  $effect(() => {
+    if (typeof document !== 'undefined') {
+      document.body.classList.toggle('zen-mode-active', zenMode);
+    }
+  });
+
+  onDestroy(() => {
+    if (typeof document !== 'undefined') {
+      document.body.classList.remove('zen-mode-active');
+    }
+  });
+
   let backdropEl = $state<HTMLElement | undefined>();
   let textareaEl = $state<HTMLTextAreaElement | undefined>();
   let lineGutterEl = $state<HTMLElement | undefined>();
@@ -1377,11 +1392,12 @@
   .preview :global(h5) { font-size: 12px; font-weight: 600; margin: 8px 0 2px; color: var(--md-h5, var(--text-muted)); }
   .preview :global(h6) { font-size: 11px; font-weight: 700; margin: 8px 0 2px; color: var(--md-h6, var(--text-muted)); text-transform: uppercase; }
   .preview :global(code) { font-family: var(--font-mono); font-size: 12px; background: var(--elevated); padding: 1px 5px; border-radius: 2px; color: var(--md-h1, var(--xp)); }
-  .preview :global(pre) { background: var(--elevated); border: 1px solid var(--border); border-radius: var(--r); padding: 16px; overflow-x: auto; margin: 12px 0; }
-  .preview :global(pre code) { background: none; padding: 0; color: var(--text-primary); }
+  .preview :global(pre) { background: var(--elevated); border: 1px solid var(--border); border-radius: var(--r); padding: 16px; overflow-x: auto; margin: 12px 0; white-space: pre; }
+  .preview :global(pre code) { background: none; padding: 0; color: var(--text-primary); white-space: pre; }
   .preview :global(blockquote) { border-left: 2px solid var(--border); margin: 0; padding: 4px 12px; color: var(--text-secondary); font-style: italic; }
-  .preview :global(li) { margin: 4px 0; padding-left: 12px; list-style: none; }
-  .preview :global(li)::before { content: "—"; margin-right: 8px; color: var(--text-muted); }
+  .preview :global(li) { margin: 4px 0; padding-left: 4px; list-style: disc; }
+  .preview :global(ul) { padding-left: 20px; margin: 0 0 12px; }
+  .preview :global(ol) { padding-left: 20px; margin: 0 0 12px; }
   .preview :global(hr) { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
   .preview :global(strong) { font-weight: 600; }
   .preview :global(p) { margin: 0 0 12px; }
