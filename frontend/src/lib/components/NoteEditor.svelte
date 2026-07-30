@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher, onDestroy, onMount, tick } from 'svelte';
-  import { Eye, EyeOff, Save, Trash2, X, Settings, Search, Maximize, ChevronLeft, ChevronRight, Download, RotateCcw, Bold, Italic, Strikethrough, Heading1, Heading2, Heading3, List, ListOrdered, Link, Quote, Code } from 'lucide-svelte';
+  import { Eye, EyeOff, Save, Trash2, X, Settings, Search, Maximize, ChevronLeft, ChevronRight, Download, RotateCcw, Bold, Italic, Strikethrough, Heading1, Heading2, Heading3, List, ListOrdered, Link, Quote, Code, Image, Paperclip } from 'lucide-svelte';
   import * as L from 'lucide-svelte';
   import DynamicIcon from './DynamicIcon.svelte';
   import IconPicker from './IconPicker.svelte';
@@ -499,6 +499,9 @@
   let backdropEl = $state<HTMLElement | undefined>();
   let textareaEl = $state<HTMLTextAreaElement | undefined>();
   let lineGutterEl = $state<HTMLElement | undefined>();
+  let imageInputEl = $state<HTMLInputElement | undefined>();
+  let fileInputEl = $state<HTMLInputElement | undefined>();
+  let uploading = $state(false);
 
   function syncScroll() {
     if (backdropEl && textareaEl) {
@@ -561,6 +564,58 @@
         textareaEl?.setSelectionRange(pos, pos);
       }
     });
+  }
+
+  function insertAtCursor(text: string) {
+    if (!textareaEl) return;
+    const { selectionStart, selectionEnd } = textareaEl;
+    const before = content.substring(0, selectionStart);
+    const after = content.substring(selectionEnd);
+    content = before + text + after;
+    tick().then(() => {
+      const pos = selectionStart + text.length;
+      textareaEl?.focus();
+      textareaEl?.setSelectionRange(pos, pos);
+    });
+  }
+
+  async function uploadAttachment(file: File, type: 'image' | 'file') {
+    if (!file) return;
+    uploading = true;
+    try {
+      const result = type === 'image' ? await api.upload.image(file) : await api.upload.file(file);
+      const insertion = type === 'image'
+        ? `![${result.filename}](${result.url})`
+        : `[${result.filename}](${result.url})`;
+      insertAtCursor(insertion);
+      showNotification(`${type === 'image' ? 'Imagen' : 'Archivo'} subido`, 'success');
+    } catch (e: any) {
+      showNotification(e.message || 'Error subiendo archivo', 'error');
+    } finally {
+      uploading = false;
+      if (imageInputEl) imageInputEl.value = '';
+      if (fileInputEl) fileInputEl.value = '';
+    }
+  }
+
+  async function handleImageUpload(e: Event) {
+    const target = e.target as HTMLInputElement;
+    const file = target.files?.[0];
+    if (file) await uploadAttachment(file, 'image');
+  }
+
+  async function handleFileUpload(e: Event) {
+    const target = e.target as HTMLInputElement;
+    const file = target.files?.[0];
+    if (file) await uploadAttachment(file, 'file');
+  }
+
+  function openImageUpload() {
+    imageInputEl?.click();
+  }
+
+  function openFileUpload() {
+    fileInputEl?.click();
   }
 
   function highlightMarkdown(text: string): string {
@@ -698,8 +753,19 @@
         <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('code')} title="Bloque de código">
           <Code size={13} />
         </button>
+
+        <div class="format-divider"></div>
+
+        <button class="toolbar-btn icon-only" onclick={openImageUpload} disabled={uploading} title="Insertar imagen">
+          <Image size={13} />
+        </button>
+        <button class="toolbar-btn icon-only" onclick={openFileUpload} disabled={uploading} title="Adjuntar archivo">
+          <Paperclip size={13} />
+        </button>
       </div>
     </div>
+    <input bind:this={imageInputEl} type="file" accept="image/*" style="display:none" onchange={handleImageUpload} />
+    <input bind:this={fileInputEl} type="file" style="display:none" onchange={handleFileUpload} />
 
     <div class="toolbar-right">
       <span class="stat">{wordCount} palabras</span>

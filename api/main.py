@@ -25,6 +25,7 @@ from routers import (
     skills,
     stats,
     tags,
+    upload,
     vault,
     websocket,
 )
@@ -35,6 +36,7 @@ from services.response_cache import get_cache_stats
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
+from starlette.staticfiles import StaticFiles
 
 logger = logging.getLogger(__name__)
 
@@ -148,6 +150,9 @@ app.include_router(websocket.router)
 app.include_router(auth.router)
 app.include_router(export.router, dependencies=[Depends(get_current_user)])
 app.include_router(stats.router, dependencies=[Depends(get_current_user)])
+app.include_router(upload.router, dependencies=[Depends(get_current_user)])
+
+app.mount("/uploads", StaticFiles(directory=settings.upload_dir), name="uploads")
 
 
 @app.get("/health")
