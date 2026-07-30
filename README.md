@@ -12,6 +12,9 @@
   <a href="https://github.com/Axel-DaMage/joidy/releases">
     <img src="https://img.shields.io/github/v/release/Axel-DaMage/joidy?style=for-the-badge" alt="Release">
   </a>
+  <a href="https://github.com/Axel-DaMage/joidy/discussions">
+    <img src="https://img.shields.io/badge/Discussions-join-5865F2?style=for-the-badge&logo=github" alt="Discussions">
+  </a>
 </p>
 
 <p align="center">
