@@ -84,3 +84,29 @@ async def get_google_task_lists(token: str, user: dict = Depends(get_current_use
         return await gs.list_task_lists(token)
     except httpx.HTTPStatusError as exc:
         raise HTTPException(status_code=exc.response.status_code, detail="Google API error")
+
+
+@router.get("/gmail")
+async def get_google_gmail_messages(
+    token: str,
+    max_results: int = 10,
+    user: dict = Depends(get_current_user),
+):
+    """List recent Gmail message headers."""
+    try:
+        return await gs.list_gmail_messages(token, max_results)
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=exc.response.status_code, detail="Google API error")
+
+
+@router.get("/contacts")
+async def get_google_contacts(
+    token: str,
+    page_size: int = 50,
+    user: dict = Depends(get_current_user),
+):
+    """List Google Contacts."""
+    try:
+        return await gs.list_contacts(token, page_size)
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=exc.response.status_code, detail="Google API error")

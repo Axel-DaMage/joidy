@@ -9,10 +9,14 @@ GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_CALENDAR_API = "https://www.googleapis.com/calendar/v3"
 GOOGLE_TASKS_API = "https://tasks.googleapis.com/tasks/v1"
+GOOGLE_GMAIL_API = "https://gmail.googleapis.com/gmail/v1"
+GOOGLE_PEOPLE_API = "https://people.googleapis.com/v1"
 GOOGLE_SCOPES = " ".join(
     [
         "https://www.googleapis.com/auth/calendar.readonly",
         "https://www.googleapis.com/auth/tasks.readonly",
+        "https://www.googleapis.com/auth/gmail.readonly",
+        "https://www.googleapis.com/auth/contacts.readonly",
     ]
 )
 
@@ -80,3 +84,23 @@ async def list_task_lists(token: str) -> list[dict[str, Any]]:
     """List the user's Google Tasks lists."""
     data = await _request(token, f"{GOOGLE_TASKS_API}/users/@me/lists")
     return data.get("items", [])
+
+
+async def list_gmail_messages(token: str, max_results: int = 10) -> list[dict[str, Any]]:
+    """List recent Gmail message headers."""
+    data = await _request(
+        token,
+        f"{GOOGLE_GMAIL_API}/users/me/messages",
+        params={"maxResults": max_results},
+    )
+    return data.get("messages", [])
+
+
+async def list_contacts(token: str, page_size: int = 50) -> list[dict[str, Any]]:
+    """List the user's Google Contacts."""
+    data = await _request(
+        token,
+        f"{GOOGLE_PEOPLE_API}/people/me/connections",
+        params={"personFields": "names,emailAddresses", "pageSize": page_size},
+    )
+    return data.get("connections", [])

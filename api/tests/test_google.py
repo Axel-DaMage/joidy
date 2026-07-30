@@ -85,3 +85,51 @@ def test_google_calendars_list(client, monkeypatch):
     data = resp.json()
     assert len(data) == 1
     assert data[0]["id"] == "primary"
+
+
+def test_google_gmail_messages_list(client, monkeypatch):
+    monkeypatch.setattr(
+        "services.google_service.settings.google_client_id", "google-client-id"
+    )
+    monkeypatch.setattr(
+        "services.google_service.settings.google_redirect_uri",
+        "http://localhost:8000/integrations/google/callback",
+    )
+
+    fake_response = MagicMock()
+    fake_response.json.return_value = {
+        "messages": [{"id": "msg1", "threadId": "t1"}]
+    }
+    fake_response.raise_for_status.return_value = None
+
+    with patch("httpx.AsyncClient.get", new=AsyncMock(return_value=fake_response)):
+        resp = client.get("/integrations/google/gmail?token=xyz&max_results=5")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["id"] == "msg1"
+
+
+def test_google_contacts_list(client, monkeypatch):
+    monkeypatch.setattr(
+        "services.google_service.settings.google_client_id", "google-client-id"
+    )
+    monkeypatch.setattr(
+        "services.google_service.settings.google_redirect_uri",
+        "http://localhost:8000/integrations/google/callback",
+    )
+
+    fake_response = MagicMock()
+    fake_response.json.return_value = {
+        "connections": [{"resourceName": "people/1", "names": [{"displayName": "Ada"}]}]
+    }
+    fake_response.raise_for_status.return_value = None
+
+    with patch("httpx.AsyncClient.get", new=AsyncMock(return_value=fake_response)):
+        resp = client.get("/integrations/google/contacts?token=xyz&page_size=10")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["resourceName"] == "people/1"
