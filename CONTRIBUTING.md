@@ -60,7 +60,7 @@ Usa prefijos descriptivos:
 
 Si no sabes por dónde empezar, prueba con:
 
-- **Good First Issues** — Tareas etiquetadas como [`good-first-issue`](https://github.com/d4mag3/Joidy/issues?q=is%3Aissue+is%3Aopen+label%3Agood-first-issue) — bugs pequeños, mejoras de documentación, tests
+- **Good First Issues** — Tareas etiquetadas como [`good-first-issue`](https://github.com/Axel-DaMage/Joidy/issues?q=is%3Aissue+is%3Aopen+label%3Agood-first-issue) — bugs pequeños, mejoras de documentación, tests
 - **TODO.md** — Tareas pendientes listadas en el proyecto
 - **AGENTS.md** — Notas detalladas de arquitectura y desarrollo
 
@@ -234,7 +234,7 @@ make test
 
 ## Reportar Bugs
 
-Usa la [plantilla de bug report](https://github.com/d4mag3/Joidy/issues/new?template=bug_report.md).
+Usa la plantilla de bug report en GitHub (`.github/ISSUE_TEMPLATE/bug_report.yml`).
 
 Incluye siempre:
 
@@ -247,7 +247,7 @@ Incluye siempre:
 
 ## Solicitar Funcionalidades
 
-Usa la [plantilla de feature request](https://github.com/d4mag3/Joidy/issues/new?template=feature_request.md) o abre una [discusión](https://github.com/d4mag3/Joidy/discussions) para ideas más abiertas.
+Usa la plantilla de feature request en GitHub (`.github/ISSUE_TEMPLATE/feature_request.yml`) o abre una discusión para ideas más abiertas.
 
 ## Reglas Importantes
 
@@ -261,9 +261,9 @@ Usa la [plantilla de feature request](https://github.com/d4mag3/Joidy/issues/new
 
 | Recurso | Dónde |
 |---------|-------|
-| Issues | [github.com/d4mag3/Joidy/issues](https://github.com/d4mag3/Joidy/issues) |
-| Discusiones | [github.com/d4mag3/Joidy/discussions](https://github.com/d4mag3/Joidy/discussions) |
+| Issues | [github.com/Axel-DaMage/Joidy/issues](https://github.com/Axel-DaMage/Joidy/issues) |
+| Discusiones | [github.com/Axel-DaMage/Joidy/discussions](https://github.com/Axel-DaMage/Joidy/discussions) |
 | AGENTS.md | Comandos de desarrollo y notas de arquitectura |
 | TODO.md | Tareas pendientes |
 | API Docs | http://localhost:8000/docs (servicio corriendo) |
-| Email | d4mag3@duck.com |
+| Email | contacto@joidy.dev |
