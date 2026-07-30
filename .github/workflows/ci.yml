@@ -32,9 +32,9 @@ jobs:
       - name: Check Python syntax
         run: python -m compileall api ai-service worker
 
-      - name: Run tests
+      - name: Run tests with coverage
         working-directory: api
-        run: python -m pytest tests/ -v
+        run: python -m pytest tests/ -v --cov=api --cov-report=term-missing
 
   frontend-check:
     name: Frontend Typecheck
