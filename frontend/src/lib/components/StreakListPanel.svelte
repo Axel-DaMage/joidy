@@ -19,7 +19,7 @@
     onToggleArchive: () => void;
     onCreate: () => void;
     onSelect: (id: number) => void;
-    onEdit: (id: number) => void;
+    onEdit: (streak: PersonalStreak) => void;
     onDelete: (id: number) => void;
   }
 
