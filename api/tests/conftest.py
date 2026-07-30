@@ -63,3 +63,9 @@ def client(db_session):
 
     app.dependency_overrides.clear()
     app.dependency_overrides.update(original_overrides)
+
+
+@pytest.fixture
+def client_no_auth():
+    with TestClient(app) as test_client:
+        yield test_client
