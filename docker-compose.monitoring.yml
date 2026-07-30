@@ -1,0 +1,29 @@
+services:
+  prometheus:
+    image: prom/prometheus:v3.0.0
+    container_name: joidy-prometheus
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    networks:
+      - joidy
+
+  grafana:
+    image: grafana/grafana:11.0.0
+    container_name: joidy-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana-data:/var/lib/grafana
+    networks:
+      - joidy
+
+networks:
+  joidy:
+    external: true
+
+volumes:
+  grafana-data:

@@ -6,8 +6,22 @@ import time
 from collections import defaultdict
 
 from fastapi import Request
+from prometheus_client import Counter, Histogram
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
+
+
+http_requests_total = Counter(
+    "http_requests_total",
+    "Total HTTP requests",
+    ["method", "path", "status"],
+)
+
+http_request_duration = Histogram(
+    "http_request_duration_seconds",
+    "HTTP request duration in seconds",
+    ["method", "path"],
+)
 
 
 class MetricsCollector:
@@ -85,13 +99,26 @@ class MetricsMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         start_time = time.perf_counter()
         response = await call_next(request)
-        duration_ms = (time.perf_counter() - start_time) * 1000
+        duration = time.perf_counter() - start_time
+
+        normalized = _collector._normalize_path(request.url.path)
 
         _collector.record(
             method=request.method,
             path=request.url.path,
             status=response.status_code,
-            duration_ms=duration_ms
+            duration_ms=duration * 1000,
         )
+
+        http_requests_total.labels(
+            method=request.method,
+            path=normalized,
+            status=str(response.status_code),
+        ).inc()
+
+        http_request_duration.labels(
+            method=request.method,
+            path=normalized,
+        ).observe(duration)
 
         return response
