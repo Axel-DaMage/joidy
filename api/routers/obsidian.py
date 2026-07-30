@@ -36,13 +36,29 @@ def obsidian_webhook(
         sync = SyncState(note_id=payload.note_id)
         db.add(sync)
 
-    # TODO: compare local/remote mtime to detect conflicts (#73)
     sync.remote_mtime = (
         datetime.fromtimestamp(payload.remote_mtime, tz=timezone.utc)
         if payload.remote_mtime
         else None
     )
     sync.last_synced_at = datetime.now(timezone.utc)
+
+    # Conflict detection: compare UTC seconds since mtimes are stored
+    # without timezone in some databases.
+    def _to_naive_utc(dt: datetime | None) -> datetime | None:
+        if dt is None:
+            return None
+        if dt.tzinfo is not None:
+            dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+        return dt
+
+    local = _to_naive_utc(sync.local_mtime)
+    remote = _to_naive_utc(sync.remote_mtime)
+    if local is not None and remote is not None and local != remote:
+        sync.conflict = True
+    else:
+        sync.conflict = False
+
     db.commit()
 
-    return {"status": "ok", "note_id": payload.note_id}
+    return {"status": "ok", "note_id": payload.note_id, "conflict": sync.conflict}
