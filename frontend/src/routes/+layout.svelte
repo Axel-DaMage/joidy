@@ -425,7 +425,7 @@
       class="btn btn-ghost btn-icon"
       title="Ajustes"
       style="color: var(--text-muted);"
-      on:click={() => settingsOpen = true}
+      on:click={() => window.dispatchEvent(new CustomEvent('joidy:open-settings'))}
     >
       <DynamicIcon name="Settings" size={14} />
     </button>
