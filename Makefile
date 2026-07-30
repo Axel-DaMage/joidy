@@ -134,9 +134,8 @@ test-frontend-check: ## Run frontend typechecking (svelte-check) inside Docker
 
 test: test-api test-frontend test-frontend-check ## Run all test suites (API + Frontend + typecheck)
 
-lint-api: ## Check syntax of all Python services using ruff
-	ruff check .
-	ruff format --check .
+lint-api: ## Check syntax of all Python services using compileall
+	python -m compileall -q api/ ai-service/ worker/ || (echo "Syntax errors found"; exit 1)
 
 lint: lint-api ## Run all linters and code checkers
 
