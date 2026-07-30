@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 
 from models.note import NoteTag, Tag
 from models.skill import Skill, compute_skill_level
-from repositories import SkillRepository, TagRepository
+from repositories import SkillRepository
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -104,7 +104,20 @@ def sync_skills(db: Session) -> list[dict]:
 def get_skill_tree(db: Session) -> dict:
     """Return skill tree as nested structure for D3 visualization."""
     skills = SkillRepository(db).list()
-    tags = {t.id: t for t in TagRepository(db).list()}
+    if not skills:
+        return {"nodes": [], "edges": []}
+
+    # Fetch only the tags referenced by skills (and their parent tags) instead
+    # of TagRepository(db).list(), which caps at 100 rows. When a user has
+    # 100+ tags from notes, skill tags with IDs > 100 were missing from the
+    # dict and the corresponding nodes were silently skipped, so the tree
+    # rendered fewer nodes than the sidebar (#206).
+    tag_ids = {s.tag_id for s in skills}
+    tags = {t.id: t for t in db.query(Tag).filter(Tag.id.in_(tag_ids)).all()}
+    # Include parent tags so edges can be drawn.
+    parent_ids = {t.parent_id for t in tags.values() if t.parent_id}
+    if parent_ids:
+        tags.update({t.id: t for t in db.query(Tag).filter(Tag.id.in_(parent_ids)).all()})
 
     nodes = []
     edges = []

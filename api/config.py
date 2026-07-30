@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    database_url: str = "postgresql://joidy:joidy@postgres:5432/joidy"
+    database_url: str = "sqlite:////data/db/joidy.db"
     ai_service_url: str = "http://ai-service:8002"
     worker_url: str = "http://worker:8001"
     secret_key: str = "dev_secret_change_me"
@@ -39,6 +39,14 @@ class Settings(BaseSettings):
 
     # Authentication
     auth_password: str = ""  # Password for single-user auth (optional)
+
+    # Obsidian
+    obsidian_webhook_secret: str | None = None  # Optional secret for /webhook/obsidian
+
+    # Google OAuth (Calendar, Tasks, Gmail, Contacts)
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    google_redirect_uri: str = ""
 
     # Strava OAuth (Activities, Athlete data)
     strava_client_id: str = ""

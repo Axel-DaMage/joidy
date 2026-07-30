@@ -5,6 +5,8 @@ from pydantic import BaseModel
 from services.auth_service import get_current_user
 from fastapi import Depends
 
+from config import settings
+
 router = APIRouter(prefix="/config", tags=["config"])
 
 ENV_FILE = Path("/app/.env") if Path("/app").exists() else Path(__file__).parent.parent.parent / ".env"

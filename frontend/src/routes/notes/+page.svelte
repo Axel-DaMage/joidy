@@ -885,7 +885,7 @@
               updateFolderMeta(editingFolder, { icon: folderIcon, color: folderColor });
               if (editingFolderNote) {
                 let content = editingFolderNote.content;
-                const match = content.match(/^---\n([\s\S]*?)\n---/);
+                const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
                 if (match) {
                   let yaml = match[1];
                   if (yaml.match(/(?:^|\n)icon:\s*([^\n]*)/)) {
@@ -898,7 +898,7 @@
                   } else {
                     yaml += `\niconColor: ${folderColor}`;
                   }
-                  content = content.replace(/^---\n([\s\S]*?)\n---/, `---\n${yaml}\n---`);
+                  content = content.replace(/^---\r?\n([\s\S]*?)\r?\n---/, `---\n${yaml}\n---`);
                 } else {
                   content = `---\nicon: ${folderIcon}\niconColor: ${folderColor}\n---\n\n${content}`;
                 }

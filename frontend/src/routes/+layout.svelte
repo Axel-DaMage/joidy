@@ -110,7 +110,20 @@
       
       const host = window.location.hostname;
       const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${wsProto}//${host}:8000/ws`;
+      // Derive the WebSocket URL from VITE_API_URL (which already reflects the
+      // configured API_PORT) so the app works on non-default ports. Fall back
+      // to the previous hostname:8000 behaviour when VITE_API_URL is unset.
+      let wsHost = `${host}:8000`;
+      const apiUrl = import.meta.env.VITE_API_URL as string | undefined;
+      if (apiUrl) {
+        try {
+          const parsed = new URL(apiUrl);
+          wsHost = `${parsed.hostname}:${parsed.port || (parsed.protocol === 'https:' ? '443' : '80')}`;
+        } catch {
+          wsHost = `${host}:8000`;
+        }
+      }
+      const wsUrl = `${wsProto}//${wsHost}/ws`;
 
       logger.info('[layout] Connecting to WebSocket:', wsUrl);
       ws = new WebSocket(wsUrl);
@@ -159,8 +172,14 @@
 
     connectWS();
 
-    // Register service worker for PWA
-    if ('serviceWorker' in navigator) {
+    // Register service worker for PWA (production only).
+    // In dev, SvelteKit does not emit a usable /service-worker.js (the
+    // `$service-worker` virtual module references build-time assets that do
+    // not exist at dev time), so registration fails with
+    // "ServiceWorker script evaluation failed" on every page load. The SW
+    // fetch handler would also intercept API calls and return 503 Offline
+    // while the dev backend is restarting, breaking the dev workflow (#205).
+    if (import.meta.env.PROD && 'serviceWorker' in navigator) {
       navigator.serviceWorker.register('/service-worker.js').catch((err) => {
         logger.warn('SW registration failed:', err);
       });

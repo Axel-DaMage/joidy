@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createEventDispatcher, onDestroy, onMount, tick } from 'svelte';
+  import { createEventDispatcher, onDestroy, onMount, tick, untrack } from 'svelte';
   import { Eye, EyeOff, Save, Trash2, X, Settings, Search, Maximize, ChevronLeft, ChevronRight, Download, RotateCcw, Bold, Italic, Strikethrough, Heading1, Heading2, Heading3, List, ListOrdered, Link, Quote, Code, Image, Paperclip } from 'lucide-svelte';
   import DynamicIcon from './DynamicIcon.svelte';
   import LazyIconPicker from './LazyIconPicker.svelte';
@@ -93,18 +93,26 @@
   let tags = $state<string[]>([]);
   let previousContentTags = $state<string[]>([]);
 
+  // Sync editor state when the `note` prop changes. The body reads `content`
+  // and `tags` (via extractTagsFromContent / tags.includes) after writing them,
+  // which would create a self-dependency loop: tags = [...note.tags] makes a
+  // new array reference every run, the read re-triggers the effect, and it
+  // never converges. Wrap the writes in untrack() so only `note` is a
+  // dependency — user edits to content/tags no longer reset the editor.
   $effect(() => {
-    if (note) {
-      title = note.title ?? initialTitle;
-      content = note.content ?? '';
-      tags = [...(note.tags || [])];
+    const n = note;
+    if (!n) return;
+    untrack(() => {
+      title = n.title ?? initialTitle;
+      content = n.content ?? '';
+      tags = [...(n.tags || [])];
       previousContentTags = extractTagsFromContent(content);
       for (const t of previousContentTags) {
         if (!tags.includes(t)) tags.push(t);
       }
       historyStack = [content || ''];
       historyIndex = 0;
-    }
+    });
   });
   let tagInput = $state('');
   let saving = $state(false);
@@ -225,7 +233,7 @@
     }
   }
 
-  let rawFrontmatterMatch = $derived(content.match(/^---\n[\s\S]*?\n---/));
+  let rawFrontmatterMatch = $derived(content.match(/^---\r?\n[\s\S]*?\r?\n---/));
   let rawFrontmatter = $derived(rawFrontmatterMatch ? rawFrontmatterMatch[0] : '');
 
   let tagsLineMatch = $derived(content.match(/^#\s*Tags?:\s*.*$/im));
@@ -234,7 +242,7 @@
   let visibleEditorContent = $derived((() => {
     let val = content;
     if (!$showFrontmatter && rawFrontmatter) {
-      val = val.replace(/^---\n[\s\S]*?\n---[\n]*/, '');
+      val = val.replace(/^---\r?\n[\s\S]*?\r?\n---[\r\n]*/, '');
     }
     if ($hideTagsLine && tags.length > 0 && currentTagsLine) {
       val = val.replace(/^#\s*Tags?:\s*.*$/im, '').trim();
@@ -439,7 +447,7 @@
   }
 
   function updateFrontmatter(key: string, value: string) {
-    const m = content.match(/^---\n([\s\S]*?)\n---/);
+    const m = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
     if (m) {
       let yaml = m[1];
       const regex = new RegExp(`(?:^|\\n)${key}:.*`);
@@ -449,7 +457,7 @@
         yaml += `\n${key}: ${value}`;
       }
       yaml = yaml.replace(/\n{2,}/g, '\n').trim();
-      content = content.replace(/^---\n[\s\S]*?\n---/, `---\n${yaml}\n---`);
+      content = content.replace(/^---\r?\n[\s\S]*?\r?\n---/, `---\n${yaml}\n---`);
     } else {
       content = `---\n${key}: ${value}\n---\n\n` + content;
     }
