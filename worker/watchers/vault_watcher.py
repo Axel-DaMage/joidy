@@ -189,7 +189,7 @@ async def import_or_update_note(filepath: Path, client: httpx.AsyncClient, token
         for attempt in range(5):
             current_token = await get_auth_token(client)
             cid = get_correlation_id()
-            headers = {"X-Request-ID": cid}
+            headers = {"X-Request-ID": cid, "X-From-Vault": "1"}
             if bulk_import:
                 headers["X-Bulk-Import"] = "1"
             if current_token:

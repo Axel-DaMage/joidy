@@ -3,6 +3,7 @@
 import sys
 import types
 import unittest
+from unittest.mock import patch
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
@@ -238,6 +239,76 @@ class TestListBacklinks(NoteServiceTestBase):
             self.assertEqual(len(backlinks), 2)
             titles = sorted([n.title for n in backlinks])
             self.assertEqual(titles, ["Source1", "Source2"])
+
+
+class TestWriteToVault(NoteServiceTestBase):
+    def test_create_note_from_vault_skips_write_to_vault(self) -> None:
+        with self.Session() as db, patch("services.note_service.write_to_vault") as mock_write:
+            note, _ = create_note(
+                db,
+                title="Vault Note",
+                content="Body",
+                tags=[],
+                source="obsidian",
+                source_path="/vault/note.md",
+                rebuild_derived_data=False,
+                from_vault=True,
+            )
+            db.commit()
+            mock_write.assert_not_called()
+            self.assertEqual(note.source, "obsidian")
+
+    def test_update_note_from_vault_skips_write_to_vault(self) -> None:
+        with self.Session() as db, patch("services.note_service.write_to_vault") as mock_write:
+            note, _ = create_note(
+                db,
+                title="Vault Note",
+                content="Body",
+                tags=[],
+                source="obsidian",
+                source_path="/vault/note.md",
+                rebuild_derived_data=False,
+            )
+            mock_write.reset_mock()
+            update_note(
+                db,
+                note.id,
+                content="Updated body",
+                rebuild_derived_data=False,
+                from_vault=True,
+            )
+            db.commit()
+            mock_write.assert_not_called()
+
+    def test_write_to_vault_skips_noop_writes(self) -> None:
+        from services.note_service import write_to_vault
+
+        with self.Session() as db:
+            note, _ = create_note(
+                db,
+                title="Vault Note",
+                content="same content",
+                tags=[],
+                source="joidy",
+                source_path=None,
+                rebuild_derived_data=False,
+            )
+            note.source_path = "/tmp/joidy_test_note.md"
+            db.commit()
+
+        from pathlib import Path
+        Path(note.source_path).write_text("same content", encoding="utf-8")
+        try:
+            with patch.dict("os.environ", {"VAULT_PATH": "/tmp"}):
+                result = write_to_vault(note, from_vault=False)
+                self.assertTrue(result)
+                mtime_after_first = Path(note.source_path).stat().st_mtime
+                # Second write with identical content should not re-touch the file
+                result = write_to_vault(note, from_vault=False)
+                self.assertTrue(result)
+                self.assertEqual(Path(note.source_path).stat().st_mtime, mtime_after_first)
+        finally:
+            Path(note.source_path).unlink(missing_ok=True)
 
 
 if __name__ == "__main__":
