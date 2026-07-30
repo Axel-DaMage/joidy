@@ -497,6 +497,84 @@ textarea.input {
 .text-success { color: var(--success); }
 .text-error { color: var(--error); }
 
+/* ── Responsive (mobile) ─────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+    grid-template-rows: var(--header-h) 1fr auto;
+    grid-template-areas:
+      "header"
+      "main"
+      "sidebar";
+  }
+
+  .app-sidebar {
+    flex-direction: row;
+    justify-content: space-around;
+    align-items: center;
+    border-right: none;
+    border-top: 1px solid var(--border);
+    padding: var(--s2) 0;
+    gap: 0;
+    overflow: visible;
+  }
+
+  .app-main {
+    overflow: auto;
+  }
+
+  .app-statusbar {
+    display: none;
+  }
+
+  .nav-item {
+    width: 40px;
+    height: 40px;
+  }
+
+  .nav-item .tooltip {
+    display: none;
+  }
+
+  /* Stack the common resizable 3-column page layouts into a single column */
+  .notes-page,
+  .dashboard,
+  .streaks-layout {
+    grid-template-columns: 1fr !important;
+    grid-template-rows: auto 1fr !important;
+    height: auto;
+    min-height: 100%;
+  }
+
+  .notes-page .resize-handle,
+  .dashboard .resize-handle,
+  .streaks-layout .resize-handle {
+    display: none;
+  }
+
+  .notes-list,
+  .plant-section,
+  .streaks-layout .list-panel {
+    max-height: 45vh;
+    min-height: 180px;
+    overflow: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .editor-panel,
+  .activity-section,
+  .streaks-layout .detail-panel {
+    min-height: 55vh;
+  }
+
+  /* Goals page */
+  .goals-body {
+    max-width: none !important;
+    padding: var(--s3);
+  }
+}
+
 /* ── Global Resize Handle ────────────────────────────────────────────────────── */
 .resize-handle {
   background: transparent;
