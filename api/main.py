@@ -22,6 +22,7 @@ from routers import (
     goals,
     metrics,
     notes,
+    obsidian,
     personal_streaks,
     planning,
     push,
@@ -152,6 +153,7 @@ app.include_router(folders.router, dependencies=[Depends(get_current_user)])
 app.include_router(ai.router, dependencies=[Depends(get_current_user)])
 app.include_router(planning.router, dependencies=[Depends(get_current_user)])
 app.include_router(websocket.router)
+app.include_router(obsidian.router)
 app.include_router(auth.router)
 app.include_router(export.router, dependencies=[Depends(get_current_user)])
 app.include_router(stats.router, dependencies=[Depends(get_current_user)])
