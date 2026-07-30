@@ -129,3 +129,8 @@ Two concurrent asyncio tasks: `watch_vault()` (watches `/vault/*.md`, 2s debounc
 - Config via Pydantic `Settings` from `.env`; no hardcoded values
 - `svelte-kit sync` runs on `postinstall` — can fail if `.svelte-kit/` has root-owned files
 - Vite HMR in Docker: `server.hmr.clientPort: 3000` + `host: localhost` (in `vite.config.ts`)
+
+## Workflow
+
+- Base branch for pull requests is `development`. Always create feature branches from `development` and open PRs against `development`, not `main`.
+- `main` is reserved for releases and should only be updated from `development` via release or hotfix PRs.
