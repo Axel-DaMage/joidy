@@ -43,5 +43,10 @@ class Settings(BaseSettings):
     # Obsidian
     obsidian_webhook_secret: str | None = None  # Optional secret for /webhook/obsidian
 
+    # Google OAuth (Calendar, Tasks, Gmail, Contacts)
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    google_redirect_uri: str = ""
+
 
 settings = Settings()

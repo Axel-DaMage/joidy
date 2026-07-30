@@ -33,7 +33,7 @@ from routers import (
     vault,
     websocket,
 )
-from routers.integrations import github
+from routers.integrations import github, google
 from services.auth_service import get_current_user
 from fastapi import Depends
 from services.response_cache import get_cache_stats
@@ -148,6 +148,7 @@ app.include_router(gamification.router, dependencies=[Depends(get_current_user)]
 app.include_router(personal_streaks.router, dependencies=[Depends(get_current_user)])
 app.include_router(push.router, dependencies=[Depends(get_current_user)])
 app.include_router(github.router, dependencies=[Depends(get_current_user)])
+app.include_router(google.router, dependencies=[Depends(get_current_user)])
 app.include_router(vault.router, dependencies=[Depends(get_current_user)])
 app.include_router(folders.router, dependencies=[Depends(get_current_user)])
 app.include_router(ai.router, dependencies=[Depends(get_current_user)])
