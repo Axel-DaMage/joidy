@@ -149,6 +149,12 @@ graph LR
 
 See [QUICKSTART.md](QUICKSTART.md) for a step-by-step dev onboarding guide.
 
+## Documentation
+
+- [Architecture](./ARCHITECTURE.md)
+- [Architecture Decision Records](./docs/ARCHITECTURE_DECISIONS.md)
+- [Frontend Architecture](./ARCHITECTURE_FRONTEND.md)
+
 ## License
 
 GNU General Public License v3.0. See [LICENSE](LICENSE).

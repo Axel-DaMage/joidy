@@ -1,5 +1,10 @@
 # Arquitectura - Joidy
 
+> Ver también:
+> - [Architecture Decision Records](./docs/ARCHITECTURE_DECISIONS.md)
+> - [Arquitectura Frontend](./ARCHITECTURE_FRONTEND.md)
+> - [Release & Versioning](./RELEASE.md)
+
 ## Visión General
 
 Joidy es un sistema de gestión de conocimiento personal con gamificación. Es un monorepo con 4 servicios Docker que se comunican entre sí.
