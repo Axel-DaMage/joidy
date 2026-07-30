@@ -42,3 +42,18 @@ def test_export_notes_zip(client, db_session):
 def test_export_notes_markdown_empty(client):
     resp = client.get("/export/notes/markdown")
     assert resp.status_code == 404
+
+
+def test_export_notes_markdown_requires_auth(client_no_auth):
+    resp = client_no_auth.get("/export/notes/markdown")
+    assert resp.status_code == 401
+
+
+def test_export_notes_html_requires_auth(client_no_auth):
+    resp = client_no_auth.get("/export/notes/html")
+    assert resp.status_code == 401
+
+
+def test_export_notes_zip_requires_auth(client_no_auth):
+    resp = client_no_auth.get("/export/notes/zip")
+    assert resp.status_code == 401
