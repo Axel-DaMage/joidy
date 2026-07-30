@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, type Component } from 'svelte';
+  import { onMount } from 'svelte';
 
   interface Props {
     selected?: string;
@@ -9,7 +9,7 @@
 
   let { selected = '', color, onSelect }: Props = $props();
 
-  let IconPicker = $state<Component | null>(null);
+  let IconPicker = $state<any>(null);
 
   onMount(async () => {
     const mod = await import('./IconPicker.svelte');
@@ -18,5 +18,5 @@
 </script>
 
 {#if IconPicker}
-  <svelte:component this={IconPicker} {selected} {color} {onSelect} />
+  <IconPicker {selected} {color} {onSelect} />
 {/if}
