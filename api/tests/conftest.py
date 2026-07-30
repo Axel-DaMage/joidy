@@ -63,3 +63,23 @@ def client(db_session):
 
     app.dependency_overrides.clear()
     app.dependency_overrides.update(original_overrides)
+
+
+@pytest.fixture
+def client_no_auth():
+    def override_get_current_user():
+        from fastapi import HTTPException, status
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    original_overrides = dict(app.dependency_overrides)
+    app.dependency_overrides[get_current_user] = override_get_current_user
+
+    with TestClient(app) as test_client:
+        yield test_client
+
+    app.dependency_overrides.clear()
+    app.dependency_overrides.update(original_overrides)

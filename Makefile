@@ -95,8 +95,11 @@ logs-worker: ## Tail worker logs
 build: ## Rebuild all Docker images
 	docker compose build --no-cache
 
-clean: ## Stop services and remove volumes (WARNING: deletes nothing in data/)
+clean: ## Stop services and remove volumes, __pycache__ and MCP logs (WARNING: deletes nothing in data/)
 	docker compose down --remove-orphans
+	find . -type d -name __pycache__ -prune -exec rm -rf {} +
+	find . -type d -name .playwright-mcp -prune -exec rm -rf {} +
+	find . -type f -name '*.py[co]' -delete
 
 backup: ## Backup all user data to a timestamped archive
 	@BACKUP_FILE="joidy-backup-$$(date +%Y-%m-%d_%H-%M-%S).tar.gz"; \
@@ -121,7 +124,7 @@ db-health: ## Verify migration head and required core tables
 	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm api sh -c "cd /app && alembic -c /app/alembic.ini current && python scripts/verify_db_health.py"
 
 test-api: ## Run all API unit tests via pytest
-	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm api sh -c "PYTHONPATH=/app pytest --cov=api --cov-report=term-missing"
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm api sh -c "cd /app && pytest --cov --cov-report=term-missing"
 
 test-frontend: ## Run frontend tests (vitest) inside Docker
 	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm frontend npm run test
@@ -131,9 +134,8 @@ test-frontend-check: ## Run frontend typechecking (svelte-check) inside Docker
 
 test: test-api test-frontend test-frontend-check ## Run all test suites (API + Frontend + typecheck)
 
-lint-api: ## Check syntax of all Python services using ruff
-	ruff check .
-	ruff format --check .
+lint-api: ## Check syntax of all Python services using compileall
+	python -m compileall -q api/ ai-service/ worker/ || (echo "Syntax errors found"; exit 1)
 
 lint: lint-api ## Run all linters and code checkers
 

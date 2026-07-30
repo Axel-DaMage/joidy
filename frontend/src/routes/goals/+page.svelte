@@ -4,15 +4,16 @@
   import { goto } from '$app/navigation';
   import { Plus, Check, ChevronDown, Calendar, BarChart, Clock, Layout, Pause, Play, Ban, Pencil, X, Flame, ChevronRight, ChevronLeft, TrendingUp, TrendingDown, PieChart, Activity, Target, Trophy, Settings, Palette, Hexagon, Filter, AlertTriangle, FileEdit, Tag, FileText, Pin, PinOff } from 'lucide-svelte';
   import { api, type Goal, type Tag as TagType, type Note } from '$lib/api';
+  import GoalFilters from '$lib/components/GoalFilters.svelte';
+  import GoalList from '$lib/components/GoalList.svelte';
   import { use24HourClock } from '$lib/stores/settings';
   import { applyGamificationResult, showXPGain } from '$lib/stores/gamification';
   import { getCachedData, setCachedData } from '$lib/utils/userSettings';
   import { logger } from '$lib/utils/logger';
   import StreakIcon from '$lib/components/StreakIcon.svelte';
   import StreakHeatmap from '$lib/components/StreakHeatmap.svelte';
-  import GoalFilters from '$lib/components/GoalFilters.svelte';
-  import GoalList from '$lib/components/GoalList.svelte';
-  import IconPicker from '$lib/components/IconPicker.svelte';
+  import GoalCard from '$lib/components/GoalCard.svelte';
+  import LazyIconPicker from '$lib/components/LazyIconPicker.svelte';
 
   let goals = $state<Goal[]>([]);
   let tags = $state<TagType[]>([]);
@@ -1641,7 +1642,7 @@
                     </div>
                   {:else}
                     <div class="field ng-large-grid" style="display: flex; flex-direction: column; height: 280px; padding: 8px; border: 1px solid var(--border); border-radius: var(--r); background: var(--surface-hover); overflow: hidden;">
-                      <IconPicker selected={newFailIcon} color={newGoalColor} onSelect={(ic) => newFailIcon = ic} />
+                      <LazyIconPicker selected={newFailIcon} color={newGoalColor} onSelect={(ic) => newFailIcon = ic} />
                     </div>
                   {/if}
                 </div>
@@ -1881,8 +1882,8 @@
         {TEMPORALITY_LABELS}
         {STATE_LABELS}
         {formatFailConfig}
-        onTogglePin={(id) => togglePinned(id)}
-        onClick={(g) => openGoalEditor(g)}
+        onTogglePin={togglePinned}
+        onClick={openGoalEditor}
       />
     </div>
   {/if}

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { activeIconPack } from '$lib/stores/settings';
+  import { Circle } from 'lucide-svelte';
 
   export let name: string;
   export let size: number = 18;
@@ -7,11 +8,6 @@
   export let pack: string | undefined = undefined;
 
   const emojiRegex = /\p{Extended_Pictographic}/u;
-
-  // ── Lucide ──
-  import * as L from 'lucide-svelte';
-  
-
 
   // ── Phosphor ──
   import {
@@ -23,43 +19,36 @@
     Wrench as PWrench
   } from 'phosphor-svelte';
 
-
-
-  // Note: project uses Svelte 5; avoid svelte-material-icons (incompatible)
-  // We'll reuse Phosphor/ Lucide icons instead for the 'material' pack mapping.
   $: isEmoji = emojiRegex.test(name);
-  $: comp = getIconComponent(pack || $activeIconPack, name);
 
-  function getIconComponent(pack: string, n: string) {
+  let lucideComp: any = Circle;
+  let phosphorComp: any = null;
 
-
-    if (pack === 'phosphor') {
-      const map: Record<string, any> = {
-        'Home': PHome, 'BookOpen': PBook, 'Network': PNet, 'Zap': PZap, 'Target': PTarget,
-        'Flame': PFlame, 'Settings': PCog, 'LayoutGrid': PGrid, 'X': PX, 'Moon': PMoon,
-        'Sun': PSun, 'Database': PDB, 'GitBranch': PGit, 'Palette': PPal, 'Plus': PPlus,
-        'Minus': PMinus, 'RotateCcw': PRot, 'SkipForward': PSkip, 'File': PFile,
-        'ChevronLeft': PLeft, 'ChevronRight': PRight, 'Wrench': PWrench,
-      };
-      return map[n] || (L as any)[n] || (L as any)['Circle'];
-    }
-
-    if (pack === 'material') {
-      const map: Record<string, any> = {
-        // map common material names to phosphor equivalents
-        'Home': PHome, 'BookOpen': PBook, 'Network': PNet, 'Zap': PZap, 'Target': PTarget,
-        'Flame': PFlame, 'Settings': PCog, 'LayoutGrid': PGrid, 'X': PX, 'Moon': PMoon,
-        'Sun': PSun, 'Database': PDB, 'GitBranch': PGit, 'Palette': PPal, 'Plus': PPlus,
-        'Minus': PMinus, 'RotateCcw': PRot, 'SkipForward': PSkip, 'File': PFile,
-        'ChevronLeft': PLeft, 'ChevronRight': PRight, 'Wrench': PWrench,
-      };
-      return map[n] || (L as any)[n] || (L as any)['Circle'];
-    }
-
-    // Default fallback to Lucide (also handles 'lucide' implicitly or missing ones)
-    const lMap = (L as any);
-    return lMap[n] || lMap['Circle'];
+  async function loadLucide(n: string) {
+    const mod = await import('lucide-svelte');
+    lucideComp = mod[n as keyof typeof mod] || Circle;
   }
+
+  $: if (!isEmoji && (pack || $activeIconPack) !== 'phosphor' && (pack || $activeIconPack) !== 'material') {
+    loadLucide(name);
+  }
+
+  function getIconComponent(packName: string, n: string) {
+    if (packName === 'phosphor' || packName === 'material') {
+      const map: Record<string, any> = {
+        'Home': PHome, 'BookOpen': PBook, 'Network': PNet, 'Zap': PZap, 'Target': PTarget,
+        'Flame': PFlame, 'Settings': PCog, 'LayoutGrid': PGrid, 'X': PX, 'Moon': PMoon,
+        'Sun': PSun, 'Database': PDB, 'GitBranch': PGit, 'Palette': PPal, 'Plus': PPlus,
+        'Minus': PMinus, 'RotateCcw': PRot, 'SkipForward': PSkip, 'File': PFile,
+        'ChevronLeft': PLeft, 'ChevronRight': PRight, 'Wrench': PWrench,
+      };
+      phosphorComp = map[n] || null;
+      return phosphorComp || Circle;
+    }
+    return lucideComp || Circle;
+  }
+
+  $: comp = getIconComponent(pack || $activeIconPack, name);
 </script>
 
 {#if isEmoji}

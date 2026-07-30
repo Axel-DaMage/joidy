@@ -7,7 +7,7 @@
   import ScientificCalculator from '$lib/components/ScientificCalculator.svelte';
   import NoteEditor from '$lib/components/NoteEditor.svelte';
   import NoteCard from '$lib/components/NoteCard.svelte';
-  import IconPicker from '$lib/components/IconPicker.svelte';
+  import LazyIconPicker from '$lib/components/LazyIconPicker.svelte';
   import VirtualList from '$lib/components/VirtualList.svelte';
   import { notes, notesLoading, loadNotes, createNote, updateNote, deleteNote, aiSuggestions, notesLoadedOnce, selectedNoteIds, bulkMode, toggleNoteSelection, selectAllNotes, clearNoteSelection, deleteSelectedNotes, tagSelectedNotes, untagSelectedNotes } from '$lib/stores/notes';
   import { buildTree, flattenTree, extractFrontmatter, getFileIcon, type SortMode, type FlatNode } from '$lib/utils/fileTree';
@@ -802,7 +802,7 @@
         
         <div class="folder-icon-row">
           <span class="folder-label mono">Icono</span>
-          <IconPicker selected={newFolderIcon} color={newFolderColor} onSelect={(ic) => newFolderIcon = ic} />
+          <LazyIconPicker selected={newFolderIcon} color={newFolderColor} onSelect={(ic) => newFolderIcon = ic} />
         </div>
         
         <div class="folder-modal-btns">
@@ -875,7 +875,7 @@
         <!-- Icon picker -->
         <div class="folder-icon-row">
           <span class="folder-label mono">Icono</span>
-          <IconPicker selected={folderIcon} color={folderColor} onSelect={(ic) => folderIcon = ic} />
+          <LazyIconPicker selected={folderIcon} color={folderColor} onSelect={(ic) => folderIcon = ic} />
         </div>
         
         <div class="folder-modal-btns">

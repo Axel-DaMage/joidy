@@ -48,5 +48,15 @@ class Settings(BaseSettings):
     google_client_secret: str = ""
     google_redirect_uri: str = ""
 
+    # Strava OAuth (Activities, Athlete data)
+    strava_client_id: str = ""
+    strava_client_secret: str = ""
+    strava_redirect_uri: str = ""
+
+    # Spotify OAuth (Playback, Playlists, Top tracks)
+    spotify_client_id: str = ""
+    spotify_client_secret: str = ""
+    spotify_redirect_uri: str = ""
+
 
 settings = Settings()

@@ -18,6 +18,7 @@ from services.goal_service import (
     get_goal_progress,
     get_bulk_goal_progress,
     get_goal_streak,
+    resolve_pending_removal,
     sync_goals_from_note,
 )
 from services.joidy_vault_writer import (

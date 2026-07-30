@@ -10,6 +10,7 @@ from database import get_db
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from models.note import Note
+from services.auth_service import get_current_user
 from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/export", tags=["export"])
@@ -64,7 +65,7 @@ def note_to_html(note: Note) -> str:
 
 
 @router.get("/notes/markdown")
-def export_notes_markdown(db: Session = Depends(get_db)):
+def export_notes_markdown(db: Session = Depends(get_db), user: dict = Depends(get_current_user)):
     """Export all notes as a single markdown file."""
     notes = db.query(Note).all()
 
@@ -81,7 +82,7 @@ def export_notes_markdown(db: Session = Depends(get_db)):
 
 
 @router.get("/notes/html")
-def export_notes_html(db: Session = Depends(get_db)):
+def export_notes_html(db: Session = Depends(get_db), user: dict = Depends(get_current_user)):
     """Export all notes as a single HTML file."""
     notes = db.query(Note).all()
 
@@ -115,7 +116,7 @@ def export_notes_html(db: Session = Depends(get_db)):
 
 
 @router.get("/notes/zip")
-def export_notes_zip(db: Session = Depends(get_db)):
+def export_notes_zip(db: Session = Depends(get_db), user: dict = Depends(get_current_user)):
     """Export all notes as individual markdown files in a ZIP."""
     notes = db.query(Note).all()
 

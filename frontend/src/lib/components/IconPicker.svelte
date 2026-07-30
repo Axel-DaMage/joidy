@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { createIconPickerStore } from '$lib/stores/iconPicker';
 	import DynamicIcon from './DynamicIcon.svelte';
-	import * as L from 'lucide-svelte';
+	import { Search } from 'lucide-svelte';
 
 	interface Props {
 		selected?: string;
@@ -21,7 +21,7 @@
 
 <div class="icon-picker">
 	<div class="search-box">
-		<L.Search size={16} class="search-icon" />
+		<Search size={16} class="search-icon" />
 		<input
 			type="text"
 			placeholder="Buscar iconos..."
