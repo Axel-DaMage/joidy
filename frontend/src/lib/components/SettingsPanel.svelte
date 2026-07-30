@@ -182,6 +182,10 @@
       }
       githubPollTimer = setTimeout(pollGithubDeviceCode, githubPollInterval * 1000);
     } catch (e: any) {
+      if (githubPollTimer) {
+        clearTimeout(githubPollTimer);
+        githubPollTimer = null;
+      }
       githubAuthError = e.message || 'Error verificando autorización de GitHub';
       githubAuthLoading = false;
     }
