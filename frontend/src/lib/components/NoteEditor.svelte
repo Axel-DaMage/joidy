@@ -1,9 +1,8 @@
 <script lang="ts">
   import { createEventDispatcher, onDestroy, onMount, tick } from 'svelte';
   import { Eye, EyeOff, Save, Trash2, X, Settings, Search, Maximize, ChevronLeft, ChevronRight, Download, RotateCcw, Bold, Italic, Strikethrough, Heading1, Heading2, Heading3, List, ListOrdered, Link, Quote, Code, Image, Paperclip } from 'lucide-svelte';
-  import * as L from 'lucide-svelte';
   import DynamicIcon from './DynamicIcon.svelte';
-  import IconPicker from './IconPicker.svelte';
+  import LazyIconPicker from './LazyIconPicker.svelte';
   import { marked } from 'marked';
   import DOMPurify from 'dompurify';
   import hljs from 'highlight.js';
@@ -968,7 +967,7 @@
         
         <!-- Icon picker -->
         <div class="folder-icon-row">
-          <IconPicker color={customColor} onSelect={(ic) => { pickIcon(ic); showIconSettings = false; }} />
+          <LazyIconPicker color={customColor} onSelect={(ic) => { pickIcon(ic); showIconSettings = false; }} />
         </div>
         
         <div class="folder-modal-btns">

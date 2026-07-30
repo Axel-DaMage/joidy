@@ -5,7 +5,7 @@
   import { api, type Goal, type Tag as TagType, type Note } from '$lib/api';
   import { logger } from '$lib/utils/logger';
   import GoalEditor from '$lib/components/GoalEditor.svelte';
-  import IconPicker from '$lib/components/IconPicker.svelte';
+  import LazyIconPicker from '$lib/components/LazyIconPicker.svelte';
   import StreakIcon from '$lib/components/StreakIcon.svelte';
 
   let goal: Goal | null = null;
@@ -262,7 +262,7 @@
                   </div>
                 {:else}
                   <div class="field ng-large-grid" style="display: flex; flex-direction: column; height: 280px; padding: 8px; border: 1px solid var(--border); border-radius: var(--r); background: var(--surface-hover); overflow: hidden;">
-                    <IconPicker selected={editFailIcon} color={editColor} onSelect={(ic) => editFailIcon = ic} />
+                    <LazyIconPicker selected={editFailIcon} color={editColor} onSelect={(ic) => editFailIcon = ic} />
                   </div>
                 {/if}
               </div>
