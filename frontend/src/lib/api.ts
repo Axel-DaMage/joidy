@@ -6,7 +6,8 @@ import { showNotification } from './stores/notifications';
 import { session, getToken } from './stores/session';
 
 const BASE = browser
-  ? `${window.location.protocol}//${window.location.hostname}:8000`
+  ? (import.meta.env.VITE_API_URL as string ||
+    `${window.location.protocol}//${window.location.hostname}:8000`)
   : (import.meta.env.VITE_INTERNAL_API_URL as string || 'http://api:8000');
 
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
