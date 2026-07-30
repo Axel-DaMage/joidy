@@ -68,7 +68,7 @@ def setup_logging() -> None:
 
     Uses JSON format in production, colored human-readable in development.
     """
-    log_dir = Path("/data/logs")
+    log_dir = Path(settings.log_dir)
     log_dir.mkdir(parents=True, exist_ok=True)
 
     is_production = settings.app_env == "production"
