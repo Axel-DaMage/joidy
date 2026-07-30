@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
-  import { Plus, Check, ChevronDown, Calendar, BarChart, Clock, Layout, Pause, Play, Ban, Pencil, X, Flame, ChevronRight, ChevronLeft, TrendingUp, TrendingDown, PieChart, Activity, Target, Trophy, Settings, Palette, Hexagon, Filter, AlertTriangle, FileEdit, Tag, FileText, Search, Pin, PinOff } from 'lucide-svelte';
+  import { Plus, Check, ChevronDown, Calendar, BarChart, Clock, Layout, Pause, Play, Ban, Pencil, X, Flame, ChevronRight, ChevronLeft, TrendingUp, TrendingDown, PieChart, Activity, Target, Trophy, Settings, Palette, Hexagon, Filter, AlertTriangle, FileEdit, Tag, FileText, Pin, PinOff } from 'lucide-svelte';
   import { api, type Goal, type Tag as TagType, type Note } from '$lib/api';
   import { use24HourClock } from '$lib/stores/settings';
   import { applyGamificationResult, showXPGain } from '$lib/stores/gamification';
@@ -10,7 +10,8 @@
   import { logger } from '$lib/utils/logger';
   import StreakIcon from '$lib/components/StreakIcon.svelte';
   import StreakHeatmap from '$lib/components/StreakHeatmap.svelte';
-  import GoalCard from '$lib/components/GoalCard.svelte';
+  import GoalFilters from '$lib/components/GoalFilters.svelte';
+  import GoalList from '$lib/components/GoalList.svelte';
   import IconPicker from '$lib/components/IconPicker.svelte';
 
   let goals = $state<Goal[]>([]);
@@ -25,31 +26,6 @@
   let goalFilterState = $state<string | null>(null);
   let pinnedGoals = $state<Set<number>>(new Set());
   let deleteConfirm = $state<number | null>(null);
-
-  function filteredGoals(goals: Goal[], query: string, filter: string | null, pinned: Set<number>) {
-    let result = goals;
-    if (query) {
-      const q = query.toLowerCase();
-      result = result.filter(g => 
-        g.title.toLowerCase().includes(q) || 
-        (g.description && g.description.toLowerCase().includes(q))
-      );
-    }
-    if (filter) {
-      if (filter === 'COMPLETED') {
-        result = result.filter(g => g.state === 'COMPLETED' || g.is_completed);
-      } else if (filter === 'PINNED') {
-        result = result.filter(g => pinned.has(g.id));
-      } else {
-        result = result.filter(g => g.state === filter);
-      }
-    }
-    return [...result].sort((a, b) => {
-      const aPinned = pinned.has(a.id) ? 0 : 1;
-      const bPinned = pinned.has(b.id) ? 0 : 1;
-      return aPinned - bPinned;
-    });
-  }
 
   function togglePinned(goalId: number) {
     const newPinned = new Set(pinnedGoals);
@@ -1893,73 +1869,21 @@
 
   {#if currentTab === 'editor'}
     <div class="tab-content fade-in editor-tab">
-      <div class="editor-header">
-        <h3 class="editor-title">Editor de Objetivos</h3>
-        <div class="editor-controls">
-          <div class="search-box">
-            <Search size={16} />
-            <input 
-              type="text" 
-              placeholder="Buscar objetivos..." 
-              bind:value={goalSearchQuery}
-            />
-          </div>
-          <div class="filter-buttons">
-            <button 
-              class="filter-btn" 
-              class:active={goalFilterState === null}
-              onclick={() => goalFilterState = null}
-            >Todos</button>
-            <button 
-              class="filter-btn" 
-              class:active={goalFilterState === 'PINNED'}
-              onclick={() => goalFilterState = 'PINNED'}
-            >Fijados</button>
-            <button 
-              class="filter-btn" 
-              class:active={goalFilterState === 'ACTIVE'}
-              onclick={() => goalFilterState = 'ACTIVE'}
-            >Activos</button>
-            <button 
-              class="filter-btn" 
-              class:active={goalFilterState === 'COMPLETED'}
-              onclick={() => goalFilterState = 'COMPLETED'}
-            >Completados</button>
-            <button 
-              class="filter-btn" 
-              class:active={goalFilterState === 'PAUSED'}
-              onclick={() => goalFilterState = 'PAUSED'}
-            >Pausados</button>
-            <button 
-              class="filter-btn" 
-              class:active={goalFilterState === 'FAILED'}
-              onclick={() => goalFilterState = 'FAILED'}
-            >Fallidos</button>
-          </div>
-        </div>
-      </div>
-      <div class="editor-grid-container">
-        {#if filteredGoals(goals, goalSearchQuery, goalFilterState, pinnedGoals).length === 0}
-          <div class="empty-state">No hay objetivos que coincidan con los filtros.</div>
-        {:else}
-          <div class="editor-grid">
-            {#each filteredGoals(goals, goalSearchQuery, goalFilterState, pinnedGoals) as goal (goal.id)}
-              <GoalCard
-                {goal}
-                pinned={pinnedGoals.has(goal.id)}
-                {tags}
-                {notes}
-                {getGoalColor}
-                {TEMPORALITY_LABELS}
-                {STATE_LABELS}
-                {formatFailConfig}
-                onTogglePin={(id) => togglePinned(id)}
-                onClick={(g) => openGoalEditor(g)}
-              />
-            {/each}
-          </div>
-        {/if}
-      </div>
+      <GoalFilters bind:query={goalSearchQuery} bind:filter={goalFilterState} />
+      <GoalList
+        {goals}
+        query={goalSearchQuery}
+        filter={goalFilterState}
+        pinned={pinnedGoals}
+        {tags}
+        {notes}
+        {getGoalColor}
+        {TEMPORALITY_LABELS}
+        {STATE_LABELS}
+        {formatFailConfig}
+        onTogglePin={(id) => togglePinned(id)}
+        onClick={(g) => openGoalEditor(g)}
+      />
     </div>
   {/if}
 </div>
@@ -3748,112 +3672,13 @@
     overflow: hidden;
   }
 
-  .editor-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 16px 24px;
-    border-bottom: 1px solid var(--border);
-    background: var(--surface);
-    flex-shrink: 0;
-    gap: 20px;
-    flex-wrap: wrap;
-  }
-
-  .editor-title {
-    font-size: 20px;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin: 0;
-  }
-
-  .editor-controls {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    flex-wrap: wrap;
-  }
-
-  .search-box {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 14px;
-    background: var(--surface-hover);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    color: var(--text-muted);
-  }
-
-  .search-box input {
-    background: transparent;
-    border: none;
-    color: var(--text-primary);
-    font-size: 13px;
-    outline: none;
-    width: 180px;
-  }
-
-  .search-box input::placeholder {
-    color: var(--text-muted);
-  }
-
-  .filter-buttons {
-    display: flex;
-    gap: 6px;
-  }
-
-  .filter-btn {
-    padding: 6px 12px;
-    border-radius: 6px;
-    font-size: 12px;
-    background: transparent;
-    border: 1px solid var(--border);
-    color: var(--text-muted);
-    cursor: pointer;
-    transition: all 0.2s ease;
-  }
-
-  .filter-btn:hover {
-    background: var(--surface-hover);
-    color: var(--text-primary);
-  }
-
-  .filter-btn.active {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: var(--bg);
-    font-weight: 500;
-  }
-
-  .editor-grid-container {
-    flex: 1;
-    overflow-y: auto;
-    padding: 24px;
-  }
-
-  .editor-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-    gap: 20px;
-    width: 100%;
-  }
-
   .goal-date {
     font-size: 10px;
   }
 
   @media (max-width: 768px) {
-    .editor-header {
-      flex-direction: column;
-      gap: 12px;
-      align-items: flex-start;
-    }
     .editor-stats {
       flex-wrap: wrap;
-    }
-    .editor-grid {
-      grid-template-columns: 1fr;
     }
   }
 

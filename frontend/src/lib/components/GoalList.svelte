@@ -1,0 +1,112 @@
+<script lang="ts">
+  import GoalCard from './GoalCard.svelte';
+  import type { Goal, Note } from '$lib/api';
+  import type { Tag as TagType } from '$lib/api';
+
+  interface Props {
+    goals: Goal[];
+    query: string;
+    filter: string | null;
+    pinned: Set<number>;
+    tags: TagType[];
+    notes: Note[];
+    getGoalColor: (goal: Goal) => string;
+    TEMPORALITY_LABELS: Record<string, string>;
+    STATE_LABELS: Record<string, string>;
+    formatFailConfig: (config: string) => string;
+    onTogglePin: (id: number) => void;
+    onClick: (goal: Goal) => void;
+  }
+
+  let {
+    goals,
+    query,
+    filter,
+    pinned,
+    tags,
+    notes,
+    getGoalColor,
+    TEMPORALITY_LABELS,
+    STATE_LABELS,
+    formatFailConfig,
+    onTogglePin,
+    onClick,
+  }: Props = $props();
+
+  function filteredGoals(goals: Goal[], query: string, filter: string | null, pinned: Set<number>) {
+    let result = goals;
+    if (query) {
+      const q = query.toLowerCase();
+      result = result.filter(g =>
+        g.title.toLowerCase().includes(q) ||
+        (g.description && g.description.toLowerCase().includes(q))
+      );
+    }
+    if (filter) {
+      if (filter === 'COMPLETED') {
+        result = result.filter(g => g.state === 'COMPLETED' || g.is_completed);
+      } else if (filter === 'PINNED') {
+        result = result.filter(g => pinned.has(g.id));
+      } else {
+        result = result.filter(g => g.state === filter);
+      }
+    }
+    return [...result].sort((a, b) => {
+      const aPinned = pinned.has(a.id) ? 0 : 1;
+      const bPinned = pinned.has(b.id) ? 0 : 1;
+      return aPinned - bPinned;
+    });
+  }
+
+  let visibleGoals = $derived(filteredGoals(goals, query, filter, pinned));
+</script>
+
+<div class="editor-grid-container">
+  {#if visibleGoals.length === 0}
+    <div class="empty-state">No hay objetivos que coincidan con los filtros.</div>
+  {:else}
+    <div class="editor-grid">
+      {#each visibleGoals as goal (goal.id)}
+        <GoalCard
+          {goal}
+          pinned={pinned.has(goal.id)}
+          {tags}
+          {notes}
+          {getGoalColor}
+          {TEMPORALITY_LABELS}
+          {STATE_LABELS}
+          {formatFailConfig}
+          onTogglePin={(id) => onTogglePin(id)}
+          onClick={(g) => onClick(g)}
+        />
+      {/each}
+    </div>
+  {/if}
+</div>
+
+<style>
+  .editor-grid-container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+  }
+
+  .editor-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 20px;
+    width: 100%;
+  }
+
+  .empty-state {
+    padding: 32px;
+    text-align: center;
+    color: var(--text-muted);
+  }
+
+  @media (max-width: 768px) {
+    .editor-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
