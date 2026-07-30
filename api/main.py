@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from logging_config import setup_logging
-from middleware.metrics import MetricsMiddleware, get_metrics_collector
+from middleware.metrics import MetricsMiddleware
 from middleware.rate_limit import RateLimitMiddleware
 from middleware.request_id import RequestIdMiddleware
 from routers import (
@@ -140,7 +140,7 @@ app.add_middleware(RequestIdMiddleware)
 
 app.include_router(notes.router, dependencies=[Depends(get_current_user)])
 app.include_router(config.router)
-app.include_router(metrics.router)
+app.include_router(metrics.router, dependencies=[Depends(get_current_user)])
 app.include_router(tags.router, dependencies=[Depends(get_current_user)])
 app.include_router(skills.router, dependencies=[Depends(get_current_user)])
 app.include_router(goals.router, dependencies=[Depends(get_current_user)])
@@ -196,14 +196,23 @@ def health_ready():
     except Exception as e:
         checks["cache"] = f"error: {str(e)[:50]}"
 
-    # AI service check
+    # AI service check — short timeout to avoid blocking the health probe
+    # while still detecting real outages (the previous implementation was a
+    # hardcoded "ok" stub that masked a broken ai-service).
     try:
-        pass
-        pass
-        checks["ai_service"] = "ok" # Bypassed to prevent circular deadlock
-        pass
-    except Exception:
-        checks["ai_service"] = "unavailable"
+        import httpx
+        with httpx.Client(timeout=2.0) as client:
+            r = client.get(f"{settings.ai_service_url}/health")
+            if r.status_code == 200:
+                body = r.json()
+                # Distinguish "alive" from "fully functional": if the ai-service
+                # reports "degraded" (e.g. configured provider not available),
+                # surface that here too.
+                checks["ai_service"] = body.get("status", "ok")
+            else:
+                checks["ai_service"] = f"error: HTTP {r.status_code}"
+    except Exception as e:
+        checks["ai_service"] = f"unavailable: {str(e)[:40]}"
 
     all_ok = all(v == "ok" for v in checks.values())
     return {
@@ -216,12 +225,6 @@ def health_ready():
 def health_cache():
     """Cache performance metrics for monitoring."""
     return get_cache_stats()
-
-
-@app.get("/metrics", dependencies=[Depends(get_current_user)])
-def metrics():
-    """Request metrics for monitoring."""
-    return get_metrics_collector().get_metrics()
 
 
 @app.get("/debug", dependencies=[Depends(get_current_user)])

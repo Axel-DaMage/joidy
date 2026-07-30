@@ -281,6 +281,8 @@ class TestWriteToVault(NoteServiceTestBase):
             mock_write.assert_not_called()
 
     def test_write_to_vault_skips_noop_writes(self) -> None:
+        from pathlib import Path
+
         from services.note_service import write_to_vault
 
         with self.Session() as db:
@@ -295,20 +297,20 @@ class TestWriteToVault(NoteServiceTestBase):
             )
             note.source_path = "/tmp/joidy_test_note.md"
             db.commit()
+            db.refresh(note)
 
-        from pathlib import Path
-        Path(note.source_path).write_text("same content", encoding="utf-8")
-        try:
-            with patch.dict("os.environ", {"VAULT_PATH": "/tmp"}):
-                result = write_to_vault(note, from_vault=False)
-                self.assertTrue(result)
-                mtime_after_first = Path(note.source_path).stat().st_mtime
-                # Second write with identical content should not re-touch the file
-                result = write_to_vault(note, from_vault=False)
-                self.assertTrue(result)
-                self.assertEqual(Path(note.source_path).stat().st_mtime, mtime_after_first)
-        finally:
-            Path(note.source_path).unlink(missing_ok=True)
+            Path(note.source_path).write_text("same content", encoding="utf-8")
+            try:
+                with patch.dict("os.environ", {"VAULT_PATH": "/tmp"}):
+                    result = write_to_vault(note, from_vault=False)
+                    self.assertTrue(result)
+                    mtime_after_first = Path(note.source_path).stat().st_mtime
+                    # Second write with identical content should not re-touch the file
+                    result = write_to_vault(note, from_vault=False)
+                    self.assertTrue(result)
+                    self.assertEqual(Path(note.source_path).stat().st_mtime, mtime_after_first)
+            finally:
+                Path(note.source_path).unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

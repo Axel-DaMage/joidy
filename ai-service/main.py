@@ -57,8 +57,8 @@ def _get_provider_info():
     llm_provider, llm_model = settings.llm_model.split(":", 1) if ":" in settings.llm_model else ("gemini", settings.llm_model)
     emb_provider, emb_model = settings.embedding_model.split(":", 1) if ":" in settings.embedding_model else ("gemini", settings.embedding_model)
     return {
-        "llm": {"provider": llm_provider, "model": llm_model},
-        "embedding": {"provider": emb_provider, "model": emb_model},
+        "llm": {"provider": llm_provider, "model": llm_model, "available": llm_provider in available},
+        "embedding": {"provider": emb_provider, "model": emb_model, "available": emb_provider in available},
         "available": available,
     }
 
@@ -66,8 +66,13 @@ def _get_provider_info():
 @app.get("/health")
 def health():
     provider_info = _get_provider_info()
+    # The service is "degraded" if the configured LLM/embedding provider is
+    # not actually available (e.g. GEMINI_API_KEY not set but model is gemini:*).
+    llm_ok = provider_info["llm"]["available"]
+    emb_ok = provider_info["embedding"]["available"]
+    status = "ok" if (llm_ok and emb_ok) else "degraded"
     return {
-        "status": "ok",
+        "status": status,
         "service": "joidy-ai",
         "ai_enabled": settings.is_ai_enabled,
         "provider": provider_info,

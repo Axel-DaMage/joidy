@@ -64,7 +64,9 @@ async def _call_with_retry(func):
 
     for attempt in range(1, attempts + 1):
         try:
-            return func()
+            # Run the synchronous google.generativeai call in a thread to
+            # avoid blocking the FastAPI event loop.
+            return await asyncio.to_thread(func)
         except Exception as exc:
             if not _is_retryable_error(exc) or attempt >= attempts:
                 raise

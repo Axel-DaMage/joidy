@@ -36,8 +36,8 @@ def create_folder(
     try:
         os.makedirs(full_path, exist_ok=True)
         return {"status": "ok", "path": folder.path}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to create folder")
 
 
 @router.delete("/{path:path}")
@@ -59,5 +59,5 @@ def delete_folder(
     try:
         shutil.rmtree(full_path)
         return {"status": "ok"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to delete folder")

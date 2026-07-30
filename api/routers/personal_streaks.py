@@ -138,17 +138,18 @@ def _streak_to_dict(streak: PersonalStreak, days_history: int = 365) -> dict:
 
     # History for heatmap (last N days)
     history = []
-    for i in range(days_history - 1, -1, -1):
-        d = today - timedelta(days=i)
-        checkin = checkin_map.get(d)
-        entry = {
-            "date": d.isoformat(),
-            "checked": d in set(checkin_dates),
-        }
-        if checkin:
-            entry["note"] = checkin.note or ""
-            entry["mood"] = checkin.mood
-        history.append(entry)
+    if days_history > 0:
+        for i in range(days_history - 1, -1, -1):
+            d = today - timedelta(days=i)
+            checkin = checkin_map.get(d)
+            entry = {
+                "date": d.isoformat(),
+                "checked": d in set(checkin_dates),
+            }
+            if checkin:
+                entry["note"] = checkin.note or ""
+                entry["mood"] = checkin.mood
+            history.append(entry)
 
     # Days remaining to target
     days_remaining = None
@@ -299,6 +300,8 @@ def global_stats(db: Session = Depends(get_db)):
 def list_streaks(
     include_archived: bool = Query(False),
     category: str | None = Query(None),
+    include_history: bool = Query(True),
+    days_history: int = Query(365, ge=1, le=730),
     db: Session = Depends(get_db),
 ):
     q = db.query(PersonalStreak).options(selectinload(PersonalStreak.checkins))
@@ -307,7 +310,10 @@ def list_streaks(
     if category and category != "all":
         q = q.filter(PersonalStreak.category == category)
     streaks = q.order_by(PersonalStreak.created_at).all()
-    return [_streak_to_dict(s) for s in streaks]
+    return [
+        _streak_to_dict(s, days_history=days_history if include_history else 0)
+        for s in streaks
+    ]
 
 
 @router.post("/", status_code=201)

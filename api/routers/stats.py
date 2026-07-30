@@ -1,12 +1,13 @@
 from datetime import datetime, timedelta, timezone
 
 from database import get_db
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from models.gamification import UserStats, XPEvent
 from models.goal import Goal
 from models.note import Note
 from models.note import Tag as TagModel
 from models.skill import Skill
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/stats", tags=["stats"])
@@ -45,29 +46,45 @@ def get_activity_stats(
     db: Session = Depends(get_db)
 ):
     """Get activity statistics for the last N days."""
+    if days < 1:
+        raise HTTPException(status_code=400, detail="days must be >= 1")
+    if days > 366:
+        days = 366
+
     now = datetime.now(timezone.utc)
     since = now - timedelta(days=days)
 
+    # Single grouped query per table instead of N individual queries.
+    notes_by_day = (
+        db.query(
+            func.date(Note.created_at).label("d"),
+            func.count(Note.id).label("c"),
+        )
+        .filter(Note.created_at >= since)
+        .group_by(func.date(Note.created_at))
+        .all()
+    )
+    xp_by_day = (
+        db.query(
+            func.date(XPEvent.created_at).label("d"),
+            func.count(XPEvent.id).label("c"),
+        )
+        .filter(XPEvent.created_at >= since)
+        .group_by(func.date(XPEvent.created_at))
+        .all()
+    )
+
+    notes_map = {str(r.d): r.c for r in notes_by_day}
+    xp_map = {str(r.d): r.c for r in xp_by_day}
+
     daily_stats = []
     for i in range(days):
-        day = now - timedelta(days=i)
-        day_start = day.replace(hour=0, minute=0, second=0, microsecond=0)
-        day_end = day_start + timedelta(days=1)
-
-        notes_created = db.query(Note).filter(
-            Note.created_at >= day_start,
-            Note.created_at < day_end
-        ).count()
-
-        xp_events = db.query(XPEvent).filter(
-            XPEvent.created_at >= day_start,
-            XPEvent.created_at < day_end
-        ).count()
-
+        day = (now - timedelta(days=i)).date()
+        day_str = day.isoformat()
         daily_stats.append({
-            "date": day_start.date().isoformat(),
-            "notes_created": notes_created,
-            "xp_events": xp_events,
+            "date": day_str,
+            "notes_created": notes_map.get(day_str, 0),
+            "xp_events": xp_map.get(day_str, 0),
         })
 
     return {"days": daily_stats}

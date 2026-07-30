@@ -81,10 +81,18 @@ def sync_note_links(db: Session, source_note_id: int, content: str) -> None:
     db.query(NoteLink).filter(NoteLink.source_note_id == source_note_id).delete()
 
     links = re.findall(r"\[\[\s*([^\]|]+?)\s*(?:\|[^\]]+)?\]\]", content)
-    for title in set(links):
-        target = db.query(Note).filter(Note.title.ilike(title.strip())).first()
-        if target:
-            db.add(NoteLink(source_note_id=source_note_id, target_note_id=target.id))
+    unique_titles = list(set(title.strip() for title in links))
+    if not unique_titles:
+        db.flush()
+        return
+
+    # Batch-load all target notes in a single query instead of one per link.
+    # Use OR of ilike conditions to avoid N+1 queries.
+    from sqlalchemy import or_
+    conditions = [Note.title.ilike(t) for t in unique_titles]
+    targets = db.query(Note).filter(or_(*conditions)).all()
+    for target in targets:
+        db.add(NoteLink(source_note_id=source_note_id, target_note_id=target.id))
 
     db.flush()
 
@@ -126,8 +134,8 @@ def create_note(
     db.refresh(note)
     if rebuild_derived_data:
         sync_skills_for_tags(db, touched_tag_ids)
-    if source_path:
-        write_to_vault(note, from_vault=from_vault)
+    if source_path and not from_vault:
+        write_to_vault(note)
     clear_api_caches()
 
     try:
@@ -196,8 +204,8 @@ def update_note(
     db.refresh(note)
     if rebuild_derived_data and touched_tag_ids:
         sync_skills_for_tags(db, touched_tag_ids)
-    if content is not None:
-        write_to_vault(note, from_vault=from_vault)
+    if content is not None and not from_vault:
+        write_to_vault(note)
     clear_api_caches()
 
     try:

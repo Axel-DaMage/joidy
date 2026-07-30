@@ -185,9 +185,10 @@
       });
     }
 
-    window.addEventListener('appinstalled', () => {
+    const handleAppInstalled = () => {
       showNotification("¡Joidy instalado! Ahora puedes acceder desde tu escritorio.", "success");
-    });
+    };
+    window.addEventListener('appinstalled', handleAppInstalled);
 
     const loadFooterStats = async (force = false) => {
       if (document.visibilityState !== 'visible') return;
@@ -316,19 +317,20 @@
       connectWS();
     };
 
-    window.addEventListener('beforeinstallprompt', (e) => {
+    const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       deferredPrompt.set(e);
-      
+
       if (!$isAppInstalled) {
         const visits = parseInt(localStorage.getItem('joidy-visits') || '0');
         localStorage.setItem('joidy-visits', (visits + 1).toString());
-        
+
         if (visits >= 1 && localStorage.getItem('joidy-pwa-dismissed') !== 'true') {
           showInstallBanner.set(true);
         }
       }
-    });
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('joidy:streaks-updated', handleStreaksUpdated);
@@ -353,6 +355,8 @@
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
       // Clean up WebSocket connection
       if (ws) {
@@ -360,6 +364,7 @@
         ws.close();
       }
       if (wsReconnectTimeout) clearTimeout(wsReconnectTimeout);
+      if (pillTimeout) clearTimeout(pillTimeout);
     };
   });
   let showConnectedPill = false;

@@ -6,7 +6,7 @@ Runs once at startup, then every day at midnight.
 import asyncio
 import logging
 import uuid
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import httpx
 from config import settings
@@ -26,7 +26,7 @@ async def write_joidy_files():
                 client.post(f"{settings.api_url}/vault/write-objectives", headers=headers),
                 client.post(f"{settings.api_url}/vault/write-skills", headers=headers),
             )
-            logger.info("[writer] _joidy/ files updated at %s", datetime.now().isoformat())
+            logger.info("[writer] _joidy/ files updated at %s", datetime.now(UTC).isoformat())
         except Exception as e:
             logger.exception("[writer] Failed to write _joidy/ files: %s", e)
 
@@ -37,8 +37,8 @@ async def schedule_daily_writes():
     await write_joidy_files()
 
     while True:
-        now = datetime.now()
-        tomorrow_midnight = datetime.combine(now.date() + timedelta(days=1), datetime.min.time())
+        now = datetime.now(UTC)
+        tomorrow_midnight = datetime.combine(now.date() + timedelta(days=1), datetime.min.time(), tzinfo=UTC)
         seconds_until_midnight = (tomorrow_midnight - now).total_seconds()
         logger.info("[writer] Next _joidy/ update in %.0fs", seconds_until_midnight)
         await asyncio.sleep(seconds_until_midnight)

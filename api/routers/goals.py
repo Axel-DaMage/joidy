@@ -104,6 +104,15 @@ class GoalUpdate(BaseModel):
             return v
         return sanitize_title(v)
 
+    @field_validator("target_value")
+    @classmethod
+    def target_positive(cls, v: float | None) -> float | None:
+        if v is None:
+            return v
+        if v <= 0:
+            raise ValueError("Target value must be positive")
+        return v
+
     @field_validator("description")
     @classmethod
     def validate_description(cls, v: str | None) -> str | None:
