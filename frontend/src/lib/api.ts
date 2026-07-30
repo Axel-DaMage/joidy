@@ -9,6 +9,8 @@ const BASE = browser
   ? `${window.location.protocol}//${window.location.hostname}:8000`
   : (import.meta.env.VITE_INTERNAL_API_URL as string || 'http://api:8000');
 
+let isHandlingLogout = false;
+
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
   try {
     const token = getToken();
@@ -23,8 +25,11 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
     });
 
     if (res.status === 401) {
-      session.logout();
-      showNotification('Sesión expirada. Por favor, vuelve a iniciar sesión.', 'error');
+      if (!isHandlingLogout) {
+        isHandlingLogout = true;
+        session.logout();
+        showNotification('Sesión expirada. Por favor, vuelve a iniciar sesión.', 'error');
+      }
       throw new Error(`API ${method} ${path} → 401 Unauthorized`);
     }
 
