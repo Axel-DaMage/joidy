@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     # Logging
     log_dir: str = "data/logs"
 
+    # Web Push (VAPID) for real push notifications
+    vapid_private_key: str = ""
+    vapid_public_key: str = ""
+    vapid_claim_email: str = "contacto@joidy.dev"
+
     # Authentication
     auth_password: str = ""  # Password for single-user auth (optional)
 

@@ -19,6 +19,7 @@
   import { accentColors, activeIconPack, use24HourClock, initTheme, devMode } from '$lib/stores/settings';
   import { getCachedData, setCachedData } from '$lib/utils/userSettings';
   import { initKeyboardNavigation } from '$lib/utils/keyboardNavigation';
+  import { initPushNotifications } from '$lib/push';
   import { logger } from '$lib/utils/logger';
   import { onboarding } from '$lib/stores/onboarding';
   import TutorialOverlay from '$lib/components/TutorialOverlay.svelte';
@@ -83,6 +84,7 @@
     initTheme();
     initPomodoroSettings();
     initKeyboardNavigation();
+    initPushNotifications();
     onboarding.init();
     achievements.init();
     devMode.init();

@@ -23,6 +23,7 @@ from routers import (
     notes,
     personal_streaks,
     planning,
+    push,
     skills,
     stats,
     tags,
@@ -142,6 +143,7 @@ app.include_router(skills.router, dependencies=[Depends(get_current_user)])
 app.include_router(goals.router, dependencies=[Depends(get_current_user)])
 app.include_router(gamification.router, dependencies=[Depends(get_current_user)])
 app.include_router(personal_streaks.router, dependencies=[Depends(get_current_user)])
+app.include_router(push.router, dependencies=[Depends(get_current_user)])
 app.include_router(github.router, dependencies=[Depends(get_current_user)])
 app.include_router(vault.router, dependencies=[Depends(get_current_user)])
 app.include_router(folders.router, dependencies=[Depends(get_current_user)])

@@ -415,4 +415,15 @@ github: {
       return result;
     },
   },
+
+  push: {
+    vapidPublicKey: () =>
+      req<{ publicKey: string }>('GET', '/push/vapid-public-key'),
+    subscribe: (endpoint: string, keys: { p256dh: string; auth: string }) =>
+      req<{ status: string }>('POST', '/push/subscribe', { endpoint, keys }),
+    unsubscribe: () =>
+      req<{ status: string }>('POST', '/push/unsubscribe'),
+    test: (title: string, body: string) =>
+      req<{ status: string }>('POST', '/push/test', { title, body }),
+  },
 };
