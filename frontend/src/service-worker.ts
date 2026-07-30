@@ -2,6 +2,7 @@
 import { build, files, version } from '$service-worker';
 
 const CACHE_NAME = `joidy-cache-${version}`;
+const OFFLINE_URL = '/offline';
 
 const ASSETS = [...build, ...files];
 
@@ -9,6 +10,15 @@ self.addEventListener('install', (event) => {
   async function addFilesToCache() {
     const cache = await caches.open(CACHE_NAME);
     await cache.addAll(ASSETS);
+    // Cache the offline fallback page explicitly.
+    try {
+      const offlineResponse = await fetch(OFFLINE_URL);
+      if (offlineResponse.ok) {
+        await cache.put(OFFLINE_URL, offlineResponse.clone());
+      }
+    } catch {
+      // Offline page may not be available during dev; it will still be fetched on demand.
+    }
   }
   event.waitUntil(addFilesToCache());
   self.skipWaiting();
@@ -47,6 +57,11 @@ self.addEventListener('fetch', (event) => {
 
   if (ASSETS.includes(url.pathname) || url.pathname.startsWith('/_app/')) {
     event.respondWith(cacheFirst(event.request));
+    return;
+  }
+
+  if (event.request.mode === 'navigate') {
+    event.respondWith(navigateWithOfflineFallback(event.request));
     return;
   }
 
@@ -90,6 +105,23 @@ async function networkWithCacheFallback(request: Request): Promise<Response> {
   } catch {
     const cached = await caches.match(request);
     if (cached) return cached;
+    return new Response('Offline', { status: 503 });
+  }
+}
+
+async function navigateWithOfflineFallback(request: Request): Promise<Response> {
+  try {
+    const response = await fetch(request);
+    if (response.ok) {
+      const cache = await caches.open(CACHE_NAME);
+      cache.put(request, response.clone());
+    }
+    return response;
+  } catch {
+    const cached = await caches.match(request);
+    if (cached) return cached;
+    const offlinePage = await caches.match(OFFLINE_URL);
+    if (offlinePage) return offlinePage;
     return new Response('Offline', { status: 503 });
   }
 }
