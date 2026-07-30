@@ -2241,6 +2241,10 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
+    /* The preview is purely visual (no interactive children). Disable pointer
+       events so it can never intercept clicks meant for the color dots above it
+       when both share the same stacking context (#203). */
+    pointer-events: none;
   }
   .ng-preview-label {
     font-size: 10px;
@@ -2454,6 +2458,9 @@
     cursor: pointer;
     transition: all 0.15s;
     flex-shrink: 0;
+    /* Raise above the non-interactive preview so clicks always land on the dot (#203). */
+    position: relative;
+    z-index: 2;
   }
   .color-dot:hover { transform: scale(1.15); }
   .color-dot.selected { 
