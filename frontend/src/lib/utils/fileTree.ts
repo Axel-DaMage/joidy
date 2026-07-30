@@ -87,7 +87,7 @@ const FILE_ICONS: [RegExp, string][] = [
 ];
 
 export function extractFrontmatter(content: string) {
-  const m = content.match(/^---\n([\s\S]*?)\n---/);
+  const m = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   if (!m) return { icon: null, color: null, pack: null };
   const yaml = m[1];
   const ic = yaml.match(/(?:^|\n)icon:\s*([^\n]+)/);
