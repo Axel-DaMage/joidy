@@ -124,7 +124,30 @@ make migrate   # Database migrations
 └── Makefile
 ```
 
+```mermaid
+graph LR
+    User[Usuario / Navegador]
+    FE[Frontend 3000<br/>SvelteKit]
+    API[API 8000<br/>FastAPI]
+    AI[AI 8002<br/>FastAPI]
+    Worker[Worker 8001<br/>asyncio]
+    DB[(SQLite + sqlite-vec)]
+    Vault[Obsidian Vault]
+
+    User --> FE
+    FE --> API
+    API --> DB
+    API --> AI
+    API --> Worker
+    Worker --> Vault
+    Worker --> API
+```
+
 ---
+
+## Quick Start
+
+See [QUICKSTART.md](QUICKSTART.md) for a step-by-step dev onboarding guide.
 
 ## License
 
