@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     embedding_retry_base_seconds: int = 60
     xp_table_json: str = ""
 
+    # Logging
+    log_dir: str = "data/logs"
+
     # Authentication
     auth_password: str = ""  # Password for single-user auth (optional)
 
