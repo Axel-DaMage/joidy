@@ -30,6 +30,18 @@ def get_db():
 
 
 def init_db():
+    db_url = settings.database_url
+
+    if db_url.startswith("sqlite"):
+        # SQLite path: ensure the parent directory exists and create tables.
+        # We skip PostgreSQL-specific vector extension and alembic migrations
+        # because the existing migrations are pgvector-oriented and SQLite
+        # does not support the PG vector extension.
+        db_path = Path(db_url.replace("sqlite:///", "").split("?")[0]).parent
+        db_path.mkdir(parents=True, exist_ok=True)
+        Base.metadata.create_all(engine)
+        return
+
     Path("/data/db").mkdir(parents=True, exist_ok=True)
     with engine.connect() as conn:
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
