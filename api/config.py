@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     embedding_retry_base_seconds: int = 60
     xp_table_json: str = ""
 
+    # File uploads
+    upload_dir: str = "data/uploads"
+    upload_max_image_bytes: int = 10 * 1024 * 1024  # 10 MB
+    upload_max_file_bytes: int = 50 * 1024 * 1024   # 50 MB
+
     # Logging
     log_dir: str = "data/logs"
 

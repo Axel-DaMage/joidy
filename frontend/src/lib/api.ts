@@ -382,4 +382,37 @@ github: {
       return req('DELETE', `/folders/${encodeURIComponent(path)}`);
     }
   },
+
+  upload: {
+    image: async (file: File) => {
+      const form = new FormData();
+      form.append('file', file);
+      const token = getToken();
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`${BASE}/upload/image`, { method: 'POST', headers, body: form });
+      if (!res.ok) {
+        const err = await res.text().catch(() => res.statusText);
+        throw new Error(`Upload failed: ${res.status} ${err}`);
+      }
+      const result = await res.json() as { url: string; filename: string; mime: string; size: number };
+      result.url = result.url.startsWith('http') ? result.url : `${BASE}${result.url}`;
+      return result;
+    },
+    file: async (file: File) => {
+      const form = new FormData();
+      form.append('file', file);
+      const token = getToken();
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`${BASE}/upload/file`, { method: 'POST', headers, body: form });
+      if (!res.ok) {
+        const err = await res.text().catch(() => res.statusText);
+        throw new Error(`Upload failed: ${res.status} ${err}`);
+      }
+      const result = await res.json() as { url: string; filename: string; mime: string; size: number };
+      result.url = result.url.startsWith('http') ? result.url : `${BASE}${result.url}`;
+      return result;
+    },
+  },
 };
