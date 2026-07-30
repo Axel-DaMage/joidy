@@ -95,8 +95,11 @@ logs-worker: ## Tail worker logs
 build: ## Rebuild all Docker images
 	docker compose build --no-cache
 
-clean: ## Stop services and remove volumes (WARNING: deletes nothing in data/)
+clean: ## Stop services and remove volumes, __pycache__ and MCP logs (WARNING: deletes nothing in data/)
 	docker compose down --remove-orphans
+	find . -type d -name __pycache__ -prune -exec rm -rf {} +
+	find . -type d -name .playwright-mcp -prune -exec rm -rf {} +
+	find . -type f -name '*.py[co]' -delete
 
 backup: ## Backup all user data to a timestamped archive
 	@BACKUP_FILE="joidy-backup-$$(date +%Y-%m-%d_%H-%M-%S).tar.gz"; \
