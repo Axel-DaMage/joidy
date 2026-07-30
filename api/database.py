@@ -49,6 +49,10 @@ def init_db():
     _run_migrations()
 
 
+# Import all models so they are registered with Base.metadata.
+from models import *  # noqa: E402,F401
+
+
 def _run_migrations() -> None:
     alembic_ini = Path(__file__).resolve().parent / "alembic.ini"
     if not alembic_ini.exists():
