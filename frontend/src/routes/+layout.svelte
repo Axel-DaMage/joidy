@@ -159,8 +159,14 @@
 
     connectWS();
 
-    // Register service worker for PWA
-    if ('serviceWorker' in navigator) {
+    // Register service worker for PWA (production only).
+    // In dev, SvelteKit does not emit a usable /service-worker.js (the
+    // `$service-worker` virtual module references build-time assets that do
+    // not exist at dev time), so registration fails with
+    // "ServiceWorker script evaluation failed" on every page load. The SW
+    // fetch handler would also intercept API calls and return 503 Offline
+    // while the dev backend is restarting, breaking the dev workflow (#205).
+    if (import.meta.env.PROD && 'serviceWorker' in navigator) {
       navigator.serviceWorker.register('/service-worker.js').catch((err) => {
         logger.warn('SW registration failed:', err);
       });
