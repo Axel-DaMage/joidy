@@ -199,6 +199,7 @@ def create_note(
     data: NoteCreate,
     background_tasks: BackgroundTasks,
     x_bulk_import: str | None = Header(default=None, alias="X-Bulk-Import"),
+    x_from_vault: str | None = Header(default=None, alias="X-From-Vault"),
     db: Session = Depends(get_db),
 ):
     note, gami = create_note_service(
@@ -209,6 +210,7 @@ def create_note(
         source=data.source,
         source_path=data.source_path,
         rebuild_derived_data=not _is_truthy_header(x_bulk_import),
+        from_vault=_is_truthy_header(x_from_vault),
     )
     background_tasks.add_task(trigger_embedding, note.id, note.content)
 
@@ -221,6 +223,7 @@ def update_note(
     data: NoteUpdate,
     background_tasks: BackgroundTasks,
     x_bulk_import: str | None = Header(default=None, alias="X-Bulk-Import"),
+    x_from_vault: str | None = Header(default=None, alias="X-From-Vault"),
     db: Session = Depends(get_db),
 ):
     note, gami = update_note_service(
@@ -232,6 +235,7 @@ def update_note(
         source_path=data.source_path,
         source=data.source,
         rebuild_derived_data=not _is_truthy_header(x_bulk_import),
+        from_vault=_is_truthy_header(x_from_vault),
     )
     if note is None or gami is None:
         raise HTTPException(status_code=404, detail="Note not found")
