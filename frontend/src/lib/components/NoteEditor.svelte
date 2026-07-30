@@ -234,7 +234,7 @@
     }
   }
 
-  let rawFrontmatterMatch = $derived(content.match(/^---\n[\s\S]*?\n---/));
+  let rawFrontmatterMatch = $derived(content.match(/^---\r?\n[\s\S]*?\r?\n---/));
   let rawFrontmatter = $derived(rawFrontmatterMatch ? rawFrontmatterMatch[0] : '');
 
   let tagsLineMatch = $derived(content.match(/^#\s*Tags?:\s*.*$/im));
@@ -243,7 +243,7 @@
   let visibleEditorContent = $derived((() => {
     let val = content;
     if (!$showFrontmatter && rawFrontmatter) {
-      val = val.replace(/^---\n[\s\S]*?\n---[\n]*/, '');
+      val = val.replace(/^---\r?\n[\s\S]*?\r?\n---[\r\n]*/, '');
     }
     if ($hideTagsLine && tags.length > 0 && currentTagsLine) {
       val = val.replace(/^#\s*Tags?:\s*.*$/im, '').trim();
@@ -448,7 +448,7 @@
   }
 
   function updateFrontmatter(key: string, value: string) {
-    const m = content.match(/^---\n([\s\S]*?)\n---/);
+    const m = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
     if (m) {
       let yaml = m[1];
       const regex = new RegExp(`(?:^|\\n)${key}:.*`);
@@ -458,7 +458,7 @@
         yaml += `\n${key}: ${value}`;
       }
       yaml = yaml.replace(/\n{2,}/g, '\n').trim();
-      content = content.replace(/^---\n[\s\S]*?\n---/, `---\n${yaml}\n---`);
+      content = content.replace(/^---\r?\n[\s\S]*?\r?\n---/, `---\n${yaml}\n---`);
     } else {
       content = `---\n${key}: ${value}\n---\n\n` + content;
     }
