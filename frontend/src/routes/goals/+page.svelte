@@ -13,7 +13,7 @@
   import StreakIcon from '$lib/components/StreakIcon.svelte';
   import StreakHeatmap from '$lib/components/StreakHeatmap.svelte';
   import GoalCard from '$lib/components/GoalCard.svelte';
-  import IconPicker from '$lib/components/IconPicker.svelte';
+  import LazyIconPicker from '$lib/components/LazyIconPicker.svelte';
 
   let goals = $state<Goal[]>([]);
   let tags = $state<TagType[]>([]);
@@ -1642,7 +1642,7 @@
                     </div>
                   {:else}
                     <div class="field ng-large-grid" style="display: flex; flex-direction: column; height: 280px; padding: 8px; border: 1px solid var(--border); border-radius: var(--r); background: var(--surface-hover); overflow: hidden;">
-                      <IconPicker selected={newFailIcon} color={newGoalColor} onSelect={(ic) => newFailIcon = ic} />
+                      <LazyIconPicker selected={newFailIcon} color={newGoalColor} onSelect={(ic) => newFailIcon = ic} />
                     </div>
                   {/if}
                 </div>

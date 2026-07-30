@@ -2,7 +2,7 @@
   import { createEventDispatcher } from 'svelte';
   import { X, Calendar, Snowflake, Target, Clock, Archive } from 'lucide-svelte';
   import StreakIcon from '$lib/components/StreakIcon.svelte';
-  import IconPicker from '$lib/components/IconPicker.svelte';
+  import LazyIconPicker from '$lib/components/LazyIconPicker.svelte';
   import type { PersonalStreak } from '$lib/api';
   import { liquidGlass } from '$lib/actions/liquidGlass';
   import { getContrastColor } from '$lib/stores/settings';
@@ -256,7 +256,7 @@
           </div>
         {:else}
           <div class="field">
-            <IconPicker selected={icon} color={color} onSelect={(ic) => icon = ic} />
+            <LazyIconPicker selected={icon} color={color} onSelect={(ic) => icon = ic} />
           </div>
         {/if}
 
