@@ -110,7 +110,20 @@
       
       const host = window.location.hostname;
       const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${wsProto}//${host}:8000/ws`;
+      // Derive the WebSocket URL from VITE_API_URL (which already reflects the
+      // configured API_PORT) so the app works on non-default ports. Fall back
+      // to the previous hostname:8000 behaviour when VITE_API_URL is unset.
+      let wsHost = `${host}:8000`;
+      const apiUrl = import.meta.env.VITE_API_URL as string | undefined;
+      if (apiUrl) {
+        try {
+          const parsed = new URL(apiUrl);
+          wsHost = `${parsed.hostname}:${parsed.port || (parsed.protocol === 'https:' ? '443' : '80')}`;
+        } catch {
+          wsHost = `${host}:8000`;
+        }
+      }
+      const wsUrl = `${wsProto}//${wsHost}/ws`;
 
       logger.info('[layout] Connecting to WebSocket:', wsUrl);
       ws = new WebSocket(wsUrl);

@@ -9,6 +9,7 @@ services:
       - /app/node_modules
     environment:
       - NODE_ENV=development
+      - FRONTEND_PORT=${FRONTEND_PORT:-3000}
       - VITE_API_URL=http://localhost:${API_PORT:-8000}
       - VITE_INTERNAL_API_URL=http://api:8000
     command: npm run dev -- --host 0.0.0.0 --port 3000
