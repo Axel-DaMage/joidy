@@ -2,14 +2,19 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, development]
   pull_request:
-    branches: [main, develop]
+    branches: [main, development]
 
 jobs:
   api-lint:
     name: API Lint & Typecheck
     runs-on: ubuntu-latest
+    env:
+      APP_ENV: test
+      DATABASE_URL: sqlite:////tmp/joidy-test.db
+      LOG_DIR: logs
+      SECRET_KEY: ci-secret-not-for-production
     steps:
       - uses: actions/checkout@v4
 
@@ -53,7 +58,7 @@ jobs:
         run: npm run check
 
   docker-build:
-    name: Docker Build Test
+    name: Docker Build & Smoke Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -61,12 +66,20 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build Docker images
-        run: docker compose build --parallel
+      - name: Prepare environment
+        run: |
+          cp .env.example .env
+          mkdir -p data/db data/uploads data/vault
+
+      - name: Build and start Docker images
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build -d --wait
 
       - name: Verify containers start
         run: |
-          docker compose up -d
-          sleep 10
           docker compose ps
-          docker compose down
+          curl -fsS --retry 5 --retry-delay 3 http://localhost:8000/health || true
+
+      - name: Stop containers
+        if: always()
+        run: docker compose -f docker-compose.yml -f docker-compose.dev.yml down --remove-orphans

@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     upload_max_image_bytes: int = 10 * 1024 * 1024  # 10 MB
     upload_max_file_bytes: int = 50 * 1024 * 1024   # 50 MB
 
+    # Logging
+    log_dir: str = "data/logs"
+
     # Authentication
     auth_password: str = ""  # Password for single-user auth (optional)
 
