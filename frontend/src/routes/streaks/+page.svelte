@@ -1,12 +1,13 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { scale } from 'svelte/transition';
-  import { Plus, X, Flame, Snowflake, Search, ChevronRight } from 'lucide-svelte';
-    import { Archive, Shuffle, CheckCheck } from 'lucide-svelte';
+  import { X, Snowflake, ChevronRight } from 'lucide-svelte';
+    import { Shuffle, CheckCheck } from 'lucide-svelte';
   import StreakListItem from '$lib/components/StreakListItem.svelte';
   import StreakCreateModal from '$lib/components/StreakCreateModal.svelte';
   import StreakHeatmap from '$lib/components/StreakHeatmap.svelte';
   import StreakStatsPanel from '$lib/components/StreakStatsPanel.svelte';
+  import StreakListPanel from '$lib/components/StreakListPanel.svelte';
   import { api, type PersonalStreak, type StreakStats } from '$lib/api';
   import { loadUserSettings, patchUserSettings, getCachedData, setCachedData } from '$lib/utils/userSettings';
   import { captureSnapshot, getSnapshot } from '$lib/stores/pageSnapshots';
@@ -308,74 +309,25 @@
   {#if mounted}
     <div class="streaks-layout" style="--panel-w: {panelWidth}px">
       <!-- ═══ LEFT PANEL: LIST ═══ -->
-      <div class="list-panel">
-        <!-- Header -->
-        <div class="list-header">
-          <div class="list-header-top">
-            <div>
-              <h1 class="list-title">Rachas</h1>
-              <span class="list-sub mono">
-                {#if loading}cargando...
-                {:else if showArchived}{filteredStreaks.length} archivadas
-                {:else}{doneCount}/{filteredStreaks.length} hoy
-                {/if}
-              </span>
-            </div>
-            <div class="header-actions">
-              <button
-                class="header-action-btn"
-                class:active={showArchived}
-                on:click={toggleArchivedView}
-                title={showArchived ? 'Volver a activas' : 'Ver archivadas'}
-              >
-                <Archive size={13} />
-              </button>
-              <button class="new-btn" on:click={openCreate}>
-                <Plus size={13} />
-              </button>
-            </div>
-          </div>
-
-          <!-- Search -->
-          <div class="search-row">
-            <Search size={12} />
-            <input
-              class="search-input"
-              bind:value={searchQuery}
-              placeholder="Buscar racha..."
-            />
-          </div>
-        </div>
-
-        <!-- Streak list -->
-        <div class="list-body">
-          {#if error}
-            <div class="error-msg">{error}</div>
-          {:else if loading}
-            <div class="empty-state mono">Cargando...</div>
-          {:else if filteredStreaks.length === 0}
-            <div class="empty-state">
-              <Flame size={24} style="opacity:.25; margin-bottom:8px;" />
-              <p>No hay rachas. ¡Crea una para comenzar!</p>
-              <button class="link-btn" on:click={openCreate}>Crear una nueva</button>
-            </div>
-          {:else}
-            {#each filteredStreaks as streak (streak.id)}
-              <StreakListItem
-                {streak}
-                selected={selectedId === streak.id}
-                {streakLabel}
-                {freqLabel}
-                {isStreakCompleted}
-                {getDaysForCompletion}
-                on:select={(e) => selectedId = e.detail}
-                on:edit={(e) => openEdit(e.detail)}
-                on:delete={(e) => deleteStreak(e.detail)}
-              />
-            {/each}
-          {/if}
-        </div>
-      </div>
+      <StreakListPanel
+        {streaks}
+        {filteredStreaks}
+        {loading}
+        {error}
+        {selectedId}
+        bind:searchQuery
+        bind:showArchived
+        {doneCount}
+        {streakLabel}
+        {freqLabel}
+        {isStreakCompleted}
+        {getDaysForCompletion}
+        onToggleArchive={toggleArchivedView}
+        onCreate={openCreate}
+        onSelect={(id) => selectedId = id}
+        onEdit={openEdit}
+        onDelete={deleteStreak}
+      />
 
       <!-- ── Resize handle ─────────────────────────────────────────────────────── -->
       <div class="resize-handle static"></div>
@@ -562,106 +514,6 @@
     display: grid;
     grid-template-columns: var(--panel-w) 5px 1fr;
     height: 100%;
-  }
-
-  /* ═══════════════════════════════════════════════════════════════════════════
-     LEFT PANEL
-     ═══════════════════════════════════════════════════════════════════════ */
-  .list-panel {
-    display: flex; flex-direction: column;
-    height: 100%;
-  }
-
-  .list-header {
-    padding: 20px 16px 12px;
-    display: flex; flex-direction: column; gap: 10px;
-    border-bottom: 1px solid var(--border-light);
-    flex-shrink: 0;
-  }
-
-  .list-header-top {
-    display: flex; align-items: flex-start; justify-content: space-between;
-  }
-
-  .header-actions {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .list-title {
-    font-size: 20px; font-weight: 700; color: var(--text-primary);
-    letter-spacing: -0.02em;
-  }
-  .list-sub { font-size: 11px; color: var(--text-muted); }
-
-  .new-btn {
-    width: 32px; height: 32px;
-    display: flex; align-items: center; justify-content: center;
-    background: var(--xp); color: var(--xp-contrast-text, var(--bg));
-    border: 1px solid var(--xp); border-radius: 8px;
-    cursor: pointer;
-  }
-  .new-btn:hover { opacity: 0.85; transform: scale(1.05); }
-
-  .header-action-btn {
-    width: 32px; height: 32px;
-    display: flex; align-items: center; justify-content: center;
-    background: var(--surface); color: var(--text-primary);
-    border: 1px solid var(--border); border-radius: 8px;
-    cursor: pointer; transition: all 0.15s;
-  }
-  .header-action-btn:hover { background: var(--elevated); border-color: var(--text-muted); transform: scale(1.05); }
-  .header-action-btn.active { background: var(--elevated); border-color: var(--text-muted); }
-
-  /* Search */
-  .search-row {
-    display: flex; align-items: center; gap: 8px;
-    padding: 6px 10px;
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: 6px; color: var(--text-muted);
-    transition: border-color 0.15s;
-  }
-  .search-row:focus-within { border-color: var(--text-muted); }
-
-  .search-input {
-    flex: 1; background: none; border: none; outline: none;
-    color: var(--text-primary); font-size: 12px;
-  }
-
-  /* Category tabs */
-  .cat-tabs {
-    display: flex; gap: 2px; overflow: hidden;
-  }
-
-  .cat-tab {
-    display: flex; align-items: center; gap: 4px;
-    padding: 4px 8px; font-size: 10px;
-    background: none; border: 1px solid transparent;
-    border-radius: 4px; color: var(--text-disabled);
-    cursor: pointer; transition: all 0.15s;
-    white-space: nowrap; flex-shrink: 0;
-  }
-  .cat-tab:hover { color: var(--text-muted); }
-  .cat-tab.active { border-color: var(--border); color: var(--text-primary); background: var(--elevated); }
-  .cat-tab-label { display: none; }
-  .cat-tab.active .cat-tab-label { display: inline; }
-
-  .archive-toggle {
-    display: flex; align-items: center; gap: 5px;
-    padding: 3px 8px; font-size: 9px;
-    background: none; border: none; color: var(--text-disabled);
-    cursor: pointer; transition: color 0.15s;
-    font-family: var(--font-mono); letter-spacing: 0.03em;
-    align-self: flex-start;
-  }
-  .archive-toggle:hover { color: var(--text-muted); }
-  .archive-toggle.active { color: var(--text-secondary); }
-
-  /* List body */
-  .list-body {
-    flex: 1; overflow: hidden; padding: 8px;
-    display: flex; flex-direction: column; gap: 4px;
   }
 
   .streak-item {
