@@ -773,6 +773,8 @@
   }
 <<<<<<< HEAD
 =======
+<<<<<<< HEAD
+=======
 
 .focus-mode-btn {
   display: flex;
@@ -793,5 +795,6 @@
   background: var(--elevated);
   border-color: var(--accent);
 }
+>>>>>>> origin/development
 >>>>>>> origin/development
 </style>

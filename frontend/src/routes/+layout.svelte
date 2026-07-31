@@ -32,6 +32,8 @@
   import { syncStore } from '$lib/stores/sync';
   import { toggle as toggleCommandPalette } from '$lib/stores/commandPalette';
   import ConflictResolutionModal from '$lib/components/ConflictResolutionModal.svelte';
+  import OfflineIndicator from '$lib/components/OfflineIndicator.svelte';
+  import { initOfflineSync } from '$lib/stores/offlineSync';
   import ShareAchievementModal from '$lib/components/ShareAchievementModal.svelte';
   import FocusMode from '$lib/components/FocusMode.svelte';
   import { initFocusModeConfig, queueNotificationIfActive } from '$lib/stores/focusMode';
@@ -99,6 +101,7 @@
     achievements.init();
     devMode.init();
     const cleanupConnection = initConnectionStore();
+    const cleanupOfflineSync = initOfflineSync();
 
     // Connect to WebSocket for real-time notifications
     let ws: WebSocket | null = null;
@@ -391,6 +394,7 @@
       if (wsReconnectTimeout) clearTimeout(wsReconnectTimeout);
       if (pillTimeout) clearTimeout(pillTimeout);
       if (cleanupTheme) cleanupTheme();
+      if (cleanupOfflineSync) cleanupOfflineSync();
       syncStore.stopPolling();
     };
   });
@@ -538,6 +542,7 @@
 <Toast />
 <TutorialOverlay />
 <ConflictResolutionModal />
+<OfflineIndicator />
 <ShareAchievementModal />
 <FocusMode />
 {/if}
