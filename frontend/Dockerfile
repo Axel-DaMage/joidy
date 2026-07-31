@@ -6,7 +6,8 @@ COPY package.json ./
 RUN npm install --legacy-peer-deps
 
 FROM deps AS development
-COPY . .
+COPY --chown=node:node . .
+USER node
 EXPOSE 3000
 CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
 
@@ -17,8 +18,9 @@ COPY . .
 RUN npm run build
 
 FROM base AS production
-COPY --from=build /app/build ./build
-COPY --from=build /app/package.json .
+COPY --from=build --chown=node:node /app/build ./build
+COPY --from=build --chown=node:node /app/package.json .
+USER node
 ENV NODE_ENV=production
 EXPOSE 3000
 CMD ["node", "build"]
