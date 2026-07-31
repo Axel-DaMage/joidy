@@ -10,6 +10,8 @@ jobs:
   api-lint:
     name: API Lint & Typecheck
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     env:
       APP_ENV: test
       DATABASE_URL: sqlite:////tmp/joidy-test.db
@@ -23,6 +25,13 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('api/requirements.txt') }}
+          restore-keys: ${{ runner.os }}-pip-
+
       - name: Install dependencies
         working-directory: api
         run: |
@@ -34,11 +43,20 @@ jobs:
 
       - name: Run tests with coverage
         working-directory: api
-        run: python -m pytest tests/ -v --cov=api --cov-report=term-missing
+        run: python -m pytest tests/ -v --cov=api --cov-report=xml --cov-report=term-missing
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: api/coverage.xml
+          retention-days: 30
 
   frontend-check:
     name: Frontend Typecheck
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -60,6 +78,8 @@ jobs:
   docker-build:
     name: Docker Build & Smoke Test
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -76,12 +96,21 @@ jobs:
 
       - name: Build and start Docker images
         run: |
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build -d --wait
+          timeout 300 docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build -d --wait
 
-      - name: Verify containers start
+      - name: Verify API health
         run: |
-          docker compose ps
-          curl -fsS --retry 5 --retry-delay 3 http://localhost:8000/health || true
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8000/health; then
+              echo "API is healthy"
+              exit 0
+            fi
+            echo "Attempt $i/30: API not ready yet..."
+            sleep 2
+          done
+          echo "::error::API did not become healthy within 60 seconds"
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml logs --tail=50 api
+          exit 1
 
       - name: Stop containers
         if: always()
