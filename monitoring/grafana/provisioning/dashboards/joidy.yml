@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: Joidy
+    orgId: 1
+    folder: Joidy
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards
