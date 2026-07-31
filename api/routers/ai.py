@@ -16,6 +16,8 @@ async def classify(req: ClassifyRequest):
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
             headers = {"X-Request-ID": get_correlation_id()}
+            if settings.internal_secret:
+                headers["X-Internal-Secret"] = settings.internal_secret
             r = await client.post(
                 f"{settings.ai_service_url}/classify",
                 json=req.model_dump(),
@@ -33,7 +35,10 @@ async def classify(req: ClassifyRequest):
 async def usage():
     async with httpx.AsyncClient(timeout=10.0) as client:
         try:
-            r = await client.get(f"{settings.ai_service_url}/usage", headers={"X-Request-ID": get_correlation_id()})
+            headers = {"X-Request-ID": get_correlation_id()}
+            if settings.internal_secret:
+                headers["X-Internal-Secret"] = settings.internal_secret
+            r = await client.get(f"{settings.ai_service_url}/usage", headers=headers)
             r.raise_for_status()
             return r.json()
         except httpx.HTTPError:

@@ -12,7 +12,7 @@
   import Login from '$lib/components/Login.svelte';
   import SetupWizard from '$lib/components/SetupWizard.svelte';
   import { api, type Goal, type PersonalStreak } from '$lib/api';
-  import { session, isAuthenticated } from '$lib/stores/session';
+  import { session, isAuthenticated, getToken } from '$lib/stores/session';
   import { totalXP, loadStats, pingActivity, globalLevel, nextStageXP, showNotification } from '$lib/stores/gamification';
   import { running, secondsLeft, phase } from '$lib/stores/pomodoro';
   import { initPomodoroSettings } from '$lib/stores/pomodoro';
@@ -125,7 +125,7 @@
           wsHost = `${host}:8000`;
         }
       }
-      const wsUrl = `${wsProto}//${wsHost}/ws`;
+      const wsUrl = `${wsProto}//${wsHost}/ws${getToken() ? `?token=${encodeURIComponent(getToken()!)}` : ''}`;
 
       logger.info('[layout] Connecting to WebSocket:', wsUrl);
       ws = new WebSocket(wsUrl);

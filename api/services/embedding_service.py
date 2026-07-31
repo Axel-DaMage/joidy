@@ -22,9 +22,13 @@ async def trigger_embedding(
     _db = _session_or_none(db)
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
+            headers = {}
+            if settings.internal_secret:
+                headers["X-Internal-Secret"] = settings.internal_secret
             response = await client.post(
                 f"{settings.ai_service_url}/embed",
                 json={"note_id": note_id, "content": content},
+                headers=headers,
             )
             response.raise_for_status()
         clear_embedding_failure(_db, note_id)
