@@ -261,7 +261,7 @@ async def sync_to_api_with_retry(path: str, content: str):
 
 ```python
 # worker/config.py
-database_url: str = "sqlite:////data/db/joidy.db"
+database_url: str = "postgresql://joidy:joidy@postgres:5432/joidy"
 api_url: str = "http://api:8000"
 ai_service_url: str = "http://ai-service:8002"
 vault_path: str = "/vault"
@@ -280,7 +280,7 @@ worker:
     - ./data/db:/data/db
     - ${OBSIDIAN_VAULT_PATH}:/vault
   environment:
-    - DATABASE_URL=sqlite:////data/db/joidy.db
+    - DATABASE_URL=postgresql://joidy:joidy@postgres:5432/joidy
     - API_URL=http://api:8000
     - AI_SERVICE_URL=http://ai-service:8002
     - VAULT_PATH=/vault

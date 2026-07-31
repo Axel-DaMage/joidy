@@ -3,49 +3,38 @@
 ## Metadata
 
 ```yaml
-engine: SQLite
-extension: sqlite-vec (vector embeddings)
-location: ./data/db/joidy.db
+engine: PostgreSQL 16
+extension: pgvector (vector embeddings)
+container: postgres
+volume: postgres_data
 shared: true
-wal_mode: true
-foreign_keys: ON
 ```
 
 ---
 
 ## 1. Configuración
 
-### 1.1 engine Setup
+### 1.1 Engine Setup
 
 ```python
 # api/database.py
-from sqlalchemy import create_engine, event
-import sqlite_vec
+from sqlalchemy import create_engine, text
 
 engine = create_engine(
-    settings.database_url,  # sqlite:////data/db/joidy.db
-    connect_args={"check_same_thread": False},
+    settings.database_url,  # postgresql://joidy:joidy@postgres:5432/joidy
 )
 
-# SQLite extensions
-def _setup_sqlite(dbapi_connection, connection_record):
-    dbapi_connection.enable_load_extension(True)
-    sqlite_vec.load(dbapi_connection)
-    dbapi_connection.enable_load_extension(False)
-    dbapi_connection.execute("PRAGMA journal_mode=WAL")
-    dbapi_connection.execute("PRAGMA foreign_keys=ON")
-    dbapi_connection.execute("PRAGMA synchronous=NORMAL")
-
-event.listen(engine, "connect", _setup_sqlite)
+# pgvector extension is created on init_db()
+def init_db():
+    with engine.connect() as conn:
+        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        conn.commit()
+    _run_migrations()
 ```
 
-### 1.2 Optimizaciones aplicadas
+### 1.2 Migraciones
 
-| PRAGMA | Valor | Propósito |
-|--------|-------|------------|
-| journal_mode | WAL | Write-Ahead Logging para concurrencia |
-| foreign_keys | ON | Integridad referencial |
-| synchronous | NORMAL | Balance entre seguridad y velocidad |
+Las migraciones se gestionan con **Alembic** (`api/alembic/versions/`). Aplicar con `make migrate`.
 
 ---
 

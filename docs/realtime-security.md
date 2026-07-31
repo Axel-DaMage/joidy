@@ -10,7 +10,7 @@ To achieve instantaneous updates across the personal knowledge workspace, Joidy 
 
 ### 1.1 Backend Architecture
 
-- **Path:** [api/routers/websocket.py](file:///home/d4mag3/Documents/Repos/Joidy/api/routers/websocket.py)
+- **Path:** [api/routers/websocket.py](api/routers/websocket.py)
 - **Connection Manager:** A module-level single instance `manager` of `ConnectionManager` accepts client WebSocket sockets, tracks active connections, handles heartbeat `ping/pong` calls, and broadcasts JSON messages to all listening clients with automatic connection cleaning.
 - **Service Integration:** Broadcasters are decoupled from HTTP-specific modules and invoked directly inside the core database mutation services. To invoke async FastAPI broadcasting from synchronous SQLAlchemy service code, Joidy uses non-blocking asynchronous wrapper functions:
   ```python
@@ -23,12 +23,12 @@ To achieve instantaneous updates across the personal knowledge workspace, Joidy 
           pass
   ```
 - **Broadcasting Triggers:**
-  - `process_event` ([gamification_engine.py](file:///home/d4mag3/Documents/Repos/Joidy/api/services/gamification_engine.py)): Centralizes the broadcast of XP gains (`xp_gained`) and streak changes (`streak_updated`) automatically after transaction commits.
-  - `create_note` & `update_note` ([note_service.py](file:///home/d4mag3/Documents/Repos/Joidy/api/services/note_service.py)): Transmits note events (`note_created` & `note_updated`) right after save, enabling other devices or background processes (like the Obsidian vault watcher) to trigger HMR updates in the UI.
+  - `process_event` ([gamification_engine.py](api/services/gamification_engine.py)): Centralizes the broadcast of XP gains (`xp_gained`) and streak changes (`streak_updated`) automatically after transaction commits.
+  - `create_note` & `update_note` ([note_service.py](api/services/note_service.py)): Transmits note events (`note_created` & `note_updated`) right after save, enabling other devices or background processes (like the Obsidian vault watcher) to trigger HMR updates in the UI.
 
 ### 1.2 Frontend Integration
 
-- **Path:** [+layout.svelte](file:///home/d4mag3/Documents/Repos/Joidy/frontend/src/routes/+layout.svelte)
+- **Path:** [+layout.svelte](frontend/src/routes/+layout.svelte)
 - **Lifecycle Management:** In `onMount`, Svelte initiates a connection `connectWS()` using the configured `VITE_API_URL` environment variable. It features a robust reconnection mechanism with exponential backoff on dropouts, and automatically closes the WebSocket handle on component destroy/unload.
 - **Client Handlers:**
   - `note_created` / `note_updated`: Shows a success/info notification and calls `loadNotes()` to refresh Svelte stores.
@@ -41,7 +41,7 @@ To achieve instantaneous updates across the personal knowledge workspace, Joidy 
 
 To secure the REST API against brute-force, scraping, or loops, Joidy enforces sliding window rate limiting.
 
-- **Path:** [api/middleware/rate_limit.py](file:///home/d4mag3/Documents/Repos/Joidy/api/middleware/rate_limit.py)
+- **Path:** [api/middleware/rate_limit.py](api/middleware/rate_limit.py)
 - **Flexible Request Identification:** Instead of simple global or pure IP boundaries, the limiter checks request headers sequentially:
   1. `X-API-Key`: Uses the API key string prefix `apikey:<key>`.
   2. `Authorization: Bearer <token>`: Extracts the token and hashes it safely as `token:<token_prefix>` to avoid security logs leakage.
@@ -57,8 +57,8 @@ To secure the REST API against brute-force, scraping, or loops, Joidy enforces s
 
 A unified interceptor simplifies Svelte page logic by handling connection drops and server issues globally.
 
-- **Path:** [api.ts](file:///home/d4mag3/Documents/Repos/Joidy/frontend/src/lib/api.ts) & [notifications.ts](file:///home/d4mag3/Documents/Repos/Joidy/frontend/src/lib/stores/notifications.ts)
-- **Decoupled Toasts:** The notifications store (`notifications.ts`) is completely isolated to resolve circular imports between the HTTP request wrapper and statistics stores. It implements the `'error'` toast type mapping to an `AlertTriangle` warning icon in [Toast.svelte](file:///home/d4mag3/Documents/Repos/Joidy/frontend/src/lib/components/Toast.svelte).
+- **Path:** [api.ts](frontend/src/lib/api.ts) & [notifications.ts](frontend/src/lib/stores/notifications.ts)
+- **Decoupled Toasts:** The notifications store (`notifications.ts`) is completely isolated to resolve circular imports between the HTTP request wrapper and statistics stores. It implements the `'error'` toast type mapping to an `AlertTriangle` warning icon in [Toast.svelte](frontend/src/lib/components/Toast.svelte).
 - **Generic `req()` Interceptor Wrapper:**
   - **Network Failures:** Captures `TypeError` or socket failures, throwing a unified `Error de red. No se pudo conectar con el servidor.` notification.
   - **Session Expired (401):** Triggers `session.logout()` to safely clean cache state and raises a session expired warning toast.
@@ -70,7 +70,7 @@ A unified interceptor simplifies Svelte page logic by handling connection drops 
 
 A premium connectivity badge displays visual indicators corresponding to browser network changes.
 
-- **Path:** [+layout.svelte](file:///home/d4mag3/Documents/Repos/Joidy/frontend/src/routes/+layout.svelte)
+- **Path:** [+layout.svelte](frontend/src/routes/+layout.svelte)
 - **Reactivity:** Subscribes to the global `isOnline` and `wasOffline` connection stores.
 - **Premium Styling:** Uses a glassmorphism theme (`backdrop-filter`) with Harmonious colors:
   - **Offline State:** A pulsing, glowing red dot (`red-pulse` keyframes) with an overlay saying `Sin conexión`.

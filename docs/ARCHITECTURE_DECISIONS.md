@@ -4,7 +4,7 @@ This document records the major architectural decisions made in Joidy and the ra
 
 ## ADR-001: SQLite as the primary database
 
-**Status:** Accepted
+**Status:** Superceded — The project now uses PostgreSQL 16 + pgvector in all environments. See `docker-compose.yml`.
 
 **Context:** The project started as a personal knowledge management tool. It needed a zero-configuration database that could be shared across the API, AI service, and worker without requiring a separate process.
 
@@ -20,7 +20,7 @@ This document records the major architectural decisions made in Joidy and the ra
 
 **Status:** Accepted
 
-**Context:** Joidy consists of a frontend, an API, an AI service, and a worker. They share models, configuration patterns, and the SQLite database.
+**Context:** Joidy consists of a frontend, an API, an AI service, and a worker. They share models, configuration patterns, and the PostgreSQL database.
 
 **Decision:** Keep all services in a single repository and orchestrate them with Docker Compose.
 

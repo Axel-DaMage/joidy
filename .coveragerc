@@ -1,3 +1,0 @@
-[run]
-source = api, ai-service, worker
-omit = */tests/*, */alembic/*, */__pycache__/*
