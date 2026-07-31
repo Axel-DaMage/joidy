@@ -8,6 +8,8 @@
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
   import SettingsPanel from '$lib/components/SettingsPanel.svelte';
   import CommandPalette from '$lib/components/CommandPalette.svelte';
+  import FocusMode from '$lib/components/FocusMode.svelte';
+  import { initFocusModeConfig } from '$lib/stores/focusMode';
   import Toast from '$lib/components/Toast.svelte';
   import Login from '$lib/components/Login.svelte';
   import SetupWizard from '$lib/components/SetupWizard.svelte';
@@ -16,19 +18,23 @@
   import { totalXP, loadStats, pingActivity, globalLevel, nextStageXP, showNotification } from '$lib/stores/gamification';
   import { running, secondsLeft, phase } from '$lib/stores/pomodoro';
   import { initPomodoroSettings } from '$lib/stores/pomodoro';
-  import { accentColors, activeIconPack, use24HourClock, initTheme, devMode } from '$lib/stores/settings';
+  import { accentColors, activeIconPack, use24HourClock, initTheme, devMode, themeMode } from '$lib/stores/settings';
   import { getCachedData, setCachedData } from '$lib/utils/userSettings';
   import { initKeyboardNavigation } from '$lib/utils/keyboardNavigation';
   import { initPushNotifications } from '$lib/push';
   import { logger } from '$lib/utils/logger';
   import { onboarding } from '$lib/stores/onboarding';
-  import TutorialOverlay from '$lib/components/TutorialOverlay.svelte';
+  import OnboardingTour from '$lib/components/OnboardingTour.svelte';
   import { achievements } from '$lib/stores/achievements';
   import { initConnectionStore } from '$lib/stores/connection';
   import { loadNotes } from '$lib/stores/notes';
   import { deferredPrompt, showInstallBanner, isAppInstalled } from '$lib/stores/pwa';
   import { syncStore } from '$lib/stores/sync';
+  import { toggle as toggleCommandPalette } from '$lib/stores/commandPalette';
   import ConflictResolutionModal from '$lib/components/ConflictResolutionModal.svelte';
+  import OfflineIndicator from '$lib/components/OfflineIndicator.svelte';
+  import { initOfflineSync } from '$lib/stores/offlineSync';
+  import ShareAchievementModal from '$lib/components/ShareAchievementModal.svelte';
   import FocusMode from '$lib/components/FocusMode.svelte';
   import { initFocusModeConfig, queueNotificationIfActive } from '$lib/stores/focusMode';
 
@@ -85,6 +91,7 @@
 
     accentColors.init();
     activeIconPack.init();
+    themeMode.init();
     const cleanupTheme = initTheme();
     initPomodoroSettings();
     initFocusModeConfig();
@@ -94,6 +101,14 @@
     achievements.init();
     devMode.init();
     const cleanupConnection = initConnectionStore();
+    const cleanupOfflineSync = initOfflineSync();
+
+    // First-use detection: start the onboarding tour for brand-new users.
+    if ($isAuthenticated) {
+      onboarding.shouldShowOnboarding().then((show: boolean) => {
+        if (show) onboarding.startTour();
+      }).catch((e: unknown) => logger.warn('[layout] onboarding detection failed:', e));
+    }
 
     // Connect to WebSocket for real-time notifications
     let ws: WebSocket | null = null;
@@ -342,6 +357,15 @@
     };
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
+    // Command palette toggle (Cmd/Ctrl+K)
+    const handleCommandPaletteKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        toggleCommandPalette();
+      }
+    };
+    window.addEventListener('keydown', handleCommandPaletteKey);
+
     window.addEventListener('online', handleOnline);
     window.addEventListener('joidy:streaks-updated', handleStreaksUpdated);
     window.addEventListener('joidy:open-settings', handleOpenSettings);
@@ -367,6 +391,7 @@
       window.removeEventListener('unhandledrejection', handleUnhandledRejection);
       window.removeEventListener('appinstalled', handleAppInstalled);
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('keydown', handleCommandPaletteKey);
 
       // Clean up WebSocket connection
       if (ws) {
@@ -376,6 +401,7 @@
       if (wsReconnectTimeout) clearTimeout(wsReconnectTimeout);
       if (pillTimeout) clearTimeout(pillTimeout);
       if (cleanupTheme) cleanupTheme();
+      if (cleanupOfflineSync) cleanupOfflineSync();
       syncStore.stopPolling();
     };
   });
@@ -519,10 +545,12 @@
 
 <SettingsPanel bind:open={settingsOpen} on:close={() => settingsOpen = false} />
 <CommandPalette />
-<Toast />
-<TutorialOverlay />
-<ConflictResolutionModal />
 <FocusMode />
+<Toast />
+<OnboardingTour />
+<ConflictResolutionModal />
+<OfflineIndicator />
+<ShareAchievementModal />
 {/if}
 
 <style>

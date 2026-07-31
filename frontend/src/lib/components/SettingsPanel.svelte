@@ -2,7 +2,7 @@
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
   import { browser } from '$app/environment';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
-  import { accentColors, activeIconPack, showFrontmatter, showTrash, showHiddenFiles, writeInObsidian, use24HourClock, hideTagsLine, darkMode, devMode, type IconPack, MAX_COLORS } from '$lib/stores/settings';
+  import { accentColors, activeIconPack, showFrontmatter, showTrash, showHiddenFiles, writeInObsidian, use24HourClock, hideTagsLine, darkMode, devMode, themeMode, type IconPack, type ThemeMode, MAX_COLORS } from '$lib/stores/settings';
   import { api } from '$lib/api';
   import { logger } from '$lib/utils/logger';
   import { deferredPrompt, isAppInstalled, showInstallBanner } from '$lib/stores/pwa';
@@ -404,6 +404,30 @@
               <span class="divider">|</span>
               <span class:active={!$darkMode}>claro</span>
             </button>
+          </div>
+
+          <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
+            <div class="row-label">
+              <DynamicIcon name="Sparkles" size={13} />
+              <span>Modo de tema</span>
+            </div>
+            <div class="theme-mode-options">
+              <label class="theme-mode-option" class:active={$themeMode === 'light'}>
+                <input type="radio" name="theme-mode" value="light" checked={$themeMode === 'light'} onchange={() => themeMode.set('light')} />
+                <span>Claro</span>
+              </label>
+              <label class="theme-mode-option" class:active={$themeMode === 'dark'}>
+                <input type="radio" name="theme-mode" value="dark" checked={$themeMode === 'dark'} onchange={() => themeMode.set('dark')} />
+                <span>Oscuro</span>
+              </label>
+              <label class="theme-mode-option" class:active={$themeMode === 'auto'}>
+                <input type="radio" name="theme-mode" value="auto" checked={$themeMode === 'auto'} onchange={() => themeMode.set('auto')} />
+                <span>Automático</span>
+              </label>
+            </div>
+            {#if $themeMode === 'auto'}
+              <p class="hint" style="margin-top: 2px;">El tema cambiará según la hora del día y la estación</p>
+            {/if}
           </div>
 
           <div class="row">
@@ -1159,4 +1183,29 @@
     margin-top: 8px;
     text-align: center;
   }
+
+  /* Theme mode selector */
+  .theme-mode-options {
+    display: flex;
+    gap: 6px;
+  }
+
+  .theme-mode-option {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: border-color var(--t-fast), color var(--t-fast);
+  }
+  .theme-mode-option:hover { border-color: var(--text-muted); }
+  .theme-mode-option.active { border-color: var(--xp); color: var(--text-primary); }
+  .theme-mode-option input { position: absolute; opacity: 0; width: 0; height: 0; }
 </style>

@@ -6,7 +6,8 @@
   import { displayTagName } from '$lib/utils/format';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
   import { devMode } from '$lib/stores/settings';
-  import { Search, X } from 'lucide-svelte';
+  import { openShare } from '$lib/stores/shareAchievement';
+  import { Search, X, Share2 } from 'lucide-svelte';
 
   let skills: Skill[] = $state([]);
   let treeData: SkillTreeData = $state({ nodes: [], edges: [] });
@@ -18,6 +19,24 @@
     locked: 'Bloqueado', apprentice: 'Aprendiz', journeyman: 'Oficial', expert: 'Experto', master: 'Maestro'
   };
   const LEVEL_ORDER = ['locked', 'apprentice', 'journeyman', 'expert', 'master'];
+
+  const LEVEL_COLORS: Record<string, string> = {
+    locked: 'var(--text-muted)',
+    apprentice: 'var(--text-secondary)',
+    journeyman: 'var(--text-secondary)',
+    expert: 'var(--accent)',
+    master: 'var(--xp)',
+  };
+
+  function shareSkill(skill: Skill) {
+    openShare({
+      title: displayTagName(skill.tag_name),
+      icon: 'Zap',
+      value: LEVEL_LABELS[skill.level] ?? skill.level,
+      subtitle: `${skill.note_count} notas`,
+      color: LEVEL_COLORS[skill.level] ?? 'var(--xp)',
+    });
+  }
 
   let filteredSkills = $derived(skills.filter(s => {
     if (searchQuery && !s.tag_name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
@@ -119,6 +138,16 @@
               <span class="skill-name">{displayTagName(skill.tag_name)}</span>
               <span class="skill-count caption">{skill.note_count} notas</span>
             </div>
+            {#if skill.level !== 'locked'}
+              <button
+                class="share-btn"
+                onclick={() => shareSkill(skill)}
+                title="Compartir habilidad"
+                aria-label="Compartir habilidad {displayTagName(skill.tag_name)}"
+              >
+                <Share2 size={12} />
+              </button>
+            {/if}
             <span class="level-badge" data-level={skill.level}>
               {LEVEL_LABELS[skill.level] ?? skill.level}
             </span>
@@ -336,6 +365,27 @@
     flex-direction: column;
     gap: 1px;
     min-width: 0;
+  }
+
+  .share-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all var(--t-fast);
+  }
+
+  .share-btn:hover {
+    border-color: var(--text-muted);
+    color: var(--text-primary);
+    background: var(--elevated);
   }
 
   .skill-name {
