@@ -10,8 +10,13 @@
 
   $: isEmoji = emojiRegex.test(name);
 
-  // Synchronous lookup — no race condition
-  $: lucideComp = name ? ((LucideIcons as any)[name] || Circle) : Circle;
+  // Convert kebab-case to PascalCase (e.g. "book-open" → "BookOpen")
+  function toPascalCase(s: string): string {
+    return s.split('-').map(p => p.charAt(0).toUpperCase() + p.slice(1)).join('');
+  }
+
+  // Synchronous lookup — handles both PascalCase and kebab-case names
+  $: lucideComp = name ? ((LucideIcons as any)[name] || (LucideIcons as any)[toPascalCase(name)] || Circle) : Circle;
 </script>
 
 {#if isEmoji}
