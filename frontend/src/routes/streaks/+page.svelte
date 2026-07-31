@@ -584,6 +584,7 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
     aspect-ratio: 2 / 0.68;
     gap: 0;
+    flex-shrink: 0;
   }
 
   /* Counter */
