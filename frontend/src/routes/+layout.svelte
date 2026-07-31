@@ -22,7 +22,7 @@
   import { initPushNotifications } from '$lib/push';
   import { logger } from '$lib/utils/logger';
   import { onboarding } from '$lib/stores/onboarding';
-  import TutorialOverlay from '$lib/components/TutorialOverlay.svelte';
+  import OnboardingTour from '$lib/components/OnboardingTour.svelte';
   import { achievements } from '$lib/stores/achievements';
   import { initConnectionStore } from '$lib/stores/connection';
   import { loadNotes } from '$lib/stores/notes';
@@ -91,6 +91,13 @@
     achievements.init();
     devMode.init();
     const cleanupConnection = initConnectionStore();
+
+    // First-use detection: start the onboarding tour for brand-new users.
+    if ($isAuthenticated) {
+      onboarding.shouldShowOnboarding().then((show: boolean) => {
+        if (show) onboarding.startTour();
+      }).catch((e: unknown) => logger.warn('[layout] onboarding detection failed:', e));
+    }
 
     // Connect to WebSocket for real-time notifications
     let ws: WebSocket | null = null;
@@ -517,7 +524,7 @@
 <SettingsPanel bind:open={settingsOpen} on:close={() => settingsOpen = false} />
 <CommandPalette />
 <Toast />
-<TutorialOverlay />
+<OnboardingTour />
 <ConflictResolutionModal />
 {/if}
 
