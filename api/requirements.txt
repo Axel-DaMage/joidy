@@ -15,5 +15,6 @@ bleach==6.4.0
 passlib[bcrypt]==1.7.4
 prometheus-client==0.21.0
 pywebpush==2.0.0
+cryptography>=43.0.0
 pytest
 pytest-cov

@@ -29,12 +29,9 @@
   let githubExpiresAt = 0;
   let githubPollTimer: ReturnType<typeof setTimeout> | null = null;
 
-  let googleCalendarConnected = false;
-  let googleCalendarEmail = '';
-  let googleTasksConnected = false;
-  let googleTasksEmail = '';
-  let googleContactsConnected = false;
-  let googleContactsEmail = '';
+  let googleConnected = false;
+  let googleConnecting = false;
+  let googleError = '';
   let stravaConnected = false;
   let stravaName = '';
   let gmailConnected = false;
@@ -96,6 +93,7 @@
       };
       configLoaded = true;
       await checkGithubStatus();
+      await checkGoogleStatus();
     } catch (e) {
       logger.error('Failed to load config:', e);
       configLoaded = true;
@@ -207,6 +205,50 @@
   async function openGoogleContactsLink() { window.open('https://contacts.google.com', '_blank'); }
   async function openStravaLink() { window.open('https://strava.com', '_blank'); }
   async function openGmailLink() { window.open('https://mail.google.com', '_blank'); }
+
+  async function checkGoogleStatus() {
+    try {
+      const status = await api.google.status();
+      googleConnected = status.connected;
+    } catch {
+      googleConnected = false;
+    }
+  }
+
+  async function startGoogleAuth() {
+    googleConnecting = true;
+    googleError = '';
+    try {
+      const data = await api.google.authUrl();
+      window.open(data.url, '_blank');
+      // Listen for the OAuth callback via URL params (popup or redirect)
+      // The user will be redirected back with ?code=xxx
+      // We poll for connection status
+      const pollInterval = setInterval(async () => {
+        await checkGoogleStatus();
+        if (googleConnected) {
+          clearInterval(pollInterval);
+          googleConnecting = false;
+          showNotification('Google conectado correctamente', 'success');
+        }
+      }, 3000);
+      // Stop polling after 5 minutes
+      setTimeout(() => { clearInterval(pollInterval); googleConnecting = false; }, 300000);
+    } catch (e: any) {
+      googleError = e.message || 'Error iniciando autenticación con Google';
+      googleConnecting = false;
+    }
+  }
+
+  async function disconnectGoogle() {
+    try {
+      await api.google.disconnect();
+      googleConnected = false;
+      showNotification('Google desconectado', 'info');
+    } catch (e: any) {
+      googleError = e.message || 'Error al desconectar Google';
+    }
+  }
 
   async function saveConfig() {
     configSaving = true;
@@ -598,17 +640,21 @@
             <button class="link-btn disabled">Futura integración</button>
           </div>
           <div class="row">
-            <div class="row-label disabled">
-              <span>Google Calendar</span>
+            <div class="row-label">
+              <span>Google Calendar & Tasks</span>
+              {#if googleConnected}<span class="badge badge-on" style="margin-left:4px">Conectado</span>{/if}
             </div>
-            <button class="link-btn disabled">Futura integración</button>
+            {#if googleConnecting}
+              <span class="mono" style="font-size:12px; color: var(--text-muted);">Conectando…</span>
+            {:else if googleConnected}
+              <button class="link-btn" onclick={disconnectGoogle} style="background:var(--border); color:var(--text-secondary);">Desconectar</button>
+            {:else}
+              <button class="link-btn" onclick={startGoogleAuth}>Enlazar</button>
+            {/if}
           </div>
-          <div class="row">
-            <div class="row-label disabled">
-              <span>Google Tasks</span>
-            </div>
-            <button class="link-btn disabled">Futura integración</button>
-          </div>
+          {#if googleError}
+            <p class="hint" style="color:var(--danger)">{googleError}</p>
+          {/if}
         </section>
 
         <!-- IA -->

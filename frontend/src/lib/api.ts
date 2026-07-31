@@ -347,6 +347,14 @@ github: {
     revoke: () => req<{ status: string }>('POST', '/integrations/github/oauth/revoke'),
   },
 
+  google: {
+    authUrl: () => req<{ url: string }>('GET', '/integrations/google/auth'),
+    connect: (code: string) =>
+      req<{ status: string; scope: string | null }>('POST', '/integrations/google/connect', { code }),
+    status: () => req<{ connected: boolean }>('GET', '/integrations/google/status'),
+    disconnect: () => req<{ status: string }>('POST', '/integrations/google/disconnect'),
+  },
+
   config: {
     setupStatus: () => req<{ needs_setup: boolean }>('GET', '/config/setup-status'),
     setup: (auth_password: string, obsidian_vault_path?: string) => 
