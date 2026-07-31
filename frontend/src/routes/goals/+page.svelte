@@ -14,6 +14,7 @@
   import StreakHeatmap from '$lib/components/StreakHeatmap.svelte';
   import GoalCard from '$lib/components/GoalCard.svelte';
   import LazyIconPicker from '$lib/components/LazyIconPicker.svelte';
+  import ModalDialog from '$lib/components/ModalDialog.svelte';
 
   let goals = $state<Goal[]>([]);
   let tags = $state<TagType[]>([]);
@@ -1798,94 +1799,83 @@
   {/if}
 
   {#if editingGoal}
-    <div class="modal-overlay" onclick={(e) => { if (e.target === e.currentTarget) editingGoal = null; }} role="dialog" tabindex="-1">
-      <div class="modal-card fade-in">
-        <div class="modal-header">
-          <h3 class="section-title" style="margin:0;">Editar Objetivo</h3>
-          <button class="btn btn-ghost" onclick={() => editingGoal = null}><X size={16} /></button>
+    <ModalDialog open={true} title="Editar Objetivo" size="md" onClose={() => editingGoal = null}>
+      <div class="form-field">
+        <label class="label">Título</label>
+        <input class="input w-full" bind:value={editTitle} />
+      </div>
+      <div class="form-field">
+        <label class="label">Descripción</label>
+        <textarea class="input w-full" bind:value={editDescription} rows="2"></textarea>
+      </div>
+      <div class="form-row">
+        <div class="form-field" style="flex:1;">
+          <label class="label">Medición</label>
+          <select class="input w-full" bind:value={editMeasurement}>
+            <option value="COUNT">Cuenta Numérica</option>
+            <option value="BOOLEAN">Hecho / No Hecho</option>
+            <option value="PERCENT">Porcentaje</option>
+          </select>
         </div>
-        <div class="form-field">
-          <label class="label">Título</label>
-          <input class="input w-full" bind:value={editTitle} />
+        <div class="form-field" style="width:120px;">
+          <label class="label">Meta</label>
+          <input class="input w-full" type="number" bind:value={editTargetValue} min="1" />
         </div>
-        <div class="form-field">
-          <label class="label">Descripción</label>
-          <textarea class="input w-full" bind:value={editDescription} rows="2"></textarea>
-        </div>
-        <div class="form-row">
-          <div class="form-field" style="flex:1;">
-            <label class="label">Medición</label>
-            <select class="input w-full" bind:value={editMeasurement}>
-              <option value="COUNT">Cuenta Numérica</option>
-              <option value="BOOLEAN">Hecho / No Hecho</option>
-              <option value="PERCENT">Porcentaje</option>
-            </select>
-          </div>
-          <div class="form-field" style="width:120px;">
-            <label class="label">Meta</label>
-            <input class="input w-full" type="number" bind:value={editTargetValue} min="1" />
-          </div>
-          <div class="form-field" style="width:100px;">
-            <label class="label">Límite (días)</label>
-            <input class="input w-full" type="number" bind:value={editMaxAssignmentDays} min="1" placeholder="∞" />
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-field" style="flex:1;">
-            <label class="label">Regla de Fallo</label>
-            <select class="input w-full" bind:value={editFailConfig}>
-              <option value="STATIC">Estático (Se reinicia)</option>
-              <option value="ROLLOVER">Traspaso (Pasa al día sig.)</option>
-              <option value="SNOWBALL">Acumulativo (Suma la deuda)</option>
-            </select>
-          </div>
-          <div class="form-field" style="width:80px;">
-            <label class="label">Color</label>
-            <div class="color-custom" style="background: {editColor}; width:36px; height:36px;">
-              <input type="color" bind:value={editColor} class="color-picker" />
-            </div>
-          </div>
-        </div>
-        <div class="form-actions">
-          <button class="btn btn-primary" onclick={saveEdit} disabled={editSaving || !editTitle.trim()}>
-            {editSaving ? 'Guardando...' : 'Guardar cambios'}
-          </button>
-          <button class="btn btn-ghost" onclick={() => editingGoal = null}>Cancelar</button>
+        <div class="form-field" style="width:100px;">
+          <label class="label">Límite (días)</label>
+          <input class="input w-full" type="number" bind:value={editMaxAssignmentDays} min="1" placeholder="∞" />
         </div>
       </div>
-    </div>
+      <div class="form-row">
+        <div class="form-field" style="flex:1;">
+          <label class="label">Regla de Fallo</label>
+          <select class="input w-full" bind:value={editFailConfig}>
+            <option value="STATIC">Estático (Se reinicia)</option>
+            <option value="ROLLOVER">Traspaso (Pasa al día sig.)</option>
+            <option value="SNOWBALL">Acumulativo (Suma la deuda)</option>
+          </select>
+        </div>
+        <div class="form-field" style="width:80px;">
+          <label class="label">Color</label>
+          <div class="color-custom" style="background: {editColor}; width:36px; height:36px;">
+            <input type="color" bind:value={editColor} class="color-picker" />
+          </div>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" onclick={saveEdit} disabled={editSaving || !editTitle.trim()}>
+          {editSaving ? 'Guardando...' : 'Guardar cambios'}
+        </button>
+        <button class="btn btn-ghost" onclick={() => editingGoal = null}>Cancelar</button>
+      </div>
+    </ModalDialog>
   {/if}
 
   {#if pendingGoals.length > 0}
-    <div class="modal-overlay" role="dialog" tabindex="-1">
-      <div class="modal-card fade-in" style="max-width: 520px;">
-        <div class="modal-header">
-          <h3 class="section-title" style="margin:0; color: var(--warning, #f59e0b);">⚠ Objetivos Huérfanos</h3>
-        </div>
-        <p class="removal-desc">
-          Los siguientes objetivos fueron eliminados del contenido de sus notas vinculadas. ¿Qué deseas hacer con cada uno?
-        </p>
-        {#each pendingGoals as pg (pg.id)}
-          <div class="removal-item">
-            <div class="removal-info">
-              <span class="removal-title">{pg.title}</span>
-              <span class="removal-meta">{pg.temporality} · {formatFailConfig(pg.fail_config)}</span>
-            </div>
-            <div class="removal-actions">
-              <button class="btn btn-ghost removal-btn manual" title="Mantener como progreso manual" onclick={() => resolveRemoval(pg.id, 'manual')}>
-                Manual
-              </button>
-              <button class="btn btn-ghost removal-btn cancel" title="Cancelar (archivar sin penalización)" onclick={() => resolveRemoval(pg.id, 'cancel')}>
-                Cancelar
-              </button>
-              <button class="btn btn-ghost removal-btn delete" title="Eliminar permanentemente" onclick={() => resolveRemoval(pg.id, 'delete')}>
-                Eliminar
-              </button>
-            </div>
+    <ModalDialog open={true} title="⚠ Objetivos Huérfanos" size="md" onClose={() => {}}>
+      <p class="removal-desc">
+        Los siguientes objetivos fueron eliminados del contenido de sus notas vinculadas. ¿Qué deseas hacer con cada uno?
+      </p>
+      {#each pendingGoals as pg (pg.id)}
+        <div class="removal-item">
+          <div class="removal-info">
+            <span class="removal-title">{pg.title}</span>
+            <span class="removal-meta">{pg.temporality} · {formatFailConfig(pg.fail_config)}</span>
           </div>
-        {/each}
-      </div>
-    </div>
+          <div class="removal-actions">
+            <button class="btn btn-ghost removal-btn manual" title="Mantener como progreso manual" onclick={() => resolveRemoval(pg.id, 'manual')}>
+              Manual
+            </button>
+            <button class="btn btn-ghost removal-btn cancel" title="Cancelar (archivar sin penalización)" onclick={() => resolveRemoval(pg.id, 'cancel')}>
+              Cancelar
+            </button>
+            <button class="btn btn-ghost removal-btn delete" title="Eliminar permanentemente" onclick={() => resolveRemoval(pg.id, 'delete')}>
+              Eliminar
+            </button>
+          </div>
+        </div>
+      {/each}
+    </ModalDialog>
   {/if}
 
   {#if currentTab === 'editor'}
@@ -2746,30 +2736,6 @@
     font-size: 11px;
     color: var(--text-secondary);
     font-family: var(--font-mono);
-  }
-
-  /* Edit Modal */
-  .modal-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: var(--z-modal);
-  }
-  .modal-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--r);
-    padding: var(--s5);
-    width: 100%;
-    max-width: 480px;
-    display: flex;
-    flex-direction: column;
-    gap: var(--s3);
-    box-shadow: 0 16px 48px rgba(0,0,0,0.3);
-  }
-  .modal-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
   }
 
   /* Hierarchical Planning */
