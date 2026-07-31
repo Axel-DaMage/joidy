@@ -5,7 +5,7 @@ Authentication endpoints.
 from config import settings
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from services.auth_service import create_access_token
+from services.auth_service import create_access_token, verify_password, hash_password
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -26,7 +26,7 @@ def login(password: str = "", username: str = "user"):
         raise HTTPException(status_code=500, detail="Server not configured for auth")
 
     expected_password = settings.auth_password or ""
-    if expected_password and password != expected_password:
+    if expected_password and not verify_password(password, expected_password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     # Create token for the single user (user_id=1)
