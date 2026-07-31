@@ -1,8 +1,11 @@
 #!/bin/bash
 # Script de inicio para Joidy con checkeo de salud
-# Ubicación: /home/d4mag3/Documents/Repos/Joidy/scripts/joidy_startup.sh
+# Ubicación: scripts/joidy_startup.sh (dentro del repo)
+# Uso: bash scripts/joidy_startup.sh  (o vía joidy.service)
 
-PROJECT_DIR="/home/d4mag3/Documents/Repos/Joidy"
+# Resolver el directorio del proyecto desde la ubicación del script
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_DIR"
 
 echo "🚀 Iniciando servicios de Joidy..."
@@ -14,8 +17,9 @@ sleep 15
 
 echo "🔍 Realizando checkeo de salud..."
 
-# Check API
-if curl -s "http://localhost:8008/health" | grep -q "ok"; then
+# Check API (puerto por defecto 8000, configurable via API_PORT)
+API_PORT="${API_PORT:-8000}"
+if curl -s "http://localhost:${API_PORT}/health" | grep -q "ok"; then
     echo "✅ API está saludable"
 else
     echo "⚠️ API podría tener problemas, revisando logs..."

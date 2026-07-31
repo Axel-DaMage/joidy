@@ -1,8 +1,10 @@
 import logging
-import sqlite3
-from pathlib import Path
 
-DB_PATH = Path("/data/db/joidy.db")
+from sqlalchemy import inspect
+
+from config import settings
+from database import engine
+
 REQUIRED_TABLES = {
     "alembic_version",
     "notes",
@@ -16,21 +18,13 @@ logger = logging.getLogger(__name__)
 
 
 def check_db_health() -> None:
-    if not DB_PATH.exists():
-        raise SystemExit(f"Database not found at {DB_PATH}")
-
-    conn = sqlite3.connect(DB_PATH)
-    try:
-        rows = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
-    finally:
-        conn.close()
-
-    existing = {r[0] for r in rows}
+    inspector = inspect(engine)
+    existing = set(inspector.get_table_names())
     missing = sorted(REQUIRED_TABLES - existing)
     if missing:
         raise SystemExit(f"Missing tables: {missing}")
 
-    logger.info("DB health OK")
+    logger.info("DB health OK (engine=%s)", settings.database_url.split("@")[-1])
 
 
 if __name__ == "__main__":

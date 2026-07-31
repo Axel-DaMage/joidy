@@ -219,7 +219,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     # Database
-    database_url: str = "sqlite:////data/db/joidy.db"
+    database_url: str = "postgresql://joidy:joidy@postgres:5432/joidy"
 
     # Services
     ai_service_url: str = "http://ai-service:8002"
@@ -256,7 +256,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     gemini_api_key: str = ""
-    database_url: str = "sqlite:////data/db/joidy.db"
+    database_url: str = "postgresql://joidy:joidy@postgres:5432/joidy"
     app_env: str = "development"
 
 settings = Settings()
@@ -270,7 +270,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    database_url: str = "sqlite:////data/db/joidy.db"
+    database_url: str = "postgresql://joidy:joidy@postgres:5432/joidy"
     api_url: str = "http://api:8000"
     ai_service_url: str = "http://ai-service:8002"
     vault_path: str = "/vault"
@@ -331,7 +331,7 @@ GET /config/keys
 ```yaml
 api:
   environment:
-    - DATABASE_URL=sqlite:////data/db/joidy.db
+    - DATABASE_URL=postgresql://joidy:joidy@postgres:5432/joidy
     - AI_SERVICE_URL=http://ai-service:8002
     - WORKER_URL=http://worker:8001
     - SECRET_KEY=${SECRET_KEY}

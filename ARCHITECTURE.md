@@ -24,9 +24,9 @@ Joidy es un sistema de gestión de conocimiento personal con gamificación. Es u
 │   │        └──────────────┴──────────────┴─────────────┘      │  │
 │   │                         │                                  │  │
 │   │                  ┌──────┴──────┐                            │  │
-│   │                  │  SQLite DB  │                            │  │
-│   │                  │  (sqlite-   │                            │  │
-│   │                  │   vec)      │                            │  │
+│   │                  │ PostgreSQL  │                            │  │
+│   │                  │ 16 + pgvec  │                            │  │
+│   │                  │  tor        │                            │  │
 │   │                  └─────────────┘                            │  │
 │   └────────────────────────────────────────────────────────────┘  │
 │                                                                     │
@@ -81,7 +81,7 @@ Joidy es un sistema de gestión de conocimiento personal con gamificación. Es u
 
 ```
 ┌──────────────┐    ┌──────────────┐    ┌──────────────┐    ┌──────────────┐
-│  Obsidian    │    │    Worker    │    │     API      │    │  SQLite DB   │
+│  Obsidian    │    │    Worker    │    │     API      │    │ PostgreSQL   │
 │  Vault       │───▶│ vault_watcher│───▶│ POST /notes  │───▶│   (notes)    │
 │  (.md files) │    │ (file change)│    │  (import)    │    │              │
 └──────────────┘    └──────────────┘    └──────────────┘    └──────────────┘
@@ -90,13 +90,13 @@ Joidy es un sistema de gestión de conocimiento personal con gamificación. Es u
 1. Usuario/edición en Obsidian
 2. Worker detecta cambio en `/vault`
 3. Worker envía nota a API
-4. API guarda en SQLite, procesa gamificación
+4. API guarda en PostgreSQL, procesa gamificación
 
 ### Gamificación
 
 ```
 ┌──────────────┐    ┌──────────────┐    ┌──────────────┐    ┌──────────────┐
-│   Frontend   │    │     API      │    │   Game       │    │  SQLite DB   │
+│   Frontend   │    │     API      │    │   Game       │    │ PostgreSQL   │
 │  (user act)  │───▶│ POST /notes  │───▶│   Engine     │───▶│ (XP + streak)│
 │              │    │              │    │ (+XP,streak) │    │              │
 └──────────────┘    └──────────────┘    └──────────────┘    └──────────────┘
@@ -162,7 +162,7 @@ Joidy es un sistema de gestión de conocimiento personal con gamificación. Es u
 | Frontend | SvelteKit, TypeScript, CSS Variables |
 | API | FastAPI, Pydantic, SQLAlchemy |
 | AI | Google Gemini API |
-| DB | SQLite + sqlite-vec |
+| DB | PostgreSQL 16 + pgvector |
 | Worker | Python asyncio, watchdog |
 | DevOps | Docker Compose, Make |
 

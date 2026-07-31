@@ -8,7 +8,7 @@ type: Sistema de Gestión del Conocimiento con Gamificación
 version: 0.1.0
 framework: Monorepo Docker
 services: 4
-database: SQLite + sqlite-vec
+database: PostgreSQL 16 + pgvector
 primary_language: Python (API, Worker, AI) + TypeScript (Frontend)
 ```
 
@@ -38,8 +38,8 @@ Joidy es un sistema personal de gestión del conocimiento que integra:
 │          │                    │                    │                       │
 │          │              ┌────▼────────────────────▼────┐                  │
 │          │              │        DATABASE               │                  │
-│          │              │   SQLite + sqlite-vec         │                  │
-│          │              │   /data/db/joidy.db           │                  │
+│          │              │   PostgreSQL 16 + pgvector    │                  │
+│          │              │   (postgres container)        │                  │
 │          │              └───────────────────────────────┘                  │
 │          │                           │                                      │
 │          └───────────────────────────┼──────────────────────────────────────┤
@@ -141,7 +141,7 @@ app.include_router(planning.router)        # /planning
 api/
 ├── main.py                      # FastAPI app, middleware, CORS
 ├── config.py                    # Pydantic Settings
-├── database.py                  # SQLAlchemy engine + sqlite-vec
+├── database.py                  # SQLAlchemy engine + pgvector
 ├── logging_config.py            # Logging setup
 ├── routers/                     # Endpoints REST
 │   ├── __init__.py
@@ -185,7 +185,7 @@ api/
 **Volúmenes de desarrollo:**
 ```yaml
 volumes:
-  - ./data/db:/data/db          # SQLite DB
+  - postgres_data:/var/lib/postgresql/data  # PostgreSQL DB
   - ./data/uploads:/data/uploads
   - ./.env:/app/.env           # Configuración
 ```
@@ -193,7 +193,7 @@ volumes:
 **Variables de entorno:**
 ```python
 # api/config.py
-database_url: str = "sqlite:////data/db/joidy.db"
+database_url: str = "postgresql://joidy:joidy@postgres:5432/joidy"
 ai_service_url: str = "http://ai-service:8002"
 worker_url: str = "http://worker:8001"
 secret_key: str = "dev_secret_change_me"
@@ -289,15 +289,15 @@ worker/
 
 ### 4.1 Configuración
 
-**Motor:** SQLite 3 con extensión `sqlite-vec` para vectores
+**Motor:** PostgreSQL 16 con extensión `pgvector` para vectores
 
-**Ubicación:** `./data/db/joidy.db`
+**Contenedor:** `postgres` (volumen `postgres_data`)
 
 **Configuración aplicada:**
 ```python
-PRAGMA journal_mode=WAL
-PRAGMA foreign_keys=ON
-PRAGMA synchronous=NORMAL
+# api/database.py — init_db()
+CREATE EXTENSION IF NOT EXISTS vector
+# Migraciones vía Alembic (make migrate)
 ```
 
 ### 4.2 Tablas
@@ -334,7 +334,7 @@ PRAGMA synchronous=NORMAL
 
 | Volumen | Servicio | Propósito |
 |---------|----------|-----------|
-| ./data/db | API, AI, Worker | SQLite DB compartida |
+| postgres_data | API, AI, Worker | PostgreSQL DB compartida |
 | ./data/uploads | API | Archivos subidos |
 | ./data/vault | Worker | Vault temporal |
 | ./frontend/src | Frontend | Hot reload |

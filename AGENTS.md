@@ -13,7 +13,6 @@
 
 DB: PostgreSQL 16 (pgvector) in `postgres` container, volume `postgres_data`.
 `DATABASE_URL=postgresql://joidy:joidy@postgres:5432/joidy`
-(`data/db/joidy.db` is a stale SQLite file from legacy setup — not used.)
 
 ## Essential Commands
 
@@ -116,8 +115,7 @@ Two concurrent asyncio tasks: `watch_vault()` (watches `/vault/*.md`, 2s debounc
 ## Testing Quirks
 - Uses `pytest` for API tests (`pytest` discover under `tests/`), with `unittest` style fixtures in `conftest.py`
 - Single test: `PYTHONPATH=/app python -m unittest tests.test_file`
-- No lint/formatter configured (no ruff, black, eslint, prettier)
-- No pre-commit hooks
+- Ruff config exists in `pyproject.toml` + `.pre-commit-config.yaml`, but pre-commit is not installed by default and CI does not run ruff. Run `ruff check` / `ruff format` manually if desired.
 - CI: `compileall`, `unittest`, `npm run check`, Docker build
 
 ## Known Issues (from TODO.md / code audit)

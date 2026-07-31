@@ -149,7 +149,7 @@ docker compose up -d --build
 api/
 ├── main.py              # App FastAPI, middleware, CORS
 ├── config.py            # Pydantic Settings
-├── database.py         # SQLAlchemy + sqlite-vec
+├── database.py         # SQLAlchemy + pgvector
 ├── routers/             # Endpoints
 │   ├── notes.py        # CRUD notas
 │   ├── tags.py         # Tags
@@ -398,11 +398,11 @@ make shell-worker
 ### 8.3 Base de Datos
 
 ```bash
-# Con SQLite CLI
-sqlite3 data/db/joidy.db
+# Con psql (dentro del contenedor postgres)
+docker compose exec postgres psql -U joidy -d joidy
 
 # O con DBeaver/TablePlus
-# Conectar a: ./data/db/joidy.db
+# Conectar a: localhost:5432, DB joidy, user joidy
 ```
 
 ---
