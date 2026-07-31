@@ -1,5 +1,4 @@
 <script lang="ts">
-  // @ts-nocheck
   import { createEventDispatcher } from 'svelte';
   import { goto } from '$app/navigation';
   import TagChip from './TagChip.svelte';
@@ -47,10 +46,10 @@
 
   function onCustomize(e: Event) {
     e.stopPropagation();
-    dispatch('customize', { 
-      path: getMetaKey(), 
-      icon: getFileMeta().icon, 
-      color: getFileMeta().color,
+    dispatch('customize', {
+      path: getMetaKey(),
+      icon: getFileMeta().icon,
+      color: getFileMeta().color ?? null,
       note: note
     });
   }
@@ -91,8 +90,8 @@
   {#if showTags && note.tags.length > 0}
     <div class="note-tags">
       {#each note.tags.slice(0, 4) as tag}
-        <TagChip {tag} onclick={(e) => {
-          const linkedNote = findNoteByTitle(e.detail);
+        <TagChip {tag} onclick={(tag) => {
+          const linkedNote = findNoteByTitle(tag);
           if (linkedNote) {
             goto(`/notes?id=${linkedNote.id}`);
           }

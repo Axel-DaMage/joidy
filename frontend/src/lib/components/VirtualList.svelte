@@ -1,5 +1,4 @@
 <script lang="ts">
-  // @ts-nocheck
   import { onMount, tick } from 'svelte';
 
   export let items: any[] = [];
@@ -69,9 +68,10 @@
 
   let ro: ResizeObserver;
 
-  onMount(async () => {
-    await tick();
-    if (containerEl) {
+  onMount(() => {
+    let destroyed = false;
+    tick().then(() => {
+      if (destroyed || !containerEl) return;
       containerHeight = containerEl.clientHeight;
       ro = new ResizeObserver((entries) => {
         let changed = false;
@@ -95,8 +95,9 @@
         }
       });
       ro.observe(containerEl);
-    }
+    });
     return () => {
+      destroyed = true;
       if (ro) ro.disconnect();
     };
   });
