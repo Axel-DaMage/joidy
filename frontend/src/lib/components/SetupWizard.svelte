@@ -47,14 +47,14 @@
         </div>
         <h2 class="title">¡Bienvenido a Joidy!</h2>
         <p class="desc">Parece que es tu primera vez aquí. Vamos a realizar una configuración rápida para asegurar tu sistema antes de comenzar.</p>
-        <button class="btn btn-primary" on:click={() => step = 2}>Comenzar Setup</button>
+        <button class="btn btn-primary" onclick={() => step = 2}>Comenzar Setup</button>
       </div>
     {:else if step === 2}
       <div class="step-content slide-in">
         <h2 class="title">Asegura tu sistema</h2>
         <p class="desc">Define una contraseña maestra. Esta será la única forma de acceder a Joidy.</p>
         
-        <form on:submit|preventDefault={() => { if(password && confirmPassword) step = 3; }}>
+        <form onsubmit={(e) => { e.preventDefault(); if(password && confirmPassword) step = 3; }}>
           <div class="field">
             <label for="pwd">Contraseña Maestra</label>
             <input id="pwd" type="password" bind:value={password} class="input" required autofocus />
@@ -65,7 +65,7 @@
           </div>
           
           <div class="actions">
-            <button type="button" class="btn btn-ghost" on:click={() => step = 1}>Atrás</button>
+            <button type="button" class="btn btn-ghost" onclick={() => step = 1}>Atrás</button>
             <button type="submit" class="btn btn-primary" disabled={!password || !confirmPassword}>Siguiente</button>
           </div>
         </form>
@@ -75,14 +75,14 @@
         <h2 class="title">Conecta tu Vault (Opcional)</h2>
         <p class="desc">Si usas Obsidian, introduce la ruta absoluta a tu bóveda. Si no, déjalo en blanco y Joidy usará su almacenamiento interno.</p>
         
-        <form on:submit|preventDefault={handleSetup}>
+        <form onsubmit={(e) => { e.preventDefault(); handleSetup(); }}>
           <div class="field">
             <label for="vault">Ruta Absoluta (Ej. home/user/Documents/Vault)</label>
             <input id="vault" type="text" bind:value={vaultPath} class="input mono" placeholder="home/usuario/Documents/Vault" />
           </div>
           
           <div class="actions">
-            <button type="button" class="btn btn-ghost" on:click={() => step = 2} disabled={loading}>Atrás</button>
+            <button type="button" class="btn btn-ghost" onclick={() => step = 2} disabled={loading}>Atrás</button>
             <button type="submit" class="btn btn-primary" disabled={loading}>
               {loading ? 'Guardando...' : 'Finalizar Configuración'}
             </button>

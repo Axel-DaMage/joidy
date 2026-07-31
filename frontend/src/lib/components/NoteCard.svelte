@@ -63,7 +63,7 @@
   class="note-card"
   class:active
   class:bulk-selected={selected}
-  on:click={() => bulkMode ? dispatch('toggleSelect', note.id) : dispatch('select', note)}
+  onclick={() => bulkMode ? dispatch('toggleSelect', note.id) : dispatch('select', note)}
 >
   <div class="note-header">
     {#if bulkMode}
@@ -71,15 +71,15 @@
         type="checkbox"
         class="note-checkbox"
         checked={selected}
-        on:click|stopPropagation
-        on:change={() => dispatch('toggleSelect', note.id)}
+        onclick={(e) => e.stopPropagation()}
+        onchange={() => dispatch('toggleSelect', note.id)}
       />
     {/if}
     <div class="note-icon"><DynamicIcon name={meta.icon} size={12} color={meta.color} pack={meta.pack} /></div>
     <span class="note-title truncate">{note.title}</span>
     <span class="note-date caption">{formatDate(note.created_at)}</span>
     {#if !bulkMode}
-      <button type="button" class="note-settings-btn" title="Personalizar" on:click={onCustomize}>
+      <button type="button" class="note-settings-btn" title="Personalizar" onclick={onCustomize}>
         <Settings size={10} />
       </button>
     {/if}
@@ -87,7 +87,7 @@
   {#if showTags && note.tags.length > 0}
     <div class="note-tags">
       {#each note.tags.slice(0, 4) as tag}
-        <TagChip {tag} on:click={(e) => {
+        <TagChip {tag} onclick={(e) => {
           const linkedNote = findNoteByTitle(e.detail);
           if (linkedNote) {
             goto(`/notes?id=${linkedNote.id}`);

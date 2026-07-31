@@ -24,7 +24,7 @@
     <div
       class="tree-row folder-row"
       style="padding-left: {8 + depth * 14}px"
-      on:click={() => toggle(node.path)}
+      onclick={() => toggle(node.path)}
     >
       <span class="chevron" class:open={!collapsed.has(node.path)}>
         <ChevronRight size={11} />
@@ -52,7 +52,7 @@
       class="tree-row file-row"
       class:active={node.note?.id === selectedNoteId}
       style="padding-left: {20 + depth * 14}px"
-      on:click={() => node.note && dispatch('select', node.note)}
+      onclick={() => node.note && dispatch('select', node.note)}
     >
       <span class="icon file-icon">{node.icon}</span>
       <span class="row-name file-name">{node.name}</span>

@@ -10,7 +10,7 @@
       <button 
         class="toast toast-{notif.type}"
         transition:fly={{ y: -20, duration: 200 }}
-        on:click={() => dismissNotification(notif.id)}
+        onclick={() => dismissNotification(notif.id)}
       >
         <DynamicIcon 
           name={notif.type === 'success' ? 'CheckCircle' : notif.type === 'level' ? 'TrendingUp' : notif.type === 'error' ? 'AlertTriangle' : 'Info'} 

@@ -336,15 +336,15 @@
   }
 </script>
 
-<svelte:window on:keydown={onKeydown} />
+<svelte:window onkeydown={onKeydown} />
 
 {#if open}
   <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-  <div class="backdrop" on:click={onBackdropClick}>
+  <div class="backdrop" onclick={onBackdropClick}>
     <div class="panel">
       <div class="panel-header">
         <span class="mono" style="font-size:12px; letter-spacing:0.08em;">AJUSTES</span>
-        <button class="close-btn" on:click={close}><DynamicIcon name="X" size={14} /></button>
+        <button class="close-btn" onclick={close}><DynamicIcon name="X" size={14} /></button>
       </div>
 
       <div class="panel-body">
@@ -357,7 +357,7 @@
               {#if $darkMode}<DynamicIcon name="Moon" size={13} />{:else}<DynamicIcon name="Sun" size={13} />{/if}
               <span>Tema</span>
             </div>
-            <button class="toggle" on:click={toggleTheme}>
+            <button class="toggle" onclick={toggleTheme}>
               <span class:active={$darkMode}>oscuro</span>
               <span class="divider">|</span>
               <span class:active={!$darkMode}>claro</span>
@@ -369,7 +369,7 @@
               <DynamicIcon name="Clock3" size={13} />
               <span>Formato de hora</span>
             </div>
-            <button class="toggle" on:click={() => use24HourClock.toggle()}>
+            <button class="toggle" onclick={() => use24HourClock.toggle()}>
               <span class:active={$use24HourClock}>24h</span>
               <span class="sep">/</span>
               <span class:active={!$use24HourClock}>12h</span>
@@ -381,7 +381,7 @@
           <div 
             class="gradient-preview" 
             style="background: {gradientPreview}; cursor: grab;"
-            on:mousedown={onGradientMouseDown}
+            onmousedown={onGradientMouseDown}
             class:dragging={isDragging}
           ></div>
           <p class="color-limit-note mono">Máximo {MAX_COLORS} colores</p>
@@ -395,18 +395,18 @@
                   type="color"
                   class="color-swatch"
                   value={color}
-                  on:input={(e) => onColorPicker(i, e)}
+                  oninput={(e) => onColorPicker(i, e)}
                 />
                 <input
                   type="text"
                   class="hex-input mono"
                   maxlength="7"
                   value={color}
-                  on:input={(e) => onHex(i, e)}
+                  oninput={(e) => onHex(i, e)}
                   placeholder="#c8a96e"
                 />
                 {#if $accentColors.length > 1}
-                  <button class="color-rm" on:click={() => accentColors.removeColor(i)} title="Quitar">
+                  <button class="color-rm" onclick={() => accentColors.removeColor(i)} title="Quitar">
                     <DynamicIcon name="Minus" size={10} />
                   </button>
                 {/if}
@@ -415,7 +415,7 @@
           </div>
 
           {#if $accentColors.length < MAX_COLORS}
-            <button class="add-color-btn mono" on:click={() => accentColors.addColor()}>
+            <button class="add-color-btn mono" onclick={() => accentColors.addColor()}>
               <DynamicIcon name="Plus" size={10} /> agregar color
             </button>
           {/if}
@@ -443,7 +443,7 @@
               <DynamicIcon name="Code" size={13} />
               <span>Metadatos (YAML)</span>
             </div>
-            <button class="toggle" on:click={() => showFrontmatter.toggle()}>
+            <button class="toggle" onclick={() => showFrontmatter.toggle()}>
               <span class:active={!$showFrontmatter}>oculto</span>
               <span class="sep">/</span>
               <span class:active={$showFrontmatter}>visible</span>
@@ -455,7 +455,7 @@
               <DynamicIcon name="EyeOff" size={13} />
               <span>Carpetas Ocultas</span>
             </div>
-            <button class="toggle" on:click={() => showHiddenFiles.toggle()}>
+            <button class="toggle" onclick={() => showHiddenFiles.toggle()}>
               <span class:active={!$showHiddenFiles}>oculto</span>
               <span class="sep">/</span>
               <span class:active={$showHiddenFiles}>visible</span>
@@ -467,7 +467,7 @@
               <DynamicIcon name="Trash2" size={13} />
               <span>Mostrar Papelera</span>
             </div>
-            <button class="toggle" on:click={() => showTrash.toggle()}>
+            <button class="toggle" onclick={() => showTrash.toggle()}>
               <span class:active={!$showTrash}>oculto</span>
               <span class="sep">/</span>
               <span class:active={$showTrash}>visible</span>
@@ -479,7 +479,7 @@
               <DynamicIcon name="Tag" size={13} />
               <span>Línea de Etiquetas</span>
             </div>
-            <button class="toggle" on:click={() => hideTagsLine.toggle()}>
+            <button class="toggle" onclick={() => hideTagsLine.toggle()}>
               <span class:active={$hideTagsLine}>oculta</span>
               <span class="sep">/</span>
               <span class:active={!$hideTagsLine}>visible</span>
@@ -517,7 +517,7 @@
               <DynamicIcon name="FolderRoot" size={13} />
               <span>Escribir en Vault nativo</span>
             </div>
-            <button class="toggle" on:click={() => writeInObsidian.toggle()}>
+            <button class="toggle" onclick={() => writeInObsidian.toggle()}>
               <span class:active={!$writeInObsidian}>aislado</span>
               <span class="sep">/</span>
               <span class:active={$writeInObsidian}>nativo</span>
@@ -553,10 +553,10 @@
             {:else if githubConnected}
               <div style="display:flex; align-items:center; gap:8px;">
                 <span class="mono" style="font-size:12px; color: var(--xp);">{githubUsername}</span>
-                <button class="link-btn" on:click={disconnectGithub} style="background:var(--border); color:var(--text-secondary);">Desconectar</button>
+                <button class="link-btn" onclick={disconnectGithub} style="background:var(--border); color:var(--text-secondary);">Desconectar</button>
               </div>
             {:else}
-              <button class="link-btn" on:click={startGithubAuth} disabled={githubAuthLoading}>Enlazar</button>
+              <button class="link-btn" onclick={startGithubAuth} disabled={githubAuthLoading}>Enlazar</button>
             {/if}
           </div>
           {#if githubAuthLoading && githubUserCode}
@@ -637,7 +637,7 @@
             </div>
             <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
               <p class="hint" style="margin-top: 0;">Instala Joidy en tu dispositivo para acceso rápido y sin conexión.</p>
-              <button class="save-config-btn" style="background: var(--xp);" on:click={async () => {
+              <button class="save-config-btn" style="background: var(--xp);" onclick={async () => {
                 $deferredPrompt.prompt();
                 const { outcome } = await $deferredPrompt.userChoice;
                 if (outcome === 'accepted') {
@@ -707,7 +707,7 @@
               <DynamicIcon name="Wrench" size={13} />
               <span>Modo Desarrollo</span>
             </div>
-            <button class="toggle" on:click={() => devMode.toggle()}>
+            <button class="toggle" onclick={() => devMode.toggle()}>
               <span class:active={!$devMode}>off</span>
               <span class="sep">/</span>
               <span class:active={$devMode}>on</span>
@@ -723,7 +723,7 @@
       <div class="panel-footer">
         <button
           class="save-config-btn fixed-save"
-          on:click={saveConfig}
+          onclick={saveConfig}
           disabled={configSaving}
         >
           {#if configSaving}

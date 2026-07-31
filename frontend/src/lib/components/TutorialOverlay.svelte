@@ -15,7 +15,7 @@
         <div class="progress-fill" style="width: {progress}%"></div>
       </div>
 
-      <button class="skip-btn" on:click={() => onboarding.skip()}>
+      <button class="skip-btn" onclick={() => onboarding.skip()}>
         Saltar
       </button>
 
@@ -35,14 +35,14 @@
 
       <div class="actions">
         {#if $onboarding.currentStep > 0}
-          <button class="btn btn-secondary" on:click={() => onboarding.prevStep()}>
+          <button class="btn btn-secondary" onclick={() => onboarding.prevStep()}>
             Anterior
           </button>
         {/if}
 
         <button
           class="btn btn-primary"
-          on:click={() => isLastStep ? onboarding.skip() : onboarding.nextStep()}
+          onclick={() => isLastStep ? onboarding.skip() : onboarding.nextStep()}
         >
           {isLastStep ? 'Comenzar' : 'Siguiente'}
         </button>

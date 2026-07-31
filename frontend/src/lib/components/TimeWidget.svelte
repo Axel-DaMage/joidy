@@ -104,7 +104,7 @@
 </script>
 
 <!-- svelte-ignore a11y-no-static-element-interactions -->
-<svelte:window on:keydown={(e) => e.key === 'Escape' && (showTzPicker = false)} />
+<svelte:window onkeydown={(e) => e.key === 'Escape' && (showTzPicker = false)} />
 
 <div class="time-widget">
   <div class="clock-row">
@@ -115,21 +115,21 @@
             class="tz-input mono"
             bind:value={tzInput}
             placeholder="Chile, Europe/Madrid, UTC..."
-            on:keydown={(e) => e.key === 'Enter' && applyTzInput()}
+            onkeydown={(e) => e.key === 'Enter' && applyTzInput()}
             autofocus
           />
-          <button class="tz-close-ui" on:click={() => showTzPicker = false} title="Cerrar">✕</button>
+          <button class="tz-close-ui" onclick={() => showTzPicker = false} title="Cerrar">✕</button>
         </div>
         {#if tzError}<span class="tz-error">{tzError}</span>{/if}
         <div class="tz-presets">
           {#each TZ_PRESETS as [label, tz]}
-            <button class="tz-preset mono" on:click={() => setTimezone(tz)}>{label}</button>
+            <button class="tz-preset mono" onclick={() => setTimezone(tz)}>{label}</button>
           {/each}
         </div>
       </div>
     {:else}
       <!-- svelte-ignore a11y-click-events-have-key-events -->
-      <span class="clock mono" on:click={() => showTzPicker = true} title="Cambiar zona horaria">
+      <span class="clock mono" onclick={() => showTzPicker = true} title="Cambiar zona horaria">
         {clockStr}
       </span>
     {/if}

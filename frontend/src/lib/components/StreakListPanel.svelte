@@ -60,13 +60,13 @@
         <button
           class="header-action-btn"
           class:active={showArchived}
-          on:click={onToggleArchive}
+          onclick={onToggleArchive}
           title={showArchived ? 'Volver a activas' : 'Ver archivadas'}
           aria-label={showArchived ? 'Volver a rachas activas' : 'Ver rachas archivadas'}
         >
           <Archive size={13} />
         </button>
-        <button class="new-btn" on:click={onCreate} aria-label="Crear nueva racha">
+        <button class="new-btn" onclick={onCreate} aria-label="Crear nueva racha">
           <Plus size={13} />
         </button>
       </div>
@@ -91,7 +91,7 @@
       <div class="empty-state">
         <Flame size={24} style="opacity:.25; margin-bottom:8px;" />
         <p>No hay rachas. ¡Crea una para comenzar!</p>
-        <button class="link-btn" on:click={onCreate}>Crear una nueva</button>
+        <button class="link-btn" onclick={onCreate}>Crear una nueva</button>
       </div>
     {:else}
       {#each filteredStreaks as streak (streak.id)}

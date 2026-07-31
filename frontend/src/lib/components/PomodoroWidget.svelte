@@ -65,11 +65,11 @@
   </div>
 
   <div class="controls-row">
-    <button class="ctrl-main" class:active={$running} on:click={toggleTimer}>
+    <button class="ctrl-main" class:active={$running} onclick={toggleTimer}>
       {$running ? 'Pausar' : 'Iniciar'}
     </button>
-    <button class="ctrl-icon" on:click={resetTimer} title="Reiniciar"><RotateCcw size={11}/></button>
-    <button class="ctrl-icon" on:click={skipTimer}  title="Saltar"><SkipForward size={11}/></button>
+    <button class="ctrl-icon" onclick={resetTimer} title="Reiniciar"><RotateCcw size={11}/></button>
+    <button class="ctrl-icon" onclick={skipTimer}  title="Saltar"><SkipForward size={11}/></button>
   </div>
 
   <div class="duration-row">

@@ -185,14 +185,14 @@
   }
 </script>
 
-<svelte:window on:keydown={onKey} />
+<svelte:window onkeydown={onKey} />
 
 {#if open}
-  <div class="modal-backdrop" on:click={onBackdrop}>
+  <div class="modal-backdrop" onclick={onBackdrop}>
     <div class="modal-panel">
       <div class="modal-header">
         <span class="modal-title mono">{isEdit ? 'EDITAR RACHA' : 'NUEVA RACHA'}</span>
-        <button class="close-btn" on:click={close}><X size={14} /></button>
+        <button class="close-btn" onclick={close}><X size={14} /></button>
       </div>
 
       <div class="modal-body">
@@ -223,10 +223,10 @@
         <div class="field">
           <label>Frecuencia</label>
           <div class="freq-row">
-            <button class="freq-btn" class:selected={frequency === 'daily'} on:click={() => { frequency = 'daily'; frequencyDays = 1; }}>Diaria</button>
-            <button class="freq-btn" class:selected={frequency === 'weekly'} on:click={() => { frequency = 'weekly'; frequencyDays = 1; }}>Semanal</button>
-            <button class="freq-btn" class:selected={frequency === 'monthly'} on:click={() => { frequency = 'monthly'; frequencyDays = 1; }}>Mensual</button>
-            <button class="freq-btn" class:selected={frequency === 'every_n'} on:click={() => { frequency = 'every_n'; }}>cada N</button>
+            <button class="freq-btn" class:selected={frequency === 'daily'} onclick={() => { frequency = 'daily'; frequencyDays = 1; }}>Diaria</button>
+            <button class="freq-btn" class:selected={frequency === 'weekly'} onclick={() => { frequency = 'weekly'; frequencyDays = 1; }}>Semanal</button>
+            <button class="freq-btn" class:selected={frequency === 'monthly'} onclick={() => { frequency = 'monthly'; frequencyDays = 1; }}>Mensual</button>
+            <button class="freq-btn" class:selected={frequency === 'every_n'} onclick={() => { frequency = 'every_n'; }}>cada N</button>
           </div>
         </div>
 
@@ -241,8 +241,8 @@
         <div class="field">
           <label>Icono</label>
           <div class="icon-toggle-row">
-            <button class="icon-type-btn" class:selected={!useIcon} on:click={() => useIcon = false}>Emoji</button>
-            <button class="icon-type-btn" class:selected={useIcon} on:click={() => { useIcon = true; if (!icon) icon = 'Flame'; }}>Icono</button>
+            <button class="icon-type-btn" class:selected={!useIcon} onclick={() => useIcon = false}>Emoji</button>
+            <button class="icon-type-btn" class:selected={useIcon} onclick={() => { useIcon = true; if (!icon) icon = 'Flame'; }}>Icono</button>
           </div>
         </div>
 
@@ -250,7 +250,7 @@
           <div class="field">
             <div class="emoji-grid">
               {#each EMOJIS as e}
-                <button class="emoji-btn" class:selected={emoji === e} on:click={() => emoji = e}>{e}</button>
+                <button class="emoji-btn" class:selected={emoji === e} onclick={() => emoji = e}>{e}</button>
               {/each}
             </div>
           </div>
@@ -268,7 +268,7 @@
                 class="color-btn"
                 class:selected={color === c.hex}
                 style="--btn-color: {c.hex}; background: {c.hex};"
-                on:click={() => color = c.hex}
+                onclick={() => color = c.hex}
               />
             {/each}
           </div>
@@ -278,7 +278,7 @@
           <label>Tema visual</label>
           <div class="theme-grid">
             {#each THEMES as t}
-              <button class="theme-btn" class:selected={theme === t.id} on:click={() => theme = t.id}>
+              <button class="theme-btn" class:selected={theme === t.id} onclick={() => theme = t.id}>
                 {t.label}
               </button>
             {/each}
@@ -312,13 +312,13 @@
 
       <div class="modal-footer" class:theme-sketch={theme === 'sketch'} class:theme-glow={theme === 'glow'} class:theme-gradient={theme === 'gradient'} class:theme-neon={theme === 'neon'}>
         {#if isEdit}
-          <button class="btn-archive" on:click={archive} title={editStreak?.is_archived ? 'Desarchivar racha' : 'Archivar racha'}>
+          <button class="btn-archive" onclick={archive} title={editStreak?.is_archived ? 'Desarchivar racha' : 'Archivar racha'}>
             <Archive size={14} />
             {editStreak?.is_archived ? 'Desarchivar' : 'Archivar'}
           </button>
         {/if}
-        <button class="btn-cancel" on:click={close}>Cancelar</button>
-        <button class="btn-save" disabled={!canSave} on:click={save} style="--btn-color: {color};">
+        <button class="btn-cancel" onclick={close}>Cancelar</button>
+        <button class="btn-save" disabled={!canSave} onclick={save} style="--btn-color: {color};">
           {isEdit ? 'Actualizar' : 'Crear Racha'}
         </button>
       </div>

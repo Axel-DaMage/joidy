@@ -157,7 +157,7 @@
   $: editorHighlightedHtml = highlightMarkdown(debouncedContent);
 </script>
 
-<svelte:window on:keydown={onKeydown} />
+<svelte:window onkeydown={onKeydown} />
 
 <div class="editor-shell" class:zen-mode={zenMode}>
   {#if !zenMode}
@@ -172,7 +172,7 @@
       <button
         class="toolbar-btn icon-only"
         class:active={zenMode}
-        on:click={() => zenMode = !zenMode}
+        onclick={() => zenMode = !zenMode}
         title="Modo Zen (Esc para salir)"
       >
         <Maximize size={14} />
@@ -181,7 +181,7 @@
       <button
         class="toolbar-btn"
         class:active={previewMode}
-        on:click={() => previewMode = !previewMode}
+        onclick={() => previewMode = !previewMode}
         title="Alternar preview (Ctrl+P)"
       >
         {#if previewMode}<EyeOff size={14} />{:else}<Eye size={14} />{/if}
@@ -191,7 +191,7 @@
       <button
         class="toolbar-btn save-btn"
         class:saved
-        on:click={handleSave}
+        onclick={handleSave}
         disabled={saving || !title.trim()}
         title="Guardar (Ctrl+S)"
       >
@@ -199,12 +199,12 @@
         <span class="save-status">{saved ? 'Guardado' : saving ? '...' : 'Guardar'}</span>
       </button>
 
-      <button class="toolbar-btn" on:click={() => dispatch('edit')} title="Editar ajustes del objetivo">
+      <button class="toolbar-btn" onclick={() => dispatch('edit')} title="Editar ajustes del objetivo">
         <Settings size={14} />
         <span>Ajustes</span>
       </button>
 
-      <button class="toolbar-btn" on:click={() => dispatch('cancel')} title="Cerrar">
+      <button class="toolbar-btn" onclick={() => dispatch('cancel')} title="Cerrar">
         <X size={14} />
       </button>
     </div>
@@ -216,13 +216,13 @@
       class="title-input"
       bind:value={title}
       placeholder="Título del objetivo..."
-      on:keydown={(e) => e.key === 'Enter' && handleSave()}
+      onkeydown={(e) => e.key === 'Enter' && handleSave()}
     />
   </div>
 
   <div class="content-area">
     {#if previewMode}
-      <div class="preview" on:dblclick={() => previewMode = false} role="button" tabindex="-1">
+      <div class="preview" ondblclick={() => previewMode = false} role="button" tabindex="-1">
         {@html renderedHtml}
       </div>
     {:else}
@@ -239,8 +239,8 @@
           class="content-textarea"
           bind:this={textareaEl}
           value={content}
-          on:input={updateContent}
-          on:scroll={syncScroll}
+          oninput={updateContent}
+          onscroll={syncScroll}
           placeholder="Escribe en markdown... (Ctrl+S para guardar, Ctrl+P para preview)"
           spellcheck="false"
         ></textarea>
