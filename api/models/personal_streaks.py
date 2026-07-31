@@ -5,6 +5,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     UniqueConstraint,
@@ -41,6 +42,12 @@ class PersonalStreak(Base):
         back_populates="streak",
         cascade="all, delete-orphan",
         order_by="StreakCheckIn.check_date",
+    )
+
+    __table_args__ = (
+        # list_streaks filters on is_archived and category on every request (#403).
+        Index("ix_personal_streaks_is_archived", "is_archived"),
+        Index("ix_personal_streaks_category", "category"),
     )
 
 

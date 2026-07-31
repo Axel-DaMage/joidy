@@ -1,6 +1,7 @@
 import re
 from datetime import datetime, timedelta, timezone
 
+from fastapi import HTTPException
 from models.goal import (
     Goal,
     GoalFailConfig,
@@ -11,6 +12,33 @@ from models.goal import (
 from models.note import Note, NoteTag
 from repositories import GoalRepository
 from sqlalchemy.orm import Session
+
+
+def validate_goal_parent(db: Session, goal_id: int | None, parent_id: int | None) -> None:
+    """Ensure setting ``parent_id`` on a goal does not create a cycle.
+
+    A goal cannot be its own parent, and the parent chain starting from
+    ``parent_id`` must not lead back to ``goal_id``. Also verifies the parent
+    exists. Without this, recursive hierarchy queries can loop indefinitely
+    (#412).
+    """
+    if parent_id is None:
+        return
+    if goal_id is not None and parent_id == goal_id:
+        raise HTTPException(status_code=400, detail="Un goal no puede ser su propio padre")
+
+    visited: set[int] = set()
+    if goal_id is not None:
+        visited.add(goal_id)
+    current = parent_id
+    while current is not None:
+        if current in visited:
+            raise HTTPException(status_code=400, detail="Ciclo detectado en jerarquía de goals")
+        visited.add(current)
+        parent = db.query(Goal).filter(Goal.id == current).first()
+        if not parent:
+            raise HTTPException(status_code=400, detail="Parent goal no existe")
+        current = parent.parent_id
 
 
 def _parse_temporality(text: str) -> GoalTemporality:
