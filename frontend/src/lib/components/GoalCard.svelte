@@ -12,6 +12,10 @@
   export let formatFailConfig: (c: string) => string;
   export let onTogglePin: (id: number) => void;
   export let onClick: (goal: any) => void;
+
+  // Build Maps for O(1) lookups instead of linear searches
+  const tagsMap = new Map(tags.map(t => [t.id, t]));
+  const notesMap = new Map(notes.map(n => [n.id, n]));
 </script>
 
 <div
@@ -63,12 +67,12 @@
     {#if goal.tag_id}
       <div class="meta-item">
         <Tag size={12} />
-        <span>{tags.find(t => t.id === goal.tag_id)?.name || 'Etiqueta'}</span>
+        <span>{tagsMap.get(goal.tag_id)?.name || 'Etiqueta'}</span>
       </div>
     {:else if goal.note_id}
       <div class="meta-item">
         <FileText size={12} />
-        <span>{notes.find(n => n.id === goal.note_id)?.title?.substring(0, 12) || 'Nota'}</span>
+        <span>{notesMap.get(goal.note_id)?.title?.substring(0, 12) || 'Nota'}</span>
       </div>
     {/if}
     {#if goal.fail_config !== 'STATIC'}

@@ -185,14 +185,12 @@
     const cachedTags = getCachedData<TagType[]>('tags');
     if (cachedGoals) goals = cachedGoals;
     if (cachedTags) tags = cachedTags;
-    
+
     try {
-      [goals, tags, notes, streakData, xpEvents] = await Promise.all([
+      // Load only essential data immediately (goals + tags)
+      [goals, tags] = await Promise.all([
         api.goals.list(),
         api.tags.list(),
-        api.notes.list(),
-        api.goals.streak(),
-        api.gamification.events(500)
       ]);
       setCachedData('goals', goals);
       setCachedData('tags', tags);
@@ -202,7 +200,27 @@
         logger.error('[goals] onMount failed:', e);
       }
     }
+
+    // Lazy-load analytics data only when needed
+    if (currentTab === 'analytics') {
+      loadAnalyticsData();
+    }
   });
+
+  let analyticsLoaded = false;
+  async function loadAnalyticsData() {
+    if (analyticsLoaded) return;
+    analyticsLoaded = true;
+    try {
+      [notes, streakData, xpEvents] = await Promise.all([
+        api.notes.list(),
+        api.goals.streak(),
+        api.gamification.events(500)
+      ]);
+    } catch (e) {
+      logger.error('[goals] loadAnalyticsData failed:', e);
+    }
+  }
 
   let addError = $state('');
 
@@ -411,6 +429,8 @@
   // persist current tab and selected planning date in localStorage
   $effect(() => {
     if (typeof localStorage !== 'undefined') localStorage.setItem('goals.currentTab', currentTab);
+    // Lazy-load analytics data when analytics tab is opened
+    if (currentTab === 'analytics') loadAnalyticsData();
   });
 
   $effect(() => {
