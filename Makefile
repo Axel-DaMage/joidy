@@ -48,6 +48,12 @@ setup: ## First-time setup: copy .env, create data directories
 		echo "$(GREEN)✓$(NC) .env already exists"; \
 		echo "  Run 'make doctor' to check your configuration"; \
 	fi
+	@. .env 2>/dev/null || true; \
+	if [ -z "$$POSTGRES_PASSWORD" ]; then \
+		NEW_PW=$$(openssl rand -hex 24 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(24))" 2>/dev/null || echo "dev_pw_$$(date +%s)"); \
+		sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$$NEW_PW|" .env; \
+		echo "$(GREEN)✓$(NC) Generated POSTGRES_PASSWORD"; \
+	fi
 	@echo ""
 	@echo "Or use 'make start' for a guided setup + start!"
 	@echo "────────────────────────────────────────────────────"
@@ -305,6 +311,12 @@ start: ## 🚀 Quick start: setup + start all services
 		NEW_SECRET=$$(openssl rand -hex 32 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null || echo "dev_secret_$$(date +%s)"); \
 		sed -i "s|^SECRET_KEY=.*|SECRET_KEY=$$NEW_SECRET|" .env; \
 		echo "  ✓ Generated new SECRET_KEY"; \
+	fi
+	@. .env 2>/dev/null || true; \
+	if [ -z "$$POSTGRES_PASSWORD" ]; then \
+		NEW_PW=$$(openssl rand -hex 24 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(24))" 2>/dev/null || echo "dev_pw_$$(date +%s)"); \
+		sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$$NEW_PW|" .env; \
+		echo "  ✓ Generated new POSTGRES_PASSWORD"; \
 	fi
 	@echo ""
 	@echo "Step 2: Starting services..."
