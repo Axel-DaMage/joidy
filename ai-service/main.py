@@ -5,14 +5,24 @@ from circuit_breaker import llm_circuit_breaker, emb_circuit_breaker, CircuitBre
 from clients import get_embedding_client, get_llm_client
 from clients.prompts import CHAT_SYSTEM_PROMPT, CLASSIFY_PROMPT, RAG_PROMPT
 from config import settings
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from logging_config import get_correlation_id, set_correlation_id, setup_logging
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
 from pydantic import BaseModel
 from rate_limiter import get_limiter
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
+
+# Prometheus metrics — exposed at /metrics for scraping (#406)
+ai_embed_requests = Counter('ai_embed_requests_total', 'Embedding requests', ['provider'])
+ai_embed_errors = Counter('ai_embed_errors_total', 'Embedding errors', ['provider'])
+ai_embed_latency = Histogram('ai_embed_latency_seconds', 'Embedding latency', ['provider'])
+ai_classify_requests = Counter('ai_classify_requests_total', 'Classification requests', ['provider'])
+ai_classify_errors = Counter('ai_classify_errors_total', 'Classification errors', ['provider'])
+ai_rag_requests = Counter('ai_rag_requests_total', 'RAG requests', ['provider'])
+ai_rag_errors = Counter('ai_rag_errors_total', 'RAG errors', ['provider'])
 
 
 @asynccontextmanager
@@ -62,7 +72,9 @@ class InternalAuthMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: Request, call_next):
-        if settings.internal_secret and request.url.path != "/health":
+        # /health and /metrics are always public so Prometheus can scrape
+        # without needing the internal secret (#406).
+        if settings.internal_secret and request.url.path not in ("/health", "/metrics"):
             provided = request.headers.get("X-Internal-Secret", "")
             if provided != settings.internal_secret:
                 return JSONResponse(
@@ -134,6 +146,12 @@ def health():
         "ai_enabled": settings.is_ai_enabled,
         "provider": provider_info,
     }
+
+
+@app.get("/metrics")
+def metrics():
+    """Expose Prometheus-compatible metrics for scraping (#406)."""
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 @app.get("/providers")

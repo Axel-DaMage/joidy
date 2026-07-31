@@ -2,9 +2,25 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
+# Alerting rules — loaded from the alerts file (#406).
+rule_files:
+  - alerts.yml
+
 scrape_configs:
   - job_name: 'joidy-api'
     static_configs:
       - targets: ['api:8000']
+    metrics_path: /metrics
+    scheme: http
+
+  - job_name: 'joidy-ai-service'
+    static_configs:
+      - targets: ['ai-service:8002']
+    metrics_path: /metrics
+    scheme: http
+
+  - job_name: 'joidy-worker'
+    static_configs:
+      - targets: ['worker:8001']
     metrics_path: /metrics
     scheme: http

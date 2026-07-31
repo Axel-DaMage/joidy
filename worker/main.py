@@ -9,6 +9,7 @@ import logging
 import signal
 
 from logging_config import setup_logging
+from metrics_server import start_metrics_server
 from tasks.joidy_daily_writer import schedule_daily_writes
 from watchers.vault_watcher import watch_vault
 
@@ -20,6 +21,9 @@ SHUTDOWN_TIMEOUT = 15.0
 async def main():
     setup_logging()
     logger.info("[worker] Joidy Worker starting...")
+
+    # Start the Prometheus metrics server so the worker is scrapable (#406).
+    start_metrics_server()
 
     tasks = [
         asyncio.create_task(watch_vault(), name="vault_watcher"),

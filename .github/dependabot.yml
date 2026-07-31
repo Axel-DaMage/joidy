@@ -1,0 +1,43 @@
+version: 2
+updates:
+  # Python — API
+  - package-ecosystem: pip
+    directory: /api
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  # Python — AI service
+  - package-ecosystem: pip
+    directory: /ai-service
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  # Python — Worker
+  - package-ecosystem: pip
+    directory: /worker
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  # npm — Frontend
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  # Docker — compose files
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  # GitHub Actions
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
