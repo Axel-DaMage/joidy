@@ -18,7 +18,7 @@
   import { totalXP, loadStats, pingActivity, globalLevel, nextStageXP, showNotification } from '$lib/stores/gamification';
   import { running, secondsLeft, phase } from '$lib/stores/pomodoro';
   import { initPomodoroSettings } from '$lib/stores/pomodoro';
-  import { accentColors, activeIconPack, use24HourClock, initTheme, devMode } from '$lib/stores/settings';
+  import { accentColors, activeIconPack, use24HourClock, initTheme, devMode, themeMode } from '$lib/stores/settings';
   import { getCachedData, setCachedData } from '$lib/utils/userSettings';
   import { initKeyboardNavigation } from '$lib/utils/keyboardNavigation';
   import { initPushNotifications } from '$lib/push';
@@ -89,6 +89,7 @@
 
     accentColors.init();
     activeIconPack.init();
+    themeMode.init();
     const cleanupTheme = initTheme();
     initPomodoroSettings();
     initFocusModeConfig();

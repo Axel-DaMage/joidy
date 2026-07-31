@@ -771,6 +771,8 @@
       font-size: 9px;
     }
   }
+<<<<<<< HEAD
+=======
 
 .focus-mode-btn {
   display: flex;
@@ -791,4 +793,5 @@
   background: var(--elevated);
   border-color: var(--accent);
 }
+>>>>>>> origin/development
 </style>
