@@ -9,17 +9,103 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Release and versioning process (`RELEASE.md`, `CHANGELOG.md`, `release.yml`).
+- **Security hardening**: JWT auth enforced on all data/mutation endpoints, API keys/secrets exposure fixed, XSS & input sanitization, CORS & WebSocket auth, ai-service hardening, all containers run as non-root user (#322, #323, #324, #325, #326, #327, #329, #358, #376, #377, #378, #379, #380, #397, #408, #416, #417, #418, #419, #422, #423)
+- **Google Calendar & Tasks OAuth integration** (#2, #374)
+- **WYSIWYG markdown editor** with TipTap (#6, #344)
+- **Real-time sync conflict detection and resolution** (#5, #321)
+- **Obsidian bidirectional sync via webhook** (#3, #320)
+- **ModalDialog component** replacing inline modals in goals page (#319)
+- **Image and file attachments** in notes (#67, #182)
+- **Distributed tracing and structured logging** (#38)
+- **Dead Letter Queue UI** for failed embeddings
+- **Undo/redo history** in note editor
+- **Graph minimap, zoom in/out, and search improvements**
+- **Dashboard widgets reorderable** via drag & drop
+- **Bulk operations on notes** (select multiple, delete/tag/untag)
+- **Weekly activity progress bar** on dashboard
+- **Search filter and level filter** to skills page
+- **Markdown formatting toolbar** to note editor
+- **Autosave in note editor** with debounce and crash recovery
+- **Scientific calculator** extracted from notes page
+- **Unified Integrations page**, fix GitHub OAuth, remove dead routes
+- **Onboarding interface** for first run (#106)
+- **Backend endpoints for initial setup** (#106)
+- **Command palette** (Cmd+K) (#63)
+- **Folder creation and deletion** (#47)
+- **PWA beforeinstallprompt handling** (#72)
+- **Visual indicators to sidebar** for page status (#51)
+- **ErrorBoundary component** and global error handlers (#65)
+- **Notes file tree reorganization** via context menu
+- **Focus trapping and ARIA attributes** to Modal component
+- **Weather caching** in WeatherWidget (#50)
+- **Multi-platform publish** (npm, brew, AUR, curl) + README with all links
+- **Production docker-compose** consuming DockerHub images
+- **Workflow to publish images to DockerHub** on release
+- **QUICKSTART.md** and mermaid architecture diagram to README (#29, #183)
+- **ARCHITECTURE_FRONTEND.md** with frontend stores, components and data flow (#181)
+- **Release and versioning process** (`RELEASE.md`, `CHANGELOG.md`, `release.yml`)
+- **ESLint + Prettier** configuration for frontend (#346)
+- **Pre-commit hooks** for frontend (svelte-check, eslint, prettier) (#337)
+- **Docker healthchecks** for ai-service and worker (#335)
+- **pip cache** in CI and **coverage artifact** upload (#330)
+- **Responsive media queries** to 8 pages for mobile (#405)
+- **aria-label** to all icon-only buttons for accessibility (#396)
+- **WeatherWidget fetch** extracted to weatherService with caching (#348)
+- **Configurable log levels** in production via localStorage (#395)
+- **localStorage SSR guards** using `browser` from `$app/environment` (#404)
 
 ### Changed
 
-### Deprecated
-
-### Removed
+- **Database migrated from SQLite to PostgreSQL 16 + pgvector** in all environments (#273)
+- **DI/repository pattern** implemented, removed legacy UnitOfWork (#37)
+- **docker-compose.yml** restructured as production, dev compose with builds
+- **DynamicIcon** replaces direct lucide-svelte imports for dynamic icons (#74)
+- **GoalCard** extracted from goals page into dedicated component
+- **StreakListItem** extracted from streaks page into dedicated component
+- **Goals chart** simplified — replaced candlestick with bar chart
+- **lint-api** now runs via Docker instead of host Python (#334)
+- **sed -i** in Makefile made portable for macOS (#334)
+- **AUR PKGBUILD** dependency changed from docker-compose to docker plugin (#331)
+- **ADRs updated** to reflect PostgreSQL + pgvector migration (#338)
+- **Logger** refactored to allow configurable log levels in production (#395)
 
 ### Fixed
 
+- **High-priority bugs batch** (#359, #360, #361, #368)
+- **6 medium-priority issues** (#273, #252, #274, #270, #271, #266)
+- **5 high-priority issues** (#269, #268, #265, #261, #260)
+- **DynamicIcon prop name** and note source_path type
+- **Streaks hover-only buttons** now visible on mobile/touch devices
+- **Onboarding 500 error** by removing invalid vault_path setting
+- **Service Worker** no longer intercepts Vite Dev dependencies
+- **svelte-check strict typing errors** to unblock CI
+- **Worker authentication** and volume mounts for local development
+- **Type errors** in folder API logic
+- **Real user data fetched after login** instead of hardcoding (#61)
+- **CI pipeline** fixed for SQLite tests and Docker builds (#20)
+- **CI health check** no longer silenced with `|| true` (#330)
+- **localStorage access** without browser check causing SSR errors (#404)
+- **Logger silencing all logs** in production including errors (#395)
+- **WeatherWidget direct API call** bypassing centralized api.ts (#348)
+
+### Removed
+
+- **npm/bun publishing** (joidy-cli package)
+- **6 dead .svelte components** never imported (#385)
+- **4 unused icon packages** from devDependencies (#382)
+- **Unused Python dependencies** (aiofiles, gitpython) (#383)
+- **TODO.md**, the last stray file in repo root (#332)
+- **Deprecated files** from repo root
+
 ### Security
+
+- **All containers run as non-root user** (#329)
+- **API keys & secrets exposure** fixed (#358, #377, #380)
+- **XSS & input sanitization** added (#376, #397, #366)
+- **CORS & WebSocket auth** hardened (#326, #325, #378)
+- **ai-service hardening** with internal secret validation
+- **Auth & security hardening** across all endpoints (#322, #323, #324, #327, #379, #408)
+- **Explicit permissions** added to all CI jobs (#330)
 
 ## [0.1.0] - 2026-07-30
 
