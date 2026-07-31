@@ -57,8 +57,19 @@ def get_current_user_id(token: str) -> int | None:
     return None
 
 def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> int | None:
-    """Dependency to get current user from Bearer token."""
+    """Dependency to get current user from Bearer token.
+
+    In development without AUTH_PASSWORD, auth is bypassed for convenience.
+    In production, auth is always required — missing AUTH_PASSWORD means
+    no valid token can be issued, so all requests are rejected.
+    """
     if not settings.auth_password:
+        if settings.app_env == "production":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication not configured. Set AUTH_PASSWORD in .env.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
         return 1
     
     if not credentials:
