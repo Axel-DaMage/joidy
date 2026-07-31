@@ -22,6 +22,7 @@ from services.note_service import (
     note_to_response,
     update_note,
 )
+from services.sync_service import detect_conflict
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -69,7 +70,10 @@ def _update_sync_state(
     note_id: int,
     remote_mtime: datetime | None,
 ) -> SyncState:
-    """Create or update the SyncState record for a note."""
+    """Create or update the SyncState record for a note.
+
+    Detects conflicts by comparing local_mtime vs remote_mtime.
+    """
     sync = db.query(SyncState).filter(SyncState.note_id == note_id).first()
     if not sync:
         sync = SyncState(note_id=note_id)
@@ -77,7 +81,7 @@ def _update_sync_state(
 
     sync.remote_mtime = remote_mtime
     sync.last_synced_at = datetime.now(timezone.utc)
-    sync.conflict = False
+    sync.conflict = detect_conflict(sync.local_mtime, remote_mtime)
     return sync
 
 

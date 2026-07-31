@@ -28,6 +28,7 @@ from routers import (
     push,
     skills,
     stats,
+    sync,
     tags,
     upload,
     vault,
@@ -173,6 +174,7 @@ app.include_router(obsidian.router)
 app.include_router(auth.router)
 app.include_router(export.router, dependencies=[Depends(get_current_user)])
 app.include_router(stats.router, dependencies=[Depends(get_current_user)])
+app.include_router(sync.router, dependencies=[Depends(get_current_user)])
 app.include_router(upload.router, dependencies=[Depends(get_current_user)])
 
 # Ensure the upload directory exists before serving it.

@@ -1,0 +1,66 @@
+"""
+Sync conflict management endpoints.
+
+Provides endpoints to list and resolve sync conflicts between
+Joidy and external sources (e.g. Obsidian).
+"""
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, field_validator
+from services.sync_service import list_conflicts, resolve_conflict
+from sqlalchemy.orm import Session
+
+from database import get_db
+
+router = APIRouter(prefix="/sync", tags=["sync"])
+
+
+class ResolveConflictIn(BaseModel):
+    resolution: str
+    merged_content: str | None = None
+
+    @field_validator("resolution")
+    @classmethod
+    def resolution_must_be_valid(cls, v: str) -> str:
+        v = v.lower().strip()
+        if v not in ("keep_local", "keep_remote", "merge"):
+            raise ValueError("resolution must be 'keep_local', 'keep_remote', or 'merge'")
+        return v
+
+
+@router.get("/conflicts")
+def get_conflicts(db: Session = Depends(get_db)):
+    """List all notes with unresolved sync conflicts."""
+    conflicts = list_conflicts(db)
+    return {"conflicts": conflicts, "count": len(conflicts)}
+
+
+@router.post("/resolve/{note_id}")
+def resolve_note_conflict(
+    note_id: int,
+    payload: ResolveConflictIn,
+    db: Session = Depends(get_db),
+):
+    """Resolve a sync conflict for a specific note.
+
+    - ``keep_local``: Discard remote changes, keep DB content.
+    - ``keep_remote``: Read vault file and overwrite DB with its content.
+    - ``merge``: Use ``merged_content`` as the new content for both.
+    """
+    if payload.resolution == "merge" and not payload.merged_content:
+        raise HTTPException(
+            status_code=400,
+            detail="merged_content is required for merge resolution",
+        )
+
+    result = resolve_conflict(
+        db,
+        note_id=note_id,
+        resolution=payload.resolution,
+        merged_content=payload.merged_content,
+    )
+
+    if result["status"] == "error":
+        raise HTTPException(status_code=400, detail=result["message"])
+
+    return result

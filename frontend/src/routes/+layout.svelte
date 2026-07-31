@@ -27,6 +27,8 @@
   import { initConnectionStore } from '$lib/stores/connection';
   import { loadNotes } from '$lib/stores/notes';
   import { deferredPrompt, showInstallBanner, isAppInstalled } from '$lib/stores/pwa';
+  import { syncStore } from '$lib/stores/sync';
+  import ConflictResolutionModal from '$lib/components/ConflictResolutionModal.svelte';
 
   type NavItemStatus = 'ready' | 'dev' | 'placeholder';
 
@@ -261,6 +263,11 @@
     };
     requestAnimationFrame(() => init());
 
+    // Start sync conflict polling when authenticated
+    if ($isAuthenticated) {
+      syncStore.startPolling();
+    }
+
     // Global error handlers
     const handleOnerror = (
       _event: Event | string,
@@ -366,6 +373,7 @@
       if (wsReconnectTimeout) clearTimeout(wsReconnectTimeout);
       if (pillTimeout) clearTimeout(pillTimeout);
       if (cleanupTheme) cleanupTheme();
+      syncStore.stopPolling();
     };
   });
   let showConnectedPill = false;
@@ -509,6 +517,7 @@
 <CommandPalette />
 <Toast />
 <TutorialOverlay />
+<ConflictResolutionModal />
 {/if}
 
 <style>
