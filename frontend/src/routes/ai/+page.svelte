@@ -93,4 +93,42 @@
   }
   .stat-value.enabled { color: var(--color-success, #38a169); }
   .stat-value.disabled { color: var(--color-error, #e53e3e); }
+
+  /* ── Responsive ── */
+  @media (max-width: 768px) {
+    .ai-page {
+      padding: var(--s4, 1rem);
+      max-width: 100%;
+    }
+
+    .ai-page h2 {
+      font-size: 1.1rem;
+      margin-bottom: var(--s3, 0.75rem);
+    }
+
+    .ai-grid {
+      gap: var(--s3, 0.75rem);
+    }
+
+    .stat {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2px;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .ai-page {
+      padding: var(--s3, 0.75rem);
+    }
+
+    .ai-page h2 {
+      font-size: 1rem;
+      gap: 6px;
+    }
+
+    .muted {
+      padding: var(--s3, 0.75rem) 0;
+    }
+  }
 </style>

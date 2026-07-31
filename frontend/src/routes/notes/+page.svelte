@@ -1543,4 +1543,88 @@
   .delete-confirm-actions .btn-danger:hover {
     opacity: 0.85;
   }
+
+  /* ── Responsive ── */
+  @media (max-width: 768px) {
+    .notes-page {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto 1fr;
+    }
+
+    .notes-list {
+      max-height: 40vh;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .resize-handle {
+      display: none;
+    }
+
+    .editor-panel {
+      height: 100%;
+    }
+
+    .empty-dashboard {
+      padding: var(--s4) var(--s3);
+      gap: var(--s4);
+    }
+
+    .dash-widgets {
+      grid-template-columns: 1fr;
+      gap: var(--s3);
+    }
+
+    .dash-widget {
+      padding: var(--s3);
+    }
+
+    .dash-search-container {
+      max-width: 100%;
+    }
+
+    .dash-search {
+      padding: var(--s2) var(--s3);
+    }
+
+    .sort-menu {
+      width: 180px;
+    }
+
+    .folder-modal-backdrop {
+      top: 0;
+      bottom: 0;
+    }
+
+    .folder-modal {
+      max-width: 100%;
+      padding: var(--s3);
+    }
+  }
+
+  @media (max-width: 480px) {
+    .notes-list {
+      max-height: 35vh;
+    }
+
+    .empty-dashboard {
+      padding: var(--s3) var(--s2);
+      gap: var(--s3);
+    }
+
+    .dash-widget {
+      padding: var(--s2);
+    }
+
+    .list-toolbar {
+      padding: var(--s1) var(--s2);
+    }
+
+    .tree-actions-bar {
+      padding: var(--s1) var(--s2);
+    }
+
+    .list-meta {
+      padding: var(--s1) var(--s2);
+    }
+  }
 </style>
