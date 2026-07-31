@@ -29,50 +29,48 @@
   class:archived={streak.is_archived}
   class:completed={isStreakCompleted(streak)}
   style="--theme-ac: {streak.color || 'var(--xp)'};"
-  on:click={() => dispatch('select', streak.id)}
-  on:keydown={(e) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      dispatch('select', streak.id);
-    }
-  }}
-  role="button"
-  tabindex="0"
   use:liquidGlass={{ enabled: streak.theme === 'glass' }}
 >
-  <div class="item-icon">
-    {#if streak.icon && streak.icon.length > 0}
-      <StreakIcon name={streak.icon} size={18} color={streak.color || undefined} />
-    {:else}
-      <span class="item-emoji">{streak.emoji || '🔥'}</span>
-    {/if}
-  </div>
-  <div class="item-info">
-    <span class="item-name">{streak.name}</span>
-    <span class="item-meta mono">
-      {#if isStreakCompleted(streak)}
-        Finalizado {getDaysForCompletion(streak)} días
+  <button
+    class="streak-item-main"
+    on:click={() => dispatch('select', streak.id)}
+    aria-label="Seleccionar racha: {streak.name}"
+  >
+    <div class="item-icon">
+      {#if streak.icon && streak.icon.length > 0}
+        <StreakIcon name={streak.icon} size={18} color={streak.color || undefined} />
       {:else}
-        {freqLabel(streak)}
-      {/if}
-    </span>
-  </div>
-  <div class="item-count" style="color: {streak.color || 'var(--xp)'};">
-    <div class="count-box">
-      <span class="item-num mono">{streakLabel(streak.current_streak)}</span>
-      {#if streak.target_date && !isStreakCompleted(streak)}
-        <span class="item-rem mono">{streak.days_remaining}d</span>
+        <span class="item-emoji">{streak.emoji || '🔥'}</span>
       {/if}
     </div>
-    {#if streak.today_checked}
-      <Check size={10} style="color: {streak.color || 'var(--xp)'};" />
-    {/if}
-  </div>
+    <div class="item-info">
+      <span class="item-name">{streak.name}</span>
+      <span class="item-meta mono">
+        {#if isStreakCompleted(streak)}
+          Finalizado {getDaysForCompletion(streak)} días
+        {:else}
+          {freqLabel(streak)}
+        {/if}
+      </span>
+    </div>
+    <div class="item-count" style="color: {streak.color || 'var(--xp)'};">
+      <div class="count-box">
+        <span class="item-num mono">{streakLabel(streak.current_streak)}</span>
+        {#if streak.target_date && !isStreakCompleted(streak)}
+          <span class="item-rem mono">{streak.days_remaining}d</span>
+        {/if}
+      </div>
+      {#if streak.today_checked}
+        <Check size={10} style="color: {streak.color || 'var(--xp)'};" />
+      {/if}
+    </div>
+  </button>
   <div class="item-actions">
     <button
       class="item-action-btn"
       on:click|stopPropagation={() => dispatch('edit', streak)}
       title="Editar racha"
+      aria-label="Editar racha: {streak.name}"
     >
       <Settings size={12} />
     </button>
@@ -80,6 +78,7 @@
       class="item-action-btn danger"
       on:click|stopPropagation={() => dispatch('delete', streak.id)}
       title="Eliminar racha"
+      aria-label="Eliminar racha: {streak.name}"
     >
       <X size={12} />
     </button>
@@ -368,4 +367,19 @@
       gap: 6px;
     }
   }
+
+  .streak-item-main {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    min-width: 0;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    text-align: left;
+    color: inherit;
+    font: inherit;
+}
 </style>
