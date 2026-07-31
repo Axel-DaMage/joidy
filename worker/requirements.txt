@@ -4,4 +4,4 @@ pydantic-settings==2.6.1
 sqlalchemy==2.0.36
 psycopg2-binary==2.9.10
 pgvector==0.3.6
-prometheus-client==0.21.1
+prometheus-client==0.26.0
