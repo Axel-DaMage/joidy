@@ -71,7 +71,7 @@ joidy/
 ├── api/              # FastAPI (Python 3.12)
 │   ├── main.py       # App FastAPI
 │   ├── config.py     # Configuración Pydantic
-│   ├── database.py   # SQLAlchemy + sqlite-vec
+│   ├── database.py   # SQLAlchemy + pgvector
 │   ├── models/       # Modelos ORM
 │   ├── routers/      # Endpoints API
 │   ├── services/     # Lógica de negocio

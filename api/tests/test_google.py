@@ -2,6 +2,8 @@
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from services import google_token_service as gts
+
 
 def test_google_auth_url_unconfigured(client):
     resp = client.get("/integrations/google/auth")
@@ -63,6 +65,125 @@ def test_google_callback_exchanges_code(client, monkeypatch):
     data = resp.json()
     assert data["access_token"] == "ACCESS"
     assert data["refresh_token"] == "REFRESH"
+
+
+def test_google_status_not_connected(client):
+    resp = client.get("/integrations/google/status")
+    assert resp.status_code == 200
+    assert resp.json()["connected"] is False
+
+
+def test_google_connect_persists_tokens(client, db_session, monkeypatch):
+    monkeypatch.setattr(
+        "services.google_service.settings.google_client_id", "google-client-id"
+    )
+    monkeypatch.setattr(
+        "services.google_service.settings.google_client_secret", "google-client-secret"
+    )
+    monkeypatch.setattr(
+        "services.google_service.settings.google_redirect_uri",
+        "http://localhost:8000/integrations/google/callback",
+    )
+
+    fake_response = MagicMock()
+    fake_response.json.return_value = {
+        "access_token": "ACCESS",
+        "refresh_token": "REFRESH",
+        "expires_in": 3600,
+        "token_type": "Bearer",
+        "scope": "calendar tasks",
+    }
+    fake_response.raise_for_status.return_value = None
+
+    with patch("httpx.AsyncClient.post", new=AsyncMock(return_value=fake_response)):
+        resp = client.post("/integrations/google/connect", json={"code": "abc123"})
+
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "connected"
+
+    # Verify status now shows connected
+    resp = client.get("/integrations/google/status")
+    assert resp.json()["connected"] is True
+
+
+def test_google_disconnect_clears_tokens(client, db_session, monkeypatch):
+    # First connect
+    monkeypatch.setattr(
+        "services.google_service.settings.google_client_id", "google-client-id"
+    )
+    monkeypatch.setattr(
+        "services.google_service.settings.google_client_secret", "google-client-secret"
+    )
+    monkeypatch.setattr(
+        "services.google_service.settings.google_redirect_uri",
+        "http://localhost:8000/integrations/google/callback",
+    )
+
+    fake_response = MagicMock()
+    fake_response.json.return_value = {
+        "access_token": "ACCESS",
+        "refresh_token": "REFRESH",
+        "expires_in": 3600,
+        "token_type": "Bearer",
+        "scope": "calendar tasks",
+    }
+    fake_response.raise_for_status.return_value = None
+
+    with patch("httpx.AsyncClient.post", new=AsyncMock(return_value=fake_response)):
+        client.post("/integrations/google/connect", json={"code": "abc123"})
+
+    # Now disconnect
+    resp = client.post("/integrations/google/disconnect")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "disconnected"
+
+    # Verify status shows not connected
+    resp = client.get("/integrations/google/status")
+    assert resp.json()["connected"] is False
+
+
+def test_google_token_service_encrypt_decrypt(db_session):
+    """Test that token encryption/decryption round-trips correctly."""
+    encrypted = gts.encrypt_token("my-secret-token")
+    assert encrypted != "my-secret-token"
+    decrypted = gts.decrypt_token(encrypted)
+    assert decrypted == "my-secret-token"
+
+
+def test_google_token_service_store_and_retrieve(db_session):
+    """Test storing and retrieving tokens from the database."""
+    row = gts.store_tokens(
+        db_session,
+        access_token="ACCESS123",
+        refresh_token="REFRESH456",
+        expires_in=3600,
+        token_type="Bearer",
+        scope="calendar tasks",
+    )
+    assert row.access_token == "ACCESS123"
+    assert row.refresh_token_encrypted is not None
+    assert row.refresh_token_encrypted != "REFRESH456"
+
+    retrieved = gts.get_stored_token(db_session)
+    assert retrieved is not None
+    assert retrieved.access_token == "ACCESS123"
+
+    assert gts.is_connected(db_session) is True
+
+
+def test_google_token_service_clear_tokens(db_session):
+    """Test clearing tokens from the database."""
+    gts.store_tokens(
+        db_session,
+        access_token="ACCESS",
+        refresh_token="REFRESH",
+        expires_in=3600,
+    )
+    assert gts.is_connected(db_session) is True
+
+    gts.clear_tokens(db_session)
+    assert gts.is_connected(db_session) is False
+    assert gts.get_stored_token(db_session) is None
 
 
 def test_google_calendars_list(client, monkeypatch):

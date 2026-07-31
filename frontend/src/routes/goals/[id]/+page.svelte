@@ -400,8 +400,7 @@
   .goal-settings-backdrop {
     position: fixed;
     inset: 0;
-    z-index: 200;
-    background: rgba(0, 0, 0, 0.6);
+    z-index: var(--z-overlay);
     backdrop-filter: blur(8px);
     display: flex;
     align-items: center;
@@ -619,7 +618,7 @@
   .ng-freq-btn.active { background: var(--surface-active); color: var(--text-primary); border-color: var(--text-primary); }
 
   .ng-large-grid {
-    max-height: 280px !important;
+    max-height: 280px;
   }
 
   .ng-fail-options {

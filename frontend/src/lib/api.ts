@@ -223,6 +223,15 @@ export interface StreakStats {
 
 // ── Notes ─────────────────────────────────────────────────────────────────────
 
+export interface SyncConflict {
+  note_id: number;
+  title: string;
+  source_path: string;
+  local_mtime: string | null;
+  remote_mtime: string | null;
+  last_synced_at: string | null;
+}
+
 export const api = {
   auth: {
     login: (password: string, username = 'user') => 
@@ -338,6 +347,14 @@ github: {
     revoke: () => req<{ status: string }>('POST', '/integrations/github/oauth/revoke'),
   },
 
+  google: {
+    authUrl: () => req<{ url: string }>('GET', '/integrations/google/auth'),
+    connect: (code: string) =>
+      req<{ status: string; scope: string | null }>('POST', '/integrations/google/connect', { code }),
+    status: () => req<{ connected: boolean }>('GET', '/integrations/google/status'),
+    disconnect: () => req<{ status: string }>('POST', '/integrations/google/disconnect'),
+  },
+
   config: {
     setupStatus: () => req<{ needs_setup: boolean }>('GET', '/config/setup-status'),
     setup: (auth_password: string, obsidian_vault_path?: string) => 
@@ -448,5 +465,12 @@ github: {
       req<{ status: string }>('POST', '/push/unsubscribe'),
     test: (title: string, body: string) =>
       req<{ status: string }>('POST', '/push/test', { title, body }),
+  },
+
+  sync: {
+    conflicts: () =>
+      req<{ conflicts: SyncConflict[]; count: number }>('GET', '/sync/conflicts'),
+    resolve: (noteId: number, resolution: string, mergedContent?: string) =>
+      req<{ status: string; note_id: number; resolution: string }>('POST', `/sync/resolve/${noteId}`, { resolution, merged_content: mergedContent ?? null }),
   },
 };

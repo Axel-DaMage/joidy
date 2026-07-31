@@ -137,6 +137,9 @@ def create_note(
         sync_skills_for_tags(db, touched_tag_ids)
     if source_path and not from_vault:
         write_to_vault(note)
+        from services.sync_service import update_local_mtime
+        update_local_mtime(db, note.id)
+        db.commit()
     clear_api_caches()
 
     try:
@@ -207,6 +210,9 @@ def update_note(
         sync_skills_for_tags(db, touched_tag_ids)
     if content is not None and not from_vault:
         write_to_vault(note)
+        from services.sync_service import update_local_mtime
+        update_local_mtime(db, note.id)
+        db.commit()
     clear_api_caches()
 
     try:

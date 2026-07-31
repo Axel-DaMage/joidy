@@ -122,7 +122,7 @@
     font-weight: 800;
     font-family: var(--font-mono);
     font-size: 18px;
-    z-index: 2000;
+    z-index: var(--z-toast);
     animation: xp-float-anim 1s ease-out forwards;
     text-shadow: 0 0 10px color-mix(in srgb, var(--xp) 45%, transparent);
   }

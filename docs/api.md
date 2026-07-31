@@ -14,9 +14,9 @@ language: Python 3.12
 
 ## 1. Autenticación
 
-**Estado actual:** No requerida
+**Estado actual:** JWT obligatorio en todos los endpoints de datos/mutación
 
-La API currently permite acceso sin autenticación. El sistema está diseñado para uso personal local.
+La API exige autenticación JWT en todos los endpoints excepto `/auth/*`, `/config` y `/ws`. El sistema está diseñado para uso personal local con un único usuario.
 
 ---
 

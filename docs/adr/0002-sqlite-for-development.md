@@ -1,7 +1,7 @@
 # ADR 002: SQLite + sqlite-vec para Desarrollo
 
 ## Estado
-Aceptado
+**Supercedado** — El proyecto ahora usa PostgreSQL 16 + pgvector en todos los entornos (desarrollo y producción) vía Docker. Ver `docker-compose.yml`.
 
 ## Contexto
 Necesitamos elegir la base de datos para el proyecto.

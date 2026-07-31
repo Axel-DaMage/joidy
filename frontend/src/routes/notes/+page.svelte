@@ -1002,7 +1002,7 @@
     overflow: hidden;
   }
   .notes-page.dragging { user-select: none; }
-  .notes-page.dragging * { cursor: col-resize !important; }
+  .notes-page.dragging * { cursor: col-resize; }
 
   /* ── Panel ── */
   .notes-list {
@@ -1043,10 +1043,7 @@
     border: 1px solid var(--border);
     border-radius: var(--r);
     box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    z-index: 100;
-    display: flex;
-    flex-direction: column;
-    padding: 4px 0;
+    z-index: var(--z-dropdown);
   }
 
   .sort-btn {
@@ -1153,8 +1150,8 @@
     transition: all var(--t-fast);
   }
   .bulk-btn:hover { color: var(--text-primary); border-color: var(--text-muted); }
-  .bulk-btn.danger { color: #f85149; border-color: #f8514940; }
-  .bulk-btn.danger:hover { border-color: #f85149; background: #f8514910; }
+  .bulk-btn.danger { color: var(--error); border-color: color-mix(in srgb, var(--error) 25%, transparent); }
+  .bulk-btn.danger:hover { border-color: var(--error); background: color-mix(in srgb, var(--error) 6%, transparent); }
 
   .list-meta {
     display: flex; align-items: center; gap: 6px;
@@ -1394,7 +1391,7 @@
   /* Folder customize modal */
   .folder-modal-backdrop {
     position: fixed; top: 50px; bottom: 50px; left: 0; right: 0;
-    z-index: 200;
+    z-index: var(--z-overlay);
     background: rgba(0,0,0,0.6); backdrop-filter: blur(2px);
     display: flex; align-items: center; justify-content: center;
   }
@@ -1539,8 +1536,8 @@
     color: var(--text-primary);
   }
   .delete-confirm-actions .btn-danger {
-    background: var(--error, #ef4444);
-    border-color: var(--error, #ef4444);
+    background: var(--error);
+    border-color: var(--error);
     color: #fff;
   }
   .delete-confirm-actions .btn-danger:hover {

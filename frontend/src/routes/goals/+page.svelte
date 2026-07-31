@@ -14,6 +14,7 @@
   import StreakHeatmap from '$lib/components/StreakHeatmap.svelte';
   import GoalCard from '$lib/components/GoalCard.svelte';
   import LazyIconPicker from '$lib/components/LazyIconPicker.svelte';
+  import ModalDialog from '$lib/components/ModalDialog.svelte';
 
   let goals = $state<Goal[]>([]);
   let tags = $state<TagType[]>([]);
@@ -804,14 +805,14 @@
 
   function getGoalColor(goal: Goal): string {
     const colorMap: Record<string, string> = {
-      'DAILY': '#fbbf24',
+      'DAILY': 'var(--today)',
       'WEEKLY': '#22d3d3',
-      'MONTHLY': '#60a5fa',
+      'MONTHLY': 'var(--link)',
       'ANNUAL': '#3b82f6',
-      'ACTIVE': '#fbbf24',
-      'COMPLETED': '#10b981',
-      'PAUSED': '#ef4444',
-      'CANCELLED': '#ef4444',
+      'ACTIVE': 'var(--today)',
+      'COMPLETED': 'var(--target)',
+      'PAUSED': 'var(--error)',
+      'CANCELLED': 'var(--error)',
     };
 
     if (goal.state === 'ACTIVE' || goal.state === 'PAUSED' || goal.state === 'CANCELLED') {
@@ -1798,94 +1799,83 @@
   {/if}
 
   {#if editingGoal}
-    <div class="modal-overlay" onclick={(e) => { if (e.target === e.currentTarget) editingGoal = null; }} role="dialog" tabindex="-1">
-      <div class="modal-card fade-in">
-        <div class="modal-header">
-          <h3 class="section-title" style="margin:0;">Editar Objetivo</h3>
-          <button class="btn btn-ghost" onclick={() => editingGoal = null}><X size={16} /></button>
+    <ModalDialog open={true} title="Editar Objetivo" size="md" onClose={() => editingGoal = null}>
+      <div class="form-field">
+        <label class="label">Título</label>
+        <input class="input w-full" bind:value={editTitle} />
+      </div>
+      <div class="form-field">
+        <label class="label">Descripción</label>
+        <textarea class="input w-full" bind:value={editDescription} rows="2"></textarea>
+      </div>
+      <div class="form-row">
+        <div class="form-field" style="flex:1;">
+          <label class="label">Medición</label>
+          <select class="input w-full" bind:value={editMeasurement}>
+            <option value="COUNT">Cuenta Numérica</option>
+            <option value="BOOLEAN">Hecho / No Hecho</option>
+            <option value="PERCENT">Porcentaje</option>
+          </select>
         </div>
-        <div class="form-field">
-          <label class="label">Título</label>
-          <input class="input w-full" bind:value={editTitle} />
+        <div class="form-field" style="width:120px;">
+          <label class="label">Meta</label>
+          <input class="input w-full" type="number" bind:value={editTargetValue} min="1" />
         </div>
-        <div class="form-field">
-          <label class="label">Descripción</label>
-          <textarea class="input w-full" bind:value={editDescription} rows="2"></textarea>
-        </div>
-        <div class="form-row">
-          <div class="form-field" style="flex:1;">
-            <label class="label">Medición</label>
-            <select class="input w-full" bind:value={editMeasurement}>
-              <option value="COUNT">Cuenta Numérica</option>
-              <option value="BOOLEAN">Hecho / No Hecho</option>
-              <option value="PERCENT">Porcentaje</option>
-            </select>
-          </div>
-          <div class="form-field" style="width:120px;">
-            <label class="label">Meta</label>
-            <input class="input w-full" type="number" bind:value={editTargetValue} min="1" />
-          </div>
-          <div class="form-field" style="width:100px;">
-            <label class="label">Límite (días)</label>
-            <input class="input w-full" type="number" bind:value={editMaxAssignmentDays} min="1" placeholder="∞" />
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-field" style="flex:1;">
-            <label class="label">Regla de Fallo</label>
-            <select class="input w-full" bind:value={editFailConfig}>
-              <option value="STATIC">Estático (Se reinicia)</option>
-              <option value="ROLLOVER">Traspaso (Pasa al día sig.)</option>
-              <option value="SNOWBALL">Acumulativo (Suma la deuda)</option>
-            </select>
-          </div>
-          <div class="form-field" style="width:80px;">
-            <label class="label">Color</label>
-            <div class="color-custom" style="background: {editColor}; width:36px; height:36px;">
-              <input type="color" bind:value={editColor} class="color-picker" />
-            </div>
-          </div>
-        </div>
-        <div class="form-actions">
-          <button class="btn btn-primary" onclick={saveEdit} disabled={editSaving || !editTitle.trim()}>
-            {editSaving ? 'Guardando...' : 'Guardar cambios'}
-          </button>
-          <button class="btn btn-ghost" onclick={() => editingGoal = null}>Cancelar</button>
+        <div class="form-field" style="width:100px;">
+          <label class="label">Límite (días)</label>
+          <input class="input w-full" type="number" bind:value={editMaxAssignmentDays} min="1" placeholder="∞" />
         </div>
       </div>
-    </div>
+      <div class="form-row">
+        <div class="form-field" style="flex:1;">
+          <label class="label">Regla de Fallo</label>
+          <select class="input w-full" bind:value={editFailConfig}>
+            <option value="STATIC">Estático (Se reinicia)</option>
+            <option value="ROLLOVER">Traspaso (Pasa al día sig.)</option>
+            <option value="SNOWBALL">Acumulativo (Suma la deuda)</option>
+          </select>
+        </div>
+        <div class="form-field" style="width:80px;">
+          <label class="label">Color</label>
+          <div class="color-custom" style="background: {editColor}; width:36px; height:36px;">
+            <input type="color" bind:value={editColor} class="color-picker" />
+          </div>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" onclick={saveEdit} disabled={editSaving || !editTitle.trim()}>
+          {editSaving ? 'Guardando...' : 'Guardar cambios'}
+        </button>
+        <button class="btn btn-ghost" onclick={() => editingGoal = null}>Cancelar</button>
+      </div>
+    </ModalDialog>
   {/if}
 
   {#if pendingGoals.length > 0}
-    <div class="modal-overlay" role="dialog" tabindex="-1">
-      <div class="modal-card fade-in" style="max-width: 520px;">
-        <div class="modal-header">
-          <h3 class="section-title" style="margin:0; color: var(--warning, #f59e0b);">⚠ Objetivos Huérfanos</h3>
-        </div>
-        <p class="removal-desc">
-          Los siguientes objetivos fueron eliminados del contenido de sus notas vinculadas. ¿Qué deseas hacer con cada uno?
-        </p>
-        {#each pendingGoals as pg (pg.id)}
-          <div class="removal-item">
-            <div class="removal-info">
-              <span class="removal-title">{pg.title}</span>
-              <span class="removal-meta">{pg.temporality} · {formatFailConfig(pg.fail_config)}</span>
-            </div>
-            <div class="removal-actions">
-              <button class="btn btn-ghost removal-btn manual" title="Mantener como progreso manual" onclick={() => resolveRemoval(pg.id, 'manual')}>
-                Manual
-              </button>
-              <button class="btn btn-ghost removal-btn cancel" title="Cancelar (archivar sin penalización)" onclick={() => resolveRemoval(pg.id, 'cancel')}>
-                Cancelar
-              </button>
-              <button class="btn btn-ghost removal-btn delete" title="Eliminar permanentemente" onclick={() => resolveRemoval(pg.id, 'delete')}>
-                Eliminar
-              </button>
-            </div>
+    <ModalDialog open={true} title="⚠ Objetivos Huérfanos" size="md" onClose={() => {}}>
+      <p class="removal-desc">
+        Los siguientes objetivos fueron eliminados del contenido de sus notas vinculadas. ¿Qué deseas hacer con cada uno?
+      </p>
+      {#each pendingGoals as pg (pg.id)}
+        <div class="removal-item">
+          <div class="removal-info">
+            <span class="removal-title">{pg.title}</span>
+            <span class="removal-meta">{pg.temporality} · {formatFailConfig(pg.fail_config)}</span>
           </div>
-        {/each}
-      </div>
-    </div>
+          <div class="removal-actions">
+            <button class="btn btn-ghost removal-btn manual" title="Mantener como progreso manual" onclick={() => resolveRemoval(pg.id, 'manual')}>
+              Manual
+            </button>
+            <button class="btn btn-ghost removal-btn cancel" title="Cancelar (archivar sin penalización)" onclick={() => resolveRemoval(pg.id, 'cancel')}>
+              Cancelar
+            </button>
+            <button class="btn btn-ghost removal-btn delete" title="Eliminar permanentemente" onclick={() => resolveRemoval(pg.id, 'delete')}>
+              Eliminar
+            </button>
+          </div>
+        </div>
+      {/each}
+    </ModalDialog>
   {/if}
 
   {#if currentTab === 'editor'}
@@ -1970,7 +1960,7 @@
   }
   /* Planning 3-col layout - One Page Style */
   .planning-3col {
-    display: grid !important;
+    display: grid;
     grid-template-columns: 1fr 1.4fr 1fr;
     gap: var(--s4);
     height: calc(100vh - 160px);
@@ -2117,13 +2107,7 @@
   .new-goal-backdrop {
     position: fixed;
     inset: 0;
-    z-index: 1100;
-    background: rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(8px);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
+    z-index: var(--z-modal);
   }
   .new-goal-panel {
     background: var(--surface);
@@ -2263,7 +2247,7 @@
   .ng-freq-btn.active { background: var(--surface-active); color: var(--text-primary); border-color: var(--text-primary); }
 
   .ng-large-grid {
-    max-height: 280px !important;
+    max-height: 280px;
   }
 
   .ng-fail-options {
@@ -2571,8 +2555,8 @@
     gap: 4px;
     flex-shrink: 0;
   }
-  .text-success { color: var(--success) !important; }
-  .text-muted { color: var(--text-muted) !important; }
+  .text-success { color: var(--success); }
+  .text-muted { color: var(--text-muted); }
   .empty-state {
     padding: 32px;
     text-align: center;
@@ -2754,35 +2738,6 @@
     font-family: var(--font-mono);
   }
 
-  /* Edit Modal */
-  .modal-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 1000;
-    background: rgba(0, 0, 0, 0.55);
-    backdrop-filter: blur(4px);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .modal-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--r);
-    padding: var(--s5);
-    width: 100%;
-    max-width: 480px;
-    display: flex;
-    flex-direction: column;
-    gap: var(--s3);
-    box-shadow: 0 16px 48px rgba(0,0,0,0.3);
-  }
-  .modal-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
   /* Hierarchical Planning */
   .goal-group {
     margin-bottom: var(--s3);
@@ -2793,10 +2748,10 @@
     border-left: 2px solid var(--border);
   }
   .child-card {
-    padding: var(--s2) var(--s3) !important;
+    padding: var(--s2) var(--s3);
     font-size: 13px;
-    margin-bottom: 4px !important;
-    background: var(--surface-hover) !important;
+    margin-bottom: 4px;
+    background: var(--surface-hover);
   }
   .child-indent {
     color: var(--text-muted);
@@ -3272,28 +3227,28 @@
     flex-shrink: 0;
   }
   .removal-btn {
-    font-size: 11px !important;
-    padding: 4px 10px !important;
-    border-radius: 4px !important;
-    font-family: var(--font-mono) !important;
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: var(--r);
+    font-family: var(--font-mono);
     text-transform: uppercase;
     letter-spacing: 0.04em;
   }
   .removal-btn.manual {
-    color: var(--success) !important;
-    border: 1px solid rgba(16, 185, 129, 0.3);
+    color: var(--success);
+    border: 1px solid color-mix(in srgb, var(--success) 30%, transparent);
   }
-  .removal-btn.manual:hover { background: rgba(16, 185, 129, 0.1); }
+  .removal-btn.manual:hover { background: color-mix(in srgb, var(--success) 10%, transparent); }
   .removal-btn.cancel {
-    color: var(--warning, #f59e0b) !important;
-    border: 1px solid rgba(245, 158, 11, 0.3);
+    color: var(--warning);
+    border: 1px solid color-mix(in srgb, var(--warning) 30%, transparent);
   }
-  .removal-btn.cancel:hover { background: rgba(245, 158, 11, 0.1); }
+  .removal-btn.cancel:hover { background: color-mix(in srgb, var(--warning) 10%, transparent); }
   .removal-btn.delete {
-    color: var(--error) !important;
-    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: var(--error);
+    border: 1px solid color-mix(in srgb, var(--error) 30%, transparent);
   }
-  .removal-btn.delete:hover { background: rgba(239, 68, 68, 0.1); }
+  .removal-btn.delete:hover { background: color-mix(in srgb, var(--error) 10%, transparent); }
 
   /* ── History Tab ── */
   .history-layout {

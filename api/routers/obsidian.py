@@ -1,58 +1,136 @@
-from datetime import datetime, timezone
+"""
+Obsidian webhook endpoints.
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
-from sqlalchemy.orm import Session
+Receives external change notifications from Obsidian (or compatible
+markdown editors) and synchronizes them with the database.
+
+Authentication:
+    If ``OBSIDIAN_WEBHOOK_SECRET`` is configured, requests must include
+    a matching ``secret`` query parameter. When no secret is configured,
+    the endpoint falls back to JWT auth so it is never left wide open.
+
+Webhook payload format:
+    POST /webhook/obsidian?secret=<secret>
+    {
+        "event": "create" | "update" | "delete",
+        "path": "/vault/note.md",
+        "content": "...",        # omitted on delete
+        "mtime": 1234567890      # optional, Unix timestamp
+    }
+"""
+
+import logging
+from datetime import datetime, timezone
 
 from config import settings
 from database import get_db
-from models.sync_state import SyncState
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, field_validator
 from services.auth_service import get_current_user
+from services.webhook_sync import process_webhook_event
+from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/webhook/obsidian", tags=["obsidian"])
 
 
-class ObsidianChangeIn(BaseModel):
-    note_id: int
+class ObsidianWebhookIn(BaseModel):
+    """Payload for the Obsidian webhook."""
+
+    event: str
     path: str
-    remote_mtime: int | None = None
+    content: str | None = None
+    mtime: int | None = None
+
+    @field_validator("event")
+    @classmethod
+    def event_must_be_valid(cls, v: str) -> str:
+        v = v.lower().strip()
+        if v not in ("create", "update", "delete"):
+            raise ValueError("event must be 'create', 'update', or 'delete'")
+        return v
+
+
+def _verify_access(secret: str) -> None:
+    """Verify webhook access via shared secret or JWT fallback."""
+    if settings.obsidian_webhook_secret:
+        if secret != settings.obsidian_webhook_secret:
+            raise HTTPException(status_code=401, detail="Invalid webhook secret")
+    elif settings.auth_password:
+        raise HTTPException(
+            status_code=401,
+            detail="Webhook secret not configured. Set OBSIDIAN_WEBHOOK_SECRET or provide JWT.",
+        )
 
 
 @router.post("")
 def obsidian_webhook(
-    payload: ObsidianChangeIn,
-    secret: str = "",
+    payload: ObsidianWebhookIn,
+    secret: str = Query(default=""),
     db: Session = Depends(get_db),
-    _user_id: int = Depends(get_current_user),
 ):
     """Receive external Obsidian change notifications.
 
-    This is the foundation for bidirectional WebSocket/push sync.
-    It records the remote mtime and flags potential conflicts.
+    Processes create/update/delete events and synchronizes the note
+    in the database. Conflict detection is recorded in SyncState but
+    conflict resolution is handled separately (issue #5).
+    """
+    _verify_access(secret)
 
-    Authentication: if ``OBSIDIAN_WEBHOOK_SECRET`` is configured, the
-    request must include a matching ``secret`` query parameter. When no
-    secret is configured, the endpoint falls back to JWT auth so it is
-    never left wide open.
+    try:
+        result = process_webhook_event(
+            db,
+            event=payload.event,
+            path=payload.path,
+            content=payload.content,
+            mtime=payload.mtime,
+            source="obsidian",
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("[webhook] Error processing event: %s", e)
+        raise HTTPException(status_code=500, detail="Internal sync error")
+
+
+@router.post("/legacy")
+def obsidian_webhook_legacy(
+    payload: dict,
+    secret: str = Query(default=""),
+    db: Session = Depends(get_db),
+    _user_id: int = Depends(get_current_user),
+):
+    """Legacy webhook endpoint for backward compatibility.
+
+    Accepts the old payload format (note_id, path, remote_mtime) and
+    only records sync state without processing content.
     """
     if settings.obsidian_webhook_secret:
         if secret != settings.obsidian_webhook_secret:
             raise HTTPException(status_code=401, detail="Invalid webhook secret")
 
-    sync = db.query(SyncState).filter(SyncState.note_id == payload.note_id).first()
+    from models.sync_state import SyncState
+
+    note_id = payload.get("note_id")
+    remote_mtime = payload.get("remote_mtime")
+
+    if not note_id:
+        raise HTTPException(status_code=400, detail="note_id is required")
+
+    sync = db.query(SyncState).filter(SyncState.note_id == note_id).first()
     if not sync:
-        sync = SyncState(note_id=payload.note_id)
+        sync = SyncState(note_id=note_id)
         db.add(sync)
 
     sync.remote_mtime = (
-        datetime.fromtimestamp(payload.remote_mtime, tz=timezone.utc)
-        if payload.remote_mtime
+        datetime.fromtimestamp(remote_mtime, tz=timezone.utc)
+        if remote_mtime
         else None
     )
     sync.last_synced_at = datetime.now(timezone.utc)
 
-    # Conflict detection: compare UTC seconds since mtimes are stored
-    # without timezone in some databases.
     def _to_naive_utc(dt: datetime | None) -> datetime | None:
         if dt is None:
             return None
@@ -69,4 +147,4 @@ def obsidian_webhook(
 
     db.commit()
 
-    return {"status": "ok", "note_id": payload.note_id, "conflict": sync.conflict}
+    return {"status": "ok", "note_id": note_id, "conflict": sync.conflict}

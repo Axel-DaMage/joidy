@@ -62,6 +62,25 @@
   /* Border radius */
   --r: 4px;
   --r-sm: 2px;
+  --r-lg: 8px;
+  --r-xl: 12px;
+  --r-full: 999px;
+
+  /* z-index scale */
+  --z-base: 1;
+  --z-sticky: 10;
+  --z-dropdown: 100;
+  --z-overlay: 200;
+  --z-modal: 1000;
+  --z-toast: 2000;
+  --z-tooltip: 9999;
+
+  /* Semantic colors */
+  --warning: #f59e0b;
+  --today: #fbbf24;
+  --target: #10b981;
+  --info: #06b6d4;
+  --link: #3b82f6;
 }
 
 [data-theme='light'] {
@@ -157,7 +176,7 @@ body.zen-mode-active .app-shell {
   border-bottom: 1px solid var(--border);
   background: var(--surface);
   gap: var(--s4);
-  z-index: 10;
+  z-index: var(--z-sticky);
 }
 
 .app-sidebar {
@@ -235,7 +254,7 @@ body.zen-mode-active .app-shell {
   opacity: 0;
   transform: translateX(-4px);
   transition: opacity var(--t-normal), transform var(--t-normal);
-  z-index: 100;
+  z-index: var(--z-dropdown);
   color: var(--text-primary);
   font-family: var(--font-mono);
 }
@@ -428,7 +447,7 @@ textarea.input {
   position: sticky;
   top: 0;
   background: var(--bg);
-  z-index: 1;
+  z-index: var(--z-base);
 }
 
 .section-header h3,
@@ -465,7 +484,7 @@ textarea.input {
   color: var(--xp);
   pointer-events: none;
   animation: xp-float 2s ease-out forwards;
-  z-index: 9999;
+  z-index: var(--z-tooltip);
   white-space: nowrap;
 }
 
@@ -594,7 +613,7 @@ textarea.input {
   cursor: col-resize;
   transition: border-color var(--t-fast), background var(--t-fast);
   position: relative;
-  z-index: 10;
+  z-index: var(--z-sticky);
 }
 .resize-handle:hover,
 .dragging .resize-handle {

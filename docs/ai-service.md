@@ -7,7 +7,7 @@ framework: FastAPI
 port: 8002
 language: Python 3.12
 ai_provider: Google Gemini
-vector_store: sqlite-vec
+vector_store: pgvector
 ```
 
 ---
@@ -149,7 +149,7 @@ ai-service/
 
 **Proceso:**
 1. Generar embedding del query
-2. Buscar en sqlite-vec notas similares
+2. Buscar en pgvector notas similares
 3. Ordenar por score
 4. Devolver top_k resultados
 
@@ -355,7 +355,7 @@ engine = create_engine(
 ```python
 # ai-service/config.py
 gemini_api_key: str = ""  # Required for AI features
-database_url: str = "sqlite:////data/db/joidy.db"
+database_url: str = "postgresql://joidy:joidy@postgres:5432/joidy"
 app_env: str = "development"
 ```
 
@@ -370,7 +370,7 @@ ai-service:
     - ./data/db:/data/db
   environment:
     - GEMINI_API_KEY=${GEMINI_API_KEY}
-    - DATABASE_URL=sqlite:////data/db/joidy.db
+    - DATABASE_URL=postgresql://joidy:joidy@postgres:5432/joidy
     - APP_ENV=${APP_ENV:-development}
   depends_on:
     api:

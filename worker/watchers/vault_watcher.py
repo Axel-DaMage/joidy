@@ -257,6 +257,7 @@ async def _consume_vault_events(
     client: httpx.AsyncClient,
     token: str,
 ):
+    _in_flight: set[asyncio.Task] = set()
     while True:
         try:
             first_event = await queue.get()
@@ -280,10 +281,22 @@ async def _consume_vault_events(
                 except Exception:
                     logger.exception("[vault] Failed to process %s (%s)", path, change_type)
 
-            await asyncio.gather(*(process(path, change_type) for path, change_type in pending.items()), return_exceptions=True)
+            batch_tasks = [
+                asyncio.ensure_future(process(path, change_type))
+                for path, change_type in pending.items()
+            ]
+            _in_flight.update(batch_tasks)
+            await asyncio.gather(*batch_tasks, return_exceptions=True)
+            _in_flight.difference_update(batch_tasks)
         except TimeoutError:
             continue
         except asyncio.CancelledError:
+            # Cancel and await any in-flight process tasks before exiting
+            for task in _in_flight:
+                task.cancel()
+            if _in_flight:
+                await asyncio.gather(*_in_flight, return_exceptions=True)
+                logger.info("[vault] Cancelled %d in-flight task(s) on shutdown", len(_in_flight))
             # Drain remaining queue items before exiting
             drained = 0
             while not queue.empty():

@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 @patch("config.settings.obsidian_webhook_secret", "super-secret")
 def test_obsidian_webhook_requires_secret(client):
-    resp = client.post("/webhook/obsidian?secret=wrong", json={
+    resp = client.post("/webhook/obsidian/legacy?secret=wrong", json={
         "note_id": 1,
         "path": "/vault/note.md",
         "remote_mtime": 1_700_000_000,
@@ -18,7 +18,7 @@ from models.sync_state import SyncState
 
 
 def test_obsidian_webhook_unconfigured_accepts_any(client, db_session):
-    resp = client.post("/webhook/obsidian", json={
+    resp = client.post("/webhook/obsidian/legacy", json={
         "note_id": 1,
         "path": "/vault/note.md",
         "remote_mtime": 1_700_000_000,
@@ -40,7 +40,7 @@ def test_obsidian_webhook_detects_conflict(client, db_session):
     db_session.add(sync)
     db_session.commit()
 
-    resp = client.post("/webhook/obsidian", json={
+    resp = client.post("/webhook/obsidian/legacy", json={
         "note_id": 2,
         "path": "/vault/note.md",
         "remote_mtime": 1_700_000_000,
@@ -61,7 +61,7 @@ def test_obsidian_webhook_no_conflict_when_mtimes_match(client, db_session):
     db_session.add(sync)
     db_session.commit()
 
-    resp = client.post("/webhook/obsidian", json={
+    resp = client.post("/webhook/obsidian/legacy", json={
         "note_id": 3,
         "path": "/vault/note.md",
         "remote_mtime": mtime,
@@ -71,3 +71,121 @@ def test_obsidian_webhook_no_conflict_when_mtimes_match(client, db_session):
 
     updated = db_session.query(SyncState).filter_by(note_id=3).first()
     assert updated.conflict is False
+
+
+# ── New webhook endpoint tests (create/update/delete) ──────────────────────────
+
+
+@patch("config.settings.auth_password", "")
+def test_webhook_create_note(client, db_session):
+    resp = client.post("/webhook/obsidian", json={
+        "event": "create",
+        "path": "/vault/webhook-test.md",
+        "content": "---\ntitle: Webhook Test\ntags: [python]\n---\n# Hello",
+        "mtime": 1_700_000_000,
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "ok"
+    assert data["action"] == "created"
+    assert data["note_id"] is not None
+
+    from models.note import Note
+    note = db_session.query(Note).filter_by(source_path="/vault/webhook-test.md").first()
+    assert note is not None
+    assert note.title == "Webhook Test"
+    assert note.source == "obsidian"
+
+
+@patch("config.settings.auth_password", "")
+def test_webhook_update_note(client, db_session):
+    # First create
+    client.post("/webhook/obsidian", json={
+        "event": "create",
+        "path": "/vault/update-test.md",
+        "content": "original",
+    })
+    # Then update
+    resp = client.post("/webhook/obsidian", json={
+        "event": "update",
+        "path": "/vault/update-test.md",
+        "content": "updated content",
+    })
+    assert resp.status_code == 200
+    assert resp.json()["action"] == "updated"
+
+    from models.note import Note
+    note = db_session.query(Note).filter_by(source_path="/vault/update-test.md").first()
+    assert note.content == "updated content"
+
+
+@patch("config.settings.auth_password", "")
+def test_webhook_delete_note(client, db_session):
+    # First create
+    create_resp = client.post("/webhook/obsidian", json={
+        "event": "create",
+        "path": "/vault/delete-test.md",
+        "content": "to be deleted",
+    })
+    note_id = create_resp.json()["note_id"]
+
+    # Then delete
+    resp = client.post("/webhook/obsidian", json={
+        "event": "delete",
+        "path": "/vault/delete-test.md",
+    })
+    assert resp.status_code == 200
+    assert resp.json()["action"] == "deleted"
+
+    from models.note import Note
+    note = db_session.query(Note).filter_by(id=note_id).first()
+    assert note is None
+
+
+@patch("config.settings.auth_password", "")
+def test_webhook_delete_unknown_path(client, db_session):
+    resp = client.post("/webhook/obsidian", json={
+        "event": "delete",
+        "path": "/vault/nonexistent.md",
+    })
+    assert resp.status_code == 200
+    assert resp.json()["action"] == "noop"
+
+
+def test_webhook_invalid_event(client, db_session):
+    resp = client.post("/webhook/obsidian", json={
+        "event": "invalid",
+        "path": "/vault/note.md",
+        "content": "test",
+    })
+    assert resp.status_code == 422
+
+
+@patch("config.settings.auth_password", "")
+def test_webhook_create_missing_content(client, db_session):
+    resp = client.post("/webhook/obsidian", json={
+        "event": "create",
+        "path": "/vault/note.md",
+    })
+    assert resp.status_code == 400
+
+
+@patch("config.settings.obsidian_webhook_secret", "test-secret")
+def test_webhook_new_endpoint_requires_secret(client, db_session):
+    resp = client.post("/webhook/obsidian", json={
+        "event": "create",
+        "path": "/vault/secret-test.md",
+        "content": "test",
+    })
+    assert resp.status_code == 401
+
+
+@patch("config.settings.obsidian_webhook_secret", "test-secret")
+def test_webhook_new_endpoint_with_valid_secret(client, db_session):
+    resp = client.post("/webhook/obsidian?secret=test-secret", json={
+        "event": "create",
+        "path": "/vault/valid-secret.md",
+        "content": "test content",
+    })
+    assert resp.status_code == 200
+    assert resp.json()["action"] == "created"

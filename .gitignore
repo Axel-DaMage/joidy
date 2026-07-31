@@ -37,6 +37,12 @@ Thumbs.db
 # Playwright artifacts
 .playwright-mcp/
 
+# Scratch / one-off scripts
+scratch/
+
+# Root-level screenshots (keep images out of the repo root)
+/*.png
+
 # Editor
 .vscode/
 .idea/

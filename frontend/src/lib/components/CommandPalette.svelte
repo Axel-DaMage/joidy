@@ -152,7 +152,7 @@
     inset: 0;
     background: rgba(0,0,0,0.5);
     backdrop-filter: blur(2px);
-    z-index: 1000;
+    z-index: var(--z-modal);
     display: flex;
     align-items: flex-start;
     justify-content: center;

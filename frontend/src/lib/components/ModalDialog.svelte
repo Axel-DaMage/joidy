@@ -1,22 +1,34 @@
 <script lang="ts">
   import { fade, scale } from 'svelte/transition';
-  import { uiModal, closeModal } from '$lib/stores/ui';
   import { X } from 'lucide-svelte';
   import { focusTrap } from '$lib/actions/focusTrap';
 
-  export let title = '';
-  export let size: 'sm' | 'md' | 'lg' = 'md';
+  let {
+    open = false,
+    title = '',
+    size = 'md',
+    onClose,
+    children,
+    footer
+  }: {
+    open?: boolean;
+    title?: string;
+    size?: 'sm' | 'md' | 'lg';
+    onClose?: () => void;
+    children?: import('svelte').Snippet;
+    footer?: import('svelte').Snippet;
+  } = $props();
 
   function handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape') {
-      closeModal();
+    if (e.key === 'Escape' && onClose) {
+      onClose();
     }
   }
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
 
-{#if $uiModal.isOpen}
+{#if open}
   <div
     class="modal-overlay"
     role="dialog"
@@ -24,8 +36,8 @@
     aria-label={title || 'Diálogo'}
     tabindex="-1"
     transition:fade={{ duration: 150 }}
-    onclick={(e) => e.target === e.currentTarget && closeModal()}
-    onkeydown={(e) => e.key === 'Escape' && closeModal()}
+    onclick={(e) => e.target === e.currentTarget && onClose?.()}
+    onkeydown={(e) => e.key === 'Escape' && onClose?.()}
   >
     <div
       class="modal modal-{size}"
@@ -34,16 +46,16 @@
     >
       <div class="modal-header">
         <h3 class="modal-title">{title}</h3>
-        <button class="modal-close" onclick={closeModal}>
+        <button class="modal-close" onclick={() => onClose?.()}>
           <X size={18} />
         </button>
       </div>
       <div class="modal-body">
-        <slot />
+        {@render children?.()}
       </div>
-      {#if $$slots.footer}
+      {#if footer}
         <div class="modal-footer">
-          <slot name="footer" />
+          {@render footer()}
         </div>
       {/if}
     </div>

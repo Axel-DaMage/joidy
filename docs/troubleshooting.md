@@ -443,7 +443,7 @@ make logs-ai
 
 **Síntoma:**
 ```
-sqlite3.OperationalError: no such table: table_name
+psycopg2.errors.UndefinedTable: relation "table_name" does not exist
 ```
 
 **Causa:** Migraciones no aplicadas o base corrupta.
@@ -466,7 +466,7 @@ make dev-reset
 
 **Síntoma:**
 ```
-sqlite3.IntegrityError: FOREIGN KEY constraint failed
+psycopg2.errors.ForeignKeyViolation: insert or update on table "..." violates foreign key constraint
 ```
 
 **Causa:** Violación de foreign key.
@@ -481,19 +481,19 @@ El código usa CASCADE deletes. Esto no debería ocurrir. Reportar como bug con 
 
 **Síntoma:**
 ```
-database disk image is malformed
+ERROR: data page checksum verification failed
 ```
 
 **Solución:**
 
-1. Backup:
+1. Backup del volumen:
    ```bash
-   cp data/db/joidy.db data/db/joidy.db.backup
+   docker compose exec postgres pg_dump -U joidy joidy > backup.sql
    ```
 
 2. Eliminar y recrear:
    ```bash
-   rm data/db/joidy.db
+   docker compose down -v
    make dev-reset
    ```
 

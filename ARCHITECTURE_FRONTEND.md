@@ -24,8 +24,6 @@ los componentes, la capa de API y el flujo de datos de `frontend/`.
 | `/skills` | `skills/+page.svelte` | Árbol de habilidades basado en tags. |
 | `/graph` | `graph/+page.svelte` | Grafo de conocimiento (modo dev). |
 | `/ai` | `ai/+page.svelte` | Asistente de IA (modo dev). |
-| `/integraciones` | `integraciones/+page.svelte` | Estado de integraciones (GitHub, Spotify, etc.). |
-| `/spotify`, `/strava`, `/gmail`, `/contactos` | `*/+page.svelte` | Placeholders para integraciones futuras. |
 
 ## Stores (`src/lib/stores/`)
 
@@ -90,7 +88,7 @@ funciones de carga/acción. Cualquier componente puede suscribirse con `$store`.
 - `Widget.svelte` — contenedor de widgets drag/drop.
 - `Plant.svelte`, `CityModule.svelte`, `GalaxyModule.svelte`, `MountainModule.svelte`, `OrbitModule.svelte` — visualizadores de la planta/estado.
 - `ActivityProgress.svelte`, `XPBar.svelte`, `ProgressBar.svelte` — barras de progreso.
-- `GithubWidget.svelte`, `PomodoroWidget.svelte`, `WeatherWidget.svelte`, `TimeWidget.svelte`, `ScientificCalculator.svelte` — widgets específicos.
+- `GithubWidget.svelte`, `PomodoroWidget.svelte`, `WeatherWidget.svelte`, `TimeWidget.svelte` — widgets específicos.
 
 ### Navegación y config
 
