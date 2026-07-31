@@ -193,9 +193,25 @@ def _serialize_goal(goal: Goal, db: Session, precalculated_progress: float | Non
 
 
 @router.get("/")
-def list_goals(db: Session = Depends(get_db)):
+def list_goals(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+):
+    if skip < 0:
+        skip = 0
+    if limit < 1:
+        limit = 1
+    if limit > 1000:
+        limit = 1000
     evaluate_active_goals(db)
-    goals = db.query(Goal).order_by(Goal.is_completed, Goal.created_at.desc()).all()
+    goals = (
+        db.query(Goal)
+        .order_by(Goal.is_completed, Goal.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
     progress_map = get_bulk_goal_progress(goals, db)
     return [_serialize_goal(g, db, precalculated_progress=progress_map.get(g.id)) for g in goals]
 
