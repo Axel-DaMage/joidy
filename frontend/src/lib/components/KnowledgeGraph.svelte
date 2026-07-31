@@ -551,7 +551,7 @@
     display: flex;
     flex-direction: column;
     gap: 6px;
-    z-index: 1000;
+    z-index: var(--z-modal);
     pointer-events: auto;
     background: color-mix(in srgb, var(--elevated) 92%, transparent);
     padding: 10px;

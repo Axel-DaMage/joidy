@@ -24,6 +24,7 @@
   import { initPushNotifications } from '$lib/push';
   import { logger } from '$lib/utils/logger';
   import { onboarding } from '$lib/stores/onboarding';
+  import { locale as localeStore } from '$lib/stores/locale';
   import OnboardingTour from '$lib/components/OnboardingTour.svelte';
   import { achievements } from '$lib/stores/achievements';
   import { initConnectionStore } from '$lib/stores/connection';
@@ -58,14 +59,14 @@
   let lastFooterStatsFetch = 0;
   let lastStatsLoad = 0;
 
-  $: currentTime = now.toLocaleTimeString('es-CL', {
+  $: currentTime = now.toLocaleTimeString($localeStore, {
     hour: $use24HourClock ? '2-digit' : 'numeric',
     minute: '2-digit',
     second: '2-digit',
     hour12: !$use24HourClock,
   });
 
-  $: currentDate = now.toLocaleDateString('es-CL', {
+  $: currentDate = now.toLocaleDateString($localeStore, {
     weekday: 'short',
     day: '2-digit',
     month: 'short'
@@ -95,7 +96,7 @@
     const cleanupTheme = initTheme();
     initPomodoroSettings();
     initFocusModeConfig();
-    initKeyboardNavigation();
+    const cleanupKeyboard = initKeyboardNavigation();
     initPushNotifications();
     onboarding.init();
     achievements.init();
@@ -401,6 +402,8 @@
       if (wsReconnectTimeout) clearTimeout(wsReconnectTimeout);
       if (pillTimeout) clearTimeout(pillTimeout);
       if (cleanupTheme) cleanupTheme();
+      if (cleanupKeyboard) cleanupKeyboard();
+      if (cleanupConnection) cleanupConnection();
       if (cleanupOfflineSync) cleanupOfflineSync();
       syncStore.stopPolling();
     };

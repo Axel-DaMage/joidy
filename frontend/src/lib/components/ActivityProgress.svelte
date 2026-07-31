@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { api } from '$lib/api';
+  import { getLocale } from '$lib/stores/locale';
 
   let weeklyData: { date: string; notes_created: number; xp_events: number }[] = [];
   let xpEventsWeek = 0;
@@ -77,7 +78,7 @@
         <div
           class="day-cell"
           class:active={day.active}
-          title={day.date.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'short' })}
+          title={day.date.toLocaleDateString(getLocale(), { weekday: 'long', day: 'numeric', month: 'short' })}
         >
           <span class="day-label">{day.label}</span>
         </div>

@@ -9,6 +9,15 @@
   let usage = $state<{ ai_enabled: boolean; estimated_cost_usd: number } | null>(null);
   let loadingUsage = $state(true);
 
+  // Lazy-load DeadLetterQueue — only shown in dev mode, so defer the chunk
+  // until the user actually enables it (#347).
+  let DeadLetterQueue: typeof import('$lib/components/DeadLetterQueue.svelte').default | null = null;
+  $effect(() => {
+    if ($devMode && !DeadLetterQueue) {
+      import('$lib/components/DeadLetterQueue.svelte').then(m => DeadLetterQueue = m.default);
+    }
+  });
+
   onMount(async () => {
     try {
       usage = await api.ai.usage();
@@ -32,6 +41,10 @@
         </span>
       {/if}
     </div>
+
+    {#if $devMode && DeadLetterQueue}
+      <svelte:component this={DeadLetterQueue} />
+    {/if}
   </div>
 
   <div class="ai-content">

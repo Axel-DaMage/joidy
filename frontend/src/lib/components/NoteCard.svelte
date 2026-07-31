@@ -9,6 +9,7 @@
   import type { Note } from '$lib/api';
   import DynamicIcon from './DynamicIcon.svelte';
   import { extractFrontmatter, getFileIcon } from '$lib/utils/fileTree';
+  import { getLocale } from '$lib/stores/locale';
 
   export let note: Note;
   export let active = false;
@@ -26,7 +27,7 @@
     if (diffDays <= 0) return 'hoy';   // ≤0 handles timezone-naive UTC strings
     if (diffDays === 1) return 'ayer';
     if (diffDays < 7) return `hace ${diffDays} días`;
-    return d.toLocaleDateString('es', { day: 'numeric', month: 'short' });
+    return d.toLocaleDateString(getLocale(), { day: 'numeric', month: 'short' });
   }
 
   function getFileMeta() {
@@ -57,13 +58,15 @@
   $: meta = getFileMeta();
 </script>
 
-<!-- svelte-ignore a11y-click-events-have-key-events -->
-<!-- svelte-ignore a11y-no-static-element-interactions -->
 <div
   class="note-card"
   class:active
   class:bulk-selected={selected}
+  role="button"
+  tabindex="0"
+  aria-label={note.title}
   onclick={() => bulkMode ? dispatch('toggleSelect', note.id) : dispatch('select', note)}
+  onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), bulkMode ? dispatch('toggleSelect', note.id) : dispatch('select', note))}
 >
   <div class="note-header">
     {#if bulkMode}

@@ -7,6 +7,7 @@
   import GoalFilters from '$lib/components/GoalFilters.svelte';
   import GoalList from '$lib/components/GoalList.svelte';
   import { use24HourClock } from '$lib/stores/settings';
+  import { getLocale } from '$lib/stores/locale';
   import { applyGamificationResult, showXPGain } from '$lib/stores/gamification';
   import { getCachedData, setCachedData } from '$lib/utils/userSettings';
   import { logger } from '$lib/utils/logger';
@@ -649,7 +650,7 @@
       return `${String(safeHour).padStart(2, '0')}:00`;
     }
     const d = new Date(2020, 0, 1, safeHour, 0, 0, 0);
-    return d.toLocaleTimeString('es-CL', {
+    return d.toLocaleTimeString(getLocale(), {
       hour: 'numeric',
       minute: '2-digit',
       hour12: true,

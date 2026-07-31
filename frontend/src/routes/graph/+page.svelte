@@ -1,10 +1,17 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import KnowledgeGraphForce from '$lib/components/KnowledgeGraphForce.svelte';
   import { graphData, graphLoading, loadGraph, selectedTag } from '$lib/stores/graph';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
   import { devMode } from '$lib/stores/settings';
   import type { GraphNode, GraphEdge } from '$lib/api';
+
+  // Lazy-load the heavy graph component (d3 + force-graph, 1300+ lines) so it
+  // is split into a separate chunk and only downloaded when the user actually
+  // opens the graph page in dev mode (#347).
+  let KnowledgeGraphForce: typeof import('$lib/components/KnowledgeGraphForce.svelte').default | null = null;
+  $: if ($devMode && !KnowledgeGraphForce) {
+    import('$lib/components/KnowledgeGraphForce.svelte').then(m => KnowledgeGraphForce = m.default);
+  }
 
   let containerEl: HTMLDivElement;
   let w = 800, h = 600;
@@ -60,8 +67,10 @@
       <div class="loading-state caption">
         Sin datos aún. Crea notas y agrega tags para ver el grafo.
       </div>
+    {:else if KnowledgeGraphForce}
+      <svelte:component this={KnowledgeGraphForce} width={w} height={h} focusId={$selectedTag} />
     {:else}
-      <KnowledgeGraphForce width={w} height={h} focusId={$selectedTag} />
+      <div class="loading-state caption">Cargando grafo...</div>
     {/if}
   </div>
 

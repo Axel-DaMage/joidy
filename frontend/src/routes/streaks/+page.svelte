@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { scale } from 'svelte/transition';
   import { X, Snowflake, ChevronRight } from 'lucide-svelte';
     import { Shuffle, CheckCheck } from 'lucide-svelte';
@@ -11,6 +11,7 @@
   import { api, type PersonalStreak, type StreakStats } from '$lib/api';
   import { loadUserSettings, patchUserSettings, getCachedData, setCachedData } from '$lib/utils/userSettings';
   import { captureSnapshot, getSnapshot } from '$lib/stores/pageSnapshots';
+  import { locale as localeStore } from '$lib/stores/locale';
   import { openShare } from '$lib/stores/shareAchievement';
   import { logger } from '$lib/utils/logger';
   import { Share2 } from 'lucide-svelte';
@@ -108,6 +109,8 @@
 
     window.addEventListener('beforeunload', handleBeforeUnload);
   });
+
+  onDestroy(() => window.removeEventListener('beforeunload', handleBeforeUnload));
 
   function handleBeforeUnload() {
     const scrollEl = document.getElementById('streaks-list');
@@ -442,18 +445,18 @@
                 {#if selected.start_date}
                   <div class="date-item">
                     <span class="date-label">Inicio</span>
-                    <span class="date-val mono">{new Date(selected.start_date).toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                    <span class="date-val mono">{new Date(selected.start_date).toLocaleDateString($localeStore, { day: 'numeric', month: 'short', year: 'numeric' })}</span>
                   </div>
                 {/if}
                 {#if selected.target_date}
                   <div class="date-item">
                     <span class="date-label">Objetivo</span>
-                    <span class="date-val mono">{new Date(selected.target_date).toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                    <span class="date-val mono">{new Date(selected.target_date).toLocaleDateString($localeStore, { day: 'numeric', month: 'short', year: 'numeric' })}</span>
                   </div>
                 {/if}
                 <div class="date-item">
                   <span class="date-label">Creada</span>
-                  <span class="date-val mono">{new Date(selected.created_at).toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                  <span class="date-val mono">{new Date(selected.created_at).toLocaleDateString($localeStore, { day: 'numeric', month: 'short', year: 'numeric' })}</span>
                 </div>
               </div>
 
