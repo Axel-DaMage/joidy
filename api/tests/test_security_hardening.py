@@ -180,6 +180,59 @@ def test_debug_available_in_development(client: TestClient):
 
 
 # ---------------------------------------------------------------------------
+# #326 — CORS must not use wildcard with credentials
+# ---------------------------------------------------------------------------
+
+def test_cors_dev_origins_are_concrete_not_wildcard():
+    """Development CORS origins must be concrete localhost URLs, not '*'."""
+    with patch.object(main_module.settings, "cors_allowed_origins", ""), \
+         patch.object(main_module.settings, "app_env", "development"):
+        origins = main_module._get_cors_origins()
+    assert "*" not in origins, (
+        "Development CORS origins must not include '*' (issue #326)"
+    )
+    assert "http://localhost:3000" in origins
+    assert "http://127.0.0.1:3000" in origins
+
+
+def test_cors_production_no_wildcard_with_credentials():
+    """In production, allow_credentials must never combine with '*'."""
+    with patch.object(main_module.settings, "app_env", "production"), \
+         patch.object(main_module.settings, "cors_allowed_origins", "https://joidy.app"):
+        origins = main_module._get_cors_origins()
+    assert "*" not in origins
+    assert origins == ["https://joidy.app"]
+
+
+def test_cors_no_safety_middleware_class():
+    """CorsSafetyMiddleware must have been removed (issue #326)."""
+    assert not hasattr(main_module, "CorsSafetyMiddleware"), (
+        "CorsSafetyMiddleware was removed because it forced "
+        "Access-Control-Allow-Origin: * on all responses."
+    )
+
+
+def test_cors_headers_present_on_error_response(client: TestClient):
+    """CORS headers must still be present on responses even after removing
+    the custom safety middleware — Starlette's CORSMiddleware handles this.
+
+    The middleware is initialised at module load with the default development
+    origins (localhost:3000), so we send a request from that origin.
+    """
+    resp = client.get("/health", headers={"Origin": "http://localhost:3000"})
+    assert resp.status_code == 200
+    assert resp.headers.get("access-control-allow-origin") == "http://localhost:3000"
+
+
+def test_cors_rejects_unlisted_origin(client: TestClient):
+    """An origin not in the allowlist must not get an Allow-Origin header."""
+    resp = client.get("/health", headers={"Origin": "http://evil.example.com"})
+    allow_origin = resp.headers.get("access-control-allow-origin", "")
+    assert "evil.example.com" not in allow_origin
+    assert "*" not in allow_origin
+
+
+# ---------------------------------------------------------------------------
 # #358 — ai-service /providers must not leak keys
 # ---------------------------------------------------------------------------
 

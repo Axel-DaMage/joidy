@@ -86,38 +86,6 @@ def _validate_secret_key() -> None:
         )
 
 
-class CorsSafetyMiddleware(BaseHTTPMiddleware):
-    """Ensure CORS headers on ALL responses, even during errors.
-
-    Respects the configured CORS origins instead of always using ``*``.
-    In production with specific origins, only the request's Origin is
-    echoed back if it matches the allowlist.
-    """
-
-    async def dispatch(self, request: Request, call_next):
-        try:
-            response = await call_next(request)
-        except Exception:
-            logger.exception("Unhandled exception in request: %s %s", request.method, request.url.path)
-            from starlette.responses import JSONResponse
-            response = JSONResponse(
-                status_code=500,
-                content={"detail": "Internal server error"},
-            )
-        # Only add CORS headers if CORSMiddleware hasn't already set them
-        # (CORSMiddleware runs first in the stack, but may skip on error paths).
-        if "Access-Control-Allow-Origin" not in response.headers:
-            if "*" in _cors_origins:
-                response.headers["Access-Control-Allow-Origin"] = "*"
-            else:
-                request_origin = request.headers.get("origin")
-                if request_origin and request_origin in _cors_origins:
-                    response.headers["Access-Control-Allow-Origin"] = request_origin
-        response.headers.setdefault("Access-Control-Allow-Methods", "*")
-        response.headers.setdefault("Access-Control-Allow-Headers", "*")
-        return response
-
-
 app = FastAPI(
     title="Joidy API",
     version="0.1.0",
@@ -154,15 +122,29 @@ app.add_middleware(MetricsMiddleware)
 app.add_middleware(RateLimitMiddleware)
 
 def _get_cors_origins() -> list[str]:
-    """Return allowed CORS origins based on environment."""
+    """Return allowed CORS origins based on environment.
+
+    Never returns ``["*"]``: a wildcard origin combined with
+    ``allow_credentials=True`` violates the CORS spec and lets any website
+    make credentialed requests. In development we list the concrete
+    localhost origins the frontend uses instead. Set
+    ``CORS_ALLOWED_ORIGINS`` explicitly for non-default ports or custom
+    hosts. See issue #326.
+    """
     if settings.cors_allowed_origins:
         return [o.strip() for o in settings.cors_allowed_origins.split(",") if o.strip()]
     if settings.app_env == "production":
         return []
-    return ["*"]  # Development fallback: allow all
+    # Development fallback: concrete localhost origins (default frontend port).
+    return ["http://localhost:3000", "http://127.0.0.1:3000"]
 
 
 _cors_origins = _get_cors_origins()
+if "*" in _cors_origins:
+    logger.warning(
+        "[api] CORS allow_origins contains '*' — never combine with "
+        "allow_credentials=True (spec violation). See issue #326."
+    )
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
@@ -170,7 +152,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.add_middleware(CorsSafetyMiddleware)
 app.add_middleware(RequestIdMiddleware)
 
 app.include_router(notes.router, dependencies=[Depends(get_current_user)])
