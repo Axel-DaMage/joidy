@@ -118,7 +118,7 @@ Two concurrent asyncio tasks: `watch_vault()` (watches `/vault/*.md`, 2s debounc
 - Ruff config exists in `pyproject.toml` + `.pre-commit-config.yaml`, but pre-commit is not installed by default and CI does not run ruff. Run `ruff check` / `ruff format` manually if desired.
 - CI: `compileall`, `unittest`, `npm run check`, Docker build
 
-## Known Issues (from TODO.md / code audit)
+## Known Issues (from code audit)
 1. CORS allows `*` in non-production — needs config
 2. Auth JWT is now enforced on all data/mutation endpoints (except `/auth/*`, `/config`, and `/ws`)
 3. Embedding retry has edge cases (`EmbeddingFailure` table)
