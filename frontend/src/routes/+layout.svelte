@@ -9,7 +9,6 @@
   import SettingsPanel from '$lib/components/SettingsPanel.svelte';
   import CommandPalette from '$lib/components/CommandPalette.svelte';
   import FocusMode from '$lib/components/FocusMode.svelte';
-  import { initFocusModeConfig } from '$lib/stores/focusMode';
   import Toast from '$lib/components/Toast.svelte';
   import Login from '$lib/components/Login.svelte';
   import SetupWizard from '$lib/components/SetupWizard.svelte';
