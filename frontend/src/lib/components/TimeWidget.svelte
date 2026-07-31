@@ -118,7 +118,7 @@
             onkeydown={(e) => e.key === 'Enter' && applyTzInput()}
             autofocus
           />
-          <button class="tz-close-ui" onclick={() => showTzPicker = false} title="Cerrar">✕</button>
+          <button class="tz-close-ui" onclick={() => showTzPicker = false} title="Cerrar" aria-label="Cerrar">✕</button>
         </div>
         {#if tzError}<span class="tz-error">{tzError}</span>{/if}
         <div class="tz-presets">

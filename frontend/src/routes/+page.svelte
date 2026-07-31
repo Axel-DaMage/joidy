@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { dev } from '$app/environment';
   import { fly } from 'svelte/transition';
@@ -12,11 +12,15 @@
   import XPBar          from '$lib/components/XPBar.svelte';
   import NoteCard       from '$lib/components/NoteCard.svelte';
   import PomodoroWidget from '$lib/components/PomodoroWidget.svelte';
+  import { Target } from 'lucide-svelte';
+  import { startFocusMode } from '$lib/stores/focusMode';
   import TimeWidget from '$lib/components/TimeWidget.svelte';
   import WeatherWidget from '$lib/components/WeatherWidget.svelte';
   import Widget         from '$lib/components/Widget.svelte';
   import GithubWidget from '$lib/components/GithubWidget.svelte';
-  import { totalXP, currentStreak, lastActivity, nextStageXP } from '$lib/stores/gamification';
+  import { totalXP, currentStreak, lastActivity, nextStageXP, globalLevel } from '$lib/stores/gamification';
+  import { openShare } from '$lib/stores/shareAchievement';
+  import { Share2 } from 'lucide-svelte';
   import ActivityProgress from '$lib/components/ActivityProgress.svelte';
   import { notes, loadNotes, notesLoadedOnce } from '$lib/stores/notes';
   import { dashboardLayout } from '$lib/stores/layout';
@@ -228,8 +232,6 @@
     window.addEventListener('beforeunload', handleBeforeUnload);
   });
 
-  onDestroy(() => window.removeEventListener('beforeunload', handleBeforeUnload));
-
   function handleBeforeUnload() {
     const scrollEls = document.querySelectorAll('[id^="panel-"]');
     captureSnapshot('/', { moduleIdx, slideDir }, 
@@ -272,134 +274,157 @@
 
   // Resizable panel synced with notes
   let panelWidth = 260;
+
+  // Level milestones that warrant a shareable achievement card.
+  const LEVEL_MILESTONES = [10, 25, 50, 75, 100];
+  $: isLevelMilestone = LEVEL_MILESTONES.includes($globalLevel);
+
+  function shareLevel() {
+    openShare({
+      title: 'Nivel alcanzado',
+      icon: 'TrendingUp',
+      value: `NVL ${$globalLevel}`,
+      subtitle: `${$totalXP.toLocaleString()} XP`,
+      color: 'var(--xp)',
+    });
+  }
 </script>
 
 <div class="dashboard" style="--panel-w: {panelWidth}px">
-
-  <!-- Single source of truth for widget rendering, consumed by both panels (#352).
-       The only panel-specific differences are the plant-carousel dots (left only)
-       and the recent-notes divider (right only), gated by the `panel` argument. -->
-  {#snippet renderWidget(wid: string, panel: 'left' | 'right')}
-    {#if wid === 'plant-carousel'}
-      <div class="widget-centered">
-        <!-- Module navigation -->
-        <div class="module-nav">
-          <button class="nav-arrow" onclick={prevModule} title="Anterior"><DynamicIcon name="ChevronLeft" size={14}/></button>
-          <span class="module-label mono">{MODULES[moduleIdx].label.toUpperCase()}</span>
-          <button class="nav-arrow" onclick={nextModule} title="Siguiente"><DynamicIcon name="ChevronRight" size={14}/></button>
-        </div>
-
-        <!-- Module viewport -->
-        <div class="module-viewport">
-          {#key moduleIdx}
-            <div class="module-slide" in:fly={{ x: slideDir * 40, duration: 220, opacity: 0 }}>
-              {#if MODULES[moduleIdx].id === 'planta'}
-                <Plant size={160} wilted={isWilted} />
-              {:else if MODULES[moduleIdx].id === 'galaxia'}
-                <GalaxyModule size={160} />
-              {:else if MODULES[moduleIdx].id === 'montana'}
-                <MountainModule size={160} />
-              {:else if MODULES[moduleIdx].id === 'ciudad'}
-                <CityModule size={160} />
-              {:else if MODULES[moduleIdx].id === 'orbita'}
-                <OrbitModule size={160} />
-              {/if}
-            </div>
-          {/key}
-        </div>
-
-        <!-- Dots (left panel only) -->
-        {#if panel === 'left'}
-          <div class="module-dots">
-            {#each MODULES as _, idx}
-              <button
-                class="dot" class:active={idx === moduleIdx}
-                onclick={() => { slideDir = idx > moduleIdx ? 1 : -1; moduleIdx = idx; }}
-                aria-label={MODULES[idx].label}
-              ></button>
-            {/each}
-          </div>
-        {/if}
-      </div>
-
-    {:else if wid === 'stats-xp'}
-      <div class="widget-centered">
-        <div class="stats-row">
-          <div class="stat">
-            <span class="stat-value mono">{$currentStreak}</span>
-            <span class="stat-label label">días</span>
-          </div>
-          <div class="stat-divider"></div>
-          <div class="stat">
-            {#if $nextStageXP}
-              <span class="stat-value mono">{$totalXP.toLocaleString()}</span>
-              <span class="stat-label label">xp</span>
-            {:else}
-              <span class="stat-value mono" style="color: var(--text-primary);">MAX</span>
-              <span class="stat-label label">xp</span>
-            {/if}
-          </div>
-          <div class="stat-divider"></div>
-          <div class="stat">
-            <span class="stat-value mono">{$notes.length}</span>
-            <span class="stat-label label">notas</span>
-          </div>
-        </div>
-      </div>
-
-    {:else if wid === 'activity-progress'}
-      <ActivityProgress />
-
-    {:else if wid === 'time-widget'}
-      <TimeWidget />
-
-    {:else if wid === 'weather-widget'}
-      <WeatherWidget />
-
-    {:else if wid === 'pomodoro'}
-      <PomodoroWidget />
-
-    {:else if wid === 'recent-notes'}
-      <div class="section-header">
-        <h4 style="color: {$accentColors[0]}">Notas recientes</h4>
-        <a href="/notes" class="btn btn-ghost" style="font-size:11px; padding:2px 8px;">ver todas →</a>
-      </div>
-      <div class="recent-notes">
-        {#if recentNotes.length === 0}
-          <div class="empty-state"><span class="caption">No hay notas aún.</span></div>
-        {:else}
-          {#each recentNotes as note}
-            <NoteCard {note} showTags={false} on:select={() => goto(`/notes?id=${note.id}`)} />
-          {/each}
-        {/if}
-      </div>
-      {#if panel === 'right'}<hr class="section-divider" />{/if}
-
-    {:else if wid === 'github-issues'}
-      <GithubWidget
-        accentColor={$accentColors[1]}
-        {githubConnected}
-        {githubLoading}
-        {githubIssues}
-        {githubPRs}
-        {repoColors}
-        {issueStats}
-        {prStats}
-        {ghFilter}
-        {ghType}
-        itemLimit={GH_ITEM_LIMIT}
-        onSetFilter={setGhFilter}
-        onSetType={setGhType}
-      />
-    {/if}
-  {/snippet}
 
   <!-- ── Left panel ─────────────────────────────────────────────────────────── -->
   <section class="plant-section">
 
     {#each $dashboardLayout.left as wid, i (wid)}
       <Widget id={wid}>
-        {@render renderWidget(wid, 'left')}
+
+        {#if wid === 'plant-carousel'}
+          <div class="widget-centered">
+            <!-- Module navigation -->
+            <div class="module-nav">
+              <button class="nav-arrow" onclick={prevModule} title="Anterior" aria-label="Anterior"><DynamicIcon name="ChevronLeft" size={14}/></button>
+              <span class="module-label mono">{MODULES[moduleIdx].label.toUpperCase()}</span>
+              <button class="nav-arrow" onclick={nextModule} title="Siguiente" aria-label="Siguiente"><DynamicIcon name="ChevronRight" size={14}/></button>
+            </div>
+
+            <!-- Module viewport -->
+            <div class="module-viewport">
+              {#key moduleIdx}
+                <div class="module-slide" in:fly={{ x: slideDir * 40, duration: 220, opacity: 0 }}>
+                  {#if MODULES[moduleIdx].id === 'planta'}
+                    <Plant size={160} wilted={isWilted} />
+                  {:else if MODULES[moduleIdx].id === 'galaxia'}
+                    <GalaxyModule size={160} />
+                  {:else if MODULES[moduleIdx].id === 'montana'}
+                    <MountainModule size={160} />
+                  {:else if MODULES[moduleIdx].id === 'ciudad'}
+                    <CityModule size={160} />
+                  {:else if MODULES[moduleIdx].id === 'orbita'}
+                    <OrbitModule size={160} />
+                  {/if}
+                </div>
+              {/key}
+            </div>
+
+            <!-- Dots -->
+            <div class="module-dots">
+              {#each MODULES as _, idx}
+                <button
+                  class="dot" class:active={idx === moduleIdx}
+                  onclick={() => { slideDir = idx > moduleIdx ? 1 : -1; moduleIdx = idx; }}
+                  aria-label={MODULES[idx].label}
+                ></button>
+              {/each}
+            </div>
+
+
+          </div>
+
+        {:else if wid === 'stats-xp'}
+          <div class="widget-centered">
+            <div class="stats-row">
+              <div class="stat">
+                <span class="stat-value mono">{$currentStreak}</span>
+                <span class="stat-label label">días</span>
+              </div>
+              <div class="stat-divider"></div>
+              <div class="stat">
+                {#if $nextStageXP}
+                  <span class="stat-value mono">{$totalXP.toLocaleString()}</span>
+                  <span class="stat-label label">xp</span>
+                {:else}
+<span class="stat-value mono" style="color: var(--text-primary);">MAX</span>
+                  <span class="stat-label label">xp</span>
+                {/if}
+              </div>
+              <div class="stat-divider"></div>
+              <div class="stat">
+                <span class="stat-value mono">{$notes.length}</span>
+                <span class="stat-label label">notas</span>
+              </div>
+            </div>
+            {#if isLevelMilestone}
+              <button
+                class="level-share-btn"
+                onclick={shareLevel}
+                title="Compartir nivel"
+                aria-label="Compartir nivel {$globalLevel}"
+              >
+                <Share2 size={11} />
+                <span>Compartir nivel</span>
+              </button>
+            {/if}
+          </div>
+
+        {:else if wid === 'activity-progress'}
+          <ActivityProgress />
+
+        {:else if wid === 'time-widget'}
+          <TimeWidget />
+
+        {:else if wid === 'weather-widget'}
+          <WeatherWidget />
+
+        {:else if wid === 'pomodoro'}
+          <PomodoroWidget />
+          <button class="focus-mode-btn" onclick={() => startFocusMode()} aria-label="Iniciar modo enfoque">
+            <Target size={16} />
+            Modo Enfoque
+          </button>
+
+        {:else if wid === 'recent-notes'}
+          <div class="section-header">
+            <h4 style="color: {$accentColors[0]}">Notas recientes</h4>
+            <a href="/notes" class="btn btn-ghost" style="font-size:11px; padding:2px 8px;">ver todas →</a>
+          </div>
+          <div class="recent-notes">
+            {#if recentNotes.length === 0}
+              <div class="empty-state"><span class="caption">No hay notas aún.</span></div>
+            {:else}
+              {#each recentNotes as note}
+                <NoteCard {note} showTags={false} on:select={() => goto(`/notes?id=${note.id}`)} />
+              {/each}
+            {/if}
+          </div>
+
+        {:else if wid === 'github-issues'}
+          <GithubWidget
+            accentColor={$accentColors[1]}
+            {githubConnected}
+            {githubLoading}
+            {githubIssues}
+            {githubPRs}
+            {repoColors}
+            {issueStats}
+            {prStats}
+            {ghFilter}
+            {ghType}
+            itemLimit={GH_ITEM_LIMIT}
+            onSetFilter={setGhFilter}
+            onSetType={setGhType}
+          />
+        {/if}
+
       </Widget>
     {/each}
 
@@ -413,7 +438,97 @@
 
     {#each $dashboardLayout.right as wid, i (wid)}
       <Widget id={wid}>
-        {@render renderWidget(wid, 'right')}
+
+        {#if wid === 'recent-notes'}
+          <div class="section-header">
+            <h4 style="color: {$accentColors[0]}">Notas recientes</h4>
+            <a href="/notes" class="btn btn-ghost" style="font-size:11px; padding:2px 8px;">ver todas →</a>
+          </div>
+          <div class="recent-notes">
+            {#if recentNotes.length === 0}
+              <div class="empty-state"><span class="caption">No hay notas aún.</span></div>
+            {:else}
+              {#each recentNotes as note}
+                <NoteCard {note} showTags={false} on:select={() => goto(`/notes?id=${note.id}`)} />
+              {/each}
+            {/if}
+          </div>
+          <hr class="section-divider" />
+
+        {:else if wid === 'github-issues'}
+          <GithubWidget
+            accentColor={$accentColors[1]}
+            {githubConnected}
+            {githubLoading}
+            {githubIssues}
+            {githubPRs}
+            {repoColors}
+            {issueStats}
+            {prStats}
+            {ghFilter}
+            {ghType}
+            itemLimit={GH_ITEM_LIMIT}
+            onSetFilter={setGhFilter}
+            onSetType={setGhType}
+          />
+
+        {:else if wid === 'plant-carousel'}
+          <div class="widget-centered">
+            <div class="module-nav">
+              <button class="nav-arrow" onclick={prevModule} aria-label="Anterior"><DynamicIcon name="ChevronLeft" size={14}/></button>
+              <span class="module-label mono">{MODULES[moduleIdx].label.toUpperCase()}</span>
+              <button class="nav-arrow" onclick={nextModule} aria-label="Siguiente"><DynamicIcon name="ChevronRight" size={14}/></button>
+            </div>
+            <div class="module-viewport">
+              {#key moduleIdx}
+                <div class="module-slide" in:fly={{ x: slideDir * 40, duration: 220, opacity: 0 }}>
+                  {#if MODULES[moduleIdx].id === 'planta'}<Plant size={160} wilted={isWilted} />
+                  {:else if MODULES[moduleIdx].id === 'galaxia'}<GalaxyModule size={160} />
+                  {:else if MODULES[moduleIdx].id === 'montana'}<MountainModule size={160} />
+                  {:else if MODULES[moduleIdx].id === 'ciudad'}<CityModule size={160} />
+                  {:else if MODULES[moduleIdx].id === 'orbita'}<OrbitModule size={160} />
+                  {/if}
+                </div>
+              {/key}
+            </div>
+          </div>
+
+        {:else if wid === 'stats-xp'}
+          <div class="widget-centered">
+            <div class="stats-row">
+              <div class="stat"><span class="stat-value mono">{$currentStreak}</span><span class="stat-label label">días</span></div>
+              <div class="stat-divider"></div>
+              <div class="stat">{#if $nextStageXP}<span class="stat-value mono">{$totalXP.toLocaleString()}</span><span class="stat-label label">xp</span>{:else}<span class="stat-value mono" style="color: var(--text-primary);">MAX</span><span class="stat-label label">xp</span>{/if}</div>
+              <div class="stat-divider"></div>
+              <div class="stat"><span class="stat-value mono">{$notes.length}</span><span class="stat-label label">notas</span></div>
+            </div>
+            {#if isLevelMilestone}
+              <button
+                class="level-share-btn"
+                onclick={shareLevel}
+                title="Compartir nivel"
+                aria-label="Compartir nivel {$globalLevel}"
+              >
+                <Share2 size={11} />
+                <span>Compartir nivel</span>
+              </button>
+            {/if}
+          </div>
+
+        {:else if wid === 'time-widget'}
+          <TimeWidget />
+
+        {:else if wid === 'pomodoro'}
+          <PomodoroWidget />
+          <button class="focus-mode-btn" onclick={() => startFocusMode()} aria-label="Iniciar modo enfoque">
+            <Target size={16} />
+            Modo Enfoque
+          </button>
+
+        {:else if wid === 'activity-progress'}
+          <ActivityProgress />
+        {/if}
+
       </Widget>
     {/each}
 
@@ -508,6 +623,26 @@
     width: 100%; max-width: 240px;
   }
 
+  .level-share-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 10px;
+    font-family: var(--font-sans);
+    cursor: pointer;
+    transition: all var(--t-fast);
+  }
+
+  .level-share-btn:hover {
+    border-color: var(--xp);
+    color: var(--xp);
+  }
+
   .stat { display: flex; flex-direction: column; align-items: center; flex: 1; gap: 2px; }
   .stat-value { font-size: 20px; font-weight: 300; color: var(--text-primary); line-height: 1; }
   .stat-divider { width: 1px; height: 32px; background: var(--border); }
@@ -558,4 +693,102 @@
   }
 
   .empty-state.success { color: #238636; text-align: center; padding: 12px; }
+
+  /* ── Responsive ── */
+  @media (max-width: 768px) {
+    .dashboard {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto auto 1fr;
+    }
+
+    .plant-section {
+      padding: var(--s3) var(--s3) var(--s2);
+      gap: var(--s2);
+    }
+
+    .resize-handle.static {
+      display: none;
+    }
+
+    .activity-section {
+      overflow-y: auto;
+    }
+
+    .stats-row {
+      gap: var(--s2);
+      max-width: 100%;
+    }
+
+    .stat-value {
+      font-size: 16px;
+    }
+
+    .stat-divider {
+      height: 24px;
+    }
+
+    .module-viewport {
+      width: 130px;
+      height: 130px;
+    }
+
+    .fab {
+      right: var(--s3);
+      bottom: calc(var(--statusbar-h) + var(--s3));
+    }
+
+    .issue-item {
+      grid-template-columns: 30px 1fr;
+      gap: var(--s2);
+      padding: var(--s2) var(--s3);
+    }
+
+    .issue-repo {
+      display: none;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .plant-section {
+      padding: var(--s2);
+    }
+
+    .stats-row {
+      gap: var(--s1);
+    }
+
+    .stat-value {
+      font-size: 14px;
+    }
+
+    .module-viewport {
+      width: 110px;
+      height: 110px;
+    }
+
+    .module-label {
+      min-width: 60px;
+      font-size: 9px;
+    }
+  }
+
+.focus-mode-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md, 8px);
+  background: var(--surface);
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+.focus-mode-btn:hover {
+  background: var(--elevated);
+  border-color: var(--accent);
+}
 </style>

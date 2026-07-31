@@ -120,6 +120,14 @@ html, body {
   padding: 0;
   margin: 0;
   overflow: hidden;
+  /* Smooth transitions for dynamic theme changes (#356) */
+  transition: background-color 2s ease, color 2s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html, body {
+    transition: none;
+  }
 }
 
 #svelte { height: 100%; }

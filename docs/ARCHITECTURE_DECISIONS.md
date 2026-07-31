@@ -4,7 +4,7 @@ This document records the major architectural decisions made in Joidy and the ra
 
 ## ADR-001: SQLite as the primary database
 
-**Status:** Superceded — The project now uses PostgreSQL 16 + pgvector in all environments. See `docker-compose.yml`.
+**Status:** Superceded by ADR-007 (PostgreSQL + pgvector) — The project now uses PostgreSQL 16 + pgvector in all environments. See `docker-compose.yml`.
 
 **Context:** The project started as a personal knowledge management tool. It needed a zero-configuration database that could be shared across the API, AI service, and worker without requiring a separate process.
 
@@ -15,6 +15,23 @@ This document records the major architectural decisions made in Joidy and the ra
 - No external database process is required.
 - The database file must be mounted into all service containers.
 - Write concurrency is managed through WAL mode.
+- **Superseded:** SQLite lacked proper vector search performance and concurrent write support for the growing feature set. Migrated to PostgreSQL + pgvector (see ADR-007).
+
+## ADR-007: PostgreSQL + pgvector as the primary database
+
+**Status:** Accepted
+
+**Context:** As the project grew (embeddings, concurrent worker writes, push subscriptions, GitHub integration), SQLite's limitations became apparent: no concurrent writes, limited vector search performance with sqlite-vec, and no native JSON/Array support.
+
+**Decision:** Use PostgreSQL 16 with the pgvector extension in all environments (development and production) via Docker. The `pgvector/pgvector:pg16` image provides both PostgreSQL and the vector extension out of the box.
+
+**Consequences:**
+- Full ACID compliance with concurrent write support.
+- Efficient vector similarity search via pgvector (HNSW index).
+- Native JSON/Array types for flexible schema evolution.
+- All services share a single PostgreSQL instance via `DATABASE_URL`.
+- Requires a running PostgreSQL process (managed via Docker Compose).
+- SQLite is still supported for CI tests (`DATABASE_URL=sqlite:////tmp/joidy-test.db`), but migrations are pgvector-oriented.
 
 ## ADR-002: Monorepo with Docker Compose
 
