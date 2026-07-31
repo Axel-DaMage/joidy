@@ -7,7 +7,7 @@ pkgdesc="Personal knowledge management with gamification"
 arch=('any')
 url="https://joidy-web.vercel.app"
 license=('GPL3')
-depends=('docker' 'docker-compose')
+depends=('docker')
 source=("https://github.com/Axel-DaMage/joidy/archive/v${_tag}.tar.gz")
 sha256sums=('SKIP')
 
