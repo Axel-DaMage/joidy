@@ -250,11 +250,26 @@
     return val;
   })());
 
+  // Debounced content for expensive operations (markdown render + syntax highlight)
+  let debouncedContent = $state(visibleEditorContent);
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  $effect(() => {
+    const current = visibleEditorContent;
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      debouncedContent = current;
+    }, 300);
+  });
+
+  // Cheap computations stay on visibleEditorContent (instant feedback)
   let wordCount = $derived(visibleEditorContent.trim() ? visibleEditorContent.trim().split(/\s+/).length : 0);
   let charCount = $derived(visibleEditorContent.length);
-  let renderedHtml = $derived(renderMarkdown(visibleEditorContent));
   let lineCount = $derived(Math.max(1, visibleEditorContent.split('\n').length));
   let lineNumbers = $derived(Array.from({ length: lineCount }, (_, i) => i + 1));
+
+  // Expensive computations use debouncedContent (300ms after last keystroke)
+  let renderedHtml = $derived(renderMarkdown(debouncedContent));
 
   function updateVisibleContent(e: Event) {
     const val = (e.currentTarget as HTMLTextAreaElement).value;
@@ -700,7 +715,7 @@
     return html;
   }
 
-  let editorHighlightedHtml = $derived(highlightMarkdown(visibleEditorContent));
+  let editorHighlightedHtml = $derived(highlightMarkdown(debouncedContent));
 </script>
 
 <svelte:window onkeydown={onKeydown} />

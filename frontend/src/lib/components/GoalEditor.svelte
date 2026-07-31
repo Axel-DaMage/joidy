@@ -65,9 +65,22 @@
   $: visibleContent = content;
   $: wordCount = visibleContent.trim() ? visibleContent.trim().split(/\s+/).length : 0;
   $: charCount = visibleContent.length;
-  $: renderedHtml = renderMarkdown(visibleContent);
   $: lineCount = Math.max(1, visibleContent.split('\n').length);
   $: lineNumbers = Array.from({ length: lineCount }, (_, i) => i + 1);
+
+  // Debounced content for expensive markdown rendering
+  let debouncedContent = content;
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  $: {
+    const current = visibleContent;
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      debouncedContent = current;
+      renderedHtml = renderMarkdown(current);
+      editorHighlightedHtml = highlightMarkdown(current);
+    }, 300);
+  }
+  $: renderedHtml = renderMarkdown(debouncedContent);
 
   function renderMarkdown(md: string): string {
     if (!md.trim()) return '<p style="color:var(--text-muted);font-style:italic;">Escribe algo para ver el preview...</p>';
@@ -78,7 +91,6 @@
     content = (e.currentTarget as HTMLTextAreaElement).value;
     wordCount = content.trim() ? content.trim().split(/\s+/).length : 0;
     charCount = content.length;
-    renderedHtml = renderMarkdown(content);
   }
 
   async function handleSave() {
@@ -142,7 +154,7 @@
     return html;
   }
 
-  $: editorHighlightedHtml = highlightMarkdown(visibleContent);
+  $: editorHighlightedHtml = highlightMarkdown(debouncedContent);
 </script>
 
 <svelte:window on:keydown={onKeydown} />
