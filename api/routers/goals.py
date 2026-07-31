@@ -20,6 +20,7 @@ from services.goal_service import (
     get_goal_streak,
     resolve_pending_removal,
     sync_goals_from_note,
+    validate_goal_parent,
 )
 from services.joidy_vault_writer import (
     _write_goal_file,
@@ -223,6 +224,9 @@ def goal_streak(db: Session = Depends(get_db)):
 
 @router.post("/", status_code=201)
 def create_goal(data: GoalCreate, db: Session = Depends(get_db)):
+    # New goal has no id yet, so only parent existence can be violated, but
+    # validate anyway for consistency and to reject non-existent parents.
+    validate_goal_parent(db, goal_id=None, parent_id=data.parent_id)
     goal = Goal(**data.model_dump())
     db.add(goal)
     db.commit()
@@ -243,6 +247,9 @@ def update_goal(goal_id: int, data: GoalUpdate, db: Session = Depends(get_db)):
 
     update_data = data.model_dump(exclude_none=True)
     content = update_data.pop("content", None)
+
+    if "parent_id" in update_data:
+        validate_goal_parent(db, goal_id=goal.id, parent_id=update_data["parent_id"])
 
     for field, value in update_data.items():
         setattr(goal, field, value)
@@ -326,6 +333,7 @@ def save_goal_content(goal_id: int, data: GoalContent, db: Session = Depends(get
     goal.theme = data.theme
     goal.note_id = data.note_id
     goal.tag_id = data.tag_id
+    validate_goal_parent(db, goal_id=goal.id, parent_id=data.parent_id)
     goal.parent_id = data.parent_id
     goal.max_assignment_days = data.max_assignment_days
 

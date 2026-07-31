@@ -3,7 +3,6 @@ Per-user rate limiting middleware using sliding window.
 """
 
 import time
-from collections import defaultdict
 from dataclasses import dataclass
 
 from fastapi import HTTPException, Request
@@ -22,9 +21,10 @@ class UserRateLimiter:
         self.requests_per_minute = requests_per_minute
         self.auth_requests_per_minute = auth_requests_per_minute
         self.window_size = 60.0
-        self._user_windows: dict[str, UserLimit] = defaultdict(
-            lambda: UserLimit(requests=[], window_size=60.0)
-        )
+        # Plain dict (not defaultdict): entries are created on demand and
+        # removed once their window empties out, so inactive IPs/tokens/keys
+        # don't accumulate forever (previously a monotonic memory leak).
+        self._user_windows: dict[str, UserLimit] = {}
 
     def _get_limit_for_request(self, request: Request) -> tuple[str, int]:
         """Extract identifier and limit for rate limiting."""
@@ -51,15 +51,29 @@ class UserRateLimiter:
         cutoff = now - user_limit.window_size
         user_limit.requests = [ts for ts in user_limit.requests if ts > cutoff]
 
+    def _get_or_create_window(self, identifier: str) -> UserLimit:
+        user_limit = self._user_windows.get(identifier)
+        if user_limit is None:
+            user_limit = UserLimit(requests=[], window_size=self.window_size)
+            self._user_windows[identifier] = user_limit
+        return user_limit
+
+    def _maybe_evict(self, identifier: str, user_limit: UserLimit) -> None:
+        """Drop the window entry if it has no active requests, keeping the
+        dict bounded over time."""
+        if not user_limit.requests:
+            self._user_windows.pop(identifier, None)
+
     def check_rate_limit(self, request: Request) -> tuple[bool, int]:
         """Returns (allowed, limit)."""
         identifier, limit = self._get_limit_for_request(request)
         now = time.time()
 
-        user_limit = self._user_windows[identifier]
+        user_limit = self._get_or_create_window(identifier)
         self._clean_old_requests(user_limit, now)
 
         if len(user_limit.requests) >= limit:
+            # Window is non-empty (at capacity), so keep the entry.
             return False, limit
 
         user_limit.requests.append(now)
@@ -69,9 +83,13 @@ class UserRateLimiter:
         """Get remaining requests for identifier in current window."""
         identifier, _ = self._get_limit_for_request(request)
         now = time.time()
-        user_limit = self._user_windows[identifier]
+        user_limit = self._user_windows.get(identifier)
+        if user_limit is None:
+            return limit
         self._clean_old_requests(user_limit, now)
-        return max(0, limit - len(user_limit.requests))
+        remaining = max(0, limit - len(user_limit.requests))
+        self._maybe_evict(identifier, user_limit)
+        return remaining
 
 
 # Default: 60 requests per minute per IP, 5000 per authenticated key/token

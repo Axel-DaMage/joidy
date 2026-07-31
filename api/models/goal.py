@@ -8,6 +8,7 @@ from sqlalchemy import (
     Enum,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -80,4 +81,13 @@ class Goal(Base):
 
     tag: Mapped["Tag | None"] = relationship("Tag")  # type: ignore
     note: Mapped["Note | None"] = relationship("Note")  # type: ignore
+
+    __table_args__ = (
+        # PostgreSQL does not auto-create indexes on FKs. These cover the
+        # common hierarchy/join/filter paths (#403).
+        Index("ix_goals_parent_id", "parent_id"),
+        Index("ix_goals_note_id", "note_id"),
+        Index("ix_goals_tag_id", "tag_id"),
+        Index("ix_goals_state", "state"),
+    )
 

@@ -302,6 +302,8 @@ def list_streaks(
     category: str | None = Query(None),
     include_history: bool = Query(True),
     days_history: int = Query(365, ge=1, le=730),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):
     q = db.query(PersonalStreak).options(selectinload(PersonalStreak.checkins))
@@ -309,7 +311,7 @@ def list_streaks(
         q = q.filter(PersonalStreak.is_archived == False)
     if category and category != "all":
         q = q.filter(PersonalStreak.category == category)
-    streaks = q.order_by(PersonalStreak.created_at).all()
+    streaks = q.order_by(PersonalStreak.created_at).offset(offset).limit(limit).all()
     return [
         _streak_to_dict(s, days_history=days_history if include_history else 0)
         for s in streaks

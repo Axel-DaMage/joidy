@@ -2,7 +2,7 @@ from datetime import datetime
 
 from database import Base
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 class NoteEmbedding(Base):
@@ -24,6 +24,12 @@ class Note(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
     tags: Mapped[list["NoteTag"]] = relationship("NoteTag", back_populates="note", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        # Notes are frequently listed/ordered by these timestamps (#403).
+        Index("ix_notes_created_at", "created_at"),
+        Index("ix_notes_updated_at", "updated_at"),
+    )
 
 
 class Tag(Base):
@@ -65,6 +71,12 @@ class NoteLink(Base):
     source_note: Mapped["Note"] = relationship("Note", foreign_keys=[source_note_id], backref="out_links")
     target_note: Mapped["Note"] = relationship("Note", foreign_keys=[target_note_id], backref="in_links")
 
+    __table_args__ = (
+        # The composite PK (source_note_id, target_note_id) covers lookups by
+        # source, but backlink queries filter on target_note_id alone (#403).
+        Index("ix_note_links_target_note_id", "target_note_id"),
+    )
+
 
 class TagCooccurrence(Base):
     __tablename__ = "tag_cooccurrences"
@@ -83,3 +95,8 @@ class EmbeddingFailure(Base):
     last_error: Mapped[str] = mapped_column(Text, default="")
     next_retry_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        # The retry scheduler filters/orders by next_retry_at (#403).
+        Index("ix_embedding_failures_next_retry_at", "next_retry_at"),
+    )

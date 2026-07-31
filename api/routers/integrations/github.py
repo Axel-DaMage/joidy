@@ -168,8 +168,18 @@ async def add_repo_to_db(
 
 
 @router.get("/repos/db")
-async def list_repos_in_db(db: Session = Depends(get_db)):
-    repos = db.execute(select(GitHubRepo)).scalars().all()
+async def list_repos_in_db(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+):
+    repos = (
+        db.execute(
+            select(GitHubRepo).offset(offset).limit(limit)
+        )
+        .scalars()
+        .all()
+    )
     return {
         "repos": [
             {
@@ -555,6 +565,8 @@ async def get_items_in_db(
     db: Session = Depends(get_db),
     repo_id: int | None = Query(None),
     goal_id: int | None = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
 ):
     query = select(GitHubItem)
     if repo_id:
@@ -562,7 +574,7 @@ async def get_items_in_db(
     if goal_id:
         query = query.where(GitHubItem.goal_id == goal_id)
 
-    items = db.execute(query).scalars().all()
+    items = db.execute(query.offset(offset).limit(limit)).scalars().all()
     return {
         "items": [
             {
