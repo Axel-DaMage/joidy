@@ -69,8 +69,6 @@ def setup_logging() -> None:
     Uses JSON format in production, colored human-readable in development.
     """
     log_dir = Path(settings.log_dir)
-    log_dir.mkdir(parents=True, exist_ok=True)
-
     is_production = settings.app_env == "production"
 
     root = logging.getLogger()
@@ -89,16 +87,27 @@ def setup_logging() -> None:
     stream.addFilter(CorrelationLogFilter())
     root.addHandler(stream)
 
-    # File handler — always JSON for machine parsing
-    file_handler = RotatingFileHandler(
-        log_dir / "api.log",
-        maxBytes=5_000_000,
-        backupCount=5,
-        encoding="utf-8",
-    )
-    file_handler.setFormatter(JSONFormatter())
-    file_handler.addFilter(CorrelationLogFilter())
-    root.addHandler(file_handler)
+    # File handler — always JSON for machine parsing.
+    # File logging is best-effort: a missing/unwritable log dir (e.g. a
+    # read-only bind-mount in CI smoke tests) must never prevent startup.
+    file_handler = None
+    try:
+        log_dir.mkdir(parents=True, exist_ok=True)
+        file_handler = RotatingFileHandler(
+            log_dir / "api.log",
+            maxBytes=5_000_000,
+            backupCount=5,
+            encoding="utf-8",
+        )
+    except OSError as exc:
+        stream.stream.write(
+            f"WARNING: file logging disabled — could not init "
+            f"'{log_dir}': {exc}\n"
+        )
+    if file_handler is not None:
+        file_handler.setFormatter(JSONFormatter())
+        file_handler.addFilter(CorrelationLogFilter())
+        root.addHandler(file_handler)
 
     # Reduce noise from third-party libraries
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
