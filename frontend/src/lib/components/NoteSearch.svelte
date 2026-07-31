@@ -28,7 +28,7 @@
       bind:value={searchInput}
     />
     {#if searchInput || $noteSearchTag}
-      <button class="clear-btn" on:click={clearSearch}>✕</button>
+      <button class="clear-btn" onclick={clearSearch}>✕</button>
     {/if}
   </div>
 
@@ -37,7 +37,7 @@
       <button
         class="tag-chip"
         class:active={$noteSearchTag === null}
-        on:click={() => noteSearchTag.set(null)}
+        onclick={() => noteSearchTag.set(null)}
       >
         Todo
       </button>
@@ -45,7 +45,7 @@
         <button
           class="tag-chip"
           class:active={$noteSearchTag === tag}
-          on:click={() => noteSearchTag.set($noteSearchTag === tag ? null : tag)}
+          onclick={() => noteSearchTag.set($noteSearchTag === tag ? null : tag)}
         >
           {tag}
         </button>

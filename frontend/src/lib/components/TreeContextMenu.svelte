@@ -58,26 +58,26 @@
   });
 </script>
 
-<div class="ctx-menu" bind:this={menuEl} style={style} on:click|stopPropagation on:contextmenu|stopPropagation>
+<div class="ctx-menu" bind:this={menuEl} style={style} onclick={(e) => e.stopPropagation()} oncontextmenu={(e) => e.stopPropagation()}>
   {#if node.type === 'file'}
-    <button class="ctx-item" on:click={handleItem('rename')}>
+    <button class="ctx-item" onclick={handleItem('rename')}>
       <Edit size={12} /> Renombrar
     </button>
-    <button class="ctx-item" on:click={handleItem('move')}>
+    <button class="ctx-item" onclick={handleItem('move')}>
       <MoveRight size={12} /> Mover a...
     </button>
     <div class="ctx-divider"></div>
-    <button class="ctx-item ctx-danger" on:click={handleItem('deleteNote')}>
+    <button class="ctx-item ctx-danger" onclick={handleItem('deleteNote')}>
       <Trash2 size={12} /> Eliminar
     </button>
   {:else}
-    <button class="ctx-item" on:click={handleItem('newNoteInFolder')}>
+    <button class="ctx-item" onclick={handleItem('newNoteInFolder')}>
       <FilePlus size={12} /> Nueva nota aquí
     </button>
-    <button class="ctx-item" on:click={handleItem('rename')}>
+    <button class="ctx-item" onclick={handleItem('rename')}>
       <Edit size={12} /> Renombrar
     </button>
-    <button class="ctx-item ctx-danger" on:click={handleItem('deleteFolder')}>
+    <button class="ctx-item ctx-danger" onclick={handleItem('deleteFolder')}>
       <FolderX size={12} /> Eliminar carpeta
     </button>
   {/if}

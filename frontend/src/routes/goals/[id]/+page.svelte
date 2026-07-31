@@ -198,8 +198,8 @@
 </div>
 
 {#if showSettings}
-  <div class="goal-settings-backdrop" on:click={() => showSettings = false} role="dialog" tabindex="-1">
-    <div class="goal-settings-panel slide-down" on:click|stopPropagation>
+  <div class="goal-settings-backdrop" onclick={() => showSettings = false} role="dialog" tabindex="-1">
+    <div class="goal-settings-panel slide-down" onclick={(e) => e.stopPropagation()}>
       <div class="goal-settings-header">
         <div class="goal-settings-title-row">
           <div class="goal-settings-icon-wrap">
@@ -210,14 +210,14 @@
             <span class="goal-settings-sub">Ajusta los detalles de este objetivo</span>
           </div>
         </div>
-        <button class="history-close-btn" on:click={() => showSettings = false} title="Cerrar">×</button>
+        <button class="history-close-btn" onclick={() => showSettings = false} title="Cerrar">×</button>
       </div>
 
       <div class="goal-settings-body">
         <div class="ng-tabs-container">
-          <button class="ng-tab" class:active={settingsSection === 'basics'} on:click={() => settingsSection = 'basics'}>Basico</button>
-          <button class="ng-tab" class:active={settingsSection === 'appearance'} on:click={() => settingsSection = 'appearance'}>Apariencia</button>
-          <button class="ng-tab" class:active={settingsSection === 'advanced'} on:click={() => settingsSection = 'advanced'}>Avanzado</button>
+          <button class="ng-tab" class:active={settingsSection === 'basics'} onclick={() => settingsSection = 'basics'}>Basico</button>
+          <button class="ng-tab" class:active={settingsSection === 'appearance'} onclick={() => settingsSection = 'appearance'}>Apariencia</button>
+          <button class="ng-tab" class:active={settingsSection === 'advanced'} onclick={() => settingsSection = 'advanced'}>Avanzado</button>
         </div>
 
         <div class="ng-content-area">
@@ -235,7 +235,7 @@
                 <label class="label">Frecuencia</label>
                 <div class="ng-freq-grid">
                   {#each TEMPORALITIES as temp}
-                    <button class="ng-freq-btn" class:active={editTemporality === temp} on:click={() => editTemporality = temp}>
+                    <button class="ng-freq-btn" class:active={editTemporality === temp} onclick={() => editTemporality = temp}>
                       {temp === 'DAILY' ? 'Diario' : temp === 'WEEKLY' ? 'Semanal' : temp === 'MONTHLY' ? 'Mensual' : 'Anual'}
                     </button>
                   {/each}
@@ -250,14 +250,14 @@
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
                   <label class="label" style="margin:0;">Icono / Emoji de Fallo</label>
                   <div class="icon-toggle-row">
-                    <button class="icon-type-btn" class:selected={!editUseFailIcon} on:click={() => editUseFailIcon = false}>Emoji</button>
-                    <button class="icon-type-btn" class:selected={editUseFailIcon} on:click={() => editUseFailIcon = true}>Icono</button>
+                    <button class="icon-type-btn" class:selected={!editUseFailIcon} onclick={() => editUseFailIcon = false}>Emoji</button>
+                    <button class="icon-type-btn" class:selected={editUseFailIcon} onclick={() => editUseFailIcon = true}>Icono</button>
                   </div>
                 </div>
                 {#if !editUseFailIcon}
                   <div class="emoji-grid ng-large-grid">
                     {#each EMOJIS as e}
-                      <button class="emoji-btn" class:selected={editFailEmoji === e} on:click={() => editFailEmoji = e}>{e}</button>
+                      <button class="emoji-btn" class:selected={editFailEmoji === e} onclick={() => editFailEmoji = e}>{e}</button>
                     {/each}
                   </div>
                 {:else}
@@ -271,7 +271,7 @@
                 <label class="label">Color de Identidad</label>
                 <div class="color-presets ng-expanded-presets">
                   {#each COLOR_PRESETS as c}
-                    <button class="color-dot" class:selected={editColor === c.hex} style="background: {c.hex}; color: {c.hex};" on:click={() => editColor = c.hex}></button>
+                    <button class="color-dot" class:selected={editColor === c.hex} style="background: {c.hex}; color: {c.hex};" onclick={() => editColor = c.hex}></button>
                   {/each}
                   <div class="color-custom" style="background: {editColor};">
                     <input type="color" bind:value={editColor} class="color-picker" />
@@ -305,15 +305,15 @@
               <div class="form-field adv-fail">
                 <label class="label">Politica de fallo</label>
                 <div class="ng-fail-options">
-                  <button class="ng-fail-btn" class:active={editFailConfig === 'STATIC'} on:click={() => editFailConfig = 'STATIC'}>
+                  <button class="ng-fail-btn" class:active={editFailConfig === 'STATIC'} onclick={() => editFailConfig = 'STATIC'}>
                     <strong>Estatico</strong>
                     <span>Se reinicia a cero cada periodo</span>
                   </button>
-                  <button class="ng-fail-btn" class:active={editFailConfig === 'ROLLOVER'} on:click={() => editFailConfig = 'ROLLOVER'}>
+                  <button class="ng-fail-btn" class:active={editFailConfig === 'ROLLOVER'} onclick={() => editFailConfig = 'ROLLOVER'}>
                     <strong>Traspaso</strong>
                     <span>La meta pendiente pasa al siguiente dia</span>
                   </button>
-                  <button class="ng-fail-btn" class:active={editFailConfig === 'SNOWBALL'} on:click={() => editFailConfig = 'SNOWBALL'}>
+                  <button class="ng-fail-btn" class:active={editFailConfig === 'SNOWBALL'} onclick={() => editFailConfig = 'SNOWBALL'}>
                     <strong>Acumulativo</strong>
                     <span>La deuda se acumula exponencialmente</span>
                   </button>
@@ -369,8 +369,8 @@
       <div class="goal-settings-footer">
         <span></span>
         <div class="new-goal-actions">
-          <button class="btn btn-ghost" on:click={() => showSettings = false}>Cancelar</button>
-          <button class="btn btn-primary" on:click={saveSettings} disabled={savingSettings || !editTitle.trim()}>
+          <button class="btn btn-ghost" onclick={() => showSettings = false}>Cancelar</button>
+          <button class="btn btn-primary" onclick={saveSettings} disabled={savingSettings || !editTitle.trim()}>
             {savingSettings ? 'Guardando...' : 'Guardar cambios'}
           </button>
         </div>

@@ -47,7 +47,7 @@
       </span>
     </div>
     {#if $selectedTag !== null}
-      <button class="btn btn-ghost" on:click={() => selectedTag.set(null)}>
+      <button class="btn btn-ghost" onclick={() => selectedTag.set(null)}>
         Limpiar seleccion
       </button>
     {/if}

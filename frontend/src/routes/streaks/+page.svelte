@@ -342,7 +342,7 @@
           >
             <button
               class="detail-exit-btn"
-              on:click={() => selectedId = null}
+              onclick={() => selectedId = null}
               title="Volver al menú"
               aria-label="Volver al menú"
             >
@@ -363,7 +363,7 @@
                   <button
                     class="counter-ring"
                     style="--ring-color: {isStreakCompleted(selected) ? '#10b981' : (selected.color || 'var(--xp)')};"
-                    on:click={() => !selected.is_archived && !selected.today_checked && !isStreakCompleted(selected) && checkin(selected.id)}
+                    onclick={() => !selected.is_archived && !selected.today_checked && !isStreakCompleted(selected) && checkin(selected.id)}
                     disabled={selected.is_archived || selected.today_checked || busy.has(selected.id) || isStreakCompleted(selected)}
                     title={isStreakCompleted(selected) ? 'Racha completada' : (selected.today_checked ? 'Ya hiciste check-in hoy' : 'Hacer check-in')}
                     aria-label={isStreakCompleted(selected) ? 'Racha completada' : (selected.today_checked ? 'Ya hiciste check-in hoy' : 'Hacer check-in')}
@@ -437,7 +437,7 @@
               <div class="no-selection-actions">
                 <button
                   class="action-pill"
-                  on:click={checkinAllCurrent}
+                  onclick={checkinAllCurrent}
                   disabled={activeCheckinCandidates.length === 0}
                   title="Hacer check-in de todas las rachas activas"
                 >
@@ -446,7 +446,7 @@
                 </button>
                 <button
                   class="action-pill"
-                  on:click={openRandomStreak}
+                  onclick={openRandomStreak}
                   disabled={filteredStreaks.length === 0}
                   title="Entrar a una racha random"
                 >
@@ -468,7 +468,7 @@
 </div>
 
 <!-- Delete confirmation modal -->
-<svelte:window on:keydown={(e) => e.key === 'Escape' && (deleteConfirm = null)} />
+<svelte:window onkeydown={(e) => e.key === 'Escape' && (deleteConfirm = null)} />
 {#if deleteConfirm !== null}
   <div class="modal-backdrop">
     <div 
@@ -491,8 +491,8 @@
         <p class="delete-modal-warning">Esta acción no se puede deshacer.</p>
       </div>
       <div class="delete-modal-buttons">
-        <button class="btn-cancel" on:click={cancelDelete}>Cancelar</button>
-        <button class="btn-danger" on:click={() => deleteConfirm !== null && deleteStreak(deleteConfirm)}>Eliminar</button>
+        <button class="btn-cancel" onclick={cancelDelete}>Cancelar</button>
+        <button class="btn-danger" onclick={() => deleteConfirm !== null && deleteStreak(deleteConfirm)}>Eliminar</button>
       </div>
     </div>
   </div>

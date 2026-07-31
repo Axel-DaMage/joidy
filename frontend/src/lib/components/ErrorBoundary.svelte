@@ -31,10 +31,10 @@
     <h3>Algo sali&oacute; mal</h3>
     <p class="error-msg">{errorMessage || 'Error inesperado en este componente.'}</p>
     <div class="actions">
-      <button class="btn" on:click={retry}>
+      <button class="btn" onclick={retry}>
         <RefreshCw size={12} /> Reintentar
       </button>
-      <button class="btn btn-ghost" on:click={() => showDetails = !showDetails}>
+      <button class="btn btn-ghost" onclick={() => showDetails = !showDetails}>
         Detalles
       </button>
     </div>

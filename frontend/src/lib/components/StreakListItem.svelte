@@ -33,7 +33,7 @@
 >
   <button
     class="streak-item-main"
-    on:click={() => dispatch('select', streak.id)}
+    onclick={() => dispatch('select', streak.id)}
     aria-label="Seleccionar racha: {streak.name}"
   >
     <div class="item-icon">
@@ -68,7 +68,7 @@
   <div class="item-actions">
     <button
       class="item-action-btn"
-      on:click|stopPropagation={() => dispatch('edit', streak)}
+      onclick={(e) => { e.stopPropagation(); dispatch('edit', streak); }}
       title="Editar racha"
       aria-label="Editar racha: {streak.name}"
     >
@@ -76,7 +76,7 @@
     </button>
     <button
       class="item-action-btn danger"
-      on:click|stopPropagation={() => dispatch('delete', streak.id)}
+      onclick={(e) => { e.stopPropagation(); dispatch('delete', streak.id); }}
       title="Eliminar racha"
       aria-label="Eliminar racha: {streak.name}"
     >

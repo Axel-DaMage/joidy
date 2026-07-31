@@ -14,7 +14,7 @@
   }
 </script>
 
-<svelte:window on:keydown={handleKeydown} />
+<svelte:window onkeydown={handleKeydown} />
 
 {#if $uiModal.isOpen}
   <div
@@ -24,8 +24,8 @@
     aria-label={title || 'Diálogo'}
     tabindex="-1"
     transition:fade={{ duration: 150 }}
-    on:click|self={closeModal}
-    on:keydown={(e) => e.key === 'Escape' && closeModal()}
+    onclick={(e) => e.target === e.currentTarget && closeModal()}
+    onkeydown={(e) => e.key === 'Escape' && closeModal()}
   >
     <div
       class="modal modal-{size}"
@@ -34,7 +34,7 @@
     >
       <div class="modal-header">
         <h3 class="modal-title">{title}</h3>
-        <button class="modal-close" on:click={closeModal}>
+        <button class="modal-close" onclick={closeModal}>
           <X size={18} />
         </button>
       </div>

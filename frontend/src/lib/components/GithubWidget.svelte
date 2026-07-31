@@ -36,14 +36,14 @@
   </div>
   <div class="gh-filters">
     <div class="gh-filter">
-      <button class="filter-btn" class:active={ghType === 'all'} on:click={() => onSetType('all')}>Todo</button>
-      <button class="filter-btn" class:active={ghType === 'issues'} on:click={() => onSetType('issues')}>Issues</button>
-      <button class="filter-btn" class:active={ghType === 'prs'} on:click={() => onSetType('prs')}>PRs</button>
+      <button class="filter-btn" class:active={ghType === 'all'} onclick={() => onSetType('all')}>Todo</button>
+      <button class="filter-btn" class:active={ghType === 'issues'} onclick={() => onSetType('issues')}>Issues</button>
+      <button class="filter-btn" class:active={ghType === 'prs'} onclick={() => onSetType('prs')}>PRs</button>
     </div>
     <span class="gh-filter-divider">|</span>
     <div class="gh-filter">
-      <button class="filter-btn" class:active={ghFilter === 'created'} on:click={() => onSetFilter('created')}>Creados</button>
-      <button class="filter-btn" class:active={ghFilter === 'assigned'} on:click={() => onSetFilter('assigned')}>Asignados</button>
+      <button class="filter-btn" class:active={ghFilter === 'created'} onclick={() => onSetFilter('created')}>Creados</button>
+      <button class="filter-btn" class:active={ghFilter === 'assigned'} onclick={() => onSetFilter('assigned')}>Asignados</button>
     </div>
   </div>
 </div>

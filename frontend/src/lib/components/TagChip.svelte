@@ -34,8 +34,8 @@
 <span 
   class="tag-chip" 
   class:ai={isAI} 
-  on:click={handleClick}
-  on:keydown={handleKeydown}
+  onclick={handleClick}
+  onkeydown={handleKeydown}
   role="button"
   tabindex="0"
 >
@@ -44,7 +44,7 @@
     <span class="ai-badge" title="Sugerencia de IA">ia</span>
   {/if}
   {#if removable}
-    <button on:click={handleRemove} aria-label="Eliminar etiqueta {displayTagName(tag)}">×</button>
+    <button onclick={handleRemove} aria-label="Eliminar etiqueta {displayTagName(tag)}">×</button>
   {/if}
 </span>
 

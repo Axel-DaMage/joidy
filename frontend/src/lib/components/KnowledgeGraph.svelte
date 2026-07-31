@@ -490,29 +490,29 @@
         type="search"
         placeholder="Buscar nodos..."
         bind:value={searchQuery}
-        on:input={rerender}
+        oninput={rerender}
       />
       {#if searchQuery.trim().length > 0}
-        <button class="search-clear" on:click={clearHighlights} aria-label="Limpiar busqueda">×</button>
+        <button class="search-clear" onclick={clearHighlights} aria-label="Limpiar busqueda">×</button>
       {/if}
     </div>
-    <button class="btn btn-ghost btn-icon" title="Alternar etiquetas" on:click={() => { showLabels = !showLabels; rerender(); }}>
+    <button class="btn btn-ghost btn-icon" title="Alternar etiquetas" onclick={() => { showLabels = !showLabels; rerender(); }}>
       <span style="font-size:10px; font-family: var(--font-mono);">Aa</span>
     </button>
-    <button class="btn btn-ghost btn-icon" title="Particulas" class:active={showParticles} on:click={() => { showParticles = !showParticles; }}>
+    <button class="btn btn-ghost btn-icon" title="Particulas" class:active={showParticles} onclick={() => { showParticles = !showParticles; }}>
       <span style="font-size:12px;">✨</span>
     </button>
-    <button class="btn btn-ghost btn-icon" title="Ajustar" on:click={recenter}>
+    <button class="btn btn-ghost btn-icon" title="Ajustar" onclick={recenter}>
       <span style="font-size:11px;">⊡</span>
     </button>
-    <button class="btn btn-ghost btn-icon" title="Restablecer vista" on:click={resetView}>
+    <button class="btn btn-ghost btn-icon" title="Restablecer vista" onclick={resetView}>
       <span style="font-size:11px;">⊙</span>
     </button>
-    <button class="btn btn-ghost btn-icon" title="Ocultar huerfanos" class:active={!showOrphans} on:click={() => { showOrphans = !showOrphans; rerender(); }}>
+    <button class="btn btn-ghost btn-icon" title="Ocultar huerfanos" class:active={!showOrphans} onclick={() => { showOrphans = !showOrphans; rerender(); }}>
       <span style="font-size:11px;">◌</span>
     </button>
     <div class="filter-group">
-      <select bind:value={filterType} on:change={rerender}>
+      <select bind:value={filterType} onchange={rerender}>
         <option value="all">Todo</option>
         <option value="notes">Notas</option>
         <option value="tags">Tags</option>

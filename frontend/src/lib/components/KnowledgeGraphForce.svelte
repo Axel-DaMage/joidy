@@ -534,7 +534,7 @@
       class="settings-toggle-btn" 
       class:panel-open={showSettingsPanel} 
       title="Ajustes del Grafo" 
-      on:click={() => showSettingsPanel = !showSettingsPanel}
+      onclick={() => showSettingsPanel = !showSettingsPanel}
     >
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="gear-icon"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
     </button>
@@ -543,14 +543,14 @@
     <div class="settings-sidebar" class:open={showSettingsPanel}>
       <div class="sidebar-header">
         <h4>Ajustes del Grafo</h4>
-        <button class="close-panel-btn" on:click={() => showSettingsPanel = false}>×</button>
+        <button class="close-panel-btn" onclick={() => showSettingsPanel = false}>×</button>
       </div>
 
       <div class="sidebar-scroll">
         <!-- 1. FILTROS -->
         <div class="accordion-item" class:active={activeSection === 'filters'}>
           <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-          <div class="accordion-header" on:click={() => toggleSection('filters')}>
+          <div class="accordion-header" onclick={() => toggleSection('filters')}>
             <span class="chevron" class:expanded={activeSection === 'filters'}>›</span>
             <h5>Filtros</h5>
           </div>
@@ -562,17 +562,17 @@
                   type="text"
                   placeholder="Buscar notas o tags..."
                   bind:value={searchQuery}
-                  on:input={applyStyling}
+                  oninput={applyStyling}
                 />
                 {#if searchQuery}
-                  <button class="panel-search-clear" on:click={() => { searchQuery = ''; applyStyling(); }}>×</button>
+                  <button class="panel-search-clear" onclick={() => { searchQuery = ''; applyStyling(); }}>×</button>
                 {/if}
               </div>
 
               <label class="toggle-control">
                 <span>Archivos</span>
                 <span class="switch">
-                  <input type="checkbox" bind:checked={showNotes} on:change={rebuildGraph} />
+                  <input type="checkbox" bind:checked={showNotes} onchange={rebuildGraph} />
                   <span class="slider"></span>
                 </span>
               </label>
@@ -580,7 +580,7 @@
               <label class="toggle-control">
                 <span>Etiquetas</span>
                 <span class="switch">
-                  <input type="checkbox" bind:checked={showTags} on:change={rebuildGraph} />
+                  <input type="checkbox" bind:checked={showTags} onchange={rebuildGraph} />
                   <span class="slider"></span>
                 </span>
               </label>
@@ -588,7 +588,7 @@
               <label class="toggle-control">
                 <span>Archivos no existentes</span>
                 <span class="switch">
-                  <input type="checkbox" bind:checked={showUnresolved} on:change={rebuildGraph} />
+                  <input type="checkbox" bind:checked={showUnresolved} onchange={rebuildGraph} />
                   <span class="slider"></span>
                 </span>
               </label>
@@ -596,7 +596,7 @@
               <label class="toggle-control">
                 <span>Adjuntos</span>
                 <span class="switch">
-                  <input type="checkbox" bind:checked={showAttachments} on:change={rebuildGraph} />
+                  <input type="checkbox" bind:checked={showAttachments} onchange={rebuildGraph} />
                   <span class="slider"></span>
                 </span>
               </label>
@@ -604,7 +604,7 @@
               <label class="toggle-control">
                 <span>Huérfanos</span>
                 <span class="switch">
-                  <input type="checkbox" bind:checked={showOrphans} on:change={rebuildGraph} />
+                  <input type="checkbox" bind:checked={showOrphans} onchange={rebuildGraph} />
                   <span class="slider"></span>
                 </span>
               </label>
@@ -612,7 +612,7 @@
               <label class="toggle-control">
                 <span>Co-ocurrencias de etiquetas</span>
                 <span class="switch">
-                  <input type="checkbox" bind:checked={showCooccurrences} on:change={rebuildGraph} />
+                  <input type="checkbox" bind:checked={showCooccurrences} onchange={rebuildGraph} />
                   <span class="slider"></span>
                 </span>
               </label>
@@ -623,7 +623,7 @@
         <!-- 2. GRUPOS DE COLOR -->
         <div class="accordion-item" class:active={activeSection === 'groups'}>
           <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-          <div class="accordion-header" on:click={() => toggleSection('groups')}>
+          <div class="accordion-header" onclick={() => toggleSection('groups')}>
             <span class="chevron" class:expanded={activeSection === 'groups'}>›</span>
             <h5>Grupos de color</h5>
           </div>
@@ -638,21 +638,21 @@
                       type="color" 
                       class="color-picker-input" 
                       bind:value={group.color} 
-                      on:change={saveGroups} 
+                      onchange={saveGroups} 
                     />
                     <input 
                       type="text" 
                       class="group-query-input" 
                       placeholder="tag:idea o palabra clave..." 
                       bind:value={group.query} 
-                      on:input={saveGroups} 
+                      oninput={saveGroups} 
                     />
-                    <button class="group-delete-btn" title="Eliminar regla" on:click={() => removeColorGroup(idx)}>×</button>
+                    <button class="group-delete-btn" title="Eliminar regla" onclick={() => removeColorGroup(idx)}>×</button>
                   </div>
                 {/each}
               </div>
 
-              <button class="btn btn-ghost add-group-btn" on:click={addColorGroup}>
+              <button class="btn btn-ghost add-group-btn" onclick={addColorGroup}>
                 + Añadir grupo
               </button>
             </div>
@@ -662,7 +662,7 @@
         <!-- 3. VISUALIZACIÓN -->
         <div class="accordion-item" class:active={activeSection === 'display'}>
           <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-          <div class="accordion-header" on:click={() => toggleSection('display')}>
+          <div class="accordion-header" onclick={() => toggleSection('display')}>
             <span class="chevron" class:expanded={activeSection === 'display'}>›</span>
             <h5>Visualización</h5>
           </div>
@@ -671,7 +671,7 @@
               <label class="toggle-control">
                 <span>Mostrar etiquetas de texto</span>
                 <span class="switch">
-                  <input type="checkbox" bind:checked={showLabels} on:change={applyStyling} />
+                  <input type="checkbox" bind:checked={showLabels} onchange={applyStyling} />
                   <span class="slider"></span>
                 </span>
               </label>
@@ -697,7 +697,7 @@
                   <span>Tamaño del nodo</span>
                   <span>{nodeSizeScale.toFixed(1)}x</span>
                 </div>
-                <input type="range" min="0.5" max="3.0" step="0.1" bind:value={nodeSizeScale} on:input={applyStyling} />
+                <input type="range" min="0.5" max="3.0" step="0.1" bind:value={nodeSizeScale} oninput={applyStyling} />
               </div>
 
               <div class="slider-control">
@@ -705,7 +705,7 @@
                   <span>Grosor de línea</span>
                   <span>{linkThicknessScale.toFixed(1)}x</span>
                 </div>
-                <input type="range" min="0.1" max="3.0" step="0.1" bind:value={linkThicknessScale} on:input={applyStyling} />
+                <input type="range" min="0.1" max="3.0" step="0.1" bind:value={linkThicknessScale} oninput={applyStyling} />
               </div>
 
               <div class="slider-control">
@@ -713,7 +713,7 @@
                   <span>Escala del texto</span>
                   <span>{textScale.toFixed(1)}x</span>
                 </div>
-                <input type="range" min="0.5" max="2.0" step="0.1" bind:value={textScale} on:input={applyStyling} />
+                <input type="range" min="0.5" max="2.0" step="0.1" bind:value={textScale} oninput={applyStyling} />
               </div>
 
               <div class="slider-control">
@@ -721,7 +721,7 @@
                   <span>Umbral de desvanecimiento</span>
                   <span>{labelThreshold.toFixed(1)}</span>
                 </div>
-                <input type="range" min="0.2" max="2.5" step="0.1" bind:value={labelThreshold} on:input={applyStyling} />
+                <input type="range" min="0.2" max="2.5" step="0.1" bind:value={labelThreshold} oninput={applyStyling} />
               </div>
             </div>
           {/if}
@@ -730,7 +730,7 @@
         <!-- 4. FUERZAS FÍSICAS -->
         <div class="accordion-item" class:active={activeSection === 'forces'}>
           <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-          <div class="accordion-header" on:click={() => toggleSection('forces')}>
+          <div class="accordion-header" onclick={() => toggleSection('forces')}>
             <span class="chevron" class:expanded={activeSection === 'forces'}>›</span>
             <h5>Fuerzas</h5>
           </div>
@@ -760,7 +760,7 @@
                 <input type="range" min="0.1" max="2.0" step="0.1" bind:value={linkForce} />
               </div>
 
-              <button class="btn btn-ghost reset-btn" on:click={resetForces}>
+              <button class="btn btn-ghost reset-btn" onclick={resetForces}>
                 Reestablecer fuerzas predeterminadas
               </button>
             </div>
@@ -771,19 +771,19 @@
 
     <!-- PERSISTENT RIGHT TOOLBAR CONTROLS (FIT, ZOOM, MINIMAP) -->
     <div class="graph-quick-actions">
-      <button class="quick-btn" title="Acercar" on:click={zoomIn}>
+      <button class="quick-btn" title="Acercar" onclick={zoomIn}>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="action-icon"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
       </button>
-      <button class="quick-btn" title="Alejar" on:click={zoomOut}>
+      <button class="quick-btn" title="Alejar" onclick={zoomOut}>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="action-icon"><circle cx="12" cy="12" r="10"></circle><line x1="8" y1="12" x2="16" y2="12"></line></svg>
       </button>
-      <button class="quick-btn" title="Ajustar a pantalla" on:click={zoomToFit}>
+      <button class="quick-btn" title="Ajustar a pantalla" onclick={zoomToFit}>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="action-icon"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="9" x2="15" y2="15"></line><line x1="15" y1="9" x2="9" y2="15"></line></svg>
       </button>
-      <button class="quick-btn" title="Centrar" on:click={resetView}>
+      <button class="quick-btn" title="Centrar" onclick={resetView}>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="action-icon"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle></svg>
       </button>
-      <button class="quick-btn" title="Limpiar selección" on:click={clearHighlights}>
+      <button class="quick-btn" title="Limpiar selección" onclick={clearHighlights}>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="action-icon"><path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"></path><line x1="18" y1="9" x2="12" y2="15"></line><line x1="12" y1="9" x2="18" y2="15"></line></svg>
       </button>
     </div>

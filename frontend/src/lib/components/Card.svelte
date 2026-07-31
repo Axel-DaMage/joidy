@@ -9,10 +9,9 @@
   class="card padding-{padding}"
   class:hoverable
   class:clickable
-  on:click
   role={clickable ? 'button' : 'none'}
   tabindex={clickable ? 0 : -1}
-  on:keydown={(e) => clickable && e.key === 'Enter' && e.currentTarget.click()}
+  onkeydown={(e) => clickable && e.key === 'Enter' && e.currentTarget.click()}
 >
   <slot />
 </div>

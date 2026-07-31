@@ -587,7 +587,7 @@
   }
 </script>
 
-<svelte:window on:click={() => { if (showSortMenu) showSortMenu = false; }} on:keydown={(e) => e.key === 'Escape' && (deleteConfirm = false)} />
+<svelte:window onclick={() => { if (showSortMenu) showSortMenu = false; }} onkeydown={(e) => e.key === 'Escape' && (deleteConfirm = false)} />
 
 <div
   class="notes-page"
@@ -598,26 +598,26 @@
   <aside class="notes-list">
     <div class="tree-actions-bar">
       <div class="actions-left">
-        <button class="icon-btn" title="Crear nota" on:click={openNew}><FileEdit size={13} /></button>
-        <button class="icon-btn" title="Crear carpeta" on:click={handleCreateFolder}><FolderPlus size={13} /></button>
+        <button class="icon-btn" title="Crear nota" onclick={openNew}><FileEdit size={13} /></button>
+        <button class="icon-btn" title="Crear carpeta" onclick={handleCreateFolder}><FolderPlus size={13} /></button>
         <div class="sort-wrapper">
-          <button class="icon-btn" title="Cambiar orden" on:click|stopPropagation={() => showSortMenu = !showSortMenu}>
+          <button class="icon-btn" title="Cambiar orden" onclick={(e) => { e.stopPropagation(); showSortMenu = !showSortMenu; }}>
             <ArrowUpDown size={13} />
           </button>
           {#if showSortMenu}
-            <div class="sort-menu" on:click|stopPropagation>
-              <button class="sort-btn" class:active={sortMode==='az'} on:click={() => setSortMode('az')}>Ordenar por nombre (A-Z)</button>
-              <button class="sort-btn" class:active={sortMode==='za'} on:click={() => setSortMode('za')}>Ordenar por nombre (Z-A)</button>
+            <div class="sort-menu" onclick={(e) => e.stopPropagation()}>
+              <button class="sort-btn" class:active={sortMode==='az'} onclick={() => setSortMode('az')}>Ordenar por nombre (A-Z)</button>
+              <button class="sort-btn" class:active={sortMode==='za'} onclick={() => setSortMode('za')}>Ordenar por nombre (Z-A)</button>
               <div class="sort-divider"></div>
-              <button class="sort-btn" class:active={sortMode==='edit-new'} on:click={() => setSortMode('edit-new')}>Editar (más reciente) {#if sortMode==='edit-new'}✓{/if}</button>
-              <button class="sort-btn" class:active={sortMode==='edit-old'} on:click={() => setSortMode('edit-old')}>Editar (más antiguo) {#if sortMode==='edit-old'}✓{/if}</button>
+              <button class="sort-btn" class:active={sortMode==='edit-new'} onclick={() => setSortMode('edit-new')}>Editar (más reciente) {#if sortMode==='edit-new'}✓{/if}</button>
+              <button class="sort-btn" class:active={sortMode==='edit-old'} onclick={() => setSortMode('edit-old')}>Editar (más antiguo) {#if sortMode==='edit-old'}✓{/if}</button>
               <div class="sort-divider"></div>
-              <button class="sort-btn" class:active={sortMode==='create-new'} on:click={() => setSortMode('create-new')}>Creado (nuevo-antiguo) {#if sortMode==='create-new'}✓{/if}</button>
-              <button class="sort-btn" class:active={sortMode==='create-old'} on:click={() => setSortMode('create-old')}>Creado (antiguo-nuevo) {#if sortMode==='create-old'}✓{/if}</button>
+              <button class="sort-btn" class:active={sortMode==='create-new'} onclick={() => setSortMode('create-new')}>Creado (nuevo-antiguo) {#if sortMode==='create-new'}✓{/if}</button>
+              <button class="sort-btn" class:active={sortMode==='create-old'} onclick={() => setSortMode('create-old')}>Creado (antiguo-nuevo) {#if sortMode==='create-old'}✓{/if}</button>
             </div>
           {/if}
         </div>
-        <button class="icon-btn" title={allCollapsed ? "Expandir todo" : "Comprimir todo"} on:click={toggleCollapseAll}>
+        <button class="icon-btn" title={allCollapsed ? "Expandir todo" : "Comprimir todo"} onclick={toggleCollapseAll}>
           <ChevronsUpDown size={13} />
         </button>
       </div>
@@ -629,12 +629,12 @@
         <Search size={11} style="color: var(--text-muted); flex-shrink:0;" />
         <input class="search-input" bind:value={search} placeholder="Buscar..." />
         {#if search}
-          <button class="icon-btn" on:click={() => search = ''} title="Limpiar">
+          <button class="icon-btn" onclick={() => search = ''} title="Limpiar">
             <X size={10} />
           </button>
         {/if}
       </div>
-      <button class="toolbar-btn bulk-toggle" class:active={$bulkMode} on:click={() => { bulkMode.set(!$bulkMode); clearNoteSelection(); }}>
+      <button class="toolbar-btn bulk-toggle" class:active={$bulkMode} onclick={() => { bulkMode.set(!$bulkMode); clearNoteSelection(); }}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
       </button>
     </div>
@@ -643,7 +643,7 @@
       <span>{ $bulkMode ? `${$selectedNoteIds.size} seleccionadas` : `${$notes.length} notas` }</span>
       {#if search}<span class="sep">·</span><span>{filtered.length} resultados</span>{/if}
       {#if $bulkMode}
-        <button class="toolbar-btn select-all" on:click={$selectedNoteIds.size === filtered.length ? clearNoteSelection : selectAllNotes}>
+        <button class="toolbar-btn select-all" onclick={$selectedNoteIds.size === filtered.length ? clearNoteSelection : selectAllNotes}>
           {$selectedNoteIds.size === filtered.length ? 'Deseleccionar todo' : 'Seleccionar todo'}
         </button>
       {/if}
@@ -652,25 +652,25 @@
     {#if $bulkMode && $selectedNoteIds.size > 0}
       <div class="bulk-actions">
         <span class="bulk-count">{$selectedNoteIds.size} nota{#if $selectedNoteIds.size !== 1}s{/if}</span>
-        <button class="bulk-btn danger" on:click={() => { if (confirm(`¿Eliminar ${$selectedNoteIds.size} nota(s)?`)) deleteSelectedNotes(); }}>
+        <button class="bulk-btn danger" onclick={() => { if (confirm(`¿Eliminar ${$selectedNoteIds.size} nota(s)?`)) deleteSelectedNotes(); }}>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
           Eliminar
         </button>
-        <button class="bulk-btn" on:click={() => { const t = prompt('Tags a añadir (separadas por coma):'); if (t) tagSelectedNotes(t.split(',').map(s => s.trim()).filter(Boolean)); }}>
+        <button class="bulk-btn" onclick={() => { const t = prompt('Tags a añadir (separadas por coma):'); if (t) tagSelectedNotes(t.split(',').map(s => s.trim()).filter(Boolean)); }}>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
           Etiquetar
         </button>
-        <button class="bulk-btn" on:click={() => { const t = prompt('Tags a quitar (separadas por coma):'); if (t) untagSelectedNotes(t.split(',').map(s => s.trim()).filter(Boolean)); }}>
+        <button class="bulk-btn" onclick={() => { const t = prompt('Tags a quitar (separadas por coma):'); if (t) untagSelectedNotes(t.split(',').map(s => s.trim()).filter(Boolean)); }}>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/><line x1="15" y1="9" x2="9" y2="15"/></svg>
           Desetiquetar
         </button>
-        <button class="bulk-btn" on:click={() => clearNoteSelection()}>
+        <button class="bulk-btn" onclick={() => clearNoteSelection()}>
           Cancelar
         </button>
       </div>
     {/if}
 
-    <div class="list-scroll" bind:this={listScrollEl} on:scroll={onListScroll}>
+    <div class="list-scroll" bind:this={listScrollEl} onscroll={onListScroll}>
       {#if $notesLoading}
         <div class="empty-msg">Cargando...</div>
 
@@ -684,15 +684,15 @@
                 <div
                   class="tree-row folder-row"
                   style="padding-left: {8 + item.depth * 14}px"
-                  on:click={() => toggleFolder(item.path)}
-                  on:contextmenu={(e) => handleContextMenu(e, item)}
+                  onclick={() => toggleFolder(item.path)}
+                  oncontextmenu={(e) => handleContextMenu(e, item)}
                 >
                   <span class="chevron" class:open={!collapsed.has(item.path)}>
                     <ChevronRight size={11} />
                   </span>
                   <div class="t-icon"><DynamicIcon name={item.icon} size={13} color={item.color} pack={item.pack} /></div>
                   <span class="t-name folder-name">{item.name}</span>
-                  <button class="folder-settings-btn" title="Personalizar carpeta" on:click|stopPropagation={() => openFolderCustomizer(item)}>
+                  <button class="folder-settings-btn" title="Personalizar carpeta" onclick={(e) => { e.stopPropagation(); openFolderCustomizer(item); }}>
                     <Settings size={10} />
                   </button>
                   <span class="t-count">{item.childCount}</span>
@@ -703,12 +703,12 @@
                   class="tree-row file-row"
                   class:active={item.note?.id === selectedNote?.id}
                   style="padding-left: {20 + item.depth * 14}px"
-                  on:click={() => item.note && openNote(item.note)}
-                  on:contextmenu={(e) => handleContextMenu(e, item)}
+                  onclick={() => item.note && openNote(item.note)}
+                  oncontextmenu={(e) => handleContextMenu(e, item)}
                 >
                   <div class="t-icon file-icon"><DynamicIcon name={item.icon} size={11} color={item.color} pack={item.pack} /></div>
                   <span class="t-name file-name">{item.name}</span>
-                  <button class="folder-settings-btn" title="Personalizar nota" on:click|stopPropagation={() => openFolderCustomizer({ path: item.note?.source_path || item.path, icon: item.icon, color: item.color, note: item.note })}>
+                  <button class="folder-settings-btn" title="Personalizar nota" onclick={(e) => { e.stopPropagation(); openFolderCustomizer({ path: item.note?.source_path || item.path, icon: item.icon, color: item.color, note: item.note }); }}>
                     <Settings size={10} />
                   </button>
                 </div>
@@ -722,15 +722,15 @@
                 <div
                   class="tree-row folder-row"
                   style="padding-left: {8 + node.depth * 14}px"
-                  on:click={() => toggleFolder(node.path)}
-                  on:contextmenu={(e) => handleContextMenu(e, node)}
+                  onclick={() => toggleFolder(node.path)}
+                  oncontextmenu={(e) => handleContextMenu(e, node)}
                 >
                   <span class="chevron" class:open={!collapsed.has(node.path)}>
                     <ChevronRight size={11} />
                   </span>
                   <div class="t-icon"><DynamicIcon name={node.icon} size={13} color={node.color} pack={node.pack} /></div>
                   <span class="t-name folder-name">{node.name}</span>
-                  <button class="folder-settings-btn" title="Personalizar carpeta" on:click|stopPropagation={() => openFolderCustomizer(node)}>
+                  <button class="folder-settings-btn" title="Personalizar carpeta" onclick={(e) => { e.stopPropagation(); openFolderCustomizer(node); }}>
                     <Settings size={10} />
                   </button>
                   <span class="t-count">{node.childCount}</span>
@@ -741,12 +741,12 @@
                   class="tree-row file-row"
                   class:active={node.note?.id === selectedNote?.id}
                   style="padding-left: {20 + node.depth * 14}px"
-                  on:click={() => node.note && openNote(node.note)}
-                  on:contextmenu={(e) => handleContextMenu(e, node)}
+                  onclick={() => node.note && openNote(node.note)}
+                  oncontextmenu={(e) => handleContextMenu(e, node)}
                 >
                   <div class="t-icon file-icon"><DynamicIcon name={node.icon} size={11} color={node.color} pack={node.pack} /></div>
                   <span class="t-name file-name">{node.name}</span>
-                  <button class="folder-settings-btn" title="Personalizar nota" on:click|stopPropagation={() => openFolderCustomizer({ path: node.note?.source_path || node.path, icon: node.icon, color: node.color, note: node.note })}>
+                  <button class="folder-settings-btn" title="Personalizar nota" onclick={(e) => { e.stopPropagation(); openFolderCustomizer({ path: node.note?.source_path || node.path, icon: node.icon, color: node.color, note: node.note }); }}>
                     <Settings size={10} />
                   </button>
                 </div>
@@ -774,8 +774,8 @@
   <!-- Folder customize modal -->
   <!-- Create folder modal -->
   {#if creatingFolder}
-    <div class="folder-modal-backdrop" on:click={() => creatingFolder = false}>
-      <div class="folder-modal" on:click|stopPropagation>
+    <div class="folder-modal-backdrop" onclick={() => creatingFolder = false}>
+      <div class="folder-modal" onclick={(e) => e.stopPropagation()}>
         <h3 class="folder-modal-title">Crear carpeta</h3>
         
         <div style="display:flex; flex-direction:column; gap:4px; margin-bottom:12px;">
@@ -805,8 +805,8 @@
         </div>
         
         <div class="folder-modal-btns">
-          <button on:click={() => creatingFolder = false}>Cancelar</button>
-          <button class="primary" disabled={!newFolderName.trim()} on:click={async () => {
+          <button onclick={() => creatingFolder = false}>Cancelar</button>
+          <button class="primary" disabled={!newFolderName.trim()} onclick={async () => {
             if (!newFolderName.trim()) return;
             const targetPath = newFolderParent ? `${newFolderParent}/${newFolderName.trim()}` : newFolderName.trim();
             try {
@@ -839,13 +839,13 @@
   {/key}
 
   {#if renamingNode}
-    <div class="folder-modal-backdrop" on:click={() => renamingNode = null}>
-      <div class="folder-modal" on:click|stopPropagation>
+    <div class="folder-modal-backdrop" onclick={() => renamingNode = null}>
+      <div class="folder-modal" onclick={(e) => e.stopPropagation()}>
         <h3 class="folder-modal-title">Renombrar</h3>
-        <input type="text" class="input mono" bind:value={renameValue} style="width:100%; box-sizing:border-box; margin-bottom:12px;" on:keydown={(e) => e.key === 'Enter' && confirmRename()} />
+        <input type="text" class="input mono" bind:value={renameValue} style="width:100%; box-sizing:border-box; margin-bottom:12px;" onkeydown={(e) => e.key === 'Enter' && confirmRename()} />
         <div class="folder-modal-btns">
-          <button on:click={() => renamingNode = null}>Cancelar</button>
-          <button class="primary" disabled={!renameValue.trim()} on:click={confirmRename}>Guardar</button>
+          <button onclick={() => renamingNode = null}>Cancelar</button>
+          <button class="primary" disabled={!renameValue.trim()} onclick={confirmRename}>Guardar</button>
         </div>
       </div>
     </div>
@@ -860,8 +860,8 @@
   {/if}
 
   {#if editingFolder}
-    <div class="folder-modal-backdrop" on:click={() => editingFolder = null}>
-      <div class="folder-modal" on:click|stopPropagation>
+    <div class="folder-modal-backdrop" onclick={() => editingFolder = null}>
+      <div class="folder-modal" onclick={(e) => e.stopPropagation()}>
         <h3 class="folder-modal-title">Personalizar carpeta</h3>
         
         <!-- Color bar -->
@@ -878,8 +878,8 @@
         </div>
         
         <div class="folder-modal-btns">
-          <button on:click={() => editingFolder = null}>Cancelar</button>
-          <button on:click={async () => { 
+          <button onclick={() => editingFolder = null}>Cancelar</button>
+          <button onclick={async () => { 
             if (editingFolder) {
               updateFolderMeta(editingFolder, { icon: folderIcon, color: folderColor });
               if (editingFolderNote) {
@@ -914,7 +914,7 @@
 
   <!-- ── Resize handle ─────────────────────────────────────────────────────── -->
   <!-- svelte-ignore a11y-no-static-element-interactions -->
-  <div class="resize-handle" on:mousedown={startResize}></div>
+  <div class="resize-handle" onmousedown={startResize}></div>
 
   <!-- ── Editor panel ──────────────────────────────────────────────────────── -->
   <div class="editor-panel">
@@ -923,8 +923,8 @@
         <span class="delete-confirm-text">¿Eliminar esta nota?</span>
         <span class="delete-confirm-hint">Esta acción no se puede deshacer.</span>
         <div class="delete-confirm-actions">
-          <button class="btn-cancel" on:click={() => deleteConfirm = false}>Cancelar</button>
-          <button class="btn-danger" on:click={handleDelete}>Eliminar</button>
+          <button class="btn-cancel" onclick={() => deleteConfirm = false}>Cancelar</button>
+          <button class="btn-danger" onclick={handleDelete}>Eliminar</button>
         </div>
       </div>
     {/if}
@@ -959,16 +959,16 @@
           <div class="dash-widget quick-note-widget">
             <div class="dash-widget-title"><DynamicIcon name="PenTool" size={13}/> Acciones Rápidas</div>
             <div class="dash-action-buttons">
-              <button class="dash-btn primary-dash-btn" on:click={openNew}>
+              <button class="dash-btn primary-dash-btn" onclick={openNew}>
                 <FileEdit size={16} /> Crear nota nueva
               </button>
-              <button class={`dash-btn secondary-dash-btn daily-note-btn ${dailyNotesConfigured ? '' : 'daily-note-muted'}`} on:click={openDaily}>
+              <button class={`dash-btn secondary-dash-btn daily-note-btn ${dailyNotesConfigured ? '' : 'daily-note-muted'}`} onclick={openDaily}>
                 <span class="daily-note-main">
                   <DynamicIcon name="Calendar" size={16} /> Nota Diaria
                 </span>
                 <span class="daily-note-hint">Configurar ruta de nota diaria</span>
               </button>
-              <button class="dash-btn secondary-dash-btn momentary-btn" on:click={openMomentary}>
+              <button class="dash-btn secondary-dash-btn momentary-btn" onclick={openMomentary}>
                 <Plus size={16} /> Nota Momentánea
               </button>
             </div>
@@ -978,7 +978,7 @@
             <div class="recent-list">
               {#each $notes.slice(0, 3) as note}
                 {@const vis = getNoteVisual(note)}
-                <button class="recent-item" on:click={() => openNote(note)}>
+                <button class="recent-item" onclick={() => openNote(note)}>
                   <DynamicIcon name={vis.icon} size={12} color={vis.color || 'var(--text-disabled)'} pack={vis.pack} />
                   <span class="recent-name" use:autoScrollTitle={note.title}>
                     <span class="recent-name-text">{note.title}</span>

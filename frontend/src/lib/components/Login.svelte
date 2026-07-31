@@ -46,7 +46,7 @@
     <div class="logo mono">JOIDY</div>
     <p class="subtitle">Conocimiento Gamificado</p>
     
-    <form on:submit|preventDefault={handleLogin}>
+    <form onsubmit={(e) => { e.preventDefault(); handleLogin(); }}>
       <div class="field">
         <label for="username">Usuario</label>
         <input id="username" type="text" bind:value={username} class="input" />

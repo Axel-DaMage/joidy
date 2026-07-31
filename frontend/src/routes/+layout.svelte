@@ -401,7 +401,7 @@
         <DynamicIcon name="DownloadCloud" size={13} />
         <span>Instala Joidy para acceso rápido</span>
         <div class="pwa-actions">
-          <button class="pwa-btn pwa-install" on:click={async () => {
+          <button class="pwa-btn pwa-install" onclick={async () => {
             if ($deferredPrompt) {
               $deferredPrompt.prompt();
               const { outcome } = await $deferredPrompt.userChoice;
@@ -411,7 +411,7 @@
               deferredPrompt.set(null);
             }
           }}>Instalar</button>
-          <button class="pwa-btn pwa-dismiss" on:click={() => {
+          <button class="pwa-btn pwa-dismiss" onclick={() => {
             showInstallBanner.set(false);
             localStorage.setItem('joidy-pwa-dismissed', 'true');
           }}>
@@ -450,7 +450,7 @@
       class="btn btn-ghost btn-icon"
       title="Ajustes"
       style="color: var(--text-muted);"
-      on:click={() => window.dispatchEvent(new CustomEvent('joidy:open-settings'))}
+      onclick={() => window.dispatchEvent(new CustomEvent('joidy:open-settings'))}
     >
       <DynamicIcon name="Settings" size={14} />
     </button>
@@ -481,7 +481,7 @@
 
   <!-- Status bar -->
   <footer class="app-statusbar">
-    <span style="color: var(--text-muted); cursor: pointer;" title="Click para notificación de prueba" on:click={() => { showNotification('Notificación de prueba - Info', 'info'); setTimeout(() => showNotification('Notificación de prueba - Success', 'success'), 600); setTimeout(() => showNotification('Notificación de prueba - Level up!', 'level'), 1200); }}>joidy v0.1</span>
+    <span style="color: var(--text-muted); cursor: pointer;" title="Click para notificación de prueba" onclick={() => { showNotification('Notificación de prueba - Info', 'info'); setTimeout(() => showNotification('Notificación de prueba - Success', 'success'), 600); setTimeout(() => showNotification('Notificación de prueba - Level up!', 'level'), 1200); }}>joidy v0.1</span>
 
     <div class="status-live" title="Estado actual">
       <span class="status-pill status-time mono">{currentTime}</span>
