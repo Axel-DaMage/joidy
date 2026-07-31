@@ -759,18 +759,6 @@
     color: var(--warning, #f59e0b);
   }
 
-  .nav-placeholder-badge {
-    font-size: 9px;
-    line-height: 1;
-    padding: 1px 4px;
-    border-radius: 3px;
-    background: var(--surface);
-    color: var(--text-muted);
-    border: 1px solid var(--border);
-    font-style: italic;
-    white-space: nowrap;
-    flex-shrink: 0;
-  }
   .nav-item.nav-placeholder {
     opacity: 0.55;
   }

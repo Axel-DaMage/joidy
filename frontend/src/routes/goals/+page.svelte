@@ -2076,8 +2076,7 @@
     width: 320px;
   }
 
-  .dashboard-side-col > .dash-card,
-  .dashboard-side-col > .btn {
+  .dashboard-side-col > .dash-card {
     width: 100%;
   }
 
@@ -2628,31 +2627,6 @@
     width: 100%;
   }
 
-  .planning-tabs-centered {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 24px;
-    font-family: var(--font-serif, serif);
-    color: var(--text-muted);
-  }
-
-  .planning-tabs-centered .planning-tab {
-    font-size: 32px;
-    padding: 0 10px;
-    background: none;
-    border: none;
-    color: var(--text-muted);
-    cursor: pointer;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
-  .planning-tabs-centered .planning-tab.active {
-    color: var(--text-primary);
-    transform: scale(1.1);
-    background: none;
-  }
-
   .nav-sep {
     opacity: 0.3;
     font-weight: 200;
@@ -2764,10 +2738,6 @@
     cursor: pointer;
     color: inherit;
   }
-  .expand-header:hover .section-title {
-    color: var(--text-primary);
-  }
-
   /* Advanced Dashboard Styles */
   .full-height-dashboard {
     height: calc(100vh - 56px - 44px - var(--s3) * 2);
@@ -2931,10 +2901,6 @@
   .candle-svg {
     filter: drop-shadow(0 0 2px rgba(0,0,0,0.15));
   }
-  .candle-svg rect:hover {
-    filter: brightness(1.25);
-    cursor: crosshair;
-  }
   .candle-empty-state {
     display: flex;
     flex-direction: column;
@@ -2945,12 +2911,6 @@
     font-size: 11px;
     height: 100%;
     text-align: center;
-  }
-  .candle-empty-state small {
-    font-size: 9px;
-    color: var(--text-disabled);
-    max-width: 180px;
-    line-height: 1.4;
   }
   .pred-period-badge {
     margin-left: auto;
@@ -3424,10 +3384,6 @@
     margin-top: 2px;
   }
 
-  .hgi-meta .config-badge {
-    margin-left: -6px;
-  }
-
   .hgi-bar {
     flex: 1;
     height: 4px;
@@ -3482,7 +3438,6 @@
     justify-content: flex-end;
   }
   .hourly-card { padding: 20px; }
-  .activity-header h3 { margin: 0 0 16px 0; font-size: 1.1rem; color: var(--text-primary); }
   .activity-tabs { display: flex; gap: 8px; }
   .activity-tab {
     padding: 6px 12px;
