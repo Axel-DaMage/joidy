@@ -18,9 +18,9 @@
 
 <style>
   .card {
-    background: var(--elevated, #1a1a1a);
+    background: var(--elevated);
     border: 1px solid var(--border);
-    border-radius: var(--r, 8px);
+    border-radius: var(--r);
     transition: all var(--t-fast);
   }
 
@@ -30,8 +30,8 @@
   .padding-lg { padding: 24px; }
 
   .hoverable:hover {
-    border-color: var(--accent, #6366f1);
-    box-shadow: 0 0 0 1px var(--accent, #6366f1);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
   }
 
   .clickable {

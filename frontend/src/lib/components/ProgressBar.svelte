@@ -31,7 +31,7 @@
   .progress-bar {
     flex: 1;
     background: var(--border);
-    border-radius: 999px;
+    border-radius: var(--r-full);
     overflow: hidden;
   }
 
@@ -41,13 +41,13 @@
 
   .progress-fill {
     height: 100%;
-    border-radius: 999px;
+    border-radius: var(--r-full);
     transition: width 0.3s ease;
   }
 
   .progress-default { background: var(--text-muted); }
-  .progress-success { background: var(--success, #22c55e); }
-  .progress-accent { background: var(--accent, #6366f1); }
+  .progress-success { background: var(--success); }
+  .progress-accent { background: var(--accent); }
 
   .progress-label {
     font-size: 12px;
