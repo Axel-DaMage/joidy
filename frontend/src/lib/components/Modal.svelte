@@ -34,7 +34,7 @@
     >
       <div class="modal-header">
         <h3 class="modal-title">{title}</h3>
-        <button class="modal-close" onclick={closeModal}>
+        <button class="modal-close" onclick={closeModal} aria-label="Cerrar">
           <X size={18} />
         </button>
       </div>

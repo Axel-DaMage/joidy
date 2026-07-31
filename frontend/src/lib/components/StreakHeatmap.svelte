@@ -218,6 +218,7 @@
         class:disabled={!canGoPrev}
         onclick={() => shiftYearMonth(-1)}
         disabled={!canGoPrev}
+        aria-label="Año anterior"
       >
         ‹
       </button>
@@ -227,6 +228,7 @@
         class:disabled={!canGoNext}
         onclick={() => shiftYearMonth(1)}
         disabled={!canGoNext}
+        aria-label="Año siguiente"
       >
         ›
       </button>

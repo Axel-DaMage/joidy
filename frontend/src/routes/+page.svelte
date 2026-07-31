@@ -284,9 +284,9 @@
           <div class="widget-centered">
             <!-- Module navigation -->
             <div class="module-nav">
-              <button class="nav-arrow" onclick={prevModule} title="Anterior"><DynamicIcon name="ChevronLeft" size={14}/></button>
+              <button class="nav-arrow" onclick={prevModule} title="Anterior" aria-label="Anterior"><DynamicIcon name="ChevronLeft" size={14}/></button>
               <span class="module-label mono">{MODULES[moduleIdx].label.toUpperCase()}</span>
-              <button class="nav-arrow" onclick={nextModule} title="Siguiente"><DynamicIcon name="ChevronRight" size={14}/></button>
+              <button class="nav-arrow" onclick={nextModule} title="Siguiente" aria-label="Siguiente"><DynamicIcon name="ChevronRight" size={14}/></button>
             </div>
 
             <!-- Module viewport -->
@@ -442,9 +442,9 @@
         {:else if wid === 'plant-carousel'}
           <div class="widget-centered">
             <div class="module-nav">
-              <button class="nav-arrow" onclick={prevModule}><DynamicIcon name="ChevronLeft" size={14}/></button>
+              <button class="nav-arrow" onclick={prevModule} aria-label="Anterior"><DynamicIcon name="ChevronLeft" size={14}/></button>
               <span class="module-label mono">{MODULES[moduleIdx].label.toUpperCase()}</span>
-              <button class="nav-arrow" onclick={nextModule}><DynamicIcon name="ChevronRight" size={14}/></button>
+              <button class="nav-arrow" onclick={nextModule} aria-label="Siguiente"><DynamicIcon name="ChevronRight" size={14}/></button>
             </div>
             <div class="module-viewport">
               {#key moduleIdx}

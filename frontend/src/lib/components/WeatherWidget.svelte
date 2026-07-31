@@ -56,7 +56,7 @@
       <span class="weather-icon">{getEmoji(weather.code, weather.isDay)}</span>
       <span class="weather-temp">{weather.temp}°</span>
       <span class="weather-location">{weather.location}</span>
-      <button class="weather-refresh" onclick={loadWeather} title="Actualizar">↻</button>
+      <button class="weather-refresh" onclick={loadWeather} title="Actualizar" aria-label="Actualizar">↻</button>
     </div>
   {/if}
 </div>

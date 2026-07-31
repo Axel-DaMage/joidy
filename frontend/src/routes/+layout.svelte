@@ -419,7 +419,7 @@
               deferredPrompt.set(null);
             }
           }}>Instalar</button>
-          <button class="pwa-btn pwa-dismiss" onclick={() => {
+          <button class="pwa-btn pwa-dismiss" aria-label="Cerrar aviso de instalación" onclick={() => {
             showInstallBanner.set(false);
             localStorage.setItem('joidy-pwa-dismissed', 'true');
           }}>
@@ -457,6 +457,7 @@
     <button
       class="btn btn-ghost btn-icon"
       title="Ajustes"
+      aria-label="Ajustes"
       style="color: var(--text-muted);"
       onclick={() => window.dispatchEvent(new CustomEvent('joidy:open-settings'))}
     >
