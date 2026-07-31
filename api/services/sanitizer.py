@@ -42,7 +42,7 @@ def sanitize_title(title: str) -> str:
     if not title:
         raise ValueError("Title cannot be empty")
     if len(title) > MAX_TITLE_LENGTH:
-        title = title[:MAX_TITLE_LENGTH]
+        raise ValueError(f"Title cannot exceed {MAX_TITLE_LENGTH} characters")
     return sanitize_html(title)
 
 
