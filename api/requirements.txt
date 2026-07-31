@@ -6,7 +6,7 @@ pydantic==2.10.3
 pydantic-settings==2.6.1
 httpx==0.28.1
 python-multipart==0.0.32
-psycopg2-binary==2.9.10
+psycopg2-binary==2.9.12
 pgvector==0.3.6
 pyjwt==2.13.0
 bleach==6.4.0
