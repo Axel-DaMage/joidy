@@ -34,8 +34,9 @@
     if (packName === 'phosphor' || packName === 'material') {
       return phosphorMap[n] || Circle;
     }
-    // Synchronous lookup — no race condition
-    return (LucideIcons as any)[n] || Circle;
+    // Synchronous lookup — handles both PascalCase and kebab-case names
+    const pascal = n.split('-').map((p: string) => p.charAt(0).toUpperCase() + p.slice(1)).join('');
+    return (LucideIcons as any)[n] || (LucideIcons as any)[pascal] || Circle;
   }
 
   $: comp = getIconComponent(pack || $activeIconPack, name);
