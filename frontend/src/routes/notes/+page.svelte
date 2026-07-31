@@ -4,7 +4,6 @@
   import { goto } from '$app/navigation';
   import { Search, Plus, X, List, FolderTree, ChevronRight, FileEdit, FolderPlus, ChevronsUpDown, ArrowUpDown, Settings } from 'lucide-svelte';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
-  import ScientificCalculator from '$lib/components/ScientificCalculator.svelte';
   import NoteEditor from '$lib/components/NoteEditor.svelte';
   import NoteCard from '$lib/components/NoteCard.svelte';
   import LazyIconPicker from '$lib/components/LazyIconPicker.svelte';
@@ -988,13 +987,6 @@
                 </button>
               {/each}
             </div>
-          </div>
-
-          <div class="dash-widget">
-            <div class="dash-widget-title" style="margin-bottom: 5px;">
-              <DynamicIcon name="Calculator" size={13}/> Calculadora
-            </div>
-            <ScientificCalculator />
           </div>
         </div>
       </div>
