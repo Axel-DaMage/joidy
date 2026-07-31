@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { goto } from '$app/navigation';
   import { fade, fly } from 'svelte/transition';
+  import { Search } from 'lucide-svelte';
   import DynamicIcon from './DynamicIcon.svelte';
   import { notes } from '$lib/stores/notes';
 
@@ -111,7 +112,7 @@
   <div class="cp-backdrop" on:click={() => open = false} transition:fade={{duration: 100}}>
     <div class="cp-modal" on:click|stopPropagation transition:fly={{y: -20, duration: 150}}>
       <div class="cp-header">
-        <DynamicIcon name="Search" size={16} />
+        <Search size={16} />
         <input 
           bind:this={searchInput}
           bind:value={query}

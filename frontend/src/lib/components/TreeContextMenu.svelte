@@ -1,7 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher, onMount } from 'svelte';
   import type { FlatNode } from '$lib/utils/fileTree';
-  import DynamicIcon from './DynamicIcon.svelte';
+  import { Edit, MoveRight, Trash2, FilePlus, FolderX } from 'lucide-svelte';
 
   export let x: number;
   export let y: number;
@@ -61,24 +61,24 @@
 <div class="ctx-menu" bind:this={menuEl} style={style} on:click|stopPropagation on:contextmenu|stopPropagation>
   {#if node.type === 'file'}
     <button class="ctx-item" on:click={handleItem('rename')}>
-      <DynamicIcon name="Edit" size={12} /> Renombrar
+      <Edit size={12} /> Renombrar
     </button>
     <button class="ctx-item" on:click={handleItem('move')}>
-      <DynamicIcon name="MoveRight" size={12} /> Mover a...
+      <MoveRight size={12} /> Mover a...
     </button>
     <div class="ctx-divider"></div>
     <button class="ctx-item ctx-danger" on:click={handleItem('deleteNote')}>
-      <DynamicIcon name="Trash2" size={12} /> Eliminar
+      <Trash2 size={12} /> Eliminar
     </button>
   {:else}
     <button class="ctx-item" on:click={handleItem('newNoteInFolder')}>
-      <DynamicIcon name="FilePlus" size={12} /> Nueva nota aquí
+      <FilePlus size={12} /> Nueva nota aquí
     </button>
     <button class="ctx-item" on:click={handleItem('rename')}>
-      <DynamicIcon name="Edit" size={12} /> Renombrar
+      <Edit size={12} /> Renombrar
     </button>
     <button class="ctx-item ctx-danger" on:click={handleItem('deleteFolder')}>
-      <DynamicIcon name="FolderX" size={12} /> Eliminar carpeta
+      <FolderX size={12} /> Eliminar carpeta
     </button>
   {/if}
 </div>

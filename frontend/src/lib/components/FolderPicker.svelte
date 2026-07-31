@@ -1,6 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import type { FlatNode } from '$lib/utils/fileTree';
+  import { FolderRoot } from 'lucide-svelte';
   import DynamicIcon from './DynamicIcon.svelte';
 
   export let flatNodes: FlatNode[] = [];
@@ -28,7 +29,7 @@
         class:selected={selectedPath === ''}
         on:click={() => selectedPath = ''}
       >
-        <DynamicIcon name="FolderRoot" size={12} />
+        <FolderRoot size={12} />
         (Raíz)
       </button>
       {#each folders as f}

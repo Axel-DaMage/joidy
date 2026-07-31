@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { StreakStats } from '$lib/api';
-  import DynamicIcon from '$lib/components/DynamicIcon.svelte';
+  import { BarChart3, Calendar } from 'lucide-svelte';
 
   export let stats: StreakStats | null = null;
 </script>
@@ -8,7 +8,7 @@
 {#if stats}
   <div class="stats-panel">
     <div class="stats-header">
-      <DynamicIcon name="BarChart3" size={12} />
+      <BarChart3 size={12} />
       <span>RESUMEN GLOBAL</span>
     </div>
 
@@ -36,7 +36,7 @@
     {/if}
 
     <div class="tracker-row">
-      <DynamicIcon name="Calendar" size={11} />
+      <Calendar size={11} />
       <span>{stats.days_tracked} días trackeados</span>
       <span class="sep">·</span>
       <span>{stats.total_checkins} check-ins totales</span>
