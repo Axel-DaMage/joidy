@@ -742,29 +742,8 @@ async def sync_repo(repo_id: int, db: Session = Depends(get_db)):
 
 GITHUB_OAUTH_SCOPES = [
     "repo",
-    "repo:status",
-    "repo_deployment",
-    "public_repo",
-    "repo:invite",
-    "security_events",
     "read:user",
     "user:email",
-    "user:follow",
-    "delete_repo",
-    "write:discussion",
-    "read:discussion",
-    "admin:repo_hook",
-    "write:repo_hook",
-    "read:repo_hook",
-    "admin:org",
-    "write:org",
-    "read:org",
-    "admin:public_key",
-    "write:public_key",
-    "read:public_key",
-    "admin:org_hook",
-    "write:org_hook",
-    "read:org_hook",
     "workflow",
 ]
 
@@ -850,6 +829,88 @@ async def poll_device_code(
         return {"status": "expired", "message": "Device code expired. Start new flow"}
     elif error == "access_denied":
         return {"status": "denied", "message": "User denied access"}
+
+    access_token = data.get("access_token")
+    token_type = data.get("token_type", "bearer")
+    scope = data.get("scope", "")
+
+    return {
+        "status": "authorized",
+        "access_token": access_token,
+        "token_type": token_type,
+        "scope": scope,
+    }
+
+
+# ── Web Flow (OAuth callback) ──────────────────────────────────────────────────
+
+@router.get("/oauth/web/start")
+async def start_web_flow():
+    """
+    Inicia el Web Flow de OAuth para GitHub.
+    Redirige al usuario a la página de autorización de GitHub.
+    Tras autorizar, GitHub redirige a la URL configurada (github_oauth_web_url).
+    """
+    if not settings.github_client_id:
+        raise HTTPException(
+            status_code=400,
+            detail="GitHub OAuth not configured. Set GITHUB_CLIENT_ID in .env"
+        )
+
+    redirect_uri = settings.github_oauth_web_url or "http://localhost:8000/integrations/github/oauth/callback"
+    authorize_url = (
+        f"https://github.com/login/oauth/authorize"
+        f"?client_id={settings.github_client_id}"
+        f"&redirect_uri={redirect_uri}"
+        f"&scope={'%20'.join(GITHUB_OAUTH_SCOPES)}"
+    )
+    return {"authorize_url": authorize_url, "redirect_uri": redirect_uri}
+
+
+@router.get("/oauth/callback")
+async def oauth_callback(
+    code: str = Query(..., description="Authorization code from GitHub"),
+    state: str | None = Query(None, description="State parameter for CSRF protection"),
+    error: str | None = Query(None, description="Error from GitHub"),
+):
+    """
+    Callback endpoint para el Web Flow de GitHub OAuth.
+    GitHub redirige aquí tras la autorización del usuario.
+    Intercambia el código por un access_token.
+    """
+    if error:
+        raise HTTPException(status_code=400, detail=f"OAuth error: {error}")
+
+    if not settings.github_client_id or not settings.github_client_secret:
+        raise HTTPException(
+            status_code=400,
+            detail="GitHub OAuth not configured. Set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET in .env"
+        )
+
+    token_url = "https://github.com/login/oauth/access_token"
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        r = await client.post(
+            token_url,
+            headers={
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+            },
+            json={
+                "client_id": settings.github_client_id,
+                "client_secret": settings.github_client_secret,
+                "code": code,
+                "redirect_uri": settings.github_oauth_web_url or "http://localhost:8000/integrations/github/oauth/callback",
+            },
+        )
+        r.raise_for_status()
+        data = r.json()
+
+    if data.get("error"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Token exchange failed: {data.get('error_description', data['error'])}"
+        )
 
     access_token = data.get("access_token")
     token_type = data.get("token_type", "bearer")
