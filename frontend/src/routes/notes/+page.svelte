@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte';
+  import { onMount, onDestroy, tick } from 'svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { Search, Plus, X, List, FolderTree, ChevronRight, FileEdit, FolderPlus, ChevronsUpDown, ArrowUpDown, Settings } from 'lucide-svelte';
@@ -431,6 +431,8 @@
 
     window.addEventListener('beforeunload', handleBeforeUnload);
   });
+
+  onDestroy(() => window.removeEventListener('beforeunload', handleBeforeUnload));
 
   function handleBeforeUnload() {
     captureSnapshot('/notes', 

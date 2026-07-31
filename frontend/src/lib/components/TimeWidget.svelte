@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { use24HourClock } from '$lib/stores/settings';
+  import { getLocale } from '$lib/stores/locale';
 
   // ── Timezone ───────────────────────────────────────────────────────────────
   const TZ_MAP: Record<string, string> = {
@@ -78,7 +79,7 @@
 
   function updateClock() {
     try {
-      clockStr = new Date().toLocaleTimeString('es', {
+      clockStr = new Date().toLocaleTimeString(getLocale(), {
         timeZone: timezone,
         hour:     $use24HourClock ? '2-digit' : 'numeric',
         minute:   '2-digit',
