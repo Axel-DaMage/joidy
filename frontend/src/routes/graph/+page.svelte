@@ -30,6 +30,9 @@
   });
 </script>
 
+<svelte:head>
+  <title>Grafo de Conocimiento — Joidy</title>
+</svelte:head>
 
 {#if $devMode}
 <div class="graph-page">

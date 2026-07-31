@@ -837,7 +837,12 @@
     z-index: 1010;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
     backdrop-filter: blur(12px);
-    transition: all 0.25s ease;
+    transition: all 0.25s ease, opacity 0.2s ease;
+    opacity: 0.4;
+  }
+
+  .graph-wrapper:hover .settings-toggle-btn {
+    opacity: 1;
   }
 
   .settings-toggle-btn:hover {
