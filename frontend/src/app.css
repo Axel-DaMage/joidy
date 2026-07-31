@@ -137,6 +137,18 @@ h4 { font-size: 14px; font-weight: 500; }
   border: none;
 }
 
+/* Zen Mode: hide nav, header, footer, and expand main to full viewport (#270) */
+body.zen-mode-active .app-header,
+body.zen-mode-active .app-sidebar,
+body.zen-mode-active .app-statusbar {
+  display: none !important;
+}
+body.zen-mode-active .app-shell {
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+  grid-template-areas: "main";
+}
+
 .app-header {
   grid-area: header;
   display: flex;

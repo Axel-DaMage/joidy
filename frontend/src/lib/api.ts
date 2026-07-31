@@ -12,7 +12,8 @@ const BASE = browser
 
 let isHandlingLogout = false;
 
-async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
+async function req<T>(method: string, path: string, body?: unknown, opts?: { silent?: boolean }): Promise<T> {
+  const silent = opts?.silent ?? false;
   try {
     const token = getToken();
     const headers: Record<string, string> = {};
@@ -35,16 +36,30 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
     }
 
     if (!res.ok) {
-      const err = await res.text().catch(() => res.statusText);
-      const errorMsg = err || res.statusText || 'Error desconocido';
-      showNotification(`Error del servidor (${res.status}): ${errorMsg}`, 'error');
-      throw new Error(`API ${method} ${path} → ${res.status}: ${err}`);
+      const raw = await res.text().catch(() => res.statusText);
+      // Parse JSON error bodies to extract a human-readable message instead
+      // of showing raw JSON like {"detail":"VAPID not configured"} (#252).
+      let userMsg = raw || res.statusText || 'Error desconocido';
+      try {
+        const parsed = JSON.parse(raw);
+        userMsg = parsed.detail || parsed.message || parsed.error || raw;
+      } catch { /* not JSON, use raw text */ }
+
+      // Map non-actionable server errors to friendlier messages
+      if (res.status === 502 || res.status === 503) {
+        userMsg = 'El servicio no está disponible temporalmente.';
+      }
+
+      if (!silent) {
+        showNotification(userMsg, 'error');
+      }
+      throw new Error(`API ${method} ${path} → ${res.status}: ${raw}`);
     }
 
     if (res.status === 204) return undefined as T;
     return res.json();
   } catch (error: any) {
-    if (error.name === 'TypeError' || error.message.includes('Failed to fetch') || error.message.includes('fetch failed')) {
+    if (!silent && (error.name === 'TypeError' || error.message.includes('Failed to fetch') || error.message.includes('fetch failed'))) {
       showNotification('Error de red. No se pudo conectar con el servidor.', 'error');
     }
     throw error;
@@ -252,7 +267,7 @@ export const api = {
   },
 
   goals: {
-    list:     ()                    => req<Goal[]>('GET', '/goals/'),
+    list:     (skip?: number, limit?: number) => req<Goal[]>('GET', `/goals/${skip !== undefined || limit !== undefined ? `?${skip !== undefined ? `skip=${skip}&` : ''}${limit !== undefined ? `limit=${limit}` : ''}` : ''}`),
     get:      (id: number)        => req<Goal>('GET', `/goals/${id}`),
     create:   (data: { title: string; description?: string; temporality?: string; measurement_type?: string; target_value?: number; fail_config?: string; fail_emoji?: string; color?: string; theme?: string; tag_id?: number | null; note_id?: number | null; parent_id?: number | null; max_assignment_days?: number | null }) =>
       req<Goal>('POST', '/goals/', data),
@@ -307,7 +322,7 @@ export const api = {
 
   ai: {
     classify: (noteId: number, content: string, existingTags: string[]) =>
-      req<{ note_id: number; status: string; suggestions: AISuggestion[] }>('POST', '/ai/classify', { note_id: noteId, content, existing_tags: existingTags }),
+      req<{ note_id: number; status: string; suggestions: AISuggestion[] }>('POST', '/ai/classify', { note_id: noteId, content, existing_tags: existingTags }, { silent: true }),
     usage: () => req<{ ai_enabled: boolean; estimated_cost_usd: number }>('GET', '/ai/usage'),
   },
 
@@ -318,6 +333,8 @@ github: {
     repos: () => req<{ repos: { id: number; name: string; full_name: string; color: string }[] }>('GET', '/integrations/github/repos'),
     startDeviceAuth: () => req<{ device_code: string; user_code: string; verification_uri: string; verification_uri_secondary?: string; expires_in: number; interval: number }>('GET', '/integrations/github/oauth/device/start'),
     pollDeviceCode: (device_code: string) => req<{ status: 'authorized'; access_token: string; token_type: string; scope: string } | { status: 'pending' | 'slowdown' | 'expired' | 'denied'; message: string }>('POST', `/integrations/github/oauth/device/polling?device_code=${encodeURIComponent(device_code)}`),
+    startWebFlow: () => req<{ authorize_url: string; redirect_uri: string }>('GET', '/integrations/github/oauth/web/start'),
+    oauthCallback: (code: string, state?: string) => req<{ status: string; access_token: string; token_type: string; scope: string }>('GET', `/integrations/github/oauth/callback?code=${encodeURIComponent(code)}${state ? `&state=${encodeURIComponent(state)}` : ''}`),
     revoke: () => req<{ status: string }>('POST', '/integrations/github/oauth/revoke'),
   },
 

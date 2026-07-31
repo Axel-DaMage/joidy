@@ -28,7 +28,12 @@ export async function initPushNotifications(): Promise<void> {
     });
 
     await sendSubscriptionToServer(subscription);
-  } catch (e) {
+  } catch (e: any) {
+    // 503 = VAPID not configured — this is an optional feature, not an error
+    const msg = e?.message || String(e);
+    if (msg.includes('503') || msg.includes('VAPID not configured')) {
+      return; // Silent fail — push notifications are optional
+    }
     logger.error('[push] Failed to init push notifications:', e);
   }
 }

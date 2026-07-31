@@ -62,10 +62,11 @@
           class:active={showArchived}
           on:click={onToggleArchive}
           title={showArchived ? 'Volver a activas' : 'Ver archivadas'}
+          aria-label={showArchived ? 'Volver a rachas activas' : 'Ver rachas archivadas'}
         >
           <Archive size={13} />
         </button>
-        <button class="new-btn" on:click={onCreate}>
+        <button class="new-btn" on:click={onCreate} aria-label="Crear nueva racha">
           <Plus size={13} />
         </button>
       </div>

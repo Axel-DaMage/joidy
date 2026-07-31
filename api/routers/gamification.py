@@ -93,6 +93,10 @@ register_cache_clearer(_cached_recent_events.cache_clear)  # type: ignore[attr-d
 
 @router.get("/recent-events")
 def get_recent_events_route(limit: int = 20, db: Session = Depends(get_db)):
+    if limit < 1:
+        limit = 1
+    if limit > 500:
+        limit = 500
     return get_recent_events(limit=limit, db=db)
 
 

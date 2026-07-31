@@ -37,7 +37,6 @@
     { href: '/skills',  label: 'Habilidades', icon: 'Zap',      status: 'dev' },
     { href: '/goals',   label: 'Objetivos',   icon: 'Target',   status: 'ready' },
     { href: '/streaks', label: 'Rachas',      icon: 'Flame',    status: 'ready' },
-    { href: '/integraciones', label: 'Integraciones', icon: 'Puzzle', status: 'ready' },
   ];
 
   let settingsOpen = false;
@@ -81,7 +80,7 @@
 
     accentColors.init();
     activeIconPack.init();
-    initTheme();
+    const cleanupTheme = initTheme();
     initPomodoroSettings();
     initKeyboardNavigation();
     initPushNotifications();
@@ -185,9 +184,10 @@
       });
     }
 
-    window.addEventListener('appinstalled', () => {
+    const handleAppInstalled = () => {
       showNotification("¡Joidy instalado! Ahora puedes acceder desde tu escritorio.", "success");
-    });
+    };
+    window.addEventListener('appinstalled', handleAppInstalled);
 
     const loadFooterStats = async (force = false) => {
       if (document.visibilityState !== 'visible') return;
@@ -316,19 +316,20 @@
       connectWS();
     };
 
-    window.addEventListener('beforeinstallprompt', (e) => {
+    const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       deferredPrompt.set(e);
-      
+
       if (!$isAppInstalled) {
         const visits = parseInt(localStorage.getItem('joidy-visits') || '0');
         localStorage.setItem('joidy-visits', (visits + 1).toString());
-        
+
         if (visits >= 1 && localStorage.getItem('joidy-pwa-dismissed') !== 'true') {
           showInstallBanner.set(true);
         }
       }
-    });
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('joidy:streaks-updated', handleStreaksUpdated);
@@ -353,6 +354,8 @@
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
       // Clean up WebSocket connection
       if (ws) {
@@ -360,6 +363,8 @@
         ws.close();
       }
       if (wsReconnectTimeout) clearTimeout(wsReconnectTimeout);
+      if (pillTimeout) clearTimeout(pillTimeout);
+      if (cleanupTheme) cleanupTheme();
     };
   });
   let showConnectedPill = false;
@@ -453,16 +458,18 @@
   <!-- Sidebar -->
   <nav class="app-sidebar">
     {#each navItems as { href, label, icon, status }}
-      {@const active = $page.url.pathname === href || ($page.url.pathname.startsWith(href) && href !== '/')}
-      <a {href} class="nav-item" class:active class:nav-dev={status === 'dev'} class:nav-placeholder={status === 'placeholder'} title={label}>
-        <DynamicIcon name={icon} size={16} />
-        {#if status === 'dev'}
-          <span class="nav-dev-dot" title="Requiere Dev Mode"></span>
-        {:else if status === 'placeholder'}
-          <!-- Pronto badge removed -->
-        {/if}
-        <span class="tooltip">{label}</span>
-      </a>
+      {#if status === 'ready' || $devMode}
+        {@const active = $page.url.pathname === href || ($page.url.pathname.startsWith(href) && href !== '/')}
+        <a {href} class="nav-item" class:active class:nav-dev={status === 'dev'} class:nav-placeholder={status === 'placeholder'} title={label}>
+          <DynamicIcon name={icon} size={16} />
+          {#if status === 'dev'}
+            <span class="nav-dev-dot" title="Requiere Dev Mode"></span>
+          {:else if status === 'placeholder'}
+            <!-- Pronto badge removed -->
+          {/if}
+          <span class="tooltip">{label}</span>
+        </a>
+      {/if}
     {/each}
   </nav>
 

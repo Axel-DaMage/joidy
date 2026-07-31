@@ -1,8 +1,14 @@
 import { writable, derived } from 'svelte/store';
 import * as L from 'lucide-svelte';
 
-const ALL_ICONS = Object.keys(L).filter(
+// Get all icon names, filtering out duplicates where lucide-svelte exports
+// both "X" and "XIcon" for the same icon (e.g. "File" and "FileIcon")
+const _rawIcons = Object.keys(L).filter(
   (k) => /^[A-Z]/.test(k) && k !== 'default' && k !== 'createLucideIcon'
+);
+const _iconSet = new Set(_rawIcons);
+const ALL_ICONS = _rawIcons.filter(
+  (k) => !(k.endsWith('Icon') && _iconSet.has(k.slice(0, -4)))
 );
 
 export function createIconPickerStore() {

@@ -123,7 +123,7 @@ async def delete_note_by_path(path: str, client: httpx.AsyncClient, token: str):
             headers = {"X-Request-ID": cid}
             if current_token:
                 headers["Authorization"] = f"Bearer {current_token}"
-            r = await client.get(f"{settings.api_url}/notes/", params={"source_path": path}, headers=headers)
+            r = await client.get(f"{settings.api_url}/notes/", params={"source_path": path}, headers=headers, timeout=10.0)
             if r.status_code == 401:
                 logger.warning("[vault] Auth expired while deleting %s, refreshing token", Path(path).name)
                 await get_auth_token(client, force=True)
@@ -132,7 +132,7 @@ async def delete_note_by_path(path: str, client: httpx.AsyncClient, token: str):
                 notes = r.json()
                 for n in notes:
                     if n.get("source_path") == path:
-                        del_res = await client.delete(f"{settings.api_url}/notes/{n['id']}", headers=headers)
+                        del_res = await client.delete(f"{settings.api_url}/notes/{n['id']}", headers=headers, timeout=10.0)
                         if del_res.status_code == 401:
                             await get_auth_token(client, force=True)
                             continue
@@ -309,7 +309,7 @@ async def watch_vault():
 
     logger.info("[vault] Watching: %s", vault_path)
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=30.0) as client:
         consumer = None
         try:
             token = await get_auth_token(client)

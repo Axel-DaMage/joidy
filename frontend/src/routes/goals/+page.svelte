@@ -185,14 +185,12 @@
     const cachedTags = getCachedData<TagType[]>('tags');
     if (cachedGoals) goals = cachedGoals;
     if (cachedTags) tags = cachedTags;
-    
+
     try {
-      [goals, tags, notes, streakData, xpEvents] = await Promise.all([
+      // Load only essential data immediately (goals + tags)
+      [goals, tags] = await Promise.all([
         api.goals.list(),
         api.tags.list(),
-        api.notes.list(),
-        api.goals.streak(),
-        api.gamification.events(500)
       ]);
       setCachedData('goals', goals);
       setCachedData('tags', tags);
@@ -202,7 +200,27 @@
         logger.error('[goals] onMount failed:', e);
       }
     }
+
+    // Lazy-load analytics data only when needed
+    if (currentTab === 'analytics') {
+      loadAnalyticsData();
+    }
   });
+
+  let analyticsLoaded = false;
+  async function loadAnalyticsData() {
+    if (analyticsLoaded) return;
+    analyticsLoaded = true;
+    try {
+      [notes, streakData, xpEvents] = await Promise.all([
+        api.notes.list(),
+        api.goals.streak(),
+        api.gamification.events(500)
+      ]);
+    } catch (e) {
+      logger.error('[goals] loadAnalyticsData failed:', e);
+    }
+  }
 
   let addError = $state('');
 
@@ -411,6 +429,8 @@
   // persist current tab and selected planning date in localStorage
   $effect(() => {
     if (typeof localStorage !== 'undefined') localStorage.setItem('goals.currentTab', currentTab);
+    // Lazy-load analytics data when analytics tab is opened
+    if (currentTab === 'analytics') loadAnalyticsData();
   });
 
   $effect(() => {
@@ -923,19 +943,19 @@
             </div>
             <div class="goal-actions">
               {#if goal.state === 'ACTIVE'}
-                <button class="btn btn-ghost text-muted" title="Pausar" onclick={() => updateGoalState(goal.id, 'PAUSED')}>
+                <button class="btn btn-ghost text-muted" title="Pausar" aria-label="Pausar objetivo" onclick={() => updateGoalState(goal.id, 'PAUSED')}>
                   <Pause size={14} />
                 </button>
-                <button class="btn btn-ghost text-success" title="Completar" onclick={() => completeGoal(goal.id)}>
+                <button class="btn btn-ghost text-success" title="Completar" aria-label="Completar objetivo" onclick={() => completeGoal(goal.id)}>
                   <Check size={14} />
                 </button>
               {:else if goal.state === 'PAUSED'}
-                <button class="btn btn-ghost text-muted" title="Reanudar" onclick={() => updateGoalState(goal.id, 'ACTIVE')}>
+                <button class="btn btn-ghost text-muted" title="Reanudar" aria-label="Reanudar objetivo" onclick={() => updateGoalState(goal.id, 'ACTIVE')}>
                   <Play size={14} />
                 </button>
               {/if}
               {#if goal.state !== 'COMPLETED' && goal.state !== 'FAILED'}
-                <button class="btn btn-ghost text-muted" title="Cancelar" onclick={() => updateGoalState(goal.id, 'CANCELLED')}>
+                <button class="btn btn-ghost text-muted" title="Cancelar" aria-label="Cancelar objetivo" onclick={() => updateGoalState(goal.id, 'CANCELLED')}>
                   <Ban size={14} />
                 </button>
               {/if}
@@ -943,9 +963,9 @@
                 <button class="btn btn-ghost text-danger" onclick={() => deleteGoal(goal.id)}>¿Eliminar?</button>
                 <button class="btn btn-ghost text-muted" onclick={() => deleteConfirm = null}>Cancelar</button>
               {:else}
-                <button class="btn btn-ghost text-muted" title="Eliminar" onclick={() => deleteGoal(goal.id)}>×</button>
+                <button class="btn btn-ghost text-muted" title="Eliminar" aria-label="Eliminar objetivo" onclick={() => deleteGoal(goal.id)}>×</button>
               {/if}
-              <button class="btn btn-ghost text-muted" title="Editar" onclick={() => openGoalEditor(goal)}>
+              <button class="btn btn-ghost text-muted" title="Editar" aria-label="Editar objetivo" onclick={() => openGoalEditor(goal)}>
                 <Pencil size={13} />
               </button>
             </div>
@@ -1008,9 +1028,9 @@
 
         <div class="dash-card" style="min-height: 280px; display: flex; flex-direction: column; padding: 0; overflow: hidden;">
           <div class="widget-header" style="display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid var(--border-light); background: var(--bg-card);">
-            <button class="btn btn-ghost text-muted" style="padding: 4px;" onclick={() => activeWidgetIndex = (activeWidgetIndex - 1 + 5) % 5}><ChevronLeft size={14}/></button>
+            <button class="btn btn-ghost text-muted" style="padding: 4px;" aria-label="Widget anterior" onclick={() => activeWidgetIndex = (activeWidgetIndex - 1 + 5) % 5}><ChevronLeft size={14}/></button>
             <span class="widget-title" style="font-size: 12px; font-weight: 600; text-align: center; flex: 1;">{widgetTitles[activeWidgetIndex]}</span>
-            <button class="btn btn-ghost text-muted" style="padding: 4px;" onclick={() => activeWidgetIndex = (activeWidgetIndex + 1) % 5}><ChevronRight size={14}/></button>
+            <button class="btn btn-ghost text-muted" style="padding: 4px;" aria-label="Widget siguiente" onclick={() => activeWidgetIndex = (activeWidgetIndex + 1) % 5}><ChevronRight size={14}/></button>
           </div>
           <div class="widget-content" style="flex: 1; position: relative; padding: 16px; overflow: hidden; display: flex; align-items: center; justify-content: center;">
             {#if activeWidgetIndex === 0}
@@ -1507,9 +1527,9 @@
                 
                 {#if activityTab === 'horas'}
                   <div class="activity-day-selector" style="display: flex; justify-content: center; align-items: center; gap: 8px; background: var(--surface); padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border);">
-                    <button class="icon-btn" onclick={prevActivityDay} style="background: none; border: none; cursor: pointer; color: var(--text-muted); display: flex; align-items: center; padding: 4px;"><ChevronLeft size={16} /></button>
+                    <button class="icon-btn" onclick={prevActivityDay} aria-label="Día anterior" style="background: none; border: none; cursor: pointer; color: var(--text-muted); display: flex; align-items: center; padding: 4px;"><ChevronLeft size={16} /></button>
                     <span style="font-size: 0.75rem; color: var(--text-secondary); min-width: 80px; text-align: center; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; font-family: var(--font-mono);">{daysOfWeek[activityDayOfWeek]}</span>
-                    <button class="icon-btn" onclick={nextActivityDay} style="background: none; border: none; cursor: pointer; color: var(--text-muted); display: flex; align-items: center; padding: 4px;"><ChevronRight size={16} /></button>
+                    <button class="icon-btn" onclick={nextActivityDay} aria-label="Día siguiente" style="background: none; border: none; cursor: pointer; color: var(--text-muted); display: flex; align-items: center; padding: 4px;"><ChevronRight size={16} /></button>
                   </div>
                 {/if}
               </div>
@@ -1579,7 +1599,7 @@
               <span class="new-goal-sub">Define un nuevo hábito o meta a seguir</span>
             </div>
           </div>
-          <button class="history-close-btn" onclick={() => showAddForm = false} title="Cerrar">
+          <button class="history-close-btn" onclick={() => showAddForm = false} title="Cerrar" aria-label="Cerrar formulario">
             <X size={15} />
           </button>
         </div>

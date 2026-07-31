@@ -12,11 +12,11 @@
   <title>Sin conexión — Joidy</title>
 </svelte:head>
 
-<main class="offline-page">
+<section class="offline-page">
   <h1>Sin conexión</h1>
   <p>No se pudo conectar con Joidy. Algunas funciones pueden no estar disponibles sin internet.</p>
   <button onclick={reload} class="reload-button">Reintentar</button>
-</main>
+</section>
 
 <style>
   .offline-page {

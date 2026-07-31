@@ -9,11 +9,13 @@ from datetime import datetime
 from database import get_db
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from models.note import Note
+from models.note import Note, NoteTag
 from services.auth_service import get_current_user
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 router = APIRouter(prefix="/export", tags=["export"])
+
+EXPORT_MAX_NOTES = 5000
 
 
 def note_to_markdown(note: Note) -> str:
@@ -67,7 +69,13 @@ def note_to_html(note: Note) -> str:
 @router.get("/notes/markdown")
 def export_notes_markdown(db: Session = Depends(get_db), user: dict = Depends(get_current_user)):
     """Export all notes as a single markdown file."""
-    notes = db.query(Note).all()
+    notes = (
+        db.query(Note)
+        .options(selectinload(Note.tags).selectinload(NoteTag.tag))
+        .order_by(Note.created_at.desc())
+        .limit(EXPORT_MAX_NOTES)
+        .all()
+    )
 
     if not notes:
         raise HTTPException(status_code=404, detail="No notes to export")
@@ -84,7 +92,13 @@ def export_notes_markdown(db: Session = Depends(get_db), user: dict = Depends(ge
 @router.get("/notes/html")
 def export_notes_html(db: Session = Depends(get_db), user: dict = Depends(get_current_user)):
     """Export all notes as a single HTML file."""
-    notes = db.query(Note).all()
+    notes = (
+        db.query(Note)
+        .options(selectinload(Note.tags).selectinload(NoteTag.tag))
+        .order_by(Note.created_at.desc())
+        .limit(EXPORT_MAX_NOTES)
+        .all()
+    )
 
     if not notes:
         raise HTTPException(status_code=404, detail="No notes to export")
@@ -118,7 +132,13 @@ def export_notes_html(db: Session = Depends(get_db), user: dict = Depends(get_cu
 @router.get("/notes/zip")
 def export_notes_zip(db: Session = Depends(get_db), user: dict = Depends(get_current_user)):
     """Export all notes as individual markdown files in a ZIP."""
-    notes = db.query(Note).all()
+    notes = (
+        db.query(Note)
+        .options(selectinload(Note.tags).selectinload(NoteTag.tag))
+        .order_by(Note.created_at.desc())
+        .limit(EXPORT_MAX_NOTES)
+        .all()
+    )
 
     if not notes:
         raise HTTPException(status_code=404, detail="No notes to export")

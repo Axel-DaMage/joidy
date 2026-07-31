@@ -42,7 +42,7 @@ def sanitize_title(title: str) -> str:
     if not title:
         raise ValueError("Title cannot be empty")
     if len(title) > MAX_TITLE_LENGTH:
-        title = title[:MAX_TITLE_LENGTH]
+        raise ValueError(f"Title cannot exceed {MAX_TITLE_LENGTH} characters")
     return sanitize_html(title)
 
 
@@ -60,6 +60,12 @@ def sanitize_tag(tag_name: str) -> str:
     tag_name = re.sub(r"[^\w\s\-]", "", tag_name, flags=re.UNICODE)
     if len(tag_name) > MAX_TAG_LENGTH:
         tag_name = tag_name[:MAX_TAG_LENGTH]
+    # Reject tags that are bare 6-char hex color codes (e.g. "ef4444", "c8a96e") —
+    # these are color values misused as tag names, not meaningful labels (#268).
+    # Only 6-char codes are rejected; 3-char codes like "e2e" or "abc" are
+    # legitimate short tags that happen to contain hex chars.
+    if re.match(r"^[0-9a-f]{6}$", tag_name):
+        return ""
     return tag_name
 
 

@@ -1,6 +1,5 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { afterNavigate } from '$app/navigation';
   import { goto } from '$app/navigation';
   import { dev } from '$app/environment';
   import { fly } from 'svelte/transition';
@@ -20,7 +19,7 @@
   import { totalXP, currentStreak, lastActivity, nextStageXP } from '$lib/stores/gamification';
   import ActivityProgress from '$lib/components/ActivityProgress.svelte';
   import { notes, loadNotes, notesLoadedOnce } from '$lib/stores/notes';
-  import { dashboardLayout, type WidgetId } from '$lib/stores/layout';
+  import { dashboardLayout } from '$lib/stores/layout';
   import { accentColors } from '$lib/stores/settings';
   import { api } from '$lib/api';
   import { loadUserSettings, patchUserSettings } from '$lib/utils/userSettings';
@@ -187,12 +186,6 @@
       moduleIdx = snap.state.moduleIdx ?? 0;
       slideDir = snap.state.slideDir ?? 1;
     }
-    
-    dashboardLayout.init();
-
-    afterNavigate(() => {
-      dashboardLayout.reload();
-    });
 
     const savedNotesUi = loadUserSettings().notesUi;
     if (savedNotesUi?.panelWidth !== undefined) {
@@ -277,15 +270,6 @@
 
   // Resizable panel synced with notes
   let panelWidth = 260;
-
-  function handleWidgetDrop(e: CustomEvent<{ id: WidgetId; fromPanel: 'left' | 'right'; fromIdx: number; toPanel: 'left' | 'right'; toIdx: number }>) {
-    const { id, fromPanel, toPanel, toIdx } = e.detail;
-    if (fromPanel === toPanel) {
-      dashboardLayout.move(fromPanel, e.detail.fromIdx, toIdx);
-    } else {
-      dashboardLayout.switchPanel(id, fromPanel);
-    }
-  }
 </script>
 
 <div class="dashboard" style="--panel-w: {panelWidth}px">
@@ -294,7 +278,7 @@
   <section class="plant-section">
 
     {#each $dashboardLayout.left as wid, i (wid)}
-      <Widget id={wid} panel="left" index={i} total={$dashboardLayout.left.length} layout={$dashboardLayout} on:drop={handleWidgetDrop}>
+      <Widget id={wid}>
 
         {#if wid === 'plant-carousel'}
           <div class="widget-centered">
@@ -420,7 +404,7 @@
   <section class="activity-section">
 
     {#each $dashboardLayout.right as wid, i (wid)}
-      <Widget id={wid} panel="right" index={i} total={$dashboardLayout.right.length} layout={$dashboardLayout} on:drop={handleWidgetDrop}>
+      <Widget id={wid}>
 
         {#if wid === 'recent-notes'}
           <div class="section-header">

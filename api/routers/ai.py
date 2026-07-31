@@ -23,8 +23,11 @@ async def classify(req: ClassifyRequest):
             )
             r.raise_for_status()
             return r.json()
-        except httpx.HTTPError as e:
-            raise HTTPException(status_code=502, detail=f"AI Service error: {str(e)}")
+        except httpx.HTTPError:
+            # AI classification is an optional enhancement — return a graceful
+            # degraded response instead of 502 so the note save flow is not
+            # disrupted and the user sees no error toast (#261).
+            return {"status": "unavailable", "note_id": req.note_id, "suggestions": []}
 
 @router.get("/usage")
 async def usage():

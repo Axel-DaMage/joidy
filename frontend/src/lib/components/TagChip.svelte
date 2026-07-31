@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
+  import { displayTagName } from '$lib/utils/format';
   export let tag: string;
   export let removable = false;
   export let isAI = false;
@@ -38,12 +39,12 @@
   role="button"
   tabindex="0"
 >
-  {tag}
+  {displayTagName(tag)}
   {#if isAI}
     <span class="ai-badge" title="Sugerencia de IA">ia</span>
   {/if}
   {#if removable}
-    <button on:click={handleRemove} aria-label="Eliminar etiqueta {tag}">×</button>
+    <button on:click={handleRemove} aria-label="Eliminar etiqueta {displayTagName(tag)}">×</button>
   {/if}
 </span>
 

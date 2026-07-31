@@ -190,6 +190,10 @@ def evaluate_active_goals(db: Session):
     now = datetime.now(timezone.utc)
     active_goals = GoalRepository(db).get_active()
 
+    # Bulk-load progress for all active goals once to avoid N+1 queries
+    # inside the expiration loop below.
+    progress_by_goal = get_bulk_goal_progress(active_goals, db)
+
     for goal in active_goals:
         expired = False
         if goal.temporality == GoalTemporality.DAILY:
@@ -200,20 +204,23 @@ def evaluate_active_goals(db: Session):
             if (now.date() - goal.created_at.date()).days >= 7:
                 expired = True
         elif goal.temporality == GoalTemporality.MONTHLY:
-            if now.month != goal.created_at.month or now.year != goal.created_at.year:
+            # Expire after ~30 days rather than on month boundary, so a goal
+            # created on the 31st doesn't expire on the 1st of the next month.
+            if (now.date() - goal.created_at.date()).days >= 30:
                 expired = True
         elif goal.temporality == GoalTemporality.ANNUAL:
             if now.year != goal.created_at.year:
                 expired = True
 
         if expired:
-            _process_goal_failure(db, goal, now)
+            _process_goal_failure(db, goal, now, progress_by_goal.get(goal.id))
 
     db.commit()
 
 
-def _process_goal_failure(db: Session, goal: Goal, now: datetime):
-    progress = get_goal_progress(goal, db)
+def _process_goal_failure(db: Session, goal: Goal, now: datetime, progress: float | None = None):
+    if progress is None:
+        progress = get_goal_progress(goal, db)
 
     if progress >= goal.target_value:
         goal.state = GoalState.COMPLETED

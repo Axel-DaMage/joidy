@@ -3,7 +3,9 @@
   import SkillTree from '$lib/components/SkillTree.svelte';
   import { api, type Skill, type SkillTree as SkillTreeData } from '$lib/api';
   import { logger } from '$lib/utils/logger';
+  import { displayTagName } from '$lib/utils/format';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
+  import { devMode } from '$lib/stores/settings';
   import { Search, X } from 'lucide-svelte';
 
   let skills: Skill[] = $state([]);
@@ -41,6 +43,7 @@
 </script>
 
 
+{#if $devMode}
 <div class="skills-page">
   <div class="skills-header">
     <div>
@@ -51,7 +54,7 @@
       {#if topSkill}
         <div class="skill-stat">
           <span class="label">mejor habilidad</span>
-          <span class="mono" style="color: var(--text-primary); font-size:13px;">{topSkill.tag_name}</span>
+          <span class="mono" style="color: var(--text-primary); font-size:13px;">{displayTagName(topSkill.tag_name)}</span>
           <span class="caption" style="color: var(--text-secondary);">{topSkill.note_count} notas</span>
         </div>
       {/if}
@@ -113,7 +116,7 @@
         {#each filteredSkills as skill}
           <div class="skill-row">
             <div class="skill-info">
-              <span class="skill-name">{skill.tag_name}</span>
+              <span class="skill-name">{displayTagName(skill.tag_name)}</span>
               <span class="skill-count caption">{skill.note_count} notas</span>
             </div>
             <span class="level-badge" data-level={skill.level}>
@@ -137,6 +140,15 @@
     {/each}
   </div>
 </div>
+{:else}
+<div class="construction-page">
+  <div class="construction-box">
+    <DynamicIcon name="Zap" size={48} />
+    <h3>En Construcción</h3>
+    <p>Activa el Modo Desarrollo en Ajustes para acceder al Árbol de Habilidades.</p>
+  </div>
+</div>
+{/if}
 
 <style>
   .skills-page {
@@ -376,4 +388,35 @@
   .legend-dot[data-level='journeyman'] { border-color: var(--text-secondary); }
   .legend-dot[data-level='expert']     { border-color: var(--accent); }
   .legend-dot[data-level='master']     { background: var(--accent); border-color: var(--accent); }
+
+  .construction-page {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    width: 100%;
+  }
+
+  .construction-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    color: var(--text-muted);
+    text-align: center;
+    padding: 40px;
+  }
+
+  .construction-box h3 {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin: 0;
+  }
+
+  .construction-box p {
+    font-size: 13px;
+    margin: 0;
+    max-width: 320px;
+  }
 </style>

@@ -172,6 +172,12 @@ def list_notes(
     source_path: str | None = None,
     db: Session = Depends(get_db),
 ):
+    if skip < 0:
+        skip = 0
+    if limit < 1:
+        limit = 1
+    if limit > 1000:
+        limit = 1000
     query = db.query(Note).options(selectinload(Note.tags).selectinload(NoteTag.tag))
     if tag:
         query = query.join(NoteTag).join(Tag).filter(Tag.name == tag.lower())
