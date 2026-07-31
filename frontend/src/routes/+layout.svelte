@@ -30,6 +30,7 @@
   import { syncStore } from '$lib/stores/sync';
   import { toggle as toggleCommandPalette } from '$lib/stores/commandPalette';
   import ConflictResolutionModal from '$lib/components/ConflictResolutionModal.svelte';
+  import ShareAchievementModal from '$lib/components/ShareAchievementModal.svelte';
   import FocusMode from '$lib/components/FocusMode.svelte';
   import { initFocusModeConfig, queueNotificationIfActive } from '$lib/stores/focusMode';
 
@@ -533,6 +534,7 @@
 <Toast />
 <TutorialOverlay />
 <ConflictResolutionModal />
+<ShareAchievementModal />
 <FocusMode />
 {/if}
 

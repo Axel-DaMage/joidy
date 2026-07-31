@@ -16,7 +16,9 @@
   import WeatherWidget from '$lib/components/WeatherWidget.svelte';
   import Widget         from '$lib/components/Widget.svelte';
   import GithubWidget from '$lib/components/GithubWidget.svelte';
-  import { totalXP, currentStreak, lastActivity, nextStageXP } from '$lib/stores/gamification';
+  import { totalXP, currentStreak, lastActivity, nextStageXP, globalLevel } from '$lib/stores/gamification';
+  import { openShare } from '$lib/stores/shareAchievement';
+  import { Share2 } from 'lucide-svelte';
   import ActivityProgress from '$lib/components/ActivityProgress.svelte';
   import { notes, loadNotes, notesLoadedOnce } from '$lib/stores/notes';
   import { dashboardLayout } from '$lib/stores/layout';
@@ -270,6 +272,20 @@
 
   // Resizable panel synced with notes
   let panelWidth = 260;
+
+  // Level milestones that warrant a shareable achievement card.
+  const LEVEL_MILESTONES = [10, 25, 50, 75, 100];
+  $: isLevelMilestone = LEVEL_MILESTONES.includes($globalLevel);
+
+  function shareLevel() {
+    openShare({
+      title: 'Nivel alcanzado',
+      icon: 'TrendingUp',
+      value: `NVL ${$globalLevel}`,
+      subtitle: `${$totalXP.toLocaleString()} XP`,
+      color: 'var(--xp)',
+    });
+  }
 </script>
 
 <div class="dashboard" style="--panel-w: {panelWidth}px">
@@ -345,6 +361,17 @@
                 <span class="stat-label label">notas</span>
               </div>
             </div>
+            {#if isLevelMilestone}
+              <button
+                class="level-share-btn"
+                onclick={shareLevel}
+                title="Compartir nivel"
+                aria-label="Compartir nivel {$globalLevel}"
+              >
+                <Share2 size={11} />
+                <span>Compartir nivel</span>
+              </button>
+            {/if}
           </div>
 
         {:else if wid === 'activity-progress'}
@@ -469,6 +496,17 @@
               <div class="stat-divider"></div>
               <div class="stat"><span class="stat-value mono">{$notes.length}</span><span class="stat-label label">notas</span></div>
             </div>
+            {#if isLevelMilestone}
+              <button
+                class="level-share-btn"
+                onclick={shareLevel}
+                title="Compartir nivel"
+                aria-label="Compartir nivel {$globalLevel}"
+              >
+                <Share2 size={11} />
+                <span>Compartir nivel</span>
+              </button>
+            {/if}
           </div>
 
         {:else if wid === 'time-widget'}
@@ -573,6 +611,26 @@
   .stats-row {
     display: flex; align-items: center; gap: var(--s4);
     width: 100%; max-width: 240px;
+  }
+
+  .level-share-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 10px;
+    font-family: var(--font-sans);
+    cursor: pointer;
+    transition: all var(--t-fast);
+  }
+
+  .level-share-btn:hover {
+    border-color: var(--xp);
+    color: var(--xp);
   }
 
   .stat { display: flex; flex-direction: column; align-items: center; flex: 1; gap: 2px; }
