@@ -228,3 +228,151 @@ async def rag(req: RAGRequest):
         return {"status": "circuit_open", "answer": "El proveedor de IA se encuentra temporalmente no disponible.", "error": "Circuit breaker open"}
     except Exception:
         raise HTTPException(status_code=500, detail="RAG failed")
+
+
+class DailyRecapRequest(BaseModel):
+    date: str  # YYYY-MM-DD
+    notes_created: int = 0
+    notes_edited: int = 0
+    xp_gained: int = 0
+    streak_maintained: bool = False
+    goals_completed: int = 0
+    focus_time_minutes: int = 0
+    note_titles: list[str] = []
+
+
+@app.post("/daily-recap")
+async def daily_recap(req: DailyRecapRequest):
+    """Generate a natural-language daily recap from structured activity data (#354).
+
+    The API sends a summary of the day's activity; the AI service generates
+    a reflective paragraph + 1-2 suggestions for tomorrow.
+    """
+    if not settings.is_ai_enabled:
+        return {"status": "disabled", "recap": "", "suggestions": []}
+
+    ai_classify_requests.labels(provider=settings.llm_model or 'unknown').inc()
+    try:
+        client = get_llm_client()
+        titles_str = "\n".join(f"- {t}" for t in req.note_titles[:10]) or "(sin notas)"
+        prompt = f"""Eres un asistente de productividad personal. Genera un resumen diario breve y motivador en español basado en esta actividad del día {req.date}:
+
+- Notas creadas: {req.notes_created}
+- Notas editadas: {req.notes_edited}
+- XP ganada: {req.xp_gained}
+- Racha mantenida: {'sí' if req.streak_maintained else 'no'}
+- Objetivos completados: {req.goals_completed}
+- Tiempo de enfoque: {req.focus_time_minutes} minutos
+
+Títulos de notas creadas hoy:
+{titles_str}
+
+Genera:
+1. Un párrafo (2-3 frases) que sintetice el día de forma natural y motivadora.
+2. 1-2 sugerencias breves para mañana.
+
+Responde en formato JSON: {{"recap": "...", "suggestions": ["...", "..."]}}"""
+
+        response = await llm_circuit_breaker.call(
+            client.generate,
+            prompt=prompt,
+            temperature=0.7,
+            max_tokens=300,
+        )
+
+        # Try to parse JSON from the response; fall back to raw text
+        import json
+        try:
+            parsed = json.loads(response)
+            return {
+                "status": "success",
+                "recap": parsed.get("recap", response),
+                "suggestions": parsed.get("suggestions", []),
+                "provider": client.provider_name,
+            }
+        except (json.JSONDecodeError, TypeError):
+            return {
+                "status": "success",
+                "recap": response,
+                "suggestions": [],
+                "provider": client.provider_name,
+            }
+    except CircuitBreakerError:
+        return {"status": "circuit_open", "recap": "El proveedor de IA no está disponible.", "suggestions": []}
+    except Exception:
+        ai_classify_errors.labels(provider=settings.llm_model or 'unknown').inc()
+        raise HTTPException(status_code=500, detail="Daily recap failed")
+
+
+@app.post("/cluster")
+async def cluster_notes(eps: float = 0.3, min_samples: int = 3, max_notes: int = 500):
+    """Cluster notes by embedding similarity using DBSCAN (#393).
+
+    Returns clusters of note IDs that share semantic themes, plus a
+    representative title for each cluster (the note closest to the centroid).
+    """
+    from database import engine
+    from sqlalchemy import text as sql_text
+
+    rows = engine.connect().execute(
+        sql_text("""
+            SELECT ne.note_id, ne.embedding
+            FROM note_embeddings ne
+            JOIN notes n ON n.id = ne.note_id
+            ORDER BY n.created_at DESC
+            LIMIT :max_notes
+        """),
+        {"max_notes": max_notes},
+    ).fetchall()
+
+    if len(rows) < min_samples:
+        return {"clusters": [], "total_notes": len(rows)}
+
+    # Parse embeddings from pgvector string format
+    import numpy as np
+    note_ids = [r[0] for r in rows]
+    embeddings = []
+    for r in rows:
+        vec_str = r[1] if isinstance(r[1], str) else str(r[1])
+        vec = [float(x) for x in vec_str.strip('[]').split(',')]
+        embeddings.append(vec)
+
+    X = np.array(embeddings)
+
+    # DBSCAN clustering — no need to specify number of clusters
+    from sklearn.cluster import DBSCAN
+    clustering = DBSCAN(eps=eps, min_samples=min_samples, metric='cosine').fit(X)
+    labels = clustering.labels_
+
+    # Build cluster results
+    from collections import defaultdict
+    clusters = defaultdict(list)
+    for idx, label in enumerate(labels):
+        if label != -1:  # -1 = noise
+            clusters[label].append(note_ids[idx])
+
+    # Fetch titles for representative notes (closest to centroid)
+    cluster_results = []
+    for label, ids in clusters.items():
+        # Get the note titles
+        placeholders = ','.join(str(i) for i in ids)
+        title_rows = engine.connect().execute(
+            sql_text(f"SELECT id, title FROM notes WHERE id IN ({placeholders})")
+        ).fetchall()
+        title_map = {r[0]: r[1] for r in title_rows}
+        cluster_results.append({
+            "cluster_id": int(label),
+            "note_ids": ids,
+            "note_count": len(ids),
+            "representative_title": title_map.get(ids[0], "Unknown"),
+            "titles": [title_map.get(i, "Unknown") for i in ids[:5]],
+        })
+
+    # Sort by cluster size descending
+    cluster_results.sort(key=lambda c: c["note_count"], reverse=True)
+
+    return {
+        "clusters": cluster_results,
+        "total_notes": len(rows),
+        "noise_count": int(sum(1 for l in labels if l == -1)),
+    }

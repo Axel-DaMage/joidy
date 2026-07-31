@@ -16,6 +16,7 @@
   import WeatherWidget from '$lib/components/WeatherWidget.svelte';
   import Widget         from '$lib/components/Widget.svelte';
   import GithubWidget from '$lib/components/GithubWidget.svelte';
+  import DailyRecap from '$lib/components/DailyRecap.svelte';
   import { totalXP, currentStreak, lastActivity, nextStageXP } from '$lib/stores/gamification';
   import ActivityProgress from '$lib/components/ActivityProgress.svelte';
   import { notes, loadNotes, notesLoadedOnce } from '$lib/stores/notes';
@@ -273,6 +274,8 @@
 </script>
 
 <div class="dashboard" style="--panel-w: {panelWidth}px">
+
+  <DailyRecap />
 
   <!-- ── Left panel ─────────────────────────────────────────────────────────── -->
   <section class="plant-section">

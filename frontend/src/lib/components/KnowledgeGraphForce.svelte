@@ -11,6 +11,9 @@
   export let width = 800;
   export let height = 600;
   export let focusId: number | string | null = null;
+  // Optional override data — when provided, uses this instead of the store
+  // (used by the timeline/search filter in graph/+page.svelte, #373).
+  export let data: { nodes: GraphNode[]; edges: GraphEdge[] } | null = null;
 
   let containerEl: HTMLDivElement;
   let graph: ReturnType<typeof import('force-graph')['default']> | null = null;
@@ -72,11 +75,15 @@
     default: '#666666'
   } as const;
 
+  // Use the `data` prop if provided (for timeline/search filtering, #373),
+  // otherwise fall back to the global graph store.
+  $: effectiveData = data || $graphData;
+
   // Helper function to build neighbor map for smart highlighting
   let neighbors = new Map<number | string, Set<number | string>>();
   $: {
     neighbors.clear();
-    const edges = $graphData.edges;
+    const edges = effectiveData.edges;
     edges.forEach(edge => {
       const s = typeof edge.source === 'object' ? (edge.source as GraphNode).id : edge.source;
       const t = typeof edge.target === 'object' ? (edge.target as GraphNode).id : edge.target;
@@ -189,8 +196,9 @@
 
   function rebuildGraph() {
     if (!graph) return;
-    const nodes = $graphData.nodes.slice();
-    const edges = $graphData.edges.slice();
+    const src = data || $graphData;
+    const nodes = src.nodes.slice();
+    const edges = src.edges.slice();
 
     // 1. Filter nodes based on visible types
     let filteredNodes = nodes.filter(n => {
