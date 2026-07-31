@@ -1,6 +1,5 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import KnowledgeGraphForce from '$lib/components/KnowledgeGraphForce.svelte';
   import TopicClusters from '$lib/components/TopicClusters.svelte';
   import { graphData, graphLoading, loadGraph, selectedTag } from '$lib/stores/graph';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
@@ -11,9 +10,11 @@
   // is split into a separate chunk and only downloaded when the user actually
   // opens the graph page in dev mode (#347).
   let KnowledgeGraphForce: typeof import('$lib/components/KnowledgeGraphForce.svelte').default | null = null;
-  $: if ($devMode && !KnowledgeGraphForce) {
-    import('$lib/components/KnowledgeGraphForce.svelte').then(m => KnowledgeGraphForce = m.default);
-  }
+  $effect(() => {
+    if ($devMode && !KnowledgeGraphForce) {
+      import('$lib/components/KnowledgeGraphForce.svelte').then(m => KnowledgeGraphForce = m.default);
+    }
+  });
 
   let containerEl: HTMLDivElement;
   let w = 800, h = 600;
@@ -139,7 +140,7 @@
     {:else if KnowledgeGraphForce}
       <svelte:component this={KnowledgeGraphForce} width={w} height={h} focusId={$selectedTag} />
     {:else}
-      <KnowledgeGraphForce width={w} height={h} focusId={$selectedTag} data={filteredGraphData} />
+      <div class="loading-state caption">Cargando grafo...</div>
     {/if}
   </div>
 
