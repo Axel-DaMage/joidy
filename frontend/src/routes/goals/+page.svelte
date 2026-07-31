@@ -11,6 +11,7 @@
   import { applyGamificationResult, showXPGain } from '$lib/stores/gamification';
   import { getCachedData, setCachedData } from '$lib/utils/userSettings';
   import { logger } from '$lib/utils/logger';
+  import { GOAL_COLOR_PRESETS, DEFAULT_GOAL_COLOR, TEMPORALITY_COLORS } from '$lib/utils/goalColors';
   import StreakIcon from '$lib/components/StreakIcon.svelte';
   import StreakHeatmap from '$lib/components/StreakHeatmap.svelte';
   import GoalCard from '$lib/components/GoalCard.svelte';
@@ -68,20 +69,7 @@
     'FAILED': 'Fallido',
     'CANCELLED': 'Cancelado'
   };
-  const COLOR_PRESETS = [
-    { name: 'Gold',      hex: '#c8a96e' },
-    { name: 'Esmeralda', hex: '#10b981' },
-    { name: 'Cyan',      hex: '#06b6d4' },
-    { name: 'Azul',      hex: '#3b82f6' },
-    { name: 'Violeta',   hex: '#8b5cf6' },
-    { name: 'Rosa',      hex: '#ec4899' },
-    { name: 'Ámbar',     hex: '#f59e0b' },
-    { name: 'Coral',     hex: '#ef4444' },
-    { name: 'Lima',      hex: '#84cc16' },
-    { name: 'Slate',     hex: '#64748b' },
-    { name: 'Teal',      hex: '#14b8a6' },
-    { name: 'Blanco',    hex: '#e2e8f0' },
-  ];
+  const COLOR_PRESETS = GOAL_COLOR_PRESETS;
 
   // New goal form
   let newTitle = $state('');
@@ -92,7 +80,7 @@
   let newFailConfig = $state<Goal['fail_config']>('STATIC');
   let newFailEmoji = $state('🔴');
   let newFailIcon = $state('Activity');
-  let newGoalColor = $state('#c8a96e');
+  let newGoalColor = $state(DEFAULT_GOAL_COLOR);
   let newMaxAssignmentDays = $state<number | null>(null);
   let useFailIcon = $state(false);
   let newTagId = $state<number | null>(null);
@@ -305,7 +293,7 @@
   let editTargetValue = $state(1);
   let editFailConfig = $state<Goal['fail_config']>('STATIC');
   let editMeasurement = $state<Goal['measurement_type']>('COUNT');
-  let editColor = $state('#c8a96e');
+  let editColor = $state(DEFAULT_GOAL_COLOR);
   let editMaxAssignmentDays = $state<number | null>(null);
   let editSaving = $state(false);
 
@@ -807,9 +795,9 @@
   function getGoalColor(goal: Goal): string {
     const colorMap: Record<string, string> = {
       'DAILY': 'var(--today)',
-      'WEEKLY': '#22d3d3',
+      'WEEKLY': TEMPORALITY_COLORS['WEEKLY'],
       'MONTHLY': 'var(--link)',
-      'ANNUAL': '#3b82f6',
+      'ANNUAL': TEMPORALITY_COLORS['ANNUAL'],
       'ACTIVE': 'var(--today)',
       'COMPLETED': 'var(--target)',
       'PAUSED': 'var(--error)',

@@ -133,6 +133,8 @@
         onclick={() => showTzPicker = true}
         title="Cambiar zona horaria"
         aria-label="Cambiar zona horaria"
+        aria-haspopup="dialog"
+        aria-expanded={showTzPicker}
       >
         {clockStr}
       </button>

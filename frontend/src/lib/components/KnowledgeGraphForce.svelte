@@ -557,11 +557,15 @@
       <div class="sidebar-scroll">
         <!-- 1. FILTROS -->
         <div class="accordion-item" class:active={activeSection === 'filters'}>
-          <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-          <div class="accordion-header" onclick={() => toggleSection('filters')}>
+          <button
+            type="button"
+            class="accordion-header"
+            onclick={() => toggleSection('filters')}
+            aria-expanded={activeSection === 'filters'}
+          >
             <span class="chevron" class:expanded={activeSection === 'filters'}>›</span>
             <h5>Filtros</h5>
-          </div>
+          </button>
           {#if activeSection === 'filters'}
             <div class="accordion-content">
               <div class="filter-search-wrap">
@@ -630,11 +634,15 @@
 
         <!-- 2. GRUPOS DE COLOR -->
         <div class="accordion-item" class:active={activeSection === 'groups'}>
-          <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-          <div class="accordion-header" onclick={() => toggleSection('groups')}>
+          <button
+            type="button"
+            class="accordion-header"
+            onclick={() => toggleSection('groups')}
+            aria-expanded={activeSection === 'groups'}
+          >
             <span class="chevron" class:expanded={activeSection === 'groups'}>›</span>
             <h5>Grupos de color</h5>
-          </div>
+          </button>
           {#if activeSection === 'groups'}
             <div class="accordion-content">
               <p class="section-desc">Pinta nodos según consultas (ej. <code>tag:idea</code>, <code>title:nota</code>)</p>
@@ -669,11 +677,15 @@
 
         <!-- 3. VISUALIZACIÓN -->
         <div class="accordion-item" class:active={activeSection === 'display'}>
-          <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-          <div class="accordion-header" onclick={() => toggleSection('display')}>
+          <button
+            type="button"
+            class="accordion-header"
+            onclick={() => toggleSection('display')}
+            aria-expanded={activeSection === 'display'}
+          >
             <span class="chevron" class:expanded={activeSection === 'display'}>›</span>
             <h5>Visualización</h5>
-          </div>
+          </button>
           {#if activeSection === 'display'}
             <div class="accordion-content">
               <label class="toggle-control">
@@ -737,11 +749,15 @@
 
         <!-- 4. FUERZAS FÍSICAS -->
         <div class="accordion-item" class:active={activeSection === 'forces'}>
-          <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-          <div class="accordion-header" onclick={() => toggleSection('forces')}>
+          <button
+            type="button"
+            class="accordion-header"
+            onclick={() => toggleSection('forces')}
+            aria-expanded={activeSection === 'forces'}
+          >
             <span class="chevron" class:expanded={activeSection === 'forces'}>›</span>
             <h5>Fuerzas</h5>
-          </div>
+          </button>
           {#if activeSection === 'forces'}
             <div class="accordion-content">
               <div class="slider-control">
@@ -960,12 +976,17 @@
     padding: 10px 12px;
     cursor: pointer;
     user-select: none;
+    width: 100%;
+    background: transparent;
+    border: none;
+    text-align: left;
+    color: inherit;
   }
 
   .accordion-header h5 {
     font-size: 12px;
     font-weight: 500;
-    color: #dfdfdf;
+    color: var(--text-secondary);
     margin: 0;
   }
 

@@ -381,8 +381,7 @@
 <svelte:window onkeydown={onKeydown} />
 
 {#if open}
-  <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-  <div class="backdrop" onclick={onBackdropClick}>
+  <div class="backdrop" role="presentation" onclick={onBackdropClick}>
     <div class="panel">
       <div class="panel-header">
         <span class="mono" style="font-size:12px; letter-spacing:0.08em;">AJUSTES</span>
@@ -443,9 +442,10 @@
           </div>
 
           <!-- Gradient preview bar -->
-          <!-- svelte-ignore a11y-no-static-element-interactions -->
-          <div 
-            class="gradient-preview" 
+          <div
+            class="gradient-preview"
+            role="slider"
+            aria-label="Color gradient preview"
             style="background: {gradientPreview}; cursor: grab;"
             onmousedown={onGradientMouseDown}
             class:dragging={isDragging}

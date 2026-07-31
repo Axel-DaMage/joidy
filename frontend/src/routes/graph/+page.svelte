@@ -208,8 +208,8 @@
     border-radius: 50%;
   }
 
-  .dot.note { background: #4a90a4; }
-  .dot.tag { background: #7d6b91; }
+  .dot.note { background: var(--text-secondary); }
+  .dot.tag { background: var(--text-muted); }
 
   .graph-container {
     flex: 1;

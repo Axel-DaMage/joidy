@@ -7,6 +7,7 @@
   import GoalEditor from '$lib/components/GoalEditor.svelte';
   import LazyIconPicker from '$lib/components/LazyIconPicker.svelte';
   import StreakIcon from '$lib/components/StreakIcon.svelte';
+  import { GOAL_COLOR_PRESETS, DEFAULT_GOAL_COLOR } from '$lib/utils/goalColors';
 
   let goal: Goal | null = null;
   let goalContent: string = '';
@@ -31,20 +32,7 @@
   ]));
 
   const TEMPORALITIES: Goal['temporality'][] = ['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL'];
-  const COLOR_PRESETS = [
-    { name: 'Gold',      hex: '#c8a96e' },
-    { name: 'Esmeralda', hex: '#10b981' },
-    { name: 'Cyan',      hex: '#06b6d4' },
-    { name: 'Azul',      hex: '#3b82f6' },
-    { name: 'Violeta',   hex: '#8b5cf6' },
-    { name: 'Rosa',      hex: '#ec4899' },
-    { name: 'Ámbar',     hex: '#f59e0b' },
-    { name: 'Coral',     hex: '#ef4444' },
-    { name: 'Lima',      hex: '#84cc16' },
-    { name: 'Slate',     hex: '#64748b' },
-    { name: 'Teal',      hex: '#14b8a6' },
-    { name: 'Blanco',    hex: '#e2e8f0' },
-  ];
+  const COLOR_PRESETS = GOAL_COLOR_PRESETS;
 
   let showSettings = false;
   let settingsSection: 'basics' | 'appearance' | 'advanced' = 'basics';
@@ -54,7 +42,7 @@
   let editMeasurement: Goal['measurement_type'] = 'COUNT';
   let editTargetValue = 1;
   let editFailConfig: Goal['fail_config'] = 'STATIC';
-  let editColor = '#c8a96e';
+  let editColor = DEFAULT_GOAL_COLOR;
   let editMaxAssignmentDays: number | null = null;
   let editNoteId: number | null = null;
   let editTagId: number | null = null;
@@ -104,7 +92,7 @@
     editMeasurement = goal.measurement_type || 'COUNT';
     editTargetValue = goal.target_value || 1;
     editFailConfig = goal.fail_config || 'STATIC';
-    editColor = goal.color || '#c8a96e';
+    editColor = goal.color || DEFAULT_GOAL_COLOR;
     editMaxAssignmentDays = goal.max_assignment_days ?? null;
     editNoteId = goal.note_id ?? null;
     editTagId = goal.tag_id ?? null;
@@ -161,7 +149,7 @@
         state: goal.state || 'ACTIVE',
         fail_config: goal.fail_config || 'STATIC',
         fail_emoji: goal.fail_emoji || '🔴',
-        color: goal.color || '#c8a96e',
+        color: goal.color || DEFAULT_GOAL_COLOR,
         theme: goal.theme || 'solid',
         note_id: goal.note_id,
         tag_id: goal.tag_id,
