@@ -9,12 +9,6 @@ export interface Toast {
   duration?: number;
 }
 
-export interface ModalState {
-  isOpen: boolean;
-  component: string | null;
-  props: Record<string, any>;
-}
-
 export const uiToasts = writable<Toast[]>([]);
 
 let toastId = 0;
@@ -46,30 +40,4 @@ export function dismissToast(id: string) {
 export function clearAllToastTimers(): void {
   for (const timer of toastTimers.values()) clearTimeout(timer);
   toastTimers.clear();
-}
-
-export const uiModal = writable<ModalState>({
-  isOpen: false,
-  component: null,
-  props: {},
-});
-
-export function openModal(component: string, props: Record<string, any> = {}) {
-  uiModal.set({ isOpen: true, component, props });
-}
-
-export function closeModal() {
-  uiModal.set({ isOpen: false, component: null, props: {} });
-}
-
-export const uiSidebarOpen = writable(true);
-
-export function toggleSidebar() {
-  uiSidebarOpen.update(v => !v);
-}
-
-export const uiTheme = writable<'dark' | 'light'>('dark');
-
-export function setTheme(theme: 'dark' | 'light') {
-  uiTheme.set(theme);
 }

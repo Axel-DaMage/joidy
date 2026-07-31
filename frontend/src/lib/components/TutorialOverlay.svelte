@@ -65,7 +65,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 10000;
+    z-index: calc(var(--z-tooltip) + 1);
     backdrop-filter: blur(4px);
   }
 

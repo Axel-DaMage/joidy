@@ -1139,7 +1139,7 @@
   /* Icon customize modal */
   .folder-modal-backdrop {
     position: fixed; top: 50px; bottom: 50px; left: 0; right: 0;
-    z-index: 200;
+    z-index: var(--z-overlay);
     background: rgba(0,0,0,0.6); backdrop-filter: blur(2px);
     display: flex; align-items: center; justify-content: center;
   }
@@ -1576,7 +1576,7 @@
     border-radius: var(--r);
     padding: 4px;
     box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
-    z-index: 999;
+    z-index: var(--z-modal);
     display: flex;
     flex-direction: column;
     gap: 2px;

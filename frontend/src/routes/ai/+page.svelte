@@ -3,11 +3,19 @@
   import { api } from '$lib/api';
   import Card from '$lib/components/Card.svelte';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
-  import DeadLetterQueue from '$lib/components/DeadLetterQueue.svelte';
   import { devMode } from '$lib/stores/settings';
 
   let usage = $state<{ ai_enabled: boolean; estimated_cost_usd: number } | null>(null);
   let loadingUsage = $state(true);
+
+  // Lazy-load DeadLetterQueue — only shown in dev mode, so defer the chunk
+  // until the user actually enables it (#347).
+  let DeadLetterQueue: typeof import('$lib/components/DeadLetterQueue.svelte').default | null = null;
+  $effect(() => {
+    if ($devMode && !DeadLetterQueue) {
+      import('$lib/components/DeadLetterQueue.svelte').then(m => DeadLetterQueue = m.default);
+    }
+  });
 
   onMount(async () => {
     try {
@@ -44,8 +52,8 @@
       {/if}
     </Card>
 
-    {#if $devMode}
-      <DeadLetterQueue />
+    {#if $devMode && DeadLetterQueue}
+      <svelte:component this={DeadLetterQueue} />
     {/if}
   </div>
 </div>

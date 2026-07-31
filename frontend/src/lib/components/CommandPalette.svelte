@@ -108,9 +108,21 @@
 </script>
 
 {#if open}
-  <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-  <div class="cp-backdrop" onclick={() => open = false} transition:fade={{duration: 100}}>
-    <div class="cp-modal" onclick={(e) => e.stopPropagation()} transition:fly={{y: -20, duration: 150}}>
+  <div
+    class="cp-backdrop"
+    role="presentation"
+    onclick={() => open = false}
+    transition:fade={{duration: 100}}
+  >
+    <div
+      class="cp-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Command palette"
+      onclick={(e) => e.stopPropagation()}
+      onkeydown={(e) => e.key === 'Escape' && (open = false)}
+      transition:fly={{y: -20, duration: 150}}
+    >
       <div class="cp-header">
         <Search size={16} />
         <input 

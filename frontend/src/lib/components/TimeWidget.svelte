@@ -104,7 +104,6 @@
   $: $use24HourClock, updateClock();
 </script>
 
-<!-- svelte-ignore a11y-no-static-element-interactions -->
 <svelte:window onkeydown={(e) => e.key === 'Escape' && (showTzPicker = false)} />
 
 <div class="time-widget">
@@ -129,10 +128,14 @@
         </div>
       </div>
     {:else}
-      <!-- svelte-ignore a11y-click-events-have-key-events -->
-      <span class="clock mono" onclick={() => showTzPicker = true} title="Cambiar zona horaria">
+      <button
+        class="clock mono"
+        onclick={() => showTzPicker = true}
+        title="Cambiar zona horaria"
+        aria-label="Cambiar zona horaria"
+      >
         {clockStr}
-      </span>
+      </button>
     {/if}
   </div>
 </div>

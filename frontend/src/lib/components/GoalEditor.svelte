@@ -266,7 +266,7 @@
     left: 0;
     width: 100vw;
     height: 100vh;
-    z-index: 9999;
+    z-index: var(--z-tooltip);
     border: none;
     border-radius: 0;
     background: var(--bg);
