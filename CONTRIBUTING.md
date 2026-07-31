@@ -61,7 +61,6 @@ Usa prefijos descriptivos:
 Si no sabes por dónde empezar, prueba con:
 
 - **Good First Issues** — Tareas etiquetadas como [`good-first-issue`](https://github.com/Axel-DaMage/Joidy/issues?q=is%3Aissue+is%3Aopen+label%3Agood-first-issue) — bugs pequeños, mejoras de documentación, tests
-- **TODO.md** — Tareas pendientes listadas en el proyecto
 - **AGENTS.md** — Notas detalladas de arquitectura y desarrollo
 
 ## Estructura del Proyecto
@@ -264,6 +263,5 @@ Usa la plantilla de feature request en GitHub (`.github/ISSUE_TEMPLATE/feature_r
 | Issues | [github.com/Axel-DaMage/Joidy/issues](https://github.com/Axel-DaMage/Joidy/issues) |
 | Discusiones | [github.com/Axel-DaMage/Joidy/discussions](https://github.com/Axel-DaMage/Joidy/discussions) |
 | AGENTS.md | Comandos de desarrollo y notas de arquitectura |
-| TODO.md | Tareas pendientes |
 | API Docs | http://localhost:8000/docs (servicio corriendo) |
 | Email | contacto@joidy.dev |
