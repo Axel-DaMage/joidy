@@ -29,6 +29,9 @@
   });
 </script>
 
+<svelte:head>
+  <title>Grafo de Conocimiento — Joidy</title>
+</svelte:head>
 
 <div class="graph-page">
   <div class="graph-header">
