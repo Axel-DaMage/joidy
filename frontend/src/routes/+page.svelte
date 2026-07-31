@@ -18,6 +18,7 @@
   import WeatherWidget from '$lib/components/WeatherWidget.svelte';
   import Widget         from '$lib/components/Widget.svelte';
   import GithubWidget from '$lib/components/GithubWidget.svelte';
+  import DailyRecap from '$lib/components/DailyRecap.svelte';
   import { totalXP, currentStreak, lastActivity, nextStageXP, globalLevel } from '$lib/stores/gamification';
   import { openShare } from '$lib/stores/shareAchievement';
   import { Share2 } from 'lucide-svelte';
@@ -291,6 +292,8 @@
 </script>
 
 <div class="dashboard" style="--panel-w: {panelWidth}px">
+
+  <DailyRecap />
 
   <!-- ── Left panel ─────────────────────────────────────────────────────────── -->
   <section class="plant-section">

@@ -288,6 +288,9 @@ export const api = {
     acceptTag: (noteId: number, tag: string) =>
       req<{ tag: string; gamification: GamificationResult }>('POST', `/notes/${noteId}/accept-tag?tag_name=${encodeURIComponent(tag)}`),
     backlinks: (id: number) => req<Note[]>('GET', `/notes/${id}/backlinks`),
+    similar: (id: number, limit = 5) => req<{ note: Note; score: number }[]>('GET', `/notes/${id}/similar?limit=${limit}`),
+    semanticSearch: (query: string, limit = 10, threshold = 0.3) =>
+      req<{ results: { note: Note; score: number }[] }>('POST', '/notes/search/semantic', { query, limit, threshold }),
   },
 
   tags: {
@@ -367,6 +370,10 @@ export const api = {
     classify: (noteId: number, content: string, existingTags: string[]) =>
       req<{ note_id: number; status: string; suggestions: AISuggestion[] }>('POST', '/ai/classify', { note_id: noteId, content, existing_tags: existingTags }, { silent: true }),
     usage: () => req<{ ai_enabled: boolean; estimated_cost_usd: number }>('GET', '/ai/usage'),
+    dailyRecap: (date?: string) =>
+      req<{ status: string; recap: string; suggestions: string[]; provider?: string }>('POST', `/ai/daily-recap${date ? `?target_date=${encodeURIComponent(date)}` : ''}`),
+    cluster: (eps = 0.3, minSamples = 3, maxNotes = 500) =>
+      req<{ clusters: { cluster_id: number; note_ids: number[]; note_count: number; representative_title: string; titles: string[] }[]; total_notes: number; noise_count: number; error?: string }>('POST', `/ai/cluster?eps=${eps}&min_samples=${minSamples}&max_notes=${maxNotes}`),
     chat: (messages: { role: 'user' | 'assistant'; content: string }[]) =>
       req<{ status: string; response: string; suggestions?: string[]; provider?: string }>('POST', '/ai/chat', { messages }, { silent: true }),
   },

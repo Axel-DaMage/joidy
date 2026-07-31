@@ -37,7 +37,11 @@ from services.note_service import (
 )
 from services.skill_tree import sync_skills_for_tags
 from services.tag_graph import sync_tag_cooccurrences_for_tags
+from sqlalchemy import text
 from sqlalchemy.orm import Session, selectinload
+
+import httpx
+from config import settings
 
 router = APIRouter(prefix="/notes", tags=["notes"])
 
@@ -187,6 +191,79 @@ def list_notes(
     return [note_to_response(n) for n in notes]
 
 
+class SemanticSearchRequest(BaseModel):
+    """Schema for semantic search queries (#353)."""
+    query: str
+    limit: int = 10
+    threshold: float = 0.3  # max cosine distance to include a result
+
+
+@router.post("/search/semantic")
+async def semantic_search(
+    req: SemanticSearchRequest,
+    db: Session = Depends(get_db),
+):
+    """Semantic search over note embeddings using pgvector cosine similarity (#353).
+
+    Embeds the query via the ai-service, then finds the top-K notes by
+    cosine distance (``<=>``) from the stored embeddings.
+    """
+    if not req.query.strip():
+        return {"results": []}
+
+    # 1. Embed the query via ai-service
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            headers = {}
+            if settings.internal_secret:
+                headers["X-Internal-Secret"] = settings.internal_secret
+            resp = await client.post(
+                f"{settings.ai_service_url}/embed",
+                json={"note_id": 0, "content": req.query},
+                headers=headers,
+            )
+            resp.raise_for_status()
+            embedding = resp.json().get("embedding")
+            if not embedding:
+                return {"results": []}
+    except Exception:
+        raise HTTPException(status_code=503, detail="AI service unavailable for semantic search")
+
+    # 2. Query pgvector for similar notes
+    rows = db.execute(
+        text("""
+            SELECT ne.note_id, ne.embedding <=> :embedding AS distance
+            FROM note_embeddings ne
+            WHERE ne.embedding <=> :embedding <= :threshold
+            ORDER BY ne.embedding <=> :embedding ASC
+            LIMIT :limit
+        """),
+        {"embedding": str(embedding), "threshold": req.threshold, "limit": req.limit},
+    ).fetchall()
+
+    note_ids = [row[0] for row in rows]
+    if not note_ids:
+        return {"results": []}
+
+    # 3. Fetch note details
+    notes = (
+        db.query(Note)
+        .options(selectinload(Note.tags).selectinload(NoteTag.tag))
+        .filter(Note.id.in_(note_ids))
+        .all()
+    )
+    note_map = {n.id: n for n in notes}
+    results = []
+    for row in rows:
+        note = note_map.get(row[0])
+        if note:
+            results.append({
+                "note": note_to_response(note),
+                "score": 1.0 - float(row[1]),  # convert distance to similarity
+            })
+    return {"results": results}
+
+
 @router.get("/{note_id}")
 def get_note(note_id: int, db: Session = Depends(get_db)):
     note = (
@@ -334,6 +411,51 @@ def accept_ai_tag(
 def get_backlinks(note_id: int, db: Session = Depends(get_db)):
     backlinks = list_backlinks_service(db, note_id)
     return [note_to_response(n) for n in backlinks]
+
+
+@router.get("/{note_id}/similar")
+def get_similar_notes(note_id: int, limit: int = 5, db: Session = Depends(get_db)):
+    """Find semantically similar notes using pgvector cosine similarity (#393).
+
+    Uses the note's stored embedding to find the top-K nearest neighbors.
+    """
+    from models.note import NoteEmbedding
+
+    embedding_row = db.query(NoteEmbedding).filter(NoteEmbedding.note_id == note_id).first()
+    if not embedding_row or not embedding_row.embedding:
+        return []
+
+    rows = db.execute(
+        text("""
+            SELECT ne.note_id, ne.embedding <=> :embedding AS distance
+            FROM note_embeddings ne
+            WHERE ne.note_id != :note_id
+            ORDER BY ne.embedding <=> :embedding ASC
+            LIMIT :limit
+        """),
+        {"embedding": str(embedding_row.embedding), "note_id": note_id, "limit": limit},
+    ).fetchall()
+
+    note_ids = [row[0] for row in rows]
+    if not note_ids:
+        return []
+
+    notes = (
+        db.query(Note)
+        .options(selectinload(Note.tags).selectinload(NoteTag.tag))
+        .filter(Note.id.in_(note_ids))
+        .all()
+    )
+    note_map = {n.id: n for n in notes}
+    results = []
+    for row in rows:
+        note = note_map.get(row[0])
+        if note:
+            results.append({
+                "note": note_to_response(note),
+                "score": 1.0 - float(row[1]),
+            })
+    return results
 
 
 @router.post("/embeddings/retry-failed")

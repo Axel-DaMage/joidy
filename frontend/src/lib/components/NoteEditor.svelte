@@ -181,13 +181,16 @@
   let noteIconPack = $derived(iconMeta.pack || undefined);
 
   let backlinks = $state<Note[]>([]);
+  let similarNotes = $state<{ note: Note; score: number }[]>([]);
 
-  // Fetch backlinks on mount or when note changes
+  // Fetch backlinks and semantically similar notes on mount or when note changes
   $effect(() => {
     if (note) {
       api.notes.backlinks(note.id).then(res => backlinks = res).catch(() => backlinks = []);
+      api.notes.similar(note.id, 5).then(res => similarNotes = res).catch(() => similarNotes = []);
     } else {
       backlinks = [];
+      similarNotes = [];
     }
   });
 
@@ -1021,6 +1024,20 @@
                 <button class="backlink-card" onclick={() => goto(`/notes?id=${bl.id}`)}>
                   <span class="bl-title">{bl.title}</span>
                   <span class="bl-meta mono">{bl.source === 'obsidian' ? '⬡' : '◆'}</span>
+                </button>
+              {/each}
+            </div>
+          </div>
+        {/if}
+
+        {#if similarNotes.length > 0}
+          <div class="backlinks-section">
+            <h5 class="mono">NOTAS RELACIONADAS (SEMÁNTICO)</h5>
+            <div class="backlinks-grid">
+              {#each similarNotes as result}
+                <button class="backlink-card" onclick={() => goto(`/notes?id=${result.note.id}`)}>
+                  <span class="bl-title">{result.note.title}</span>
+                  <span class="bl-meta mono">{(result.score * 100).toFixed(0)}%</span>
                 </button>
               {/each}
             </div>
