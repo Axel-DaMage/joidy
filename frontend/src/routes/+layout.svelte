@@ -37,7 +37,7 @@
     { href: '/skills',  label: 'Habilidades', icon: 'Zap',      status: 'dev' },
     { href: '/goals',   label: 'Objetivos',   icon: 'Target',   status: 'ready' },
     { href: '/streaks', label: 'Rachas',      icon: 'Flame',    status: 'ready' },
-    { href: '/integraciones', label: 'Integraciones', icon: 'Puzzle', status: 'ready' },
+    { href: '/integraciones', label: 'Integraciones', icon: 'Puzzle', status: 'dev' },
   ];
 
   let settingsOpen = false;
@@ -459,16 +459,18 @@
   <!-- Sidebar -->
   <nav class="app-sidebar">
     {#each navItems as { href, label, icon, status }}
-      {@const active = $page.url.pathname === href || ($page.url.pathname.startsWith(href) && href !== '/')}
-      <a {href} class="nav-item" class:active class:nav-dev={status === 'dev'} class:nav-placeholder={status === 'placeholder'} title={label}>
-        <DynamicIcon name={icon} size={16} />
-        {#if status === 'dev'}
-          <span class="nav-dev-dot" title="Requiere Dev Mode"></span>
-        {:else if status === 'placeholder'}
-          <!-- Pronto badge removed -->
-        {/if}
-        <span class="tooltip">{label}</span>
-      </a>
+      {#if status === 'ready' || $devMode}
+        {@const active = $page.url.pathname === href || ($page.url.pathname.startsWith(href) && href !== '/')}
+        <a {href} class="nav-item" class:active class:nav-dev={status === 'dev'} class:nav-placeholder={status === 'placeholder'} title={label}>
+          <DynamicIcon name={icon} size={16} />
+          {#if status === 'dev'}
+            <span class="nav-dev-dot" title="Requiere Dev Mode"></span>
+          {:else if status === 'placeholder'}
+            <!-- Pronto badge removed -->
+          {/if}
+          <span class="tooltip">{label}</span>
+        </a>
+      {/if}
     {/each}
   </nav>
 
