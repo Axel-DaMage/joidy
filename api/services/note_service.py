@@ -3,7 +3,7 @@ import re
 
 from config import settings
 from models.note import Note, NoteLink, NoteTag, Tag
-from services.gamification_engine import process_event
+from services.gamification_engine import process_event, xp_for, get_xp_table
 from services.goal_service import sync_goals_from_note
 from services.response_cache import clear_api_caches
 from services.sanitizer import sanitize_content, sanitize_tag, sanitize_title
@@ -230,6 +230,15 @@ def delete_note(db: Session, note_id: int) -> bool:
         return False
 
     touched_tag_ids = {nt.tag_id for nt in note.tags}
+
+    # Revert XP awarded for note creation to prevent XP farming
+    from models.gamification import UserStats, XPEvent
+    stats = db.query(UserStats).filter(UserStats.id == 1).first()
+    if stats:
+        xp_to_revert = xp_for("note_created", db, 10)
+        stats.total_xp = max(0, stats.total_xp - xp_to_revert)
+        db.add(XPEvent(event_type="note_deleted", xp=-xp_to_revert, metadata_json=f'{{"note_id": {note_id}}}'))
+
     db.delete(note)
     sync_tag_cooccurrences_for_tags(db, touched_tag_ids)
     db.commit()

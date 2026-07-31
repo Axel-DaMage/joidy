@@ -16,7 +16,7 @@ class Skill(Base):
     __tablename__ = "skills"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    tag_id: Mapped[int] = mapped_column(Integer, ForeignKey("tags.id"), unique=True)
+    tag_id: Mapped[int] = mapped_column(Integer, ForeignKey("tags.id", ondelete="CASCADE"), unique=True)
     note_count: Mapped[int] = mapped_column(Integer, default=0)
     level: Mapped[str] = mapped_column(String(20), default="locked")  # locked|apprentice|journeyman|expert|master
     xp: Mapped[int] = mapped_column(Integer, default=0)

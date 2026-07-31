@@ -63,10 +63,10 @@ class Goal(Base):
     color: Mapped[str] = mapped_column(String(20), default="#c8a96e")
     theme: Mapped[str] = mapped_column(String(20), default="solid")
 
-    note_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("notes.id"), nullable=True)
-    tag_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("tags.id"), nullable=True)
+    note_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("notes.id", ondelete="SET NULL"), nullable=True)
+    tag_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("tags.id", ondelete="SET NULL"), nullable=True)
 
-    parent_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("goals.id"), nullable=True)
+    parent_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("goals.id", ondelete="SET NULL"), nullable=True)
 
     pending_removal: Mapped[bool] = mapped_column(Boolean, default=False)
 
