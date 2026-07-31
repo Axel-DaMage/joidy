@@ -3,12 +3,13 @@ from contextlib import asynccontextmanager
 
 from circuit_breaker import llm_circuit_breaker, emb_circuit_breaker, CircuitBreakerError
 from clients import get_embedding_client, get_llm_client
-from clients.prompts import CLASSIFY_PROMPT, RAG_PROMPT
+from clients.prompts import CHAT_SYSTEM_PROMPT, CLASSIFY_PROMPT, RAG_PROMPT
 from config import settings
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from logging_config import get_correlation_id, set_correlation_id, setup_logging
 from pydantic import BaseModel
+from rate_limiter import get_limiter
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -90,6 +91,24 @@ class RAGRequest(BaseModel):
     top_k: int = 5
 
 
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+
+class ChatContext(BaseModel):
+    goals: list[dict] = []
+    streaks: list[dict] = []
+    xp: int | None = None
+    top_tags: list[str] = []
+    recent_notes: list[str] = []
+
+
+class ChatRequest(BaseModel):
+    messages: list[ChatMessage]
+    context: ChatContext | None = None
+
+
 def _get_provider_info():
     available = settings.available_providers
     llm_provider, llm_model = settings.llm_model.split(":", 1) if ":" in settings.llm_model else ("gemini", settings.llm_model)
@@ -125,6 +144,40 @@ def providers():
         "llm_model": settings.llm_model,
         "embedding_model": settings.embedding_model,
     }
+
+def _build_chat_system_prompt(ctx: ChatContext | None) -> str:
+    """Build a system prompt that includes the user's personal context."""
+    if ctx is None:
+        return CHAT_SYSTEM_PROMPT.format(personal_context="Sin contexto adicional disponible.")
+    lines: list[str] = []
+    if ctx.goals:
+        goal_lines = []
+        for g in ctx.goals[:10]:
+            title = g.get("title", "Meta")
+            progress = g.get("progress_pct")
+            target = g.get("target_value")
+            current = g.get("current_value")
+            state = g.get("state", "ACTIVE")
+            if progress is not None:
+                goal_lines.append(f"- {title} ({state}): {progress}% — {current}/{target}")
+            else:
+                goal_lines.append(f"- {title} ({state})")
+        lines.append("Metas activas:\n" + "\n".join(goal_lines))
+    if ctx.streaks:
+        streak_lines = []
+        for st in ctx.streaks[:5]:
+            name = st.get("name", "Racha")
+            current = st.get("current_streak", 0)
+            streak_lines.append(f"- {name}: {current} días")
+        lines.append("Rachas:\n" + "\n".join(streak_lines))
+    if ctx.xp is not None:
+        lines.append(f"XP total: {ctx.xp}")
+    if ctx.top_tags:
+        lines.append("Tags principales (intereses): " + ", ".join(ctx.top_tags[:5]))
+    if ctx.recent_notes:
+        lines.append("Notas recientes (títulos):\n- " + "\n- ".join(ctx.recent_notes[:10]))
+    personal_context = "\n\n".join(lines) if lines else "Sin contexto adicional disponible."
+    return CHAT_SYSTEM_PROMPT.format(personal_context=personal_context)
 
 
 @app.post("/embed")
@@ -228,3 +281,72 @@ async def rag(req: RAGRequest):
         return {"status": "circuit_open", "answer": "El proveedor de IA se encuentra temporalmente no disponible.", "error": "Circuit breaker open"}
     except Exception:
         raise HTTPException(status_code=500, detail="RAG failed")
+
+
+@app.post("/chat")
+async def chat(req: ChatRequest):
+    if not settings.is_ai_enabled:
+        return {
+            "status": "disabled",
+            "response": "El asistente de IA no está configurado. Añade una API key para activarlo.",
+            "suggestions": [],
+        }
+    if not req.messages:
+        raise HTTPException(status_code=422, detail="messages must not be empty")
+    limiter = get_limiter()
+    await limiter.acquire()
+    try:
+        system_prompt = _build_chat_system_prompt(req.context)
+        history = "\n\n".join(
+            f"{'Usuario' if m.role == 'user' else 'Asistente'}: {m.content}"
+            for m in req.messages[:-1]
+        )
+        last = req.messages[-1]
+        if last.role != "user":
+            raise HTTPException(status_code=422, detail="last message must be from user")
+        prompt = f"{history}\n\nUsuario: {last.content}\n\nAsistente:" if history else f"Usuario: {last.content}\n\nAsistente:"
+        client = get_llm_client()
+        response = await llm_circuit_breaker.call(
+            client.generate,
+            prompt=prompt,
+            temperature=0.7,
+            max_tokens=1024,
+            system_prompt=system_prompt,
+        )
+        suggestions = _build_suggestions(last.content, req.context)
+        return {
+            "status": "success",
+            "response": response.strip(),
+            "suggestions": suggestions,
+            "provider": client.provider_name,
+        }
+    except CircuitBreakerError:
+        return {
+            "status": "circuit_open",
+            "response": "El proveedor de IA se encuentra temporalmente no disponible. Intenta de nuevo en unos minutos.",
+            "suggestions": [],
+        }
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=500, detail="Chat failed")
+
+
+def _build_suggestions(user_message: str, ctx: ChatContext | None) -> list[str]:
+    """Return a few follow-up prompt suggestions based on user context."""
+    suggestions: list[str] = []
+    if ctx and ctx.goals:
+        suggestions.append("¿Cómo voy con mis metas activas?")
+    if ctx and ctx.streaks:
+        suggestions.append("Dame ideas para mantener mis rachas")
+    if ctx and ctx.recent_notes:
+        suggestions.append("Resume mis notas recientes")
+    if ctx and ctx.top_tags:
+        suggestions.append(f"Háblame sobre {ctx.top_tags[0]}")
+    if not suggestions:
+        suggestions = [
+            "¿Qué debería aprender esta semana?",
+            "Ayúdame a definir una nueva meta",
+            "¿Cómo organizo mejor mis notas?",
+        ]
+    return suggestions[:3]

@@ -45,7 +45,7 @@
     { href: '/notes',   label: 'Notas',       icon: 'BookOpen', status: 'ready' },
     { href: '/graph',   label: 'Grafo',       icon: 'Network',  status: 'dev' },
     { href: '/skills',  label: 'Habilidades', icon: 'Zap',      status: 'dev' },
-    { href: '/ai',      label: 'IA',          icon: 'Brain',    status: 'dev' },
+    { href: '/ai',      label: 'IA',          icon: 'Brain',    status: 'ready' },
     { href: '/goals',   label: 'Objetivos',   icon: 'Target',   status: 'ready' },
     { href: '/streaks', label: 'Rachas',      icon: 'Flame',    status: 'ready' },
   ];
@@ -551,7 +551,6 @@
 <ConflictResolutionModal />
 <OfflineIndicator />
 <ShareAchievementModal />
-<FocusMode />
 {/if}
 
 <style>
