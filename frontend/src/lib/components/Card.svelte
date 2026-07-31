@@ -4,14 +4,14 @@
   export let clickable = false;
 </script>
 
-<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 <div
   class="card padding-{padding}"
   class:hoverable
   class:clickable
-  role={clickable ? 'button' : 'none'}
-  tabindex={clickable ? 0 : -1}
-  onkeydown={(e) => clickable && e.key === 'Enter' && e.currentTarget.click()}
+  role={clickable ? 'button' : undefined}
+  tabindex={clickable ? 0 : undefined}
+  aria-label={clickable ? 'Card' : undefined}
+  onkeydown={(e) => clickable && (e.key === 'Enter' || e.key === ' ') && e.currentTarget.click()}
 >
   <slot />
 </div>

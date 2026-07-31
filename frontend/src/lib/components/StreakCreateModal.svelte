@@ -188,8 +188,8 @@
 <svelte:window onkeydown={onKey} />
 
 {#if open}
-  <div class="modal-backdrop" onclick={onBackdrop}>
-    <div class="modal-panel">
+  <div class="modal-backdrop" role="presentation" onclick={onBackdrop}>
+    <div class="modal-panel" role="dialog" aria-modal="true" aria-label="Crear racha" onclick={(e) => e.stopPropagation()}>
       <div class="modal-header">
         <span class="modal-title mono">{isEdit ? 'EDITAR RACHA' : 'NUEVA RACHA'}</span>
         <button class="close-btn" onclick={close}><X size={14} /></button>
@@ -328,7 +328,7 @@
 
 <style>
   .modal-backdrop {
-    position: fixed; inset: 0; z-index: 200;
+    position: fixed; inset: 0; z-index: var(--z-overlay);
     background: rgba(0,0,0,0.75); backdrop-filter: blur(4px);
     display: flex; align-items: center; justify-content: center;
   }

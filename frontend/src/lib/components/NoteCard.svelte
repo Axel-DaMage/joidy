@@ -57,13 +57,16 @@
   $: meta = getFileMeta();
 </script>
 
-<!-- svelte-ignore a11y-click-events-have-key-events -->
-<!-- svelte-ignore a11y-no-static-element-interactions -->
 <div
   class="note-card"
   class:active
   class:bulk-selected={selected}
+  role="button"
+  tabindex="0"
+  aria-label={note.title}
+  aria-pressed={selected}
   onclick={() => bulkMode ? dispatch('toggleSelect', note.id) : dispatch('select', note)}
+  onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), bulkMode ? dispatch('toggleSelect', note.id) : dispatch('select', note))}
 >
   <div class="note-header">
     {#if bulkMode}

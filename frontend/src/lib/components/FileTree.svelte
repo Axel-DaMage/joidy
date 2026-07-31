@@ -20,11 +20,14 @@
 {#each nodes as node (node.path)}
   {#if node.type === 'folder'}
     <!-- Folder row -->
-    <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
     <div
       class="tree-row folder-row"
       style="padding-left: {8 + depth * 14}px"
+      role="button"
+      tabindex="0"
+      aria-expanded={!collapsed.has(node.path)}
       onclick={() => toggle(node.path)}
+      onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), toggle(node.path))}
     >
       <span class="chevron" class:open={!collapsed.has(node.path)}>
         <ChevronRight size={11} />
@@ -47,12 +50,15 @@
 
   {:else}
     <!-- File row -->
-    <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
     <div
       class="tree-row file-row"
       class:active={node.note?.id === selectedNoteId}
       style="padding-left: {20 + depth * 14}px"
+      role="button"
+      tabindex="0"
+      aria-selected={node.note?.id === selectedNoteId}
       onclick={() => node.note && dispatch('select', node.note)}
+      onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && node.note && (e.preventDefault(), dispatch('select', node.note))}
     >
       <span class="icon file-icon">{node.icon}</span>
       <span class="row-name file-name">{node.name}</span>

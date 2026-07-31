@@ -128,10 +128,16 @@
         </div>
       </div>
     {:else}
-      <!-- svelte-ignore a11y-click-events-have-key-events -->
-      <span class="clock mono" onclick={() => showTzPicker = true} title="Cambiar zona horaria">
+      <button
+        class="clock mono"
+        onclick={() => showTzPicker = true}
+        title="Cambiar zona horaria"
+        aria-label="Cambiar zona horaria"
+        aria-haspopup="dialog"
+        aria-expanded={showTzPicker}
+      >
         {clockStr}
-      </span>
+      </button>
     {/if}
   </div>
 </div>

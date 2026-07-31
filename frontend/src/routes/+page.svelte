@@ -206,7 +206,7 @@
             api.github.repos(),
             (!cached || !isGithubCacheFresh(cached)) ? loadGitHubData(ghFilter) : Promise.resolve()
           ]);
-          repoColors = Object.fromEntries((reposRes.repos || []).map((r: any) => [r.full_name, r.color || '#6366F1']));
+          repoColors = Object.fromEntries((reposRes.repos || []).map((r: any) => [r.full_name, r.color || 'var(--accent)']));
           writeGithubCache({
             connected: githubConnected,
             filter: ghFilter,
@@ -624,5 +624,5 @@
     background: var(--surface);
   }
 
-  .empty-state.success { color: #238636; text-align: center; padding: 12px; }
+  .empty-state.success { color: var(--success); text-align: center; padding: 12px; }
 </style>

@@ -16,6 +16,7 @@
   import { loadUserSettings, patchUserSettings } from '$lib/utils/userSettings';
   import { captureSnapshot, getSnapshot } from '$lib/stores/pageSnapshots';
   import { api, type Note } from '$lib/api';
+  import { DEFAULT_GOAL_COLOR } from '$lib/utils/goalColors';
 
   // ── State ────────────────────────────────────────────────────────────────────
   let search = '';
@@ -30,7 +31,7 @@
 
   // Folder customization
   let editingFolder: string | null = null;
-  let folderColor = '#c8a96e';
+  let folderColor = DEFAULT_GOAL_COLOR;
   let folderIcon = 'Folder';
 
   let editingFolderNote: Note | null = null;
@@ -110,10 +111,10 @@
   let newFolderName = "";
   let newFolderParent = "";
   let newFolderIcon = "Folder";
-  let newFolderColor = "#c8a96e";
+  let newFolderColor = DEFAULT_GOAL_COLOR;
   async function openFolderCustomizer(node: { path: string; color?: string | null; icon?: string | null; note?: Note }) {
     editingFolder = node.path;
-    folderColor = node.color || '#c8a96e';
+    folderColor = node.color || DEFAULT_GOAL_COLOR;
     folderIcon = node.icon || 'Folder';
     editingFolderNote = node.note || null;
   }
@@ -220,7 +221,7 @@
     newFolderName = "";
     newFolderParent = "";
     newFolderIcon = "Folder";
-    newFolderColor = "#c8a96e";
+    newFolderColor = DEFAULT_GOAL_COLOR;
   }
 
   function toggleCollapseAll() {
@@ -680,11 +681,14 @@
         {:else if flatNodes.length > 50}
             <VirtualList items={flatNodes} itemHeight={26} getKey={(n, i) => n.path ?? i} let:item let:index>
               {#if item.type === 'folder'}
-                <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
                 <div
                   class="tree-row folder-row"
                   style="padding-left: {8 + item.depth * 14}px"
+                  role="button"
+                  tabindex="0"
+                  aria-expanded={!collapsed.has(item.path)}
                   onclick={() => toggleFolder(item.path)}
+                  onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), toggleFolder(item.path))}
                   oncontextmenu={(e) => handleContextMenu(e, item)}
                 >
                   <span class="chevron" class:open={!collapsed.has(item.path)}>
@@ -698,12 +702,15 @@
                   <span class="t-count">{item.childCount}</span>
                 </div>
               {:else}
-                <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
                 <div
                   class="tree-row file-row"
                   class:active={item.note?.id === selectedNote?.id}
                   style="padding-left: {20 + item.depth * 14}px"
+                  role="button"
+                  tabindex="0"
+                  aria-selected={item.note?.id === selectedNote?.id}
                   onclick={() => item.note && openNote(item.note)}
+                  onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && item.note && (e.preventDefault(), openNote(item.note))}
                   oncontextmenu={(e) => handleContextMenu(e, item)}
                 >
                   <div class="t-icon file-icon"><DynamicIcon name={item.icon} size={11} color={item.color} pack={item.pack} /></div>
@@ -718,11 +725,14 @@
           <div class="tree-wrap">
             {#each flatNodes as node (node.path)}
               {#if node.type === 'folder'}
-                <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
                 <div
                   class="tree-row folder-row"
                   style="padding-left: {8 + node.depth * 14}px"
+                  role="button"
+                  tabindex="0"
+                  aria-expanded={!collapsed.has(node.path)}
                   onclick={() => toggleFolder(node.path)}
+                  onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), toggleFolder(node.path))}
                   oncontextmenu={(e) => handleContextMenu(e, node)}
                 >
                   <span class="chevron" class:open={!collapsed.has(node.path)}>
@@ -736,12 +746,15 @@
                   <span class="t-count">{node.childCount}</span>
                 </div>
               {:else}
-                <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
                 <div
                   class="tree-row file-row"
                   class:active={node.note?.id === selectedNote?.id}
                   style="padding-left: {20 + node.depth * 14}px"
+                  role="button"
+                  tabindex="0"
+                  aria-selected={node.note?.id === selectedNote?.id}
                   onclick={() => node.note && openNote(node.note)}
+                  onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && node.note && (e.preventDefault(), openNote(node.note))}
                   oncontextmenu={(e) => handleContextMenu(e, node)}
                 >
                   <div class="t-icon file-icon"><DynamicIcon name={node.icon} size={11} color={node.color} pack={node.pack} /></div>
@@ -913,8 +926,13 @@
   {/if}
 
   <!-- ── Resize handle ─────────────────────────────────────────────────────── -->
-  <!-- svelte-ignore a11y-no-static-element-interactions -->
-  <div class="resize-handle" onmousedown={startResize}></div>
+  <div
+    class="resize-handle"
+    role="separator"
+    aria-orientation="vertical"
+    aria-label="Resize panel"
+    onmousedown={startResize}
+  ></div>
 
   <!-- ── Editor panel ──────────────────────────────────────────────────────── -->
   <div class="editor-panel">
