@@ -9,6 +9,12 @@ class Settings(BaseSettings):
     database_url: str = "postgresql://joidy:joidy@postgres:5432/joidy"
     app_env: str = "development"
 
+    # Internal auth: shared secret for API → ai-service communication
+    internal_secret: str = ""
+
+    # CORS
+    cors_allowed_origins: str = ""
+
     # Multi-provider API keys
     gemini_api_key: str = ""
     openai_api_key: str = ""

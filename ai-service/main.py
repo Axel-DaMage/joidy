@@ -5,11 +5,13 @@ from circuit_breaker import llm_circuit_breaker, emb_circuit_breaker, CircuitBre
 from clients import get_embedding_client, get_llm_client
 from clients.prompts import CLASSIFY_PROMPT, RAG_PROMPT
 from config import settings
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from logging_config import get_correlation_id, set_correlation_id, setup_logging
 from pydantic import BaseModel
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
+from starlette.responses import JSONResponse
 
 
 @asynccontextmanager
@@ -34,6 +36,42 @@ class CorrelationMiddleware(BaseHTTPMiddleware):
 
 
 app.add_middleware(CorrelationMiddleware)
+
+
+# CORS: restrict to configured origins, or allow all in development
+_cors_origins = (
+    [o.strip() for o in settings.cors_allowed_origins.split(",") if o.strip()]
+    if settings.cors_allowed_origins
+    else (["*"] if settings.app_env != "production" else [])
+)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_credentials=settings.app_env == "production",
+    allow_methods=["GET", "POST"],
+    allow_headers=["Authorization", "Content-Type", "X-Request-ID", "X-Internal-Secret"],
+)
+
+
+class InternalAuthMiddleware(BaseHTTPMiddleware):
+    """Validate internal secret for non-health endpoints.
+
+    If INTERNAL_SECRET is configured, all endpoints except /health
+    require an X-Internal-Secret header matching the configured value.
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        if settings.internal_secret and request.url.path != "/health":
+            provided = request.headers.get("X-Internal-Secret", "")
+            if provided != settings.internal_secret:
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": "Forbidden: invalid internal secret"},
+                )
+        return await call_next(request)
+
+
+app.add_middleware(InternalAuthMiddleware)
 
 
 class EmbedRequest(BaseModel):

@@ -6,7 +6,9 @@ import asyncio
 import json
 import logging
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from config import settings
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
+from services.auth_service import verify_token
 
 logger = logging.getLogger(__name__)
 
@@ -46,8 +48,28 @@ manager = ConnectionManager()
 
 
 @router.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    """Main WebSocket endpoint for real-time updates."""
+async def websocket_endpoint(
+    websocket: WebSocket,
+    token: str = Query(default=""),
+):
+    """Main WebSocket endpoint for real-time updates.
+
+    Validates JWT token via query parameter for authentication.
+    In development without AUTH_PASSWORD, auth is bypassed.
+    """
+    # Authenticate: verify token if auth is configured
+    if settings.auth_password:
+        if not token:
+            await websocket.close(code=4001, reason="Missing authentication token")
+            return
+        payload = verify_token(token)
+        if not payload:
+            await websocket.close(code=4001, reason="Invalid authentication token")
+            return
+    elif settings.app_env == "production":
+        await websocket.close(code=4001, reason="Authentication not configured")
+        return
+
     await manager.connect(websocket)
     try:
         while True:

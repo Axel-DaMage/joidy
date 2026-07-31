@@ -92,8 +92,8 @@ class CorsSafetyMiddleware(BaseHTTPMiddleware):
                 request_origin = request.headers.get("origin")
                 if request_origin and request_origin in _cors_origins:
                     response.headers["Access-Control-Allow-Origin"] = request_origin
-        response.headers.setdefault("Access-Control-Allow-Methods", "*")
-        response.headers.setdefault("Access-Control-Allow-Headers", "*")
+                    response.headers.setdefault("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+                    response.headers.setdefault("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Request-Id")
         return response
 
 
