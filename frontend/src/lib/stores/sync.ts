@@ -33,7 +33,7 @@ function createSyncStore() {
   async function checkConflicts(): Promise<void> {
     update(s => ({ ...s, loading: true }));
     try {
-      const data = await api<{ conflicts: SyncConflict[]; count: number }>('GET', '/sync/conflicts');
+      const data = await api.sync.conflicts();
       update(s => ({
         conflicts: data.conflicts,
         loading: false,
@@ -57,10 +57,7 @@ function createSyncStore() {
     mergedContent?: string
   ): Promise<boolean> {
     try {
-      await api('POST', `/sync/resolve/${noteId}`, {
-        resolution,
-        merged_content: mergedContent ?? null,
-      });
+      await api.sync.resolve(noteId, resolution, mergedContent);
       update(s => ({
         ...s,
         conflicts: s.conflicts.filter(c => c.note_id !== noteId),

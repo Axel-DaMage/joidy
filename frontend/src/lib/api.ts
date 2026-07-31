@@ -223,6 +223,15 @@ export interface StreakStats {
 
 // ── Notes ─────────────────────────────────────────────────────────────────────
 
+export interface SyncConflict {
+  note_id: number;
+  title: string;
+  source_path: string;
+  local_mtime: string | null;
+  remote_mtime: string | null;
+  last_synced_at: string | null;
+}
+
 export const api = {
   auth: {
     login: (password: string, username = 'user') => 
@@ -448,5 +457,12 @@ github: {
       req<{ status: string }>('POST', '/push/unsubscribe'),
     test: (title: string, body: string) =>
       req<{ status: string }>('POST', '/push/test', { title, body }),
+  },
+
+  sync: {
+    conflicts: () =>
+      req<{ conflicts: SyncConflict[]; count: number }>('GET', '/sync/conflicts'),
+    resolve: (noteId: number, resolution: string, mergedContent?: string) =>
+      req<{ status: string; note_id: number; resolution: string }>('POST', `/sync/resolve/${noteId}`, { resolution, merged_content: mergedContent ?? null }),
   },
 };
