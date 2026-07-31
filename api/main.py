@@ -65,7 +65,12 @@ async def lifespan(app: FastAPI):
 
 
 class CorsSafetyMiddleware(BaseHTTPMiddleware):
-    """Ensure CORS headers on ALL responses, even during errors."""
+    """Ensure CORS headers on ALL responses, even during errors.
+
+    Respects the configured CORS origins instead of always using ``*``.
+    In production with specific origins, only the request's Origin is
+    echoed back if it matches the allowlist.
+    """
 
     async def dispatch(self, request: Request, call_next):
         try:
@@ -77,7 +82,15 @@ class CorsSafetyMiddleware(BaseHTTPMiddleware):
                 status_code=500,
                 content={"detail": "Internal server error"},
             )
-        response.headers.setdefault("Access-Control-Allow-Origin", "*")
+        # Only add CORS headers if CORSMiddleware hasn't already set them
+        # (CORSMiddleware runs first in the stack, but may skip on error paths).
+        if "Access-Control-Allow-Origin" not in response.headers:
+            if "*" in _cors_origins:
+                response.headers["Access-Control-Allow-Origin"] = "*"
+            else:
+                request_origin = request.headers.get("origin")
+                if request_origin and request_origin in _cors_origins:
+                    response.headers["Access-Control-Allow-Origin"] = request_origin
         response.headers.setdefault("Access-Control-Allow-Methods", "*")
         response.headers.setdefault("Access-Control-Allow-Headers", "*")
         return response
