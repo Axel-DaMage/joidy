@@ -117,6 +117,10 @@ def process_webhook_event(
             return {"status": "ok", "note_id": None, "action": "noop", "conflict": False}
 
         note_id = note.id
+        # Remove SyncState first to avoid FK constraint when note is deleted
+        sync = db.query(SyncState).filter(SyncState.note_id == note_id).first()
+        if sync:
+            db.delete(sync)
         delete_note(db, note_id)
         logger.info("[webhook] Deleted note %d for path %s", note_id, path)
         return {"status": "ok", "note_id": note_id, "action": "deleted", "conflict": False}
