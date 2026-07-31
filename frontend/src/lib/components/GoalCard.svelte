@@ -186,7 +186,7 @@
     justify-content: center;
     cursor: pointer;
     transition: all 0.2s ease;
-    z-index: 1;
+    z-index: var(--z-base);
   }
 
   .pin-btn:hover {

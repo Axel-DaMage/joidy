@@ -451,8 +451,8 @@
   }
 
   .week-col:first-child { margin-left: 0; }
-  .week-col:hover { border-color: var(--ac); z-index: 1; background: color-mix(in srgb, var(--ac) 8%, var(--surface)); }
-  .week-col.checked { border-color: var(--ac); z-index: 1; }
+  .week-col:hover { border-color: var(--ac); z-index: var(--z-base); background: color-mix(in srgb, var(--ac) 8%, var(--surface)); }
+  .week-col.checked { border-color: var(--ac); z-index: var(--z-base); }
   .week-col.selected { border-color: var(--ac); box-shadow: 0 0 0 2px var(--ac); z-index: 3; }
 
   /* ── Day number / emoji ── */
@@ -494,16 +494,16 @@
 
   .week-col.failed, .mcell.failed {
     border-color: var(--error);
-    z-index: 1;
+    z-index: var(--z-base);
   }
 
   .week-col.today {
-    border-color: #fbbf24 !important;
+    border-color: var(--today);
     z-index: 4;
   }
   .week-col.today.selected {
-    border-color: #fbbf24 !important;
-    box-shadow: 0 0 0 2px #fbbf24 !important;
+    border-color: var(--today);
+    box-shadow: 0 0 0 2px var(--today);
     z-index: 5;
   }
 
@@ -524,9 +524,9 @@
   /* Today always wins */
   .wd-num.today-num,
   .mday.mtoday {
-    background: #fbbf24 !important;
-    color: #000 !important;
-    font-weight: 700 !important;
+    background: var(--today);
+    color: #000;
+    font-weight: 700;
   }
 
   .wd-num.today-num, .mday.mtoday { font-weight: 700; }
@@ -539,12 +539,12 @@
   }
 
   .wd-num.target-num, .mday.mtarget {
-    background: #10b981 !important;
-    color: #000 !important;
+    background: var(--target);
+    color: #000;
     font-weight: 700;
   }
 
-  .week-col.target, .mcell.target { border-color: #10b981 !important; z-index: 2; }
+  .week-col.target, .mcell.target { border-color: var(--target); z-index: 2; }
 
   /* ── Month grid ── */
   .mgrid {
@@ -576,14 +576,14 @@
   .mcell:not(.empty):hover {
     background: color-mix(in srgb, var(--ac) 10%, var(--surface));
     box-shadow: inset 0 0 0 1px var(--ac);
-    z-index: 1;
+    z-index: var(--z-base);
   }
 
-  .mcell.checked { box-shadow: inset 0 0 0 1px var(--ac); z-index: 1; }
+  .mcell.checked { box-shadow: inset 0 0 0 1px var(--ac); z-index: var(--z-base); }
   .mcell.failed:not(.checked) { box-shadow: inset 0 0 0 1px var(--error); }
-  .mcell.today { box-shadow: inset 0 0 0 1px #fbbf24 !important; z-index: 4; }
-  .mcell.selected { box-shadow: inset 0 0 0 2px var(--ac) !important; z-index: 3; }
-  .mcell.today.selected { box-shadow: inset 0 0 0 2px #fbbf24 !important; z-index: 5; }
+  .mcell.today { box-shadow: inset 0 0 0 1px var(--today); z-index: 4; }
+  .mcell.selected { box-shadow: inset 0 0 0 2px var(--ac); z-index: 3; }
+  .mcell.today.selected { box-shadow: inset 0 0 0 2px var(--today); z-index: 5; }
 
   .mcell.empty {
     background: #000;

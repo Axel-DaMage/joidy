@@ -660,16 +660,16 @@
     margin-right: 12px;
   }
   .connectivity-pill.offline {
-    background: rgba(239, 68, 68, 0.1);
-    border: 1px solid rgba(239, 68, 68, 0.3);
-    color: var(--error, #ef4444);
-    box-shadow: 0 0 10px rgba(239, 68, 68, 0.1);
+    background: color-mix(in srgb, var(--error) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--error) 30%, transparent);
+    color: var(--error);
+    box-shadow: 0 0 10px color-mix(in srgb, var(--error) 10%, transparent);
   }
   .connectivity-pill.online {
-    background: rgba(34, 197, 94, 0.1);
-    border: 1px solid rgba(34, 197, 94, 0.3);
-    color: var(--success, #22c55e);
-    box-shadow: 0 0 10px rgba(34, 197, 94, 0.1);
+    background: color-mix(in srgb, var(--success) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--success) 30%, transparent);
+    color: var(--success);
+    box-shadow: 0 0 10px color-mix(in srgb, var(--success) 10%, transparent);
   }
   
   .pulse-dot {
@@ -679,7 +679,7 @@
     display: inline-block;
   }
   .pulse-dot.red {
-    background-color: var(--error, #ef4444);
+    background-color: var(--error);
     animation: red-pulse 1.5s infinite;
   }
   .pulse-dot.green {

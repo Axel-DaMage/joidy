@@ -440,17 +440,17 @@
   }
   .preview-card.theme-lcd .preview-num {
     font-family: var(--font-mono);
-    color: color-mix(in srgb, var(--theme-ac) 20%, black) !important;
+    color: color-mix(in srgb, var(--theme-ac) 20%, black);
     text-shadow: none;
     font-weight: 800;
   }
   .preview-card.theme-lcd .preview-name {
-    color: color-mix(in srgb, var(--theme-ac) 20%, black) !important;
+    color: color-mix(in srgb, var(--theme-ac) 20%, black);
     opacity: 0.9;
     font-weight: 700;
   }
   .preview-card.theme-lcd .preview-meta {
-    color: color-mix(in srgb, var(--theme-ac) 20%, black) !important;
+    color: color-mix(in srgb, var(--theme-ac) 20%, black);
     opacity: 0.7;
     font-weight: 600;
   }
