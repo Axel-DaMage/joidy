@@ -31,7 +31,7 @@ class Tag(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
-    parent_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("tags.id"), nullable=True)
+    parent_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("tags.id", ondelete="SET NULL"), nullable=True)
     color: Mapped[str] = mapped_column(String(20), default="#888888")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 

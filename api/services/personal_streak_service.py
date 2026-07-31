@@ -1,5 +1,5 @@
 """Personal Streaks Service — extracted from routers for better separation of concerns."""
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from models.personal_streaks import PersonalStreak, StreakCheckIn
 from repositories import PersonalStreakRepository, StreakCheckInRepository
@@ -11,7 +11,7 @@ def backfill_streak_history(db: Session, streak: PersonalStreak) -> None:
     if not streak.start_date:
         return
 
-    today = date.today()
+    today = datetime.now(timezone.utc).date()
     end_date = streak.created_at.date() if streak.created_at else today
     current = streak.start_date
 
@@ -51,7 +51,7 @@ def compute_streak(checkin_dates: list[date], frequency: str = "daily", frequenc
         return 0, 0
 
     dates_set = set(checkin_dates)
-    today = date.today()
+    today = datetime.now(timezone.utc).date()
 
     if frequency == "every_n" and frequency_days > 1:
         sorted_dates = sorted(dates_set, reverse=True)

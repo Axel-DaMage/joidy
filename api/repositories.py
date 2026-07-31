@@ -299,9 +299,10 @@ class StreakRecordRepository(BaseRepository[StreakRecord]):
         super().__init__(db, StreakRecord)
 
     def get_today(self) -> StreakRecord | None:
+        today = datetime.now(timezone.utc).date()
         return (
             self._db.query(StreakRecord)
-            .filter(StreakRecord.activity_date == date.today())
+            .filter(StreakRecord.activity_date == today)
             .first()
         )
 

@@ -11,7 +11,7 @@ Every mutation in the system calls process_event(), which:
 import json
 import logging
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, timezone
 
 from config import settings
 from models.config import SystemConfig
@@ -148,6 +148,11 @@ STREAK_MILESTONES = {7, 30, 100, 365}
 GRACE_PERIOD_DAYS = 1  # One missed day forgiven per week
 
 
+def _today_utc() -> date:
+    """Return today's date in UTC to avoid timezone-related streak bugs."""
+    return datetime.now(timezone.utc).date()
+
+
 @dataclass
 class GamificationResult:
     xp_awarded: int = 0
@@ -177,7 +182,7 @@ def _compute_plant_stage(total_xp: int, db: Session | None = None) -> tuple[int,
 
 
 def _compute_streak(db: Session, stats: UserStats) -> tuple[int, bool]:
-    today = date.today()
+    today = _today_utc()
     last = stats.last_activity_date
 
     if last is None:
@@ -210,7 +215,7 @@ def process_event(
         metadata = {}
 
     stats = _get_or_create_stats(db)
-    today = date.today()
+    today = _today_utc()
 
     # Check if already at max XP
     stages = get_plant_stages(db)
