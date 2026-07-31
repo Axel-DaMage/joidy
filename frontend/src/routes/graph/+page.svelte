@@ -137,7 +137,7 @@
     position: relative;
     min-height: 0;
     background: var(--bg);
-    z-index: 1; /* Ensure graph content (incl. settings panel) is above the nav sidebar (#274) */
+    z-index: var(--z-base); /* Ensure graph content (incl. settings panel) is above the nav sidebar (#274) */
   }
 
   .loading-state {

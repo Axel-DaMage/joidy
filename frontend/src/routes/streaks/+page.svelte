@@ -355,21 +355,21 @@
                 <div class="counter-stack">
                   <h2
                     class="counter-title mono"
-                    style="--title-accent: {isStreakCompleted(selected) ? '#10b981' : (selected.color || 'var(--xp)')};"
+                    style="--title-accent: {isStreakCompleted(selected) ? 'var(--target)' : (selected.color || 'var(--xp)')};"
                     title={selected.name}
                   >
                     {selected.name}
                   </h2>
                   <button
                     class="counter-ring"
-                    style="--ring-color: {isStreakCompleted(selected) ? '#10b981' : (selected.color || 'var(--xp)')};"
+                    style="--ring-color: {isStreakCompleted(selected) ? 'var(--target)' : (selected.color || 'var(--xp)')};"
                     onclick={() => !selected.is_archived && !selected.today_checked && !isStreakCompleted(selected) && checkin(selected.id)}
                     disabled={selected.is_archived || selected.today_checked || busy.has(selected.id) || isStreakCompleted(selected)}
                     title={isStreakCompleted(selected) ? 'Racha completada' : (selected.today_checked ? 'Ya hiciste check-in hoy' : 'Hacer check-in')}
                     aria-label={isStreakCompleted(selected) ? 'Racha completada' : (selected.today_checked ? 'Ya hiciste check-in hoy' : 'Hacer check-in')}
                   >
                     {#if isStreakCompleted(selected)}
-                      <span class="counter-num mono" style="color: #10b981;">✓</span>
+                      <span class="counter-num mono" style="color: var(--target);">✓</span>
                       <span class="counter-label mono">FINALIZADO</span>
                     {:else}
                       <span class="counter-num mono">{selected.current_streak}</span>
@@ -400,7 +400,7 @@
             <div class="heatmap-section">
               <StreakHeatmap
                 history={selected.history}
-                color={selected.color || '#c8a96e'}
+                color={selected.color || 'var(--xp)'}
                 startDate={selected.start_date}
                 targetDate={selected.target_date}
               />
@@ -519,7 +519,7 @@
   }
 
   .detail-content.completed {
-    --theme-ac: #10b981;
+    --theme-ac: var(--target);
   }
 
   .error-msg { color: var(--error); padding: 15px; font-size: 13px; }
@@ -566,7 +566,7 @@
     color: var(--text-muted);
     cursor: pointer;
     transition: all 0.15s;
-    z-index: 3;
+    z-index: var(--z-base);
   }
 
   .detail-exit-btn:hover {
@@ -760,7 +760,7 @@
 
   /* Delete confirmation modal */
   .modal-backdrop {
-    position: fixed; inset: 0; z-index: 300;
+    position: fixed; inset: 0; z-index: var(--z-overlay);
     background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(4px);
     display: flex; align-items: center; justify-content: center;
   }

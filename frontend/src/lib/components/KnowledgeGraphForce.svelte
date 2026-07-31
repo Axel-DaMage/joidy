@@ -815,8 +815,7 @@
     transform: translate(-50%, -50%);
     color: var(--text-muted);
     font-size: 13px;
-    z-index: 10;
-    font-family: var(--font-mono, monospace);
+    z-index: var(--z-sticky);
   }
 
   /* SETTINGS PANEL FLOATING TOGGLE BUTTON */
@@ -834,7 +833,7 @@
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    z-index: 1010;
+    z-index: var(--z-modal);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
     backdrop-filter: blur(12px);
     transition: all 0.25s ease, opacity 0.2s ease;
@@ -879,7 +878,7 @@
     border: 1px solid rgba(255, 255, 255, 0.08);
     box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
     backdrop-filter: blur(20px);
-    z-index: 1005;
+    z-index: var(--z-modal);
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -1239,8 +1238,7 @@
     display: flex;
     flex-direction: column;
     gap: 6px;
-    z-index: 1000;
-    background: color-mix(in srgb, var(--elevated) 90%, transparent);
+    z-index: var(--z-modal);
     padding: 8px;
     border-radius: 10px;
     border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);

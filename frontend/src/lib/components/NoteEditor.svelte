@@ -858,7 +858,7 @@
             <!-- Backdrop to close dropdown on outside click -->
             <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
             <div
-              style="position: fixed; inset: 0; z-index: 998; cursor: default;"
+              style="position: fixed; inset: 0; z-index: var(--z-dropdown); cursor: default;"
               onclick={() => showExportMenu = false}
               role="presentation"
               tabindex="-1"
@@ -1031,8 +1031,7 @@
     left: 0;
     width: 100vw;
     height: 100vh;
-    z-index: 9999;
-    border-left: none;
+    z-index: var(--z-tooltip);
     background: var(--bg);
     padding-top: 40px;
   }
@@ -1209,7 +1208,7 @@
 
   /* ── Title ── */
   .toolbar-nav {
-    margin-bottom: 0 !important;
+    margin-bottom: 0;
   }
 
   .nav-controls {

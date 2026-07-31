@@ -159,21 +159,21 @@
     box-shadow: inset 0 0 10px rgba(0,0,0,0.15);
   }
   .streak-item.theme-lcd .item-num {
-    font-family: var(--font-mono); color: color-mix(in srgb, var(--theme-ac) 20%, black) !important; text-shadow: none; font-weight: 800;
+    font-family: var(--font-mono); color: color-mix(in srgb, var(--theme-ac) 20%, black); text-shadow: none; font-weight: 800;
   }
   .streak-item.theme-lcd .item-name {
-    color: color-mix(in srgb, var(--theme-ac) 20%, black) !important; opacity: 0.9; font-weight: 700;
+    color: color-mix(in srgb, var(--theme-ac) 20%, black); opacity: 0.9; font-weight: 700;
   }
   .streak-item.theme-lcd .item-meta,
   .streak-item.theme-lcd .item-rem {
-    color: color-mix(in srgb, var(--theme-ac) 20%, black) !important; opacity: 0.7; font-weight: 600;
+    color: color-mix(in srgb, var(--theme-ac) 20%, black); opacity: 0.7; font-weight: 600;
   }
   .streak-item.theme-lcd .item-emoji,
   .streak-item.theme-lcd .item-icon {
     filter: grayscale(1) brightness(0) opacity(0.8);
   }
   .streak-item.theme-lcd .item-count :global(svg) {
-    color: color-mix(in srgb, var(--theme-ac) 20%, black) !important;
+    color: color-mix(in srgb, var(--theme-ac) 20%, black);
   }
 
   .streak-item.theme-neon {
@@ -223,10 +223,10 @@
   .streak-item:hover { background: var(--elevated); }
   .streak-item.selected { background: var(--elevated); }
   .streak-item.completed {
-    border-color: #10b981;
-    background: rgba(16, 185, 129, 0.05);
+    border-color: var(--target);
+    background: color-mix(in srgb, var(--target) 5%, transparent);
   }
-  .streak-item.completed .item-count { color: #10b981 !important; }
+  .streak-item.completed .item-count { color: var(--target); }
 
   .streak-item.archived { opacity: 0.5; }
 
@@ -360,8 +360,8 @@
 
     .streak-item .item-actions {
       position: static;
-      opacity: 1 !important;
-      pointer-events: auto !important;
+      opacity: 1;
+      pointer-events: auto;
       flex-direction: row;
       width: 100%;
       justify-content: flex-end;

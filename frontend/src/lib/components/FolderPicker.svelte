@@ -57,7 +57,7 @@
 
 <style>
   .folder-picker-backdrop {
-    position: fixed; inset: 0; z-index: 200;
+    position: fixed; inset: 0; z-index: var(--z-overlay);
     background: rgba(0,0,0,0.3);
     display: flex; align-items: center; justify-content: center;
   }

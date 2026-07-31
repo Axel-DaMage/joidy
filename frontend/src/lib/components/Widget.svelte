@@ -33,7 +33,7 @@
   /* Force-neutral container even if older accent styles remain in cache/builds. */
   .widget::before,
   .widget::after {
-    content: none !important;
-    display: none !important;
+    content: none;
+    display: none;
   }
 </style>

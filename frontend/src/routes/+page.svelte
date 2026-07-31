@@ -614,7 +614,7 @@
     bottom: calc(var(--statusbar-h) + 24px); right: 32px;
     width: 44px; height: 44px; border-radius: 50%; padding: 0;
     display: flex; align-items: center; justify-content: center;
-    z-index: 50; box-shadow: 0 0 0 1px var(--bg); text-decoration: none;
+    z-index: var(--z-sticky); box-shadow: 0 0 0 1px var(--bg); text-decoration: none;
   }
 
   .github-widget {

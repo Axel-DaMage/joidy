@@ -745,8 +745,7 @@
     position: fixed;
     inset: 0;
     background: rgba(0, 0, 0, 0.6);
-    z-index: 100;
-    display: flex;
+    z-index: var(--z-dropdown);
     align-items: flex-start;
     justify-content: flex-end;
   }
@@ -1041,7 +1040,7 @@
   .setting-input:focus { outline: none; }
   
   .input-wrapper:focus-within {
-    border-color: var(--text-muted) !important;
+    border-color: var(--text-muted);
   }
 
   .color-rm {

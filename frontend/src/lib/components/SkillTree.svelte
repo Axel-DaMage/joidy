@@ -208,7 +208,7 @@
 
   .skill-tooltip {
     position: fixed;
-    z-index: 1000;
+    z-index: var(--z-modal);
     width: 180px;
     background: rgba(15, 15, 15, 0.95);
     backdrop-filter: blur(10px);
