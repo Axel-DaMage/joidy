@@ -29,6 +29,7 @@
   import { deferredPrompt, showInstallBanner, isAppInstalled } from '$lib/stores/pwa';
   import { syncStore } from '$lib/stores/sync';
   import ConflictResolutionModal from '$lib/components/ConflictResolutionModal.svelte';
+  import ShareAchievementModal from '$lib/components/ShareAchievementModal.svelte';
 
   type NavItemStatus = 'ready' | 'dev' | 'placeholder';
 
@@ -519,6 +520,7 @@
 <Toast />
 <TutorialOverlay />
 <ConflictResolutionModal />
+<ShareAchievementModal />
 {/if}
 
 <style>

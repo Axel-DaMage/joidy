@@ -11,7 +11,9 @@
   import { api, type PersonalStreak, type StreakStats } from '$lib/api';
   import { loadUserSettings, patchUserSettings, getCachedData, setCachedData } from '$lib/utils/userSettings';
   import { captureSnapshot, getSnapshot } from '$lib/stores/pageSnapshots';
+  import { openShare } from '$lib/stores/shareAchievement';
   import { logger } from '$lib/utils/logger';
+  import { Share2 } from 'lucide-svelte';
 
   let streaks: PersonalStreak[] = [];
   let stats: StreakStats | null = null;
@@ -303,6 +305,23 @@
     const totalDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
     return `${s.current_streak}/${totalDays}`;
   }
+
+  // Streak milestones that are shareable.
+  const STREAK_MILESTONES = [7, 30, 100, 365];
+
+  function isStreakMilestone(s: PersonalStreak): boolean {
+    return STREAK_MILESTONES.includes(s.current_streak);
+  }
+
+  function shareStreak(s: PersonalStreak) {
+    openShare({
+      title: s.name,
+      icon: 'Flame',
+      value: `${s.current_streak}`,
+      subtitle: 'días de racha',
+      color: s.color || 'var(--xp)',
+    });
+  }
 </script>
 
 <div class="streaks-page">
@@ -376,6 +395,17 @@
                       <span class="counter-label mono">DÍAS</span>
                     {/if}
                   </button>
+                  {#if !isStreakCompleted(selected) && isStreakMilestone(selected)}
+                    <button
+                      class="streak-share-btn"
+                      onclick={() => shareStreak(selected)}
+                      title="Compartir hito de racha"
+                      aria-label="Compartir racha {selected.name}"
+                    >
+                      <Share2 size={13} />
+                      <span>Compartir</span>
+                    </button>
+                  {/if}
                 </div>
               </div>
 
@@ -601,6 +631,26 @@
     align-items: center;
     gap: 5px;
     width: min(220px, 100%);
+  }
+
+  .streak-share-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    background: var(--surface);
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-family: var(--font-sans);
+    cursor: pointer;
+    transition: all var(--t-fast);
+  }
+
+  .streak-share-btn:hover {
+    border-color: var(--theme-ac, var(--xp));
+    color: var(--text-primary);
   }
 
   .counter-title {
