@@ -3,7 +3,6 @@
   import { api } from '$lib/api';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
   import ChatInterface from '$lib/components/ChatInterface.svelte';
-  import DeadLetterQueue from '$lib/components/DeadLetterQueue.svelte';
   import { devMode } from '$lib/stores/settings';
 
   let usage = $state<{ ai_enabled: boolean; estimated_cost_usd: number } | null>(null);
@@ -42,9 +41,6 @@
       {/if}
     </div>
 
-    {#if $devMode && DeadLetterQueue}
-      <svelte:component this={DeadLetterQueue} />
-    {/if}
   </div>
 
   <div class="ai-content">
@@ -72,7 +68,7 @@
             <p class="muted">No se pudo obtener el estado.</p>
           {/if}
         </div>
-        <DeadLetterQueue />
+        {#if DeadLetterQueue}<svelte:component this={DeadLetterQueue} />{/if}
       </div>
     </details>
   {/if}

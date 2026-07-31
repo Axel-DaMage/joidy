@@ -11,6 +11,9 @@ export interface Toast {
 
 export const uiToasts = writable<Toast[]>([]);
 
+/** Sidebar open/close state (used by FocusMode to save/restore sidebar). */
+export const uiSidebarOpen = writable(true);
+
 let toastId = 0;
 // Track auto-dismiss timers per toast id so they can be cancelled on manual
 // dismiss or teardown, preventing callbacks firing on a stale store and

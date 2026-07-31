@@ -7,8 +7,6 @@ vi.mock('./StreakIcon.svelte', () => ({
   default: () => null,
 }));
 
-import GoalCard from './GoalCard.svelte';
-
 const STATE_LABELS: Record<string, string> = {
   ACTIVE: 'Activo',
   COMPLETED: 'Completado',
@@ -31,6 +29,25 @@ function formatFailConfig(c: string) {
 }
 function onTogglePin() {}
 function onClick() {}
+
+// GoalCard reads context values via getGoalContext() instead of props (#351).
+// Mock the module so the test can supply the context values.
+let _ctx: any = {
+  tags: [],
+  notes: [],
+  getGoalColor,
+  TEMPORALITY_LABELS,
+  STATE_LABELS,
+  formatFailConfig,
+  onTogglePin,
+  onClick,
+};
+vi.mock('$lib/stores/goalContext', () => ({
+  getGoalContext: () => _ctx,
+  setGoalContext: () => {},
+}));
+
+import GoalCard from './GoalCard.svelte';
 
 function baseGoal(overrides: Record<string, any> = {}) {
   return {
@@ -57,14 +74,6 @@ function renderGoal(goal: Record<string, any>, pinned = false) {
   return render(GoalCard, {
     goal,
     pinned,
-    tags: [],
-    notes: [],
-    getGoalColor,
-    TEMPORALITY_LABELS,
-    STATE_LABELS,
-    formatFailConfig,
-    onTogglePin,
-    onClick,
   });
 }
 
@@ -227,17 +236,10 @@ describe('GoalCard — pin button', () => {
 
   it('pin button calls onTogglePin with goal id', async () => {
     const toggle = vi.fn();
+    _ctx = { ..._ctx, onTogglePin: toggle };
     const { container } = render(GoalCard, {
       goal: baseGoal({ id: 7 }),
       pinned: false,
-      tags: [],
-      notes: [],
-      getGoalColor,
-      TEMPORALITY_LABELS,
-      STATE_LABELS,
-      formatFailConfig,
-      onTogglePin: toggle,
-      onClick,
     });
     const pinBtn = container.querySelector('.pin-btn') as HTMLElement;
     pinBtn.click();

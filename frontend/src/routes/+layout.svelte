@@ -35,7 +35,6 @@
   import OfflineIndicator from '$lib/components/OfflineIndicator.svelte';
   import { initOfflineSync } from '$lib/stores/offlineSync';
   import ShareAchievementModal from '$lib/components/ShareAchievementModal.svelte';
-  import FocusMode from '$lib/components/FocusMode.svelte';
   import { initFocusModeConfig, queueNotificationIfActive } from '$lib/stores/focusMode';
 
   type NavItemStatus = 'ready' | 'dev' | 'placeholder';
