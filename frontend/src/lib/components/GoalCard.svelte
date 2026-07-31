@@ -24,87 +24,90 @@
   class:failed={goal.state === 'FAILED'}
   class:paused={goal.state === 'PAUSED'}
   style="--goal-color: {getGoalColor(goal)}"
-  role="button"
-  tabindex="0"
-  onclick={() => onClick(goal)}
-  onkeydown={(e) => e.key === 'Enter' && onClick(goal)}
 >
-  <div class="card-header">
-    <div class="card-header-left">
-      <div class="goal-icon">
-        {#if goal.fail_emoji}
-          <StreakIcon name={goal.fail_emoji} size={24} color={getGoalColor(goal)} />
-        {:else}
-          <Target size={20} color={getGoalColor(goal)} />
-        {/if}
+  <button
+    class="goal-card-main"
+    onclick={() => onClick(goal)}
+    aria-label="Abrir objetivo: {goal.title}"
+  >
+    <div class="card-header">
+      <div class="card-header-left">
+        <div class="goal-icon">
+          {#if goal.fail_emoji}
+            <StreakIcon name={goal.fail_emoji} size={24} color={getGoalColor(goal)} />
+          {:else}
+            <Target size={20} color={getGoalColor(goal)} />
+          {/if}
+        </div>
       </div>
-      <button
-        class="pin-btn"
-        class:pinned
-        onclick={(e) => { e.stopPropagation(); onTogglePin(goal.id); }}
-        title={pinned ? 'Desfijar' : 'Fijar'}
-      >
-        {#if pinned}
-          <Pin size={14} fill="currentColor" />
-        {:else}
-          <PinOff size={14} />
-        {/if}
-      </button>
+      <div class="goal-state-indicator" class:active={goal.state === 'ACTIVE'} class:completed={goal.state === 'COMPLETED' || goal.is_completed} class:paused={goal.state === 'PAUSED'} class:failed={goal.state === 'FAILED'}>
+        {STATE_LABELS[goal.state] || goal.state}
+      </div>
     </div>
-    <div class="goal-state-indicator" class:active={goal.state === 'ACTIVE'} class:completed={goal.state === 'COMPLETED' || goal.is_completed} class:paused={goal.state === 'PAUSED'} class:failed={goal.state === 'FAILED'}>
-      {STATE_LABELS[goal.state] || goal.state}
-    </div>
-  </div>
-  <div class="card-title">{goal.title}</div>
-  {#if goal.description}
-    <div class="card-description">{goal.description.substring(0, 80)}{goal.description.length > 80 ? '...' : ''}</div>
-  {/if}
-  <div class="card-meta">
-    <div class="meta-item">
-      <Clock size={12} />
-      <span>{TEMPORALITY_LABELS[goal.temporality] || goal.temporality}</span>
-    </div>
-    {#if goal.tag_id}
+    <div class="card-title">{goal.title}</div>
+    {#if goal.description}
+      <div class="card-description">{goal.description.substring(0, 80)}{goal.description.length > 80 ? '...' : ''}</div>
+    {/if}
+    <div class="card-meta">
       <div class="meta-item">
-        <Tag size={12} />
-        <span>{tagsMap.get(goal.tag_id)?.name || 'Etiqueta'}</span>
+        <Clock size={12} />
+        <span>{TEMPORALITY_LABELS[goal.temporality] || goal.temporality}</span>
       </div>
-    {:else if goal.note_id}
-      <div class="meta-item">
-        <FileText size={12} />
-        <span>{notesMap.get(goal.note_id)?.title?.substring(0, 12) || 'Nota'}</span>
-      </div>
-    {/if}
-    {#if goal.fail_config !== 'STATIC'}
-      <div class="meta-item config">
-        <Settings size={12} />
-        <span>{formatFailConfig(goal.fail_config)}</span>
-      </div>
-    {/if}
-  </div>
-  <div class="card-progress">
-    <div class="progress-info">
-      <span class="progress-text">
-        {#if goal.measurement_type === 'BOOLEAN'}
-          {goal.current_value >= 1 ? 'Completado' : 'Pendiente'}
-        {:else if goal.measurement_type === 'PERCENT'}
-          {goal.current_value}%
-        {:else}
-          {goal.current_value} / {goal.target_value}
-        {/if}
-      </span>
-      <span class="progress-pct">{(goal.state === 'COMPLETED' || goal.is_completed) ? 100 : goal.progress_pct}%</span>
+      {#if goal.tag_id}
+        <div class="meta-item">
+          <Tag size={12} />
+          <span>{tagsMap.get(goal.tag_id)?.name || 'Etiqueta'}</span>
+        </div>
+      {:else if goal.note_id}
+        <div class="meta-item">
+          <FileText size={12} />
+          <span>{notesMap.get(goal.note_id)?.title?.substring(0, 12) || 'Nota'}</span>
+        </div>
+      {/if}
+      {#if goal.fail_config !== 'STATIC'}
+        <div class="meta-item config">
+          <Settings size={12} />
+          <span>{formatFailConfig(goal.fail_config)}</span>
+        </div>
+      {/if}
     </div>
-    <div class="progress-bar">
-      <div class="progress-fill" style="width: {(goal.state === 'COMPLETED' || goal.is_completed) ? 100 : goal.progress_pct}%"></div>
+    <div class="card-progress">
+      <div class="progress-info">
+        <span class="progress-text">
+          {#if goal.measurement_type === 'BOOLEAN'}
+            {goal.current_value >= 1 ? 'Completado' : 'Pendiente'}
+          {:else if goal.measurement_type === 'PERCENT'}
+            {goal.current_value}%
+          {:else}
+            {goal.current_value} / {goal.target_value}
+          {/if}
+        </span>
+        <span class="progress-pct">{(goal.state === 'COMPLETED' || goal.is_completed) ? 100 : goal.progress_pct}%</span>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill" style="width: {(goal.state === 'COMPLETED' || goal.is_completed) ? 100 : goal.progress_pct}%"></div>
+      </div>
     </div>
-  </div>
-  <div class="card-footer">
-    <span class="goal-id">#{goal.id}</span>
-    {#if goal.created_at}
-      <span class="goal-date">Creado: {goal.created_at.split('T')[0]}</span>
+    <div class="card-footer">
+      <span class="goal-id">#{goal.id}</span>
+      {#if goal.created_at}
+        <span class="goal-date">Creado: {goal.created_at.split('T')[0]}</span>
+      {/if}
+    </div>
+  </button>
+  <button
+    class="pin-btn"
+    class:pinned
+    onclick={() => onTogglePin(goal.id)}
+    title={pinned ? 'Desfijar' : 'Fijar'}
+    aria-label={pinned ? 'Desfijar objetivo' : 'Fijar objetivo'}
+  >
+    {#if pinned}
+      <Pin size={14} fill="currentColor" />
+    {:else}
+      <PinOff size={14} />
     {/if}
-  </div>
+  </button>
 </div>
 
 <style>
@@ -113,7 +116,6 @@
     border: 2px solid var(--goal-color);
     border-radius: 12px;
     padding: 20px;
-    cursor: pointer;
     transition: all 0.25s ease;
     display: flex;
     flex-direction: column;
@@ -121,6 +123,20 @@
     text-align: left;
     position: relative;
     overflow: hidden;
+  }
+
+  .goal-card-main {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    text-align: left;
+    color: inherit;
+    font: inherit;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    flex: 1;
   }
 
   .goal-editor-card:hover {
@@ -156,6 +172,9 @@
   }
 
   .pin-btn {
+    position: absolute;
+    top: 16px;
+    right: 16px;
     width: 28px;
     height: 28px;
     border-radius: 6px;
@@ -167,6 +186,7 @@
     justify-content: center;
     cursor: pointer;
     transition: all 0.2s ease;
+    z-index: 1;
   }
 
   .pin-btn:hover {
