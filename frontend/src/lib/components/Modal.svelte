@@ -1,7 +1,7 @@
 <script lang="ts">
   import { fade, scale } from 'svelte/transition';
   import { uiModal, closeModal } from '$lib/stores/ui';
-  import DynamicIcon from './DynamicIcon.svelte';
+  import { X } from 'lucide-svelte';
   import { focusTrap } from '$lib/actions/focusTrap';
 
   export let title = '';
@@ -35,7 +35,7 @@
       <div class="modal-header">
         <h3 class="modal-title">{title}</h3>
         <button class="modal-close" on:click={closeModal}>
-          <DynamicIcon name="X" size={18} />
+          <X size={18} />
         </button>
       </div>
       <div class="modal-body">

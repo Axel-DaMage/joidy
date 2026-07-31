@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
-  import DynamicIcon from '$lib/components/DynamicIcon.svelte';
+  import { RotateCcw, SkipForward } from 'lucide-svelte';
 
   // ── Timer ──────────────────────────────────────────────────────────────────
   import {
@@ -68,8 +68,8 @@
     <button class="ctrl-main" class:active={$running} on:click={toggleTimer}>
       {$running ? 'Pausar' : 'Iniciar'}
     </button>
-    <button class="ctrl-icon" on:click={resetTimer} title="Reiniciar"><DynamicIcon name="RotateCcw" size={11}/></button>
-    <button class="ctrl-icon" on:click={skipTimer}  title="Saltar"><DynamicIcon name="SkipForward" size={11}/></button>
+    <button class="ctrl-icon" on:click={resetTimer} title="Reiniciar"><RotateCcw size={11}/></button>
+    <button class="ctrl-icon" on:click={skipTimer}  title="Saltar"><SkipForward size={11}/></button>
   </div>
 
   <div class="duration-row">
