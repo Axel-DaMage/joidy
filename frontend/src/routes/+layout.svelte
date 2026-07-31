@@ -8,27 +8,34 @@
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
   import SettingsPanel from '$lib/components/SettingsPanel.svelte';
   import CommandPalette from '$lib/components/CommandPalette.svelte';
+  import FocusMode from '$lib/components/FocusMode.svelte';
   import Toast from '$lib/components/Toast.svelte';
   import Login from '$lib/components/Login.svelte';
   import SetupWizard from '$lib/components/SetupWizard.svelte';
   import { api, type Goal, type PersonalStreak } from '$lib/api';
-  import { session, isAuthenticated } from '$lib/stores/session';
+  import { session, isAuthenticated, getToken } from '$lib/stores/session';
   import { totalXP, loadStats, pingActivity, globalLevel, nextStageXP, showNotification } from '$lib/stores/gamification';
   import { running, secondsLeft, phase } from '$lib/stores/pomodoro';
   import { initPomodoroSettings } from '$lib/stores/pomodoro';
-  import { accentColors, activeIconPack, use24HourClock, initTheme, devMode } from '$lib/stores/settings';
+  import { accentColors, activeIconPack, use24HourClock, initTheme, devMode, themeMode } from '$lib/stores/settings';
   import { getCachedData, setCachedData } from '$lib/utils/userSettings';
   import { initKeyboardNavigation } from '$lib/utils/keyboardNavigation';
   import { initPushNotifications } from '$lib/push';
   import { logger } from '$lib/utils/logger';
   import { onboarding } from '$lib/stores/onboarding';
-  import TutorialOverlay from '$lib/components/TutorialOverlay.svelte';
+  import { locale as localeStore } from '$lib/stores/locale';
+  import OnboardingTour from '$lib/components/OnboardingTour.svelte';
   import { achievements } from '$lib/stores/achievements';
   import { initConnectionStore } from '$lib/stores/connection';
   import { loadNotes } from '$lib/stores/notes';
   import { deferredPrompt, showInstallBanner, isAppInstalled } from '$lib/stores/pwa';
   import { syncStore } from '$lib/stores/sync';
+  import { toggle as toggleCommandPalette } from '$lib/stores/commandPalette';
   import ConflictResolutionModal from '$lib/components/ConflictResolutionModal.svelte';
+  import OfflineIndicator from '$lib/components/OfflineIndicator.svelte';
+  import { initOfflineSync } from '$lib/stores/offlineSync';
+  import ShareAchievementModal from '$lib/components/ShareAchievementModal.svelte';
+  import { initFocusModeConfig, queueNotificationIfActive } from '$lib/stores/focusMode';
 
   type NavItemStatus = 'ready' | 'dev' | 'placeholder';
 
@@ -37,7 +44,7 @@
     { href: '/notes',   label: 'Notas',       icon: 'BookOpen', status: 'ready' },
     { href: '/graph',   label: 'Grafo',       icon: 'Network',  status: 'dev' },
     { href: '/skills',  label: 'Habilidades', icon: 'Zap',      status: 'dev' },
-    { href: '/ai',      label: 'IA',          icon: 'Brain',    status: 'dev' },
+    { href: '/ai',      label: 'IA',          icon: 'Brain',    status: 'ready' },
     { href: '/goals',   label: 'Objetivos',   icon: 'Target',   status: 'ready' },
     { href: '/streaks', label: 'Rachas',      icon: 'Flame',    status: 'ready' },
   ];
@@ -50,14 +57,14 @@
   let lastFooterStatsFetch = 0;
   let lastStatsLoad = 0;
 
-  $: currentTime = now.toLocaleTimeString('es-CL', {
+  $: currentTime = now.toLocaleTimeString($localeStore, {
     hour: $use24HourClock ? '2-digit' : 'numeric',
     minute: '2-digit',
     second: '2-digit',
     hour12: !$use24HourClock,
   });
 
-  $: currentDate = now.toLocaleDateString('es-CL', {
+  $: currentDate = now.toLocaleDateString($localeStore, {
     weekday: 'short',
     day: '2-digit',
     month: 'short'
@@ -83,14 +90,24 @@
 
     accentColors.init();
     activeIconPack.init();
+    themeMode.init();
     const cleanupTheme = initTheme();
     initPomodoroSettings();
-    initKeyboardNavigation();
+    initFocusModeConfig();
+    const cleanupKeyboard = initKeyboardNavigation();
     initPushNotifications();
     onboarding.init();
     achievements.init();
     devMode.init();
     const cleanupConnection = initConnectionStore();
+    const cleanupOfflineSync = initOfflineSync();
+
+    // First-use detection: start the onboarding tour for brand-new users.
+    if ($isAuthenticated) {
+      onboarding.shouldShowOnboarding().then((show: boolean) => {
+        if (show) onboarding.startTour();
+      }).catch((e: unknown) => logger.warn('[layout] onboarding detection failed:', e));
+    }
 
     // Connect to WebSocket for real-time notifications
     let ws: WebSocket | null = null;
@@ -125,7 +142,7 @@
           wsHost = `${host}:8000`;
         }
       }
-      const wsUrl = `${wsProto}//${wsHost}/ws`;
+      const wsUrl = `${wsProto}//${wsHost}/ws${getToken() ? `?token=${encodeURIComponent(getToken()!)}` : ''}`;
 
       logger.info('[layout] Connecting to WebSocket:', wsUrl);
       ws = new WebSocket(wsUrl);
@@ -141,16 +158,16 @@
           logger.info('[layout] WebSocket message received:', msg);
           
           if (msg.type === 'note_created') {
-            showNotification(`Nueva nota creada: "${msg.title}"`, 'success');
+            queueNotificationIfActive(`Nueva nota creada: "${msg.title}"`, 'success');
             loadNotes(undefined, true).catch(() => {});
           } else if (msg.type === 'note_updated') {
-            showNotification(`Nota actualizada: "${msg.title}"`, 'info');
+            queueNotificationIfActive(`Nota actualizada: "${msg.title}"`, 'info');
             loadNotes(undefined, true).catch(() => {});
           } else if (msg.type === 'xp_gained') {
-            showNotification(`¡+${msg.xp} XP!`, 'level');
+            queueNotificationIfActive(`¡+${msg.xp} XP!`, 'level');
             loadStats().catch(() => {});
           } else if (msg.type === 'streak_updated') {
-            showNotification(`¡Racha de ${msg.streak} días! 🔥`, 'info');
+            queueNotificationIfActive(`¡Racha de ${msg.streak} días! 🔥`, 'info');
             loadStats().catch(() => {});
           }
         } catch (e) {
@@ -339,6 +356,15 @@
     };
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
+    // Command palette toggle (Cmd/Ctrl+K)
+    const handleCommandPaletteKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        toggleCommandPalette();
+      }
+    };
+    window.addEventListener('keydown', handleCommandPaletteKey);
+
     window.addEventListener('online', handleOnline);
     window.addEventListener('joidy:streaks-updated', handleStreaksUpdated);
     window.addEventListener('joidy:open-settings', handleOpenSettings);
@@ -364,6 +390,7 @@
       window.removeEventListener('unhandledrejection', handleUnhandledRejection);
       window.removeEventListener('appinstalled', handleAppInstalled);
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('keydown', handleCommandPaletteKey);
 
       // Clean up WebSocket connection
       if (ws) {
@@ -373,6 +400,9 @@
       if (wsReconnectTimeout) clearTimeout(wsReconnectTimeout);
       if (pillTimeout) clearTimeout(pillTimeout);
       if (cleanupTheme) cleanupTheme();
+      if (cleanupKeyboard) cleanupKeyboard();
+      if (cleanupConnection) cleanupConnection();
+      if (cleanupOfflineSync) cleanupOfflineSync();
       syncStore.stopPolling();
     };
   });
@@ -419,7 +449,7 @@
               deferredPrompt.set(null);
             }
           }}>Instalar</button>
-          <button class="pwa-btn pwa-dismiss" onclick={() => {
+          <button class="pwa-btn pwa-dismiss" aria-label="Cerrar aviso de instalación" onclick={() => {
             showInstallBanner.set(false);
             localStorage.setItem('joidy-pwa-dismissed', 'true');
           }}>
@@ -457,6 +487,7 @@
     <button
       class="btn btn-ghost btn-icon"
       title="Ajustes"
+      aria-label="Ajustes"
       style="color: var(--text-muted);"
       onclick={() => window.dispatchEvent(new CustomEvent('joidy:open-settings'))}
     >
@@ -515,9 +546,12 @@
 
 <SettingsPanel bind:open={settingsOpen} on:close={() => settingsOpen = false} />
 <CommandPalette />
+<FocusMode />
 <Toast />
-<TutorialOverlay />
+<OnboardingTour />
 <ConflictResolutionModal />
+<OfflineIndicator />
+<ShareAchievementModal />
 {/if}
 
 <style>
@@ -725,18 +759,6 @@
     color: var(--warning, #f59e0b);
   }
 
-  .nav-placeholder-badge {
-    font-size: 9px;
-    line-height: 1;
-    padding: 1px 4px;
-    border-radius: 3px;
-    background: var(--surface);
-    color: var(--text-muted);
-    border: 1px solid var(--border);
-    font-style: italic;
-    white-space: nowrap;
-    flex-shrink: 0;
-  }
   .nav-item.nav-placeholder {
     opacity: 0.55;
   }

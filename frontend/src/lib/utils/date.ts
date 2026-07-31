@@ -1,3 +1,5 @@
+import { getLocale } from '$lib/stores/locale';
+
 export function formatRelativeDate(date: string | Date): string {
   const d = typeof date === 'string' ? new Date(date) : date;
   const now = new Date();
@@ -16,12 +18,12 @@ export function formatRelativeDate(date: string | Date): string {
   if (diffDays === 1) return 'ayer';
   if (diffDays < 7) return `hace ${diffDays}d`;
 
-  return d.toLocaleDateString('es-CL', { day: 'numeric', month: 'short' });
+  return d.toLocaleDateString(getLocale(), { day: 'numeric', month: 'short' });
 }
 
 export function formatDate(date: string | Date): string {
   const d = typeof date === 'string' ? new Date(date) : date;
-  return d.toLocaleDateString('es-CL', {
+  return d.toLocaleDateString(getLocale(), {
     weekday: 'short',
     day: 'numeric',
     month: 'short',
@@ -31,7 +33,7 @@ export function formatDate(date: string | Date): string {
 
 export function formatTime(date: string | Date, use24Hour = true): string {
   const d = typeof date === 'string' ? new Date(date) : date;
-  return d.toLocaleTimeString('es-CL', {
+  return d.toLocaleTimeString(getLocale(), {
     hour: '2-digit',
     minute: '2-digit',
     hour12: !use24Hour,

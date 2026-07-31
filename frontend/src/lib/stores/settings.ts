@@ -1,4 +1,10 @@
 import { writable, derived } from 'svelte/store';
+import { browser } from '$app/environment';
+import {
+  startAutoTheme,
+  stopAutoTheme,
+  clearDynamicTheme,
+} from '$lib/utils/dynamicTheme';
 
 const COLORS_KEY     = 'joidy-accent-colors';
 const DEFAULT_COLORS = ['#c8a96e'];
@@ -40,7 +46,7 @@ function normalizeColors(colors: unknown): string[] {
 }
 
 function loadColors(): string[] {
-  if (typeof localStorage === 'undefined') return [...DEFAULT_COLORS];
+  if (!browser) return [...DEFAULT_COLORS];
   try {
     const saved = localStorage.getItem(COLORS_KEY);
     if (saved) {
@@ -52,13 +58,13 @@ function loadColors(): string[] {
 }
 
 function persist(colors: string[]) {
-  if (typeof localStorage !== 'undefined') {
+  if (browser) {
     localStorage.setItem(COLORS_KEY, JSON.stringify(colors));
   }
 }
 
 function applyColors(colors: string[]) {
-  if (typeof document === 'undefined') return;
+  if (!browser) return;
   const primary = colors[0];
   const secondary = colors.length > 1 ? colors[1] : `color-mix(in srgb, ${primary} 70%, var(--text-primary))`;
   const tertiary = colors.length > 2 ? colors[2] : `color-mix(in srgb, ${secondary} 70%, var(--text-primary))`;
@@ -151,13 +157,13 @@ function createIconPackStore() {
   return {
     subscribe,
     init() {
-      if (typeof localStorage !== 'undefined') {
+      if (browser) {
         const saved = (localStorage.getItem('joidy-icon-pack') as IconPack) || 'lucide';
         set(saved);
       }
     },
     set: (val: IconPack) => {
-      if (typeof localStorage !== 'undefined') localStorage.setItem('joidy-icon-pack', val);
+      if (browser) localStorage.setItem('joidy-icon-pack', val);
       set(val);
     }
   };
@@ -169,7 +175,7 @@ function createBooleanStore(key: string, defaultValue: boolean = false) {
   const { subscribe, set, update } = writable<boolean>(defaultValue);
   let _initialized = false;
   function ensureInit() {
-    if (_initialized || typeof localStorage === 'undefined') return;
+    if (_initialized || !browser) return;
     _initialized = true;
     const saved = localStorage.getItem(key);
     if (saved !== null) set(saved === 'true');
@@ -181,13 +187,13 @@ function createBooleanStore(key: string, defaultValue: boolean = false) {
     },
     set: (val: boolean) => {
       _initialized = true;
-      if (typeof localStorage !== 'undefined') localStorage.setItem(key, String(val));
+      if (browser) localStorage.setItem(key, String(val));
       set(val);
     },
     toggle: () => update(v => {
       ensureInit();
       const next = !v;
-      if (typeof localStorage !== 'undefined') localStorage.setItem(key, String(next));
+      if (browser) localStorage.setItem(key, String(next));
       return next;
     })
   };
@@ -202,12 +208,59 @@ export const hideTagsLine    = createBooleanStore('joidy-hide-tags-line', true);
 
 export const darkMode = createBooleanStore('joidy-dark-mode', true);
 
+export type ThemeMode = 'light' | 'dark' | 'auto';
+const THEME_MODE_KEY = 'joidy-theme-mode';
+
+function createThemeModeStore() {
+  const { subscribe, set } = writable<ThemeMode>('light');
+  let _initialized = false;
+
+  function applyMode(mode: ThemeMode) {
+    if (!browser) return;
+    if (mode === 'auto') {
+      document.documentElement.setAttribute('data-theme', 'dark');
+      startAutoTheme();
+    } else {
+      stopAutoTheme();
+      clearDynamicTheme();
+      document.documentElement.setAttribute('data-theme', mode);
+    }
+  }
+
+  return {
+    subscribe: (run: (v: ThemeMode) => void, invalidate?: () => void) => {
+      if (!_initialized && browser) {
+        _initialized = true;
+        const saved = (localStorage.getItem(THEME_MODE_KEY) as ThemeMode) || 'light';
+        set(saved);
+        applyMode(saved);
+      }
+      return subscribe(run, invalidate);
+    },
+    set: (val: ThemeMode) => {
+      _initialized = true;
+      if (browser) localStorage.setItem(THEME_MODE_KEY, val);
+      applyMode(val);
+      set(val);
+    },
+    init: () => {
+      if (!browser) return;
+      _initialized = true;
+      const saved = (localStorage.getItem(THEME_MODE_KEY) as ThemeMode) || 'light';
+      set(saved);
+      applyMode(saved);
+    },
+  };
+}
+
+export const themeMode = createThemeModeStore();
+
 export function initTheme(): (() => void) | void {
   // Return the unsubscribe function so the caller can clean it up.
   // Previously the subscription was auto-unsubscribed immediately via `()`,
   // which meant theme changes after init were never applied (#265).
   return darkMode.subscribe(dark => {
-    if (typeof document !== 'undefined') {
+    if (browser) {
       document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
     }
   });
@@ -218,7 +271,7 @@ type FolderMetaMap = Record<string, FolderMeta>;
 const FOLDER_META_KEY = 'joidy-folder-meta';
 
 function loadFolderMeta(): FolderMetaMap {
-  if (typeof localStorage === 'undefined') return {};
+  if (!browser) return {};
   try {
     const raw = localStorage.getItem(FOLDER_META_KEY);
     return raw ? JSON.parse(raw) : {};
@@ -226,7 +279,7 @@ function loadFolderMeta(): FolderMetaMap {
 }
 
 function persistFolderMeta(meta: FolderMetaMap) {
-  if (typeof localStorage !== 'undefined') {
+  if (browser) {
     localStorage.setItem(FOLDER_META_KEY, JSON.stringify(meta));
   }
 }
@@ -245,12 +298,12 @@ export function updateFolderMeta(path: string, meta: FolderMeta) {
 const DEV_MODE_KEY = 'joidy-dev-mode';
 
 function loadDevMode(): boolean {
-  if (typeof window === 'undefined') return false;
+  if (!browser) return false;
   return localStorage.getItem(DEV_MODE_KEY) === 'true';
 }
 
 function persistDevMode(enabled: boolean) {
-  if (typeof window === 'undefined') return;
+  if (!browser) return;
   localStorage.setItem(DEV_MODE_KEY, String(enabled));
 }
 

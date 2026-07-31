@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { scale } from 'svelte/transition';
   import { X, Snowflake, ChevronRight } from 'lucide-svelte';
     import { Shuffle, CheckCheck } from 'lucide-svelte';
@@ -11,7 +11,10 @@
   import { api, type PersonalStreak, type StreakStats } from '$lib/api';
   import { loadUserSettings, patchUserSettings, getCachedData, setCachedData } from '$lib/utils/userSettings';
   import { captureSnapshot, getSnapshot } from '$lib/stores/pageSnapshots';
+  import { locale as localeStore } from '$lib/stores/locale';
+  import { openShare } from '$lib/stores/shareAchievement';
   import { logger } from '$lib/utils/logger';
+  import { Share2 } from 'lucide-svelte';
 
   let streaks: PersonalStreak[] = [];
   let stats: StreakStats | null = null;
@@ -106,6 +109,8 @@
 
     window.addEventListener('beforeunload', handleBeforeUnload);
   });
+
+  onDestroy(() => window.removeEventListener('beforeunload', handleBeforeUnload));
 
   function handleBeforeUnload() {
     const scrollEl = document.getElementById('streaks-list');
@@ -303,6 +308,23 @@
     const totalDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
     return `${s.current_streak}/${totalDays}`;
   }
+
+  // Streak milestones that are shareable.
+  const STREAK_MILESTONES = [7, 30, 100, 365];
+
+  function isStreakMilestone(s: PersonalStreak): boolean {
+    return STREAK_MILESTONES.includes(s.current_streak);
+  }
+
+  function shareStreak(s: PersonalStreak) {
+    openShare({
+      title: s.name,
+      icon: 'Flame',
+      value: `${s.current_streak}`,
+      subtitle: 'días de racha',
+      color: s.color || 'var(--xp)',
+    });
+  }
 </script>
 
 <div class="streaks-page">
@@ -376,6 +398,17 @@
                       <span class="counter-label mono">DÍAS</span>
                     {/if}
                   </button>
+                  {#if !isStreakCompleted(selected) && isStreakMilestone(selected)}
+                    <button
+                      class="streak-share-btn"
+                      onclick={() => shareStreak(selected)}
+                      title="Compartir hito de racha"
+                      aria-label="Compartir racha {selected.name}"
+                    >
+                      <Share2 size={13} />
+                      <span>Compartir</span>
+                    </button>
+                  {/if}
                 </div>
               </div>
 
@@ -412,18 +445,18 @@
                 {#if selected.start_date}
                   <div class="date-item">
                     <span class="date-label">Inicio</span>
-                    <span class="date-val mono">{new Date(selected.start_date).toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                    <span class="date-val mono">{new Date(selected.start_date).toLocaleDateString($localeStore, { day: 'numeric', month: 'short', year: 'numeric' })}</span>
                   </div>
                 {/if}
                 {#if selected.target_date}
                   <div class="date-item">
                     <span class="date-label">Objetivo</span>
-                    <span class="date-val mono">{new Date(selected.target_date).toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                    <span class="date-val mono">{new Date(selected.target_date).toLocaleDateString($localeStore, { day: 'numeric', month: 'short', year: 'numeric' })}</span>
                   </div>
                 {/if}
                 <div class="date-item">
                   <span class="date-label">Creada</span>
-                  <span class="date-val mono">{new Date(selected.created_at).toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                  <span class="date-val mono">{new Date(selected.created_at).toLocaleDateString($localeStore, { day: 'numeric', month: 'short', year: 'numeric' })}</span>
                 </div>
               </div>
 
@@ -522,19 +555,6 @@
     --theme-ac: var(--target);
   }
 
-  .error-msg { color: var(--error); padding: 15px; font-size: 13px; }
-  .empty-state {
-    flex: 1; display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    color: var(--text-muted); text-align: center;
-    padding: 40px 20px; gap: 4px; font-size: 12px;
-  }
-  .link-btn {
-    background: none; border: none; color: var(--xp);
-    font-size: 12px; cursor: pointer; margin-top: 8px;
-    text-decoration: underline;
-  }
-
   /* ═══════════════════════════════════════════════════════════════════════════
      RIGHT PANEL
      ═══════════════════════════════════════════════════════════════════════ */
@@ -601,6 +621,26 @@
     align-items: center;
     gap: 5px;
     width: min(220px, 100%);
+  }
+
+  .streak-share-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    background: var(--surface);
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-family: var(--font-sans);
+    cursor: pointer;
+    transition: all var(--t-fast);
+  }
+
+  .streak-share-btn:hover {
+    border-color: var(--theme-ac, var(--xp));
+    color: var(--text-primary);
   }
 
   .counter-title {
@@ -677,12 +717,6 @@
     width: 100%;
     flex: 1;
     min-height: 0;
-  }
-
-  .section-label {
-    display: flex; align-items: center; gap: 5px;
-    font-size: 10px; color: var(--text-muted);
-    font-family: var(--font-mono); letter-spacing: 0.05em;
   }
 
   /* Footer (dates + actions) */
@@ -920,5 +954,108 @@
     border-color: color-mix(in srgb, var(--theme-ac) 20%, black);
     background: color-mix(in srgb, black 15%, transparent);
     color: color-mix(in srgb, var(--theme-ac) 20%, black);
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 768px) {
+    .streaks-layout {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto 1fr;
+    }
+
+    .resize-handle.static {
+      display: none;
+    }
+
+    .detail-content {
+      padding: 0 var(--s3) var(--s2);
+    }
+
+    .top-metrics {
+      max-width: 100%;
+      grid-template-columns: 1fr;
+      aspect-ratio: unset;
+      gap: var(--s3);
+    }
+
+    .counter-section {
+      padding-top: var(--s3);
+    }
+
+    .counter-ring {
+      width: 80px;
+      height: 80px;
+    }
+
+    .counter-num {
+      font-size: 28px;
+    }
+
+    .detail-stats {
+      flex-direction: row;
+      justify-content: space-around;
+      padding: var(--s2) 0;
+      gap: var(--s3);
+    }
+
+    .dstat-row + .dstat-row {
+      border-top: none;
+      border-left: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+      padding-left: var(--s3);
+    }
+
+    .no-selection {
+      padding: var(--s4) var(--s3);
+    }
+
+    .no-selection-actions {
+      width: 100%;
+    }
+
+    .delete-modal {
+      width: 95%;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .detail-content {
+      padding: 0 var(--s2) var(--s2);
+    }
+
+    .counter-ring {
+      width: 68px;
+      height: 68px;
+    }
+
+    .counter-num {
+      font-size: 22px;
+    }
+
+    .counter-title {
+      font-size: 9px;
+    }
+
+    .detail-stats {
+      gap: var(--s2);
+      padding: var(--s1) 0;
+    }
+
+    .dstat-val {
+      font-size: 14px;
+    }
+
+    .no-selection {
+      padding: var(--s3) var(--s2);
+      gap: var(--s3);
+    }
+
+    .action-pill {
+      padding: var(--s2) var(--s3);
+      font-size: 11px;
+    }
+
+    .delete-modal-content {
+      padding: var(--s4) var(--s3) var(--s3);
+    }
   }
 </style>

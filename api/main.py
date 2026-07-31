@@ -61,7 +61,7 @@ class RequestTimingMiddleware(BaseHTTPMiddleware):
 async def lifespan(app: FastAPI):
     setup_logging()
     init_db()
-    print("FINISHED INIT_DB")
+    logger.info("Database initialization complete")
     yield
 
 
@@ -92,8 +92,8 @@ class CorsSafetyMiddleware(BaseHTTPMiddleware):
                 request_origin = request.headers.get("origin")
                 if request_origin and request_origin in _cors_origins:
                     response.headers["Access-Control-Allow-Origin"] = request_origin
-        response.headers.setdefault("Access-Control-Allow-Methods", "*")
-        response.headers.setdefault("Access-Control-Allow-Headers", "*")
+                    response.headers.setdefault("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+                    response.headers.setdefault("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Request-Id")
         return response
 
 
@@ -179,7 +179,20 @@ app.include_router(upload.router, dependencies=[Depends(get_current_user)])
 
 # Ensure the upload directory exists before serving it.
 Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=settings.upload_dir), name="uploads")
+
+
+class SafeStaticFiles(StaticFiles):
+    """StaticFiles that forces Content-Disposition: attachment for SVG files."""
+
+    async def get_response(self, path: str, scope):
+        response = await super().get_response(path, scope)
+        if path.lower().endswith(".svg"):
+            response.headers["Content-Disposition"] = "attachment"
+            response.headers["Content-Type"] = "image/svg+xml"
+        return response
+
+
+app.mount("/uploads", SafeStaticFiles(directory=settings.upload_dir), name="uploads")
 
 
 @app.get("/health")
@@ -244,19 +257,13 @@ def health_cache():
 
 @app.get("/debug", dependencies=[Depends(get_current_user)])
 def debug_info():
-    """Debug endpoint with detailed system information."""
-    import os
+    """Debug endpoint with safe diagnostic information."""
     import sys
     from datetime import datetime, timezone
 
     debug_data = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "python_version": sys.version,
-        "platform": os.name,
-        "env": {
-            k: v for k, v in os.environ.items()
-            if k in ("PYTHON_ENV", "DEBUG", "LOG_LEVEL")
-        },
     }
 
     # Database info
@@ -281,15 +288,15 @@ def debug_info():
                 "goals": result[3],
                 "embedding_failures": result[4],
             }
-    except Exception as e:
-        debug_data["database"] = {"error": str(e)[:100]}
+    except Exception:
+        debug_data["database"] = {"error": "unavailable"}
 
     # Cache stats
     try:
         from services.response_cache import get_cache_stats
         debug_data["cache"] = get_cache_stats()
-    except Exception as e:
-        debug_data["cache"] = {"error": str(e)[:100]}
+    except Exception:
+        debug_data["cache"] = {"error": "unavailable"}
 
     # Recent errors
     try:
@@ -305,13 +312,12 @@ def debug_info():
                 {
                     "note_id": f.note_id,
                     "attempts": f.attempts,
-                    "last_error": f.last_error,
                     "next_retry": f.next_retry_at.isoformat() if f.next_retry_at else None
                 }
                 for f in recent_failures
             ]
-    except Exception as e:
-        debug_data["recent_failures"] = {"error": str(e)[:100]}
+    except Exception:
+        debug_data["recent_failures"] = {"error": "unavailable"}
 
     # Gamification stats
     try:
@@ -327,8 +333,8 @@ def debug_info():
                     "plant_stage": stats.plant_stage,
                     "last_activity": stats.last_activity_date.isoformat() if stats.last_activity_date else None
                 }
-    except Exception as e:
-        debug_data["gamification"] = {"error": str(e)[:100]}
+    except Exception:
+        debug_data["gamification"] = {"error": "unavailable"}
 
     return debug_data
 

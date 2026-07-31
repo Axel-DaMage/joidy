@@ -128,7 +128,7 @@ def write_daily(db: Session, target_date: date | None = None) -> bool:
     if not vault:
         return False
 
-    today = target_date or date.today()
+    today = target_date or datetime.now(timezone.utc).date()
     daily_dir = vault / JOIDY_DIR / "daily"
     daily_dir.mkdir(parents=True, exist_ok=True)
     filepath = daily_dir / f"{today.isoformat()}.md"

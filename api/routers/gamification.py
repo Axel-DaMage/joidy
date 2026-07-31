@@ -24,8 +24,8 @@ def _cached_stats(db: Session):
     next_stage_xp = PLANT_STAGES[stats.plant_stage + 1][0] if stats.plant_stage + 1 < len(PLANT_STAGES) else None
 
     # Heal: active today but streak still at 0 (written by old buggy engine)
-    from datetime import date as _date
-    if stats.current_streak == 0 and stats.last_activity_date == _date.today():
+    from datetime import datetime, timezone
+    if stats.current_streak == 0 and stats.last_activity_date == datetime.now(timezone.utc).date():
         stats.current_streak = 1
         if stats.longest_streak < 1:
             stats.longest_streak = 1

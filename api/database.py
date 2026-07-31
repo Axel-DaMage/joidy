@@ -12,6 +12,8 @@ logger = logging.getLogger(__name__)
 
 engine = create_engine(
     settings.database_url,
+    pool_pre_ping=True,
+    pool_recycle=3600,
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -25,23 +27,17 @@ def get_db():
     db = SessionLocal()
     try:
         yield db
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()
 
 
 def init_db():
-    db_url = settings.database_url
-
-    if db_url.startswith("sqlite"):
-        # SQLite path: ensure the parent directory exists and create tables.
-        # We skip PostgreSQL-specific vector extension and alembic migrations
-        # because the existing migrations are pgvector-oriented and SQLite
-        # does not support the PG vector extension.
-        db_path = Path(db_url.replace("sqlite:///", "").split("?")[0]).parent
-        db_path.mkdir(parents=True, exist_ok=True)
-        Base.metadata.create_all(engine)
-        return
-
+    # The project is PostgreSQL-only (16 + pgvector) since #273. The previous
+    # SQLite branch created a stale joidy.db and silently skipped migrations
+    # and the vector extension, causing schema drift and broken AI features.
     Path("/data/db").mkdir(parents=True, exist_ok=True)
     with engine.connect() as conn:
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))

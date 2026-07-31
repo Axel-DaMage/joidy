@@ -79,7 +79,7 @@ main.py → routers/*.py → services/*.py → models/*.py
 - **routers/**: HTTP endpoints, Pydantic validation only
 - **services/**: Business logic + DB ops
 - **models/**: SQLAlchemy ORM
-- **alembic/versions/**: 12 migration files (`make migrate`)
+- **alembic/versions/**: 5 migration files (`make migrate`)
 - **tests/**: 7 test files (unittest)
 
 Internal comms:
@@ -100,8 +100,7 @@ Two concurrent asyncio tasks: `watch_vault()` (watches `/vault/*.md`, 2s debounc
 - `lib/actions/`: Svelte actions (focusTrap, liquidGlass)
 - `lib/api.ts`: API client wrapper
 - `lib/components/`: Reusable Svelte components (Modal, DynamicIcon, GoalCard, StreakListItem, etc.)
-- `lib/utils/debug.ts`: `debugLog()` / `debugWarn()` / `debugError()` — only logs when Dev Mode ON
-- Dev Mode is stored in localStorage key `joidy-dev-mode`, toggled in Settings. Pages under development show "En Construccion" unless dev mode is ON.
+- `lib/utils/logger.ts`: `logger.info()` / `logger.log()` / `logger.debug()` / `logger.warn()` / `logger.error()` — the logging convention used across the codebase (imported in 9+ files). Dev Mode is stored in localStorage key `joidy-dev-mode`, toggled in Settings. Pages under development show "En Construccion" unless dev mode is ON.
 
 #### Icon Usage Convention (#257)
 - **Static UI icons** (always the same icon, e.g. close button, search): Import directly from `lucide-svelte` — `import { Search, X } from 'lucide-svelte'`. This is tree-shakeable and more efficient.
@@ -118,7 +117,7 @@ Two concurrent asyncio tasks: `watch_vault()` (watches `/vault/*.md`, 2s debounc
 - Ruff config exists in `pyproject.toml` + `.pre-commit-config.yaml`, but pre-commit is not installed by default and CI does not run ruff. Run `ruff check` / `ruff format` manually if desired.
 - CI: `compileall`, `unittest`, `npm run check`, Docker build
 
-## Known Issues (from TODO.md / code audit)
+## Known Issues (from code audit)
 1. CORS allows `*` in non-production — needs config
 2. Auth JWT is now enforced on all data/mutation endpoints (except `/auth/*`, `/config`, and `/ws`)
 3. Embedding retry has edge cases (`EmbeddingFailure` table)

@@ -7,9 +7,11 @@
   import GoalFilters from '$lib/components/GoalFilters.svelte';
   import GoalList from '$lib/components/GoalList.svelte';
   import { use24HourClock } from '$lib/stores/settings';
+  import { getLocale } from '$lib/stores/locale';
   import { applyGamificationResult, showXPGain } from '$lib/stores/gamification';
   import { getCachedData, setCachedData } from '$lib/utils/userSettings';
   import { logger } from '$lib/utils/logger';
+  import { GOAL_COLOR_PRESETS, DEFAULT_GOAL_COLOR, TEMPORALITY_COLORS } from '$lib/utils/goalColors';
   import StreakIcon from '$lib/components/StreakIcon.svelte';
   import StreakHeatmap from '$lib/components/StreakHeatmap.svelte';
   import GoalCard from '$lib/components/GoalCard.svelte';
@@ -67,20 +69,7 @@
     'FAILED': 'Fallido',
     'CANCELLED': 'Cancelado'
   };
-  const COLOR_PRESETS = [
-    { name: 'Gold',      hex: '#c8a96e' },
-    { name: 'Esmeralda', hex: '#10b981' },
-    { name: 'Cyan',      hex: '#06b6d4' },
-    { name: 'Azul',      hex: '#3b82f6' },
-    { name: 'Violeta',   hex: '#8b5cf6' },
-    { name: 'Rosa',      hex: '#ec4899' },
-    { name: 'Ámbar',     hex: '#f59e0b' },
-    { name: 'Coral',     hex: '#ef4444' },
-    { name: 'Lima',      hex: '#84cc16' },
-    { name: 'Slate',     hex: '#64748b' },
-    { name: 'Teal',      hex: '#14b8a6' },
-    { name: 'Blanco',    hex: '#e2e8f0' },
-  ];
+  const COLOR_PRESETS = GOAL_COLOR_PRESETS;
 
   // New goal form
   let newTitle = $state('');
@@ -91,7 +80,7 @@
   let newFailConfig = $state<Goal['fail_config']>('STATIC');
   let newFailEmoji = $state('🔴');
   let newFailIcon = $state('Activity');
-  let newGoalColor = $state('#c8a96e');
+  let newGoalColor = $state(DEFAULT_GOAL_COLOR);
   let newMaxAssignmentDays = $state<number | null>(null);
   let useFailIcon = $state(false);
   let newTagId = $state<number | null>(null);
@@ -304,7 +293,7 @@
   let editTargetValue = $state(1);
   let editFailConfig = $state<Goal['fail_config']>('STATIC');
   let editMeasurement = $state<Goal['measurement_type']>('COUNT');
-  let editColor = $state('#c8a96e');
+  let editColor = $state(DEFAULT_GOAL_COLOR);
   let editMaxAssignmentDays = $state<number | null>(null);
   let editSaving = $state(false);
 
@@ -649,7 +638,7 @@
       return `${String(safeHour).padStart(2, '0')}:00`;
     }
     const d = new Date(2020, 0, 1, safeHour, 0, 0, 0);
-    return d.toLocaleTimeString('es-CL', {
+    return d.toLocaleTimeString(getLocale(), {
       hour: 'numeric',
       minute: '2-digit',
       hour12: true,
@@ -806,9 +795,9 @@
   function getGoalColor(goal: Goal): string {
     const colorMap: Record<string, string> = {
       'DAILY': 'var(--today)',
-      'WEEKLY': '#22d3d3',
+      'WEEKLY': TEMPORALITY_COLORS['WEEKLY'],
       'MONTHLY': 'var(--link)',
-      'ANNUAL': '#3b82f6',
+      'ANNUAL': TEMPORALITY_COLORS['ANNUAL'],
       'ACTIVE': 'var(--today)',
       'COMPLETED': 'var(--target)',
       'PAUSED': 'var(--error)',
@@ -1209,7 +1198,7 @@
                   {@const status = getGoalStatusOnDate(g, selectedPlanningDate)}
                   <div class="goal-card" class:completed={status === 'COMPLETED'} class:failed={status === 'FAILED'} style="border-left: 3px solid {status === 'FAILED' ? '#ef4444' : (status === 'COMPLETED' ? '#10b981' : getGoalColor(g))}; display:flex; align-items:center;">
                     <div style="display:flex; gap:6px; margin-right: 8px;">
-                      <button class="btn btn-ghost text-muted" style="padding: 4px;" onclick={() => unassignGoalFromDate(g.id, selectedPlanningDate)} title="Quitar"><ChevronLeft size={14} /></button>
+                      <button class="btn btn-ghost text-muted" style="padding: 4px;" onclick={() => unassignGoalFromDate(g.id, selectedPlanningDate)} title="Quitar" aria-label="Quitar"><ChevronLeft size={14} /></button>
                     </div>
                     <div class="goal-main" style="flex: 1;">
                       <div class="goal-title">
@@ -2087,8 +2076,7 @@
     width: 320px;
   }
 
-  .dashboard-side-col > .dash-card,
-  .dashboard-side-col > .btn {
+  .dashboard-side-col > .dash-card {
     width: 100%;
   }
 
@@ -2639,31 +2627,6 @@
     width: 100%;
   }
 
-  .planning-tabs-centered {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 24px;
-    font-family: var(--font-serif, serif);
-    color: var(--text-muted);
-  }
-
-  .planning-tabs-centered .planning-tab {
-    font-size: 32px;
-    padding: 0 10px;
-    background: none;
-    border: none;
-    color: var(--text-muted);
-    cursor: pointer;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
-  .planning-tabs-centered .planning-tab.active {
-    color: var(--text-primary);
-    transform: scale(1.1);
-    background: none;
-  }
-
   .nav-sep {
     opacity: 0.3;
     font-weight: 200;
@@ -2775,10 +2738,6 @@
     cursor: pointer;
     color: inherit;
   }
-  .expand-header:hover .section-title {
-    color: var(--text-primary);
-  }
-
   /* Advanced Dashboard Styles */
   .full-height-dashboard {
     height: calc(100vh - 56px - 44px - var(--s3) * 2);
@@ -2942,10 +2901,6 @@
   .candle-svg {
     filter: drop-shadow(0 0 2px rgba(0,0,0,0.15));
   }
-  .candle-svg rect:hover {
-    filter: brightness(1.25);
-    cursor: crosshair;
-  }
   .candle-empty-state {
     display: flex;
     flex-direction: column;
@@ -2956,12 +2911,6 @@
     font-size: 11px;
     height: 100%;
     text-align: center;
-  }
-  .candle-empty-state small {
-    font-size: 9px;
-    color: var(--text-disabled);
-    max-width: 180px;
-    line-height: 1.4;
   }
   .pred-period-badge {
     margin-left: auto;
@@ -3435,10 +3384,6 @@
     margin-top: 2px;
   }
 
-  .hgi-meta .config-badge {
-    margin-left: -6px;
-  }
-
   .hgi-bar {
     flex: 1;
     height: 4px;
@@ -3493,7 +3438,6 @@
     justify-content: flex-end;
   }
   .hourly-card { padding: 20px; }
-  .activity-header h3 { margin: 0 0 16px 0; font-size: 1.1rem; color: var(--text-primary); }
   .activity-tabs { display: flex; gap: 8px; }
   .activity-tab {
     padding: 6px 12px;

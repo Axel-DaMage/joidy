@@ -142,8 +142,8 @@ async def add_repo_to_db(
 
     try:
         gh_repo = await _fetch(f"/repos/{owner}/{name}")
-    except Exception as e:
-        raise HTTPException(status_code=404, detail=f"Repo not found: {e}")
+    except Exception:
+        raise HTTPException(status_code=404, detail="Repo not found")
 
     existing = (
         db.execute(select(GitHubRepo).where(GitHubRepo.full_name == full_name))
@@ -168,8 +168,18 @@ async def add_repo_to_db(
 
 
 @router.get("/repos/db")
-async def list_repos_in_db(db: Session = Depends(get_db)):
-    repos = db.execute(select(GitHubRepo)).scalars().all()
+async def list_repos_in_db(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+):
+    repos = (
+        db.execute(
+            select(GitHubRepo).offset(offset).limit(limit)
+        )
+        .scalars()
+        .all()
+    )
     return {
         "repos": [
             {
@@ -555,6 +565,8 @@ async def get_items_in_db(
     db: Session = Depends(get_db),
     repo_id: int | None = Query(None),
     goal_id: int | None = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
 ):
     query = select(GitHubItem)
     if repo_id:
@@ -562,7 +574,7 @@ async def get_items_in_db(
     if goal_id:
         query = query.where(GitHubItem.goal_id == goal_id)
 
-    items = db.execute(query).scalars().all()
+    items = db.execute(query.offset(offset).limit(limit)).scalars().all()
     return {
         "items": [
             {
@@ -684,8 +696,8 @@ async def sync_repo(repo_id: int, db: Session = Depends(get_db)):
 
     try:
         gh_issues = await _fetch(f"/repos/{owner}/{name}/issues", {"state": "all", "per_page": 100})
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"GitHub API error: {e}")
+    except Exception:
+        raise HTTPException(status_code=502, detail="GitHub API error")
 
     synced_count = 0
     for issue_data in gh_issues:
@@ -857,7 +869,13 @@ async def start_web_flow():
             detail="GitHub OAuth not configured. Set GITHUB_CLIENT_ID in .env"
         )
 
-    redirect_uri = settings.github_oauth_web_url or "http://localhost:8000/integrations/github/oauth/callback"
+    if not settings.github_oauth_web_url:
+        raise HTTPException(
+            status_code=400,
+            detail="GitHub OAuth redirect URI not configured. Set GITHUB_OAUTH_WEB_URL in .env"
+        )
+
+    redirect_uri = settings.github_oauth_web_url
     authorize_url = (
         f"https://github.com/login/oauth/authorize"
         f"?client_id={settings.github_client_id}"
@@ -900,7 +918,7 @@ async def oauth_callback(
                 "client_id": settings.github_client_id,
                 "client_secret": settings.github_client_secret,
                 "code": code,
-                "redirect_uri": settings.github_oauth_web_url or "http://localhost:8000/integrations/github/oauth/callback",
+                "redirect_uri": settings.github_oauth_web_url,
             },
         )
         r.raise_for_status()

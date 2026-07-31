@@ -47,6 +47,12 @@ def create_tag(data: TagCreate, db: Session = Depends(get_db)):
     existing = db.query(Tag).filter(Tag.name == data.name.lower().strip()).first()
     if existing:
         raise HTTPException(status_code=409, detail="Tag already exists")
+    # A brand-new tag can't form a cycle (it has no id yet), but the parent
+    # must still exist. set_parent already enforces cycles for updates.
+    if data.parent_id is not None:
+        parent = db.query(Tag).filter(Tag.id == data.parent_id).first()
+        if not parent:
+            raise HTTPException(status_code=400, detail="Parent tag no existe")
     tag = Tag(name=data.name.lower().strip(), parent_id=data.parent_id)
     db.add(tag)
     db.commit()

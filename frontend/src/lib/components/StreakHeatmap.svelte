@@ -218,6 +218,7 @@
         class:disabled={!canGoPrev}
         onclick={() => shiftYearMonth(-1)}
         disabled={!canGoPrev}
+        aria-label="Año anterior"
       >
         ‹
       </button>
@@ -227,6 +228,7 @@
         class:disabled={!canGoNext}
         onclick={() => shiftYearMonth(1)}
         disabled={!canGoNext}
+        aria-label="Año siguiente"
       >
         ›
       </button>
@@ -474,22 +476,6 @@
     color: var(--text-secondary);
     border-radius: 50%;
     transition: all 0.2s;
-  }
-
-  .wd-emoji, .mday-emoji {
-    width: 38px;
-    height: 38px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 20px;
-    border-radius: 50%;
-    transition: all 0.2s;
-  }
-
-  .wd-emoji.on, .mday-emoji.on {
-    background: var(--error);
-    color: var(--bg);
   }
 
   .week-col.failed, .mcell.failed {

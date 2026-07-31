@@ -8,6 +8,7 @@ from sqlalchemy import (
     Enum,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -63,10 +64,10 @@ class Goal(Base):
     color: Mapped[str] = mapped_column(String(20), default="#c8a96e")
     theme: Mapped[str] = mapped_column(String(20), default="solid")
 
-    note_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("notes.id"), nullable=True)
-    tag_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("tags.id"), nullable=True)
+    note_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("notes.id", ondelete="SET NULL"), nullable=True)
+    tag_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("tags.id", ondelete="SET NULL"), nullable=True)
 
-    parent_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("goals.id"), nullable=True)
+    parent_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("goals.id", ondelete="SET NULL"), nullable=True)
 
     pending_removal: Mapped[bool] = mapped_column(Boolean, default=False)
 
@@ -80,4 +81,13 @@ class Goal(Base):
 
     tag: Mapped["Tag | None"] = relationship("Tag")  # type: ignore
     note: Mapped["Note | None"] = relationship("Note")  # type: ignore
+
+    __table_args__ = (
+        # PostgreSQL does not auto-create indexes on FKs. These cover the
+        # common hierarchy/join/filter paths (#403).
+        Index("ix_goals_parent_id", "parent_id"),
+        Index("ix_goals_note_id", "note_id"),
+        Index("ix_goals_tag_id", "tag_id"),
+        Index("ix_goals_state", "state"),
+    )
 

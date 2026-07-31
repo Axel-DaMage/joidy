@@ -1,19 +1,28 @@
 <script lang="ts">
-  // @ts-nocheck
   import { onDestroy, onMount } from 'svelte';
   import { browser } from '$app/environment';
   import { graphData, selectedTag } from '$lib/stores/graph';
   import type { GraphNode, GraphEdge } from '$lib/api';
   import { forceCollide } from 'd3';
+  import type { NodeObject } from 'force-graph';
 
-  let ForceGraph: typeof import('force-graph') | null = null;
+  // ForceGraph constructor is dynamically imported; typed loosely since
+  // force-graph uses a Kapsule factory pattern with complex generics not
+  // fully captured by its .d.ts (callbacks expect NodeObject, we use GraphNode).
+  let ForceGraph: any = null;
+
+  // GraphNode extended with force-graph runtime properties (x, y added by the simulation)
+  type ForceGraphNode = GraphNode & NodeObject;
 
   export let width = 800;
   export let height = 600;
   export let focusId: number | string | null = null;
+  // Optional override data — when provided, uses this instead of the store
+  // (used by the timeline/search filter in graph/+page.svelte, #373).
+  export let data: { nodes: GraphNode[]; edges: GraphEdge[] } | null = null;
 
   let containerEl: HTMLDivElement;
-  let graph: ReturnType<typeof import('force-graph')['default']> | null = null;
+  let graph: any = null;
   let lastFocusId: number | string | null = null;
   let searchQuery = '';
   
@@ -72,11 +81,15 @@
     default: '#666666'
   } as const;
 
+  // Use the `data` prop if provided (for timeline/search filtering, #373),
+  // otherwise fall back to the global graph store.
+  $: effectiveData = data || $graphData;
+
   // Helper function to build neighbor map for smart highlighting
   let neighbors = new Map<number | string, Set<number | string>>();
   $: {
     neighbors.clear();
-    const edges = $graphData.edges;
+    const edges = effectiveData.edges;
     edges.forEach(edge => {
       const s = typeof edge.source === 'object' ? (edge.source as GraphNode).id : edge.source;
       const t = typeof edge.target === 'object' ? (edge.target as GraphNode).id : edge.target;
@@ -189,15 +202,16 @@
 
   function rebuildGraph() {
     if (!graph) return;
-    const nodes = $graphData.nodes.slice();
-    const edges = $graphData.edges.slice();
+    const src = data || $graphData;
+    const nodes = src.nodes.slice();
+    const edges = src.edges.slice();
 
     // 1. Filter nodes based on visible types
     let filteredNodes = nodes.filter(n => {
       if (n.type === 'note' && !showNotes) return false;
       if (n.type === 'tag' && !showTags) return false;
       if (n.type === 'unresolved' && !showUnresolved) return false;
-      if (n.type === 'attachment' && !showAttachments) return false;
+      if ((n.type as string) === 'attachment' && !showAttachments) return false;
       return true;
     });
 
@@ -237,8 +251,10 @@
 
     graph
       .nodeRelSize(3.2)
-      .nodeCanvasObject((node: GraphNode, ctx: CanvasRenderingContext2D, scale: number) => {
-        if (!Number.isFinite(node.x) || !Number.isFinite(node.y)) return;
+      .nodeCanvasObject((node: ForceGraphNode, ctx: CanvasRenderingContext2D, scale: number) => {
+        const x = node.x;
+        const y = node.y;
+        if (x === undefined || y === undefined || !Number.isFinite(x) || !Number.isFinite(y)) return;
         const label = getNodeLabel(node);
         const isNote = node.type === 'note';
         const isTag = node.type === 'tag';
@@ -262,7 +278,7 @@
         ctx.globalAlpha = alpha;
 
         // Custom Color Queries Evaluation
-        let nodeColor = isTag ? COLORS.tag : (isUnresolved ? COLORS.unresolved : COLORS.note);
+        let nodeColor: string = isTag ? COLORS.tag : (isUnresolved ? COLORS.unresolved : COLORS.note);
         for (const group of colorGroups) {
           if (matchesQuery(node, group.query)) {
             nodeColor = group.color;
@@ -277,7 +293,7 @@
           ctx.strokeStyle = nodeColor;
           ctx.lineWidth = 1.2 / scale;
           ctx.setLineDash([2, 2]);
-          ctx.arc(node.x, node.y, r, 0, Math.PI * 2);
+          ctx.arc(x, y, r, 0, Math.PI * 2);
           ctx.stroke();
           ctx.setLineDash([]); // reset dash
 
@@ -286,17 +302,17 @@
         } else {
           // Normal nodes draw with gradient fill
           const gradient = ctx.createRadialGradient(
-            node.x - r * 0.3,
-            node.y - r * 0.3,
+            x - r * 0.3,
+            y - r * 0.3,
             0,
-            node.x,
-            node.y,
+            x,
+            y,
             r
           );
           gradient.addColorStop(0, lightenColor(nodeColor, 0.25));
           gradient.addColorStop(1, nodeColor);
           ctx.fillStyle = gradient;
-          ctx.arc(node.x, node.y, r, 0, Math.PI * 2);
+          ctx.arc(x, y, r, 0, Math.PI * 2);
           ctx.fill();
         }
 
@@ -306,7 +322,7 @@
           ctx.strokeStyle = '#ffffff';
           ctx.lineWidth = 1.5 / scale;
           ctx.globalAlpha = 0.95 * alpha;
-          ctx.arc(node.x, node.y, r + 2 / scale, 0, Math.PI * 2);
+          ctx.arc(x, y, r + 2 / scale, 0, Math.PI * 2);
           ctx.stroke();
         }
 
@@ -316,7 +332,7 @@
           ctx.strokeStyle = COLORS.selected;
           ctx.lineWidth = 2.0 / scale;
           ctx.globalAlpha = 0.95 * alpha;
-          ctx.arc(node.x, node.y, r + 3 / scale, 0, Math.PI * 2);
+          ctx.arc(x, y, r + 3 / scale, 0, Math.PI * 2);
           ctx.stroke();
         }
 
@@ -331,7 +347,7 @@
           ctx.globalAlpha = alpha;
 
           const labelText = label.length > 28 ? label.slice(0, 26) + '...' : label;
-          ctx.fillText(labelText, node.x, node.y + r + 6 / scale);
+          ctx.fillText(labelText, x, y + r + 6 / scale);
         }
       })
       .linkWidth((l: GraphEdge) => {
@@ -376,9 +392,9 @@
 
   function focusOnNode(id: number | string) {
     if (!graph) return;
-    const node = graph.graphData().nodes.find((n: GraphNode) => n.id === id) as GraphNode | undefined;
+    const node = graph.graphData().nodes.find((n: ForceGraphNode) => n.id === id) as ForceGraphNode | undefined;
     if (!node) return;
-    graph.centerAt(node.x, node.y, 400);
+    graph.centerAt(node.x ?? 0, node.y ?? 0, 400);
     graph.zoom(1.2, 400);
   }
 
@@ -451,7 +467,9 @@
 
     const module = await import('force-graph');
     if (!containerEl) return; // Prevent crash if unmounted during import
-    
+
+    // force-graph uses a Kapsule factory pattern: ForceGraph() returns a
+    // constructor, then calling it with the element creates a chainable instance.
     ForceGraph = module.default;
     graph = ForceGraph()(containerEl)
       .width(width)
@@ -459,8 +477,8 @@
       .backgroundColor('transparent')
       .enableNodeDrag(true)
       .onNodeClick(handleNodeClick)
-      .onNodeHover((node: GraphNode | null) => {
-        hoveredNode = node;
+      .onNodeHover((node: ForceGraphNode | null) => {
+        hoveredNode = node as GraphNode | null;
       });
 
     // NOTE: a `.minimap('#graph-minimap', ...)` chain used to be appended here,
@@ -543,17 +561,21 @@
     <div class="settings-sidebar" class:open={showSettingsPanel}>
       <div class="sidebar-header">
         <h4>Ajustes del Grafo</h4>
-        <button class="close-panel-btn" onclick={() => showSettingsPanel = false}>×</button>
+        <button class="close-panel-btn" onclick={() => showSettingsPanel = false} aria-label="Cerrar panel">×</button>
       </div>
 
       <div class="sidebar-scroll">
         <!-- 1. FILTROS -->
         <div class="accordion-item" class:active={activeSection === 'filters'}>
-          <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-          <div class="accordion-header" onclick={() => toggleSection('filters')}>
+          <button
+            type="button"
+            class="accordion-header"
+            onclick={() => toggleSection('filters')}
+            aria-expanded={activeSection === 'filters'}
+          >
             <span class="chevron" class:expanded={activeSection === 'filters'}>›</span>
             <h5>Filtros</h5>
-          </div>
+          </button>
           {#if activeSection === 'filters'}
             <div class="accordion-content">
               <div class="filter-search-wrap">
@@ -565,7 +587,7 @@
                   oninput={applyStyling}
                 />
                 {#if searchQuery}
-                  <button class="panel-search-clear" onclick={() => { searchQuery = ''; applyStyling(); }}>×</button>
+                  <button class="panel-search-clear" onclick={() => { searchQuery = ''; applyStyling(); }} aria-label="Limpiar búsqueda">×</button>
                 {/if}
               </div>
 
@@ -622,11 +644,15 @@
 
         <!-- 2. GRUPOS DE COLOR -->
         <div class="accordion-item" class:active={activeSection === 'groups'}>
-          <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-          <div class="accordion-header" onclick={() => toggleSection('groups')}>
+          <button
+            type="button"
+            class="accordion-header"
+            onclick={() => toggleSection('groups')}
+            aria-expanded={activeSection === 'groups'}
+          >
             <span class="chevron" class:expanded={activeSection === 'groups'}>›</span>
             <h5>Grupos de color</h5>
-          </div>
+          </button>
           {#if activeSection === 'groups'}
             <div class="accordion-content">
               <p class="section-desc">Pinta nodos según consultas (ej. <code>tag:idea</code>, <code>title:nota</code>)</p>
@@ -647,7 +673,7 @@
                       bind:value={group.query} 
                       oninput={saveGroups} 
                     />
-                    <button class="group-delete-btn" title="Eliminar regla" onclick={() => removeColorGroup(idx)}>×</button>
+                    <button class="group-delete-btn" title="Eliminar regla" aria-label="Eliminar regla" onclick={() => removeColorGroup(idx)}>×</button>
                   </div>
                 {/each}
               </div>
@@ -661,11 +687,15 @@
 
         <!-- 3. VISUALIZACIÓN -->
         <div class="accordion-item" class:active={activeSection === 'display'}>
-          <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-          <div class="accordion-header" onclick={() => toggleSection('display')}>
+          <button
+            type="button"
+            class="accordion-header"
+            onclick={() => toggleSection('display')}
+            aria-expanded={activeSection === 'display'}
+          >
             <span class="chevron" class:expanded={activeSection === 'display'}>›</span>
             <h5>Visualización</h5>
-          </div>
+          </button>
           {#if activeSection === 'display'}
             <div class="accordion-content">
               <label class="toggle-control">
@@ -729,11 +759,15 @@
 
         <!-- 4. FUERZAS FÍSICAS -->
         <div class="accordion-item" class:active={activeSection === 'forces'}>
-          <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-          <div class="accordion-header" onclick={() => toggleSection('forces')}>
+          <button
+            type="button"
+            class="accordion-header"
+            onclick={() => toggleSection('forces')}
+            aria-expanded={activeSection === 'forces'}
+          >
             <span class="chevron" class:expanded={activeSection === 'forces'}>›</span>
             <h5>Fuerzas</h5>
-          </div>
+          </button>
           {#if activeSection === 'forces'}
             <div class="accordion-content">
               <div class="slider-control">
@@ -952,12 +986,17 @@
     padding: 10px 12px;
     cursor: pointer;
     user-select: none;
+    width: 100%;
+    background: transparent;
+    border: none;
+    text-align: left;
+    color: inherit;
   }
 
   .accordion-header h5 {
     font-size: 12px;
     font-weight: 500;
-    color: #dfdfdf;
+    color: var(--text-secondary);
     margin: 0;
   }
 

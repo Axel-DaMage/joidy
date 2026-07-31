@@ -1,5 +1,4 @@
 <script lang="ts">
-  // @ts-nocheck
   import { onMount, onDestroy } from 'svelte';
   import * as d3 from 'd3';
   import { graphData, selectedTag } from '$lib/stores/graph';
@@ -7,7 +6,7 @@
 
   export let width = 800;
   export let height = 600;
-  export let focusId: number | null = null;
+  export let focusId: number | string | null = null;
 
   let svgEl: SVGSVGElement;
   let canvasEl: HTMLCanvasElement;
@@ -17,16 +16,16 @@
   let filterType: 'all' | 'notes' | 'tags' = 'all';
   let showOrphans = true;
   let searchQuery = '';
-  let hoveredId: number | null = null;
-  let lastFocusId: number | null = null;
+  let hoveredId: number | string | null = null;
+  let lastFocusId: number | string | null = null;
 
   let ctx: CanvasRenderingContext2D | null = null;
   let animationFrame: number;
   let sim: d3.Simulation<SimNode, undefined> | undefined;
   let zoom: d3.ZoomBehavior<SVGSVGElement, unknown>;
   let currentTransform = d3.zoomIdentity;
-  let neighborMap = new Map<number, Set<number>>();
-  let labelIndex = new Map<number, string>();
+  let neighborMap = new Map<number | string, Set<number | string>>();
+  let labelIndex = new Map<number | string, string>();
 
   const COLORS = {
     tag: '#7d6b91',
@@ -43,13 +42,7 @@
     return COLORS[type as keyof typeof COLORS] || COLORS.default;
   }
 
-  interface SimNode extends GraphNode {
-    x?: number;
-    y?: number;
-    fx?: number | null;
-    fy?: number | null;
-    vx?: number;
-    vy?: number;
+  interface SimNode extends GraphNode, d3.SimulationNodeDatum {
   }
 
   interface SimLink extends d3.SimulationLinkDatum<SimNode> {
@@ -96,21 +89,21 @@
     let filteredNodes = filterNodes(nodes);
     if (filteredNodes.length === 0) return;
 
-    let nodeIds = new Set(filteredNodes.map(n => n.id));
+    let nodeIds = new Set<number | string>(filteredNodes.map(n => n.id));
     let filteredEdges = edges.filter(e =>
-      nodeIds.has(e.source as number) && nodeIds.has(e.target as number)
+      nodeIds.has(e.source) && nodeIds.has(e.target)
     );
 
     if (!showOrphans) {
-      const degreeMap = new Map<number, number>();
+      const degreeMap = new Map<number | string, number>();
       filteredEdges.forEach((e) => {
-        degreeMap.set(e.source as number, (degreeMap.get(e.source as number) ?? 0) + 1);
-        degreeMap.set(e.target as number, (degreeMap.get(e.target as number) ?? 0) + 1);
+        degreeMap.set(e.source, (degreeMap.get(e.source) ?? 0) + 1);
+        degreeMap.set(e.target, (degreeMap.get(e.target) ?? 0) + 1);
       });
       filteredNodes = filteredNodes.filter(n => (degreeMap.get(n.id) ?? 0) > 0);
       nodeIds = new Set(filteredNodes.map(n => n.id));
       filteredEdges = filteredEdges.filter(e =>
-        nodeIds.has(e.source as number) && nodeIds.has(e.target as number)
+        nodeIds.has(e.source) && nodeIds.has(e.target)
       );
     }
 
@@ -133,13 +126,13 @@
       x: width/2 + (Math.random() - 0.5) * width * 0.8,
       y: height/2 + (Math.random() - 0.5) * height * 0.8,
     }));
-    const nodeMap = new Map(simNodes.map(n => [n.id, n]));
+    const nodeMap = new Map<number | string, SimNode>(simNodes.map(n => [n.id, n]));
     neighborMap = new Map();
     labelIndex = new Map(simNodes.map(n => [n.id, getNodeLabel(n).toLowerCase()]));
 
     const simLinks: SimLink[] = filteredEdges.map((e: GraphEdge) => ({
-      source: nodeMap.get(e.source as number) as SimNode,
-      target: nodeMap.get(e.target as number) as SimNode,
+      source: nodeMap.get(e.source) as SimNode,
+      target: nodeMap.get(e.target) as SimNode,
       type: e.type,
       weight: e.weight ?? 1,
       particles: e.type === 'linked' || e.type === 'tagged' ? [
@@ -167,7 +160,7 @@
         .strength(0.3))
       .force('charge', d3.forceManyBody().strength(-150).theta(0.8))
       .force('center', d3.forceCenter(width / 2, height / 2).strength(0.05))
-      .force('collision', d3.forceCollide().radius((d: SimNode) => nodeRadiusBase(d) + 6))
+      .force('collision', d3.forceCollide<SimNode>().radius((d: SimNode) => nodeRadiusBase(d) + 6))
       .alphaDecay(0.03)
       .velocityDecay(0.3)
       .alphaMin(0.001);
@@ -281,20 +274,20 @@
       };
 
       simLinks.forEach((link: SimLink) => {
-        if (!link.source.x || !link.source.y || !link.target.x || !link.target.y) return;
+        const source = link.source as SimNode;
+        const target = link.target as SimNode;
+        if (!source.x || !source.y || !target.x || !target.y) return;
 
-        const sx = link.source.x, sy = link.source.y;
-        const tx = link.target.x, ty = link.target.y;
+        const sx = source.x, sy = source.y;
+        const tx = target.x, ty = target.y;
 
         let linkAlpha = link.type === 'cooccurrence' ? 0.3 : 0.5;
         if (focus !== null) {
-          const sourceId = (link.source as SimNode).id;
-          const targetId = (link.target as SimNode).id;
+          const sourceId = source.id;
+          const targetId = target.id;
           linkAlpha = (sourceId === focus || targetId === focus) ? 0.9 : 0.08;
         } else if (hasQuery) {
-          const sourceNode = link.source as SimNode;
-          const targetNode = link.target as SimNode;
-          linkAlpha = (matchesQuery(sourceNode) || matchesQuery(targetNode)) ? 0.55 : 0.05;
+          linkAlpha = (matchesQuery(source) || matchesQuery(target)) ? 0.55 : 0.05;
         }
 
         ctx!.beginPath();
@@ -431,7 +424,7 @@
     zoomToFit();
   }
 
-  function focusOnNode(id: number) {
+  function focusOnNode(id: number | string) {
     if (!svgEl || !sim) return;
     const node = sim.nodes().find(n => n.id === id);
     if (!node || node.x === undefined || node.y === undefined) return;
@@ -496,19 +489,19 @@
         <button class="search-clear" onclick={clearHighlights} aria-label="Limpiar busqueda">×</button>
       {/if}
     </div>
-    <button class="btn btn-ghost btn-icon" title="Alternar etiquetas" onclick={() => { showLabels = !showLabels; rerender(); }}>
+    <button class="btn btn-ghost btn-icon" title="Alternar etiquetas" aria-label="Alternar etiquetas" onclick={() => { showLabels = !showLabels; rerender(); }}>
       <span style="font-size:10px; font-family: var(--font-mono);">Aa</span>
     </button>
-    <button class="btn btn-ghost btn-icon" title="Particulas" class:active={showParticles} onclick={() => { showParticles = !showParticles; }}>
+    <button class="btn btn-ghost btn-icon" title="Particulas" aria-label="Partículas" class:active={showParticles} onclick={() => { showParticles = !showParticles; }}>
       <span style="font-size:12px;">✨</span>
     </button>
-    <button class="btn btn-ghost btn-icon" title="Ajustar" onclick={recenter}>
+    <button class="btn btn-ghost btn-icon" title="Ajustar" aria-label="Ajustar" onclick={recenter}>
       <span style="font-size:11px;">⊡</span>
     </button>
-    <button class="btn btn-ghost btn-icon" title="Restablecer vista" onclick={resetView}>
+    <button class="btn btn-ghost btn-icon" title="Restablecer vista" aria-label="Restablecer vista" onclick={resetView}>
       <span style="font-size:11px;">⊙</span>
     </button>
-    <button class="btn btn-ghost btn-icon" title="Ocultar huerfanos" class:active={!showOrphans} onclick={() => { showOrphans = !showOrphans; rerender(); }}>
+    <button class="btn btn-ghost btn-icon" title="Ocultar huerfanos" aria-label="Ocultar huérfanos" class:active={!showOrphans} onclick={() => { showOrphans = !showOrphans; rerender(); }}>
       <span style="font-size:11px;">◌</span>
     </button>
     <div class="filter-group">
@@ -551,7 +544,7 @@
     display: flex;
     flex-direction: column;
     gap: 6px;
-    z-index: 1000;
+    z-index: var(--z-modal);
     pointer-events: auto;
     background: color-mix(in srgb, var(--elevated) 92%, transparent);
     padding: 10px;

@@ -11,7 +11,11 @@ logger = logging.getLogger(__name__)
 
 class CohereClient(BaseLLMClient, EmbeddingClient):
     def __init__(self, api_key: str, model: str, is_embedding: bool = False):
-        self._client = cohere.AsyncClient(api_key=api_key)
+        timeout = settings.embed_timeout if is_embedding else settings.llm_timeout
+        self._client = cohere.AsyncClient(
+            api_key=api_key,
+            timeout=timeout,
+        )
         self._model = model
         self._is_embedding = is_embedding
 

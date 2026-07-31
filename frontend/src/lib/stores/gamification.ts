@@ -104,12 +104,25 @@ export function applyStats(stats: Partial<GamificationStats>): void {
   if (stats.last_activity_date !== undefined) lastActivity.set(stats.last_activity_date);
 }
 
+// Track XP-gain auto-dismiss timers per event id so they can be cancelled on
+// teardown, preventing callbacks firing on a stale store and avoiding timer
+// accumulation across rapid navigation (#413).
+const xpTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
 export function showXPGain(amount: number, x?: number, y?: number): void {
   const id = `xp-${Date.now()}-${Math.random()}`;
   xpEvents.update(evts => [...evts, { amount, id, x, y }]);
-  setTimeout(() => {
+  const timer = setTimeout(() => {
     xpEvents.update(evts => evts.filter(e => e.id !== id));
+    xpTimers.delete(id);
   }, 2200);
+  xpTimers.set(id, timer);
+}
+
+/** Cancel all pending XP-gain timers (e.g. on teardown/logout). */
+export function clearAllXpTimers(): void {
+  for (const timer of xpTimers.values()) clearTimeout(timer);
+  xpTimers.clear();
 }
 
 import { notifications, showNotification, dismissNotification } from './notifications';

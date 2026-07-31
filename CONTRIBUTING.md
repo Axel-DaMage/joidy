@@ -61,7 +61,6 @@ Usa prefijos descriptivos:
 Si no sabes por dónde empezar, prueba con:
 
 - **Good First Issues** — Tareas etiquetadas como [`good-first-issue`](https://github.com/Axel-DaMage/Joidy/issues?q=is%3Aissue+is%3Aopen+label%3Agood-first-issue) — bugs pequeños, mejoras de documentación, tests
-- **TODO.md** — Tareas pendientes listadas en el proyecto
 - **AGENTS.md** — Notas detalladas de arquitectura y desarrollo
 
 ## Estructura del Proyecto
@@ -177,6 +176,7 @@ test: add gamification engine edge cases
 - Mensajes en presente imperativo ("add", no "added")
 - No mezclar cambios de código con cambios de formato
 - Para WIP usa `wip:` como prefijo y no hagas PR hasta que esté listo
+- **Añade una entrada al `CHANGELOG.md`** en la sección `[Unreleased]` bajo la categoría correspondiente (Added/Changed/Fixed/Removed/Security)
 
 ## Testing
 
@@ -264,6 +264,5 @@ Usa la plantilla de feature request en GitHub (`.github/ISSUE_TEMPLATE/feature_r
 | Issues | [github.com/Axel-DaMage/Joidy/issues](https://github.com/Axel-DaMage/Joidy/issues) |
 | Discusiones | [github.com/Axel-DaMage/Joidy/discussions](https://github.com/Axel-DaMage/Joidy/discussions) |
 | AGENTS.md | Comandos de desarrollo y notas de arquitectura |
-| TODO.md | Tareas pendientes |
 | API Docs | http://localhost:8000/docs (servicio corriendo) |
 | Email | contacto@joidy.dev |

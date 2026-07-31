@@ -2,7 +2,7 @@
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
   import { browser } from '$app/environment';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
-  import { accentColors, activeIconPack, showFrontmatter, showTrash, showHiddenFiles, writeInObsidian, use24HourClock, hideTagsLine, darkMode, devMode, type IconPack, MAX_COLORS } from '$lib/stores/settings';
+  import { accentColors, activeIconPack, showFrontmatter, showTrash, showHiddenFiles, writeInObsidian, use24HourClock, hideTagsLine, darkMode, devMode, themeMode, type IconPack, type ThemeMode, MAX_COLORS } from '$lib/stores/settings';
   import { api } from '$lib/api';
   import { logger } from '$lib/utils/logger';
   import { deferredPrompt, isAppInstalled, showInstallBanner } from '$lib/stores/pwa';
@@ -381,12 +381,11 @@
 <svelte:window onkeydown={onKeydown} />
 
 {#if open}
-  <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-  <div class="backdrop" onclick={onBackdropClick}>
+  <div class="backdrop" role="presentation" onclick={onBackdropClick}>
     <div class="panel">
       <div class="panel-header">
         <span class="mono" style="font-size:12px; letter-spacing:0.08em;">AJUSTES</span>
-        <button class="close-btn" onclick={close}><DynamicIcon name="X" size={14} /></button>
+        <button class="close-btn" onclick={close} aria-label="Cerrar"><DynamicIcon name="X" size={14} /></button>
       </div>
 
       <div class="panel-body">
@@ -406,6 +405,30 @@
             </button>
           </div>
 
+          <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
+            <div class="row-label">
+              <DynamicIcon name="Sparkles" size={13} />
+              <span>Modo de tema</span>
+            </div>
+            <div class="theme-mode-options">
+              <label class="theme-mode-option" class:active={$themeMode === 'light'}>
+                <input type="radio" name="theme-mode" value="light" checked={$themeMode === 'light'} onchange={() => themeMode.set('light')} />
+                <span>Claro</span>
+              </label>
+              <label class="theme-mode-option" class:active={$themeMode === 'dark'}>
+                <input type="radio" name="theme-mode" value="dark" checked={$themeMode === 'dark'} onchange={() => themeMode.set('dark')} />
+                <span>Oscuro</span>
+              </label>
+              <label class="theme-mode-option" class:active={$themeMode === 'auto'}>
+                <input type="radio" name="theme-mode" value="auto" checked={$themeMode === 'auto'} onchange={() => themeMode.set('auto')} />
+                <span>Automático</span>
+              </label>
+            </div>
+            {#if $themeMode === 'auto'}
+              <p class="hint" style="margin-top: 2px;">El tema cambiará según la hora del día y la estación</p>
+            {/if}
+          </div>
+
           <div class="row">
             <div class="row-label">
               <DynamicIcon name="Clock3" size={13} />
@@ -419,9 +442,10 @@
           </div>
 
           <!-- Gradient preview bar -->
-          <!-- svelte-ignore a11y-no-static-element-interactions -->
-          <div 
-            class="gradient-preview" 
+          <div
+            class="gradient-preview"
+            role="slider"
+            aria-label="Color gradient preview"
             style="background: {gradientPreview}; cursor: grab;"
             onmousedown={onGradientMouseDown}
             class:dragging={isDragging}
@@ -448,7 +472,7 @@
                   placeholder="#c8a96e"
                 />
                 {#if $accentColors.length > 1}
-                  <button class="color-rm" onclick={() => accentColors.removeColor(i)} title="Quitar">
+                  <button class="color-rm" onclick={() => accentColors.removeColor(i)} title="Quitar" aria-label="Quitar">
                     <DynamicIcon name="Minus" size={10} />
                   </button>
                 {/if}
@@ -1159,4 +1183,29 @@
     margin-top: 8px;
     text-align: center;
   }
+
+  /* Theme mode selector */
+  .theme-mode-options {
+    display: flex;
+    gap: 6px;
+  }
+
+  .theme-mode-option {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: border-color var(--t-fast), color var(--t-fast);
+  }
+  .theme-mode-option:hover { border-color: var(--text-muted); }
+  .theme-mode-option.active { border-color: var(--xp); color: var(--text-primary); }
+  .theme-mode-option input { position: absolute; opacity: 0; width: 0; height: 0; }
 </style>

@@ -2,7 +2,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from services.auth_service import get_current_user
+from services.auth_service import get_current_user, hash_password
 
 from config import settings
 
@@ -191,10 +191,7 @@ class SetupRequest(BaseModel):
 @router.get("/setup-status")
 def setup_status():
     env_vars = read_env()
-    has_password = bool(env_vars.get("AUTH_PASSWORD"))
-    has_secret = bool(env_vars.get("SECRET_KEY"))
-    
-    needs_setup = not (has_password and has_secret)
+    needs_setup = not (env_vars.get("AUTH_PASSWORD") and env_vars.get("SECRET_KEY"))
     return {"needs_setup": needs_setup}
 
 @router.post("/setup")
@@ -210,7 +207,7 @@ def perform_setup(req: SetupRequest):
             detail="Password must be at least 4 characters long",
         )
 
-    env_vars["AUTH_PASSWORD"] = req.auth_password
+    env_vars["AUTH_PASSWORD"] = hash_password(req.auth_password)
     if req.obsidian_vault_path:
         env_vars["OBSIDIAN_VAULT_PATH"] = req.obsidian_vault_path
         
@@ -222,7 +219,7 @@ def perform_setup(req: SetupRequest):
     # Reload settings in memory
     import os
     from config import settings
-    settings.auth_password = req.auth_password
+    settings.auth_password = hash_password(req.auth_password)
     settings.secret_key = env_vars["SECRET_KEY"]
     if req.obsidian_vault_path:
         os.environ["OBSIDIAN_VAULT_PATH"] = req.obsidian_vault_path

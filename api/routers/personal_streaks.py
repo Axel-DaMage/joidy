@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from database import get_db
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -24,7 +24,7 @@ def _backfill_streak_history(db: Session, streak: PersonalStreak):
     if not streak.start_date:
         return
 
-    today = date.today()
+    today = datetime.now(timezone.utc).date()
     end_date = streak.created_at.date() if streak.created_at else today
     current = streak.start_date
 
@@ -67,7 +67,7 @@ def _compute_streak(checkin_dates: list[date], frequency: str = "daily", frequen
         return 0, 0
 
     dates_set = set(checkin_dates)
-    today = date.today()
+    today = datetime.now(timezone.utc).date()
 
     if frequency == "every_n" and frequency_days > 1:
         # For every-N-days: streak counts how many consecutive "on-time" check-ins
@@ -127,7 +127,7 @@ def _compute_streak(checkin_dates: list[date], frequency: str = "daily", frequen
 
 
 def _streak_to_dict(streak: PersonalStreak, days_history: int = 365) -> dict:
-    today = date.today()
+    today = datetime.now(timezone.utc).date()
     checkin_dates = [c.check_date for c in streak.checkins]
     checkin_map = {c.check_date: c for c in streak.checkins}
     current, longest = compute_streak(checkin_dates, streak.frequency or "daily", streak.frequency_days or 1)
@@ -265,7 +265,7 @@ def global_stats(db: Session = Depends(get_db)):
         total_checkins += len(checkin_dates)
 
     # Check-in rate for active streaks in last 30 days
-    today = date.today()
+    today = datetime.now(timezone.utc).date()
     thirty_ago = today - timedelta(days=30)
     possible_checkins = 0
     actual_checkins = 0
@@ -302,6 +302,8 @@ def list_streaks(
     category: str | None = Query(None),
     include_history: bool = Query(True),
     days_history: int = Query(365, ge=1, le=730),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):
     q = db.query(PersonalStreak).options(selectinload(PersonalStreak.checkins))
@@ -309,7 +311,7 @@ def list_streaks(
         q = q.filter(PersonalStreak.is_archived == False)
     if category and category != "all":
         q = q.filter(PersonalStreak.category == category)
-    streaks = q.order_by(PersonalStreak.created_at).all()
+    streaks = q.order_by(PersonalStreak.created_at).offset(offset).limit(limit).all()
     return [
         _streak_to_dict(s, days_history=days_history if include_history else 0)
         for s in streaks
@@ -326,7 +328,7 @@ def create_streak(data: StreakCreate, db: Session = Depends(get_db)):
         color=data.color,
         theme=data.theme,
         category=data.category,
-        start_date=data.start_date or date.today(),
+        start_date=data.start_date or datetime.now(timezone.utc).date(),
         target_date=data.target_date,
         offset=data.offset,
         frequency=data.frequency,
@@ -338,7 +340,7 @@ def create_streak(data: StreakCreate, db: Session = Depends(get_db)):
     db.refresh(streak)
 
     # Automatically backfill if start_date is in the past
-    if streak.start_date and streak.start_date < date.today():
+    if streak.start_date and streak.start_date < datetime.now(timezone.utc).date():
         backfill_streak_history(db, streak)
 
     return _streak_to_dict(streak)
@@ -368,7 +370,7 @@ def update_streak(streak_id: int, data: StreakUpdate, db: Session = Depends(get_
     db.refresh(streak)
 
     # If start_date was moved back, backfill again
-    if streak.start_date and streak.start_date < date.today():
+    if streak.start_date and streak.start_date < datetime.now(timezone.utc).date():
         backfill_streak_history(db, streak)
 
     return _streak_to_dict(streak)
@@ -392,7 +394,7 @@ def checkin(streak_id: int, data: CheckInData = None, db: Session = Depends(get_
     if not streak:
         raise HTTPException(status_code=404, detail="Streak not found")
 
-    today = data.check_date or date.today()
+    today = data.check_date or datetime.now(timezone.utc).date()
     existing = db.query(StreakCheckIn).filter(
         StreakCheckIn.streak_id == streak_id,
         StreakCheckIn.check_date == today,
@@ -435,7 +437,7 @@ def undo_checkin(streak_id: int, db: Session = Depends(get_db)):
     if not streak:
         raise HTTPException(status_code=404, detail="Streak not found")
 
-    today = date.today()
+    today = datetime.now(timezone.utc).date()
     ci = db.query(StreakCheckIn).filter(
         StreakCheckIn.streak_id == streak_id,
         StreakCheckIn.check_date == today,
@@ -462,7 +464,7 @@ def use_freeze(streak_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="No freezes available")
 
     # Check if already checked in today
-    today = date.today()
+    today = datetime.now(timezone.utc).date()
     already = db.query(StreakCheckIn).filter(
         StreakCheckIn.streak_id == streak_id,
         StreakCheckIn.check_date == today,
@@ -497,7 +499,7 @@ def get_history(
     if not streak:
         raise HTTPException(status_code=404, detail="Streak not found")
 
-    today = date.today()
+    today = datetime.now(timezone.utc).date()
     since = today - timedelta(days=days)
     checkins = (
         db.query(StreakCheckIn)

@@ -181,13 +181,16 @@
   let noteIconPack = $derived(iconMeta.pack || undefined);
 
   let backlinks = $state<Note[]>([]);
+  let similarNotes = $state<{ note: Note; score: number }[]>([]);
 
-  // Fetch backlinks on mount or when note changes
+  // Fetch backlinks and semantically similar notes on mount or when note changes
   $effect(() => {
     if (note) {
       api.notes.backlinks(note.id).then(res => backlinks = res).catch(() => backlinks = []);
+      api.notes.similar(note.id, 5).then(res => similarNotes = res).catch(() => similarNotes = []);
     } else {
       backlinks = [];
+      similarNotes = [];
     }
   });
 
@@ -785,10 +788,10 @@
     <div class="toolbar-left">
       {#if !momentary && note}
       <div class="nav-controls toolbar-nav">
-        <button class="toolbar-btn icon-only" disabled={!hasPrev} onclick={() => dispatch('prev')} title="Nota anterior (Alt + ←)">
+        <button class="toolbar-btn icon-only" disabled={!hasPrev} onclick={() => dispatch('prev')} title="Nota anterior (Alt + ←)" aria-label="Nota anterior">
           <ChevronLeft size={14} />
         </button>
-        <button class="toolbar-btn icon-only" disabled={!hasNext} onclick={() => dispatch('next')} title="Siguiente nota (Alt + →)">
+        <button class="toolbar-btn icon-only" disabled={!hasNext} onclick={() => dispatch('next')} title="Siguiente nota (Alt + →)" aria-label="Siguiente nota">
           <ChevronRight size={14} />
         </button>
       </div>
@@ -797,55 +800,55 @@
       <div class="format-divider"></div>
 
       <div class="format-toolbar">
-        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('bold')} title="Negrita (Ctrl+B)">
+        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('bold')} title="Negrita (Ctrl+B)" aria-label="Negrita">
           <Bold size={13} />
         </button>
-        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('italic')} title="Cursiva (Ctrl+I)">
+        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('italic')} title="Cursiva (Ctrl+I)" aria-label="Cursiva">
           <Italic size={13} />
         </button>
-        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('strikethrough')} title="Tachado">
+        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('strikethrough')} title="Tachado" aria-label="Tachado">
           <Strikethrough size={13} />
         </button>
 
         <div class="format-divider"></div>
 
-        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('h1')} title="Título 1">
+        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('h1')} title="Título 1" aria-label="Título 1">
           <Heading1 size={13} />
         </button>
-        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('h2')} title="Título 2">
+        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('h2')} title="Título 2" aria-label="Título 2">
           <Heading2 size={13} />
         </button>
-        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('h3')} title="Título 3">
+        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('h3')} title="Título 3" aria-label="Título 3">
           <Heading3 size={13} />
         </button>
 
         <div class="format-divider"></div>
 
-        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('ul')} title="Lista desordenada">
+        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('ul')} title="Lista desordenada" aria-label="Lista desordenada">
           <List size={13} />
         </button>
-        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('ol')} title="Lista ordenada">
+        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('ol')} title="Lista ordenada" aria-label="Lista ordenada">
           <ListOrdered size={13} />
         </button>
 
         <div class="format-divider"></div>
 
-        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('link')} title="Enlace">
+        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('link')} title="Enlace" aria-label="Enlace">
           <Link size={13} />
         </button>
-        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('quote')} title="Cita">
+        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('quote')} title="Cita" aria-label="Cita">
           <Quote size={13} />
         </button>
-        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('code')} title="Bloque de código">
+        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('code')} title="Bloque de código" aria-label="Bloque de código">
           <Code size={13} />
         </button>
 
         <div class="format-divider"></div>
 
-        <button class="toolbar-btn icon-only" onclick={openImageUpload} disabled={uploading} title="Insertar imagen">
+        <button class="toolbar-btn icon-only" onclick={openImageUpload} disabled={uploading} title="Insertar imagen" aria-label="Insertar imagen">
           <Image size={13} />
         </button>
-        <button class="toolbar-btn icon-only" onclick={openFileUpload} disabled={uploading} title="Adjuntar archivo">
+        <button class="toolbar-btn icon-only" onclick={openFileUpload} disabled={uploading} title="Adjuntar archivo" aria-label="Adjuntar archivo">
           <Paperclip size={13} />
         </button>
       </div>
@@ -862,6 +865,7 @@
         class:active={zenMode}
         onclick={() => zenMode = !zenMode}
         title="Modo Zen (Esc para salir)"
+        aria-label="Modo Zen"
       >
         <Maximize size={14} />
       </button>
@@ -940,12 +944,12 @@
           {/if}
         </div>
 
-        <button class="toolbar-btn danger-btn" onclick={() => dispatch('delete')} title="Eliminar nota">
+        <button class="toolbar-btn danger-btn" onclick={() => dispatch('delete')} title="Eliminar nota" aria-label="Eliminar nota">
           <Trash2 size={14} />
         </button>
       {/if}
 
-      <button class="toolbar-btn" onclick={() => dispatch('cancel')} title="Cerrar">
+      <button class="toolbar-btn" onclick={() => dispatch('cancel')} title="Cerrar" aria-label="Cerrar">
         <X size={14} />
       </button>
     </div>
@@ -957,6 +961,7 @@
     <button
       class="note-icon-btn"
       title="Personalizar icono"
+      aria-label="Personalizar icono"
       type="button"
       onclick={() => showIconSettings = true}
     >
@@ -993,7 +998,7 @@
         <button class="suggestion-chip" onclick={() => acceptSuggestion(s.tag)}>
           {s.tag} <span class="conf">{Math.round(s.confidence * 100)}%</span>
         </button>
-        <button class="dismiss-btn" onclick={() => dismissSuggestion(s.tag)}>×</button>
+        <button class="dismiss-btn" onclick={() => dismissSuggestion(s.tag)} aria-label="Descartar sugerencia">×</button>
       {/each}
     {/if}
   </div>
@@ -1019,6 +1024,20 @@
                 <button class="backlink-card" onclick={() => goto(`/notes?id=${bl.id}`)}>
                   <span class="bl-title">{bl.title}</span>
                   <span class="bl-meta mono">{bl.source === 'obsidian' ? '⬡' : '◆'}</span>
+                </button>
+              {/each}
+            </div>
+          </div>
+        {/if}
+
+        {#if similarNotes.length > 0}
+          <div class="backlinks-section">
+            <h5 class="mono">NOTAS RELACIONADAS (SEMÁNTICO)</h5>
+            <div class="backlinks-grid">
+              {#each similarNotes as result}
+                <button class="backlink-card" onclick={() => goto(`/notes?id=${result.note.id}`)}>
+                  <span class="bl-title">{result.note.title}</span>
+                  <span class="bl-meta mono">{(result.score * 100).toFixed(0)}%</span>
                 </button>
               {/each}
             </div>
@@ -1139,7 +1158,7 @@
   /* Icon customize modal */
   .folder-modal-backdrop {
     position: fixed; top: 50px; bottom: 50px; left: 0; right: 0;
-    z-index: 200;
+    z-index: var(--z-overlay);
     background: rgba(0,0,0,0.6); backdrop-filter: blur(2px);
     display: flex; align-items: center; justify-content: center;
   }
@@ -1227,13 +1246,6 @@
     background: var(--border);
     margin: 0 4px;
     flex-shrink: 0;
-  }
-
-  .note-source {
-    font-size: 11px;
-    font-family: var(--font-mono);
-    color: var(--text-muted);
-    letter-spacing: 0.05em;
   }
 
   .stat {
@@ -1576,7 +1588,7 @@
     border-radius: var(--r);
     padding: 4px;
     box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
-    z-index: 999;
+    z-index: var(--z-modal);
     display: flex;
     flex-direction: column;
     gap: 2px;

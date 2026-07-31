@@ -2,6 +2,7 @@ import asyncio
 import logging
 
 import anthropic
+import httpx
 from config import settings
 
 from .base import BaseLLMClient
@@ -11,7 +12,10 @@ logger = logging.getLogger(__name__)
 
 class AnthropicClient(BaseLLMClient):
     def __init__(self, api_key: str, model: str):
-        self._client = anthropic.AsyncAnthropic(api_key=api_key)
+        self._client = anthropic.AsyncAnthropic(
+            api_key=api_key,
+            timeout=httpx.Timeout(settings.llm_timeout, connect=settings.connect_timeout),
+        )
         self._model = model
 
     @property
