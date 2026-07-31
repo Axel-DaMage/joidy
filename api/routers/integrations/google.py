@@ -1,10 +1,19 @@
-"""Google Calendar, Tasks, Gmail and Contacts integration router."""
+"""Google Calendar, Tasks, Gmail and Contacts integration router.
+
+Provides OAuth flow, token persistence, status, and data endpoints.
+The callback persists the refresh token (encrypted) so users stay
+connected across restarts.
+"""
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from services import google_service as gs
+from services import google_token_service as gts
 from services.auth_service import get_current_user
+from sqlalchemy.orm import Session
+
+from database import get_db
 
 router = APIRouter(prefix="/integrations/google", tags=["integrations"])
 
@@ -18,6 +27,11 @@ class GoogleTokenResponse(BaseModel):
     refresh_token: str | None = None
     expires_in: int
     token_type: str
+    scope: str | None = None
+
+
+class GoogleConnectCallback(BaseModel):
+    code: str
     scope: str | None = None
 
 
@@ -53,6 +67,52 @@ async def google_oauth_callback(code: str = "", error: str = ""):
         "token_type": tokens.get("token_type", "Bearer"),
         "scope": tokens.get("scope"),
     }
+
+
+@router.post("/connect")
+async def google_connect(
+    payload: GoogleConnectCallback,
+    db: Session = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
+    """Exchange OAuth code and persist tokens in the database.
+
+    The refresh token is encrypted before storage.
+    """
+    try:
+        tokens = await gs.exchange_code(payload.code)
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=exc.response.status_code, detail="Google token exchange failed")
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    gts.store_tokens(
+        db,
+        access_token=tokens.get("access_token", ""),
+        refresh_token=tokens.get("refresh_token"),
+        expires_in=tokens.get("expires_in", 3600),
+        token_type=tokens.get("token_type", "Bearer"),
+        scope=tokens.get("scope"),
+    )
+
+    return {"status": "connected", "scope": tokens.get("scope")}
+
+
+@router.get("/status")
+async def google_status(db: Session = Depends(get_db)):
+    """Check if Google integration is connected."""
+    connected = gts.is_connected(db)
+    return {"connected": connected}
+
+
+@router.post("/disconnect")
+async def google_disconnect(
+    db: Session = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
+    """Disconnect Google integration — removes stored tokens."""
+    gts.clear_tokens(db)
+    return {"status": "disconnected"}
 
 
 @router.get("/calendars")

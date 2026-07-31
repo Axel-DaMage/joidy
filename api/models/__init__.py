@@ -2,6 +2,7 @@ from .config import *
 from .gamification import *
 from .github import *
 from .goal import *
+from .google_token import *
 from .note import *
 from .personal_streaks import *
 from .planning import *
