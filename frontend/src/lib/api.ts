@@ -267,7 +267,7 @@ export const api = {
   },
 
   goals: {
-    list:     ()                    => req<Goal[]>('GET', '/goals/'),
+    list:     (skip?: number, limit?: number) => req<Goal[]>('GET', `/goals/${skip !== undefined || limit !== undefined ? `?${skip !== undefined ? `skip=${skip}&` : ''}${limit !== undefined ? `limit=${limit}` : ''}` : ''}`),
     get:      (id: number)        => req<Goal>('GET', `/goals/${id}`),
     create:   (data: { title: string; description?: string; temporality?: string; measurement_type?: string; target_value?: number; fail_config?: string; fail_emoji?: string; color?: string; theme?: string; tag_id?: number | null; note_id?: number | null; parent_id?: number | null; max_assignment_days?: number | null }) =>
       req<Goal>('POST', '/goals/', data),
