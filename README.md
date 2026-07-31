@@ -46,8 +46,16 @@ docker compose up -d
 
 ### curl
 
+**Linux / macOS:**
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Axel-DaMage/joidy/main/scripts/install.sh | bash
+```
+
+**Windows (PowerShell):**
+
+```powershell
+irm https://raw.githubusercontent.com/Axel-DaMage/joidy/main/scripts/install.ps1 | iex
 ```
 
 ### Homebrew
