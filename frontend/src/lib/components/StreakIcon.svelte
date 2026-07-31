@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Circle } from 'lucide-svelte';
+  import * as LucideIcons from 'lucide-svelte';
 
   export let name: string = '';
   export let size: number = 18;
@@ -9,16 +10,8 @@
 
   $: isEmoji = emojiRegex.test(name);
 
-  let lucideComp: any = Circle;
-
-  async function loadIcon(n: string) {
-    const mod = await import('lucide-svelte');
-    lucideComp = mod[n as keyof typeof mod] || Circle;
-  }
-
-  $: if (!isEmoji && name) {
-    loadIcon(name);
-  }
+  // Synchronous lookup — no race condition
+  $: lucideComp = name ? ((LucideIcons as any)[name] || Circle) : Circle;
 </script>
 
 {#if isEmoji}
