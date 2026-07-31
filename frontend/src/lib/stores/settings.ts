@@ -1,13 +1,10 @@
 import { writable, derived } from 'svelte/store';
 import { browser } from '$app/environment';
-<<<<<<< HEAD
-=======
 import {
   startAutoTheme,
   stopAutoTheme,
   clearDynamicTheme,
 } from '$lib/utils/dynamicTheme';
->>>>>>> origin/development
 
 const COLORS_KEY     = 'joidy-accent-colors';
 const DEFAULT_COLORS = ['#c8a96e'];
