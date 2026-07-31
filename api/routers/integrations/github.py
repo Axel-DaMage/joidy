@@ -857,7 +857,13 @@ async def start_web_flow():
             detail="GitHub OAuth not configured. Set GITHUB_CLIENT_ID in .env"
         )
 
-    redirect_uri = settings.github_oauth_web_url or "http://localhost:8000/integrations/github/oauth/callback"
+    if not settings.github_oauth_web_url:
+        raise HTTPException(
+            status_code=400,
+            detail="GitHub OAuth redirect URI not configured. Set GITHUB_OAUTH_WEB_URL in .env"
+        )
+
+    redirect_uri = settings.github_oauth_web_url
     authorize_url = (
         f"https://github.com/login/oauth/authorize"
         f"?client_id={settings.github_client_id}"
@@ -900,7 +906,7 @@ async def oauth_callback(
                 "client_id": settings.github_client_id,
                 "client_secret": settings.github_client_secret,
                 "code": code,
-                "redirect_uri": settings.github_oauth_web_url or "http://localhost:8000/integrations/github/oauth/callback",
+                "redirect_uri": settings.github_oauth_web_url,
             },
         )
         r.raise_for_status()

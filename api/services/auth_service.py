@@ -9,6 +9,7 @@ import jwt
 from config import settings
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from passlib.context import CryptContext
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,22 @@ ALGORITHM = "HS256"
 TOKEN_EXPIRE_HOURS = 24 * 7  # 1 week
 
 security = HTTPBearer(auto_error=False)
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+def verify_password(plain: str, hashed_or_plain: str) -> bool:
+    """Verify a password against a stored hash or plaintext.
+
+    Supports bcrypt hashes (starting with $2b$) and plaintext for backward compat.
+    """
+    if hashed_or_plain.startswith("$2b$"):
+        return pwd_context.verify(plain, hashed_or_plain)
+    return plain == hashed_or_plain
+
+
+def hash_password(plain: str) -> str:
+    """Hash a password using bcrypt."""
+    return pwd_context.hash(plain)
 
 
 def create_access_token(user_id: int, username: str = "user") -> str:

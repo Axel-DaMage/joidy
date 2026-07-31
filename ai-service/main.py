@@ -121,7 +121,7 @@ def health():
 def providers():
     return {
         "available": settings.available_providers,
-        "configured": settings.provider_config,
+        "configured": {name: True for name in settings.provider_config},
         "llm_model": settings.llm_model,
         "embedding_model": settings.embedding_model,
     }
