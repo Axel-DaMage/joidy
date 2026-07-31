@@ -12,11 +12,15 @@
   import XPBar          from '$lib/components/XPBar.svelte';
   import NoteCard       from '$lib/components/NoteCard.svelte';
   import PomodoroWidget from '$lib/components/PomodoroWidget.svelte';
+  import { Target } from 'lucide-svelte';
+  import { startFocusMode } from '$lib/stores/focusMode';
   import TimeWidget from '$lib/components/TimeWidget.svelte';
   import WeatherWidget from '$lib/components/WeatherWidget.svelte';
   import Widget         from '$lib/components/Widget.svelte';
   import GithubWidget from '$lib/components/GithubWidget.svelte';
-  import { totalXP, currentStreak, lastActivity, nextStageXP } from '$lib/stores/gamification';
+  import { totalXP, currentStreak, lastActivity, nextStageXP, globalLevel } from '$lib/stores/gamification';
+  import { openShare } from '$lib/stores/shareAchievement';
+  import { Share2 } from 'lucide-svelte';
   import ActivityProgress from '$lib/components/ActivityProgress.svelte';
   import { notes, loadNotes, notesLoadedOnce } from '$lib/stores/notes';
   import { dashboardLayout } from '$lib/stores/layout';
@@ -270,6 +274,20 @@
 
   // Resizable panel synced with notes
   let panelWidth = 260;
+
+  // Level milestones that warrant a shareable achievement card.
+  const LEVEL_MILESTONES = [10, 25, 50, 75, 100];
+  $: isLevelMilestone = LEVEL_MILESTONES.includes($globalLevel);
+
+  function shareLevel() {
+    openShare({
+      title: 'Nivel alcanzado',
+      icon: 'TrendingUp',
+      value: `NVL ${$globalLevel}`,
+      subtitle: `${$totalXP.toLocaleString()} XP`,
+      color: 'var(--xp)',
+    });
+  }
 </script>
 
 <div class="dashboard" style="--panel-w: {panelWidth}px">
@@ -345,6 +363,17 @@
                 <span class="stat-label label">notas</span>
               </div>
             </div>
+            {#if isLevelMilestone}
+              <button
+                class="level-share-btn"
+                onclick={shareLevel}
+                title="Compartir nivel"
+                aria-label="Compartir nivel {$globalLevel}"
+              >
+                <Share2 size={11} />
+                <span>Compartir nivel</span>
+              </button>
+            {/if}
           </div>
 
         {:else if wid === 'activity-progress'}
@@ -358,6 +387,10 @@
 
         {:else if wid === 'pomodoro'}
           <PomodoroWidget />
+          <button class="focus-mode-btn" onclick={() => startFocusMode()} aria-label="Iniciar modo enfoque">
+            <Target size={16} />
+            Modo Enfoque
+          </button>
 
         {:else if wid === 'recent-notes'}
           <div class="section-header">
@@ -469,6 +502,17 @@
               <div class="stat-divider"></div>
               <div class="stat"><span class="stat-value mono">{$notes.length}</span><span class="stat-label label">notas</span></div>
             </div>
+            {#if isLevelMilestone}
+              <button
+                class="level-share-btn"
+                onclick={shareLevel}
+                title="Compartir nivel"
+                aria-label="Compartir nivel {$globalLevel}"
+              >
+                <Share2 size={11} />
+                <span>Compartir nivel</span>
+              </button>
+            {/if}
           </div>
 
         {:else if wid === 'time-widget'}
@@ -476,6 +520,10 @@
 
         {:else if wid === 'pomodoro'}
           <PomodoroWidget />
+          <button class="focus-mode-btn" onclick={() => startFocusMode()} aria-label="Iniciar modo enfoque">
+            <Target size={16} />
+            Modo Enfoque
+          </button>
 
         {:else if wid === 'activity-progress'}
           <ActivityProgress />
@@ -573,6 +621,26 @@
   .stats-row {
     display: flex; align-items: center; gap: var(--s4);
     width: 100%; max-width: 240px;
+  }
+
+  .level-share-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 10px;
+    font-family: var(--font-sans);
+    cursor: pointer;
+    transition: all var(--t-fast);
+  }
+
+  .level-share-btn:hover {
+    border-color: var(--xp);
+    color: var(--xp);
   }
 
   .stat { display: flex; flex-direction: column; align-items: center; flex: 1; gap: 2px; }
@@ -703,4 +771,27 @@
       font-size: 9px;
     }
   }
+<<<<<<< HEAD
+=======
+
+.focus-mode-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md, 8px);
+  background: var(--surface);
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+.focus-mode-btn:hover {
+  background: var(--elevated);
+  border-color: var(--accent);
+}
+>>>>>>> origin/development
 </style>
