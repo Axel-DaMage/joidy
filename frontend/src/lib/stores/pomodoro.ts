@@ -77,29 +77,75 @@ let timerInterval: ReturnType<typeof setInterval> | null = null;
 let beepAudio: HTMLAudioElement | null = null;
 
 export function initAudio() {
-  if (typeof window !== 'undefined' && !beepAudio) {
-    const beepB64 = "data:audio/mp3;base64,//O0XAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIg==";
-  }
+  if (typeof window === 'undefined' || beepAudio) return;
+  const beepB64 = "data:audio/mp3;base64,//O0XAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIg==";
+  beepAudio = new Audio(beepB64);
+  beepAudio.load();
 }
 
 function playBeep() {
   if (typeof window === 'undefined') return;
-  const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-  const osc = ctx.createOscillator();
-  const gain = ctx.createGain();
+  // Try pre-loaded HTMLAudioElement first (works even if AudioContext is suspended)
+  if (beepAudio) {
+    beepAudio.currentTime = 0;
+    beepAudio.play().catch(() => {
+      // Fallback: try AudioContext if HTMLAudioElement fails
+      playBeepOscillator();
+    });
+    return;
+  }
+  playBeepOscillator();
+}
 
-  osc.type = 'sine';
-  osc.frequency.setValueAtTime(600, ctx.currentTime);
-  osc.frequency.exponentialRampToValueAtTime(300, ctx.currentTime + 0.3);
+function playBeepOscillator() {
+  if (typeof window === 'undefined') return;
+  try {
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
 
-  gain.gain.setValueAtTime(0.1, ctx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(600, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(300, ctx.currentTime + 0.3);
 
-  osc.connect(gain);
-  gain.connect(ctx.destination);
+    gain.gain.setValueAtTime(0.1, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
 
-  osc.start();
-  osc.stop(ctx.currentTime + 0.5);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start();
+    osc.stop(ctx.currentTime + 0.5);
+  } catch {
+    // AudioContext may be suspended — silent fail
+  }
+}
+
+function showSystemNotification(title: string, body: string) {
+  if (typeof window === 'undefined' || !('Notification' in window)) return;
+  if (Notification.permission === 'granted') {
+    try {
+      new Notification(title, {
+        body,
+        icon: '/favicon.png',
+        badge: '/favicon.png',
+        tag: 'pomodoro',
+      });
+    } catch {
+      // Notification API may not be available — silent fail
+    }
+  }
+}
+
+export async function requestNotificationPermission() {
+  if (typeof window === 'undefined' || !('Notification' in window)) return;
+  if (Notification.permission === 'default') {
+    try {
+      await Notification.requestPermission();
+    } catch {
+      // Silent fail
+    }
+  }
 }
 
 function tick() {
@@ -121,9 +167,11 @@ export function advance() {
     pomodorosDone.set(done);
     phase.set(done % 4 === 0 ? 'longBreak' : 'break');
     showNotification('¡Pomodoro completado! Hora de descansar.', 'success');
+    showSystemNotification('¡Pomodoro completado! 🍅', 'Hora de descansar.');
   } else {
     phase.set('work');
     showNotification('¡Descanso terminado! A trabajar.', 'info');
+    showSystemNotification('¡Descanso terminado! ⚡', 'A trabajar.');
   }
 
   secondsLeft.set(get(totalSec));
@@ -132,6 +180,8 @@ export function advance() {
 
 export function startTimer() {
   if (get(running)) return;
+  initAudio();
+  requestNotificationPermission();
   running.set(true);
   timerInterval = setInterval(tick, 1000);
 }
