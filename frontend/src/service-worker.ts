@@ -142,3 +142,40 @@ self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   event.waitUntil(self.clients.openWindow('/'));
 });
+
+// ── Background Sync ───────────────────────────────────────────────────────────
+// When supported, register a sync tag so the browser retries pending outbox
+// changes once connectivity is restored (even if the page is closed). On the
+// sync event we postMessage all controlled clients so they call processOutbox.
+
+const SYNC_TAG = 'joidy-outbox-sync';
+
+self.addEventListener('message', (event) => {
+  // Allow the page to request a Background Sync registration.
+  if (event.data?.type === 'joidy:register-sync') {
+    registerBackgroundSync();
+  }
+});
+
+async function registerBackgroundSync(): Promise<void> {
+  try {
+    if ('sync' in self.registration) {
+      await self.registration.sync.register(SYNC_TAG);
+    }
+  } catch {
+    // Background Sync may be unavailable (e.g. iOS Safari); ignore silently.
+  }
+}
+
+self.addEventListener('sync', (event) => {
+  if (event.tag === SYNC_TAG) {
+    event.waitUntil(notifyClientsToSync());
+  }
+});
+
+async function notifyClientsToSync(): Promise<void> {
+  const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+  for (const client of clients) {
+    client.postMessage({ type: 'joidy:sync' });
+  }
+});

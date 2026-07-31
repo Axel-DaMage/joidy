@@ -1,27 +1,10 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { logger } from '$lib/utils/logger';
-
-  interface WeatherData {
-    temp: number;
-    code: number;
-    isDay: boolean;
-    location: string;
-  }
-
-  interface CacheEntry<T> {
-    data: T;
-    timestamp: number;
-  }
+  import { fetchWeather, type WeatherData } from '$lib/services/weatherService';
 
   let weather: WeatherData | null = null;
   let loading = true;
   let error = '';
-
-  const LOCATION_CACHE_KEY = 'joidy-weather-location';
-  const WEATHER_CACHE_KEY = 'joidy-weather-cache';
-  const LOCATION_TTL = 24 * 60 * 60 * 1000;
-  const WEATHER_TTL = 15 * 60 * 1000;
 
   const WEATHER_CODES: Record<number, string> = {
     0: '☀️',   1: '🌤',   2: '⛅',   3: '☁️',
@@ -40,87 +23,20 @@
     return base;
   }
 
-  function getCache<T>(key: string, ttl: number): T | null {
-    try {
-      const raw = localStorage.getItem(key);
-      if (!raw) return null;
-      const entry: CacheEntry<T> = JSON.parse(raw);
-      if (Date.now() - entry.timestamp > ttl) {
-        localStorage.removeItem(key);
-        return null;
-      }
-      return entry.data;
-    } catch {
-      return null;
-    }
-  }
-
-  function setCache<T>(key: string, data: T): void {
-    const entry: CacheEntry<T> = { data, timestamp: Date.now() };
-    localStorage.setItem(key, JSON.stringify(entry));
-  }
-
-  async function getPosition(): Promise<GeolocationPosition> {
-    const cached = getCache<{ lat: number; lon: number }>(LOCATION_CACHE_KEY, LOCATION_TTL);
-    if (cached) {
-      return {
-        coords: { latitude: cached.lat, longitude: cached.lon, accuracy: 0, altitude: null, altitudeAccuracy: null, heading: null, speed: null },
-        timestamp: Date.now(),
-      } as GeolocationPosition;
-    }
-
-    const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-      navigator.geolocation.getCurrentPosition(resolve, reject, {
-        timeout: 10000,
-        maximumAge: 3600000,
-      });
-    });
-
-    setCache(LOCATION_CACHE_KEY, {
-      lat: position.coords.latitude,
-      lon: position.coords.longitude,
-    });
-
-    return position;
-  }
-
-  async function fetchWeather() {
+  async function loadWeather() {
     loading = true;
     error = '';
-
-    const cached = getCache<WeatherData>(WEATHER_CACHE_KEY, WEATHER_TTL);
-    if (cached) {
-      weather = cached;
-      loading = false;
-      return;
-    }
-
-    try {
-      const position = await getPosition();
-      const { latitude, longitude } = position.coords;
-      const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,is_day&timezone=auto`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error('Weather API error');
-      const data = await res.json();
-
-      weather = {
-        temp: Math.round(data.current.temperature_2m),
-        code: data.current.weather_code,
-        isDay: data.current.is_day === 1,
-        location: data.timezone || 'Mi ubicación',
-      };
-
-      setCache(WEATHER_CACHE_KEY, weather);
-    } catch (e) {
+    const data = await fetchWeather();
+    if (data) {
+      weather = data;
+    } else {
       error = 'No disponible';
-      logger.warn('[Weather] fetch failed:', e);
-    } finally {
-      loading = false;
     }
+    loading = false;
   }
 
   onMount(() => {
-    fetchWeather();
+    loadWeather();
   });
 </script>
 
@@ -140,7 +56,7 @@
       <span class="weather-icon">{getEmoji(weather.code, weather.isDay)}</span>
       <span class="weather-temp">{weather.temp}°</span>
       <span class="weather-location">{weather.location}</span>
-      <button class="weather-refresh" onclick={fetchWeather} title="Actualizar">↻</button>
+      <button class="weather-refresh" onclick={loadWeather} title="Actualizar" aria-label="Actualizar">↻</button>
     </div>
   {/if}
 </div>

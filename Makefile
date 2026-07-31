@@ -2,6 +2,8 @@
 
 COMPOSE_PROJECT ?= joidy
 PLATFORM := $(shell uname -s | tr '[:upper:]' '[:lower:]')
+# Portable sed in-place: GNU sed uses -i, BSD sed (macOS) needs -i ''
+SED_INPLACE := $(shell sed --version >/dev/null 2>&1 && echo "sed -i" || echo "sed -i ''")
 
 RED := \033[0;31m
 GREEN := \033[0;32m
@@ -51,7 +53,7 @@ setup: ## First-time setup: copy .env, create data directories
 	@. .env 2>/dev/null || true; \
 	if [ -z "$$POSTGRES_PASSWORD" ]; then \
 		NEW_PW=$$(openssl rand -hex 24 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(24))" 2>/dev/null || echo "dev_pw_$$(date +%s)"); \
-		sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$$NEW_PW|" .env; \
+		$(SED_INPLACE) "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$$NEW_PW|" .env; \
 		echo "$(GREEN)✓$(NC) Generated POSTGRES_PASSWORD"; \
 	fi
 	@echo ""
@@ -140,8 +142,8 @@ test-frontend-check: ## Run frontend typechecking (svelte-check) inside Docker
 
 test: test-api test-frontend test-frontend-check ## Run all test suites (API + Frontend + typecheck)
 
-lint-api: ## Check syntax of all Python services using compileall
-	python -m compileall -q api/ ai-service/ worker/ || (echo "Syntax errors found"; exit 1)
+lint-api: ## Check syntax of all Python services via Docker (compileall)
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm api python -m compileall -q /app/api /app/ai-service /app/worker || (echo "Syntax errors found"; exit 1)
 
 lint: lint-api ## Run all linters and code checkers
 
@@ -302,20 +304,20 @@ start: ## 🚀 Quick start: setup + start all services
 		echo -n "$(BLUE)Vault path (or press Enter to skip):$(NC) "; \
 		read -r VAULT_PATH; \
 		if [ -n "$$VAULT_PATH" ]; then \
-			sed -i "s|^OBSIDIAN_VAULT_PATH=.*|OBSIDIAN_VAULT_PATH=$$VAULT_PATH|" .env; \
+			$(SED_INPLACE) "s|^OBSIDIAN_VAULT_PATH=.*|OBSIDIAN_VAULT_PATH=$$VAULT_PATH|" .env; \
 			echo "  ✓ Updated OBSIDIAN_VAULT_PATH in .env"; \
 		fi; \
 	fi
 	@. .env 2>/dev/null || true; \
 	if [ -z "$$SECRET_KEY" ] || [ "$$SECRET_KEY" = "change_this_to_a_random_secret_key" ]; then \
 		NEW_SECRET=$$(openssl rand -hex 32 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null || echo "dev_secret_$$(date +%s)"); \
-		sed -i "s|^SECRET_KEY=.*|SECRET_KEY=$$NEW_SECRET|" .env; \
+		$(SED_INPLACE) "s|^SECRET_KEY=.*|SECRET_KEY=$$NEW_SECRET|" .env; \
 		echo "  ✓ Generated new SECRET_KEY"; \
 	fi
 	@. .env 2>/dev/null || true; \
 	if [ -z "$$POSTGRES_PASSWORD" ]; then \
 		NEW_PW=$$(openssl rand -hex 24 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(24))" 2>/dev/null || echo "dev_pw_$$(date +%s)"); \
-		sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$$NEW_PW|" .env; \
+		$(SED_INPLACE) "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$$NEW_PW|" .env; \
 		echo "  ✓ Generated new POSTGRES_PASSWORD"; \
 	fi
 	@echo ""
