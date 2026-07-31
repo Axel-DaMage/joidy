@@ -89,6 +89,9 @@ jobs:
       - name: Prepare environment
         run: |
           cp .env.example .env
+          # docker-compose.yml requires a non-empty POSTGRES_PASSWORD (${VAR:?...})
+          # .env.example ships it empty, so set a CI-only value here.
+          sed -i 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=joidy-ci/' .env
           mkdir -p data/db data/uploads data/vault
 
       - name: Build and start Docker images

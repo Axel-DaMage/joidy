@@ -28,8 +28,11 @@
   import { loadNotes } from '$lib/stores/notes';
   import { deferredPrompt, showInstallBanner, isAppInstalled } from '$lib/stores/pwa';
   import { syncStore } from '$lib/stores/sync';
+  import { toggle as toggleCommandPalette } from '$lib/stores/commandPalette';
   import ConflictResolutionModal from '$lib/components/ConflictResolutionModal.svelte';
   import ShareAchievementModal from '$lib/components/ShareAchievementModal.svelte';
+  import FocusMode from '$lib/components/FocusMode.svelte';
+  import { initFocusModeConfig, queueNotificationIfActive } from '$lib/stores/focusMode';
 
   type NavItemStatus = 'ready' | 'dev' | 'placeholder';
 
@@ -86,6 +89,7 @@
     activeIconPack.init();
     const cleanupTheme = initTheme();
     initPomodoroSettings();
+    initFocusModeConfig();
     initKeyboardNavigation();
     initPushNotifications();
     onboarding.init();
@@ -142,16 +146,16 @@
           logger.info('[layout] WebSocket message received:', msg);
           
           if (msg.type === 'note_created') {
-            showNotification(`Nueva nota creada: "${msg.title}"`, 'success');
+            queueNotificationIfActive(`Nueva nota creada: "${msg.title}"`, 'success');
             loadNotes(undefined, true).catch(() => {});
           } else if (msg.type === 'note_updated') {
-            showNotification(`Nota actualizada: "${msg.title}"`, 'info');
+            queueNotificationIfActive(`Nota actualizada: "${msg.title}"`, 'info');
             loadNotes(undefined, true).catch(() => {});
           } else if (msg.type === 'xp_gained') {
-            showNotification(`¡+${msg.xp} XP!`, 'level');
+            queueNotificationIfActive(`¡+${msg.xp} XP!`, 'level');
             loadStats().catch(() => {});
           } else if (msg.type === 'streak_updated') {
-            showNotification(`¡Racha de ${msg.streak} días! 🔥`, 'info');
+            queueNotificationIfActive(`¡Racha de ${msg.streak} días! 🔥`, 'info');
             loadStats().catch(() => {});
           }
         } catch (e) {
@@ -340,6 +344,15 @@
     };
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
+    // Command palette toggle (Cmd/Ctrl+K)
+    const handleCommandPaletteKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        toggleCommandPalette();
+      }
+    };
+    window.addEventListener('keydown', handleCommandPaletteKey);
+
     window.addEventListener('online', handleOnline);
     window.addEventListener('joidy:streaks-updated', handleStreaksUpdated);
     window.addEventListener('joidy:open-settings', handleOpenSettings);
@@ -365,6 +378,7 @@
       window.removeEventListener('unhandledrejection', handleUnhandledRejection);
       window.removeEventListener('appinstalled', handleAppInstalled);
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('keydown', handleCommandPaletteKey);
 
       // Clean up WebSocket connection
       if (ws) {
@@ -521,6 +535,7 @@
 <TutorialOverlay />
 <ConflictResolutionModal />
 <ShareAchievementModal />
+<FocusMode />
 {/if}
 
 <style>
