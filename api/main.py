@@ -5,7 +5,7 @@ from time import perf_counter
 
 from config import settings
 from database import init_db
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from logging_config import setup_logging
@@ -60,9 +60,30 @@ class RequestTimingMiddleware(BaseHTTPMiddleware):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
+    _validate_secret_key()
     init_db()
-    print("FINISHED INIT_DB")
+    logger.info("[api] init_db complete")
     yield
+
+
+def _validate_secret_key() -> None:
+    """Abort startup if SECRET_KEY is a known public placeholder.
+
+    An empty SECRET_KEY is allowed: it puts the app into the first-time setup
+    flow (no tokens can be issued/verified, all auth-protected endpoints
+    return 401 until `/config/setup` is completed). But a placeholder value
+    that is public in the repo would let anyone forge JWTs, so we refuse to
+    boot in that case. See issue #322.
+    """
+    from services.setup_state import SECRET_KEY_PLACEHOLDERS
+
+    if settings.secret_key in SECRET_KEY_PLACEHOLDERS and settings.secret_key:
+        # Non-empty placeholder (e.g. "dev_secret_change_me") — never allowed.
+        raise RuntimeError(
+            f"SECRET_KEY is set to a known public placeholder ({settings.secret_key!r}). "
+            "Generate a real one with `openssl rand -hex 32` and set it in .env, "
+            "or leave it empty to use the first-time setup flow."
+        )
 
 
 class CorsSafetyMiddleware(BaseHTTPMiddleware):
@@ -244,19 +265,20 @@ def health_cache():
 
 @app.get("/debug", dependencies=[Depends(get_current_user)])
 def debug_info():
-    """Debug endpoint with detailed system information."""
-    import os
-    import sys
+    """Debug endpoint with detailed system information.
+
+    Only available when `APP_ENV=development`. In production this returns 404
+    so the endpoint (and the operational data it exposes) is not discoverable
+    by an authenticated attacker. See issue #327.
+    """
+    if settings.app_env != "development":
+        raise HTTPException(status_code=404, detail="Not Found")
+
     from datetime import datetime, timezone
 
     debug_data = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "python_version": sys.version,
-        "platform": os.name,
-        "env": {
-            k: v for k, v in os.environ.items()
-            if k in ("PYTHON_ENV", "DEBUG", "LOG_LEVEL")
-        },
+        "app_env": settings.app_env,
     }
 
     # Database info

@@ -6,6 +6,7 @@ from config import settings
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from services.auth_service import create_access_token
+from services.setup_state import is_secret_key_safe, is_setup_complete
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -21,12 +22,24 @@ def login(password: str = "", username: str = "user"):
 
     For a personal app, we use a simple single-user auth.
     The password should be configured via AUTH_PASSWORD in .env.
+
+    Refuses to issue tokens until first-time setup is complete (issue #323):
+    previously, an empty AUTH_PASSWORD let anyone log in with any password.
     """
-    if not settings.secret_key:
+    if not is_setup_complete():
+        raise HTTPException(
+            status_code=503,
+            detail="Setup required: complete first-time setup via /config/setup before logging in.",
+        )
+    if not is_secret_key_safe(settings.secret_key):
         raise HTTPException(status_code=500, detail="Server not configured for auth")
 
     expected_password = settings.auth_password or ""
-    if expected_password and password != expected_password:
+    if not expected_password:
+        # Defensive: is_setup_complete() should have caught this, but never
+        # allow a token to be issued without a configured password.
+        raise HTTPException(status_code=503, detail="Setup required: AUTH_PASSWORD not configured.")
+    if password != expected_password:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     # Create token for the single user (user_id=1)
@@ -38,6 +51,7 @@ def login(password: str = "", username: str = "user"):
 def auth_status():
     """Check if authentication is configured."""
     return {
-        "enabled": bool(settings.secret_key),
+        "enabled": is_setup_complete(),
         "has_password": bool(settings.auth_password),
+        "needs_setup": not is_setup_complete(),
     }

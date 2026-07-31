@@ -8,6 +8,9 @@ import logging
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from services.auth_service import get_current_user_id
+from services.setup_state import is_setup_complete
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["websocket"])
@@ -45,9 +48,39 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
+def _authenticate_ws(websocket: WebSocket) -> int | None:
+    """Validate the WebSocket handshake.
+
+    Browsers cannot set custom headers on WebSocket handshakes, so the JWT is
+    passed as a `token` query parameter. Returns the user id, or None if the
+    connection is not allowed.
+
+    When first-time setup is not complete the handshake is rejected (the WS
+    is for real-time updates, not for the setup flow). See issue #325.
+    """
+    if not is_setup_complete():
+        return None
+    token = websocket.query_params.get("token", "")
+    if not token:
+        return None
+    return get_current_user_id(token)
+
+
 @router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    """Main WebSocket endpoint for real-time updates."""
+    """Main WebSocket endpoint for real-time updates.
+
+    Requires a valid JWT passed as `?token=<jwt>` in the handshake URL.
+    See issue #325.
+    """
+    user_id = _authenticate_ws(websocket)
+    if user_id is None:
+        # Reject the handshake with a policy-violation close code. Use accept
+        # then close because some clients surface the reason better that way.
+        await websocket.accept()
+        await websocket.close(code=4401, reason="Unauthorized")
+        return
+
     await manager.connect(websocket)
     try:
         while True:

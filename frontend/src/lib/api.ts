@@ -236,8 +236,8 @@ export const api = {
   auth: {
     login: (password: string, username = 'user') => 
       req<{ access_token: string; token_type: string }>('POST', `/auth/login?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`),
-    status: () => 
-      req<{ enabled: boolean; has_password: boolean }>('GET', '/auth/status')
+    status: () =>
+      req<{ enabled: boolean; has_password: boolean; needs_setup: boolean }>('GET', '/auth/status')
   },
   
   notes: {

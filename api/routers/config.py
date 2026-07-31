@@ -3,6 +3,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from services.auth_service import get_current_user
+from services.setup_state import is_setup_complete
 
 from config import settings
 
@@ -190,19 +191,27 @@ class SetupRequest(BaseModel):
 
 @router.get("/setup-status")
 def setup_status():
-    env_vars = read_env()
-    has_password = bool(env_vars.get("AUTH_PASSWORD"))
-    has_secret = bool(env_vars.get("SECRET_KEY"))
-    
-    needs_setup = not (has_password and has_secret)
-    return {"needs_setup": needs_setup}
+    """Public endpoint used by the frontend to detect first-time setup.
+
+    Only returns a boolean — no secrets or config values. After setup is
+    complete the endpoint still responds (so the frontend can confirm) but
+    reports `needs_setup=false`. See issue #324.
+    """
+    return {"needs_setup": not is_setup_complete()}
 
 @router.post("/setup")
 def perform_setup(req: SetupRequest):
-    env_vars = read_env()
+    """First-time setup: set AUTH_PASSWORD and generate SECRET_KEY.
 
-    if env_vars.get("AUTH_PASSWORD") and env_vars.get("SECRET_KEY"):
-        return {"status": "error", "message": "Setup already completed"}
+    Only callable when setup has NOT been completed yet. Once a password and
+    a non-placeholder SECRET_KEY exist in .env, this endpoint returns 403 so
+    an attacker cannot (re)set the password. See issue #324.
+    """
+    if is_setup_complete():
+        raise HTTPException(
+            status_code=403,
+            detail="Setup already completed. Use /auth/login and /config to change settings.",
+        )
 
     if not req.auth_password or len(req.auth_password) < 4:
         raise HTTPException(
@@ -210,15 +219,17 @@ def perform_setup(req: SetupRequest):
             detail="Password must be at least 4 characters long",
         )
 
+    env_vars = read_env()
     env_vars["AUTH_PASSWORD"] = req.auth_password
     if req.obsidian_vault_path:
         env_vars["OBSIDIAN_VAULT_PATH"] = req.obsidian_vault_path
-        
-    if not env_vars.get("SECRET_KEY"):
-        env_vars["SECRET_KEY"] = secrets.token_urlsafe(32)
-        
+
+    # Always (re)generate SECRET_KEY during setup: the existing value may be a
+    # placeholder like "change_this_to_a_random_secret_key" which is unsafe.
+    env_vars["SECRET_KEY"] = secrets.token_urlsafe(32)
+
     write_env(env_vars)
-    
+
     # Reload settings in memory
     import os
     from config import settings
@@ -227,6 +238,6 @@ def perform_setup(req: SetupRequest):
     if req.obsidian_vault_path:
         os.environ["OBSIDIAN_VAULT_PATH"] = req.obsidian_vault_path
         settings.obsidian_vault_path = req.obsidian_vault_path
-    
+
     return {"status": "ok", "message": "Setup completed"}
 

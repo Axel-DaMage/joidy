@@ -12,7 +12,7 @@
   import Login from '$lib/components/Login.svelte';
   import SetupWizard from '$lib/components/SetupWizard.svelte';
   import { api, type Goal, type PersonalStreak } from '$lib/api';
-  import { session, isAuthenticated } from '$lib/stores/session';
+  import { session, isAuthenticated, getToken } from '$lib/stores/session';
   import { totalXP, loadStats, pingActivity, globalLevel, nextStageXP, showNotification } from '$lib/stores/gamification';
   import { running, secondsLeft, phase } from '$lib/stores/pomodoro';
   import { initPomodoroSettings } from '$lib/stores/pomodoro';
@@ -109,6 +109,13 @@
         logger.info('[layout] Tab hidden, skipping WebSocket reconnect');
         return;
       }
+
+      // The WebSocket now requires a valid JWT (issue #325). Skip connecting
+      // when not authenticated to avoid an immediate 4401 + reconnect storm.
+      if (!getToken()) {
+        logger.info('[layout] No auth token, skipping WebSocket connect');
+        return;
+      }
       
       const host = window.location.hostname;
       const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -128,7 +135,13 @@
       const wsUrl = `${wsProto}//${wsHost}/ws`;
 
       logger.info('[layout] Connecting to WebSocket:', wsUrl);
-      ws = new WebSocket(wsUrl);
+      // Pass the JWT as a query param: browsers cannot set Authorization
+      // headers on WebSocket handshakes. See issue #325.
+      const wsToken = getToken();
+      const wsUrlWithToken = wsToken
+        ? `${wsUrl}?token=${encodeURIComponent(wsToken)}`
+        : wsUrl;
+      ws = new WebSocket(wsUrlWithToken);
 
       ws.onopen = () => {
         logger.info('[layout] WebSocket connected');

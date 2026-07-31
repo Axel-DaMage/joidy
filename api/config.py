@@ -7,7 +7,10 @@ class Settings(BaseSettings):
     database_url: str = "postgresql://joidy:joidy@postgres:5432/joidy"
     ai_service_url: str = "http://ai-service:8002"
     worker_url: str = "http://worker:8001"
-    secret_key: str = "dev_secret_change_me"
+    # No default: an unset SECRET_KEY forces the first-time setup flow
+    # (/config/setup generates one). A hardcoded default would let anyone
+    # who reads the repo forge valid JWTs. See issue #322.
+    secret_key: str = ""
     app_env: str = "development"
     cors_allowed_origins: str = ""  # Comma-separated origins for production (e.g. "https://joidy.app,https://www.joidy.app")
 

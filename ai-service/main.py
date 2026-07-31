@@ -81,9 +81,15 @@ def health():
 
 @app.get("/providers")
 def providers():
+    """List configured AI providers.
+
+    Returns only *which* providers are configured (boolean), never the API
+    keys. Previously this returned `settings.provider_config` which includes
+    the raw keys in plaintext. See issue #358.
+    """
     return {
         "available": settings.available_providers,
-        "configured": settings.provider_config,
+        "configured": {p: True for p in settings.provider_config},
         "llm_model": settings.llm_model,
         "embedding_model": settings.embedding_model,
     }
