@@ -16,6 +16,7 @@
   import { extractFrontmatter, getFileIcon } from '$lib/utils/fileTree';
   import { downloadMarkdown, downloadHTML, copyNoteAsMarkdown } from '$lib/utils/export';
   import { showNotification } from '$lib/stores/gamification';
+  import WysiwygEditor from './WysiwygEditor.svelte';
 
   const AUTOSAVE_DELAY = 2000;
   const DRAFT_PREFIX = 'joidy-draft-';
@@ -118,6 +119,8 @@
   let saving = $state(false);
   let saved = $state(false);
   let previewMode = $state(false);
+  let wysiwygMode = $state(false);
+  let wysiwygRef = $state<WysiwygEditor | undefined>();
   let aiTimeout: ReturnType<typeof setTimeout>;
   let autosaveTimer: ReturnType<typeof setTimeout> | undefined;
   let hasUnsavedChanges = $state(false);
@@ -370,6 +373,25 @@
     }, 2000);
   }
 
+  function handleWysiwygChange(e: CustomEvent<string>) {
+    const md = e.detail;
+    scheduleSnapshot();
+    let nextContent = md;
+
+    if ($hideTagsLine && tags.length > 0 && currentTagsLine) {
+      if (!nextContent.includes(currentTagsLine)) {
+        nextContent = nextContent.trim() + '\n\n' + currentTagsLine;
+      }
+    }
+
+    if (!$showFrontmatter && rawFrontmatter) {
+      nextContent = rawFrontmatter + '\n\n' + nextContent.trim();
+    }
+
+    content = nextContent;
+    onContentChange();
+  }
+
   function acceptSuggestion(tag: string) {
     addTag(tag);
     aiSuggestions.update(s => s.filter(x => x.tag !== tag));
@@ -489,6 +511,10 @@
       e.preventDefault();
       previewMode = !previewMode;
     }
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'v') {
+      e.preventDefault();
+      wysiwygMode = !wysiwygMode;
+    }
     if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
       if (e.shiftKey) {
         e.preventDefault();
@@ -566,6 +592,25 @@
   };
 
   function formatMarkdown(type: string) {
+    if (wysiwygMode && wysiwygRef) {
+      switch (type) {
+        case 'bold': wysiwygRef.toggleBold(); break;
+        case 'italic': wysiwygRef.toggleItalic(); break;
+        case 'strikethrough': wysiwygRef.toggleStrike(); break;
+        case 'h1': wysiwygRef.toggleH1(); break;
+        case 'h2': wysiwygRef.toggleH2(); break;
+        case 'h3': wysiwygRef.toggleH3(); break;
+        case 'ul': wysiwygRef.toggleBulletList(); break;
+        case 'ol': wysiwygRef.toggleOrderedList(); break;
+        case 'link':
+          const url = prompt('URL del enlace:');
+          if (url) wysiwygRef.setLink(url);
+          break;
+        case 'quote': wysiwygRef.toggleBlockquote(); break;
+        case 'code': wysiwygRef.toggleCodeBlock(); break;
+      }
+      return;
+    }
     if (!textareaEl) return;
     const { selectionStart, selectionEnd } = textareaEl;
     const selected = content.substring(selectionStart, selectionEnd);
@@ -604,6 +649,10 @@
   }
 
   function insertAtCursor(text: string) {
+    if (wysiwygMode && wysiwygRef) {
+      wysiwygRef.insertContent(text);
+      return;
+    }
     if (!textareaEl) return;
     const { selectionStart, selectionEnd } = textareaEl;
     const before = content.substring(0, selectionStart);
@@ -819,6 +868,16 @@
 
       <button
         class="toolbar-btn"
+        class:active={wysiwygMode}
+        onclick={() => wysiwygMode = !wysiwygMode}
+        title="Editor visual (WYSIWYG)"
+      >
+        <Eye size={14} />
+        <span>{wysiwygMode ? 'Raw' : 'Visual'}</span>
+      </button>
+
+      <button
+        class="toolbar-btn"
         class:active={previewMode}
         onclick={() => previewMode = !previewMode}
         title="Alternar preview (Ctrl+P)"
@@ -966,6 +1025,14 @@
           </div>
         {/if}
       </div>
+    {:else if wysiwygMode}
+      <WysiwygEditor
+        bind:this={wysiwygRef}
+        content={visibleEditorContent}
+        placeholder="Escribe algo... (Ctrl+S para guardar)"
+        oncontentchange={handleWysiwygChange}
+        onsave={handleSave}
+      />
     {:else}
       <div class="editor-container">
         <div class="line-gutter" bind:this={lineGutterEl} aria-hidden="true">
