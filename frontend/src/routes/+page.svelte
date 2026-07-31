@@ -12,6 +12,8 @@
   import XPBar          from '$lib/components/XPBar.svelte';
   import NoteCard       from '$lib/components/NoteCard.svelte';
   import PomodoroWidget from '$lib/components/PomodoroWidget.svelte';
+  import { Target } from 'lucide-svelte';
+  import { startFocusMode } from '$lib/stores/focusMode';
   import TimeWidget from '$lib/components/TimeWidget.svelte';
   import WeatherWidget from '$lib/components/WeatherWidget.svelte';
   import Widget         from '$lib/components/Widget.svelte';
@@ -385,6 +387,10 @@
 
         {:else if wid === 'pomodoro'}
           <PomodoroWidget />
+          <button class="focus-mode-btn" onclick={() => startFocusMode()} aria-label="Iniciar modo enfoque">
+            <Target size={16} />
+            Modo Enfoque
+          </button>
 
         {:else if wid === 'recent-notes'}
           <div class="section-header">
@@ -514,6 +520,10 @@
 
         {:else if wid === 'pomodoro'}
           <PomodoroWidget />
+          <button class="focus-mode-btn" onclick={() => startFocusMode()} aria-label="Iniciar modo enfoque">
+            <Target size={16} />
+            Modo Enfoque
+          </button>
 
         {:else if wid === 'activity-progress'}
           <ActivityProgress />
@@ -761,4 +771,24 @@
       font-size: 9px;
     }
   }
+
+.focus-mode-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md, 8px);
+  background: var(--surface);
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+.focus-mode-btn:hover {
+  background: var(--elevated);
+  border-color: var(--accent);
+}
 </style>
