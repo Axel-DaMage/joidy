@@ -3,6 +3,7 @@
   import KnowledgeGraphForce from '$lib/components/KnowledgeGraphForce.svelte';
   import { graphData, graphLoading, loadGraph, selectedTag } from '$lib/stores/graph';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
+  import { devMode } from '$lib/stores/settings';
   import type { GraphNode, GraphEdge } from '$lib/api';
 
   let containerEl: HTMLDivElement;
@@ -30,6 +31,7 @@
 </script>
 
 
+{#if $devMode}
 <div class="graph-page">
   <div class="graph-header">
     <div>
@@ -69,6 +71,15 @@
     <span class="legend-hint">doble-click para abrir · drag parafixar</span>
   </div>
 </div>
+{:else}
+<div class="construction-page">
+  <div class="construction-box">
+    <DynamicIcon name="Network" size={48} />
+    <h3>En Construcción</h3>
+    <p>Activa el Modo Desarrollo en Ajustes para acceder al Grafo de Conocimiento.</p>
+  </div>
+</div>
+{/if}
 
 <style>
   .graph-page {
@@ -170,5 +181,36 @@
     margin-left: auto;
     color: var(--text-muted);
     opacity: 0.7;
+  }
+
+  .construction-page {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    width: 100%;
+  }
+
+  .construction-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    color: var(--text-muted);
+    text-align: center;
+    padding: 40px;
+  }
+
+  .construction-box h3 {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin: 0;
+  }
+
+  .construction-box p {
+    font-size: 13px;
+    margin: 0;
+    max-width: 320px;
   }
 </style>
