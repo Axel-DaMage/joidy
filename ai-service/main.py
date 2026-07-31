@@ -147,9 +147,9 @@ async def embed(req: EmbedRequest):
             "provider": client.provider_name,
         }
     except CircuitBreakerError as e:
-        return {"status": "circuit_open", "note_id": req.note_id, "error": str(e)}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"status": "circuit_open", "note_id": req.note_id, "error": "Circuit breaker open"}
+    except Exception:
+        raise HTTPException(status_code=500, detail="Embedding failed")
 
 
 @app.post("/classify")
@@ -167,9 +167,9 @@ async def classify(req: ClassifyRequest):
             "provider": client.provider_name,
         }
     except CircuitBreakerError as e:
-        return {"status": "circuit_open", "note_id": req.note_id, "suggestions": [], "error": str(e)}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"status": "circuit_open", "note_id": req.note_id, "suggestions": [], "error": "Circuit breaker open"}
+    except Exception:
+        raise HTTPException(status_code=500, detail="Classification failed")
 
 
 @app.get("/usage")
@@ -196,9 +196,12 @@ async def rag(req: RAGRequest):
         similar = find_similar_notes(question_vector, limit=req.top_k)
 
         # 3. Retrieve note titles & contents to build LLM context
+        # Limit context size to reduce PII exposure and token usage
+        MAX_CONTEXT_NOTES = 5
+        MAX_NOTE_CHARS = 2000
         context_chunks = []
         with engine.connect() as conn:
-            for item in similar:
+            for item in similar[:MAX_CONTEXT_NOTES]:
                 nid = item["note_id"]
                 # Use raw SQL to fetch from the shared SQLite DB
                 row = conn.execute(
@@ -206,7 +209,8 @@ async def rag(req: RAGRequest):
                     (nid,),
                 ).fetchone()
                 if row:
-                    context_chunks.append(f"Nota: {row[0]}\nContenido: {row[1]}")
+                    note_content = (row[1] or "")[:MAX_NOTE_CHARS]
+                    context_chunks.append(f"Nota: {row[0]}\nContenido: {note_content}")
 
         client = get_llm_client()
         answer = await llm_circuit_breaker.call(
@@ -221,6 +225,6 @@ async def rag(req: RAGRequest):
             "provider": client.provider_name,
         }
     except CircuitBreakerError as e:
-        return {"status": "circuit_open", "answer": "El proveedor de IA se encuentra temporalmente no disponible.", "error": str(e)}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"status": "circuit_open", "answer": "El proveedor de IA se encuentra temporalmente no disponible.", "error": "Circuit breaker open"}
+    except Exception:
+        raise HTTPException(status_code=500, detail="RAG failed")

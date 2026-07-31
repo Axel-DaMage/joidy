@@ -34,16 +34,22 @@ def note_to_markdown(note: Note) -> str:
     return "\n".join(lines)
 
 
+def _html_escape(text: str) -> str:
+    """Escape HTML special characters to prevent XSS."""
+    return (text or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;").replace("'", "&#x27;")
+
+
 def note_to_html(note: Note) -> str:
     """Convert a note to HTML format."""
-    content = (note.content or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-    tags = [nt.tag.name for nt in note.tags if nt.tag]
+    content = _html_escape(note.content or "")
+    title = _html_escape(note.title or "")
+    tags = [_html_escape(nt.tag.name) for nt in note.tags if nt.tag]
 
     html = f"""<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
-  <title>{note.title}</title>
+  <title>{title}</title>
   <style>
     body {{ font-family: system-ui, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; line-height: 1.6; }}
     h1 {{ color: #c8a96e; }}
@@ -53,7 +59,7 @@ def note_to_html(note: Note) -> str:
   </style>
 </head>
 <body>
-  <h1>{note.title}</h1>
+  <h1>{title}</h1>
   <div class="meta">
     <div>Created: {note.created_at.isoformat()}</div>
     <div>Updated: {note.updated_at.isoformat()}</div>

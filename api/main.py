@@ -179,7 +179,20 @@ app.include_router(upload.router, dependencies=[Depends(get_current_user)])
 
 # Ensure the upload directory exists before serving it.
 Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=settings.upload_dir), name="uploads")
+
+
+class SafeStaticFiles(StaticFiles):
+    """StaticFiles that forces Content-Disposition: attachment for SVG files."""
+
+    async def get_response(self, path: str, scope):
+        response = await super().get_response(path, scope)
+        if path.lower().endswith(".svg"):
+            response.headers["Content-Disposition"] = "attachment"
+            response.headers["Content-Type"] = "image/svg+xml"
+        return response
+
+
+app.mount("/uploads", SafeStaticFiles(directory=settings.upload_dir), name="uploads")
 
 
 @app.get("/health")

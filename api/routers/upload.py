@@ -16,7 +16,6 @@ ALLOWED_IMAGE_TYPES = {
     "image/png",
     "image/gif",
     "image/webp",
-    "image/svg+xml",
     "image/avif",
 }
 

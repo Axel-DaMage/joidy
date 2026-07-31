@@ -25,4 +25,6 @@ NOTAS RELEVANTES:
 
 PREGUNTA: {question}
 
-Responde de forma concisa y directa, citando conceptos de las notas cuando sea útil."""
+Responde de forma concisa y directa, citando conceptos de las notas cuando sea útil.
+
+IMPORTANTE: No incluyas ni repitas informacion personal sensible (emails, telefonos, direcciones, credenciales) que aparezca en las notas."""
