@@ -176,6 +176,7 @@ test: add gamification engine edge cases
 - Mensajes en presente imperativo ("add", no "added")
 - No mezclar cambios de código con cambios de formato
 - Para WIP usa `wip:` como prefijo y no hagas PR hasta que esté listo
+- **Añade una entrada al `CHANGELOG.md`** en la sección `[Unreleased]` bajo la categoría correspondiente (Added/Changed/Fixed/Removed/Security)
 
 ## Testing
 

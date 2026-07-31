@@ -79,7 +79,7 @@ main.py → routers/*.py → services/*.py → models/*.py
 - **routers/**: HTTP endpoints, Pydantic validation only
 - **services/**: Business logic + DB ops
 - **models/**: SQLAlchemy ORM
-- **alembic/versions/**: 12 migration files (`make migrate`)
+- **alembic/versions/**: 5 migration files (`make migrate`)
 - **tests/**: 7 test files (unittest)
 
 Internal comms:

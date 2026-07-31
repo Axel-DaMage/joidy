@@ -1,31 +1,32 @@
 # Worker Service
 
 Python asyncio background worker for Joidy. Handles Obsidian vault syncing and
-scheduled daily writes. Runs on **port 8001** (healthcheck only — no HTTP
-server).
+scheduled daily writes. Runs on **port 8001** (healthcheck only — there is no
+HTTP server).
 
 ## Tech Stack
 
-- Python 3.12, asyncio
+- **Python 3.12**, asyncio
 - `watchdog` for filesystem events
 - HTTP calls to the `api` service (no inbound HTTP)
 
 ## Prerequisites
 
-- Docker + Docker Compose (recommended) or Python 3.12 + `requirements.txt`
+- Docker + Docker Compose (recommended)
+- Or Python 3.12 with `requirements.txt` for local dev
 - `OBSIDIAN_VAULT_PATH` pointing to a host vault (mounted at `/vault`)
-- The `api` service reachable at `http://api:8000`
+- The `api` service must be reachable at `http://api:8000`
 
 ## Development
 
-From the repo root:
+Start the full stack with hot reload from the repo root:
 
 ```bash
 make dev          # all services, hot reload (Ctrl+C to stop)
-make logs-worker  # tail worker logs
+make logs-worker  # tail worker logs only
 ```
 
-Standalone container:
+To run the worker container alone:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up worker
@@ -33,7 +34,8 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up worker
 
 ## Environment Variables
 
-Key vars (see root [`.env.example`](../.env.example) for the full list):
+Key variables consumed by this service (see root [`.env.example`](../.env.example)
+for the full list — do not duplicate here):
 
 - `OBSIDIAN_VAULT_PATH` — absolute host path to the Obsidian vault
   (mounted read-only at `/vault` inside the container)
