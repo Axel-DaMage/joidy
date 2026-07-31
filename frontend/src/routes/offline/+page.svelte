@@ -55,4 +55,39 @@
   .reload-button:hover {
     background: var(--accent-hover, #7c3aed);
   }
+
+  /* ── Responsive ── */
+  @media (max-width: 768px) {
+    .offline-page {
+      padding: var(--space-md, 1rem);
+    }
+
+    h1 {
+      font-size: 1.6rem;
+    }
+
+    p {
+      max-width: 100%;
+      font-size: 0.95rem;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .offline-page {
+      padding: var(--space-sm, 0.75rem);
+    }
+
+    h1 {
+      font-size: 1.4rem;
+    }
+
+    p {
+      font-size: 0.85rem;
+    }
+
+    .reload-button {
+      padding: 0.6rem 1.2rem;
+      font-size: 0.9rem;
+    }
+  }
 </style>

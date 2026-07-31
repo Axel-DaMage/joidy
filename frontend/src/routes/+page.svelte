@@ -625,4 +625,82 @@
   }
 
   .empty-state.success { color: #238636; text-align: center; padding: 12px; }
+
+  /* ── Responsive ── */
+  @media (max-width: 768px) {
+    .dashboard {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto auto 1fr;
+    }
+
+    .plant-section {
+      padding: var(--s3) var(--s3) var(--s2);
+      gap: var(--s2);
+    }
+
+    .resize-handle.static {
+      display: none;
+    }
+
+    .activity-section {
+      overflow-y: auto;
+    }
+
+    .stats-row {
+      gap: var(--s2);
+      max-width: 100%;
+    }
+
+    .stat-value {
+      font-size: 16px;
+    }
+
+    .stat-divider {
+      height: 24px;
+    }
+
+    .module-viewport {
+      width: 130px;
+      height: 130px;
+    }
+
+    .fab {
+      right: var(--s3);
+      bottom: calc(var(--statusbar-h) + var(--s3));
+    }
+
+    .issue-item {
+      grid-template-columns: 30px 1fr;
+      gap: var(--s2);
+      padding: var(--s2) var(--s3);
+    }
+
+    .issue-repo {
+      display: none;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .plant-section {
+      padding: var(--s2);
+    }
+
+    .stats-row {
+      gap: var(--s1);
+    }
+
+    .stat-value {
+      font-size: 14px;
+    }
+
+    .module-viewport {
+      width: 110px;
+      height: 110px;
+    }
+
+    .module-label {
+      min-width: 60px;
+      font-size: 9px;
+    }
+  }
 </style>
