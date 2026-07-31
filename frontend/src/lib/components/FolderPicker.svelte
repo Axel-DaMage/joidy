@@ -1,6 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import type { FlatNode } from '$lib/utils/fileTree';
+  import { FolderRoot } from 'lucide-svelte';
   import DynamicIcon from './DynamicIcon.svelte';
 
   export let flatNodes: FlatNode[] = [];
@@ -16,8 +17,8 @@
   $: folders = flatNodes.filter(n => n.type === 'folder' && (!search || n.path.toLowerCase().includes(search.toLowerCase())));
 </script>
 
-<div class="folder-picker-backdrop" on:click={() => dispatch('close')} role="button" tabindex="-1" on:keydown={(e) => e.key === 'Enter' && dispatch('close')}>
-  <div class="folder-picker" on:click={(e) => e.stopPropagation()} role="button" tabindex="-1" on:keydown={(e) => e.stopPropagation()}>
+<div class="folder-picker-backdrop" onclick={() => dispatch('close')} role="button" tabindex="-1" onkeydown={(e) => e.key === 'Enter' && dispatch('close')}>
+  <div class="folder-picker" onclick={(e) => e.stopPropagation()} role="button" tabindex="-1" onkeydown={(e) => e.stopPropagation()}>
     <h3 class="folder-modal-title">Mover nota a carpeta</h3>
 
     <input type="text" class="input mono" bind:value={search} placeholder="Buscar carpeta..." style="width:100%; box-sizing:border-box; margin-bottom:8px;" />
@@ -26,16 +27,16 @@
       <button
         class="folder-opt"
         class:selected={selectedPath === ''}
-        on:click={() => selectedPath = ''}
+        onclick={() => selectedPath = ''}
       >
-        <DynamicIcon name="FolderRoot" size={12} />
+        <FolderRoot size={12} />
         (Raíz)
       </button>
       {#each folders as f}
         <button
           class="folder-opt"
           class:selected={selectedPath === f.path}
-          on:click={() => selectedPath = f.path}
+          onclick={() => selectedPath = f.path}
         >
           <span class="folder-opt-indent" style="width: {f.depth * 14}px"></span>
           <DynamicIcon name={f.icon || 'Folder'} size={12} color={f.color} />
@@ -48,8 +49,8 @@
     </div>
 
     <div class="folder-modal-btns">
-      <button on:click={() => dispatch('close')}>Cancelar</button>
-      <button class="primary" on:click={() => dispatch('select', selectedPath)}>Mover aquí</button>
+      <button onclick={() => dispatch('close')}>Cancelar</button>
+      <button class="primary" onclick={() => dispatch('select', selectedPath)}>Mover aquí</button>
     </div>
   </div>
 </div>

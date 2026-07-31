@@ -9,7 +9,7 @@
       <button
         class="theme-btn"
         class:active={$theme.id === t.id}
-        on:click={() => theme.setTheme(t)}
+        onclick={() => theme.setTheme(t)}
         title={t.name}
       >
         <div class="theme-preview">

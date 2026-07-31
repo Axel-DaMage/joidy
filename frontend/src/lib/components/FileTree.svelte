@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import DynamicIcon from './DynamicIcon.svelte';
+  import { ChevronRight } from 'lucide-svelte';
   import type { TreeNode } from '$lib/utils/fileTree';
 
   export let nodes: TreeNode[];
@@ -24,10 +24,10 @@
     <div
       class="tree-row folder-row"
       style="padding-left: {8 + depth * 14}px"
-      on:click={() => toggle(node.path)}
+      onclick={() => toggle(node.path)}
     >
       <span class="chevron" class:open={!collapsed.has(node.path)}>
-        <DynamicIcon name="ChevronRight" size={11} />
+        <ChevronRight size={11} />
       </span>
       <span class="icon">{node.icon}</span>
       <span class="row-name folder-name">{node.name}</span>
@@ -52,7 +52,7 @@
       class="tree-row file-row"
       class:active={node.note?.id === selectedNoteId}
       style="padding-left: {20 + depth * 14}px"
-      on:click={() => node.note && dispatch('select', node.note)}
+      onclick={() => node.note && dispatch('select', node.note)}
     >
       <span class="icon file-icon">{node.icon}</span>
       <span class="row-name file-name">{node.name}</span>

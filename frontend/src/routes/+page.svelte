@@ -284,9 +284,9 @@
           <div class="widget-centered">
             <!-- Module navigation -->
             <div class="module-nav">
-              <button class="nav-arrow" on:click={prevModule} title="Anterior"><DynamicIcon name="ChevronLeft" size={14}/></button>
+              <button class="nav-arrow" onclick={prevModule} title="Anterior"><DynamicIcon name="ChevronLeft" size={14}/></button>
               <span class="module-label mono">{MODULES[moduleIdx].label.toUpperCase()}</span>
-              <button class="nav-arrow" on:click={nextModule} title="Siguiente"><DynamicIcon name="ChevronRight" size={14}/></button>
+              <button class="nav-arrow" onclick={nextModule} title="Siguiente"><DynamicIcon name="ChevronRight" size={14}/></button>
             </div>
 
             <!-- Module viewport -->
@@ -313,7 +313,7 @@
               {#each MODULES as _, idx}
                 <button
                   class="dot" class:active={idx === moduleIdx}
-                  on:click={() => { slideDir = idx > moduleIdx ? 1 : -1; moduleIdx = idx; }}
+                  onclick={() => { slideDir = idx > moduleIdx ? 1 : -1; moduleIdx = idx; }}
                   aria-label={MODULES[idx].label}
                 ></button>
               {/each}
@@ -442,9 +442,9 @@
         {:else if wid === 'plant-carousel'}
           <div class="widget-centered">
             <div class="module-nav">
-              <button class="nav-arrow" on:click={prevModule}><DynamicIcon name="ChevronLeft" size={14}/></button>
+              <button class="nav-arrow" onclick={prevModule}><DynamicIcon name="ChevronLeft" size={14}/></button>
               <span class="module-label mono">{MODULES[moduleIdx].label.toUpperCase()}</span>
-              <button class="nav-arrow" on:click={nextModule}><DynamicIcon name="ChevronRight" size={14}/></button>
+              <button class="nav-arrow" onclick={nextModule}><DynamicIcon name="ChevronRight" size={14}/></button>
             </div>
             <div class="module-viewport">
               {#key moduleIdx}

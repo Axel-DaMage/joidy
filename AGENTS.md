@@ -96,13 +96,19 @@ Factory pattern (`clients/`) for 6 providers (Gemini, OpenAI, Anthropic, Cohere,
 Two concurrent asyncio tasks: `watch_vault()` (watches `/vault/*.md`, 2s debounce) + `schedule_daily_writes()` (writes _joidy/ files at midnight).
 
 ### Frontend (`frontend/src/`)
-- `routes/`: SvelteKit pages (notes, goals, graph, skills, streaks, ai, integrations, etc.)
+- `routes/`: SvelteKit pages (notes, goals, graph, skills, streaks, ai, etc.)
 - `lib/stores/`: 20 Svelte stores (notes, gamification, pomodoro, graph, settings, etc.)
 - `lib/actions/`: Svelte actions (focusTrap, liquidGlass)
 - `lib/api.ts`: API client wrapper
-- `lib/components/`: Reusable Svelte components (Modal, DynamicIcon, GoalCard, StreakListItem, Calculator, etc.)
+- `lib/components/`: Reusable Svelte components (Modal, DynamicIcon, GoalCard, StreakListItem, etc.)
 - `lib/utils/debug.ts`: `debugLog()` / `debugWarn()` / `debugError()` — only logs when Dev Mode ON
 - Dev Mode is stored in localStorage key `joidy-dev-mode`, toggled in Settings. Pages under development show "En Construccion" unless dev mode is ON.
+
+#### Icon Usage Convention (#257)
+- **Static UI icons** (always the same icon, e.g. close button, search): Import directly from `lucide-svelte` — `import { Search, X } from 'lucide-svelte'`. This is tree-shakeable and more efficient.
+- **Dynamic icons** (icon name comes from data/config, e.g. streak icon, folder icon, nav item icon): Use `<DynamicIcon name={iconName} />` — supports runtime lookup, kebab-to-PascalCase conversion, and icon pack switching (Lucide/Phosphor/Material).
+- **Streak icons**: Use `<StreakIcon name={streak.icon} />` — optimized for streak items with emoji fallback.
+- Never use `<DynamicIcon name="StaticName" />` with a hardcoded string — import the icon directly instead.
 
 ### Gamification
 `api/services/gamification_engine.py`: XP events (note_created +10, note_edited +5, daily_activity +15, goal_completed +50), streaks (7/30/100/365d → +100 XP), plant stages (0→semilla, 300→brote, 1200→planton, 4000→joven, 10000→madura, 25000→floreciendo, 60000→arbol). Grace period: 1 missed day/week.

@@ -124,7 +124,7 @@
   }
 </script>
 
-<div class="virtual-container" bind:this={containerEl} on:scroll={onScroll}>
+<div class="virtual-container" bind:this={containerEl} onscroll={onScroll}>
   <div class="virtual-spacer" style="height: {totalHeight}px;">
     <div class="virtual-content" style="transform: translateY({offsetY}px);">
       {#each visibleItems as item, i (getKey(item, startIndex + i))}
