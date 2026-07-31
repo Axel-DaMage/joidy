@@ -28,7 +28,7 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetMeta> = {
   'github-issues':  { id: 'github-issues',   label: 'GitHub',       panel: 'right' },
 };
 
-// ── Layout: two ordered columns ────────────────────────────────────────────────
+// ── Layout: two ordered columns (static, no reordering) ───────────────────────
 export interface DashboardLayout {
   left:  WidgetId[];
   right: WidgetId[];
@@ -39,74 +39,4 @@ const DEFAULT: DashboardLayout = {
   right: ['recent-notes', 'github-issues'],
 };
 
-const KEY = 'joidy-dashboard-layout-v2';
-
-function load(): DashboardLayout {
-  if (typeof localStorage === 'undefined') return DEFAULT;
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as DashboardLayout;
-      if (Array.isArray(parsed.left) && Array.isArray(parsed.right)) {
-        if (!parsed.left.includes('time-widget') && !parsed.right.includes('time-widget')) {
-          const pIdx = parsed.left.indexOf('pomodoro');
-          if (pIdx > -1) parsed.left.splice(pIdx, 0, 'time-widget');
-          else parsed.left.push('time-widget');
-        }
-        return parsed;
-      }
-    }
-  } catch { /* */ }
-  return DEFAULT;
-}
-
-function save(l: DashboardLayout) {
-  if (typeof localStorage !== 'undefined') localStorage.setItem(KEY, JSON.stringify(l));
-}
-
-let _initialized = false;
-
-function createLayoutStore() {
-  const { subscribe, update, set } = writable<DashboardLayout>(DEFAULT);
-
-  return {
-    subscribe,
-    init() {
-      if (_initialized) return;
-      _initialized = true;
-      set(load());
-    },
-
-    reload() {
-      set(load());
-    },
-
-    // Move widget up/down within its panel
-    move(panel: 'left' | 'right', fromIdx: number, toIdx: number) {
-      update(l => {
-        const col = [...l[panel]];
-        const [item] = col.splice(fromIdx, 1);
-        col.splice(toIdx, 0, item);
-        const next = { ...l, [panel]: col };
-        save(next);
-        return next;
-      });
-    },
-
-    // Move widget between panels
-    switchPanel(id: WidgetId, from: 'left' | 'right') {
-      const to = from === 'left' ? 'right' : 'left';
-      update(l => {
-        const src  = l[from].filter(w => w !== id);
-        const dest = [...l[to], id];
-        const next = { ...l, [from]: src, [to]: dest };
-        save(next);
-        return next;
-      });
-    },
-
-    reset() { save(DEFAULT); set(DEFAULT); },
-  };
-}
-
-export const dashboardLayout = createLayoutStore();
+export const dashboardLayout = writable<DashboardLayout>(DEFAULT);
