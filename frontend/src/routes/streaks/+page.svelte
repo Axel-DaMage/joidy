@@ -344,6 +344,7 @@
               class="detail-exit-btn"
               on:click={() => selectedId = null}
               title="Volver al menú"
+              aria-label="Volver al menú"
             >
               <X size={14} />
             </button>
@@ -365,6 +366,7 @@
                     on:click={() => !selected.is_archived && !selected.today_checked && !isStreakCompleted(selected) && checkin(selected.id)}
                     disabled={selected.is_archived || selected.today_checked || busy.has(selected.id) || isStreakCompleted(selected)}
                     title={isStreakCompleted(selected) ? 'Racha completada' : (selected.today_checked ? 'Ya hiciste check-in hoy' : 'Hacer check-in')}
+                    aria-label={isStreakCompleted(selected) ? 'Racha completada' : (selected.today_checked ? 'Ya hiciste check-in hoy' : 'Hacer check-in')}
                   >
                     {#if isStreakCompleted(selected)}
                       <span class="counter-num mono" style="color: #10b981;">✓</span>
