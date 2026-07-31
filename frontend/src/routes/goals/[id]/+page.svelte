@@ -210,7 +210,7 @@
             <span class="goal-settings-sub">Ajusta los detalles de este objetivo</span>
           </div>
         </div>
-        <button class="history-close-btn" onclick={() => showSettings = false} title="Cerrar">×</button>
+        <button class="history-close-btn" onclick={() => showSettings = false} title="Cerrar" aria-label="Cerrar">×</button>
       </div>
 
       <div class="goal-settings-body">
@@ -801,5 +801,96 @@
 
   .preview-card-live {
     border-width: 1px;
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 768px) {
+    .goal-settings-backdrop {
+      padding: var(--s2);
+    }
+
+    .goal-settings-panel {
+      width: 100%;
+      height: calc(100vh - var(--s4));
+      max-height: calc(100vh - var(--s4));
+      border-radius: var(--r);
+    }
+
+    .goal-settings-header {
+      padding: var(--s3) var(--s4);
+    }
+
+    .goal-settings-body {
+      padding: var(--s3) var(--s4);
+      gap: var(--s3);
+    }
+
+    .goal-settings-footer {
+      padding: var(--s3) var(--s4);
+    }
+
+    .ng-freq-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+
+    .form-row {
+      flex-direction: column;
+      gap: var(--s2);
+    }
+
+    /* Counteract inline width: 140px on form fields */
+    .form-row .form-field {
+      width: 100% !important;
+    }
+
+    .emoji-grid {
+      grid-template-columns: repeat(auto-fill, minmax(32px, 1fr));
+    }
+
+    .ng-expanded-presets {
+      gap: var(--s2);
+      padding: var(--s2);
+    }
+  }
+
+  @media (max-width: 480px) {
+    .goal-settings-header {
+      padding: var(--s2) var(--s3);
+    }
+
+    .goal-settings-body {
+      padding: var(--s2) var(--s3);
+    }
+
+    .goal-settings-footer {
+      padding: var(--s2) var(--s3);
+    }
+
+    .ng-freq-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .ng-tab {
+      padding: var(--s2);
+      font-size: 10px;
+    }
+
+    .emoji-grid {
+      grid-template-columns: repeat(auto-fill, minmax(28px, 1fr));
+    }
+
+    .color-presets {
+      gap: var(--s2);
+    }
+
+    .color-dot {
+      width: 20px;
+      height: 20px;
+    }
+
+    .color-custom {
+      width: 20px;
+      height: 20px;
+    }
   }
 </style>

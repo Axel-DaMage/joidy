@@ -7,6 +7,14 @@
   import { devMode } from '$lib/stores/settings';
   import type { GraphNode, GraphEdge } from '$lib/api';
 
+  // Lazy-load the heavy graph component (d3 + force-graph, 1300+ lines) so it
+  // is split into a separate chunk and only downloaded when the user actually
+  // opens the graph page in dev mode (#347).
+  let KnowledgeGraphForce: typeof import('$lib/components/KnowledgeGraphForce.svelte').default | null = null;
+  $: if ($devMode && !KnowledgeGraphForce) {
+    import('$lib/components/KnowledgeGraphForce.svelte').then(m => KnowledgeGraphForce = m.default);
+  }
+
   let containerEl: HTMLDivElement;
   let w = 800, h = 600;
 
@@ -128,6 +136,8 @@
           Sin resultados para el filtro actual.
         {/if}
       </div>
+    {:else if KnowledgeGraphForce}
+      <svelte:component this={KnowledgeGraphForce} width={w} height={h} focusId={$selectedTag} />
     {:else}
       <KnowledgeGraphForce width={w} height={h} focusId={$selectedTag} data={filteredGraphData} />
     {/if}
@@ -336,5 +346,60 @@
     font-size: 13px;
     margin: 0;
     max-width: 320px;
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 768px) {
+    .graph-header {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: var(--s2);
+      padding: var(--s3) var(--s3);
+    }
+
+    .graph-header h3 {
+      font-size: 13px;
+    }
+
+    .stats {
+      flex-wrap: wrap;
+      gap: var(--s2);
+      font-size: 10px;
+    }
+
+    .graph-legend {
+      gap: var(--s3);
+      padding: var(--s2) var(--s3);
+      font-size: 9px;
+    }
+
+    .legend-hint {
+      width: 100%;
+      margin-left: 0;
+      margin-top: var(--s1);
+    }
+
+    .construction-box {
+      padding: var(--s4);
+    }
+
+    .construction-box p {
+      max-width: 100%;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .graph-header {
+      padding: var(--s2) var(--s2);
+    }
+
+    .stats {
+      gap: var(--s1);
+    }
+
+    .graph-legend {
+      gap: var(--s2);
+      padding: var(--s1) var(--s2);
+    }
   }
 </style>

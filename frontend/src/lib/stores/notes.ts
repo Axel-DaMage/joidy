@@ -3,6 +3,13 @@ import { browser } from '$app/environment';
 import { api, type Note, type AISuggestion } from '$lib/api';
 import { applyGamificationResult } from './gamification';
 import { logger } from '$lib/utils/logger';
+import {
+  isOnline as offlineIsOnline,
+  queueChange,
+  getAllNotes,
+  putNote,
+  deleteNote as idbDeleteNote,
+} from './offlineSync';
 
 export const notes        = writable<Note[]>([]);
 export const currentNote  = writable<Note | null>(null);
@@ -64,8 +71,26 @@ export async function loadNotes(tag?: string, force = false): Promise<void> {
     notesLoaded = true;
     cacheLoadDone = true;
     notesLoadedOnce.set(true);
+    // Persist fetched notes into IndexedDB for offline access.
+    if (browser) {
+      Promise.all(data.map((n) => putNote(n))).catch(() => {});
+    }
   } catch (e) {
     logger.error('[notes] Failed to load:', e);
+    // Fallback to IndexedDB cache when the API is unreachable.
+    if (browser) {
+      try {
+        const cached = await getAllNotes();
+        if (cached.length > 0) {
+          notes.set(cached);
+          notesLoaded = true;
+          cacheLoadDone = true;
+          notesLoadedOnce.set(true);
+        }
+      } catch (cacheErr) {
+        logger.error('[notes] IndexedDB fallback failed:', cacheErr);
+      }
+    }
   } finally {
     notesLoading.set(false);
     pendingLoad = false;
@@ -73,10 +98,34 @@ export async function loadNotes(tag?: string, force = false): Promise<void> {
 }
 
 export async function createNote(title: string, content: string, tags: string[], sourcePath?: string | null): Promise<Note | null> {
+  // When offline, queue the change instead of failing.
+  if (browser && !get(offlineIsOnline)) {
+    try {
+      const tempId = -Date.now();
+      const tempNote: Note = {
+        id: tempId,
+        title,
+        content,
+        source: 'manual',
+        source_path: sourcePath ?? null,
+        tags,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      notes.update((ns) => [tempNote, ...ns]);
+      await queueChange('create', tempNote);
+      return tempNote;
+    } catch (e) {
+      logger.error('[notes] Failed to queue create while offline:', e);
+      return null;
+    }
+  }
+
   try {
     const result = await api.notes.create({ title, content, tags, source_path: sourcePath ?? undefined });
     notes.update(ns => [result, ...ns]);
     applyGamificationResult(result.gamification);
+    if (browser) putNote(result).catch(() => {});
     return result;
   } catch (e) {
     logger.error('[notes] Failed to create:', e);
@@ -85,20 +134,62 @@ export async function createNote(title: string, content: string, tags: string[],
 }
 
 export async function updateNote(id: number, data: Partial<{ title: string; content: string; tags: string[] }>): Promise<void> {
+  // When offline, queue the change instead of failing.
+  if (browser && !get(offlineIsOnline)) {
+    try {
+      const existing = get(notes).find((n) => n.id === id);
+      if (!existing) {
+        logger.error('[notes] Cannot update unknown note while offline:', id);
+        return;
+      }
+      const updated: Note = {
+        ...existing,
+        title: data.title ?? existing.title,
+        content: data.content ?? existing.content,
+        tags: data.tags ?? existing.tags,
+        updated_at: new Date().toISOString(),
+      };
+      notes.update((ns) => ns.map((n) => (n.id === id ? updated : n)));
+      await queueChange('update', updated);
+    } catch (e) {
+      logger.error('[notes] Failed to queue update while offline:', e);
+    }
+    return;
+  }
+
   try {
     const result = await api.notes.update(id, data);
     notes.update(ns => ns.map(n => (n.id === id ? result : n)));
     applyGamificationResult(result.gamification);
+    if (browser) putNote(result).catch(() => {});
   } catch (e) {
     logger.error('[notes] Failed to update:', e);
   }
 }
 
 export async function deleteNote(id: number): Promise<void> {
+  // When offline, queue the change instead of failing.
+  if (browser && !get(offlineIsOnline)) {
+    try {
+      const existing = get(notes).find((n) => n.id === id);
+      if (!existing) {
+        logger.error('[notes] Cannot delete unknown note while offline:', id);
+        return;
+      }
+      notes.update((ns) => ns.filter((n) => n.id !== id));
+      currentNote.update((n) => (n?.id === id ? null : n));
+      await queueChange('delete', existing);
+    } catch (e) {
+      logger.error('[notes] Failed to queue delete while offline:', e);
+    }
+    return;
+  }
+
   try {
     await api.notes.delete(id);
     notes.update(ns => ns.filter(n => n.id !== id));
     currentNote.update(n => (n?.id === id ? null : n));
+    if (browser) idbDeleteNote(id).catch(() => {});
   } catch (e) {
     logger.error('[notes] Failed to delete:', e);
   }

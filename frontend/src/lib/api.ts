@@ -12,58 +12,92 @@ const BASE = browser
 
 let isHandlingLogout = false;
 
-async function req<T>(method: string, path: string, body?: unknown, opts?: { silent?: boolean }): Promise<T> {
+// In-flight request dedup: identical GET requests share the same promise so
+// multiple components asking for the same resource at once fire one fetch (#350).
+const inflight = new Map<string, Promise<unknown>>();
+
+export interface RequestOptions {
+  silent?: boolean;
+  signal?: AbortSignal;
+}
+
+async function req<T>(method: string, path: string, body?: unknown, opts?: RequestOptions): Promise<T> {
   const silent = opts?.silent ?? false;
-  try {
-    const token = getToken();
-    const headers: Record<string, string> = {};
-    if (body) headers['Content-Type'] = 'application/json';
-    if (token) headers['Authorization'] = `Bearer ${token}`;
+  const signal = opts?.signal;
 
-    const res = await fetch(`${BASE}${path}`, {
-      method,
-      headers,
-      body: body ? JSON.stringify(body) : undefined
-    });
-
-    if (res.status === 401) {
-      if (!isHandlingLogout) {
-        isHandlingLogout = true;
-        session.logout();
-        showNotification('Sesión expirada. Por favor, vuelve a iniciar sesión.', 'error');
-      }
-      throw new Error(`API ${method} ${path} → 401 Unauthorized`);
-    }
-
-    if (!res.ok) {
-      const raw = await res.text().catch(() => res.statusText);
-      // Parse JSON error bodies to extract a human-readable message instead
-      // of showing raw JSON like {"detail":"VAPID not configured"} (#252).
-      let userMsg = raw || res.statusText || 'Error desconocido';
-      try {
-        const parsed = JSON.parse(raw);
-        userMsg = parsed.detail || parsed.message || parsed.error || raw;
-      } catch { /* not JSON, use raw text */ }
-
-      // Map non-actionable server errors to friendlier messages
-      if (res.status === 502 || res.status === 503) {
-        userMsg = 'El servicio no está disponible temporalmente.';
-      }
-
-      if (!silent) {
-        showNotification(userMsg, 'error');
-      }
-      throw new Error(`API ${method} ${path} → ${res.status}: ${raw}`);
-    }
-
-    if (res.status === 204) return undefined as T;
-    return res.json();
-  } catch (error: any) {
-    if (!silent && (error.name === 'TypeError' || error.message.includes('Failed to fetch') || error.message.includes('fetch failed'))) {
-      showNotification('Error de red. No se pudo conectar con el servidor.', 'error');
-    }
-    throw error;
+  // Dedup identical concurrent GETs (safe — GET is idempotent). Non-GET
+  // requests are never deduped to avoid swallowing mutations.
+  if (method === 'GET') {
+    const key = `GET ${path}`;
+    const existing = inflight.get(key);
+    if (existing) return existing as Promise<T>;
   }
+
+  const exec = async (): Promise<T> => {
+    try {
+      const token = getToken();
+      const headers: Record<string, string> = {};
+      if (body) headers['Content-Type'] = 'application/json';
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const res = await fetch(`${BASE}${path}`, {
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : undefined,
+        signal,
+      });
+
+      if (res.status === 401) {
+        if (!isHandlingLogout) {
+          isHandlingLogout = true;
+          session.logout();
+          showNotification('Sesión expirada. Por favor, vuelve a iniciar sesión.', 'error');
+        }
+        throw new Error(`API ${method} ${path} → 401 Unauthorized`);
+      }
+
+      if (!res.ok) {
+        const raw = await res.text().catch(() => res.statusText);
+        // Parse JSON error bodies to extract a human-readable message instead
+        // of showing raw JSON like {"detail":"VAPID not configured"} (#252).
+        let userMsg = raw || res.statusText || 'Error desconocido';
+        try {
+          const parsed = JSON.parse(raw);
+          userMsg = parsed.detail || parsed.message || parsed.error || raw;
+        } catch { /* not JSON, use raw text */ }
+
+        // Map non-actionable server errors to friendlier messages
+        if (res.status === 502 || res.status === 503) {
+          userMsg = 'El servicio no está disponible temporalmente.';
+        }
+
+        if (!silent) {
+          showNotification(userMsg, 'error');
+        }
+        throw new Error(`API ${method} ${path} → ${res.status}: ${raw}`);
+      }
+
+      if (res.status === 204) return undefined as T;
+      return res.json();
+    } catch (error: any) {
+      // AbortError is expected when a component unmounts mid-request — don't
+      // show a network error notification for it (#350).
+      if (error.name === 'AbortError') throw error;
+      if (!silent && (error.name === 'TypeError' || error.message.includes('Failed to fetch') || error.message.includes('fetch failed'))) {
+        showNotification('Error de red. No se pudo conectar con el servidor.', 'error');
+      }
+      throw error;
+    }
+  };
+
+  if (method === 'GET') {
+    const key = `GET ${path}`;
+    const p = exec().finally(() => inflight.delete(key));
+    inflight.set(key, p);
+    return p;
+  }
+
+  return exec();
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -340,6 +374,8 @@ export const api = {
       req<{ status: string; recap: string; suggestions: string[]; provider?: string }>('POST', `/ai/daily-recap${date ? `?target_date=${encodeURIComponent(date)}` : ''}`),
     cluster: (eps = 0.3, minSamples = 3, maxNotes = 500) =>
       req<{ clusters: { cluster_id: number; note_ids: number[]; note_count: number; representative_title: string; titles: string[] }[]; total_notes: number; noise_count: number; error?: string }>('POST', `/ai/cluster?eps=${eps}&min_samples=${minSamples}&max_notes=${maxNotes}`),
+    chat: (messages: { role: 'user' | 'assistant'; content: string }[]) =>
+      req<{ status: string; response: string; suggestions?: string[]; provider?: string }>('POST', '/ai/chat', { messages }, { silent: true }),
   },
 
 github: {

@@ -192,7 +192,7 @@
     <div class="modal-panel">
       <div class="modal-header">
         <span class="modal-title mono">{isEdit ? 'EDITAR RACHA' : 'NUEVA RACHA'}</span>
-        <button class="close-btn" onclick={close}><X size={14} /></button>
+        <button class="close-btn" onclick={close} aria-label="Cerrar"><X size={14} /></button>
       </div>
 
       <div class="modal-body">
@@ -328,7 +328,7 @@
 
 <style>
   .modal-backdrop {
-    position: fixed; inset: 0; z-index: 200;
+    position: fixed; inset: 0; z-index: var(--z-overlay);
     background: rgba(0,0,0,0.75); backdrop-filter: blur(4px);
     display: flex; align-items: center; justify-content: center;
   }

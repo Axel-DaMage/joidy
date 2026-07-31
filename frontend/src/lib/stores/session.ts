@@ -1,4 +1,5 @@
 import { writable } from 'svelte/store';
+import { browser } from '$app/environment';
 
 export interface UserSession {
   id: string;
@@ -17,7 +18,7 @@ export interface UserSession {
 const SESSION_KEY = 'joidy_session';
 
 function loadSession(): UserSession | null {
-  if (typeof localStorage === 'undefined') return null;
+  if (!browser) return null;
   try {
     const raw = localStorage.getItem(SESSION_KEY);
     return raw ? JSON.parse(raw) : null;
@@ -27,7 +28,7 @@ function loadSession(): UserSession | null {
 }
 
 function saveSession(session: UserSession | null) {
-  if (typeof localStorage === 'undefined') return;
+  if (!browser) return;
   if (session) {
     localStorage.setItem(SESSION_KEY, JSON.stringify(session));
   } else {
@@ -76,7 +77,7 @@ export const isAuthenticated = {
 };
 
 export function getToken(): string | null {
-  if (typeof localStorage === 'undefined') return null;
+  if (!browser) return null;
   try {
     const raw = localStorage.getItem(SESSION_KEY);
     if (!raw) return null;
@@ -88,7 +89,7 @@ export function getToken(): string | null {
 }
 
 export function saveToken(token: string) {
-  if (typeof localStorage === 'undefined') return;
+  if (!browser) return;
   try {
     const raw = localStorage.getItem(SESSION_KEY);
     if (!raw) return;

@@ -551,7 +551,7 @@
     <div class="settings-sidebar" class:open={showSettingsPanel}>
       <div class="sidebar-header">
         <h4>Ajustes del Grafo</h4>
-        <button class="close-panel-btn" onclick={() => showSettingsPanel = false}>×</button>
+        <button class="close-panel-btn" onclick={() => showSettingsPanel = false} aria-label="Cerrar panel">×</button>
       </div>
 
       <div class="sidebar-scroll">
@@ -573,7 +573,7 @@
                   oninput={applyStyling}
                 />
                 {#if searchQuery}
-                  <button class="panel-search-clear" onclick={() => { searchQuery = ''; applyStyling(); }}>×</button>
+                  <button class="panel-search-clear" onclick={() => { searchQuery = ''; applyStyling(); }} aria-label="Limpiar búsqueda">×</button>
                 {/if}
               </div>
 
@@ -655,7 +655,7 @@
                       bind:value={group.query} 
                       oninput={saveGroups} 
                     />
-                    <button class="group-delete-btn" title="Eliminar regla" onclick={() => removeColorGroup(idx)}>×</button>
+                    <button class="group-delete-btn" title="Eliminar regla" aria-label="Eliminar regla" onclick={() => removeColorGroup(idx)}>×</button>
                   </div>
                 {/each}
               </div>

@@ -1,4 +1,4 @@
-export function initKeyboardNavigation() {
+export function initKeyboardNavigation(): () => void {
   const isFocusable = (el: Element): el is HTMLElement => {
     if (!el || !(el instanceof HTMLElement)) return false;
     if (el.hasAttribute('disabled')) return false;
@@ -42,7 +42,7 @@ export function initKeyboardNavigation() {
     }
   };
 
-  window.addEventListener('keydown', (e) => {
+  const handleKeyDown = (e: KeyboardEvent) => {
     // If user is typing in an input, don't intercept unless it's Escape
     const active = document.activeElement;
     const isTyping = active instanceof HTMLInputElement || 
@@ -105,5 +105,10 @@ export function initKeyboardNavigation() {
         (active as HTMLElement).click();
       }
     }
-  });
+  };
+
+  window.addEventListener('keydown', handleKeyDown);
+  // Return a cleanup function so the layout can remove the listener on
+  // teardown, preventing duplicate handlers accumulating across remounts (#362).
+  return () => window.removeEventListener('keydown', handleKeyDown);
 }
