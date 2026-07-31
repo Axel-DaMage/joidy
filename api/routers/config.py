@@ -191,10 +191,7 @@ class SetupRequest(BaseModel):
 @router.get("/setup-status")
 def setup_status():
     env_vars = read_env()
-    has_password = bool(env_vars.get("AUTH_PASSWORD"))
-    has_secret = bool(env_vars.get("SECRET_KEY"))
-    
-    needs_setup = not (has_password and has_secret)
+    needs_setup = not (env_vars.get("AUTH_PASSWORD") and env_vars.get("SECRET_KEY"))
     return {"needs_setup": needs_setup}
 
 @router.post("/setup")

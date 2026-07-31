@@ -61,7 +61,7 @@ class RequestTimingMiddleware(BaseHTTPMiddleware):
 async def lifespan(app: FastAPI):
     setup_logging()
     init_db()
-    print("FINISHED INIT_DB")
+    logger.info("Database initialization complete")
     yield
 
 
@@ -244,19 +244,13 @@ def health_cache():
 
 @app.get("/debug", dependencies=[Depends(get_current_user)])
 def debug_info():
-    """Debug endpoint with detailed system information."""
-    import os
+    """Debug endpoint with safe diagnostic information."""
     import sys
     from datetime import datetime, timezone
 
     debug_data = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "python_version": sys.version,
-        "platform": os.name,
-        "env": {
-            k: v for k, v in os.environ.items()
-            if k in ("PYTHON_ENV", "DEBUG", "LOG_LEVEL")
-        },
     }
 
     # Database info
@@ -281,15 +275,15 @@ def debug_info():
                 "goals": result[3],
                 "embedding_failures": result[4],
             }
-    except Exception as e:
-        debug_data["database"] = {"error": str(e)[:100]}
+    except Exception:
+        debug_data["database"] = {"error": "unavailable"}
 
     # Cache stats
     try:
         from services.response_cache import get_cache_stats
         debug_data["cache"] = get_cache_stats()
-    except Exception as e:
-        debug_data["cache"] = {"error": str(e)[:100]}
+    except Exception:
+        debug_data["cache"] = {"error": "unavailable"}
 
     # Recent errors
     try:
@@ -305,13 +299,12 @@ def debug_info():
                 {
                     "note_id": f.note_id,
                     "attempts": f.attempts,
-                    "last_error": f.last_error,
                     "next_retry": f.next_retry_at.isoformat() if f.next_retry_at else None
                 }
                 for f in recent_failures
             ]
-    except Exception as e:
-        debug_data["recent_failures"] = {"error": str(e)[:100]}
+    except Exception:
+        debug_data["recent_failures"] = {"error": "unavailable"}
 
     # Gamification stats
     try:
@@ -327,8 +320,8 @@ def debug_info():
                     "plant_stage": stats.plant_stage,
                     "last_activity": stats.last_activity_date.isoformat() if stats.last_activity_date else None
                 }
-    except Exception as e:
-        debug_data["gamification"] = {"error": str(e)[:100]}
+    except Exception:
+        debug_data["gamification"] = {"error": "unavailable"}
 
     return debug_data
 

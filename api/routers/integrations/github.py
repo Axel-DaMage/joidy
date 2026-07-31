@@ -142,8 +142,8 @@ async def add_repo_to_db(
 
     try:
         gh_repo = await _fetch(f"/repos/{owner}/{name}")
-    except Exception as e:
-        raise HTTPException(status_code=404, detail=f"Repo not found: {e}")
+    except Exception:
+        raise HTTPException(status_code=404, detail="Repo not found")
 
     existing = (
         db.execute(select(GitHubRepo).where(GitHubRepo.full_name == full_name))
@@ -684,8 +684,8 @@ async def sync_repo(repo_id: int, db: Session = Depends(get_db)):
 
     try:
         gh_issues = await _fetch(f"/repos/{owner}/{name}/issues", {"state": "all", "per_page": 100})
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"GitHub API error: {e}")
+    except Exception:
+        raise HTTPException(status_code=502, detail="GitHub API error")
 
     synced_count = 0
     for issue_data in gh_issues:
