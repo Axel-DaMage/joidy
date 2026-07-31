@@ -39,6 +39,7 @@
 				class:active={selected === icon}
 				onclick={() => select(icon)}
 				title={icon}
+				aria-label={icon}
 			>
 				<DynamicIcon name={icon} size={20} {color} />
 			</button>

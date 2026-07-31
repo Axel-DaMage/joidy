@@ -7,6 +7,7 @@
   import GoalFilters from '$lib/components/GoalFilters.svelte';
   import GoalList from '$lib/components/GoalList.svelte';
   import { use24HourClock } from '$lib/stores/settings';
+  import { getLocale } from '$lib/stores/locale';
   import { applyGamificationResult, showXPGain } from '$lib/stores/gamification';
   import { getCachedData, setCachedData } from '$lib/utils/userSettings';
   import { logger } from '$lib/utils/logger';
@@ -649,7 +650,7 @@
       return `${String(safeHour).padStart(2, '0')}:00`;
     }
     const d = new Date(2020, 0, 1, safeHour, 0, 0, 0);
-    return d.toLocaleTimeString('es-CL', {
+    return d.toLocaleTimeString(getLocale(), {
       hour: 'numeric',
       minute: '2-digit',
       hour12: true,
@@ -1209,7 +1210,7 @@
                   {@const status = getGoalStatusOnDate(g, selectedPlanningDate)}
                   <div class="goal-card" class:completed={status === 'COMPLETED'} class:failed={status === 'FAILED'} style="border-left: 3px solid {status === 'FAILED' ? '#ef4444' : (status === 'COMPLETED' ? '#10b981' : getGoalColor(g))}; display:flex; align-items:center;">
                     <div style="display:flex; gap:6px; margin-right: 8px;">
-                      <button class="btn btn-ghost text-muted" style="padding: 4px;" onclick={() => unassignGoalFromDate(g.id, selectedPlanningDate)} title="Quitar"><ChevronLeft size={14} /></button>
+                      <button class="btn btn-ghost text-muted" style="padding: 4px;" onclick={() => unassignGoalFromDate(g.id, selectedPlanningDate)} title="Quitar" aria-label="Quitar"><ChevronLeft size={14} /></button>
                     </div>
                     <div class="goal-main" style="flex: 1;">
                       <div class="goal-title">

@@ -3,7 +3,7 @@ WORKDIR /app
 
 FROM base AS deps
 COPY package.json ./
-RUN npm install --legacy-peer-deps
+RUN npm install
 
 FROM deps AS development
 COPY --chown=node:node . .

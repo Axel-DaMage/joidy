@@ -1,17 +1,24 @@
 <script lang="ts">
   import { Pin, PinOff, Target, Clock, Tag, FileText, Settings } from 'lucide-svelte';
   import StreakIcon from './StreakIcon.svelte';
+  import { getGoalContext } from '$lib/stores/goalContext';
 
   export let goal: any;
   export let pinned: boolean = false;
-  export let tags: any[] = [];
-  export let notes: any[] = [];
-  export let getGoalColor: (g: any) => string;
-  export let TEMPORALITY_LABELS: Record<string, string>;
-  export let STATE_LABELS: Record<string, string>;
-  export let formatFailConfig: (c: string) => string;
-  export let onTogglePin: (id: number) => void;
-  export let onClick: (goal: any) => void;
+
+  // Consume the shared goal context instead of receiving 9 props from the
+  // parent (#351). Falls back to no-op defaults if used outside a provider.
+  const ctx = getGoalContext() ?? {
+    tags: [] as any[],
+    notes: [] as any[],
+    getGoalColor: (_g: any) => '#c8a96e',
+    TEMPORALITY_LABELS: {} as Record<string, string>,
+    STATE_LABELS: {} as Record<string, string>,
+    formatFailConfig: (_c: string) => '',
+    onTogglePin: (_id: number) => {},
+    onClick: (_g: any) => {},
+  };
+  const { tags, notes, getGoalColor, TEMPORALITY_LABELS, STATE_LABELS, formatFailConfig, onTogglePin, onClick } = ctx;
 
   // Build Maps for O(1) lookups instead of linear searches
   const tagsMap = new Map(tags.map(t => [t.id, t]));

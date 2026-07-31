@@ -12,11 +12,15 @@
   import XPBar          from '$lib/components/XPBar.svelte';
   import NoteCard       from '$lib/components/NoteCard.svelte';
   import PomodoroWidget from '$lib/components/PomodoroWidget.svelte';
+  import { Target } from 'lucide-svelte';
+  import { startFocusMode } from '$lib/stores/focusMode';
   import TimeWidget from '$lib/components/TimeWidget.svelte';
   import WeatherWidget from '$lib/components/WeatherWidget.svelte';
   import Widget         from '$lib/components/Widget.svelte';
   import GithubWidget from '$lib/components/GithubWidget.svelte';
-  import { totalXP, currentStreak, lastActivity, nextStageXP } from '$lib/stores/gamification';
+  import { totalXP, currentStreak, lastActivity, nextStageXP, globalLevel } from '$lib/stores/gamification';
+  import { openShare } from '$lib/stores/shareAchievement';
+  import { Share2 } from 'lucide-svelte';
   import ActivityProgress from '$lib/components/ActivityProgress.svelte';
   import { notes, loadNotes, notesLoadedOnce } from '$lib/stores/notes';
   import { dashboardLayout } from '$lib/stores/layout';
@@ -270,6 +274,20 @@
 
   // Resizable panel synced with notes
   let panelWidth = 260;
+
+  // Level milestones that warrant a shareable achievement card.
+  const LEVEL_MILESTONES = [10, 25, 50, 75, 100];
+  $: isLevelMilestone = LEVEL_MILESTONES.includes($globalLevel);
+
+  function shareLevel() {
+    openShare({
+      title: 'Nivel alcanzado',
+      icon: 'TrendingUp',
+      value: `NVL ${$globalLevel}`,
+      subtitle: `${$totalXP.toLocaleString()} XP`,
+      color: 'var(--xp)',
+    });
+  }
 </script>
 
 <div class="dashboard" style="--panel-w: {panelWidth}px">
@@ -284,9 +302,9 @@
           <div class="widget-centered">
             <!-- Module navigation -->
             <div class="module-nav">
-              <button class="nav-arrow" onclick={prevModule} title="Anterior"><DynamicIcon name="ChevronLeft" size={14}/></button>
+              <button class="nav-arrow" onclick={prevModule} title="Anterior" aria-label="Anterior"><DynamicIcon name="ChevronLeft" size={14}/></button>
               <span class="module-label mono">{MODULES[moduleIdx].label.toUpperCase()}</span>
-              <button class="nav-arrow" onclick={nextModule} title="Siguiente"><DynamicIcon name="ChevronRight" size={14}/></button>
+              <button class="nav-arrow" onclick={nextModule} title="Siguiente" aria-label="Siguiente"><DynamicIcon name="ChevronRight" size={14}/></button>
             </div>
 
             <!-- Module viewport -->
@@ -345,6 +363,17 @@
                 <span class="stat-label label">notas</span>
               </div>
             </div>
+            {#if isLevelMilestone}
+              <button
+                class="level-share-btn"
+                onclick={shareLevel}
+                title="Compartir nivel"
+                aria-label="Compartir nivel {$globalLevel}"
+              >
+                <Share2 size={11} />
+                <span>Compartir nivel</span>
+              </button>
+            {/if}
           </div>
 
         {:else if wid === 'activity-progress'}
@@ -358,6 +387,10 @@
 
         {:else if wid === 'pomodoro'}
           <PomodoroWidget />
+          <button class="focus-mode-btn" onclick={() => startFocusMode()} aria-label="Iniciar modo enfoque">
+            <Target size={16} />
+            Modo Enfoque
+          </button>
 
         {:else if wid === 'recent-notes'}
           <div class="section-header">
@@ -442,9 +475,9 @@
         {:else if wid === 'plant-carousel'}
           <div class="widget-centered">
             <div class="module-nav">
-              <button class="nav-arrow" onclick={prevModule}><DynamicIcon name="ChevronLeft" size={14}/></button>
+              <button class="nav-arrow" onclick={prevModule} aria-label="Anterior"><DynamicIcon name="ChevronLeft" size={14}/></button>
               <span class="module-label mono">{MODULES[moduleIdx].label.toUpperCase()}</span>
-              <button class="nav-arrow" onclick={nextModule}><DynamicIcon name="ChevronRight" size={14}/></button>
+              <button class="nav-arrow" onclick={nextModule} aria-label="Siguiente"><DynamicIcon name="ChevronRight" size={14}/></button>
             </div>
             <div class="module-viewport">
               {#key moduleIdx}
@@ -469,6 +502,17 @@
               <div class="stat-divider"></div>
               <div class="stat"><span class="stat-value mono">{$notes.length}</span><span class="stat-label label">notas</span></div>
             </div>
+            {#if isLevelMilestone}
+              <button
+                class="level-share-btn"
+                onclick={shareLevel}
+                title="Compartir nivel"
+                aria-label="Compartir nivel {$globalLevel}"
+              >
+                <Share2 size={11} />
+                <span>Compartir nivel</span>
+              </button>
+            {/if}
           </div>
 
         {:else if wid === 'time-widget'}
@@ -476,6 +520,10 @@
 
         {:else if wid === 'pomodoro'}
           <PomodoroWidget />
+          <button class="focus-mode-btn" onclick={() => startFocusMode()} aria-label="Iniciar modo enfoque">
+            <Target size={16} />
+            Modo Enfoque
+          </button>
 
         {:else if wid === 'activity-progress'}
           <ActivityProgress />
@@ -575,6 +623,26 @@
     width: 100%; max-width: 240px;
   }
 
+  .level-share-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 10px;
+    font-family: var(--font-sans);
+    cursor: pointer;
+    transition: all var(--t-fast);
+  }
+
+  .level-share-btn:hover {
+    border-color: var(--xp);
+    color: var(--xp);
+  }
+
   .stat { display: flex; flex-direction: column; align-items: center; flex: 1; gap: 2px; }
   .stat-value { font-size: 20px; font-weight: 300; color: var(--text-primary); line-height: 1; }
   .stat-divider { width: 1px; height: 32px; background: var(--border); }
@@ -625,4 +693,102 @@
   }
 
   .empty-state.success { color: #238636; text-align: center; padding: 12px; }
+
+  /* ── Responsive ── */
+  @media (max-width: 768px) {
+    .dashboard {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto auto 1fr;
+    }
+
+    .plant-section {
+      padding: var(--s3) var(--s3) var(--s2);
+      gap: var(--s2);
+    }
+
+    .resize-handle.static {
+      display: none;
+    }
+
+    .activity-section {
+      overflow-y: auto;
+    }
+
+    .stats-row {
+      gap: var(--s2);
+      max-width: 100%;
+    }
+
+    .stat-value {
+      font-size: 16px;
+    }
+
+    .stat-divider {
+      height: 24px;
+    }
+
+    .module-viewport {
+      width: 130px;
+      height: 130px;
+    }
+
+    .fab {
+      right: var(--s3);
+      bottom: calc(var(--statusbar-h) + var(--s3));
+    }
+
+    .issue-item {
+      grid-template-columns: 30px 1fr;
+      gap: var(--s2);
+      padding: var(--s2) var(--s3);
+    }
+
+    .issue-repo {
+      display: none;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .plant-section {
+      padding: var(--s2);
+    }
+
+    .stats-row {
+      gap: var(--s1);
+    }
+
+    .stat-value {
+      font-size: 14px;
+    }
+
+    .module-viewport {
+      width: 110px;
+      height: 110px;
+    }
+
+    .module-label {
+      min-width: 60px;
+      font-size: 9px;
+    }
+  }
+
+.focus-mode-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md, 8px);
+  background: var(--surface);
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+.focus-mode-btn:hover {
+  background: var(--elevated);
+  border-color: var(--accent);
+}
 </style>

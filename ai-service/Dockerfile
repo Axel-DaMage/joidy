@@ -15,4 +15,7 @@ COPY --chown=app:app . .
 
 USER app
 
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=10s \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8002/health').read()" || exit 1
+
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8002"]

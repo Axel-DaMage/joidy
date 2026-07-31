@@ -496,19 +496,19 @@
         <button class="search-clear" onclick={clearHighlights} aria-label="Limpiar busqueda">×</button>
       {/if}
     </div>
-    <button class="btn btn-ghost btn-icon" title="Alternar etiquetas" onclick={() => { showLabels = !showLabels; rerender(); }}>
+    <button class="btn btn-ghost btn-icon" title="Alternar etiquetas" aria-label="Alternar etiquetas" onclick={() => { showLabels = !showLabels; rerender(); }}>
       <span style="font-size:10px; font-family: var(--font-mono);">Aa</span>
     </button>
-    <button class="btn btn-ghost btn-icon" title="Particulas" class:active={showParticles} onclick={() => { showParticles = !showParticles; }}>
+    <button class="btn btn-ghost btn-icon" title="Particulas" aria-label="Partículas" class:active={showParticles} onclick={() => { showParticles = !showParticles; }}>
       <span style="font-size:12px;">✨</span>
     </button>
-    <button class="btn btn-ghost btn-icon" title="Ajustar" onclick={recenter}>
+    <button class="btn btn-ghost btn-icon" title="Ajustar" aria-label="Ajustar" onclick={recenter}>
       <span style="font-size:11px;">⊡</span>
     </button>
-    <button class="btn btn-ghost btn-icon" title="Restablecer vista" onclick={resetView}>
+    <button class="btn btn-ghost btn-icon" title="Restablecer vista" aria-label="Restablecer vista" onclick={resetView}>
       <span style="font-size:11px;">⊙</span>
     </button>
-    <button class="btn btn-ghost btn-icon" title="Ocultar huerfanos" class:active={!showOrphans} onclick={() => { showOrphans = !showOrphans; rerender(); }}>
+    <button class="btn btn-ghost btn-icon" title="Ocultar huerfanos" aria-label="Ocultar huérfanos" class:active={!showOrphans} onclick={() => { showOrphans = !showOrphans; rerender(); }}>
       <span style="font-size:11px;">◌</span>
     </button>
     <div class="filter-group">
@@ -551,7 +551,7 @@
     display: flex;
     flex-direction: column;
     gap: 6px;
-    z-index: 1000;
+    z-index: var(--z-modal);
     pointer-events: auto;
     background: color-mix(in srgb, var(--elevated) 92%, transparent);
     padding: 10px;

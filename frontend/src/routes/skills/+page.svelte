@@ -6,7 +6,8 @@
   import { displayTagName } from '$lib/utils/format';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
   import { devMode } from '$lib/stores/settings';
-  import { Search, X } from 'lucide-svelte';
+  import { openShare } from '$lib/stores/shareAchievement';
+  import { Search, X, Share2 } from 'lucide-svelte';
 
   let skills: Skill[] = $state([]);
   let treeData: SkillTreeData = $state({ nodes: [], edges: [] });
@@ -18,6 +19,24 @@
     locked: 'Bloqueado', apprentice: 'Aprendiz', journeyman: 'Oficial', expert: 'Experto', master: 'Maestro'
   };
   const LEVEL_ORDER = ['locked', 'apprentice', 'journeyman', 'expert', 'master'];
+
+  const LEVEL_COLORS: Record<string, string> = {
+    locked: 'var(--text-muted)',
+    apprentice: 'var(--text-secondary)',
+    journeyman: 'var(--text-secondary)',
+    expert: 'var(--accent)',
+    master: 'var(--xp)',
+  };
+
+  function shareSkill(skill: Skill) {
+    openShare({
+      title: displayTagName(skill.tag_name),
+      icon: 'Zap',
+      value: LEVEL_LABELS[skill.level] ?? skill.level,
+      subtitle: `${skill.note_count} notas`,
+      color: LEVEL_COLORS[skill.level] ?? 'var(--xp)',
+    });
+  }
 
   let filteredSkills = $derived(skills.filter(s => {
     if (searchQuery && !s.tag_name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
@@ -89,7 +108,7 @@
             bind:value={searchQuery}
           />
           {#if searchQuery}
-            <button class="search-clear" onclick={() => searchQuery = ''}>
+            <button class="search-clear" onclick={() => searchQuery = ''} aria-label="Limpiar búsqueda">
               <X size={12} />
             </button>
           {/if}
@@ -119,6 +138,16 @@
               <span class="skill-name">{displayTagName(skill.tag_name)}</span>
               <span class="skill-count caption">{skill.note_count} notas</span>
             </div>
+            {#if skill.level !== 'locked'}
+              <button
+                class="share-btn"
+                onclick={() => shareSkill(skill)}
+                title="Compartir habilidad"
+                aria-label="Compartir habilidad {displayTagName(skill.tag_name)}"
+              >
+                <Share2 size={12} />
+              </button>
+            {/if}
             <span class="level-badge" data-level={skill.level}>
               {LEVEL_LABELS[skill.level] ?? skill.level}
             </span>
@@ -338,6 +367,27 @@
     min-width: 0;
   }
 
+  .share-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all var(--t-fast);
+  }
+
+  .share-btn:hover {
+    border-color: var(--text-muted);
+    color: var(--text-primary);
+    background: var(--elevated);
+  }
+
   .skill-name {
     font-size: 13px;
     color: var(--text-primary);
@@ -418,5 +468,75 @@
     font-size: 13px;
     margin: 0;
     max-width: 320px;
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 768px) {
+    .skills-header {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: var(--s2);
+      padding: var(--s3) var(--s3);
+    }
+
+    .skill-stats {
+      gap: var(--s3);
+    }
+
+    .skill-stat {
+      align-items: flex-start;
+    }
+
+    .skills-body {
+      grid-template-columns: 1fr;
+      grid-template-rows: 1fr auto;
+    }
+
+    .skills-list {
+      border-left: none;
+      border-top: 1px solid var(--border);
+      max-height: 40vh;
+    }
+
+    .tree-panel {
+      padding: var(--s3);
+    }
+
+    .legend {
+      gap: var(--s3);
+      padding: var(--s2) var(--s3);
+      flex-wrap: wrap;
+    }
+
+    .construction-box {
+      padding: var(--s4);
+    }
+
+    .construction-box p {
+      max-width: 100%;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .skills-header {
+      padding: var(--s2) var(--s2);
+    }
+
+    .tree-panel {
+      padding: var(--s2);
+    }
+
+    .skills-list {
+      max-height: 35vh;
+    }
+
+    .skill-row {
+      padding: var(--s1) var(--s3);
+    }
+
+    .legend {
+      padding: var(--s1) var(--s2);
+      gap: var(--s2);
+    }
   }
 </style>

@@ -46,7 +46,7 @@
     >
       <div class="modal-header">
         <h3 class="modal-title">{title}</h3>
-        <button class="modal-close" onclick={() => onClose?.()}>
+        <button class="modal-close" onclick={() => onClose?.()} aria-label="Cerrar">
           <X size={18} />
         </button>
       </div>
