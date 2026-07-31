@@ -555,19 +555,6 @@
     --theme-ac: var(--target);
   }
 
-  .error-msg { color: var(--error); padding: 15px; font-size: 13px; }
-  .empty-state {
-    flex: 1; display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    color: var(--text-muted); text-align: center;
-    padding: 40px 20px; gap: 4px; font-size: 12px;
-  }
-  .link-btn {
-    background: none; border: none; color: var(--xp);
-    font-size: 12px; cursor: pointer; margin-top: 8px;
-    text-decoration: underline;
-  }
-
   /* ═══════════════════════════════════════════════════════════════════════════
      RIGHT PANEL
      ═══════════════════════════════════════════════════════════════════════ */
@@ -730,12 +717,6 @@
     width: 100%;
     flex: 1;
     min-height: 0;
-  }
-
-  .section-label {
-    display: flex; align-items: center; gap: 5px;
-    font-size: 10px; color: var(--text-muted);
-    font-family: var(--font-mono); letter-spacing: 0.05em;
   }
 
   /* Footer (dates + actions) */

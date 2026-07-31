@@ -176,14 +176,4 @@
     gap: 4px;
     margin-top: 4px;
   }
-
-  .source-badge {
-    position: absolute;
-    top: var(--s2);
-    right: var(--s3);
-    font-size: 9px;
-    color: var(--text-muted);
-    letter-spacing: 0.05em;
-    font-family: var(--font-mono);
-  }
 </style>

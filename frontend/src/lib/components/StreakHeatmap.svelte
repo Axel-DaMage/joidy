@@ -478,22 +478,6 @@
     transition: all 0.2s;
   }
 
-  .wd-emoji, .mday-emoji {
-    width: 38px;
-    height: 38px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 20px;
-    border-radius: 50%;
-    transition: all 0.2s;
-  }
-
-  .wd-emoji.on, .mday-emoji.on {
-    background: var(--error);
-    color: var(--bg);
-  }
-
   .week-col.failed, .mcell.failed {
     border-color: var(--error);
     z-index: var(--z-base);

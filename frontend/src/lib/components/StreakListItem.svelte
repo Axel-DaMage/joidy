@@ -340,12 +340,6 @@
     color: var(--error);
   }
 
-  .item-action-btn.confirm {
-    border-color: var(--error);
-    color: var(--error);
-    background: color-mix(in srgb, var(--error) 10%, var(--surface));
-  }
-
   @media (max-width: 768px) {
     .streak-item {
       flex-wrap: wrap;

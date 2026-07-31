@@ -1248,13 +1248,6 @@
     flex-shrink: 0;
   }
 
-  .note-source {
-    font-size: 11px;
-    font-family: var(--font-mono);
-    color: var(--text-muted);
-    letter-spacing: 0.05em;
-  }
-
   .stat {
     font-size: 11px;
     font-family: var(--font-mono);
