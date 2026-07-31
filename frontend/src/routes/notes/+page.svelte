@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte';
+  import { onMount, onDestroy, tick } from 'svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { Search, Plus, X, List, FolderTree, ChevronRight, FileEdit, FolderPlus, ChevronsUpDown, ArrowUpDown, Settings } from 'lucide-svelte';
@@ -433,6 +433,8 @@
     window.addEventListener('beforeunload', handleBeforeUnload);
   });
 
+  onDestroy(() => window.removeEventListener('beforeunload', handleBeforeUnload));
+
   function handleBeforeUnload() {
     captureSnapshot('/notes', 
       { search, viewMode, sortMode, allCollapsed, collapsedPaths: Array.from(collapsed), selectedNoteId: selectedNote?.id },
@@ -599,10 +601,10 @@
   <aside class="notes-list">
     <div class="tree-actions-bar">
       <div class="actions-left">
-        <button class="icon-btn" title="Crear nota" onclick={openNew}><FileEdit size={13} /></button>
-        <button class="icon-btn" title="Crear carpeta" onclick={handleCreateFolder}><FolderPlus size={13} /></button>
+        <button class="icon-btn" title="Crear nota" aria-label="Crear nota" onclick={openNew}><FileEdit size={13} /></button>
+        <button class="icon-btn" title="Crear carpeta" aria-label="Crear carpeta" onclick={handleCreateFolder}><FolderPlus size={13} /></button>
         <div class="sort-wrapper">
-          <button class="icon-btn" title="Cambiar orden" onclick={(e) => { e.stopPropagation(); showSortMenu = !showSortMenu; }}>
+          <button class="icon-btn" title="Cambiar orden" aria-label="Cambiar orden" onclick={(e) => { e.stopPropagation(); showSortMenu = !showSortMenu; }}>
             <ArrowUpDown size={13} />
           </button>
           {#if showSortMenu}
@@ -618,7 +620,7 @@
             </div>
           {/if}
         </div>
-        <button class="icon-btn" title={allCollapsed ? "Expandir todo" : "Comprimir todo"} onclick={toggleCollapseAll}>
+        <button class="icon-btn" title={allCollapsed ? "Expandir todo" : "Comprimir todo"} aria-label={allCollapsed ? "Expandir todo" : "Comprimir todo"} onclick={toggleCollapseAll}>
           <ChevronsUpDown size={13} />
         </button>
       </div>
@@ -630,12 +632,12 @@
         <Search size={11} style="color: var(--text-muted); flex-shrink:0;" />
         <input class="search-input" bind:value={search} placeholder="Buscar..." />
         {#if search}
-          <button class="icon-btn" onclick={() => search = ''} title="Limpiar">
+          <button class="icon-btn" onclick={() => search = ''} title="Limpiar" aria-label="Limpiar">
             <X size={10} />
           </button>
         {/if}
       </div>
-      <button class="toolbar-btn bulk-toggle" class:active={$bulkMode} onclick={() => { bulkMode.set(!$bulkMode); clearNoteSelection(); }}>
+      <button class="toolbar-btn bulk-toggle" class:active={$bulkMode} aria-label="Modo selección múltiple" onclick={() => { bulkMode.set(!$bulkMode); clearNoteSelection(); }}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
       </button>
     </div>
@@ -696,7 +698,7 @@
                   </span>
                   <div class="t-icon"><DynamicIcon name={item.icon} size={13} color={item.color} pack={item.pack} /></div>
                   <span class="t-name folder-name">{item.name}</span>
-                  <button class="folder-settings-btn" title="Personalizar carpeta" onclick={(e) => { e.stopPropagation(); openFolderCustomizer(item); }}>
+                  <button class="folder-settings-btn" title="Personalizar carpeta" aria-label="Personalizar carpeta" onclick={(e) => { e.stopPropagation(); openFolderCustomizer(item); }}>
                     <Settings size={10} />
                   </button>
                   <span class="t-count">{item.childCount}</span>
@@ -715,7 +717,7 @@
                 >
                   <div class="t-icon file-icon"><DynamicIcon name={item.icon} size={11} color={item.color} pack={item.pack} /></div>
                   <span class="t-name file-name">{item.name}</span>
-                  <button class="folder-settings-btn" title="Personalizar nota" onclick={(e) => { e.stopPropagation(); openFolderCustomizer({ path: item.note?.source_path || item.path, icon: item.icon, color: item.color, note: item.note }); }}>
+                  <button class="folder-settings-btn" title="Personalizar nota" aria-label="Personalizar nota" onclick={(e) => { e.stopPropagation(); openFolderCustomizer({ path: item.note?.source_path || item.path, icon: item.icon, color: item.color, note: item.note }); }}>
                     <Settings size={10} />
                   </button>
                 </div>
@@ -740,7 +742,7 @@
                   </span>
                   <div class="t-icon"><DynamicIcon name={node.icon} size={13} color={node.color} pack={node.pack} /></div>
                   <span class="t-name folder-name">{node.name}</span>
-                  <button class="folder-settings-btn" title="Personalizar carpeta" onclick={(e) => { e.stopPropagation(); openFolderCustomizer(node); }}>
+                  <button class="folder-settings-btn" title="Personalizar carpeta" aria-label="Personalizar carpeta" onclick={(e) => { e.stopPropagation(); openFolderCustomizer(node); }}>
                     <Settings size={10} />
                   </button>
                   <span class="t-count">{node.childCount}</span>
@@ -759,7 +761,7 @@
                 >
                   <div class="t-icon file-icon"><DynamicIcon name={node.icon} size={11} color={node.color} pack={node.pack} /></div>
                   <span class="t-name file-name">{node.name}</span>
-                  <button class="folder-settings-btn" title="Personalizar nota" onclick={(e) => { e.stopPropagation(); openFolderCustomizer({ path: node.note?.source_path || node.path, icon: node.icon, color: node.color, note: node.note }); }}>
+                  <button class="folder-settings-btn" title="Personalizar nota" aria-label="Personalizar nota" onclick={(e) => { e.stopPropagation(); openFolderCustomizer({ path: node.note?.source_path || node.path, icon: node.icon, color: node.color, note: node.note }); }}>
                     <Settings size={10} />
                   </button>
                 </div>
@@ -1560,5 +1562,89 @@
   }
   .delete-confirm-actions .btn-danger:hover {
     opacity: 0.85;
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 768px) {
+    .notes-page {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto 1fr;
+    }
+
+    .notes-list {
+      max-height: 40vh;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .resize-handle {
+      display: none;
+    }
+
+    .editor-panel {
+      height: 100%;
+    }
+
+    .empty-dashboard {
+      padding: var(--s4) var(--s3);
+      gap: var(--s4);
+    }
+
+    .dash-widgets {
+      grid-template-columns: 1fr;
+      gap: var(--s3);
+    }
+
+    .dash-widget {
+      padding: var(--s3);
+    }
+
+    .dash-search-container {
+      max-width: 100%;
+    }
+
+    .dash-search {
+      padding: var(--s2) var(--s3);
+    }
+
+    .sort-menu {
+      width: 180px;
+    }
+
+    .folder-modal-backdrop {
+      top: 0;
+      bottom: 0;
+    }
+
+    .folder-modal {
+      max-width: 100%;
+      padding: var(--s3);
+    }
+  }
+
+  @media (max-width: 480px) {
+    .notes-list {
+      max-height: 35vh;
+    }
+
+    .empty-dashboard {
+      padding: var(--s3) var(--s2);
+      gap: var(--s3);
+    }
+
+    .dash-widget {
+      padding: var(--s2);
+    }
+
+    .list-toolbar {
+      padding: var(--s1) var(--s2);
+    }
+
+    .tree-actions-bar {
+      padding: var(--s1) var(--s2);
+    }
+
+    .list-meta {
+      padding: var(--s1) var(--s2);
+    }
   }
 </style>

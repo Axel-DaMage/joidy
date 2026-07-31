@@ -1,4 +1,5 @@
 import { writable, get } from 'svelte/store';
+import { browser } from '$app/environment';
 
 export interface Achievement {
   id: string;
@@ -26,7 +27,7 @@ const ACHIEVEMENTS_CONFIG: Omit<Achievement, 'unlocked' | 'unlockedAt'>[] = [
 const STORAGE_KEY = 'joidy-achievements';
 
 function loadAchievements(): Achievement[] {
-  if (typeof localStorage === 'undefined') return [];
+  if (!browser) return [];
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
@@ -42,7 +43,7 @@ function loadAchievements(): Achievement[] {
 }
 
 function saveAchievements(achievements: Achievement[]) {
-  if (typeof localStorage === 'undefined') return;
+  if (!browser) return;
   const unlocked: Record<string, string> = {};
   achievements.forEach(a => {
     if (a.unlocked && a.unlockedAt) {

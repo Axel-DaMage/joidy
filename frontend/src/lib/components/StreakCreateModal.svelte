@@ -192,7 +192,7 @@
     <div class="modal-panel" role="dialog" aria-modal="true" aria-label="Crear racha" onclick={(e) => e.stopPropagation()}>
       <div class="modal-header">
         <span class="modal-title mono">{isEdit ? 'EDITAR RACHA' : 'NUEVA RACHA'}</span>
-        <button class="close-btn" onclick={close}><X size={14} /></button>
+        <button class="close-btn" onclick={close} aria-label="Cerrar"><X size={14} /></button>
       </div>
 
       <div class="modal-body">

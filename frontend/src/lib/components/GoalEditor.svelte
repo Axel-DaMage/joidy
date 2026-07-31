@@ -174,6 +174,7 @@
         class:active={zenMode}
         onclick={() => zenMode = !zenMode}
         title="Modo Zen (Esc para salir)"
+        aria-label="Modo Zen"
       >
         <Maximize size={14} />
       </button>
@@ -204,7 +205,7 @@
         <span>Ajustes</span>
       </button>
 
-      <button class="toolbar-btn" onclick={() => dispatch('cancel')} title="Cerrar">
+      <button class="toolbar-btn" onclick={() => dispatch('cancel')} title="Cerrar" aria-label="Cerrar">
         <X size={14} />
       </button>
     </div>
@@ -266,7 +267,7 @@
     left: 0;
     width: 100vw;
     height: 100vh;
-    z-index: 9999;
+    z-index: var(--z-tooltip);
     border: none;
     border-radius: 0;
     background: var(--bg);

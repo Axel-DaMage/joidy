@@ -1,0 +1,54 @@
+# Prometheus alerting rules for Joidy (#406).
+# These cover the four core services and the most critical failure modes.
+
+groups:
+  - name: joidy-service-health
+    rules:
+      - alert: JoidyApiDown
+        expr: up{job="joidy-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Joidy API is down"
+          description: "The API has not responded to Prometheus scrapes for 2 minutes."
+
+      - alert: JoidyAiServiceDown
+        expr: up{job="joidy-ai-service"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Joidy AI service is down"
+          description: "The AI service has not responded for 2 minutes. AI features (classify, embed, RAG) are unavailable."
+
+      - alert: JoidyWorkerDown
+        expr: up{job="joidy-worker"} == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Joidy worker is down"
+          description: "The worker has not responded for 5 minutes. Vault sync is paused."
+
+  - name: joidy-ai-errors
+    rules:
+      - alert: JoidyAiEmbedErrorRateHigh
+        expr: |
+          rate(ai_embed_errors_total[5m]) / rate(ai_embed_requests_total[5m]) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AI embedding error rate > 10%"
+          description: "More than 10% of embedding requests are failing over the last 5 minutes."
+
+      - alert: JoidyAiClassifyErrorRateHigh
+        expr: |
+          rate(ai_classify_errors_total[5m]) / rate(ai_classify_requests_total[5m]) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AI classification error rate > 10%"
+          description: "More than 10% of classification requests are failing over the last 5 minutes."

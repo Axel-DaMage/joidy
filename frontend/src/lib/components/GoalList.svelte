@@ -2,6 +2,7 @@
   import GoalCard from './GoalCard.svelte';
   import type { Goal, Note } from '$lib/api';
   import type { Tag as TagType } from '$lib/api';
+  import { setGoalContext } from '$lib/stores/goalContext';
 
   interface Props {
     goals: Goal[];
@@ -32,6 +33,19 @@
     onTogglePin,
     onClick,
   }: Props = $props();
+
+  // Set the shared context once so GoalCard can consume tags, notes, callbacks,
+  // and label maps without each intermediate level re-forwarding them as props (#351).
+  setGoalContext({
+    tags,
+    notes,
+    getGoalColor,
+    TEMPORALITY_LABELS,
+    STATE_LABELS,
+    formatFailConfig,
+    onTogglePin,
+    onClick,
+  });
 
   function filteredGoals(goals: Goal[], query: string, filter: string | null, pinned: Set<number>) {
     let result = goals;
@@ -70,14 +84,6 @@
         <GoalCard
           {goal}
           pinned={pinned.has(goal.id)}
-          {tags}
-          {notes}
-          {getGoalColor}
-          {TEMPORALITY_LABELS}
-          {STATE_LABELS}
-          {formatFailConfig}
-          onTogglePin={(id) => onTogglePin(id)}
-          onClick={(g) => onClick(g)}
         />
       {/each}
     </div>

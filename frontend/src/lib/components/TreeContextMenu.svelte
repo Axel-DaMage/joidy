@@ -86,7 +86,7 @@
 <style>
   .ctx-menu {
     position: fixed;
-    z-index: 1000;
+    z-index: var(--z-modal);
     min-width: 160px;
     background: var(--surface, #fff);
     border: 1px solid var(--border, #ddd);

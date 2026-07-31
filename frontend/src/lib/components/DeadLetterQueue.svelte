@@ -3,6 +3,7 @@
   import { api, type EmbeddingFailure } from '$lib/api';
   import Card from './Card.svelte';
   import DynamicIcon from './DynamicIcon.svelte';
+  import { getLocale } from '$lib/stores/locale';
 
   let failures = $state<EmbeddingFailure[]>([]);
   let loading = $state(true);
@@ -53,7 +54,7 @@
     if (diff < 60000) return 'hace momentos';
     if (diff < 3600000) return `hace ${Math.floor(diff / 60000)} min`;
     if (diff < 86400000) return `hace ${Math.floor(diff / 3600000)} h`;
-    return d.toLocaleDateString('es');
+    return d.toLocaleDateString(getLocale());
   }
 </script>
 

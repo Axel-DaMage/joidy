@@ -1,4 +1,5 @@
 import type { Note } from '$lib/api';
+import { getLocale } from '$lib/stores/locale';
 
 export interface TreeNode {
   type: 'folder' | 'file';
@@ -241,13 +242,13 @@ function rawToTreeNodes(map: Record<string, RawNode>, parentPath: string, sortMo
 
       // Both are of same type. If folders, always A-Z (or Z-A)
       if (a.type === 'folder') {
-        const cmp = a.name.localeCompare(b.name, 'es', { numeric: true });
+        const cmp = a.name.localeCompare(b.name, getLocale(), { numeric: true });
         return sortMode === 'za' ? -cmp : cmp;
       }
 
       // Both are files
-      if (sortMode === 'az') return a.name.localeCompare(b.name, 'es', { numeric: true });
-      if (sortMode === 'za') return b.name.localeCompare(a.name, 'es', { numeric: true });
+      if (sortMode === 'az') return a.name.localeCompare(b.name, getLocale(), { numeric: true });
+      if (sortMode === 'za') return b.name.localeCompare(a.name, getLocale(), { numeric: true });
 
       const d1 = new Date(a.note?.updated_at || 0).getTime();
       const d2 = new Date(b.note?.updated_at || 0).getTime();

@@ -2,6 +2,7 @@
   import { api } from '$lib/api';
   import { session, saveToken } from '$lib/stores/session';
   import { showNotification } from '$lib/stores/notifications';
+  import { getLocale } from '$lib/stores/locale';
   import { logger } from '$lib/utils/logger';
 
   let password = '';
@@ -18,7 +19,7 @@
         id: '1',
         username,
         token: res.access_token,
-        preferences: { theme: 'dark', timezone: 'UTC', language: 'es' },
+        preferences: { theme: 'dark', timezone: 'UTC', language: getLocale() },
         createdAt: new Date().toISOString()
       });
 
