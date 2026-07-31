@@ -1,31 +1,33 @@
 # AI Service
 
-FastAPI microservice providing AI features for Joidy: text embeddings, note
-classification, and retrieval-augmented generation (RAG). Runs on **port 8002**.
+FastAPI microservice providing AI-powered features for Joidy: text embeddings,
+note classification, and retrieval-augmented generation (RAG). Runs on
+**port 8002**.
 
 ## Tech Stack
 
-- Python 3.12, FastAPI, Uvicorn
+- **Python 3.12**, FastAPI, Uvicorn
 - Google Gemini API (default provider)
 - Factory pattern supporting 6 AI providers
 - Circuit breaker + rate limiter + cost tracking
 
 ## Prerequisites
 
-- Docker + Docker Compose (recommended) or Python 3.12 + `requirements.txt`
+- Docker + Docker Compose (recommended)
+- Or Python 3.12 with `requirements.txt` for local dev
 - At least one AI provider API key in `.env` (see root [AGENTS.md](../AGENTS.md))
 - The `api` service must be healthy (it calls this service)
 
 ## Development
 
-From the repo root:
+Start the full stack with hot reload from the repo root:
 
 ```bash
 make dev          # all services, hot reload (Ctrl+C to stop)
-make logs-ai      # tail AI service logs
+make logs-ai      # tail AI service logs only
 ```
 
-Standalone container:
+To run the AI service container alone:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up ai-service
@@ -33,7 +35,8 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up ai-service
 
 ## Environment Variables
 
-Key vars (see root [`.env.example`](../.env.example) for the full list):
+Key variables consumed by this service (see root [`.env.example`](../.env.example)
+for the full list — do not duplicate here):
 
 - `GEMINI_API_KEY` — default provider (https://aistudio.google.com/)
 - `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `COHERE_API_KEY`,
@@ -51,8 +54,10 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm ai-servi
 
 ## Endpoints
 
-`POST /embed` (vector embedding), `POST /classify` (tag suggestions),
-`POST /rag` (semantic search), `GET /health` (liveness).
+- `POST /embed` — generate a vector embedding for text
+- `POST /classify` — suggest tags / classify a note
+- `POST /rag` — semantic search over stored embeddings
+- `GET /health` — liveness check
 
 ## Project Structure
 
@@ -62,16 +67,24 @@ ai-service/
 ├── config.py            Pydantic Settings (provider + model selection)
 ├── database.py          Shared DB access for embeddings
 ├── clients/             AI provider implementations (factory pattern)
-│   ├── base.py / factory.py    Abstract interface + provider selection
-│   ├── gemini.py               Google Gemini (default)
-│   ├── openai.py / anthropic.py / cohere.py / ollama.py / openrouter.py
-│   └── prompts.py              Shared prompt templates
-├── circuit_breaker.py / rate_limiter.py / cost_tracker.py
+│   ├── base.py          Abstract client interface
+│   ├── factory.py       Provider selection by LLM_MODEL
+│   ├── gemini.py        Google Gemini (default)
+│   ├── openai.py        OpenAI
+│   ├── anthropic.py     Anthropic
+│   ├── cohere.py        Cohere
+│   ├── ollama.py        Local Ollama models
+│   ├── openrouter.py    OpenRouter gateway
+│   └── prompts.py       Shared prompt templates
+├── circuit_breaker.py   Resilience for provider calls
+├── rate_limiter.py      Per-provider rate limiting
+├── cost_tracker.py      Token / cost accounting
 └── tests/               Test suite
 ```
 
-The **factory pattern** in `clients/factory.py` selects the active provider from
-`LLM_MODEL`; adding a provider only needs a new client module + factory entry.
+The **factory pattern** in `clients/factory.py` selects the active provider
+based on `LLM_MODEL`, so adding a new provider only requires a new client module
+plus a factory entry.
 
 ## See Also
 
