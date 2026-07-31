@@ -90,6 +90,7 @@ Edit `.env` after cloning:
 |----------|-------------|--------|
 | `GEMINI_API_KEY` | AI service key | [Google AI Studio](https://aistudio.google.com/app/apikey) |
 | `OBSIDIAN_VAULT_PATH` | Path to your Obsidian vault | e.g. `/home/user/Documents/Obsidian` |
+| `OBSIDIAN_WEBHOOK_SECRET` | Shared secret for Obsidian webhook auth | Optional, any random string |
 | `SECRET_KEY` | Session signing key | Auto-generated on first setup |
 
 Optional:
@@ -119,6 +120,55 @@ make logs      # View logs
 make test      # Run tests
 make migrate   # Database migrations
 ```
+
+### Obsidian Webhook Sync
+
+Joidy supports bidirectional sync with Obsidian. In addition to the local
+file watcher (worker), you can configure Obsidian to push changes via webhook
+for instant sync without polling.
+
+#### Setup
+
+1. Set `OBSIDIAN_WEBHOOK_SECRET` in `.env` to a random string
+2. Configure an Obsidian plugin (e.g. [Obsidian Webhook](https://github.com/)) to send events to:
+
+```
+POST http://localhost:8000/webhook/obsidian?secret=YOUR_SECRET
+```
+
+#### Payload format
+
+```json
+{
+  "event": "create",
+  "path": "/vault/My Note.md",
+  "content": "---\ntitle: My Note\ntags: [python, web]\n---\n# Content here",
+  "mtime": 1700000000
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `event` | string | yes | `create`, `update`, or `delete` |
+| `path` | string | yes | File path (matches `source_path` in DB) |
+| `content` | string | create/update | Full file content (frontmatter + body) |
+| `mtime` | int | no | Remote modification time (Unix timestamp) |
+
+#### Events
+
+- **create**: Creates a new note in the DB. Extracts title from frontmatter or filename, tags from frontmatter + inline `#tags`.
+- **update**: Updates existing note by `source_path`. If not found, creates it instead.
+- **delete**: Deletes the note matching `source_path`. No-op if not found.
+
+#### Authentication
+
+- If `OBSIDIAN_WEBHOOK_SECRET` is set: requests must include `?secret=<secret>` query param
+- If not set but `AUTH_PASSWORD` is configured: JWT auth required
+- If neither is set (dev mode): no auth required
+
+#### Legacy endpoint
+
+`POST /webhook/obsidian/legacy` — accepts the old payload format (`note_id`, `path`, `remote_mtime`) for backward compatibility. Only records sync state without processing content.
 
 ---
 
