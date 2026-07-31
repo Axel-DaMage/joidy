@@ -89,7 +89,7 @@
             bind:value={searchQuery}
           />
           {#if searchQuery}
-            <button class="search-clear" onclick={() => searchQuery = ''}>
+            <button class="search-clear" onclick={() => searchQuery = ''} aria-label="Limpiar búsqueda">
               <X size={12} />
             </button>
           {/if}

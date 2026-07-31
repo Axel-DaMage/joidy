@@ -386,7 +386,7 @@
     <div class="panel">
       <div class="panel-header">
         <span class="mono" style="font-size:12px; letter-spacing:0.08em;">AJUSTES</span>
-        <button class="close-btn" onclick={close}><DynamicIcon name="X" size={14} /></button>
+        <button class="close-btn" onclick={close} aria-label="Cerrar"><DynamicIcon name="X" size={14} /></button>
       </div>
 
       <div class="panel-body">
@@ -448,7 +448,7 @@
                   placeholder="#c8a96e"
                 />
                 {#if $accentColors.length > 1}
-                  <button class="color-rm" onclick={() => accentColors.removeColor(i)} title="Quitar">
+                  <button class="color-rm" onclick={() => accentColors.removeColor(i)} title="Quitar" aria-label="Quitar">
                     <DynamicIcon name="Minus" size={10} />
                   </button>
                 {/if}

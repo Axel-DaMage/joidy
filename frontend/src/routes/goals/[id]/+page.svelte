@@ -210,7 +210,7 @@
             <span class="goal-settings-sub">Ajusta los detalles de este objetivo</span>
           </div>
         </div>
-        <button class="history-close-btn" onclick={() => showSettings = false} title="Cerrar">×</button>
+        <button class="history-close-btn" onclick={() => showSettings = false} title="Cerrar" aria-label="Cerrar">×</button>
       </div>
 
       <div class="goal-settings-body">
