@@ -1,4 +1,5 @@
 import { writable } from 'svelte/store';
+import { browser } from '$app/environment';
 
 const ONBOARDING_KEY = 'joidy-onboarding-complete';
 
@@ -41,7 +42,7 @@ function createOnboardingStore() {
   return {
     subscribe,
     init() {
-      if (typeof localStorage !== 'undefined') {
+      if (browser) {
         const completed = localStorage.getItem(ONBOARDING_KEY) === 'true';
         set({ completed, currentStep: 0, seen: !completed });
       }
@@ -50,7 +51,7 @@ function createOnboardingStore() {
       update(state => {
         const next = state.currentStep + 1;
         if (next >= ONBOARDING_STEPS.length) {
-          if (typeof localStorage !== 'undefined') {
+          if (browser) {
             localStorage.setItem(ONBOARDING_KEY, 'true');
           }
           return { completed: true, currentStep: 0, seen: false };
@@ -65,7 +66,7 @@ function createOnboardingStore() {
       }));
     },
     skip() {
-      if (typeof localStorage !== 'undefined') {
+      if (browser) {
         localStorage.setItem(ONBOARDING_KEY, 'true');
       }
       set({ completed: true, currentStep: 0, seen: false });
