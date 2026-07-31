@@ -11,10 +11,10 @@ class Settings(BaseSettings):
     app_env: str = "development"
     cors_allowed_origins: str = ""  # Comma-separated origins for production (e.g. "https://joidy.app,https://www.joidy.app")
 
-    # GitHub Integration (OAuth - Device Flow)
+    # GitHub Integration (OAuth - Web Flow + Device Flow)
     github_client_id: str = ""
     github_client_secret: str = ""
-    github_oauth_web_url: str = ""
+    github_oauth_web_url: str = ""  # Redirect URL for Web Flow callback
     github_token: str = ""
     github_username: str = ""
     github_webhook_url: str = ""

@@ -333,6 +333,8 @@ github: {
     repos: () => req<{ repos: { id: number; name: string; full_name: string; color: string }[] }>('GET', '/integrations/github/repos'),
     startDeviceAuth: () => req<{ device_code: string; user_code: string; verification_uri: string; verification_uri_secondary?: string; expires_in: number; interval: number }>('GET', '/integrations/github/oauth/device/start'),
     pollDeviceCode: (device_code: string) => req<{ status: 'authorized'; access_token: string; token_type: string; scope: string } | { status: 'pending' | 'slowdown' | 'expired' | 'denied'; message: string }>('POST', `/integrations/github/oauth/device/polling?device_code=${encodeURIComponent(device_code)}`),
+    startWebFlow: () => req<{ authorize_url: string; redirect_uri: string }>('GET', '/integrations/github/oauth/web/start'),
+    oauthCallback: (code: string, state?: string) => req<{ status: string; access_token: string; token_type: string; scope: string }>('GET', `/integrations/github/oauth/callback?code=${encodeURIComponent(code)}${state ? `&state=${encodeURIComponent(state)}` : ''}`),
     revoke: () => req<{ status: string }>('POST', '/integrations/github/oauth/revoke'),
   },
 
