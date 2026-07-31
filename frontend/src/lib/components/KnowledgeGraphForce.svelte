@@ -1,12 +1,18 @@
 <script lang="ts">
-  // @ts-nocheck
   import { onDestroy, onMount } from 'svelte';
   import { browser } from '$app/environment';
   import { graphData, selectedTag } from '$lib/stores/graph';
   import type { GraphNode, GraphEdge } from '$lib/api';
   import { forceCollide } from 'd3';
+  import type { NodeObject } from 'force-graph';
 
-  let ForceGraph: typeof import('force-graph') | null = null;
+  // ForceGraph constructor is dynamically imported; typed loosely since
+  // force-graph uses a Kapsule factory pattern with complex generics not
+  // fully captured by its .d.ts (callbacks expect NodeObject, we use GraphNode).
+  let ForceGraph: any = null;
+
+  // GraphNode extended with force-graph runtime properties (x, y added by the simulation)
+  type ForceGraphNode = GraphNode & NodeObject;
 
   export let width = 800;
   export let height = 600;
@@ -16,7 +22,7 @@
   export let data: { nodes: GraphNode[]; edges: GraphEdge[] } | null = null;
 
   let containerEl: HTMLDivElement;
-  let graph: ReturnType<typeof import('force-graph')['default']> | null = null;
+  let graph: any = null;
   let lastFocusId: number | string | null = null;
   let searchQuery = '';
   
@@ -205,7 +211,7 @@
       if (n.type === 'note' && !showNotes) return false;
       if (n.type === 'tag' && !showTags) return false;
       if (n.type === 'unresolved' && !showUnresolved) return false;
-      if (n.type === 'attachment' && !showAttachments) return false;
+      if ((n.type as string) === 'attachment' && !showAttachments) return false;
       return true;
     });
 
@@ -245,8 +251,10 @@
 
     graph
       .nodeRelSize(3.2)
-      .nodeCanvasObject((node: GraphNode, ctx: CanvasRenderingContext2D, scale: number) => {
-        if (!Number.isFinite(node.x) || !Number.isFinite(node.y)) return;
+      .nodeCanvasObject((node: ForceGraphNode, ctx: CanvasRenderingContext2D, scale: number) => {
+        const x = node.x;
+        const y = node.y;
+        if (x === undefined || y === undefined || !Number.isFinite(x) || !Number.isFinite(y)) return;
         const label = getNodeLabel(node);
         const isNote = node.type === 'note';
         const isTag = node.type === 'tag';
@@ -270,7 +278,7 @@
         ctx.globalAlpha = alpha;
 
         // Custom Color Queries Evaluation
-        let nodeColor = isTag ? COLORS.tag : (isUnresolved ? COLORS.unresolved : COLORS.note);
+        let nodeColor: string = isTag ? COLORS.tag : (isUnresolved ? COLORS.unresolved : COLORS.note);
         for (const group of colorGroups) {
           if (matchesQuery(node, group.query)) {
             nodeColor = group.color;
@@ -285,7 +293,7 @@
           ctx.strokeStyle = nodeColor;
           ctx.lineWidth = 1.2 / scale;
           ctx.setLineDash([2, 2]);
-          ctx.arc(node.x, node.y, r, 0, Math.PI * 2);
+          ctx.arc(x, y, r, 0, Math.PI * 2);
           ctx.stroke();
           ctx.setLineDash([]); // reset dash
 
@@ -294,17 +302,17 @@
         } else {
           // Normal nodes draw with gradient fill
           const gradient = ctx.createRadialGradient(
-            node.x - r * 0.3,
-            node.y - r * 0.3,
+            x - r * 0.3,
+            y - r * 0.3,
             0,
-            node.x,
-            node.y,
+            x,
+            y,
             r
           );
           gradient.addColorStop(0, lightenColor(nodeColor, 0.25));
           gradient.addColorStop(1, nodeColor);
           ctx.fillStyle = gradient;
-          ctx.arc(node.x, node.y, r, 0, Math.PI * 2);
+          ctx.arc(x, y, r, 0, Math.PI * 2);
           ctx.fill();
         }
 
@@ -314,7 +322,7 @@
           ctx.strokeStyle = '#ffffff';
           ctx.lineWidth = 1.5 / scale;
           ctx.globalAlpha = 0.95 * alpha;
-          ctx.arc(node.x, node.y, r + 2 / scale, 0, Math.PI * 2);
+          ctx.arc(x, y, r + 2 / scale, 0, Math.PI * 2);
           ctx.stroke();
         }
 
@@ -324,7 +332,7 @@
           ctx.strokeStyle = COLORS.selected;
           ctx.lineWidth = 2.0 / scale;
           ctx.globalAlpha = 0.95 * alpha;
-          ctx.arc(node.x, node.y, r + 3 / scale, 0, Math.PI * 2);
+          ctx.arc(x, y, r + 3 / scale, 0, Math.PI * 2);
           ctx.stroke();
         }
 
@@ -339,7 +347,7 @@
           ctx.globalAlpha = alpha;
 
           const labelText = label.length > 28 ? label.slice(0, 26) + '...' : label;
-          ctx.fillText(labelText, node.x, node.y + r + 6 / scale);
+          ctx.fillText(labelText, x, y + r + 6 / scale);
         }
       })
       .linkWidth((l: GraphEdge) => {
@@ -384,9 +392,9 @@
 
   function focusOnNode(id: number | string) {
     if (!graph) return;
-    const node = graph.graphData().nodes.find((n: GraphNode) => n.id === id) as GraphNode | undefined;
+    const node = graph.graphData().nodes.find((n: ForceGraphNode) => n.id === id) as ForceGraphNode | undefined;
     if (!node) return;
-    graph.centerAt(node.x, node.y, 400);
+    graph.centerAt(node.x ?? 0, node.y ?? 0, 400);
     graph.zoom(1.2, 400);
   }
 
@@ -459,7 +467,9 @@
 
     const module = await import('force-graph');
     if (!containerEl) return; // Prevent crash if unmounted during import
-    
+
+    // force-graph uses a Kapsule factory pattern: ForceGraph() returns a
+    // constructor, then calling it with the element creates a chainable instance.
     ForceGraph = module.default;
     graph = ForceGraph()(containerEl)
       .width(width)
@@ -467,8 +477,8 @@
       .backgroundColor('transparent')
       .enableNodeDrag(true)
       .onNodeClick(handleNodeClick)
-      .onNodeHover((node: GraphNode | null) => {
-        hoveredNode = node;
+      .onNodeHover((node: ForceGraphNode | null) => {
+        hoveredNode = node as GraphNode | null;
       });
 
     // NOTE: a `.minimap('#graph-minimap', ...)` chain used to be appended here,
