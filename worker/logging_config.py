@@ -84,8 +84,6 @@ class DevFormatter(logging.Formatter):
 def setup_logging() -> None:
     """Configure worker logging for console + rotating file."""
     log_dir = Path("/data/logs")
-    log_dir.mkdir(parents=True, exist_ok=True)
-
     is_production = settings.app_env == "production"
 
     root = logging.getLogger()
@@ -103,15 +101,25 @@ def setup_logging() -> None:
         stream.setFormatter(DevFormatter())
     root.addHandler(stream)
 
-    file_handler = RotatingFileHandler(
-        log_dir / "worker.log",
-        maxBytes=5_000_000,
-        backupCount=5,
-        encoding="utf-8",
-    )
-    file_handler.addFilter(CorrelationLogFilter())
-    file_handler.setFormatter(JSONFormatter())
-    root.addHandler(file_handler)
+    # File handler is best-effort: an unwritable log dir must never prevent startup.
+    file_handler = None
+    try:
+        log_dir.mkdir(parents=True, exist_ok=True)
+        file_handler = RotatingFileHandler(
+            log_dir / "worker.log",
+            maxBytes=5_000_000,
+            backupCount=5,
+            encoding="utf-8",
+        )
+    except OSError as exc:
+        stream.stream.write(
+            f"WARNING: file logging disabled — could not init "
+            f"'{log_dir}': {exc}\n"
+        )
+    if file_handler is not None:
+        file_handler.addFilter(CorrelationLogFilter())
+        file_handler.setFormatter(JSONFormatter())
+        root.addHandler(file_handler)
 
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("watchfiles").setLevel(logging.WARNING)
