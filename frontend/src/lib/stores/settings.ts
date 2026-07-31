@@ -1,5 +1,13 @@
 import { writable, derived } from 'svelte/store';
 import { browser } from '$app/environment';
+<<<<<<< HEAD
+=======
+import {
+  startAutoTheme,
+  stopAutoTheme,
+  clearDynamicTheme,
+} from '$lib/utils/dynamicTheme';
+>>>>>>> origin/development
 
 const COLORS_KEY     = 'joidy-accent-colors';
 const DEFAULT_COLORS = ['#c8a96e'];
@@ -202,6 +210,53 @@ export const use24HourClock  = createBooleanStore('joidy-use-24h-clock', true);
 export const hideTagsLine    = createBooleanStore('joidy-hide-tags-line', true);
 
 export const darkMode = createBooleanStore('joidy-dark-mode', true);
+
+export type ThemeMode = 'light' | 'dark' | 'auto';
+const THEME_MODE_KEY = 'joidy-theme-mode';
+
+function createThemeModeStore() {
+  const { subscribe, set } = writable<ThemeMode>('light');
+  let _initialized = false;
+
+  function applyMode(mode: ThemeMode) {
+    if (!browser) return;
+    if (mode === 'auto') {
+      document.documentElement.setAttribute('data-theme', 'dark');
+      startAutoTheme();
+    } else {
+      stopAutoTheme();
+      clearDynamicTheme();
+      document.documentElement.setAttribute('data-theme', mode);
+    }
+  }
+
+  return {
+    subscribe: (run: (v: ThemeMode) => void, invalidate?: () => void) => {
+      if (!_initialized && browser) {
+        _initialized = true;
+        const saved = (localStorage.getItem(THEME_MODE_KEY) as ThemeMode) || 'light';
+        set(saved);
+        applyMode(saved);
+      }
+      return subscribe(run, invalidate);
+    },
+    set: (val: ThemeMode) => {
+      _initialized = true;
+      if (browser) localStorage.setItem(THEME_MODE_KEY, val);
+      applyMode(val);
+      set(val);
+    },
+    init: () => {
+      if (!browser) return;
+      _initialized = true;
+      const saved = (localStorage.getItem(THEME_MODE_KEY) as ThemeMode) || 'light';
+      set(saved);
+      applyMode(saved);
+    },
+  };
+}
+
+export const themeMode = createThemeModeStore();
 
 export function initTheme(): (() => void) | void {
   // Return the unsubscribe function so the caller can clean it up.
