@@ -6,14 +6,13 @@
 ---
 
 ## 🏆 1. Logros Recientes (Completados)
-- [x] **Rate Limiting Avanzado**: Extender el middleware `RateLimitMiddleware` (PR #27 / Issue #27).
+- [x] **Migración a PostgreSQL**: PostgreSQL 16 + pgvector en producción (#4, #273).
 - [x] **Soporte de WebSocket End-to-End (Real-time)**: Conexión de Svelte a `/ws` y notificaciones reactivas (PR #27).
 - [x] **Menú de Exportación en Interfaz (Frontend)**: Controles para exportar markdown/html/zip en `NoteEditor.svelte` (PR #27).
 - [x] **Bug en Health Check de Caché (Backend)**: Corregido en `api/services/response_cache.py` (PR #27).
 - [x] **VirtualList dinámica**: Refactorizado para admitir alturas variables (Issue #7).
 - [x] **Migración Consistente a Runas Svelte 5**: Reactividad nativa en componentes (Issue #10).
 - [x] **Seguridad JWT**: Autenticación nativa por JWT (Issue #14).
-- [x] **Ruff + Black**: Pipeline de formateo automático y análisis estático (Issue #16).
 - [x] **Dashboard de Historial Anual**: Componente `StreakHeatmap` interactivo.
 - [x] **Modal de Objetivos**: Componente `GoalOverlay`.
 - [x] **Dashboard de Planificación unificado (SGOJ)**.
@@ -27,7 +26,6 @@
 ### 2.1 Integraciones & Backend
 - [ ] **Calendario Personalizado (Google API)**: Implementar Google Calendar y Tasks (#2).
 - [ ] **Sincronización Bidireccional con Obsidian via Webhook**: Triggers instantáneos externos (#3).
-- [ ] **Migración a PostgreSQL**: Adaptar los modelos para producción (#4).
 - [ ] **Integración de IA (chat/asistente)**: (#41)
 - [ ] **Integración de Gmail**: (#42)
 - [ ] **Integración de Contactos (Google)**: (#43)
@@ -36,6 +34,8 @@
 - [ ] **GitHub OAuth real**: (#46)
 - [ ] **UI de Dead Letter Queue**: Gestión de embeddings fallidos (#49).
 - [ ] **Alerting & Monitoring**: Prometheus/Grafana (#15).
+- [ ] **Ruff + Black**: Configurar e integrar linter/formatter en CI (Issue #16). *No completado — no hay config de ruff/black en el repo ni en CI.*
+- [ ] **Rate Limiting en ai-service**: El middleware existe en la API pero el ai-service no lo aplica (#367). *Parcialmente completado.*
 
 ### 2.2 Frontend & UX
 - [ ] **WYSIWYG Editor**: Editor enriquecido Markdown (#6).
