@@ -177,7 +177,8 @@
   }
 
   .streak-item.theme-neon {
-    background: #000; border: 1px solid var(--theme-ac);
+    background: color-mix(in srgb, var(--theme-ac) 8%, var(--surface));
+    border: 1px solid var(--theme-ac);
     box-shadow: 0 0 10px color-mix(in srgb, var(--theme-ac) 25%, transparent);
   }
   .streak-item.theme-neon .item-name, .streak-item.theme-neon .item-num {
