@@ -37,7 +37,6 @@
     { href: '/skills',  label: 'Habilidades', icon: 'Zap',      status: 'dev' },
     { href: '/goals',   label: 'Objetivos',   icon: 'Target',   status: 'ready' },
     { href: '/streaks', label: 'Rachas',      icon: 'Flame',    status: 'ready' },
-    { href: '/integraciones', label: 'Integraciones', icon: 'Puzzle', status: 'dev' },
   ];
 
   let settingsOpen = false;
