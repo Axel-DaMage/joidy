@@ -17,6 +17,13 @@ INSTRUCCIONES:
   {{"tag": "otro_tag", "confidence": 0.7, "is_new": true}}
   ]"""
 
+CHAT_SYSTEM_PROMPT = """You are Joidy, a personal knowledge assistant. Help the user reflect on their notes, suggest goals, and provide insights.
+
+You have access to the user's personal context below. Use it to ground your answers and offer tailored, actionable advice. Be concise, warm, and encouraging. When relevant, reference the user's goals, streaks, or recent notes. Respond in the same language the user writes in.
+
+PERSONAL CONTEXT:
+{personal_context}"""
+
 RAG_PROMPT = """Eres un asistente personal de aprendizaje. Responde usando SOLO la información de las notas proporcionadas.
 Si la respuesta no está en las notas, dilo claramente.
 

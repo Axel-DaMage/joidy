@@ -333,6 +333,8 @@ export const api = {
     classify: (noteId: number, content: string, existingTags: string[]) =>
       req<{ note_id: number; status: string; suggestions: AISuggestion[] }>('POST', '/ai/classify', { note_id: noteId, content, existing_tags: existingTags }, { silent: true }),
     usage: () => req<{ ai_enabled: boolean; estimated_cost_usd: number }>('GET', '/ai/usage'),
+    chat: (messages: { role: 'user' | 'assistant'; content: string }[]) =>
+      req<{ status: string; response: string; suggestions?: string[]; provider?: string }>('POST', '/ai/chat', { messages }, { silent: true }),
   },
 
 github: {

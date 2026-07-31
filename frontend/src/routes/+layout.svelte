@@ -29,6 +29,8 @@
   import { deferredPrompt, showInstallBanner, isAppInstalled } from '$lib/stores/pwa';
   import { syncStore } from '$lib/stores/sync';
   import ConflictResolutionModal from '$lib/components/ConflictResolutionModal.svelte';
+  import FocusMode from '$lib/components/FocusMode.svelte';
+  import { initFocusModeConfig, queueNotificationIfActive } from '$lib/stores/focusMode';
 
   type NavItemStatus = 'ready' | 'dev' | 'placeholder';
 
@@ -37,7 +39,7 @@
     { href: '/notes',   label: 'Notas',       icon: 'BookOpen', status: 'ready' },
     { href: '/graph',   label: 'Grafo',       icon: 'Network',  status: 'dev' },
     { href: '/skills',  label: 'Habilidades', icon: 'Zap',      status: 'dev' },
-    { href: '/ai',      label: 'IA',          icon: 'Brain',    status: 'dev' },
+    { href: '/ai',      label: 'IA',          icon: 'Brain',    status: 'ready' },
     { href: '/goals',   label: 'Objetivos',   icon: 'Target',   status: 'ready' },
     { href: '/streaks', label: 'Rachas',      icon: 'Flame',    status: 'ready' },
   ];
@@ -85,6 +87,7 @@
     activeIconPack.init();
     const cleanupTheme = initTheme();
     initPomodoroSettings();
+    initFocusModeConfig();
     initKeyboardNavigation();
     initPushNotifications();
     onboarding.init();
@@ -141,16 +144,16 @@
           logger.info('[layout] WebSocket message received:', msg);
           
           if (msg.type === 'note_created') {
-            showNotification(`Nueva nota creada: "${msg.title}"`, 'success');
+            queueNotificationIfActive(`Nueva nota creada: "${msg.title}"`, 'success');
             loadNotes(undefined, true).catch(() => {});
           } else if (msg.type === 'note_updated') {
-            showNotification(`Nota actualizada: "${msg.title}"`, 'info');
+            queueNotificationIfActive(`Nota actualizada: "${msg.title}"`, 'info');
             loadNotes(undefined, true).catch(() => {});
           } else if (msg.type === 'xp_gained') {
-            showNotification(`¡+${msg.xp} XP!`, 'level');
+            queueNotificationIfActive(`¡+${msg.xp} XP!`, 'level');
             loadStats().catch(() => {});
           } else if (msg.type === 'streak_updated') {
-            showNotification(`¡Racha de ${msg.streak} días! 🔥`, 'info');
+            queueNotificationIfActive(`¡Racha de ${msg.streak} días! 🔥`, 'info');
             loadStats().catch(() => {});
           }
         } catch (e) {
@@ -519,6 +522,7 @@
 <Toast />
 <TutorialOverlay />
 <ConflictResolutionModal />
+<FocusMode />
 {/if}
 
 <style>
