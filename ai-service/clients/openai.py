@@ -1,6 +1,7 @@
 import asyncio
 import logging
 
+import httpx
 from config import settings
 from openai import AsyncOpenAI
 
@@ -11,7 +12,11 @@ logger = logging.getLogger(__name__)
 
 class OpenAIClient(BaseLLMClient, EmbeddingClient):
     def __init__(self, api_key: str, model: str, is_embedding: bool = False):
-        self._client = AsyncOpenAI(api_key=api_key)
+        timeout = settings.embed_timeout if is_embedding else settings.llm_timeout
+        self._client = AsyncOpenAI(
+            api_key=api_key,
+            timeout=httpx.Timeout(timeout, connect=settings.connect_timeout),
+        )
         self._model = model
         self._is_embedding = is_embedding
 

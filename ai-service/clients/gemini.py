@@ -28,7 +28,8 @@ class GeminiClient(BaseLLMClient, EmbeddingClient):
                 model=self._model,
                 content=text,
                 task_type="RETRIEVAL_DOCUMENT",
-            )
+            ),
+            timeout=settings.embed_timeout,
         )
         return result["embedding"]
 
@@ -47,7 +48,8 @@ class GeminiClient(BaseLLMClient, EmbeddingClient):
                     temperature=temperature,
                     max_output_tokens=max_tokens,
                 ),
-            )
+            ),
+            timeout=settings.llm_timeout,
         )
         return response.text
 
@@ -57,7 +59,7 @@ def _is_retryable_error(exc: Exception) -> bool:
     return "429" in msg or "resource exhausted" in msg or "rate limit" in msg
 
 
-async def _call_with_retry(func):
+async def _call_with_retry(func, timeout: float | None = None):
     attempts = max(1, settings.ai_retry_max_attempts)
     base = max(0.1, settings.ai_retry_base_delay_seconds)
     cap = max(base, settings.ai_retry_max_delay_seconds)
@@ -65,8 +67,14 @@ async def _call_with_retry(func):
     for attempt in range(1, attempts + 1):
         try:
             # Run the synchronous google.generativeai call in a thread to
-            # avoid blocking the FastAPI event loop.
-            return await asyncio.to_thread(func)
+            # avoid blocking the FastAPI event loop. google-generativeai does
+            # not expose a per-request timeout, so enforce one with wait_for.
+            coro = asyncio.to_thread(func)
+            if timeout is not None:
+                return await asyncio.wait_for(coro, timeout=timeout)
+            return await coro
+        except asyncio.TimeoutError:
+            raise TimeoutError(f"Gemini call timed out after {timeout}s")
         except Exception as exc:
             if not _is_retryable_error(exc) or attempt >= attempts:
                 raise

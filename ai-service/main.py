@@ -5,12 +5,15 @@ from circuit_breaker import llm_circuit_breaker, emb_circuit_breaker, CircuitBre
 from clients import get_embedding_client, get_llm_client
 from clients.prompts import CHAT_SYSTEM_PROMPT, CLASSIFY_PROMPT, RAG_PROMPT
 from config import settings
+from cost_tracker import get_monthly_stats, record_usage
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from logging_config import get_correlation_id, set_correlation_id, setup_logging
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from rate_limiter import get_limiter
+from response_cache import cache_key, get_cache
+from sqlalchemy import text
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -89,18 +92,23 @@ app.add_middleware(InternalAuthMiddleware)
 
 class EmbedRequest(BaseModel):
     note_id: int
-    content: str
+    content: str = Field(max_length=100_000)
 
 
 class ClassifyRequest(BaseModel):
     note_id: int
-    content: str
+    content: str = Field(max_length=10_000)
     existing_tags: list[str] = []
 
 
 class RAGRequest(BaseModel):
-    question: str
-    top_k: int = 5
+    question: str = Field(max_length=1000)
+    top_k: int = Field(default=5, ge=1, le=20)
+
+
+def _estimate_tokens(text: str) -> int:
+    """Rough token estimate (~4 chars/token) for cost tracking."""
+    return max(1, len(text) // 4)
 
 
 class ChatMessage(BaseModel):
@@ -203,19 +211,34 @@ async def embed(req: EmbedRequest):
     if not settings.is_ai_enabled:
         return {"status": "disabled", "note_id": req.note_id, "error": "No AI provider configured"}
 
-    try:
-        client = get_embedding_client()
-        vector = await emb_circuit_breaker.call(client.embed, req.content)
+    await get_limiter(settings.max_requests_per_minute).acquire()
 
-        # Save vector embedding to shared SQLite database
+    # Cache: identical content + model always yields the same vector, so skip
+    # the provider call entirely when we have a hit.
+    key = cache_key("embed", settings.embedding_model, req.content)
+    cached = get_cache().get(key)
+
+    try:
+        if cached is not None:
+            vector = cached
+            provider_name = settings.embedding_model.split(":", 1)[0]
+        else:
+            client = get_embedding_client()
+            vector = await emb_circuit_breaker.call(client.embed, req.content)
+            provider_name = client.provider_name
+            get_cache().set(key, vector)
+
+        # Save vector embedding to shared PostgreSQL database
         from database import store_embedding
         store_embedding(req.note_id, vector)
+
+        record_usage("embed", input_tokens=_estimate_tokens(req.content))
 
         return {
             "status": "success",
             "note_id": req.note_id,
             "embedding": vector,
-            "provider": client.provider_name,
+            "provider": provider_name,
         }
     except CircuitBreakerError as e:
         return {"status": "circuit_open", "note_id": req.note_id, "error": "Circuit breaker open"}
@@ -228,14 +251,33 @@ async def classify(req: ClassifyRequest):
     if not settings.is_ai_enabled:
         return {"status": "disabled", "note_id": req.note_id, "suggestions": [], "error": "No AI provider configured"}
 
+    await get_limiter(settings.max_requests_per_minute).acquire()
+
+    # Cache keyed on content + existing tags + model. Classify is often fired
+    # repeatedly while editing, so this avoids burning provider quota.
+    tags_key = ",".join(sorted(req.existing_tags))
+    key = cache_key("classify", settings.llm_model, req.content, tags_key)
+    cached = get_cache().get(key)
+
     try:
-        client = get_llm_client()
-        suggestions = await llm_circuit_breaker.call(client.classify, req.content, req.existing_tags, CLASSIFY_PROMPT)
+        if cached is not None:
+            suggestions = cached
+            provider_name = settings.llm_model.split(":", 1)[0]
+        else:
+            client = get_llm_client()
+            suggestions = await llm_circuit_breaker.call(
+                client.classify, req.content, req.existing_tags, CLASSIFY_PROMPT
+            )
+            provider_name = client.provider_name
+            get_cache().set(key, suggestions)
+
+        record_usage("classify", input_tokens=_estimate_tokens(req.content))
+
         return {
             "status": "success",
             "note_id": req.note_id,
             "suggestions": suggestions,
-            "provider": client.provider_name,
+            "provider": provider_name,
         }
     except CircuitBreakerError as e:
         return {"status": "circuit_open", "note_id": req.note_id, "suggestions": [], "error": "Circuit breaker open"}
@@ -245,10 +287,11 @@ async def classify(req: ClassifyRequest):
 
 @app.get("/usage")
 def usage():
+    stats = get_monthly_stats()
     return {
         "ai_enabled": settings.is_ai_enabled,
         "available_providers": settings.available_providers,
-        "estimated_cost_usd": 0,
+        **stats,
     }
 
 
@@ -257,27 +300,30 @@ async def rag(req: RAGRequest):
     if not settings.is_ai_enabled:
         return {"status": "disabled", "answer": "No AI provider configured"}
 
+    await get_limiter(settings.max_requests_per_minute).acquire()
+
     try:
         # 1. Get embedding for the question
         emb_client = get_embedding_client()
         question_vector = await emb_circuit_breaker.call(emb_client.embed, req.question)
 
-        # 2. Find similar note IDs from SQLite vector database
+        # 2. Find similar note IDs via pgvector cosine similarity
         from database import engine, find_similar_notes
         similar = find_similar_notes(question_vector, limit=req.top_k)
 
-        # 3. Retrieve note titles & contents to build LLM context
-        # Limit context size to reduce PII exposure and token usage
+        # 3. Retrieve note titles & contents to build LLM context.
+        # Use SQLAlchemy text() with named parameters — PostgreSQL does not
+        # accept the SQLite "?" placeholder style (previously broken, #398).
+        # Limit context size to reduce PII exposure and token usage.
         MAX_CONTEXT_NOTES = 5
         MAX_NOTE_CHARS = 2000
         context_chunks = []
         with engine.connect() as conn:
             for item in similar[:MAX_CONTEXT_NOTES]:
                 nid = item["note_id"]
-                # Use raw SQL to fetch from the shared SQLite DB
                 row = conn.execute(
-                    "SELECT title, content FROM notes WHERE id = ?",  # type: ignore
-                    (nid,),
+                    text("SELECT title, content FROM notes WHERE id = :nid"),
+                    {"nid": nid},
                 ).fetchone()
                 if row:
                     note_content = (row[1] or "")[:MAX_NOTE_CHARS]
@@ -289,6 +335,10 @@ async def rag(req: RAGRequest):
             prompt=RAG_PROMPT.format(question=req.question, context="\n\n---\n\n".join(context_chunks)),
             temperature=0.2,
             max_tokens=512,
+        )
+        record_usage(
+            "rag",
+            input_tokens=_estimate_tokens(req.question) + sum(_estimate_tokens(c) for c in context_chunks),
         )
         return {
             "status": "success",

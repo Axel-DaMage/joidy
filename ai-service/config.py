@@ -34,6 +34,18 @@ class Settings(BaseSettings):
     ai_retry_base_delay_seconds: float = 1.0
     ai_retry_max_delay_seconds: float = 30.0
 
+    # Timeouts (seconds) for provider calls. Prevents indefinite hangs when a
+    # provider is degraded or unreachable. Embeddings are usually fast; LLM
+    # generation can take longer.
+    embed_timeout: float = 30.0
+    llm_timeout: float = 60.0
+    # Connect timeout shared by all providers (time to establish the TCP link).
+    connect_timeout: float = 5.0
+
+    # Response cache: avoids re-calling providers for identical inputs.
+    cache_ttl_seconds: float = 3600.0
+    cache_max_size: int = 2048
+
     @property
     def provider_config(self) -> dict:
         """Returns dict of provider -> {api_key, base_url} for available providers."""
