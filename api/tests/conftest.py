@@ -1,4 +1,4 @@
-from sqlalchemy import pool
+import os
 import sys
 import types
 
@@ -6,39 +6,65 @@ import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
+# sqlite_vec is only needed for the local SQLite fallback. Stub it before
+# importing app modules so pgvector's Vector type doesn't blow up on SQLite.
+# In CI we run against real PostgreSQL + pgvector (see .github/workflows/ci.yml,
+# #409), so this stub is a no-op there.
 if "sqlite_vec" not in sys.modules:
     _stub = types.ModuleType("sqlite_vec")
-    _stub.load = lambda _conn: None
+    _stub.load = lambda _conn: None  # type: ignore
     sys.modules["sqlite_vec"] = _stub
 
 from database import Base, get_db
+import main as main_module
 from main import app
 from fastapi.testclient import TestClient
 from middleware.rate_limit import _default_limiter
 from services.auth_service import get_current_user
 
+_DATABASE_URL = os.getenv("DATABASE_URL", "")
+_USE_POSTGRES = _DATABASE_URL.startswith("postgresql")
+
+# Prevent the app lifespan from running Alembic migrations during tests. The
+# test fixture creates the schema directly via Base.metadata.create_all(), and
+# running migrations on the same DB would conflict (table-already-exists) and
+# pull in migration history that isn't relevant to unit/e2e tests.
+main_module.init_db = lambda: None
+
+
 @pytest.fixture
 def db_session():
-    engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=pool.StaticPool
-    )
-    Base.metadata.create_all(engine)
-    with engine.begin() as conn:
-        try:
-            conn.execute(text(
-                "CREATE TABLE IF NOT EXISTS tag_cooccurrences "
-                "(tag_a_id INTEGER, tag_b_id INTEGER, weight INTEGER, "
-                "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)"
-            ))
-        except Exception:
-            pass
+    """Per-test isolated database session.
+
+    In CI (DATABASE_URL=postgresql://...) this runs against a real PostgreSQL
+    instance with pgvector, so tests catch PG-specific bugs (#409) — the
+    SQLite fallback previously masked issues like #398/#399/#400. Locally,
+    when no DATABASE_URL is set, it falls back to an in-memory SQLite DB.
+    """
+    if _USE_POSTGRES:
+        engine = create_engine(_DATABASE_URL, pool_pre_ping=True)
+        with engine.connect() as conn:
+            conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+            conn.commit()
+        Base.metadata.create_all(engine)
+    else:
+        engine = create_engine(
+            "sqlite:///:memory:",
+            connect_args={"check_same_thread": False},
+            pool=__import__("sqlalchemy.pool", fromlist=["StaticPool"]).StaticPool(),
+        )
+        Base.metadata.create_all(engine)
+
     factory = sessionmaker(bind=engine)
     session = factory()
     yield session
     session.close()
+
+    if _USE_POSTGRES:
+        # Drop and recreate per test for isolation on PostgreSQL.
+        Base.metadata.drop_all(engine)
     engine.dispose()
+
 
 @pytest.fixture(autouse=True, scope="session")
 def _disable_rate_limits():

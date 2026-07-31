@@ -12,9 +12,26 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    # Run the test suite against real PostgreSQL + pgvector instead of SQLite.
+    # SQLite previously masked PostgreSQL-specific bugs (#398/#399/#400) because
+    # the test DB accepted SQLite-only SQL syntax and lacked pgvector (#409).
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: joidy
+          POSTGRES_PASSWORD: joidy
+          POSTGRES_DB: joidy_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
     env:
       APP_ENV: test
-      DATABASE_URL: sqlite:////tmp/joidy-test.db
+      DATABASE_URL: postgresql://joidy:joidy@localhost:5432/joidy_test
       LOG_DIR: logs
       SECRET_KEY: ci-secret-not-for-production
     steps:

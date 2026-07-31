@@ -17,7 +17,19 @@ def test_obsidian_webhook_requires_secret(client):
 from models.sync_state import SyncState
 
 
+def _create_note(db_session, note_id):
+    """Create a parent Note so SyncState's FK constraint is satisfied on PostgreSQL."""
+    from models.note import Note
+    note = db_session.query(Note).filter_by(id=note_id).first()
+    if note is None:
+        note = Note(id=note_id, title=f"Test Note {note_id}", content="", source="obsidian")
+        db_session.add(note)
+        db_session.commit()
+    return note
+
+
 def test_obsidian_webhook_unconfigured_accepts_any(client, db_session):
+    _create_note(db_session, 1)
     resp = client.post("/webhook/obsidian/legacy", json={
         "note_id": 1,
         "path": "/vault/note.md",
@@ -36,6 +48,7 @@ def test_sync_state_model_exists():
 
 
 def test_obsidian_webhook_detects_conflict(client, db_session):
+    _create_note(db_session, 2)
     sync = SyncState(note_id=2, local_mtime=datetime.fromtimestamp(1_600_000_000, tz=timezone.utc))
     db_session.add(sync)
     db_session.commit()
@@ -53,6 +66,7 @@ def test_obsidian_webhook_detects_conflict(client, db_session):
 
 
 def test_obsidian_webhook_no_conflict_when_mtimes_match(client, db_session):
+    _create_note(db_session, 3)
     mtime = 1_700_000_000
     sync = SyncState(
         note_id=3,

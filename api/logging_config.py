@@ -13,7 +13,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from config import settings
-from middleware.correlation_id import CorrelationLogFilter
+from middleware.correlation_id import CorrelationLogFilter, get_correlation_id
 
 
 class JSONFormatter(logging.Formatter):
