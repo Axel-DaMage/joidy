@@ -9,8 +9,10 @@ to avoid reading files while Obsidian is still writing them.
 """
 
 import asyncio
+import hashlib
 import logging
 import re
+import sqlite3
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,6 +28,7 @@ JOIDY_DIR = "_joidy"
 DEBOUNCE_SECONDS = 2.0
 QUEUE_FLUSH_INTERVAL = 0.5
 MAX_AUTH_RETRIES = 5
+SHUTDOWN_TIMEOUT = 15.0  # seconds to let in-flight writes finish on shutdown
 
 
 @dataclass(frozen=True)
@@ -36,6 +39,109 @@ class VaultEvent:
 
 _auth_token: str = ""
 _auth_lock = asyncio.Lock()
+
+# Per-file locks so rapid successive edits to the same file cannot start
+# concurrent imports for that file (#364).
+_file_locks: dict[str, asyncio.Lock] = {}
+_file_locks_guard = asyncio.Lock()
+
+# Last-synced content fingerprint per path, used to detect renames: a deleted
+# file whose hash matches an added file in the same batch is a move, not a
+# delete+create (#364).
+_fingerprints: dict[str, str] = {}
+
+# Set by the worker's signal handler to trigger a graceful two-phase shutdown:
+# stop accepting new filesystem events, then let in-flight writes finish (#371).
+shutdown_event: asyncio.Event = asyncio.Event()
+
+
+async def _get_file_lock(path: str) -> asyncio.Lock:
+    async with _file_locks_guard:
+        lock = _file_locks.get(path)
+        if lock is None:
+            lock = asyncio.Lock()
+            _file_locks[path] = lock
+        return lock
+
+
+def _fingerprint(content: str) -> str:
+    return hashlib.sha256(content.encode("utf-8", errors="replace")).hexdigest()
+
+
+class PersistentEventLog:
+    """SQLite-backed log of pending vault events.
+
+    Events are recorded before processing and removed once the batch succeeds,
+    so if the worker crashes mid-processing the events are replayed on the next
+    startup (#371). The log keys on path (last write wins), mirroring the
+    in-memory batch dedup.
+    """
+
+    def __init__(self, path: str):
+        self._path = path
+        try:
+            Path(path).parent.mkdir(parents=True, exist_ok=True)
+            self._conn = sqlite3.connect(path, check_same_thread=False)
+            self._conn.execute(
+                "CREATE TABLE IF NOT EXISTS pending_events "
+                "(path TEXT PRIMARY KEY, change_type TEXT NOT NULL)"
+            )
+            self._conn.commit()
+        except Exception as exc:
+            logger.warning("[vault] Persistent event log unavailable (%s); "
+                           "crash recovery disabled", exc)
+            self._conn = None
+
+    def add(self, path: str, change_type: Change) -> None:
+        if self._conn is None:
+            return
+        try:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO pending_events (path, change_type) VALUES (?, ?)",
+                (path, change_type.name),
+            )
+            self._conn.commit()
+        except Exception as exc:
+            logger.warning("[vault] Failed to persist event %s: %s", path, exc)
+
+    def remove(self, path: str) -> None:
+        if self._conn is None:
+            return
+        try:
+            self._conn.execute("DELETE FROM pending_events WHERE path = ?", (path,))
+            self._conn.commit()
+        except Exception as exc:
+            logger.warning("[vault] Failed to remove event %s: %s", path, exc)
+
+    def pending(self) -> list[tuple[str, Change]]:
+        if self._conn is None:
+            return []
+        try:
+            rows = self._conn.execute(
+                "SELECT path, change_type FROM pending_events"
+            ).fetchall()
+            result = []
+            for path, ct_name in rows:
+                try:
+                    result.append((path, Change[ct_name]))
+                except KeyError:
+                    # Unknown change type from an older log version — drop it.
+                    self._conn.execute(
+                        "DELETE FROM pending_events WHERE path = ?", (path,)
+                    )
+            self._conn.commit()
+            return result
+        except Exception as exc:
+            logger.warning("[vault] Failed to read pending events: %s", exc)
+            return []
+
+    def close(self) -> None:
+        if self._conn is not None:
+            try:
+                self._conn.close()
+            except Exception:
+                pass
+            self._conn = None
 
 
 async def get_auth_token(client: httpx.AsyncClient, *, force: bool = False) -> str:
@@ -145,6 +251,80 @@ async def delete_note_by_path(path: str, client: httpx.AsyncClient, token: str):
             await asyncio.sleep(1 * (attempt + 1))
 
 
+async def rename_note_path(old_path: str, new_path: Path, client: httpx.AsyncClient, token: str):
+    """Treat a delete+add pair as a rename: update the existing note's
+    source_path instead of deleting and recreating it, preserving id/XP/history
+    (#364)."""
+    try:
+        if not new_path.exists():
+            return
+        content = new_path.read_text(encoding="utf-8", errors="replace")
+        frontmatter, body = _parse_frontmatter(content)
+        title = frontmatter.get("title") or new_path.stem.replace("-", " ").replace("_", " ").title()
+        tags = _extract_tags_from_content(content, frontmatter)
+
+        # Find the existing note by the OLD source_path.
+        existing = None
+        for attempt in range(3):
+            try:
+                current_token = await get_auth_token(client)
+                cid = get_correlation_id()
+                headers = {"X-Request-ID": cid}
+                if current_token:
+                    headers["Authorization"] = f"Bearer {current_token}"
+                r = await client.get(
+                    f"{settings.api_url}/notes/",
+                    params={"source_path": old_path},
+                    headers=headers,
+                    timeout=10.0,
+                )
+                if r.status_code == 401:
+                    await get_auth_token(client, force=True)
+                    continue
+                if r.status_code == 200:
+                    for n in r.json():
+                        if n.get("source_path") == old_path:
+                            existing = n
+                            break
+                break
+            except Exception:
+                if attempt == 2:
+                    raise
+                await asyncio.sleep(1)
+
+        if not existing:
+            # No note at the old path — fall back to a normal import of the new path.
+            await import_or_update_note(new_path, client, token)
+            return
+
+        for attempt in range(5):
+            current_token = await get_auth_token(client)
+            cid = get_correlation_id()
+            headers = {"X-Request-ID": cid, "X-From-Vault": "1"}
+            if current_token:
+                headers["Authorization"] = f"Bearer {current_token}"
+            res = await client.put(
+                f"{settings.api_url}/notes/{existing['id']}",
+                json={"title": title, "content": content, "tags": tags,
+                      "source": "obsidian", "source_path": str(new_path)},
+                headers=headers,
+                timeout=10.0,
+            )
+            if res.status_code == 401:
+                await get_auth_token(client, force=True)
+                continue
+            if res.status_code in (429, 500, 503):
+                await asyncio.sleep(2 ** attempt)
+                continue
+            res.raise_for_status()
+            _fingerprints[str(new_path)] = _fingerprint(content)
+            _fingerprints.pop(old_path, None)
+            logger.info("[vault] Renamed: %s -> %s", Path(old_path).name, new_path.name)
+            return
+    except Exception as e:
+        logger.exception("[vault] Error renaming %s -> %s: %s", old_path, new_path, e)
+
+
 async def import_or_update_note(filepath: Path, client: httpx.AsyncClient, token: str, *, bulk_import: bool = False):
     try:
         if not filepath.exists():
@@ -219,6 +399,7 @@ async def import_or_update_note(filepath: Path, client: httpx.AsyncClient, token
             res.raise_for_status()
             break
 
+        _fingerprints[str(filepath)] = _fingerprint(content)
         logger.info("[vault] Synced: %s", filepath.name)
 
     except Exception as e:
@@ -256,11 +437,19 @@ async def _consume_vault_events(
     queue: asyncio.Queue[VaultEvent],
     client: httpx.AsyncClient,
     token: str,
+    event_log: PersistentEventLog,
 ):
     _in_flight: set[asyncio.Task] = set()
     while True:
+        if shutdown_event.is_set():
+            # Graceful shutdown phase 2: stop taking new batches, but let any
+            # in-flight writes finish (handled below) before returning.
+            return
         try:
-            first_event = await queue.get()
+            try:
+                first_event = await asyncio.wait_for(queue.get(), timeout=1.0)
+            except TimeoutError:
+                continue
             pending: dict[str, Change] = {first_event.path: first_event.change_type}
 
             while True:
@@ -272,41 +461,95 @@ async def _consume_vault_events(
 
             await asyncio.sleep(DEBOUNCE_SECONDS)
 
-            async def process(path: str, change_type: Change):
-                try:
-                    if change_type == Change.deleted:
-                        await delete_note_by_path(path, client, token)
-                    else:
-                        await import_or_update_note(Path(path), client, token)
-                except Exception:
-                    logger.exception("[vault] Failed to process %s (%s)", path, change_type)
+            # Rename detection (#364): pair a deleted path with an added path
+            # whose content fingerprint matches the last-seen content of the
+            # deleted path. Treat the pair as a move (update source_path) and
+            # drop both from the delete/add processing.
+            deletes: dict[str, Change] = {}
+            adds: dict[str, Change] = {}
+            for path, ct in pending.items():
+                if ct == Change.deleted:
+                    deletes[path] = ct
+                else:
+                    adds[path] = ct
 
-            batch_tasks = [
-                asyncio.ensure_future(process(path, change_type))
-                for path, change_type in pending.items()
-            ]
+            renames: list[tuple[str, str]] = []  # (old_path, new_path)
+            consumed_adds: set[str] = set()
+            for old_path in list(deletes.keys()):
+                old_fp = _fingerprints.get(old_path)
+                if not old_fp:
+                    continue
+                for new_path in adds:
+                    if new_path in consumed_adds:
+                        continue
+                    try:
+                        if Path(new_path).exists():
+                            content = Path(new_path).read_text(encoding="utf-8", errors="replace")
+                            if _fingerprint(content) == old_fp:
+                                renames.append((old_path, new_path))
+                                consumed_adds.add(new_path)
+                                break
+                    except Exception:
+                        continue
+
+            for old_path, new_path in renames:
+                deletes.pop(old_path, None)
+                pending.pop(old_path, None)
+                pending.pop(new_path, None)
+
+            remaining = {**deletes}
+            for path, ct in adds.items():
+                if path not in consumed_adds:
+                    remaining[path] = ct
+
+            async def process(path: str, change_type: Change):
+                lock = await _get_file_lock(path)
+                async with lock:
+                    try:
+                        # Shield the critical write so a shutdown cancellation
+                        # does not interrupt a mid-flight API call (#371).
+                        if change_type == Change.deleted:
+                            await asyncio.shield(delete_note_by_path(path, client, token))
+                        else:
+                            await asyncio.shield(import_or_update_note(Path(path), client, token))
+                        event_log.remove(path)
+                    except asyncio.CancelledError:
+                        # Propagate cancellation but keep the event logged so
+                        # it is retried on the next startup.
+                        raise
+                    except Exception:
+                        logger.exception("[vault] Failed to process %s (%s)", path, change_type)
+
+            async def process_rename(old_path: str, new_path: str):
+                lock = await _get_file_lock(old_path)
+                async with lock:
+                    try:
+                        await asyncio.shield(rename_note_path(old_path, Path(new_path), client, token))
+                        event_log.remove(old_path)
+                        event_log.remove(new_path)
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception:
+                        logger.exception("[vault] Failed to rename %s -> %s", old_path, new_path)
+
+            batch_tasks: list[asyncio.Task] = []
+            for old_path, new_path in renames:
+                batch_tasks.append(asyncio.ensure_future(process_rename(old_path, new_path)))
+            for path, change_type in remaining.items():
+                batch_tasks.append(asyncio.ensure_future(process(path, change_type)))
+
             _in_flight.update(batch_tasks)
             await asyncio.gather(*batch_tasks, return_exceptions=True)
             _in_flight.difference_update(batch_tasks)
-        except TimeoutError:
-            continue
         except asyncio.CancelledError:
-            # Cancel and await any in-flight process tasks before exiting
+            # Hard cancellation (e.g. timeout after graceful phase). Let any
+            # in-flight tasks finish that can; cancel the rest.
             for task in _in_flight:
-                task.cancel()
+                if not task.done():
+                    task.cancel()
             if _in_flight:
                 await asyncio.gather(*_in_flight, return_exceptions=True)
                 logger.info("[vault] Cancelled %d in-flight task(s) on shutdown", len(_in_flight))
-            # Drain remaining queue items before exiting
-            drained = 0
-            while not queue.empty():
-                try:
-                    queue.get_nowait()
-                    drained += 1
-                except asyncio.QueueEmpty:
-                    break
-            if drained:
-                logger.info("[vault] Drained %d orphaned events on shutdown", drained)
             return
         except Exception:
             logger.exception("[vault] Unexpected error in event consumer")
@@ -322,6 +565,7 @@ async def watch_vault():
 
     logger.info("[vault] Watching: %s", vault_path)
 
+    event_log = PersistentEventLog(settings.event_log_path)
     async with httpx.AsyncClient(timeout=30.0) as client:
         consumer = None
         try:
@@ -332,32 +576,58 @@ async def watch_vault():
             await initial_scan(vault_path, client, token)
 
             queue: asyncio.Queue[VaultEvent] = asyncio.Queue(maxsize=1000)
-            consumer = asyncio.create_task(_consume_vault_events(queue, client, token), name="vault_event_consumer")
+
+            # Replay events that were persisted but not processed before a
+            # previous crash (#371).
+            pending = event_log.pending()
+            if pending:
+                logger.info("[vault] Recovering %d pending event(s) from previous run", len(pending))
+                for path, change_type in pending:
+                    await queue.put(VaultEvent(path=path, change_type=change_type))
+
+            consumer = asyncio.create_task(
+                _consume_vault_events(queue, client, token, event_log),
+                name="vault_event_consumer",
+            )
 
             max_retries = 5
             retry_delay = 1.0
             for attempt in range(max_retries):
                 try:
                     async for changes in awatch(str(vault_path)):
+                        if shutdown_event.is_set():
+                            break
                         retry_delay = 1.0
                         for change_type, path in changes:
                             if not path.endswith(".md"):
                                 continue
                             if _is_joidy_file(path):
                                 continue
+                            event_log.add(path, change_type)
                             await queue.put(VaultEvent(path=path, change_type=change_type))
                     break
                 except Exception as e:
+                    if shutdown_event.is_set():
+                        break
                     logger.error("[vault] Watcher error (attempt %d/%d): %s", attempt + 1, max_retries, e)
                     if attempt == max_retries - 1:
                         raise
                     await asyncio.sleep(retry_delay)
                     retry_delay = min(retry_delay * 2, 60.0)
-        finally:
+
+            # Graceful shutdown phase 1 is already done (awatch stopped
+            # accepting). Phase 2: let the consumer drain the queue and finish
+            # in-flight writes, then return.
             if consumer is not None:
-                consumer.cancel()
                 try:
-                    await asyncio.wait_for(consumer, timeout=5.0)
+                    await asyncio.wait_for(consumer, timeout=SHUTDOWN_TIMEOUT)
                 except (TimeoutError, asyncio.CancelledError):
-                    pass
+                    logger.warning("[vault] Consumer did not finish within %.0fs; cancelling", SHUTDOWN_TIMEOUT)
+                    consumer.cancel()
+                    try:
+                        await consumer
+                    except (asyncio.CancelledError, Exception):
+                        pass
+        finally:
+            event_log.close()
             logger.info("[vault] Watcher stopped cleanly")

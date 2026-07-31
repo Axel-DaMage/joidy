@@ -13,12 +13,15 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from watchers import vault_watcher
 from watchers.vault_watcher import (
+    PersistentEventLog,
     _extract_tags_from_content,
+    _fingerprint,
     _is_joidy_file,
     _parse_frontmatter,
     delete_note_by_path,
     import_or_update_note,
 )
+from watchfiles import Change
 
 
 class FakeResponse:
@@ -60,6 +63,42 @@ class TestVaultParsing(unittest.TestCase):
     def test_is_joidy_file(self):
         assert _is_joidy_file("/vault/_joidy/sync.md")
         assert not _is_joidy_file("/vault/notes/page.md")
+
+    def test_fingerprint_stable_and_distinct(self):
+        assert _fingerprint("abc") == _fingerprint("abc")
+        assert _fingerprint("abc") != _fingerprint("abd")
+
+
+class TestPersistentEventLog(unittest.TestCase):
+    def test_add_remove_and_pending_roundtrip(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            log = PersistentEventLog(Path(tmp) / "events.db")
+            log.add("/vault/a.md", Change.added)
+            log.add("/vault/b.md", Change.deleted)
+            pending = log.pending()
+            paths = {p for p, _ in pending}
+            assert paths == {"/vault/a.md", "/vault/b.md"}
+
+            log.remove("/vault/a.md")
+            pending = log.pending()
+            assert len(pending) == 1
+            assert pending[0][0] == "/vault/b.md"
+            assert pending[0][1] == Change.deleted
+            log.close()
+
+    def test_reopen_recovers_pending_events(self):
+        """Crash recovery: events persisted before a crash are replayed (#371)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "events.db"
+            log = PersistentEventLog(log_path)
+            log.add("/vault/unsynced.md", Change.modified)
+            log.close()
+            # Simulate a crash by opening a fresh instance against the same file.
+            log2 = PersistentEventLog(log_path)
+            pending = log2.pending()
+            assert len(pending) == 1
+            assert pending[0] == ("/vault/unsynced.md", Change.modified)
+            log2.close()
 
 
 class TestVaultSync(unittest.IsolatedAsyncioTestCase):
