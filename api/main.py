@@ -62,6 +62,21 @@ async def lifespan(app: FastAPI):
     setup_logging()
     init_db()
     logger.info("Database initialization complete")
+
+    # Auto-restore goals from vault if DB has none (#504)
+    try:
+        from database import SessionLocal
+        from models.goal import Goal
+        from services.joidy_vault_writer import restore_goals_from_vault
+
+        with SessionLocal() as db:
+            if db.query(Goal).count() == 0:
+                result = restore_goals_from_vault(db)
+                if result["restored"] > 0:
+                    logger.info("Restored %d goals from vault", result["restored"])
+    except Exception:
+        logger.exception("Failed to auto-restore goals from vault")
+
     yield
 
 
