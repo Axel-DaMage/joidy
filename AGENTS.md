@@ -79,8 +79,8 @@ main.py → routers/*.py → services/*.py → models/*.py
 - **routers/**: HTTP endpoints, Pydantic validation only
 - **services/**: Business logic + DB ops
 - **models/**: SQLAlchemy ORM
-- **alembic/versions/**: 5 migration files (`make migrate`)
-- **tests/**: 7 test files (unittest)
+- **alembic/versions/**: 7 migration files (`make migrate`)
+- **tests/**: 31 test files (unittest)
 
 Internal comms:
 - API → AI: `http://ai-service:8002`
@@ -96,7 +96,7 @@ Two concurrent asyncio tasks: `watch_vault()` (watches `/vault/*.md`, 2s debounc
 
 ### Frontend (`frontend/src/`)
 - `routes/`: SvelteKit pages (notes, goals, graph, skills, streaks, ai, etc.)
-- `lib/stores/`: 20 Svelte stores (notes, gamification, pomodoro, graph, settings, etc.)
+- `lib/stores/`: 24 Svelte stores (notes, gamification, pomodoro, graph, settings, etc.)
 - `lib/actions/`: Svelte actions (focusTrap, liquidGlass)
 - `lib/api.ts`: API client wrapper
 - `lib/components/`: Reusable Svelte components (Modal, DynamicIcon, GoalCard, StreakListItem, etc.)
