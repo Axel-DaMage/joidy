@@ -8,15 +8,16 @@
   import { api, type Goal } from '$lib/api';
 
   const renderer = new marked.Renderer();
-  renderer.code = ({ text, lang }) => {
+  renderer.code = (code: string, infostring: string | undefined, _escaped: boolean) => {
+    const lang = infostring || '';
     const language = lang && hljs.getLanguage(lang) ? lang : '';
     let highlighted: string;
     try {
       highlighted = language
-        ? hljs.highlight(text, { language }).value
-        : hljs.highlightAuto(text).value;
+        ? hljs.highlight(code, { language }).value
+        : hljs.highlightAuto(code).value;
     } catch {
-      highlighted = text;
+      highlighted = code;
     }
     return `<pre><code class="hljs language-${language || 'auto'}">${highlighted}</code></pre>`;
   };
