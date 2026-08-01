@@ -19,6 +19,7 @@
   const AUTOSAVE_DELAY = 2000;
   const DRAFT_PREFIX = 'joidy-draft-';
 
+
   interface NoteEditorProps {
     note?: Note | null;
     momentary?: boolean;
