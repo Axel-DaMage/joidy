@@ -3,10 +3,8 @@
   import { Eye, EyeOff, Save, Trash2, X, Settings, Search, Maximize, ChevronLeft, ChevronRight, Download, RotateCcw, Bold, Italic, Strikethrough, Heading1, Heading2, Heading3, List, ListOrdered, Link, Quote, Code, Image, Paperclip } from 'lucide-svelte';
   import DynamicIcon from './DynamicIcon.svelte';
   import LazyIconPicker from './LazyIconPicker.svelte';
-  import { marked } from 'marked';
-  import DOMPurify from 'dompurify';
-  import hljs from 'highlight.js';
   import 'highlight.js/styles/github-dark.css';
+  import { renderMarkdown as renderMarkdownUtil } from '$lib/utils/markdown';
   import TagChip from './TagChip.svelte';
   import { aiSuggestions, fetchAISuggestions, findNoteByTitle } from '$lib/stores/notes';
   import { activeIconPack, showFrontmatter, hideTagsLine } from '$lib/stores/settings';
@@ -20,35 +18,6 @@
 
   const AUTOSAVE_DELAY = 2000;
   const DRAFT_PREFIX = 'joidy-draft-';
-
-  // Configure marked with GFM and syntax highlighting via highlight.js
-  const renderer = new marked.Renderer();
-  renderer.code = (code: string, infostring: string | undefined, _escaped: boolean) => {
-    const lang = infostring || '';
-    const language = lang && hljs.getLanguage(lang) ? lang : '';
-    let highlighted: string;
-    try {
-      highlighted = language
-        ? hljs.highlight(code, { language }).value
-        : hljs.highlightAuto(code).value;
-    } catch {
-      highlighted = code;
-    }
-    return `<pre><code class="hljs language-${language || 'auto'}">${highlighted}</code></pre>`;
-  };
-  marked.use({ gfm: true, breaks: true, renderer });
-
-  // Configure DOMPurify for safe markdown rendering
-  DOMPurify.setConfig({
-    ALLOWED_TAGS: [
-      'p', 'br', 'strong', 'em', 'a', 'ul', 'ol', 'li',
-      'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-      'pre', 'code', 'blockquote',
-      'table', 'thead', 'tbody', 'tr', 'th', 'td',
-      'span', 'div', 'hr', 'img', 'del', 'ins', 'sup', 'sub',
-    ],
-    ALLOWED_ATTR: ['href', 'target', 'rel', 'src', 'alt', 'class', 'data-title'],
-  });
 
   interface NoteEditorProps {
     note?: Note | null;
@@ -203,24 +172,13 @@
     next: void;
   }>();
 
-  // Markdown → HTML via marked (handles tables, blockquotes, lists, etc.)
+  // Markdown → HTML via the shared utility (handles tables, blockquotes, lists,
+  // wikilinks, syntax highlighting, and DOMPurify sanitization).
   function renderMarkdown(md: string): string {
-    if (!md.trim()) return '<p style="color:var(--text-muted);font-style:italic;">Escribe algo para ver el preview...</p>';
-
-    // Hide tags line from preview if requested
-    let preprocessed = md;
-    if ($hideTagsLine && tags.length > 0) {
-      preprocessed = preprocessed.replace(/^#\s*Tags?:\s*.*$/gim, '');
-    }
-
-    // Pre-process Obsidian wikilinks → HTML spans before marked runs
-    // (marked doesn't know about [[links]] and would render them as plain text)
-    preprocessed = preprocessed.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (match, title, alias) => {
-      const display = alias || title;
-      return `<span class="wikilink" data-title="${title.trim()}">${display}</span>`;
+    return renderMarkdownUtil(md, {
+      hideTagsLine: $hideTagsLine,
+      hasTags: tags.length > 0,
     });
-
-    return DOMPurify.sanitize(String(marked.parse(preprocessed)));
   }
 
   function handlePreviewClick(e: MouseEvent) {
