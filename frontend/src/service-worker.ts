@@ -178,4 +178,4 @@ async function notifyClientsToSync(): Promise<void> {
   for (const client of clients) {
     client.postMessage({ type: 'joidy:sync' });
   }
-});
+}
