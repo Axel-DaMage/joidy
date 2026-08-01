@@ -5,7 +5,7 @@
   import { Search, CornerDownLeft } from 'lucide-svelte';
   import DynamicIcon from './DynamicIcon.svelte';
   import { notes } from '$lib/stores/notes';
-  import { darkMode } from '$lib/stores/settings';
+  import { darkMode, devMode } from '$lib/stores/settings';
   import { isOpen, close } from '$lib/stores/commandPalette';
   import { get } from 'svelte/store';
 
@@ -26,6 +26,7 @@
     { type: 'Navegación', title: 'Ir a Rachas', icon: 'Flame', action: () => goto('/streaks') },
     { type: 'Navegación', title: 'Ir a IA', icon: 'Brain', action: () => goto('/ai') },
     { type: 'Navegación', title: 'Ir a Offline', icon: 'CloudOff', action: () => goto('/offline') },
+    { type: 'Navegación', title: 'Ajustes', icon: 'Settings', action: () => window.dispatchEvent(new CustomEvent('joidy:open-settings')) },
   ];
 
   const actionCommands: Command[] = [
@@ -69,6 +70,14 @@
       icon: 'SunMoon',
       action: () => {
         darkMode.toggle();
+      },
+    },
+    {
+      type: 'Acciones',
+      title: 'Toggle dev mode',
+      icon: 'Terminal',
+      action: () => {
+        devMode.toggle();
       },
     },
     {
