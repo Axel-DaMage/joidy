@@ -19,6 +19,7 @@ build/
 .mypy_cache/
 .coverage
 htmlcov/
+frontend/coverage/
 
 # Node / SvelteKit
 node_modules/

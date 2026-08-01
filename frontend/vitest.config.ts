@@ -12,6 +12,18 @@ export default defineConfig({
 	test: {
 		include: ['src/**/*.{test,spec}.{js,ts}'],
 		environment: 'jsdom',
-		setupFiles: ['./vitest.setup.ts']
+		setupFiles: ['./vitest.setup.ts'],
+		coverage: {
+			provider: 'v8',
+			include: ['src/lib/stores/**', 'src/lib/utils/**'],
+			exclude: ['**/*.d.ts', '**/*.test.ts', 'src/lib/stores/index.ts'],
+			thresholds: {
+				lines: 25,
+				functions: 25,
+				statements: 24,
+				branches: 20
+			},
+			reporter: ['text', 'html']
+		}
 	}
 });
