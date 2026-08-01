@@ -1,5 +1,6 @@
 <script lang="ts">
   import GoalCard from './GoalCard.svelte';
+  import EmptyState from './EmptyState.svelte';
   import type { Goal, Note } from '$lib/api';
   import type { Tag as TagType } from '$lib/api';
   import { setGoalContext } from '$lib/stores/goalContext';
@@ -77,7 +78,7 @@
 
 <div class="editor-grid-container">
   {#if visibleGoals.length === 0}
-    <div class="empty-state">No hay objetivos que coincidan con los filtros.</div>
+    <EmptyState message="No hay objetivos que coincidan con los filtros." />
   {:else}
     <div class="editor-grid">
       {#each visibleGoals as goal (goal.id)}
@@ -102,12 +103,6 @@
     grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
     gap: 20px;
     width: 100%;
-  }
-
-  .empty-state {
-    padding: 32px;
-    text-align: center;
-    color: var(--text-muted);
   }
 
   @media (max-width: 768px) {

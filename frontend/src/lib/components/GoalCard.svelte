@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Pin, PinOff, Target, Clock, Tag, FileText, Settings } from 'lucide-svelte';
   import StreakIcon from './StreakIcon.svelte';
+  import ProgressBar from './ProgressBar.svelte';
   import { getGoalContext } from '$lib/stores/goalContext';
 
   export let goal: any;
@@ -91,9 +92,7 @@
         </span>
         <span class="progress-pct">{(goal.state === 'COMPLETED' || goal.is_completed) ? 100 : goal.progress_pct}%</span>
       </div>
-      <div class="progress-bar">
-        <div class="progress-fill" style="width: {(goal.state === 'COMPLETED' || goal.is_completed) ? 100 : goal.progress_pct}%"></div>
-      </div>
+      <ProgressBar value={(goal.state === 'COMPLETED' || goal.is_completed) ? 100 : goal.progress_pct} color="var(--goal-color)" height={6} />
     </div>
     <div class="card-footer">
       <span class="goal-id">#{goal.id}</span>
@@ -319,20 +318,6 @@
     font-weight: 600;
     color: var(--goal-color);
     font-family: var(--font-mono);
-  }
-
-  .progress-bar {
-    height: 6px;
-    background: var(--border);
-    border-radius: 3px;
-    overflow: hidden;
-  }
-
-  .card-progress .progress-fill {
-    height: 100%;
-    background: var(--goal-color);
-    border-radius: 3px;
-    transition: width 0.3s ease;
   }
 
   .card-footer {
