@@ -36,6 +36,13 @@ Thumbs.db
 
 # Playwright artifacts
 .playwright-mcp/
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
 
 # Scratch / one-off scripts
 scratch/
