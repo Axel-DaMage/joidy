@@ -73,7 +73,7 @@ api/
 ├── services/          Business logic + DB operations
 ├── models/            SQLAlchemy ORM models
 ├── middleware/        Correlation ID, request ID, rate limit, metrics
-├── alembic/           Migrations (versions/ has 12 files)
+├── alembic/           Migrations (versions/ has 7 files)
 ├── repositories.py    Shared query helpers
 └── tests/             pytest/unittest test suite
 ```
