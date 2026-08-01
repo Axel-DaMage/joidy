@@ -1,7 +1,7 @@
 watchfiles==1.0.3
 httpx==0.28.1
-pydantic-settings==2.6.1
-sqlalchemy==2.0.36
-psycopg2-binary==2.9.10
-pgvector==0.3.6
-prometheus-client==0.21.1
+pydantic-settings==2.14.2
+sqlalchemy==2.0.51
+psycopg2-binary==2.9.12
+pgvector==0.5.0
+prometheus-client==0.26.0
