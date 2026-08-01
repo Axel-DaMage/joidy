@@ -25,6 +25,13 @@ from services.auth_service import get_current_user
 _DATABASE_URL = os.getenv("DATABASE_URL", "")
 _USE_POSTGRES = _DATABASE_URL.startswith("postgresql")
 
+# Safety: only allow destructive drop_all on databases whose name contains
+# "test" to prevent accidentally wiping a shared dev/production database (#503).
+from urllib.parse import urlparse
+
+_DB_NAME = urlparse(_DATABASE_URL).path.lstrip("/") if _USE_POSTGRES else ""
+_CAN_DROP = "test" in _DB_NAME.lower() if _DB_NAME else False
+
 # Prevent the app lifespan from running Alembic migrations during tests. The
 # test fixture creates the schema directly via Base.metadata.create_all(), and
 # running migrations on the same DB would conflict (table-already-exists) and
@@ -62,7 +69,18 @@ def db_session():
 
     if _USE_POSTGRES:
         # Drop and recreate per test for isolation on PostgreSQL.
-        Base.metadata.drop_all(engine)
+        # Guard: only drop on test databases to protect dev/prod (#503).
+        if _CAN_DROP:
+            Base.metadata.drop_all(engine)
+        else:
+            import warnings
+
+            warnings.warn(
+                f"Skipping drop_all for non-test database '{_DB_NAME}'. "
+                "Use a database with 'test' in the name for test isolation.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
     engine.dispose()
 
 
