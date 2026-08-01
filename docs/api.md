@@ -57,6 +57,7 @@ interactive OpenAPI docs at `/docs` for full schemas.
 | Method | Path | Auth | Description | Request Body | Response |
 |--------|------|------|-------------|--------------|----------|
 | GET | `/notes/` | Yes | List notes (filters: `tag`, `source_path`, `skip`, `limit`) | — | `List[Note]` |
+| POST | `/notes/search/semantic` | Yes | Semantic search over embeddings (pgvector cosine similarity) | `{query, limit?, threshold?}` | `{results: [{note, score}]}` |
 | GET | `/notes/{note_id}` | Yes | Get a single note | — | `Note` |
 | POST | `/notes/` | Yes | Create a note (201) | `{title, content, tags, source, source_path}` | `Note` + `gamification` |
 | PUT | `/notes/{note_id}` | Yes | Update a note | `{title?, content?, tags?, source_path?, source?}` | `Note` + `gamification` |
@@ -67,6 +68,7 @@ interactive OpenAPI docs at `/docs` for full schemas.
 | POST | `/notes/bulk-untag` | Yes | Remove tags from multiple notes | `{ids: [int], tags: [str]}` | `{removed, notes, tags}` |
 | POST | `/notes/{note_id}/accept-tag` | Yes | Accept an AI-suggested tag (`tag_name` query) | — | `{tag, gamification}` |
 | GET | `/notes/{note_id}/backlinks` | Yes | Notes linking to this note | — | `List[Note]` |
+| GET | `/notes/{note_id}/similar` | Yes | Semantically similar notes (pgvector cosine similarity, `limit` query) | — | `List[{note, score}]` |
 | POST | `/notes/embeddings/retry-failed` | Yes | Retry failed embeddings (`limit` query) | — | `{queued, remaining_failures}` |
 | GET | `/notes/embeddings/dead-letters` | Yes | List dead-lettered embedding failures (`limit` query) | — | list of failure entries |
 | POST | `/notes/embeddings/dead-letters/{note_id}/reset` | Yes | Reset a dead letter for retry | — | `{status, note_id}` |
@@ -199,6 +201,9 @@ interactive OpenAPI docs at `/docs` for full schemas.
 |--------|------|------|-------------|--------------|----------|
 | POST | `/ai/classify` | Yes | Classify a note and suggest tags (proxied to AI service) | `{note_id, content, existing_tags}` | `{note_id, status, suggestions}` |
 | GET | `/ai/usage` | Yes | AI usage and estimated cost | — | `{ai_enabled, estimated_cost_usd}` |
+| POST | `/ai/cluster` | Yes | Cluster notes by semantic similarity (`eps`, `min_samples`, `max_notes` queries) | — | `{clusters, total_notes}` |
+| POST | `/ai/daily-recap` | Yes | Generate an AI daily recap (`target_date` query, YYYY-MM-DD) | — | recap object |
+| POST | `/ai/chat` | Yes | Conversational AI assistant (forwards context + messages to AI service) | `{messages: [{role, content}]}` | chat response object |
 
 ### 2.19 Sync (`sync.py`)
 
@@ -331,8 +336,10 @@ class Goal(Base):
     tag_id: int | None
     parent_id: int | None
     max_assignment_days: int | None
+    pending_removal: bool
     is_completed: bool
     completed_at: datetime | None
+    source_path: str | None
     created_at: datetime
     updated_at: datetime
 ```

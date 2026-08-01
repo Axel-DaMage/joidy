@@ -90,7 +90,7 @@ columns.
 | `id` | Integer | PK, indexed |
 | `title` | String(500) | not null |
 | `content` | Text | default `""` |
-| `source` | String(50) | default `"joidy"` (`joidy` \| `obsidian`) |
+| `source` | String(50) | default `"joidy"` (`joidy` \| `obsidian` \| `api` \| `import`) |
 | `source_path` | String(1000) | nullable, indexed |
 | `is_embedded` | Boolean | default `False` |
 | `created_at` | DateTime | server default `now()` |
@@ -385,6 +385,21 @@ token is encrypted with Fernet using the app's `SECRET_KEY`.
 | `created_at` | DateTime | server default `now()` |
 | `updated_at` | DateTime | server default `now()`, onupdate `now()` |
 
+### `api_usage` — `APIUsage` (no ORM model; created by Alembic migration)
+Tracks AI provider token usage for cost estimation. Written by
+`ai-service/cost_tracker.py` via raw SQL (no SQLAlchemy model in `api/models/`).
+Created by migration `d4e5f6a7b8c9_add_api_usage.py`.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | Integer | PK |
+| `operation` | String(50) | not null (e.g. `embed`, `classify`, `chat`) |
+| `input_tokens` | Integer | default `0` |
+| `output_tokens` | Integer | default `0` |
+| `created_at` | DateTime (timezone) | server default `now()`, indexed |
+
+**Indexes:** `ix_api_usage_created_at`, `ix_api_usage_operation`.
+
 ---
 
 ## Entity-Relationship Diagram
@@ -635,6 +650,13 @@ erDiagram
         datetime created_at
         datetime updated_at
     }
+    api_usage {
+        integer id PK
+        string operation
+        integer input_tokens
+        integer output_tokens
+        datetime created_at
+    }
 ```
 
 ---
@@ -653,4 +675,10 @@ erDiagram
 - **Indexes:** Primary keys and explicitly `index=True` columns are indexed
   automatically by SQLAlchemy. Unique constraints (e.g. `tags.name`,
   `github_repos.full_name`, `streak_checkins(streak_id, check_date)`) also
-  create indexes.
+  create indexes. Migration `e5f6a7b8c9d0_add_missing_indexes.py` added
+  explicit indexes on frequently filtered/ordered columns: `notes.created_at`,
+  `notes.updated_at`, `note_links.target_note_id`,
+  `embedding_failures.next_retry_at`, `goals.parent_id`, `goals.note_id`,
+  `goals.tag_id`, `goals.state`, `personal_streaks.is_archived`,
+  `personal_streaks.category`. The `api_usage` table has indexes on
+  `created_at` and `operation`.

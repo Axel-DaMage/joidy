@@ -7,13 +7,13 @@ pydantic-settings==2.6.1
 httpx==0.28.1
 python-multipart==0.0.32
 psycopg2-binary==2.9.12
-pgvector==0.3.6
+pgvector==0.5.0
 pyjwt==2.13.0
 bleach==6.4.0
 passlib[bcrypt]==1.7.4
 bcrypt==4.0.1
 prometheus-client==0.26.0
-pywebpush==2.0.0
+pywebpush==2.3.0
 cryptography==48.0.1
 pytest==8.3.4
 pytest-cov==6.0.0
