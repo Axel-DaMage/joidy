@@ -1,6 +1,5 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import SkillTree from '$lib/components/SkillTree.svelte';
   import { api, type Skill, type SkillTree as SkillTreeData } from '$lib/api';
   import { logger } from '$lib/utils/logger';
   import { displayTagName } from '$lib/utils/format';
@@ -8,6 +7,15 @@
   import { devMode } from '$lib/stores/settings';
   import { openShare } from '$lib/stores/shareAchievement';
   import { Search, X, Share2 } from 'lucide-svelte';
+
+  // Lazy-load the heavy SkillTree (236 lines, pulls in d3) so it is split
+  // into a separate chunk and only downloaded when dev mode is on (#347).
+  let SkillTree = $state<typeof import('$lib/components/SkillTree.svelte').default | null>(null);
+  $effect(() => {
+    if ($devMode && !SkillTree) {
+      import('$lib/components/SkillTree.svelte').then(m => SkillTree = m.default);
+    }
+  });
 
   let skills: Skill[] = $state([]);
   let treeData: SkillTreeData = $state({ nodes: [], edges: [] });
@@ -89,8 +97,10 @@
         <div class="loading-state caption">
           Agrega 3+ notas con un tag para desbloquear una habilidad.
         </div>
+      {:else if SkillTree}
+        <svelte:component this={SkillTree} data={treeData} width={560} height={420} />
       {:else}
-        <SkillTree data={treeData} width={560} height={420} />
+        <div class="loading-state caption">Cargando árbol...</div>
       {/if}
     </div>
 

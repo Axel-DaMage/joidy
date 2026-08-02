@@ -4,8 +4,6 @@
   import { X, Snowflake, ChevronRight } from 'lucide-svelte';
     import { Shuffle, CheckCheck } from 'lucide-svelte';
   import StreakListItem from '$lib/components/StreakListItem.svelte';
-  import StreakCreateModal from '$lib/components/StreakCreateModal.svelte';
-  import StreakHeatmap from '$lib/components/StreakHeatmap.svelte';
   import StreakStatsPanel from '$lib/components/StreakStatsPanel.svelte';
   import StreakListPanel from '$lib/components/StreakListPanel.svelte';
   import { api, type PersonalStreak, type StreakStats } from '$lib/api';
@@ -15,6 +13,23 @@
   import { openShare } from '$lib/stores/shareAchievement';
   import { logger } from '$lib/utils/logger';
   import { Share2 } from 'lucide-svelte';
+
+  // Lazy-load heavy components so they are split into separate chunks and
+  // only downloaded when actually needed (#347).
+  // StreakCreateModal (558 lines) — loaded when the user opens the create/edit modal.
+  let StreakCreateModal: typeof import('$lib/components/StreakCreateModal.svelte').default | null = null;
+  function ensureStreakCreateModal() {
+    if (!StreakCreateModal) {
+      import('$lib/components/StreakCreateModal.svelte').then(m => StreakCreateModal = m.default);
+    }
+  }
+  // StreakHeatmap (561 lines) — loaded when a streak is selected for detail view.
+  let StreakHeatmap: typeof import('$lib/components/StreakHeatmap.svelte').default | null = null;
+  function ensureStreakHeatmap() {
+    if (!StreakHeatmap) {
+      import('$lib/components/StreakHeatmap.svelte').then(m => StreakHeatmap = m.default);
+    }
+  }
 
   let streaks: PersonalStreak[] = [];
   let stats: StreakStats | null = null;
@@ -81,6 +96,7 @@
       selectedId = snap.state.selectedId ?? null;
       showArchived = snap.state.showArchived ?? false;
       searchQuery = snap.state.searchQuery ?? '';
+      if (selectedId) ensureStreakHeatmap();
     }
     
     const cached = getCachedData<PersonalStreak[]>('streaks');
@@ -105,6 +121,7 @@
       }
     } finally {
       if (selectedId && !streaks.find(s => s.id === selectedId)) selectedId = streaks[0]?.id ?? null;
+      if (selectedId) ensureStreakHeatmap();
     }
 
     window.addEventListener('beforeunload', handleBeforeUnload);
@@ -137,6 +154,7 @@
         // Force reactivity
         streaks = streaks;
         selectedId = created.id;
+        ensureStreakHeatmap();
       }
       stats = await api.personalStreaks.stats();
       notifyStreaksUpdated();
@@ -202,6 +220,7 @@
     if (filteredStreaks.length === 0) return;
     const next = filteredStreaks[Math.floor(Math.random() * filteredStreaks.length)];
     selectedId = next.id;
+    ensureStreakHeatmap();
   }
 
   function toggleArchivedView() {
@@ -275,11 +294,13 @@
   function openCreate() {
     editTarget = null;
     showModal = true;
+    ensureStreakCreateModal();
   }
 
   function openEdit(s: PersonalStreak) {
     editTarget = s;
     showModal = true;
+    ensureStreakCreateModal();
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
@@ -346,7 +367,7 @@
         {getDaysForCompletion}
         onToggleArchive={toggleArchivedView}
         onCreate={openCreate}
-        onSelect={(id) => selectedId = id}
+        onSelect={(id) => { selectedId = id; ensureStreakHeatmap(); }}
         onEdit={openEdit}
         onDelete={deleteStreak}
       />
@@ -431,12 +452,17 @@
 
             <!-- Activity calendar -->
             <div class="heatmap-section">
-              <StreakHeatmap
-                history={selected.history}
-                color={selected.color || 'var(--xp)'}
-                startDate={selected.start_date}
-                targetDate={selected.target_date}
-              />
+              {#if StreakHeatmap}
+                <svelte:component
+                  this={StreakHeatmap}
+                  history={selected.history}
+                  color={selected.color || 'var(--xp)'}
+                  startDate={selected.start_date}
+                  targetDate={selected.target_date}
+                />
+              {:else}
+                <div class="caption" style="padding: 24px; text-align: center; color: var(--text-muted);">Cargando calendario...</div>
+              {/if}
             </div>
 
             <!-- Footer: dates + actions, sticky at bottom -->
@@ -531,13 +557,16 @@
   </div>
 {/if}
 
-<StreakCreateModal
-  bind:open={showModal}
-  editStreak={editTarget}
-  on:close={() => { showModal = false; editTarget = null; }}
-  on:save={handleSave}
-  on:archive={() => editTarget?.id != null && archiveStreak(editTarget.id, !editTarget.is_archived)}
-/>
+{#if StreakCreateModal}
+  <svelte:component
+    this={StreakCreateModal}
+    bind:open={showModal}
+    editStreak={editTarget}
+    on:close={() => { showModal = false; editTarget = null; }}
+    on:save={handleSave}
+    on:archive={() => editTarget?.id != null && archiveStreak(editTarget.id, !editTarget.is_archived)}
+  />
+{/if}
 
 <style>
   .streaks-page {

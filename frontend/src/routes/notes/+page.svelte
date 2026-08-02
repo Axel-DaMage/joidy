@@ -4,8 +4,17 @@
   import { goto } from '$app/navigation';
   import { Search, Plus, X, List, FolderTree, ChevronRight, FileEdit, FolderPlus, ChevronsUpDown, ArrowUpDown, Settings } from 'lucide-svelte';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
-  import NoteEditor from '$lib/components/NoteEditor.svelte';
   import NoteCard from '$lib/components/NoteCard.svelte';
+
+  // Lazy-load the heavy NoteEditor (1631 lines, pulls in highlight.js, marked,
+  // dompurify, tiptap) so it is split into a separate chunk and only
+  // downloaded when the user actually opens a note for editing (#347).
+  let NoteEditor: typeof import('$lib/components/NoteEditor.svelte').default | null = null;
+  function ensureNoteEditor() {
+    if (!NoteEditor) {
+      import('$lib/components/NoteEditor.svelte').then(m => NoteEditor = m.default);
+    }
+  }
   import LazyIconPicker from '$lib/components/LazyIconPicker.svelte';
   import VirtualList from '$lib/components/VirtualList.svelte';
   import { notes, notesLoading, loadNotes, createNote, updateNote, deleteNote, aiSuggestions, notesLoadedOnce, selectedNoteIds, bulkMode, toggleNoteSelection, selectAllNotes, clearNoteSelection, deleteSelectedNotes, tagSelectedNotes, untagSelectedNotes } from '$lib/stores/notes';
@@ -486,6 +495,7 @@
     showEditor = true;
     editingNew = false;
     aiSuggestions.set([]);
+    ensureNoteEditor();
   }
 
   function openNew() {
@@ -496,6 +506,7 @@
     dailySourcePath = null;
     dailyInitialTitle = '';
     aiSuggestions.set([]);
+    ensureNoteEditor();
   }
 
   function openMomentary() {
@@ -505,6 +516,7 @@
     isMomentary = true;
     dailySourcePath = null;
     dailyInitialTitle = '';
+    ensureNoteEditor();
   }
 
   function normalizeVaultFolder(path: string): string {
@@ -542,6 +554,7 @@
     dailyInitialTitle = today;
     dailySourcePath = buildDailySourcePath(vaultPath, dailyFolder, `${today}.md`);
     aiSuggestions.set([]);
+    ensureNoteEditor();
   }
 
   function closeEditor() {
@@ -950,18 +963,23 @@
     {/if}
     {#if showEditor}
       {#key editingNew ? (isMomentary ? 'momentary' : 'new') : selectedNote?.id}
-        <NoteEditor
-          note={editorNote}
-          momentary={isMomentary}
-          initialTitle={dailyInitialTitle}
-          {hasPrev}
-          {hasNext}
-          on:save={handleSave}
-          on:cancel={closeEditor}
-          on:delete={handleDelete}
-          on:prev={goToPrev}
-          on:next={goToNext}
-        />
+        {#if NoteEditor}
+          <svelte:component
+            this={NoteEditor}
+            note={editorNote}
+            momentary={isMomentary}
+            initialTitle={dailyInitialTitle}
+            {hasPrev}
+            {hasNext}
+            on:save={handleSave}
+            on:cancel={closeEditor}
+            on:delete={handleDelete}
+            on:prev={goToPrev}
+            on:next={goToNext}
+          />
+        {:else}
+          <div class="editor-loading caption">Cargando editor...</div>
+        {/if}
       {/key}
     {:else}
       <div class="empty-dashboard">
