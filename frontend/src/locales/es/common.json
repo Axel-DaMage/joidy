@@ -87,5 +87,16 @@
     "defaultTitle": "Nota rápida",
     "created": "¡Nota creada!",
     "error": "No se pudo crear la nota"
+  },
+  "mood": {
+    "title": "ÁNIMO",
+    "scoreLabel": "Ánimo {score} de 5",
+    "notePlaceholder": "Nota (opcional)",
+    "history": "Últimos 7 días",
+    "noHistory": "Sin registros aún",
+    "avg": "promedio",
+    "streak": "racha",
+    "saved": "Ánimo guardado",
+    "error": "Error al guardar el ánimo"
   }
 }
