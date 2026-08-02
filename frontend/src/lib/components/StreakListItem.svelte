@@ -300,6 +300,7 @@
     display: flex; flex-direction: column; gap: 3px;
     position: absolute; top: 6px; right: 6px;
     transition: opacity 0.15s;
+    z-index: 2;
   }
 
   @media (hover: hover) {

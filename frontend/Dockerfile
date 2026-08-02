@@ -6,6 +6,7 @@ COPY package.json ./
 RUN npm install
 
 FROM deps AS development
+RUN chown -R node:node /app/node_modules
 COPY --chown=node:node . .
 USER node
 EXPOSE 3000

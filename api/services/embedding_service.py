@@ -1,4 +1,6 @@
+import asyncio
 import logging
+import time
 from datetime import datetime, timedelta, timezone
 
 import httpx
@@ -10,31 +12,72 @@ from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
+_EMBEDDING_HEALTH_TTL = 60.0
+_embedding_health_cache: tuple[bool, float] | None = None
+_embedding_semaphore = asyncio.Semaphore(8)
+
 
 # ponytail: background tasks need own session; sync callers can pass one
 def _session_or_none(db: Session | None) -> Session:
     return db if db is not None else SessionLocal()
 
 
+async def _embeddings_available() -> bool:
+    """Check (cached) whether the ai-service can produce embeddings."""
+    global _embedding_health_cache
+    now = time.monotonic()
+    if _embedding_health_cache is not None and now - _embedding_health_cache[1] < _EMBEDDING_HEALTH_TTL:
+        return _embedding_health_cache[0]
+    available = False
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            r = await client.get(f"{settings.ai_service_url}/health")
+            if r.status_code == 200:
+                body = r.json()
+                available = bool((body.get("provider") or {}).get("embedding", {}).get("available"))
+    except Exception:
+        logger.warning("[embedding] ai-service health check failed, assuming unavailable", exc_info=True)
+    _embedding_health_cache = (available, now)
+    return available
+
+
 async def trigger_embedding(
     note_id: int, content: str, db: Session | None = None
 ) -> None:
+    if not await _embeddings_available():
+        logger.debug("[embedding] skipped note_id=%s (no embedding provider available)", note_id)
+        return
+    async with _embedding_semaphore:
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                headers = {}
+                if settings.internal_secret:
+                    headers["X-Internal-Secret"] = settings.internal_secret
+                response = await client.post(
+                    f"{settings.ai_service_url}/embed",
+                    json={"note_id": note_id, "content": content},
+                    headers=headers,
+                )
+                response.raise_for_status()
+            await asyncio.to_thread(_clear_embedding_failure_sync, note_id, db)
+        except Exception as exc:
+            logger.exception("Embedding failed for note_id=%s", note_id)
+            await asyncio.to_thread(_record_embedding_failure_sync, note_id, str(exc), db)
+
+
+def _clear_embedding_failure_sync(note_id: int, db: Session | None) -> None:
     _db = _session_or_none(db)
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            headers = {}
-            if settings.internal_secret:
-                headers["X-Internal-Secret"] = settings.internal_secret
-            response = await client.post(
-                f"{settings.ai_service_url}/embed",
-                json={"note_id": note_id, "content": content},
-                headers=headers,
-            )
-            response.raise_for_status()
         clear_embedding_failure(_db, note_id)
-    except Exception as exc:
-        record_embedding_failure(_db, note_id, str(exc))
-        logger.exception("Embedding failed for note_id=%s", note_id)
+    finally:
+        if db is None:
+            _db.close()
+
+
+def _record_embedding_failure_sync(note_id: int, error_message: str, db: Session | None) -> None:
+    _db = _session_or_none(db)
+    try:
+        record_embedding_failure(_db, note_id, error_message)
     finally:
         if db is None:
             _db.close()

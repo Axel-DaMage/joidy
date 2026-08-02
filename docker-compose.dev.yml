@@ -28,7 +28,7 @@ services:
       - APP_ENV=development
       - VAULT_PATH=/vault
       - OBSIDIAN_VAULT_PATH=/vault
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload --reload-include '*.py'
 
   ai-service:
     build:

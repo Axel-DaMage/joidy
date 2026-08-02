@@ -158,6 +158,26 @@ CREATE TABLE embedding_failures (
 );
 ```
 
+Registro de reintentos de embeddings fallidos (ver `embedding_service.py`).
+
+---
+
+#### note_embeddings
+
+```sql
+CREATE TABLE note_embeddings (
+    note_id INTEGER REFERENCES notes(id) ON DELETE CASCADE PRIMARY KEY,
+    embedding VECTOR(768)
+);
+```
+
+Vector de embeddings por nota (pgvector, dimensión 768 = Gemini). Un solo embedding por nota (PK = note_id).
+
+| Campo | Tipo | Descripción |
+|-------|------|-------------|
+| note_id | INTEGER | FK a notes.id (PK, un embedding por nota) |
+| embedding | VECTOR(768) | Vector semántico generado por el provider de embeddings |
+
 Retry logic para embeddings fallidos.
 
 ---
@@ -350,13 +370,258 @@ CREATE TABLE planning_assignments (
 ```sql
 CREATE TABLE github_repos (
     id INTEGER PRIMARY KEY,
-    repo_id INTEGER UNIQUE,
-    name VARCHAR(100) NOT NULL,
-    full_name VARCHAR(200) NOT NULL,
-    color VARCHAR(20) DEFAULT '#888888',
-    last_synced DATETIME
+    name VARCHAR(200) NOT NULL,
+    full_name VARCHAR(200) UNIQUE NOT NULL,
+    description TEXT,
+    url VARCHAR(500) NOT NULL,
+    default_branch VARCHAR(100) DEFAULT 'main',
+    is_private BOOLEAN DEFAULT FALSE,
+    status VARCHAR(50) DEFAULT 'ACTIVE',       -- GitHubRepoStatus: ACTIVE | ARCHIVED
+    webhook_id INTEGER,
+    webhook_secret VARCHAR(100),
+    last_synced_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 ```
+
+| Campo | Tipo | Descripción |
+|-------|------|-------------|
+| id | INTEGER | Primary key |
+| name | VARCHAR(200) | Nombre del repo |
+| full_name | VARCHAR(200) | `owner/repo` (único) |
+| description | TEXT | Descripción del repo |
+| url | VARCHAR(500) | URL del repo |
+| default_branch | VARCHAR(100) | Rama por defecto |
+| is_private | BOOLEAN | Si es repo privado |
+| status | VARCHAR(50) | ACTIVE o ARCHIVED |
+| webhook_id | INTEGER | ID del webhook de GitHub |
+| webhook_secret | VARCHAR(100) | Secreto para verificar firma del webhook |
+| last_synced_at | DATETIME | Última sincronización |
+| created_at / updated_at | DATETIME | Timestamps |
+
+---
+
+#### github_items
+
+Items de GitHub sincronizados (issues/PRs) y su vínculo con goals/notas.
+
+```sql
+CREATE TABLE github_items (
+    id INTEGER PRIMARY KEY,
+    repo_id INTEGER REFERENCES github_repos(id) ON DELETE CASCADE,
+    external_id INTEGER NOT NULL,
+    item_type VARCHAR(50) NOT NULL,            -- GitHubItemType: ISSUE | PULL_REQUEST
+    number INTEGER NOT NULL,
+    title VARCHAR(500) NOT NULL,
+    body TEXT DEFAULT '',
+    state VARCHAR(20) DEFAULT 'open',
+    state_reason VARCHAR(50),
+    author VARCHAR(100) DEFAULT '',
+    assignee VARCHAR(100),
+    labels VARCHAR(500) DEFAULT '',
+    url VARCHAR(500) NOT NULL,
+    html_url VARCHAR(500) NOT NULL,
+    goal_id INTEGER REFERENCES goals(id) ON DELETE SET NULL,
+    note_id INTEGER REFERENCES notes(id) ON DELETE SET NULL,
+    synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+| Campo | Tipo | Descripción |
+|-------|------|-------------|
+| id | INTEGER | Primary key |
+| repo_id | INTEGER | FK a github_repos.id |
+| external_id | INTEGER | ID del item en GitHub |
+| item_type | VARCHAR(50) | ISSUE o PULL_REQUEST |
+| number | INTEGER | Número en GitHub |
+| title | VARCHAR(500) | Título |
+| body | TEXT | Cuerpo |
+| state | VARCHAR(20) | open/closed |
+| state_reason | VARCHAR(50) | Motivo de cierre |
+| author | VARCHAR(100) | Autor |
+| assignee | VARCHAR(100) | Asignado |
+| labels | VARCHAR(500) | Labels separados por coma |
+| url / html_url | VARCHAR(500) | URLs del item |
+| goal_id | INTEGER | FK a goals.id (opcional, item → goal) |
+| note_id | INTEGER | FK a notes.id (opcional, item → nota) |
+
+---
+
+#### github_events
+
+Webhook events de GitHub crudos, pendientes de procesar.
+
+```sql
+CREATE TABLE github_events (
+    id INTEGER PRIMARY KEY,
+    repo_id INTEGER REFERENCES github_repos(id) ON DELETE CASCADE,
+    event_type VARCHAR(50) NOT NULL,           -- GitHubEventType: ISSUES | PULL_REQUEST | ...
+    action VARCHAR(50) NOT NULL,
+    sender VARCHAR(100) NOT NULL,
+    item_type VARCHAR(50),
+    item_number INTEGER,
+    item_external_id INTEGER,
+    payload JSON DEFAULT '{}',
+    processed BOOLEAN DEFAULT FALSE,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+| Campo | Tipo | Descripción |
+|-------|------|-------------|
+| id | INTEGER | Primary key |
+| repo_id | INTEGER | FK a github_repos.id |
+| event_type | VARCHAR(50) | Tipo de evento (issues, pull_request, ...) |
+| action | VARCHAR(50) | Acción (opened, closed, ...) |
+| sender | VARCHAR(100) | Usuario que disparó el evento |
+| item_type | VARCHAR(50) | Tipo de item afectado |
+| item_number / item_external_id | INTEGER | Identificación del item |
+| payload | JSON | Payload crudo del webhook |
+| processed | BOOLEAN | Si ya fue procesado por el worker |
+
+---
+
+### 2.8 Integración Google
+
+#### google_tokens
+
+Tokens de integraciones Google (Gmail, Calendar, Tasks, Contacts).
+
+```sql
+CREATE TABLE google_tokens (
+    id INTEGER PRIMARY KEY,
+    user_id INTEGER NOT NULL DEFAULT 1 UNIQUE,
+    access_token TEXT,
+    refresh_token_encrypted TEXT,
+    token_type VARCHAR DEFAULT 'Bearer',
+    expires_at DATETIME,
+    scope TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+| Campo | Tipo | Descripción |
+|-------|------|-------------|
+| id | INTEGER | Primary key |
+| user_id | INTEGER | Usuario (único, un token por usuario) |
+| access_token | TEXT | Access token de OAuth |
+| refresh_token_encrypted | TEXT | Refresh token cifrado |
+| token_type | VARCHAR | Bearer |
+| expires_at | DATETIME | Expiración del access token |
+| scope | TEXT | Scopes concedidos |
+
+---
+
+### 2.9 Push Notifications
+
+#### push_subscriptions
+
+Suscripciones Web Push (VAPID) por usuario.
+
+```sql
+CREATE TABLE push_subscriptions (
+    id INTEGER PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    endpoint VARCHAR NOT NULL,
+    p256dh VARCHAR NOT NULL,
+    auth VARCHAR NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+| Campo | Tipo | Descripción |
+|-------|------|-------------|
+| id | INTEGER | Primary key |
+| user_id | INTEGER | Usuario |
+| endpoint | VARCHAR | Endpoint de Push API |
+| p256dh | VARCHAR | Clave pública del cliente |
+| auth | VARCHAR | Secreto de autenticación |
+
+---
+
+### 2.10 Sincronización
+
+#### sync_state
+
+Estado de sincronización por nota (para sync bidireccional con Obsidian).
+
+```sql
+CREATE TABLE sync_state (
+    id INTEGER PRIMARY KEY,
+    note_id INTEGER NOT NULL,
+    last_synced_at DATETIME,
+    local_mtime DATETIME,
+    remote_mtime DATETIME,
+    conflict BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+| Campo | Tipo | Descripción |
+|-------|------|-------------|
+| id | INTEGER | Primary key |
+| note_id | INTEGER | Nota sincronizada |
+| last_synced_at | DATETIME | Última sincronización |
+| local_mtime | DATETIME | Modificación local |
+| remote_mtime | DATETIME | Modificación remota |
+| conflict | BOOLEAN | Si hay conflicto pendiente |
+
+---
+
+### 2.11 Configuración
+
+#### system_config
+
+Configuración clave-valor del sistema.
+
+```sql
+CREATE TABLE system_config (
+    id INTEGER PRIMARY KEY,
+    key VARCHAR UNIQUE NOT NULL,
+    value VARCHAR,
+    updated_at DATETIME
+);
+```
+
+| Campo | Tipo | Descripción |
+|-------|------|-------------|
+| id | INTEGER | Primary key |
+| key | VARCHAR | Clave (única) |
+| value | VARCHAR | Valor |
+| updated_at | DATETIME | Última actualización |
+
+---
+
+### 2.12 Métricas de IA
+
+#### api_usage
+
+Tracking de uso/costo de las llamadas al servicio de IA (creada en la migración `d4e5f6a7b8c9`).
+
+```sql
+CREATE TABLE api_usage (
+    id INTEGER PRIMARY KEY,
+    operation VARCHAR(50) NOT NULL,
+    input_tokens INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT now() NOT NULL
+);
+CREATE INDEX ix_api_usage_created_at ON api_usage(created_at);
+CREATE INDEX ix_api_usage_operation ON api_usage(operation);
+```
+
+| Campo | Tipo | Descripción |
+|-------|------|-------------|
+| id | INTEGER | Primary key |
+| operation | VARCHAR(50) | Operación (embed, classify, rag) |
+| input_tokens | INTEGER | Tokens de entrada |
+| output_tokens | INTEGER | Tokens de salida |
+| created_at | TIMESTAMPTZ | Fecha (UTC) |
 
 ---
 
@@ -366,13 +631,19 @@ CREATE TABLE github_repos (
 
 | Archivo | Modelos |
 |---------|---------|
-| note.py | Note, Tag, NoteTag, NoteLink, TagCooccurrence, EmbeddingFailure |
+| note.py | Note, Tag, NoteTag, NoteLink, TagCooccurrence, EmbeddingFailure, NoteEmbedding |
 | goal.py | Goal |
 | gamification.py | XPEvent, StreakRecord, UserStats |
 | personal_streaks.py | PersonalStreak, StreakCheckin |
 | skill.py | Skill |
 | planning.py | PlanningAssignment |
-| github.py | GitHubRepo |
+| github.py | GitHubRepo, GitHubItem, GitHubEvent |
+| google_token.py | GoogleToken |
+| sync_state.py | SyncState |
+| push_subscription.py | PushSubscription |
+| config.py | SystemConfig |
+
+> `api_usage` no tiene modelo ORM; se crea vía migración (`d4e5f6a7b8c9_add_api_usage.py`) y se escribe directamente con SQLAlchemy Core en el ai-service.
 
 ### 3.2 Ejemplo de Modelo
 
@@ -435,14 +706,13 @@ docker compose exec api alembic revision -m "description"
 
 | Archivo | Descripción |
 |---------|-------------|
-| 20260421_000001_initial_schema.py | Schema inicial |
-| 20260421_000002_tag_cooccurrences.py | Co-ocurrencias de tags |
-| 20260421_000003_embedding_failures.py | Tabla de reintentos |
-| 20260427_consolidated.py | Consolidación |
-| 20260501_planning.py | Planificación |
-| 20260502_github_integration.py | GitHub |
-| 20260503_add_max_assignment_days.py | Max days |
-| 20260504_add_source_path_to_goals.py | Source path |
+| 2f638d55375d_schema.py | Schema inicial consolidado |
+| a1b2c3d4e5f6_cleanup_hex_named_tags.py | Limpieza de tags con nombres hex |
+| bce8f3a471d1_add_push_subscriptions_table.py | Tabla push_subscriptions |
+| c3d4e5f6a7b8_add_google_tokens.py | Tabla google_tokens |
+| d4e5f6a7b8c9_add_api_usage.py | Tabla api_usage (costo IA) |
+| 8261da3f5e9d_add_sync_state.py | Tabla sync_state |
+| e5f6a7b8c9d0_add_missing_indexes.py | Índices faltantes (ix_notes_created_at, ix_notes_updated_at) |
 
 ---
 

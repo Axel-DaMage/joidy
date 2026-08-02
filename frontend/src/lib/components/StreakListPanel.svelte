@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Plus, Archive, Search, Flame } from 'lucide-svelte';
   import StreakListItem from './StreakListItem.svelte';
+  import EmptyState from './EmptyState.svelte';
   import type { PersonalStreak } from '$lib/api';
 
   interface Props {
@@ -88,11 +89,9 @@
     {:else if loading}
       <div class="empty-state mono">Cargando...</div>
     {:else if filteredStreaks.length === 0}
-      <div class="empty-state">
-        <Flame size={24} style="opacity:.25; margin-bottom:8px;" />
-        <p>No hay rachas. ¡Crea una para comenzar!</p>
-        <button class="link-btn" onclick={onCreate}>Crear una nueva</button>
-      </div>
+      <EmptyState message="No hay rachas. ¡Crea una para comenzar!" actionLabel="Crear una nueva" onAction={onCreate}>
+        {#snippet icon()}<Flame size={24} />{/snippet}
+      </EmptyState>
     {:else}
       {#each filteredStreaks as streak (streak.id)}
         <StreakListItem
