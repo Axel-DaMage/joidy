@@ -90,6 +90,7 @@ def sync_note_links(db: Session, source_note_id: int, content: str) -> None:
     # Batch-load all target notes in a single query instead of one per link.
     # Use OR of ilike conditions to avoid N+1 queries.
     from sqlalchemy import or_
+
     conditions = [Note.title.ilike(t) for t in unique_titles]
     targets = db.query(Note).filter(or_(*conditions)).all()
     for target in targets:
@@ -138,15 +139,27 @@ def create_note(
     if source_path and not from_vault:
         write_to_vault(note)
         from services.sync_service import update_local_mtime
+
         update_local_mtime(db, note.id)
         db.commit()
     clear_api_caches()
 
     try:
         from routers.websocket import broadcast_note_created
+
         broadcast_note_created(note.id, note.title)
     except Exception:
         pass
+
+    # Broadcast a vault_synced event when the note came from Obsidian so the
+    # frontend can distinguish vault syncs from manual creations (#73).
+    if source == "obsidian":
+        try:
+            from routers.websocket import broadcast_vault_synced
+
+            broadcast_vault_synced(note.id, note.title, note.source_path)
+        except Exception:
+            pass
 
     return note, gami
 
@@ -183,7 +196,7 @@ def update_note(
         if abs(len(content) - old_len) > 50:
             gami = process_event(db, "note_edited", {"note_id": note.id})
     if tags is not None:
-        touched_tag_ids = {tag_id for tag_id, in db.query(NoteTag.tag_id).filter(NoteTag.note_id == note_id).all()}
+        touched_tag_ids = {tag_id for (tag_id,) in db.query(NoteTag.tag_id).filter(NoteTag.note_id == note_id).all()}
         db.query(NoteTag).filter(NoteTag.note_id == note_id).delete()
         db.flush()
         for tag_name in tags:
@@ -211,15 +224,27 @@ def update_note(
     if content is not None and not from_vault:
         write_to_vault(note)
         from services.sync_service import update_local_mtime
+
         update_local_mtime(db, note.id)
         db.commit()
     clear_api_caches()
 
     try:
         from routers.websocket import broadcast_note_updated
+
         broadcast_note_updated(note.id, note.title)
     except Exception:
         pass
+
+    # Broadcast a vault_synced event when the update came from Obsidian so the
+    # frontend can distinguish vault syncs from manual edits (#73).
+    if from_vault or note.source == "obsidian":
+        try:
+            from routers.websocket import broadcast_vault_synced
+
+            broadcast_vault_synced(note.id, note.title, note.source_path)
+        except Exception:
+            pass
 
     return note, gami
 
@@ -233,6 +258,7 @@ def delete_note(db: Session, note_id: int) -> bool:
 
     # Revert XP awarded for note creation to prevent XP farming
     from models.gamification import UserStats, XPEvent
+
     stats = db.query(UserStats).filter(UserStats.id == 1).first()
     if stats:
         xp_to_revert = xp_for("note_created", db, 10)

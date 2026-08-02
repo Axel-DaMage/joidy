@@ -98,5 +98,13 @@
     "streak": "streak",
     "saved": "Mood saved",
     "error": "Failed to save mood"
+  },
+  "sync": {
+    "syncedFromVault": "Synced from vault: \"{title}\"",
+    "syncingVault": "Syncing vault...",
+    "syncedVault": "Vault synced",
+    "lastSync": "Last sync",
+    "neverSynced": "Never synced",
+    "totalSynced": "{count} notes synced"
   }
 }
