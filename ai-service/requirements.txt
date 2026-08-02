@@ -8,7 +8,7 @@ anthropic==0.120.2
 cohere==5.11.4
 aiohttp==3.14.1
 sqlalchemy==2.0.51
-psycopg2-binary==2.9.10
+psycopg2-binary==2.9.12
 pgvector==0.3.6
 prometheus-client==0.21.1
 numpy==1.26.4
