@@ -52,12 +52,6 @@
   import { initOfflineSync } from '$lib/stores/offlineSync';
   import ShareAchievementModal from '$lib/components/ShareAchievementModal.svelte';
   import { initFocusModeConfig, queueNotificationIfActive } from '$lib/stores/focusMode';
-  import {
-    initUsageTracking,
-    trackPageView,
-    trackSessionStart,
-    trackSessionEnd,
-  } from '$lib/stores/usage';
 
   type NavItemStatus = 'ready' | 'dev' | 'placeholder';
 
@@ -73,13 +67,7 @@
     { href: '/ai', label: $t('nav.ai'), icon: 'Brain', status: 'ready' },
     { href: '/goals', label: $t('nav.goals'), icon: 'Target', status: 'ready' },
     { href: '/streaks', label: $t('nav.streaks'), icon: 'Flame', status: 'ready' },
-    { href: '/analytics', label: $t('nav.analytics'), icon: 'BarChart3', status: 'ready' },
   ] as { href: string; label: string; icon: string; status: NavItemStatus }[];
-
-  // Track page views on route changes (foreground-only, debounced in the store).
-  $: if (mounted && $isAuthenticated) {
-    trackPageView($page.url.pathname);
-  }
 
   let settingsOpen = false;
   let now = new Date();
@@ -134,13 +122,6 @@
     devMode.init();
     const cleanupConnection = initConnectionStore();
     const cleanupOfflineSync = initOfflineSync();
-
-    // Internal usage tracking (#250) — only records while the app is in the
-    // foreground. Starts a session on mount and ends it on cleanup.
-    const cleanupUsage = initUsageTracking();
-    if ($isAuthenticated) {
-      trackSessionStart();
-    }
 
     // First-use detection: start the onboarding tour for brand-new users.
     if ($isAuthenticated) {
@@ -478,10 +459,6 @@
       if (cleanupKeyboard) cleanupKeyboard();
       if (cleanupConnection) cleanupConnection();
       if (cleanupOfflineSync) cleanupOfflineSync();
-      if (cleanupUsage) cleanupUsage();
-      if ($isAuthenticated) {
-        trackSessionEnd();
-      }
       syncStore.stopPolling();
     };
   });
