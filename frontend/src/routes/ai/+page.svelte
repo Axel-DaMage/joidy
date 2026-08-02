@@ -2,11 +2,20 @@
   import { onMount } from 'svelte';
   import { api } from '$lib/api';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
-  import ChatInterface from '$lib/components/ChatInterface.svelte';
   import { devMode } from '$lib/stores/settings';
 
   let usage = $state<{ ai_enabled: boolean; estimated_cost_usd: number } | null>(null);
   let loadingUsage = $state(true);
+
+  // Lazy-load the heavy ChatInterface (376 lines, pulls in marked, dompurify)
+  // so it is split into a separate chunk and only downloaded when the AI page
+  // is opened (#347).
+  let ChatInterface = $state<typeof import('$lib/components/ChatInterface.svelte').default | null>(null);
+  $effect(() => {
+    if (!ChatInterface) {
+      import('$lib/components/ChatInterface.svelte').then(m => ChatInterface = m.default);
+    }
+  });
 
   // Lazy-load DeadLetterQueue — only shown in dev mode, so defer the chunk
   // until the user actually enables it (#347).
@@ -44,7 +53,11 @@
   </div>
 
   <div class="ai-content">
-    <ChatInterface />
+    {#if ChatInterface}
+      <svelte:component this={ChatInterface} />
+    {:else}
+      <div class="caption" style="padding: 24px; text-align: center; color: var(--text-muted);">Cargando chat...</div>
+    {/if}
   </div>
 
   {#if $devMode}

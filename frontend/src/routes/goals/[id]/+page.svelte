@@ -4,10 +4,19 @@
   import { goto } from '$app/navigation';
   import { api, type Goal, type Tag as TagType, type Note } from '$lib/api';
   import { logger } from '$lib/utils/logger';
-  import GoalEditor from '$lib/components/GoalEditor.svelte';
   import LazyIconPicker from '$lib/components/LazyIconPicker.svelte';
   import StreakIcon from '$lib/components/StreakIcon.svelte';
   import { GOAL_COLOR_PRESETS, DEFAULT_GOAL_COLOR } from '$lib/utils/goalColors';
+
+  // Lazy-load the heavy GoalEditor (461 lines, pulls in marked, dompurify,
+  // highlight.js) so it is split into a separate chunk and only downloaded
+  // when the goal detail/edit page is opened (#347).
+  let GoalEditor: typeof import('$lib/components/GoalEditor.svelte').default | null = null;
+  function ensureGoalEditor() {
+    if (!GoalEditor) {
+      import('$lib/components/GoalEditor.svelte').then(m => GoalEditor = m.default);
+    }
+  }
 
   let goal: Goal | null = null;
   let goalContent: string = '';
@@ -54,6 +63,7 @@
   $: goalId = parseInt($page.params.id || "0");
 
   onMount(async () => {
+    ensureGoalEditor();
     await Promise.all([loadGoal(), loadMeta()]);
   });
 
@@ -173,13 +183,18 @@
   {:else if loadError}
     <div class="error">{loadError}</div>
   {:else if goal}
-    <GoalEditor
-      {goal}
-      content={goalContent}
-      on:save={handleSave}
-      on:edit={openSettings}
-      on:cancel={handleCancel}
-    />
+    {#if GoalEditor}
+      <svelte:component
+        this={GoalEditor}
+        {goal}
+        content={goalContent}
+        on:save={handleSave}
+        on:edit={openSettings}
+        on:cancel={handleCancel}
+      />
+    {:else}
+      <div class="loading">Cargando editor...</div>
+    {/if}
   {:else}
     <div class="error">Objetivo no encontrado</div>
   {/if}

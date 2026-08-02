@@ -13,10 +13,19 @@
   import { logger } from '$lib/utils/logger';
   import { GOAL_COLOR_PRESETS, DEFAULT_GOAL_COLOR, TEMPORALITY_COLORS } from '$lib/utils/goalColors';
   import StreakIcon from '$lib/components/StreakIcon.svelte';
-  import StreakHeatmap from '$lib/components/StreakHeatmap.svelte';
   import GoalCard from '$lib/components/GoalCard.svelte';
   import LazyIconPicker from '$lib/components/LazyIconPicker.svelte';
   import ModalDialog from '$lib/components/ModalDialog.svelte';
+
+  // Lazy-load the heavy StreakHeatmap (561 lines) so it is split into a
+  // separate chunk and only downloaded when the planning or history tab is
+  // active — the only tabs that render it (#347).
+  let StreakHeatmap = $state<typeof import('$lib/components/StreakHeatmap.svelte').default | null>(null);
+  $effect(() => {
+    if ((currentTab === 'planning' || currentTab === 'history') && !StreakHeatmap) {
+      import('$lib/components/StreakHeatmap.svelte').then(m => StreakHeatmap = m.default);
+    }
+  });
 
   let goals = $state<Goal[]>([]);
   let tags = $state<TagType[]>([]);
@@ -1168,13 +1177,16 @@
             <span class="section-title" style="margin:0;">Calendario</span>
           </div>
           <div class="history-heatmap-wrap">
-            <StreakHeatmap
-              history={historyData}
-              color="var(--success)"
-              selectedDate={selectedPlanningDate}
-              onselect={(date) => selectedPlanningDate = date}
-              maxFutureMonths={1200}
-            />
+            {#if StreakHeatmap}
+              <svelte:component
+                this={StreakHeatmap}
+                history={historyData}
+                color="var(--success)"
+                selectedDate={selectedPlanningDate}
+                onselect={(date) => selectedPlanningDate = date}
+                maxFutureMonths={1200}
+              />
+            {/if}
           </div>
         </div>
 
@@ -1248,12 +1260,15 @@
             <div class="empty-state">Aún no hay actividad registrada.</div>
           {:else}
             <div class="history-heatmap-wrap">
-              <StreakHeatmap
-                history={historyData}
-                color="var(--success)"
-                selectedDate={selectedHistoryDate}
-                onselect={(date) => selectedHistoryDate = date}
-              />
+              {#if StreakHeatmap}
+                <svelte:component
+                  this={StreakHeatmap}
+                  history={historyData}
+                  color="var(--success)"
+                  selectedDate={selectedHistoryDate}
+                  onselect={(date) => selectedHistoryDate = date}
+                />
+              {/if}
             </div>
           {/if}
         </div>
