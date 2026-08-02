@@ -52,6 +52,12 @@
   import { initOfflineSync } from '$lib/stores/offlineSync';
   import ShareAchievementModal from '$lib/components/ShareAchievementModal.svelte';
   import { initFocusModeConfig, queueNotificationIfActive } from '$lib/stores/focusMode';
+  import {
+    initUsageTracking,
+    trackPageView,
+    trackSessionStart,
+    trackSessionEnd,
+  } from '$lib/stores/usage';
 
   type NavItemStatus = 'ready' | 'dev' | 'placeholder';
 
@@ -67,7 +73,13 @@
     { href: '/ai', label: $t('nav.ai'), icon: 'Brain', status: 'ready' },
     { href: '/goals', label: $t('nav.goals'), icon: 'Target', status: 'ready' },
     { href: '/streaks', label: $t('nav.streaks'), icon: 'Flame', status: 'ready' },
+    { href: '/analytics', label: $t('nav.analytics'), icon: 'BarChart3', status: 'ready' },
   ] as { href: string; label: string; icon: string; status: NavItemStatus }[];
+
+  // Track page views on route changes (foreground-only, debounced in the store).
+  $: if (mounted && $isAuthenticated) {
+    trackPageView($page.url.pathname);
+  }
 
   let settingsOpen = false;
   let now = new Date();
@@ -122,6 +134,13 @@
     devMode.init();
     const cleanupConnection = initConnectionStore();
     const cleanupOfflineSync = initOfflineSync();
+
+    // Internal usage tracking (#250) — only records while the app is in the
+    // foreground. Starts a session on mount and ends it on cleanup.
+    const cleanupUsage = initUsageTracking();
+    if ($isAuthenticated) {
+      trackSessionStart();
+    }
 
     // First-use detection: start the onboarding tour for brand-new users.
     if ($isAuthenticated) {
@@ -193,6 +212,29 @@
           } else if (msg.type === 'streak_updated') {
             queueNotificationIfActive(`¡Racha de ${msg.streak} días! 🔥`, 'info');
             loadStats().catch(() => {});
+          } else if (msg.type === 'vault_synced') {
+            // A note was synced from the Obsidian vault (#73).
+            queueNotificationIfActive(
+              $t('sync.syncedFromVault', { values: { title: msg.title } }),
+              'info'
+            );
+            loadNotes(undefined, true).catch(() => {});
+            vaultSyncActive = true;
+            if (vaultSyncTimeout) clearTimeout(vaultSyncTimeout);
+            vaultSyncTimeout = setTimeout(() => {
+              vaultSyncActive = false;
+            }, 3000);
+          } else if (msg.type === 'vault_sync_started') {
+            vaultSyncActive = true;
+            if (vaultSyncTimeout) clearTimeout(vaultSyncTimeout);
+          } else if (msg.type === 'vault_sync_complete') {
+            loadNotes(undefined, true).catch(() => {});
+            vaultSyncActive = false;
+            vaultSyncPulse = true;
+            if (vaultSyncTimeout) clearTimeout(vaultSyncTimeout);
+            vaultSyncTimeout = setTimeout(() => {
+              vaultSyncPulse = false;
+            }, 2000);
           }
         } catch (e) {
           logger.error('[layout] Error parsing WebSocket message:', e);
@@ -431,15 +473,25 @@
       }
       if (wsReconnectTimeout) clearTimeout(wsReconnectTimeout);
       if (pillTimeout) clearTimeout(pillTimeout);
+      if (vaultSyncTimeout) clearTimeout(vaultSyncTimeout);
       if (cleanupTheme) cleanupTheme();
       if (cleanupKeyboard) cleanupKeyboard();
       if (cleanupConnection) cleanupConnection();
       if (cleanupOfflineSync) cleanupOfflineSync();
+      if (cleanupUsage) cleanupUsage();
+      if ($isAuthenticated) {
+        trackSessionEnd();
+      }
       syncStore.stopPolling();
     };
   });
   let showConnectedPill = false;
   let pillTimeout: any = null;
+
+  // Vault sync indicator state (#73).
+  let vaultSyncActive = false;
+  let vaultSyncPulse = false;
+  let vaultSyncTimeout: any = null;
 
   $: if ($isOnline && $wasOffline) {
     showConnectedPill = true;
@@ -499,6 +551,21 @@
       {/if}
 
       <div style="flex:1;"></div>
+
+      <!-- Vault sync indicator (#73) -->
+      {#if vaultSyncActive || vaultSyncPulse}
+        <div
+          class="vault-sync-indicator"
+          class:syncing={vaultSyncActive}
+          class:pulse={vaultSyncPulse}
+          transition:fade={{ duration: 150 }}
+          title={$t('sync.syncedFromVault', { values: { title: '' } }).trim() ||
+            $t('sync.syncingVault')}
+        >
+          <DynamicIcon name="RefreshCw" size={12} />
+          <span>{vaultSyncActive ? $t('sync.syncingVault') : $t('sync.syncedVault')}</span>
+        </div>
+      {/if}
 
       <!-- Connectivity Indicator -->
       {#if !$isOnline}
@@ -817,6 +884,38 @@
   .pulse-dot.green {
     background-color: var(--success, #22c55e);
     animation: green-pulse 1.5s infinite;
+  }
+
+  /* Vault sync indicator (#73) */
+  .vault-sync-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 4px 10px;
+    border-radius: 99px;
+    margin-right: 12px;
+    background: color-mix(in srgb, var(--accent, var(--xp)) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent, var(--xp)) 30%, transparent);
+    color: var(--accent, var(--xp));
+    transition: all 0.2s ease-in-out;
+  }
+  .vault-sync-indicator.syncing :global(svg) {
+    animation: vault-spin 1s linear infinite;
+  }
+  .vault-sync-indicator.pulse {
+    background: color-mix(in srgb, var(--success, #22c55e) 10%, transparent);
+    border-color: color-mix(in srgb, var(--success, #22c55e) 30%, transparent);
+    color: var(--success, #22c55e);
+  }
+  @keyframes vault-spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
   }
 
   @keyframes red-pulse {

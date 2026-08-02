@@ -98,5 +98,13 @@
     "streak": "racha",
     "saved": "Ánimo guardado",
     "error": "Error al guardar el ánimo"
+  },
+  "sync": {
+    "syncedFromVault": "Sincronizado desde la bóveda: \"{title}\"",
+    "syncingVault": "Sincronizando bóveda...",
+    "syncedVault": "Bóveda sincronizada",
+    "lastSync": "Última sincronización",
+    "neverSynced": "Nunca sincronizado",
+    "totalSynced": "{count} notas sincronizadas"
   }
 }
