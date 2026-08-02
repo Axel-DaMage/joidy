@@ -82,6 +82,12 @@
     "language": "Language",
     "languageHint": "The interface language"
   },
+  "quickCapture": {
+    "placeholder": "Capture a quick idea...",
+    "defaultTitle": "Quick note",
+    "created": "Note created!",
+    "error": "Could not create note"
+  },
   "mood": {
     "title": "MOOD",
     "scoreLabel": "Mood {score} of 5",
