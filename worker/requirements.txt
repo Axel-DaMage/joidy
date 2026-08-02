@@ -1,4 +1,4 @@
-watchfiles==1.0.3
+watchfiles==1.2.0
 httpx==0.28.1
 pydantic-settings==2.14.2
 sqlalchemy==2.0.51
