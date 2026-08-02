@@ -33,11 +33,13 @@ class WebhookSyncTestBase(unittest.TestCase):
         Base.metadata.create_all(self.engine)
         with self.engine.begin() as conn:
             try:
-                conn.execute(text(
-                    "CREATE TABLE IF NOT EXISTS tag_cooccurrences "
-                    "(tag_a_id INTEGER, tag_b_id INTEGER, weight INTEGER, "
-                    "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)"
-                ))
+                conn.execute(
+                    text(
+                        "CREATE TABLE IF NOT EXISTS tag_cooccurrences "
+                        "(tag_a_id INTEGER, tag_b_id INTEGER, weight INTEGER, "
+                        "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)"
+                    )
+                )
             except Exception:
                 pass
         self.Session = sessionmaker(bind=self.engine)
@@ -281,6 +283,144 @@ class TestProcessWebhookValidation(WebhookSyncTestBase):
                     content=None,
                     source="obsidian",
                 )
+
+
+class TestProcessWebhookConflict(WebhookSyncTestBase):
+    """Conflict detection — when remote mtime diverges from local mtime beyond
+    the tolerance window, the sync state should be flagged as conflicted (#402)."""
+
+    def test_no_conflict_when_local_mtime_missing(self) -> None:
+        """A note with no prior local_mtime (fresh from vault) should not be
+        flagged as conflicted even if a remote mtime is provided."""
+        with self.Session() as db:
+            result = process_webhook_event(
+                db,
+                event="create",
+                path="/vault/no-conflict.md",
+                content="content",
+                mtime=1700000000,
+                source="obsidian",
+            )
+            db.commit()
+        self.assertFalse(result["conflict"])
+
+    def test_conflict_detected_on_diverging_mtimes(self) -> None:
+        """When local_mtime was set (note edited in Joidy) and the remote
+        mtime differs significantly, a conflict should be flagged."""
+        from services.sync_service import update_local_mtime
+
+        with self.Session() as db:
+            # Create the note first.
+            create_result = process_webhook_event(
+                db,
+                event="create",
+                path="/vault/conflict-note.md",
+                content="original",
+                mtime=1700000000,
+                source="obsidian",
+            )
+            db.commit()
+            note_id = create_result["note_id"]
+
+            # Simulate a local edit (sets local_mtime to now).
+            update_local_mtime(db, note_id)
+            db.commit()
+
+            # Now a webhook update arrives with a remote mtime far in the past.
+            result = process_webhook_event(
+                db,
+                event="update",
+                path="/vault/conflict-note.md",
+                content="remote content",
+                mtime=1600000000,  # ~2020, far from local_mtime
+                source="obsidian",
+            )
+            db.commit()
+
+        self.assertTrue(result["conflict"])
+
+    def test_no_conflict_when_mtimes_within_tolerance(self) -> None:
+        """When local and remote mtimes are within the 2s tolerance window,
+        no conflict should be flagged."""
+        import time
+
+        from services.sync_service import update_local_mtime
+
+        with self.Session() as db:
+            create_result = process_webhook_event(
+                db,
+                event="create",
+                path="/vault/synced-note.md",
+                content="original",
+                mtime=1700000000,
+                source="obsidian",
+            )
+            db.commit()
+            note_id = create_result["note_id"]
+
+            update_local_mtime(db, note_id)
+            db.commit()
+
+            # Remote mtime within ~1s of local (now) — should not conflict.
+            now_ts = int(time.time())
+            result = process_webhook_event(
+                db,
+                event="update",
+                path="/vault/synced-note.md",
+                content="updated content",
+                mtime=now_ts,  # ~now, within tolerance
+                source="obsidian",
+            )
+            db.commit()
+
+        self.assertFalse(result["conflict"])
+
+    def test_sync_state_remote_mtime_set(self) -> None:
+        """The SyncState record should store the remote mtime from the webhook."""
+        with self.Session() as db:
+            result = process_webhook_event(
+                db,
+                event="create",
+                path="/vault/mtime-test.md",
+                content="content",
+                mtime=1700000123,
+                source="obsidian",
+            )
+            db.commit()
+
+        with self.Session() as db:
+            sync = db.query(SyncState).filter(SyncState.note_id == result["note_id"]).first()
+            self.assertIsNotNone(sync)
+            self.assertIsNotNone(sync.remote_mtime)
+            self.assertIsNotNone(sync.last_synced_at)
+
+    def test_delete_removes_sync_state(self) -> None:
+        """Deleting a note via webhook should also remove its SyncState to
+        avoid orphaned FK references."""
+        with self.Session() as db:
+            create_result = process_webhook_event(
+                db,
+                event="create",
+                path="/vault/delete-sync.md",
+                content="content",
+                mtime=1700000000,
+                source="obsidian",
+            )
+            db.commit()
+            note_id = create_result["note_id"]
+
+        with self.Session() as db:
+            process_webhook_event(
+                db,
+                event="delete",
+                path="/vault/delete-sync.md",
+                source="obsidian",
+            )
+            db.commit()
+
+        with self.Session() as db:
+            sync = db.query(SyncState).filter(SyncState.note_id == note_id).first()
+            self.assertIsNone(sync)
 
 
 if __name__ == "__main__":
