@@ -23,7 +23,7 @@ jobs:
         service: [api, frontend, ai-service, worker]
     steps:
       - uses: actions/checkout@v4
-      - uses: docker/login-action@v4.5.2
+      - uses: docker/login-action@v4.6.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -36,7 +36,7 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest
-      - uses: docker/build-push-action@v5
+      - uses: docker/build-push-action@v7
         with:
           context: ./${{ matrix.service }}
           push: true

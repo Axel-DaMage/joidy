@@ -123,6 +123,68 @@ def delete_goal_file(goal_id: int) -> bool:
     return False
 
 
+def restore_goals_from_vault(db: Session) -> dict:
+    """Scan Objetivos/ for joidy_managed files and restore missing goals to DB (#504).
+
+    Only restores goals whose goal_id is not already in the database, preserving
+    original IDs and all frontmatter fields. Returns a summary dict.
+    """
+    obj_dir = get_objectives_dir()
+    if not obj_dir:
+        return {"status": "no_vault", "restored": 0, "skipped": 0}
+
+    restored = 0
+    skipped = 0
+
+    for f in sorted(obj_dir.glob("*.md")):
+        content = f.read_text(encoding="utf-8")
+        parsed = _parse_goal_content(content)
+
+        if not parsed.get("joidy_managed"):
+            continue
+
+        goal_id_str = parsed.get("goal_id")
+        if not goal_id_str:
+            continue
+
+        try:
+            goal_id = int(goal_id_str)
+        except (ValueError, TypeError):
+            continue
+
+        existing = db.query(Goal).filter(Goal.id == goal_id).first()
+        if existing:
+            skipped += 1
+            continue
+
+        goal = Goal(
+            id=goal_id,
+            title=parsed.get("title", "Untitled"),
+            description=parsed.get("content", ""),
+            temporality=parsed.get("temporality", "DAILY"),
+            measurement_type=parsed.get("measurement_type", "COUNT"),
+            target_value=float(parsed.get("target_value", 1.0) or 1.0),
+            current_value=float(parsed.get("current_value", 0.0) or 0.0),
+            state=parsed.get("state", "ACTIVE"),
+            fail_config=parsed.get("fail_config", "STATIC"),
+            fail_emoji=parsed.get("fail_emoji", "🔴"),
+            color=parsed.get("color", "#c8a96e"),
+            theme=parsed.get("theme", "solid"),
+            max_assignment_days=int(parsed["max_assignment_days"]) if parsed.get("max_assignment_days") and parsed["max_assignment_days"] != "None" else None,
+            note_id=int(parsed["note_id"]) if parsed.get("note_id") and parsed["note_id"] != "None" else None,
+            tag_id=int(parsed["tag_id"]) if parsed.get("tag_id") and parsed["tag_id"] != "None" else None,
+            parent_id=int(parsed["parent_id"]) if parsed.get("parent_id") and parsed["parent_id"] != "None" else None,
+            is_completed=str(parsed.get("is_completed", "")).lower() == "true",
+            completed_at=datetime.fromisoformat(parsed["completed_at"]) if parsed.get("completed_at") and parsed["completed_at"] != "None" else None,
+            source_path=str(f.relative_to(f.parents[1])),
+        )
+        db.add(goal)
+        restored += 1
+
+    db.commit()
+    return {"status": "ok", "restored": restored, "skipped": skipped}
+
+
 def write_daily(db: Session, target_date: date | None = None) -> bool:
     vault = get_vault_path()
     if not vault:
