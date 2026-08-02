@@ -81,5 +81,11 @@
     "timeFormat": "Time format",
     "language": "Language",
     "languageHint": "The interface language"
+  },
+  "quickCapture": {
+    "placeholder": "Capture a quick idea...",
+    "defaultTitle": "Quick note",
+    "created": "Note created!",
+    "error": "Could not create note"
   }
 }

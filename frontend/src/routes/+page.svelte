@@ -12,6 +12,7 @@
   import XPBar          from '$lib/components/XPBar.svelte';
   import NoteCard       from '$lib/components/NoteCard.svelte';
   import PomodoroWidget from '$lib/components/PomodoroWidget.svelte';
+  import QuickCaptureWidget from '$lib/components/QuickCaptureWidget.svelte';
   import { Target } from 'lucide-svelte';
   import { startFocusMode } from '$lib/stores/focusMode';
   import TimeWidget from '$lib/components/TimeWidget.svelte';
@@ -373,6 +374,8 @@
       <Target size={16} />
       Modo Enfoque
     </button>
+  {:else if wid === 'quick-capture'}
+    <QuickCaptureWidget />
   {:else if wid === 'recent-notes'}
     <div class="section-header">
       <h4 style="color: {$accentColors[0]}">Notas recientes</h4>
