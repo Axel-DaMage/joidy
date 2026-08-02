@@ -22,5 +22,32 @@ export default defineConfig({
   },
   ssr: {
     noExternal: ['phosphor-svelte', 'svelte-hero-icons', 'svelte-bootstrap-icons', 'svelte-radix']
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Visualization: d3 + force-graph (used by SkillTree, KnowledgeGraph)
+          d3: ['d3', 'force-graph'],
+          // Markdown rendering: marked + dompurify + highlight.js (used by
+          // NoteEditor, GoalEditor, ChatInterface, WysiwygEditor)
+          markdown: ['marked', 'dompurify', 'highlight.js'],
+          // Rich text editor: TipTap + extensions (used by WysiwygEditor)
+          tiptap: [
+            '@tiptap/core',
+            '@tiptap/starter-kit',
+            '@tiptap/pm',
+            '@tiptap/extension-code-block-lowlight',
+            '@tiptap/extension-image',
+            '@tiptap/extension-link',
+            '@tiptap/extension-placeholder',
+            '@tiptap/extension-strike',
+            '@tiptap/extension-task-item',
+            '@tiptap/extension-task-list',
+            '@tiptap/extension-underline'
+          ]
+        }
+      }
+    }
   }
 });
