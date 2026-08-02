@@ -81,5 +81,16 @@
     "timeFormat": "Formato de hora",
     "language": "Idioma",
     "languageHint": "El idioma de la interfaz"
+  },
+  "mood": {
+    "title": "ÁNIMO",
+    "scoreLabel": "Ánimo {score} de 5",
+    "notePlaceholder": "Nota (opcional)",
+    "history": "Últimos 7 días",
+    "noHistory": "Sin registros aún",
+    "avg": "promedio",
+    "streak": "racha",
+    "saved": "Ánimo guardado",
+    "error": "Error al guardar el ánimo"
   }
 }

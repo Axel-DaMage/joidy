@@ -8,6 +8,7 @@ export type WidgetId =
   | 'time-widget'
   | 'weather-widget'
   | 'pomodoro'
+  | 'mood-tracker'
   | 'recent-notes'
   | 'github-issues';
 
@@ -24,6 +25,7 @@ export const WIDGET_REGISTRY: Record<WidgetId, WidgetMeta> = {
   'time-widget':       { id: 'time-widget',       label: 'Reloj',                  panel: 'left'  },
   'weather-widget': { id: 'weather-widget', label: 'Clima',         panel: 'left'  },
   'pomodoro':       { id: 'pomodoro',        label: 'Pomodoro',     panel: 'left'  },
+  'mood-tracker':   { id: 'mood-tracker',    label: 'Mood',         panel: 'left'  },
   'recent-notes':   { id: 'recent-notes',    label: 'Notas',        panel: 'right' },
   'github-issues':  { id: 'github-issues',   label: 'GitHub',       panel: 'right' },
 };
@@ -35,7 +37,7 @@ export interface DashboardLayout {
 }
 
 const DEFAULT: DashboardLayout = {
-  left:  ['plant-carousel', 'stats-xp', 'activity-progress', 'time-widget', 'pomodoro'],
+  left:  ['plant-carousel', 'stats-xp', 'activity-progress', 'time-widget', 'pomodoro', 'mood-tracker'],
   right: ['recent-notes', 'github-issues'],
 };
 

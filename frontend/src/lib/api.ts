@@ -255,6 +255,23 @@ export interface StreakStats {
   days_tracked: number;
 }
 
+export interface MoodEntry {
+  id: number;
+  user_id: number;
+  score: number;
+  note: string | null;
+  entry_date: string;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface MoodStats {
+  average: number;
+  streak: number;
+  total_entries: number;
+  notes_correlation: number;
+}
+
 // ── Notes ─────────────────────────────────────────────────────────────────────
 
 export interface SyncConflict {
@@ -364,6 +381,14 @@ export const api = {
     stats:    ()                  => req<StreakStats>('GET', '/personal-streaks/stats'),
     categories: ()                => req<string[]>('GET', '/personal-streaks/categories'),
     history:  (id: number, days = 90) => req<{ date: string; note: string; mood: number | null; created_at: string }[]>('GET', `/personal-streaks/${id}/history?days=${days}`),
+  },
+
+  mood: {
+    create: (data: { score: number; note?: string | null }) =>
+      req<MoodEntry>('POST', '/mood/', data),
+    today:  () => req<MoodEntry | null>('GET', '/mood/today'),
+    history: (days = 30) => req<MoodEntry[]>('GET', `/mood/history?days=${days}`),
+    stats:   () => req<MoodStats>('GET', '/mood/stats'),
   },
 
   ai: {

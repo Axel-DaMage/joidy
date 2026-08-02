@@ -81,5 +81,16 @@
     "timeFormat": "Time format",
     "language": "Language",
     "languageHint": "The interface language"
+  },
+  "mood": {
+    "title": "MOOD",
+    "scoreLabel": "Mood {score} of 5",
+    "notePlaceholder": "Note (optional)",
+    "history": "Last 7 days",
+    "noHistory": "No entries yet",
+    "avg": "average",
+    "streak": "streak",
+    "saved": "Mood saved",
+    "error": "Failed to save mood"
   }
 }
