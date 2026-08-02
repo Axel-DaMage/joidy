@@ -81,5 +81,11 @@
     "timeFormat": "Formato de hora",
     "language": "Idioma",
     "languageHint": "El idioma de la interfaz"
+  },
+  "quickCapture": {
+    "placeholder": "Captura una idea rápida...",
+    "defaultTitle": "Nota rápida",
+    "created": "¡Nota creada!",
+    "error": "No se pudo crear la nota"
   }
 }
