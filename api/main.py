@@ -15,6 +15,7 @@ from middleware.request_id import RequestIdMiddleware
 from routers import (
     folders,
     ai,
+    analytics,
     auth,
     config,
     export,
@@ -192,6 +193,7 @@ app.include_router(obsidian.router)
 app.include_router(auth.router)
 app.include_router(export.router, dependencies=[Depends(get_current_user)])
 app.include_router(stats.router, dependencies=[Depends(get_current_user)])
+app.include_router(analytics.router, dependencies=[Depends(get_current_user)])
 app.include_router(sync.router, dependencies=[Depends(get_current_user)])
 app.include_router(upload.router, dependencies=[Depends(get_current_user)])
 

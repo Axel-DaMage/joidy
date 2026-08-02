@@ -6,7 +6,8 @@
     "skills": "Habilidades",
     "ai": "IA",
     "goals": "Objetivos",
-    "streaks": "Rachas"
+    "streaks": "Rachas",
+    "analytics": "Analítica"
   },
   "common": {
     "save": "Guardar",
@@ -106,5 +107,36 @@
     "lastSync": "Última sincronización",
     "neverSynced": "Nunca sincronizado",
     "totalSynced": "{count} notas sincronizadas"
+  },
+  "analytics": {
+    "title": "ANALÍTICA",
+    "loading": "Cargando analítica...",
+    "error": "Error al cargar la analítica",
+    "noData": "Sin datos suficientes",
+    "lastDays": "Últimos {n}d",
+    "systemOverview": "Resumen del sistema",
+    "activityTitle": "Actividad",
+    "moodTitle": "Tendencias de ánimo",
+    "aiTitle": "Uso de IA",
+    "featureUsage": "Funciones más usadas",
+    "sessionStats": "Estadísticas de sesión",
+    "notes": "Notas",
+    "tags": "Etiquetas",
+    "goals": "Objetivos",
+    "skills": "Habilidades",
+    "totalXp": "XP total",
+    "streak": "Racha",
+    "notesCreated": "Notas creadas",
+    "moodAvg": "Ánimo medio",
+    "moodStreak": "Racha de ánimo",
+    "moodEntries": "Registros",
+    "aiCost": "Coste estimado",
+    "aiMonthly": "Coste mensual acumulado",
+    "aiUnavailable": "IA no disponible",
+    "sessions": "Sesiones",
+    "activeDays": "Días activos",
+    "avgSessionMin": "Sesión media (min)",
+    "totalEvents": "Eventos totales",
+    "topPages": "Páginas más visitadas"
   }
 }

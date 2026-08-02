@@ -10,3 +10,4 @@ from .planning import *
 from .push_subscription import *
 from .skill import *
 from .sync_state import *
+from .usage_event import *

@@ -308,6 +308,35 @@ export interface MoodStats {
   notes_correlation: number;
 }
 
+export interface UsageSummary {
+  days: number;
+  total_events: number;
+  session_count: number;
+  active_days: number;
+  avg_session_duration_min: number;
+  top_features: { feature: string; count: number }[];
+  top_pages: { path: string; count: number }[];
+}
+
+export interface AnalyticsDashboard {
+  system: {
+    notes: number;
+    tags: number;
+    goals: number;
+    skills: number;
+    total_xp: number;
+    current_streak: number;
+    xp_events_week: number;
+  };
+  activity: { days: { date: string; notes_created: number; xp_events: number }[] };
+  mood: {
+    stats: MoodStats;
+    history: { entry_date: string; score: number }[];
+  };
+  ai_usage: { ai_enabled: boolean; estimated_cost_usd: number; [k: string]: unknown };
+  usage: UsageSummary;
+}
+
 // ── Notes ─────────────────────────────────────────────────────────────────────
 
 export interface SyncConflict {
@@ -705,6 +734,12 @@ export const api = {
       req<{
         days: { date: string; notes_created: number; xp_events: number }[];
       }>('GET', `/stats/activity?days=${days}`),
+  },
+  analytics: {
+    dashboard: (days = 30) => req<AnalyticsDashboard>('GET', `/analytics/dashboard?days=${days}`),
+    track: (event_type: string, event_data?: Record<string, unknown>) =>
+      req<{ status: string; id: number }>('POST', '/analytics/track', { event_type, event_data }, { silent: true }),
+    usage: (days = 30) => req<UsageSummary>('GET', `/analytics/usage?days=${days}`),
   },
   export: {
     markdownUrl: () => `${BASE}/export/notes/markdown`,
