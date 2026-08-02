@@ -14,7 +14,7 @@ jobs:
       APP_ENV: test
       LOG_DIR: logs
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Python
         uses: actions/setup-python@v7
