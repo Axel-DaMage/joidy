@@ -6,7 +6,8 @@
     "skills": "Skills",
     "ai": "AI",
     "goals": "Goals",
-    "streaks": "Streaks"
+    "streaks": "Streaks",
+    "analytics": "Analytics"
   },
   "common": {
     "save": "Save",
@@ -106,5 +107,36 @@
     "lastSync": "Last sync",
     "neverSynced": "Never synced",
     "totalSynced": "{count} notes synced"
+  },
+  "analytics": {
+    "title": "ANALYTICS",
+    "loading": "Loading analytics...",
+    "error": "Failed to load analytics",
+    "noData": "Not enough data",
+    "lastDays": "Last {n}d",
+    "systemOverview": "System overview",
+    "activityTitle": "Activity",
+    "moodTitle": "Mood trends",
+    "aiTitle": "AI usage",
+    "featureUsage": "Most used features",
+    "sessionStats": "Session stats",
+    "notes": "Notes",
+    "tags": "Tags",
+    "goals": "Goals",
+    "skills": "Skills",
+    "totalXp": "Total XP",
+    "streak": "Streak",
+    "notesCreated": "Notes created",
+    "moodAvg": "Avg mood",
+    "moodStreak": "Mood streak",
+    "moodEntries": "Entries",
+    "aiCost": "Estimated cost",
+    "aiMonthly": "Accumulated monthly cost",
+    "aiUnavailable": "AI unavailable",
+    "sessions": "Sessions",
+    "activeDays": "Active days",
+    "avgSessionMin": "Avg session (min)",
+    "totalEvents": "Total events",
+    "topPages": "Top pages"
   }
 }
