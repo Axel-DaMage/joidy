@@ -1,0 +1,85 @@
+{
+  "nav": {
+    "home": "Inicio",
+    "notes": "Notas",
+    "graph": "Grafo",
+    "skills": "Habilidades",
+    "ai": "IA",
+    "goals": "Objetivos",
+    "streaks": "Rachas"
+  },
+  "common": {
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "delete": "Eliminar",
+    "search": "Buscar",
+    "close": "Cerrar",
+    "settings": "Ajustes",
+    "install": "Instalar",
+    "skip": "Saltar",
+    "previous": "Anterior",
+    "next": "Siguiente",
+    "start": "Comenzar",
+    "saving": "Guardando...",
+    "tasks": "tareas",
+    "level": "NVL"
+  },
+  "status": {
+    "offline": "Sin conexión",
+    "online": "Conectado",
+    "pendingStreaks": "Rachas pendientes",
+    "requiresDevMode": "Requiere Dev Mode"
+  },
+  "pwa": {
+    "installPrompt": "Instala Joidy para acceso rápido",
+    "closeInstallNotice": "Cerrar aviso de instalación",
+    "installed": "¡Joidy instalado! Ahora puedes acceder desde tu escritorio."
+  },
+  "onboarding": {
+    "skipTour": "Saltar tour de bienvenida",
+    "stepIndicator": "Paso {current} de {total}",
+    "previousStep": "Paso anterior",
+    "nextStep": "Siguiente paso",
+    "skipForNow": "Saltar por ahora",
+    "configureObsidian": "Configurar Obsidian",
+    "welcome": {
+      "title": "Bienvenida a Joidy",
+      "content": "Tu sistema personal de gestión del conocimiento con gamificación. Aquí tomarás notas, establecerás metas y harás crecer una planta mientras mantienes rachas diarias."
+    },
+    "notes": {
+      "title": "Crea tu primera nota",
+      "content": "En la página de Notas puedes crear y organizar tu conocimiento. Cada nota admite etiquetas, iconos y colores, y se sincroniza con tu bóveda de Obsidian."
+    },
+    "tags": {
+      "title": "Tags y grafo",
+      "content": "Etiqueta tus notas para conectarlas. El Grafo visualiza cómo se relacionan tus notas a través de los tags, revelando patrones y temas en tu conocimiento."
+    },
+    "goals": {
+      "title": "Tu primera meta",
+      "content": "Establece metas con temporalidades (diaria, semanal, mensual o anual). Completar metas te da XP y alimenta tu progreso. Empieza con algo pequeño y alcanzable."
+    },
+    "streaks": {
+      "title": "Rachas y planta",
+      "content": "Mantén una racha diaria de actividad. Cada día que interactúas con Joidy ganas XP y tu planta crece: de semilla a árbol. ¡No rompas la cadena!"
+    },
+    "obsidian": {
+      "title": "Conecta Obsidian (opcional)",
+      "content": "Joidy se sincroniza con tu bóveda de Obsidian para mantener tus notas en formato Markdown. Puedes configurarlo ahora desde Ajustes, o saltar este paso y hacerlo más tarde."
+    }
+  },
+  "settings": {
+    "title": "AJUSTES",
+    "appearance": "Apariencia",
+    "theme": "Tema",
+    "dark": "oscuro",
+    "light": "claro",
+    "themeMode": "Modo de tema",
+    "themeLight": "Claro",
+    "themeDark": "Oscuro",
+    "themeAuto": "Automático",
+    "themeAutoHint": "El tema cambiará según la hora del día y la estación",
+    "timeFormat": "Formato de hora",
+    "language": "Idioma",
+    "languageHint": "El idioma de la interfaz"
+  }
+}

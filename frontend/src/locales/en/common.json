@@ -1,0 +1,85 @@
+{
+  "nav": {
+    "home": "Home",
+    "notes": "Notes",
+    "graph": "Graph",
+    "skills": "Skills",
+    "ai": "AI",
+    "goals": "Goals",
+    "streaks": "Streaks"
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "search": "Search",
+    "close": "Close",
+    "settings": "Settings",
+    "install": "Install",
+    "skip": "Skip",
+    "previous": "Previous",
+    "next": "Next",
+    "start": "Start",
+    "saving": "Saving...",
+    "tasks": "tasks",
+    "level": "LVL"
+  },
+  "status": {
+    "offline": "Offline",
+    "online": "Online",
+    "pendingStreaks": "Pending streaks",
+    "requiresDevMode": "Requires Dev Mode"
+  },
+  "pwa": {
+    "installPrompt": "Install Joidy for quick access",
+    "closeInstallNotice": "Close install notice",
+    "installed": "Joidy installed! You can now access it from your desktop."
+  },
+  "onboarding": {
+    "skipTour": "Skip welcome tour",
+    "stepIndicator": "Step {current} of {total}",
+    "previousStep": "Previous step",
+    "nextStep": "Next step",
+    "skipForNow": "Skip for now",
+    "configureObsidian": "Configure Obsidian",
+    "welcome": {
+      "title": "Welcome to Joidy",
+      "content": "Your personal knowledge management system with gamification. Here you'll take notes, set goals, and grow a plant while keeping daily streaks."
+    },
+    "notes": {
+      "title": "Create your first note",
+      "content": "On the Notes page you can create and organize your knowledge. Each note supports tags, icons, and colors, and syncs with your Obsidian vault."
+    },
+    "tags": {
+      "title": "Tags and graph",
+      "content": "Tag your notes to connect them. The Graph visualizes how your notes relate through tags, revealing patterns and themes in your knowledge."
+    },
+    "goals": {
+      "title": "Your first goal",
+      "content": "Set goals with timeframes (daily, weekly, monthly, or yearly). Completing goals gives you XP and fuels your progress. Start with something small and achievable."
+    },
+    "streaks": {
+      "title": "Streaks and plant",
+      "content": "Keep a daily activity streak. Every day you interact with Joidy you earn XP and your plant grows: from seed to tree. Don't break the chain!"
+    },
+    "obsidian": {
+      "title": "Connect Obsidian (optional)",
+      "content": "Joidy syncs with your Obsidian vault to keep your notes in Markdown format. You can set it up now from Settings, or skip this step and do it later."
+    }
+  },
+  "settings": {
+    "title": "SETTINGS",
+    "appearance": "Appearance",
+    "theme": "Theme",
+    "dark": "dark",
+    "light": "light",
+    "themeMode": "Theme mode",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "themeAuto": "Automatic",
+    "themeAutoHint": "The theme will change based on the time of day and season",
+    "timeFormat": "Time format",
+    "language": "Language",
+    "languageHint": "The interface language"
+  }
+}

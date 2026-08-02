@@ -3,6 +3,7 @@
   import { highlightElement, clearHighlight } from '$lib/utils/spotlight';
   import { fly, fade } from 'svelte/transition';
   import { ArrowRight, ArrowLeft, X, Check } from 'lucide-svelte';
+  import { t } from 'svelte-i18n';
 
   $: step = ONBOARDING_STEPS[$onboarding.currentStep];
   $: isLastStep = $onboarding.currentStep === ONBOARDING_STEPS.length - 1;
@@ -68,23 +69,21 @@
         <div class="progress-fill" style="width: {progress}%"></div>
       </div>
 
-      <button
-        class="skip-btn"
-        onclick={handleSkip}
-        aria-label="Saltar tour de bienvenida"
-      >
+      <button class="skip-btn" onclick={handleSkip} aria-label={$t('onboarding.skipTour')}>
         <X size={16} />
-        <span>Saltar</span>
+        <span>{$t('common.skip')}</span>
       </button>
 
       <div class="content">
-        <h2 id="onboarding-title" class="title">{step.title}</h2>
-        <p class="description">{step.content}</p>
+        <h2 id="onboarding-title" class="title">{step ? $t(step.titleKey) : ''}</h2>
+        <p class="description">{step ? $t(step.contentKey) : ''}</p>
       </div>
 
       <div class="footer">
         <span class="step-indicator" aria-live="polite">
-          Paso {$onboarding.currentStep + 1} de {ONBOARDING_STEPS.length}
+          {$t('onboarding.stepIndicator', {
+            values: { current: $onboarding.currentStep + 1, total: ONBOARDING_STEPS.length },
+          })}
         </span>
 
         <div class="actions">
@@ -92,29 +91,33 @@
             <button
               class="btn btn-secondary"
               onclick={() => onboarding.prevStep()}
-              aria-label="Paso anterior"
+              aria-label={$t('onboarding.previousStep')}
             >
               <ArrowLeft size={16} />
-              <span>Anterior</span>
+              <span>{$t('common.previous')}</span>
             </button>
           {/if}
 
           {#if isLastStep && step.id === 'obsidian'}
             <button class="btn btn-secondary" onclick={handleSkip}>
-              Saltar por ahora
+              {$t('onboarding.skipForNow')}
             </button>
             <button class="btn btn-primary" onclick={openSettings}>
-              <span>Configurar Obsidian</span>
+              <span>{$t('onboarding.configureObsidian')}</span>
               <ArrowRight size={16} />
             </button>
           {:else if isLastStep}
             <button class="btn btn-primary" onclick={handleNext}>
               <Check size={16} />
-              <span>Comenzar</span>
+              <span>{$t('common.start')}</span>
             </button>
           {:else}
-            <button class="btn btn-primary" onclick={handleNext} aria-label="Siguiente paso">
-              <span>Siguiente</span>
+            <button
+              class="btn btn-primary"
+              onclick={handleNext}
+              aria-label={$t('onboarding.nextStep')}
+            >
+              <span>{$t('common.next')}</span>
               <ArrowRight size={16} />
             </button>
           {/if}
@@ -314,7 +317,9 @@
     position: absolute;
     border: 2px solid var(--xp);
     border-radius: var(--r);
-    box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.4), 0 0 20px rgba(0, 0, 0, 0.5);
+    box-shadow:
+      0 0 0 4px rgba(0, 0, 0, 0.4),
+      0 0 20px rgba(0, 0, 0, 0.5);
     pointer-events: none;
     transition: all 0.25s ease;
   }

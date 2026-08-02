@@ -14,16 +14,32 @@
   import SetupWizard from '$lib/components/SetupWizard.svelte';
   import { api, type Goal, type PersonalStreak } from '$lib/api';
   import { session, isAuthenticated, getToken } from '$lib/stores/session';
-  import { totalXP, loadStats, pingActivity, globalLevel, nextStageXP, showNotification } from '$lib/stores/gamification';
+  import {
+    totalXP,
+    loadStats,
+    pingActivity,
+    globalLevel,
+    nextStageXP,
+    showNotification,
+  } from '$lib/stores/gamification';
   import { running, secondsLeft, phase } from '$lib/stores/pomodoro';
   import { initPomodoroSettings } from '$lib/stores/pomodoro';
-  import { accentColors, activeIconPack, use24HourClock, initTheme, devMode, themeMode } from '$lib/stores/settings';
+  import {
+    accentColors,
+    activeIconPack,
+    use24HourClock,
+    initTheme,
+    devMode,
+    themeMode,
+  } from '$lib/stores/settings';
   import { getCachedData, setCachedData } from '$lib/utils/userSettings';
   import { initKeyboardNavigation } from '$lib/utils/keyboardNavigation';
   import { initPushNotifications } from '$lib/push';
   import { logger } from '$lib/utils/logger';
   import { onboarding } from '$lib/stores/onboarding';
   import { locale as localeStore } from '$lib/stores/locale';
+  import { initI18n } from '$lib/i18n';
+  import { t } from 'svelte-i18n';
   import OnboardingTour from '$lib/components/OnboardingTour.svelte';
   import { achievements } from '$lib/stores/achievements';
   import { initConnectionStore } from '$lib/stores/connection';
@@ -39,15 +55,19 @@
 
   type NavItemStatus = 'ready' | 'dev' | 'placeholder';
 
-  const navItems: { href: string; label: string; icon: string; status: NavItemStatus }[] = [
-    { href: '/',        label: 'Inicio',      icon: 'Home',     status: 'ready' },
-    { href: '/notes',   label: 'Notas',       icon: 'BookOpen', status: 'ready' },
-    { href: '/graph',   label: 'Grafo',       icon: 'Network',  status: 'dev' },
-    { href: '/skills',  label: 'Habilidades', icon: 'Zap',      status: 'dev' },
-    { href: '/ai',      label: 'IA',          icon: 'Brain',    status: 'ready' },
-    { href: '/goals',   label: 'Objetivos',   icon: 'Target',   status: 'ready' },
-    { href: '/streaks', label: 'Rachas',      icon: 'Flame',    status: 'ready' },
-  ];
+  // Initialize i18n once — syncs svelte-i18n with the locale store (#370).
+  initI18n();
+
+  // Reactive so labels re-render when the locale changes.
+  $: navItems = [
+    { href: '/', label: $t('nav.home'), icon: 'Home', status: 'ready' },
+    { href: '/notes', label: $t('nav.notes'), icon: 'BookOpen', status: 'ready' },
+    { href: '/graph', label: $t('nav.graph'), icon: 'Network', status: 'dev' },
+    { href: '/skills', label: $t('nav.skills'), icon: 'Zap', status: 'dev' },
+    { href: '/ai', label: $t('nav.ai'), icon: 'Brain', status: 'ready' },
+    { href: '/goals', label: $t('nav.goals'), icon: 'Target', status: 'ready' },
+    { href: '/streaks', label: $t('nav.streaks'), icon: 'Flame', status: 'ready' },
+  ] as { href: string; label: string; icon: string; status: NavItemStatus }[];
 
   let settingsOpen = false;
   let now = new Date();
@@ -67,7 +87,7 @@
   $: currentDate = now.toLocaleDateString($localeStore, {
     weekday: 'short',
     day: '2-digit',
-    month: 'short'
+    month: 'short',
   });
 
   let mounted = false;
@@ -76,14 +96,15 @@
 
   onMount(() => {
     mounted = true;
-    
+
     // Check setup status
-    api.config.setupStatus()
-      .then(res => {
+    api.config
+      .setupStatus()
+      .then((res) => {
         needsSetup = res.needs_setup;
         checkingSetup = false;
       })
-      .catch(err => {
+      .catch((err) => {
         logger.error('Failed to check setup status:', err);
         checkingSetup = false;
       });
@@ -104,9 +125,12 @@
 
     // First-use detection: start the onboarding tour for brand-new users.
     if ($isAuthenticated) {
-      onboarding.shouldShowOnboarding().then((show: boolean) => {
-        if (show) onboarding.startTour();
-      }).catch((e: unknown) => logger.warn('[layout] onboarding detection failed:', e));
+      onboarding
+        .shouldShowOnboarding()
+        .then((show: boolean) => {
+          if (show) onboarding.startTour();
+        })
+        .catch((e: unknown) => logger.warn('[layout] onboarding detection failed:', e));
     }
 
     // Connect to WebSocket for real-time notifications
@@ -126,7 +150,7 @@
         logger.info('[layout] Tab hidden, skipping WebSocket reconnect');
         return;
       }
-      
+
       const host = window.location.hostname;
       const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       // Derive the WebSocket URL from VITE_API_URL (which already reflects the
@@ -156,7 +180,7 @@
         try {
           const msg = JSON.parse(event.data);
           logger.info('[layout] WebSocket message received:', msg);
-          
+
           if (msg.type === 'note_created') {
             queueNotificationIfActive(`Nueva nota creada: "${msg.title}"`, 'success');
             loadNotes(undefined, true).catch(() => {});
@@ -205,7 +229,7 @@
     }
 
     const handleAppInstalled = () => {
-      showNotification("¡Joidy instalado! Ahora puedes acceder desde tu escritorio.", "success");
+      showNotification('¡Joidy instalado! Ahora puedes acceder desde tu escritorio.', 'success');
     };
     window.addEventListener('appinstalled', handleAppInstalled);
 
@@ -222,9 +246,11 @@
         pendingTasks = cachedGoals.filter((goal: Goal) => !goal.is_completed).length;
       }
       if (cachedStreaks) {
-        pendingStreaks = cachedStreaks.filter((streak: PersonalStreak) => !streak.today_checked && !streak.is_archived).length;
+        pendingStreaks = cachedStreaks.filter(
+          (streak: PersonalStreak) => !streak.today_checked && !streak.is_archived
+        ).length;
       }
-      
+
       try {
         const goals = await api.goals.list();
         pendingTasks = goals.filter((goal) => !goal.is_completed).length;
@@ -235,10 +261,12 @@
 
       try {
         const streaks = await api.personalStreaks.list({ include_archived: false });
-        const newPendingStreaks = streaks.filter((streak) => !streak.today_checked && !streak.is_archived).length;
+        const newPendingStreaks = streaks.filter(
+          (streak) => !streak.today_checked && !streak.is_archived
+        ).length;
         pendingStreaks = newPendingStreaks;
         setCachedData('streaks', streaks);
-        
+
         if (newPendingStreaks > 0 && !streaksNotified) {
           streaksNotified = true;
           showNotification(`Tienes ${newPendingStreaks} rachas pendientes hoy!`, 'info');
@@ -317,14 +345,18 @@
 
     const handleWindowFocus = () => {
       if (document.visibilityState === 'visible') {
-        loadFooterStats(true).catch((e) => logger.error('[layout] footer stats refresh failed:', e));
+        loadFooterStats(true).catch((e) =>
+          logger.error('[layout] footer stats refresh failed:', e)
+        );
       }
     };
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         if (Date.now() - lastFooterStatsFetch > 60000) {
-          loadFooterStats(true).catch((e) => logger.error('[layout] footer stats refresh failed:', e));
+          loadFooterStats(true).catch((e) =>
+            logger.error('[layout] footer stats refresh failed:', e)
+          );
         }
         if (!ws || (ws.readyState !== WebSocket.OPEN && ws.readyState !== WebSocket.CONNECTING)) {
           if (wsReconnectTimeout) clearTimeout(wsReconnectTimeout);
@@ -429,129 +461,169 @@
   <Login />
   <Toast />
 {:else}
-<div class="app-shell">
-  <!-- Header -->
-  <header class="app-header">
-    <span class="logo mono">JOIDY</span>
-    
-    {#if $showInstallBanner}
-      <div class="pwa-banner" transition:fade={{ duration: 150 }}>
-        <DynamicIcon name="DownloadCloud" size={13} />
-        <span>Instala Joidy para acceso rápido</span>
-        <div class="pwa-actions">
-          <button class="pwa-btn pwa-install" onclick={async () => {
-            if ($deferredPrompt) {
-              $deferredPrompt.prompt();
-              const { outcome } = await $deferredPrompt.userChoice;
-              if (outcome === 'accepted') {
+  <div class="app-shell">
+    <!-- Header -->
+    <header class="app-header">
+      <span class="logo mono">JOIDY</span>
+
+      {#if $showInstallBanner}
+        <div class="pwa-banner" transition:fade={{ duration: 150 }}>
+          <DynamicIcon name="DownloadCloud" size={13} />
+          <span>{$t('pwa.installPrompt')}</span>
+          <div class="pwa-actions">
+            <button
+              class="pwa-btn pwa-install"
+              onclick={async () => {
+                if ($deferredPrompt) {
+                  $deferredPrompt.prompt();
+                  const { outcome } = await $deferredPrompt.userChoice;
+                  if (outcome === 'accepted') {
+                    showInstallBanner.set(false);
+                  }
+                  deferredPrompt.set(null);
+                }
+              }}>{$t('common.install')}</button
+            >
+            <button
+              class="pwa-btn pwa-dismiss"
+              aria-label={$t('pwa.closeInstallNotice')}
+              onclick={() => {
                 showInstallBanner.set(false);
-              }
-              deferredPrompt.set(null);
-            }
-          }}>Instalar</button>
-          <button class="pwa-btn pwa-dismiss" aria-label="Cerrar aviso de instalación" onclick={() => {
-            showInstallBanner.set(false);
-            localStorage.setItem('joidy-pwa-dismissed', 'true');
-          }}>
-            <DynamicIcon name="X" size={12} />
-          </button>
+                localStorage.setItem('joidy-pwa-dismissed', 'true');
+              }}
+            >
+              <DynamicIcon name="X" size={12} />
+            </button>
+          </div>
         </div>
-      </div>
-    {/if}
+      {/if}
 
-    <div style="flex:1;"></div>
+      <div style="flex:1;"></div>
 
-    <!-- Connectivity Indicator -->
-    {#if !$isOnline}
-      <div class="connectivity-pill offline" transition:fade={{ duration: 150 }}>
-        <span class="pulse-dot red"></span>
-        <span>Sin conexión</span>
-      </div>
-    {:else if showConnectedPill}
-      <div class="connectivity-pill online" transition:fade={{ duration: 150 }}>
-        <span class="pulse-dot green"></span>
-        <span>Conectado</span>
-      </div>
-    {/if}
-    <span class="mono" style="font-size:13px; color: var(--xp); display: flex; align-items: center; gap: 8px;">
-      <span>
-        {#if $nextStageXP}
-          {$totalXP.toLocaleString()}
-          <span style="font-size:10px; color: var(--text-muted);">/ {$nextStageXP.toLocaleString()} xp</span>
-        {:else}
-          <span style="font-size:12px; font-weight: 700;">MAX</span>
-        {/if}
-      </span>
-      <span style="font-size:11px; color: var(--text-primary); background: var(--surface); border: 1px solid var(--border); padding: 2px 6px; border-radius: 4px;">NVL {$globalLevel}</span>
-    </span>
-    <button
-      class="btn btn-ghost btn-icon"
-      title="Ajustes"
-      aria-label="Ajustes"
-      style="color: var(--text-muted);"
-      onclick={() => window.dispatchEvent(new CustomEvent('joidy:open-settings'))}
-    >
-      <DynamicIcon name="Settings" size={14} />
-    </button>
-  </header>
-
-  <!-- Sidebar -->
-  <nav class="app-sidebar">
-    {#each navItems as { href, label, icon, status }}
-      {#if status === 'ready' || $devMode}
-        {@const active = $page.url.pathname === href || ($page.url.pathname.startsWith(href) && href !== '/')}
-        <a {href} class="nav-item" class:active class:nav-dev={status === 'dev'} class:nav-placeholder={status === 'placeholder'} title={label}>
-          <DynamicIcon name={icon} size={16} />
-          {#if status === 'dev'}
-            <span class="nav-dev-dot" title="Requiere Dev Mode"></span>
-          {:else if status === 'placeholder'}
-            <!-- Pronto badge removed -->
+      <!-- Connectivity Indicator -->
+      {#if !$isOnline}
+        <div class="connectivity-pill offline" transition:fade={{ duration: 150 }}>
+          <span class="pulse-dot red"></span>
+          <span>{$t('status.offline')}</span>
+        </div>
+      {:else if showConnectedPill}
+        <div class="connectivity-pill online" transition:fade={{ duration: 150 }}>
+          <span class="pulse-dot green"></span>
+          <span>{$t('status.online')}</span>
+        </div>
+      {/if}
+      <span
+        class="mono"
+        style="font-size:13px; color: var(--xp); display: flex; align-items: center; gap: 8px;"
+      >
+        <span>
+          {#if $nextStageXP}
+            {$totalXP.toLocaleString()}
+            <span style="font-size:10px; color: var(--text-muted);"
+              >/ {$nextStageXP.toLocaleString()} xp</span
+            >
+          {:else}
+            <span style="font-size:12px; font-weight: 700;">MAX</span>
           {/if}
-          <span class="tooltip">{label}</span>
-        </a>
-      {/if}
-    {/each}
-  </nav>
-
-  <!-- Main content -->
-  <main class="app-main">
-    <slot />
-  </main>
-
-  <!-- Status bar -->
-  <footer class="app-statusbar">
-    <span style="color: var(--text-muted); cursor: pointer;" title="Click para notificación de prueba" onclick={() => { showNotification('Notificación de prueba - Info', 'info'); setTimeout(() => showNotification('Notificación de prueba - Success', 'success'), 600); setTimeout(() => showNotification('Notificación de prueba - Level up!', 'level'), 1200); }}>joidy v0.1</span>
-
-    <div class="status-live" title="Estado actual">
-      <span class="status-pill status-time mono">{currentTime}</span>
-      <span class="status-pill status-date">{currentDate}</span>
-      <span class="status-pill status-tasks">{pendingTasks} tareas</span>
-      {#if pendingStreaks > 0}
-        <span class="status-pill status-streak-alert" title="Rachas pendientes">
-          <DynamicIcon name="Flame" size={12} color="var(--xp)" />
-          <span>{pendingStreaks}</span>
         </span>
-      {/if}
-    </div>
+        <span
+          style="font-size:11px; color: var(--text-primary); background: var(--surface); border: 1px solid var(--border); padding: 2px 6px; border-radius: 4px;"
+          >{$t('common.level')} {$globalLevel}</span
+        >
+      </span>
+      <button
+        class="btn btn-ghost btn-icon"
+        title={$t('common.settings')}
+        aria-label={$t('common.settings')}
+        style="color: var(--text-muted);"
+        onclick={() => window.dispatchEvent(new CustomEvent('joidy:open-settings'))}
+      >
+        <DynamicIcon name="Settings" size={14} />
+      </button>
+    </header>
 
-    <div style="flex:1;"></div>
+    <!-- Sidebar -->
+    <nav class="app-sidebar">
+      {#each navItems as { href, label, icon, status }}
+        {#if status === 'ready' || $devMode}
+          {@const active =
+            $page.url.pathname === href || ($page.url.pathname.startsWith(href) && href !== '/')}
+          <a
+            {href}
+            class="nav-item"
+            class:active
+            class:nav-dev={status === 'dev'}
+            class:nav-placeholder={status === 'placeholder'}
+            title={label}
+          >
+            <DynamicIcon name={icon} size={16} />
+            {#if status === 'dev'}
+              <span class="nav-dev-dot" title={$t('status.requiresDevMode')}></span>
+            {:else if status === 'placeholder'}
+              <!-- Pronto badge removed -->
+            {/if}
+            <span class="tooltip">{label}</span>
+          </a>
+        {/if}
+      {/each}
+    </nav>
 
-    <!-- Mini global Pomodoro -->
-    <div class="mini-pomo" class:is-running={$running} class:is-break={$phase !== 'work'} title="Temporizador global">
-      <span class="mono p-timer">{String(Math.floor($secondsLeft / 60)).padStart(2, '0')}:{String($secondsLeft % 60).padStart(2, '0')}</span>
-      <span class="p-dot" class:beat={$running}></span>
-    </div>
-  </footer>
-</div>
+    <!-- Main content -->
+    <main class="app-main">
+      <slot />
+    </main>
 
-<SettingsPanel bind:open={settingsOpen} on:close={() => settingsOpen = false} />
-<CommandPalette />
-<FocusMode />
-<Toast />
-<OnboardingTour />
-<ConflictResolutionModal />
-<OfflineIndicator />
-<ShareAchievementModal />
+    <!-- Status bar -->
+    <footer class="app-statusbar">
+      <span
+        style="color: var(--text-muted); cursor: pointer;"
+        title="Click para notificación de prueba"
+        onclick={() => {
+          showNotification('Notificación de prueba - Info', 'info');
+          setTimeout(() => showNotification('Notificación de prueba - Success', 'success'), 600);
+          setTimeout(() => showNotification('Notificación de prueba - Level up!', 'level'), 1200);
+        }}>joidy v0.1</span
+      >
+
+      <div class="status-live" title="Estado actual">
+        <span class="status-pill status-time mono">{currentTime}</span>
+        <span class="status-pill status-date">{currentDate}</span>
+        <span class="status-pill status-tasks">{pendingTasks} {$t('common.tasks')}</span>
+        {#if pendingStreaks > 0}
+          <span class="status-pill status-streak-alert" title={$t('status.pendingStreaks')}>
+            <DynamicIcon name="Flame" size={12} color="var(--xp)" />
+            <span>{pendingStreaks}</span>
+          </span>
+        {/if}
+      </div>
+
+      <div style="flex:1;"></div>
+
+      <!-- Mini global Pomodoro -->
+      <div
+        class="mini-pomo"
+        class:is-running={$running}
+        class:is-break={$phase !== 'work'}
+        title="Temporizador global"
+      >
+        <span class="mono p-timer"
+          >{String(Math.floor($secondsLeft / 60)).padStart(2, '0')}:{String(
+            $secondsLeft % 60
+          ).padStart(2, '0')}</span
+        >
+        <span class="p-dot" class:beat={$running}></span>
+      </div>
+    </footer>
+  </div>
+
+  <SettingsPanel bind:open={settingsOpen} on:close={() => (settingsOpen = false)} />
+  <CommandPalette />
+  <FocusMode />
+  <Toast />
+  <OnboardingTour />
+  <ConflictResolutionModal />
+  <OfflineIndicator />
+  <ShareAchievementModal />
 {/if}
 
 <style>
@@ -619,9 +691,18 @@
     color: var(--text-disabled);
     transition: all var(--t-normal);
   }
-  .mini-pomo.is-running { color: var(--xp); border-color: var(--xp); background: color-mix(in srgb, var(--xp) 5%, transparent); }
-  .mini-pomo.is-break { color: var(--success); border-color: var(--success); }
-  .p-timer { font-size: 11px; }
+  .mini-pomo.is-running {
+    color: var(--xp);
+    border-color: var(--xp);
+    background: color-mix(in srgb, var(--xp) 5%, transparent);
+  }
+  .mini-pomo.is-break {
+    color: var(--success);
+    border-color: var(--success);
+  }
+  .p-timer {
+    font-size: 11px;
+  }
 
   .status-live {
     display: flex;
@@ -684,8 +765,16 @@
     animation: p-beat 1.5s infinite;
   }
   @keyframes p-beat {
-    0%, 100% { opacity: 0.3; transform: scale(0.9); }
-    50%      { opacity: 1; transform: scale(1.1); box-shadow: 0 0 5px currentColor; }
+    0%,
+    100% {
+      opacity: 0.3;
+      transform: scale(0.9);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1.1);
+      box-shadow: 0 0 5px currentColor;
+    }
   }
 
   /* Connectivity Pill & Pulse Dot Styles */
@@ -714,7 +803,7 @@
     color: var(--success);
     box-shadow: 0 0 10px color-mix(in srgb, var(--success) 10%, transparent);
   }
-  
+
   .pulse-dot {
     width: 6px;
     height: 6px;
@@ -729,16 +818,28 @@
     background-color: var(--success, #22c55e);
     animation: green-pulse 1.5s infinite;
   }
-  
+
   @keyframes red-pulse {
-    0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
-    70% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+    0% {
+      box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+    }
+    70% {
+      box-shadow: 0 0 0 6px rgba(239, 68, 68, 0);
+    }
+    100% {
+      box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+    }
   }
   @keyframes green-pulse {
-    0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4); }
-    70% { box-shadow: 0 0 0 6px rgba(34, 197, 94, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+    0% {
+      box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4);
+    }
+    70% {
+      box-shadow: 0 0 0 6px rgba(34, 197, 94, 0);
+    }
+    100% {
+      box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+    }
   }
 
   .nav-dev-dot {
@@ -750,8 +851,14 @@
     animation: dev-dot-pulse 2s infinite;
   }
   @keyframes dev-dot-pulse {
-    0%, 100% { opacity: 0.6; }
-    50%      { opacity: 1; box-shadow: 0 0 4px var(--warning, #f59e0b); }
+    0%,
+    100% {
+      opacity: 0.6;
+    }
+    50% {
+      opacity: 1;
+      box-shadow: 0 0 4px var(--warning, #f59e0b);
+    }
   }
   .nav-item.nav-dev .tooltip::after {
     content: ' (dev)';
