@@ -75,5 +75,6 @@ def test_unsubscribe_when_none(client: TestClient):
 
 def test_vapid_public_key_not_configured(client: TestClient):
     response = client.get("/push/vapid-public-key")
-    # VAPID is not configured in tests → 503
-    assert response.status_code == 503
+    # VAPID not configured → returns null instead of 503 (#549)
+    assert response.status_code == 200
+    assert response.json()["publicKey"] is None
