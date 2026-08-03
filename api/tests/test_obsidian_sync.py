@@ -203,3 +203,31 @@ def test_webhook_new_endpoint_with_valid_secret(client, db_session):
     })
     assert resp.status_code == 200
     assert resp.json()["action"] == "created"
+
+
+@patch("config.settings.obsidian_webhook_secret", "")
+@patch("config.settings.auth_password", "hashed-password")
+def test_webhook_jwt_fallback_rejects_no_token(client, db_session):
+    """In production with auth_password set, webhook requires JWT when no secret configured."""
+    resp = client.post("/webhook/obsidian", json={
+        "event": "create",
+        "path": "/vault/jwt-fallback.md",
+        "content": "test",
+    })
+    assert resp.status_code == 401
+
+
+@patch("config.settings.obsidian_webhook_secret", "")
+@patch("config.settings.auth_password", "hashed-password")
+def test_webhook_jwt_fallback_rejects_invalid_token(client, db_session):
+    """Invalid JWT token is rejected when no webhook secret configured."""
+    resp = client.post(
+        "/webhook/obsidian",
+        json={
+            "event": "create",
+            "path": "/vault/jwt-invalid.md",
+            "content": "test",
+        },
+        headers={"Authorization": "Bearer invalid-token"},
+    )
+    assert resp.status_code == 401

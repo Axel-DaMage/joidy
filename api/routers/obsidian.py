@@ -24,9 +24,9 @@ from datetime import datetime, timezone
 
 from config import settings
 from database import get_db
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, field_validator
-from services.auth_service import get_current_user
+from services.auth_service import get_current_user_id
 from services.webhook_sync import process_webhook_event
 from sqlalchemy.orm import Session
 
@@ -52,21 +52,39 @@ class ObsidianWebhookIn(BaseModel):
         return v
 
 
-def _verify_access(secret: str) -> None:
-    """Verify webhook access via shared secret or JWT fallback."""
+def _verify_access(request: Request, secret: str, db: Session) -> None:
+    """Verify webhook access via shared secret or JWT fallback.
+
+    If ``OBSIDIAN_WEBHOOK_SECRET`` is configured, requests must include
+    a matching ``secret`` query parameter. When no secret is configured,
+    the endpoint falls back to JWT auth so it is never left wide open
+    in production. In development (no ``AUTH_PASSWORD``), the webhook
+    is accessible without auth for convenience.
+    """
     if settings.obsidian_webhook_secret:
         if secret != settings.obsidian_webhook_secret:
             raise HTTPException(status_code=401, detail="Invalid webhook secret")
-    elif settings.auth_password:
+        return
+
+    # No webhook secret configured — fall back to JWT auth in production
+    if not settings.auth_password:
+        return  # dev mode: no auth configured, allow access
+
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
         raise HTTPException(
             status_code=401,
-            detail="Webhook secret not configured. Set OBSIDIAN_WEBHOOK_SECRET or provide JWT.",
+            detail="Webhook secret not configured. Set OBSIDIAN_WEBHOOK_SECRET or provide a Bearer token.",
         )
+    token = auth_header.removeprefix("Bearer ").strip()
+    if get_current_user_id(token) is None:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
 
 
 @router.post("")
 def obsidian_webhook(
     payload: ObsidianWebhookIn,
+    request: Request,
     secret: str = Query(default=""),
     db: Session = Depends(get_db),
 ):
@@ -76,7 +94,7 @@ def obsidian_webhook(
     in the database. Conflict detection is recorded in SyncState but
     conflict resolution is handled separately (issue #5).
     """
-    _verify_access(secret)
+    _verify_access(request, secret, db)
 
     try:
         result = process_webhook_event(
@@ -98,18 +116,16 @@ def obsidian_webhook(
 @router.post("/legacy")
 def obsidian_webhook_legacy(
     payload: dict,
+    request: Request,
     secret: str = Query(default=""),
     db: Session = Depends(get_db),
-    _user_id: int = Depends(get_current_user),
 ):
     """Legacy webhook endpoint for backward compatibility.
 
     Accepts the old payload format (note_id, path, remote_mtime) and
     only records sync state without processing content.
     """
-    if settings.obsidian_webhook_secret:
-        if secret != settings.obsidian_webhook_secret:
-            raise HTTPException(status_code=401, detail="Invalid webhook secret")
+    _verify_access(request, secret, db)
 
     from models.sync_state import SyncState
 
