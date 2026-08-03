@@ -7,16 +7,23 @@
   let resolution: ConflictResolution | null = null;
   let mergedContent = '';
   let resolving = false;
+  // Track dismissed conflict IDs so the modal doesn't re-open on every
+  // navigation after the user skips a conflict (#550).
+  let dismissed: Set<number> = new Set();
 
-  // Auto-open modal when conflicts exist
-  $: if ($syncStore.conflicts.length > 0 && !selectedConflict) {
-    selectedConflict = $syncStore.conflicts[0];
-    resolution = null;
-    mergedContent = '';
+  // Auto-open modal only for conflicts the user hasn't dismissed this session
+  $: {
+    const undismissed = $syncStore.conflicts.filter(c => !dismissed.has(c.note_id));
+    if (undismissed.length > 0 && !selectedConflict) {
+      selectedConflict = undismissed[0];
+      resolution = null;
+      mergedContent = '';
+    }
   }
 
   $: if ($syncStore.conflicts.length === 0) {
     selectedConflict = null;
+    dismissed = new Set();
   }
 
   async function handleResolve() {
@@ -36,6 +43,9 @@
   }
 
   function handleSkip() {
+    if (selectedConflict) {
+      dismissed = new Set([...dismissed, selectedConflict.note_id]);
+    }
     selectedConflict = null;
     resolution = null;
     mergedContent = '';

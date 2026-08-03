@@ -192,14 +192,19 @@ class SetupRequest(BaseModel):
 def setup_status():
     env_vars = read_env()
     needs_setup = not (env_vars.get("AUTH_PASSWORD") and env_vars.get("SECRET_KEY"))
+    # Only reveal whether setup is needed — no sensitive information
     return {"needs_setup": needs_setup}
 
 @router.post("/setup")
 def perform_setup(req: SetupRequest):
     env_vars = read_env()
 
+    # Reject if setup already completed — prevents re-setup attacks
     if env_vars.get("AUTH_PASSWORD") and env_vars.get("SECRET_KEY"):
-        return {"status": "error", "message": "Setup already completed"}
+        raise HTTPException(
+            status_code=403,
+            detail="Setup already completed. Use the settings page to change configuration.",
+        )
 
     if not req.auth_password or len(req.auth_password) < 4:
         raise HTTPException(
