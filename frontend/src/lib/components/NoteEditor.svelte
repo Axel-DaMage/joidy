@@ -864,10 +864,11 @@
       {/if}
 
       {#if note}
-        <div style="position: relative; display: inline-block;">
+        <div style="position: relative; display: inline-block; z-index: {showExportMenu ? 'var(--z-overlay)' : 'auto'};">
           <button
             class="toolbar-btn"
             class:active={showExportMenu}
+            style="position: relative; z-index: var(--z-overlay);"
             onclick={() => showExportMenu = !showExportMenu}
             title="Exportar nota"
           >
