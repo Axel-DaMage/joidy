@@ -65,6 +65,8 @@ services:
 
   worker:
     image: d4mag3/joidy-worker:latest
+    ports:
+      - "${WORKER_PORT:-8001}:8001"
     volumes:
       - ./data/db:/data/db
       - ./.env:/app/.env

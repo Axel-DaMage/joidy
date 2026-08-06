@@ -28,7 +28,7 @@ services:
       - APP_ENV=development
       - VAULT_PATH=/vault
       - OBSIDIAN_VAULT_PATH=/vault
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload --reload-include '*.py' --reload-exclude '__pycache__/*' --reload-exclude '*.pyc'
+    command: sh -c "mkdir -p /app/data/logs && exec uvicorn main:app --host 0.0.0.0 --port 8000 --reload --reload-include '*.py' --reload-exclude '__pycache__/*' --reload-exclude '*.pyc'"
 
   ai-service:
     build:
@@ -44,6 +44,8 @@ services:
     build:
       context: ./worker
       dockerfile: Dockerfile
+    ports:
+      - "${WORKER_PORT:-8001}:8001"
     volumes:
       - ./worker:/app
       - ./data/db:/data/db

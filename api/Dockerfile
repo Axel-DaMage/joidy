@@ -19,6 +19,10 @@ RUN addgroup --system --gid 1000 app && adduser --system --uid 1000 --ingroup ap
 
 COPY --chown=app:app . .
 
+# Create the file-logging directory with correct ownership so the app user
+# can write /app/data/logs/api.log at runtime (#577).
+RUN mkdir -p /app/data/logs && chown -R app:app /app/data
+
 USER app
 
 CMD ["/bin/sh", "-c", "rm -rf alembic/versions/__pycache__ && exec uvicorn main:app --host 0.0.0.0 --port 8000 --workers ${WEB_CONCURRENCY:-2} --timeout-keep-alive ${UVICORN_TIMEOUT_KEEP_ALIVE:-5} --proxy-headers --forwarded-allow-ips='*'"]
