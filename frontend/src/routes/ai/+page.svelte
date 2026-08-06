@@ -10,19 +10,22 @@
   // Lazy-load the heavy ChatInterface (376 lines, pulls in marked, dompurify)
   // so it is split into a separate chunk and only downloaded when the AI page
   // is opened (#347).
-  let ChatInterface = $state<typeof import('$lib/components/ChatInterface.svelte').default | null>(null);
+  let ChatInterface = $state<typeof import('$lib/components/ChatInterface.svelte').default | null>(
+    null
+  );
   $effect(() => {
     if (!ChatInterface) {
-      import('$lib/components/ChatInterface.svelte').then(m => ChatInterface = m.default);
+      import('$lib/components/ChatInterface.svelte').then((m) => (ChatInterface = m.default));
     }
   });
 
   // Lazy-load DeadLetterQueue — only shown in dev mode, so defer the chunk
   // until the user actually enables it (#347).
-  let DeadLetterQueue: typeof import('$lib/components/DeadLetterQueue.svelte').default | null = null;
+  let DeadLetterQueue: typeof import('$lib/components/DeadLetterQueue.svelte').default | null =
+    null;
   $effect(() => {
     if ($devMode && !DeadLetterQueue) {
-      import('$lib/components/DeadLetterQueue.svelte').then(m => DeadLetterQueue = m.default);
+      import('$lib/components/DeadLetterQueue.svelte').then((m) => (DeadLetterQueue = m.default));
     }
   });
 
@@ -44,19 +47,24 @@
       {#if loadingUsage}
         <span class="status-pill muted">Verificando…</span>
       {:else if usage}
-        <span class="status-pill" class:enabled={usage.ai_enabled} class:disabled={!usage.ai_enabled}>
+        <span
+          class="status-pill"
+          class:enabled={usage.ai_enabled}
+          class:disabled={!usage.ai_enabled}
+        >
           {usage.ai_enabled ? 'IA activa' : 'IA inactiva'}
         </span>
       {/if}
     </div>
-
   </div>
 
   <div class="ai-content">
     {#if ChatInterface}
       <svelte:component this={ChatInterface} />
     {:else}
-      <div class="caption" style="padding: 24px; text-align: center; color: var(--text-muted);">Cargando chat...</div>
+      <div class="caption" style="padding: 24px; text-align: center; color: var(--text-muted);">
+        Cargando chat...
+      </div>
     {/if}
   </div>
 
@@ -69,7 +77,11 @@
           {#if usage}
             <p class="stat">
               <span class="stat-label">API Key configurada:</span>
-              <span class="stat-value" class:enabled={usage.ai_enabled} class:disabled={!usage.ai_enabled}>
+              <span
+                class="stat-value"
+                class:enabled={usage.ai_enabled}
+                class:disabled={!usage.ai_enabled}
+              >
                 {usage.ai_enabled ? 'Sí' : 'No'}
               </span>
             </p>
@@ -176,8 +188,12 @@
   .stat-label {
     color: var(--text-muted, #888);
   }
-  .stat-value.enabled { color: var(--success, #10b981); }
-  .stat-value.disabled { color: var(--error, #ef4444); }
+  .stat-value.enabled {
+    color: var(--success, #10b981);
+  }
+  .stat-value.disabled {
+    color: var(--error, #ef4444);
+  }
   .muted {
     color: var(--text-muted, #888);
     font-size: 0.85rem;
@@ -190,8 +206,12 @@
       font-size: 1rem;
     }
   }
-  .stat-value.enabled { color: var(--color-success, #38a169); }
-  .stat-value.disabled { color: var(--color-error, #e53e3e); }
+  .stat-value.enabled {
+    color: var(--color-success, #38a169);
+  }
+  .stat-value.disabled {
+    color: var(--color-error, #e53e3e);
+  }
 
   /* ── Responsive ── */
   @media (max-width: 768px) {

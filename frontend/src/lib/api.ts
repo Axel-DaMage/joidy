@@ -738,7 +738,12 @@ export const api = {
   analytics: {
     dashboard: (days = 30) => req<AnalyticsDashboard>('GET', `/analytics/dashboard?days=${days}`),
     track: (event_type: string, event_data?: Record<string, unknown>) =>
-      req<{ status: string; id: number }>('POST', '/analytics/track', { event_type, event_data }, { silent: true }),
+      req<{ status: string; id: number }>(
+        'POST',
+        '/analytics/track',
+        { event_type, event_data },
+        { silent: true }
+      ),
     usage: (days = 30) => req<UsageSummary>('GET', `/analytics/usage?days=${days}`),
   },
   export: {

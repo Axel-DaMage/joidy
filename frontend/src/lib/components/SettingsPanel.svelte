@@ -11,7 +11,6 @@
     writeInObsidian,
     use24HourClock,
     hideTagsLine,
-    darkMode,
     devMode,
     themeMode,
     type IconPack,
@@ -323,7 +322,9 @@
   }
 
   function toggleTheme() {
-    darkMode.toggle();
+    // Sync with themeMode store instead of the independent darkMode store (#571).
+    // Flip between 'dark' and 'light'; if currently 'auto', default to 'dark'.
+    themeMode.set($themeMode === 'dark' ? 'light' : 'dark');
   }
 
   function onColorPicker(i: number, e: Event) {
@@ -443,16 +444,16 @@
           </div>
           <div class="row">
             <div class="row-label">
-              {#if $darkMode}<DynamicIcon name="Moon" size={13} />{:else}<DynamicIcon
+              {#if $themeMode === 'dark'}<DynamicIcon name="Moon" size={13} />{:else}<DynamicIcon
                   name="Sun"
                   size={13}
                 />{/if}
               <span>{$t('settings.theme')}</span>
             </div>
             <button class="toggle" onclick={toggleTheme}>
-              <span class:active={$darkMode}>{$t('settings.dark')}</span>
+              <span class:active={$themeMode === 'dark'}>{$t('settings.dark')}</span>
               <span class="divider">|</span>
-              <span class:active={!$darkMode}>{$t('settings.light')}</span>
+              <span class:active={$themeMode !== 'dark'}>{$t('settings.light')}</span>
             </button>
           </div>
 
@@ -754,32 +755,28 @@
             <p class="hint" style="color:var(--danger)">{githubAuthError}</p>
           {/if}
           <div class="row">
-            <div class="row-label disabled">
+            <div class="row-label">
               <span>Google Contacts</span>
-              <span class="badge badge-off" style="margin-left:4px">En desarrollo (#43)</span>
             </div>
-            <button class="link-btn disabled">Futura integración</button>
+            <button class="link-btn" onclick={openGoogleContactsLink}>Enlazar</button>
           </div>
           <div class="row">
-            <div class="row-label disabled">
+            <div class="row-label">
               <span>Strava</span>
-              <span class="badge badge-off" style="margin-left:4px">En desarrollo (#44)</span>
             </div>
-            <button class="link-btn disabled">Futura integración</button>
+            <button class="link-btn" onclick={openStravaLink}>Enlazar</button>
           </div>
           <div class="row">
-            <div class="row-label disabled">
+            <div class="row-label">
               <span>Gmail</span>
-              <span class="badge badge-off" style="margin-left:4px">En desarrollo (#42)</span>
             </div>
-            <button class="link-btn disabled">Futura integración</button>
+            <button class="link-btn" onclick={openGmailLink}>Enlazar</button>
           </div>
           <div class="row">
-            <div class="row-label disabled">
+            <div class="row-label">
               <span>Spotify</span>
-              <span class="badge badge-off" style="margin-left:4px">En desarrollo (#45)</span>
             </div>
-            <button class="link-btn disabled">Futura integración</button>
+            <button class="link-btn">Enlazar</button>
           </div>
           <div class="row">
             <div class="row-label">
@@ -815,7 +812,6 @@
             <div class="row-label">
               <span>Gemini API Key</span>
               {#if isConfigured('gemini_api_key')}<span class="configured-badge">✓</span>{/if}
-              <span class="badge badge-off" style="margin-left:auto">En desarrollo (#41)</span>
             </div>
             <input
               type="password"
