@@ -96,7 +96,11 @@ export async function dismissConflictModal(page: Page): Promise<void> {
  */
 export async function authGoto(page: Page, path: string): Promise<void> {
   await page.goto(path);
-  await page.waitForLoadState('networkidle');
+  // Wait for DOM to be ready, then try networkidle with a short timeout
+  // (networkidle may never fire due to WebSocket connections)
+  await page.waitForLoadState('domcontentloaded');
+  await page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => {});
+  await page.waitForTimeout(500);
   await dismissConflictModal(page);
 }
 

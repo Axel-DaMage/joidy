@@ -96,21 +96,18 @@ test.describe('Streaks — bulk actions', () => {
 test.describe('Streaks — global summary', () => {
   test('shows active streaks count', async ({ page }) => {
     await authGoto(page, '/streaks');
-    // Wait for streaks to load, then check summary
-    await expect(page.locator('.streak-item-main').first()).toBeVisible({ timeout: 15000 });
-    await expect(page.locator('text=/\\d+\\s+Activas/i')).toBeVisible({ timeout: 5000 });
+    // Wait for the summary section to load (it doesn't depend on streak items)
+    await expect(page.locator('text=/\\d+\\s+Activas/i')).toBeVisible({ timeout: 15000 });
   });
 
   test('shows archived count', async ({ page }) => {
     await authGoto(page, '/streaks');
-    await expect(page.locator('.streak-item-main').first()).toBeVisible({ timeout: 15000 });
-    await expect(page.locator('text=/\\d+\\s+Archivadas/i')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('text=/\\d+\\s+Archivadas/i')).toBeVisible({ timeout: 15000 });
   });
 
   test('shows record streak info', async ({ page }) => {
     await authGoto(page, '/streaks');
-    await expect(page.locator('.streak-item-main').first()).toBeVisible({ timeout: 15000 });
     // Shows "Récord" and "Racha más larga"
-    await expect(page.locator('text=/r[ié]cord/i')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('text=/r[ié]cord/i')).toBeVisible({ timeout: 15000 });
   });
 });

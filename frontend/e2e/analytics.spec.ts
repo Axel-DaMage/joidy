@@ -102,9 +102,12 @@ test.describe('Analytics — top pages', () => {
 
   test('top pages list has entries', async ({ page }) => {
     await authGoto(page, '/analytics');
-    await page.waitForTimeout(1000);
+    // Wait for analytics data to load
+    await page.waitForTimeout(2000);
     // Top pages should show page paths with counts like "/ 17"
+    // The data loads asynchronously, so retry until found
     const topPages = page.locator('text=/\\/\\s+\\d+/');
+    await expect(topPages.first()).toBeVisible({ timeout: 10000 });
     const count = await topPages.count();
     expect(count).toBeGreaterThan(0);
   });

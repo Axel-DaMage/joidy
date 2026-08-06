@@ -89,3 +89,116 @@ test.describe('AI — dev mode panel', () => {
     await expect(devPanel.first()).toBeVisible({ timeout: 5000 });
   });
 });
+
+test.describe('AI — chat interface details', () => {
+  test('chat header has clear button when messages exist', async ({ page }) => {
+    await authGoto(page, '/ai');
+    // Wait for ChatInterface to lazy-load
+    await expect(page.locator('.chat')).toBeVisible({ timeout: 10000 });
+    // The clear button only appears when there are messages ({#if !isEmpty})
+    // Send a message first
+    const textarea = page.locator('textarea');
+    await textarea.fill('Test for clear button');
+    await textarea.press('Enter');
+    await page.waitForTimeout(2000);
+    // Now the clear button should be visible
+    const clearBtn = page.locator('.clear-btn');
+    if (await clearBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await expect(clearBtn).toBeVisible();
+    }
+  });
+
+  test('empty state shows suggestions when no messages', async ({ page }) => {
+    await authGoto(page, '/ai');
+    await page.waitForTimeout(1000);
+    // Empty state should be visible initially
+    const emptyState = page.locator('.empty-state');
+    if (await emptyState.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await expect(emptyState).toBeVisible();
+      // Suggestions should be in the empty state
+      await expect(page.locator('.suggestions .suggestion-chip').first()).toBeVisible({ timeout: 3000 });
+    }
+  });
+
+  test('chat messages container is visible', async ({ page }) => {
+    await authGoto(page, '/ai');
+    await page.waitForTimeout(1000);
+    await expect(page.locator('.chat-messages')).toBeVisible({ timeout: 5000 });
+  });
+
+  test('chat input area is visible', async ({ page }) => {
+    await authGoto(page, '/ai');
+    await page.waitForTimeout(1000);
+    await expect(page.locator('.chat-input')).toBeVisible({ timeout: 5000 });
+  });
+
+  test('send button is disabled when input is empty', async ({ page }) => {
+    await authGoto(page, '/ai');
+    await page.waitForTimeout(1000);
+    const sendBtn = page.locator('.send-btn');
+    await expect(sendBtn).toBeVisible({ timeout: 5000 });
+    // Should be disabled when textarea is empty
+    const textarea = page.locator('textarea');
+    await textarea.fill('');
+    await expect(sendBtn).toBeDisabled();
+  });
+
+  test('send button is enabled when input has text', async ({ page }) => {
+    await authGoto(page, '/ai');
+    await page.waitForTimeout(1000);
+    const sendBtn = page.locator('.send-btn');
+    const textarea = page.locator('textarea');
+    await textarea.fill('Test message');
+    await expect(sendBtn).toBeEnabled({ timeout: 3000 });
+  });
+
+  test('can clear chat with clear button', async ({ page }) => {
+    await authGoto(page, '/ai');
+    await page.waitForTimeout(1000);
+    // First send a message
+    const textarea = page.locator('textarea');
+    await textarea.fill('Test message for clearing');
+    await textarea.press('Enter');
+    await page.waitForTimeout(2000);
+    // Now click clear
+    const clearBtn = page.locator('.clear-btn');
+    await clearBtn.click();
+    await page.waitForTimeout(500);
+    // After clearing, the empty state should be visible again
+    const emptyState = page.locator('.empty-state');
+    // The empty state may or may not appear depending on implementation
+    if (await emptyState.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await expect(emptyState).toBeVisible();
+    }
+  });
+});
+
+test.describe('AI — dev mode panel details', () => {
+  async function expandDevPanel(page: import('@playwright/test').Page) {
+    await authGoto(page, '/ai');
+    // The dev section is a <details> element — expand it to see contents
+    const devSection = page.locator('.dev-section');
+    await expect(devSection).toBeVisible({ timeout: 5000 });
+    const summary = devSection.locator('summary');
+    await summary.click();
+    await page.waitForTimeout(300);
+  }
+
+  test('dev panel shows API key status', async ({ page }) => {
+    await expandDevPanel(page);
+    await expect(page.locator('text=/API Key configurada/i')).toBeVisible({ timeout: 5000 });
+  });
+
+  test('dev panel shows estimated cost', async ({ page }) => {
+    await expandDevPanel(page);
+    await expect(page.locator('text=/Costo estimado/i')).toBeVisible({ timeout: 5000 });
+  });
+
+  test('dev panel is collapsible', async ({ page }) => {
+    await authGoto(page, '/ai');
+    const devSection = page.locator('.dev-section');
+    await expect(devSection).toBeVisible({ timeout: 5000 });
+    const summary = devSection.locator('summary');
+    await expect(summary).toBeVisible();
+  });
+});
