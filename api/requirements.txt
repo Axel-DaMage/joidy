@@ -15,5 +15,5 @@ bcrypt==4.0.1
 prometheus-client==0.26.0
 pywebpush==2.3.0
 cryptography==49.0.0
-pytest==8.3.4
+pytest==9.0.3
 pytest-cov==6.0.0
