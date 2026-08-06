@@ -197,6 +197,8 @@ body.zen-mode-active .app-shell {
   padding: var(--s3) 0;
   gap: var(--s2);
   overflow: visible;
+  position: relative;
+  z-index: var(--z-base);
 }
 
 .app-main {
