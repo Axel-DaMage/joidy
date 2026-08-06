@@ -217,7 +217,30 @@ app.mount("/uploads", SafeStaticFiles(directory=settings.upload_dir), name="uplo
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "joidy-api"}
+    """Liveness + basic dependency check.
+
+    Unlike ``/health/ready`` (which performs a full readiness probe including
+    the AI service), this endpoint verifies only the core dependency (database)
+    so it can be used as a liveness probe that still reflects real outages.
+    """
+    from database import engine
+    from sqlalchemy import text
+
+    checks = {"database": "unknown"}
+
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        checks["database"] = "ok"
+    except Exception as e:
+        checks["database"] = f"error: {str(e)[:50]}"
+
+    all_ok = all(v == "ok" for v in checks.values())
+    return {
+        "status": "ok" if all_ok else "degraded",
+        "service": "joidy-api",
+        "checks": checks,
+    }
 
 
 @app.get("/health/ready")
