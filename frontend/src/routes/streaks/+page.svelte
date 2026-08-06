@@ -120,6 +120,7 @@
         logger.error('[streaks]', e);
       }
     } finally {
+      loading = false;
       if (selectedId && !streaks.find(s => s.id === selectedId)) selectedId = streaks[0]?.id ?? null;
       if (selectedId) ensureStreakHeatmap();
     }

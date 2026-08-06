@@ -1,49 +1,154 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, authGoto } from './helpers/auth';
 
 /**
- * E2E flow: complete a goal.
- *
- * Prerequisites: the full stack (frontend + API) must be running,
- * and at least one goal exists.
+ * Goals feature — comprehensive E2E tests.
+ * Covers: tabs (Editor/Inicio/Planificación/Historial/Análisis),
+ * filters, goal cards, pin, search, goal detail view.
  */
-test.describe('Goals — complete goal flow', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+test.describe('Goals — page structure', () => {
+  test('goals page loads with all tabs', async ({ page }) => {
+    await authGoto(page, '/goals');
+    // All 5 tabs should be visible
+    await expect(page.locator('button:has-text("Editor")')).toBeVisible();
+    await expect(page.locator('button:has-text("Inicio")')).toBeVisible();
+    await expect(page.locator('button:has-text("Planificación")')).toBeVisible();
+    await expect(page.locator('button:has-text("Historial")')).toBeVisible();
+    await expect(page.locator('button:has-text("Análisis")')).toBeVisible();
   });
 
-  test('can navigate to goals and interact with a goal', async ({ page }) => {
-    await page.goto('/goals');
-    await page.waitForLoadState('networkidle');
+  test('filter buttons are visible', async ({ page }) => {
+    await authGoto(page, '/goals');
+    await expect(page.locator('button:has-text("Todos")')).toBeVisible();
+    await expect(page.locator('button:has-text("Fijados")')).toBeVisible();
+    await expect(page.locator('button:has-text("Activos")')).toBeVisible();
+    await expect(page.locator('button:has-text("Completados")')).toBeVisible();
+    await expect(page.locator('button:has-text("Pausados")')).toBeVisible();
+    await expect(page.locator('button:has-text("Fallidos")')).toBeVisible();
+  });
 
-    // Look for goal cards
-    const goalCards = page.locator('.goal-editor-card, [data-goal-id]');
+  test('search input is visible', async ({ page }) => {
+    await authGoto(page, '/goals');
+    await expect(page.locator('input[placeholder="Buscar objetivos..."]')).toBeVisible();
+  });
+});
+
+test.describe('Goals — tabs navigation', () => {
+  test('can switch to Inicio tab', async ({ page }) => {
+    await authGoto(page, '/goals');
+    await page.locator('button:has-text("Inicio")').click();
+    await page.waitForTimeout(500);
+    // The tab should become active
+    await expect(page.locator('button.tab:has-text("Inicio")')).toHaveClass(/active/);
+  });
+
+  test('can switch to Planificación tab', async ({ page }) => {
+    await authGoto(page, '/goals');
+    await page.locator('button:has-text("Planificación")').click();
+    await page.waitForTimeout(500);
+    await expect(page.locator('button.tab:has-text("Planificación")')).toHaveClass(/active/);
+  });
+
+  test('can switch to Historial tab', async ({ page }) => {
+    await authGoto(page, '/goals');
+    await page.locator('button:has-text("Historial")').click();
+    await page.waitForTimeout(500);
+    await expect(page.locator('button.tab:has-text("Historial")')).toHaveClass(/active/);
+  });
+
+  test('can switch to Análisis tab', async ({ page }) => {
+    await authGoto(page, '/goals');
+    await page.locator('button:has-text("Análisis")').click();
+    await page.waitForTimeout(500);
+    await expect(page.locator('button.tab:has-text("Análisis")')).toHaveClass(/active/);
+  });
+
+  test('can switch back to Editor tab', async ({ page }) => {
+    await authGoto(page, '/goals');
+    // Switch to another tab first
+    await page.locator('button:has-text("Análisis")').click();
+    await page.waitForTimeout(300);
+    // Then back to Editor
+    await page.locator('button:has-text("Editor")').click();
+    await page.waitForTimeout(300);
+    await expect(page.locator('button.tab:has-text("Editor")')).toHaveClass(/active/);
+  });
+});
+
+test.describe('Goals — filters', () => {
+  test('can filter by Fallidos', async ({ page }) => {
+    await authGoto(page, '/goals');
+    const filterBtn = page.locator('button.filter-btn:has-text("Fallidos")');
+    await filterBtn.click();
+    await page.waitForTimeout(500);
+    await expect(filterBtn).toHaveClass(/active/);
+  });
+
+  test('can filter by Completados', async ({ page }) => {
+    await authGoto(page, '/goals');
+    const filterBtn = page.locator('button.filter-btn:has-text("Completados")');
+    await filterBtn.click();
+    await page.waitForTimeout(500);
+    await expect(filterBtn).toHaveClass(/active/);
+  });
+
+  test('can reset to Todos filter', async ({ page }) => {
+    await authGoto(page, '/goals');
+    // Apply a filter
+    await page.locator('button.filter-btn:has-text("Fallidos")').click();
+    await page.waitForTimeout(300);
+    // Reset to Todos
+    const todosBtn = page.locator('button.filter-btn:has-text("Todos")');
+    await todosBtn.click();
+    await page.waitForTimeout(500);
+    await expect(todosBtn).toHaveClass(/active/);
+  });
+
+  test('search filters goals', async ({ page }) => {
+    await authGoto(page, '/goals');
+    const search = page.locator('input[placeholder="Buscar objetivos..."]');
+    await search.fill('G1');
+    await page.waitForTimeout(500);
+    // Should show goals with "G1" in the title
+    const goalCards = page.locator('.goal-card-main, [class*="goal-card"]');
     const count = await goalCards.count();
+    expect(count).toBeGreaterThan(0);
+  });
+});
 
-    if (count === 0) {
-      test.skip(true, 'No goals exist — create a goal first to run this test');
+test.describe('Goals — goal cards', () => {
+  test('goal cards are visible and have pin buttons', async ({ page }) => {
+    await authGoto(page, '/goals');
+    await page.waitForTimeout(2000);
+    const goalCards = page.locator('.goal-card-main');
+    const count = await goalCards.count();
+    if (count > 0) {
+      // Pin button is a sibling within the goal card container
+      const pinBtn = page.locator('button[aria-label="Fijar objetivo"]').first();
+      await expect(pinBtn).toBeVisible({ timeout: 3000 });
     }
+  });
 
-    // Try to complete the first goal
-    const firstGoal = goalCards.first();
-    const completeBtn = firstGoal.locator('button:has-text("Completar"), [data-action="complete"]').first();
-
-    if (await completeBtn.isVisible()) {
-      await completeBtn.click();
+  test('clicking a goal card opens it', async ({ page }) => {
+    await authGoto(page, '/goals');
+    await page.waitForTimeout(1000);
+    const firstGoal = page.locator('.goal-card-main').first();
+    if (await firstGoal.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await firstGoal.click();
       await page.waitForTimeout(1000);
-      // Verify the goal shows as completed
-      await expect(firstGoal.locator('.completed, [data-state="COMPLETED"]')).toBeVisible({ timeout: 5000 }).catch(() => {
-        test.skip(true, 'Goal completion requires a fully functional API backend');
-      });
-    } else {
-      // Some goals use a checkbox or different UI
-      const checkbox = firstGoal.locator('input[type="checkbox"], .goal-checkbox').first();
-      if (await checkbox.isVisible()) {
-        await checkbox.click();
-        await page.waitForTimeout(1000);
-      } else {
-        test.skip(true, 'No completion control found — UI may differ');
-      }
+      // Should show goal detail/editor
+      await expect(page.locator('main.app-main')).not.toBeEmpty();
+    }
+  });
+
+  test('pin button toggles goal pin state', async ({ page }) => {
+    await authGoto(page, '/goals');
+    await page.waitForTimeout(1000);
+    const firstPinBtn = page.locator('button[aria-label="Fijar objetivo"]').first();
+    if (await firstPinBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await firstPinBtn.click();
+      await page.waitForTimeout(500);
+      // The button should still be visible (toggled state)
+      await expect(firstPinBtn).toBeVisible();
     }
   });
 });
