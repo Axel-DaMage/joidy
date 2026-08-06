@@ -1103,6 +1103,7 @@
   /* ── Toolbar ── */
   .toolbar {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
     padding: 6px 20px;
@@ -1185,18 +1186,30 @@
     display: flex;
     align-items: center;
     gap: var(--s2);
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
   }
 
   .toolbar-right {
     display: flex;
     align-items: center;
     gap: var(--s2);
+    flex-shrink: 0;
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
 
   .format-toolbar {
     display: flex;
     align-items: center;
     gap: 2px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    min-width: 0;
+  }
+  .format-toolbar::-webkit-scrollbar {
+    display: none;
   }
 
   .format-divider {
