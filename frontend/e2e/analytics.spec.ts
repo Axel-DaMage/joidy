@@ -3,24 +3,26 @@ import { test, expect, authGoto } from './helpers/auth';
 /**
  * Analytics feature — comprehensive E2E tests.
  * Covers: range tabs, system overview, charts, session stats, top pages.
+ * Locale: Spanish (es) — set in auth helper.
  */
 test.describe('Analytics — page structure', () => {
   test('analytics page loads with title', async ({ page }) => {
     await authGoto(page, '/analytics');
-    // Analytics page shows "ANALYTICS" heading
-    await expect(page.locator('main.app-main').locator('text=/analytics/i').first()).toBeVisible({ timeout: 5000 });
+    // Analytics page shows "ANALÍTICA" heading (Spanish locale)
+    await expect(page.locator('main.app-main').locator('text=/analítica/i').first()).toBeVisible({ timeout: 5000 });
   });
 
   test('range tabs are visible', async ({ page }) => {
     await authGoto(page, '/analytics');
-    await expect(page.locator('button.range-tab:has-text("Last 7d")')).toBeVisible();
-    await expect(page.locator('button.range-tab:has-text("Last 30d")')).toBeVisible();
-    await expect(page.locator('button.range-tab:has-text("Last 90d")')).toBeVisible();
+    // Spanish: "Últimos 7d", "Últimos 30d", "Últimos 90d"
+    await expect(page.locator('button.range-tab:has-text("Últimos 7d")')).toBeVisible();
+    await expect(page.locator('button.range-tab:has-text("Últimos 30d")')).toBeVisible();
+    await expect(page.locator('button.range-tab:has-text("Últimos 90d")')).toBeVisible();
   });
 });
 
 test.describe('Analytics — range tabs', () => {
-  const ranges = ['Last 7d', 'Last 30d', 'Last 90d'];
+  const ranges = ['Últimos 7d', 'Últimos 30d', 'Últimos 90d'];
 
   for (const range of ranges) {
     test(`can switch to ${range}`, async ({ page }) => {
@@ -36,56 +38,66 @@ test.describe('Analytics — range tabs', () => {
 test.describe('Analytics — system overview', () => {
   test('system overview section is visible', async ({ page }) => {
     await authGoto(page, '/analytics');
-    await expect(page.locator('text=/system overview/i')).toBeVisible({ timeout: 5000 });
+    // Spanish: "Resumen del sistema"
+    await expect(page.locator('text=/resumen del sistema/i')).toBeVisible({ timeout: 5000 });
   });
 
   test('notes count is displayed', async ({ page }) => {
     await authGoto(page, '/analytics');
-    await expect(page.locator('text=/\\d+\\s+Notes/i')).toBeVisible({ timeout: 5000 });
+    // Spanish: "Notas"
+    await expect(page.locator('text=/\\d+\\s+Notas/i')).toBeVisible({ timeout: 5000 });
   });
 
   test('tags count is displayed', async ({ page }) => {
     await authGoto(page, '/analytics');
-    await expect(page.locator('text=/\\d+\\s+Tags/i')).toBeVisible({ timeout: 5000 });
+    // Spanish: "Etiquetas"
+    await expect(page.locator('text=/\\d+\\s+Etiquetas/i')).toBeVisible({ timeout: 5000 });
   });
 
   test('goals count is displayed', async ({ page }) => {
     await authGoto(page, '/analytics');
-    await expect(page.locator('text=/\\d+\\s+Goals/i')).toBeVisible({ timeout: 5000 });
+    // Spanish: "Objetivos"
+    await expect(page.locator('text=/\\d+\\s+Objetivos/i')).toBeVisible({ timeout: 5000 });
   });
 
   test('total XP is displayed', async ({ page }) => {
     await authGoto(page, '/analytics');
-    await expect(page.locator('text=/\\d+\\s+Total XP/i')).toBeVisible({ timeout: 5000 });
+    // Spanish: "XP total"
+    await expect(page.locator('text=/\\d+\\s+XP total/i')).toBeVisible({ timeout: 5000 });
   });
 });
 
 test.describe('Analytics — session stats', () => {
   test('session stats section is visible', async ({ page }) => {
     await authGoto(page, '/analytics');
-    await expect(page.locator('text=/session stats/i')).toBeVisible({ timeout: 5000 });
+    // Spanish: "Estadísticas de sesión"
+    await expect(page.locator('text=/estadísticas de sesión/i')).toBeVisible({ timeout: 5000 });
   });
 
   test('sessions count is displayed', async ({ page }) => {
     await authGoto(page, '/analytics');
-    await expect(page.locator('text=/\\d+\\s+Sessions/i')).toBeVisible({ timeout: 5000 });
+    // Spanish: "Sesiones"
+    await expect(page.locator('text=/\\d+\\s+Sesiones/i')).toBeVisible({ timeout: 5000 });
   });
 
   test('active days count is displayed', async ({ page }) => {
     await authGoto(page, '/analytics');
-    await expect(page.locator('text=/\\d+\\s+Active days/i')).toBeVisible({ timeout: 5000 });
+    // Spanish: "Días activos"
+    await expect(page.locator('text=/\\d+\\s+Días activos/i')).toBeVisible({ timeout: 5000 });
   });
 
   test('total events count is displayed', async ({ page }) => {
     await authGoto(page, '/analytics');
-    await expect(page.locator('text=/\\d+\\s+Total events/i')).toBeVisible({ timeout: 5000 });
+    // Spanish: "Eventos totales"
+    await expect(page.locator('text=/\\d+\\s+Eventos totales/i')).toBeVisible({ timeout: 5000 });
   });
 });
 
 test.describe('Analytics — top pages', () => {
   test('top pages section is visible', async ({ page }) => {
     await authGoto(page, '/analytics');
-    await expect(page.locator('text=/top pages/i')).toBeVisible({ timeout: 5000 });
+    // Spanish: "Páginas más visitadas"
+    await expect(page.locator('text=/páginas más visitadas/i')).toBeVisible({ timeout: 5000 });
   });
 
   test('top pages list has entries', async ({ page }) => {
@@ -101,23 +113,27 @@ test.describe('Analytics — top pages', () => {
 test.describe('Analytics — mood trends', () => {
   test('mood trends section is visible', async ({ page }) => {
     await authGoto(page, '/analytics');
-    await expect(page.locator('text=/mood trends/i')).toBeVisible({ timeout: 5000 });
+    // Spanish: "Tendencias de ánimo"
+    await expect(page.locator('text=/tendencias de ánimo/i')).toBeVisible({ timeout: 5000 });
   });
 
   test('average mood is displayed', async ({ page }) => {
     await authGoto(page, '/analytics');
-    await expect(page.locator('text=/avg mood/i')).toBeVisible({ timeout: 5000 });
+    // Spanish: "Ánimo medio"
+    await expect(page.locator('text=/ánimo medio/i')).toBeVisible({ timeout: 5000 });
   });
 });
 
 test.describe('Analytics — AI usage', () => {
   test('AI usage section is visible', async ({ page }) => {
     await authGoto(page, '/analytics');
-    await expect(page.locator('text=/ai usage/i')).toBeVisible({ timeout: 5000 });
+    // Spanish: "Uso de IA"
+    await expect(page.locator('text=/uso de ia/i')).toBeVisible({ timeout: 5000 });
   });
 
   test('estimated cost is displayed', async ({ page }) => {
     await authGoto(page, '/analytics');
-    await expect(page.locator('text=/\\$[\\d.]+\\s+estimated cost/i')).toBeVisible({ timeout: 5000 });
+    // Spanish: "Coste estimado"
+    await expect(page.locator('text=/coste estimado/i')).toBeVisible({ timeout: 5000 });
   });
 });

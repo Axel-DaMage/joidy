@@ -15,7 +15,8 @@ test.describe('Home — dashboard structure', () => {
     await authGoto(page, '/');
     // XP shows like "23,223 / 25,000 xp" — use a more flexible regex
     await expect(page.locator('header.app-header').locator('text=/[\\d,]+\\s*\\/.*xp/i')).toBeVisible({ timeout: 5000 });
-    await expect(page.locator('text=/LVL\\s+\\d+/i')).toBeVisible({ timeout: 5000 });
+    // Level shows as "NVL" in Spanish locale (was "LVL" in English)
+    await expect(page.locator('text=/NVL\\s+\\d+/i')).toBeVisible({ timeout: 5000 });
   });
 
   test('activity week tracker is visible', async ({ page }) => {
@@ -113,17 +114,17 @@ test.describe('Home — focus mode', () => {
 test.describe('Home — mood tracker', () => {
   test('mood buttons are visible', async ({ page }) => {
     await authGoto(page, '/');
-    // 5 mood emoji buttons
-    await expect(page.locator('button[aria-label="Mood 1 of 5"]')).toBeVisible({ timeout: 5000 });
-    await expect(page.locator('button[aria-label="Mood 2 of 5"]')).toBeVisible();
-    await expect(page.locator('button[aria-label="Mood 3 of 5"]')).toBeVisible();
-    await expect(page.locator('button[aria-label="Mood 4 of 5"]')).toBeVisible();
-    await expect(page.locator('button[aria-label="Mood 5 of 5"]')).toBeVisible();
+    // 5 mood emoji buttons — Spanish aria-label: "Ánimo X de 5"
+    await expect(page.locator('button[aria-label="Ánimo 1 de 5"]')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('button[aria-label="Ánimo 2 de 5"]')).toBeVisible();
+    await expect(page.locator('button[aria-label="Ánimo 3 de 5"]')).toBeVisible();
+    await expect(page.locator('button[aria-label="Ánimo 4 de 5"]')).toBeVisible();
+    await expect(page.locator('button[aria-label="Ánimo 5 de 5"]')).toBeVisible();
   });
 
   test('can select a mood', async ({ page }) => {
     await authGoto(page, '/');
-    const moodBtn = page.locator('button[aria-label="Mood 4 of 5"]');
+    const moodBtn = page.locator('button[aria-label="Ánimo 4 de 5"]');
     await moodBtn.click();
     await page.waitForTimeout(300);
     // The button should become active/selected

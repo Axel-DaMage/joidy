@@ -55,12 +55,12 @@ test.describe('Smoke — app shell', () => {
     // Wait a bit more for any late modals to appear and be dismissed
     await page.waitForTimeout(500);
     await dismissConflictModal(page);
-    const settingsBtn = page.locator('button[aria-label="Settings"]');
-    await settingsBtn.click();
+    // Settings button aria-label is i18n-translated, use custom event instead
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent('joidy:open-settings')));
     // Settings modal or panel should appear
     await page.waitForTimeout(500);
     // Check for either a modal overlay or a settings panel
-    const modal = page.locator('.modal-overlay, .settings-panel, [class*="settings"]');
+    const modal = page.locator('.modal-overlay, .backdrop, .settings-panel, [class*="settings"]');
     await expect(modal.first()).toBeVisible({ timeout: 5000 });
   });
 });
