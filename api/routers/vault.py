@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 
 from database import get_db
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from services.joidy_vault_writer import restore_goals_from_vault, write_daily, write_objectives, write_skills
 from sqlalchemy.orm import Session
 
@@ -31,4 +31,7 @@ def trigger_write_skills(db: Session = Depends(get_db)):
 @router.post("/restore-goals")
 def trigger_restore_goals(db: Session = Depends(get_db)):
     """Restore goals from joidy_managed files in Objetivos/ (#504)."""
-    return restore_goals_from_vault(db)
+    try:
+        return restore_goals_from_vault(db)
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Vault not ready: {e}")
