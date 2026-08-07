@@ -1,6 +1,6 @@
 
 from database import get_db
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query
 from models.note import EmbeddingFailure, Note, NoteTag, Tag
 from pydantic import BaseModel, field_validator
 from services.sanitizer import sanitize_title, sanitize_content
@@ -170,18 +170,12 @@ def _is_truthy_header(value: str | None) -> bool:
 
 @router.get("/")
 def list_notes(
-    skip: int = 0,
-    limit: int = 1000,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(1000, ge=1, le=1000),
     tag: str | None = None,
     source_path: str | None = None,
     db: Session = Depends(get_db),
 ):
-    if skip < 0:
-        skip = 0
-    if limit < 1:
-        limit = 1
-    if limit > 1000:
-        limit = 1000
     query = db.query(Note).options(selectinload(Note.tags).selectinload(NoteTag.tag))
     if tag:
         query = query.join(NoteTag).join(Tag).filter(Tag.name == tag.lower())
@@ -409,16 +403,26 @@ def accept_ai_tag(
 
 @router.get("/{note_id}/backlinks")
 def get_backlinks(note_id: int, db: Session = Depends(get_db)):
+    note = db.query(Note).filter(Note.id == note_id).first()
+    if not note:
+        raise HTTPException(status_code=404, detail="Note not found")
     backlinks = list_backlinks_service(db, note_id)
     return [note_to_response(n) for n in backlinks]
 
 
 @router.get("/{note_id}/similar")
-def get_similar_notes(note_id: int, limit: int = 5, db: Session = Depends(get_db)):
+def get_similar_notes(
+    note_id: int,
+    limit: int = Query(5, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
     """Find semantically similar notes using pgvector cosine similarity (#393).
 
     Uses the note's stored embedding to find the top-K nearest neighbors.
     """
+    note = db.query(Note).filter(Note.id == note_id).first()
+    if not note:
+        raise HTTPException(status_code=404, detail="Note not found")
     from models.note import NoteEmbedding
 
     embedding_row = db.query(NoteEmbedding).filter(NoteEmbedding.note_id == note_id).first()

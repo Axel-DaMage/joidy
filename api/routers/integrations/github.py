@@ -46,6 +46,16 @@ class GitHubGoalLink(BaseModel):
     goal_id: int = Field(..., description="Goal ID to link")
 
 
+class CreateIssueRequest(BaseModel):
+    title: str
+    body: str | None = None
+    labels: list[str] = []
+
+
+class CreateCommentRequest(BaseModel):
+    body: str
+
+
 def _headers() -> dict[str, str]:
     if not settings.github_token:
         raise HTTPException(status_code=400, detail="GitHub token not configured")
@@ -426,15 +436,13 @@ async def get_issue(owner: str, repo: str, issue_number: int):
 async def create_issue(
     owner: str,
     repo: str,
-    title: str = Query(..., min_length=1, max_length=500),
-    body: str = Query(""),
-    labels: list[str] = Query(default_factory=list),
+    request: CreateIssueRequest,
 ):
-    data: dict[str, Any] = {"title": title}
-    if body:
-        data["body"] = body
-    if labels:
-        data["labels"] = labels
+    data: dict[str, Any] = {"title": request.title}
+    if request.body:
+        data["body"] = request.body
+    if request.labels:
+        data["labels"] = request.labels
 
     issue = await _post(f"/repos/{owner}/{repo}/issues", data)
     return {
@@ -499,9 +507,14 @@ async def get_comments(owner: str, repo: str, issue_number: int):
 
 @router.post("/repos/{owner}/{repo}/issues/{issue_number}/comments")
 async def add_comment(
-    owner: str, repo: str, issue_number: int, body: str = Query(..., min_length=1)
+    owner: str,
+    repo: str,
+    issue_number: int,
+    request: CreateCommentRequest,
 ):
-    comment = await _post(f"/repos/{owner}/{repo}/issues/{issue_number}/comments", {"body": body})
+    comment = await _post(
+        f"/repos/{owner}/{repo}/issues/{issue_number}/comments", {"body": request.body}
+    )
     return {"id": comment["id"], "body": comment["body"]}
 
 
@@ -973,7 +986,7 @@ async def revoke_token(
     return {"status": "revoked"}
 
 
-@router.get("/oauth/scpies")
+@router.get("/oauth/scopes")
 async def list_oauth_scopes():
     """
     Lista los scopes disponibles para OAuth.
