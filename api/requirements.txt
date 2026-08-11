@@ -1,7 +1,7 @@
 fastapi==0.140.13
 uvicorn[standard]==0.32.1
 sqlalchemy==2.0.51
-alembic==1.18.5
+alembic==1.19.0
 pydantic==2.13.4
 pydantic-settings==2.14.2
 httpx==0.28.1
