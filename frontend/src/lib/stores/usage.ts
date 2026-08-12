@@ -42,6 +42,16 @@ function send(eventType: string, eventData?: Record<string, unknown>): void {
   api.analytics.track(eventType, eventData).catch((e) => logger.debug('[usage] track failed:', e));
 }
 
+/**
+ * Send a usage event regardless of foreground state.
+ * Used by `trackSessionEnd()` which fires when the tab goes hidden —
+ * the foreground check would otherwise block the session_end event (#563).
+ */
+function sendUnconditional(eventType: string, eventData?: Record<string, unknown>): void {
+  if (!browser) return;
+  api.analytics.track(eventType, eventData).catch((e) => logger.debug('[usage] track failed:', e));
+}
+
 /** Track a page navigation. Debounced per-path to avoid duplicates. */
 export function trackPageView(path: string): void {
   if (!shouldTrack(`page_view:${path}`, PAGE_VIEW_DEBOUNCE_MS)) return;
@@ -66,10 +76,10 @@ export function trackSessionStart(): void {
 export function trackSessionEnd(): void {
   if (!browser || !sessionStarted) return;
   sessionStarted = false;
-  // Session end is not debounced by lastTracked (we reset sessionStarted),
-  // but still respect the foreground gate.
-  if (!trackingEnabled || !isForeground()) return;
-  send(EVENT_SESSION_END);
+  // Session end must fire even when the tab is going to background —
+  // that's the whole point of ending the session. The foreground check
+  // in send() would block it, so we use sendUnconditional() (#563).
+  sendUnconditional(EVENT_SESSION_END);
 }
 
 /**
