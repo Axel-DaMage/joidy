@@ -5,6 +5,9 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
+# Switch apt sources to HTTPS (Fastly 403s on HTTP from Docker build network)
+RUN sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources
+
 # Install system dependencies for sqlite-vec and curl (healthcheck)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
