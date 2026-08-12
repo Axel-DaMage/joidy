@@ -108,6 +108,25 @@
     "neverSynced": "Nunca sincronizado",
     "totalSynced": "{count} notas sincronizadas"
   },
+  "home": {
+    "modules": {
+      "planta": "Planta",
+      "galaxia": "Galaxia",
+      "montana": "Montaña",
+      "ciudad": "Ciudad",
+      "orbita": "Órbita"
+    },
+    "days": "días",
+    "xp": "xp",
+    "notes": "notas",
+    "shareLevel": "Compartir nivel",
+    "levelReached": "Nivel alcanzado",
+    "focusMode": "Modo Enfoque",
+    "startFocusMode": "Iniciar modo enfoque",
+    "recentNotes": "Notas recientes",
+    "seeAll": "ver todas →",
+    "noNotesYet": "No hay notas aún."
+  },
   "analytics": {
     "title": "ANALÍTICA",
     "loading": "Cargando analítica...",

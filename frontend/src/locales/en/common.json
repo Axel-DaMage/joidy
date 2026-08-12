@@ -108,6 +108,25 @@
     "neverSynced": "Never synced",
     "totalSynced": "{count} notes synced"
   },
+  "home": {
+    "modules": {
+      "planta": "Plant",
+      "galaxia": "Galaxy",
+      "montana": "Mountain",
+      "ciudad": "City",
+      "orbita": "Orbit"
+    },
+    "days": "days",
+    "xp": "xp",
+    "notes": "notes",
+    "shareLevel": "Share level",
+    "levelReached": "Level reached",
+    "focusMode": "Focus Mode",
+    "startFocusMode": "Start focus mode",
+    "recentNotes": "Recent notes",
+    "seeAll": "see all →",
+    "noNotesYet": "No notes yet."
+  },
   "analytics": {
     "title": "ANALYTICS",
     "loading": "Loading analytics...",

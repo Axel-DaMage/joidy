@@ -92,6 +92,11 @@ def get_usage_summary(db: Session, user_id: int, days: int = 30) -> dict:
     # Average session duration: pair each session_start with the next
     # session_end that follows it. This is an approximation (no explicit
     # session id) but sufficient for a lightweight dashboard.
+    #
+    # Sessions longer than MAX_SESSION_MIN are discarded as outliers — they
+    # typically result from missing session_end events (e.g. tab closed
+    # without firing pagehide) rather than genuine usage (#563).
+    MAX_SESSION_MIN = 480  # 8 hours
     starts = (
         base.filter(UsageEvent.event_type == EVENT_SESSION_START)
         .order_by(UsageEvent.created_at.asc())
@@ -110,7 +115,9 @@ def get_usage_summary(db: Session, user_id: int, days: int = 30) -> dict:
             end_idx += 1
         if end_idx < len(ends):
             delta = ends[end_idx].created_at - s.created_at
-            durations.append(delta.total_seconds() / 60.0)
+            duration_min = delta.total_seconds() / 60.0
+            if duration_min <= MAX_SESSION_MIN:
+                durations.append(duration_min)
             end_idx += 1
     avg_session_duration_min = round(sum(durations) / len(durations), 2) if durations else 0.0
 

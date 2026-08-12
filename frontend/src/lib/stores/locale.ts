@@ -20,9 +20,11 @@ function detectLocale(): string {
   } catch {
     /* localStorage unavailable (private mode) — fall through */
   }
-  // navigator.language gives e.g. "en-US", "es-CL", "es". Use it as-is so
-  // Intl picks the right regional formatting; fall back to es-CL if absent.
-  return (navigator.language || 'es-CL');
+  // Default to 'es-CL' since the UI is primarily in Spanish (#560).
+  // Browser language detection is intentionally disabled until the i18n
+  // migration (#572) is complete — otherwise the combobox shows "English"
+  // while the UI remains in Spanish, which is confusing.
+  return 'es-CL';
 }
 
 export const locale = writable<string>(detectLocale());
