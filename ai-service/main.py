@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 
 from circuit_breaker import llm_circuit_breaker, emb_circuit_breaker, CircuitBreakerError
 from clients import get_embedding_client, get_llm_client
+from clients.factory import ClientFactory
 from clients.prompts import CHAT_SYSTEM_PROMPT, CLASSIFY_PROMPT, RAG_PROMPT
 from config import settings
 from cost_tracker import get_monthly_stats, record_usage
@@ -133,21 +134,52 @@ def _get_provider_info():
     available = settings.available_providers
     llm_provider, llm_model = settings.llm_model.split(":", 1) if ":" in settings.llm_model else ("gemini", settings.llm_model)
     emb_provider, emb_model = settings.embedding_model.split(":", 1) if ":" in settings.embedding_model else ("gemini", settings.embedding_model)
+    active = ClientFactory.get_active_providers()
+    llm_active = active.get("llm")
+    emb_active = active.get("embedding")
     return {
-        "llm": {"provider": llm_provider, "model": llm_model, "available": llm_provider in available},
-        "embedding": {"provider": emb_provider, "model": emb_model, "available": emb_provider in available},
+        "llm": {
+            "provider": llm_provider,
+            "model": llm_model,
+            "available": llm_provider in available,
+            "active_provider": llm_active["provider"] if llm_active else None,
+            "active_model": llm_active["model"] if llm_active else None,
+            "fallback": llm_active is not None and llm_active["provider"] != llm_provider,
+        },
+        "embedding": {
+            "provider": emb_provider,
+            "model": emb_model,
+            "available": emb_provider in available,
+            "active_provider": emb_active["provider"] if emb_active else None,
+            "active_model": emb_active["model"] if emb_active else None,
+            "fallback": emb_active is not None and emb_active["provider"] != emb_provider,
+        },
         "available": available,
     }
 
 
 @app.get("/health")
 def health():
+    # Resolve clients eagerly so /health reflects the actual provider after
+    # fallback (clients are cached, so subsequent requests reuse them).
+    if settings.is_ai_enabled:
+        try:
+            get_llm_client()
+        except ValueError:
+            pass
+        try:
+            get_embedding_client()
+        except ValueError:
+            pass
     provider_info = _get_provider_info()
-    # The service is "degraded" if the configured LLM/embedding provider is
-    # not actually available (e.g. GEMINI_API_KEY not set but model is gemini:*).
-    llm_ok = provider_info["llm"]["available"]
-    emb_ok = provider_info["embedding"]["available"]
-    status = "ok" if (llm_ok and emb_ok) else "degraded"
+    # "ok" = configured provider available. "degraded" = using fallback or
+    # no provider could be resolved at all.
+    llm_ok = provider_info["llm"]["available"] or provider_info["llm"]["active_provider"] is not None
+    emb_ok = provider_info["embedding"]["available"] or provider_info["embedding"]["active_provider"] is not None
+    if llm_ok and emb_ok:
+        status = "ok" if not (provider_info["llm"]["fallback"] or provider_info["embedding"]["fallback"]) else "degraded"
+    else:
+        status = "degraded"
     return {
         "status": status,
         "service": "joidy-ai",
