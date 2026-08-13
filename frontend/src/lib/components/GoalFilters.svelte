@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Search } from 'lucide-svelte';
+  import { t } from 'svelte-i18n';
 
   let {
     query = $bindable(''),
@@ -8,13 +9,13 @@
 </script>
 
 <div class="editor-header">
-  <h3 class="editor-title">Editor de Objetivos</h3>
+  <h3 class="editor-title">{$t('goalFilters.editorTitle')}</h3>
   <div class="editor-controls">
     <div class="search-box">
       <Search size={16} />
       <input
         type="text"
-        placeholder="Buscar objetivos..."
+        placeholder={$t('goalFilters.searchPlaceholder')}
         bind:value={query}
       />
     </div>
@@ -23,32 +24,32 @@
         class="filter-btn"
         class:active={filter === null}
         onclick={() => filter = null}
-      >Todos</button>
+      >{$t('goalFilters.all')}</button>
       <button
         class="filter-btn"
         class:active={filter === 'PINNED'}
         onclick={() => filter = 'PINNED'}
-      >Fijados</button>
+      >{$t('goalFilters.pinned')}</button>
       <button
         class="filter-btn"
         class:active={filter === 'ACTIVE'}
         onclick={() => filter = 'ACTIVE'}
-      >Activos</button>
+      >{$t('goalFilters.active')}</button>
       <button
         class="filter-btn"
         class:active={filter === 'COMPLETED'}
         onclick={() => filter = 'COMPLETED'}
-      >Completados</button>
+      >{$t('goalFilters.completed')}</button>
       <button
         class="filter-btn"
         class:active={filter === 'PAUSED'}
         onclick={() => filter = 'PAUSED'}
-      >Pausados</button>
+      >{$t('goalFilters.paused')}</button>
       <button
         class="filter-btn"
         class:active={filter === 'FAILED'}
         onclick={() => filter = 'FAILED'}
-      >Fallidos</button>
+      >{$t('goalFilters.failed')}</button>
     </div>
   </div>
 </div>

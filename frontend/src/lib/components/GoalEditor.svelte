@@ -6,6 +6,7 @@
   import hljs from 'highlight.js';
   import 'highlight.js/styles/github-dark.css';
   import { api, type Goal } from '$lib/api';
+  import { t } from 'svelte-i18n';
 
   const renderer = new marked.Renderer();
   renderer.code = ({ text, lang }) => {
@@ -82,7 +83,7 @@
   $: renderedHtml = renderMarkdown(debouncedContent);
 
   function renderMarkdown(md: string): string {
-    if (!md.trim()) return '<p style="color:var(--text-muted);font-style:italic;">Escribe algo para ver el preview...</p>';
+    if (!md.trim()) return `<p style="color:var(--text-muted);font-style:italic;">${$t('goalEditor.previewPlaceholder')}</p>`;
     return DOMPurify.sanitize(String(marked.parse(md)));
   }
 
@@ -172,8 +173,8 @@
         class="toolbar-btn icon-only"
         class:active={zenMode}
         onclick={() => zenMode = !zenMode}
-        title="Modo Zen (Esc para salir)"
-        aria-label="Modo Zen"
+        title={$t('goalEditor.zenMode')}
+        aria-label={$t('goalEditor.zenModeShort')}
       >
         <Maximize size={14} />
       </button>
@@ -182,7 +183,7 @@
         class="toolbar-btn"
         class:active={previewMode}
         onclick={() => previewMode = !previewMode}
-        title="Alternar preview (Ctrl+P)"
+        title={$t('goalEditor.togglePreview')}
       >
         {#if previewMode}<EyeOff size={14} />{:else}<Eye size={14} />{/if}
         <span>{previewMode ? 'Editor' : 'Vista previa'}</span>
@@ -193,18 +194,18 @@
         class:saved
         onclick={handleSave}
         disabled={saving || !title.trim()}
-        title="Guardar (Ctrl+S)"
+        title={$t('goalEditor.save')}
       >
         <Save size={14} />
         <span class="save-status">{saved ? 'Guardado' : saving ? '...' : 'Guardar'}</span>
       </button>
 
-      <button class="toolbar-btn" onclick={() => dispatch('edit')} title="Editar ajustes del objetivo">
+      <button class="toolbar-btn" onclick={() => dispatch('edit')} title={$t('goalEditor.editGoalSettings')}>
         <Settings size={14} />
-        <span>Ajustes</span>
+        <span>{$t('goalEditor.settings')}</span>
       </button>
 
-      <button class="toolbar-btn" onclick={() => dispatch('cancel')} title="Cerrar" aria-label="Cerrar">
+      <button class="toolbar-btn" onclick={() => dispatch('cancel')} title={$t('goalEditor.close')} aria-label={$t('goalEditor.close')}>
         <X size={14} />
       </button>
     </div>
@@ -215,7 +216,7 @@
     <input
       class="title-input"
       bind:value={title}
-      placeholder="Título del objetivo..."
+      placeholder={$t('goalEditor.titlePlaceholder')}
       onkeydown={(e) => e.key === 'Enter' && handleSave()}
     />
   </div>
@@ -241,7 +242,7 @@
           value={content}
           oninput={updateContent}
           onscroll={syncScroll}
-          placeholder="Escribe en markdown... (Ctrl+S para guardar, Ctrl+P para preview)"
+          placeholder={$t('goalEditor.contentPlaceholder')}
           spellcheck="false"
         ></textarea>
       </div>

@@ -3,6 +3,7 @@
   import type { FlatNode } from '$lib/utils/fileTree';
   import { FolderRoot } from 'lucide-svelte';
   import DynamicIcon from './DynamicIcon.svelte';
+  import { t } from 'svelte-i18n';
 
   export let flatNodes: FlatNode[] = [];
 
@@ -19,9 +20,9 @@
 
 <div class="folder-picker-backdrop" onclick={() => dispatch('close')} role="button" tabindex="-1" onkeydown={(e) => e.key === 'Enter' && dispatch('close')}>
   <div class="folder-picker" onclick={(e) => e.stopPropagation()} role="button" tabindex="-1" onkeydown={(e) => e.stopPropagation()}>
-    <h3 class="folder-modal-title">Mover nota a carpeta</h3>
+    <h3 class="folder-modal-title">{$t('folderPicker.title')}</h3>
 
-    <input type="text" class="input mono" bind:value={search} placeholder="Buscar carpeta..." style="width:100%; box-sizing:border-box; margin-bottom:8px;" />
+    <input type="text" class="input mono" bind:value={search} placeholder={$t('folderPicker.searchPlaceholder')} style="width:100%; box-sizing:border-box; margin-bottom:8px;" />
 
     <div class="folder-list">
       <button
@@ -44,13 +45,13 @@
         </button>
       {/each}
       {#if folders.length === 0}
-        <p class="muted">Sin resultados</p>
+        <p class="muted">{$t('folderPicker.noResults')}</p>
       {/if}
     </div>
 
     <div class="folder-modal-btns">
-      <button onclick={() => dispatch('close')}>Cancelar</button>
-      <button class="primary" onclick={() => dispatch('select', selectedPath)}>Mover aquí</button>
+      <button onclick={() => dispatch('close')}>{$t('folderPicker.cancel')}</button>
+      <button class="primary" onclick={() => dispatch('select', selectedPath)}>{$t('folderPicker.moveHere')}</button>
     </div>
   </div>
 </div>

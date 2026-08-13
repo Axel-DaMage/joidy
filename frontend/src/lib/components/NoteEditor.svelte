@@ -15,6 +15,7 @@
   import { downloadMarkdown, downloadHTML, copyNoteAsMarkdown } from '$lib/utils/export';
   import { showNotification } from '$lib/stores/gamification';
   import WysiwygEditor from './WysiwygEditor.svelte';
+  import { t } from 'svelte-i18n';
 
   const AUTOSAVE_DELAY = 2000;
   const DRAFT_PREFIX = 'joidy-draft-';
@@ -735,8 +736,8 @@
     <div class="recovery-banner">
       <RotateCcw size={12} />
       <span>¿Recuperar borrador no guardado?</span>
-      <button class="recovery-btn" onclick={applyDraft}>Recuperar</button>
-      <button class="recovery-btn secondary" onclick={dismissDraft}>Descartar</button>
+      <button class="recovery-btn" onclick={applyDraft}>{$t('noteEditor.recover')}</button>
+      <button class="recovery-btn secondary" onclick={dismissDraft}>{$t('noteEditor.discard')}</button>
     </div>
   {/if}
 
@@ -746,10 +747,10 @@
     <div class="toolbar-left">
       {#if !momentary && note}
       <div class="nav-controls toolbar-nav">
-        <button class="toolbar-btn icon-only" disabled={!hasPrev} onclick={() => dispatch('prev')} title="Nota anterior (Alt + ←)" aria-label="Nota anterior">
+        <button class="toolbar-btn icon-only" disabled={!hasPrev} onclick={() => dispatch('prev')} title={$t('noteEditor.prevNote')} aria-label={$t('noteEditor.prevNoteShort')}>
           <ChevronLeft size={14} />
         </button>
-        <button class="toolbar-btn icon-only" disabled={!hasNext} onclick={() => dispatch('next')} title="Siguiente nota (Alt + →)" aria-label="Siguiente nota">
+        <button class="toolbar-btn icon-only" disabled={!hasNext} onclick={() => dispatch('next')} title={$t('noteEditor.nextNote')} aria-label={$t('noteEditor.nextNoteShort')}>
           <ChevronRight size={14} />
         </button>
       </div>
@@ -758,55 +759,55 @@
       <div class="format-divider"></div>
 
       <div class="format-toolbar">
-        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('bold')} title="Negrita (Ctrl+B)" aria-label="Negrita">
+        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('bold')} title={$t('noteEditor.bold')} aria-label={$t('noteEditor.boldShort')}>
           <Bold size={13} />
         </button>
-        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('italic')} title="Cursiva (Ctrl+I)" aria-label="Cursiva">
+        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('italic')} title={$t('noteEditor.italic')} aria-label={$t('noteEditor.italicShort')}>
           <Italic size={13} />
         </button>
-        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('strikethrough')} title="Tachado" aria-label="Tachado">
+        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('strikethrough')} title={$t('noteEditor.strikethrough')} aria-label={$t('noteEditor.strikethrough')}>
           <Strikethrough size={13} />
         </button>
 
         <div class="format-divider"></div>
 
-        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('h1')} title="Título 1" aria-label="Título 1">
+        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('h1')} title={$t('noteEditor.h1')} aria-label={$t('noteEditor.h1')}>
           <Heading1 size={13} />
         </button>
-        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('h2')} title="Título 2" aria-label="Título 2">
+        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('h2')} title={$t('noteEditor.h2')} aria-label={$t('noteEditor.h2')}>
           <Heading2 size={13} />
         </button>
-        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('h3')} title="Título 3" aria-label="Título 3">
+        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('h3')} title={$t('noteEditor.h3')} aria-label={$t('noteEditor.h3')}>
           <Heading3 size={13} />
         </button>
 
         <div class="format-divider"></div>
 
-        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('ul')} title="Lista desordenada" aria-label="Lista desordenada">
+        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('ul')} title={$t('noteEditor.ul')} aria-label={$t('noteEditor.ul')}>
           <List size={13} />
         </button>
-        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('ol')} title="Lista ordenada" aria-label="Lista ordenada">
+        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('ol')} title={$t('noteEditor.ol')} aria-label={$t('noteEditor.ol')}>
           <ListOrdered size={13} />
         </button>
 
         <div class="format-divider"></div>
 
-        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('link')} title="Enlace" aria-label="Enlace">
+        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('link')} title={$t('noteEditor.link')} aria-label={$t('noteEditor.link')}>
           <Link size={13} />
         </button>
-        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('quote')} title="Cita" aria-label="Cita">
+        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('quote')} title={$t('noteEditor.quote')} aria-label={$t('noteEditor.quote')}>
           <Quote size={13} />
         </button>
-        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('code')} title="Bloque de código" aria-label="Bloque de código">
+        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('code')} title={$t('noteEditor.code')} aria-label={$t('noteEditor.code')}>
           <Code size={13} />
         </button>
 
         <div class="format-divider"></div>
 
-        <button class="toolbar-btn icon-only" onclick={openImageUpload} disabled={uploading} title="Insertar imagen" aria-label="Insertar imagen">
+        <button class="toolbar-btn icon-only" onclick={openImageUpload} disabled={uploading} title={$t('noteEditor.image')} aria-label={$t('noteEditor.image')}>
           <Image size={13} />
         </button>
-        <button class="toolbar-btn icon-only" onclick={openFileUpload} disabled={uploading} title="Adjuntar archivo" aria-label="Adjuntar archivo">
+        <button class="toolbar-btn icon-only" onclick={openFileUpload} disabled={uploading} title={$t('noteEditor.file')} aria-label={$t('noteEditor.file')}>
           <Paperclip size={13} />
         </button>
       </div>
@@ -822,8 +823,8 @@
         class="toolbar-btn icon-only"
         class:active={zenMode}
         onclick={() => zenMode = !zenMode}
-        title="Modo Zen (Esc para salir)"
-        aria-label="Modo Zen"
+        title={$t('noteEditor.zenMode')}
+        aria-label={$t('noteEditor.zenModeShort')}
       >
         <Maximize size={14} />
       </button>
@@ -832,7 +833,7 @@
         class="toolbar-btn"
         class:active={wysiwygMode}
         onclick={() => wysiwygMode = !wysiwygMode}
-        title="Editor visual (WYSIWYG)"
+        title={$t('noteEditor.wysiwyg')}
       >
         <Eye size={14} />
         <span>{wysiwygMode ? 'Raw' : 'Visual'}</span>
