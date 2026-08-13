@@ -15,6 +15,7 @@ from fastapi import Depends
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
+from config import settings
 from database import get_db
 from models.config import SystemConfig
 from models.gamification import StreakRecord, UserStats, XPEvent
@@ -180,37 +181,38 @@ class EmbeddingFailureRepository(BaseRepository[EmbeddingFailure]):
         )
 
     def get_retryable(self, limit: int = 20) -> list[EmbeddingFailure]:
+        """Failures still eligible for retry (attempts < max and due now)."""
         now = datetime.now(timezone.utc)
+        max_attempts = settings.embedding_retry_max_attempts
         return (
             self._db.query(EmbeddingFailure)
+            .filter(EmbeddingFailure.attempts < max_attempts)
             .filter(
                 EmbeddingFailure.next_retry_at.is_(None)
                 | (EmbeddingFailure.next_retry_at <= now)
             )
+            .order_by(EmbeddingFailure.updated_at.asc())
             .limit(limit)
             .all()
         )
 
     def get_dead_letters(self, limit: int = 50) -> list[EmbeddingFailure]:
-        now = datetime.now(timezone.utc)
+        """Failures that exceeded max retry attempts (dead letter queue)."""
+        max_attempts = settings.embedding_retry_max_attempts
         return (
             self._db.query(EmbeddingFailure)
-            .filter(
-                EmbeddingFailure.next_retry_at.isnot(None),
-                EmbeddingFailure.next_retry_at > now,
-            )
+            .filter(EmbeddingFailure.attempts >= max_attempts)
+            .order_by(EmbeddingFailure.updated_at.desc())
             .limit(limit)
             .all()
         )
 
     def count_dead_letters(self) -> int:
-        now = datetime.now(timezone.utc)
+        """Count failures that exceeded max retry attempts."""
+        max_attempts = settings.embedding_retry_max_attempts
         return (
             self._db.query(EmbeddingFailure)
-            .filter(
-                EmbeddingFailure.next_retry_at.isnot(None),
-                EmbeddingFailure.next_retry_at > now,
-            )
+            .filter(EmbeddingFailure.attempts >= max_attempts)
             .count()
         )
 
