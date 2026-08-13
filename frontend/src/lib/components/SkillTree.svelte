@@ -4,6 +4,7 @@
   import type { SkillTree, SkillNode } from '$lib/api';
   import { displayTagName } from '$lib/utils/format';
   import { Star, Hash, Zap, Shield, Sparkles } from 'lucide-svelte';
+  import { t } from 'svelte-i18n';
 
   export let data: SkillTree = { nodes: [], edges: [] };
   export let width = 800;
@@ -186,7 +187,7 @@
         <div class="stat"><Zap size={10}/> {tooltip.node.note_count} Notas</div>
         <div class="stat"><Sparkles size={10}/> {tooltip.node.xp} XP acumulada</div>
         {#if tooltip.node.level === 'locked'}
-          <p class="req">Requiere {3 - tooltip.node.note_count} notas más para desbloquear</p>
+          <p class="req">{$t('skillTree.requiresMore', { values: { count: 3 - tooltip.node.note_count } })}</p>
         {/if}
       </div>
     </div>

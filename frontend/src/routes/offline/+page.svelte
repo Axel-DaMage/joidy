@@ -1,5 +1,6 @@
 <script lang="ts">
   import { browser } from '$app/environment';
+  import { t } from 'svelte-i18n';
 
   function reload() {
     if (browser) {
@@ -9,13 +10,13 @@
 </script>
 
 <svelte:head>
-  <title>Sin conexión — Joidy</title>
+  <title>{$t('offlinePage.pageTitle')}</title>
 </svelte:head>
 
 <section class="offline-page">
-  <h1>Sin conexión</h1>
-  <p>No se pudo conectar con Joidy. Algunas funciones pueden no estar disponibles sin internet.</p>
-  <button onclick={reload} class="reload-button">Reintentar</button>
+  <h1>{$t('offlinePage.title')}</h1>
+  <p>{$t('offlinePage.description')}</p>
+  <button onclick={reload} class="reload-button">{$t('offlinePage.retry')}</button>
 </section>
 
 <style>

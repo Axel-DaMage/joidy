@@ -4,6 +4,7 @@
   import Card from './Card.svelte';
   import DynamicIcon from './DynamicIcon.svelte';
   import { getLocale } from '$lib/stores/locale';
+  import { t } from 'svelte-i18n';
 
   let failures = $state<EmbeddingFailure[]>([]);
   let loading = $state(true);
@@ -69,11 +70,11 @@
   </div>
 
   {#if loading}
-    <p class="muted">Cargando...</p>
+    <p class="muted">{$t('deadLetter.loading')}</p>
   {:else if error}
     <p class="muted">{error}</p>
   {:else if failures.length === 0}
-    <p class="muted">No hay embeddings fallidos.</p>
+    <p class="muted">{$t('deadLetter.noFailures')}</p>
   {:else}
     <div class="dlq-list">
       {#each failures as failure (failure.note_id)}

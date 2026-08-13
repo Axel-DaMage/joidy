@@ -2,6 +2,7 @@
 	import { createIconPickerStore } from '$lib/stores/iconPicker';
 	import DynamicIcon from './DynamicIcon.svelte';
 	import { Search } from 'lucide-svelte';
+	import { t } from 'svelte-i18n';
 
 	interface Props {
 		selected?: string;
@@ -24,7 +25,7 @@
 		<Search size={16} class="search-icon" />
 		<input
 			type="text"
-			placeholder="Buscar iconos..."
+			placeholder={$t('iconPicker.searchPlaceholder')}
 			bind:value={$searchTerm}
 			onfocus={() => picker.visibleLimit.set(150)}
 		/>

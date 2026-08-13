@@ -108,6 +108,62 @@
     "neverSynced": "Nunca sincronizado",
     "totalSynced": "{count} notas sincronizadas"
   },
+  "streakCreateModal": {
+    "createTitle": "Crear racha",
+    "close": "Cerrar",
+    "name": "Nombre",
+    "namePlaceholder": "Ej: Meditación, Lectura, Ejercicio...",
+    "description": "Descripción",
+    "optional": "(opcional)",
+    "descriptionPlaceholder": "Mi motivación, mi meta...",
+    "frequency": "Frecuencia",
+    "daily": "Diaria",
+    "weekly": "Semanal",
+    "monthly": "Mensual",
+    "every": "Cada",
+    "icon": "Icono",
+    "emoji": "Emoji",
+    "color": "Color",
+    "visualTheme": "Tema visual",
+    "offsetPlaceholder": "Calculado automáticamente",
+    "freezeHint": "Protegen tu racha si fallas un día.",
+    "cancel": "Cancelar",
+    "update": "Actualizar",
+    "create": "Crear Racha"
+  },
+  "tagChip": {
+    "aiSuggestion": "Sugerencia de IA",
+    "removeTag": "Eliminar etiqueta {name}"
+  },
+  "goalCard": {
+    "openGoal": "Abrir objetivo: {title}",
+    "created": "Creado: {date}"
+  },
+  "deadLetter": {
+    "loading": "Cargando...",
+    "noFailures": "No hay embeddings fallidos."
+  },
+  "skillTree": {
+    "requiresMore": "Requiere {count} notas más para desbloquear"
+  },
+  "plant": {
+    "stageLabel": "Etapa: {stage} (Nivel {level})"
+  },
+  "noteCard": {
+    "customize": "Personalizar"
+  },
+  "modalDialog": {
+    "close": "Cerrar"
+  },
+  "iconPicker": {
+    "searchPlaceholder": "Buscar iconos..."
+  },
+  "offlinePage": {
+    "pageTitle": "Sin conexión — Joidy",
+    "title": "Sin conexión",
+    "description": "No se pudo conectar con Joidy. Algunas funciones pueden no estar disponibles sin internet.",
+    "retry": "Reintentar"
+  },
   "noteEditor": {
     "recover": "Recuperar",
     "discard": "Descartar",

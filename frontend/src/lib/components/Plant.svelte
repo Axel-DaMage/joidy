@@ -1,6 +1,7 @@
 <script lang="ts">
   import { plantStageName, globalLevel } from '$lib/stores/gamification';
   import { accentColors } from '$lib/stores/settings';
+  import { t } from 'svelte-i18n';
 
   // wilted if no activity for 3+ days — passed as prop
   export let wilted = false;
@@ -20,7 +21,7 @@
   class="plant-container"
   class:wilted
   style="width:{size}px; height:{size}px;"
-  title="Etapa: {stageName} (Nivel {$globalLevel})"
+  title={$t('plant.stageLabel', { values: { stage: stageName, level: $globalLevel } })}
 >
   <svg
     viewBox="0 0 100 120"

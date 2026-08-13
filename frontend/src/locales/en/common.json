@@ -108,6 +108,62 @@
     "neverSynced": "Never synced",
     "totalSynced": "{count} notes synced"
   },
+  "streakCreateModal": {
+    "createTitle": "Create streak",
+    "close": "Close",
+    "name": "Name",
+    "namePlaceholder": "e.g. Meditation, Reading, Exercise...",
+    "description": "Description",
+    "optional": "(optional)",
+    "descriptionPlaceholder": "My motivation, my goal...",
+    "frequency": "Frequency",
+    "daily": "Daily",
+    "weekly": "Weekly",
+    "monthly": "Monthly",
+    "every": "Every",
+    "icon": "Icon",
+    "emoji": "Emoji",
+    "color": "Color",
+    "visualTheme": "Visual theme",
+    "offsetPlaceholder": "Calculated automatically",
+    "freezeHint": "Protects your streak if you miss a day.",
+    "cancel": "Cancel",
+    "update": "Update",
+    "create": "Create Streak"
+  },
+  "tagChip": {
+    "aiSuggestion": "AI suggestion",
+    "removeTag": "Remove tag {name}"
+  },
+  "goalCard": {
+    "openGoal": "Open goal: {title}",
+    "created": "Created: {date}"
+  },
+  "deadLetter": {
+    "loading": "Loading...",
+    "noFailures": "No failed embeddings."
+  },
+  "skillTree": {
+    "requiresMore": "Requires {count} more notes to unlock"
+  },
+  "plant": {
+    "stageLabel": "Stage: {stage} (Level {level})"
+  },
+  "noteCard": {
+    "customize": "Customize"
+  },
+  "modalDialog": {
+    "close": "Close"
+  },
+  "iconPicker": {
+    "searchPlaceholder": "Search icons..."
+  },
+  "offlinePage": {
+    "pageTitle": "Offline — Joidy",
+    "title": "Offline",
+    "description": "Could not connect to Joidy. Some features may be unavailable without internet.",
+    "retry": "Retry"
+  },
   "noteEditor": {
     "recover": "Recover",
     "discard": "Discard",
