@@ -16,6 +16,7 @@
   import GoalCard from '$lib/components/GoalCard.svelte';
   import LazyIconPicker from '$lib/components/LazyIconPicker.svelte';
   import ModalDialog from '$lib/components/ModalDialog.svelte';
+  import { t } from 'svelte-i18n';
 
   // Lazy-load the heavy StreakHeatmap (561 lines) so it is split into a
   // separate chunk and only downloaded when the planning or history tab is
@@ -866,13 +867,13 @@
       <div class="tab-content fade-in today-layout">
         <div class="dashboard-main-col">
           <div class="today-header">
-            <h3 class="section-title" style="margin: 0;">Objetivos del Día</h3>
+            <h3 class="section-title" style="margin: 0;">{$t('goalsPage.dayGoals')}</h3>
             <button class="btn btn-primary new-goal-cta new-goal-cta-inline" onclick={() => showAddForm = !showAddForm}>
               <Plus size={16} /> Nuevo Objetivo
             </button>
           </div>
         {#if dailyGoals.length === 0}
-          <div class="empty-state">No hay objetivos activos asignados para hoy.</div>
+          <div class="empty-state">{$t('goalsPage.noActiveGoals')}</div>
         {/if}
         {#each dailyGoals as goal (goal.id)}
           <div class="goal-card" class:completed={goal.state === 'COMPLETED' || goal.is_completed} class:failed={goal.state === 'FAILED'} class:paused={goal.state === 'PAUSED'} style="border-left: 3px solid {getGoalColor(goal)}">
@@ -881,7 +882,7 @@
                 <button
                   class="btn btn-ghost"
                   style="font-size: inherit; font-weight: inherit; padding: 0; margin: 0; height: auto; color: inherit;"
-                  title="Editar en el editor"
+                  title={$t('goalsPage.editInEditor')}
                   onclick={(e) => { e.stopPropagation(); goto(`/goals/${goal.id}`); }}
                 >
                   {#if goal.fail_emoji}
@@ -898,9 +899,9 @@
               <div class="goal-meta">
                 <span class="tag-chip" style="background: {getGoalColor(goal)}20; border: 1px solid {getGoalColor(goal)}; color: {getGoalColor(goal)};">{TEMPORALITY_LABELS[goal.temporality] || goal.temporality}</span>
                 {#if goal.state === 'COMPLETED' || goal.is_completed}
-                  <span class="status-badge success" style="background: rgba(16, 185, 129, 0.1); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.2);">Completado</span>
+                  <span class="status-badge success" style="background: rgba(16, 185, 129, 0.1); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.2);">{$t('goalsPage.completed')}</span>
                 {:else if goal.state === 'FAILED'}
-                  <span class="status-badge error" style="background: rgba(239, 68, 68, 0.1); color: var(--error); border: 1px solid rgba(239, 68, 68, 0.2);">Fallido</span>
+                  <span class="status-badge error" style="background: rgba(239, 68, 68, 0.1); color: var(--error); border: 1px solid rgba(239, 68, 68, 0.2);">{$t('goalsPage.failed')}</span>
                 {/if}
                 {#if goal.note_id}
                   <span class="tag-chip" style="background: {getGoalColor(goal)}20; border: 1px solid {getGoalColor(goal)}; color: {getGoalColor(goal)};">{notes.find(n => n.id === goal.note_id)?.title || 'Nota vinculada'}</span>
@@ -914,7 +915,7 @@
                   <span class="config-badge" style="background:transparent; border: 1px solid var(--border);">{goal.measurement_type}</span>
                 {/if}
                 {#if goal.max_assignment_days}
-                  <span class="config-badge" style="background: rgba(59, 130, 246, 0.1); color: var(--text-muted); border: 1px solid rgba(59, 130, 246, 0.2);">Límite: {goal.max_assignment_days}d</span>
+                  <span class="config-badge" style="background: rgba(59, 130, 246, 0.1); color: var(--text-muted); border: 1px solid rgba(59, 130, 246, 0.2);">{$t('goalsPage.limit', { values: { days: goal.max_assignment_days } })}</span>
                 {/if}
               </div>
               {#if goal.description}
@@ -942,29 +943,29 @@
             </div>
             <div class="goal-actions">
               {#if goal.state === 'ACTIVE'}
-                <button class="btn btn-ghost text-muted" title="Pausar" aria-label="Pausar objetivo" onclick={() => updateGoalState(goal.id, 'PAUSED')}>
+                <button class="btn btn-ghost text-muted" title={$t('goalsPage.pause')} aria-label={$t('goalsPage.pauseGoal')} onclick={() => updateGoalState(goal.id, 'PAUSED')}>
                   <Pause size={14} />
                 </button>
-                <button class="btn btn-ghost text-success" title="Completar" aria-label="Completar objetivo" onclick={() => completeGoal(goal.id)}>
+                <button class="btn btn-ghost text-success" title={$t('goalsPage.complete')} aria-label={$t('goalsPage.completeGoal')} onclick={() => completeGoal(goal.id)}>
                   <Check size={14} />
                 </button>
               {:else if goal.state === 'PAUSED'}
-                <button class="btn btn-ghost text-muted" title="Reanudar" aria-label="Reanudar objetivo" onclick={() => updateGoalState(goal.id, 'ACTIVE')}>
+                <button class="btn btn-ghost text-muted" title={$t('goalsPage.resume')} aria-label={$t('goalsPage.resumeGoal')} onclick={() => updateGoalState(goal.id, 'ACTIVE')}>
                   <Play size={14} />
                 </button>
               {/if}
               {#if goal.state !== 'COMPLETED' && goal.state !== 'FAILED'}
-                <button class="btn btn-ghost text-muted" title="Cancelar" aria-label="Cancelar objetivo" onclick={() => updateGoalState(goal.id, 'CANCELLED')}>
+                <button class="btn btn-ghost text-muted" title={$t('goalsPage.cancel')} aria-label={$t('goalsPage.cancelGoal')} onclick={() => updateGoalState(goal.id, 'CANCELLED')}>
                   <Ban size={14} />
                 </button>
               {/if}
               {#if deleteConfirm === goal.id}
                 <button class="btn btn-ghost text-danger" onclick={() => deleteGoal(goal.id)}>¿Eliminar?</button>
-                <button class="btn btn-ghost text-muted" onclick={() => deleteConfirm = null}>Cancelar</button>
+                <button class="btn btn-ghost text-muted" onclick={() => deleteConfirm = null}>{$t('goalsPage.cancel')}</button>
               {:else}
-                <button class="btn btn-ghost text-muted" title="Eliminar" aria-label="Eliminar objetivo" onclick={() => deleteGoal(goal.id)}>×</button>
+                <button class="btn btn-ghost text-muted" title={$t('goalsPage.delete')} aria-label={$t('goalsPage.deleteGoal')} onclick={() => deleteGoal(goal.id)}>×</button>
               {/if}
-              <button class="btn btn-ghost text-muted" title="Editar" aria-label="Editar objetivo" onclick={() => openGoalEditor(goal)}>
+              <button class="btn btn-ghost text-muted" title={$t('goalsPage.edit')} aria-label={$t('goalsPage.editGoal')} onclick={() => openGoalEditor(goal)}>
                 <Pencil size={13} />
               </button>
             </div>
@@ -972,10 +973,10 @@
         {/each}
 
         <!-- Next Assigned Tasks -->
-        <h3 class="section-title" style="margin-top: 24px;">Próximos Asignados</h3>
+        <h3 class="section-title" style="margin-top: 24px;">{$t('goalsPage.upcomingAssigned')}</h3>
         <div class="history-goal-list" style="width:100%">
           {#if upcomingTasks.length === 0}
-            <div class="empty-state">No hay tareas próximas planificadas.</div>
+            <div class="empty-state">{$t('goalsPage.noUpcomingTasks')}</div>
           {/if}
           {#each upcomingTasks as task}
             {@const g = task.goal}
@@ -1005,7 +1006,7 @@
         <div class="dash-card week-map-card">
           <div class="dash-card-header">
             <Calendar size={14} />
-            <span>Mapa de la Semana</span>
+            <span>{$t('goalsPage.weekMap')}</span>
           </div>
           <div style="display: flex; gap: 6px; justify-content: space-between; margin-top: 12px;">
             {#each currentWeekDates as day}
@@ -1027,9 +1028,9 @@
 
         <div class="dash-card" style="min-height: 280px; display: flex; flex-direction: column; padding: 0; overflow: hidden;">
           <div class="widget-header" style="display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid var(--border-light); background: var(--bg-card);">
-            <button class="btn btn-ghost text-muted" style="padding: 4px;" aria-label="Widget anterior" onclick={() => activeWidgetIndex = (activeWidgetIndex - 1 + 5) % 5}><ChevronLeft size={14}/></button>
+            <button class="btn btn-ghost text-muted" style="padding: 4px;" aria-label={$t('goalsPage.prevWidget')} onclick={() => activeWidgetIndex = (activeWidgetIndex - 1 + 5) % 5}><ChevronLeft size={14}/></button>
             <span class="widget-title" style="font-size: 12px; font-weight: 600; text-align: center; flex: 1;">{widgetTitles[activeWidgetIndex]}</span>
-            <button class="btn btn-ghost text-muted" style="padding: 4px;" aria-label="Widget siguiente" onclick={() => activeWidgetIndex = (activeWidgetIndex + 1) % 5}><ChevronRight size={14}/></button>
+            <button class="btn btn-ghost text-muted" style="padding: 4px;" aria-label={$t('goalsPage.nextWidget')} onclick={() => activeWidgetIndex = (activeWidgetIndex + 1) % 5}><ChevronRight size={14}/></button>
           </div>
           <div class="widget-content" style="flex: 1; position: relative; padding: 16px; overflow: hidden; display: flex; align-items: center; justify-content: center;">
             {#if activeWidgetIndex === 0}
@@ -1040,10 +1041,10 @@
                       {#if prediction.trend === 'UP'} <TrendingUp size={14} /> {:else} <TrendingDown size={14} /> {/if}
                       <span class="trend-pct">{prediction.percentChange > 0 ? '+' : ''}{prediction.percentChange}%</span>
                     </div>
-                    <span class="trend-label">Disciplina</span>
+                    <span class="trend-label">{$t('goalsPage.discipline')}</span>
                   </div>
                   <div class="prediction-estimate">
-                    <span class="pred-lab">Próx. 30d</span>
+                    <span class="pred-lab">{$t('goalsPage.next30d')}</span>
                     <span class="pred-val">~{prediction.estimateNextMonth}✓</span>
                   </div>
                 </div>
@@ -1065,7 +1066,7 @@
             {:else if activeWidgetIndex === 2}
               <div class="radar-container" style="width: 100%; height: 100%;">
                 {#if radarData.length === 0}
-                  <div class="empty-state mini">Sin datos suficientes</div>
+                  <div class="empty-state mini">{$t('goalsPage.insufficientData')}</div>
                 {:else}
                   <svg viewBox="0 0 100 100" class="radar-svg" style="max-height: 100%; margin: 0 auto; display: block;">
                     {#each [20, 40, 60, 80, 100] as r}
@@ -1082,11 +1083,11 @@
               <div class="debt-content" style="width: 100%; height: 100%; display: flex; flex-direction: column;">
                 <div class="debt-total" style="padding-bottom: 8px;">
                   <span class="debt-val" style="font-size: 24px;">{debtData.total}</span>
-                  <span class="debt-lab">Pendientes</span>
+                  <span class="debt-lab">{$t('goalsPage.pending')}</span>
                 </div>
                 <div class="debt-list" style="flex: 1; overflow: hidden;">
                   {#if debtData.goals.length === 0}
-                     <div class="empty-state mini">Cero deudas.</div>
+                     <div class="empty-state mini">{$t('goalsPage.zeroDebt')}</div>
                   {:else}
                     {#each debtData.goals.slice(0,3) as d}
                       <div class="debt-item" style="margin-bottom: 8px;">
@@ -1126,13 +1127,13 @@
         <!-- Left: All Goals List (click => assign to selectedPlanningDate) -->
         <div class="planning-left-col history-detail-col">
           <div class="history-detail-header">
-            <div class="history-detail-date" style="text-transform:none;">Lista de Objetivos</div>
+            <div class="history-detail-date" style="text-transform:none;">{$t('goalsPage.goalList')}</div>
           </div>
           <div style="padding: 0 var(--s3) 8px; display: flex; justify-content: flex-end; border-bottom: 1px solid var(--border-light); margin-bottom: 8px;">
             <select class="input" style="padding: 2px 8px; font-size: 11px; height: auto;" bind:value={listSortBy}>
-              <option value="recent">Orden: Reciente</option>
-              <option value="alpha">Orden: Alfabético</option>
-              <option value="state">Orden: Estado</option>
+              <option value="recent">{$t('goalsPage.sortRecent')}</option>
+              <option value="alpha">{$t('goalsPage.sortAlpha')}</option>
+              <option value="state">{$t('goalsPage.sortState')}</option>
             </select>
           </div>
 
@@ -1142,7 +1143,7 @@
                 class="goal-card"
                 style="text-align: left; cursor: pointer; height: fit-content; border-left: 3px solid {getGoalColor(goal)}; display: flex; align-items:center; justify-content:space-between; width: 100%;"
                 onclick={() => assignGoalToDate(goal.id, selectedPlanningDate)}
-                title="Asignar al día seleccionado"
+                title={$t('goalsPage.assignToDay')}
               >
                 <div class="goal-main" style="flex:1;">
                   <div class="goal-title">
@@ -1156,15 +1157,15 @@
                   <div class="goal-meta">
                     <span class="tag-chip" style="background: {getGoalColor(goal)}20; border: 1px solid {getGoalColor(goal)}; color: {getGoalColor(goal)};">{TEMPORALITY_LABELS[goal.temporality] || goal.temporality}</span>
                     {#if goal.state === 'PAUSED'}
-                      <span class="status-badge" style="background: rgba(255,255,255,0.05); color: var(--text-muted); border: 1px solid rgba(255,255,255,0.1);">Pausado</span>
+                      <span class="status-badge" style="background: rgba(255,255,255,0.05); color: var(--text-muted); border: 1px solid rgba(255,255,255,0.1);">{$t('goalsPage.paused')}</span>
                     {/if}
                     {#if goal.max_assignment_days}
-                      <span class="config-badge" style="margin-left: 8px; background: rgba(59, 130, 246, 0.1); color: var(--text-muted); border: 1px solid rgba(59, 130, 246, 0.2);">Límite: {goal.max_assignment_days}d</span>
+                      <span class="config-badge" style="margin-left: 8px; background: rgba(59, 130, 246, 0.1); color: var(--text-muted); border: 1px solid rgba(59, 130, 246, 0.2);">{$t('goalsPage.limit', { values: { days: goal.max_assignment_days } })}</span>
                     {/if}
                   </div>
                 </div>
                 <div style="display:flex; gap:6px;">
-                  <span class="btn btn-ghost text-muted" title="Asignar"><ChevronRight size={14} /></span>
+                  <span class="btn btn-ghost text-muted" title={$t('goalsPage.assign')}><ChevronRight size={14} /></span>
                 </div>
               </button>
             {/each}
@@ -1174,7 +1175,7 @@
         <!-- Center: Calendar (fixed year view, allow future months) -->
         <div class="planning-center-col history-detail-col">
           <div class="history-detail-header">
-            <span class="section-title" style="margin:0;">Calendario</span>
+            <span class="section-title" style="margin:0;">{$t('goalsPage.calendar')}</span>
           </div>
           <div class="history-heatmap-wrap">
             {#if StreakHeatmap}
@@ -1193,7 +1194,7 @@
         <!-- Right: Assigned for selected date -->
         <div class="planning-right-col history-detail-col">
           <div class="history-detail-header">
-            <div class="history-detail-date" style="text-transform:none;">Asignados · {selectedPlanningDate}</div>
+            <div class="history-detail-date" style="text-transform:none;">{$t('goalsPage.assignedOn', { values: { date: selectedPlanningDate } })}</div>
           </div>
 
           <div class="history-goal-list" style="width:100%">
@@ -1210,7 +1211,7 @@
                   {@const status = getGoalStatusOnDate(g, selectedPlanningDate)}
                   <div class="goal-card" class:completed={status === 'COMPLETED'} class:failed={status === 'FAILED'} style="border-left: 3px solid {status === 'FAILED' ? '#ef4444' : (status === 'COMPLETED' ? '#10b981' : getGoalColor(g))}; display:flex; align-items:center;">
                     <div style="display:flex; gap:6px; margin-right: 8px;">
-                      <button class="btn btn-ghost text-muted" style="padding: 4px;" onclick={() => unassignGoalFromDate(g.id, selectedPlanningDate)} title="Quitar" aria-label="Quitar"><ChevronLeft size={14} /></button>
+                      <button class="btn btn-ghost text-muted" style="padding: 4px;" onclick={() => unassignGoalFromDate(g.id, selectedPlanningDate)} title={$t('goalsPage.remove')} aria-label={$t('goalsPage.remove')}><ChevronLeft size={14} /></button>
                     </div>
                     <div class="goal-main" style="flex: 1;">
                       <div class="goal-title">
@@ -1224,12 +1225,12 @@
                       <div class="goal-meta">
                         <span class="tag-chip" style="background: {getGoalColor(g)}20; border: 1px solid {getGoalColor(g)}; color: {getGoalColor(g)};">{TEMPORALITY_LABELS[g.temporality] || g.temporality}</span>
                         {#if status === 'COMPLETED'}
-                          <span class="status-badge success">Completado</span>
+                          <span class="status-badge success">{$t('goalsPage.completed')}</span>
                         {:else if status === 'FAILED'}
-                          <span class="status-badge error">Fallido</span>
+                          <span class="status-badge error">{$t('goalsPage.failed')}</span>
                         {/if}
                         {#if g.max_assignment_days}
-                          <span class="config-badge" style="margin-left: 8px; background: rgba(59, 130, 246, 0.1); color: var(--text-muted); border: 1px solid rgba(59, 130, 246, 0.2);">Límite: {g.max_assignment_days}d</span>
+                          <span class="config-badge" style="margin-left: 8px; background: rgba(59, 130, 246, 0.1); color: var(--text-muted); border: 1px solid rgba(59, 130, 246, 0.2);">{$t('goalsPage.limit', { values: { days: g.max_assignment_days } })}</span>
                         {/if}
                       </div>
                     </div>
@@ -1240,7 +1241,7 @@
 
             {#if !(['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL'] as const).some(temp => (assignments[getNormalizedDate(selectedPlanningDate, temp as 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'ANNUAL')] || []).some(id => goals.find(g => g.id === id)?.temporality === temp))}
               <div class="history-detail-empty" style="padding: 2rem; border: 1px dashed var(--border); border-radius: var(--r); margin: 1rem;">
-                <span class="history-detail-msg" style="font-size: 12px; text-align: center; display: block;">No hay objetivos asignados para este periodo.</span>
+                <span class="history-detail-msg" style="font-size: 12px; text-align: center; display: block;">{$t('goalsPage.noGoalsForPeriod')}</span>
               </div>
             {/if}
           </div>
@@ -1253,11 +1254,11 @@
         <!-- Left: Annual Calendar -->
         <div class="history-calendar-col">
           <div class="history-cal-header">
-            <span class="section-title" style="margin:0;">Mapa Anual</span>
-            <span class="history-hint">Selecciona un día para ver sus objetivos</span>
+            <span class="section-title" style="margin:0;">{$t('goalsPage.yearMap')}</span>
+            <span class="history-hint">{$t('goalsPage.selectDayHint')}</span>
           </div>
           {#if historyData.length === 0}
-            <div class="empty-state">Aún no hay actividad registrada.</div>
+            <div class="empty-state">{$t('goalsPage.noActivityYet')}</div>
           {:else}
             <div class="history-heatmap-wrap">
               {#if StreakHeatmap}
@@ -1278,7 +1279,7 @@
           {#if !selectedHistoryDate}
             <div class="history-detail-empty">
               <div class="history-detail-icon"><Calendar size={40} strokeWidth={1} /></div>
-              <span class="history-detail-msg">Selecciona un día en el calendario para ver los objetivos de esa fecha.</span>
+              <span class="history-detail-msg">{$t('goalsPage.selectDayCalendarHint')}</span>
             </div>
           {:else}
             <div class="history-detail-header">
@@ -1287,12 +1288,12 @@
 
             {#if goalsForDate.completed.length === 0 && goalsForDate.failed.length === 0}
               <div class="history-no-activity">
-                <span>Sin actividad registrada para este día.</span>
+                <span>{$t('goalsPage.noActivityForDay')}</span>
               </div>
             {/if}
 
             {#if goalsForDate.completed.length > 0}
-              <div class="history-section-label success"><Check size={12} /> Completados ({goalsForDate.completed.length})</div>
+              <div class="history-section-label success"><Check size={12} /> {$t('goalsPage.completedLabel')} ({goalsForDate.completed.length})</div>
               <div class="history-goal-list">
                 {#each goalsForDate.completed as g (g.id)}
                   <div class="goal-card completed" style="border-left: 3px solid {getGoalColor(g)}; width: 100%;">
@@ -1324,7 +1325,7 @@
             {/if}
 
             {#if goalsForDate.failed.length > 0}
-              <div class="history-section-label failed"><X size={12} /> Fallidos ({goalsForDate.failed.length})</div>
+              <div class="history-section-label failed"><X size={12} /> {$t('goalsPage.failedLabel')} ({goalsForDate.failed.length})</div>
               <div class="history-goal-list">
                 {#each goalsForDate.failed as g (g.id)}
                   <div class="goal-card failed" style="border-left: 3px solid #ef4444; width: 100%;">
@@ -1367,19 +1368,19 @@
             <Trophy size={16} class="text-xp" />
             <div style="display:flex; flex-direction:column; gap:2px;">
               <span class="stb-val text-success">{completedGoalsCount}</span>
-              <span class="stb-label">Completados</span>
+              <span class="stb-label">{$t('goalsPage.completedLabel')}</span>
             </div>
           </div>
           <div class="stb-item">
             <X size={16} class="text-error" />
             <div style="display:flex; flex-direction:column; gap:2px;">
               <span class="stb-val text-error">{failedGoalsCount}</span>
-              <span class="stb-label">Fallidos</span>
+              <span class="stb-label">{$t('goalsPage.failedLabel')}</span>
             </div>
           </div>
           <div class="stb-item" style="flex: 1; flex-direction: column; align-items: stretch; justify-content: center; gap: 8px;">
             <div style="display:flex; justify-content:space-between; align-items: flex-end;">
-              <span class="stb-label">Efectividad Global</span>
+              <span class="stb-label">{$t('goalsPage.globalEffectiveness')}</span>
               <span class="stb-val" style="line-height: 1;">{successRate}%</span>
             </div>
             <div class="success-meter" style="margin-top: 0;">
@@ -1393,7 +1394,7 @@
           <div class="dash-card prediction-card">
             <div class="dash-card-header">
               <TrendingUp size={16} />
-              <span>Predicción y Tendencia</span>
+              <span>{$t('goalsPage.predictionTrend')}</span>
               <span class="pred-period-badge">30 días</span>
             </div>
             <div class="prediction-hero">
@@ -1401,8 +1402,8 @@
                 {#if dailyActivity.every(d => d.completed === 0 && d.failed === 0)}
                   <div class="bar-empty-state">
                     <TrendingUp size={24} style="opacity:0.2" />
-                    <span>Sin datos suficientes aún</span>
-                    <small>Completa o falla objetivos para ver la actividad</small>
+                    <span>{$t('goalsPage.insufficientDataYet')}</span>
+                    <small>{$t('goalsPage.completeOrFailHint')}</small>
                   </div>
                 {:else}
                   <svg viewBox="0 0 420 130" class="bar-svg" preserveAspectRatio="xMidYMid meet">
@@ -1457,11 +1458,11 @@
                 </div>
                 <div class="prediction-kpis">
                   <div class="pred-kpi">
-                    <span class="pred-lab">Últ. 7d</span>
+                    <span class="pred-lab">{$t('goalsPage.last7d')}</span>
                     <span class="pred-val">{prediction.last7Days} ✓</span>
                   </div>
                   <div class="pred-kpi">
-                    <span class="pred-lab">Próx. 30d</span>
+                    <span class="pred-lab">{$t('goalsPage.next30d')}</span>
                     <span class="pred-val">~{prediction.estimateNextMonth} ✓</span>
                   </div>
                 </div>
@@ -1472,7 +1473,7 @@
           <div class="dash-card weekday-card">
             <div class="dash-card-header">
               <Activity size={16} />
-              <span>Actividad por Día</span>
+              <span>{$t('goalsPage.activityByDay')}</span>
             </div>
             <div class="weekday-chart">
               {#each completionsByDay as day}
@@ -1492,7 +1493,7 @@
           <div class="dash-card temporality-card">
             <div class="dash-card-header">
               <Target size={16} />
-              <span>Efectividad por Periodo</span>
+              <span>{$t('goalsPage.effectivenessByPeriod')}</span>
             </div>
             <div class="temporality-rows">
               {#each progressOverview as p}
@@ -1521,20 +1522,20 @@
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 12px;">
               <div class="dash-card-header" style="flex-shrink: 0;">
                 <Activity size={16} />
-                <span>Momentos de más actividad</span>
+                <span>{$t('goalsPage.peakActivity')}</span>
               </div>
               
               <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
                 <div class="activity-tabs" style="display: flex; gap: 8px;">
-                  <button class="activity-tab {activityTab === 'horas' ? 'active' : ''}" onclick={() => activityTab = 'horas'}>Horas</button>
-                  <button class="activity-tab {activityTab === 'dias' ? 'active' : ''}" onclick={() => activityTab = 'dias'}>Días</button>
+                  <button class="activity-tab {activityTab === 'horas' ? 'active' : ''}" onclick={() => activityTab = 'horas'}>{$t('goalsPage.hours')}</button>
+                  <button class="activity-tab {activityTab === 'dias' ? 'active' : ''}" onclick={() => activityTab = 'dias'}>{$t('goalsPage.days')}</button>
                 </div>
                 
                 {#if activityTab === 'horas'}
                   <div class="activity-day-selector" style="display: flex; justify-content: center; align-items: center; gap: 8px; background: var(--surface); padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border);">
-                    <button class="icon-btn" onclick={prevActivityDay} aria-label="Día anterior" style="background: none; border: none; cursor: pointer; color: var(--text-muted); display: flex; align-items: center; padding: 4px;"><ChevronLeft size={16} /></button>
+                    <button class="icon-btn" onclick={prevActivityDay} aria-label={$t('goalsPage.prevDay')} style="background: none; border: none; cursor: pointer; color: var(--text-muted); display: flex; align-items: center; padding: 4px;"><ChevronLeft size={16} /></button>
                     <span style="font-size: 0.75rem; color: var(--text-secondary); min-width: 80px; text-align: center; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; font-family: var(--font-mono);">{daysOfWeek[activityDayOfWeek]}</span>
-                    <button class="icon-btn" onclick={nextActivityDay} aria-label="Día siguiente" style="background: none; border: none; cursor: pointer; color: var(--text-muted); display: flex; align-items: center; padding: 4px;"><ChevronRight size={16} /></button>
+                    <button class="icon-btn" onclick={nextActivityDay} aria-label={$t('goalsPage.nextDay')} style="background: none; border: none; cursor: pointer; color: var(--text-muted); display: flex; align-items: center; padding: 4px;"><ChevronRight size={16} /></button>
                   </div>
                 {/if}
               </div>
@@ -1568,7 +1569,7 @@
           <div class="dash-card funnel-card">
             <div class="dash-card-header">
               <Filter size={16} />
-              <span>Conversión y Abandono</span>
+              <span>{$t('goalsPage.conversionAbandon')}</span>
             </div>
             <div class="funnel-chart">
               {#each funnelData as f}
@@ -1600,11 +1601,11 @@
               <Plus size={16} />
             </div>
             <div>
-              <h3 class="new-goal-heading">Nuevo Objetivo</h3>
-              <span class="new-goal-sub">Define un nuevo hábito o meta a seguir</span>
+              <h3 class="new-goal-heading">{$t('goalsPage.newGoal')}</h3>
+              <span class="new-goal-sub">{$t('goalsPage.newGoalSub')}</span>
             </div>
           </div>
-          <button class="history-close-btn" onclick={() => showAddForm = false} title="Cerrar" aria-label="Cerrar formulario">
+          <button class="history-close-btn" onclick={() => showAddForm = false} title={$t('goalsPage.cancel')} aria-label={$t('goalsPage.closeForm')}>
             <X size={15} />
           </button>
         </div>
@@ -1612,24 +1613,24 @@
         <div class="new-goal-body">
           <!-- Section Tabs -->
           <div class="ng-tabs-container">
-            <button class="ng-tab" class:active={ngActiveSection === 'basics'} onclick={() => ngActiveSection = 'basics'}>Básico</button>
-            <button class="ng-tab" class:active={ngActiveSection === 'appearance'} onclick={() => ngActiveSection = 'appearance'}>Apariencia</button>
-            <button class="ng-tab" class:active={ngActiveSection === 'advanced'} onclick={() => ngActiveSection = 'advanced'}>Avanzado</button>
+            <button class="ng-tab" class:active={ngActiveSection === 'basics'} onclick={() => ngActiveSection = 'basics'}>{$t('goalsPage.basics')}</button>
+            <button class="ng-tab" class:active={ngActiveSection === 'appearance'} onclick={() => ngActiveSection = 'appearance'}>{$t('goalsPage.appearance')}</button>
+            <button class="ng-tab" class:active={ngActiveSection === 'advanced'} onclick={() => ngActiveSection = 'advanced'}>{$t('goalsPage.advanced')}</button>
           </div>
 
           <div class="ng-content-area">
             {#if ngActiveSection === 'basics'}
               <div class="ng-section-fade">
                 <div class="form-field">
-                  <label class="label">Título del objetivo</label>
-                  <input class="input w-full" bind:value={newTitle} placeholder="Ej: Leer 10 páginas, Correr 5km..." maxlength="38" autofocus />
+                  <label class="label">{$t('goalsPage.goalTitle')}</label>
+                  <input class="input w-full" bind:value={newTitle} placeholder={$t('goalsPage.goalTitlePlaceholder')} maxlength="38" autofocus />
                 </div>
                 <div class="form-field">
-                  <label class="label">Descripción <span class="optional">(Opcional)</span></label>
-                  <textarea 
-                    class="input w-full" 
-                    bind:value={newDescription} 
-                    placeholder="Motivación, detalles o reglas de este objetivo..." 
+                  <label class="label">{$t('goalsPage.description')} <span class="optional">{$t('goalsPage.optional')}</span></label>
+                  <textarea
+                    class="input w-full"
+                    bind:value={newDescription}
+                    placeholder={$t('goalsPage.descriptionPlaceholder')}
                     maxlength="63" 
                     rows="2"
                     onkeydown={(e) => e.key === 'Enter' && e.preventDefault()}
@@ -1637,7 +1638,7 @@
                   ></textarea>
                 </div>
                 <div class="form-field">
-                  <label class="label">Frecuencia de Repetición</label>
+                  <label class="label">{$t('goalsPage.repeatFrequency')}</label>
                   <div class="ng-freq-grid">
                     {#each TEMPORALITIES as temp}
                       <button class="ng-freq-btn" class:active={newTemporality === temp} onclick={() => newTemporality = temp}>
@@ -1653,10 +1654,10 @@
               <div class="ng-section-fade">
                 <div class="form-field">
                   <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                    <label class="label" style="margin:0;">Icono / Emoji de Fallo</label>
+                    <label class="label" style="margin:0;">{$t('goalsPage.failIconEmoji')}</label>
                     <div class="icon-toggle-row">
-                      <button class="icon-type-btn" class:selected={!useFailIcon} onclick={() => useFailIcon = false}>Emoji</button>
-                      <button class="icon-type-btn" class:selected={useFailIcon} onclick={() => useFailIcon = true}>Icono</button>
+                      <button class="icon-type-btn" class:selected={!useFailIcon} onclick={() => useFailIcon = false}>{$t('goalsPage.emoji')}</button>
+                      <button class="icon-type-btn" class:selected={useFailIcon} onclick={() => useFailIcon = true}>{$t('goalsPage.icon')}</button>
                     </div>
                   </div>
                   {#if !useFailIcon}
@@ -1673,7 +1674,7 @@
                 </div>
 
                 <div class="form-field">
-                  <label class="label">Color de Identidad</label>
+                  <label class="label">{$t('goalsPage.identityColor')}</label>
                   <div class="color-presets ng-expanded-presets">
                     {#each COLOR_PRESETS as c}
                       <button
@@ -1695,55 +1696,55 @@
               <div class="ng-section-fade">
                 <div class="form-row">
                   <div class="form-field" style="flex:1;">
-                    <label class="label">Tipo de Medición</label>
+                    <label class="label">{$t('goalsPage.measurementType')}</label>
                     <select class="input w-full" bind:value={newMeasurement}>
-                      <option value="COUNT">Cuenta Numérica</option>
-                      <option value="BOOLEAN">Hecho / No Hecho</option>
-                      <option value="PERCENT">Porcentaje</option>
+                      <option value="COUNT">{$t('goalsPage.countNumeric')}</option>
+                      <option value="BOOLEAN">{$t('goalsPage.booleanDone')}</option>
+                      <option value="PERCENT">{$t('goalsPage.percent')}</option>
                     </select>
                   </div>
                   <div class="form-field" style="width: 140px;">
-                    <label class="label">Meta a Alcanzar</label>
+                    <label class="label">{$t('goalsPage.targetGoal')}</label>
                     <input class="input w-full" type="number" bind:value={newTargetValue} min="1" disabled={newMeasurement === 'BOOLEAN'} />
                   </div>
                   <div class="form-field" style="width: 140px;">
-                    <label class="label">Límite días <span class="optional">(Opc)</span></label>
-                    <input class="input w-full" type="number" bind:value={newMaxAssignmentDays} min="1" placeholder="Ilimitado" />
+                    <label class="label">{$t('goalsPage.limitDays')} <span class="optional">{$t('goalsPage.limitDaysOptional')}</span></label>
+                    <input class="input w-full" type="number" bind:value={newMaxAssignmentDays} min="1" placeholder={$t('goalsPage.unlimited')} />
                   </div>
                 </div>
 
                 <div class="form-field">
-                  <label class="label">Política de Incumplimiento (Fallo)</label>
+                  <label class="label">{$t('goalsPage.failPolicy')}</label>
                   <div class="ng-fail-options">
                     <button class="ng-fail-btn" class:active={newFailConfig === 'STATIC'} onclick={() => newFailConfig = 'STATIC'}>
-                      <strong>Estático</strong>
-                      <span>Se reinicia a cero cada periodo</span>
+                      <strong>{$t('goalsPage.static')}</strong>
+                      <span>{$t('goalsPage.staticDesc')}</span>
                     </button>
                     <button class="ng-fail-btn" class:active={newFailConfig === 'ROLLOVER'} onclick={() => newFailConfig = 'ROLLOVER'}>
-                      <strong>Traspaso</strong>
-                      <span>La meta pendiente pasa al siguiente día</span>
+                      <strong>{$t('goalsPage.rollover')}</strong>
+                      <span>{$t('goalsPage.rolloverDesc')}</span>
                     </button>
                     <button class="ng-fail-btn" class:active={newFailConfig === 'SNOWBALL'} onclick={() => newFailConfig = 'SNOWBALL'}>
-                      <strong>Acumulativo</strong>
-                      <span>La deuda se acumula exponencialmente</span>
+                      <strong>{$t('goalsPage.snowball')}</strong>
+                      <span>{$t('goalsPage.snowballDesc')}</span>
                     </button>
                   </div>
                 </div>
 
                 <div class="form-row">
                   <div class="form-field" style="flex:1;">
-                    <label class="label">Vincular a Proyecto (Nota)</label>
+                    <label class="label">{$t('goalsPage.linkToProject')}</label>
                     <select class="input w-full" bind:value={newNoteId}>
-                      <option value={null}>Sin nota vinculada</option>
+                      <option value={null}>{$t('goalsPage.noLinkedNote')}</option>
                       {#each notes as n}
                         <option value={n.id}>{n.title}</option>
                       {/each}
                     </select>
                   </div>
                   <div class="form-field" style="flex:1;">
-                    <label class="label">Sincronización de Tag</label>
+                    <label class="label">{$t('goalsPage.tagSync')}</label>
                     <select class="input w-full" bind:value={newTagId}>
-                      <option value={null}>Actualización manual</option>
+                      <option value={null}>{$t('goalsPage.manualUpdate')}</option>
                       {#each notes as n}
                         {@const tagId = tags.find(t => t.name === n.title)?.id}
                         {#if tagId}
@@ -1759,7 +1760,7 @@
 
           <!-- Bottom Preview Section (Moved from top) -->
           <div class="ng-bottom-preview">
-            <span class="ng-preview-label">Vista Previa</span>
+            <span class="ng-preview-label">{$t('goalsPage.preview')}</span>
             <div class="goal-card preview-card-live" style="border-color: {newGoalColor}; background: color-mix(in srgb, {newGoalColor} 5%, var(--surface));">
               <div class="goal-main">
                 <div class="goal-title">
@@ -1792,7 +1793,7 @@
             <span></span>
           {/if}
           <div class="new-goal-actions">
-            <button class="btn btn-ghost" onclick={() => showAddForm = false}>Cancelar</button>
+            <button class="btn btn-ghost" onclick={() => showAddForm = false}>{$t('goalsPage.cancel')}</button>
             <button class="btn btn-primary" onclick={addGoal} disabled={saving || !newTitle.trim()}>
               {saving ? 'Guardando...' : 'Crear objetivo'}
             </button>
@@ -1803,44 +1804,44 @@
   {/if}
 
   {#if editingGoal}
-    <ModalDialog open={true} title="Editar Objetivo" size="md" onClose={() => editingGoal = null}>
+    <ModalDialog open={true} title={$t('goalsPage.editGoalModal')} size="md" onClose={() => editingGoal = null}>
       <div class="form-field">
-        <label class="label">Título</label>
+        <label class="label">{$t('goalsPage.title')}</label>
         <input class="input w-full" bind:value={editTitle} />
       </div>
       <div class="form-field">
-        <label class="label">Descripción</label>
+        <label class="label">{$t('goalsPage.description')}</label>
         <textarea class="input w-full" bind:value={editDescription} rows="2"></textarea>
       </div>
       <div class="form-row">
         <div class="form-field" style="flex:1;">
-          <label class="label">Medición</label>
+          <label class="label">{$t('goalsPage.measurement')}</label>
           <select class="input w-full" bind:value={editMeasurement}>
-            <option value="COUNT">Cuenta Numérica</option>
-            <option value="BOOLEAN">Hecho / No Hecho</option>
-            <option value="PERCENT">Porcentaje</option>
+            <option value="COUNT">{$t('goalsPage.countNumeric')}</option>
+            <option value="BOOLEAN">{$t('goalsPage.booleanDone')}</option>
+            <option value="PERCENT">{$t('goalsPage.percent')}</option>
           </select>
         </div>
         <div class="form-field" style="width:120px;">
-          <label class="label">Meta</label>
+          <label class="label">{$t('goalsPage.target')}</label>
           <input class="input w-full" type="number" bind:value={editTargetValue} min="1" />
         </div>
         <div class="form-field" style="width:100px;">
-          <label class="label">Límite (días)</label>
+          <label class="label">{$t('goalsPage.limitDaysLabel')}</label>
           <input class="input w-full" type="number" bind:value={editMaxAssignmentDays} min="1" placeholder="∞" />
         </div>
       </div>
       <div class="form-row">
         <div class="form-field" style="flex:1;">
-          <label class="label">Regla de Fallo</label>
+          <label class="label">{$t('goalsPage.failRule')}</label>
           <select class="input w-full" bind:value={editFailConfig}>
-            <option value="STATIC">Estático (Se reinicia)</option>
-            <option value="ROLLOVER">Traspaso (Pasa al día sig.)</option>
-            <option value="SNOWBALL">Acumulativo (Suma la deuda)</option>
+            <option value="STATIC">{$t('goalsPage.staticReset')}</option>
+            <option value="ROLLOVER">{$t('goalsPage.rolloverNext')}</option>
+            <option value="SNOWBALL">{$t('goalsPage.snowballSum')}</option>
           </select>
         </div>
         <div class="form-field" style="width:80px;">
-          <label class="label">Color</label>
+          <label class="label">{$t('goalsPage.color')}</label>
           <div class="color-custom" style="background: {editColor}; width:36px; height:36px;">
             <input type="color" bind:value={editColor} class="color-picker" />
           </div>
@@ -1850,7 +1851,7 @@
         <button class="btn btn-primary" onclick={saveEdit} disabled={editSaving || !editTitle.trim()}>
           {editSaving ? 'Guardando...' : 'Guardar cambios'}
         </button>
-        <button class="btn btn-ghost" onclick={() => editingGoal = null}>Cancelar</button>
+        <button class="btn btn-ghost" onclick={() => editingGoal = null}>{$t('goalsPage.cancel')}</button>
       </div>
     </ModalDialog>
   {/if}
@@ -1867,13 +1868,13 @@
             <span class="removal-meta">{pg.temporality} · {formatFailConfig(pg.fail_config)}</span>
           </div>
           <div class="removal-actions">
-            <button class="btn btn-ghost removal-btn manual" title="Mantener como progreso manual" onclick={() => resolveRemoval(pg.id, 'manual')}>
+            <button class="btn btn-ghost removal-btn manual" title={$t('goalsPage.keepManual')} onclick={() => resolveRemoval(pg.id, 'manual')}>
               Manual
             </button>
-            <button class="btn btn-ghost removal-btn cancel" title="Cancelar (archivar sin penalización)" onclick={() => resolveRemoval(pg.id, 'cancel')}>
+            <button class="btn btn-ghost removal-btn cancel" title={$t('goalsPage.cancelArchive')} onclick={() => resolveRemoval(pg.id, 'cancel')}>
               Cancelar
             </button>
-            <button class="btn btn-ghost removal-btn delete" title="Eliminar permanentemente" onclick={() => resolveRemoval(pg.id, 'delete')}>
+            <button class="btn btn-ghost removal-btn delete" title={$t('goalsPage.deletePermanent')} onclick={() => resolveRemoval(pg.id, 'delete')}>
               Eliminar
             </button>
           </div>

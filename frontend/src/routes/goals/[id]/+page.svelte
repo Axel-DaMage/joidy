@@ -7,6 +7,7 @@
   import LazyIconPicker from '$lib/components/LazyIconPicker.svelte';
   import StreakIcon from '$lib/components/StreakIcon.svelte';
   import { GOAL_COLOR_PRESETS, DEFAULT_GOAL_COLOR } from '$lib/utils/goalColors';
+  import { t } from 'svelte-i18n';
 
   // Lazy-load the heavy GoalEditor (461 lines, pulls in marked, dompurify,
   // highlight.js) so it is split into a separate chunk and only downloaded
@@ -179,7 +180,7 @@
 
 <div class="goal-detail-page">
   {#if loading}
-    <div class="loading">Cargando...</div>
+    <div class="loading">{$t('goalDetail.loading')}</div>
   {:else if loadError}
     <div class="error">{loadError}</div>
   {:else if goal}
@@ -193,10 +194,10 @@
         on:cancel={handleCancel}
       />
     {:else}
-      <div class="loading">Cargando editor...</div>
+      <div class="loading">{$t('goalDetail.editorLoading')}</div>
     {/if}
   {:else}
-    <div class="error">Objetivo no encontrado</div>
+    <div class="error">{$t('goalDetail.notFound')}</div>
   {/if}
 </div>
 
@@ -209,33 +210,33 @@
             <StreakIcon name={editUseFailIcon ? editFailIcon : editFailEmoji} size={16} color={editColor} />
           </div>
           <div>
-            <h3 class="goal-settings-heading">Editar objetivo</h3>
-            <span class="goal-settings-sub">Ajusta los detalles de este objetivo</span>
+            <h3 class="goal-settings-heading">{$t('goalDetail.editGoal')}</h3>
+            <span class="goal-settings-sub">{$t('goalDetail.editGoalSub')}</span>
           </div>
         </div>
-        <button class="history-close-btn" onclick={() => showSettings = false} title="Cerrar" aria-label="Cerrar">×</button>
+        <button class="history-close-btn" onclick={() => showSettings = false} title={$t('goalDetail.close')} aria-label={$t('goalDetail.close')}>×</button>
       </div>
 
       <div class="goal-settings-body">
         <div class="ng-tabs-container">
-          <button class="ng-tab" class:active={settingsSection === 'basics'} onclick={() => settingsSection = 'basics'}>Basico</button>
-          <button class="ng-tab" class:active={settingsSection === 'appearance'} onclick={() => settingsSection = 'appearance'}>Apariencia</button>
-          <button class="ng-tab" class:active={settingsSection === 'advanced'} onclick={() => settingsSection = 'advanced'}>Avanzado</button>
+          <button class="ng-tab" class:active={settingsSection === 'basics'} onclick={() => settingsSection = 'basics'}>{$t('goalDetail.basics')}</button>
+          <button class="ng-tab" class:active={settingsSection === 'appearance'} onclick={() => settingsSection = 'appearance'}>{$t('goalDetail.appearance')}</button>
+          <button class="ng-tab" class:active={settingsSection === 'advanced'} onclick={() => settingsSection = 'advanced'}>{$t('goalDetail.advanced')}</button>
         </div>
 
         <div class="ng-content-area">
           {#if settingsSection === 'basics'}
             <div class="ng-section-fade settings-basics">
               <div class="form-field">
-                <label class="label">Titulo del objetivo</label>
+                <label class="label">{$t('goalDetail.goalTitle')}</label>
                 <input class="input w-full" bind:value={editTitle} maxlength="38" />
               </div>
               <div class="form-field">
-                <label class="label">Descripcion</label>
+                <label class="label">{$t('goalDetail.description')}</label>
                 <textarea class="input w-full" bind:value={editDescription} rows="2"></textarea>
               </div>
               <div class="form-field basics-frequency">
-                <label class="label">Frecuencia</label>
+                <label class="label">{$t('goalDetail.frequency')}</label>
                 <div class="ng-freq-grid">
                   {#each TEMPORALITIES as temp}
                     <button class="ng-freq-btn" class:active={editTemporality === temp} onclick={() => editTemporality = temp}>
@@ -251,10 +252,10 @@
             <div class="ng-section-fade settings-appearance">
               <div class="form-field appearance-icon">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                  <label class="label" style="margin:0;">Icono / Emoji de Fallo</label>
+                  <label class="label" style="margin:0;">{$t('goalDetail.failIconEmoji')}</label>
                   <div class="icon-toggle-row">
-                    <button class="icon-type-btn" class:selected={!editUseFailIcon} onclick={() => editUseFailIcon = false}>Emoji</button>
-                    <button class="icon-type-btn" class:selected={editUseFailIcon} onclick={() => editUseFailIcon = true}>Icono</button>
+                    <button class="icon-type-btn" class:selected={!editUseFailIcon} onclick={() => editUseFailIcon = false}>{$t('goalDetail.emoji')}</button>
+                    <button class="icon-type-btn" class:selected={editUseFailIcon} onclick={() => editUseFailIcon = true}>{$t('goalDetail.icon')}</button>
                   </div>
                 </div>
                 {#if !editUseFailIcon}
@@ -271,7 +272,7 @@
               </div>
 
               <div class="form-field appearance-color">
-                <label class="label">Color de Identidad</label>
+                <label class="label">{$t('goalDetail.identityColor')}</label>
                 <div class="color-presets ng-expanded-presets">
                   {#each COLOR_PRESETS as c}
                     <button class="color-dot" class:selected={editColor === c.hex} style="background: {c.hex}; color: {c.hex};" onclick={() => editColor = c.hex}></button>
@@ -288,55 +289,55 @@
             <div class="ng-section-fade settings-advanced">
               <div class="form-row adv-measure">
                 <div class="form-field" style="flex:1;">
-                  <label class="label">Tipo de medicion</label>
+                  <label class="label">{$t('goalDetail.measurementType')}</label>
                   <select class="input w-full" bind:value={editMeasurement}>
-                    <option value="COUNT">Cuenta Numerica</option>
-                    <option value="BOOLEAN">Hecho / No Hecho</option>
-                    <option value="PERCENT">Porcentaje</option>
+                    <option value="COUNT">{$t('goalDetail.countNumeric')}</option>
+                    <option value="BOOLEAN">{$t('goalDetail.booleanDone')}</option>
+                    <option value="PERCENT">{$t('goalDetail.percent')}</option>
                   </select>
                 </div>
                 <div class="form-field" style="width: 140px;">
-                  <label class="label">Meta</label>
+                  <label class="label">{$t('goalDetail.target')}</label>
                   <input class="input w-full" type="number" bind:value={editTargetValue} min="1" disabled={editMeasurement === 'BOOLEAN'} />
                 </div>
                 <div class="form-field" style="width: 140px;">
-                  <label class="label">Limite dias</label>
-                  <input class="input w-full" type="number" bind:value={editMaxAssignmentDays} min="1" placeholder="Ilimitado" />
+                  <label class="label">{$t('goalDetail.limitDays')}</label>
+                  <input class="input w-full" type="number" bind:value={editMaxAssignmentDays} min="1" placeholder={$t('goalDetail.unlimited')} />
                 </div>
               </div>
 
               <div class="form-field adv-fail">
-                <label class="label">Politica de fallo</label>
+                <label class="label">{$t('goalDetail.failPolicy')}</label>
                 <div class="ng-fail-options">
                   <button class="ng-fail-btn" class:active={editFailConfig === 'STATIC'} onclick={() => editFailConfig = 'STATIC'}>
-                    <strong>Estatico</strong>
-                    <span>Se reinicia a cero cada periodo</span>
+                    <strong>{$t('goalDetail.static')}</strong>
+                    <span>{$t('goalDetail.staticDesc')}</span>
                   </button>
                   <button class="ng-fail-btn" class:active={editFailConfig === 'ROLLOVER'} onclick={() => editFailConfig = 'ROLLOVER'}>
-                    <strong>Traspaso</strong>
-                    <span>La meta pendiente pasa al siguiente dia</span>
+                    <strong>{$t('goalDetail.rollover')}</strong>
+                    <span>{$t('goalDetail.rolloverDesc')}</span>
                   </button>
                   <button class="ng-fail-btn" class:active={editFailConfig === 'SNOWBALL'} onclick={() => editFailConfig = 'SNOWBALL'}>
-                    <strong>Acumulativo</strong>
-                    <span>La deuda se acumula exponencialmente</span>
+                    <strong>{$t('goalDetail.snowball')}</strong>
+                    <span>{$t('goalDetail.snowballDesc')}</span>
                   </button>
                 </div>
               </div>
 
               <div class="form-row adv-links">
                 <div class="form-field" style="flex:1;">
-                  <label class="label">Vincular a proyecto (nota)</label>
+                  <label class="label">{$t('goalDetail.linkToProject')}</label>
                   <select class="input w-full" bind:value={editNoteId}>
-                    <option value={null}>Sin nota vinculada</option>
+                    <option value={null}>{$t('goalDetail.noLinkedNote')}</option>
                     {#each notes as n}
                       <option value={n.id}>{n.title}</option>
                     {/each}
                   </select>
                 </div>
                 <div class="form-field" style="flex:1;">
-                  <label class="label">Sincronizacion de tag</label>
+                  <label class="label">{$t('goalDetail.tagSync')}</label>
                   <select class="input w-full" bind:value={editTagId}>
-                    <option value={null}>Actualizacion manual</option>
+                    <option value={null}>{$t('goalDetail.manualUpdate')}</option>
                     {#each notes as n}
                       {@const tagId = tags.find(t => t.name === n.title)?.id}
                       {#if tagId}
@@ -351,7 +352,7 @@
         </div>
 
         <div class="ng-bottom-preview">
-          <span class="ng-preview-label">Vista previa</span>
+          <span class="ng-preview-label">{$t('goalDetail.preview')}</span>
           <div class="goal-card preview-card-live" style="border-color: {editColor}; background: color-mix(in srgb, {editColor} 5%, var(--surface));">
             <div class="goal-main">
               <div class="goal-title">
@@ -372,7 +373,7 @@
       <div class="goal-settings-footer">
         <span></span>
         <div class="new-goal-actions">
-          <button class="btn btn-ghost" onclick={() => showSettings = false}>Cancelar</button>
+          <button class="btn btn-ghost" onclick={() => showSettings = false}>{$t('goalDetail.cancel')}</button>
           <button class="btn btn-primary" onclick={saveSettings} disabled={savingSettings || !editTitle.trim()}>
             {savingSettings ? 'Guardando...' : 'Guardar cambios'}
           </button>

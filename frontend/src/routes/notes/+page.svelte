@@ -26,6 +26,7 @@
   import { captureSnapshot, getSnapshot } from '$lib/stores/pageSnapshots';
   import { api, type Note } from '$lib/api';
   import { DEFAULT_GOAL_COLOR } from '$lib/utils/goalColors';
+  import { t } from 'svelte-i18n';
 
   // ── State ────────────────────────────────────────────────────────────────────
   let search = '';
@@ -614,22 +615,22 @@
   <aside class="notes-list">
     <div class="tree-actions-bar">
       <div class="actions-left">
-        <button class="icon-btn" title="Crear nota" aria-label="Crear nota" onclick={openNew}><FileEdit size={13} /></button>
-        <button class="icon-btn" title="Crear carpeta" aria-label="Crear carpeta" onclick={handleCreateFolder}><FolderPlus size={13} /></button>
+        <button class="icon-btn" title={$t('notesPage.createNote')} aria-label={$t('notesPage.createNote')} onclick={openNew}><FileEdit size={13} /></button>
+        <button class="icon-btn" title={$t('notesPage.createFolder')} aria-label={$t('notesPage.createFolder')} onclick={handleCreateFolder}><FolderPlus size={13} /></button>
         <div class="sort-wrapper">
-          <button class="icon-btn" title="Cambiar orden" aria-label="Cambiar orden" onclick={(e) => { e.stopPropagation(); showSortMenu = !showSortMenu; }}>
+          <button class="icon-btn" title={$t('notesPage.changeOrder')} aria-label={$t('notesPage.changeOrder')} onclick={(e) => { e.stopPropagation(); showSortMenu = !showSortMenu; }}>
             <ArrowUpDown size={13} />
           </button>
           {#if showSortMenu}
             <div class="sort-menu" onclick={(e) => e.stopPropagation()}>
-              <button class="sort-btn" class:active={sortMode==='az'} onclick={() => setSortMode('az')}>Ordenar por nombre (A-Z)</button>
-              <button class="sort-btn" class:active={sortMode==='za'} onclick={() => setSortMode('za')}>Ordenar por nombre (Z-A)</button>
+              <button class="sort-btn" class:active={sortMode==='az'} onclick={() => setSortMode('az')}>{$t('notesPage.sortAz')}</button>
+              <button class="sort-btn" class:active={sortMode==='za'} onclick={() => setSortMode('za')}>{$t('notesPage.sortZa')}</button>
               <div class="sort-divider"></div>
-              <button class="sort-btn" class:active={sortMode==='edit-new'} onclick={() => setSortMode('edit-new')}>Editar (más reciente) {#if sortMode==='edit-new'}✓{/if}</button>
-              <button class="sort-btn" class:active={sortMode==='edit-old'} onclick={() => setSortMode('edit-old')}>Editar (más antiguo) {#if sortMode==='edit-old'}✓{/if}</button>
+              <button class="sort-btn" class:active={sortMode==='edit-new'} onclick={() => setSortMode('edit-new')}>{$t('notesPage.sortEditNew')} {#if sortMode==='edit-new'}✓{/if}</button>
+              <button class="sort-btn" class:active={sortMode==='edit-old'} onclick={() => setSortMode('edit-old')}>{$t('notesPage.sortEditOld')} {#if sortMode==='edit-old'}✓{/if}</button>
               <div class="sort-divider"></div>
-              <button class="sort-btn" class:active={sortMode==='create-new'} onclick={() => setSortMode('create-new')}>Creado (nuevo-antiguo) {#if sortMode==='create-new'}✓{/if}</button>
-              <button class="sort-btn" class:active={sortMode==='create-old'} onclick={() => setSortMode('create-old')}>Creado (antiguo-nuevo) {#if sortMode==='create-old'}✓{/if}</button>
+              <button class="sort-btn" class:active={sortMode==='create-new'} onclick={() => setSortMode('create-new')}>{$t('notesPage.sortCreateNew')} {#if sortMode==='create-new'}✓{/if}</button>
+              <button class="sort-btn" class:active={sortMode==='create-old'} onclick={() => setSortMode('create-old')}>{$t('notesPage.sortCreateOld')} {#if sortMode==='create-old'}✓{/if}</button>
             </div>
           {/if}
         </div>
@@ -643,14 +644,14 @@
     <div class="list-toolbar">
       <div class="search-wrap">
         <Search size={11} style="color: var(--text-muted); flex-shrink:0;" />
-        <input class="search-input" bind:value={search} placeholder="Buscar..." />
+        <input class="search-input" bind:value={search} placeholder={$t('notesPage.search')} />
         {#if search}
-          <button class="icon-btn" onclick={() => search = ''} title="Limpiar" aria-label="Limpiar">
+          <button class="icon-btn" onclick={() => search = ''} title={$t('notesPage.clear')} aria-label={$t('notesPage.clear')}>
             <X size={10} />
           </button>
         {/if}
       </div>
-      <button class="toolbar-btn bulk-toggle" class:active={$bulkMode} aria-label="Modo selección múltiple" onclick={() => { bulkMode.set(!$bulkMode); clearNoteSelection(); }}>
+      <button class="toolbar-btn bulk-toggle" class:active={$bulkMode} aria-label={$t('notesPage.bulkMode')} onclick={() => { bulkMode.set(!$bulkMode); clearNoteSelection(); }}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
       </button>
     </div>
@@ -688,7 +689,7 @@
 
     <div class="list-scroll" bind:this={listScrollEl} onscroll={onListScroll}>
       {#if $notesLoading}
-        <div class="empty-msg">Cargando...</div>
+        <div class="empty-msg">{$t('notesPage.loading')}</div>
 
       {:else if viewMode === 'tree'}
         {#if flatNodes.length === 0}
@@ -711,7 +712,7 @@
                   </span>
                   <div class="t-icon"><DynamicIcon name={item.icon} size={13} color={item.color} pack={item.pack} /></div>
                   <span class="t-name folder-name">{item.name}</span>
-                  <button class="folder-settings-btn" title="Personalizar carpeta" aria-label="Personalizar carpeta" onclick={(e) => { e.stopPropagation(); openFolderCustomizer(item); }}>
+                  <button class="folder-settings-btn" title={$t('notesPage.customizeFolder')} aria-label={$t('notesPage.customizeFolder')} onclick={(e) => { e.stopPropagation(); openFolderCustomizer(item); }}>
                     <Settings size={10} />
                   </button>
                   <span class="t-count">{item.childCount}</span>
@@ -730,7 +731,7 @@
                 >
                   <div class="t-icon file-icon"><DynamicIcon name={item.icon} size={11} color={item.color} pack={item.pack} /></div>
                   <span class="t-name file-name">{item.name}</span>
-                  <button class="folder-settings-btn" title="Personalizar nota" aria-label="Personalizar nota" onclick={(e) => { e.stopPropagation(); openFolderCustomizer({ path: item.note?.source_path || item.path, icon: item.icon, color: item.color, note: item.note }); }}>
+                  <button class="folder-settings-btn" title={$t('notesPage.customizeNote')} aria-label={$t('notesPage.customizeNote')} onclick={(e) => { e.stopPropagation(); openFolderCustomizer({ path: item.note?.source_path || item.path, icon: item.icon, color: item.color, note: item.note }); }}>
                     <Settings size={10} />
                   </button>
                 </div>
@@ -755,7 +756,7 @@
                   </span>
                   <div class="t-icon"><DynamicIcon name={node.icon} size={13} color={node.color} pack={node.pack} /></div>
                   <span class="t-name folder-name">{node.name}</span>
-                  <button class="folder-settings-btn" title="Personalizar carpeta" aria-label="Personalizar carpeta" onclick={(e) => { e.stopPropagation(); openFolderCustomizer(node); }}>
+                  <button class="folder-settings-btn" title={$t('notesPage.customizeFolder')} aria-label={$t('notesPage.customizeFolder')} onclick={(e) => { e.stopPropagation(); openFolderCustomizer(node); }}>
                     <Settings size={10} />
                   </button>
                   <span class="t-count">{node.childCount}</span>
@@ -774,7 +775,7 @@
                 >
                   <div class="t-icon file-icon"><DynamicIcon name={node.icon} size={11} color={node.color} pack={node.pack} /></div>
                   <span class="t-name file-name">{node.name}</span>
-                  <button class="folder-settings-btn" title="Personalizar nota" aria-label="Personalizar nota" onclick={(e) => { e.stopPropagation(); openFolderCustomizer({ path: node.note?.source_path || node.path, icon: node.icon, color: node.color, note: node.note }); }}>
+                  <button class="folder-settings-btn" title={$t('notesPage.customizeNote')} aria-label={$t('notesPage.customizeNote')} onclick={(e) => { e.stopPropagation(); openFolderCustomizer({ path: node.note?.source_path || node.path, icon: node.icon, color: node.color, note: node.note }); }}>
                     <Settings size={10} />
                   </button>
                 </div>
@@ -804,15 +805,15 @@
   {#if creatingFolder}
     <div class="folder-modal-backdrop" onclick={() => creatingFolder = false}>
       <div class="folder-modal" onclick={(e) => e.stopPropagation()}>
-        <h3 class="folder-modal-title">Crear carpeta</h3>
+        <h3 class="folder-modal-title">{$t('notesPage.createFolderTitle')}</h3>
         
         <div style="display:flex; flex-direction:column; gap:4px; margin-bottom:12px;">
-          <span class="folder-label mono">Nombre</span>
-          <input type="text" class="input mono" bind:value={newFolderName} placeholder="Nueva Carpeta" style="width:100%; box-sizing:border-box;" />
+          <span class="folder-label mono">{$t('notesPage.name')}</span>
+          <input type="text" class="input mono" bind:value={newFolderName} placeholder={$t('notesPage.newFolderPlaceholder')} style="width:100%; box-sizing:border-box;" />
         </div>
         
         <div style="display:flex; flex-direction:column; gap:4px; margin-bottom:12px;">
-          <span class="folder-label mono">Ubicación (Padre)</span>
+          <span class="folder-label mono">{$t('notesPage.location')}</span>
           <select class="input mono" bind:value={newFolderParent} style="width:100%; box-sizing:border-box;">
             <option value="">(Raíz)</option>
             {#each flatNodes.filter(n => n.type === 'folder') as f}
@@ -822,18 +823,18 @@
         </div>
 
         <div class="folder-color-row">
-          <span class="folder-label mono">Color</span>
+          <span class="folder-label mono">{$t('notesPage.color')}</span>
           <input type="color" class="folder-color-input" bind:value={newFolderColor} />
           <input type="text" class="folder-hex-input mono" maxlength="7" bind:value={newFolderColor} />
         </div>
         
         <div class="folder-icon-row">
-          <span class="folder-label mono">Icono</span>
+          <span class="folder-label mono">{$t('notesPage.icon')}</span>
           <LazyIconPicker selected={newFolderIcon} color={newFolderColor} onSelect={(ic) => newFolderIcon = ic} />
         </div>
         
         <div class="folder-modal-btns">
-          <button onclick={() => creatingFolder = false}>Cancelar</button>
+          <button onclick={() => creatingFolder = false}>{$t('notesPage.cancel')}</button>
           <button class="primary" disabled={!newFolderName.trim()} onclick={async () => {
             if (!newFolderName.trim()) return;
             const targetPath = newFolderParent ? `${newFolderParent}/${newFolderName.trim()}` : newFolderName.trim();
@@ -847,7 +848,7 @@
             } catch (e) {
               alert((e as any).message || "Error al crear carpeta");
             }
-          }}>Crear</button>
+          }}>{$t('notesPage.create')}</button>
         </div>
       </div>
     </div>
@@ -869,11 +870,11 @@
   {#if renamingNode}
     <div class="folder-modal-backdrop" onclick={() => renamingNode = null}>
       <div class="folder-modal" onclick={(e) => e.stopPropagation()}>
-        <h3 class="folder-modal-title">Renombrar</h3>
+        <h3 class="folder-modal-title">{$t('notesPage.renameTitle')}</h3>
         <input type="text" class="input mono" bind:value={renameValue} style="width:100%; box-sizing:border-box; margin-bottom:12px;" onkeydown={(e) => e.key === 'Enter' && confirmRename()} />
         <div class="folder-modal-btns">
-          <button onclick={() => renamingNode = null}>Cancelar</button>
-          <button class="primary" disabled={!renameValue.trim()} onclick={confirmRename}>Guardar</button>
+          <button onclick={() => renamingNode = null}>{$t('notesPage.cancel')}</button>
+          <button class="primary" disabled={!renameValue.trim()} onclick={confirmRename}>{$t('notesPage.save')}</button>
         </div>
       </div>
     </div>
@@ -890,23 +891,23 @@
   {#if editingFolder}
     <div class="folder-modal-backdrop" onclick={() => editingFolder = null}>
       <div class="folder-modal" onclick={(e) => e.stopPropagation()}>
-        <h3 class="folder-modal-title">Personalizar carpeta</h3>
+        <h3 class="folder-modal-title">{$t('notesPage.customizeFolderTitle')}</h3>
         
         <!-- Color bar -->
         <div class="folder-color-row">
-          <span class="folder-label mono">Color</span>
+          <span class="folder-label mono">{$t('notesPage.color')}</span>
           <input type="color" class="folder-color-input" bind:value={folderColor} />
           <input type="text" class="folder-hex-input mono" maxlength="7" bind:value={folderColor} />
         </div>
         
         <!-- Icon picker -->
         <div class="folder-icon-row">
-          <span class="folder-label mono">Icono</span>
+          <span class="folder-label mono">{$t('notesPage.icon')}</span>
           <LazyIconPicker selected={folderIcon} color={folderColor} onSelect={(ic) => folderIcon = ic} />
         </div>
         
         <div class="folder-modal-btns">
-          <button onclick={() => editingFolder = null}>Cancelar</button>
+          <button onclick={() => editingFolder = null}>{$t('notesPage.cancel')}</button>
           <button onclick={async () => { 
             if (editingFolder) {
               updateFolderMeta(editingFolder, { icon: folderIcon, color: folderColor });
@@ -934,7 +935,7 @@
             }
             editingFolder = null; 
             editingFolderNote = null;
-          }}>Guardar</button>
+          }}>{$t('notesPage.save')}</button>
         </div>
       </div>
     </div>
@@ -954,10 +955,10 @@
     {#if deleteConfirm}
       <div class="delete-confirm-bar">
         <span class="delete-confirm-text">¿Eliminar esta nota?</span>
-        <span class="delete-confirm-hint">Esta acción no se puede deshacer.</span>
+        <span class="delete-confirm-hint">{$t('notesPage.deleteHint')}</span>
         <div class="delete-confirm-actions">
-          <button class="btn-cancel" onclick={() => deleteConfirm = false}>Cancelar</button>
-          <button class="btn-danger" onclick={handleDelete}>Eliminar</button>
+          <button class="btn-cancel" onclick={() => deleteConfirm = false}>{$t('notesPage.cancel')}</button>
+          <button class="btn-danger" onclick={handleDelete}>{$t('notesPage.delete')}</button>
         </div>
       </div>
     {/if}
@@ -978,7 +979,7 @@
             on:next={goToNext}
           />
         {:else}
-          <div class="editor-loading caption">Cargando editor...</div>
+          <div class="editor-loading caption">{$t('notesPage.editorLoading')}</div>
         {/if}
       {/key}
     {:else}
@@ -988,7 +989,7 @@
         <div class="dash-search-container">
           <div class="dash-search">
             <Search size={14} color="var(--text-muted)" />
-            <input type="text" placeholder="Buscar nota en tu baúl..." bind:value={search} />
+            <input type="text" placeholder={$t('notesPage.searchNotePlaceholder')} bind:value={search} />
           </div>
         </div>
 
@@ -1004,7 +1005,7 @@
                 <span class="daily-note-main">
                   <DynamicIcon name="Calendar" size={16} /> Nota Diaria
                 </span>
-                <span class="daily-note-hint">Configurar ruta de nota diaria</span>
+                <span class="daily-note-hint">{$t('notesPage.configureDailyNote')}</span>
               </button>
               <button class="dash-btn secondary-dash-btn momentary-btn" onclick={openMomentary}>
                 <Plus size={16} /> Nota Momentánea
