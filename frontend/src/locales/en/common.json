@@ -108,6 +108,163 @@
     "neverSynced": "Never synced",
     "totalSynced": "{count} notes synced"
   },
+  "offline": {
+    "syncing": "Syncing...",
+    "offline": "Offline — {pending} {change}",
+    "pendingChange": "pending change",
+    "pendingChanges": "pending changes",
+    "forceSync": "Force sync",
+    "online": "Online"
+  },
+  "login": {
+    "subtitle": "Gamified Knowledge",
+    "username": "Username",
+    "password": "Password",
+    "passwordPlaceholder": "Your master password",
+    "entering": "Logging in...",
+    "enter": "Log in"
+  },
+  "focus": {
+    "modeLabel": "Focus mode",
+    "session": "Focus session",
+    "queuedNotifications": "Queued notifications",
+    "exit": "Exit focus mode"
+  },
+  "commandPalette": {
+    "label": "Command palette",
+    "searchPlaceholder": "Search commands, notes, #tags...",
+    "searchLabel": "Search commands",
+    "noResults": "No results found"
+  },
+  "topicClusters": {
+    "analyzing": "Analyzing...",
+    "noTopics": "No topics detected with enough notes. Keep writing for patterns to emerge."
+  },
+  "streakStats": {
+    "active": "Active",
+    "archived": "Archived",
+    "record": "Record",
+    "longestStreak": "Longest streak:"
+  },
+  "streakList": {
+    "title": "Streaks",
+    "createNew": "Create new streak",
+    "searchPlaceholder": "Search streak...",
+    "loading": "Loading...",
+    "selectStreak": "Select streak: {name}",
+    "editStreak": "Edit streak",
+    "editStreakName": "Edit streak: {name}",
+    "deleteStreak": "Delete streak",
+    "deleteStreakName": "Delete streak: {name}"
+  },
+  "streakHeatmap": {
+    "week": "Week",
+    "month": "Month",
+    "year": "Year",
+    "currentWeek": "Current week",
+    "prevYear": "Previous year",
+    "nextYear": "Next year"
+  },
+  "shareAchievement": {
+    "title": "Share achievement",
+    "downloadPng": "Download PNG",
+    "copyClipboard": "Copy to clipboard",
+    "close": "Close"
+  },
+  "widgets": {
+    "reset": "Reset",
+    "skip": "Skip",
+    "pause": "Pause",
+    "start": "Start",
+    "refresh": "Refresh",
+    "close": "Close",
+    "closeSummary": "Close summary",
+    "changeTimezone": "Change timezone",
+    "timezonePlaceholder": "Chile, Europe/Madrid, UTC...",
+    "dailyRecap": "Daily recap",
+    "ghUpdating": "Updating",
+    "ghAll": "All",
+    "ghIssues": "Issues",
+    "ghCreated": "Created",
+    "ghAssigned": "Assigned",
+    "ghConnect": "Connect GitHub",
+    "ghNoPending": "✓ No pending"
+  },
+  "graph": {
+    "searchPlaceholder": "Search graph...",
+    "loading": "Loading graph...",
+    "noData": "No data yet. Create notes and add tags to see the graph.",
+    "noResults": "No results for the current filter.",
+    "pageTitle": "Knowledge Graph — Joidy",
+    "title": "Knowledge graph",
+    "construction": "Under Construction",
+    "constructionHint": "Enable Dev Mode in Settings to access the Knowledge Graph."
+  },
+  "skills": {
+    "searchPlaceholder": "Search skill...",
+    "clearSearch": "Clear search",
+    "all": "All",
+    "shareSkill": "Share skill",
+    "shareSkillName": "Share skill {name}",
+    "noteCount": "{count} notes",
+    "treeTitle": "Skill tree",
+    "unlockedCount": "{count} skills unlocked",
+    "topSkill": "top skill",
+    "construction": "Under Construction",
+    "constructionHint": "Enable Dev Mode in Settings to access the Skill Tree."
+  },
+  "layout": {
+    "testNotification": "Click for test notification",
+    "testNotifInfo": "Test notification - Info",
+    "testNotifSuccess": "Test notification - Success",
+    "testNotifLevel": "Test notification - Level up!",
+    "currentStatus": "Current status",
+    "globalTimer": "Global timer"
+  },
+  "ai": {
+    "title": "Artificial Intelligence",
+    "checking": "Checking…",
+    "active": "AI active",
+    "inactive": "AI inactive",
+    "loadingChat": "Loading chat...",
+    "devSection": "Dev mode — Service status & error queue",
+    "serviceStatus": "Service status",
+    "apiKeyConfigured": "API Key configured:",
+    "estimatedCost": "Estimated cost:",
+    "yes": "Yes",
+    "no": "No",
+    "statusUnavailable": "Could not fetch status."
+  },
+  "streaks": {
+    "backToMenu": "Back to menu",
+    "streakCompleted": "Streak completed",
+    "alreadyCheckedIn": "Already checked in today",
+    "checkIn": "Check in",
+    "finished": "FINISHED",
+    "days": "DAYS",
+    "shareMilestone": "Share streak milestone",
+    "share": "Share",
+    "shareStreak": "Share streak {name}",
+    "current": "Current",
+    "best": "Best",
+    "checkIns": "Check-ins",
+    "loadingCalendar": "Loading calendar...",
+    "startDate": "Start",
+    "targetDate": "Target",
+    "createdDate": "Created",
+    "checkInAll": "Check in all active streaks",
+    "checkInAllBtn": "Check in all",
+    "randomStreak": "Enter a random streak",
+    "randomStreakBtn": "Random streak",
+    "selectStreakHint": "Select a streak to see details",
+    "deleteStreak": "Delete streak",
+    "deleteConfirmPrefix": "Are you sure you want to delete",
+    "deleteConfirmSuffix": "?",
+    "deleteWarning": "This action cannot be undone.",
+    "connectionError": "Connection error with the streak system.",
+    "noName": "No name",
+    "streakDays": "days of streak"
+  },
   "home": {
     "modules": {
       "planta": "Plant",

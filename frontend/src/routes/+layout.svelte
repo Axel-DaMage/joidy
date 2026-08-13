@@ -644,15 +644,15 @@
     <footer class="app-statusbar">
       <span
         style="color: var(--text-muted); cursor: pointer;"
-        title="Click para notificación de prueba"
+        title={$t('layout.testNotification')}
         onclick={() => {
-          showNotification('Notificación de prueba - Info', 'info');
-          setTimeout(() => showNotification('Notificación de prueba - Success', 'success'), 600);
-          setTimeout(() => showNotification('Notificación de prueba - Level up!', 'level'), 1200);
+          showNotification($t('layout.testNotifInfo'), 'info');
+          setTimeout(() => showNotification($t('layout.testNotifSuccess'), 'success'), 600);
+          setTimeout(() => showNotification($t('layout.testNotifLevel'), 'level'), 1200);
         }}>joidy v0.1</span
       >
 
-      <div class="status-live" title="Estado actual">
+      <div class="status-live" title={$t('layout.currentStatus')}>
         <span class="status-pill status-time mono">{currentTime}</span>
         <span class="status-pill status-date">{currentDate}</span>
         <span class="status-pill status-tasks">{pendingTasks} {$t('common.tasks')}</span>
@@ -671,7 +671,7 @@
         class="mini-pomo"
         class:is-running={$running}
         class:is-break={$phase !== 'work'}
-        title="Temporizador global"
+        title={$t('layout.globalTimer')}
       >
         <span class="mono p-timer"
           >{String(Math.floor($secondsLeft / 60)).padStart(2, '0')}:{String(

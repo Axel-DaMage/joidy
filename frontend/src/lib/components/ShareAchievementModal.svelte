@@ -6,6 +6,7 @@
   import { currentAchievement, closeShare } from '$lib/stores/shareAchievement';
   import { showNotification } from '$lib/stores/gamification';
   import { logger } from '$lib/utils/logger';
+  import { t } from 'svelte-i18n';
 
   let cardEl: HTMLElement | null = $state(null);
   let busy = $state(false);
@@ -77,7 +78,7 @@
 
 <ModalDialog
   open={achievement !== null}
-  title="Compartir logro"
+  title={$t('shareAchievement.title')}
   size="md"
   onClose={closeShare}
 >
@@ -103,28 +104,28 @@
             class="share-btn primary"
             onclick={handleDownload}
             disabled={busy}
-            aria-label="Descargar PNG"
+            aria-label={$t('shareAchievement.downloadPng')}
           >
             <Download size={15} />
-            <span>Descargar PNG</span>
+            <span>{$t('shareAchievement.downloadPng')}</span>
           </button>
           <button
             class="share-btn"
             onclick={handleCopy}
             disabled={busy}
-            aria-label="Copiar al portapapeles"
+            aria-label={$t('shareAchievement.copyClipboard')}
           >
             <Copy size={15} />
-            <span>Copiar al portapapeles</span>
+            <span>{$t('shareAchievement.copyClipboard')}</span>
           </button>
           <button
             class="share-btn ghost"
             onclick={closeShare}
             disabled={busy}
-            aria-label="Cerrar"
+            aria-label={$t('shareAchievement.close')}
           >
             <X size={15} />
-            <span>Cerrar</span>
+            <span>{$t('shareAchievement.close')}</span>
           </button>
         </div>
       </div>

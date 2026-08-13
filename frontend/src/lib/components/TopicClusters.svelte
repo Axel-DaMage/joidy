@@ -3,6 +3,7 @@
   import { api } from '$lib/api';
   import { goto } from '$app/navigation';
   import DynamicIcon from './DynamicIcon.svelte';
+  import { t } from 'svelte-i18n';
 
   let clusters = $state<{ cluster_id: number; note_ids: number[]; note_count: number; representative_title: string; titles: string[] }[]>([]);
   let loading = $state(true);
@@ -35,7 +36,7 @@
 <div class="topic-clusters">
   <div class="clusters-header">
     <h4><DynamicIcon name="Layers" size={16} /> Temas detectados</h4>
-    {#if loading}<span class="caption">Analizando...</span>{/if}
+    {#if loading}<span class="caption">{$t('topicClusters.analyzing')}</span>{/if}
   </div>
 
   {#if error}
@@ -43,7 +44,7 @@
   {/if}
 
   {#if !loading && clusters.length === 0 && !error}
-    <div class="caption">No se detectaron temas con suficientes notas. Sigue escribiendo para que emerjan patrones.</div>
+    <div class="caption">{$t('topicClusters.noTopics')}</div>
   {/if}
 
   {#each clusters as cluster (cluster.cluster_id)}

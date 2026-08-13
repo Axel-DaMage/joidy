@@ -7,6 +7,7 @@
   import { devMode } from '$lib/stores/settings';
   import { openShare } from '$lib/stores/shareAchievement';
   import { Search, X, Share2 } from 'lucide-svelte';
+  import { t } from 'svelte-i18n';
 
   // Lazy-load the heavy SkillTree (236 lines, pulls in d3) so it is split
   // into a separate chunk and only downloaded when dev mode is on (#347).
@@ -74,15 +75,15 @@
 <div class="skills-page">
   <div class="skills-header">
     <div>
-      <h3>Árbol de habilidades</h3>
-      <span class="caption">{totalUnlocked} habilidades desbloqueadas</span>
+      <h3>{$t('skills.treeTitle')}</h3>
+      <span class="caption">{$t('skills.unlockedCount', { values: { count: totalUnlocked } })}</span>
     </div>
     <div class="skill-stats">
       {#if topSkill}
         <div class="skill-stat">
-          <span class="label">mejor habilidad</span>
+          <span class="label">{$t('skills.topSkill')}</span>
           <span class="mono" style="color: var(--text-primary); font-size:13px;">{displayTagName(topSkill.tag_name)}</span>
-          <span class="caption" style="color: var(--text-secondary);">{topSkill.note_count} notas</span>
+          <span class="caption" style="color: var(--text-secondary);">{$t('skills.noteCount', { values: { count: topSkill.note_count } })}</span>
         </div>
       {/if}
     </div>
@@ -114,11 +115,11 @@
           <input
             class="search-input"
             type="text"
-            placeholder="Buscar habilidad..."
+            placeholder={$t('skills.searchPlaceholder')}
             bind:value={searchQuery}
           />
           {#if searchQuery}
-            <button class="search-clear" onclick={() => searchQuery = ''} aria-label="Limpiar búsqueda">
+            <button class="search-clear" onclick={() => searchQuery = ''} aria-label={$t('skills.clearSearch')}>
               <X size={12} />
             </button>
           {/if}
@@ -130,7 +131,7 @@
           class="level-filter-btn"
           class:active={levelFilter === null}
           onclick={() => levelFilter = null}
-        >Todas</button>
+        >{$t('skills.all')}</button>
         {#each LEVEL_ORDER as level}
           <button
             class="level-filter-btn"
@@ -146,14 +147,14 @@
           <div class="skill-row">
             <div class="skill-info">
               <span class="skill-name">{displayTagName(skill.tag_name)}</span>
-              <span class="skill-count caption">{skill.note_count} notas</span>
+              <span class="skill-count caption">{$t('skills.noteCount', { values: { count: skill.note_count } })}</span>
             </div>
             {#if skill.level !== 'locked'}
               <button
                 class="share-btn"
                 onclick={() => shareSkill(skill)}
-                title="Compartir habilidad"
-                aria-label="Compartir habilidad {displayTagName(skill.tag_name)}"
+                title={$t('skills.shareSkill')}
+                aria-label={$t('skills.shareSkillName', { values: { name: displayTagName(skill.tag_name) } })}
               >
                 <Share2 size={12} />
               </button>
@@ -183,8 +184,8 @@
 <div class="construction-page">
   <div class="construction-box">
     <DynamicIcon name="Zap" size={48} />
-    <h3>En Construcción</h3>
-    <p>Activa el Modo Desarrollo en Ajustes para acceder al Árbol de Habilidades.</p>
+    <h3>{$t('skills.construction')}</h3>
+    <p>{$t('skills.constructionHint')}</p>
   </div>
 </div>
 {/if}

@@ -1,5 +1,6 @@
 <script lang="ts">
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
+  import { t } from 'svelte-i18n';
 
   export let accentColor = '#6366F1';
   export let githubConnected = false;
@@ -31,19 +32,19 @@
   <div class="gh-heading">
     <h4 style="color: {accentColor}">GitHub</h4>
     {#if githubLoading}
-      <span class="gh-updating" title="Actualizando"></span>
+      <span class="gh-updating" title={$t('widgets.ghUpdating')}></span>
     {/if}
   </div>
   <div class="gh-filters">
     <div class="gh-filter">
-      <button class="filter-btn" class:active={ghType === 'all'} onclick={() => onSetType('all')}>Todo</button>
-      <button class="filter-btn" class:active={ghType === 'issues'} onclick={() => onSetType('issues')}>Issues</button>
+      <button class="filter-btn" class:active={ghType === 'all'} onclick={() => onSetType('all')}>{$t('widgets.ghAll')}</button>
+      <button class="filter-btn" class:active={ghType === 'issues'} onclick={() => onSetType('issues')}>{$t('widgets.ghIssues')}</button>
       <button class="filter-btn" class:active={ghType === 'prs'} onclick={() => onSetType('prs')}>PRs</button>
     </div>
     <span class="gh-filter-divider">|</span>
     <div class="gh-filter">
-      <button class="filter-btn" class:active={ghFilter === 'created'} onclick={() => onSetFilter('created')}>Creados</button>
-      <button class="filter-btn" class:active={ghFilter === 'assigned'} onclick={() => onSetFilter('assigned')}>Asignados</button>
+      <button class="filter-btn" class:active={ghFilter === 'created'} onclick={() => onSetFilter('created')}>{$t('widgets.ghCreated')}</button>
+      <button class="filter-btn" class:active={ghFilter === 'assigned'} onclick={() => onSetFilter('assigned')}>{$t('widgets.ghAssigned')}</button>
     </div>
   </div>
 </div>
@@ -96,10 +97,10 @@
         <div class="stat-divider"></div>
         <div class="stat"><span class="stat-value mono">{prStats.total}</span><span class="stat-label label">prs</span></div>
       </div>
-      <div class="empty-state success">✓ Sin pendientes</div>
+      <div class="empty-state success">{$t('widgets.ghNoPending')}</div>
     {/if}
     {:else}
-      <div class="empty-state"><span class="caption">Conecta GitHub</span></div>
+      <div class="empty-state"><span class="caption">{$t('widgets.ghConnect')}</span></div>
     {/if}
   </div>
 

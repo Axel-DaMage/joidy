@@ -10,6 +10,7 @@
     toggleTimer,
   } from '$lib/stores/pomodoro';
   import { notes } from '$lib/stores/notes';
+  import { t } from 'svelte-i18n';
 
   let reducedMotion = $state(false);
 
@@ -107,7 +108,7 @@
     class="focus-overlay"
     role="dialog"
     aria-modal="true"
-    aria-label="Modo enfoque"
+    aria-label={$t('focus.modeLabel')}
     in:fade={reducedMotion ? { duration: 0 } : { duration: 220 }}
     out:fade={reducedMotion ? { duration: 0 } : { duration: 180 }}
   >
@@ -120,7 +121,7 @@
       {:else}
         <div class="focus-note-title placeholder">
           <Target size={13} />
-          <span class="note-title-text">Sesión de enfoque</span>
+          <span class="note-title-text">{$t('focus.session')}</span>
         </div>
       {/if}
 
@@ -172,12 +173,12 @@
       {/if}
 
       {#if $queuedNotifications.length > 0}
-        <div class="queued-count" title="Notificaciones en cola">
+        <div class="queued-count" title={$t('focus.queuedNotifications')}>
           {$queuedNotifications.length} notificación{#if $queuedNotifications.length !== 1}s{/if} en cola
         </div>
       {/if}
 
-      <button class="exit-btn" onclick={handleExit} aria-label="Salir del modo enfoque">
+      <button class="exit-btn" onclick={handleExit} aria-label={$t('focus.exit')}>
         Salir del modo enfoque
       </button>
     </div>

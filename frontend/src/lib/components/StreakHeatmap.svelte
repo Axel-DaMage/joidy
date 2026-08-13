@@ -1,6 +1,7 @@
 <script lang="ts">
   import StreakIcon from './StreakIcon.svelte';
   import type { StreakDay } from "$lib/api";
+  import { t } from 'svelte-i18n';
 
   let {
     history = [],
@@ -201,15 +202,15 @@
 <div class="activity" style="--ac: {color};">
   {#if !hideTabs}
     <div class="tabs">
-      <button class="tab" class:on={view === "week"} onclick={() => (view = "week")}>Semana</button>
-      <button class="tab" class:on={view === "month"} onclick={() => (view = "month")}>Mes</button>
-      <button class="tab" class:on={view === "year"} onclick={() => (view = "year")}>Año</button>
+      <button class="tab" class:on={view === "week"} onclick={() => (view = "week")}>{$t('streakHeatmap.week')}</button>
+      <button class="tab" class:on={view === "month"} onclick={() => (view = "month")}>{$t('streakHeatmap.month')}</button>
+      <button class="tab" class:on={view === "year"} onclick={() => (view = "year")}>{$t('streakHeatmap.year')}</button>
     </div>
   {/if}
 
   <div class="view-title-row">
     {#if view === "week"}
-      <span class="title">Semana actual</span>
+      <span class="title">{$t('streakHeatmap.currentWeek')}</span>
     {:else if view === "month"}
       <span class="title">{MONTH_LABEL}</span>
     {:else}
@@ -218,7 +219,7 @@
         class:disabled={!canGoPrev}
         onclick={() => shiftYearMonth(-1)}
         disabled={!canGoPrev}
-        aria-label="Año anterior"
+        aria-label={$t('streakHeatmap.prevYear')}
       >
         ‹
       </button>
@@ -228,7 +229,7 @@
         class:disabled={!canGoNext}
         onclick={() => shiftYearMonth(1)}
         disabled={!canGoNext}
-        aria-label="Año siguiente"
+        aria-label={$t('streakHeatmap.nextYear')}
       >
         ›
       </button>

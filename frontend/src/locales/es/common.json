@@ -108,6 +108,163 @@
     "neverSynced": "Nunca sincronizado",
     "totalSynced": "{count} notas sincronizadas"
   },
+  "offline": {
+    "syncing": "Sincronizando...",
+    "offline": "Offline — {pending} {change}",
+    "pendingChange": "cambio pendiente",
+    "pendingChanges": "cambios pendientes",
+    "forceSync": "Forzar sincronización",
+    "online": "En línea"
+  },
+  "login": {
+    "subtitle": "Conocimiento Gamificado",
+    "username": "Usuario",
+    "password": "Contraseña",
+    "passwordPlaceholder": "Tu contraseña maestra",
+    "entering": "Entrando...",
+    "enter": "Entrar"
+  },
+  "focus": {
+    "modeLabel": "Modo enfoque",
+    "session": "Sesión de enfoque",
+    "queuedNotifications": "Notificaciones en cola",
+    "exit": "Salir del modo enfoque"
+  },
+  "commandPalette": {
+    "label": "Paleta de comandos",
+    "searchPlaceholder": "Buscar comandos, notas, #etiquetas...",
+    "searchLabel": "Buscar comandos",
+    "noResults": "No se encontraron resultados"
+  },
+  "topicClusters": {
+    "analyzing": "Analizando...",
+    "noTopics": "No se detectaron temas con suficientes notas. Sigue escribiendo para que emerjan patrones."
+  },
+  "streakStats": {
+    "active": "Activas",
+    "archived": "Archivadas",
+    "record": "Récord",
+    "longestStreak": "Racha más larga:"
+  },
+  "streakList": {
+    "title": "Rachas",
+    "createNew": "Crear nueva racha",
+    "searchPlaceholder": "Buscar racha...",
+    "loading": "Cargando...",
+    "selectStreak": "Seleccionar racha: {name}",
+    "editStreak": "Editar racha",
+    "editStreakName": "Editar racha: {name}",
+    "deleteStreak": "Eliminar racha",
+    "deleteStreakName": "Eliminar racha: {name}"
+  },
+  "streakHeatmap": {
+    "week": "Semana",
+    "month": "Mes",
+    "year": "Año",
+    "currentWeek": "Semana actual",
+    "prevYear": "Año anterior",
+    "nextYear": "Año siguiente"
+  },
+  "shareAchievement": {
+    "title": "Compartir logro",
+    "downloadPng": "Descargar PNG",
+    "copyClipboard": "Copiar al portapapeles",
+    "close": "Cerrar"
+  },
+  "widgets": {
+    "reset": "Reiniciar",
+    "skip": "Saltar",
+    "pause": "Pausar",
+    "start": "Iniciar",
+    "refresh": "Actualizar",
+    "close": "Cerrar",
+    "closeSummary": "Cerrar resumen",
+    "changeTimezone": "Cambiar zona horaria",
+    "timezonePlaceholder": "Chile, Europe/Madrid, UTC...",
+    "dailyRecap": "Resumen del día",
+    "ghUpdating": "Actualizando",
+    "ghAll": "Todo",
+    "ghIssues": "Issues",
+    "ghCreated": "Creados",
+    "ghAssigned": "Asignados",
+    "ghConnect": "Conecta GitHub",
+    "ghNoPending": "✓ Sin pendientes"
+  },
+  "graph": {
+    "searchPlaceholder": "Buscar en grafo...",
+    "loading": "Cargando grafo...",
+    "noData": "Sin datos aún. Crea notas y agrega tags para ver el grafo.",
+    "noResults": "Sin resultados para el filtro actual.",
+    "pageTitle": "Grafo de Conocimiento — Joidy",
+    "title": "Grafo de conocimiento",
+    "construction": "En Construcción",
+    "constructionHint": "Activa el Modo Desarrollo en Ajustes para acceder al Grafo de Conocimiento."
+  },
+  "skills": {
+    "searchPlaceholder": "Buscar habilidad...",
+    "clearSearch": "Limpiar búsqueda",
+    "all": "Todas",
+    "shareSkill": "Compartir habilidad",
+    "shareSkillName": "Compartir habilidad {name}",
+    "noteCount": "{count} notas",
+    "treeTitle": "Árbol de habilidades",
+    "unlockedCount": "{count} habilidades desbloqueadas",
+    "topSkill": "mejor habilidad",
+    "construction": "En Construcción",
+    "constructionHint": "Activa el Modo Desarrollo en Ajustes para acceder al Árbol de Habilidades."
+  },
+  "layout": {
+    "testNotification": "Click para notificación de prueba",
+    "testNotifInfo": "Notificación de prueba - Info",
+    "testNotifSuccess": "Notificación de prueba - Success",
+    "testNotifLevel": "Notificación de prueba - Level up!",
+    "currentStatus": "Estado actual",
+    "globalTimer": "Temporizador global"
+  },
+  "ai": {
+    "title": "Inteligencia Artificial",
+    "checking": "Verificando…",
+    "active": "IA activa",
+    "inactive": "IA inactiva",
+    "loadingChat": "Cargando chat...",
+    "devSection": "Modo dev — Estado del servicio & cola de errores",
+    "serviceStatus": "Estado del servicio",
+    "apiKeyConfigured": "API Key configurada:",
+    "estimatedCost": "Costo estimado:",
+    "yes": "Sí",
+    "no": "No",
+    "statusUnavailable": "No se pudo obtener el estado."
+  },
+  "streaks": {
+    "backToMenu": "Volver al menú",
+    "streakCompleted": "Racha completada",
+    "alreadyCheckedIn": "Ya hiciste check-in hoy",
+    "checkIn": "Hacer check-in",
+    "finished": "FINALIZADO",
+    "days": "DÍAS",
+    "shareMilestone": "Compartir hito de racha",
+    "share": "Compartir",
+    "shareStreak": "Compartir racha {name}",
+    "current": "Actual",
+    "best": "Mejor",
+    "checkIns": "Check-ins",
+    "loadingCalendar": "Cargando calendario...",
+    "startDate": "Inicio",
+    "targetDate": "Objetivo",
+    "createdDate": "Creada",
+    "checkInAll": "Hacer check-in de todas las rachas activas",
+    "checkInAllBtn": "Check-in de todas",
+    "randomStreak": "Entrar a una racha random",
+    "randomStreakBtn": "Racha random",
+    "selectStreakHint": "Selecciona una racha para ver detalles",
+    "deleteStreak": "Eliminar racha",
+    "deleteConfirmPrefix": "¿Estás seguro de que quieres eliminar",
+    "deleteConfirmSuffix": "?",
+    "deleteWarning": "Esta acción no se puede deshacer.",
+    "connectionError": "Error de conexión con el sistema de rachas.",
+    "noName": "Sin nombre",
+    "streakDays": "días de racha"
+  },
   "home": {
     "modules": {
       "planta": "Planta",

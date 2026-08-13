@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { StreakStats } from '$lib/api';
   import { BarChart3, Calendar } from 'lucide-svelte';
+  import { t } from 'svelte-i18n';
 
   export let stats: StreakStats | null = null;
 </script>
@@ -15,21 +16,21 @@
     <div class="stats-grid">
       <div class="stat-block">
         <span class="stat-val mono">{stats.total_active}</span>
-        <span class="stat-lbl">Activas</span>
+        <span class="stat-lbl">{$t('streakStats.active')}</span>
       </div>
       <div class="stat-block">
         <span class="stat-val mono">{stats.total_archived}</span>
-        <span class="stat-lbl">Archivadas</span>
+        <span class="stat-lbl">{$t('streakStats.archived')}</span>
       </div>
       <div class="stat-block">
         <span class="stat-val mono">{stats.longest_ever}</span>
-        <span class="stat-lbl">Récord</span>
+        <span class="stat-lbl">{$t('streakStats.record')}</span>
       </div>
     </div>
 
     {#if stats.longest_name}
       <div class="longest-info">
-        <span class="longest-label">Racha más larga:</span>
+        <span class="longest-label">{$t('streakStats.longestStreak')}</span>
         <span class="longest-name mono">{stats.longest_name}</span>
         <span class="longest-days">{stats.longest_ever} días</span>
       </div>
