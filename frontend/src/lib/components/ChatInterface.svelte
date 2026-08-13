@@ -4,6 +4,7 @@
   import { marked } from 'marked';
   import DOMPurify from 'dompurify';
   import { messages, isLoading, suggestions, sendMessage, clearChat } from '$lib/stores/chat';
+  import { t } from 'svelte-i18n';
 
   marked.use({ gfm: true, breaks: true });
 
@@ -63,10 +64,10 @@
   <div class="chat-header">
     <div class="chat-title">
       <Sparkles size={18} />
-      <span>Asistente Joidy</span>
+      <span>{$t('chat.assistantName')}</span>
     </div>
     {#if !isEmpty}
-      <button class="clear-btn" onclick={clearChat} title="Limpiar conversación">
+      <button class="clear-btn" onclick={clearChat} title={$t('chat.clearConversation')}>
         <Trash2 size={15} />
       </button>
     {/if}
@@ -76,7 +77,7 @@
     {#if isEmpty}
       <div class="empty-state">
         <div class="empty-icon"><Sparkles size={28} /></div>
-        <h3>Conversa con tu asistente</h3>
+        <h3>{$t('chat.welcomeTitle')}</h3>
         <p class="empty-hint">
           Pregunta sobre tus notas, metas y progreso. Joidy usa tu contexto personal para responder.
         </p>
@@ -105,7 +106,7 @@
         <div class="msg assistant">
           <div class="bubble loading-bubble">
             <Loader2 size={16} class="spin" />
-            <span>Pensando…</span>
+            <span>{$t('chat.thinking')}</span>
           </div>
         </div>
       {/if}
@@ -126,11 +127,11 @@
     <textarea
       bind:value={input}
       onkeydown={handleKeydown}
-      placeholder="Escribe un mensaje… (Enter para enviar, Shift+Enter para salto de línea)"
+      placeholder={$t('chat.inputPlaceholder')}
       rows="1"
       disabled={$isLoading}
     ></textarea>
-    <button class="send-btn" onclick={handleSend} disabled={$isLoading || !input.trim()} title="Enviar">
+    <button class="send-btn" onclick={handleSend} disabled={$isLoading || !input.trim()} title={$t('chat.send')}>
       <Send size={17} />
     </button>
   </div>
