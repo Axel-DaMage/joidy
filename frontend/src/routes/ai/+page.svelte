@@ -3,6 +3,7 @@
   import { api } from '$lib/api';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
   import { devMode } from '$lib/stores/settings';
+  import { t } from 'svelte-i18n';
 
   let usage = $state<{ ai_enabled: boolean; estimated_cost_usd: number } | null>(null);
   let loadingUsage = $state(true);
@@ -42,17 +43,17 @@
 
 <div class="ai-page">
   <div class="ai-header">
-    <h2><DynamicIcon name="Brain" /> Inteligencia Artificial</h2>
+    <h2><DynamicIcon name="Brain" /> {$t('ai.title')}</h2>
     <div class="ai-status">
       {#if loadingUsage}
-        <span class="status-pill muted">Verificando…</span>
+        <span class="status-pill muted">{$t('ai.checking')}</span>
       {:else if usage}
         <span
           class="status-pill"
           class:enabled={usage.ai_enabled}
           class:disabled={!usage.ai_enabled}
         >
-          {usage.ai_enabled ? 'IA activa' : 'IA inactiva'}
+          {usage.ai_enabled ? $t('ai.active') : $t('ai.inactive')}
         </span>
       {/if}
     </div>
@@ -63,34 +64,34 @@
       <svelte:component this={ChatInterface} />
     {:else}
       <div class="caption" style="padding: 24px; text-align: center; color: var(--text-muted);">
-        Cargando chat...
+        {$t('ai.loadingChat')}
       </div>
     {/if}
   </div>
 
   {#if $devMode}
     <details class="dev-section">
-      <summary>Modo dev — Estado del servicio & cola de errores</summary>
+      <summary>{$t('ai.devSection')}</summary>
       <div class="dev-grid">
         <div class="dev-card">
-          <h3><DynamicIcon name="Activity" /> Estado del servicio</h3>
+          <h3><DynamicIcon name="Activity" /> {$t('ai.serviceStatus')}</h3>
           {#if usage}
             <p class="stat">
-              <span class="stat-label">API Key configurada:</span>
+              <span class="stat-label">{$t('ai.apiKeyConfigured')}</span>
               <span
                 class="stat-value"
                 class:enabled={usage.ai_enabled}
                 class:disabled={!usage.ai_enabled}
               >
-                {usage.ai_enabled ? 'Sí' : 'No'}
+                {usage.ai_enabled ? $t('ai.yes') : $t('ai.no')}
               </span>
             </p>
             <p class="stat">
-              <span class="stat-label">Costo estimado:</span>
+              <span class="stat-label">{$t('ai.estimatedCost')}</span>
               <span class="stat-value">${usage.estimated_cost_usd.toFixed(4)} USD</span>
             </p>
           {:else}
-            <p class="muted">No se pudo obtener el estado.</p>
+            <p class="muted">{$t('ai.statusUnavailable')}</p>
           {/if}
         </div>
         {#if DeadLetterQueue}<svelte:component this={DeadLetterQueue} />{/if}

@@ -13,6 +13,7 @@
   import { openShare } from '$lib/stores/shareAchievement';
   import { logger } from '$lib/utils/logger';
   import { Share2 } from 'lucide-svelte';
+  import { t } from 'svelte-i18n';
 
   // Lazy-load heavy components so they are split into separate chunks and
   // only downloaded when actually needed (#347).
@@ -116,7 +117,7 @@
       setCachedData('stats', st);
     } catch (e) {
       if (!cached || !cachedStats) {
-        error = 'Error de conexión con el sistema de rachas.';
+        error = $t('streaks.connectionError');
         logger.error('[streaks]', e);
       }
     } finally {
@@ -264,7 +265,7 @@
     if (deleteConfirm !== id) {
       const streak = streaks.find(s => s.id === id);
       deleteConfirm = id;
-      deleteConfirmName = streak?.name || 'Sin nombre';
+      deleteConfirmName = streak?.name || $t('streaks.noName');
       deleteConfirmTheme = streak?.theme || 'solid';
       return;
     }
@@ -343,7 +344,7 @@
       title: s.name,
       icon: 'Flame',
       value: `${s.current_streak}`,
-      subtitle: 'días de racha',
+      subtitle: $t('streaks.streakDays'),
       color: s.color || 'var(--xp)',
     });
   }
@@ -387,8 +388,8 @@
             <button
               class="detail-exit-btn"
               onclick={() => selectedId = null}
-              title="Volver al menú"
-              aria-label="Volver al menú"
+              title={$t('streaks.backToMenu')}
+              aria-label={$t('streaks.backToMenu')}
             >
               <X size={14} />
             </button>
@@ -409,26 +410,26 @@
                     style="--ring-color: {isStreakCompleted(selected) ? 'var(--target)' : (selected.color || 'var(--xp)')};"
                     onclick={() => !selected.is_archived && !selected.today_checked && !isStreakCompleted(selected) && checkin(selected.id)}
                     disabled={selected.is_archived || selected.today_checked || busy.has(selected.id) || isStreakCompleted(selected)}
-                    title={isStreakCompleted(selected) ? 'Racha completada' : (selected.today_checked ? 'Ya hiciste check-in hoy' : 'Hacer check-in')}
-                    aria-label={isStreakCompleted(selected) ? 'Racha completada' : (selected.today_checked ? 'Ya hiciste check-in hoy' : 'Hacer check-in')}
+                    title={isStreakCompleted(selected) ? $t('streaks.streakCompleted') : (selected.today_checked ? $t('streaks.alreadyCheckedIn') : $t('streaks.checkIn'))}
+                    aria-label={isStreakCompleted(selected) ? $t('streaks.streakCompleted') : (selected.today_checked ? $t('streaks.alreadyCheckedIn') : $t('streaks.checkIn'))}
                   >
                     {#if isStreakCompleted(selected)}
                       <span class="counter-num mono" style="color: var(--target);">✓</span>
-                      <span class="counter-label mono">FINALIZADO</span>
+                      <span class="counter-label mono">{$t('streaks.finished')}</span>
                     {:else}
                       <span class="counter-num mono">{selected.current_streak}</span>
-                      <span class="counter-label mono">DÍAS</span>
+                      <span class="counter-label mono">{$t('streaks.days')}</span>
                     {/if}
                   </button>
                   {#if !isStreakCompleted(selected) && isStreakMilestone(selected)}
                     <button
                       class="streak-share-btn"
                       onclick={() => shareStreak(selected)}
-                      title="Compartir hito de racha"
-                      aria-label="Compartir racha {selected.name}"
+                      title={$t('streaks.shareMilestone')}
+                      aria-label={$t('streaks.shareStreak', { values: { name: selected.name } })}
                     >
                       <Share2 size={13} />
-                      <span>Compartir</span>
+                      <span>{$t('streaks.share')}</span>
                     </button>
                   {/if}
                 </div>
@@ -437,15 +438,15 @@
               <!-- Vertical stats panel -->
               <div class="detail-stats">
                 <div class="dstat-row">
-                  <span class="dstat-lbl">Actual</span>
+                  <span class="dstat-lbl">{$t('streaks.current')}</span>
                   <span class="dstat-val mono">{selected.current_streak}</span>
                 </div>
                 <div class="dstat-row">
-                  <span class="dstat-lbl">Mejor</span>
+                  <span class="dstat-lbl">{$t('streaks.best')}</span>
                   <span class="dstat-val mono">{selected.longest_streak}</span>
                 </div>
                 <div class="dstat-row">
-                  <span class="dstat-lbl">Check-ins</span>
+                  <span class="dstat-lbl">{$t('streaks.checkIns')}</span>
                   <span class="dstat-val mono">{selected.total_checkins}</span>
                 </div>
               </div>
@@ -462,7 +463,7 @@
                   targetDate={selected.target_date}
                 />
               {:else}
-                <div class="caption" style="padding: 24px; text-align: center; color: var(--text-muted);">Cargando calendario...</div>
+                <div class="caption" style="padding: 24px; text-align: center; color: var(--text-muted);">{$t('streaks.loadingCalendar')}</div>
               {/if}
             </div>
 
@@ -471,18 +472,18 @@
               <div class="dates-info">
                 {#if selected.start_date}
                   <div class="date-item">
-                    <span class="date-label">Inicio</span>
+                    <span class="date-label">{$t('streaks.startDate')}</span>
                     <span class="date-val mono">{new Date(selected.start_date).toLocaleDateString($localeStore, { day: 'numeric', month: 'short', year: 'numeric' })}</span>
                   </div>
                 {/if}
                 {#if selected.target_date}
                   <div class="date-item">
-                    <span class="date-label">Objetivo</span>
+                    <span class="date-label">{$t('streaks.targetDate')}</span>
                     <span class="date-val mono">{new Date(selected.target_date).toLocaleDateString($localeStore, { day: 'numeric', month: 'short', year: 'numeric' })}</span>
                   </div>
                 {/if}
                 <div class="date-item">
-                  <span class="date-label">Creada</span>
+                  <span class="date-label">{$t('streaks.createdDate')}</span>
                   <span class="date-val mono">{new Date(selected.created_at).toLocaleDateString($localeStore, { day: 'numeric', month: 'short', year: 'numeric' })}</span>
                 </div>
               </div>
@@ -499,26 +500,26 @@
                   class="action-pill"
                   onclick={checkinAllCurrent}
                   disabled={activeCheckinCandidates.length === 0}
-                  title="Hacer check-in de todas las rachas activas"
+                  title={$t('streaks.checkInAll')}
                 >
                   <CheckCheck size={14} />
-                  <span>Check-in de todas</span>
+                  <span>{$t('streaks.checkInAllBtn')}</span>
                 </button>
                 <button
                   class="action-pill"
                   onclick={openRandomStreak}
                   disabled={filteredStreaks.length === 0}
-                  title="Entrar a una racha random"
+                  title={$t('streaks.randomStreak')}
                 >
                   <Shuffle size={14} />
-                  <span>Racha random</span>
+                  <span>{$t('streaks.randomStreakBtn')}</span>
                 </button>
               </div>
               <StreakStatsPanel {stats} />
             {/if}
             <div class="no-sel-hint">
               <ChevronRight size={14} />
-              <span>Selecciona una racha para ver detalles</span>
+              <span>{$t('streaks.selectStreakHint')}</span>
             </div>
           </div>
         {/if}
@@ -544,15 +545,15 @@
         <div class="delete-modal-icon">
           <X size={32} />
         </div>
-        <h2 class="delete-modal-title">Eliminar racha</h2>
+        <h2 class="delete-modal-title">{$t('streaks.deleteStreak')}</h2>
         <p class="delete-modal-text">
-          ¿Estás seguro de que quieres eliminar <strong>{deleteConfirmName}</strong>?
+          {$t('streaks.deleteConfirmPrefix')} <strong>{deleteConfirmName}</strong>{$t('streaks.deleteConfirmSuffix')}
         </p>
-        <p class="delete-modal-warning">Esta acción no se puede deshacer.</p>
+        <p class="delete-modal-warning">{$t('streaks.deleteWarning')}</p>
       </div>
       <div class="delete-modal-buttons">
-        <button class="btn-cancel" onclick={cancelDelete}>Cancelar</button>
-        <button class="btn-danger" onclick={() => deleteConfirm !== null && deleteStreak(deleteConfirm)}>Eliminar</button>
+        <button class="btn-cancel" onclick={cancelDelete}>{$t('common.cancel')}</button>
+        <button class="btn-danger" onclick={() => deleteConfirm !== null && deleteStreak(deleteConfirm)}>{$t('common.delete')}</button>
       </div>
     </div>
   </div>
