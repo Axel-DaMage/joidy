@@ -1,9 +1,10 @@
 from datetime import date, datetime, timedelta, timezone
 
 from database import get_db
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from models.personal_streaks import PersonalStreak, StreakCheckIn
 from pydantic import BaseModel
+from services.pagination import add_pagination_headers
 from services.personal_streak_service import (
     backfill_streak_history,
     compute_streak,
@@ -305,13 +306,16 @@ def list_streaks(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
+    response: Response = None,
 ):
     q = db.query(PersonalStreak).options(selectinload(PersonalStreak.checkins))
     if not include_archived:
         q = q.filter(PersonalStreak.is_archived == False)
     if category and category != "all":
         q = q.filter(PersonalStreak.category == category)
+    total = q.count()
     streaks = q.order_by(PersonalStreak.created_at).offset(offset).limit(limit).all()
+    add_pagination_headers(response, total=total, limit=limit, offset=offset)
     return [
         _streak_to_dict(s, days_history=days_history if include_history else 0)
         for s in streaks
