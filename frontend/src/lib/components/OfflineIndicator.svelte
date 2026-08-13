@@ -3,6 +3,7 @@
   import { onMount } from 'svelte';
   import { fade } from 'svelte/transition';
   import { RefreshCw, CloudOff, CheckCircle, Loader } from 'lucide-svelte';
+  import { t } from 'svelte-i18n';
   import {
     isOnline,
     pendingChanges,
@@ -46,19 +47,19 @@
   <div class="offline-indicator" class:offline={!$isOnline} class:syncing={$syncStatus === 'syncing'} class:online={$isOnline && showOnlinePill} transition:fade={{ duration: 200 }}>
     {#if $syncStatus === 'syncing'}
       <Loader size={14} class="spin" />
-      <span>Sincronizando...</span>
+      <span>{$t('offline.syncing')}</span>
     {:else if !$isOnline}
       <CloudOff size={14} />
-      <span>Offline — {$pendingChanges} {#if $pendingChanges === 1}cambio pendiente{:else}cambios pendientes{/if}</span>
+      <span>{$t('offline.offline', { values: { pending: $pendingChanges, change: $pendingChanges === 1 ? $t('offline.pendingChange') : $t('offline.pendingChanges') } })}</span>
       {#if $pendingChanges > 0}
-        <button class="sync-btn" onclick={() => forceSync().catch(() => {})} aria-label="Forzar sincronización">
+        <button class="sync-btn" onclick={() => forceSync().catch(() => {})} aria-label={$t('offline.forceSync')}>
           <RefreshCw size={12} />
-          Forzar sync
+          {$t('offline.forceSync')}
         </button>
       {/if}
     {:else if showOnlinePill}
       <CheckCircle size={14} />
-      <span>En línea</span>
+      <span>{$t('offline.online')}</span>
     {/if}
   </div>
 {/if}

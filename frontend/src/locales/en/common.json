@@ -108,6 +108,69 @@
     "neverSynced": "Never synced",
     "totalSynced": "{count} notes synced"
   },
+  "offline": {
+    "syncing": "Syncing...",
+    "offline": "Offline — {pending} {change}",
+    "pendingChange": "pending change",
+    "pendingChanges": "pending changes",
+    "forceSync": "Force sync",
+    "online": "Online"
+  },
+  "login": {
+    "subtitle": "Gamified Knowledge",
+    "username": "Username",
+    "password": "Password",
+    "passwordPlaceholder": "Your master password",
+    "entering": "Logging in...",
+    "enter": "Log in"
+  },
+  "focus": {
+    "modeLabel": "Focus mode",
+    "session": "Focus session",
+    "queuedNotifications": "Queued notifications",
+    "exit": "Exit focus mode"
+  },
+  "commandPalette": {
+    "label": "Command palette",
+    "searchPlaceholder": "Search commands, notes, #tags...",
+    "searchLabel": "Search commands",
+    "noResults": "No results found"
+  },
+  "topicClusters": {
+    "analyzing": "Analyzing...",
+    "noTopics": "No topics detected with enough notes. Keep writing for patterns to emerge."
+  },
+  "streakStats": {
+    "active": "Active",
+    "archived": "Archived",
+    "record": "Record",
+    "longestStreak": "Longest streak:"
+  },
+  "streakList": {
+    "title": "Streaks",
+    "createNew": "Create new streak",
+    "searchPlaceholder": "Search streak...",
+    "loading": "Loading...",
+    "selectStreak": "Select streak: {name}",
+    "editStreak": "Edit streak",
+    "editStreakName": "Edit streak: {name}",
+    "deleteStreak": "Delete streak",
+    "deleteStreakName": "Delete streak: {name}"
+  },
+  "streakHeatmap": {
+    "week": "Week",
+    "month": "Month",
+    "year": "Year",
+    "currentWeek": "Current week",
+    "prevYear": "Previous year",
+    "nextYear": "Next year"
+  },
+  "shareAchievement": {
+    "title": "Share achievement",
+    "downloadPng": "Download PNG",
+    "copyClipboard": "Copy to clipboard",
+    "close": "Close"
+  },
   "widgets": {
     "reset": "Reset",
     "skip": "Skip",

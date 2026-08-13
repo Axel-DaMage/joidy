@@ -3,6 +3,7 @@
   import StreakListItem from './StreakListItem.svelte';
   import EmptyState from './EmptyState.svelte';
   import type { PersonalStreak } from '$lib/api';
+  import { t } from 'svelte-i18n';
 
   interface Props {
     streaks: PersonalStreak[];
@@ -49,7 +50,7 @@
   <div class="list-header">
     <div class="list-header-top">
       <div>
-        <h1 class="list-title">Rachas</h1>
+        <h1 class="list-title">{$t('streakList.title')}</h1>
         <span class="list-sub mono">
           {#if loading}cargando...
           {:else if showArchived}{filteredStreaks.length} archivadas
@@ -67,7 +68,7 @@
         >
           <Archive size={13} />
         </button>
-        <button class="new-btn" onclick={onCreate} aria-label="Crear nueva racha">
+        <button class="new-btn" onclick={onCreate} aria-label={$t('streakList.createNew')}>
           <Plus size={13} />
         </button>
       </div>
@@ -78,7 +79,7 @@
       <input
         class="search-input"
         bind:value={searchQuery}
-        placeholder="Buscar racha..."
+        placeholder={$t('streakList.searchPlaceholder')}
       />
     </div>
   </div>
@@ -87,7 +88,7 @@
     {#if error}
       <div class="error-msg">{error}</div>
     {:else if loading}
-      <div class="empty-state mono">Cargando...</div>
+      <div class="empty-state mono">{$t('streakList.loading')}</div>
     {:else if filteredStreaks.length === 0}
       <EmptyState message="No hay rachas. ¡Crea una para comenzar!" actionLabel="Crear una nueva" onAction={onCreate}>
         {#snippet icon()}<Flame size={24} />{/snippet}

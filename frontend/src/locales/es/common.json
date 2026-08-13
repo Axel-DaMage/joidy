@@ -108,6 +108,69 @@
     "neverSynced": "Nunca sincronizado",
     "totalSynced": "{count} notas sincronizadas"
   },
+  "offline": {
+    "syncing": "Sincronizando...",
+    "offline": "Offline — {pending} {change}",
+    "pendingChange": "cambio pendiente",
+    "pendingChanges": "cambios pendientes",
+    "forceSync": "Forzar sincronización",
+    "online": "En línea"
+  },
+  "login": {
+    "subtitle": "Conocimiento Gamificado",
+    "username": "Usuario",
+    "password": "Contraseña",
+    "passwordPlaceholder": "Tu contraseña maestra",
+    "entering": "Entrando...",
+    "enter": "Entrar"
+  },
+  "focus": {
+    "modeLabel": "Modo enfoque",
+    "session": "Sesión de enfoque",
+    "queuedNotifications": "Notificaciones en cola",
+    "exit": "Salir del modo enfoque"
+  },
+  "commandPalette": {
+    "label": "Paleta de comandos",
+    "searchPlaceholder": "Buscar comandos, notas, #etiquetas...",
+    "searchLabel": "Buscar comandos",
+    "noResults": "No se encontraron resultados"
+  },
+  "topicClusters": {
+    "analyzing": "Analizando...",
+    "noTopics": "No se detectaron temas con suficientes notas. Sigue escribiendo para que emerjan patrones."
+  },
+  "streakStats": {
+    "active": "Activas",
+    "archived": "Archivadas",
+    "record": "Récord",
+    "longestStreak": "Racha más larga:"
+  },
+  "streakList": {
+    "title": "Rachas",
+    "createNew": "Crear nueva racha",
+    "searchPlaceholder": "Buscar racha...",
+    "loading": "Cargando...",
+    "selectStreak": "Seleccionar racha: {name}",
+    "editStreak": "Editar racha",
+    "editStreakName": "Editar racha: {name}",
+    "deleteStreak": "Eliminar racha",
+    "deleteStreakName": "Eliminar racha: {name}"
+  },
+  "streakHeatmap": {
+    "week": "Semana",
+    "month": "Mes",
+    "year": "Año",
+    "currentWeek": "Semana actual",
+    "prevYear": "Año anterior",
+    "nextYear": "Año siguiente"
+  },
+  "shareAchievement": {
+    "title": "Compartir logro",
+    "downloadPng": "Descargar PNG",
+    "copyClipboard": "Copiar al portapapeles",
+    "close": "Cerrar"
+  },
   "widgets": {
     "reset": "Reiniciar",
     "skip": "Saltar",

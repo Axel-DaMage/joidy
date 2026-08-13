@@ -3,6 +3,7 @@
   import { session, saveToken } from '$lib/stores/session';
   import { showNotification } from '$lib/stores/notifications';
   import { getLocale } from '$lib/stores/locale';
+  import { t } from 'svelte-i18n';
   import { logger } from '$lib/utils/logger';
 
   let password = '';
@@ -45,20 +46,20 @@
 <div class="login-wrapper">
   <div class="login-card">
     <div class="logo mono">JOIDY</div>
-    <p class="subtitle">Conocimiento Gamificado</p>
-    
+    <p class="subtitle">{$t('login.subtitle')}</p>
+
     <form onsubmit={(e) => { e.preventDefault(); handleLogin(); }}>
       <div class="field">
-        <label for="username">Usuario</label>
+        <label for="username">{$t('login.username')}</label>
         <input id="username" type="text" bind:value={username} class="input" />
       </div>
       <div class="field">
-        <label for="password">Contraseña</label>
-        <input id="password" type="password" bind:value={password} class="input" placeholder="Tu contraseña maestra" />
+        <label for="password">{$t('login.password')}</label>
+        <input id="password" type="password" bind:value={password} class="input" placeholder={$t('login.passwordPlaceholder')} />
       </div>
-      
+
       <button type="submit" class="btn btn-primary" disabled={loading}>
-        {loading ? 'Entrando...' : 'Entrar'}
+        {loading ? $t('login.entering') : $t('login.enter')}
       </button>
     </form>
   </div>
