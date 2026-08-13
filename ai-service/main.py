@@ -465,16 +465,17 @@ async def cluster_notes(eps: float = 0.3, min_samples: int = 3, max_notes: int =
     from database import engine
     from sqlalchemy import text as sql_text
 
-    rows = engine.connect().execute(
-        sql_text("""
-            SELECT ne.note_id, ne.embedding
-            FROM note_embeddings ne
-            JOIN notes n ON n.id = ne.note_id
-            ORDER BY n.created_at DESC
-            LIMIT :max_notes
-        """),
-        {"max_notes": max_notes},
-    ).fetchall()
+    with engine.connect() as conn:
+        rows = conn.execute(
+            sql_text("""
+                SELECT ne.note_id, ne.embedding
+                FROM note_embeddings ne
+                JOIN notes n ON n.id = ne.note_id
+                ORDER BY n.created_at DESC
+                LIMIT :max_notes
+            """),
+            {"max_notes": max_notes},
+        ).fetchall()
 
     if len(rows) < min_samples:
         return {"clusters": [], "total_notes": len(rows)}
@@ -502,22 +503,26 @@ async def cluster_notes(eps: float = 0.3, min_samples: int = 3, max_notes: int =
         if label != -1:  # -1 = noise
             clusters[label].append(note_ids[idx])
 
-    # Fetch titles for representative notes (closest to centroid)
+    # Fetch titles for representative notes (closest to centroid).
+    # Use a single connection for all cluster lookups to avoid exhausting the
+    # pool, and use parameterized placeholders to prevent SQL injection (#610).
     cluster_results = []
-    for label, ids in clusters.items():
-        # Get the note titles
-        placeholders = ','.join(str(i) for i in ids)
-        title_rows = engine.connect().execute(
-            sql_text(f"SELECT id, title FROM notes WHERE id IN ({placeholders})")
-        ).fetchall()
-        title_map = {r[0]: r[1] for r in title_rows}
-        cluster_results.append({
-            "cluster_id": int(label),
-            "note_ids": ids,
-            "note_count": len(ids),
-            "representative_title": title_map.get(ids[0], "Unknown"),
-            "titles": [title_map.get(i, "Unknown") for i in ids[:5]],
-        })
+    with engine.connect() as conn:
+        for label, ids in clusters.items():
+            params = {f"id_{idx}": i for idx, i in enumerate(ids)}
+            placeholders = ", ".join(f":id_{idx}" for idx in range(len(ids)))
+            title_rows = conn.execute(
+                sql_text(f"SELECT id, title FROM notes WHERE id IN ({placeholders})"),
+                params,
+            ).fetchall()
+            title_map = {r[0]: r[1] for r in title_rows}
+            cluster_results.append({
+                "cluster_id": int(label),
+                "note_ids": ids,
+                "note_count": len(ids),
+                "representative_title": title_map.get(ids[0], "Unknown"),
+                "titles": [title_map.get(i, "Unknown") for i in ids[:5]],
+            })
 
     # Sort by cluster size descending
     cluster_results.sort(key=lambda c: c["note_count"], reverse=True)
