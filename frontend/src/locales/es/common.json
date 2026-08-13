@@ -108,6 +108,25 @@
     "neverSynced": "Nunca sincronizado",
     "totalSynced": "{count} notas sincronizadas"
   },
+  "widgets": {
+    "reset": "Reiniciar",
+    "skip": "Saltar",
+    "pause": "Pausar",
+    "start": "Iniciar",
+    "refresh": "Actualizar",
+    "close": "Cerrar",
+    "closeSummary": "Cerrar resumen",
+    "changeTimezone": "Cambiar zona horaria",
+    "timezonePlaceholder": "Chile, Europe/Madrid, UTC...",
+    "dailyRecap": "Resumen del día",
+    "ghUpdating": "Actualizando",
+    "ghAll": "Todo",
+    "ghIssues": "Issues",
+    "ghCreated": "Creados",
+    "ghAssigned": "Asignados",
+    "ghConnect": "Conecta GitHub",
+    "ghNoPending": "✓ Sin pendientes"
+  },
   "graph": {
     "searchPlaceholder": "Buscar en grafo...",
     "loading": "Cargando grafo...",

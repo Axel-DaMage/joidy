@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { use24HourClock } from '$lib/stores/settings';
   import { getLocale } from '$lib/stores/locale';
+  import { t } from 'svelte-i18n';
 
   // ── Timezone ───────────────────────────────────────────────────────────────
   const TZ_MAP: Record<string, string> = {
@@ -114,11 +115,11 @@
           <input
             class="tz-input mono"
             bind:value={tzInput}
-            placeholder="Chile, Europe/Madrid, UTC..."
+            placeholder={$t('widgets.timezonePlaceholder')}
             onkeydown={(e) => e.key === 'Enter' && applyTzInput()}
             autofocus
           />
-          <button class="tz-close-ui" onclick={() => showTzPicker = false} title="Cerrar" aria-label="Cerrar">✕</button>
+          <button class="tz-close-ui" onclick={() => showTzPicker = false} title={$t('widgets.close')} aria-label={$t('widgets.close')}>✕</button>
         </div>
         {#if tzError}<span class="tz-error">{tzError}</span>{/if}
         <div class="tz-presets">
@@ -131,8 +132,8 @@
       <button
         class="clock mono"
         onclick={() => showTzPicker = true}
-        title="Cambiar zona horaria"
-        aria-label="Cambiar zona horaria"
+        title={$t('widgets.changeTimezone')}
+        aria-label={$t('widgets.changeTimezone')}
         aria-haspopup="dialog"
         aria-expanded={showTzPicker}
       >

@@ -108,6 +108,25 @@
     "neverSynced": "Never synced",
     "totalSynced": "{count} notes synced"
   },
+  "widgets": {
+    "reset": "Reset",
+    "skip": "Skip",
+    "pause": "Pause",
+    "start": "Start",
+    "refresh": "Refresh",
+    "close": "Close",
+    "closeSummary": "Close summary",
+    "changeTimezone": "Change timezone",
+    "timezonePlaceholder": "Chile, Europe/Madrid, UTC...",
+    "dailyRecap": "Daily recap",
+    "ghUpdating": "Updating",
+    "ghAll": "All",
+    "ghIssues": "Issues",
+    "ghCreated": "Created",
+    "ghAssigned": "Assigned",
+    "ghConnect": "Connect GitHub",
+    "ghNoPending": "✓ No pending"
+  },
   "graph": {
     "searchPlaceholder": "Search graph...",
     "loading": "Loading graph...",

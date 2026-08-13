@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { api } from '$lib/api';
   import DynamicIcon from './DynamicIcon.svelte';
+  import { t } from 'svelte-i18n';
 
   let recap = $state<{ status: string; recap: string; suggestions: string[] } | null>(null);
   let loading = $state(true);
@@ -46,8 +47,8 @@
   <div class="daily-recap-card">
     <div class="recap-header">
       <DynamicIcon name="Sparkles" size={16} />
-      <span class="recap-title">Resumen del día</span>
-      <button class="recap-dismiss" onclick={dismiss} title="Cerrar" aria-label="Cerrar resumen">✕</button>
+      <span class="recap-title">{$t('widgets.dailyRecap')}</span>
+      <button class="recap-dismiss" onclick={dismiss} title={$t('widgets.close')} aria-label={$t('widgets.closeSummary')}>✕</button>
     </div>
     <p class="recap-text">{recap.recap}</p>
     {#if recap.suggestions.length > 0}

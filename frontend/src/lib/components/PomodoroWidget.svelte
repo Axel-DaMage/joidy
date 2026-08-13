@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
   import { RotateCcw, SkipForward } from 'lucide-svelte';
+  import { t } from 'svelte-i18n';
 
   // ── Timer ──────────────────────────────────────────────────────────────────
   import {
@@ -65,10 +66,10 @@
 
   <div class="controls-row">
     <button class="ctrl-main" class:active={$running} onclick={toggleTimer}>
-      {$running ? 'Pausar' : 'Iniciar'}
+      {$running ? $t('widgets.pause') : $t('widgets.start')}
     </button>
-    <button class="ctrl-icon" onclick={resetTimer} title="Reiniciar" aria-label="Reiniciar"><RotateCcw size={11}/></button>
-    <button class="ctrl-icon" onclick={skipTimer}  title="Saltar" aria-label="Saltar"><SkipForward size={11}/></button>
+    <button class="ctrl-icon" onclick={resetTimer} title={$t('widgets.reset')} aria-label={$t('widgets.reset')}><RotateCcw size={11}/></button>
+    <button class="ctrl-icon" onclick={skipTimer}  title={$t('widgets.skip')} aria-label={$t('widgets.skip')}><SkipForward size={11}/></button>
   </div>
 
   <div class="duration-row">
