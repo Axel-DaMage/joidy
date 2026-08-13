@@ -28,6 +28,8 @@ def _create_note(db_session, note_id):
     return note
 
 
+@patch("config.settings.obsidian_webhook_secret", "")
+@patch("config.settings.auth_password", "")
 def test_obsidian_webhook_unconfigured_accepts_any(client, db_session):
     _create_note(db_session, 1)
     resp = client.post("/webhook/obsidian/legacy", json={
@@ -47,6 +49,8 @@ def test_sync_state_model_exists():
     assert SyncState.__tablename__ == "sync_state"
 
 
+@patch("config.settings.obsidian_webhook_secret", "")
+@patch("config.settings.auth_password", "")
 def test_obsidian_webhook_detects_conflict(client, db_session):
     _create_note(db_session, 2)
     sync = SyncState(note_id=2, local_mtime=datetime.fromtimestamp(1_600_000_000, tz=timezone.utc))
@@ -65,6 +69,8 @@ def test_obsidian_webhook_detects_conflict(client, db_session):
     assert updated.conflict is True
 
 
+@patch("config.settings.obsidian_webhook_secret", "")
+@patch("config.settings.auth_password", "")
 def test_obsidian_webhook_no_conflict_when_mtimes_match(client, db_session):
     _create_note(db_session, 3)
     mtime = 1_700_000_000
@@ -90,6 +96,7 @@ def test_obsidian_webhook_no_conflict_when_mtimes_match(client, db_session):
 # ── New webhook endpoint tests (create/update/delete) ──────────────────────────
 
 
+@patch("config.settings.obsidian_webhook_secret", "")
 @patch("config.settings.auth_password", "")
 def test_webhook_create_note(client, db_session):
     resp = client.post("/webhook/obsidian", json={
@@ -111,6 +118,7 @@ def test_webhook_create_note(client, db_session):
     assert note.source == "obsidian"
 
 
+@patch("config.settings.obsidian_webhook_secret", "")
 @patch("config.settings.auth_password", "")
 def test_webhook_update_note(client, db_session):
     # First create
@@ -133,6 +141,7 @@ def test_webhook_update_note(client, db_session):
     assert note.content == "updated content"
 
 
+@patch("config.settings.obsidian_webhook_secret", "")
 @patch("config.settings.auth_password", "")
 def test_webhook_delete_note(client, db_session):
     # First create
@@ -156,6 +165,7 @@ def test_webhook_delete_note(client, db_session):
     assert note is None
 
 
+@patch("config.settings.obsidian_webhook_secret", "")
 @patch("config.settings.auth_password", "")
 def test_webhook_delete_unknown_path(client, db_session):
     resp = client.post("/webhook/obsidian", json={
@@ -175,6 +185,7 @@ def test_webhook_invalid_event(client, db_session):
     assert resp.status_code == 422
 
 
+@patch("config.settings.obsidian_webhook_secret", "")
 @patch("config.settings.auth_password", "")
 def test_webhook_create_missing_content(client, db_session):
     resp = client.post("/webhook/obsidian", json={
