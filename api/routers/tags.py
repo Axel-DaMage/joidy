@@ -1,6 +1,6 @@
 
 from database import get_db
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from models.note import Note, NoteLink, NoteTag, Tag, TagCooccurrence
 from pydantic import BaseModel
 from services.response_cache import clear_api_caches, register_cache_clearer, ttl_cache
@@ -195,5 +195,9 @@ register_cache_clearer(_cached_tag_graph.cache_clear)  # type: ignore[attr-defin
 
 
 @router.get("/graph")
-def get_tag_graph(db: Session = Depends(get_db)):
-    return _cached_tag_graph(db)
+def get_tag_graph(db: Session = Depends(get_db), response: Response = None):
+    data = _cached_tag_graph(db)
+    if response is not None:
+        response.headers["X-Total-Nodes"] = str(len(data.get("nodes", [])))
+        response.headers["X-Total-Edges"] = str(len(data.get("edges", [])))
+    return data

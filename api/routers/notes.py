@@ -1,8 +1,9 @@
 
 from database import get_db
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Response
 from models.note import EmbeddingFailure, Note, NoteTag, Tag
 from pydantic import BaseModel, field_validator
+from services.pagination import add_pagination_headers
 from services.sanitizer import sanitize_title, sanitize_content
 from services.embedding_service import (
     get_dead_letter_entries,
@@ -175,13 +176,16 @@ def list_notes(
     tag: str | None = None,
     source_path: str | None = None,
     db: Session = Depends(get_db),
+    response: Response = None,
 ):
     query = db.query(Note).options(selectinload(Note.tags).selectinload(NoteTag.tag))
     if tag:
         query = query.join(NoteTag).join(Tag).filter(Tag.name == tag.lower())
     if source_path:
         query = query.filter(Note.source_path == source_path)
+    total = query.count()
     notes = query.order_by(Note.created_at.desc()).offset(skip).limit(limit).all()
+    add_pagination_headers(response, total=total, limit=limit, offset=skip)
     return [note_to_response(n) for n in notes]
 
 
