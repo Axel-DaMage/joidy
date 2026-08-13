@@ -118,13 +118,15 @@ Two concurrent asyncio tasks: `watch_vault()` (watches `/vault/*.md`, 2s debounc
 - CI: `compileall`, `unittest`, `npm run check`, Docker build
 
 ## Known Issues (from code audit)
-1. CORS allows `*` in non-production — needs config
+1. ~~CORS allows `*` in non-production~~ — **Fixed**: `_get_cors_origins()` in `api/main.py` respects `cors_allowed_origins` setting; dev fallback only. Same in `ai-service/main.py`.
 2. Auth JWT is now enforced on all data/mutation endpoints (except `/auth/*`, `/config`, and `/ws`)
-3. Embedding retry has edge cases (`EmbeddingFailure` table)
-4. Skill tree can have cycles if circular parent created manually
-5. Response cache is a placeholder
-6. Tag co-occurrences O(n²) — should pre-calc on write
-7. Vault watcher can leave orphaned tasks in edge cases
+3. ~~Embedding retry has edge cases~~ — **Fixed**: `EmbeddingFailureRepository` dead-letter logic corrected (#612). `embedding_service.py` retry/dead-letter functions are correct and used by routers.
+4. ~~Skill tree can have cycles if circular parent created manually~~ — **Fixed**: `set_parent` in `api/routers/tags.py` walks the parent chain and rejects circular references.
+5. ~~Response cache is a placeholder~~ — **Fixed**: `api/services/response_cache.py` has a full TTL cache with stats, eviction, and registered clearers.
+6. ~~Tag co-occurrences O(n²)~~ — **Fixed**: `api/services/tag_graph.py` pre-calculates co-occurrences on write via `sync_tag_cooccurrences_for_tags`, called on every note create/update/delete.
+7. ~~Vault watcher can leave orphaned tasks~~ — **Fixed**: `worker/watchers/vault_watcher.py` has `PersistentEventLog` for crash recovery, `_in_flight` task tracking, graceful two-phase shutdown with `asyncio.shield`, and per-file locks.
+8. ai-service `/cluster` endpoint had connection leak + SQL injection — **Fixed** (#610).
+9. ai-service database engine missing `pool_pre_ping`/`pool_recycle` — **Fixed** (#611).
 
 ## Constraints
 - Never commit `.env` or `data/` (in `.gitignore`)
