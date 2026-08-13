@@ -108,6 +108,37 @@
     "neverSynced": "Nunca sincronizado",
     "totalSynced": "{count} notas sincronizadas"
   },
+  "graph": {
+    "searchPlaceholder": "Buscar en grafo...",
+    "loading": "Cargando grafo...",
+    "noData": "Sin datos aún. Crea notas y agrega tags para ver el grafo.",
+    "noResults": "Sin resultados para el filtro actual.",
+    "pageTitle": "Grafo de Conocimiento — Joidy",
+    "title": "Grafo de conocimiento",
+    "construction": "En Construcción",
+    "constructionHint": "Activa el Modo Desarrollo en Ajustes para acceder al Grafo de Conocimiento."
+  },
+  "skills": {
+    "searchPlaceholder": "Buscar habilidad...",
+    "clearSearch": "Limpiar búsqueda",
+    "all": "Todas",
+    "shareSkill": "Compartir habilidad",
+    "shareSkillName": "Compartir habilidad {name}",
+    "noteCount": "{count} notas",
+    "treeTitle": "Árbol de habilidades",
+    "unlockedCount": "{count} habilidades desbloqueadas",
+    "topSkill": "mejor habilidad",
+    "construction": "En Construcción",
+    "constructionHint": "Activa el Modo Desarrollo en Ajustes para acceder al Árbol de Habilidades."
+  },
+  "layout": {
+    "testNotification": "Click para notificación de prueba",
+    "testNotifInfo": "Notificación de prueba - Info",
+    "testNotifSuccess": "Notificación de prueba - Success",
+    "testNotifLevel": "Notificación de prueba - Level up!",
+    "currentStatus": "Estado actual",
+    "globalTimer": "Temporizador global"
+  },
   "ai": {
     "title": "Inteligencia Artificial",
     "checking": "Verificando…",

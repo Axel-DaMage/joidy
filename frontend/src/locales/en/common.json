@@ -108,6 +108,37 @@
     "neverSynced": "Never synced",
     "totalSynced": "{count} notes synced"
   },
+  "graph": {
+    "searchPlaceholder": "Search graph...",
+    "loading": "Loading graph...",
+    "noData": "No data yet. Create notes and add tags to see the graph.",
+    "noResults": "No results for the current filter.",
+    "pageTitle": "Knowledge Graph — Joidy",
+    "title": "Knowledge graph",
+    "construction": "Under Construction",
+    "constructionHint": "Enable Dev Mode in Settings to access the Knowledge Graph."
+  },
+  "skills": {
+    "searchPlaceholder": "Search skill...",
+    "clearSearch": "Clear search",
+    "all": "All",
+    "shareSkill": "Share skill",
+    "shareSkillName": "Share skill {name}",
+    "noteCount": "{count} notes",
+    "treeTitle": "Skill tree",
+    "unlockedCount": "{count} skills unlocked",
+    "topSkill": "top skill",
+    "construction": "Under Construction",
+    "constructionHint": "Enable Dev Mode in Settings to access the Skill Tree."
+  },
+  "layout": {
+    "testNotification": "Click for test notification",
+    "testNotifInfo": "Test notification - Info",
+    "testNotifSuccess": "Test notification - Success",
+    "testNotifLevel": "Test notification - Level up!",
+    "currentStatus": "Current status",
+    "globalTimer": "Global timer"
+  },
   "ai": {
     "title": "Artificial Intelligence",
     "checking": "Checking…",
