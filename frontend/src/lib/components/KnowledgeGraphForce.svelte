@@ -5,6 +5,7 @@
   import type { GraphNode, GraphEdge } from '$lib/api';
   import { forceCollide } from 'd3';
   import type { NodeObject } from 'force-graph';
+  import { t } from 'svelte-i18n';
 
   // ForceGraph constructor is dynamically imported; typed loosely since
   // force-graph uses a Kapsule factory pattern with complex generics not
@@ -550,7 +551,7 @@
 
 <div class="graph-wrapper" style="width:100%; height:100%; position:relative; min-height: 450px;">
   {#if !loaded}
-    <div class="graph-loading">Cargando grafo de conocimiento...</div>
+    <div class="graph-loading">{$t('knowledgeGraphForce.loading')}</div>
   {/if}
 
   <div bind:this={containerEl} class="graph-canvas"></div>
@@ -560,7 +561,7 @@
     <button
       class="settings-toggle-btn"
       class:panel-open={showSettingsPanel}
-      title="Ajustes del Grafo"
+      title={$t('knowledgeGraphForce.settingsTitle')}
       onclick={() => (showSettingsPanel = !showSettingsPanel)}
     >
       <svg
@@ -582,11 +583,11 @@
     {#if showSettingsPanel}
       <div class="settings-sidebar" class:open={showSettingsPanel}>
         <div class="sidebar-header">
-          <h4>Ajustes del Grafo</h4>
+          <h4>{$t('knowledgeGraphForce.settingsTitle')}</h4>
           <button
             class="close-panel-btn"
             onclick={() => (showSettingsPanel = false)}
-            aria-label="Cerrar panel">×</button
+            aria-label={$t('knowledgeGraphForce.closePanel')}>×</button
           >
         </div>
 
@@ -600,7 +601,7 @@
               aria-expanded={activeSection === 'filters'}
             >
               <span class="chevron" class:expanded={activeSection === 'filters'}>›</span>
-              <h5>Filtros</h5>
+              <h5>{$t('knowledgeGraphForce.filters')}</h5>
             </button>
             {#if activeSection === 'filters'}
               <div class="accordion-content">
@@ -608,7 +609,7 @@
                   <input
                     class="panel-search"
                     type="text"
-                    placeholder="Buscar notas o tags..."
+                    placeholder={$t('knowledgeGraphForce.searchPlaceholder')}
                     bind:value={searchQuery}
                     oninput={applyStyling}
                   />
@@ -619,13 +620,13 @@
                         searchQuery = '';
                         applyStyling();
                       }}
-                      aria-label="Limpiar búsqueda">×</button
+                      aria-label={$t('knowledgeGraphForce.clearSearch')}>×</button
                     >
                   {/if}
                 </div>
 
                 <label class="toggle-control">
-                  <span>Archivos</span>
+                  <span>{$t('knowledgeGraphForce.files')}</span>
                   <span class="switch">
                     <input type="checkbox" bind:checked={showNotes} onchange={rebuildGraph} />
                     <span class="slider"></span>
@@ -633,7 +634,7 @@
                 </label>
 
                 <label class="toggle-control">
-                  <span>Etiquetas</span>
+                  <span>{$t('knowledgeGraphForce.tagsLabel')}</span>
                   <span class="switch">
                     <input type="checkbox" bind:checked={showTags} onchange={rebuildGraph} />
                     <span class="slider"></span>
@@ -641,7 +642,7 @@
                 </label>
 
                 <label class="toggle-control">
-                  <span>Archivos no existentes</span>
+                  <span>{$t('knowledgeGraphForce.nonExistentFiles')}</span>
                   <span class="switch">
                     <input type="checkbox" bind:checked={showUnresolved} onchange={rebuildGraph} />
                     <span class="slider"></span>
@@ -649,7 +650,7 @@
                 </label>
 
                 <label class="toggle-control">
-                  <span>Adjuntos</span>
+                  <span>{$t('knowledgeGraphForce.attachments')}</span>
                   <span class="switch">
                     <input type="checkbox" bind:checked={showAttachments} onchange={rebuildGraph} />
                     <span class="slider"></span>
@@ -657,7 +658,7 @@
                 </label>
 
                 <label class="toggle-control">
-                  <span>Huérfanos</span>
+                  <span>{$t('knowledgeGraphForce.orphans')}</span>
                   <span class="switch">
                     <input type="checkbox" bind:checked={showOrphans} onchange={rebuildGraph} />
                     <span class="slider"></span>
@@ -665,7 +666,7 @@
                 </label>
 
                 <label class="toggle-control">
-                  <span>Co-ocurrencias de etiquetas</span>
+                  <span>{$t('knowledgeGraphForce.tagCooccurrences')}</span>
                   <span class="switch">
                     <input
                       type="checkbox"
@@ -688,7 +689,7 @@
               aria-expanded={activeSection === 'groups'}
             >
               <span class="chevron" class:expanded={activeSection === 'groups'}>›</span>
-              <h5>Grupos de color</h5>
+              <h5>{$t('knowledgeGraphForce.colorGroups')}</h5>
             </button>
             {#if activeSection === 'groups'}
               <div class="accordion-content">
@@ -714,8 +715,8 @@
                       />
                       <button
                         class="group-delete-btn"
-                        title="Eliminar regla"
-                        aria-label="Eliminar regla"
+                        title={$t('knowledgeGraphForce.removeRule')}
+                        aria-label={$t('knowledgeGraphForce.removeRule')}
                         onclick={() => removeColorGroup(idx)}>×</button
                       >
                     </div>
@@ -738,12 +739,12 @@
               aria-expanded={activeSection === 'display'}
             >
               <span class="chevron" class:expanded={activeSection === 'display'}>›</span>
-              <h5>Visualización</h5>
+              <h5>{$t('knowledgeGraphForce.visualization')}</h5>
             </button>
             {#if activeSection === 'display'}
               <div class="accordion-content">
                 <label class="toggle-control">
-                  <span>Mostrar etiquetas de texto</span>
+                  <span>{$t('knowledgeGraphForce.showTextLabels')}</span>
                   <span class="switch">
                     <input type="checkbox" bind:checked={showLabels} onchange={applyStyling} />
                     <span class="slider"></span>
@@ -751,7 +752,7 @@
                 </label>
 
                 <label class="toggle-control">
-                  <span>Flechas de dirección</span>
+                  <span>{$t('knowledgeGraphForce.directionArrows')}</span>
                   <span class="switch">
                     <input type="checkbox" bind:checked={showArrows} />
                     <span class="slider"></span>
@@ -759,7 +760,7 @@
                 </label>
 
                 <label class="toggle-control">
-                  <span>Evitar solapamiento de nodos</span>
+                  <span>{$t('knowledgeGraphForce.avoidOverlap')}</span>
                   <span class="switch">
                     <input type="checkbox" bind:checked={enableCollision} />
                     <span class="slider"></span>
@@ -768,7 +769,7 @@
 
                 <div class="slider-control">
                   <div class="slider-lbl">
-                    <span>Tamaño del nodo</span>
+                    <span>{$t('knowledgeGraphForce.nodeSize')}</span>
                     <span>{nodeSizeScale.toFixed(1)}x</span>
                   </div>
                   <input
@@ -783,7 +784,7 @@
 
                 <div class="slider-control">
                   <div class="slider-lbl">
-                    <span>Grosor de línea</span>
+                    <span>{$t('knowledgeGraphForce.lineWidth')}</span>
                     <span>{linkThicknessScale.toFixed(1)}x</span>
                   </div>
                   <input
@@ -798,7 +799,7 @@
 
                 <div class="slider-control">
                   <div class="slider-lbl">
-                    <span>Escala del texto</span>
+                    <span>{$t('knowledgeGraphForce.textScale')}</span>
                     <span>{textScale.toFixed(1)}x</span>
                   </div>
                   <input
@@ -813,7 +814,7 @@
 
                 <div class="slider-control">
                   <div class="slider-lbl">
-                    <span>Umbral de desvanecimiento</span>
+                    <span>{$t('knowledgeGraphForce.fadeThreshold')}</span>
                     <span>{labelThreshold.toFixed(1)}</span>
                   </div>
                   <input
@@ -838,13 +839,13 @@
               aria-expanded={activeSection === 'forces'}
             >
               <span class="chevron" class:expanded={activeSection === 'forces'}>›</span>
-              <h5>Fuerzas</h5>
+              <h5>{$t('knowledgeGraphForce.forces')}</h5>
             </button>
             {#if activeSection === 'forces'}
               <div class="accordion-content">
                 <div class="slider-control">
                   <div class="slider-lbl">
-                    <span>Repulsión (Fuerza de carga)</span>
+                    <span>{$t('knowledgeGraphForce.repulsion')}</span>
                     <span>{repelForce}</span>
                   </div>
                   <input type="range" min="30" max="600" step="10" bind:value={repelForce} />
@@ -852,7 +853,7 @@
 
                 <div class="slider-control">
                   <div class="slider-lbl">
-                    <span>Distancia de enlace</span>
+                    <span>{$t('knowledgeGraphForce.linkDistance')}</span>
                     <span>{linkDistance}px</span>
                   </div>
                   <input type="range" min="15" max="180" step="5" bind:value={linkDistance} />
@@ -860,7 +861,7 @@
 
                 <div class="slider-control">
                   <div class="slider-lbl">
-                    <span>Atracción de enlace</span>
+                    <span>{$t('knowledgeGraphForce.linkAttraction')}</span>
                     <span>{linkForce.toFixed(1)}</span>
                   </div>
                   <input type="range" min="0.1" max="2.0" step="0.1" bind:value={linkForce} />
@@ -878,7 +879,7 @@
 
     <!-- PERSISTENT RIGHT TOOLBAR CONTROLS (FIT, ZOOM, MINIMAP) -->
     <div class="graph-quick-actions">
-      <button class="quick-btn" title="Acercar" onclick={zoomIn}>
+      <button class="quick-btn" title={$t('knowledgeGraphForce.zoomIn')} onclick={zoomIn}>
         <svg
           xmlns="http://www.w3.org/2000/svg"
           viewBox="0 0 24 24"
@@ -896,7 +897,7 @@
           ></line></svg
         >
       </button>
-      <button class="quick-btn" title="Alejar" onclick={zoomOut}>
+      <button class="quick-btn" title={$t('knowledgeGraphForce.zoomOut')} onclick={zoomOut}>
         <svg
           xmlns="http://www.w3.org/2000/svg"
           viewBox="0 0 24 24"
@@ -909,7 +910,7 @@
           ><circle cx="12" cy="12" r="10"></circle><line x1="8" y1="12" x2="16" y2="12"></line></svg
         >
       </button>
-      <button class="quick-btn" title="Ajustar a pantalla" onclick={zoomToFit}>
+      <button class="quick-btn" title={$t('knowledgeGraphForce.fitToScreen')} onclick={zoomToFit}>
         <svg
           xmlns="http://www.w3.org/2000/svg"
           viewBox="0 0 24 24"
@@ -927,7 +928,7 @@
           ></line><line x1="15" y1="9" x2="9" y2="15"></line></svg
         >
       </button>
-      <button class="quick-btn" title="Centrar" onclick={resetView}>
+      <button class="quick-btn" title={$t('knowledgeGraphForce.center')} onclick={resetView}>
         <svg
           xmlns="http://www.w3.org/2000/svg"
           viewBox="0 0 24 24"
@@ -940,7 +941,7 @@
           ><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle></svg
         >
       </button>
-      <button class="quick-btn" title="Limpiar selección" onclick={clearHighlights}>
+      <button class="quick-btn" title={$t('knowledgeGraphForce.clearSelection')} onclick={clearHighlights}>
         <svg
           xmlns="http://www.w3.org/2000/svg"
           viewBox="0 0 24 24"
