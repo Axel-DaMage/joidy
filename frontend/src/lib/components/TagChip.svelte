@@ -1,6 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import { displayTagName } from '$lib/utils/format';
+  import { t } from 'svelte-i18n';
   export let tag: string;
   export let removable = false;
   export let isAI = false;
@@ -41,10 +42,10 @@
 >
   {displayTagName(tag)}
   {#if isAI}
-    <span class="ai-badge" title="Sugerencia de IA">ia</span>
+    <span class="ai-badge" title={$t('tagChip.aiSuggestion')}>ia</span>
   {/if}
   {#if removable}
-    <button onclick={handleRemove} aria-label="Eliminar etiqueta {displayTagName(tag)}">×</button>
+    <button onclick={handleRemove} aria-label={$t('tagChip.removeTag', { values: { name: displayTagName(tag) } })}>×</button>
   {/if}
 </span>
 

@@ -3,6 +3,7 @@
   import StreakIcon from './StreakIcon.svelte';
   import ProgressBar from './ProgressBar.svelte';
   import { getGoalContext } from '$lib/stores/goalContext';
+  import { t } from 'svelte-i18n';
 
   export let goal: any;
   export let pinned: boolean = false;
@@ -36,7 +37,7 @@
   <button
     class="goal-card-main"
     onclick={() => onClick(goal)}
-    aria-label="Abrir objetivo: {goal.title}"
+    aria-label={$t('goalCard.openGoal', { values: { title: goal.title } })}
   >
     <div class="card-header">
       <div class="card-header-left">
@@ -97,7 +98,7 @@
     <div class="card-footer">
       <span class="goal-id">#{goal.id}</span>
       {#if goal.created_at}
-        <span class="goal-date">Creado: {goal.created_at.split('T')[0]}</span>
+        <span class="goal-date">{$t('goalCard.created', { values: { date: goal.created_at.split('T')[0] } })}</span>
       {/if}
     </div>
   </button>
