@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import globalTeardown from './e2e/helpers/cleanup';
 
 /**
  * Playwright E2E configuration for Joidy frontend.
@@ -13,6 +14,10 @@ import { defineConfig, devices } from '@playwright/test';
  *
  * In CI, the full Docker stack should be running before executing these
  * tests (see the `docker-build` job in .github/workflows/ci.yml).
+ *
+ * Global teardown (#565): after all tests complete, any test artifacts
+ * (notes, goals, streaks with E2E test names) are deleted from the
+ * database to prevent accumulation across runs.
  */
 export default defineConfig({
   testDir: './e2e',
@@ -40,4 +45,5 @@ export default defineConfig({
         reuseExistingServer: true,
         timeout: 60_000,
       },
+  globalTeardown,
 });
