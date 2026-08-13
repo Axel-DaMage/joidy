@@ -197,8 +197,18 @@ app.include_router(analytics.router, dependencies=[Depends(get_current_user)])
 app.include_router(sync.router, dependencies=[Depends(get_current_user)])
 app.include_router(upload.router, dependencies=[Depends(get_current_user)])
 
-# Ensure the upload directory exists before serving it.
-Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
+# Ensure the upload directory exists before serving it. This is best-effort:
+# uploads are a non-critical feature, so an unwritable path (read-only mount,
+# host/container UID mismatch) must degrade rather than abort startup and take
+# down notes, goals and sync with it (#624).
+_uploads_available = True
+try:
+    Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
+except OSError:
+    _uploads_available = False
+    logger.warning(
+        "Uploads disabled — could not create upload_dir '%s'", settings.upload_dir, exc_info=True
+    )
 
 
 class SafeStaticFiles(StaticFiles):
@@ -212,7 +222,9 @@ class SafeStaticFiles(StaticFiles):
         return response
 
 
-app.mount("/uploads", SafeStaticFiles(directory=settings.upload_dir), name="uploads")
+# StaticFiles resolves the directory eagerly, so only mount when it exists.
+if _uploads_available:
+    app.mount("/uploads", SafeStaticFiles(directory=settings.upload_dir), name="uploads")
 
 
 @app.get("/health")

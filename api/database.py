@@ -38,7 +38,12 @@ def init_db():
     # The project is PostgreSQL-only (16 + pgvector) since #273. The previous
     # SQLite branch created a stale joidy.db and silently skipped migrations
     # and the vector extension, causing schema drift and broken AI features.
-    Path("/data/db").mkdir(parents=True, exist_ok=True)
+    #
+    # Creating /data/db was a leftover of that SQLite era: the API stores
+    # nothing there (PostgreSQL owns its own volume), and only the worker uses
+    # the directory, for its own event log — which it creates itself. The
+    # unguarded mkdir could raise PermissionError and abort API startup
+    # entirely when /data was not writable (#624).
     with engine.connect() as conn:
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         conn.commit()
