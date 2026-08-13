@@ -66,3 +66,12 @@ class OllamaClient(BaseLLMClient, EmbeddingClient):
                 raise Exception(f"Ollama generate failed: {await resp.text()}")
             data = await resp.json()
             return data["response"]
+
+    async def health_check(self) -> bool:
+        """Check if Ollama is reachable via GET /api/tags (lightweight, no model load)."""
+        try:
+            session = await self._get_session()
+            async with session.get(f"{self._base_url}/api/tags") as resp:
+                return resp.status == 200
+        except Exception:
+            return False
