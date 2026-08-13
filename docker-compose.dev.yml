@@ -28,7 +28,13 @@ services:
       - APP_ENV=development
       - VAULT_PATH=/vault
       - OBSIDIAN_VAULT_PATH=/vault
-    command: sh -c "mkdir -p /app/data/logs && exec uvicorn main:app --host 0.0.0.0 --port 8000 --reload --reload-include '*.py' --reload-exclude '__pycache__/*' --reload-exclude '*.pyc'"
+    # The ./api:/app bind mount shadows the image's pre-chowned /app/data/logs,
+    # so this mkdir runs against the host checkout and fails whenever the host
+    # UID differs from the container's app user (uid 1000) — e.g. in CI, where
+    # it crash-looped the container before uvicorn ever started (#622).
+    # Keep it best-effort: logging_config.py already creates the directory and
+    # degrades to console-only logging when it is not writable.
+    command: sh -c "mkdir -p /app/data/logs 2>/dev/null || true; exec uvicorn main:app --host 0.0.0.0 --port 8000 --reload --reload-include '*.py' --reload-exclude '__pycache__/*' --reload-exclude '*.pyc'"
 
   ai-service:
     build:
