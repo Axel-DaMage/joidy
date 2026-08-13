@@ -28,6 +28,14 @@ class BaseLLMClient(ABC):
         """Generate text response."""
         pass
 
+    async def health_check(self) -> bool:
+        """Ping the provider to verify it's reachable. Returns True if healthy."""
+        try:
+            await self.generate("ping", temperature=0.0, max_tokens=1)
+            return True
+        except Exception:
+            return False
+
     async def classify(
         self,
         content: str,
@@ -39,7 +47,7 @@ class BaseLLMClient(ABC):
         """
         prompt = classify_prompt.format(
             content=content[:2000],
-            existing_tags=", ".join(existing_tags) if existing_tags else "ninguno aún"
+            existing_tags=", ".join(existing_tags) if existing_tags else "ninguno aún",
         )
         result = await self.generate(prompt, temperature=0.2, max_tokens=256)
         return parse_classification(result, existing_tags)
@@ -55,11 +63,13 @@ def parse_classification(text: str, existing_tags: list[str]) -> list[dict]:
         result = []
         for s in suggestions:
             if isinstance(s, dict) and "tag" in s and "confidence" in s:
-                result.append({
-                    "tag": str(s["tag"]).lower().strip(),
-                    "confidence": float(s.get("confidence", 0.5)),
-                    "is_new": s.get("is_new", s["tag"] not in existing_tags),
-                })
+                result.append(
+                    {
+                        "tag": str(s["tag"]).lower().strip(),
+                        "confidence": float(s.get("confidence", 0.5)),
+                        "is_new": s.get("is_new", s["tag"] not in existing_tags),
+                    }
+                )
         return result
     except (json.JSONDecodeError, KeyError, ValueError):
         return []
@@ -76,3 +86,11 @@ class EmbeddingClient(ABC):
     @abstractmethod
     async def embed(self, text: str) -> list[float]:
         pass
+
+    async def health_check(self) -> bool:
+        """Ping the provider to verify it's reachable. Returns True if healthy."""
+        try:
+            await self.embed("ping")
+            return True
+        except Exception:
+            return False

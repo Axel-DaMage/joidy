@@ -31,9 +31,31 @@ ai_rag_errors = Counter('ai_rag_errors_total', 'RAG errors', ['provider'])
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
-    logging.getLogger(__name__).info("[ai-service] Starting up")
+    logger = logging.getLogger(__name__)
+    logger.info("[ai-service] Starting up")
+
+    # Startup health check: ping configured providers and log availability (#568).
+    # This does NOT block startup — it only logs the result so operators can
+    # see which provider is actually reachable.
+    if settings.is_ai_enabled:
+        try:
+            llm_client = get_llm_client()
+            llm_healthy = await llm_client.health_check()
+            logger.info(f"[ai-service] LLM provider '{llm_client.provider_name}' health: {'OK' if llm_healthy else 'UNREACHABLE'}")
+        except Exception as exc:
+            logger.warning(f"[ai-service] LLM health check failed: {exc}")
+
+        try:
+            emb_client = get_embedding_client()
+            emb_healthy = await emb_client.health_check()
+            logger.info(f"[ai-service] Embedding provider '{emb_client.provider_name}' health: {'OK' if emb_healthy else 'UNREACHABLE'}")
+        except Exception as exc:
+            logger.warning(f"[ai-service] Embedding health check failed: {exc}")
+    else:
+        logger.info("[ai-service] No AI providers configured — AI features disabled")
+
     yield
-    logging.getLogger(__name__).info("[ai-service] Shutting down")
+    logger.info("[ai-service] Shutting down")
 
 
 app = FastAPI(title="Joidy AI Service", version="0.2.0", lifespan=lifespan)
@@ -140,8 +162,16 @@ def _get_provider_info():
     }
 
 
+def _has_fallback() -> bool:
+    """Check if Ollama fallback is available for the configured primary provider."""
+    available = settings.available_providers
+    llm_provider = settings.llm_model.split(":", 1)[0] if ":" in settings.llm_model else "gemini"
+    emb_provider = settings.embedding_model.split(":", 1)[0] if ":" in settings.embedding_model else "gemini"
+    return "ollama" in available and (llm_provider != "ollama" or emb_provider != "ollama")
+
+
 @app.get("/health")
-def health():
+async def health():
     provider_info = _get_provider_info()
     # The service is "degraded" if the configured LLM/embedding provider is
     # not actually available (e.g. GEMINI_API_KEY not set but model is gemini:*).
@@ -153,6 +183,7 @@ def health():
         "service": "joidy-ai",
         "ai_enabled": settings.is_ai_enabled,
         "provider": provider_info,
+        "fallback_enabled": _has_fallback(),
     }
 
 
