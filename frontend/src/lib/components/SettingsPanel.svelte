@@ -754,30 +754,32 @@
           {:else if githubAuthError && !githubAuthLoading}
             <p class="hint" style="color:var(--danger)">{githubAuthError}</p>
           {/if}
-          <div class="row">
-            <div class="row-label">
-              <span>Google Contacts</span>
+          {#if $devMode}
+            <div class="row">
+              <div class="row-label">
+                <span>Google Contacts</span>
+              </div>
+              <button class="link-btn" onclick={openGoogleContactsLink}>Enlazar</button>
             </div>
-            <button class="link-btn" onclick={openGoogleContactsLink}>Enlazar</button>
-          </div>
-          <div class="row">
-            <div class="row-label">
-              <span>Strava</span>
+            <div class="row">
+              <div class="row-label">
+                <span>Strava</span>
+              </div>
+              <button class="link-btn" onclick={openStravaLink}>Enlazar</button>
             </div>
-            <button class="link-btn" onclick={openStravaLink}>Enlazar</button>
-          </div>
-          <div class="row">
-            <div class="row-label">
-              <span>Gmail</span>
+            <div class="row">
+              <div class="row-label">
+                <span>Gmail</span>
+              </div>
+              <button class="link-btn" onclick={openGmailLink}>Enlazar</button>
             </div>
-            <button class="link-btn" onclick={openGmailLink}>Enlazar</button>
-          </div>
-          <div class="row">
-            <div class="row-label">
-              <span>Spotify</span>
+            <div class="row">
+              <div class="row-label">
+                <span>Spotify</span>
+              </div>
+              <button class="link-btn">Enlazar</button>
             </div>
-            <button class="link-btn">Enlazar</button>
-          </div>
+          {/if}
           <div class="row">
             <div class="row-label">
               <span>Google Calendar & Tasks</span>
@@ -919,7 +921,7 @@
               <span class:active={$devMode}>on</span>
             </button>
           </div>
-          <p class="hint">Activa para mostrar páginas en desarrollo y contenido avanzado.</p>
+          <p class="hint">Activa para mostrar contenido avanzado e integraciones experimentales.</p>
         </section>
       </div>
 
