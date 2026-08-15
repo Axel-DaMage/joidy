@@ -1,6 +1,7 @@
+import os
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from services.auth_service import get_current_user, hash_password
 
@@ -183,6 +184,54 @@ def get_gamification_config():
     )
 
 import secrets
+
+
+class BrowseDirItem(BaseModel):
+    name: str
+    path: str
+    is_dir: bool
+
+
+class BrowseDirResponse(BaseModel):
+    current: str
+    parent: str | None = None
+    entries: list[BrowseDirItem] = []
+
+
+@router.get("/browse-dirs", response_model=BrowseDirResponse, dependencies=[Depends(get_current_user)])
+def browse_dirs(path: str = Query("/vault", description="Directory to browse")):
+    """List subdirectories of a given path. Used by the Settings folder picker
+    to let the user navigate and select a directory (e.g. the Obsidian vault
+    or the daily-notes folder) with a file-explorer-like UI instead of typing
+    the path manually.
+    """
+    # Resolve and validate the path — must be a real directory.
+    target = Path(path).resolve()
+    if not target.exists():
+        raise HTTPException(status_code=404, detail=f"Path not found: {path}")
+    if not target.is_dir():
+        raise HTTPException(status_code=400, detail=f"Not a directory: {path}")
+
+    entries: list[BrowseDirItem] = []
+    try:
+        for entry in sorted(os.scandir(str(target)), key=lambda e: e.name.lower()):
+            if entry.is_dir() and not entry.name.startswith("."):
+                entries.append(BrowseDirItem(
+                    name=entry.name,
+                    path=str(Path(entry.path)),
+                    is_dir=True,
+                ))
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+    parent = str(target.parent) if target != target.parent else None
+
+    return BrowseDirResponse(
+        current=str(target),
+        parent=parent,
+        entries=entries,
+    )
+
 
 class SetupRequest(BaseModel):
     auth_password: str

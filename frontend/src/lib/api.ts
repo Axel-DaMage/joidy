@@ -715,6 +715,12 @@ export const api = {
         plant_stages: { stage: number; name: string; xp_required: number }[];
         streak_milestones: number[];
       }>('GET', '/config/gamification'),
+    browseDirs: (path: string = '/vault') =>
+      req<{
+        current: string;
+        parent: string | null;
+        entries: { name: string; path: string; is_dir: boolean }[];
+      }>('GET', `/config/browse-dirs?path=${encodeURIComponent(path)}`),
   },
   stats: {
     system: () =>

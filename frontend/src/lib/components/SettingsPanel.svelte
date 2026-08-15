@@ -24,6 +24,8 @@
   import { locale as localeStore, setLocale } from '$lib/stores/locale';
   import { t } from 'svelte-i18n';
   import { mapToSupportedLocale, SUPPORTED_LOCALES, type SupportedLocale } from '$lib/i18n';
+  import DirectoryBrowser from '$lib/components/DirectoryBrowser.svelte';
+  import { FolderOpen } from 'lucide-svelte';
 
   export let open = false;
 
@@ -51,6 +53,13 @@
   let stravaName = '';
   let gmailConnected = false;
   let gmailEmail = '';
+
+  // Folder picker state
+  let folderPickerOpen = false;
+  let folderPickerTitle = '';
+  let folderPickerStart = '/vault';
+  let folderPickerRelativeTo: string | null = null;
+  let folderPickerTarget: 'vault' | 'daily' = 'vault';
 
   let systemConfig = {
     gemini_api_key: '',
@@ -216,6 +225,31 @@
     await checkGithubStatus();
     showNotification('GitHub desconectado', 'info');
     window.dispatchEvent(new CustomEvent('joidy:github-disconnected'));
+  }
+
+  function openVaultPicker() {
+    folderPickerTarget = 'vault';
+    folderPickerTitle = 'Directorio del Vault';
+    folderPickerStart = systemConfig.obsidian_vault_path || '/vault';
+    folderPickerRelativeTo = null;
+    folderPickerOpen = true;
+  }
+
+  function openDailyNotesPicker() {
+    folderPickerTarget = 'daily';
+    folderPickerTitle = 'Carpeta de notas diarias';
+    folderPickerStart = '/vault';
+    folderPickerRelativeTo = '/vault';
+    folderPickerOpen = true;
+  }
+
+  function onFolderSelect(path: string) {
+    if (folderPickerTarget === 'vault') {
+      systemConfig.obsidian_vault_path = path;
+    } else {
+      systemConfig.daily_notes_folder = path;
+    }
+    folderPickerOpen = false;
   }
 
   async function openGoogleCalendarLink() {
@@ -655,6 +689,14 @@
                 placeholder="/Documentos/ObsidianVault"
                 bind:value={systemConfig.obsidian_vault_path}
               />
+              <button
+                class="folder-picker-btn"
+                onclick={openVaultPicker}
+                title="Explorar carpetas"
+                aria-label="Explorar carpetas"
+              >
+                <FolderOpen size={14} />
+              </button>
             </div>
           </div>
           <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
@@ -674,6 +716,14 @@
                 placeholder="Ejemplo/Daily"
                 bind:value={systemConfig.daily_notes_folder}
               />
+              <button
+                class="folder-picker-btn"
+                onclick={openDailyNotesPicker}
+                title="Explorar carpetas del vault"
+                aria-label="Explorar carpetas del vault"
+              >
+                <FolderOpen size={14} />
+              </button>
             </div>
           </div>
           <div class="row">
@@ -882,6 +932,15 @@
     </div>
   </div>
 {/if}
+
+<DirectoryBrowser
+  open={folderPickerOpen}
+  title={folderPickerTitle}
+  startPath={folderPickerStart}
+  relativeTo={folderPickerRelativeTo}
+  on:select={(e) => onFolderSelect(e.detail)}
+  on:cancel={() => (folderPickerOpen = false)}
+/>
 
 <style>
   .backdrop {
@@ -1209,6 +1268,17 @@
 
   .input-wrapper:focus-within {
     border-color: var(--text-muted);
+  }
+
+  .folder-picker-btn {
+    display: flex; align-items: center; justify-content: center;
+    background: none; border: none; cursor: pointer;
+    color: var(--text-muted); padding: 4px; border-radius: 4px;
+    flex-shrink: 0;
+  }
+  .folder-picker-btn:hover {
+    color: var(--accent);
+    background: var(--border);
   }
 
   .color-rm {
