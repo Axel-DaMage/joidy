@@ -49,8 +49,8 @@ interactive OpenAPI docs at `/docs` for full schemas.
 
 | Method | Path | Auth | Description | Request Body | Response |
 |--------|------|------|-------------|--------------|----------|
-| POST | `/auth/login` | No | Single-user login; returns JWT | `password` (query), `username` (query) | `{access_token, token_type}` |
-| GET | `/auth/status` | No | Whether auth is configured | — | `{enabled, has_password}` |
+| POST | `/auth/login` | No | Single-user login; returns JWT | `{password, username}` (JSON body) | `{access_token, token_type}` |
+| GET | `/auth/status` | No | Whether auth is configured | — | `{enabled}` |
 
 ### 2.3 Notes (`notes.py`)
 

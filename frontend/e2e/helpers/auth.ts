@@ -24,8 +24,10 @@ let cachedToken: string | null = null;
 
 export async function getAuthToken(): Promise<string> {
   if (cachedToken) return cachedToken;
-  const res = await fetch(`${API_BASE}/auth/login?username=user&password=${TEST_PASSWORD}`, {
+  const res = await fetch(`${API_BASE}/auth/login`, {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'user', password: TEST_PASSWORD }),
   });
   if (!res.ok) {
     throw new Error(`Login failed: ${res.status} ${await res.text()}`);

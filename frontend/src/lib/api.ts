@@ -351,11 +351,8 @@ export interface SyncConflict {
 export const api = {
   auth: {
     login: (password: string, username = 'user') =>
-      req<{ access_token: string; token_type: string }>(
-        'POST',
-        `/auth/login?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`
-      ),
-    status: () => req<{ enabled: boolean; has_password: boolean }>('GET', '/auth/status'),
+      req<{ access_token: string; token_type: string }>('POST', '/auth/login', { password, username }),
+    status: () => req<{ enabled: boolean }>('GET', '/auth/status'),
   },
 
   notes: {

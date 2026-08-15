@@ -35,8 +35,10 @@ const E2E_PATTERNS = [
 ];
 
 async function getAuthToken(): Promise<string> {
-  const res = await fetch(`${API_BASE}/auth/login?username=user&password=${TEST_PASSWORD}`, {
+  const res = await fetch(`${API_BASE}/auth/login`, {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'user', password: TEST_PASSWORD }),
   });
   if (!res.ok) {
     console.error(`[cleanup] Login failed: ${res.status}`);
