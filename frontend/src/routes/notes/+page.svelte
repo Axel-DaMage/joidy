@@ -264,8 +264,10 @@
     };
   }
 
-  // Resizable panel
-  const MIN_W = 160;
+  // Resizable panel — min width matches the dashboard's default panel width
+  // so the left sidebar (plant, timer, etc.) on the index page is never
+  // crushed below its intended size. Moving right is unrestricted up to MAX_W.
+  const MIN_W = 260;
   const MAX_W = 520;
   let panelWidth = 260;
   let dragging = false;
