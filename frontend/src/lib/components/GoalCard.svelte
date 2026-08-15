@@ -122,12 +122,12 @@
     background: var(--surface);
     border: 2px solid var(--goal-color);
     border-radius: 12px;
-    padding: 20px;
+    padding: 14px 16px;
     transition: all 0.25s ease;
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    text-align: left;
+    gap: 8px;
+    text-align: center;
     position: relative;
     overflow: hidden;
   }
@@ -137,13 +137,14 @@
     border: none;
     padding: 0;
     cursor: pointer;
-    text-align: left;
+    text-align: center;
     color: inherit;
     font: inherit;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 8px;
     flex: 1;
+    align-items: center;
   }
 
   .goal-editor-card:hover {
@@ -168,22 +169,24 @@
 
   .card-header {
     display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    position: relative;
   }
 
   .card-header-left {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
   }
 
   .pin-btn {
     position: absolute;
-    top: 16px;
-    right: 16px;
-    width: 28px;
-    height: 28px;
+    top: 0;
+    right: 0;
+    width: 24px;
+    height: 24px;
     border-radius: 6px;
     background: var(--surface-hover);
     border: 1px solid var(--border);
@@ -249,33 +252,36 @@
   }
 
   .card-title {
-    font-size: 16px;
+    font-size: 14px;
     font-weight: 600;
     color: var(--text-primary);
-    line-height: 1.4;
+    line-height: 1.3;
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     line-clamp: 2;
     overflow: hidden;
+    text-align: center;
   }
 
   .card-description {
-    font-size: 12px;
+    font-size: 11px;
     color: var(--text-muted);
-    line-height: 1.5;
+    line-height: 1.4;
     display: -webkit-box;
-    -webkit-line-clamp: 2;
+    -webkit-line-clamp: 1;
     -webkit-box-orient: vertical;
-    line-clamp: 2;
+    line-clamp: 1;
     overflow: hidden;
+    text-align: center;
   }
 
   .card-meta {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 4px;
+    gap: 6px;
+    margin-top: 2px;
+    justify-content: center;
   }
 
   .meta-item {
@@ -295,16 +301,17 @@
   }
 
   .card-progress {
-    margin-top: 8px;
-    padding-top: 12px;
+    margin-top: 4px;
+    padding-top: 8px;
     border-top: 1px solid var(--border-light);
+    width: 100%;
   }
 
   .progress-info {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
   }
 
   .progress-text {
@@ -323,11 +330,12 @@
 
   .card-footer {
     display: flex;
-    justify-content: space-between;
+    justify-content: center;
     align-items: center;
+    gap: 8px;
     font-size: 10px;
     color: var(--text-disabled);
-    margin-top: 4px;
+    margin-top: 2px;
   }
 
   .goal-id {

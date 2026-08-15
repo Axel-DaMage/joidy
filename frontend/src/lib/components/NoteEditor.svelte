@@ -1104,17 +1104,20 @@
   /* ── Toolbar ── */
   .toolbar {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     align-items: center;
     justify-content: space-between;
-    padding: 6px 20px;
+    padding: 4px 12px;
     border-bottom: 1px solid var(--border);
     background: var(--surface);
     flex-shrink: 0;
-    gap: var(--s3);
+    gap: var(--s2);
     position: relative;
     z-index: 20;
+    overflow-x: auto;
+    scrollbar-width: none;
   }
+  .toolbar::-webkit-scrollbar { display: none; }
 
   /* Icon customize modal */
   .folder-modal-backdrop {
@@ -1186,7 +1189,7 @@
   .toolbar-left {
     display: flex;
     align-items: center;
-    gap: var(--s2);
+    gap: 2px;
     flex: 1 1 auto;
     min-width: 0;
     overflow: hidden;
@@ -1195,9 +1198,9 @@
   .toolbar-right {
     display: flex;
     align-items: center;
-    gap: var(--s2);
+    gap: 2px;
     flex-shrink: 0;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     justify-content: flex-end;
   }
 
@@ -1215,31 +1218,33 @@
 
   .format-divider {
     width: 1px;
-    height: 18px;
+    height: 14px;
     background: var(--border);
-    margin: 0 4px;
+    margin: 0 2px;
     flex-shrink: 0;
   }
 
   .stat {
-    font-size: 11px;
+    font-size: 10px;
     font-family: var(--font-mono);
     color: var(--text-muted);
+    white-space: nowrap;
   }
 
   .toolbar-btn {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    padding: 4px 10px;
+    gap: 4px;
+    padding: 3px 7px;
     border: 1px solid var(--border);
     border-radius: var(--r);
     background: transparent;
     color: var(--text-secondary);
-    font-size: 11px;
+    font-size: 10px;
     font-family: var(--font-sans);
     cursor: pointer;
     transition: all var(--t-fast);
+    white-space: nowrap;
   }
   .toolbar-btn:hover { background: var(--elevated); color: var(--text-primary); }
   .toolbar-btn.active { border-color: var(--text-secondary); color: var(--text-primary); }

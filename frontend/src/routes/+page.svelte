@@ -10,10 +10,7 @@
   import CityModule     from '$lib/components/CityModule.svelte';
   import OrbitModule    from '$lib/components/OrbitModule.svelte';
   import XPBar          from '$lib/components/XPBar.svelte';
-  import NoteCard       from '$lib/components/NoteCard.svelte';
   import PomodoroWidget from '$lib/components/PomodoroWidget.svelte';
-  import QuickCaptureWidget from '$lib/components/QuickCaptureWidget.svelte';
-  import MoodWidget from '$lib/components/MoodWidget.svelte';
   import { Target } from 'lucide-svelte';
   import { startFocusMode } from '$lib/stores/focusMode';
   import TimeWidget from '$lib/components/TimeWidget.svelte';
@@ -24,7 +21,6 @@
   import { totalXP, currentStreak, lastActivity, nextStageXP, globalLevel } from '$lib/stores/gamification';
   import { openShare } from '$lib/stores/shareAchievement';
   import { Share2 } from 'lucide-svelte';
-  import ActivityProgress from '$lib/components/ActivityProgress.svelte';
   import { notes, loadNotes, notesLoadedOnce } from '$lib/stores/notes';
   import { dashboardLayout } from '$lib/stores/layout';
   import { accentColors } from '$lib/stores/settings';
@@ -178,8 +174,6 @@
 
   let githubStatusChecked = false;
   let ttiMeasured = false;
-
-  $: recentNotes = $notes.slice(0, 5);
 
   onMount(() => {
     if (typeof performance !== 'undefined') {
@@ -366,7 +360,7 @@
       {/if}
     </div>
   {:else if wid === 'activity-progress'}
-    <ActivityProgress />
+    <!-- activity-progress widget removed from dashboard per user request -->
   {:else if wid === 'time-widget'}
     <TimeWidget />
   {:else if wid === 'weather-widget'}
@@ -378,23 +372,11 @@
       {$t('home.focusMode')}
     </button>
   {:else if wid === 'quick-capture'}
-    <QuickCaptureWidget />
+    <!-- quick-capture widget moved to notes page -->
   {:else if wid === 'mood-tracker'}
-    <MoodWidget />
+    <!-- mood-tracker widget removed from dashboard per user request -->
   {:else if wid === 'recent-notes'}
-    <div class="section-header">
-      <h4 style="color: {$accentColors[0]}">{$t('home.recentNotes')}</h4>
-      <a href="/notes" class="btn btn-ghost" style="font-size:11px; padding:2px 8px;">{$t('home.seeAll')}</a>
-    </div>
-    <div class="recent-notes">
-      {#if recentNotes.length === 0}
-        <div class="empty-state"><span class="caption">{$t('home.noNotesYet')}</span></div>
-      {:else}
-        {#each recentNotes as note}
-          <NoteCard {note} showTags={false} on:select={() => goto(`/notes?id=${note.id}`)} />
-        {/each}
-      {/if}
-    </div>
+    <!-- recent-notes widget removed from dashboard per user request -->
   {:else if wid === 'github-issues'}
     <GithubWidget
       accentColor={$accentColors[1]}

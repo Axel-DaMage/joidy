@@ -455,8 +455,7 @@
             <!-- Activity calendar -->
             <div class="heatmap-section">
               {#if StreakHeatmap}
-                <svelte:component
-                  this={StreakHeatmap}
+                <StreakHeatmap
                   history={selected.history}
                   color={selected.color || 'var(--xp)'}
                   startDate={selected.start_date}
@@ -560,8 +559,7 @@
 {/if}
 
 {#if StreakCreateModal}
-  <svelte:component
-    this={StreakCreateModal}
+  <StreakCreateModal
     bind:open={showModal}
     editStreak={editTarget}
     on:close={() => { showModal = false; editTarget = null; }}

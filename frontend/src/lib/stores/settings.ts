@@ -217,7 +217,7 @@ export type ThemeMode = 'light' | 'dark' | 'auto';
 const THEME_MODE_KEY = 'joidy-theme-mode';
 
 function createThemeModeStore() {
-  const { subscribe, set } = writable<ThemeMode>('light');
+  const { subscribe, set } = writable<ThemeMode>('dark');
   let _initialized = false;
 
   function applyMode(mode: ThemeMode) {
@@ -236,7 +236,7 @@ function createThemeModeStore() {
     subscribe: (run: (v: ThemeMode) => void, invalidate?: () => void) => {
       if (!_initialized && browser) {
         _initialized = true;
-        const saved = (localStorage.getItem(THEME_MODE_KEY) as ThemeMode) || 'light';
+        const saved = (localStorage.getItem(THEME_MODE_KEY) as ThemeMode) || 'dark';
         set(saved);
         applyMode(saved);
       }
@@ -251,7 +251,7 @@ function createThemeModeStore() {
     init: () => {
       if (!browser) return;
       _initialized = true;
-      const saved = (localStorage.getItem(THEME_MODE_KEY) as ThemeMode) || 'light';
+      const saved = (localStorage.getItem(THEME_MODE_KEY) as ThemeMode) || 'dark';
       set(saved);
       applyMode(saved);
     },

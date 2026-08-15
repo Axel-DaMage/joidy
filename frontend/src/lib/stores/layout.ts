@@ -39,8 +39,8 @@ export interface DashboardLayout {
 }
 
 const DEFAULT: DashboardLayout = {
-  left:  ['plant-carousel', 'stats-xp', 'activity-progress', 'time-widget', 'pomodoro', 'quick-capture', 'mood-tracker'],
-  right: ['recent-notes', 'github-issues'],
+  left:  ['plant-carousel', 'stats-xp', 'time-widget', 'pomodoro'],
+  right: ['github-issues'],
 };
 
 export const dashboardLayout = writable<DashboardLayout>(DEFAULT);
