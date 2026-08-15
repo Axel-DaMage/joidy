@@ -16,6 +16,8 @@
     }
   }
   import LazyIconPicker from '$lib/components/LazyIconPicker.svelte';
+  import QuickCaptureWidget from '$lib/components/QuickCaptureWidget.svelte';
+  import ScientificCalculator from '$lib/components/ScientificCalculator.svelte';
   import VirtualList from '$lib/components/VirtualList.svelte';
   import { notes, notesLoading, loadNotes, createNote, updateNote, deleteNote, aiSuggestions, notesLoadedOnce, selectedNoteIds, bulkMode, toggleNoteSelection, selectAllNotes, clearNoteSelection, deleteSelectedNotes, tagSelectedNotes, untagSelectedNotes } from '$lib/stores/notes';
   import { buildTree, flattenTree, extractFrontmatter, getFileIcon, type SortMode, type FlatNode } from '$lib/utils/fileTree';
@@ -33,7 +35,7 @@
   let selectedNote: Note | null = null;
   let showEditor = false;
   let editingNew = false;
-  let viewMode: 'tree' | 'list' = 'list';
+  let viewMode: 'tree' | 'list' = 'tree';
   let dailySourcePath: string | null = null;
   let dailyInitialTitle = '';
   let dailyNotesConfigured = false;
@@ -639,6 +641,15 @@
         </button>
       </div>
 
+      <div class="actions-right">
+        <button class="icon-btn" class:active={viewMode === 'tree'} title="Vista de carpetas" aria-label="Vista de carpetas" onclick={() => { viewMode = 'tree'; if (notesPrefsReady) persistNotesPrefs(); }}>
+          <FolderTree size={13} />
+        </button>
+        <button class="icon-btn" class:active={viewMode === 'list'} title="Vista de lista" aria-label="Vista de lista" onclick={() => { viewMode = 'list'; if (notesPrefsReady) persistNotesPrefs(); }}>
+          <List size={13} />
+        </button>
+      </div>
+
     </div>
 
     <div class="list-toolbar">
@@ -985,12 +996,16 @@
     {:else}
       <div class="empty-dashboard">
         <DynamicIcon name="Box" size={48} color="var(--border)" />
-        
+
         <div class="dash-search-container">
           <div class="dash-search">
             <Search size={14} color="var(--text-muted)" />
             <input type="text" placeholder={$t('notesPage.searchNotePlaceholder')} bind:value={search} />
           </div>
+        </div>
+
+        <div class="dash-quick-capture">
+          <QuickCaptureWidget />
         </div>
 
         <div class="dash-widgets">
@@ -1027,6 +1042,13 @@
               {/each}
             </div>
           </div>
+
+          <div class="dash-widget">
+            <div class="dash-widget-title" style="margin-bottom: 5px;">
+              <DynamicIcon name="Calculator" size={13}/> Calculadora
+            </div>
+            <ScientificCalculator />
+          </div>
         </div>
       </div>
     {/if}
@@ -1062,6 +1084,12 @@
   }
 
   .actions-left {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .actions-right {
     display: flex;
     align-items: center;
     gap: 2px;
@@ -1276,6 +1304,9 @@
 
   .dash-widgets {
     display: grid; grid-template-columns: 1fr 1.2fr; gap: 24px;
+    width: 100%; max-width: 850px;
+  }
+  .dash-quick-capture {
     width: 100%; max-width: 850px;
   }
   .dash-widget {

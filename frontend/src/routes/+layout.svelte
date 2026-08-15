@@ -70,7 +70,7 @@
     { href: '/notes', label: $t('nav.notes'), icon: 'BookOpen', status: 'ready' },
     { href: '/graph', label: $t('nav.graph'), icon: 'Network', status: 'dev' },
     { href: '/skills', label: $t('nav.skills'), icon: 'Zap', status: 'dev' },
-    { href: '/ai', label: $t('nav.ai'), icon: 'Brain', status: 'ready' },
+    { href: '/ai', label: $t('nav.ai'), icon: 'Brain', status: 'dev' },
     { href: '/goals', label: $t('nav.goals'), icon: 'Target', status: 'ready' },
     { href: '/streaks', label: $t('nav.streaks'), icon: 'Flame', status: 'ready' },
     { href: '/analytics', label: $t('nav.analytics'), icon: 'BarChart3', status: 'ready' },
