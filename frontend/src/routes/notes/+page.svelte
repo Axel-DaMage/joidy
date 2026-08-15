@@ -384,6 +384,17 @@
     });
   }
 
+  // Restore scroll position as soon as the scroll container is available
+  // and prefs are loaded — avoids the flash at scrollTop=0 before the
+  // saved position is applied.
+  let scrollRestored = false;
+  $: if (notesPrefsReady && listScrollEl && !scrollRestored) {
+    scrollRestored = true;
+    const snap = getSnapshot('/notes');
+    const snapScroll = snap?.scrollPositions;
+    listScrollEl.scrollTop = snapScroll?.['notes-list'] ?? (viewMode === 'tree' ? treeScrollTop : listScrollTop);
+  }
+
   onMount(async () => {
     try {
       const config = await api.config.get();
@@ -442,11 +453,6 @@
       } else if (typeof saved?.selectedNoteId === 'number') {
         const n = $notes.find(note => note.id === saved.selectedNoteId);
         if (n) openNote(n);
-      }
-      await tick();
-      if (listScrollEl) {
-        const snapScroll = snap?.scrollPositions;
-        listScrollEl.scrollTop = snapScroll?.['notes-list'] ?? (viewMode === 'tree' ? treeScrollTop : listScrollTop);
       }
     });
 
