@@ -164,6 +164,28 @@
     loadGitHubData(ghFilter);
   }
 
+  /** Re-check GitHub connection status and reload data (used when the user
+   *  connects/disconnects GitHub from the Settings panel). */
+  async function refreshGithubFromEvent() {
+    try {
+      const status = await api.github.status();
+      githubConnected = status.connected;
+      if (githubConnected) {
+        const [reposRes] = await Promise.all([
+          api.github.repos(),
+          loadGitHubData(ghFilter),
+        ]);
+        repoColors = Object.fromEntries((reposRes.repos || []).map((r: any) => [r.full_name, r.color || 'var(--accent)']));
+      } else {
+        githubIssues = [];
+        githubPRs = [];
+        clearGithubCache();
+      }
+    } catch (e) {
+      logger.error('GitHub refresh error:', e);
+    }
+  }
+
   $: isWilted = (() => {
     if (!$lastActivity) return false;
     const last = new Date($lastActivity);
@@ -228,13 +250,17 @@
     });
 
     window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('joidy:github-connected', refreshGithubFromEvent);
+    window.addEventListener('joidy:github-disconnected', refreshGithubFromEvent);
   });
 
   function handleBeforeUnload() {
     const scrollEls = document.querySelectorAll('[id^="panel-"]');
-    captureSnapshot('/', { moduleIdx, slideDir }, 
+    captureSnapshot('/', { moduleIdx, slideDir },
       Array.from(scrollEls).map(el => ({ id: el.id, scrollTop: (el as HTMLElement).scrollTop }))
     );
+    window.removeEventListener('joidy:github-connected', refreshGithubFromEvent);
+    window.removeEventListener('joidy:github-disconnected', refreshGithubFromEvent);
   }
 
   $: if (modulePrefsReady && MODULES[moduleIdx]) {

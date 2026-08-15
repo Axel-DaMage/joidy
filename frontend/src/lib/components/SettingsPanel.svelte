@@ -177,6 +177,9 @@
         await checkGithubStatus();
         clearGithubAuth();
         showNotification('GitHub conectado correctamente', 'success');
+        // Notify other components (e.g. the dashboard) to refresh GitHub data
+        // without requiring a manual page reload.
+        window.dispatchEvent(new CustomEvent('joidy:github-connected'));
         return;
       }
       if (result.status === 'denied') {
@@ -212,6 +215,7 @@
     await api.config.update({ github_token: '', github_username: '' });
     await checkGithubStatus();
     showNotification('GitHub desconectado', 'info');
+    window.dispatchEvent(new CustomEvent('joidy:github-disconnected'));
   }
 
   async function openGoogleCalendarLink() {
@@ -705,7 +709,7 @@
             {#if githubAuthLoading}
               <span class="mono" style="font-size:12px; color: var(--text-muted);">
                 {#if githubUserCode}
-                  Código: <code style="margin-left:4px;">{githubUserCode}</code>
+                  Código: <code style="margin-left:4px; color: var(--accent); font-weight:600; letter-spacing:0.05em;">{githubUserCode}</code>
                 {:else}
                   Conectando…
                 {/if}
@@ -725,15 +729,7 @@
               >
             {/if}
           </div>
-          {#if githubAuthLoading && githubUserCode}
-            <p class="hint">
-              Abre <a href={githubVerificationUri} target="_blank">{githubVerificationUri}</a> e
-              introduce el código <code>{githubUserCode}</code> para autorizar a Joidy.
-              {#if githubAuthError}
-                <br /><span style="color:var(--danger)">{githubAuthError}</span>
-              {/if}
-            </p>
-          {:else if githubAuthError && !githubAuthLoading}
+          {#if githubAuthError && !githubAuthLoading}
             <p class="hint" style="color:var(--danger)">{githubAuthError}</p>
           {/if}
           {#if $devMode}
