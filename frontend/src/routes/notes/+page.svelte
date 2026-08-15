@@ -1708,12 +1708,13 @@
   @media (max-width: 768px) {
     .notes-page {
       grid-template-columns: 1fr;
-      grid-template-rows: auto 1fr;
+      grid-template-rows: auto;
     }
 
     .notes-list {
-      max-height: 40vh;
+      max-height: none;
       border-bottom: 1px solid var(--border);
+      overflow: visible;
     }
 
     .resize-handle {
@@ -1721,7 +1722,8 @@
     }
 
     .editor-panel {
-      height: 100%;
+      height: auto;
+      overflow: visible;
     }
 
     .empty-dashboard {
@@ -1763,7 +1765,7 @@
 
   @media (max-width: 480px) {
     .notes-list {
-      max-height: 35vh;
+      max-height: none;
     }
 
     .empty-dashboard {

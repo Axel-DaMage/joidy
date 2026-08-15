@@ -997,7 +997,7 @@
   @media (max-width: 768px) {
     .streaks-layout {
       grid-template-columns: 1fr;
-      grid-template-rows: auto 1fr;
+      grid-template-rows: auto;
     }
 
     .resize-handle.static {

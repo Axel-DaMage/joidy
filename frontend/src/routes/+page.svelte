@@ -466,6 +466,17 @@
     background: var(--bg);
   }
 
+  /* Mobile: allow natural flow */
+  @media (max-width: 768px) {
+    .plant-section {
+      overflow: visible;
+      padding: var(--s3) var(--s3) var(--s4);
+    }
+    .activity-section {
+      overflow: visible;
+    }
+  }
+
   /* ── Module navigation ── */
   .module-nav {
     display: flex;
@@ -623,12 +634,13 @@
   @media (max-width: 768px) {
     .dashboard {
       grid-template-columns: 1fr;
-      grid-template-rows: auto auto 1fr;
+      grid-template-rows: auto;
     }
 
     .plant-section {
       padding: var(--s3) var(--s3) var(--s2);
       gap: var(--s2);
+      overflow: visible;
     }
 
     .resize-handle.static {
@@ -636,7 +648,7 @@
     }
 
     .activity-section {
-      overflow-y: auto;
+      overflow: visible;
     }
 
     .stats-row {
