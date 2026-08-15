@@ -2174,7 +2174,7 @@
     border: 1px solid var(--border);
     border-radius: var(--r);
     background: var(--surface-hover);
-    padding: 8px;
+    padding: var(--s2);
   }
   .ng-picker-field > :global(*) {
     height: 100%;
@@ -2291,7 +2291,7 @@
   @media (max-width: 900px) {
     .ng-columns {
       grid-template-columns: 1fr;
-      gap: 16px;
+      gap: var(--s4);
     }
     .ng-col-title {
       text-align: left;
@@ -2303,7 +2303,7 @@
   @media (max-width: 640px) {
     .new-goal-panel {
       max-height: calc(100vh - 16px);
-      border-radius: 8px;
+      border-radius: var(--r-lg);
     }
     .new-goal-header,
     .new-goal-body,
@@ -3172,7 +3172,7 @@
     /* Today tab: stack sidebar below main content */
     .today-layout {
       grid-template-columns: 1fr;
-      gap: 16px;
+      gap: var(--s4);
     }
     /* Analytics projection: stack 2-col grid */
     .projection-content {

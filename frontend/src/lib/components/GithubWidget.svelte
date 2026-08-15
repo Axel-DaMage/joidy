@@ -221,7 +221,7 @@
     .github-header {
       flex-direction: column;
       align-items: stretch;
-      gap: 8px;
+      gap: var(--s2);
       min-height: auto;
       padding: var(--s2) var(--s3);
     }
@@ -241,7 +241,7 @@
   @media (max-width: 480px) {
     .gh-filters {
       flex-direction: column;
-      gap: 4px;
+      gap: var(--s1);
     }
     .filter-btn {
       width: 100%;

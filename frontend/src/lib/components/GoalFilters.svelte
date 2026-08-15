@@ -136,9 +136,9 @@
   @media (max-width: 768px) {
     .editor-header {
       flex-direction: column;
-      gap: 12px;
+      gap: var(--s3);
       align-items: flex-start;
-      padding: 12px var(--s3);
+      padding: var(--s3) var(--s3);
     }
     .search-box input {
       width: 100%;
@@ -156,10 +156,10 @@
     }
     .filter-buttons {
       flex-wrap: wrap;
-      gap: 4px;
+      gap: var(--s1);
     }
     .filter-btn {
-      padding: 8px 10px;
+      padding: var(--s2) 10px;
       font-size: 11px;
     }
   }

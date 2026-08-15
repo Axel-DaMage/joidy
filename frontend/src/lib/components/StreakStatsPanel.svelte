@@ -75,7 +75,7 @@
   @media (max-width: 480px) {
     .stats-grid {
       grid-template-columns: repeat(3, 1fr);
-      gap: 4px;
+      gap: var(--s1);
     }
     .stat-block {
       padding: 6px 2px;

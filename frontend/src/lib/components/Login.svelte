@@ -159,10 +159,10 @@
 
   @media (max-width: 480px) {
     .login-wrapper {
-      padding: 16px;
+      padding: var(--s4);
     }
     .login-card {
-      padding: 24px 20px;
+      padding: var(--s5) 20px;
       border-radius: var(--r);
     }
     .logo {
@@ -173,7 +173,7 @@
       margin-bottom: 20px;
     }
     .input {
-      padding: 12px 14px;
+      padding: var(--s3) 14px;
       font-size: 16px; /* prevents iOS zoom on focus */
     }
     .btn-primary {

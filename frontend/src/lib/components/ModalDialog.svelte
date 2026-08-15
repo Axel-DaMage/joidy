@@ -141,7 +141,7 @@
 
   @media (max-width: 480px) {
     .modal-overlay {
-      padding: 8px;
+      padding: var(--s2);
     }
     .modal {
       max-height: calc(100vh - 16px);

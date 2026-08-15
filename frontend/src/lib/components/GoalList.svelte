@@ -117,7 +117,7 @@
   @media (max-width: 480px) {
     .editor-grid {
       grid-template-columns: 1fr;
-      gap: 12px;
+      gap: var(--s3);
     }
   }
 </style>

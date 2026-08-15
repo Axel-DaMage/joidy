@@ -416,8 +416,8 @@
   @media (max-width: 560px) {
     .cp-backdrop {
       padding-top: 8vh;
-      padding-left: 8px;
-      padding-right: 8px;
+      padding-left: var(--s2);
+      padding-right: var(--s2);
     }
     .cp-modal {
       max-width: 100%;
@@ -425,7 +425,7 @@
       border-radius: var(--r);
     }
     .cp-item {
-      padding: 14px 16px;
+      padding: 14px var(--s4);
     }
     .cp-item-title {
       font-size: 14px;
