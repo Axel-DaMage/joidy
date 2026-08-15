@@ -642,14 +642,16 @@
 
     <!-- Status bar -->
     <footer class="app-statusbar">
-      <span
-        style="color: var(--text-muted); cursor: pointer;"
+      <button
+        type="button"
+        class="statusbar-version-btn"
         title={$t('layout.testNotification')}
+        aria-label={$t('layout.testNotification')}
         onclick={() => {
           showNotification($t('layout.testNotifInfo'), 'info');
           setTimeout(() => showNotification($t('layout.testNotifSuccess'), 'success'), 600);
           setTimeout(() => showNotification($t('layout.testNotifLevel'), 'level'), 1200);
-        }}>joidy v0.1</span
+        }}>joidy v0.1</button
       >
 
       <div class="status-live" title={$t('layout.currentStatus')}>
@@ -694,6 +696,15 @@
 {/if}
 
 <style>
+  .statusbar-version-btn {
+    color: var(--text-muted);
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+  }
+
   .pwa-banner {
     display: flex;
     align-items: center;
