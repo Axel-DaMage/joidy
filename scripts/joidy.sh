@@ -67,7 +67,8 @@ cmd_down() {
 cmd_sleep() {
   print_status "Hibernating heavy services (ai-service, worker)..."
   for svc in $HIBERNATE_SERVICES; do
-    if docker compose ps --status running "$svc" 2>/dev/null | grep -q "$svc"; then
+    # Check if the service is running by looking at docker compose ps output
+    if docker compose ps "$svc" 2>/dev/null | grep -q "$svc"; then
       docker compose stop "$svc"
       print_ok "Stopped $svc"
     else
@@ -82,11 +83,16 @@ cmd_sleep() {
 cmd_wake() {
   print_status "Waking heavy services from hibernation..."
   for svc in $HIBERNATE_SERVICES; do
-    if docker compose ps --status stopped "$svc" 2>/dev/null | grep -q "$svc"; then
-      docker compose start "$svc"
-      print_ok "Started $svc"
+    # Check if the service is NOT running (use -a to include stopped containers)
+    if docker compose ps -a "$svc" 2>/dev/null | grep -q "$svc"; then
+      if docker compose ps "$svc" 2>/dev/null | grep -q "$svc"; then
+        print_warn "$svc is already running"
+      else
+        docker compose start "$svc"
+        print_ok "Started $svc"
+      fi
     else
-      print_warn "$svc is already running"
+      print_warn "$svc container not found"
     fi
   done
   echo ""

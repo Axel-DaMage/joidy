@@ -54,7 +54,7 @@ function Invoke-Down {
 function Invoke-Sleep {
   Write-Status "Hibernating heavy services (ai-service, worker)..."
   foreach ($svc in $HIBERNATE_SERVICES) {
-    $running = docker compose ps --status running $svc 2>$null
+    $running = docker compose ps $svc 2>$null
     if ($running -match $svc) {
       docker compose stop $svc
       Write-Ok "Stopped $svc"
@@ -70,12 +70,17 @@ function Invoke-Sleep {
 function Invoke-Wake {
   Write-Status "Waking heavy services from hibernation..."
   foreach ($svc in $HIBERNATE_SERVICES) {
-    $stopped = docker compose ps --status stopped $svc 2>$null
-    if ($stopped -match $svc) {
-      docker compose start $svc
-      Write-Ok "Started $svc"
+    $all = docker compose ps -a $svc 2>$null
+    if ($all -match $svc) {
+      $running = docker compose ps $svc 2>$null
+      if ($running -match $svc) {
+        Write-Warn "$svc is already running"
+      } else {
+        docker compose start $svc
+        Write-Ok "Started $svc"
+      }
     } else {
-      Write-Warn "$svc is already running"
+      Write-Warn "$svc container not found"
     }
   }
   Write-Host ""
