@@ -566,8 +566,10 @@ textarea.input {
   }
 
   .app-main {
-    overflow: auto;
+    overflow-y: auto;
+    overflow-x: hidden;
     display: block;
+    -webkit-overflow-scrolling: touch;
   }
 
   .app-statusbar {
