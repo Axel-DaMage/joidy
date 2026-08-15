@@ -415,7 +415,7 @@
     "file": "Attach file",
     "zenMode": "Zen Mode (Esc to exit)",
     "zenModeShort": "Zen Mode",
-    "wysiwyg": "Visual editor (WYSIWYG)"
+    "splitView": "Split view: editor + preview (Ctrl+Shift+V)"
   },
   "goalEditor": {
     "previewPlaceholder": "Write something to see the preview...",

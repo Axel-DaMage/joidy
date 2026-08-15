@@ -415,7 +415,7 @@
     "file": "Adjuntar archivo",
     "zenMode": "Modo Zen (Esc para salir)",
     "zenModeShort": "Modo Zen",
-    "wysiwyg": "Editor visual (WYSIWYG)"
+    "splitView": "Vista dividida: editor + preview (Ctrl+Shift+V)"
   },
   "goalEditor": {
     "previewPlaceholder": "Escribe algo para ver el preview...",

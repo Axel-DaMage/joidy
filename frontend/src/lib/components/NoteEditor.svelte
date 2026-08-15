@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher, onDestroy, onMount, tick, untrack } from 'svelte';
-  import { Eye, EyeOff, Save, Trash2, X, Settings, Search, Maximize, ChevronLeft, ChevronRight, Download, RotateCcw, Bold, Italic, Strikethrough, Heading1, Heading2, Heading3, List, ListOrdered, Link, Quote, Code, Image, Paperclip } from 'lucide-svelte';
+  import { Eye, EyeOff, Save, Trash2, X, Settings, Search, Maximize, ChevronLeft, ChevronRight, Download, RotateCcw, Bold, Italic, Strikethrough, Heading1, Heading2, Heading3, List, ListOrdered, Link, Quote, Code, Image, Paperclip, Columns } from 'lucide-svelte';
   import DynamicIcon from './DynamicIcon.svelte';
   import LazyIconPicker from './LazyIconPicker.svelte';
   import 'highlight.js/styles/github-dark.css';
@@ -14,7 +14,6 @@
   import { extractFrontmatter, getFileIcon } from '$lib/utils/fileTree';
   import { downloadMarkdown, downloadHTML, copyNoteAsMarkdown } from '$lib/utils/export';
   import { showNotification } from '$lib/stores/gamification';
-  import WysiwygEditor from './WysiwygEditor.svelte';
   import { t } from 'svelte-i18n';
 
   const AUTOSAVE_DELAY = 2000;
@@ -89,8 +88,10 @@
   let saving = $state(false);
   let saved = $state(false);
   let previewMode = $state(false);
-  let wysiwygMode = $state(false);
-  let wysiwygRef = $state<WysiwygEditor | undefined>();
+  // Split view: markdown editor + live rendered preview side by side. Distinct
+  // from `previewMode` (full-width read-only rendered markdown). The two modes
+  // are mutually exclusive — see toggleSplit/togglePreview (#704).
+  let splitMode = $state(false);
   let aiTimeout: ReturnType<typeof setTimeout>;
   let autosaveTimer: ReturnType<typeof setTimeout> | undefined;
   let hasUnsavedChanges = $state(false);
@@ -335,25 +336,6 @@
     }, 2000);
   }
 
-  function handleWysiwygChange(e: CustomEvent<string>) {
-    const md = e.detail;
-    scheduleSnapshot();
-    let nextContent = md;
-
-    if ($hideTagsLine && tags.length > 0 && currentTagsLine) {
-      if (!nextContent.includes(currentTagsLine)) {
-        nextContent = nextContent.trim() + '\n\n' + currentTagsLine;
-      }
-    }
-
-    if (!$showFrontmatter && rawFrontmatter) {
-      nextContent = rawFrontmatter + '\n\n' + nextContent.trim();
-    }
-
-    content = nextContent;
-    onContentChange();
-  }
-
   function acceptSuggestion(tag: string) {
     addTag(tag);
     aiSuggestions.update(s => s.filter(x => x.tag !== tag));
@@ -464,6 +446,19 @@
     handleSave();
   }
 
+  // Preview and split are mutually exclusive view modes (#704):
+  //   - previewMode = full-width read-only rendered markdown
+  //   - splitMode   = markdown editor + live rendered preview side by side
+  function togglePreview() {
+    previewMode = !previewMode;
+    if (previewMode) splitMode = false;
+  }
+
+  function toggleSplit() {
+    splitMode = !splitMode;
+    if (splitMode) previewMode = false;
+  }
+
   function onKeydown(e: KeyboardEvent) {
     if ((e.ctrlKey || e.metaKey) && e.key === 's') {
       e.preventDefault();
@@ -471,11 +466,11 @@
     }
     if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
       e.preventDefault();
-      previewMode = !previewMode;
+      togglePreview();
     }
     if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'v') {
       e.preventDefault();
-      wysiwygMode = !wysiwygMode;
+      toggleSplit();
     }
     if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
       if (e.shiftKey) {
@@ -554,25 +549,6 @@
   };
 
   function formatMarkdown(type: string) {
-    if (wysiwygMode && wysiwygRef) {
-      switch (type) {
-        case 'bold': wysiwygRef.toggleBold(); break;
-        case 'italic': wysiwygRef.toggleItalic(); break;
-        case 'strikethrough': wysiwygRef.toggleStrike(); break;
-        case 'h1': wysiwygRef.toggleH1(); break;
-        case 'h2': wysiwygRef.toggleH2(); break;
-        case 'h3': wysiwygRef.toggleH3(); break;
-        case 'ul': wysiwygRef.toggleBulletList(); break;
-        case 'ol': wysiwygRef.toggleOrderedList(); break;
-        case 'link':
-          const url = prompt('URL del enlace:');
-          if (url) wysiwygRef.setLink(url);
-          break;
-        case 'quote': wysiwygRef.toggleBlockquote(); break;
-        case 'code': wysiwygRef.toggleCodeBlock(); break;
-      }
-      return;
-    }
     if (!textareaEl) return;
     const { selectionStart, selectionEnd } = textareaEl;
     const selected = content.substring(selectionStart, selectionEnd);
@@ -611,10 +587,6 @@
   }
 
   function insertAtCursor(text: string) {
-    if (wysiwygMode && wysiwygRef) {
-      wysiwygRef.insertContent(text);
-      return;
-    }
     if (!textareaEl) return;
     const { selectionStart, selectionEnd } = textareaEl;
     const before = content.substring(0, selectionStart);
@@ -831,18 +803,18 @@
 
       <button
         class="toolbar-btn"
-        class:active={wysiwygMode}
-        onclick={() => wysiwygMode = !wysiwygMode}
-        title={$t('noteEditor.wysiwyg')}
+        class:active={splitMode}
+        onclick={toggleSplit}
+        title={$t('noteEditor.splitView')}
       >
-        <Eye size={14} />
-        <span>{wysiwygMode ? 'Raw' : 'Visual'}</span>
+        <Columns size={14} />
+        <span>{splitMode ? 'Editor' : 'Split'}</span>
       </button>
 
       <button
         class="toolbar-btn"
         class:active={previewMode}
-        onclick={() => previewMode = !previewMode}
+        onclick={togglePreview}
         title="Alternar preview (Ctrl+P)"
       >
         {#if previewMode}<EyeOff size={14} />{:else}<Eye size={14} />{/if}
@@ -1004,16 +976,8 @@
           </div>
         {/if}
       </div>
-    {:else if wysiwygMode}
-      <WysiwygEditor
-        bind:this={wysiwygRef}
-        content={visibleEditorContent}
-        placeholder="Escribe algo... (Ctrl+S para guardar)"
-        oncontentchange={handleWysiwygChange}
-        onsave={handleSave}
-      />
     {:else}
-      <div class="editor-container">
+      <div class="editor-container" class:split={splitMode}>
         <div class="line-gutter" bind:this={lineGutterEl} aria-hidden="true">
           {#each lineNumbers as line}
             <div class="line-number">{line}</div>
@@ -1032,6 +996,17 @@
           spellcheck="false"
         ></textarea>
       </div>
+      {#if splitMode}
+        <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+        <div
+          class="preview split-preview"
+          onclick={handlePreviewClick}
+          role="region"
+          aria-label="Vista previa"
+        >
+          {@html renderedHtml}
+        </div>
+      {/if}
     {/if}
   </div>
 
@@ -1369,6 +1344,20 @@
     width: 100%;
     height: 100%;
     overflow: hidden;
+  }
+
+  /* Split view: editor + live preview side by side (#704) */
+  .editor-container.split {
+    flex: 1 1 50%;
+    min-width: 0;
+    border-right: 1px solid var(--border);
+  }
+
+  .split-preview {
+    flex: 1 1 50%;
+    min-width: 0;
+    overflow-y: auto;
+    border-top: none;
   }
 
   .line-gutter {

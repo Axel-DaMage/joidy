@@ -50,7 +50,7 @@ export default defineConfig({
           // Visualization: d3 + force-graph (used by SkillTree, KnowledgeGraph)
           if (id.includes('/d3/') || id.includes('/force-graph/')) return 'd3';
           // Markdown rendering: marked + dompurify + highlight.js (used by
-          // NoteEditor, GoalEditor, ChatInterface, WysiwygEditor)
+          // NoteEditor, GoalEditor, ChatInterface)
           if (
             id.includes('/marked/') ||
             id.includes('/dompurify/') ||
@@ -58,8 +58,6 @@ export default defineConfig({
           ) {
             return 'markdown';
           }
-          // Rich text editor: TipTap + extensions (used by WysiwygEditor)
-          if (id.includes('/@tiptap/')) return 'tiptap';
         },
       },
     },
