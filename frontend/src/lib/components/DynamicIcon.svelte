@@ -1,7 +1,7 @@
 <script lang="ts">
   import { activeIconPack } from '$lib/stores/settings';
   import { Circle } from 'lucide-svelte';
-  import { loadLucideIcon } from '$lib/utils/lucideIcons';
+  import { getLucideIcon } from '$lib/utils/lucideIcons';
 
   export let name: string;
   export let size: number = 18;
@@ -63,22 +63,16 @@
     Wrench: PWrench,
   };
 
-  // Lucide icons are loaded on demand via dynamic import so the whole icon
-  // library is no longer bundled into the main chunk (#209). A `Circle`
-  // placeholder is shown until the requested icon chunk resolves.
+  // Lucide icons are resolved synchronously from the bundled namespace
+  // import — no async placeholder flicker (#693). Falls back to `Circle`
+  // for unknown names.
   let comp: any = Circle;
-  let _req = 0;
-
   $: {
-    const req = ++_req;
     const packName = pack || $activeIconPack;
     if (packName === 'phosphor' || packName === 'material') {
       comp = phosphorMap[name] || Circle;
     } else {
-      loadLucideIcon(name).then((loaded) => {
-        // Guard against stale loads when `name`/`pack` change quickly.
-        if (req === _req) comp = loaded ?? Circle;
-      });
+      comp = getLucideIcon(name) ?? Circle;
     }
   }
 </script>
