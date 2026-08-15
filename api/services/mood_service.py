@@ -3,11 +3,12 @@
 from datetime import date, datetime, timedelta, timezone
 
 from models.mood_entry import MoodEntry
+from services.timezone_utils import get_local_today
 from sqlalchemy.orm import Session
 
 
 def _today() -> date:
-    return datetime.now(timezone.utc).date()
+    return get_local_today()
 
 
 def create_or_update_mood(db: Session, user_id: int, score: int, note: str | None = None) -> MoodEntry:

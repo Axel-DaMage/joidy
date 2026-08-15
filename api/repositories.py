@@ -32,6 +32,7 @@ from models.note import (
 from models.personal_streaks import PersonalStreak, StreakCheckIn
 from models.planning import PlanningAssignment
 from models.skill import Skill
+from services.timezone_utils import get_local_today
 
 ModelT = TypeVar("ModelT")
 
@@ -301,7 +302,7 @@ class StreakRecordRepository(BaseRepository[StreakRecord]):
         super().__init__(db, StreakRecord)
 
     def get_today(self) -> StreakRecord | None:
-        today = datetime.now(timezone.utc).date()
+        today = get_local_today()
         return (
             self._db.query(StreakRecord)
             .filter(StreakRecord.activity_date == today)

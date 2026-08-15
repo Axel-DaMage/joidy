@@ -8,6 +8,7 @@ from models.gamification import UserStats
 from models.note import Note, NoteTag, Tag
 from pydantic import BaseModel
 from services.auth_service import get_current_user
+from services.timezone_utils import get_local_today, to_utc_datetime
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from datetime import datetime, date, timedelta, timezone
@@ -80,15 +81,17 @@ async def daily_recap(
     then asks the ai-service to generate a natural-language summary.
     """
     if target_date is None:
-        target_date = date.today().isoformat()
+        target_date = get_local_today().isoformat()
 
     try:
         day = datetime.strptime(target_date, "%Y-%m-%d").date()
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid date format, use YYYY-MM-DD")
 
-    start = datetime.combine(day, datetime.min.time(), tzinfo=timezone.utc)
-    end = start + timedelta(days=1)
+    # Query the DB using UTC boundaries that correspond to the user-local day,
+    # since created_at/updated_at/completed_at are stored as UTC timestamps.
+    start = to_utc_datetime(day)
+    end = to_utc_datetime(day + timedelta(days=1))
 
     # Gather the day's activity from the DB
     notes_created = db.query(Note).filter(Note.created_at >= start, Note.created_at < end).all()

@@ -12,6 +12,7 @@ from models.gamification import StreakRecord, UserStats
 from models.goal import Goal
 from models.note import NoteTag, Tag
 from models.skill import Skill
+from services.timezone_utils import get_local_today
 from sqlalchemy.orm import Session
 
 JOIDY_DIR = "_joidy"
@@ -190,7 +191,7 @@ def write_daily(db: Session, target_date: date | None = None) -> bool:
     if not vault:
         return False
 
-    today = target_date or datetime.now(timezone.utc).date()
+    today = target_date or get_local_today()
     daily_dir = vault / JOIDY_DIR / "daily"
     daily_dir.mkdir(parents=True, exist_ok=True)
     filepath = daily_dir / f"{today.isoformat()}.md"

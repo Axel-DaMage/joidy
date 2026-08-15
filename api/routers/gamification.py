@@ -3,6 +3,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends
 from models.gamification import StreakRecord, UserStats, XPEvent
 from services.gamification_engine import PLANT_STAGES, process_event
 from services.response_cache import clear_api_caches, register_cache_clearer, ttl_cache
+from services.timezone_utils import get_local_today
 from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/gamification", tags=["gamification"])
@@ -24,8 +25,7 @@ def _cached_stats(db: Session):
     next_stage_xp = PLANT_STAGES[stats.plant_stage + 1][0] if stats.plant_stage + 1 < len(PLANT_STAGES) else None
 
     # Heal: active today but streak still at 0 (written by old buggy engine)
-    from datetime import datetime, timezone
-    if stats.current_streak == 0 and stats.last_activity_date == datetime.now(timezone.utc).date():
+    if stats.current_streak == 0 and stats.last_activity_date == get_local_today():
         stats.current_streak = 1
         if stats.longest_streak < 1:
             stats.longest_streak = 1
