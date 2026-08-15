@@ -166,7 +166,7 @@
   .clock {
     font-size: 22px;
     font-weight: 300;
-    color: var(--text-secondary);
+    color: var(--text-primary);
     letter-spacing: 0.08em;
     cursor: pointer;
     transition: color var(--t-fast);
