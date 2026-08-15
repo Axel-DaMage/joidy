@@ -152,6 +152,10 @@
   .github-body {
     --gh-item-h: 48px;
     height: calc(var(--gh-item-h) * var(--gh-items-max));
+    overflow-y: auto;
+  }
+  .github-body:has(.empty-state) {
+    height: auto;
   }
   .gh-item {
     display: flex; align-items: center; gap: 8px;
@@ -215,5 +219,44 @@
     0% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.45); opacity: 1; }
     70% { box-shadow: 0 0 0 6px rgba(99, 102, 241, 0); opacity: 0.6; }
     100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); opacity: 1; }
+  }
+
+  @media (max-width: 768px) {
+    .github-header {
+      flex-direction: column;
+      align-items: stretch;
+      gap: var(--s2);
+      min-height: auto;
+      padding: var(--s2) var(--s3);
+    }
+    .gh-filters {
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .filter-btn {
+      min-width: 48px;
+    }
+    .github-body {
+      --gh-item-h: 40px;
+      max-height: 280px;
+    }
+    .github-summary {
+      gap: var(--s3);
+      padding: var(--s3);
+    }
+  }
+
+  @media (max-width: 480px) {
+    .gh-filters {
+      flex-direction: column;
+      gap: var(--s1);
+    }
+    .filter-btn {
+      width: 100%;
+      min-width: unset;
+    }
+    .gh-filter-divider {
+      display: none;
+    }
   }
 </style>

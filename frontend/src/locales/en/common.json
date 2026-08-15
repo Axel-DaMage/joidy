@@ -81,27 +81,6 @@
     "language": "Language",
     "languageHint": "The interface language"
   },
-  "power": {
-    "title": "Power & System",
-    "status": "Service Status",
-    "hibernate": "Hibernate",
-    "wake": "Wake",
-    "shutdown": "Shutdown",
-    "hibernateHint": "Stop AI service and worker to save resources. API, frontend, and database stay running.",
-    "shutdownHint": "Stop all services. You will need to run 'joidy up' in your terminal to restart.",
-    "shutdownConfirm": "Are you sure you want to shut down all services? You will need the CLI to restart.",
-    "dockerUnavailable": "Docker socket not available. Use the CLI ('joidy' command) to manage services.",
-    "running": "Running",
-    "stopped": "Stopped",
-    "healthy": "Healthy",
-    "unhealthy": "Unhealthy",
-    "refreshing": "Refreshing...",
-    "refresh": "Refresh",
-    "hibernating": "Hibernating",
-    "allRunning": "All services running",
-    "actionDone": "Done",
-    "actionFailed": "Failed"
-  },
   "quickCapture": {
     "placeholder": "Capture a quick idea...",
     "defaultTitle": "Quick note",

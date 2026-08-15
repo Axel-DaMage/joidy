@@ -72,6 +72,26 @@
     gap: 8px;
   }
 
+  @media (max-width: 480px) {
+    .stats-grid {
+      grid-template-columns: repeat(3, 1fr);
+      gap: var(--s1);
+    }
+    .stat-block {
+      padding: var(--s1_5) var(--s0_5);
+    }
+    .stat-val {
+      font-size: 15px;
+    }
+  }
+
+  @media (max-width: 360px) {
+    .stats-grid {
+      grid-template-columns: 1fr;
+      gap: var(--s1_5);
+    }
+  }
+
   .stat-block {
     display: flex;
     flex-direction: column;

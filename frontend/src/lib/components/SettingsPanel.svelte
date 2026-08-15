@@ -24,7 +24,6 @@
   import { locale as localeStore, setLocale } from '$lib/stores/locale';
   import { t } from 'svelte-i18n';
   import { mapToSupportedLocale, SUPPORTED_LOCALES, type SupportedLocale } from '$lib/i18n';
-  import { Power, Moon, Sun, PowerOff, RefreshCw, CheckCircle, XCircle, Loader2 } from 'lucide-svelte';
 
   export let open = false;
 
@@ -53,14 +52,6 @@
   let gmailConnected = false;
   let gmailEmail = '';
 
-  // Power management state
-  let powerStatus: { docker_available: boolean; services: { name: string; status: string; healthy: boolean | null }[]; hibernating: boolean } | null = null;
-  let powerLoading = false;
-  let powerActionLoading: 'sleep' | 'wake' | 'shutdown' | null = null;
-  let powerMessage = '';
-  let powerError = '';
-  let powerStatusAttempted = false;
-
   let systemConfig = {
     gemini_api_key: '',
     obsidian_vault_path: '',
@@ -81,81 +72,6 @@
 
   $: if (open && !configLoaded) {
     loadConfig();
-  }
-
-  $: if (open && !powerStatusAttempted && !powerLoading) {
-    refreshPowerStatus();
-  }
-
-  async function refreshPowerStatus() {
-    powerLoading = true;
-    powerError = '';
-    powerStatusAttempted = true;
-    try {
-      powerStatus = await api.system.power.status();
-    } catch (e: any) {
-      powerError = e?.message || 'Failed to load power status';
-      powerStatus = null;
-    } finally {
-      powerLoading = false;
-    }
-  }
-
-  async function doHibernate() {
-    powerActionLoading = 'sleep';
-    powerMessage = '';
-    powerError = '';
-    try {
-      const res = await api.system.power.sleep();
-      powerMessage = res.message;
-      await refreshPowerStatus();
-    } catch (e: any) {
-      powerError = e?.message || 'Hibernate failed';
-    } finally {
-      powerActionLoading = null;
-    }
-  }
-
-  async function doWake() {
-    powerActionLoading = 'wake';
-    powerMessage = '';
-    powerError = '';
-    try {
-      const res = await api.system.power.wake();
-      powerMessage = res.message;
-      await refreshPowerStatus();
-    } catch (e: any) {
-      powerError = e?.message || 'Wake failed';
-    } finally {
-      powerActionLoading = null;
-    }
-  }
-
-  async function doShutdown() {
-    if (!confirm($t('power.shutdownConfirm'))) return;
-    powerActionLoading = 'shutdown';
-    powerMessage = '';
-    powerError = '';
-    try {
-      const res = await api.system.power.shutdown();
-      powerMessage = res.message;
-      await refreshPowerStatus();
-    } catch (e: any) {
-      powerError = e?.message || 'Shutdown failed';
-    } finally {
-      powerActionLoading = null;
-    }
-  }
-
-  function serviceLabel(name: string): string {
-    const labels: Record<string, string> = {
-      'postgres': 'PostgreSQL',
-      'api': 'API',
-      'ai-service': 'AI Service',
-      'worker': 'Worker',
-      'frontend': 'Frontend',
-    };
-    return labels[name] ?? name;
   }
 
   function handleKeydown(e: KeyboardEvent) {
@@ -917,78 +833,6 @@
           </div>
         </section>
 
-        <!-- Power & System -->
-        <section class="section">
-          <div class="section-title" style="color: var(--xp, var(--accent));">
-            <Power size={12} /> {$t('power.title')}
-          </div>
-
-          {#if powerLoading}
-            <div class="row"><span class="hint"><Loader2 size={13} class="spin" /> {$t('power.refreshing')}</span></div>
-          {:else if powerStatus && !powerStatus.docker_available}
-            <p class="hint">{$t('power.dockerUnavailable')}</p>
-          {:else if powerStatus}
-            <div class="power-services">
-              {#each powerStatus.services as svc (svc.name)}
-                <div class="power-service-row">
-                  <span class="power-service-name">{serviceLabel(svc.name)}</span>
-                  <span class="power-service-badge" class:running={svc.status === 'running'} class:stopped={svc.status !== 'running'}>
-                    {#if svc.status === 'running'}
-                      {#if svc.healthy === false}
-                        <XCircle size={11} /> {$t('power.unhealthy')}
-                      {:else}
-                        <CheckCircle size={11} /> {$t('power.running')}
-                      {/if}
-                    {:else}
-                      <XCircle size={11} /> {$t('power.stopped')}
-                    {/if}
-                  </span>
-                </div>
-              {/each}
-            </div>
-
-            {#if powerStatus.hibernating}
-              <p class="hint" style="color: var(--accent);">{$t('power.hibernating')}</p>
-            {:else if powerStatus.services.every(s => s.status === 'running')}
-              <p class="hint">{$t('power.allRunning')}</p>
-            {/if}
-
-            <div class="power-actions">
-              {#if powerStatus.hibernating}
-                <button class="power-btn wake-btn" onclick={doWake} disabled={powerActionLoading !== null}>
-                  {#if powerActionLoading === 'wake'}<Loader2 size={13} class="spin" />{:else}<Sun size={13} />{/if}
-                  {$t('power.wake')}
-                </button>
-              {:else}
-                <button class="power-btn sleep-btn" onclick={doHibernate} disabled={powerActionLoading !== null}>
-                  {#if powerActionLoading === 'sleep'}<Loader2 size={13} class="spin" />{:else}<Moon size={13} />{/if}
-                  {$t('power.hibernate')}
-                </button>
-              {/if}
-              <button class="power-btn shutdown-btn" onclick={doShutdown} disabled={powerActionLoading !== null}>
-                {#if powerActionLoading === 'shutdown'}<Loader2 size={13} class="spin" />{:else}<PowerOff size={13} />{/if}
-                {$t('power.shutdown')}
-              </button>
-              <button class="power-btn refresh-btn" onclick={refreshPowerStatus} disabled={powerLoading}>
-                <RefreshCw size={13} />
-                {$t('power.refresh')}
-              </button>
-            </div>
-
-            <p class="hint">{$t('power.hibernateHint')}</p>
-            <p class="hint" style="color: var(--danger, #e74c3c);">{$t('power.shutdownHint')}</p>
-
-            {#if powerMessage}
-              <p class="hint" style="color: var(--accent);">{powerMessage}</p>
-            {/if}
-            {#if powerError}
-              <p class="hint" style="color: var(--danger, #e74c3c);">{$t('power.actionFailed')}: {powerError}</p>
-            {/if}
-          {:else}
-            <p class="hint">{$t('power.dockerUnavailable')}</p>
-          {/if}
-        </section>
-
         <!-- Desarrollador -->
         <section class="section">
           <div class="section-title" style="color: var(--xp, var(--accent));">
@@ -1480,78 +1324,28 @@
     .panel {
       width: 100%;
     }
+    .panel-header,
+    .panel-footer {
+      padding-left: var(--s3);
+      padding-right: var(--s3);
+    }
+    .section {
+      padding: var(--s3);
+    }
+    .config-message-footer {
+      white-space: normal;
+    }
   }
 
-  /* ── Power Management ── */
-  .power-services {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    margin-bottom: 8px;
-  }
-  .power-service-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 4px 8px;
-    border-radius: 4px;
-    background: var(--surface-2, rgba(128, 128, 128, 0.08));
-    font-size: 12px;
-  }
-  .power-service-name {
-    color: var(--text-primary);
-    font-weight: 500;
-  }
-  .power-service-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 11px;
-    padding: 2px 6px;
-    border-radius: 3px;
-  }
-  .power-service-badge.running {
-    color: var(--success, #2ecc71);
-    background: rgba(46, 204, 113, 0.1);
-  }
-  .power-service-badge.stopped {
-    color: var(--text-secondary);
-    background: rgba(128, 128, 128, 0.1);
-  }
-  .power-actions {
-    display: flex;
-    gap: 6px;
-    flex-wrap: wrap;
-    margin: 8px 0;
-  }
-  .power-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    padding: 6px 12px;
-    border: 1px solid var(--border);
-    border-radius: 5px;
-    background: var(--surface-2, rgba(128, 128, 128, 0.06));
-    color: var(--text-primary);
-    font-size: 12px;
-    cursor: pointer;
-    transition: all 0.15s ease;
-  }
-  .power-btn:hover:not(:disabled) {
-    border-color: var(--accent);
-    background: var(--surface-3, rgba(128, 128, 128, 0.12));
-  }
-  .power-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-  .sleep-btn:hover:not(:disabled) { border-color: var(--accent, #3498db); }
-  .wake-btn:hover:not(:disabled) { border-color: var(--success, #2ecc71); }
-  .shutdown-btn:hover:not(:disabled) { border-color: var(--danger, #e74c3c); color: var(--danger, #e74c3c); }
-  .spin {
-    animation: spin 1s linear infinite;
-  }
-  @keyframes spin {
-    to { transform: rotate(360deg); }
+  @media (max-width: 380px) {
+    .panel-header {
+      padding: 10px var(--s2);
+    }
+    .section {
+      padding: var(--s2) var(--s3);
+    }
+    .toggle {
+      white-space: normal;
+    }
   }
 </style>

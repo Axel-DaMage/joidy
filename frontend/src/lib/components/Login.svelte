@@ -156,4 +156,36 @@
     opacity: 0.5;
     cursor: not-allowed;
   }
+
+  @media (max-width: 480px) {
+    .login-wrapper {
+      padding: var(--s4);
+    }
+    .login-card {
+      padding: var(--s5) var(--s4_5);
+      border-radius: var(--r);
+    }
+    .logo {
+      font-size: 20px;
+    }
+    .subtitle {
+      font-size: 13px;
+      margin-bottom: var(--s4_5);
+    }
+    .input {
+      padding: var(--s3) var(--s3_5);
+      font-size: 16px; /* prevents iOS zoom on focus */
+    }
+    .btn-primary {
+      padding: var(--s3_5);
+      font-size: 15px;
+    }
+  }
+
+  @supports (padding: env(safe-area-inset-top)) {
+    .login-wrapper {
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+  }
 </style>
