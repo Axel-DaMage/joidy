@@ -69,7 +69,8 @@ async def _call_with_retry(func, timeout: float | None = None):
             # Run the synchronous google.generativeai call in a thread to
             # avoid blocking the FastAPI event loop. google-generativeai does
             # not expose a per-request timeout, so enforce one with wait_for.
-            coro = asyncio.to_thread(func)
+            loop = asyncio.get_event_loop()
+            coro = loop.run_in_executor(None, func)
             if timeout is not None:
                 return await asyncio.wait_for(coro, timeout=timeout)
             return await coro
