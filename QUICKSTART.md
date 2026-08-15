@@ -70,7 +70,7 @@ graph LR
     API[API 8000<br/>FastAPI]
     AI[AI 8002<br/>FastAPI]
     Worker[Worker 8001<br/>asyncio]
-    DB[(SQLite + sqlite-vec)]
+    DB[(PostgreSQL 16 + pgvector)]
     Vault[Obsidian Vault]
 
     User --> FE
@@ -112,7 +112,7 @@ Si prefieres correr sin Docker, necesitas:
 - Python 3.12+ en `ai-service/`: `pip install -r requirements.txt && uvicorn main:app --reload --port 8002`
 - Worker: `python main.py` dentro de `worker/`
 
-Recuerda que la base de datos SQLite se comparte entre servicios, así que debe estar en una ruta accesible.
+Recuerda que la base de datos PostgreSQL (con la extensión `pgvector`) se comparte entre servicios vía `DATABASE_URL`, así que necesitas una instancia accesible (local o remota).
 
 ## 8. Convenciones útiles
 
