@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import { sveltekit } from '@sveltejs/kit/vite';
+import pkg from './package.json';
 
 // The browser connects to the host-mapped frontend port, which may differ from
 // the container's internal port (3000) when FRONTEND_PORT is overridden.
@@ -7,6 +8,9 @@ const FRONTEND_PORT = (typeof process !== 'undefined' && Number(process.env.FRON
 
 export default defineConfig({
   plugins: [sveltekit()],
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+  },
   esbuild: {
     target: 'esnext',
   },

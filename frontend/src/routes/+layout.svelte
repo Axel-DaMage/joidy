@@ -651,7 +651,7 @@
           showNotification($t('layout.testNotifInfo'), 'info');
           setTimeout(() => showNotification($t('layout.testNotifSuccess'), 'success'), 600);
           setTimeout(() => showNotification($t('layout.testNotifLevel'), 'level'), 1200);
-        }}>joidy v0.1</button
+        }}>joidy v{__APP_VERSION__}</button
       >
 
       <div class="status-live" title={$t('layout.currentStatus')}>
