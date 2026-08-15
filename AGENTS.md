@@ -115,7 +115,7 @@ Two concurrent asyncio tasks: `watch_vault()` (watches `/vault/*.md`, 2s debounc
 - Uses `pytest` for API tests (`pytest` discover under `tests/`), with `unittest` style fixtures in `conftest.py`
 - Single test: `PYTHONPATH=/app python -m unittest tests.test_file`
 - Ruff config exists in `pyproject.toml` + `.pre-commit-config.yaml`, but pre-commit is not installed by default and CI does not run ruff. Run `ruff check` / `ruff format` manually if desired.
-- CI: `compileall`, `unittest`, `npm run check`, Docker build
+- CI: `compileall`, `unittest`, `npm run check`, `npm run build`, Docker build
 
 ## Known Issues (from code audit)
 1. ~~CORS allows `*` in non-production~~ — **Fixed**: `_get_cors_origins()` in `api/main.py` respects `cors_allowed_origins` setting; dev fallback only. Same in `ai-service/main.py`.
