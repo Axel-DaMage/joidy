@@ -19,7 +19,7 @@
   import QuickCaptureWidget from '$lib/components/QuickCaptureWidget.svelte';
   import ScientificCalculator from '$lib/components/ScientificCalculator.svelte';
   import VirtualList from '$lib/components/VirtualList.svelte';
-  import { notes, notesLoading, loadNotes, createNote, updateNote, deleteNote, aiSuggestions, notesLoadedOnce, selectedNoteIds, bulkMode, toggleNoteSelection, selectAllNotes, clearNoteSelection, deleteSelectedNotes, tagSelectedNotes, untagSelectedNotes } from '$lib/stores/notes';
+  import { notes, notesLoading, loadNotes, loadMore, hasMoreNotes, loadingMore, createNote, updateNote, deleteNote, aiSuggestions, notesLoadedOnce, selectedNoteIds, bulkMode, toggleNoteSelection, selectAllNotes, clearNoteSelection, deleteSelectedNotes, tagSelectedNotes, untagSelectedNotes } from '$lib/stores/notes';
   import { buildTree, flattenTree, extractFrontmatter, getFileIcon, type SortMode, type FlatNode } from '$lib/utils/fileTree';
   import TreeContextMenu from '$lib/components/TreeContextMenu.svelte';
   import FolderPicker from '$lib/components/FolderPicker.svelte';
@@ -808,6 +808,16 @@
           {/each}
         {/if}
       {/if}
+
+      {#if !$notesLoading && $hasMoreNotes && !search}
+        <button
+          class="load-more-btn"
+          onclick={() => loadMore()}
+          disabled={$loadingMore}
+        >
+          {$loadingMore ? $t('notesPage.loading') : $t('notesPage.loadMore')}
+        </button>
+      {/if}
     </div>
   </aside>
 
@@ -1235,6 +1245,28 @@
   .empty-msg {
     padding: 32px 16px; text-align: center;
     color: var(--text-muted); font-size: 12px;
+  }
+
+  .load-more-btn {
+    display: block;
+    width: 100%;
+    padding: 10px 12px;
+    margin-top: 4px;
+    border: none;
+    border-top: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 12px;
+    cursor: pointer;
+    text-align: center;
+  }
+  .load-more-btn:hover:not(:disabled) {
+    color: var(--text);
+    background: var(--hover-bg, rgba(128, 128, 128, 0.08));
+  }
+  .load-more-btn:disabled {
+    opacity: 0.6;
+    cursor: default;
   }
 
   /* ── Tree rows ── */

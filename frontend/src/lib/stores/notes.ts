@@ -18,11 +18,16 @@ export const notesLoading  = writable(false);
 export const notesLoadedOnce = writable(false);
 export const selectedNoteIds = writable<Set<number>>(new Set());
 export const bulkMode = writable(false);
+export const hasMoreNotes = writable(false);
+export const loadingMore = writable(false);
 
 let notesLoaded = false;
 let lastTag: string | undefined = undefined;
 let pendingLoad = false;
 let cacheLoadDone = false;
+
+/** Page size for paginated note fetching. */
+const NOTES_PAGE_SIZE = 200;
 
 const CACHE_KEY = 'joidy_notes_cache';
 
@@ -63,10 +68,11 @@ export async function loadNotes(tag?: string, force = false): Promise<void> {
   pendingLoad = true;
   notesLoading.set(get(notes).length === 0);
   lastTag = tag;
-  
+
   try {
-    const data = await api.notes.list(tag);
+    const data = await api.notes.list(tag, NOTES_PAGE_SIZE, 0);
     notes.set(data);
+    hasMoreNotes.set(data.length >= NOTES_PAGE_SIZE);
     saveNotesCache(data);
     notesLoaded = true;
     cacheLoadDone = true;
@@ -83,6 +89,7 @@ export async function loadNotes(tag?: string, force = false): Promise<void> {
         const cached = await getAllNotes();
         if (cached.length > 0) {
           notes.set(cached);
+          hasMoreNotes.set(false);
           notesLoaded = true;
           cacheLoadDone = true;
           notesLoadedOnce.set(true);
@@ -94,6 +101,35 @@ export async function loadNotes(tag?: string, force = false): Promise<void> {
   } finally {
     notesLoading.set(false);
     pendingLoad = false;
+  }
+}
+
+/**
+ * Fetch the next page of notes (using `skip`) and append them to the existing
+ * list. Resolves the "silent cap at 1000" issue (#648) by letting users load
+ * older notes on demand.
+ */
+export async function loadMore(): Promise<void> {
+  if (get(loadingMore) || !get(hasMoreNotes)) return;
+  loadingMore.set(true);
+  try {
+    const skip = get(notes).length;
+    const data = await api.notes.list(lastTag, NOTES_PAGE_SIZE, skip);
+    if (data.length > 0) {
+      // Append, de-duplicating by id in case of overlap.
+      const existingIds = new Set(get(notes).map((n) => n.id));
+      const fresh = data.filter((n) => !existingIds.has(n.id));
+      notes.update((ns) => [...ns, ...fresh]);
+      if (browser) {
+        Promise.all(fresh.map((n) => putNote(n))).catch(() => {});
+      }
+    }
+    hasMoreNotes.set(data.length >= NOTES_PAGE_SIZE);
+  } catch (e) {
+    logger.error('[notes] Failed to load more:', e);
+    hasMoreNotes.set(false);
+  } finally {
+    loadingMore.set(false);
   }
 }
 
