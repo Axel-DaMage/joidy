@@ -1564,13 +1564,15 @@
                   </div>
                 </div>
                 {#if !useFailIcon}
-                  <div class="emoji-grid ng-large-grid">
-                    {#each EMOJIS as e}
-                      <button class="emoji-btn" class:selected={newFailEmoji === e} onclick={() => newFailEmoji = e}>{e}</button>
-                    {/each}
+                  <div class="ng-picker-field">
+                    <div class="emoji-grid">
+                      {#each EMOJIS as e}
+                        <button class="emoji-btn" class:selected={newFailEmoji === e} onclick={() => newFailEmoji = e}>{e}</button>
+                      {/each}
+                    </div>
                   </div>
                 {:else}
-                  <div class="field ng-large-grid" style="display: flex; flex-direction: column; height: 280px; padding: 8px; border: 1px solid var(--border); border-radius: var(--r); background: var(--surface-hover); overflow: hidden;">
+                  <div class="ng-picker-field ng-picker-icon">
                     <LazyIconPicker selected={newFailIcon} color={newGoalColor} onSelect={(ic) => newFailIcon = ic} />
                   </div>
                 {/if}
@@ -2100,7 +2102,9 @@
   }
 
   .ng-bottom-preview {
-    margin-top: var(--s2);
+    margin-top: var(--s4);
+    padding-top: var(--s4);
+    border-top: 1px solid var(--border);
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -2122,7 +2126,7 @@
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 20px;
-    align-items: flex-start;
+    align-items: stretch;
   }
   .ng-col {
     display: flex;
@@ -2160,8 +2164,26 @@
   .ng-freq-btn:hover { border-color: var(--text-muted); }
   .ng-freq-btn.active { background: var(--surface-active); color: var(--text-primary); border-color: var(--text-primary); }
 
-  .ng-large-grid {
+  /* Fixed-height picker container — switching between emoji and icon
+     modes does not resize the modal (#726, matches StreakCreateModal pattern). */
+  .ng-picker-field {
+    height: 280px;
+    min-height: 280px;
     max-height: 280px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    background: var(--surface-hover);
+    padding: 8px;
+  }
+  .ng-picker-field > :global(*) {
+    height: 100%;
+    min-height: 0;
+    max-height: 100%;
+  }
+  .ng-picker-icon {
+    display: flex;
+    flex-direction: column;
   }
 
   .ng-fail-options {
@@ -2264,6 +2286,38 @@
     transition: border-color 0.15s;
   }
   .ng-hex-input:focus { border-color: var(--text-muted); }
+
+  /* Responsive — stack columns on narrow viewports (#726) */
+  @media (max-width: 900px) {
+    .ng-columns {
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+    .ng-col-title {
+      text-align: left;
+    }
+    .new-goal-panel {
+      width: calc(100vw - 16px);
+    }
+  }
+  @media (max-width: 640px) {
+    .new-goal-panel {
+      max-height: calc(100vh - 16px);
+      border-radius: 8px;
+    }
+    .new-goal-header,
+    .new-goal-body,
+    .new-goal-footer {
+      padding-left: var(--s4);
+      padding-right: var(--s4);
+    }
+    .ng-picker-field {
+      height: 220px;
+      min-height: 220px;
+      max-height: 220px;
+    }
+  }
+
   .form-row {
     display: flex;
     gap: var(--s3);
@@ -2272,7 +2326,7 @@
   .form-field {
     display: flex;
     flex-direction: column;
-    gap: 0px;
+    gap: 5px;
   }
   .label {
     display: flex;
@@ -2303,12 +2357,9 @@
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
     gap: 4px;
-    background: var(--surface-hover);
-    padding: 8px;
-    border-radius: var(--r);
-    border: 1px solid var(--border);
-    max-height: 200px;
+    height: 100%;
     overflow-y: auto;
+    align-content: start;
   }
   .emoji-btn {
     width: 32px;
