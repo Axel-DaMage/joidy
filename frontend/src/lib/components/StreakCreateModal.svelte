@@ -236,17 +236,16 @@
               <input type="date" bind:value={targetDate} />
             </div>
 
-            <div class="field-row">
-              <div class="field half">
-                <label><Clock size={11} /> Días desde inicio</label>
-                <input type="number" bind:value={offset} min="0" disabled={isEdit} placeholder={$t('streakCreateModal.offsetPlaceholder')} />
-                <span class="field-hint">{isEdit ? 'Este valor no se puede modificar una vez creada la racha' : 'Se calcula automáticamente desde la fecha de inicio'}</span>
-              </div>
-              <div class="field half">
-                <label><Snowflake size={11} /> Freezes (escudos)</label>
-                <input type="number" bind:value={freezeCount} min="0" max="30" />
-                <span class="field-hint">{$t('streakCreateModal.freezeHint')}</span>
-              </div>
+            <div class="field">
+              <label><Clock size={11} /> Días desde inicio</label>
+              <input type="number" bind:value={offset} min="0" disabled={isEdit} placeholder={$t('streakCreateModal.offsetPlaceholder')} />
+              <span class="field-hint">{isEdit ? 'Este valor no se puede modificar una vez creada la racha' : 'Se calcula automáticamente desde la fecha de inicio'}</span>
+            </div>
+
+            <div class="field">
+              <label><Snowflake size={11} /> Freezes (escudos)</label>
+              <input type="number" bind:value={freezeCount} min="0" max="30" />
+              <span class="field-hint">{$t('streakCreateModal.freezeHint')}</span>
             </div>
 
             <div class="field">
@@ -325,12 +324,14 @@
                 {/each}
               </div>
               <div class="color-manual-row">
-                <input
-                  type="color"
-                  class="color-swatch"
-                  value={color}
-                  oninput={(e) => color = e.currentTarget.value}
-                />
+                <div class="color-swatch-wrapper" style="background: {color};">
+                  <input
+                    type="color"
+                    class="color-swatch"
+                    value={color}
+                    oninput={(e) => color = e.currentTarget.value}
+                  />
+                </div>
                 <input
                   type="text"
                   class="hex-input mono"
@@ -665,11 +666,20 @@
   .emoji-btn.selected { border-color: var(--text-primary); background: var(--elevated); }
 
   /* Theme selector */
+  .theme-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+  }
   .theme-btn {
-    flex: 1; padding: 6px; font-size: 11px;
+    padding: 8px 4px; font-size: 11px;
     background: var(--surface); border: 1px solid var(--border);
     border-radius: 4px; color: var(--text-muted);
     cursor: pointer; transition: all 0.15s; font-family: var(--font-mono);
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .theme-btn:hover { border-color: var(--text-muted); }
   .theme-btn.selected { border-color: var(--text-primary); color: var(--text-primary); }
@@ -705,29 +715,29 @@
     gap: 8px;
     margin-top: 8px;
   }
-  .color-swatch {
+  .color-swatch-wrapper {
     width: 36px;
     height: 36px;
     border: 1px solid var(--border);
     border-radius: 6px;
-    cursor: pointer;
-    padding: 0;
     flex-shrink: 0;
-    -webkit-appearance: none;
-    appearance: none;
-    background: none;
+    overflow: hidden;
+    position: relative;
+    cursor: pointer;
   }
-  .color-swatch::-webkit-color-swatch-wrapper {
+  .color-swatch {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: none;
     padding: 0;
+    cursor: pointer;
+    opacity: 0;
   }
-  .color-swatch::-webkit-color-swatch {
-    border: none;
-    border-radius: 5px;
-  }
-  .color-swatch::-moz-color-swatch {
-    border: none;
-    border-radius: 5px;
-  }
+  .color-swatch::-webkit-color-swatch-wrapper { padding: 0; }
+  .color-swatch::-webkit-color-swatch { border: none; }
+  .color-swatch::-moz-color-swatch { border: none; }
   .hex-input {
     width: 90px;
     flex: none;
