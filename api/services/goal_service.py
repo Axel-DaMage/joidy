@@ -11,6 +11,7 @@ from models.goal import (
 )
 from models.note import Note, NoteTag
 from repositories import GoalRepository
+from services.timezone_utils import get_local_today
 from sqlalchemy.orm import Session
 
 
@@ -216,6 +217,7 @@ def get_bulk_goal_progress(goals: list[Goal], db: Session) -> dict[int, float]:
 
 def evaluate_active_goals(db: Session):
     now = datetime.now(timezone.utc)
+    today = get_local_today()
     active_goals = GoalRepository(db).get_active()
 
     # Bulk-load progress for all active goals once to avoid N+1 queries
@@ -226,18 +228,18 @@ def evaluate_active_goals(db: Session):
         expired = False
         if goal.temporality == GoalTemporality.DAILY:
             # We assume it expires at the end of the created_at day
-            if now.date() > goal.created_at.date():
+            if today > goal.created_at.date():
                 expired = True
         elif goal.temporality == GoalTemporality.WEEKLY:
-            if (now.date() - goal.created_at.date()).days >= 7:
+            if (today - goal.created_at.date()).days >= 7:
                 expired = True
         elif goal.temporality == GoalTemporality.MONTHLY:
             # Expire after ~30 days rather than on month boundary, so a goal
             # created on the 31st doesn't expire on the 1st of the next month.
-            if (now.date() - goal.created_at.date()).days >= 30:
+            if (today - goal.created_at.date()).days >= 30:
                 expired = True
         elif goal.temporality == GoalTemporality.ANNUAL:
-            if now.year != goal.created_at.year:
+            if today.year != goal.created_at.year:
                 expired = True
 
         if expired:
@@ -337,7 +339,7 @@ def get_goal_streak(db: Session) -> dict:
         return {"current_streak": 0, "best_streak": 0}
 
     # Current streak: count backwards from today
-    today = datetime.now(timezone.utc).date()
+    today = get_local_today()
     current_streak = 0
     day = today
     while day in completion_dates:

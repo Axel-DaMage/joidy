@@ -60,5 +60,10 @@ class Settings(BaseSettings):
     spotify_client_secret: str = ""
     spotify_redirect_uri: str = ""
 
+    # User timezone for day-boundary calculations (streaks, gamification, mood).
+    # IANA zone name (e.g. "America/Santiago", "Europe/Madrid"). Defaults to UTC
+    # so behaviour is unchanged when not configured. See issue #650.
+    user_timezone: str = "UTC"
+
 
 settings = Settings()
