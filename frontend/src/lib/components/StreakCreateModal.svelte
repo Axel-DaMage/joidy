@@ -43,16 +43,12 @@
   const COLOR_PRESETS = [
     { name: 'Gold',      hex: '#c8a96e' },
     { name: 'Esmeralda', hex: '#10b981' },
-    { name: 'Cyan',      hex: '#06b6d4' },
     { name: 'Azul',      hex: '#3b82f6' },
     { name: 'Violeta',   hex: '#8b5cf6' },
     { name: 'Rosa',      hex: '#ec4899' },
     { name: 'Ámbar',     hex: '#f59e0b' },
     { name: 'Coral',     hex: '#ef4444' },
-    { name: 'Lima',      hex: '#84cc16' },
     { name: 'Slate',     hex: '#64748b' },
-    { name: 'Teal',      hex: '#14b8a6' },
-    { name: 'Blanco',    hex: '#e2e8f0' },
   ];
 
   const EMOJIS = Array.from(new Set([
@@ -322,8 +318,25 @@
                     class:selected={color === c.hex}
                     style="--btn-color: {c.hex}; background: {c.hex};"
                     onclick={() => color = c.hex}
+                    title={c.name}
+                    aria-label={c.name}
                   />
                 {/each}
+              </div>
+              <div class="color-manual-row">
+                <input
+                  type="color"
+                  class="color-swatch"
+                  value={color}
+                  oninput={(e) => color = e.currentTarget.value}
+                />
+                <input
+                  type="text"
+                  class="hex-input mono"
+                  maxlength="7"
+                  bind:value={color}
+                  placeholder="#c8a96e"
+                />
               </div>
             </div>
           </div>
@@ -567,10 +580,11 @@
 
   .field-hint {
     font-size: 10px; color: var(--text-disabled); line-height: 1.3;
+    min-height: 26px;
   }
 
-  .field-row { display: flex; gap: 12px; }
-  .field.half { flex: 1; }
+  .field-row { display: flex; gap: 12px; align-items: flex-start; }
+  .field.half { flex: 1; min-width: 0; }
 
   /* Frequency */
   .freq-row { display: flex; gap: 6px; }
@@ -584,7 +598,25 @@
   .freq-btn.selected { border-color: var(--text-primary); color: var(--text-primary); }
 
   .freq-n-row {
-    display: flex; align-items: center; gap: 8px; margin-top: 6px;
+    display: flex; align-items: center; gap: 8px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 4px; padding: 8px 12px;
+  }
+  .freq-n-label {
+    font-size: 12px; color: var(--text-muted); font-family: var(--font-mono);
+    white-space: nowrap;
+  }
+  .freq-n-input {
+    width: 60px;
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 4px; padding: 4px 8px; color: var(--text-primary);
+    font-size: 13px; outline: none; text-align: center;
+    -moz-appearance: textfield; appearance: textfield;
+  }
+  .freq-n-input:focus { border-color: var(--text-muted); }
+  .freq-n-input::-webkit-outer-spin-button,
+  .freq-n-input::-webkit-inner-spin-button {
+    -webkit-appearance: none; margin: 0;
   }
 
   /* Icon toggles */
@@ -664,6 +696,36 @@
     border-color: var(--text-primary);
     box-shadow: 0 0 0 1px var(--bg), 0 0 0 3px var(--text-primary);
   }
+
+  /* Manual color picker */
+  .color-manual-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .color-swatch {
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: none;
+    cursor: pointer;
+    padding: 2px;
+    flex-shrink: 0;
+  }
+  .hex-input {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-size: 13px;
+    color: var(--text-primary);
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .hex-input:focus { border-color: var(--text-muted); }
 
   /* Footer */
   .modal-footer {
