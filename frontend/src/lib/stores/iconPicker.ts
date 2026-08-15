@@ -1,15 +1,9 @@
 import { writable, derived } from 'svelte/store';
-import * as L from 'lucide-svelte';
+import { ALL_LUCIDE_ICON_NAMES } from '$lib/utils/lucideIcons';
 
-// Get all icon names, filtering out duplicates where lucide-svelte exports
-// both "X" and "XIcon" for the same icon (e.g. "File" and "FileIcon")
-const _rawIcons = Object.keys(L).filter(
-  (k) => /^[A-Z]/.test(k) && k !== 'default' && k !== 'createLucideIcon'
-);
-const _iconSet = new Set(_rawIcons);
-const ALL_ICONS = _rawIcons.filter(
-  (k) => !(k.endsWith('Icon') && _iconSet.has(k.slice(0, -4)))
-);
+// Icon names come from `import.meta.glob` over lucide-svelte's icon files, so
+// no icon code is imported just to enumerate names (see #209).
+const ALL_ICONS = ALL_LUCIDE_ICON_NAMES;
 
 export function createIconPickerStore() {
   const searchTerm = writable('');
@@ -42,6 +36,6 @@ export function createIconPickerStore() {
       if (target.scrollHeight - target.scrollTop - target.clientHeight < 150) {
         this.loadMore();
       }
-    }
+    },
   };
 }
