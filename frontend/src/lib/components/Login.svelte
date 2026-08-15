@@ -162,7 +162,7 @@
       padding: var(--s4);
     }
     .login-card {
-      padding: var(--s5) 20px;
+      padding: var(--s5) var(--s4_5);
       border-radius: var(--r);
     }
     .logo {
@@ -170,14 +170,14 @@
     }
     .subtitle {
       font-size: 13px;
-      margin-bottom: 20px;
+      margin-bottom: var(--s4_5);
     }
     .input {
-      padding: var(--s3) 14px;
+      padding: var(--s3) var(--s3_5);
       font-size: 16px; /* prevents iOS zoom on focus */
     }
     .btn-primary {
-      padding: 14px;
+      padding: var(--s3_5);
       font-size: 15px;
     }
   }

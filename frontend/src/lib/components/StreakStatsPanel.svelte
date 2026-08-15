@@ -78,7 +78,7 @@
       gap: var(--s1);
     }
     .stat-block {
-      padding: 6px 2px;
+      padding: var(--s1_5) var(--s0_5);
     }
     .stat-val {
       font-size: 15px;
@@ -88,7 +88,7 @@
   @media (max-width: 360px) {
     .stats-grid {
       grid-template-columns: 1fr;
-      gap: 6px;
+      gap: var(--s1_5);
     }
   }
 

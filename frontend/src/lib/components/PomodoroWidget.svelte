@@ -242,7 +242,7 @@
       font-size: 26px;
     }
     .ctrl-main {
-      padding: 5px 14px;
+      padding: 5px var(--s3_5);
       min-width: 64px;
     }
   }

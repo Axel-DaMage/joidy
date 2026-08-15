@@ -152,14 +152,14 @@
       width: 100%;
       flex-direction: column;
       align-items: stretch;
-      gap: 10px;
+      gap: var(--s2_5);
     }
     .filter-buttons {
       flex-wrap: wrap;
       gap: var(--s1);
     }
     .filter-btn {
-      padding: var(--s2) 10px;
+      padding: var(--s2) var(--s2_5);
       font-size: 11px;
     }
   }

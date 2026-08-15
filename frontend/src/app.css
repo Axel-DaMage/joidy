@@ -51,14 +51,19 @@
   --font-mono: 'Geist Mono', 'Fira Code', monospace;
 
   /* Sizing scale */
-  --s1: 4px;
-  --s2: 8px;
-  --s3: 12px;
-  --s4: 16px;
-  --s5: 24px;
-  --s6: 32px;
-  --s7: 48px;
-  --s8: 64px;
+  --s0_5:  2px;
+  --s1:    4px;
+  --s1_5:  6px;
+  --s2:    8px;
+  --s2_5:  10px;
+  --s3:    12px;
+  --s3_5:  14px;
+  --s4:    16px;
+  --s4_5:  20px;
+  --s5:    24px;
+  --s6:    32px;
+  --s7:    48px;
+  --s8:    64px;
 
   /* Transitions */
   --t-fast:   50ms ease-out;
@@ -68,6 +73,9 @@
   /* Border radius */
   --r: 4px;
   --r-sm: 2px;
+  --r-xs: 3px;
+  --r-md: 5px;
+  --r-lg-md: 6px;
   --r-lg: 8px;
   --r-xl: 12px;
   --r-full: 999px;

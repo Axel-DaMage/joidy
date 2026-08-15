@@ -425,7 +425,7 @@
       border-radius: var(--r);
     }
     .cp-item {
-      padding: 14px var(--s4);
+      padding: var(--s3_5) var(--s4);
     }
     .cp-item-title {
       font-size: 14px;

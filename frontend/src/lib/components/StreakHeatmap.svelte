@@ -642,7 +642,7 @@
       gap: var(--s3);
     }
     .tab {
-      padding: var(--s1) 10px;
+      padding: var(--s1) var(--s2_5);
       font-size: 10px;
     }
   }
