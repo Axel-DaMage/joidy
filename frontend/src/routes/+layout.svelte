@@ -51,7 +51,7 @@
   import OfflineIndicator from '$lib/components/OfflineIndicator.svelte';
   import { initOfflineSync } from '$lib/stores/offlineSync';
   import ShareAchievementModal from '$lib/components/ShareAchievementModal.svelte';
-  import { initFocusModeConfig, queueNotificationIfActive } from '$lib/stores/focusMode';
+  import { initFocusModeConfig, queueNotificationIfActive, startFocusMode } from '$lib/stores/focusMode';
   import {
     initUsageTracking,
     trackPageView,
@@ -682,6 +682,16 @@
         >
         <span class="p-dot" class:beat={$running}></span>
       </div>
+
+      <!-- Focus Mode trigger -->
+      <button
+        class="mini-focus-btn"
+        onclick={() => startFocusMode()}
+        aria-label={$t('home.startFocusMode')}
+        title={$t('home.focusMode')}
+      >
+        <DynamicIcon name="Target" size={14} />
+      </button>
     </footer>
   </div>
 
@@ -780,6 +790,25 @@
   }
   .p-timer {
     font-size: 11px;
+  }
+
+  .mini-focus-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 6px;
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    background: var(--elevated);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all var(--t-normal);
+  }
+  .mini-focus-btn:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 5%, transparent);
   }
 
   .status-live {
