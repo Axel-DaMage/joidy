@@ -787,25 +787,27 @@
           {/if}
         </section>
 
-        <!-- IA -->
-        <section class="section">
-          <div class="section-title" style="color: var(--xp, var(--accent));">
-            <DynamicIcon name="Zap" size={12} /> IA
-          </div>
-          <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
-            <div class="row-label">
-              <span>Gemini API Key</span>
-              {#if isConfigured('gemini_api_key')}<span class="configured-badge">✓</span>{/if}
+        {#if $devMode}
+          <!-- IA -->
+          <section class="section">
+            <div class="section-title" style="color: var(--xp, var(--accent));">
+              <DynamicIcon name="Zap" size={12} /> IA
             </div>
-            <input
-              type="password"
-              class="setting-input mono"
-              placeholder="AIzaSy..."
-              bind:value={systemConfig.gemini_api_key}
-            />
-          </div>
-          <p class="hint">Habilita auto-tagging y búsqueda semántica.</p>
-        </section>
+            <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
+              <div class="row-label">
+                <span>Gemini API Key</span>
+                {#if isConfigured('gemini_api_key')}<span class="configured-badge">✓</span>{/if}
+              </div>
+              <input
+                type="password"
+                class="setting-input mono"
+                placeholder="AIzaSy..."
+                bind:value={systemConfig.gemini_api_key}
+              />
+            </div>
+            <p class="hint">Habilita auto-tagging y búsqueda semántica.</p>
+          </section>
+        {/if}
 
         <!-- Aplicación (PWA) -->
         {#if $deferredPrompt && !$isAppInstalled}
@@ -891,6 +893,7 @@
     inset: 0;
     background: rgba(0, 0, 0, 0.6);
     z-index: var(--z-dropdown);
+    display: flex;
     align-items: flex-start;
     justify-content: flex-end;
   }
