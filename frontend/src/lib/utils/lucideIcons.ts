@@ -1,27 +1,19 @@
 // Tree-shakeable access to the lucide-svelte icon set.
 //
-// Uses `import.meta.glob` with `eager: true` so that all icon components are
-// available synchronously — no async placeholder flicker (#684). Vite places
-// the glob result in a separate chunk, so the main bundle stays small (#209).
+// Uses `import.meta.glob` with `eager: false` so that:
+//   - `ALL_LUCIDE_ICON_NAMES` is available synchronously (only the file paths
+//     are enumerated, no icon code is imported).
+//   - `loadLucideIcon()` triggers a per-icon dynamic import, letting Vite split
+//     each icon into its own chunk instead of bundling them all up front.
 //
 // The glob targets the compiled `.js` icon files shipped under
-// `lucide-svelte/dist/icons/`. A relative path is required because the
-// package's `exports` map does not expose `./dist/icons/*` as a public
-// sub-path, so a bare specifier like `lucide-svelte/dist/icons/*.js` fails
-// at build time.
+// `lucide-svelte/dist/icons/` (the package `./icons/*` export).
 
-// The glob matches all `.js` files under `dist/icons/` except `index.js`,
-// which is a barrel re-export with no default export and would break Rollup.
-const iconModules = import.meta.glob(
-  [
-    '../../../node_modules/lucide-svelte/dist/icons/*.js',
-    '!../../../node_modules/lucide-svelte/dist/icons/index.js',
-  ],
-  {
-    eager: true,
-    import: 'default',
-  }
-);
+// Path is relative to this file: src/lib/utils/ → frontend/node_modules/...
+const iconModules = import.meta.glob('../../../node_modules/lucide-svelte/dist/icons/*.js', {
+  eager: false,
+  import: 'default',
+});
 
 // kebab-case file name → PascalCase (e.g. "a-arrow-down" → "AArrowDown",
 // "file-audio-2" → "FileAudio2"). Matches the PascalCase keys that the old
@@ -33,46 +25,53 @@ function kebabToPascal(kebab: string): string {
     .join('');
 }
 
-// Build a map of PascalCase name → icon component (synchronous).
-const _icons = new Map<string, any>();
-for (const path of Object.keys(iconModules)) {
+const _iconPaths = Object.keys(iconModules);
+
+// Build a map of PascalCase name → lazy loader function.
+const _loaders = new Map<string, () => Promise<any>>();
+for (const path of _iconPaths) {
   // path looks like "../../../node_modules/lucide-svelte/dist/icons/a-arrow-down.js"
   const file = path.split('/').pop()!.replace(/\.js$/, '');
-  _icons.set(kebabToPascal(file), (iconModules as Record<string, any>)[path]);
+  _loaders.set(kebabToPascal(file), iconModules[path] as () => Promise<any>);
 }
 
 /**
  * All available lucide icon names in PascalCase (e.g. "Search", "FileText").
- * Used by the icon picker to render its grid.
+ * Used by the icon picker to render its grid without importing any icon code.
  */
-export const ALL_LUCIDE_ICON_NAMES: string[] = Array.from(_icons.keys()).sort();
+export const ALL_LUCIDE_ICON_NAMES: string[] = Array.from(_loaders.keys()).sort();
 
 /**
- * Resolve a lucide icon component by name, synchronously.
- *
- * Accepts either PascalCase ("FileText") or kebab-case ("file-text"). Returns
- * the icon's Svelte component, or `null` when the name is unknown so callers
- * can fall back to a placeholder (e.g. `Circle`).
+ * Resolve a loader by either a PascalCase or kebab-case icon name.
+ * Returns the loader or undefined when the name does not match any icon.
  */
-export function getLucideIcon(name: string): any | null {
-  if (!name) return null;
-  return _icons.get(name) ?? _icons.get(kebabToPascal(name)) ?? null;
+function getLoader(name: string): (() => Promise<any>) | undefined {
+  if (!name) return undefined;
+  // Try the name as-is (PascalCase) first, then convert kebab → Pascal.
+  return _loaders.get(name) ?? _loaders.get(kebabToPascal(name));
 }
 
 /**
  * Lazily import a lucide icon component by name.
  *
- * kept for backward compatibility — now resolves synchronously since all
- * icons are eagerly loaded. Prefer `getLucideIcon` for new code.
+ * Accepts either PascalCase ("FileText") or kebab-case ("file-text"). Resolves
+ * to the icon's Svelte component, or `null` when the name is unknown so callers
+ * can fall back to a placeholder (e.g. `Circle`).
  */
 export async function loadLucideIcon(name: string): Promise<any | null> {
-  return getLucideIcon(name);
+  const loader = getLoader(name);
+  if (!loader) return null;
+  try {
+    return await loader();
+  } catch {
+    return null;
+  }
 }
 
 /**
- * Synchronous check whether an icon name exists in the lucide set.
+ * Synchronous check whether an icon name exists in the lucide set, without
+ * importing the icon. Useful for cheap validation before triggering a load.
  */
 export function hasLucideIcon(name: string): boolean {
-  if (!name) return false;
-  return _icons.has(name) || _icons.has(kebabToPascal(name));
+  return getLoader(name) !== undefined;
 }
