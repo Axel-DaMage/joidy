@@ -11,7 +11,6 @@ param(
 $TaskName = "Joidy"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectDir = Split-Path -Parent $ScriptDir
-$StartupScript = Join-Path $ScriptDir "joidy_startup.sh"
 
 if ($Remove) {
   Write-Host "Removing Joidy auto-start task..."
@@ -28,13 +27,11 @@ if ($Remove) {
 Write-Host "Setting up Joidy auto-start via Windows Task Scheduler..."
 
 # Check if running on Windows
-if ($PSVersionTable.Platform -ne "Win32NT" -and -not $env:OS.Contains("Windows")) {
+$osEnv = $env:OS
+if ($PSVersionTable.Platform -ne "Win32NT" -and (-not $osEnv -or -not $osEnv.Contains("Windows"))) {
   Write-Host "⚠ This script is for Windows. For Linux, use install-autostart.sh"
   exit 1
 }
-
-# Find docker compose startup command
-$DockerComposeCmd = "docker compose up -d"
 
 # Create the scheduled task action
 $Action = New-ScheduledTaskAction `
