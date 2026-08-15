@@ -1896,7 +1896,12 @@
 
   {#if currentTab === 'editor'}
     <div class="tab-content fade-in editor-tab">
-      <GoalFilters bind:query={goalSearchQuery} bind:filter={goalFilterState} />
+      <div class="editor-header-row">
+        <GoalFilters bind:query={goalSearchQuery} bind:filter={goalFilterState} />
+        <button class="btn btn-primary new-goal-cta-inline" onclick={() => showAddForm = !showAddForm}>
+          <Plus size={16} /> {$t('goalsPage.newGoal')}
+        </button>
+      </div>
       <GoalList
         {goals}
         query={goalSearchQuery}
@@ -2117,6 +2122,13 @@
     box-sizing: border-box;
     border: 1px solid var(--border-light);
     border-radius: var(--r);
+  }
+  .editor-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
   }
   /* ── New Goal Centered Modal ── */
   .new-goal-backdrop {
