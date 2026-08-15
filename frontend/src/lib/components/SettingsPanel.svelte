@@ -59,6 +59,7 @@
   let powerActionLoading: 'sleep' | 'wake' | 'shutdown' | null = null;
   let powerMessage = '';
   let powerError = '';
+  let powerStatusAttempted = false;
 
   let systemConfig = {
     gemini_api_key: '',
@@ -82,13 +83,14 @@
     loadConfig();
   }
 
-  $: if (open && !powerStatus && !powerLoading) {
+  $: if (open && !powerStatusAttempted && !powerLoading) {
     refreshPowerStatus();
   }
 
   async function refreshPowerStatus() {
     powerLoading = true;
     powerError = '';
+    powerStatusAttempted = true;
     try {
       powerStatus = await api.system.power.status();
     } catch (e: any) {
@@ -147,11 +149,11 @@
 
   function serviceLabel(name: string): string {
     const labels: Record<string, string> = {
-      'joidy-postgres-1': 'PostgreSQL',
-      'joidy-api-1': 'API',
-      'joidy-ai-service-1': 'AI Service',
-      'joidy-worker-1': 'Worker',
-      'joidy-frontend-1': 'Frontend',
+      'postgres': 'PostgreSQL',
+      'api': 'API',
+      'ai-service': 'AI Service',
+      'worker': 'Worker',
+      'frontend': 'Frontend',
     };
     return labels[name] ?? name;
   }

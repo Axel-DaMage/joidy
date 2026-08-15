@@ -18,18 +18,16 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/system/power", tags=["system-power"])
 
-# Services that are stopped during hibernation (heavy compute).
-# api, frontend, and postgres stay running so the web UI remains accessible.
-HIBERNATE_SERVICES = ["joidy-ai-service-1", "joidy-worker-1"]
+# Docker Compose service names (from the `com.docker.compose.service` label).
+# These are independent of the project name / directory name.
+HIBERNATE_SERVICES = {"ai-service", "worker"}
 
-# All Joidy services (for full shutdown). The api itself is excluded because
-# stopping it from within itself would prevent sending the response.
-ALL_SERVICES = [
-    "joidy-ai-service-1",
-    "joidy-worker-1",
-    "joidy-frontend-1",
-    # postgres is kept running so data isn't lost; user can stop it via CLI.
-]
+# All Joidy services to show in the status list (by compose service name).
+ALL_SERVICES = {"ai-service", "worker", "frontend", "api", "postgres"}
+
+# Services to stop during full shutdown (in order).
+# postgres and api are kept so the response can be sent and data isn't lost.
+SHUTDOWN_SERVICES = ["frontend", "ai-service", "worker"]
 
 _docker_client = None
 
@@ -67,6 +65,51 @@ class PowerActionResponse(BaseModel):
     affected: list[str] = []
 
 
+def _get_compose_service(container: dict) -> str | None:
+    """Extract the Docker Compose service name from container labels."""
+    labels = container.get("Labels") or {}
+    if isinstance(labels, dict):
+        return labels.get("com.docker.compose.service")
+    # Docker API returns labels as a list of "key=value" strings in some versions
+    if isinstance(labels, list):
+        for label in labels:
+            if isinstance(label, str) and label.startswith("com.docker.compose.service="):
+                return label.split("=", 1)[1]
+    return None
+
+
+def _get_container_name(container: dict) -> str:
+    """Get the container name without the leading slash."""
+    names = container.get("Names") or []
+    if names:
+        return names[0].lstrip("/")
+    return container.get("Id", "unknown")[:12]
+
+
+def _parse_health(container: dict) -> bool | None:
+    """Parse health status from the Docker API list response.
+
+    Returns True (healthy), False (unhealthy), or None (no healthcheck).
+    """
+    health = container.get("Health")
+    if health and isinstance(health, dict):
+        status = health.get("Status")
+        if status == "healthy":
+            return True
+        if status == "unhealthy":
+            return False
+        # "none" or other values → no healthcheck configured
+        return None
+
+    # Fallback: parse the Status string (e.g., "Up 2 hours (healthy)")
+    status_str = container.get("Status", "")
+    if "(healthy)" in status_str:
+        return True
+    if "(unhealthy)" in status_str:
+        return False
+    return None
+
+
 @router.get("/status", response_model=PowerStatusResponse)
 async def get_power_status(_=Depends(get_current_user)):
     """Get the status of all Joidy services."""
@@ -88,24 +131,28 @@ async def get_power_status(_=Depends(get_current_user)):
             hibernating=False,
         )
 
-    joidy_containers = [c for c in containers if c["Names"][0].lstrip("/") in ALL_SERVICES + ["joidy-postgres-1"]]
+    # Filter to Joidy containers by compose service label
+    joidy_containers = []
+    for c in containers:
+        svc = _get_compose_service(c)
+        if svc and svc in ALL_SERVICES:
+            joidy_containers.append((svc, c))
+
+    # Sort by a fixed order for consistent display
+    service_order = ["postgres", "api", "ai-service", "worker", "frontend"]
+    joidy_containers.sort(key=lambda pair: service_order.index(pair[0]) if pair[0] in service_order else 99)
 
     services: list[ServiceStatus] = []
     hibernating = False
 
-    for c in joidy_containers:
-        name = c["Names"][0].lstrip("/")
+    for svc_name, c in joidy_containers:
         state = c.get("State", "unknown")
         status = "running" if state == "running" else "stopped"
-        healthy = None
-        if status == "running":
-            health = c.get("Health", {})
-            if health:
-                healthy = health.get("Status") == "healthy"
+        healthy = _parse_health(c) if status == "running" else None
 
-        services.append(ServiceStatus(name=name, status=status, healthy=healthy))
+        services.append(ServiceStatus(name=svc_name, status=status, healthy=healthy))
 
-        if name in HIBERNATE_SERVICES and status == "stopped":
+        if svc_name in HIBERNATE_SERVICES and status == "stopped":
             hibernating = True
 
     return PowerStatusResponse(
@@ -124,16 +171,20 @@ async def hibernate_services(_=Depends(get_current_user)):
         raise HTTPException(status_code=503, detail="Docker socket not available. Use the CLI instead.")
 
     affected: list[str] = []
-    for name in HIBERNATE_SERVICES:
+    for c in await docker.containers.list(all=True):
+        svc = _get_compose_service(c)
+        if svc not in HIBERNATE_SERVICES:
+            continue
         try:
-            container = await docker.containers.get(name)
+            container_name = _get_container_name(c)
+            container = await docker.containers.get(container_name)
             info = await container.show()
             if info.get("State", {}).get("Running"):
                 await container.stop()
-                affected.append(name)
-                logger.info("Stopped container %s for hibernation", name)
+                affected.append(svc)
+                logger.info("Stopped container %s for hibernation", container_name)
         except Exception as exc:
-            logger.warning("Failed to stop %s: %s", name, exc)
+            logger.warning("Failed to stop %s: %s", svc, exc)
 
     return PowerActionResponse(
         status="ok",
@@ -150,16 +201,20 @@ async def wake_services(_=Depends(get_current_user)):
         raise HTTPException(status_code=503, detail="Docker socket not available. Use the CLI instead.")
 
     affected: list[str] = []
-    for name in HIBERNATE_SERVICES:
+    for c in await docker.containers.list(all=True):
+        svc = _get_compose_service(c)
+        if svc not in HIBERNATE_SERVICES:
+            continue
         try:
-            container = await docker.containers.get(name)
+            container_name = _get_container_name(c)
+            container = await docker.containers.get(container_name)
             info = await container.show()
             if not info.get("State", {}).get("Running"):
                 await container.start()
-                affected.append(name)
-                logger.info("Started container %s from hibernation", name)
+                affected.append(svc)
+                logger.info("Started container %s from hibernation", container_name)
         except Exception as exc:
-            logger.warning("Failed to start %s: %s", name, exc)
+            logger.warning("Failed to start %s: %s", svc, exc)
 
     return PowerActionResponse(
         status="ok",
@@ -176,19 +231,27 @@ async def shutdown_services(_=Depends(get_current_user)):
     if docker is None:
         raise HTTPException(status_code=503, detail="Docker socket not available. Use the CLI instead.")
 
+    # Build a map of compose service name → container name
+    svc_to_container_name: dict[str, str] = {}
+    for c in await docker.containers.list(all=True):
+        svc = _get_compose_service(c)
+        if svc and svc in SHUTDOWN_SERVICES:
+            svc_to_container_name[svc] = _get_container_name(c)
+
     affected: list[str] = []
-    # Stop in reverse dependency order: frontend → ai-service → worker
-    stop_order = ["joidy-frontend-1", "joidy-ai-service-1", "joidy-worker-1"]
-    for name in stop_order:
+    for svc_name in SHUTDOWN_SERVICES:
+        container_name = svc_to_container_name.get(svc_name)
+        if not container_name:
+            continue
         try:
-            container = await docker.containers.get(name)
+            container = await docker.containers.get(container_name)
             info = await container.show()
             if info.get("State", {}).get("Running"):
                 await container.stop()
-                affected.append(name)
-                logger.info("Stopped container %s for shutdown", name)
+                affected.append(svc_name)
+                logger.info("Stopped container %s for shutdown", container_name)
         except Exception as exc:
-            logger.warning("Failed to stop %s: %s", name, exc)
+            logger.warning("Failed to stop %s: %s", svc_name, exc)
 
     return PowerActionResponse(
         status="ok",
