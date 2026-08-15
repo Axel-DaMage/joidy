@@ -62,6 +62,21 @@ class RequestTimingMiddleware(BaseHTTPMiddleware):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
+
+    # Security guard (#647): refuse to boot in production without an
+    # AUTH_PASSWORD. An empty password previously caused get_current_user()
+    # to bypass auth entirely, leaving every authenticated endpoint open.
+    # Failing fast at startup is safer than silently running an open server.
+    if settings.app_env == "production" and not settings.auth_password:
+        logger.critical(
+            "AUTH_PASSWORD is not set in production. Refusing to start with "
+            "authentication disabled. Set AUTH_PASSWORD in your .env."
+        )
+        raise RuntimeError(
+            "AUTH_PASSWORD must be set when APP_ENV=production. "
+            "Authentication is disabled without it — refusing to start."
+        )
+
     init_db()
     logger.info("Database initialization complete")
 
