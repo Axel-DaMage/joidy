@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher, onDestroy, onMount, tick, untrack } from 'svelte';
-  import { Eye, EyeOff, Save, Trash2, X, Settings, Search, Maximize, ChevronLeft, ChevronRight, Download, RotateCcw, Bold, Italic, Strikethrough, Heading1, Heading2, Heading3, List, ListOrdered, Link, Quote, Code, Image, Paperclip } from 'lucide-svelte';
+  import { Eye, EyeOff, Save, Trash2, X, Settings, Search, Maximize, ChevronLeft, ChevronRight, Download, RotateCcw, Bold, Italic, Strikethrough, Heading1, Heading2, Heading3, List, ListOrdered, Link, Quote, Code, Image, Paperclip, Type } from 'lucide-svelte';
   import DynamicIcon from './DynamicIcon.svelte';
   import LazyIconPicker from './LazyIconPicker.svelte';
   import 'highlight.js/styles/github-dark.css';
@@ -859,8 +859,9 @@
         class:active={wysiwygMode}
         onclick={() => wysiwygMode = !wysiwygMode}
         title={$t('noteEditor.wysiwyg')}
+        aria-label={$t('noteEditor.wysiwygShort')}
       >
-        <Eye size={14} />
+        <Type size={14} />
         <span>{wysiwygMode ? 'Raw' : 'Visual'}</span>
       </button>
 
@@ -868,7 +869,8 @@
         class="toolbar-btn"
         class:active={previewMode}
         onclick={() => previewMode = !previewMode}
-        title="Alternar preview (Ctrl+P)"
+        title={$t('noteEditor.preview')}
+        aria-label={$t('noteEditor.previewShort')}
       >
         {#if previewMode}<EyeOff size={14} />{:else}<Eye size={14} />{/if}
         <span>{previewMode ? 'Editor' : 'Vista previa'}</span>

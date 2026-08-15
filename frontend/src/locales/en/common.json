@@ -415,7 +415,10 @@
     "file": "Attach file",
     "zenMode": "Zen Mode (Esc to exit)",
     "zenModeShort": "Zen Mode",
-    "wysiwyg": "Visual editor (WYSIWYG)"
+    "wysiwyg": "Visual editor (WYSIWYG) — write with formatting (Ctrl+Shift+V)",
+    "wysiwygShort": "Visual editor",
+    "preview": "Rendered preview — read only (Ctrl+P)",
+    "previewShort": "Preview"
   },
   "goalEditor": {
     "previewPlaceholder": "Write something to see the preview...",
