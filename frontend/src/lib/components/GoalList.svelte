@@ -109,5 +109,15 @@
     .editor-grid {
       grid-template-columns: 1fr;
     }
+    .editor-grid-container {
+      padding: var(--s3);
+    }
+  }
+
+  @media (max-width: 480px) {
+    .editor-grid {
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
   }
 </style>

@@ -138,4 +138,28 @@
     gap: 12px;
     flex-shrink: 0;
   }
+
+  @media (max-width: 480px) {
+    .modal-overlay {
+      padding: 8px;
+    }
+    .modal {
+      max-height: calc(100vh - 16px);
+      border-radius: var(--r);
+    }
+    .modal-sm,
+    .modal-md,
+    .modal-lg {
+      max-width: 100%;
+    }
+    .modal-header,
+    .modal-body,
+    .modal-footer {
+      padding-left: var(--s3);
+      padding-right: var(--s3);
+    }
+    .modal-title {
+      font-size: 14px;
+    }
+  }
 </style>

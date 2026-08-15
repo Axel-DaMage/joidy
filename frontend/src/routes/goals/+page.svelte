@@ -3169,6 +3169,25 @@
     .weekday-card, .temporality-card, .funnel-card {
       grid-column: span 1;
     }
+    /* Today tab: stack sidebar below main content */
+    .today-layout {
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+    /* Analytics projection: stack 2-col grid */
+    .projection-content {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .dashboard-grid {
+      grid-template-columns: 1fr;
+    }
+    .prediction-card, .weekday-card, .temporality-card,
+    .hourly-card, .funnel-card {
+      grid-column: span 1;
+    }
   }
 
   /* Modal de Consistencia */

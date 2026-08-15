@@ -851,6 +851,9 @@
       grid-template-columns: 1fr;
       gap: 16px;
     }
+    .theme-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
     /* Preview first on mobile, then data fields */
     .modal-col-preview { order: -1; }
   }

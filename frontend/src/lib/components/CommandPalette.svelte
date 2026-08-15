@@ -412,4 +412,23 @@
     display: flex;
     align-items: center;
   }
+
+  @media (max-width: 560px) {
+    .cp-backdrop {
+      padding-top: 8vh;
+      padding-left: 8px;
+      padding-right: 8px;
+    }
+    .cp-modal {
+      max-width: 100%;
+      max-height: 70vh;
+      border-radius: var(--r);
+    }
+    .cp-item {
+      padding: 14px 16px;
+    }
+    .cp-item-title {
+      font-size: 14px;
+    }
+  }
 </style>

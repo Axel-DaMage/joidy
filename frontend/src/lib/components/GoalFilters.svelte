@@ -138,6 +138,29 @@
       flex-direction: column;
       gap: 12px;
       align-items: flex-start;
+      padding: 12px var(--s3);
+    }
+    .search-box input {
+      width: 100%;
+      min-width: 120px;
+    }
+    .search-box {
+      flex: 1;
+      width: 100%;
+    }
+    .editor-controls {
+      width: 100%;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 10px;
+    }
+    .filter-buttons {
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+    .filter-btn {
+      padding: 8px 10px;
+      font-size: 11px;
     }
   }
 </style>
