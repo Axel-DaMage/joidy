@@ -68,9 +68,34 @@ class Settings(BaseSettings):
     def available_providers(self) -> list[str]:
         return list(self.provider_config.keys())
 
+    def _model_provider(self, model: str) -> str:
+        """Extract the provider prefix from a 'provider:model' string."""
+        if ":" in model:
+            return model.split(":", 1)[0].lower()
+        return "gemini"
+
+    @property
+    def llm_provider(self) -> str:
+        return self._model_provider(self.llm_model)
+
+    @property
+    def embedding_provider(self) -> str:
+        return self._model_provider(self.embedding_model)
+
+    @property
+    def is_llm_configured(self) -> bool:
+        """True when the configured LLM provider is actually available."""
+        return self.llm_provider in self.available_providers
+
+    @property
+    def is_embedding_configured(self) -> bool:
+        """True when the configured embedding provider is actually available."""
+        return self.embedding_provider in self.available_providers
+
     @property
     def is_ai_enabled(self) -> bool:
-        return len(self.available_providers) > 0
+        """True only when the *configured* providers are available, not just any provider (#642)."""
+        return self.is_llm_configured and self.is_embedding_configured
 
 
 settings = Settings()
