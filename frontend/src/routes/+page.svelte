@@ -161,6 +161,7 @@
 
   function setGhType(t: string) {
     ghType = t;
+    loadGitHubData(ghFilter);
   }
 
   $: isWilted = (() => {
