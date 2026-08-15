@@ -40,6 +40,7 @@
   let dailyInitialTitle = '';
   let dailyNotesConfigured = false;
   let deleteConfirm = false;
+  let totalNotes = 0;
 
   // Folder customization
   let editingFolder: string | null = null;
@@ -391,6 +392,13 @@
       dailyNotesConfigured = false;
     }
 
+    try {
+      const stats = await api.stats.system();
+      totalNotes = stats.notes;
+    } catch {
+      totalNotes = 0;
+    }
+
     const saved = loadUserSettings().notesUi;
     if (saved?.panelWidth !== undefined) {
       panelWidth = Math.max(MIN_W, Math.min(MAX_W, Number(saved.panelWidth)));
@@ -668,7 +676,7 @@
     </div>
 
     <div class="list-meta">
-      <span>{ $bulkMode ? `${$selectedNoteIds.size} seleccionadas` : `${$notes.length} notas` }</span>
+      <span>{ $bulkMode ? `${$selectedNoteIds.size} seleccionadas` : `${totalNotes || $notes.length} notas` }</span>
       {#if search}<span class="sep">·</span><span>{filtered.length} resultados</span>{/if}
       {#if $bulkMode}
         <button class="toolbar-btn select-all" onclick={$selectedNoteIds.size === filtered.length ? clearNoteSelection : selectAllNotes}>
