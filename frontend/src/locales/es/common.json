@@ -503,7 +503,8 @@
     "modeLabel": "Modo enfoque",
     "session": "Sesión de enfoque",
     "queuedNotifications": "Notificaciones en cola",
-    "exit": "Salir del modo enfoque"
+    "exit": "Salir del modo enfoque",
+    "clock": "Hora actual"
   },
   "commandPalette": {
     "label": "Paleta de comandos",

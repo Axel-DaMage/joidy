@@ -503,7 +503,8 @@
     "modeLabel": "Focus mode",
     "session": "Focus session",
     "queuedNotifications": "Queued notifications",
-    "exit": "Exit focus mode"
+    "exit": "Exit focus mode",
+    "clock": "Current time"
   },
   "commandPalette": {
     "label": "Command palette",

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { use24HourClock } from '$lib/stores/settings';
-  import { getLocale } from '$lib/stores/locale';
+  import { getTimezone, formatClock } from '$lib/utils/clock';
   import { t } from 'svelte-i18n';
 
   // ── Timezone ───────────────────────────────────────────────────────────────
@@ -48,11 +48,7 @@
   let tzError = '';
 
   function initTimezone() {
-    const saved = localStorage.getItem('joidy-timezone');
-    if (saved) { timezone = saved; return; }
-    try {
-      timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    } catch { timezone = 'UTC'; }
+    timezone = getTimezone();
   }
 
   function setTimezone(tz: string) {
@@ -79,15 +75,7 @@
   let clockStr = '--:--:--';
 
   function updateClock() {
-    try {
-      clockStr = new Date().toLocaleTimeString(getLocale(), {
-        timeZone: timezone,
-        hour:     $use24HourClock ? '2-digit' : 'numeric',
-        minute:   '2-digit',
-        second:   '2-digit',
-        hour12:   !$use24HourClock,
-      });
-    } catch { clockStr = '--:--:--'; }
+    clockStr = formatClock(timezone, $use24HourClock);
   }
 
   let clockInterval: ReturnType<typeof setInterval> | null = null;
