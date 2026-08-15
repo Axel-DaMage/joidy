@@ -368,10 +368,10 @@
 
   /* Preview card */
   .preview-card {
-    display: flex; align-items: center; gap: 10px;
-    padding: 10px 12px;
+    display: flex; align-items: center; gap: 16px;
+    padding: 18px 20px;
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 10px;
     background: var(--surface);
     position: relative;
     overflow: hidden;
@@ -410,22 +410,26 @@
 
   .preview-icon {
     flex-shrink: 0;
-    width: 28px;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     text-align: center;
-    font-size: 20px;
+    font-size: 22px;
   }
 
-  .preview-emoji { font-size: 20px; }
+  .preview-emoji { font-size: 22px; }
   .preview-info {
     flex: 1;
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 1px;
+    gap: 3px;
   }
 
   .preview-name {
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 500;
     color: var(--text-primary);
     white-space: nowrap;
@@ -434,8 +438,8 @@
   }
 
   .preview-meta {
-    font-size: 9px;
-    color: var(--text-disabled);
+    font-size: 10px;
+    color: var(--text-muted);
   }
 
   /* Fields */
