@@ -321,12 +321,6 @@
     setLocale(value);
   }
 
-  function toggleTheme() {
-    // Sync with themeMode store instead of the independent darkMode store (#571).
-    // Flip between 'dark' and 'light'; if currently 'auto', default to 'dark'.
-    themeMode.set($themeMode === 'dark' ? 'light' : 'dark');
-  }
-
   function onColorPicker(i: number, e: Event) {
     accentColors.setColor(i, (e.target as HTMLInputElement).value);
   }
@@ -442,25 +436,10 @@
           <div class="section-title" style="color: var(--xp, var(--accent));">
             {$t('settings.appearance')}
           </div>
-          <div class="row">
-            <div class="row-label">
-              {#if $themeMode === 'dark'}<DynamicIcon name="Moon" size={13} />{:else}<DynamicIcon
-                  name="Sun"
-                  size={13}
-                />{/if}
-              <span>{$t('settings.theme')}</span>
-            </div>
-            <button class="toggle" onclick={toggleTheme}>
-              <span class:active={$themeMode === 'dark'}>{$t('settings.dark')}</span>
-              <span class="divider">|</span>
-              <span class:active={$themeMode !== 'dark'}>{$t('settings.light')}</span>
-            </button>
-          </div>
-
           <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
             <div class="row-label">
               <DynamicIcon name="Sparkles" size={13} />
-              <span>{$t('settings.themeMode')}</span>
+              <span>{$t('settings.theme')}</span>
             </div>
             <div class="theme-mode-options">
               <label class="theme-mode-option" class:active={$themeMode === 'light'}>
@@ -471,6 +450,7 @@
                   checked={$themeMode === 'light'}
                   onchange={() => themeMode.set('light')}
                 />
+                <DynamicIcon name="Sun" size={14} />
                 <span>{$t('settings.themeLight')}</span>
               </label>
               <label class="theme-mode-option" class:active={$themeMode === 'dark'}>
@@ -481,6 +461,7 @@
                   checked={$themeMode === 'dark'}
                   onchange={() => themeMode.set('dark')}
                 />
+                <DynamicIcon name="Moon" size={14} />
                 <span>{$t('settings.themeDark')}</span>
               </label>
               <label class="theme-mode-option" class:active={$themeMode === 'auto'}>
@@ -491,6 +472,7 @@
                   checked={$themeMode === 'auto'}
                   onchange={() => themeMode.set('auto')}
                 />
+                <DynamicIcon name="Sparkles" size={14} />
                 <span>{$t('settings.themeAuto')}</span>
               </label>
             </div>
