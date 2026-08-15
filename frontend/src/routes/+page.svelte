@@ -359,8 +359,6 @@
         </button>
       {/if}
     </div>
-  {:else if wid === 'activity-progress'}
-    <!-- activity-progress widget removed from dashboard per user request -->
   {:else if wid === 'time-widget'}
     <TimeWidget />
   {:else if wid === 'weather-widget'}
