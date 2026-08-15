@@ -950,7 +950,8 @@
   }
 
   .panel {
-    width: 340px;
+    width: 480px;
+    max-width: 100%;
     height: 100%;
     background: var(--surface);
     border-left: 1px solid var(--border);
@@ -1386,5 +1387,11 @@
     opacity: 0;
     width: 0;
     height: 0;
+  }
+
+  @media (max-width: 520px) {
+    .panel {
+      width: 100%;
+    }
   }
 </style>
