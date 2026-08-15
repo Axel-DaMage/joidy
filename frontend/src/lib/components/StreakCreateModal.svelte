@@ -251,11 +251,33 @@
                 <span class="field-hint">{$t('streakCreateModal.freezeHint')}</span>
               </div>
             </div>
+
+            <div class="field">
+              <label>{$t('streakCreateModal.visualTheme')}</label>
+              <div class="theme-grid">
+                {#each THEMES as themeOpt}
+                  <button class="theme-btn" class:selected={theme === themeOpt.id} onclick={() => theme = themeOpt.id}>
+                    {themeOpt.label}
+                  </button>
+                {/each}
+              </div>
+            </div>
           </div>
 
           <!-- Right column: preview + customization -->
           <div class="modal-col modal-col-preview">
-            <div class="preview-card" class:theme-gradient={theme === 'gradient'} style={previewStyle}>
+            <div
+              class="preview-card"
+              class:theme-solid={theme === 'solid'}
+              class:theme-gradient={theme === 'gradient'}
+              class:theme-glow={theme === 'glow'}
+              class:theme-minimal={theme === 'minimal'}
+              class:theme-lcd={theme === 'lcd'}
+              class:theme-neon={theme === 'neon'}
+              class:theme-glass={theme === 'glass'}
+              class:theme-sketch={theme === 'sketch'}
+              style={previewStyle}
+            >
               <div class="preview-icon">
                 {#if useIcon && icon}
                   <StreakIcon name={icon} size={24} />
@@ -301,17 +323,6 @@
                     style="--btn-color: {c.hex}; background: {c.hex};"
                     onclick={() => color = c.hex}
                   />
-                {/each}
-              </div>
-            </div>
-
-            <div class="field">
-              <label>{$t('streakCreateModal.visualTheme')}</label>
-              <div class="theme-grid">
-                {#each THEMES as themeOpt}
-                  <button class="theme-btn" class:selected={theme === themeOpt.id} onclick={() => theme = themeOpt.id}>
-                    {themeOpt.label}
-                  </button>
                 {/each}
               </div>
             </div>
@@ -376,7 +387,7 @@
 
   .modal-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 0.85fr 1.15fr;
     gap: 20px;
   }
 
@@ -428,6 +439,70 @@
       );
   }
 
+  .preview-card.theme-glow {
+    border-color: color-mix(in srgb, var(--theme-ac) 22%, var(--border));
+    box-shadow:
+      0 0 14px color-mix(in srgb, var(--theme-ac) 12%, transparent),
+      inset 0 0 0 1px color-mix(in srgb, var(--theme-ac) 14%, transparent);
+  }
+
+  .preview-card.theme-glow::before {
+    opacity: 1;
+    background:
+      radial-gradient(
+        120% 90% at 50% 50%,
+        color-mix(in srgb, var(--theme-ac) 12%, transparent) 0%,
+        transparent 70%
+      );
+  }
+
+  .preview-card.theme-minimal {
+    background: color-mix(in srgb, var(--theme-ac) 8%, transparent);
+    border: 1px solid transparent;
+  }
+
+  .preview-card.theme-lcd {
+    background-color: var(--theme-ac);
+    background-image:
+      linear-gradient(rgba(0, 0, 0, 0.1) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 0, 0, 0.1) 1px, transparent 1px);
+    background-size: 3px 3px;
+    border: 1px solid color-mix(in srgb, var(--theme-ac) 70%, black);
+    box-shadow: inset 0 0 10px rgba(0,0,0,0.15);
+  }
+  .preview-card.theme-lcd .preview-name {
+    color: color-mix(in srgb, var(--theme-ac) 20%, black); font-weight: 700;
+  }
+  .preview-card.theme-lcd .preview-meta {
+    color: color-mix(in srgb, var(--theme-ac) 20%, black); opacity: 0.7; font-weight: 600;
+  }
+  .preview-card.theme-lcd .preview-emoji,
+  .preview-card.theme-lcd .preview-icon :global(svg) {
+    filter: grayscale(1) brightness(0) opacity(0.8);
+  }
+
+  .preview-card.theme-neon {
+    background: color-mix(in srgb, var(--theme-ac) 8%, var(--surface));
+    border: 1px solid var(--theme-ac);
+    box-shadow: 0 0 10px color-mix(in srgb, var(--theme-ac) 25%, transparent);
+  }
+  .preview-card.theme-neon .preview-name {
+    text-shadow: 0 0 10px var(--theme-ac);
+  }
+
+  .preview-card.theme-glass {
+    border: 1px solid transparent;
+  }
+
+  .preview-card.theme-solid {
+    background: transparent;
+    border: 1px solid var(--theme-ac);
+  }
+
+  .preview-card.theme-sketch {
+    border: 1px dashed var(--theme-ac); border-radius: 2px;
+  }
+
   .preview-icon {
     flex-shrink: 0;
     width: 36px;
@@ -467,7 +542,8 @@
   .field label {
     font-size: 11px; color: var(--text-muted); text-transform: uppercase;
     letter-spacing: 0.05em; font-family: var(--font-mono);
-    display: flex; align-items: center; gap: 4px;
+    display: flex; align-items: center; justify-content: center; gap: 4px;
+    text-align: center;
   }
   .optional { font-size: 9px; color: var(--text-disabled); text-transform: lowercase; }
 
@@ -524,9 +600,9 @@
   /* Icon picker field — fixed height container so switching between
      emoji and icon modes does not resize the modal. */
   .icon-picker-field {
-    height: 260px;
-    min-height: 260px;
-    max-height: 260px;
+    height: 320px;
+    min-height: 320px;
+    max-height: 320px;
     overflow: hidden;
   }
   .icon-picker-field > :global(*) {
