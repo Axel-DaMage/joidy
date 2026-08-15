@@ -24,9 +24,24 @@ param(
   [string]$Service = ""
 )
 
-# Resolve project directory from script location
+# Resolve project directory.
+# Priority: JOIDY_DIR env var → ~/.config/joidy/path file → script location (../)
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$ProjectDir = Split-Path -Parent $ScriptDir
+
+if ($env:JOIDY_DIR -and (Test-Path $env:JOIDY_DIR)) {
+  $ProjectDir = $env:JOIDY_DIR
+} elseif (Test-Path "$env:USERPROFILE\.config\joidy\path") {
+  $ProjectDir = Get-Content "$env:USERPROFILE\.config\joidy\path" -Raw
+  $ProjectDir = $ProjectDir.Trim()
+} else {
+  $ProjectDir = Split-Path -Parent $ScriptDir
+}
+
+if (-not (Test-Path "$ProjectDir\docker-compose.yml")) {
+  Write-Err "docker-compose.yml not found in $ProjectDir"
+  Write-Host "Set JOIDY_DIR env var or create ~/.config/joidy/path with the project path."
+  exit 1
+}
 
 Set-Location $ProjectDir
 
@@ -37,12 +52,44 @@ function Write-Ok($msg)     { Write-Host "✓ $msg" -ForegroundColor Green }
 function Write-Warn($msg)   { Write-Host "⚠ $msg" -ForegroundColor Yellow }
 function Write-Err($msg)    { Write-Host "✗ $msg" -ForegroundColor Red }
 
+function Get-LanIp {
+  # Try to get the first non-loopback IPv4 address
+  $ip = "localhost"
+  try {
+    $ips = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+      Where-Object { $_.IPAddress -ne '127.0.0.1' -and $_.PrefixOrigin -ne 'WellKnown' -and $_.IPAddress -notlike '169.254.*' -and $_.IPAddress -notlike '172.*' } |
+      Select-Object -First 1
+    if ($ips) { $ip = $ips.IPAddress }
+  } catch {
+    # Fallback for older PowerShell / non-Windows
+    $hostEntry = [System.Net.Dns]::GetHostEntry([System.Net.Dns]::GetHostName())
+    foreach ($addr in $hostEntry.AddressList) {
+      if ($addr.AddressFamily -eq 'InterNetwork' -and $addr.ToString() -ne '127.0.0.1' -and $addr.ToString() -notlike '169.254.*') {
+        $ip = $addr.ToString()
+        break
+      }
+    }
+  }
+  return $ip
+}
+
+function Write-AccessUrl {
+  $port = if ($env:FRONTEND_PORT) { $env:FRONTEND_PORT } else { "3000" }
+  $ip = Get-LanIp
+  Write-Host ""
+  Write-Host "╔══════════════════════════════════════════════╗" -ForegroundColor Green
+  Write-Host "║  Joidy is running at:                        ║" -ForegroundColor Green
+  Write-Host "║  http://${ip}:${port}" -ForegroundColor Green
+  Write-Host "╚══════════════════════════════════════════════╝" -ForegroundColor Green
+}
+
 function Invoke-Up {
   Write-Status "Starting Joidy services..."
   docker compose up -d
   Write-Status "Waiting for services to stabilize..."
   Start-Sleep -Seconds 5
   Invoke-Status
+  Write-AccessUrl
 }
 
 function Invoke-Down {
@@ -91,6 +138,7 @@ function Invoke-Restart {
   Write-Status "Restarting all Joidy services..."
   docker compose restart
   Write-Ok "All services restarted."
+  Write-AccessUrl
 }
 
 function Invoke-Status {

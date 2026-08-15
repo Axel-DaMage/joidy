@@ -5,6 +5,13 @@
 #   chmod +x scripts/joidy.sh
 #   ln -sf "$(pwd)/scripts/joidy.sh" ~/.local/bin/joidy
 #
+#   Or copy to /usr/local/bin and set the project path:
+#     sudo cp scripts/joidy.sh /usr/local/bin/joidy
+#     echo "$HOME/Documents/Repos/Joidy" > ~/.config/joidy/path
+#
+#   Or export JOIDY_DIR in your shell profile:
+#     export JOIDY_DIR="$HOME/Documents/Repos/Joidy"
+#
 # Usage:
 #   joidy up       Start all services (detached)
 #   joidy down     Stop all services
@@ -18,9 +25,23 @@
 
 set -e
 
-# Resolve project directory from script location
+# Resolve project directory.
+# Priority: JOIDY_DIR env var → ~/.config/joidy/path file → script location (../)
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
-PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+if [ -n "$JOIDY_DIR" ] && [ -d "$JOIDY_DIR" ]; then
+  PROJECT_DIR="$JOIDY_DIR"
+elif [ -f "$HOME/.config/joidy/path" ]; then
+  PROJECT_DIR="$(cat "$HOME/.config/joidy/path")"
+else
+  PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+fi
+
+if [ ! -f "$PROJECT_DIR/docker-compose.yml" ]; then
+  echo "Error: docker-compose.yml not found in $PROJECT_DIR" >&2
+  echo "Set JOIDY_DIR env var or create ~/.config/joidy/path with the project path." >&2
+  exit 1
+fi
 
 cd "$PROJECT_DIR"
 
@@ -50,12 +71,44 @@ print_err() {
   echo -e "${RED}✗${NC} $1"
 }
 
+# Detect the LAN IP address (exclude loopback, docker, virbr, etc.)
+get_lan_ip() {
+  local ip=""
+  # Try ip command first (modern Linux)
+  if command -v ip &>/dev/null; then
+    ip=$(ip -4 addr show 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}' \
+      | grep -vE '127\.|172\.1[6-9]\.|172\.2[0-9]\.|172\.3[01]\.|169\.254\.' \
+      | head -1)
+  fi
+  # Fallback to hostname command (macOS / older Linux)
+  if [ -z "$ip" ] && command -v hostname &>/dev/null; then
+    ip=$(hostname -I 2>/dev/null | awk '{print $1}')
+    # Filter out docker/virbr ranges
+    echo "$ip" | grep -qE '^172\.|^169\.254\.' && ip=""
+  fi
+  # Final fallback
+  [ -z "$ip" ] && ip="localhost"
+  echo "$ip"
+}
+
+print_access_url() {
+  local port="${FRONTEND_PORT:-3000}"
+  local ip
+  ip=$(get_lan_ip)
+  echo ""
+  echo -e "${GREEN}╔══════════════════════════════════════════════╗${NC}"
+  echo -e "${GREEN}║  Joidy is running at:                        ║${NC}"
+  echo -e "${GREEN}║  http://${ip}:${port}${NC}"
+  echo -e "${GREEN}╚══════════════════════════════════════════════╝${NC}"
+}
+
 cmd_up() {
   print_status "Starting Joidy services..."
   docker compose up -d
   print_status "Waiting for services to stabilize..."
   sleep 5
   cmd_status
+  print_access_url
 }
 
 cmd_down() {
@@ -103,6 +156,7 @@ cmd_restart() {
   print_status "Restarting all Joidy services..."
   docker compose restart
   print_ok "All services restarted."
+  print_access_url
 }
 
 cmd_status() {
