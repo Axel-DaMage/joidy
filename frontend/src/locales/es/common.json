@@ -81,6 +81,27 @@
     "language": "Idioma",
     "languageHint": "El idioma de la interfaz"
   },
+  "power": {
+    "title": "Energía y Sistema",
+    "status": "Estado de Servicios",
+    "hibernate": "Hibernar",
+    "wake": "Despertar",
+    "shutdown": "Apagar",
+    "hibernateHint": "Detiene el servicio de IA y el worker para ahorrar recursos. La API, el frontend y la base de datos siguen funcionando.",
+    "shutdownHint": "Detiene todos los servicios. Necesitarás ejecutar 'joidy up' en tu terminal para reiniciar.",
+    "shutdownConfirm": "¿Seguro que quieres apagar todos los servicios? Necesitarás la CLI para reiniciar.",
+    "dockerUnavailable": "Socket de Docker no disponible. Usa la CLI (comando 'joidy') para gestionar los servicios.",
+    "running": "Activo",
+    "stopped": "Detenido",
+    "healthy": "Saludable",
+    "unhealthy": "No saludable",
+    "refreshing": "Actualizando...",
+    "refresh": "Actualizar",
+    "hibernating": "Hibernando",
+    "allRunning": "Todos los servicios activos",
+    "actionDone": "Listo",
+    "actionFailed": "Falló"
+  },
   "quickCapture": {
     "placeholder": "Captura una idea rápida...",
     "defaultTitle": "Nota rápida",

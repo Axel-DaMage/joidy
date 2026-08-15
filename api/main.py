@@ -31,6 +31,7 @@ from routers import (
     skills,
     stats,
     sync,
+    system,
     tags,
     upload,
     vault,
@@ -211,6 +212,7 @@ app.include_router(stats.router, dependencies=[Depends(get_current_user)])
 app.include_router(analytics.router, dependencies=[Depends(get_current_user)])
 app.include_router(sync.router, dependencies=[Depends(get_current_user)])
 app.include_router(upload.router, dependencies=[Depends(get_current_user)])
+app.include_router(system.router, dependencies=[Depends(get_current_user)])
 
 # Ensure the upload directory exists before serving it. This is best-effort:
 # uploads are a non-critical feature, so an unwritable path (read-only mount,
