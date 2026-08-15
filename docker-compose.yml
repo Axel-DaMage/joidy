@@ -23,6 +23,11 @@ services:
       - ./data/uploads:/data/uploads
       - ./.env:/app/.env
       - ${OBSIDIAN_VAULT_PATH:-./data/vault}:/vault
+      # Docker socket for power management (sleep/wake/shutdown from web UI).
+      # On Linux: ensure the container user can access the socket
+      #   (set DOCKER_GID in .env to your host's docker group GID, or use 0 for root).
+      # On Windows Docker Desktop: the socket is accessible by default.
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-joidy}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-joidy}
       - AI_SERVICE_URL=http://ai-service:8002
@@ -31,6 +36,11 @@ services:
       - UPLOAD_DIR=/data/uploads
       - OBSIDIAN_VAULT_PATH=/vault
       - VAULT_PATH=/vault
+      - DOCKER_SOCK_PATH=/var/run/docker.sock
+    # Add the host's docker group so the app user can access the Docker socket.
+    # Set DOCKER_GID in .env (find it with `getent group docker | cut -d: -f3` on Linux).
+    group_add:
+      - "${DOCKER_GID:-0}"
     depends_on:
       postgres:
         condition: service_healthy
