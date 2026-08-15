@@ -5,8 +5,9 @@
   export let itemHeight = 32; // This now acts as a default/fallback height
   export let buffer = 5;
   export let getKey: (item: any, index: number) => any = (item, i) => item.id ?? i;
+  export let scrollTop = 0;
+  export let onScrollChange: (scrollTop: number) => void = () => {};
 
-  let scrollTop = 0;
   let containerEl: HTMLElement;
   let containerHeight = 400;
 
@@ -73,6 +74,13 @@
   function onScroll(e: Event) {
     const target = e.target as HTMLElement;
     scrollTop = target.scrollTop;
+    onScrollChange(scrollTop);
+  }
+
+  // Sync the container's scroll position when scrollTop is changed
+  // externally (e.g. scroll restoration via bind:scrollTop).
+  $: if (containerEl && scrollTop !== containerEl.scrollTop) {
+    containerEl.scrollTop = scrollTop;
   }
 
   let ro: ResizeObserver;

@@ -19,7 +19,7 @@
   import QuickCaptureWidget from '$lib/components/QuickCaptureWidget.svelte';
   import ScientificCalculator from '$lib/components/ScientificCalculator.svelte';
   import VirtualList from '$lib/components/VirtualList.svelte';
-  import { notes, notesLoading, loadNotes, loadMore, hasMoreNotes, loadingMore, createNote, updateNote, deleteNote, aiSuggestions, notesLoadedOnce, selectedNoteIds, bulkMode, toggleNoteSelection, selectAllNotes, clearNoteSelection, deleteSelectedNotes, tagSelectedNotes, untagSelectedNotes } from '$lib/stores/notes';
+  import { notes, notesLoading, loadNotes, loadMore, hasMoreNotes, loadingMore, createNote, updateNote, deleteNote, aiSuggestions, selectedNoteIds, bulkMode, toggleNoteSelection, selectAllNotes, clearNoteSelection, deleteSelectedNotes, tagSelectedNotes, untagSelectedNotes } from '$lib/stores/notes';
   import { buildTree, flattenTree, extractFrontmatter, getFileIcon, type SortMode, type FlatNode } from '$lib/utils/fileTree';
   import TreeContextMenu from '$lib/components/TreeContextMenu.svelte';
   import FolderPicker from '$lib/components/FolderPicker.svelte';
@@ -140,6 +140,9 @@
   let listScrollEl: HTMLDivElement | null = null;
   let treeScrollTop = 0;
   let listScrollTop = 0;
+  let scrollReady = false;
+  let virtualScrollTop = 0;
+  let lastVirtualScroll = 0;
   let lastRestoredViewMode: 'tree' | 'list' = 'tree';
 
   const SORT_MODES: SortMode[] = ['az', 'za', 'edit-new', 'edit-old', 'create-new', 'create-old'];
@@ -201,7 +204,10 @@
   }
 
   function persistNotesPrefs() {
-    const currentScroll = listScrollEl?.scrollTop ?? 0;
+    // When VirtualList is used (>50 items), listScrollEl.scrollTop is always 0.
+    // Use virtualScrollTop (bound to VirtualList's internal scroll) instead.
+    const itemCount = viewMode === 'tree' ? flatNodes.length : filtered.length;
+    const currentScroll = itemCount > 50 ? virtualScrollTop : (listScrollEl?.scrollTop ?? 0);
     const nextTreeScrollTop = viewMode === 'tree' ? currentScroll : treeScrollTop;
     const nextListScrollTop = viewMode === 'list' ? currentScroll : listScrollTop;
 
@@ -378,38 +384,20 @@
 
   $: if (notesPrefsReady && viewMode !== lastRestoredViewMode) {
     lastRestoredViewMode = viewMode;
+    const target = viewMode === 'tree' ? treeScrollTop : listScrollTop;
+    lastVirtualScroll = target;
+    virtualScrollTop = target;
     tick().then(() => {
       if (!listScrollEl) return;
-      listScrollEl.scrollTop = viewMode === 'tree' ? treeScrollTop : listScrollTop;
+      listScrollEl.scrollTop = target;
+      lastVirtualScroll = target;
+      virtualScrollTop = target;
     });
   }
 
-  // Restore scroll position as soon as the scroll container is available
-  // and prefs are loaded — avoids the flash at scrollTop=0 before the
-  // saved position is applied.
-  let scrollRestored = false;
-  $: if (notesPrefsReady && listScrollEl && !scrollRestored) {
-    scrollRestored = true;
-    const snap = getSnapshot('/notes');
-    const snapScroll = snap?.scrollPositions;
-    listScrollEl.scrollTop = snapScroll?.['notes-list'] ?? (viewMode === 'tree' ? treeScrollTop : listScrollTop);
-  }
-
   onMount(async () => {
-    try {
-      const config = await api.config.get();
-      dailyNotesConfigured = Boolean(config.obsidian_vault_path?.trim() && config.daily_notes_folder?.trim());
-    } catch {
-      dailyNotesConfigured = false;
-    }
-
-    try {
-      const stats = await api.stats.system();
-      totalNotes = stats.notes;
-    } catch {
-      totalNotes = 0;
-    }
-
+    // Load prefs from localStorage FIRST (synchronous) — before any async
+    // operation so we know the target scroll position ASAP.
     const saved = loadUserSettings().notesUi;
     if (saved?.panelWidth !== undefined) {
       panelWidth = Math.max(MIN_W, Math.min(MAX_W, Number(saved.panelWidth)));
@@ -430,7 +418,6 @@
     allCollapsed = Boolean(saved?.allCollapsed);
     treeScrollTop = Number.isFinite(Number(saved?.treeScrollTop)) ? Number(saved?.treeScrollTop) : 0;
     listScrollTop = Number.isFinite(Number(saved?.listScrollTop)) ? Number(saved?.listScrollTop) : 0;
-    notesPrefsReady = true;
 
     const snap = getSnapshot('/notes');
     if (snap) {
@@ -442,7 +429,36 @@
       if (snap.state.selectedNoteId) selectedId = snap.state.selectedNoteId;
     }
 
+    notesPrefsReady = true;
+
+    // Kick off note loading (loads from cache synchronously inside loadNotes,
+    // then fetches from API asynchronously).
     loadNotes();
+
+    // Wait one tick for Svelte to render the cached notes into the DOM.
+    await tick();
+
+    // Apply scroll position BEFORE making the list visible.
+    const target = viewMode === 'tree' ? treeScrollTop : listScrollTop;
+    const itemCount = viewMode === 'tree' ? flatNodes.length : filtered.length;
+    if (itemCount > 50) {
+      lastVirtualScroll = target;
+      virtualScrollTop = target;
+    } else if (listScrollEl) {
+      listScrollEl.scrollTop = target;
+    }
+
+    // Now reveal the list — the user never sees it at position 0.
+    scrollReady = true;
+
+    // Fire async config/stats fetches in parallel (non-blocking).
+    api.config.get().then(config => {
+      dailyNotesConfigured = Boolean(config.obsidian_vault_path?.trim() && config.daily_notes_folder?.trim());
+    }).catch(() => { dailyNotesConfigured = false; });
+
+    api.stats.system().then(stats => {
+      totalNotes = stats.notes;
+    }).catch(() => { totalNotes = 0; });
 
     requestAnimationFrame(async () => {
       await tick();
@@ -462,9 +478,12 @@
   onDestroy(() => window.removeEventListener('beforeunload', handleBeforeUnload));
 
   function handleBeforeUnload() {
+    // Scroll position is persisted via onListScroll/onVirtualScrollChange
+    // → persistNotesPrefs → localStorage. No need to capture it in the
+    // snapshot (which is stale in SPA navigation anyway).
     captureSnapshot('/notes', 
       { search, viewMode, sortMode, allCollapsed, collapsedPaths: Array.from(collapsed), selectedNoteId: selectedNote?.id },
-      [{ id: 'notes-list', scrollTop: listScrollEl?.scrollTop ?? 0 }]
+      []
     );
   }
 
@@ -497,8 +516,23 @@
 
   function onListScroll() {
     if (!notesPrefsReady || !listScrollEl) return;
+    // When VirtualList is used (>50 items), the outer .list-scroll container
+    // doesn't scroll — VirtualList has its own internal scroll container.
+    // Scroll position is tracked via onVirtualScrollChange callback instead.
+    const itemCount = viewMode === 'tree' ? flatNodes.length : filtered.length;
+    if (itemCount > 50) return;
     if (viewMode === 'tree') treeScrollTop = listScrollEl.scrollTop;
     else listScrollTop = listScrollEl.scrollTop;
+    persistNotesPrefs();
+  }
+
+  // Called by VirtualList when its internal scroll position changes.
+  // Replaces a reactive block that caused a cyclical dependency.
+  function onVirtualScrollChange(scrollVal: number) {
+    if (!notesPrefsReady) return;
+    lastVirtualScroll = scrollVal;
+    if (viewMode === 'tree') treeScrollTop = scrollVal;
+    else listScrollTop = scrollVal;
     persistNotesPrefs();
   }
 
@@ -712,7 +746,7 @@
       </div>
     {/if}
 
-    <div class="list-scroll" bind:this={listScrollEl} onscroll={onListScroll}>
+    <div class="list-scroll" class:scroll-ready={scrollReady} bind:this={listScrollEl} onscroll={onListScroll}>
       {#if $notesLoading}
         <div class="empty-msg">{$t('notesPage.loading')}</div>
 
@@ -720,7 +754,7 @@
         {#if flatNodes.length === 0}
           <div class="empty-msg">{search ? 'Sin resultados.' : 'Sin notas.'}</div>
         {:else if flatNodes.length > 50}
-            <VirtualList items={flatNodes} itemHeight={26} getKey={(n, i) => n.path ?? i} let:item let:index>
+            <VirtualList items={flatNodes} itemHeight={26} getKey={(n, i) => n.path ?? i} bind:scrollTop={virtualScrollTop} onScrollChange={onVirtualScrollChange} let:item let:index>
               {#if item.type === 'folder'}
                 <div
                   class="tree-row folder-row"
@@ -813,7 +847,7 @@
         {#if filtered.length === 0}
           <div class="empty-msg">{search ? 'Sin resultados.' : 'Sin notas.'}</div>
         {:else if filtered.length > 50}
-          <VirtualList items={filtered} itemHeight={52} let:item let:index>
+          <VirtualList items={filtered} itemHeight={52} bind:scrollTop={virtualScrollTop} onScrollChange={onVirtualScrollChange} let:item let:index>
             <NoteCard note={item} active={selectedNote?.id === item.id} selected={$selectedNoteIds.has(item.id)} bulkMode={$bulkMode} on:select={(e) => openNote(e.detail)} on:toggleSelect={(e) => toggleNoteSelection(e.detail)} on:customize={(e) => openFolderCustomizer(e.detail)} />
           </VirtualList>
         {:else}
@@ -1253,6 +1287,7 @@
   .sep { color: var(--border); }
 
   .list-scroll { flex: 1; overflow-y: auto; overflow-x: hidden; }
+  .list-scroll:not(.scroll-ready) { visibility: hidden; }
 
   .tree-wrap { padding: 4px 0; }
 
