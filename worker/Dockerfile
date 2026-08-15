@@ -24,6 +24,6 @@ COPY --chown=app:app . .
 USER app
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=10s \
-  CMD python -c "import os, signal; os.kill(1, 0)" || exit 1
+  CMD curl -f http://localhost:8001/health || exit 1
 
 CMD ["python", "main.py"]

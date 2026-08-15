@@ -82,7 +82,7 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import os, signal; os.kill(1, 0)\" || exit 1"]
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
       interval: 10s
       timeout: 5s
       retries: 5
