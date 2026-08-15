@@ -5,6 +5,7 @@ Export endpoints for notes.
 import io
 import zipfile
 from datetime import datetime
+from typing import Iterator
 
 from database import get_db
 from fastapi import APIRouter, Depends, HTTPException
@@ -16,6 +17,37 @@ from sqlalchemy.orm import Session, selectinload
 router = APIRouter(prefix="/export", tags=["export"])
 
 EXPORT_MAX_NOTES = 5000
+EXPORT_BATCH_SIZE = 100
+
+
+def iter_notes_batched(db: Session, limit: int = EXPORT_MAX_NOTES) -> Iterator[Note]:
+    """Yield notes in batches using SQL pagination so that not all notes (and
+    their tag relationships) are loaded into memory at once.
+
+    Each batch is expunged from the session after it has been consumed, freeing
+    the associated ORM objects before the next batch is fetched.
+    """
+    offset = 0
+    remaining = limit
+    while remaining > 0:
+        batch_size = min(EXPORT_BATCH_SIZE, remaining)
+        batch = (
+            db.query(Note)
+            .options(selectinload(Note.tags).selectinload(NoteTag.tag))
+            .order_by(Note.created_at.desc())
+            .limit(batch_size)
+            .offset(offset)
+            .all()
+        )
+        if not batch:
+            break
+        for note in batch:
+            yield note
+        # Detach the consumed batch from the session so it can be garbage
+        # collected before the next batch is loaded.
+        db.expunge_all()
+        offset += len(batch)
+        remaining -= len(batch)
 
 
 def note_to_markdown(note: Note) -> str:
@@ -75,21 +107,19 @@ def note_to_html(note: Note) -> str:
 @router.get("/notes/markdown")
 def export_notes_markdown(db: Session = Depends(get_db), user: dict = Depends(get_current_user)):
     """Export all notes as a single markdown file."""
-    notes = (
-        db.query(Note)
-        .options(selectinload(Note.tags).selectinload(NoteTag.tag))
-        .order_by(Note.created_at.desc())
-        .limit(EXPORT_MAX_NOTES)
-        .all()
-    )
-
-    if not notes:
+    if db.query(Note).count() == 0:
         raise HTTPException(status_code=404, detail="No notes to export")
 
-    content = "\n---\n\n".join(note_to_markdown(n) for n in notes)
+    def generate():
+        first = True
+        for note in iter_notes_batched(db):
+            if not first:
+                yield b"\n---\n\n"
+            first = False
+            yield note_to_markdown(note).encode("utf-8")
 
     return StreamingResponse(
-        io.BytesIO(content.encode("utf-8")),
+        generate(),
         media_type="text/markdown",
         headers={"Content-Disposition": f"attachment; filename=joidy-export-{datetime.now().date()}.md"}
     )
@@ -98,23 +128,18 @@ def export_notes_markdown(db: Session = Depends(get_db), user: dict = Depends(ge
 @router.get("/notes/html")
 def export_notes_html(db: Session = Depends(get_db), user: dict = Depends(get_current_user)):
     """Export all notes as a single HTML file."""
-    notes = (
-        db.query(Note)
-        .options(selectinload(Note.tags).selectinload(NoteTag.tag))
-        .order_by(Note.created_at.desc())
-        .limit(EXPORT_MAX_NOTES)
-        .all()
-    )
-
-    if not notes:
+    if db.query(Note).count() == 0:
         raise HTTPException(status_code=404, detail="No notes to export")
 
-    html_parts = [note_to_html(n) for n in notes]
-    full_html = f"""<!DOCTYPE html>
+    export_date = datetime.now().date()
+    export_iso = datetime.now().isoformat()
+
+    def generate():
+        yield f"""<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Joidy Export - {datetime.now().date()}</title>
+  <title>Joidy Export - {export_date}</title>
   <style>
     body {{ font-family: system-ui, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; }}
     .note {{ margin-bottom: 60px; padding-bottom: 40px; border-bottom: 1px solid #eee; }}
@@ -122,36 +147,33 @@ def export_notes_html(db: Session = Depends(get_db), user: dict = Depends(get_cu
 </head>
 <body>
   <h1>Joidy Notes Export</h1>
-  <p>Exported on {datetime.now().isoformat()}</p>
+  <p>Exported on {export_iso}</p>
   <hr>
-  {"".join(f'<div class="note">{h}</div>' for h in html_parts)}
-</body>
-</html>"""
+""".encode("utf-8")
+        for note in iter_notes_batched(db):
+            yield f'<div class="note">{note_to_html(note)}</div>'.encode("utf-8")
+        yield b"\n</body>\n</html>"
 
     return StreamingResponse(
-        io.BytesIO(full_html.encode("utf-8")),
+        generate(),
         media_type="text/html",
-        headers={"Content-Disposition": f"attachment; filename=joidy-export-{datetime.now().date()}.html"}
+        headers={"Content-Disposition": f"attachment; filename=joidy-export-{export_date}.html"}
     )
 
 
 @router.get("/notes/zip")
 def export_notes_zip(db: Session = Depends(get_db), user: dict = Depends(get_current_user)):
     """Export all notes as individual markdown files in a ZIP."""
-    notes = (
-        db.query(Note)
-        .options(selectinload(Note.tags).selectinload(NoteTag.tag))
-        .order_by(Note.created_at.desc())
-        .limit(EXPORT_MAX_NOTES)
-        .all()
-    )
-
-    if not notes:
+    if db.query(Note).count() == 0:
         raise HTTPException(status_code=404, detail="No notes to export")
 
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-        for note in notes:
+        # Notes are fetched in batches so that not all notes (and their tag
+        # relationships) are held in memory at once. The ZIP archive itself is
+        # still assembled in a buffer, but the per-note ORM objects are released
+        # between batches.
+        for note in iter_notes_batched(db):
             safe_title = "".join(c for c in note.title if c.isalnum() or c in " -_").strip()[:50]
             if not safe_title:
                 safe_title = "unnamed"
