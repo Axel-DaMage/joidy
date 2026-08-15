@@ -256,7 +256,7 @@ def health():
 
 
 @app.get("/health/ready")
-def health_ready():
+async def health_ready():
     """Comprehensive health check for orchestration (Kubernetes, Docker)."""
     from database import engine
     from sqlalchemy import text
@@ -284,8 +284,8 @@ def health_ready():
     # hardcoded "ok" stub that masked a broken ai-service).
     try:
         import httpx
-        with httpx.Client(timeout=2.0) as client:
-            r = client.get(f"{settings.ai_service_url}/health")
+        async with httpx.AsyncClient(timeout=2.0) as client:
+            r = await client.get(f"{settings.ai_service_url}/health")
             if r.status_code == 200:
                 body = r.json()
                 # Distinguish "alive" from "fully functional": if the ai-service
