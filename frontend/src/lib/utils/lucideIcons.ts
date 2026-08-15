@@ -5,13 +5,23 @@
 // the glob result in a separate chunk, so the main bundle stays small (#209).
 //
 // The glob targets the compiled `.js` icon files shipped under
-// `lucide-svelte/dist/icons/` via a bare module specifier, which Vite resolves
-// through the module system — more robust than a relative `node_modules` path.
+// `lucide-svelte/dist/icons/`. A relative path is required because the
+// package's `exports` map does not expose `./dist/icons/*` as a public
+// sub-path, so a bare specifier like `lucide-svelte/dist/icons/*.js` fails
+// at build time.
 
-const iconModules = import.meta.glob('lucide-svelte/dist/icons/*.js', {
-  eager: true,
-  import: 'default',
-});
+// The glob matches all `.js` files under `dist/icons/` except `index.js`,
+// which is a barrel re-export with no default export and would break Rollup.
+const iconModules = import.meta.glob(
+  [
+    '../../../node_modules/lucide-svelte/dist/icons/*.js',
+    '!../../../node_modules/lucide-svelte/dist/icons/index.js',
+  ],
+  {
+    eager: true,
+    import: 'default',
+  }
+);
 
 // kebab-case file name → PascalCase (e.g. "a-arrow-down" → "AArrowDown",
 // "file-audio-2" → "FileAudio2"). Matches the PascalCase keys that the old
@@ -26,7 +36,7 @@ function kebabToPascal(kebab: string): string {
 // Build a map of PascalCase name → icon component (synchronous).
 const _icons = new Map<string, any>();
 for (const path of Object.keys(iconModules)) {
-  // path looks like "lucide-svelte/dist/icons/a-arrow-down.js"
+  // path looks like "../../../node_modules/lucide-svelte/dist/icons/a-arrow-down.js"
   const file = path.split('/').pop()!.replace(/\.js$/, '');
   _icons.set(kebabToPascal(file), (iconModules as Record<string, any>)[path]);
 }
