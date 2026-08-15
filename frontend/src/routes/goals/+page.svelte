@@ -9,7 +9,7 @@
   import { use24HourClock } from '$lib/stores/settings';
   import { getLocale } from '$lib/stores/locale';
   import { applyGamificationResult, showXPGain } from '$lib/stores/gamification';
-  import { getCachedData, setCachedData } from '$lib/utils/userSettings';
+  import { getCachedData, setCachedData, loadUserSettings, patchUserSettings } from '$lib/utils/userSettings';
   import { logger } from '$lib/utils/logger';
   import { GOAL_COLOR_PRESETS, DEFAULT_GOAL_COLOR, TEMPORALITY_COLORS } from '$lib/utils/goalColors';
   import StreakIcon from '$lib/components/StreakIcon.svelte';
@@ -49,6 +49,7 @@
       newPinned.add(goalId);
     }
     pinnedGoals = newPinned;
+    patchUserSettings({ goalsUi: { pinnedGoalIds: [...newPinned] } });
   }
 
   const EMOJIS = Array.from(new Set([
@@ -185,6 +186,16 @@
     const cachedTags = getCachedData<TagType[]>('tags');
     if (cachedGoals) goals = cachedGoals;
     if (cachedTags) tags = cachedTags;
+
+    // Restore pinned goals from localStorage
+    try {
+      const saved = loadUserSettings().goalsUi;
+      if (saved?.pinnedGoalIds && Array.isArray(saved.pinnedGoalIds)) {
+        pinnedGoals = new Set(saved.pinnedGoalIds);
+      }
+    } catch {
+      // ignore storage errors
+    }
 
     try {
       // Load only essential data immediately (goals + tags)
