@@ -415,7 +415,10 @@
     "file": "Adjuntar archivo",
     "zenMode": "Modo Zen (Esc para salir)",
     "zenModeShort": "Modo Zen",
-    "wysiwyg": "Editor visual (WYSIWYG)"
+    "wysiwyg": "Editor visual (WYSIWYG) — escribe con formato (Ctrl+Shift+V)",
+    "wysiwygShort": "Editor visual",
+    "preview": "Vista previa renderizada — solo lectura (Ctrl+P)",
+    "previewShort": "Vista previa"
   },
   "goalEditor": {
     "previewPlaceholder": "Escribe algo para ver el preview...",
