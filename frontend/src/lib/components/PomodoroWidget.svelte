@@ -30,7 +30,7 @@
 
   <!-- Big ring -->
   <div class="ring-wrap">
-    <svg width="150" height="150" viewBox="0 0 150 150" class="ring-svg">
+    <svg viewBox="0 0 150 150" class="ring-svg">
       <defs>
         <linearGradient id="pomodoroRingBlend" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stop-color="var(--xp)" />
@@ -112,7 +112,11 @@
     flex-shrink: 0;
   }
 
-  .ring-svg { display: block; }
+  .ring-svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
 
   .ring-overlay {
     position: absolute;
@@ -231,6 +235,16 @@
   .dur-sep {
     font-size: 9px;
     color: var(--text-disabled, var(--border));
+  }
+
+  @media (max-width: 768px) {
+    .ring-wrap {
+      width: 130px;
+      height: 130px;
+    }
+    .timer {
+      font-size: 28px;
+    }
   }
 
   @media (max-width: 480px) {
