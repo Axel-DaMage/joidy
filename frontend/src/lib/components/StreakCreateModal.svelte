@@ -278,7 +278,7 @@
             </div>
 
             {#if !useIcon}
-              <div class="field">
+              <div class="field icon-picker-field">
                 <div class="emoji-grid">
                   {#each EMOJIS as e}
                     <button class="emoji-btn" class:selected={emoji === e} onclick={() => emoji = e}>{e}</button>
@@ -286,7 +286,7 @@
                 </div>
               </div>
             {:else}
-              <div class="field">
+              <div class="field icon-picker-field">
                 <LazyIconPicker selected={icon} color={color} onSelect={(ic) => icon = ic} />
               </div>
             {/if}
@@ -521,13 +521,27 @@
   }
   .icon-type-btn.selected { border-color: var(--text-primary); color: var(--text-primary); }
 
+  /* Icon picker field — fixed height container so switching between
+     emoji and icon modes does not resize the modal. */
+  .icon-picker-field {
+    height: 260px;
+    min-height: 260px;
+    max-height: 260px;
+    overflow: hidden;
+  }
+  .icon-picker-field > :global(*) {
+    height: 100%;
+    min-height: 0;
+    max-height: 100%;
+    overflow: hidden;
+  }
+
   /* Emoji grid */
   .emoji-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
     gap: 4px;
-    min-height: 220px;
-    max-height: 300px;
+    height: 100%;
     overflow-y: auto;
     padding: 4px;
     align-content: start;
