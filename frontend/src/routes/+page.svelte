@@ -605,6 +605,21 @@
   .empty-state.success { color: var(--success); text-align: center; padding: 12px; }
 
   /* ── Responsive ── */
+
+  /* Tablet — narrow the left panel and reduce gaps */
+  @media (max-width: 1024px) {
+    .dashboard {
+      grid-template-columns: minmax(180px, 220px) 5px 1fr;
+    }
+    .plant-section {
+      padding: var(--s3) var(--s4) var(--s3);
+    }
+    .module-viewport {
+      width: 140px;
+      height: 140px;
+    }
+  }
+
   @media (max-width: 768px) {
     .dashboard {
       grid-template-columns: 1fr;
@@ -679,6 +694,11 @@
     .module-label {
       min-width: 60px;
       font-size: 9px;
+    }
+
+    .fab {
+      right: var(--s2);
+      bottom: calc(60px + var(--s2));
     }
   }
 </style>

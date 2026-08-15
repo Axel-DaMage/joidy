@@ -232,4 +232,18 @@
     font-size: 9px;
     color: var(--text-disabled, var(--border));
   }
+
+  @media (max-width: 480px) {
+    .ring-wrap {
+      width: 120px;
+      height: 120px;
+    }
+    .timer {
+      font-size: 26px;
+    }
+    .ctrl-main {
+      padding: 5px 14px;
+      min-width: 64px;
+    }
+  }
 </style>

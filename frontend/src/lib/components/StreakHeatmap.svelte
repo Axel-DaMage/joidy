@@ -630,4 +630,29 @@
     color: var(--text-disabled);
     border-color: var(--border);
   }
+
+  @media (max-width: 480px) {
+    .wd-num,
+    .mday {
+      width: 30px;
+      height: 30px;
+      font-size: 14px;
+    }
+    .view-title-row {
+      gap: var(--s3);
+    }
+    .tab {
+      padding: 4px 10px;
+      font-size: 10px;
+    }
+  }
+
+  @media (max-width: 360px) {
+    .wd-num,
+    .mday {
+      width: 26px;
+      height: 26px;
+      font-size: 12px;
+    }
+  }
 </style>

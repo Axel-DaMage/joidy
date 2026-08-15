@@ -1324,5 +1324,28 @@
     .panel {
       width: 100%;
     }
+    .panel-header,
+    .panel-footer {
+      padding-left: var(--s3);
+      padding-right: var(--s3);
+    }
+    .section {
+      padding: var(--s3);
+    }
+    .config-message-footer {
+      white-space: normal;
+    }
+  }
+
+  @media (max-width: 380px) {
+    .panel-header {
+      padding: 10px var(--s2);
+    }
+    .section {
+      padding: var(--s2) var(--s3);
+    }
+    .toggle {
+      white-space: normal;
+    }
   }
 </style>

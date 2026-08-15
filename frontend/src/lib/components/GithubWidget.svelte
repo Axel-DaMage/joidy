@@ -216,4 +216,39 @@
     70% { box-shadow: 0 0 0 6px rgba(99, 102, 241, 0); opacity: 0.6; }
     100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); opacity: 1; }
   }
+
+  @media (max-width: 768px) {
+    .github-header {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 8px;
+      min-height: auto;
+      padding: var(--s2) var(--s3);
+    }
+    .gh-filters {
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .filter-btn {
+      min-width: 48px;
+    }
+    .github-summary {
+      gap: var(--s3);
+      padding: var(--s3);
+    }
+  }
+
+  @media (max-width: 480px) {
+    .gh-filters {
+      flex-direction: column;
+      gap: 4px;
+    }
+    .filter-btn {
+      width: 100%;
+      min-width: unset;
+    }
+    .gh-filter-divider {
+      display: none;
+    }
+  }
 </style>
