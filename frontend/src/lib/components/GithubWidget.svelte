@@ -152,6 +152,10 @@
   .github-body {
     --gh-item-h: 48px;
     height: calc(var(--gh-item-h) * var(--gh-items-max));
+    overflow-y: auto;
+  }
+  .github-body:has(.empty-state) {
+    height: auto;
   }
   .gh-item {
     display: flex; align-items: center; gap: 8px;
@@ -231,6 +235,10 @@
     }
     .filter-btn {
       min-width: 48px;
+    }
+    .github-body {
+      --gh-item-h: 40px;
+      max-height: 280px;
     }
     .github-summary {
       gap: var(--s3);
