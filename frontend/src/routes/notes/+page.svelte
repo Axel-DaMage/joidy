@@ -1315,17 +1315,16 @@
 
   .editor-panel {
     display: flex; flex-direction: column;
-    height: 100%; overflow: hidden;
+    height: 100%; overflow-y: auto;
     background: var(--bg); min-width: 0;
   }
-  
+
   /* ── Empty Dashboard ── */
   .empty-dashboard {
     display: flex; flex-direction: column;
     align-items: center; justify-content: start;
-    height: 100%; gap: 30px; padding: 60px 40px;
+    min-height: 100%; gap: 30px; padding: 60px 40px;
     background: var(--bg); color: var(--text-primary);
-    overflow-y: auto;
   }
   .dash-search-container {
     width: 100%; max-width: 850px;
