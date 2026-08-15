@@ -4,7 +4,6 @@ import { writable } from 'svelte/store';
 export type WidgetId =
   | 'plant-carousel'
   | 'stats-xp'
-  | 'activity-progress'
   | 'time-widget'
   | 'weather-widget'
   | 'pomodoro'
@@ -22,7 +21,6 @@ export interface WidgetMeta {
 export const WIDGET_REGISTRY: Record<WidgetId, WidgetMeta> = {
   'plant-carousel':    { id: 'plant-carousel',    label: 'Módulo visual',          panel: 'left'  },
   'stats-xp':          { id: 'stats-xp',          label: 'Estadísticas y XP',      panel: 'left'  },
-  'activity-progress': { id: 'activity-progress', label: 'Actividad semanal',      panel: 'left'  },
   'time-widget':       { id: 'time-widget',       label: 'Reloj',                  panel: 'left'  },
   'weather-widget': { id: 'weather-widget', label: 'Clima',         panel: 'left'  },
   'pomodoro':       { id: 'pomodoro',        label: 'Pomodoro',     panel: 'left'  },
