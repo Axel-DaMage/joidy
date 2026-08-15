@@ -192,7 +192,7 @@ graph LR
     API[API 8000<br/>FastAPI]
     AI[AI 8002<br/>FastAPI]
     Worker[Worker 8001<br/>asyncio]
-    DB[(SQLite + sqlite-vec)]
+    DB[(PostgreSQL 16 + pgvector)]
     Vault[Obsidian Vault]
 
     User --> FE
