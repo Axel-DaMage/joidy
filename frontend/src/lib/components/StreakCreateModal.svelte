@@ -197,116 +197,124 @@
       </div>
 
       <div class="modal-body">
-        <div class="preview-card" class:theme-gradient={theme === 'gradient'} style={previewStyle}>
-          <div class="preview-icon">
-            {#if useIcon && icon}
-              <StreakIcon name={icon} size={24} />
-            {:else}
-              <span class="preview-emoji">{emoji}</span>
+        <div class="modal-grid">
+          <!-- Left column: hard data -->
+          <div class="modal-col modal-col-data">
+            <div class="field">
+              <label>{$t('streakCreateModal.name')}</label>
+              <input bind:value={name} placeholder={$t('streakCreateModal.namePlaceholder')} autofocus />
+            </div>
+
+            <div class="field">
+              <label>{$t('streakCreateModal.description')} <span class="optional">{$t('streakCreateModal.optional')}</span></label>
+              <input bind:value={description} placeholder={$t('streakCreateModal.descriptionPlaceholder')} />
+            </div>
+
+            <div class="field">
+              <label>{$t('streakCreateModal.frequency')}</label>
+              <div class="freq-row">
+                <button class="freq-btn" class:selected={frequency === 'daily'} onclick={() => { frequency = 'daily'; frequencyDays = 1; }}>{$t('streakCreateModal.daily')}</button>
+                <button class="freq-btn" class:selected={frequency === 'weekly'} onclick={() => { frequency = 'weekly'; frequencyDays = 1; }}>{$t('streakCreateModal.weekly')}</button>
+                <button class="freq-btn" class:selected={frequency === 'monthly'} onclick={() => { frequency = 'monthly'; frequencyDays = 1; }}>{$t('streakCreateModal.monthly')}</button>
+                <button class="freq-btn" class:selected={frequency === 'every_n'} onclick={() => { frequency = 'every_n'; }}>cada N</button>
+              </div>
+            </div>
+
+            {#if frequency === 'every_n'}
+              <div class="freq-n-row">
+                <span class="freq-n-label">{$t('streakCreateModal.every')}</span>
+                <input type="number" bind:value={frequencyDays} min="1" max="365" class="freq-n-input" />
+                <span class="freq-n-label">días</span>
+              </div>
             {/if}
-          </div>
-          <div class="preview-info">
-            <span class="preview-name">{name || 'Nombre de la racha'}</span>
-            <span class="preview-meta mono">{name ? previewFreqLabel() : 'frecuencia'}</span>
-          </div>
-        </div>
 
-        <div class="field">
-          <label>{$t('streakCreateModal.name')}</label>
-          <input bind:value={name} placeholder={$t('streakCreateModal.namePlaceholder')} autofocus />
-        </div>
+            <div class="field-row">
+              <div class="field half">
+                <label><Calendar size={11} /> Fecha de inicio</label>
+                <input type="date" bind:value={startDate} disabled={isEdit} />
+              </div>
+              <div class="field half">
+                <label><Target size={11} /> Fecha objetivo <span class="optional">(op.)</span></label>
+                <input type="date" bind:value={targetDate} />
+              </div>
+            </div>
 
-        <div class="field">
-          <label>{$t('streakCreateModal.description')} <span class="optional">{$t('streakCreateModal.optional')}</span></label>
-          <input bind:value={description} placeholder={$t('streakCreateModal.descriptionPlaceholder')} />
-        </div>
-
-        <div class="field">
-          <label>{$t('streakCreateModal.frequency')}</label>
-          <div class="freq-row">
-            <button class="freq-btn" class:selected={frequency === 'daily'} onclick={() => { frequency = 'daily'; frequencyDays = 1; }}>{$t('streakCreateModal.daily')}</button>
-            <button class="freq-btn" class:selected={frequency === 'weekly'} onclick={() => { frequency = 'weekly'; frequencyDays = 1; }}>{$t('streakCreateModal.weekly')}</button>
-            <button class="freq-btn" class:selected={frequency === 'monthly'} onclick={() => { frequency = 'monthly'; frequencyDays = 1; }}>{$t('streakCreateModal.monthly')}</button>
-            <button class="freq-btn" class:selected={frequency === 'every_n'} onclick={() => { frequency = 'every_n'; }}>cada N</button>
-          </div>
-        </div>
-
-        {#if frequency === 'every_n'}
-          <div class="freq-n-row">
-            <span class="freq-n-label">{$t('streakCreateModal.every')}</span>
-            <input type="number" bind:value={frequencyDays} min="1" max="365" class="freq-n-input" />
-            <span class="freq-n-label">días</span>
-          </div>
-        {/if}
-
-        <div class="field">
-          <label>{$t('streakCreateModal.icon')}</label>
-          <div class="icon-toggle-row">
-            <button class="icon-type-btn" class:selected={!useIcon} onclick={() => useIcon = false}>{$t('streakCreateModal.emoji')}</button>
-            <button class="icon-type-btn" class:selected={useIcon} onclick={() => { useIcon = true; if (!icon) icon = 'Flame'; }}>{$t('streakCreateModal.icon')}</button>
-          </div>
-        </div>
-
-        {#if !useIcon}
-          <div class="field">
-            <div class="emoji-grid">
-              {#each EMOJIS as e}
-                <button class="emoji-btn" class:selected={emoji === e} onclick={() => emoji = e}>{e}</button>
-              {/each}
+            <div class="field-row">
+              <div class="field half">
+                <label><Clock size={11} /> Días desde inicio</label>
+                <input type="number" bind:value={offset} min="0" disabled={isEdit} placeholder={$t('streakCreateModal.offsetPlaceholder')} />
+                <span class="field-hint">{isEdit ? 'Este valor no se puede modificar una vez creada la racha' : 'Se calcula automáticamente desde la fecha de inicio'}</span>
+              </div>
+              <div class="field half">
+                <label><Snowflake size={11} /> Freezes (escudos)</label>
+                <input type="number" bind:value={freezeCount} min="0" max="30" />
+                <span class="field-hint">{$t('streakCreateModal.freezeHint')}</span>
+              </div>
             </div>
           </div>
-        {:else}
-          <div class="field">
-            <LazyIconPicker selected={icon} color={color} onSelect={(ic) => icon = ic} />
-          </div>
-        {/if}
 
-        <div class="field">
-          <label>{$t('streakCreateModal.color')}</label>
-          <div class="color-grid">
-            {#each COLOR_PRESETS as c}
-              <button
-                class="color-btn"
-                class:selected={color === c.hex}
-                style="--btn-color: {c.hex}; background: {c.hex};"
-                onclick={() => color = c.hex}
-              />
-            {/each}
-          </div>
-        </div>
+          <!-- Right column: preview + customization -->
+          <div class="modal-col modal-col-preview">
+            <div class="preview-card" class:theme-gradient={theme === 'gradient'} style={previewStyle}>
+              <div class="preview-icon">
+                {#if useIcon && icon}
+                  <StreakIcon name={icon} size={24} />
+                {:else}
+                  <span class="preview-emoji">{emoji}</span>
+                {/if}
+              </div>
+              <div class="preview-info">
+                <span class="preview-name">{name || 'Nombre de la racha'}</span>
+                <span class="preview-meta mono">{name ? previewFreqLabel() : 'frecuencia'}</span>
+              </div>
+            </div>
 
-        <div class="field">
-          <label>{$t('streakCreateModal.visualTheme')}</label>
-          <div class="theme-grid">
-            {#each THEMES as themeOpt}
-              <button class="theme-btn" class:selected={theme === themeOpt.id} onclick={() => theme = themeOpt.id}>
-                {themeOpt.label}
-              </button>
-            {/each}
-          </div>
-        </div>
+            <div class="field">
+              <label>{$t('streakCreateModal.icon')}</label>
+              <div class="icon-toggle-row">
+                <button class="icon-type-btn" class:selected={!useIcon} onclick={() => useIcon = false}>{$t('streakCreateModal.emoji')}</button>
+                <button class="icon-type-btn" class:selected={useIcon} onclick={() => { useIcon = true; if (!icon) icon = 'Flame'; }}>{$t('streakCreateModal.icon')}</button>
+              </div>
+            </div>
 
-        <div class="field-row">
-          <div class="field half">
-            <label><Calendar size={11} /> Fecha de inicio</label>
-            <input type="date" bind:value={startDate} disabled={isEdit} />
-          </div>
-          <div class="field half">
-            <label><Target size={11} /> Fecha objetivo <span class="optional">(op.)</span></label>
-            <input type="date" bind:value={targetDate} />
-          </div>
-        </div>
+            {#if !useIcon}
+              <div class="field">
+                <div class="emoji-grid">
+                  {#each EMOJIS as e}
+                    <button class="emoji-btn" class:selected={emoji === e} onclick={() => emoji = e}>{e}</button>
+                  {/each}
+                </div>
+              </div>
+            {:else}
+              <div class="field">
+                <LazyIconPicker selected={icon} color={color} onSelect={(ic) => icon = ic} />
+              </div>
+            {/if}
 
-        <div class="field-row">
-          <div class="field half">
-            <label><Clock size={11} /> Días desde inicio</label>
-            <input type="number" bind:value={offset} min="0" disabled={isEdit} placeholder={$t('streakCreateModal.offsetPlaceholder')} />
-            <span class="field-hint">{isEdit ? 'Este valor no se puede modificar una vez creada la racha' : 'Se calcula automáticamente desde la fecha de inicio'}</span>
-          </div>
-          <div class="field half">
-            <label><Snowflake size={11} /> Freezes (escudos)</label>
-            <input type="number" bind:value={freezeCount} min="0" max="30" />
-            <span class="field-hint">{$t('streakCreateModal.freezeHint')}</span>
+            <div class="field">
+              <label>{$t('streakCreateModal.color')}</label>
+              <div class="color-grid">
+                {#each COLOR_PRESETS as c}
+                  <button
+                    class="color-btn"
+                    class:selected={color === c.hex}
+                    style="--btn-color: {c.hex}; background: {c.hex};"
+                    onclick={() => color = c.hex}
+                  />
+                {/each}
+              </div>
+            </div>
+
+            <div class="field">
+              <label>{$t('streakCreateModal.visualTheme')}</label>
+              <div class="theme-grid">
+                {#each THEMES as themeOpt}
+                  <button class="theme-btn" class:selected={theme === themeOpt.id} onclick={() => theme = themeOpt.id}>
+                    {themeOpt.label}
+                  </button>
+                {/each}
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -335,7 +343,7 @@
   }
 
   .modal-panel {
-    width: 520px;
+    width: 760px;
     height: auto;
     max-width: calc(100vw - 24px);
     max-height: calc(100vh - 24px);
@@ -364,6 +372,18 @@
     overflow-y: auto;
     padding: 20px;
     display: flex; flex-direction: column; gap: 16px;
+  }
+
+  .modal-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+
+  .modal-col {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
   }
 
   /* Preview card */
@@ -626,5 +646,11 @@
       max-width: none;
       max-height: calc(100vh - 16px);
     }
+    .modal-grid {
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+    /* Preview first on mobile, then data fields */
+    .modal-col-preview { order: -1; }
   }
 </style>
