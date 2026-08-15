@@ -119,10 +119,17 @@ export function applyDynamicTheme(tokens: ThemeTokens): void {
   root.style.setProperty('--border', tokens['--border']);
   root.style.setProperty('--shadow', tokens['--shadow']);
   root.style.setProperty('--text-primary', tokens['--fg']);
+  // Preserve custom accent colors set by the user via settings.
+  // Only set dynamic theme accent if the user hasn't customized it.
+  const accentVars = ['--accent', '--xp', '--xp-2', '--xp-3', '--xp-dark',
+    '--plant', '--plant-secondary', '--plant-tertiary', '--plant-glow'];
   const hasCustomAccent = root.style.getPropertyValue('--accent').trim().length > 0;
   if (!hasCustomAccent) {
     root.style.setProperty('--accent', tokens['--accent']);
   }
+  // Ensure custom accent vars are never overwritten by the dynamic theme.
+  // If they exist as inline styles (set by applyColors), they are preserved.
+  // If they don't exist, they fall through to :root defaults which is fine.
 }
 
 export function clearDynamicTheme(): void {
