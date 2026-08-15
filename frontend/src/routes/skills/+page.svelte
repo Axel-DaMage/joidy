@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { goto } from '$app/navigation';
   import { api, type Skill, type SkillTree as SkillTreeData } from '$lib/api';
   import { logger } from '$lib/utils/logger';
   import { displayTagName } from '$lib/utils/format';
@@ -8,6 +9,12 @@
   import { openShare } from '$lib/stores/shareAchievement';
   import { Search, X, Share2 } from 'lucide-svelte';
   import { t } from 'svelte-i18n';
+
+  // Redirect to home when dev mode is off — dev routes should not be
+  // accessible via direct URL in production (#649).
+  $effect(() => {
+    if (!$devMode) goto('/');
+  });
 
   // Lazy-load the heavy SkillTree (236 lines, pulls in d3) so it is split
   // into a separate chunk and only downloaded when dev mode is on (#347).

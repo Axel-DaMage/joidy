@@ -1,9 +1,16 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { goto } from '$app/navigation';
   import { api } from '$lib/api';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
   import { devMode } from '$lib/stores/settings';
   import { t } from 'svelte-i18n';
+
+  // Redirect to home when dev mode is off — dev routes should not be
+  // accessible via direct URL in production (#649).
+  $effect(() => {
+    if (!$devMode) goto('/');
+  });
 
   let usage = $state<{ ai_enabled: boolean; estimated_cost_usd: number } | null>(null);
   let loadingUsage = $state(true);
