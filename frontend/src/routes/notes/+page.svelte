@@ -2,7 +2,7 @@
   import { onMount, onDestroy, tick } from 'svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
-  import { Search, Plus, X, List, FolderTree, ChevronRight, FileEdit, FolderPlus, ChevronsUpDown, ArrowUpDown, Settings } from 'lucide-svelte';
+  import { Search, Plus, X, List, FolderTree, ChevronRight, FileEdit, FolderPlus, ChevronsUpDown, ArrowUpDown, Settings, CheckSquare } from 'lucide-svelte';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
   import NoteCard from '$lib/components/NoteCard.svelte';
 
@@ -671,7 +671,7 @@
         {/if}
       </div>
       <button class="toolbar-btn bulk-toggle" class:active={$bulkMode} aria-label={$t('notesPage.bulkMode')} onclick={() => { bulkMode.set(!$bulkMode); clearNoteSelection(); }}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+        <CheckSquare size={14} />
       </button>
     </div>
 
