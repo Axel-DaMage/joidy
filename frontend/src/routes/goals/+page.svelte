@@ -322,15 +322,6 @@
   let showPerformanceChart = $state(true);
 
   // ── Dashboard State ──
-  let activeWidgetIndex = $state(0);
-  const widgetTitles = [
-    'Predicción y Tendencia',
-    'Actividad por Día',
-    'Distribución de Éxito',
-    'Deuda de Objetivos',
-    'Embudo de Retención'
-  ];
-
   let upcomingTasks = $derived.by(() => {
     const futureAssignments: { date: string, goal: Goal }[] = [];
     const sortedDates = Object.keys(assignments).filter(d => d >= todayIso).sort();
@@ -1034,98 +1025,6 @@
                 <span style="font-size: 12px; font-weight: {day.isToday ? 'bold' : 'normal'};">{day.dateStr.split('-')[2]}</span>
               </button>
             {/each}
-          </div>
-        </div>
-
-        <div class="dash-card" style="min-height: 280px; display: flex; flex-direction: column; padding: 0; overflow: hidden;">
-          <div class="widget-header" style="display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid var(--border-light); background: var(--bg-card);">
-            <button class="btn btn-ghost text-muted" style="padding: 4px;" aria-label={$t('goalsPage.prevWidget')} onclick={() => activeWidgetIndex = (activeWidgetIndex - 1 + 5) % 5}><ChevronLeft size={14}/></button>
-            <span class="widget-title" style="font-size: 12px; font-weight: 600; text-align: center; flex: 1;">{widgetTitles[activeWidgetIndex]}</span>
-            <button class="btn btn-ghost text-muted" style="padding: 4px;" aria-label={$t('goalsPage.nextWidget')} onclick={() => activeWidgetIndex = (activeWidgetIndex + 1) % 5}><ChevronRight size={14}/></button>
-          </div>
-          <div class="widget-content" style="flex: 1; position: relative; padding: 16px; overflow: hidden; display: flex; align-items: center; justify-content: center;">
-            {#if activeWidgetIndex === 0}
-              <div class="prediction-hero" style="width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center;">
-                <div class="prediction-stats-row" style="margin-top: 0; justify-content: space-around;">
-                  <div class="trend-summary">
-                    <div class="trend-icon-wrap {prediction.trend.toLowerCase()}">
-                      {#if prediction.trend === 'UP'} <TrendingUp size={14} /> {:else} <TrendingDown size={14} /> {/if}
-                      <span class="trend-pct">{prediction.percentChange > 0 ? '+' : ''}{prediction.percentChange}%</span>
-                    </div>
-                    <span class="trend-label">{$t('goalsPage.discipline')}</span>
-                  </div>
-                  <div class="prediction-estimate">
-                    <span class="pred-lab">{$t('goalsPage.next30d')}</span>
-                    <span class="pred-val">~{prediction.estimateNextMonth}✓</span>
-                  </div>
-                </div>
-              </div>
-            {:else if activeWidgetIndex === 1}
-              <div class="weekday-chart" style="width: 100%; height: 100%; padding-top: 10px;">
-                {#each completionsByDay as day}
-                  {@const maxVal = Math.max(...completionsByDay.map(d => d.value)) || 1}
-                  {@const intensity = day.value > 0 ? Math.max(30, (day.value / maxVal) * 100) : 0}
-                  <div class="day-col">
-                    <span class="day-val" style="color: {day.value > 0 ? 'var(--text-primary)' : 'var(--text-disabled)'}">{day.value}</span>
-                    <div class="day-bar-wrap" style="height: 60px;">
-                      <div class="day-bar" style="height: {day.value > 0 ? Math.max(8, intensity) : 0}%; background: {day.value > 0 ? `color-mix(in srgb, var(--xp) ${intensity}%, transparent)` : 'transparent'}; border: {day.value === 0 ? '1px dashed var(--border)' : 'none'};"></div>
-                    </div>
-                    <span class="day-label">{day.label[0]}</span>
-                  </div>
-                {/each}
-              </div>
-            {:else if activeWidgetIndex === 2}
-              <div class="radar-container" style="width: 100%; height: 100%;">
-                {#if radarData.length === 0}
-                  <div class="empty-state mini">{$t('goalsPage.insufficientData')}</div>
-                {:else}
-                  <svg viewBox="0 0 100 100" class="radar-svg" style="max-height: 100%; margin: 0 auto; display: block;">
-                    {#each [20, 40, 60, 80, 100] as r}
-                      <polygon points={radarData.map(d => `${50 + (r/100)*40*Math.cos(d.angle)},${50 + (r/100)*40*Math.sin(d.angle)}`).join(' ')} fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="0.5" />
-                    {/each}
-                    <polygon points={radarData.map(d => `${50 + d.pct*40*Math.cos(d.angle)},${50 + d.pct*40*Math.sin(d.angle)}`).join(' ')} fill="var(--xp)" fill-opacity="0.3" stroke="var(--xp)" stroke-width="1" stroke-linejoin="round" />
-                    {#each radarData as d}
-                      <circle cx={50 + d.pct*40*Math.cos(d.angle)} cy={50 + d.pct*40*Math.sin(d.angle)} r="1.5" fill="var(--surface)" stroke="var(--xp)" stroke-width="1" />
-                    {/each}
-                  </svg>
-                {/if}
-              </div>
-            {:else if activeWidgetIndex === 3}
-              <div class="debt-content" style="width: 100%; height: 100%; display: flex; flex-direction: column;">
-                <div class="debt-total" style="padding-bottom: 8px;">
-                  <span class="debt-val" style="font-size: 24px;">{debtData.total}</span>
-                  <span class="debt-lab">{$t('goalsPage.pending')}</span>
-                </div>
-                <div class="debt-list" style="flex: 1; overflow: hidden;">
-                  {#if debtData.goals.length === 0}
-                     <div class="empty-state mini">{$t('goalsPage.zeroDebt')}</div>
-                  {:else}
-                    {#each debtData.goals.slice(0,3) as d}
-                      <div class="debt-item" style="margin-bottom: 8px;">
-                        <span class="debt-title" style="font-size: 11px;">{d.title}</span>
-                        <div class="debt-bar-wrap" style="height: 4px; margin-top: 4px;">
-                          <div class="debt-bar" style="width: {(d.debt / (debtData.goals[0]?.debt || 1)) * 100}%"></div>
-                        </div>
-                      </div>
-                    {/each}
-                  {/if}
-                </div>
-              </div>
-            {:else if activeWidgetIndex === 4}
-              <div class="funnel-chart" style="width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; gap: 8px;">
-                {#each funnelData.slice(0,3) as f}
-                  <div class="funnel-row" style="margin-bottom: 0;">
-                    <div class="funnel-label-col" style="flex: 1; display: flex; justify-content: space-between;">
-                      <span class="funnel-name" style="font-size: 11px;">{f.label}</span>
-                      <span class="funnel-val" style="color: {f.color}; font-size: 11px;">{f.value}</span>
-                    </div>
-                    <div class="funnel-bar-col" style="flex: 2; height: 6px;">
-                      <div class="funnel-bar" style="width: {(f.value / (funnelData[0]?.value || 1)) * 100}%; background: {f.color};"></div>
-                    </div>
-                  </div>
-                {/each}
-              </div>
-            {/if}
           </div>
         </div>
 
