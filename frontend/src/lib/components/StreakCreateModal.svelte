@@ -641,6 +641,30 @@
   .theme-btn:hover { border-color: var(--text-muted); }
   .theme-btn.selected { border-color: var(--text-primary); color: var(--text-primary); }
 
+  /* Color picker */
+  .color-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(32px, 1fr));
+    gap: 6px;
+    padding: 4px;
+  }
+  .color-btn {
+    width: 32px; height: 32px;
+    border: 2px solid transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+    padding: 0;
+  }
+  .color-btn:hover {
+    transform: scale(1.1);
+    border-color: var(--text-muted);
+  }
+  .color-btn.selected {
+    border-color: var(--text-primary);
+    box-shadow: 0 0 0 1px var(--bg), 0 0 0 3px var(--text-primary);
+  }
+
   /* Footer */
   .modal-footer {
     display: flex; justify-content: flex-end; gap: 10px;
