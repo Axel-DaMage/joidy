@@ -215,7 +215,10 @@
     return val;
   })());
 
-  // Debounced content for expensive operations (markdown render + syntax highlight)
+  // Debounced content for the expensive full markdown render (preview mode:
+  // marked + DOMPurify + highlight.js). The editor syntax highlight uses a
+  // faster rAF-based update (see editorHighlightedHtml) so typed text is styled
+  // immediately instead of lagging 300ms (#703).
   let debouncedContent = $state(visibleEditorContent);
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -726,7 +729,29 @@
     return html;
   }
 
-  let editorHighlightedHtml = $derived(highlightMarkdown(debouncedContent));
+  // Editor syntax highlight: update on the next animation frame instead of the
+  // 300ms debounce. rAF coalesces multiple keystrokes into a single ~16ms
+  // render, so typed characters are styled immediately without re-running the
+  // regex highlighter more than once per frame (#703).
+  let editorHighlightedHtml = $state(highlightMarkdown(visibleEditorContent));
+  let highlightRaf: ReturnType<typeof requestAnimationFrame> | null = null;
+
+  $effect(() => {
+    const current = visibleEditorContent;
+    if (typeof requestAnimationFrame === 'function') {
+      if (highlightRaf !== null) cancelAnimationFrame(highlightRaf);
+      highlightRaf = requestAnimationFrame(() => {
+        editorHighlightedHtml = highlightMarkdown(current);
+        highlightRaf = null;
+      });
+    } else {
+      editorHighlightedHtml = highlightMarkdown(current);
+    }
+  });
+
+  onDestroy(() => {
+    if (highlightRaf !== null) cancelAnimationFrame(highlightRaf);
+  });
 </script>
 
 <svelte:window onkeydown={onKeydown} />
