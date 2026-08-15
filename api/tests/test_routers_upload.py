@@ -6,16 +6,26 @@ from fastapi.testclient import TestClient
 
 
 def test_upload_image_succeeds(client: TestClient):
+    png_data = b"\x89PNG\r\n\x1a\n" + b"fake-png-data"
     response = client.post(
         "/upload/image",
-        files={"file": ("test.png", io.BytesIO(b"fake-png-data"), "image/png")},
+        files={"file": ("test.png", io.BytesIO(png_data), "image/png")},
     )
     assert response.status_code == 200
     data = response.json()
     assert data["url"].startswith("/uploads/")
     assert data["filename"].endswith(".png")
     assert data["mime"] == "image/png"
-    assert data["size"] == len(b"fake-png-data")
+    assert data["size"] == len(png_data)
+
+
+def test_upload_image_magic_bytes_mismatch_rejected(client: TestClient):
+    # Client claims PNG but payload is an executable — must be rejected.
+    response = client.post(
+        "/upload/image",
+        files={"file": ("evil.png", io.BytesIO(b"MZ\x90\x00binary"), "image/png")},
+    )
+    assert response.status_code == 400
 
 
 def test_upload_image_invalid_type_rejected(client: TestClient):
