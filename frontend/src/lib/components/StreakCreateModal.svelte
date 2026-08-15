@@ -41,14 +41,16 @@
 
   // ── Presets ─────────────────────────────────────────────────────────────────
   const COLOR_PRESETS = [
-    { name: 'Gold',      hex: '#c8a96e' },
-    { name: 'Esmeralda', hex: '#10b981' },
-    { name: 'Azul',      hex: '#3b82f6' },
-    { name: 'Violeta',   hex: '#8b5cf6' },
-    { name: 'Rosa',      hex: '#ec4899' },
-    { name: 'Ámbar',     hex: '#f59e0b' },
-    { name: 'Coral',     hex: '#ef4444' },
-    { name: 'Slate',     hex: '#64748b' },
+    { name: 'Rojo',     hex: '#ef4444' },
+    { name: 'Coral',    hex: '#f97316' },
+    { name: 'Ámbar',    hex: '#f59e0b' },
+    { name: 'Lima',     hex: '#84cc16' },
+    { name: 'Esmeralda',hex: '#10b981' },
+    { name: 'Cian',     hex: '#06b6d4' },
+    { name: 'Azul',     hex: '#3b82f6' },
+    { name: 'Violeta',  hex: '#8b5cf6' },
+    { name: 'Rosa',     hex: '#ec4899' },
+    { name: 'Slate',    hex: '#64748b' },
   ];
 
   const EMOJIS = Array.from(new Set([
@@ -224,15 +226,14 @@
               </div>
             {/if}
 
-            <div class="field-row">
-              <div class="field half">
-                <label><Calendar size={11} /> Fecha de inicio</label>
-                <input type="date" bind:value={startDate} disabled={isEdit} />
-              </div>
-              <div class="field half">
-                <label><Target size={11} /> Fecha objetivo <span class="optional">(op.)</span></label>
-                <input type="date" bind:value={targetDate} />
-              </div>
+            <div class="field">
+              <label><Calendar size={11} /> Fecha de inicio</label>
+              <input type="date" bind:value={startDate} disabled={isEdit} />
+            </div>
+
+            <div class="field">
+              <label><Target size={11} /> Fecha objetivo <span class="optional">(op.)</span></label>
+              <input type="date" bind:value={targetDate} />
             </div>
 
             <div class="field-row">
@@ -705,17 +706,31 @@
     margin-top: 8px;
   }
   .color-swatch {
-    width: 32px;
-    height: 32px;
+    width: 36px;
+    height: 36px;
     border: 1px solid var(--border);
     border-radius: 6px;
-    background: none;
     cursor: pointer;
-    padding: 2px;
+    padding: 0;
     flex-shrink: 0;
+    -webkit-appearance: none;
+    appearance: none;
+    background: none;
+  }
+  .color-swatch::-webkit-color-swatch-wrapper {
+    padding: 0;
+  }
+  .color-swatch::-webkit-color-swatch {
+    border: none;
+    border-radius: 5px;
+  }
+  .color-swatch::-moz-color-swatch {
+    border: none;
+    border-radius: 5px;
   }
   .hex-input {
-    flex: 1;
+    width: 90px;
+    flex: none;
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 4px;
