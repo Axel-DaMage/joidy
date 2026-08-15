@@ -8,18 +8,16 @@ export interface GoalColorPreset {
 }
 
 export const GOAL_COLOR_PRESETS: GoalColorPreset[] = [
-  { name: 'Gold',      hex: '#c8a96e' },
+  { name: 'Rojo',      hex: '#ef4444' },
+  { name: 'Coral',     hex: '#f97316' },
+  { name: 'Ámbar',     hex: '#f59e0b' },
+  { name: 'Lima',      hex: '#84cc16' },
   { name: 'Esmeralda', hex: '#10b981' },
-  { name: 'Cyan',      hex: '#06b6d4' },
+  { name: 'Cian',      hex: '#06b6d4' },
   { name: 'Azul',      hex: '#3b82f6' },
   { name: 'Violeta',   hex: '#8b5cf6' },
   { name: 'Rosa',      hex: '#ec4899' },
-  { name: 'Ámbar',     hex: '#f59e0b' },
-  { name: 'Coral',     hex: '#ef4444' },
-  { name: 'Lima',      hex: '#84cc16' },
   { name: 'Slate',     hex: '#64748b' },
-  { name: 'Teal',      hex: '#14b8a6' },
-  { name: 'Blanco',    hex: '#e2e8f0' },
 ];
 
 export const DEFAULT_GOAL_COLOR = '#c8a96e';

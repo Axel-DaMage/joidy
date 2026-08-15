@@ -97,7 +97,6 @@
   let newTagId = $state<number | null>(null);
   let newNoteId = $state<number | null>(null);
   let saving = $state(false);
-  let ngActiveSection = $state<'basics' | 'appearance' | 'advanced'>('basics');
 
   let _todayStr = $derived.by(() => {
     const d = new Date();
@@ -1521,154 +1520,159 @@
         </div>
 
         <div class="new-goal-body">
-          <!-- Section Tabs -->
-          <div class="ng-tabs-container">
-            <button class="ng-tab" class:active={ngActiveSection === 'basics'} onclick={() => ngActiveSection = 'basics'}>{$t('goalsPage.basics')}</button>
-            <button class="ng-tab" class:active={ngActiveSection === 'appearance'} onclick={() => ngActiveSection = 'appearance'}>{$t('goalsPage.appearance')}</button>
-            <button class="ng-tab" class:active={ngActiveSection === 'advanced'} onclick={() => ngActiveSection = 'advanced'}>{$t('goalsPage.advanced')}</button>
-          </div>
+          <div class="ng-columns">
+            <!-- Column 1: Basics -->
+            <div class="ng-col">
+              <span class="ng-col-title">{$t('goalsPage.basics')}</span>
+              <div class="form-field">
+                <label class="label">{$t('goalsPage.goalTitle')}</label>
+                <input class="input w-full" bind:value={newTitle} placeholder={$t('goalsPage.goalTitlePlaceholder')} maxlength="38" autofocus />
+              </div>
+              <div class="form-field">
+                <label class="label">{$t('goalsPage.description')} <span class="optional">{$t('goalsPage.optional')}</span></label>
+                <textarea
+                  class="input w-full"
+                  bind:value={newDescription}
+                  placeholder={$t('goalsPage.descriptionPlaceholder')}
+                  maxlength="63"
+                  rows="2"
+                  onkeydown={(e) => e.key === 'Enter' && e.preventDefault()}
+                  oninput={(e) => newDescription = e.currentTarget.value.replace(/\n/g, '')}
+                ></textarea>
+              </div>
+              <div class="form-field">
+                <label class="label">{$t('goalsPage.repeatFrequency')}</label>
+                <div class="ng-freq-grid">
+                  {#each TEMPORALITIES as temp}
+                    <button class="ng-freq-btn" class:active={newTemporality === temp} onclick={() => newTemporality = temp}>
+                      {temp === 'DAILY' ? 'Diario' : temp === 'WEEKLY' ? 'Semanal' : temp === 'MONTHLY' ? 'Mensual' : 'Anual'}
+                    </button>
+                  {/each}
+                </div>
+              </div>
+            </div>
 
-          <div class="ng-content-area">
-            {#if ngActiveSection === 'basics'}
-              <div class="ng-section-fade">
-                <div class="form-field">
-                  <label class="label">{$t('goalsPage.goalTitle')}</label>
-                  <input class="input w-full" bind:value={newTitle} placeholder={$t('goalsPage.goalTitlePlaceholder')} maxlength="38" autofocus />
+            <!-- Column 2: Appearance -->
+            <div class="ng-col">
+              <span class="ng-col-title">{$t('goalsPage.appearance')}</span>
+              <div class="form-field">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                  <label class="label" style="margin:0;">{$t('goalsPage.failIconEmoji')}</label>
+                  <div class="icon-toggle-row">
+                    <button class="icon-type-btn" class:selected={!useFailIcon} onclick={() => useFailIcon = false}>{$t('goalsPage.emoji')}</button>
+                    <button class="icon-type-btn" class:selected={useFailIcon} onclick={() => useFailIcon = true}>{$t('goalsPage.icon')}</button>
+                  </div>
                 </div>
-                <div class="form-field">
-                  <label class="label">{$t('goalsPage.description')} <span class="optional">{$t('goalsPage.optional')}</span></label>
-                  <textarea
-                    class="input w-full"
-                    bind:value={newDescription}
-                    placeholder={$t('goalsPage.descriptionPlaceholder')}
-                    maxlength="63" 
-                    rows="2"
-                    onkeydown={(e) => e.key === 'Enter' && e.preventDefault()}
-                    oninput={(e) => newDescription = e.currentTarget.value.replace(/\n/g, '')}
-                  ></textarea>
-                </div>
-                <div class="form-field">
-                  <label class="label">{$t('goalsPage.repeatFrequency')}</label>
-                  <div class="ng-freq-grid">
-                    {#each TEMPORALITIES as temp}
-                      <button class="ng-freq-btn" class:active={newTemporality === temp} onclick={() => newTemporality = temp}>
-                        {temp === 'DAILY' ? 'Diario' : temp === 'WEEKLY' ? 'Semanal' : temp === 'MONTHLY' ? 'Mensual' : 'Anual'}
-                      </button>
+                {#if !useFailIcon}
+                  <div class="emoji-grid ng-large-grid">
+                    {#each EMOJIS as e}
+                      <button class="emoji-btn" class:selected={newFailEmoji === e} onclick={() => newFailEmoji = e}>{e}</button>
                     {/each}
                   </div>
+                {:else}
+                  <div class="field ng-large-grid" style="display: flex; flex-direction: column; height: 280px; padding: 8px; border: 1px solid var(--border); border-radius: var(--r); background: var(--surface-hover); overflow: hidden;">
+                    <LazyIconPicker selected={newFailIcon} color={newGoalColor} onSelect={(ic) => newFailIcon = ic} />
+                  </div>
+                {/if}
+              </div>
+
+              <div class="form-field">
+                <label class="label">{$t('goalsPage.identityColor')}</label>
+                <div class="ng-color-grid">
+                  {#each COLOR_PRESETS as c}
+                    <button
+                      class="ng-color-btn"
+                      class:selected={newGoalColor === c.hex}
+                      style="background: {c.hex};"
+                      onclick={() => newGoalColor = c.hex}
+                      title={c.name}
+                      aria-label={c.name}
+                    />
+                  {/each}
+                </div>
+                <div class="ng-color-manual-row">
+                  <div class="ng-color-swatch-wrapper" style="background: {newGoalColor};">
+                    <input
+                      type="color"
+                      class="ng-color-swatch"
+                      value={newGoalColor}
+                      oninput={(e) => newGoalColor = e.currentTarget.value}
+                    />
+                  </div>
+                  <input
+                    type="text"
+                    class="ng-hex-input mono"
+                    maxlength="7"
+                    bind:value={newGoalColor}
+                    placeholder="#c8a96e"
+                  />
                 </div>
               </div>
-            {/if}
+            </div>
 
-            {#if ngActiveSection === 'appearance'}
-              <div class="ng-section-fade">
-                <div class="form-field">
-                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                    <label class="label" style="margin:0;">{$t('goalsPage.failIconEmoji')}</label>
-                    <div class="icon-toggle-row">
-                      <button class="icon-type-btn" class:selected={!useFailIcon} onclick={() => useFailIcon = false}>{$t('goalsPage.emoji')}</button>
-                      <button class="icon-type-btn" class:selected={useFailIcon} onclick={() => useFailIcon = true}>{$t('goalsPage.icon')}</button>
-                    </div>
-                  </div>
-                  {#if !useFailIcon}
-                    <div class="emoji-grid ng-large-grid">
-                      {#each EMOJIS as e}
-                        <button class="emoji-btn" class:selected={newFailEmoji === e} onclick={() => newFailEmoji = e}>{e}</button>
-                      {/each}
-                    </div>
-                  {:else}
-                    <div class="field ng-large-grid" style="display: flex; flex-direction: column; height: 280px; padding: 8px; border: 1px solid var(--border); border-radius: var(--r); background: var(--surface-hover); overflow: hidden;">
-                      <LazyIconPicker selected={newFailIcon} color={newGoalColor} onSelect={(ic) => newFailIcon = ic} />
-                    </div>
-                  {/if}
-                </div>
+            <!-- Column 3: Advanced -->
+            <div class="ng-col">
+              <span class="ng-col-title">{$t('goalsPage.advanced')}</span>
+              <div class="form-field">
+                <label class="label">{$t('goalsPage.measurementType')}</label>
+                <select class="input w-full" bind:value={newMeasurement}>
+                  <option value="COUNT">{$t('goalsPage.countNumeric')}</option>
+                  <option value="BOOLEAN">{$t('goalsPage.booleanDone')}</option>
+                  <option value="PERCENT">{$t('goalsPage.percent')}</option>
+                </select>
+              </div>
+              <div class="form-field">
+                <label class="label">{$t('goalsPage.targetGoal')}</label>
+                <input class="input w-full" type="number" bind:value={newTargetValue} min="1" disabled={newMeasurement === 'BOOLEAN'} />
+              </div>
+              <div class="form-field">
+                <label class="label">{$t('goalsPage.limitDays')} <span class="optional">{$t('goalsPage.limitDaysOptional')}</span></label>
+                <input class="input w-full" type="number" bind:value={newMaxAssignmentDays} min="1" placeholder={$t('goalsPage.unlimited')} />
+              </div>
 
-                <div class="form-field">
-                  <label class="label">{$t('goalsPage.identityColor')}</label>
-                  <div class="color-presets ng-expanded-presets">
-                    {#each COLOR_PRESETS as c}
-                      <button
-                        class="color-dot"
-                        class:selected={newGoalColor === c.hex}
-                        style="background: {c.hex}; color: {c.hex};"
-                        onclick={() => newGoalColor = c.hex}
-                      >&nbsp;</button>
-                    {/each}
-                    <div class="color-custom" style="background: {newGoalColor};">
-                      <input type="color" bind:value={newGoalColor} class="color-picker" />
-                    </div>
-                  </div>
+              <div class="form-field">
+                <label class="label">{$t('goalsPage.failPolicy')}</label>
+                <div class="ng-fail-options">
+                  <button class="ng-fail-btn" class:active={newFailConfig === 'STATIC'} onclick={() => newFailConfig = 'STATIC'}>
+                    <strong>{$t('goalsPage.static')}</strong>
+                    <span>{$t('goalsPage.staticDesc')}</span>
+                  </button>
+                  <button class="ng-fail-btn" class:active={newFailConfig === 'ROLLOVER'} onclick={() => newFailConfig = 'ROLLOVER'}>
+                    <strong>{$t('goalsPage.rollover')}</strong>
+                    <span>{$t('goalsPage.rolloverDesc')}</span>
+                  </button>
+                  <button class="ng-fail-btn" class:active={newFailConfig === 'SNOWBALL'} onclick={() => newFailConfig = 'SNOWBALL'}>
+                    <strong>{$t('goalsPage.snowball')}</strong>
+                    <span>{$t('goalsPage.snowballDesc')}</span>
+                  </button>
                 </div>
               </div>
-            {/if}
 
-            {#if ngActiveSection === 'advanced'}
-              <div class="ng-section-fade">
-                <div class="form-row">
-                  <div class="form-field" style="flex:1;">
-                    <label class="label">{$t('goalsPage.measurementType')}</label>
-                    <select class="input w-full" bind:value={newMeasurement}>
-                      <option value="COUNT">{$t('goalsPage.countNumeric')}</option>
-                      <option value="BOOLEAN">{$t('goalsPage.booleanDone')}</option>
-                      <option value="PERCENT">{$t('goalsPage.percent')}</option>
-                    </select>
-                  </div>
-                  <div class="form-field" style="width: 140px;">
-                    <label class="label">{$t('goalsPage.targetGoal')}</label>
-                    <input class="input w-full" type="number" bind:value={newTargetValue} min="1" disabled={newMeasurement === 'BOOLEAN'} />
-                  </div>
-                  <div class="form-field" style="width: 140px;">
-                    <label class="label">{$t('goalsPage.limitDays')} <span class="optional">{$t('goalsPage.limitDaysOptional')}</span></label>
-                    <input class="input w-full" type="number" bind:value={newMaxAssignmentDays} min="1" placeholder={$t('goalsPage.unlimited')} />
-                  </div>
-                </div>
-
-                <div class="form-field">
-                  <label class="label">{$t('goalsPage.failPolicy')}</label>
-                  <div class="ng-fail-options">
-                    <button class="ng-fail-btn" class:active={newFailConfig === 'STATIC'} onclick={() => newFailConfig = 'STATIC'}>
-                      <strong>{$t('goalsPage.static')}</strong>
-                      <span>{$t('goalsPage.staticDesc')}</span>
-                    </button>
-                    <button class="ng-fail-btn" class:active={newFailConfig === 'ROLLOVER'} onclick={() => newFailConfig = 'ROLLOVER'}>
-                      <strong>{$t('goalsPage.rollover')}</strong>
-                      <span>{$t('goalsPage.rolloverDesc')}</span>
-                    </button>
-                    <button class="ng-fail-btn" class:active={newFailConfig === 'SNOWBALL'} onclick={() => newFailConfig = 'SNOWBALL'}>
-                      <strong>{$t('goalsPage.snowball')}</strong>
-                      <span>{$t('goalsPage.snowballDesc')}</span>
-                    </button>
-                  </div>
-                </div>
-
-                <div class="form-row">
-                  <div class="form-field" style="flex:1;">
-                    <label class="label">{$t('goalsPage.linkToProject')}</label>
-                    <select class="input w-full" bind:value={newNoteId}>
-                      <option value={null}>{$t('goalsPage.noLinkedNote')}</option>
-                      {#each notes as n}
-                        <option value={n.id}>{n.title}</option>
-                      {/each}
-                    </select>
-                  </div>
-                  <div class="form-field" style="flex:1;">
-                    <label class="label">{$t('goalsPage.tagSync')}</label>
-                    <select class="input w-full" bind:value={newTagId}>
-                      <option value={null}>{$t('goalsPage.manualUpdate')}</option>
-                      {#each notes as n}
-                        {@const tagId = tags.find(t => t.name === n.title)?.id}
-                        {#if tagId}
-                          <option value={tagId}>{n.title} (Auto-rastreo)</option>
-                        {/if}
-                      {/each}
-                    </select>
-                  </div>
-                </div>
+              <div class="form-field">
+                <label class="label">{$t('goalsPage.linkToProject')}</label>
+                <select class="input w-full" bind:value={newNoteId}>
+                  <option value={null}>{$t('goalsPage.noLinkedNote')}</option>
+                  {#each notes as n}
+                    <option value={n.id}>{n.title}</option>
+                  {/each}
+                </select>
               </div>
-            {/if}
+              <div class="form-field">
+                <label class="label">{$t('goalsPage.tagSync')}</label>
+                <select class="input w-full" bind:value={newTagId}>
+                  <option value={null}>{$t('goalsPage.manualUpdate')}</option>
+                  {#each notes as n}
+                    {@const tagId = tags.find(t => t.name === n.title)?.id}
+                    {#if tagId}
+                      <option value={tagId}>{n.title} (Auto-rastreo)</option>
+                    {/if}
+                  {/each}
+                </select>
+              </div>
+            </div>
           </div>
 
-          <!-- Bottom Preview Section (Moved from top) -->
+          <!-- Bottom Preview Section -->
           <div class="ng-bottom-preview">
             <span class="ng-preview-label">{$t('goalsPage.preview')}</span>
             <div class="goal-card preview-card-live" style="border-color: {newGoalColor}; background: color-mix(in srgb, {newGoalColor} 5%, var(--surface));">
@@ -2034,6 +2038,11 @@
     position: fixed;
     inset: 0;
     z-index: var(--z-modal);
+    background: rgba(0,0,0,0.75);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
   .new-goal-panel {
     background: var(--surface);
@@ -2041,10 +2050,9 @@
     box-shadow: 0 24px 80px rgba(0,0,0,0.6);
     display: flex;
     flex-direction: column;
-    height: calc(100vh - 40px);
-    max-height: calc(100vh - 40px);
-    width: min(720px, 100%);
-    border-radius: 16px;
+    max-height: calc(100vh - 24px);
+    width: min(1100px, calc(100vw - 24px));
+    border-radius: 12px;
     overflow: hidden;
   }
   .slide-down {
@@ -2110,48 +2118,28 @@
     text-align: center;
   }
 
-  .ng-tabs-container {
-    display: flex;
-    gap: 4px;
-    background: var(--surface-hover);
-    padding: 3px;
-    border-radius: 8px;
-    border: 1px solid var(--border);
+  .ng-columns {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    align-items: flex-start;
   }
-  .ng-tab {
-    flex: 1;
-    padding: 8px;
+  .ng-col {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-width: 0;
+  }
+  .ng-col-title {
     font-size: 11px;
     font-family: var(--font-mono);
-    font-weight: 600;
-    color: var(--text-disabled);
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    border-radius: 6px;
-    transition: all 0.2s;
-  }
-  .ng-tab:hover { color: var(--text-secondary); }
-  .ng-tab.active { background: var(--surface); color: var(--text-primary); box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
-
-  .ng-content-area {
-    flex: 1;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .ng-section-fade {
-    display: flex;
-    flex-direction: column;
-    gap: var(--s4);
-    animation: ngFadeIn 0.3s ease;
-    flex: 1;
-    min-height: 0;
-  }
-  @keyframes ngFadeIn {
-    from { opacity: 0; transform: translateY(4px); }
-    to { opacity: 1; transform: translateY(0); }
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    text-align: center;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
   }
 
   .ng-freq-grid {
@@ -2210,14 +2198,72 @@
   .ng-error { font-size: 12px; color: var(--error); font-family: var(--font-mono); }
   .optional { font-size: 10px; color: var(--text-disabled); font-style: italic; }
 
-  .ng-expanded-presets {
-    justify-content: center;
-    gap: 12px;
-    padding: 12px;
-    background: var(--surface-hover);
-    border-radius: 8px;
-    border: 1px solid var(--border);
+  /* Color picker — matches StreakCreateModal pattern */
+  .ng-color-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(32px, 1fr));
+    gap: 6px;
+    padding: 4px;
   }
+  .ng-color-btn {
+    width: 32px; height: 32px;
+    border: 2px solid transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+    padding: 0;
+  }
+  .ng-color-btn:hover {
+    transform: scale(1.1);
+    border-color: var(--text-muted);
+  }
+  .ng-color-btn.selected {
+    border-color: var(--text-primary);
+    box-shadow: 0 0 0 1px var(--bg), 0 0 0 3px var(--text-primary);
+  }
+  .ng-color-manual-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .ng-color-swatch-wrapper {
+    width: 36px;
+    height: 36px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    flex-shrink: 0;
+    overflow: hidden;
+    position: relative;
+    cursor: pointer;
+  }
+  .ng-color-swatch {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    opacity: 0;
+  }
+  .ng-color-swatch::-webkit-color-swatch-wrapper { padding: 0; }
+  .ng-color-swatch::-webkit-color-swatch { border: none; }
+  .ng-color-swatch::-moz-color-swatch { border: none; }
+  .ng-hex-input {
+    width: 90px;
+    flex: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-size: 13px;
+    color: var(--text-primary);
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .ng-hex-input:focus { border-color: var(--text-muted); }
   .form-row {
     display: flex;
     gap: var(--s3);
@@ -2229,13 +2275,16 @@
     gap: 0px;
   }
   .label {
-    display: block;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     font-size: 11px;
     font-family: var(--font-mono);
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     margin-bottom: 6px;
+    text-align: center;
   }
   .w-full {
     width: 100%;
