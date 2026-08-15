@@ -3664,6 +3664,56 @@
     .editor-stats {
       flex-wrap: wrap;
     }
+    .tabs {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      gap: var(--s1);
+    }
+    .tabs::-webkit-scrollbar {
+      display: none;
+    }
+    .tab {
+      padding: var(--s1) var(--s2);
+      font-size: 12px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .goals-header {
+      flex-direction: column;
+      align-items: stretch;
+      gap: var(--s2);
+      padding: var(--s2) var(--s3);
+    }
+    .goals-body,
+    .goals-body.full-width {
+      padding: var(--s3);
+      overflow: visible !important;
+      flex: none;
+      min-height: auto !important;
+    }
+    .editor-header,
+    .editor-controls,
+    .search-box,
+    .filter-buttons {
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+      overflow-x: hidden;
+    }
+    .tab-content {
+      overflow-x: hidden;
+      max-width: 100%;
+    }
+    .editor-header-row {
+      flex-direction: column;
+      align-items: stretch;
+      gap: var(--s2);
+    }
+    .new-goal-cta-inline {
+      width: 100%;
+      justify-content: center;
+    }
   }
 
 </style>

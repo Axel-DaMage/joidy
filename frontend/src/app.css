@@ -592,11 +592,13 @@ textarea.input {
   /* Stack the common resizable 3-column page layouts into a single column */
   .notes-page,
   .dashboard,
-  .streaks-layout {
+  .streaks-layout,
+  .goals-page {
     grid-template-columns: 1fr !important;
     grid-template-rows: auto !important;
     height: auto;
     min-height: 100%;
+    overflow: visible !important;
   }
 
   .notes-page .resize-handle,
