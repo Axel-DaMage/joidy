@@ -34,25 +34,52 @@ async def lifespan(app: FastAPI):
     logger = logging.getLogger(__name__)
     logger.info("[ai-service] Starting up")
 
-    # Startup health check: ping configured providers and log availability (#568).
-    # This does NOT block startup — it only logs the result so operators can
-    # see which provider is actually reachable.
-    if settings.is_ai_enabled:
-        try:
-            llm_client = get_llm_client()
-            llm_healthy = await llm_client.health_check()
-            logger.info(f"[ai-service] LLM provider '{llm_client.provider_name}' health: {'OK' if llm_healthy else 'UNREACHABLE'}")
-        except Exception as exc:
-            logger.warning(f"[ai-service] LLM health check failed: {exc}")
+    # Startup validation: check that the configured model providers are
+    # actually available. If not, log a clear error so operators can fix
+    # the configuration. The service still starts so /health can report
+    # the degraded state (#642).
+    available = settings.available_providers
+    llm_provider = settings.llm_provider
+    emb_provider = settings.embedding_provider
 
-        try:
-            emb_client = get_embedding_client()
-            emb_healthy = await emb_client.health_check()
-            logger.info(f"[ai-service] Embedding provider '{emb_client.provider_name}' health: {'OK' if emb_healthy else 'UNREACHABLE'}")
-        except Exception as exc:
-            logger.warning(f"[ai-service] Embedding health check failed: {exc}")
-    else:
+    if not available:
         logger.info("[ai-service] No AI providers configured — AI features disabled")
+    else:
+        if not settings.is_llm_configured:
+            logger.error(
+                f"[ai-service] LLM model '{settings.llm_model}' uses provider "
+                f"'{llm_provider}' which is NOT configured. "
+                f"Available providers: {available}. "
+                f"Set LLM_MODEL to use an available provider (e.g. 'ollama:llama3')."
+            )
+        if not settings.is_embedding_configured:
+            logger.error(
+                f"[ai-service] Embedding model '{settings.embedding_model}' uses provider "
+                f"'{emb_provider}' which is NOT configured. "
+                f"Available providers: {available}. "
+                f"Set EMBEDDING_MODEL to use an available provider (e.g. 'ollama:nomic-embed-text')."
+            )
+
+        if settings.is_ai_enabled:
+            # Ping configured providers and log availability (#568).
+            try:
+                llm_client = get_llm_client()
+                llm_healthy = await llm_client.health_check()
+                logger.info(f"[ai-service] LLM provider '{llm_client.provider_name}' health: {'OK' if llm_healthy else 'UNREACHABLE'}")
+            except Exception as exc:
+                logger.warning(f"[ai-service] LLM health check failed: {exc}")
+
+            try:
+                emb_client = get_embedding_client()
+                emb_healthy = await emb_client.health_check()
+                logger.info(f"[ai-service] Embedding provider '{emb_client.provider_name}' health: {'OK' if emb_healthy else 'UNREACHABLE'}")
+            except Exception as exc:
+                logger.warning(f"[ai-service] Embedding health check failed: {exc}")
+        else:
+            logger.warning(
+                "[ai-service] AI features disabled — configured model providers "
+                "are not available. See errors above."
+            )
 
     yield
     logger.info("[ai-service] Shutting down")
