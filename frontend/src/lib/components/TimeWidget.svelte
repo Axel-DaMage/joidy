@@ -170,6 +170,9 @@
     letter-spacing: 0.08em;
     cursor: pointer;
     transition: color var(--t-fast);
+    background: transparent;
+    border: none;
+    padding: 0;
   }
   .clock:hover { color: var(--xp); }
 

@@ -73,7 +73,6 @@
     { href: '/ai', label: $t('nav.ai'), icon: 'Brain', status: 'dev' },
     { href: '/goals', label: $t('nav.goals'), icon: 'Target', status: 'ready' },
     { href: '/streaks', label: $t('nav.streaks'), icon: 'Flame', status: 'ready' },
-    { href: '/analytics', label: $t('nav.analytics'), icon: 'BarChart3', status: 'ready' },
   ] as { href: string; label: string; icon: string; status: NavItemStatus }[];
 
   // Track page views on route changes (foreground-only, debounced in the store).
