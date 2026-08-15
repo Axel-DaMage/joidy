@@ -356,8 +356,8 @@ export const api = {
   },
 
   notes: {
-    list: (tag?: string, limit = 1000) =>
-      req<Note[]>('GET', `/notes/?limit=${limit}${tag ? `&tag=${encodeURIComponent(tag)}` : ''}`),
+    list: (tag?: string, limit = 1000, skip = 0) =>
+      req<Note[]>('GET', `/notes/?limit=${limit}&skip=${skip}${tag ? `&tag=${encodeURIComponent(tag)}` : ''}`),
     get: (id: number) => req<Note>('GET', `/notes/${id}`),
     create: (data: {
       title: string;

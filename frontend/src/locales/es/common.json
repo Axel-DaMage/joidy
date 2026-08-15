@@ -249,7 +249,8 @@
     "delete": "Eliminar",
     "editorLoading": "Cargando editor...",
     "searchNotePlaceholder": "Buscar nota en tu baúl...",
-    "configureDailyNote": "Configurar ruta de nota diaria"
+    "configureDailyNote": "Configurar ruta de nota diaria",
+    "loadMore": "Cargar más"
   },
   "goalDetail": {
     "loading": "Cargando...",

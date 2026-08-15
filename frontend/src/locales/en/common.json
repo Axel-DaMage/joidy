@@ -249,7 +249,8 @@
     "delete": "Delete",
     "editorLoading": "Loading editor...",
     "searchNotePlaceholder": "Search note in your vault...",
-    "configureDailyNote": "Configure daily note path"
+    "configureDailyNote": "Configure daily note path",
+    "loadMore": "Load more"
   },
   "goalDetail": {
     "loading": "Loading...",
