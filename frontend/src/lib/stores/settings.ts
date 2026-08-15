@@ -1,6 +1,5 @@
 import { writable, derived } from 'svelte/store';
 import { browser } from '$app/environment';
-import { startAutoTheme, stopAutoTheme, clearDynamicTheme } from '$lib/utils/dynamicTheme';
 
 const COLORS_KEY = 'joidy-accent-colors';
 const DEFAULT_COLORS = ['#c8a96e'];
@@ -213,7 +212,7 @@ export const hideTagsLine = createBooleanStore('joidy-hide-tags-line', true);
 
 export const darkMode = createBooleanStore('joidy-dark-mode', true);
 
-export type ThemeMode = 'light' | 'dark' | 'auto';
+export type ThemeMode = 'light' | 'dark';
 const THEME_MODE_KEY = 'joidy-theme-mode';
 
 function createThemeModeStore() {
@@ -222,21 +221,15 @@ function createThemeModeStore() {
 
   function applyMode(mode: ThemeMode) {
     if (!browser) return;
-    if (mode === 'auto') {
-      document.documentElement.setAttribute('data-theme', 'dark');
-      startAutoTheme();
-    } else {
-      stopAutoTheme();
-      clearDynamicTheme();
-      document.documentElement.setAttribute('data-theme', mode);
-    }
+    document.documentElement.setAttribute('data-theme', mode);
   }
 
   return {
     subscribe: (run: (v: ThemeMode) => void, invalidate?: () => void) => {
       if (!_initialized && browser) {
         _initialized = true;
-        const saved = (localStorage.getItem(THEME_MODE_KEY) as ThemeMode) || 'dark';
+        const raw = localStorage.getItem(THEME_MODE_KEY);
+        const saved: ThemeMode = raw === 'light' || raw === 'dark' ? raw : 'dark';
         set(saved);
         applyMode(saved);
       }
@@ -251,7 +244,8 @@ function createThemeModeStore() {
     init: () => {
       if (!browser) return;
       _initialized = true;
-      const saved = (localStorage.getItem(THEME_MODE_KEY) as ThemeMode) || 'dark';
+      const raw = localStorage.getItem(THEME_MODE_KEY);
+      const saved: ThemeMode = raw === 'light' || raw === 'dark' ? raw : 'dark';
       set(saved);
       applyMode(saved);
     },

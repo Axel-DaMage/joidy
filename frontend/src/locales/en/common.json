@@ -77,8 +77,6 @@
     "themeMode": "Theme mode",
     "themeLight": "Light",
     "themeDark": "Dark",
-    "themeAuto": "Automatic",
-    "themeAutoHint": "The theme will change based on the time of day and season",
     "timeFormat": "Time format",
     "language": "Language",
     "languageHint": "The interface language"

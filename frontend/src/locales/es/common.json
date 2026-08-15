@@ -77,8 +77,6 @@
     "themeMode": "Modo de tema",
     "themeLight": "Claro",
     "themeDark": "Oscuro",
-    "themeAuto": "Automático",
-    "themeAutoHint": "El tema cambiará según la hora del día y la estación",
     "timeFormat": "Formato de hora",
     "language": "Idioma",
     "languageHint": "El idioma de la interfaz"

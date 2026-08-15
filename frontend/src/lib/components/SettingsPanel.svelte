@@ -468,21 +468,7 @@
                 <DynamicIcon name="Moon" size={14} />
                 <span>{$t('settings.themeDark')}</span>
               </label>
-              <label class="theme-mode-option" class:active={$themeMode === 'auto'}>
-                <input
-                  type="radio"
-                  name="theme-mode"
-                  value="auto"
-                  checked={$themeMode === 'auto'}
-                  onchange={() => themeMode.set('auto')}
-                />
-                <DynamicIcon name="Sparkles" size={14} />
-                <span>{$t('settings.themeAuto')}</span>
-              </label>
             </div>
-            {#if $themeMode === 'auto'}
-              <p class="hint" style="margin-top: 2px;">{$t('settings.themeAutoHint')}</p>
-            {/if}
           </div>
 
           <div class="row">
