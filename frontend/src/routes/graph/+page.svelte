@@ -1,11 +1,18 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { goto } from '$app/navigation';
   import TopicClusters from '$lib/components/TopicClusters.svelte';
   import { graphData, graphLoading, loadGraph, selectedTag } from '$lib/stores/graph';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
   import { devMode } from '$lib/stores/settings';
   import type { GraphNode, GraphEdge } from '$lib/api';
   import { t } from 'svelte-i18n';
+
+  // Redirect to home when dev mode is off — dev routes should not be
+  // accessible via direct URL in production (#649).
+  $effect(() => {
+    if (!$devMode) goto('/');
+  });
 
   // Lazy-load the heavy graph component (d3 + force-graph, 1300+ lines) so it
   // is split into a separate chunk and only downloaded when the user actually
