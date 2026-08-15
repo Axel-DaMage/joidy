@@ -754,30 +754,32 @@
           {:else if githubAuthError && !githubAuthLoading}
             <p class="hint" style="color:var(--danger)">{githubAuthError}</p>
           {/if}
-          <div class="row">
-            <div class="row-label">
-              <span>Google Contacts</span>
+          {#if $devMode}
+            <div class="row">
+              <div class="row-label">
+                <span>Google Contacts</span>
+              </div>
+              <button class="link-btn" onclick={openGoogleContactsLink}>Enlazar</button>
             </div>
-            <button class="link-btn" onclick={openGoogleContactsLink}>Enlazar</button>
-          </div>
-          <div class="row">
-            <div class="row-label">
-              <span>Strava</span>
+            <div class="row">
+              <div class="row-label">
+                <span>Strava</span>
+              </div>
+              <button class="link-btn" onclick={openStravaLink}>Enlazar</button>
             </div>
-            <button class="link-btn" onclick={openStravaLink}>Enlazar</button>
-          </div>
-          <div class="row">
-            <div class="row-label">
-              <span>Gmail</span>
+            <div class="row">
+              <div class="row-label">
+                <span>Gmail</span>
+              </div>
+              <button class="link-btn" onclick={openGmailLink}>Enlazar</button>
             </div>
-            <button class="link-btn" onclick={openGmailLink}>Enlazar</button>
-          </div>
-          <div class="row">
-            <div class="row-label">
-              <span>Spotify</span>
+            <div class="row">
+              <div class="row-label">
+                <span>Spotify</span>
+              </div>
+              <button class="link-btn">Enlazar</button>
             </div>
-            <button class="link-btn">Enlazar</button>
-          </div>
+          {/if}
           <div class="row">
             <div class="row-label">
               <span>Google Calendar & Tasks</span>
@@ -865,44 +867,6 @@
           </div>
         </section>
 
-        <!-- Exportar Datos -->
-        <section class="section">
-          <div class="section-title" style="color: var(--xp, var(--accent));">
-            <DynamicIcon name="Download" size={12} /> Exportar Datos
-          </div>
-          <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px;">
-            <a
-              href={api.export.markdownUrl()}
-              download
-              class="save-config-btn"
-              style="display: flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; text-align: center; height: 32px; background: var(--elevated); border: 1px solid var(--border); color: var(--text-primary); font-size: 11px;"
-            >
-              <DynamicIcon name="FileText" size={12} /> Descargar Markdown Único
-            </a>
-
-            <a
-              href={api.export.htmlUrl()}
-              download
-              class="save-config-btn"
-              style="display: flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; text-align: center; height: 32px; background: var(--elevated); border: 1px solid var(--border); color: var(--text-primary); font-size: 11px;"
-            >
-              <DynamicIcon name="Code" size={12} /> Descargar HTML Único
-            </a>
-
-            <a
-              href={api.export.zipUrl()}
-              download
-              class="save-config-btn"
-              style="display: flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; text-align: center; height: 32px; background: var(--elevated); border: 1px solid var(--border); color: var(--text-primary); font-size: 11px;"
-            >
-              <DynamicIcon name="FolderArchive" size={12} /> Descargar Todas en ZIP
-            </a>
-          </div>
-          <p class="hint">
-            Crea una copia de seguridad local de todos tus conocimientos acumulados en Joidy.
-          </p>
-        </section>
-
         <!-- Desarrollador -->
         <section class="section">
           <div class="section-title" style="color: var(--xp, var(--accent));">
@@ -919,7 +883,7 @@
               <span class:active={$devMode}>on</span>
             </button>
           </div>
-          <p class="hint">Activa para mostrar páginas en desarrollo y contenido avanzado.</p>
+          <p class="hint">Activa para mostrar contenido avanzado e integraciones experimentales.</p>
         </section>
       </div>
 
