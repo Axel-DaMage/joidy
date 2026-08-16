@@ -1,6 +1,6 @@
 watchfiles==1.2.0
 httpx==0.28.1
-pydantic-settings==2.14.2
+pydantic-settings==2.15.0
 sqlalchemy==2.0.52
 psycopg2-binary==2.9.12
 pgvector==0.5.0
