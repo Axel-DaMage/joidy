@@ -24,10 +24,10 @@ test.describe('Smoke — app shell', () => {
     await expect(xp).toBeVisible({ timeout: 5000 });
   });
 
-  test('all 8 nav items are present and clickable', async ({ page }) => {
+  test('all 7 nav items are present and clickable', async ({ page }) => {
     await authGoto(page, '/');
     const nav = page.locator('nav.app-sidebar');
-    const expectedHrefs = ['/', '/notes', '/graph', '/skills', '/ai', '/goals', '/streaks', '/analytics'];
+    const expectedHrefs = ['/', '/notes', '/graph', '/skills', '/ai', '/streaks', '/goals'];
     for (const href of expectedHrefs) {
       const link = nav.locator(`a[href="${href}"]`);
       await expect(link).toBeVisible();
@@ -72,9 +72,8 @@ test.describe('Smoke — navigation between pages', () => {
     { path: '/graph', title: 'Graph' },
     { path: '/skills', title: 'Skills' },
     { path: '/ai', title: 'AI' },
-    { path: '/goals', title: 'Goals' },
     { path: '/streaks', title: 'Streaks' },
-    { path: '/analytics', title: 'Analytics' },
+    { path: '/goals', title: 'Goals' },
   ];
 
   for (const p of pages) {

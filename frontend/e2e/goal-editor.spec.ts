@@ -219,7 +219,7 @@ test.describe('Goal Editor — new goal creation', () => {
     }
   });
 
-  test('new goal modal has 3 tabs', async ({ page }) => {
+  test('new goal modal has 3 columns', async ({ page }) => {
     await authGoto(page, '/goals');
     await page.locator('button.tab:has-text("Inicio")').click();
     await page.waitForTimeout(1000);
@@ -227,9 +227,9 @@ test.describe('Goal Editor — new goal creation', () => {
     if (await newGoalBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
       await newGoalBtn.click();
       await page.waitForTimeout(500);
-      await expect(page.locator('.ng-tab:has-text("Básico")').or(page.locator('.ng-tab:has-text("Basico")'))).toBeVisible({ timeout: 3000 });
-      await expect(page.locator('.ng-tab:has-text("Apariencia")')).toBeVisible();
-      await expect(page.locator('.ng-tab:has-text("Avanzado")')).toBeVisible();
+      await expect(page.locator('.ng-col-title:has-text("Básico")').or(page.locator('.ng-col-title:has-text("Basico")'))).toBeVisible({ timeout: 3000 });
+      await expect(page.locator('.ng-col-title:has-text("Apariencia")')).toBeVisible();
+      await expect(page.locator('.ng-col-title:has-text("Avanzado")')).toBeVisible();
     }
   });
 

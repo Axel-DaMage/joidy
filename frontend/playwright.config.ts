@@ -1,5 +1,4 @@
 import { defineConfig, devices } from '@playwright/test';
-import globalTeardown from './e2e/helpers/cleanup';
 
 /**
  * Playwright E2E configuration for Joidy frontend.
@@ -45,5 +44,5 @@ export default defineConfig({
         reuseExistingServer: true,
         timeout: 60_000,
       },
-  globalTeardown,
+  globalTeardown: './e2e/helpers/cleanup.ts',
 });

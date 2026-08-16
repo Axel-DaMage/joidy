@@ -122,8 +122,8 @@ test.describe('Goals — goal cards', () => {
     const goalCards = page.locator('.goal-card-main');
     const count = await goalCards.count();
     if (count > 0) {
-      // Pin button is a sibling within the goal card container
-      const pinBtn = page.locator('button[aria-label="Fijar objetivo"]').first();
+      // Pin button is a sibling within the goal-editor-card container
+      const pinBtn = page.locator('.goal-editor-card button[aria-label="Fijar objetivo"], .goal-editor-card button[aria-label="Desfijar objetivo"]').first();
       await expect(pinBtn).toBeVisible({ timeout: 3000 });
     }
   });
@@ -143,12 +143,15 @@ test.describe('Goals — goal cards', () => {
   test('pin button toggles goal pin state', async ({ page }) => {
     await authGoto(page, '/goals');
     await page.waitForTimeout(1000);
-    const firstPinBtn = page.locator('button[aria-label="Fijar objetivo"]').first();
-    if (await firstPinBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+    const firstGoalCard = page.locator('.goal-editor-card').first();
+    if (await firstGoalCard.isVisible({ timeout: 2000 }).catch(() => false)) {
+      const firstPinBtn = firstGoalCard.locator('button[aria-label="Fijar objetivo"], button[aria-label="Desfijar objetivo"]').first();
+      await expect(firstPinBtn).toBeVisible({ timeout: 3000 });
       await firstPinBtn.click();
       await page.waitForTimeout(500);
-      // The button should still be visible (toggled state)
-      await expect(firstPinBtn).toBeVisible();
+      // The button should still be visible (toggled state, aria-label may change)
+      const toggledBtn = firstGoalCard.locator('button[aria-label="Fijar objetivo"], button[aria-label="Desfijar objetivo"]').first();
+      await expect(toggledBtn).toBeVisible();
     }
   });
 });
