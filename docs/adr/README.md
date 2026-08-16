@@ -28,10 +28,3 @@ All ADRs follow a consistent template with these sections:
 1. Create a new file `NNNN-short-title.md` (zero-padded number)
 2. Follow the template above
 3. Add an entry to the index table in this README
-4. Also add an entry in `docs/ARCHITECTURE_DECISIONS.md` for backward compatibility
-
-## Relationship to `docs/ARCHITECTURE_DECISIONS.md`
-
-`docs/ARCHITECTURE_DECISIONS.md` is a consolidated document that includes all
-ADRs in a single file for easy reading. This directory contains the individual
-ADR files. Both should be kept in sync.

@@ -116,7 +116,7 @@ Recuerda que la base de datos PostgreSQL (con la extensión `pgvector`) se compa
 
 ## 8. Convenciones útiles
 
-- Cada servicio tiene su propio `README.md` o `ARCHITECTURE.md`.
+- Cada servicio tiene su propio `README.md`. La arquitectura general está en `docs/`.
 - El frontend usa Svelte stores en `frontend/src/lib/stores/`.
 - El backend separa `routers/` (HTTP), `services/` (lógica) y `models/` (SQLAlchemy).
 - `make lint` ejecuta `python -m compileall` en todos los servicios Python.
@@ -132,5 +132,7 @@ Recuerda que la base de datos PostgreSQL (con la extensión `pgvector`) se compa
 
 ---
 
-Para más detalles técnicos del frontend ver `ARCHITECTURE_FRONTEND.md`.
-Para la arquitectura general ver `ARCHITECTURE.md`.
+Para más detalles técnicos del frontend ver `docs/frontend.md`.
+Para la arquitectura general ver `docs/architecture.md`.
+Para el esquema de base de datos ver `docs/database.md`.
+Para el índice completo de documentación ver `docs/index.md`.

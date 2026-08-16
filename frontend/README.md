@@ -100,7 +100,7 @@ pages under development show "En Construccion" unless Dev Mode is ON.
 
 ## See Also
 
-- [ARCHITECTURE.md](../ARCHITECTURE.md) — system overview and data flow
-- [ARCHITECTURE_FRONTEND.md](../ARCHITECTURE_FRONTEND.md) — frontend architecture
+- [Architecture](../docs/architecture.md) — system overview and data flow
+- [Frontend](../docs/frontend.md) — frontend architecture
 - [AGENTS.md](../AGENTS.md) — agent instructions, commands, known issues
 - [docs/](../docs/) — architecture decision records and guides

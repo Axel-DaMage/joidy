@@ -212,9 +212,11 @@ See [QUICKSTART.md](QUICKSTART.md) for a step-by-step dev onboarding guide.
 
 ## Documentation
 
-- [Architecture](./ARCHITECTURE.md)
-- [Architecture Decision Records](./docs/ARCHITECTURE_DECISIONS.md)
-- [Frontend Architecture](./ARCHITECTURE_FRONTEND.md)
+- [Architecture](./docs/architecture.md)
+- [Architecture Decision Records](./docs/adr/README.md)
+- [Frontend Architecture](./docs/frontend.md)
+- [Database](./docs/database.md)
+- [Full docs index](./docs/index.md)
 
 ## License
 
