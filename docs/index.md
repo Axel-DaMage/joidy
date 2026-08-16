@@ -26,6 +26,8 @@ Joidy es un sistema personal de gestión del conocimiento que integra:
 
 ## Índice de Documentación
 
+### Documentación Principal
+
 | # | Documento | Descripción |
 |---|-----------|-------------|
 | 1 | [Arquitectura](architecture.md) | Visión general del sistema, servicios, base de datos y comunicación |
@@ -38,6 +40,23 @@ Joidy es un sistema personal de gestión del conocimiento que integra:
 | 8 | [Gamificación](gamification.md) | XP, niveles, rachas, planta, milestones |
 | 9 | [Desarrollo](development.md) | Guía para desarrolladores |
 | 10 | [Troubleshooting](troubleshooting.md) | Errores comunes y soluciones |
+
+### Guías y Referencias
+
+| # | Documento | Descripción |
+|---|-----------|-------------|
+| 11 | [Accesibilidad](A11Y.md) | Criterios WCAG 2.1 AA, patrones a11y aplicados en el frontend |
+| 12 | [Internacionalización](I18N.md) | Estado actual del i18n y estrategia para multi-idioma |
+| 13 | [Guía de Estilo](STYLE_GUIDE.md) | Convenciones de código para frontend y backend |
+| 14 | [Monitoring](MONITORING.md) | Métricas Prometheus, endpoint `/metrics`, Grafana |
+| 15 | [Comunidad](COMMUNITY.md) | Canales de participación, contribuciones, código de conducta |
+| 16 | [Real-Time & Security](realtime-security.md) | WebSockets, error handling, rate limiting, seguridad |
+
+### Architecture Decision Records
+
+| # | Documento | Descripción |
+|---|-----------|-------------|
+| 17 | [ADRs](adr/README.md) | Índice de Architecture Decision Records (0001–0006) |
 
 ---
 
