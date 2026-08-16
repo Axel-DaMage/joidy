@@ -24,6 +24,7 @@
     background: transparent;
     overflow: hidden;
     box-shadow: none;
+    flex-shrink: 0;
   }
 
   .widget-content {

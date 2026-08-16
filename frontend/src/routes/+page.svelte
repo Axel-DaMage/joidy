@@ -186,12 +186,12 @@
     }
   }
 
-  $: isWilted = (() => {
+  let isWilted = $derived.by(() => {
     if (!$lastActivity) return false;
     const last = new Date($lastActivity);
     if (isNaN(last.getTime())) return false;
     return (Date.now() - last.getTime()) / 86400000 > 2;
-  })();
+  });
 
   let githubStatusChecked = false;
   let ttiMeasured = false;
@@ -263,34 +263,38 @@
     window.removeEventListener('joidy:github-disconnected', refreshGithubFromEvent);
   }
 
-  $: if (modulePrefsReady && MODULES[moduleIdx]) {
-    patchUserSettings({
-      dashboard: {
-        moduleId: MODULES[moduleIdx].id,
-      }
-    });
-  }
-
-  $: if (!ttiMeasured && githubStatusChecked && $notesLoadedOnce) {
-    ttiMeasured = true;
-    if (typeof performance !== 'undefined') {
-      performance.mark('dashboard-interactive');
-      performance.measure('dashboard-tti', 'dashboard-mount', 'dashboard-interactive');
-      const entry = performance.getEntriesByName('dashboard-tti').slice(-1)[0];
-      if (entry) {
-        try {
-          if (typeof localStorage !== 'undefined') {
-            localStorage.setItem('joidy_dashboard_tti_ms', Math.round(entry.duration).toString());
-          }
-        } catch {
-          // Ignore storage failures
+  $effect(() => {
+    if (modulePrefsReady && MODULES[moduleIdx]) {
+      patchUserSettings({
+        dashboard: {
+          moduleId: MODULES[moduleIdx].id,
         }
-        if (dev) {
-          logger.info(`Dashboard TTI: ${Math.round(entry.duration)}ms`);
+      });
+    }
+  });
+
+  $effect(() => {
+    if (!ttiMeasured && githubStatusChecked && $notesLoadedOnce) {
+      ttiMeasured = true;
+      if (typeof performance !== 'undefined') {
+        performance.mark('dashboard-interactive');
+        performance.measure('dashboard-tti', 'dashboard-mount', 'dashboard-interactive');
+        const entry = performance.getEntriesByName('dashboard-tti').slice(-1)[0];
+        if (entry) {
+          try {
+            if (typeof localStorage !== 'undefined') {
+              localStorage.setItem('joidy_dashboard_tti_ms', Math.round(entry.duration).toString());
+            }
+          } catch {
+            // Ignore storage failures
+          }
+          if (dev) {
+            logger.info(`Dashboard TTI: ${Math.round(entry.duration)}ms`);
+          }
         }
       }
     }
-  }
+  });
 
   // Widget renderers per panel
   function leftWidgets(layout: typeof $dashboardLayout) { return layout.left; }
@@ -299,9 +303,22 @@
   // Resizable panel synced with notes
   let panelWidth = 260;
 
+  // Responsive module size — smaller on narrow viewports
+  let moduleSize = $state(160);
+  function updateModuleSize() {
+    if (typeof window === 'undefined') return;
+    moduleSize = window.innerWidth <= 480 ? 110 : window.innerWidth <= 768 ? 130 : 160;
+  }
+  $effect(() => {
+    if (typeof window === 'undefined') return;
+    updateModuleSize();
+    window.addEventListener('resize', updateModuleSize);
+    return () => window.removeEventListener('resize', updateModuleSize);
+  });
+
   // Level milestones that warrant a shareable achievement card.
   const LEVEL_MILESTONES = [10, 25, 50, 75, 100];
-  $: isLevelMilestone = LEVEL_MILESTONES.includes($globalLevel);
+  let isLevelMilestone = $derived(LEVEL_MILESTONES.includes($globalLevel));
 
   function shareLevel() {
     openShare({
@@ -326,15 +343,15 @@
         {#key moduleIdx}
           <div class="module-slide" in:fly={{ x: slideDir * 40, duration: 220, opacity: 0 }}>
             {#if MODULES[moduleIdx].id === 'planta'}
-              <Plant size={160} wilted={isWilted} />
+              <Plant size={moduleSize} wilted={isWilted} />
             {:else if MODULES[moduleIdx].id === 'galaxia'}
-              <GalaxyModule size={160} />
+              <GalaxyModule size={moduleSize} />
             {:else if MODULES[moduleIdx].id === 'montana'}
-              <MountainModule size={160} />
+              <MountainModule size={moduleSize} />
             {:else if MODULES[moduleIdx].id === 'ciudad'}
-              <CityModule size={160} />
+              <CityModule size={moduleSize} />
             {:else if MODULES[moduleIdx].id === 'orbita'}
-              <OrbitModule size={160} />
+              <OrbitModule size={moduleSize} />
             {/if}
           </div>
         {/key}
@@ -464,6 +481,17 @@
     gap: 10px;
     overflow: hidden;
     background: var(--bg);
+  }
+
+  /* Mobile: allow natural flow */
+  @media (max-width: 768px) {
+    .plant-section {
+      overflow: visible;
+      padding: var(--s3) var(--s3) var(--s4);
+    }
+    .activity-section {
+      overflow: visible;
+    }
   }
 
   /* ── Module navigation ── */
@@ -605,15 +633,31 @@
   .empty-state.success { color: var(--success); text-align: center; padding: 12px; }
 
   /* ── Responsive ── */
+
+  /* Tablet — narrow the left panel and reduce gaps */
+  @media (max-width: 1024px) {
+    .dashboard {
+      grid-template-columns: minmax(180px, 220px) 5px 1fr;
+    }
+    .plant-section {
+      padding: var(--s3) var(--s4) var(--s3);
+    }
+    .module-viewport {
+      width: 140px;
+      height: 140px;
+    }
+  }
+
   @media (max-width: 768px) {
     .dashboard {
       grid-template-columns: 1fr;
-      grid-template-rows: auto auto 1fr;
+      grid-template-rows: auto;
     }
 
     .plant-section {
       padding: var(--s3) var(--s3) var(--s2);
       gap: var(--s2);
+      overflow: visible;
     }
 
     .resize-handle.static {
@@ -621,7 +665,7 @@
     }
 
     .activity-section {
-      overflow-y: auto;
+      overflow: visible;
     }
 
     .stats-row {
@@ -679,6 +723,11 @@
     .module-label {
       min-width: 60px;
       font-size: 9px;
+    }
+
+    .fab {
+      right: var(--s2);
+      bottom: calc(60px + var(--s2));
     }
   }
 </style>

@@ -837,21 +837,4 @@ export const api = {
         server_time: string;
       }>('GET', '/sync/status'),
   },
-
-  system: {
-    power: {
-      status: () =>
-        req<{
-          docker_available: boolean;
-          services: { name: string; status: string; healthy: boolean | null }[];
-          hibernating: boolean;
-        }>('GET', '/system/power/status'),
-      sleep: () =>
-        req<{ status: string; message: string; affected: string[] }>('POST', '/system/power/sleep'),
-      wake: () =>
-        req<{ status: string; message: string; affected: string[] }>('POST', '/system/power/wake'),
-      shutdown: () =>
-        req<{ status: string; message: string; affected: string[] }>('POST', '/system/power/shutdown'),
-    },
-  },
 };

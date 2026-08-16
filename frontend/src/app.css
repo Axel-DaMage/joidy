@@ -40,19 +40,30 @@
   --header-h:   48px;
   --statusbar-h: 36px;
 
+  /* Responsive breakpoints */
+  --bp-mobile-s: 480px;
+  --bp-mobile:   768px;
+  --bp-tablet:   1024px;
+  --bp-desktop:  1440px;
+
   /* Typography */
   --font-sans: 'Geist', 'Helvetica Neue', system-ui, sans-serif;
   --font-mono: 'Geist Mono', 'Fira Code', monospace;
 
   /* Sizing scale */
-  --s1: 4px;
-  --s2: 8px;
-  --s3: 12px;
-  --s4: 16px;
-  --s5: 24px;
-  --s6: 32px;
-  --s7: 48px;
-  --s8: 64px;
+  --s0_5:  2px;
+  --s1:    4px;
+  --s1_5:  6px;
+  --s2:    8px;
+  --s2_5:  10px;
+  --s3:    12px;
+  --s3_5:  14px;
+  --s4:    16px;
+  --s4_5:  20px;
+  --s5:    24px;
+  --s6:    32px;
+  --s7:    48px;
+  --s8:    64px;
 
   /* Transitions */
   --t-fast:   50ms ease-out;
@@ -62,6 +73,9 @@
   /* Border radius */
   --r: 4px;
   --r-sm: 2px;
+  --r-xs: 3px;
+  --r-md: 5px;
+  --r-lg-md: 6px;
   --r-lg: 8px;
   --r-xl: 12px;
   --r-full: 999px;
@@ -118,6 +132,9 @@ html, body {
 @media (prefers-reduced-motion: reduce) {
   html, body {
     transition: none;
+  }
+  .app-main {
+    scroll-behavior: auto;
   }
 }
 
@@ -552,7 +569,11 @@ textarea.input {
   }
 
   .app-main {
-    overflow: auto;
+    overflow-y: auto;
+    overflow-x: hidden;
+    display: block;
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
   }
 
   .app-statusbar {
@@ -571,11 +592,13 @@ textarea.input {
   /* Stack the common resizable 3-column page layouts into a single column */
   .notes-page,
   .dashboard,
-  .streaks-layout {
+  .streaks-layout,
+  .goals-page {
     grid-template-columns: 1fr !important;
-    grid-template-rows: auto 1fr !important;
+    grid-template-rows: auto !important;
     height: auto;
     min-height: 100%;
+    overflow: visible !important;
   }
 
   .notes-page .resize-handle,
@@ -584,26 +607,80 @@ textarea.input {
     display: none;
   }
 
+  /* List/panel sections: allow natural height with a reasonable cap */
   .notes-list,
   .plant-section,
   .streaks-layout .list-panel {
-    max-height: 45vh;
-    min-height: 180px;
-    overflow: auto;
+    max-height: none;
+    min-height: 0;
+    overflow: visible;
     border-right: none;
     border-bottom: 1px solid var(--border);
+    padding-bottom: var(--s4);
   }
 
+  /* Content/detail sections: natural flow, no forced min-height */
   .editor-panel,
   .activity-section,
   .streaks-layout .detail-panel {
-    min-height: 55vh;
+    min-height: 0;
+    overflow: visible;
   }
 
   /* Goals page */
   .goals-body {
     max-width: none !important;
     padding: var(--s3);
+  }
+}
+
+/* ── Responsive (small mobile) ──────────────────────────────────────────────── */
+@media (max-width: 480px) {
+  .app-header {
+    padding: 0 var(--s2);
+    gap: var(--s2);
+  }
+
+  /* Hide non-essential header elements on very small screens */
+  .pwa-banner,
+  .vault-sync-indicator,
+  .connectivity-pill {
+    display: none;
+  }
+
+  /* Touch-friendly nav targets (44px minimum) */
+  .nav-item {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+/* ── Safe area insets (notched devices) ─────────────────────────────────────── */
+@supports (padding: env(safe-area-inset-bottom)) {
+  .app-sidebar {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .app-header {
+    padding-top: env(safe-area-inset-top);
+  }
+}
+
+/* ── Landscape phone: keep sidebar on left ──────────────────────────────────── */
+@media (max-height: 500px) and (orientation: landscape) {
+  .app-shell {
+    grid-template-columns: var(--sidebar-w) 1fr;
+    grid-template-rows: var(--header-h) 1fr;
+    grid-template-areas:
+      "header header"
+      "sidebar main";
+  }
+  .app-sidebar {
+    flex-direction: column;
+    border-right: 1px solid var(--border);
+    border-top: none;
+  }
+  .app-statusbar {
+    display: none;
   }
 }
 

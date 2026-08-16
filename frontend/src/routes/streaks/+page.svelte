@@ -986,10 +986,18 @@
   }
 
   /* ── Responsive ── */
+
+  /* Tablet — narrow the list panel */
+  @media (max-width: 1024px) {
+    .streaks-layout {
+      grid-template-columns: minmax(200px, 240px) 5px 1fr;
+    }
+  }
+
   @media (max-width: 768px) {
     .streaks-layout {
       grid-template-columns: 1fr;
-      grid-template-rows: auto 1fr;
+      grid-template-rows: auto;
     }
 
     .resize-handle.static {
@@ -1085,6 +1093,20 @@
 
     .delete-modal-content {
       padding: var(--s4) var(--s3) var(--s3);
+    }
+  }
+
+  @media (max-width: 360px) {
+    .no-selection {
+      padding: var(--s3) var(--s2);
+      gap: var(--s3);
+    }
+    .counter-ring {
+      width: 60px;
+      height: 60px;
+    }
+    .counter-num {
+      font-size: 18px;
     }
   }
 </style>

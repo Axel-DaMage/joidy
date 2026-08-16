@@ -1697,15 +1697,24 @@
   }
 
   /* ── Responsive ── */
+
+  /* Tablet — narrow the list panel */
+  @media (max-width: 1024px) {
+    .notes-page {
+      grid-template-columns: minmax(200px, 240px) 5px 1fr;
+    }
+  }
+
   @media (max-width: 768px) {
     .notes-page {
       grid-template-columns: 1fr;
-      grid-template-rows: auto 1fr;
+      grid-template-rows: auto;
     }
 
     .notes-list {
-      max-height: 40vh;
+      max-height: none;
       border-bottom: 1px solid var(--border);
+      overflow: visible;
     }
 
     .resize-handle {
@@ -1713,7 +1722,8 @@
     }
 
     .editor-panel {
-      height: 100%;
+      height: auto;
+      overflow: visible;
     }
 
     .empty-dashboard {
@@ -1755,7 +1765,7 @@
 
   @media (max-width: 480px) {
     .notes-list {
-      max-height: 35vh;
+      max-height: none;
     }
 
     .empty-dashboard {
@@ -1777,6 +1787,24 @@
 
     .list-meta {
       padding: var(--s1) var(--s2);
+    }
+  }
+
+  @media (max-width: 360px) {
+    .notes-list {
+      max-height: 35vh;
+    }
+    .sort-menu {
+      width: 130px;
+    }
+    .empty-dashboard {
+      padding: var(--s3) var(--s2);
+    }
+    .dash-widget {
+      padding: var(--s2);
+    }
+    .folder-modal {
+      padding: var(--s2);
     }
   }
 </style>

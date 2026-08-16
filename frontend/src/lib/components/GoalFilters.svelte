@@ -136,8 +136,40 @@
   @media (max-width: 768px) {
     .editor-header {
       flex-direction: column;
-      gap: 12px;
+      gap: var(--s3);
       align-items: flex-start;
+      padding: var(--s3) var(--s3);
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+      overflow: hidden;
+    }
+    .search-box input {
+      width: 100%;
+      min-width: 0;
+    }
+    .search-box {
+      flex: 1;
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+    .editor-controls {
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+      flex-direction: column;
+      align-items: stretch;
+      gap: var(--s2_5);
+      overflow: hidden;
+    }
+    .filter-buttons {
+      flex-wrap: wrap;
+      gap: var(--s1);
+    }
+    .filter-btn {
+      padding: var(--s2) var(--s2_5);
+      font-size: 11px;
     }
   }
 </style>
