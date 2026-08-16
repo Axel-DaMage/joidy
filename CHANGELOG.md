@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- _Nothing yet_
+
+### Changed
+
+- _Nothing yet_
+
+### Fixed
+
+- _Nothing yet_
+
+### Removed
+
+- _Nothing yet_
+
+### Security
+
+- _Nothing yet_
+
+## [0.2.0] - 2026-08-16
+
+### Added
+
 - **Security hardening**: JWT auth enforced on all data/mutation endpoints, API keys/secrets exposure fixed, XSS & input sanitization, CORS & WebSocket auth, ai-service hardening, all containers run as non-root user (#322, #323, #324, #325, #326, #327, #329, #358, #376, #377, #378, #379, #380, #397, #408, #416, #417, #418, #419, #422, #423)
 - **Google Calendar & Tasks OAuth integration** (#2, #374)
 - **WYSIWYG markdown editor** with TipTap (#6, #344)
@@ -123,5 +145,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Responsive base layout and mobile streak actions.
 - CI pipeline: API tests, frontend typecheck, Docker build smoke test.
 
-[unreleased]: https://github.com/Axel-DaMage/joidy/compare/v0.1.0...HEAD
+[unreleased]: https://github.com/Axel-DaMage/joidy/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/Axel-DaMage/joidy/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Axel-DaMage/joidy/releases/tag/v0.1.0

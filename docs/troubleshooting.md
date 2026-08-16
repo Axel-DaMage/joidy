@@ -3,8 +3,8 @@
 ## Metadata
 
 ```yaml
-last_updated: 2024
-version: 1.0
+last_updated: 2026-08-16
+version: 0.2.0
 ```
 
 ---
