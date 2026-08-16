@@ -49,7 +49,7 @@
   },
   "dependencies": {
     "@tiptap/core": "^3.29.2",
-    "@tiptap/extension-code-block-lowlight": "^3.29.2",
+    "@tiptap/extension-code-block-lowlight": "^3.30.0",
     "@tiptap/extension-image": "^3.29.2",
     "@tiptap/extension-link": "^3.29.2",
     "@tiptap/extension-placeholder": "^3.29.2",
