@@ -10,6 +10,11 @@ volume: postgres_data
 shared: true
 ```
 
+> **Fuente de verdad:** El código en `api/models/*.py` y las migraciones de
+> Alembic son la definición autoritativa del esquema. Este documento es una
+> referencia legible para humanos y puede quedarse atrás respecto al código. En
+> caso de duda, lee los modelos y las migraciones.
+
 ---
 
 ## 1. Configuración
@@ -625,9 +630,334 @@ CREATE INDEX ix_api_usage_operation ON api_usage(operation);
 
 ---
 
-## 3. Modelos ORM
+## 3. Enums
 
-### 3.1 Located in `api/models/`
+Estos tipos `enum.Enum` (subclase de `str`) respaldan columnas `Enum` de SQLAlchemy.
+
+### `GoalTemporality` (`api/models/goal.py`)
+| Valor | Descripción |
+|-------|-------------|
+| `DAILY` | Objetivo diario |
+| `WEEKLY` | Objetivo semanal |
+| `MONTHLY` | Objetivo mensual |
+| `ANNUAL` | Objetivo anual |
+
+### `GoalMeasurement` (`api/models/goal.py`)
+| Valor | Descripción |
+|-------|-------------|
+| `COUNT` | Medido por conteo |
+| `BOOLEAN` | Hecho / no hecho |
+| `PERCENT` | Medido como porcentaje |
+
+### `GoalState` (`api/models/goal.py`)
+| Valor | Descripción |
+|-------|-------------|
+| `ACTIVE` | En progreso |
+| `COMPLETED` | Finalizado con éxito |
+| `FAILED` | Fallado |
+| `PAUSED` | Pausado temporalmente |
+| `CANCELLED` | Cancelado |
+
+### `GoalFailConfig` (`api/models/goal.py`)
+| Valor | Descripción |
+|-------|-------------|
+| `STATIC` | Comportamiento de fallo estático |
+| `ROLLOVER` | Arrastre al fallar |
+| `SNOWBALL` | Acumulación tipo bola de nieve |
+
+### `GitHubRepoStatus` (`api/models/github.py`)
+| Valor | Descripción |
+|-------|-------------|
+| `ACTIVE` | El repo se está sincronizando |
+| `PAUSED` | Sincronización pausada |
+| `DISABLED` | Sincronización deshabilitada |
+
+### `GitHubItemType` (`api/models/github.py`)
+| Valor | Descripción |
+|-------|-------------|
+| `ISSUE` | Issue de GitHub |
+| `PR` | Pull request |
+| `COMMIT` | Commit |
+
+### `GitHubSyncStatus` (`api/models/github.py`)
+| Valor | Descripción |
+|-------|-------------|
+| `SYNCED` | Item sincronizado |
+| `PENDING` | Sincronización pendiente |
+| `FAILED` | Sincronización fallida |
+
+### `GitHubEventType` (`api/models/github.py`)
+| Valor | Descripción |
+|-------|-------------|
+| `issues` | Evento de issue |
+| `pull_request` | Evento de pull request |
+| `issue_comment` | Evento de comentario de issue |
+| `push` | Evento de push |
+
+---
+
+## 4. Diagrama Entidad-Relación
+
+```mermaid
+erDiagram
+    notes ||--o{ note_tags : "has"
+    tags   ||--o{ note_tags : "has"
+    notes ||--o{ note_links : "source"
+    notes ||--o{ note_links : "target"
+    tags  ||--o{ tags : "parent"
+    notes ||--|| note_embeddings : "embedded"
+    notes ||--o{ embedding_failures : "fails"
+    notes ||--o| sync_state : "synced"
+
+    tags ||--o{ tag_cooccurrences : "tag_a"
+    tags ||--o{ tag_cooccurrences : "tag_b"
+
+    tags   ||--o| skills : "tracks"
+    goals  }o--o| notes : "note_id"
+    goals  }o--o| tags  : "tag_id"
+    goals  }o--o| goals : "parent_id"
+    goals  ||--o{ planning_assignments : "assigned"
+    goals  ||--o{ github_items : "goal_id"
+    notes  ||--o{ github_items : "note_id"
+
+    github_repos ||--o{ github_items : "contains"
+    github_repos ||--o{ github_events : "receives"
+
+    personal_streaks ||--o{ streak_checkins : "checkins"
+
+    notes {
+        integer id PK
+        string title
+        text content
+        string source
+        string source_path
+        boolean is_embedded
+        datetime created_at
+        datetime updated_at
+    }
+    note_embeddings {
+        integer note_id PK
+        vector embedding
+    }
+    tags {
+        integer id PK
+        string name
+        integer parent_id
+        string color
+        datetime created_at
+    }
+    note_tags {
+        integer note_id PK
+        integer tag_id PK
+        float confidence
+        string source
+    }
+    note_links {
+        integer source_note_id PK
+        integer target_note_id PK
+        text context_text
+    }
+    tag_cooccurrences {
+        integer tag_a_id PK
+        integer tag_b_id PK
+        integer weight
+        datetime updated_at
+    }
+    embedding_failures {
+        integer note_id PK
+        integer attempts
+        text last_error
+        datetime next_retry_at
+        datetime updated_at
+    }
+    sync_state {
+        integer id PK
+        integer note_id
+        datetime last_synced_at
+        datetime local_mtime
+        datetime remote_mtime
+        boolean conflict
+        datetime created_at
+        datetime updated_at
+    }
+    goals {
+        integer id PK
+        string title
+        text description
+        enum temporality
+        enum measurement_type
+        float target_value
+        float current_value
+        integer max_assignment_days
+        enum state
+        enum fail_config
+        string fail_emoji
+        string color
+        string theme
+        integer note_id
+        integer tag_id
+        integer parent_id
+        boolean pending_removal
+        boolean is_completed
+        datetime completed_at
+        string source_path
+        datetime created_at
+        datetime updated_at
+    }
+    planning_assignments {
+        integer id PK
+        date date
+        integer goal_id
+        datetime created_at
+    }
+    skills {
+        integer id PK
+        integer tag_id
+        integer note_count
+        string level
+        integer xp
+        datetime first_unlocked_at
+        datetime updated_at
+    }
+    personal_streaks {
+        integer id PK
+        string name
+        string emoji
+        string icon
+        string description
+        string color
+        string theme
+        string category
+        date start_date
+        date target_date
+        integer offset
+        string frequency
+        integer frequency_days
+        boolean is_archived
+        integer best_streak
+        integer total_checkins
+        integer freeze_count
+        integer freeze_used
+        datetime created_at
+    }
+    streak_checkins {
+        integer id PK
+        integer streak_id
+        date check_date
+        string note
+        integer mood
+        datetime created_at
+    }
+    xp_events {
+        integer id PK
+        string event_type
+        integer xp
+        string metadata_json
+        datetime created_at
+    }
+    streak_records {
+        integer id PK
+        date activity_date
+        integer xp_earned
+        datetime created_at
+    }
+    user_stats {
+        integer id PK
+        integer total_xp
+        integer current_streak
+        integer longest_streak
+        integer plant_stage
+        date last_activity_date
+        datetime updated_at
+    }
+    system_config {
+        integer id PK
+        string key
+        string value
+        datetime updated_at
+    }
+    push_subscriptions {
+        integer id PK
+        integer user_id
+        string endpoint
+        string p256dh
+        string auth
+        datetime created_at
+    }
+    github_repos {
+        integer id PK
+        string name
+        string full_name
+        text description
+        string url
+        string default_branch
+        boolean is_private
+        enum status
+        integer webhook_id
+        string webhook_secret
+        datetime last_synced_at
+        datetime created_at
+        datetime updated_at
+    }
+    github_items {
+        integer id PK
+        integer repo_id
+        integer external_id
+        enum item_type
+        integer number
+        string title
+        text body
+        string state
+        string state_reason
+        string author
+        string assignee
+        string labels
+        string url
+        string html_url
+        integer goal_id
+        integer note_id
+        datetime synced_at
+        datetime created_at
+        datetime updated_at
+    }
+    github_events {
+        integer id PK
+        integer repo_id
+        enum event_type
+        string action
+        string sender
+        enum item_type
+        integer item_number
+        integer item_external_id
+        json payload
+        boolean processed
+        datetime created_at
+    }
+    google_tokens {
+        integer id PK
+        integer user_id
+        text access_token
+        text refresh_token_encrypted
+        string token_type
+        datetime expires_at
+        text scope
+        datetime created_at
+        datetime updated_at
+    }
+    api_usage {
+        integer id PK
+        string operation
+        integer input_tokens
+        integer output_tokens
+        datetime created_at
+    }
+```
+
+---
+
+## 5. Modelos ORM
+
+### 5.1 Located in `api/models/`
 
 | Archivo | Modelos |
 |---------|---------|
@@ -645,7 +975,7 @@ CREATE INDEX ix_api_usage_operation ON api_usage(operation);
 
 > `api_usage` no tiene modelo ORM; se crea vía migración (`d4e5f6a7b8c9_add_api_usage.py`) y se escribe directamente con SQLAlchemy Core en el ai-service.
 
-### 3.2 Ejemplo de Modelo
+### 5.2 Ejemplo de Modelo
 
 ```python
 # api/models/note.py
@@ -670,9 +1000,9 @@ class Note(Base):
 
 ---
 
-## 4. Migraciones
+## 6. Migraciones
 
-### 4.1 Alembic Setup
+### 6.1 Alembic Setup
 
 ```python
 # api/database.py
@@ -687,7 +1017,7 @@ def _run_migrations():
     command.upgrade(cfg, "head")
 ```
 
-### 4.2 Comandos
+### 6.2 Comandos
 
 ```bash
 # Aplicar migraciones
@@ -702,7 +1032,7 @@ make db-health
 docker compose exec api alembic revision -m "description"
 ```
 
-### 4.3 Migraciones existentes
+### 6.3 Migraciones existentes
 
 | Archivo | Descripción |
 |---------|-------------|
@@ -716,7 +1046,7 @@ docker compose exec api alembic revision -m "description"
 
 ---
 
-## 5. Índices
+## 7. Índices
 
 | Tabla | Índice | Columnas |
 |-------|--------|----------|
@@ -728,7 +1058,7 @@ docker compose exec api alembic revision -m "description"
 
 ---
 
-## 6. Foreign Keys
+## 8. Foreign Keys
 
 Todas las tablas usan `ON DELETE CASCADE` para relaciones padre-hijo.
 
@@ -739,8 +1069,32 @@ Todas las tablas usan `ON DELETE CASCADE` para relaciones padre-hijo.
 
 ---
 
-## 7. Timestamps
+## 9. Timestamps
 
 - Todos los timestamps en UTC
 - Usar `server_default=func.now()` para que la DB genere el valor
 - Actualizaciones usan `onupdate=func.now()`
+
+---
+
+## 10. Notas Técnicas
+
+- **pgvector:** La columna `note_embeddings.embedding` usa `Vector(768)`,
+  coincidiendo con la dimensión de embeddings de Gemini. Esto requiere la
+  extensión `pgvector`, que está habilitada en el contenedor de PostgreSQL.
+- **App mono-usuario:** `user_stats` es un singleton (`id = 1`) y
+  `google_tokens` tiene una sola fila (`user_id = 1`).
+- **Comportamiento de cascada:** La mayoría de las foreign keys hacia `notes` y
+  `tags` usan `CASCADE` para registros hijos (ej. `note_tags`,
+  `note_embeddings`) y `SET NULL` para referencias opcionales (ej.
+  `goals.note_id`, `github_items.goal_id`).
+- **Índices:** Las primary keys y las columnas con `index=True` explícito se
+  indexan automáticamente por SQLAlchemy. Las restricciones unique (ej.
+  `tags.name`, `github_repos.full_name`,
+  `streak_checkins(streak_id, check_date)`) también crean índices. La migración
+  `e5f6a7b8c9d0_add_missing_indexes.py` añadió índices explícitos en columnas
+  frecuentemente filtradas/ordenadas: `notes.created_at`, `notes.updated_at`,
+  `note_links.target_note_id`, `embedding_failures.next_retry_at`,
+  `goals.parent_id`, `goals.note_id`, `goals.tag_id`, `goals.state`,
+  `personal_streaks.is_archived`, `personal_streaks.category`. La tabla
+  `api_usage` tiene índices en `created_at` y `operation`.

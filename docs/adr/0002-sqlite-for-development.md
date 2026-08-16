@@ -1,7 +1,7 @@
 # ADR 002: SQLite + sqlite-vec para Desarrollo
 
 ## Estado
-**Supercedado** — El proyecto ahora usa PostgreSQL 16 + pgvector en todos los entornos (desarrollo y producción) vía Docker. Ver ADR-007 en `docs/ARCHITECTURE_DECISIONS.md` y `docker-compose.yml`.
+**Supercedado** — El proyecto ahora usa PostgreSQL 16 + pgvector en todos los entornos (desarrollo y producción) vía Docker. Ver [ADR-0004](0004-postgresql-pgvector.md) y `docker-compose.yml`.
 
 ## Contexto
 Necesitamos elegir la base de datos para el proyecto.
@@ -27,7 +27,7 @@ A medida que el proyecto creció (embeddings, worker concurrente, push subscript
 - Sin soporte nativo para JSON/Array types
 - Migraciones Alembic orientadas a pgvector no funcionaban correctamente
 
-La migración a PostgreSQL + pgvector se documenta en ADR-007.
+La migración a PostgreSQL + pgvector se documenta en [ADR-0004](0004-postgresql-pgvector.md).
 
 ## Consecuencias
 

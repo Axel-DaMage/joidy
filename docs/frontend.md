@@ -196,12 +196,27 @@ frontend/
 
 ## 4. Componentes
 
+### 4.0 Primitivas UI
+
+| Componente | Archivo | Descripción |
+|------------|---------|-------------|
+| Card | components/Card.svelte | Contenedor con elevación y borde. |
+| Badge | components/Badge.svelte | Etiquetas de estado. |
+| Modal | components/Modal.svelte | Modal global con `focusTrap`. |
+| Toast | components/Toast.svelte | Notificación flotante. |
+| Skeleton | components/Skeleton.svelte | Placeholder de carga. |
+| Spinner | components/Spinner.svelte | Indicador de carga giratorio. |
+| EmptyState | components/EmptyState.svelte | Estado de vacío (sin datos). |
+
+> **Nota:** `Button` no existe como componente; se usan clases `.btn`, `.link-btn`
+> desde `app.css`.
+
 ### 4.1 UI Core
 
 | Componente | Archivo | Descripción |
 |------------|---------|-------------|
 | DynamicIcon | components/DynamicIcon.svelte | Iconos dinámicos (Lucide, Phosphor, Material) |
-| Widget | components/Widget.svelte | Contenedor de widget |
+| Widget | components/Widget.svelte | Contenedor de widgets drag/drop |
 | TagChip | components/TagChip.svelte | Chip de etiqueta con color |
 | IconPicker | components/IconPicker.svelte | Selector de iconos |
 
@@ -212,43 +227,105 @@ frontend/
 | XPBar | components/XPBar.svelte | Barra de progreso de XP |
 | Plant | components/Plant.svelte | Visualización de planta según etapa |
 | StreakCounter | components/StreakCounter.svelte | Contador de racha |
+| ActivityProgress | components/ActivityProgress.svelte | Barra de progreso de actividad |
+| ProgressBar | components/ProgressBar.svelte | Barra de progreso genérica |
 
 ### 4.3 Notas
 
 | Componente | Archivo | Descripción |
 |------------|---------|-------------|
 | NoteCard | components/NoteCard.svelte | Tarjeta de previsualización |
-| NoteEditor | components/NoteEditor.svelte | Editor markdown |
+| NoteEditor | components/NoteEditor.svelte | Editor markdown y previsualización (migrado a Svelte 5) |
+| NoteSearch | components/NoteSearch.svelte | Búsqueda de notas |
 | FileTree | components/FileTree.svelte | Árbol de archivos del vault |
+| TagChip | components/TagChip.svelte | Chip de tag interactivo |
+| TreeContextMenu | components/TreeContextMenu.svelte | Menú contextual del árbol de carpetas/notas |
 
 ### 4.4 Objetivos
 
 | Componente | Archivo | Descripción |
 |------------|---------|-------------|
+| GoalCard | components/GoalCard.svelte | Tarjeta de objetivo |
 | GoalEditor | components/GoalEditor.svelte | Editor de objetivos |
 
 ### 4.5 Rachas
 
 | Componente | Archivo | Descripción |
 |------------|---------|-------------|
-| StreakHeatmap | components/StreakHeatmap.svelte | Heatmap de actividad |
-| StreakCreateModal | components/StreakCreateModal.svelte | Modal de creación |
+| StreakListItem | components/StreakListItem.svelte | Item de racha en listados |
+| StreakHeatmap | components/StreakHeatmap.svelte | Heatmap de actividad (calendario de check-ins) |
+| StreakCreateModal | components/StreakCreateModal.svelte | Modal de creación/edición |
 | StreakStatsPanel | components/StreakStatsPanel.svelte | Panel de estadísticas |
 | StreakIcon | components/StreakIcon.svelte | Icono de racha |
 
-### 4.6 Otros
+### 4.6 Dashboard y Widgets
 
 | Componente | Archivo | Descripción |
 |------------|---------|-------------|
-| SettingsPanel | components/SettingsPanel.svelte | Panel de configuración |
+| Widget | components/Widget.svelte | Contenedor de widgets drag/drop |
+| Plant | components/Plant.svelte | Visualizador de etapa de planta |
+| CityModule | components/CityModule.svelte | Visualizador de estado tipo ciudad |
+| GalaxyModule | components/GalaxyModule.svelte | Visualizador de estado tipo galaxia |
+| MountainModule | components/MountainModule.svelte | Visualizador de estado tipo montaña |
+| OrbitModule | components/OrbitModule.svelte | Visualizador de estado tipo órbita |
+| GithubWidget | components/GithubWidget.svelte | Widget de issues/PRs de GitHub |
 | PomodoroWidget | components/PomodoroWidget.svelte | Widget Pomodoro |
-| KnowledgeGraph | components/KnowledgeGraph.svelte | Grafo D3 |
-| SkillTree | components/SkillTree.svelte | Árbol de habilidades |
+| WeatherWidget | components/WeatherWidget.svelte | Widget de clima |
 | TimeWidget | components/TimeWidget.svelte | Widget de tiempo |
+
+### 4.7 Navegación y Config
+
+| Componente | Archivo | Descripción |
+|------------|---------|-------------|
+| SettingsPanel | components/SettingsPanel.svelte | Panel de ajustes e integraciones |
+| CommandPalette | components/CommandPalette.svelte | Comandos rápidos (palette) |
+| Login | components/Login.svelte | Autenticación de usuario |
+| SetupWizard | components/SetupWizard.svelte | Asistente de configuración inicial (onboarding) |
+| TutorialOverlay | components/TutorialOverlay.svelte | Guía de bienvenida superpuesta |
+
+### 4.8 Otros
+
+| Componente | Archivo | Descripción |
+|------------|---------|-------------|
+| SkillTree | components/SkillTree.svelte | Árbol de habilidades |
+| KnowledgeGraph | components/KnowledgeGraph.svelte | Grafo de tags/notas (D3) |
+| KnowledgeGraphForce | components/KnowledgeGraphForce.svelte | Grafo de tags/notas con simulación de fuerzas |
+| ThemePicker | components/ThemePicker.svelte | Selector de tema |
+| FolderPicker | components/FolderPicker.svelte | Selector de carpeta |
+| ErrorBoundary | components/ErrorBoundary.svelte | Captura de errores de componente |
+| DeadLetterQueue | components/DeadLetterQueue.svelte | Utilidad de debug para mensajes fallidos |
 
 ---
 
 ## 5. Stores
+
+Patrón principal: un archivo por dominio, exporta `writable`/`derived` y
+funciones de carga/acción. Cualquier componente puede suscribirse con `$store`.
+
+### 5.0 Catálogo completo
+
+| Store | Tipo | Persistencia | Propósito |
+|-------|------|--------------|-----------|
+| `achievements.ts` | `writable` | `localStorage` | Logros desbloqueables del usuario. |
+| `analytics.ts` | `writable` | memoria | Eventos de analytics y pageviews. |
+| `connection.ts` | `writable` | escucha `navigator.onLine` | Estado online/offline. |
+| `gamification.ts` | `writable + derived` | `localStorage` + API | XP, rachas, etapas de planta. |
+| `githubCache.ts` | `writable` | `localStorage` | Cache de issues/PRs de GitHub. |
+| `graph.ts` | `writable` | memoria | Datos del grafo de tags y nodo seleccionado. |
+| `iconPicker.ts` | factory | memoria | Búsqueda y paginación de iconos Lucide. |
+| `layout.ts` | `writable` | `localStorage` | Layout de widgets del dashboard. |
+| `notes.ts` | `writable + derived` | API | Lista de notas, nota actual, selección masiva. |
+| `notifications.ts` | `writable` | memoria | Cola de toasts/notificaciones UI. |
+| `onboarding.ts` | `writable` | `localStorage` | Pasos del tutorial de bienvenida. |
+| `pageSnapshots.ts` | `writable` | memoria | Guarda scroll/state al navegar. |
+| `pagination.ts` | factory | memoria | Paginación reutilizable. |
+| `pomodoro.ts` | `writable + derived` | `localStorage` | Temporizador Pomodoro global. |
+| `pwa.ts` | `writable` | eventos del navegador | Prompt de instalación PWA. |
+| `routeCache.ts` | writable + helper | `localStorage` | Cache TTL por ruta. |
+| `session.ts` | `writable` | `localStorage` | Token y estado de autenticación. |
+| `settings.ts` | `writable + derived` | `localStorage` | Colores, tema, icon pack, preferencias. |
+| `theme.ts` | `writable` | `localStorage` | Temas predefinidos y switcher. |
+| `ui.ts` | `writable` | memoria | Toasts, modal global, sidebar. |
 
 ### 5.1 gamification.ts
 
@@ -330,6 +407,66 @@ loadGraph(): Promise<GraphData>
 // Estado del layout
 sidebarCollapsed: Writable<boolean>
 ```
+
+### 5.7 achievements.ts
+
+Logros desbloqueables del usuario. Persiste en `localStorage`.
+
+### 5.8 analytics.ts
+
+Eventos de analytics y pageviews. Mantiene los datos en memoria.
+
+### 5.9 connection.ts
+
+Estado online/offline. Escucha `navigator.onLine` para reflejar la conectividad
+del navegador en tiempo real.
+
+### 5.10 githubCache.ts
+
+Cache de issues/PRs de GitHub. Persiste en `localStorage` para reducir llamadas
+a la API.
+
+### 5.11 iconPicker.ts
+
+Factory de store para búsqueda y paginación de iconos Lucide. Datos en memoria.
+
+### 5.12 notifications.ts
+
+Cola de toasts/notificaciones UI. Datos en memoria.
+
+### 5.13 onboarding.ts
+
+Pasos del tutorial de bienvenida. Persiste en `localStorage`.
+
+### 5.14 pageSnapshots.ts
+
+Guarda scroll/state al navegar entre rutas para restaurar la posición. Datos en
+memoria.
+
+### 5.15 pagination.ts
+
+Factory de store reutilizable para paginación. Datos en memoria.
+
+### 5.16 pwa.ts
+
+Prompt de instalación PWA. Escucha eventos del navegador
+(`beforeinstallprompt`).
+
+### 5.17 routeCache.ts
+
+Cache TTL por ruta. Persiste en `localStorage` con helpers de expiración.
+
+### 5.18 session.ts
+
+Token y estado de autenticación. Persiste en `localStorage`.
+
+### 5.19 theme.ts
+
+Temas predefinidos y switcher. Persiste en `localStorage`.
+
+### 5.20 ui.ts
+
+Toasts, modal global y estado del sidebar. Datos en memoria.
 
 ---
 
@@ -517,3 +654,42 @@ interface PersonalStreak {
   // ... más campos
 }
 ```
+
+---
+
+## 11. Flujo de Datos
+
+```
+Usuario ──► Componente Svelte ──► Store ──► api.ts ──► Backend (FastAPI)
+                │                   │
+                ▼                   ▼
+            UI reactiva ($store)   cache/localStorage
+```
+
+1. El usuario interactúa con un componente.
+2. El componente invoca una función de un store (p. ej. `createNote`).
+3. La función del store llama a `api.notes.create(...)`.
+4. Si la respuesta es OK, el store actualiza su `writable`.
+5. Los componentes suscritos (`$notes`, `$currentNote`) se re-renderizan.
+6. Algunos stores persisten en `localStorage` o `routeCache` para reducir llamadas.
+
+---
+
+## 12. Convenciones
+
+- **Componentes**: PascalCase (`NoteEditor.svelte`), un componente por archivo.
+- **Stores**: camelCase (`notes.ts`), preferiblemente dominio por archivo.
+- **Rutas**: SvelteKit, carpetas con `+page.svelte`.
+- **Iconos**: usar `DynamicIcon name="IconName"` en vez de importar iconos a mano.
+- **Estilos**: variables CSS en `:root` (`app.css`); componentes usan `<style scoped>`.
+- **Errores**: usar `logger` para consola y `showNotification` para mensajes UI.
+
+---
+
+## 13. Cómo agregar una nueva página
+
+1. Crear carpeta en `src/routes/<nombre>/+page.svelte`.
+2. Agregar ítem en `+layout.svelte` (`navItems`) si debe aparecer en la sidebar.
+3. Crear/actualizar store en `src/lib/stores/` si la página necesita estado global.
+4. Agregar endpoints en `src/lib/api.ts` si consumen datos nuevos.
+5. Actualizar esta documentación.

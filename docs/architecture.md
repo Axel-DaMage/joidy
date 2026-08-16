@@ -285,9 +285,42 @@ worker/
 - Hash-based change detection
 - Envía a API via HTTP
 
-## 4. Base de Datos
+## 4. Flujo de Datos
 
-### 4.1 Configuración
+### 4.1 Sincronización de Notas (Obsidian → Joidy)
+
+```
+┌──────────────┐    ┌──────────────┐    ┌──────────────┐    ┌──────────────┐
+│  Obsidian    │    │    Worker    │    │     API      │    │ PostgreSQL   │
+│  Vault       │───▶│ vault_watcher│───▶│ POST /notes  │───▶│   (notes)    │
+│  (.md files) │    │ (file change)│    │  (import)    │    │              │
+└──────────────┘    └──────────────┘    └──────────────┘    └──────────────┘
+```
+
+1. Usuario/edición en Obsidian
+2. Worker detecta cambio en `/vault`
+3. Worker envía nota a API
+4. API guarda en PostgreSQL, procesa gamificación
+
+### 4.2 Gamificación
+
+```
+┌──────────────┐    ┌──────────────┐    ┌──────────────┐    ┌──────────────┐
+│   Frontend   │    │     API      │    │   Game       │    │ PostgreSQL   │
+│  (user act)  │───▶│ POST /notes  │───▶│   Engine     │───▶│ (XP + streak)│
+│              │    │              │    │ (+XP,streak) │    │              │
+└──────────────┘    └──────────────┘    └──────────────┘    └──────────────┘
+        │                                       │
+        ▼                                       ▼
+┌──────────────┐                        ┌──────────────┐
+│  XP Event    │                        │ Plant Stage  │
+│  Animation   │                        │   Update     │
+└──────────────┘                        └──────────────┘
+```
+
+## 5. Base de Datos
+
+### 5.1 Configuración
 
 **Motor:** PostgreSQL 16 con extensión `pgvector` para vectores
 
@@ -300,7 +333,7 @@ CREATE EXTENSION IF NOT EXISTS vector
 # Migraciones vía Alembic (make migrate)
 ```
 
-### 4.2 Tablas
+### 5.2 Tablas
 
 | Tabla | Propósito |
 |-------|-----------|
@@ -320,7 +353,7 @@ CREATE EXTENSION IF NOT EXISTS vector
 | planning_assignments | Asignaciones de objetivos |
 | github_repos | Repos sincronizados |
 
-## 5. Comunicación entre Servicios
+## 6. Comunicación entre Servicios
 
 | Origen | Destino | Protocolo | Endpoint |
 |--------|---------|-----------|----------|
@@ -330,7 +363,7 @@ CREATE EXTENSION IF NOT EXISTS vector
 | Worker | API | HTTP REST | http://api:8000 |
 | Worker | Vault | FS | /vault (mount) |
 
-## 6. Volúmenes Docker
+## 7. Volúmenes Docker
 
 | Volumen | Servicio | Propósito |
 |---------|----------|-----------|
@@ -341,7 +374,7 @@ CREATE EXTENSION IF NOT EXISTS vector
 | ./.env | API | Configuración |
 | ${OBSIDIAN_VAULT_PATH} | Worker | Vault Obsidian |
 
-## 7. Health Checks
+## 8. Health Checks
 
 | Servicio | Check | Intervalo |
 |----------|-------|------------|
@@ -350,7 +383,7 @@ CREATE EXTENSION IF NOT EXISTS vector
 | AI Service | depends_on api.condition=service_healthy | - |
 | Worker | depends_on api.condition=service_healthy | - |
 
-## 8. Entornos
+## 9. Entornos
 
 ### Development
 - Hot reload activo
@@ -362,7 +395,7 @@ CREATE EXTENSION IF NOT EXISTS vector
 - Sin mounts de código
 - Configuración via env vars
 
-## 9. Dependencias Externas
+## 10. Dependencias Externas
 
 | Servicio | Proveedor | Propósito |
 |----------|-----------|-----------|
@@ -370,3 +403,43 @@ CREATE EXTENSION IF NOT EXISTS vector
 | Obsidian Vault | Sistema de archivos local | Sincronización de notas |
 | GitHub API | github.com | Sincronización de issues/PRs |
 | Telegram Bot | Telegram | Notificaciones |
+
+## 11. Stack Tecnológico
+
+| Capa | Tecnología |
+|------|------------|
+| Frontend | SvelteKit, TypeScript, CSS Variables |
+| API | FastAPI, Pydantic, SQLAlchemy |
+| AI | Google Gemini API |
+| DB | PostgreSQL 16 + pgvector |
+| Worker | Python asyncio, watchdog |
+| DevOps | Docker Compose, Make |
+
+## 12. Variables de Entorno
+
+```bash
+# Obligatorias
+GEMINI_API_KEY        # API de Google Gemini
+OBSIDIAN_VAULT_PATH   # Ruta absoluta al vault
+SECRET_KEY            # Clave para sesiones
+
+# Opcionales
+GITHUB_CLIENT_ID      # OAuth GitHub
+GITHUB_CLIENT_SECRET  # OAuth GitHub
+GITHUB_TOKEN          # PAT para sincronización
+TELEGRAM_BOT_TOKEN    # Bot de Telegram
+```
+
+## 13. Seguridad
+
+- **CORS**: Configurable por entorno (`APP_ENV`)
+- **Rate Limiting**: 60 req/min global
+- **Sanitización**: XSS, longitud de inputs, normalización
+- **Secrets**: Nunca en git (`.env` en `.gitignore`)
+
+## 14. Scaling (Futuro)
+
+- **DB**: PostgreSQL para producción
+- **Cache**: Redis para respuestas
+- **Queue**: Celery para tareas async
+- **Realtime**: WebSockets para updates live
