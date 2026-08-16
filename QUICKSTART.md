@@ -101,7 +101,7 @@ graph LR
 2. Si es la primera vez, elige contraseña maestra o accede con la configurada en `.env`.
 3. Crea una nota desde `/notes`.
 4. Crea una racha desde `/streaks`.
-5. Explora el dashboard y las integraciones en `/integraciones`.
+5. Abre Ajustes y configura tus integraciones en la sección "Integraciones".
 
 ## 7. Desarrollo sin Docker (no recomendado)
 
