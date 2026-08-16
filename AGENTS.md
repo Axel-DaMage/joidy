@@ -63,12 +63,12 @@ Port overrides: `FRONTEND_PORT`, `API_PORT`, `AI_SERVICE_PORT`, `WORKER_PORT`.
 |-------------|---------|----------|-------|
 | **Gemini AI** | ✅ `ai-service` | ⚠️ Placeholder UI | #41 |
 | **GitHub** | ✅ `auth/github` | ✅ Unified integrations page | #120 |
-| **Gmail** | ❌ None | ❌ None | #42 |
-| **Contacts** | ❌ None | ❌ None | #43 |
-| **Strava** | ❌ None | ❌ None | #44 |
-| **Spotify** | ❌ None | ❌ None | #45 |
-| **G Calendar**| ❌ None | ❌ None | #2 |
-| **G Tasks** | ❌ None | ❌ None | #2 |
+| **Google Calendar** | ⚠️ `integrations/google` scaffold | ⚠️ Partial | #2 |
+| **Google Tasks** | ⚠️ `integrations/google` scaffold | ⚠️ Partial | #2 |
+| **Gmail** | ❌ None (Google OAuth scaffold only) | ❌ None | #42 |
+| **Contacts** | ❌ None (Google OAuth scaffold only) | ❌ None | #43 |
+| **Strava** | ⚠️ `integrations/strava` scaffold | ❌ None | #44 |
+| **Spotify** | ⚠️ `integrations/spotify` scaffold | ❌ None | #45 |
 
 ## Architecture
 
