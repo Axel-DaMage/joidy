@@ -1550,6 +1550,18 @@
                   {/each}
                 </div>
               </div>
+              <div class="form-field">
+                <label class="label">{$t('goalsPage.measurementType')}</label>
+                <select class="input w-full" bind:value={newMeasurement}>
+                  <option value="COUNT">{$t('goalsPage.countNumeric')}</option>
+                  <option value="BOOLEAN">{$t('goalsPage.booleanDone')}</option>
+                  <option value="PERCENT">{$t('goalsPage.percent')}</option>
+                </select>
+              </div>
+              <div class="form-field">
+                <label class="label">{$t('goalsPage.targetGoal')}</label>
+                <input class="input w-full" type="number" bind:value={newTargetValue} min="1" disabled={newMeasurement === 'BOOLEAN'} />
+              </div>
             </div>
 
             <!-- Column 2: Appearance -->
@@ -1615,18 +1627,6 @@
             <!-- Column 3: Advanced -->
             <div class="ng-col">
               <span class="ng-col-title">{$t('goalsPage.advanced')}</span>
-              <div class="form-field">
-                <label class="label">{$t('goalsPage.measurementType')}</label>
-                <select class="input w-full" bind:value={newMeasurement}>
-                  <option value="COUNT">{$t('goalsPage.countNumeric')}</option>
-                  <option value="BOOLEAN">{$t('goalsPage.booleanDone')}</option>
-                  <option value="PERCENT">{$t('goalsPage.percent')}</option>
-                </select>
-              </div>
-              <div class="form-field">
-                <label class="label">{$t('goalsPage.targetGoal')}</label>
-                <input class="input w-full" type="number" bind:value={newTargetValue} min="1" disabled={newMeasurement === 'BOOLEAN'} />
-              </div>
               <div class="form-field">
                 <label class="label">{$t('goalsPage.limitDays')} <span class="optional">{$t('goalsPage.limitDaysOptional')}</span></label>
                 <input class="input w-full" type="number" bind:value={newMaxAssignmentDays} min="1" placeholder={$t('goalsPage.unlimited')} />
@@ -2099,6 +2099,7 @@
     flex-direction: column;
     gap: var(--s4);
     min-height: 0;
+    overscroll-behavior: contain;
   }
 
   .ng-bottom-preview {
