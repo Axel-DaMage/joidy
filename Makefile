@@ -248,6 +248,24 @@ doctor: ## Verify all prerequisites are met
 		echo "$(YELLOW)⚠$(NC) data/db directory not found"; \
 	fi; \
 	echo ""; \
+	if [ -d "frontend/.svelte-kit" ]; then \
+		if [ -e "frontend/.svelte-kit/env.d.ts" ] && [ ! -w "frontend/.svelte-kit/env.d.ts" ]; then \
+			echo "$(YELLOW)⚠$(NC) frontend/.svelte-kit/env.d.ts is not writable (likely root-owned)"; \
+			echo "  The frontend dev container (uid 1000) will crash on start with EACCES"; \
+			echo "  Run: sudo make fix-permissions"; \
+			EXIT_CODE=1; \
+		elif [ ! -w "frontend/.svelte-kit" ]; then \
+			echo "$(YELLOW)⚠$(NC) frontend/.svelte-kit is not writable (likely root-owned)"; \
+			echo "  The frontend dev container (uid 1000) will crash on start with EACCES"; \
+			echo "  Run: sudo make fix-permissions"; \
+			EXIT_CODE=1; \
+		else \
+			echo "$(GREEN)✓$(NC) frontend/.svelte-kit is writable"; \
+		fi; \
+	else \
+		echo "$(GREEN)✓$(NC) frontend/.svelte-kit will be generated on first start"; \
+	fi; \
+	echo ""; \
 	if [ $$EXIT_CODE -eq 0 ]; then \
 		echo "$(GREEN)All checks passed! Run 'make dev' to start.$(NC)"; \
 	else \
