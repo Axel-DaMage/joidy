@@ -52,6 +52,14 @@ docker compose up -d
 curl -fsSL https://raw.githubusercontent.com/Axel-DaMage/joidy/main/scripts/install.sh | bash
 ```
 
+This clones the repo, copies `.env`, and installs the `joidy` CLI into `~/.local/bin`
+so you can manage the stack from anywhere. After the installer finishes, edit `.env`
+with your credentials and run:
+
+```bash
+joidy up
+```
+
 **Windows (PowerShell):**
 
 ```powershell

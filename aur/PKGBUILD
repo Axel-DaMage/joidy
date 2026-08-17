@@ -13,7 +13,8 @@ sha256sums=('SKIP')
 
 package() {
   cd "${srcdir}/joidy-${_tag}"
-  install -Dm755 bin/joidy "${pkgdir}/usr/bin/joidy"
+  install -Dm755 scripts/joidy.sh "${pkgdir}/usr/bin/joidy"
   install -Dm644 docker-compose.yml "${pkgdir}/usr/share/joidy/docker-compose.yml"
   install -Dm644 .env.example "${pkgdir}/usr/share/joidy/.env.example"
+  install -Dm644 /dev/stdin "${pkgdir}/etc/joidy/path" <<<"/usr/share/joidy"
 }

@@ -26,13 +26,15 @@
 set -e
 
 # Resolve project directory.
-# Priority: JOIDY_DIR env var → ~/.config/joidy/path file → script location (../)
+# Priority: JOIDY_DIR env var → ~/.config/joidy/path (user) → /etc/joidy/path (system, e.g. AUR) → script location (../)
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 
 if [ -n "$JOIDY_DIR" ] && [ -d "$JOIDY_DIR" ]; then
   PROJECT_DIR="$JOIDY_DIR"
 elif [ -f "$HOME/.config/joidy/path" ]; then
   PROJECT_DIR="$(cat "$HOME/.config/joidy/path")"
+elif [ -f "/etc/joidy/path" ]; then
+  PROJECT_DIR="$(cat "/etc/joidy/path")"
 else
   PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 fi
