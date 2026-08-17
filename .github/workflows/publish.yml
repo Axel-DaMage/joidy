@@ -101,9 +101,10 @@ jobs:
             echo ""
             echo "package() {"
             echo '  cd "${srcdir}/joidy-${_tag}"'
-            echo '  install -Dm755 bin/joidy "${pkgdir}/usr/bin/joidy"'
+            echo '  install -Dm755 scripts/joidy.sh "${pkgdir}/usr/bin/joidy"'
             echo '  install -Dm644 docker-compose.yml "${pkgdir}/usr/share/joidy/docker-compose.yml"'
             echo '  install -Dm644 .env.example "${pkgdir}/usr/share/joidy/.env.example"'
+            echo '  install -Dm644 /dev/stdin "${pkgdir}/etc/joidy/path" <<<"/usr/share/joidy"'
             echo "}"
           } > PKGBUILD
           {
