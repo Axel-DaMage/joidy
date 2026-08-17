@@ -129,7 +129,7 @@ migrate: ## Run Alembic migrations up to head in api container
 	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm api sh -c "cd /app && alembic -c /app/alembic.ini upgrade head"
 
 db-health: ## Verify migration head and required core tables
-	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm api sh -c "cd /app && alembic -c /app/alembic.ini current && python scripts/verify_db_health.py"
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm api sh -c "cd /app && alembic -c /app/alembic.ini current && PYTHONPATH=/app python scripts/verify_db_health.py"
 
 test-api: ## Run all API unit tests via pytest
 	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm api sh -c "cd /app && pytest --cov --cov-report=term-missing"
