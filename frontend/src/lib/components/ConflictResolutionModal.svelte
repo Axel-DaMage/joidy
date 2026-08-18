@@ -1,7 +1,7 @@
 <script lang="ts">
   import { syncStore, type SyncConflict, type ConflictResolution } from '$lib/stores/sync';
   import ModalDialog from './ModalDialog.svelte';
-  import { AlertTriangle, FileText, Upload, Download, GitMerge } from 'lucide-svelte';
+  import { TriangleAlert, FileText, Upload, Download, GitMerge } from 'lucide-svelte';
   import { t } from 'svelte-i18n';
 
   let selectedConflict: SyncConflict | null = null;
@@ -13,7 +13,7 @@
   // The dismissed set lives in the syncStore so it persists across navigations
   // (component is recreated on each route change, local state would be lost).
   $: {
-    const undismissed = $syncStore.conflicts.filter(c => !$syncStore.dismissed.has(c.note_id));
+    const undismissed = $syncStore.conflicts.filter((c) => !$syncStore.dismissed.has(c.note_id));
     if (undismissed.length > 0 && !selectedConflict) {
       selectedConflict = undismissed[0];
       resolution = null;
@@ -52,15 +52,10 @@
 </script>
 
 {#if selectedConflict}
-  <ModalDialog
-    open={true}
-    title={$t('conflict.title')}
-    size="lg"
-    onClose={handleSkip}
-  >
+  <ModalDialog open={true} title={$t('conflict.title')} size="lg" onClose={handleSkip}>
     <div class="conflict-info">
       <div class="conflict-icon">
-        <AlertTriangle size={24} color="var(--warning)" />
+        <TriangleAlert size={24} color="var(--warning)" />
       </div>
       <p class="conflict-desc">
         Se detectaron cambios simultáneos en <strong>{selectedConflict.title}</strong>
@@ -89,7 +84,7 @@
       <button
         class="resolution-btn"
         class:active={resolution === 'keep_local'}
-        onclick={() => resolution = 'keep_local'}
+        onclick={() => (resolution = 'keep_local')}
       >
         <FileText size={18} />
         <div class="resolution-text">
@@ -101,7 +96,7 @@
       <button
         class="resolution-btn"
         class:active={resolution === 'keep_remote'}
-        onclick={() => resolution = 'keep_remote'}
+        onclick={() => (resolution = 'keep_remote')}
       >
         <Download size={18} />
         <div class="resolution-text">
@@ -113,7 +108,7 @@
       <button
         class="resolution-btn"
         class:active={resolution === 'merge'}
-        onclick={() => resolution = 'merge'}
+        onclick={() => (resolution = 'merge')}
       >
         <GitMerge size={18} />
         <div class="resolution-text">
@@ -130,8 +125,7 @@
           class="input w-full"
           bind:value={mergedContent}
           rows="10"
-          placeholder={$t('conflict.mergePlaceholder')}
-        ></textarea>
+          placeholder={$t('conflict.mergePlaceholder')}></textarea>
       </div>
     {/if}
 

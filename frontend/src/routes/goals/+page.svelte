@@ -2,16 +2,57 @@
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
-  import { Plus, Check, ChevronDown, Calendar, BarChart, Clock, Layout, Pause, Play, Ban, Pencil, X, Flame, ChevronRight, ChevronLeft, TrendingUp, TrendingDown, PieChart, Activity, Target, Trophy, Settings, Palette, Hexagon, Filter, AlertTriangle, FileEdit, Tag, FileText, Pin, PinOff } from 'lucide-svelte';
+  import {
+    Plus,
+    Check,
+    ChevronDown,
+    Calendar,
+    ChartColumn,
+    Clock,
+    LayoutDashboard,
+    Pause,
+    Play,
+    Ban,
+    Pencil,
+    X,
+    Flame,
+    ChevronRight,
+    ChevronLeft,
+    TrendingUp,
+    TrendingDown,
+    ChartPie,
+    Activity,
+    Target,
+    Trophy,
+    Settings,
+    Palette,
+    Hexagon,
+    ListFilter,
+    TriangleAlert,
+    FilePen,
+    Tag,
+    FileText,
+    Pin,
+    PinOff,
+  } from 'lucide-svelte';
   import { api, type Goal, type Tag as TagType, type Note } from '$lib/api';
   import GoalFilters from '$lib/components/GoalFilters.svelte';
   import GoalList from '$lib/components/GoalList.svelte';
   import { use24HourClock } from '$lib/stores/settings';
   import { getLocale } from '$lib/stores/locale';
   import { applyGamificationResult, showXPGain } from '$lib/stores/gamification';
-  import { getCachedData, setCachedData, loadUserSettings, patchUserSettings } from '$lib/utils/userSettings';
+  import {
+    getCachedData,
+    setCachedData,
+    loadUserSettings,
+    patchUserSettings,
+  } from '$lib/utils/userSettings';
   import { logger } from '$lib/utils/logger';
-  import { GOAL_COLOR_PRESETS, DEFAULT_GOAL_COLOR, TEMPORALITY_COLORS } from '$lib/utils/goalColors';
+  import {
+    GOAL_COLOR_PRESETS,
+    DEFAULT_GOAL_COLOR,
+    TEMPORALITY_COLORS,
+  } from '$lib/utils/goalColors';
   import StreakIcon from '$lib/components/StreakIcon.svelte';
   import GoalCard from '$lib/components/GoalCard.svelte';
   import LazyIconPicker from '$lib/components/LazyIconPicker.svelte';
@@ -21,10 +62,12 @@
   // Lazy-load the heavy StreakHeatmap (561 lines) so it is split into a
   // separate chunk and only downloaded when the planning or history tab is
   // active — the only tabs that render it (#347).
-  let StreakHeatmap = $state<typeof import('$lib/components/StreakHeatmap.svelte').default | null>(null);
+  let StreakHeatmap = $state<typeof import('$lib/components/StreakHeatmap.svelte').default | null>(
+    null
+  );
   $effect(() => {
     if ((currentTab === 'planning' || currentTab === 'history') && !StreakHeatmap) {
-      import('$lib/components/StreakHeatmap.svelte').then(m => StreakHeatmap = m.default);
+      import('$lib/components/StreakHeatmap.svelte').then((m) => (StreakHeatmap = m.default));
     }
   });
 
@@ -52,33 +95,183 @@
     patchUserSettings({ goalsUi: { pinnedGoalIds: [...newPinned] } });
   }
 
-  const EMOJIS = Array.from(new Set([
-    '🔴','❌','⚠️','📉','⛔','🌧️','🔥','💪','🏃','🚴','🏊','🏋️','🤸','🧘',
-    '❤️','💚','💙','💛','🧠','👁️','👂','👃','💊','💉','🩹','🩺',
-    '📚','📖','📝','✍️','📓','📔','📕','📗','📘','🖊️','🖍️','📜','📋','🗂️',
-    '🎨','🎭','🎬','🎤','🎧','🎵','🎶','🎸','🎹','🎺','🎷','📸','🖼️',
-    '🌿','🍀','🌱','🌲','🌳','🌴','🌵','🌾','🌻','🌺','🌸','🌼','🌷','🌹','🌎',
-    '🍎','🍊','🍋','🍌','🍇','🍓','🥗','🥙','🍕','🍔','🍟','🌮','☕','🍵',
-    '💻','📱','⌚','🎮','🧩','🪀','🪁','🎯','🔐','🔒','🔓','🔑','⚙️','🔧','🔨','⚒️',
-    '✈️','🚂','🚗','🚙','🚕','🚌','🚎','🏎️','🚓','🚑','🚒','🚐','🛻','🚚','🚛','🚜',
-    '☀️','🌤️','⛅','🌥️','☁️','🌦️','🌧️','⛈️','🌩️','🌨️','❄️','☃️','⛄','🌊','💧','💦',
-    '😀','😃','😄','😁','😆','😊','☺️','😉','😌','😚','😍','🤩','😘','🥰','😏','😐',
-    '🥇','🥈','🥉','🏆','🎖️','🏅','⭐','🌟','✨','💫','🎊','🎉','🎁'
-  ]));
+  const EMOJIS = Array.from(
+    new Set([
+      '🔴',
+      '❌',
+      '⚠️',
+      '📉',
+      '⛔',
+      '🌧️',
+      '🔥',
+      '💪',
+      '🏃',
+      '🚴',
+      '🏊',
+      '🏋️',
+      '🤸',
+      '🧘',
+      '❤️',
+      '💚',
+      '💙',
+      '💛',
+      '🧠',
+      '👁️',
+      '👂',
+      '👃',
+      '💊',
+      '💉',
+      '🩹',
+      '🩺',
+      '📚',
+      '📖',
+      '📝',
+      '✍️',
+      '📓',
+      '📔',
+      '📕',
+      '📗',
+      '📘',
+      '🖊️',
+      '🖍️',
+      '📜',
+      '📋',
+      '🗂️',
+      '🎨',
+      '🎭',
+      '🎬',
+      '🎤',
+      '🎧',
+      '🎵',
+      '🎶',
+      '🎸',
+      '🎹',
+      '🎺',
+      '🎷',
+      '📸',
+      '🖼️',
+      '🌿',
+      '🍀',
+      '🌱',
+      '🌲',
+      '🌳',
+      '🌴',
+      '🌵',
+      '🌾',
+      '🌻',
+      '🌺',
+      '🌸',
+      '🌼',
+      '🌷',
+      '🌹',
+      '🌎',
+      '🍎',
+      '🍊',
+      '🍋',
+      '🍌',
+      '🍇',
+      '🍓',
+      '🥗',
+      '🥙',
+      '🍕',
+      '🍔',
+      '🍟',
+      '🌮',
+      '☕',
+      '🍵',
+      '💻',
+      '📱',
+      '⌚',
+      '🎮',
+      '🧩',
+      '🪀',
+      '🪁',
+      '🎯',
+      '🔐',
+      '🔒',
+      '🔓',
+      '🔑',
+      '⚙️',
+      '🔧',
+      '🔨',
+      '⚒️',
+      '✈️',
+      '🚂',
+      '🚗',
+      '🚙',
+      '🚕',
+      '🚌',
+      '🚎',
+      '🏎️',
+      '🚓',
+      '🚑',
+      '🚒',
+      '🚐',
+      '🛻',
+      '🚚',
+      '🚛',
+      '🚜',
+      '☀️',
+      '🌤️',
+      '⛅',
+      '🌥️',
+      '☁️',
+      '🌦️',
+      '🌧️',
+      '⛈️',
+      '🌩️',
+      '🌨️',
+      '❄️',
+      '☃️',
+      '⛄',
+      '🌊',
+      '💧',
+      '💦',
+      '😀',
+      '😃',
+      '😄',
+      '😁',
+      '😆',
+      '😊',
+      '☺️',
+      '😉',
+      '😌',
+      '😚',
+      '😍',
+      '🤩',
+      '😘',
+      '🥰',
+      '😏',
+      '😐',
+      '🥇',
+      '🥈',
+      '🥉',
+      '🏆',
+      '🎖️',
+      '🏅',
+      '⭐',
+      '🌟',
+      '✨',
+      '💫',
+      '🎊',
+      '🎉',
+      '🎁',
+    ])
+  );
 
   const TEMPORALITIES: Goal['temporality'][] = ['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL'];
   const TEMPORALITY_LABELS: Record<string, string> = {
-    'DAILY': 'Diario',
-    'WEEKLY': 'Semanal',
-    'MONTHLY': 'Mensual',
-    'ANNUAL': 'Anual'
+    DAILY: 'Diario',
+    WEEKLY: 'Semanal',
+    MONTHLY: 'Mensual',
+    ANNUAL: 'Anual',
   };
   const STATE_LABELS: Record<string, string> = {
-    'ACTIVE': 'Activo',
-    'PAUSED': 'Pausado',
-    'COMPLETED': 'Completado',
-    'FAILED': 'Fallido',
-    'CANCELLED': 'Cancelado'
+    ACTIVE: 'Activo',
+    PAUSED: 'Pausado',
+    COMPLETED: 'Completado',
+    FAILED: 'Fallido',
+    CANCELLED: 'Cancelado',
   };
   const COLOR_PRESETS = GOAL_COLOR_PRESETS;
 
@@ -102,9 +295,11 @@
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   });
-  let dailyGoals = $derived(goals.filter(g => g.state !== 'CANCELLED' && isAssigned(g.id, _todayStr)));
-  let planningGoals = $derived(goals.filter(g => g.state !== 'CANCELLED'));
-  let pendingGoals = $derived(goals.filter(g => g.pending_removal));
+  let dailyGoals = $derived(
+    goals.filter((g) => g.state !== 'CANCELLED' && isAssigned(g.id, _todayStr))
+  );
+  let planningGoals = $derived(goals.filter((g) => g.state !== 'CANCELLED'));
+  let pendingGoals = $derived(goals.filter((g) => g.pending_removal));
 
   let historyData = $state<any[]>([]);
   $effect(() => {
@@ -137,17 +332,19 @@
 
   // ── History tab state ──
   const _now = new Date();
-  let selectedHistoryDate = $state<string | null>(`${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}-${String(_now.getDate()).padStart(2, '0')}`);
+  let selectedHistoryDate = $state<string | null>(
+    `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}-${String(_now.getDate()).padStart(2, '0')}`
+  );
 
   let goalsForDate = $derived.by(() => {
     if (!selectedHistoryDate) return { completed: [], failed: [] };
-    const completed = goals.filter(g =>
-      (g.state === 'COMPLETED' || g.is_completed) &&
-      g.completed_at?.startsWith(selectedHistoryDate!)
+    const completed = goals.filter(
+      (g) =>
+        (g.state === 'COMPLETED' || g.is_completed) &&
+        g.completed_at?.startsWith(selectedHistoryDate!)
     );
-    const failed = goals.filter(g =>
-      g.state === 'FAILED' &&
-      g.updated_at?.startsWith(selectedHistoryDate!)
+    const failed = goals.filter(
+      (g) => g.state === 'FAILED' && g.updated_at?.startsWith(selectedHistoryDate!)
     );
     return { completed, failed };
   });
@@ -156,9 +353,22 @@
     if (!iso) return '';
     const [y, m, d] = iso.split('-').map(Number);
     const date = new Date(y, m - 1, d);
-    const DAYS = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
-    const MONTHS = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
-    return `${DAYS[date.getDay()]}, ${d} de ${MONTHS[m-1]} de ${y}`;
+    const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+    const MONTHS = [
+      'enero',
+      'febrero',
+      'marzo',
+      'abril',
+      'mayo',
+      'junio',
+      'julio',
+      'agosto',
+      'septiembre',
+      'octubre',
+      'noviembre',
+      'diciembre',
+    ];
+    return `${DAYS[date.getDay()]}, ${d} de ${MONTHS[m - 1]} de ${y}`;
   }
 
   let loadError = $state('');
@@ -198,10 +408,7 @@
 
     try {
       // Load only essential data immediately (goals + tags)
-      [goals, tags] = await Promise.all([
-        api.goals.list(),
-        api.tags.list(),
-      ]);
+      [goals, tags] = await Promise.all([api.goals.list(), api.tags.list()]);
       setCachedData('goals', goals);
       setCachedData('tags', tags);
     } catch (e) {
@@ -225,7 +432,7 @@
       [notes, streakData, xpEvents] = await Promise.all([
         api.notes.list(),
         api.goals.streak(),
-        api.gamification.events(500)
+        api.gamification.events(500),
       ]);
     } catch (e) {
       logger.error('[goals] loadAnalyticsData failed:', e);
@@ -254,8 +461,10 @@
       });
       goals = [g, ...goals];
       showAddForm = false;
-      newTitle = ''; newTargetValue = 1;
-      newTagId = null; newNoteId = null;
+      newTitle = '';
+      newTargetValue = 1;
+      newTagId = null;
+      newNoteId = null;
       newMaxAssignmentDays = null;
     } catch (e) {
       addError = 'Error al crear el objetivo.';
@@ -266,7 +475,7 @@
 
   async function completeGoal(id: number) {
     const result = await api.goals.complete(id);
-    goals = goals.map(g => g.id === id ? result.goal : g);
+    goals = goals.map((g) => (g.id === id ? result.goal : g));
     applyGamificationResult(result.gamification);
     showXPGain(result.gamification.xp_awarded);
   }
@@ -274,7 +483,7 @@
   async function updateGoalState(id: number, state: 'ACTIVE' | 'PAUSED' | 'CANCELLED') {
     try {
       const result = await api.goals.update(id, { state });
-      goals = goals.map(g => g.id === id ? result : g);
+      goals = goals.map((g) => (g.id === id ? result : g));
     } catch (e) {
       logger.error('Error al actualizar estado:', e);
     }
@@ -286,7 +495,7 @@
       return;
     }
     await api.goals.delete(id);
-    goals = goals.filter(g => g.id !== id);
+    goals = goals.filter((g) => g.id !== id);
     deleteConfirm = null;
   }
 
@@ -300,7 +509,7 @@
   async function updateGoalTemporality(id: number, temporality: Goal['temporality']) {
     try {
       const result = await api.goals.update(id, { temporality });
-      goals = goals.map(g => g.id === id ? result : g);
+      goals = goals.map((g) => (g.id === id ? result : g));
     } catch (e) {
       logger.error('Error al actualizar temporalidad:', e);
     }
@@ -322,14 +531,16 @@
 
   // ── Dashboard State ──
   let upcomingTasks = $derived.by(() => {
-    const futureAssignments: { date: string, goal: Goal }[] = [];
-    const sortedDates = Object.keys(assignments).filter(d => d >= todayIso).sort();
-    
+    const futureAssignments: { date: string; goal: Goal }[] = [];
+    const sortedDates = Object.keys(assignments)
+      .filter((d) => d >= todayIso)
+      .sort();
+
     for (const date of sortedDates) {
       for (const id of assignments[date]) {
-        const goal = goals.find(g => g.id === id);
+        const goal = goals.find((g) => g.id === id);
         if (goal && goal.state !== 'COMPLETED' && goal.state !== 'FAILED') {
-          if (!futureAssignments.some(a => a.goal.id === id && a.date === date)) {
+          if (!futureAssignments.some((a) => a.goal.id === id && a.date === date)) {
             futureAssignments.push({ date, goal });
           }
         }
@@ -344,18 +555,18 @@
     const day = today.getDay();
     const diff = today.getDate() - day + (day === 0 ? -6 : 1);
     const monday = new Date(new Date().setDate(diff));
-    
+
     for (let i = 0; i < 7; i++) {
       const d = new Date(monday);
       d.setDate(monday.getDate() + i);
       const dateStr = d.toISOString().split('T')[0];
       const isToday = dateStr === todayIso;
-      const hData = historyData.find(h => h.date === dateStr);
+      const hData = historyData.find((h) => h.date === dateStr);
       dates.push({
         dateStr,
         isToday,
         dayName: ['L', 'M', 'X', 'J', 'V', 'S', 'D'][i],
-        hasActivity: hData?.checked || false
+        hasActivity: hData?.checked || false,
       });
     }
     return dates;
@@ -363,10 +574,10 @@
 
   // ── Hierarchical planning helpers ──
   function getParentGoals(goalList: Goal[]) {
-    return goalList.filter(g => !g.parent_id || !goalList.some(p => p.id === g.parent_id));
+    return goalList.filter((g) => !g.parent_id || !goalList.some((p) => p.id === g.parent_id));
   }
   function getChildGoals(parentId: number, goalList: Goal[]) {
-    return goalList.filter(g => g.parent_id === parentId);
+    return goalList.filter((g) => g.parent_id === parentId);
   }
 
   // Planning assignment state (frontend-only mapping date -> goal ids)
@@ -392,11 +603,13 @@
   let listSortBy = $state<'recent' | 'alpha' | 'state'>('recent');
 
   let filteredUnassignedGoals = $derived.by(() => {
-    let unassigned = goals.filter(g => g.state !== 'CANCELLED' && !isAssigned(g.id, selectedPlanningDate));
+    let unassigned = goals.filter(
+      (g) => g.state !== 'CANCELLED' && !isAssigned(g.id, selectedPlanningDate)
+    );
     if (listSortBy === 'alpha') {
       unassigned.sort((a, b) => a.title.localeCompare(b.title));
     } else if (listSortBy === 'state') {
-      const stateOrder: Record<string, number> = { 'ACTIVE': 1, 'PAUSED': 2, 'COMPLETED': 3, 'FAILED': 4 };
+      const stateOrder: Record<string, number> = { ACTIVE: 1, PAUSED: 2, COMPLETED: 3, FAILED: 4 };
       unassigned.sort((a, b) => (stateOrder[a.state] || 9) - (stateOrder[b.state] || 9));
     } else {
       unassigned.sort((a, b) => b.id - a.id);
@@ -406,22 +619,22 @@
 
   function getGoalStatusOnDate(goal: Goal, dateStr: string) {
     const normDate = getNormalizedDate(dateStr, goal.temporality);
-    
+
     if (goal.completed_at) {
       const compDate = getNormalizedDate(goal.completed_at.split('T')[0], goal.temporality);
       if (compDate === normDate) return 'COMPLETED';
     }
-    
+
     if (goal.state === 'FAILED' && goal.updated_at) {
       const failDate = getNormalizedDate(goal.updated_at.split('T')[0], goal.temporality);
       if (failDate === normDate) return 'FAILED';
     }
-    
+
     return 'PENDING';
   }
 
   function isAssigned(goalId: number, date: string) {
-    const goal = goals.find(g => g.id === goalId);
+    const goal = goals.find((g) => g.id === goalId);
     if (!goal) return false;
     const normDate = getNormalizedDate(date, goal.temporality);
     return assignments[normDate] && assignments[normDate].includes(goalId);
@@ -436,7 +649,8 @@
 
   $effect(() => {
     if (selectedPlanningDate) {
-      if (typeof localStorage !== 'undefined') localStorage.setItem('goals.selectedPlanningDate', selectedPlanningDate);
+      if (typeof localStorage !== 'undefined')
+        localStorage.setItem('goals.selectedPlanningDate', selectedPlanningDate);
       loadAssignmentsForDate(selectedPlanningDate);
     }
     // Preload upcoming assignments for dashboard
@@ -460,35 +674,37 @@
       date,
       getNormalizedDate(date, 'WEEKLY'),
       getNormalizedDate(date, 'MONTHLY'),
-      getNormalizedDate(date, 'ANNUAL')
+      getNormalizedDate(date, 'ANNUAL'),
     ];
     const uniqueDates = Array.from(new Set(datesToLoad));
-    
-    const fetchedResults = await Promise.all(uniqueDates.map(async (d) => {
-      try {
-        const res = await api.planning.getAssignments(d);
-        return { date: d, ids: res.goal_ids };
-      } catch (e) {
-        return { date: d, ids: [] };
-      }
-    }));
+
+    const fetchedResults = await Promise.all(
+      uniqueDates.map(async (d) => {
+        try {
+          const res = await api.planning.getAssignments(d);
+          return { date: d, ids: res.goal_ids };
+        } catch (e) {
+          return { date: d, ids: [] };
+        }
+      })
+    );
 
     assignments = {
       ...assignments,
-      ...Object.fromEntries(fetchedResults.map(r => [r.date, r.ids]))
+      ...Object.fromEntries(fetchedResults.map((r) => [r.date, r.ids])),
     };
   }
 
   async function assignGoalToDate(goalId: number, date: string) {
     if (!date) return;
-    const goal = goals.find(g => g.id === goalId);
+    const goal = goals.find((g) => g.id === goalId);
     if (!goal) return;
-    
+
     const normDate = getNormalizedDate(date, goal.temporality);
     assignments = { ...assignments };
     if (!assignments[normDate]) assignments[normDate] = [];
     if (!assignments[normDate].includes(goalId)) assignments[normDate].push(goalId);
-    
+
     try {
       await api.planning.setAssignments(normDate, assignments[normDate]);
     } catch (e) {
@@ -498,13 +714,16 @@
 
   async function unassignGoalFromDate(goalId: number, date: string) {
     if (!date) return;
-    const goal = goals.find(g => g.id === goalId);
+    const goal = goals.find((g) => g.id === goalId);
     if (!goal) return;
-    
+
     const normDate = getNormalizedDate(date, goal.temporality);
     if (!assignments[normDate]) return;
-    
-    assignments = { ...assignments, [normDate]: assignments[normDate].filter(id => id !== goalId) };
+
+    assignments = {
+      ...assignments,
+      [normDate]: assignments[normDate].filter((id) => id !== goalId),
+    };
     try {
       await api.planning.setAssignments(normDate, assignments[normDate]);
     } catch (e) {
@@ -517,9 +736,9 @@
     try {
       const result = await api.goals.resolveRemoval(goalId, action);
       if (action === 'delete' || ('status' in result && result.status === 'deleted')) {
-        goals = goals.filter(g => g.id !== goalId);
+        goals = goals.filter((g) => g.id !== goalId);
       } else {
-        goals = goals.map(g => g.id === goalId ? (result as Goal) : g);
+        goals = goals.map((g) => (g.id === goalId ? (result as Goal) : g));
       }
     } catch (e) {
       logger.error('Error al resolver objetivo huérfano:', e);
@@ -531,34 +750,42 @@
   }
 
   // ── Advanced Analytics Calculations ──
-  let completedGoalsCount = $derived(goals.filter(g => g.state === 'COMPLETED' || g.is_completed).length);
-  let failedGoalsCount = $derived(goals.filter(g => g.state === 'FAILED').length);
-  let successRate = $derived((completedGoalsCount + failedGoalsCount) > 0 
-    ? Math.round((completedGoalsCount / (completedGoalsCount + failedGoalsCount)) * 100) 
-    : 0);
+  let completedGoalsCount = $derived(
+    goals.filter((g) => g.state === 'COMPLETED' || g.is_completed).length
+  );
+  let failedGoalsCount = $derived(goals.filter((g) => g.state === 'FAILED').length);
+  let successRate = $derived(
+    completedGoalsCount + failedGoalsCount > 0
+      ? Math.round((completedGoalsCount / (completedGoalsCount + failedGoalsCount)) * 100)
+      : 0
+  );
 
   let completionsByDay = $derived.by(() => {
     const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
     const counts = [0, 0, 0, 0, 0, 0, 0];
-    goals.filter(g => (g.state === 'COMPLETED' || g.is_completed) && g.completed_at).forEach(g => {
-      const dateParts = g.completed_at!.split('T')[0].split('-');
-      const d = new Date(Number(dateParts[0]), Number(dateParts[1]) - 1, Number(dateParts[2]));
-      counts[d.getDay()]++;
-    });
+    goals
+      .filter((g) => (g.state === 'COMPLETED' || g.is_completed) && g.completed_at)
+      .forEach((g) => {
+        const dateParts = g.completed_at!.split('T')[0].split('-');
+        const d = new Date(Number(dateParts[0]), Number(dateParts[1]) - 1, Number(dateParts[2]));
+        counts[d.getDay()]++;
+      });
     return days.map((label, i) => ({ label, value: counts[i] }));
   });
 
   let topTagsBySuccess = $derived.by(() => {
     const tagMap = new Map();
-    goals.filter(g => (g.state === 'COMPLETED' || g.is_completed) && (g.tag_id || g.note_id)).forEach(g => {
-      let name = 'Sin Etiqueta';
-      if (g.tag_id) {
-        name = tags.find(t => t.id === g.tag_id)?.name || 'Sin Etiqueta';
-      } else if (g.note_id) {
-        name = notes.find(n => n.id === g.note_id)?.title || 'Nota';
-      }
-      tagMap.set(name, (tagMap.get(name) || 0) + 1);
-    });
+    goals
+      .filter((g) => (g.state === 'COMPLETED' || g.is_completed) && (g.tag_id || g.note_id))
+      .forEach((g) => {
+        let name = 'Sin Etiqueta';
+        if (g.tag_id) {
+          name = tags.find((t) => t.id === g.tag_id)?.name || 'Sin Etiqueta';
+        } else if (g.note_id) {
+          name = notes.find((n) => n.id === g.note_id)?.title || 'Nota';
+        }
+        tagMap.set(name, (tagMap.get(name) || 0) + 1);
+      });
     return Array.from(tagMap.entries())
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count)
@@ -566,13 +793,20 @@
   });
 
   let progressOverview = $derived.by(() => {
-    return ['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL'].map(temp => {
-      const tempGoals = goals.filter(g => g.temporality === temp && g.state !== 'CANCELLED');
-      const avgProgress = tempGoals.length > 0 
-        ? Math.round(tempGoals.reduce((acc, g) => acc + (g.state === 'COMPLETED' || g.is_completed ? 100 : (g.progress_pct || 0)), 0) / tempGoals.length)
-        : 0;
-      const completed = tempGoals.filter(g => g.state === 'COMPLETED' || g.is_completed).length;
-      const failed = tempGoals.filter(g => g.state === 'FAILED').length;
+    return ['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL'].map((temp) => {
+      const tempGoals = goals.filter((g) => g.temporality === temp && g.state !== 'CANCELLED');
+      const avgProgress =
+        tempGoals.length > 0
+          ? Math.round(
+              tempGoals.reduce(
+                (acc, g) =>
+                  acc + (g.state === 'COMPLETED' || g.is_completed ? 100 : g.progress_pct || 0),
+                0
+              ) / tempGoals.length
+            )
+          : 0;
+      const completed = tempGoals.filter((g) => g.state === 'COMPLETED' || g.is_completed).length;
+      const failed = tempGoals.filter((g) => g.state === 'FAILED').length;
       return { temp, avgProgress, count: tempGoals.length, completed, failed };
     });
   });
@@ -580,22 +814,24 @@
   let prediction = $derived.by(() => {
     const nowMs = Date.now();
     const MS_PER_DAY = 1000 * 60 * 60 * 24;
-    const last7Start = nowMs - (7 * MS_PER_DAY);
-    const prev7Start = nowMs - (14 * MS_PER_DAY);
+    const last7Start = nowMs - 7 * MS_PER_DAY;
+    const prev7Start = nowMs - 14 * MS_PER_DAY;
 
-    const completionEvents = xpEvents.filter(e => e.type === 'goal_completed');
+    const completionEvents = xpEvents.filter((e) => e.type === 'goal_completed');
 
     const countCompletionsInRange = (startMs: number, endMs: number) => {
       if (completionEvents.length > 0) {
-        return completionEvents.filter(e => {
+        return completionEvents.filter((e) => {
           const t = new Date(e.at).getTime();
           return t >= startMs && t < endMs;
         }).length;
       }
-      return goals.filter(g =>
-        (g.state === 'COMPLETED' || g.is_completed) && g.completed_at &&
-        new Date(g.completed_at).getTime() >= startMs &&
-        new Date(g.completed_at).getTime() < endMs
+      return goals.filter(
+        (g) =>
+          (g.state === 'COMPLETED' || g.is_completed) &&
+          g.completed_at &&
+          new Date(g.completed_at).getTime() >= startMs &&
+          new Date(g.completed_at).getTime() < endMs
       ).length;
     };
 
@@ -603,11 +839,16 @@
     const prev7 = countCompletionsInRange(prev7Start, last7Start);
 
     const trend = last7 >= prev7 ? 'UP' : 'DOWN';
-    const percentChange = prev7 > 0
-      ? Math.round(((last7 - prev7) / prev7) * 100)
-      : (last7 > 0 ? 100 : 0);
+    const percentChange =
+      prev7 > 0 ? Math.round(((last7 - prev7) / prev7) * 100) : last7 > 0 ? 100 : 0;
 
-    return { trend, percentChange, estimateNextMonth: Math.round(last7 * 4), last7Days: last7, prev7Days: prev7 };
+    return {
+      trend,
+      percentChange,
+      estimateNextMonth: Math.round(last7 * 4),
+      last7Days: last7,
+      prev7Days: prev7,
+    };
   });
 
   let dailyActivity = $derived.by(() => {
@@ -618,8 +859,12 @@
       const m = String(d.getMonth() + 1).padStart(2, '0');
       const day = String(d.getDate()).padStart(2, '0');
       const dateStr = `${d.getFullYear()}-${m}-${day}`;
-      const comps = goals.filter(g => (g.state === 'COMPLETED' || g.is_completed) && g.completed_at?.startsWith(dateStr)).length;
-      const fails = goals.filter(g => g.state === 'FAILED' && g.updated_at?.startsWith(dateStr)).length;
+      const comps = goals.filter(
+        (g) => (g.state === 'COMPLETED' || g.is_completed) && g.completed_at?.startsWith(dateStr)
+      ).length;
+      const fails = goals.filter(
+        (g) => g.state === 'FAILED' && g.updated_at?.startsWith(dateStr)
+      ).length;
       results.push({
         date: dateStr,
         label: `${d.getDate()}/${d.getMonth() + 1}`,
@@ -630,7 +875,7 @@
     return results;
   });
 
-  let maxDaily = $derived(Math.max(1, ...dailyActivity.flatMap(d => [d.completed, d.failed])));
+  let maxDaily = $derived(Math.max(1, ...dailyActivity.flatMap((d) => [d.completed, d.failed])));
 
   let activityTab = $state<'horas' | 'dias'>('horas');
   let activityDayOfWeek = $state(new Date().getDay());
@@ -666,8 +911,8 @@
   let activityBinnedByHour = $derived.by(() => {
     const bins = new Array(8).fill(0);
     // Use goal_completed XP events for real user-action timestamps
-    const completionEvents = xpEvents.filter(e => e.type === 'goal_completed');
-    completionEvents.forEach(e => {
+    const completionEvents = xpEvents.filter((e) => e.type === 'goal_completed');
+    completionEvents.forEach((e) => {
       const d = new Date(e.at);
       if (d.getDay() === activityDayOfWeek) {
         const hour = d.getHours();
@@ -679,7 +924,7 @@
     });
     // Fallback: if no XP events exist yet, try goals completed_at (legacy)
     if (completionEvents.length === 0) {
-      goals.forEach(g => {
+      goals.forEach((g) => {
         if ((g.state === 'COMPLETED' || g.is_completed) && g.completed_at) {
           const d = new Date(g.completed_at);
           if (d.getDay() === activityDayOfWeek) {
@@ -700,15 +945,15 @@
         label: formatHourLabel(startHour),
         rangeLabel: formatHourRange(startHour, endHour),
         val: c,
-        pct: Math.min(1, c / 5)
+        pct: Math.min(1, c / 5),
       };
     });
   });
 
   let activityByDay = $derived.by(() => {
     const days = new Array(7).fill(0);
-    const completionEvents = xpEvents.filter(e => e.type === 'goal_completed');
-    completionEvents.forEach(e => {
+    const completionEvents = xpEvents.filter((e) => e.type === 'goal_completed');
+    completionEvents.forEach((e) => {
       const d = new Date(e.at);
       const day = d.getDay();
       if (!isNaN(day) && day >= 0 && day < 7) {
@@ -717,7 +962,7 @@
     });
     // Fallback: if no XP events exist yet, use goals completed_at
     if (completionEvents.length === 0) {
-      goals.forEach(g => {
+      goals.forEach((g) => {
         if ((g.state === 'COMPLETED' || g.is_completed) && g.completed_at) {
           const d = new Date(g.completed_at);
           const day = d.getDay();
@@ -730,17 +975,17 @@
     return days.map((c, i) => ({
       label: daysOfWeek[i].substring(0, 3),
       val: c,
-      pct: Math.min(1, c / 5)
+      pct: Math.min(1, c / 5),
     }));
   });
 
   let radarData = $derived.by(() => {
     const categories = topTagsBySuccess.slice(0, 6);
-    while(categories.length > 0 && categories.length < 3) {
-      categories.push({name: '', count: 0});
+    while (categories.length > 0 && categories.length < 3) {
+      categories.push({ name: '', count: 0 });
     }
-    if(categories.length === 0) return [];
-    const maxVal = Math.max(...categories.map(c => c.count)) || 1;
+    if (categories.length === 0) return [];
+    const maxVal = Math.max(...categories.map((c) => c.count)) || 1;
     return categories.map((c, i) => {
       const angle = (Math.PI * 2 * i) / categories.length - Math.PI / 2;
       return {
@@ -751,35 +996,38 @@
         y: 50 + 40 * Math.sin(angle),
         labelX: 50 + 50 * Math.cos(angle),
         labelY: 50 + 50 * Math.sin(angle),
-        angle
+        angle,
       };
     });
   });
 
   let debtData = $derived.by(() => {
-    const dGoals = goals.filter(g => (g.fail_config === 'ROLLOVER' || g.fail_config === 'SNOWBALL') && g.state === 'ACTIVE');
+    const dGoals = goals.filter(
+      (g) => (g.fail_config === 'ROLLOVER' || g.fail_config === 'SNOWBALL') && g.state === 'ACTIVE'
+    );
     const total = dGoals.reduce((acc, g) => acc + Math.max(0, g.target_value - g.current_value), 0);
     return {
-      goals: dGoals.map(g => ({ title: g.title, debt: Math.max(0, g.target_value - g.current_value) })).sort((a,b)=>b.debt-a.debt).slice(0, 5),
-      total
+      goals: dGoals
+        .map((g) => ({ title: g.title, debt: Math.max(0, g.target_value - g.current_value) }))
+        .sort((a, b) => b.debt - a.debt)
+        .slice(0, 5),
+      total,
     };
   });
 
   let funnelData = $derived.by(() => {
     const total = goals.length || 1;
-    const completed = goals.filter(g => g.state === 'COMPLETED' || g.is_completed).length;
-    const failed = goals.filter(g => g.state === 'FAILED').length;
-    const active = goals.filter(g => g.state === 'ACTIVE').length;
-    const cancelled = goals.filter(g => g.state === 'CANCELLED' || g.state === 'PAUSED').length;
+    const completed = goals.filter((g) => g.state === 'COMPLETED' || g.is_completed).length;
+    const failed = goals.filter((g) => g.state === 'FAILED').length;
+    const active = goals.filter((g) => g.state === 'ACTIVE').length;
+    const cancelled = goals.filter((g) => g.state === 'CANCELLED' || g.state === 'PAUSED').length;
     return [
       { label: 'Iniciados', value: total, color: 'var(--text-disabled)' },
       { label: 'Activos', value: active, color: 'var(--xp)' },
       { label: 'Completados', value: completed, color: 'var(--success)' },
-      { label: 'Abandonados', value: cancelled + failed, color: 'var(--error)' }
+      { label: 'Abandonados', value: cancelled + failed, color: 'var(--error)' },
     ];
   });
-
-
 
   async function saveEdit() {
     if (!editingGoal) return;
@@ -794,7 +1042,7 @@
         color: editColor,
         max_assignment_days: editMaxAssignmentDays,
       });
-      goals = goals.map(g => g.id === editingGoal!.id ? result : g);
+      goals = goals.map((g) => (g.id === editingGoal!.id ? result : g));
       editingGoal = null;
     } catch (e) {
       logger.error('Error al editar:', e);
@@ -805,14 +1053,14 @@
 
   function getGoalColor(goal: Goal): string {
     const colorMap: Record<string, string> = {
-      'DAILY': 'var(--today)',
-      'WEEKLY': TEMPORALITY_COLORS['WEEKLY'],
-      'MONTHLY': 'var(--link)',
-      'ANNUAL': TEMPORALITY_COLORS['ANNUAL'],
-      'ACTIVE': 'var(--today)',
-      'COMPLETED': 'var(--target)',
-      'PAUSED': 'var(--error)',
-      'CANCELLED': 'var(--error)',
+      DAILY: 'var(--today)',
+      WEEKLY: TEMPORALITY_COLORS['WEEKLY'],
+      MONTHLY: 'var(--link)',
+      ANNUAL: TEMPORALITY_COLORS['ANNUAL'],
+      ACTIVE: 'var(--today)',
+      COMPLETED: 'var(--target)',
+      PAUSED: 'var(--error)',
+      CANCELLED: 'var(--error)',
     };
 
     if (goal.state === 'ACTIVE' || goal.state === 'PAUSED' || goal.state === 'CANCELLED') {
@@ -826,15 +1074,20 @@
     }
     return goal.color || 'var(--border)';
   }
-</script> 
+</script>
 
-<svelte:window onkeydown={(e) => {
-  if (e.key === 'Escape') {
-    if (deleteConfirm !== null) { deleteConfirm = null; return; }
-    showAddForm = false;
-    editingGoal = null;
-  }
-}} />
+<svelte:window
+  onkeydown={(e) => {
+    if (e.key === 'Escape') {
+      if (deleteConfirm !== null) {
+        deleteConfirm = null;
+        return;
+      }
+      showAddForm = false;
+      editingGoal = null;
+    }
+  }}
+/>
 
 <div class="goals-page">
   {#if loadError}
@@ -843,192 +1096,342 @@
 
   <div class="goals-header">
     <div class="tabs">
-      <button class="tab" class:active={currentTab === 'editor'} onclick={() => currentTab = 'editor'}>
+      <button
+        class="tab"
+        class:active={currentTab === 'editor'}
+        onclick={() => (currentTab = 'editor')}
+      >
         <Pencil size={14} /> Editor
       </button>
-      <button class="tab" class:active={currentTab === 'today'} onclick={() => currentTab = 'today'}>
-        <Layout size={14} /> Inicio
+      <button
+        class="tab"
+        class:active={currentTab === 'today'}
+        onclick={() => (currentTab = 'today')}
+      >
+        <LayoutDashboard size={14} /> Inicio
       </button>
-      <button class="tab" class:active={currentTab === 'planning'} onclick={() => currentTab = 'planning'}>
+      <button
+        class="tab"
+        class:active={currentTab === 'planning'}
+        onclick={() => (currentTab = 'planning')}
+      >
         <Clock size={14} /> Planificación
       </button>
-      <button class="tab" class:active={currentTab === 'history'} onclick={() => currentTab = 'history'}>
+      <button
+        class="tab"
+        class:active={currentTab === 'history'}
+        onclick={() => (currentTab = 'history')}
+      >
         <Calendar size={14} /> Historial
       </button>
-      <button class="tab" class:active={currentTab === 'analytics'} onclick={() => currentTab = 'analytics'}>
-        <BarChart size={14} /> Análisis
+      <button
+        class="tab"
+        class:active={currentTab === 'analytics'}
+        onclick={() => (currentTab = 'analytics')}
+      >
+        <ChartColumn size={14} /> Análisis
       </button>
     </div>
   </div>
 
-  <div class="goals-body" class:full-width={currentTab === 'analytics' || currentTab === 'history' || currentTab === 'planning' || currentTab === 'today' || currentTab === 'editor'}>
-
-
+  <div
+    class="goals-body"
+    class:full-width={currentTab === 'analytics' ||
+      currentTab === 'history' ||
+      currentTab === 'planning' ||
+      currentTab === 'today' ||
+      currentTab === 'editor'}
+  >
     {#if currentTab === 'today'}
       <div class="tab-content fade-in today-layout">
         <div class="dashboard-main-col">
           <div class="today-header">
             <h3 class="section-title" style="margin: 0;">{$t('goalsPage.dayGoals')}</h3>
-            <button class="btn btn-primary new-goal-cta new-goal-cta-inline" onclick={() => showAddForm = !showAddForm}>
+            <button
+              class="btn btn-primary new-goal-cta new-goal-cta-inline"
+              onclick={() => (showAddForm = !showAddForm)}
+            >
               <Plus size={16} /> Nuevo Objetivo
             </button>
           </div>
-        {#if dailyGoals.length === 0}
-          <div class="empty-state">{$t('goalsPage.noActiveGoals')}</div>
-        {/if}
-        {#each dailyGoals as goal (goal.id)}
-          <div class="goal-card" class:completed={goal.state === 'COMPLETED' || goal.is_completed} class:failed={goal.state === 'FAILED'} class:paused={goal.state === 'PAUSED'} style="border-left: 3px solid {getGoalColor(goal)}">
-            <div class="goal-main">
-              <div class="goal-title">
-                <button
-                  class="btn btn-ghost"
-                  style="font-size: inherit; font-weight: inherit; padding: 0; margin: 0; height: auto; color: inherit;"
-                  title={$t('goalsPage.editInEditor')}
-                  onclick={(e) => { e.stopPropagation(); goto(`/goals/${goal.id}`); }}
-                >
-                  {#if goal.fail_emoji}
-                    <span class="emoji-badge" style="display:flex; align-items:center; margin-right:8px;">
-                      <StreakIcon name={goal.fail_emoji} size={16} color={getGoalColor(goal)} />
-                    </span>
-                  {/if}
-                  {goal.title}
-                </button>
-                {#if goal.state === 'PAUSED'}
-                  <span class="state-badge paused-badge">PAUSADO</span>
-                {/if}
-              </div>
-              <div class="goal-meta">
-                <span class="tag-chip" style="background: {getGoalColor(goal)}20; border: 1px solid {getGoalColor(goal)}; color: {getGoalColor(goal)};">{TEMPORALITY_LABELS[goal.temporality] || goal.temporality}</span>
-                {#if goal.state === 'COMPLETED' || goal.is_completed}
-                  <span class="status-badge success" style="background: rgba(16, 185, 129, 0.1); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.2);">{$t('goalsPage.completed')}</span>
-                {:else if goal.state === 'FAILED'}
-                  <span class="status-badge error" style="background: rgba(239, 68, 68, 0.1); color: var(--error); border: 1px solid rgba(239, 68, 68, 0.2);">{$t('goalsPage.failed')}</span>
-                {/if}
-                {#if goal.note_id}
-                  <span class="tag-chip" style="background: {getGoalColor(goal)}20; border: 1px solid {getGoalColor(goal)}; color: {getGoalColor(goal)};">{notes.find(n => n.id === goal.note_id)?.title || 'Nota vinculada'}</span>
-                {:else if goal.tag_id}
-                  <span class="tag-chip" style="background: {getGoalColor(goal)}20; border: 1px solid {getGoalColor(goal)}; color: {getGoalColor(goal)};">{tags.find(t => t.id === goal.tag_id)?.name}</span>
-                {/if}
-                {#if goal.fail_config !== 'STATIC'}
-                  <span class="config-badge">{formatFailConfig(goal.fail_config)}</span>
-                {/if}
-                {#if goal.measurement_type !== 'COUNT'}
-                  <span class="config-badge" style="background:transparent; border: 1px solid var(--border);">{goal.measurement_type}</span>
-                {/if}
-                {#if goal.max_assignment_days}
-                  <span class="config-badge" style="background: rgba(59, 130, 246, 0.1); color: var(--text-muted); border: 1px solid rgba(59, 130, 246, 0.2);">{$t('goalsPage.limit', { values: { days: goal.max_assignment_days } })}</span>
-                {/if}
-              </div>
-              {#if goal.description}
-                <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">{goal.description}</div>
-              {/if}
-            </div>
-            <div class="goal-progress">
-              <div class="progress-meta">
-                <span class="mono caption">
-                  {#if goal.state === 'COMPLETED' || goal.is_completed}
-                    {goal.target_value}/{goal.target_value}
-                  {:else if goal.measurement_type === 'BOOLEAN'}
-                    {goal.current_value >= 1 ? 'Sí' : 'No'}
-                  {:else if goal.measurement_type === 'PERCENT'}
-                    {goal.current_value}%
-                  {:else}
-                    {goal.current_value}/{goal.target_value}
-                  {/if}
-                </span>
-                <span class="caption">{(goal.state === 'COMPLETED' || goal.is_completed) ? 100 : goal.progress_pct}%</span>
-              </div>
-              <div class="progress-track" style="height: 4px;">
-                <div class="progress-fill" style="width:{(goal.state === 'COMPLETED' || goal.is_completed) ? 100 : goal.progress_pct}%"></div>
-              </div>
-            </div>
-            <div class="goal-actions">
-              {#if goal.state === 'ACTIVE'}
-                <button class="btn btn-ghost text-muted" title={$t('goalsPage.pause')} aria-label={$t('goalsPage.pauseGoal')} onclick={() => updateGoalState(goal.id, 'PAUSED')}>
-                  <Pause size={14} />
-                </button>
-                <button class="btn btn-ghost text-success" title={$t('goalsPage.complete')} aria-label={$t('goalsPage.completeGoal')} onclick={() => completeGoal(goal.id)}>
-                  <Check size={14} />
-                </button>
-              {:else if goal.state === 'PAUSED'}
-                <button class="btn btn-ghost text-muted" title={$t('goalsPage.resume')} aria-label={$t('goalsPage.resumeGoal')} onclick={() => updateGoalState(goal.id, 'ACTIVE')}>
-                  <Play size={14} />
-                </button>
-              {/if}
-              {#if goal.state !== 'COMPLETED' && goal.state !== 'FAILED'}
-                <button class="btn btn-ghost text-muted" title={$t('goalsPage.cancel')} aria-label={$t('goalsPage.cancelGoal')} onclick={() => updateGoalState(goal.id, 'CANCELLED')}>
-                  <Ban size={14} />
-                </button>
-              {/if}
-              {#if deleteConfirm === goal.id}
-                <button class="btn btn-ghost text-danger" onclick={() => deleteGoal(goal.id)}>¿Eliminar?</button>
-                <button class="btn btn-ghost text-muted" onclick={() => deleteConfirm = null}>{$t('goalsPage.cancel')}</button>
-              {:else}
-                <button class="btn btn-ghost text-muted" title={$t('goalsPage.delete')} aria-label={$t('goalsPage.deleteGoal')} onclick={() => deleteGoal(goal.id)}>×</button>
-              {/if}
-              <button class="btn btn-ghost text-muted" title={$t('goalsPage.edit')} aria-label={$t('goalsPage.editGoal')} onclick={() => openGoalEditor(goal)}>
-                <Pencil size={13} />
-              </button>
-            </div>
-          </div>
-        {/each}
-
-        <!-- Next Assigned Tasks -->
-        <h3 class="section-title" style="margin-top: 24px;">{$t('goalsPage.upcomingAssigned')}</h3>
-        <div class="history-goal-list" style="width:100%">
-          {#if upcomingTasks.length === 0}
-            <div class="empty-state">{$t('goalsPage.noUpcomingTasks')}</div>
+          {#if dailyGoals.length === 0}
+            <div class="empty-state">{$t('goalsPage.noActiveGoals')}</div>
           {/if}
-          {#each upcomingTasks as task}
-            {@const g = task.goal}
-            <button class="goal-card" style="text-align: left; cursor: pointer; height: fit-content; border-left: 3px solid {getGoalColor(g)}; display:flex; align-items:center; width: 100%;" onclick={() => goto(`/goals/${g.id}`)}>
-              <div class="goal-main" style="flex: 1;">
+          {#each dailyGoals as goal (goal.id)}
+            <div
+              class="goal-card"
+              class:completed={goal.state === 'COMPLETED' || goal.is_completed}
+              class:failed={goal.state === 'FAILED'}
+              class:paused={goal.state === 'PAUSED'}
+              style="border-left: 3px solid {getGoalColor(goal)}"
+            >
+              <div class="goal-main">
                 <div class="goal-title">
-                  {#if g.fail_emoji}
-                    <span class="emoji-badge" style="display:flex; align-items:center; margin-right:8px;">
-                      <StreakIcon name={g.fail_emoji} size={16} color={getGoalColor(g)} />
-                    </span>
+                  <button
+                    class="btn btn-ghost"
+                    style="font-size: inherit; font-weight: inherit; padding: 0; margin: 0; height: auto; color: inherit;"
+                    title={$t('goalsPage.editInEditor')}
+                    onclick={(e) => {
+                      e.stopPropagation();
+                      goto(`/goals/${goal.id}`);
+                    }}
+                  >
+                    {#if goal.fail_emoji}
+                      <span
+                        class="emoji-badge"
+                        style="display:flex; align-items:center; margin-right:8px;"
+                      >
+                        <StreakIcon name={goal.fail_emoji} size={16} color={getGoalColor(goal)} />
+                      </span>
+                    {/if}
+                    {goal.title}
+                  </button>
+                  {#if goal.state === 'PAUSED'}
+                    <span class="state-badge paused-badge">PAUSADO</span>
                   {/if}
-                  {g.title}
                 </div>
                 <div class="goal-meta">
-                  <span class="config-badge">{task.date}</span>
-                  <span class="tag-chip" style="background: {getGoalColor(g)}20; border: 1px solid {getGoalColor(g)}; color: {getGoalColor(g)};">{TEMPORALITY_LABELS[g.temporality] || g.temporality}</span>
+                  <span
+                    class="tag-chip"
+                    style="background: {getGoalColor(goal)}20; border: 1px solid {getGoalColor(
+                      goal
+                    )}; color: {getGoalColor(goal)};"
+                    >{TEMPORALITY_LABELS[goal.temporality] || goal.temporality}</span
+                  >
+                  {#if goal.state === 'COMPLETED' || goal.is_completed}
+                    <span
+                      class="status-badge success"
+                      style="background: rgba(16, 185, 129, 0.1); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.2);"
+                      >{$t('goalsPage.completed')}</span
+                    >
+                  {:else if goal.state === 'FAILED'}
+                    <span
+                      class="status-badge error"
+                      style="background: rgba(239, 68, 68, 0.1); color: var(--error); border: 1px solid rgba(239, 68, 68, 0.2);"
+                      >{$t('goalsPage.failed')}</span
+                    >
+                  {/if}
+                  {#if goal.note_id}
+                    <span
+                      class="tag-chip"
+                      style="background: {getGoalColor(goal)}20; border: 1px solid {getGoalColor(
+                        goal
+                      )}; color: {getGoalColor(goal)};"
+                      >{notes.find((n) => n.id === goal.note_id)?.title || 'Nota vinculada'}</span
+                    >
+                  {:else if goal.tag_id}
+                    <span
+                      class="tag-chip"
+                      style="background: {getGoalColor(goal)}20; border: 1px solid {getGoalColor(
+                        goal
+                      )}; color: {getGoalColor(goal)};"
+                      >{tags.find((t) => t.id === goal.tag_id)?.name}</span
+                    >
+                  {/if}
+                  {#if goal.fail_config !== 'STATIC'}
+                    <span class="config-badge">{formatFailConfig(goal.fail_config)}</span>
+                  {/if}
+                  {#if goal.measurement_type !== 'COUNT'}
+                    <span
+                      class="config-badge"
+                      style="background:transparent; border: 1px solid var(--border);"
+                      >{goal.measurement_type}</span
+                    >
+                  {/if}
+                  {#if goal.max_assignment_days}
+                    <span
+                      class="config-badge"
+                      style="background: rgba(59, 130, 246, 0.1); color: var(--text-muted); border: 1px solid rgba(59, 130, 246, 0.2);"
+                      >{$t('goalsPage.limit', { values: { days: goal.max_assignment_days } })}</span
+                    >
+                  {/if}
+                </div>
+                {#if goal.description}
+                  <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
+                    {goal.description}
+                  </div>
+                {/if}
+              </div>
+              <div class="goal-progress">
+                <div class="progress-meta">
+                  <span class="mono caption">
+                    {#if goal.state === 'COMPLETED' || goal.is_completed}
+                      {goal.target_value}/{goal.target_value}
+                    {:else if goal.measurement_type === 'BOOLEAN'}
+                      {goal.current_value >= 1 ? 'Sí' : 'No'}
+                    {:else if goal.measurement_type === 'PERCENT'}
+                      {goal.current_value}%
+                    {:else}
+                      {goal.current_value}/{goal.target_value}
+                    {/if}
+                  </span>
+                  <span class="caption"
+                    >{goal.state === 'COMPLETED' || goal.is_completed
+                      ? 100
+                      : goal.progress_pct}%</span
+                  >
+                </div>
+                <div class="progress-track" style="height: 4px;">
+                  <div
+                    class="progress-fill"
+                    style="width:{goal.state === 'COMPLETED' || goal.is_completed
+                      ? 100
+                      : goal.progress_pct}%"
+                  ></div>
                 </div>
               </div>
-            </button>
+              <div class="goal-actions">
+                {#if goal.state === 'ACTIVE'}
+                  <button
+                    class="btn btn-ghost text-muted"
+                    title={$t('goalsPage.pause')}
+                    aria-label={$t('goalsPage.pauseGoal')}
+                    onclick={() => updateGoalState(goal.id, 'PAUSED')}
+                  >
+                    <Pause size={14} />
+                  </button>
+                  <button
+                    class="btn btn-ghost text-success"
+                    title={$t('goalsPage.complete')}
+                    aria-label={$t('goalsPage.completeGoal')}
+                    onclick={() => completeGoal(goal.id)}
+                  >
+                    <Check size={14} />
+                  </button>
+                {:else if goal.state === 'PAUSED'}
+                  <button
+                    class="btn btn-ghost text-muted"
+                    title={$t('goalsPage.resume')}
+                    aria-label={$t('goalsPage.resumeGoal')}
+                    onclick={() => updateGoalState(goal.id, 'ACTIVE')}
+                  >
+                    <Play size={14} />
+                  </button>
+                {/if}
+                {#if goal.state !== 'COMPLETED' && goal.state !== 'FAILED'}
+                  <button
+                    class="btn btn-ghost text-muted"
+                    title={$t('goalsPage.cancel')}
+                    aria-label={$t('goalsPage.cancelGoal')}
+                    onclick={() => updateGoalState(goal.id, 'CANCELLED')}
+                  >
+                    <Ban size={14} />
+                  </button>
+                {/if}
+                {#if deleteConfirm === goal.id}
+                  <button class="btn btn-ghost text-danger" onclick={() => deleteGoal(goal.id)}
+                    >¿Eliminar?</button
+                  >
+                  <button class="btn btn-ghost text-muted" onclick={() => (deleteConfirm = null)}
+                    >{$t('goalsPage.cancel')}</button
+                  >
+                {:else}
+                  <button
+                    class="btn btn-ghost text-muted"
+                    title={$t('goalsPage.delete')}
+                    aria-label={$t('goalsPage.deleteGoal')}
+                    onclick={() => deleteGoal(goal.id)}>×</button
+                  >
+                {/if}
+                <button
+                  class="btn btn-ghost text-muted"
+                  title={$t('goalsPage.edit')}
+                  aria-label={$t('goalsPage.editGoal')}
+                  onclick={() => openGoalEditor(goal)}
+                >
+                  <Pencil size={13} />
+                </button>
+              </div>
+            </div>
           {/each}
-        </div>
-      </div>
 
-      <!-- Dashboard Right Column -->
-      <div class="dashboard-side-col">
-
-        <div class="dash-card week-map-card">
-          <div class="dash-card-header">
-            <Calendar size={14} />
-            <span>{$t('goalsPage.weekMap')}</span>
-          </div>
-          <div style="display: flex; gap: 6px; justify-content: space-between; margin-top: 12px;">
-            {#each currentWeekDates as day}
-              <button 
-                class="week-day-box" 
-                title={day.dateStr}
-                onclick={() => {
-                  currentTab = 'history';
-                  selectedHistoryDate = day.dateStr;
-                }}
-                style="flex: 1; aspect-ratio: 1; border-radius: 4px; border: 1px solid {day.isToday ? '#fbbf24' : 'var(--border)'}; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; background: {day.isToday ? '#fbbf24' : (day.hasActivity ? 'var(--success)' : 'var(--surface)')}; color: {day.isToday ? '#000' : (day.hasActivity ? 'var(--bg)' : 'var(--text-muted)')}; opacity: 1; {day.isToday ? 'box-shadow: 0 0 0 2px #fbbf24;' : ''}"
+          <!-- Next Assigned Tasks -->
+          <h3 class="section-title" style="margin-top: 24px;">
+            {$t('goalsPage.upcomingAssigned')}
+          </h3>
+          <div class="history-goal-list" style="width:100%">
+            {#if upcomingTasks.length === 0}
+              <div class="empty-state">{$t('goalsPage.noUpcomingTasks')}</div>
+            {/if}
+            {#each upcomingTasks as task}
+              {@const g = task.goal}
+              <button
+                class="goal-card"
+                style="text-align: left; cursor: pointer; height: fit-content; border-left: 3px solid {getGoalColor(
+                  g
+                )}; display:flex; align-items:center; width: 100%;"
+                onclick={() => goto(`/goals/${g.id}`)}
               >
-                <span style="font-size: 10px; font-weight: bold; margin-bottom: 2px;">{day.dayName}</span>
-                <span style="font-size: 12px; font-weight: {day.isToday ? 'bold' : 'normal'};">{day.dateStr.split('-')[2]}</span>
+                <div class="goal-main" style="flex: 1;">
+                  <div class="goal-title">
+                    {#if g.fail_emoji}
+                      <span
+                        class="emoji-badge"
+                        style="display:flex; align-items:center; margin-right:8px;"
+                      >
+                        <StreakIcon name={g.fail_emoji} size={16} color={getGoalColor(g)} />
+                      </span>
+                    {/if}
+                    {g.title}
+                  </div>
+                  <div class="goal-meta">
+                    <span class="config-badge">{task.date}</span>
+                    <span
+                      class="tag-chip"
+                      style="background: {getGoalColor(g)}20; border: 1px solid {getGoalColor(
+                        g
+                      )}; color: {getGoalColor(g)};"
+                      >{TEMPORALITY_LABELS[g.temporality] || g.temporality}</span
+                    >
+                  </div>
+                </div>
               </button>
             {/each}
           </div>
         </div>
 
+        <!-- Dashboard Right Column -->
+        <div class="dashboard-side-col">
+          <div class="dash-card week-map-card">
+            <div class="dash-card-header">
+              <Calendar size={14} />
+              <span>{$t('goalsPage.weekMap')}</span>
+            </div>
+            <div style="display: flex; gap: 6px; justify-content: space-between; margin-top: 12px;">
+              {#each currentWeekDates as day}
+                <button
+                  class="week-day-box"
+                  title={day.dateStr}
+                  onclick={() => {
+                    currentTab = 'history';
+                    selectedHistoryDate = day.dateStr;
+                  }}
+                  style="flex: 1; aspect-ratio: 1; border-radius: 4px; border: 1px solid {day.isToday
+                    ? '#fbbf24'
+                    : 'var(--border)'}; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; background: {day.isToday
+                    ? '#fbbf24'
+                    : day.hasActivity
+                      ? 'var(--success)'
+                      : 'var(--surface)'}; color: {day.isToday
+                    ? '#000'
+                    : day.hasActivity
+                      ? 'var(--bg)'
+                      : 'var(--text-muted)'}; opacity: 1; {day.isToday
+                    ? 'box-shadow: 0 0 0 2px #fbbf24;'
+                    : ''}"
+                >
+                  <span style="font-size: 10px; font-weight: bold; margin-bottom: 2px;"
+                    >{day.dayName}</span
+                  >
+                  <span style="font-size: 12px; font-weight: {day.isToday ? 'bold' : 'normal'};"
+                    >{day.dateStr.split('-')[2]}</span
+                  >
+                </button>
+              {/each}
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
     {/if}
 
     {#if currentTab === 'planning'}
@@ -1036,10 +1439,18 @@
         <!-- Left: All Goals List (click => assign to selectedPlanningDate) -->
         <div class="planning-left-col history-detail-col">
           <div class="history-detail-header">
-            <div class="history-detail-date" style="text-transform:none;">{$t('goalsPage.goalList')}</div>
+            <div class="history-detail-date" style="text-transform:none;">
+              {$t('goalsPage.goalList')}
+            </div>
           </div>
-          <div style="padding: 0 var(--s3) 8px; display: flex; justify-content: flex-end; border-bottom: 1px solid var(--border-light); margin-bottom: 8px;">
-            <select class="input" style="padding: 2px 8px; font-size: 11px; height: auto;" bind:value={listSortBy}>
+          <div
+            style="padding: 0 var(--s3) 8px; display: flex; justify-content: flex-end; border-bottom: 1px solid var(--border-light); margin-bottom: 8px;"
+          >
+            <select
+              class="input"
+              style="padding: 2px 8px; font-size: 11px; height: auto;"
+              bind:value={listSortBy}
+            >
               <option value="recent">{$t('goalsPage.sortRecent')}</option>
               <option value="alpha">{$t('goalsPage.sortAlpha')}</option>
               <option value="state">{$t('goalsPage.sortState')}</option>
@@ -1050,31 +1461,54 @@
             {#each filteredUnassignedGoals as goal (goal.id)}
               <button
                 class="goal-card"
-                style="text-align: left; cursor: pointer; height: fit-content; border-left: 3px solid {getGoalColor(goal)}; display: flex; align-items:center; justify-content:space-between; width: 100%;"
+                style="text-align: left; cursor: pointer; height: fit-content; border-left: 3px solid {getGoalColor(
+                  goal
+                )}; display: flex; align-items:center; justify-content:space-between; width: 100%;"
                 onclick={() => assignGoalToDate(goal.id, selectedPlanningDate)}
                 title={$t('goalsPage.assignToDay')}
               >
                 <div class="goal-main" style="flex:1;">
                   <div class="goal-title">
                     {#if goal.fail_emoji}
-                      <span class="emoji-badge" style="display:flex; align-items:center; margin-right:8px;">
+                      <span
+                        class="emoji-badge"
+                        style="display:flex; align-items:center; margin-right:8px;"
+                      >
                         <StreakIcon name={goal.fail_emoji} size={16} color={getGoalColor(goal)} />
                       </span>
                     {/if}
                     {goal.title}
                   </div>
                   <div class="goal-meta">
-                    <span class="tag-chip" style="background: {getGoalColor(goal)}20; border: 1px solid {getGoalColor(goal)}; color: {getGoalColor(goal)};">{TEMPORALITY_LABELS[goal.temporality] || goal.temporality}</span>
+                    <span
+                      class="tag-chip"
+                      style="background: {getGoalColor(goal)}20; border: 1px solid {getGoalColor(
+                        goal
+                      )}; color: {getGoalColor(goal)};"
+                      >{TEMPORALITY_LABELS[goal.temporality] || goal.temporality}</span
+                    >
                     {#if goal.state === 'PAUSED'}
-                      <span class="status-badge" style="background: rgba(255,255,255,0.05); color: var(--text-muted); border: 1px solid rgba(255,255,255,0.1);">{$t('goalsPage.paused')}</span>
+                      <span
+                        class="status-badge"
+                        style="background: rgba(255,255,255,0.05); color: var(--text-muted); border: 1px solid rgba(255,255,255,0.1);"
+                        >{$t('goalsPage.paused')}</span
+                      >
                     {/if}
                     {#if goal.max_assignment_days}
-                      <span class="config-badge" style="margin-left: 8px; background: rgba(59, 130, 246, 0.1); color: var(--text-muted); border: 1px solid rgba(59, 130, 246, 0.2);">{$t('goalsPage.limit', { values: { days: goal.max_assignment_days } })}</span>
+                      <span
+                        class="config-badge"
+                        style="margin-left: 8px; background: rgba(59, 130, 246, 0.1); color: var(--text-muted); border: 1px solid rgba(59, 130, 246, 0.2);"
+                        >{$t('goalsPage.limit', {
+                          values: { days: goal.max_assignment_days },
+                        })}</span
+                      >
                     {/if}
                   </div>
                 </div>
                 <div style="display:flex; gap:6px;">
-                  <span class="btn btn-ghost text-muted" title={$t('goalsPage.assign')}><ChevronRight size={14} /></span>
+                  <span class="btn btn-ghost text-muted" title={$t('goalsPage.assign')}
+                    ><ChevronRight size={14} /></span
+                  >
                 </div>
               </button>
             {/each}
@@ -1093,7 +1527,7 @@
                 history={historyData}
                 color="var(--success)"
                 selectedDate={selectedPlanningDate}
-                onselect={(date) => selectedPlanningDate = date}
+                onselect={(date) => (selectedPlanningDate = date)}
                 maxFutureMonths={1200}
               />
             {/if}
@@ -1103,43 +1537,94 @@
         <!-- Right: Assigned for selected date -->
         <div class="planning-right-col history-detail-col">
           <div class="history-detail-header">
-            <div class="history-detail-date" style="text-transform:none;">{$t('goalsPage.assignedOn', { values: { date: selectedPlanningDate } })}</div>
+            <div class="history-detail-date" style="text-transform:none;">
+              {$t('goalsPage.assignedOn', { values: { date: selectedPlanningDate } })}
+            </div>
           </div>
 
           <div class="history-goal-list" style="width:100%">
             {#each ['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL'] as temp}
-              {@const normDate = getNormalizedDate(selectedPlanningDate, temp as 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'ANNUAL')}
+              {@const normDate = getNormalizedDate(
+                selectedPlanningDate,
+                temp as 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'ANNUAL'
+              )}
               {@const assignedIds = assignments[normDate] || []}
-              {@const filteredGoals = assignedIds.map(id => goals.find(g => g.id === id)).filter((g): g is Goal => g !== undefined && Boolean(g) && g.temporality === temp)}
-              
+              {@const filteredGoals = assignedIds
+                .map((id) => goals.find((g) => g.id === id))
+                .filter((g): g is Goal => g !== undefined && Boolean(g) && g.temporality === temp)}
+
               {#if filteredGoals.length > 0}
                 <div class="planning-section-header">
-                  {temp === 'DAILY' ? 'Día' : temp === 'WEEKLY' ? 'Semana' : temp === 'MONTHLY' ? 'Mes' : 'Año'}
+                  {temp === 'DAILY'
+                    ? 'Día'
+                    : temp === 'WEEKLY'
+                      ? 'Semana'
+                      : temp === 'MONTHLY'
+                        ? 'Mes'
+                        : 'Año'}
                 </div>
                 {#each filteredGoals as g (g.id)}
                   {@const status = getGoalStatusOnDate(g, selectedPlanningDate)}
-                  <div class="goal-card" class:completed={status === 'COMPLETED'} class:failed={status === 'FAILED'} style="border-left: 3px solid {status === 'FAILED' ? '#ef4444' : (status === 'COMPLETED' ? '#10b981' : getGoalColor(g))}; display:flex; align-items:center;">
+                  <div
+                    class="goal-card"
+                    class:completed={status === 'COMPLETED'}
+                    class:failed={status === 'FAILED'}
+                    style="border-left: 3px solid {status === 'FAILED'
+                      ? '#ef4444'
+                      : status === 'COMPLETED'
+                        ? '#10b981'
+                        : getGoalColor(g)}; display:flex; align-items:center;"
+                  >
                     <div style="display:flex; gap:6px; margin-right: 8px;">
-                      <button class="btn btn-ghost text-muted" style="padding: 4px;" onclick={() => unassignGoalFromDate(g.id, selectedPlanningDate)} title={$t('goalsPage.remove')} aria-label={$t('goalsPage.remove')}><ChevronLeft size={14} /></button>
+                      <button
+                        class="btn btn-ghost text-muted"
+                        style="padding: 4px;"
+                        onclick={() => unassignGoalFromDate(g.id, selectedPlanningDate)}
+                        title={$t('goalsPage.remove')}
+                        aria-label={$t('goalsPage.remove')}><ChevronLeft size={14} /></button
+                      >
                     </div>
                     <div class="goal-main" style="flex: 1;">
                       <div class="goal-title">
                         {#if g.fail_emoji}
-                          <span class="emoji-badge" style="display:flex; align-items:center; margin-right:8px;">
-                            <StreakIcon name={g.fail_emoji} size={16} color={status === 'FAILED' ? '#ef4444' : (status === 'COMPLETED' ? '#10b981' : getGoalColor(g))} />
+                          <span
+                            class="emoji-badge"
+                            style="display:flex; align-items:center; margin-right:8px;"
+                          >
+                            <StreakIcon
+                              name={g.fail_emoji}
+                              size={16}
+                              color={status === 'FAILED'
+                                ? '#ef4444'
+                                : status === 'COMPLETED'
+                                  ? '#10b981'
+                                  : getGoalColor(g)}
+                            />
                           </span>
                         {/if}
                         {g.title}
                       </div>
                       <div class="goal-meta">
-                        <span class="tag-chip" style="background: {getGoalColor(g)}20; border: 1px solid {getGoalColor(g)}; color: {getGoalColor(g)};">{TEMPORALITY_LABELS[g.temporality] || g.temporality}</span>
+                        <span
+                          class="tag-chip"
+                          style="background: {getGoalColor(g)}20; border: 1px solid {getGoalColor(
+                            g
+                          )}; color: {getGoalColor(g)};"
+                          >{TEMPORALITY_LABELS[g.temporality] || g.temporality}</span
+                        >
                         {#if status === 'COMPLETED'}
                           <span class="status-badge success">{$t('goalsPage.completed')}</span>
                         {:else if status === 'FAILED'}
                           <span class="status-badge error">{$t('goalsPage.failed')}</span>
                         {/if}
                         {#if g.max_assignment_days}
-                          <span class="config-badge" style="margin-left: 8px; background: rgba(59, 130, 246, 0.1); color: var(--text-muted); border: 1px solid rgba(59, 130, 246, 0.2);">{$t('goalsPage.limit', { values: { days: g.max_assignment_days } })}</span>
+                          <span
+                            class="config-badge"
+                            style="margin-left: 8px; background: rgba(59, 130, 246, 0.1); color: var(--text-muted); border: 1px solid rgba(59, 130, 246, 0.2);"
+                            >{$t('goalsPage.limit', {
+                              values: { days: g.max_assignment_days },
+                            })}</span
+                          >
                         {/if}
                       </div>
                     </div>
@@ -1148,9 +1633,16 @@
               {/if}
             {/each}
 
-            {#if !(['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL'] as const).some(temp => (assignments[getNormalizedDate(selectedPlanningDate, temp as 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'ANNUAL')] || []).some(id => goals.find(g => g.id === id)?.temporality === temp))}
-              <div class="history-detail-empty" style="padding: 2rem; border: 1px dashed var(--border); border-radius: var(--r); margin: 1rem;">
-                <span class="history-detail-msg" style="font-size: 12px; text-align: center; display: block;">{$t('goalsPage.noGoalsForPeriod')}</span>
+            {#if !(['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL'] as const).some( (temp) => (assignments[getNormalizedDate(selectedPlanningDate, temp as 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'ANNUAL')] || []).some((id) => goals.find((g) => g.id === id)?.temporality === temp) )}
+              <div
+                class="history-detail-empty"
+                style="padding: 2rem; border: 1px dashed var(--border); border-radius: var(--r); margin: 1rem;"
+              >
+                <span
+                  class="history-detail-msg"
+                  style="font-size: 12px; text-align: center; display: block;"
+                  >{$t('goalsPage.noGoalsForPeriod')}</span
+                >
               </div>
             {/if}
           </div>
@@ -1176,7 +1668,7 @@
                   history={historyData}
                   color="var(--success)"
                   selectedDate={selectedHistoryDate}
-                  onselect={(date) => selectedHistoryDate = date}
+                  onselect={(date) => (selectedHistoryDate = date)}
                 />
               {/if}
             </div>
@@ -1192,7 +1684,9 @@
             </div>
           {:else}
             <div class="history-detail-header">
-              <div class="history-detail-date" style="text-transform:none;">{formatHistoryDate(selectedHistoryDate)}</div>
+              <div class="history-detail-date" style="text-transform:none;">
+                {formatHistoryDate(selectedHistoryDate)}
+              </div>
             </div>
 
             {#if goalsForDate.completed.length === 0 && goalsForDate.failed.length === 0}
@@ -1202,21 +1696,36 @@
             {/if}
 
             {#if goalsForDate.completed.length > 0}
-              <div class="history-section-label success"><Check size={12} /> {$t('goalsPage.completedLabel')} ({goalsForDate.completed.length})</div>
+              <div class="history-section-label success">
+                <Check size={12} />
+                {$t('goalsPage.completedLabel')} ({goalsForDate.completed.length})
+              </div>
               <div class="history-goal-list">
                 {#each goalsForDate.completed as g (g.id)}
-                  <div class="goal-card completed" style="border-left: 3px solid {getGoalColor(g)}; width: 100%;">
+                  <div
+                    class="goal-card completed"
+                    style="border-left: 3px solid {getGoalColor(g)}; width: 100%;"
+                  >
                     <div class="goal-main">
                       <div class="goal-title">
                         {#if g.fail_emoji}
-                          <span class="emoji-badge" style="display:flex; align-items:center; margin-right:8px;">
+                          <span
+                            class="emoji-badge"
+                            style="display:flex; align-items:center; margin-right:8px;"
+                          >
                             <StreakIcon name={g.fail_emoji} size={16} color={getGoalColor(g)} />
                           </span>
                         {/if}
                         {g.title}
                       </div>
                       <div class="goal-meta">
-                        <span class="tag-chip" style="background: {getGoalColor(g)}20; border: 1px solid {getGoalColor(g)}; color: {getGoalColor(g)};">{TEMPORALITY_LABELS[g.temporality] || g.temporality}</span>
+                        <span
+                          class="tag-chip"
+                          style="background: {getGoalColor(g)}20; border: 1px solid {getGoalColor(
+                            g
+                          )}; color: {getGoalColor(g)};"
+                          >{TEMPORALITY_LABELS[g.temporality] || g.temporality}</span
+                        >
                       </div>
                     </div>
                     <div class="goal-progress" style="width: 100px;">
@@ -1225,7 +1734,10 @@
                         <span class="caption" style="color: {getGoalColor(g)};">100%</span>
                       </div>
                       <div class="progress-track" style="height: 4px;">
-                        <div class="progress-fill" style="width: 100%; background: {getGoalColor(g)};"></div>
+                        <div
+                          class="progress-fill"
+                          style="width: 100%; background: {getGoalColor(g)};"
+                        ></div>
                       </div>
                     </div>
                   </div>
@@ -1234,21 +1746,34 @@
             {/if}
 
             {#if goalsForDate.failed.length > 0}
-              <div class="history-section-label failed"><X size={12} /> {$t('goalsPage.failedLabel')} ({goalsForDate.failed.length})</div>
+              <div class="history-section-label failed">
+                <X size={12} />
+                {$t('goalsPage.failedLabel')} ({goalsForDate.failed.length})
+              </div>
               <div class="history-goal-list">
                 {#each goalsForDate.failed as g (g.id)}
-                  <div class="goal-card failed" style="border-left: 3px solid #ef4444; width: 100%;">
+                  <div
+                    class="goal-card failed"
+                    style="border-left: 3px solid #ef4444; width: 100%;"
+                  >
                     <div class="goal-main">
                       <div class="goal-title">
                         {#if g.fail_emoji}
-                          <span class="emoji-badge" style="display:flex; align-items:center; margin-right:8px;">
+                          <span
+                            class="emoji-badge"
+                            style="display:flex; align-items:center; margin-right:8px;"
+                          >
                             <StreakIcon name={g.fail_emoji} size={16} color="#ef4444" />
                           </span>
                         {/if}
                         {g.title}
                       </div>
                       <div class="goal-meta">
-                        <span class="tag-chip" style="background: #ef444420; border: 1px solid #ef4444; color: #ef4444;">{TEMPORALITY_LABELS[g.temporality] || g.temporality}</span>
+                        <span
+                          class="tag-chip"
+                          style="background: #ef444420; border: 1px solid #ef4444; color: #ef4444;"
+                          >{TEMPORALITY_LABELS[g.temporality] || g.temporality}</span
+                        >
                       </div>
                     </div>
                     <div class="goal-progress" style="width: 100px;">
@@ -1257,7 +1782,10 @@
                         <span class="caption" style="color: #ef4444;">{g.progress_pct}%</span>
                       </div>
                       <div class="progress-track" style="height: 4px;">
-                        <div class="progress-fill" style="width: {g.progress_pct}%; background: #ef4444;"></div>
+                        <div
+                          class="progress-fill"
+                          style="width: {g.progress_pct}%; background: #ef4444;"
+                        ></div>
                       </div>
                     </div>
                   </div>
@@ -1287,7 +1815,10 @@
               <span class="stb-label">{$t('goalsPage.failedLabel')}</span>
             </div>
           </div>
-          <div class="stb-item" style="flex: 1; flex-direction: column; align-items: stretch; justify-content: center; gap: 8px;">
+          <div
+            class="stb-item"
+            style="flex: 1; flex-direction: column; align-items: stretch; justify-content: center; gap: 8px;"
+          >
             <div style="display:flex; justify-content:space-between; align-items: flex-end;">
               <span class="stb-label">{$t('goalsPage.globalEffectiveness')}</span>
               <span class="stb-val" style="line-height: 1;">{successRate}%</span>
@@ -1299,7 +1830,6 @@
         </div>
 
         <div class="dashboard-grid">
-
           <div class="dash-card prediction-card">
             <div class="dash-card-header">
               <TrendingUp size={16} />
@@ -1308,7 +1838,7 @@
             </div>
             <div class="prediction-hero">
               <div class="bar-chart-container">
-                {#if dailyActivity.every(d => d.completed === 0 && d.failed === 0)}
+                {#if dailyActivity.every((d) => d.completed === 0 && d.failed === 0)}
                   <div class="bar-empty-state">
                     <TrendingUp size={24} style="opacity:0.2" />
                     <span>{$t('goalsPage.insufficientDataYet')}</span>
@@ -1336,23 +1866,56 @@
                       {@const failY = 115 - compH - failH}
 
                       {#if day.failed > 0}
-                        <rect x={barX + 2} y={failY} width={barW * 0.35} height={failH} fill="url(#failGrad)" rx="2" />
+                        <rect
+                          x={barX + 2}
+                          y={failY}
+                          width={barW * 0.35}
+                          height={failH}
+                          fill="url(#failGrad)"
+                          rx="2"
+                        />
                       {/if}
                       {#if day.completed > 0}
-                        <rect x={barX + barW * 0.5 + 1} y={compY} width={barW * 0.35} height={compH} fill="url(#compGrad)" rx="2" />
+                        <rect
+                          x={barX + barW * 0.5 + 1}
+                          y={compY}
+                          width={barW * 0.35}
+                          height={compH}
+                          fill="url(#compGrad)"
+                          rx="2"
+                        />
                       {/if}
 
                       {#if i % 2 === 0 || i === dailyActivity.length - 1}
-                        <text x={barX + barW / 2} y="124" font-size="6" fill="var(--text-muted)" text-anchor="middle" font-family="var(--font-mono)">{day.label}</text>
+                        <text
+                          x={barX + barW / 2}
+                          y="124"
+                          font-size="6"
+                          fill="var(--text-muted)"
+                          text-anchor="middle"
+                          font-family="var(--font-mono)">{day.label}</text
+                        >
                       {/if}
                     {/each}
 
-                    <line x1="0" y1="115" x2="420" y2="115" stroke="var(--border)" stroke-width="0.5" opacity="0.3" />
+                    <line
+                      x1="0"
+                      y1="115"
+                      x2="420"
+                      y2="115"
+                      stroke="var(--border)"
+                      stroke-width="0.5"
+                      opacity="0.3"
+                    />
                   </svg>
 
                   <div class="bar-legend">
-                    <span class="legend-item"><span class="legend-dot" style="background:var(--success)"></span> Completados</span>
-                    <span class="legend-item"><span class="legend-dot" style="background:var(--error)"></span> Fallados</span>
+                    <span class="legend-item"
+                      ><span class="legend-dot" style="background:var(--success)"></span> Completados</span
+                    >
+                    <span class="legend-item"
+                      ><span class="legend-dot" style="background:var(--error)"></span> Fallados</span
+                    >
                   </div>
                 {/if}
               </div>
@@ -1360,8 +1923,14 @@
               <div class="prediction-stats-row">
                 <div class="trend-summary">
                   <div class="trend-icon-wrap {prediction.trend.toLowerCase()}">
-                    {#if prediction.trend === 'UP'} <TrendingUp size={14} /> {:else} <TrendingDown size={14} /> {/if}
-                    <span class="trend-pct">{prediction.percentChange > 0 ? '+' : ''}{prediction.percentChange}%</span>
+                    {#if prediction.trend === 'UP'}
+                      <TrendingUp size={14} />
+                    {:else}
+                      <TrendingDown size={14} />
+                    {/if}
+                    <span class="trend-pct"
+                      >{prediction.percentChange > 0 ? '+' : ''}{prediction.percentChange}%</span
+                    >
                   </div>
                   <span class="trend-label">vs semana anterior</span>
                 </div>
@@ -1386,12 +1955,25 @@
             </div>
             <div class="weekday-chart">
               {#each completionsByDay as day}
-                {@const maxVal = Math.max(...completionsByDay.map(d => d.value)) || 1}
+                {@const maxVal = Math.max(...completionsByDay.map((d) => d.value)) || 1}
                 {@const intensity = day.value > 0 ? Math.max(30, (day.value / maxVal) * 100) : 0}
                 <div class="day-col">
-                  <span class="day-val" style="color: {day.value > 0 ? 'var(--text-primary)' : 'var(--text-disabled)'}">{day.value}</span>
+                  <span
+                    class="day-val"
+                    style="color: {day.value > 0 ? 'var(--text-primary)' : 'var(--text-disabled)'}"
+                    >{day.value}</span
+                  >
                   <div class="day-bar-wrap">
-                    <div class="day-bar" style="height: {day.value > 0 ? Math.max(8, intensity) : 0}%; background: {day.value > 0 ? `color-mix(in srgb, var(--xp) ${intensity}%, transparent)` : 'transparent'}; border: {day.value === 0 ? '1px dashed var(--border)' : 'none'};"></div>
+                    <div
+                      class="day-bar"
+                      style="height: {day.value > 0
+                        ? Math.max(8, intensity)
+                        : 0}%; background: {day.value > 0
+                        ? `color-mix(in srgb, var(--xp) ${intensity}%, transparent)`
+                        : 'transparent'}; border: {day.value === 0
+                        ? '1px dashed var(--border)'
+                        : 'none'};"
+                    ></div>
                   </div>
                   <span class="day-label">{day.label}</span>
                 </div>
@@ -1410,65 +1992,163 @@
                   <div class="temp-info">
                     <span class="temp-name">{TEMPORALITY_LABELS[p.temp] || p.temp}</span>
                     <span class="temp-stats">
-                      <span class="text-success">{p.completed} ✓</span> / <span class="text-error">{p.failed} ✗</span>
+                      <span class="text-success">{p.completed} ✓</span> /
+                      <span class="text-error">{p.failed} ✗</span>
                     </span>
                   </div>
-                  <div class="temp-bar-wrapper" style="display: flex; align-items: center; gap: 8px;">
+                  <div
+                    class="temp-bar-wrapper"
+                    style="display: flex; align-items: center; gap: 8px;"
+                  >
                     <div class="temp-bar-container" style="flex: 1;">
-                      {#if (p.completed + p.failed) > 0}
-                        <div class="temp-bar" style="width: {(p.completed / (p.completed + p.failed)) * 100}%; background: var(--success);"></div>
-                        <div class="temp-bar" style="width: {(p.failed / (p.completed + p.failed)) * 100}%; background: var(--error);"></div>
+                      {#if p.completed + p.failed > 0}
+                        <div
+                          class="temp-bar"
+                          style="width: {(p.completed / (p.completed + p.failed)) *
+                            100}%; background: var(--success);"
+                        ></div>
+                        <div
+                          class="temp-bar"
+                          style="width: {(p.failed / (p.completed + p.failed)) *
+                            100}%; background: var(--error);"
+                        ></div>
                       {/if}
                     </div>
-                    <span class="temp-perc-out">{(p.completed + p.failed) > 0 ? Math.round((p.completed / (p.completed + p.failed)) * 100) : 0}%</span>
+                    <span class="temp-perc-out"
+                      >{p.completed + p.failed > 0
+                        ? Math.round((p.completed / (p.completed + p.failed)) * 100)
+                        : 0}%</span
+                    >
                   </div>
                 </div>
               {/each}
             </div>
           </div>
 
-          <div class="dash-card hourly-card" style="padding: 20px; display: flex; flex-direction: column;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 12px;">
+          <div
+            class="dash-card hourly-card"
+            style="padding: 20px; display: flex; flex-direction: column;"
+          >
+            <div
+              style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 12px;"
+            >
               <div class="dash-card-header" style="flex-shrink: 0;">
                 <Activity size={16} />
                 <span>{$t('goalsPage.peakActivity')}</span>
               </div>
-              
+
               <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
                 <div class="activity-tabs" style="display: flex; gap: 8px;">
-                  <button class="activity-tab {activityTab === 'horas' ? 'active' : ''}" onclick={() => activityTab = 'horas'}>{$t('goalsPage.hours')}</button>
-                  <button class="activity-tab {activityTab === 'dias' ? 'active' : ''}" onclick={() => activityTab = 'dias'}>{$t('goalsPage.days')}</button>
+                  <button
+                    class="activity-tab {activityTab === 'horas' ? 'active' : ''}"
+                    onclick={() => (activityTab = 'horas')}>{$t('goalsPage.hours')}</button
+                  >
+                  <button
+                    class="activity-tab {activityTab === 'dias' ? 'active' : ''}"
+                    onclick={() => (activityTab = 'dias')}>{$t('goalsPage.days')}</button
+                  >
                 </div>
-                
+
                 {#if activityTab === 'horas'}
-                  <div class="activity-day-selector" style="display: flex; justify-content: center; align-items: center; gap: 8px; background: var(--surface); padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border);">
-                    <button class="icon-btn" onclick={prevActivityDay} aria-label={$t('goalsPage.prevDay')} style="background: none; border: none; cursor: pointer; color: var(--text-muted); display: flex; align-items: center; padding: 4px;"><ChevronLeft size={16} /></button>
-                    <span style="font-size: 0.75rem; color: var(--text-secondary); min-width: 80px; text-align: center; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; font-family: var(--font-mono);">{daysOfWeek[activityDayOfWeek]}</span>
-                    <button class="icon-btn" onclick={nextActivityDay} aria-label={$t('goalsPage.nextDay')} style="background: none; border: none; cursor: pointer; color: var(--text-muted); display: flex; align-items: center; padding: 4px;"><ChevronRight size={16} /></button>
+                  <div
+                    class="activity-day-selector"
+                    style="display: flex; justify-content: center; align-items: center; gap: 8px; background: var(--surface); padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border);"
+                  >
+                    <button
+                      class="icon-btn"
+                      onclick={prevActivityDay}
+                      aria-label={$t('goalsPage.prevDay')}
+                      style="background: none; border: none; cursor: pointer; color: var(--text-muted); display: flex; align-items: center; padding: 4px;"
+                      ><ChevronLeft size={16} /></button
+                    >
+                    <span
+                      style="font-size: 0.75rem; color: var(--text-secondary); min-width: 80px; text-align: center; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; font-family: var(--font-mono);"
+                      >{daysOfWeek[activityDayOfWeek]}</span
+                    >
+                    <button
+                      class="icon-btn"
+                      onclick={nextActivityDay}
+                      aria-label={$t('goalsPage.nextDay')}
+                      style="background: none; border: none; cursor: pointer; color: var(--text-muted); display: flex; align-items: center; padding: 4px;"
+                      ><ChevronRight size={16} /></button
+                    >
                   </div>
                 {/if}
               </div>
             </div>
 
-            <div class="hourly-chart" style="display: flex; align-items: flex-end; gap: 2px; height: 160px; width: 100%; flex: 1;">
+            <div
+              class="hourly-chart"
+              style="display: flex; align-items: flex-end; gap: 2px; height: 160px; width: 100%; flex: 1;"
+            >
               {#if activityTab === 'horas'}
                 {#each activityBinnedByHour as bin}
-                  <div class="hour-col" title="{bin.rangeLabel}: {bin.val} completados" style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%;">
-                    <span class="bar-value" style="font-size: 0.75rem; font-weight: 700; color: {bin.val > 0 ? 'var(--text-primary)' : 'transparent'};">{bin.val}</span>
-                    <div class="hour-bar-wrap" style="flex: 1; width: 100%; display: flex; align-items: flex-end; background: none;">
-                      <div class="hour-bar" style="height: {bin.val > 0 ? Math.max(6, bin.pct * 100) : 0}%; width: 100%; background: {bin.val > 0 ? 'var(--xp)' : 'var(--border)'}; border-radius: 4px 4px 0 0; opacity: {bin.val > 0 ? '1' : '0.3'};"></div>
+                  <div
+                    class="hour-col"
+                    title="{bin.rangeLabel}: {bin.val} completados"
+                    style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%;"
+                  >
+                    <span
+                      class="bar-value"
+                      style="font-size: 0.75rem; font-weight: 700; color: {bin.val > 0
+                        ? 'var(--text-primary)'
+                        : 'transparent'};">{bin.val}</span
+                    >
+                    <div
+                      class="hour-bar-wrap"
+                      style="flex: 1; width: 100%; display: flex; align-items: flex-end; background: none;"
+                    >
+                      <div
+                        class="hour-bar"
+                        style="height: {bin.val > 0
+                          ? Math.max(6, bin.pct * 100)
+                          : 0}%; width: 100%; background: {bin.val > 0
+                          ? 'var(--xp)'
+                          : 'var(--border)'}; border-radius: 4px 4px 0 0; opacity: {bin.val > 0
+                          ? '1'
+                          : '0.3'};"
+                      ></div>
                     </div>
-                    <span class="hour-label" style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-mono);">{bin.label}</span>
+                    <span
+                      class="hour-label"
+                      style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-mono);"
+                      >{bin.label}</span
+                    >
                   </div>
                 {/each}
               {:else}
                 {#each activityByDay as day}
-                  <div class="hour-col" title="{day.label}: {day.val} completados" style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%;">
-                    <span class="bar-value" style="font-size: 0.75rem; font-weight: 700; color: {day.val > 0 ? 'var(--text-primary)' : 'transparent'};">{day.val}</span>
-                    <div class="hour-bar-wrap" style="flex: 1; width: 100%; display: flex; align-items: flex-end; background: none;">
-                      <div class="hour-bar" style="height: {day.val > 0 ? Math.max(6, day.pct * 100) : 0}%; width: 100%; background: {day.val > 0 ? 'var(--xp)' : 'var(--border)'}; border-radius: 4px 4px 0 0; opacity: {day.val > 0 ? '1' : '0.3'};"></div>
+                  <div
+                    class="hour-col"
+                    title="{day.label}: {day.val} completados"
+                    style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%;"
+                  >
+                    <span
+                      class="bar-value"
+                      style="font-size: 0.75rem; font-weight: 700; color: {day.val > 0
+                        ? 'var(--text-primary)'
+                        : 'transparent'};">{day.val}</span
+                    >
+                    <div
+                      class="hour-bar-wrap"
+                      style="flex: 1; width: 100%; display: flex; align-items: flex-end; background: none;"
+                    >
+                      <div
+                        class="hour-bar"
+                        style="height: {day.val > 0
+                          ? Math.max(6, day.pct * 100)
+                          : 0}%; width: 100%; background: {day.val > 0
+                          ? 'var(--xp)'
+                          : 'var(--border)'}; border-radius: 4px 4px 0 0; opacity: {day.val > 0
+                          ? '1'
+                          : '0.3'};"
+                      ></div>
                     </div>
-                    <span class="hour-label" style="font-size: 0.85rem; color: var(--text-muted); font-weight: 500;">{day.label}</span>
+                    <span
+                      class="hour-label"
+                      style="font-size: 0.85rem; color: var(--text-muted); font-weight: 500;"
+                      >{day.label}</span
+                    >
                   </div>
                 {/each}
               {/if}
@@ -1477,7 +2157,7 @@
 
           <div class="dash-card funnel-card">
             <div class="dash-card-header">
-              <Filter size={16} />
+              <ListFilter size={16} />
               <span>{$t('goalsPage.conversionAbandon')}</span>
             </div>
             <div class="funnel-chart">
@@ -1488,13 +2168,16 @@
                     <span class="funnel-val" style="color: {f.color}">{f.value}</span>
                   </div>
                   <div class="funnel-bar-col">
-                    <div class="funnel-bar" style="width: {(f.value / (funnelData[0]?.value || 1)) * 100}%; background: {f.color};"></div>
+                    <div
+                      class="funnel-bar"
+                      style="width: {(f.value / (funnelData[0]?.value || 1)) *
+                        100}%; background: {f.color};"
+                    ></div>
                   </div>
                 </div>
               {/each}
             </div>
           </div>
-
         </div>
       </div>
     {/if}
@@ -1502,7 +2185,14 @@
 
   <!-- ── New Goal Slide-Down Panel ── -->
   {#if showAddForm}
-    <div class="new-goal-backdrop" onclick={(e) => { if (e.target === e.currentTarget) showAddForm = false; }} role="dialog" tabindex="-1">
+    <div
+      class="new-goal-backdrop"
+      onclick={(e) => {
+        if (e.target === e.currentTarget) showAddForm = false;
+      }}
+      role="dialog"
+      tabindex="-1"
+    >
       <div class="new-goal-panel slide-down">
         <div class="new-goal-header">
           <div class="new-goal-title-row">
@@ -1514,7 +2204,12 @@
               <span class="new-goal-sub">{$t('goalsPage.newGoalSub')}</span>
             </div>
           </div>
-          <button class="history-close-btn" onclick={() => showAddForm = false} title={$t('goalsPage.cancel')} aria-label={$t('goalsPage.closeForm')}>
+          <button
+            class="history-close-btn"
+            onclick={() => (showAddForm = false)}
+            title={$t('goalsPage.cancel')}
+            aria-label={$t('goalsPage.closeForm')}
+          >
             <X size={15} />
           </button>
         </div>
@@ -1526,10 +2221,19 @@
               <span class="ng-col-title">{$t('goalsPage.basics')}</span>
               <div class="form-field">
                 <label class="label">{$t('goalsPage.goalTitle')}</label>
-                <input class="input w-full" bind:value={newTitle} placeholder={$t('goalsPage.goalTitlePlaceholder')} maxlength="38" autofocus />
+                <input
+                  class="input w-full"
+                  bind:value={newTitle}
+                  placeholder={$t('goalsPage.goalTitlePlaceholder')}
+                  maxlength="38"
+                  autofocus
+                />
               </div>
               <div class="form-field">
-                <label class="label">{$t('goalsPage.description')} <span class="optional">{$t('goalsPage.optional')}</span></label>
+                <label class="label"
+                  >{$t('goalsPage.description')}
+                  <span class="optional">{$t('goalsPage.optional')}</span></label
+                >
                 <textarea
                   class="input w-full"
                   bind:value={newDescription}
@@ -1537,15 +2241,25 @@
                   maxlength="63"
                   rows="2"
                   onkeydown={(e) => e.key === 'Enter' && e.preventDefault()}
-                  oninput={(e) => newDescription = e.currentTarget.value.replace(/\n/g, '')}
+                  oninput={(e) => (newDescription = e.currentTarget.value.replace(/\n/g, ''))}
                 ></textarea>
               </div>
               <div class="form-field">
                 <label class="label">{$t('goalsPage.repeatFrequency')}</label>
                 <div class="ng-freq-grid">
                   {#each TEMPORALITIES as temp}
-                    <button class="ng-freq-btn" class:active={newTemporality === temp} onclick={() => newTemporality = temp}>
-                      {temp === 'DAILY' ? 'Diario' : temp === 'WEEKLY' ? 'Semanal' : temp === 'MONTHLY' ? 'Mensual' : 'Anual'}
+                    <button
+                      class="ng-freq-btn"
+                      class:active={newTemporality === temp}
+                      onclick={() => (newTemporality = temp)}
+                    >
+                      {temp === 'DAILY'
+                        ? 'Diario'
+                        : temp === 'WEEKLY'
+                          ? 'Semanal'
+                          : temp === 'MONTHLY'
+                            ? 'Mensual'
+                            : 'Anual'}
                     </button>
                   {/each}
                 </div>
@@ -1560,7 +2274,13 @@
               </div>
               <div class="form-field">
                 <label class="label">{$t('goalsPage.targetGoal')}</label>
-                <input class="input w-full" type="number" bind:value={newTargetValue} min="1" disabled={newMeasurement === 'BOOLEAN'} />
+                <input
+                  class="input w-full"
+                  type="number"
+                  bind:value={newTargetValue}
+                  min="1"
+                  disabled={newMeasurement === 'BOOLEAN'}
+                />
               </div>
             </div>
 
@@ -1568,24 +2288,42 @@
             <div class="ng-col">
               <span class="ng-col-title">{$t('goalsPage.appearance')}</span>
               <div class="form-field">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <div
+                  style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;"
+                >
                   <label class="label" style="margin:0;">{$t('goalsPage.failIconEmoji')}</label>
                   <div class="icon-toggle-row">
-                    <button class="icon-type-btn" class:selected={!useFailIcon} onclick={() => useFailIcon = false}>{$t('goalsPage.emoji')}</button>
-                    <button class="icon-type-btn" class:selected={useFailIcon} onclick={() => useFailIcon = true}>{$t('goalsPage.icon')}</button>
+                    <button
+                      class="icon-type-btn"
+                      class:selected={!useFailIcon}
+                      onclick={() => (useFailIcon = false)}>{$t('goalsPage.emoji')}</button
+                    >
+                    <button
+                      class="icon-type-btn"
+                      class:selected={useFailIcon}
+                      onclick={() => (useFailIcon = true)}>{$t('goalsPage.icon')}</button
+                    >
                   </div>
                 </div>
                 {#if !useFailIcon}
                   <div class="ng-picker-field">
                     <div class="emoji-grid">
                       {#each EMOJIS as e}
-                        <button class="emoji-btn" class:selected={newFailEmoji === e} onclick={() => newFailEmoji = e}>{e}</button>
+                        <button
+                          class="emoji-btn"
+                          class:selected={newFailEmoji === e}
+                          onclick={() => (newFailEmoji = e)}>{e}</button
+                        >
                       {/each}
                     </div>
                   </div>
                 {:else}
                   <div class="ng-picker-field ng-picker-icon">
-                    <LazyIconPicker selected={newFailIcon} color={newGoalColor} onSelect={(ic) => newFailIcon = ic} />
+                    <LazyIconPicker
+                      selected={newFailIcon}
+                      color={newGoalColor}
+                      onSelect={(ic) => (newFailIcon = ic)}
+                    />
                   </div>
                 {/if}
               </div>
@@ -1598,7 +2336,7 @@
                       class="ng-color-btn"
                       class:selected={newGoalColor === c.hex}
                       style="background: {c.hex};"
-                      onclick={() => newGoalColor = c.hex}
+                      onclick={() => (newGoalColor = c.hex)}
                       title={c.name}
                       aria-label={c.name}
                     />
@@ -1610,7 +2348,7 @@
                       type="color"
                       class="ng-color-swatch"
                       value={newGoalColor}
-                      oninput={(e) => newGoalColor = e.currentTarget.value}
+                      oninput={(e) => (newGoalColor = e.currentTarget.value)}
                     />
                   </div>
                   <input
@@ -1628,22 +2366,43 @@
             <div class="ng-col">
               <span class="ng-col-title">{$t('goalsPage.advanced')}</span>
               <div class="form-field">
-                <label class="label">{$t('goalsPage.limitDays')} <span class="optional">{$t('goalsPage.limitDaysOptional')}</span></label>
-                <input class="input w-full" type="number" bind:value={newMaxAssignmentDays} min="1" placeholder={$t('goalsPage.unlimited')} />
+                <label class="label"
+                  >{$t('goalsPage.limitDays')}
+                  <span class="optional">{$t('goalsPage.limitDaysOptional')}</span></label
+                >
+                <input
+                  class="input w-full"
+                  type="number"
+                  bind:value={newMaxAssignmentDays}
+                  min="1"
+                  placeholder={$t('goalsPage.unlimited')}
+                />
               </div>
 
               <div class="form-field">
                 <label class="label">{$t('goalsPage.failPolicy')}</label>
                 <div class="ng-fail-options">
-                  <button class="ng-fail-btn" class:active={newFailConfig === 'STATIC'} onclick={() => newFailConfig = 'STATIC'}>
+                  <button
+                    class="ng-fail-btn"
+                    class:active={newFailConfig === 'STATIC'}
+                    onclick={() => (newFailConfig = 'STATIC')}
+                  >
                     <strong>{$t('goalsPage.static')}</strong>
                     <span>{$t('goalsPage.staticDesc')}</span>
                   </button>
-                  <button class="ng-fail-btn" class:active={newFailConfig === 'ROLLOVER'} onclick={() => newFailConfig = 'ROLLOVER'}>
+                  <button
+                    class="ng-fail-btn"
+                    class:active={newFailConfig === 'ROLLOVER'}
+                    onclick={() => (newFailConfig = 'ROLLOVER')}
+                  >
                     <strong>{$t('goalsPage.rollover')}</strong>
                     <span>{$t('goalsPage.rolloverDesc')}</span>
                   </button>
-                  <button class="ng-fail-btn" class:active={newFailConfig === 'SNOWBALL'} onclick={() => newFailConfig = 'SNOWBALL'}>
+                  <button
+                    class="ng-fail-btn"
+                    class:active={newFailConfig === 'SNOWBALL'}
+                    onclick={() => (newFailConfig = 'SNOWBALL')}
+                  >
                     <strong>{$t('goalsPage.snowball')}</strong>
                     <span>{$t('goalsPage.snowballDesc')}</span>
                   </button>
@@ -1664,7 +2423,7 @@
                 <select class="input w-full" bind:value={newTagId}>
                   <option value={null}>{$t('goalsPage.manualUpdate')}</option>
                   {#each notes as n}
-                    {@const tagId = tags.find(t => t.name === n.title)?.id}
+                    {@const tagId = tags.find((t) => t.name === n.title)?.id}
                     {#if tagId}
                       <option value={tagId}>{n.title} (Auto-rastreo)</option>
                     {/if}
@@ -1677,10 +2436,16 @@
           <!-- Bottom Preview Section -->
           <div class="ng-bottom-preview">
             <span class="ng-preview-label">{$t('goalsPage.preview')}</span>
-            <div class="goal-card preview-card-live" style="border-color: {newGoalColor}; background: color-mix(in srgb, {newGoalColor} 5%, var(--surface));">
+            <div
+              class="goal-card preview-card-live"
+              style="border-color: {newGoalColor}; background: color-mix(in srgb, {newGoalColor} 5%, var(--surface));"
+            >
               <div class="goal-main">
                 <div class="goal-title">
-                  <span class="emoji-badge" style="display:flex; align-items:center; margin-right:8px;">
+                  <span
+                    class="emoji-badge"
+                    style="display:flex; align-items:center; margin-right:8px;"
+                  >
                     {#if useFailIcon}
                       <StreakIcon name={newFailIcon} size={16} color={newGoalColor} />
                     {:else}
@@ -1709,7 +2474,9 @@
             <span></span>
           {/if}
           <div class="new-goal-actions">
-            <button class="btn btn-ghost" onclick={() => showAddForm = false}>{$t('goalsPage.cancel')}</button>
+            <button class="btn btn-ghost" onclick={() => (showAddForm = false)}
+              >{$t('goalsPage.cancel')}</button
+            >
             <button class="btn btn-primary" onclick={addGoal} disabled={saving || !newTitle.trim()}>
               {saving ? 'Guardando...' : 'Crear objetivo'}
             </button>
@@ -1720,7 +2487,12 @@
   {/if}
 
   {#if editingGoal}
-    <ModalDialog open={true} title={$t('goalsPage.editGoalModal')} size="md" onClose={() => editingGoal = null}>
+    <ModalDialog
+      open={true}
+      title={$t('goalsPage.editGoalModal')}
+      size="md"
+      onClose={() => (editingGoal = null)}
+    >
       <div class="form-field">
         <label class="label">{$t('goalsPage.title')}</label>
         <input class="input w-full" bind:value={editTitle} />
@@ -1744,7 +2516,13 @@
         </div>
         <div class="form-field" style="width:100px;">
           <label class="label">{$t('goalsPage.limitDaysLabel')}</label>
-          <input class="input w-full" type="number" bind:value={editMaxAssignmentDays} min="1" placeholder="∞" />
+          <input
+            class="input w-full"
+            type="number"
+            bind:value={editMaxAssignmentDays}
+            min="1"
+            placeholder="∞"
+          />
         </div>
       </div>
       <div class="form-row">
@@ -1764,10 +2542,16 @@
         </div>
       </div>
       <div class="form-actions">
-        <button class="btn btn-primary" onclick={saveEdit} disabled={editSaving || !editTitle.trim()}>
+        <button
+          class="btn btn-primary"
+          onclick={saveEdit}
+          disabled={editSaving || !editTitle.trim()}
+        >
           {editSaving ? 'Guardando...' : 'Guardar cambios'}
         </button>
-        <button class="btn btn-ghost" onclick={() => editingGoal = null}>{$t('goalsPage.cancel')}</button>
+        <button class="btn btn-ghost" onclick={() => (editingGoal = null)}
+          >{$t('goalsPage.cancel')}</button
+        >
       </div>
     </ModalDialog>
   {/if}
@@ -1775,7 +2559,8 @@
   {#if pendingGoals.length > 0}
     <ModalDialog open={true} title="⚠ Objetivos Huérfanos" size="md" onClose={() => {}}>
       <p class="removal-desc">
-        Los siguientes objetivos fueron eliminados del contenido de sus notas vinculadas. ¿Qué deseas hacer con cada uno?
+        Los siguientes objetivos fueron eliminados del contenido de sus notas vinculadas. ¿Qué
+        deseas hacer con cada uno?
       </p>
       {#each pendingGoals as pg (pg.id)}
         <div class="removal-item">
@@ -1784,13 +2569,25 @@
             <span class="removal-meta">{pg.temporality} · {formatFailConfig(pg.fail_config)}</span>
           </div>
           <div class="removal-actions">
-            <button class="btn btn-ghost removal-btn manual" title={$t('goalsPage.keepManual')} onclick={() => resolveRemoval(pg.id, 'manual')}>
+            <button
+              class="btn btn-ghost removal-btn manual"
+              title={$t('goalsPage.keepManual')}
+              onclick={() => resolveRemoval(pg.id, 'manual')}
+            >
               Manual
             </button>
-            <button class="btn btn-ghost removal-btn cancel" title={$t('goalsPage.cancelArchive')} onclick={() => resolveRemoval(pg.id, 'cancel')}>
+            <button
+              class="btn btn-ghost removal-btn cancel"
+              title={$t('goalsPage.cancelArchive')}
+              onclick={() => resolveRemoval(pg.id, 'cancel')}
+            >
               Cancelar
             </button>
-            <button class="btn btn-ghost removal-btn delete" title={$t('goalsPage.deletePermanent')} onclick={() => resolveRemoval(pg.id, 'delete')}>
+            <button
+              class="btn btn-ghost removal-btn delete"
+              title={$t('goalsPage.deletePermanent')}
+              onclick={() => resolveRemoval(pg.id, 'delete')}
+            >
               Eliminar
             </button>
           </div>
@@ -1803,8 +2600,12 @@
     <div class="tab-content fade-in editor-tab">
       <div class="editor-header-row">
         <GoalFilters bind:query={goalSearchQuery} bind:filter={goalFilterState} />
-        <button class="btn btn-primary new-goal-cta-inline" onclick={() => showAddForm = !showAddForm}>
-          <Plus size={16} /> {$t('goalsPage.newGoal')}
+        <button
+          class="btn btn-primary new-goal-cta-inline"
+          onclick={() => (showAddForm = !showAddForm)}
+        >
+          <Plus size={16} />
+          {$t('goalsPage.newGoal')}
         </button>
       </div>
       <GoalList
@@ -1942,7 +2743,7 @@
     padding: 16px 16px 8px;
     border-bottom: 1px solid var(--border-light);
     margin-bottom: 8px;
-    background: rgba(255,255,255,0.02);
+    background: rgba(255, 255, 255, 0.02);
   }
 
   .status-badge {
@@ -1953,8 +2754,16 @@
     font-weight: 600;
     margin-left: 8px;
   }
-  .status-badge.success { background: rgba(16, 185, 129, 0.1); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.2); }
-  .status-badge.error { background: rgba(239, 68, 68, 0.1); color: var(--error); border: 1px solid rgba(239, 68, 68, 0.2); }
+  .status-badge.success {
+    background: rgba(16, 185, 129, 0.1);
+    color: #10b981;
+    border: 1px solid rgba(16, 185, 129, 0.2);
+  }
+  .status-badge.error {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--error);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+  }
 
   .history-heatmap-wrap {
     width: 100%;
@@ -2040,7 +2849,7 @@
     position: fixed;
     inset: 0;
     z-index: var(--z-modal);
-    background: rgba(0,0,0,0.75);
+    background: rgba(0, 0, 0, 0.75);
     backdrop-filter: blur(4px);
     display: flex;
     align-items: center;
@@ -2049,7 +2858,7 @@
   .new-goal-panel {
     background: var(--surface);
     border: 1px solid var(--border);
-    box-shadow: 0 24px 80px rgba(0,0,0,0.6);
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
     display: flex;
     flex-direction: column;
     max-height: calc(100vh - 24px);
@@ -2061,8 +2870,14 @@
     animation: modalPopIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
   }
   @keyframes modalPopIn {
-    from { transform: scale(0.95) translateY(10px); opacity: 0; }
-    to { transform: scale(1) translateY(0); opacity: 1; }
+    from {
+      transform: scale(0.95) translateY(10px);
+      opacity: 0;
+    }
+    to {
+      transform: scale(1) translateY(0);
+      opacity: 1;
+    }
   }
   .new-goal-header {
     display: flex;
@@ -2079,17 +2894,29 @@
     gap: var(--s3);
   }
   .new-goal-icon-wrap {
-    width: 32px; height: 32px; background: var(--surface-active);
-    border: 1px solid var(--border); border-radius: 8px;
-    display: flex; align-items: center; justify-content: center;
-    color: var(--text-secondary); flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    background: var(--surface-active);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    flex-shrink: 0;
   }
   .new-goal-heading {
-    font-size: 11px; font-weight: 700; color: var(--text-muted);
-    margin: 0; text-transform: uppercase; letter-spacing: 0.1em;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-muted);
+    margin: 0;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
     font-family: var(--font-mono);
   }
-  .new-goal-sub { display: none; }
+  .new-goal-sub {
+    display: none;
+  }
 
   .new-goal-body {
     flex: 1;
@@ -2162,8 +2989,14 @@
     cursor: pointer;
     transition: all 0.2s;
   }
-  .ng-freq-btn:hover { border-color: var(--text-muted); }
-  .ng-freq-btn.active { background: var(--surface-active); color: var(--text-primary); border-color: var(--text-primary); }
+  .ng-freq-btn:hover {
+    border-color: var(--text-muted);
+  }
+  .ng-freq-btn.active {
+    background: var(--surface-active);
+    color: var(--text-primary);
+    border-color: var(--text-primary);
+  }
 
   /* Fixed-height picker container — switching between emoji and icon
      modes does not resize the modal (#726, matches StreakCreateModal pattern). */
@@ -2203,10 +3036,22 @@
     cursor: pointer;
     transition: all 0.2s;
   }
-  .ng-fail-btn strong { font-size: 13px; color: var(--text-secondary); }
-  .ng-fail-btn span { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
-  .ng-fail-btn:hover { border-color: var(--text-muted); }
-  .ng-fail-btn.active { background: rgba(var(--primary-rgb, 139, 92, 246), 0.1); border-color: var(--primary); }
+  .ng-fail-btn strong {
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  .ng-fail-btn span {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+  .ng-fail-btn:hover {
+    border-color: var(--text-muted);
+  }
+  .ng-fail-btn.active {
+    background: rgba(var(--primary-rgb, 139, 92, 246), 0.1);
+    border-color: var(--primary);
+  }
 
   .new-goal-footer {
     display: flex;
@@ -2217,9 +3062,20 @@
     background: var(--surface);
     flex-shrink: 0;
   }
-  .new-goal-actions { display: flex; gap: var(--s3); }
-  .ng-error { font-size: 12px; color: var(--error); font-family: var(--font-mono); }
-  .optional { font-size: 10px; color: var(--text-disabled); font-style: italic; }
+  .new-goal-actions {
+    display: flex;
+    gap: var(--s3);
+  }
+  .ng-error {
+    font-size: 12px;
+    color: var(--error);
+    font-family: var(--font-mono);
+  }
+  .optional {
+    font-size: 10px;
+    color: var(--text-disabled);
+    font-style: italic;
+  }
 
   /* Color picker — matches StreakCreateModal pattern */
   .ng-color-grid {
@@ -2229,7 +3085,8 @@
     padding: 4px;
   }
   .ng-color-btn {
-    width: 32px; height: 32px;
+    width: 32px;
+    height: 32px;
     border: 2px solid transparent;
     border-radius: 6px;
     cursor: pointer;
@@ -2242,7 +3099,9 @@
   }
   .ng-color-btn.selected {
     border-color: var(--text-primary);
-    box-shadow: 0 0 0 1px var(--bg), 0 0 0 3px var(--text-primary);
+    box-shadow:
+      0 0 0 1px var(--bg),
+      0 0 0 3px var(--text-primary);
   }
   .ng-color-manual-row {
     display: flex;
@@ -2271,9 +3130,15 @@
     cursor: pointer;
     opacity: 0;
   }
-  .ng-color-swatch::-webkit-color-swatch-wrapper { padding: 0; }
-  .ng-color-swatch::-webkit-color-swatch { border: none; }
-  .ng-color-swatch::-moz-color-swatch { border: none; }
+  .ng-color-swatch::-webkit-color-swatch-wrapper {
+    padding: 0;
+  }
+  .ng-color-swatch::-webkit-color-swatch {
+    border: none;
+  }
+  .ng-color-swatch::-moz-color-swatch {
+    border: none;
+  }
   .ng-hex-input {
     width: 90px;
     flex: none;
@@ -2286,7 +3151,9 @@
     outline: none;
     transition: border-color 0.15s;
   }
-  .ng-hex-input:focus { border-color: var(--text-muted); }
+  .ng-hex-input:focus {
+    border-color: var(--text-muted);
+  }
 
   /* Responsive — stack columns on narrow viewports (#726) */
   @media (max-width: 900px) {
@@ -2344,15 +3211,27 @@
   .w-full {
     width: 100%;
   }
-  
-  .icon-toggle-row { display: flex; gap: 6px; }
+
+  .icon-toggle-row {
+    display: flex;
+    gap: 6px;
+  }
   .icon-type-btn {
-    flex: 1; padding: 4px 12px; font-size: 11px; font-family: var(--font-mono);
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: 4px; color: var(--text-muted); cursor: pointer;
+    flex: 1;
+    padding: 4px 12px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-muted);
+    cursor: pointer;
     transition: all 0.15s;
   }
-  .icon-type-btn.selected { border-color: var(--text-primary); color: var(--text-primary); }
+  .icon-type-btn.selected {
+    border-color: var(--text-primary);
+    color: var(--text-primary);
+  }
 
   .emoji-grid {
     display: grid;
@@ -2375,8 +3254,13 @@
     cursor: pointer;
     transition: all 0.2s;
   }
-  .emoji-btn:hover { background: var(--elevated); }
-  .emoji-btn.selected { border-color: var(--text-primary); background: var(--elevated); }
+  .emoji-btn:hover {
+    background: var(--elevated);
+  }
+  .emoji-btn.selected {
+    border-color: var(--text-primary);
+    background: var(--elevated);
+  }
 
   .icon-grid {
     display: grid;
@@ -2390,14 +3274,27 @@
     overflow-y: auto;
   }
   .lucide-btn {
-    width: 32px; height: 32px; background: none;
-    border: 1px solid transparent; cursor: pointer;
-    border-radius: 4px; display: flex; align-items: center;
-    justify-content: center; color: var(--text-muted);
+    width: 32px;
+    height: 32px;
+    background: none;
+    border: 1px solid transparent;
+    cursor: pointer;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
     transition: all 0.15s;
   }
-  .lucide-btn:hover { background: var(--elevated); color: var(--text-secondary); }
-  .lucide-btn.selected { border-color: var(--text-primary); color: var(--text-primary); background: var(--elevated); }
+  .lucide-btn:hover {
+    background: var(--elevated);
+    color: var(--text-secondary);
+  }
+  .lucide-btn.selected {
+    border-color: var(--text-primary);
+    color: var(--text-primary);
+    background: var(--elevated);
+  }
 
   .color-presets {
     display: flex;
@@ -2418,12 +3315,16 @@
     position: relative;
     z-index: 2;
   }
-  .color-dot:hover { transform: scale(1.15); }
-  .color-dot.selected { 
-    border-color: var(--text-primary); 
-    box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px currentColor; 
+  .color-dot:hover {
+    transform: scale(1.15);
   }
-  
+  .color-dot.selected {
+    border-color: var(--text-primary);
+    box-shadow:
+      0 0 0 2px var(--bg),
+      0 0 0 4px currentColor;
+  }
+
   .color-custom {
     width: 24px;
     height: 24px;
@@ -2434,7 +3335,10 @@
     cursor: pointer;
     transition: all 0.15s;
   }
-  .color-custom:hover { transform: scale(1.1); border-color: var(--text-muted); }
+  .color-custom:hover {
+    transform: scale(1.1);
+    border-color: var(--text-muted);
+  }
   .color-picker {
     position: absolute;
     top: 0;
@@ -2466,9 +3370,16 @@
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
-  .theme-btn:hover { border-color: var(--text-muted); color: var(--text-secondary); }
-  .theme-btn.selected { border-color: var(--text-primary); color: var(--text-primary); background: var(--elevated); }
-  
+  .theme-btn:hover {
+    border-color: var(--text-muted);
+    color: var(--text-secondary);
+  }
+  .theme-btn.selected {
+    border-color: var(--text-primary);
+    color: var(--text-primary);
+    background: var(--elevated);
+  }
+
   .form-actions {
     display: flex;
     gap: var(--s2);
@@ -2500,7 +3411,7 @@
   }
   .goal-card.failed {
     border-color: var(--error);
-    background: rgba(255,0,0,0.02);
+    background: rgba(255, 0, 0, 0.02);
   }
   .goal-card.paused {
     opacity: 0.55;
@@ -2582,8 +3493,12 @@
     gap: 4px;
     flex-shrink: 0;
   }
-  .text-success { color: var(--success); }
-  .text-muted { color: var(--text-muted); }
+  .text-success {
+    color: var(--success);
+  }
+  .text-muted {
+    color: var(--text-muted);
+  }
   .empty-state {
     padding: 32px;
     text-align: center;
@@ -2624,7 +3539,7 @@
     letter-spacing: 0.05em;
     margin-top: 4px;
   }
-  
+
   /* Planning Tabs */
   .planning-tabs {
     display: flex;
@@ -2790,9 +3705,9 @@
     grid-template-columns: repeat(4, 1fr);
     grid-template-rows: 1fr 1fr 1fr;
     grid-template-areas:
-      "pred pred pred temp"
-      "pred pred pred funnel"
-      "hourly hourly hourly weekday";
+      'pred pred pred temp'
+      'pred pred pred funnel'
+      'hourly hourly hourly weekday';
     gap: var(--s2);
     flex: 1;
     min-height: 0;
@@ -2806,7 +3721,9 @@
     flex-direction: column;
     gap: var(--s1);
     backdrop-filter: blur(10px);
-    transition: transform 0.2s, border-color 0.2s;
+    transition:
+      transform 0.2s,
+      border-color 0.2s;
     min-height: 0;
     overflow: hidden;
   }
@@ -2825,7 +3742,7 @@
     color: var(--text-muted);
     font-family: var(--font-mono);
   }
-  
+
   /* Stats Top Bar */
   .stats-top-bar {
     display: flex;
@@ -2883,7 +3800,7 @@
   .candle-chart-container {
     flex: 1;
     min-height: 80px;
-    background: rgba(0,0,0,0.15);
+    background: rgba(0, 0, 0, 0.15);
     border-radius: var(--r-sm, 8px);
     padding: var(--s2) var(--s3);
     position: relative;
@@ -2916,16 +3833,21 @@
     font-weight: 700;
     font-family: var(--font-mono);
   }
-  .trend-icon-wrap.up { color: var(--success); }
-  .trend-icon-wrap.down { color: var(--error); }
-  
+  .trend-icon-wrap.up {
+    color: var(--success);
+  }
+  .trend-icon-wrap.down {
+    color: var(--error);
+  }
+
   .prediction-estimate {
     text-align: right;
     display: flex;
     flex-direction: column;
     gap: 1px;
   }
-  .trend-label, .pred-lab {
+  .trend-label,
+  .pred-lab {
     font-size: 9px;
     color: var(--text-muted);
     text-transform: uppercase;
@@ -2938,7 +3860,7 @@
   }
 
   .candle-svg {
-    filter: drop-shadow(0 0 2px rgba(0,0,0,0.15));
+    filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.15));
   }
   .candle-empty-state {
     display: flex;
@@ -2955,7 +3877,7 @@
     margin-left: auto;
     font-size: 9px;
     padding: 2px 6px;
-    background: rgba(255,255,255,0.05);
+    background: rgba(255, 255, 255, 0.05);
     border: 1px solid var(--border);
     border-radius: 4px;
     font-family: var(--font-mono);
@@ -3156,18 +4078,26 @@
   }
 
   @media (max-width: 900px) {
-    .full-height-dashboard { height: auto; overflow-y: auto; }
+    .full-height-dashboard {
+      height: auto;
+      overflow-y: auto;
+    }
     .dashboard-grid {
       grid-template-columns: 1fr 1fr;
       grid-template-rows: unset;
       grid-template-areas: unset;
     }
-    .prediction-card, .weekday-card, .temporality-card,
-    .hourly-card, .funnel-card {
+    .prediction-card,
+    .weekday-card,
+    .temporality-card,
+    .hourly-card,
+    .funnel-card {
       grid-area: unset;
       grid-column: span 2;
     }
-    .weekday-card, .temporality-card, .funnel-card {
+    .weekday-card,
+    .temporality-card,
+    .funnel-card {
       grid-column: span 1;
     }
     /* Today tab: stack sidebar below main content */
@@ -3185,8 +4115,11 @@
     .dashboard-grid {
       grid-template-columns: 1fr;
     }
-    .prediction-card, .weekday-card, .temporality-card,
-    .hourly-card, .funnel-card {
+    .prediction-card,
+    .weekday-card,
+    .temporality-card,
+    .hourly-card,
+    .funnel-card {
       grid-column: span 1;
     }
   }
@@ -3245,17 +4178,23 @@
     color: var(--success);
     border: 1px solid color-mix(in srgb, var(--success) 30%, transparent);
   }
-  .removal-btn.manual:hover { background: color-mix(in srgb, var(--success) 10%, transparent); }
+  .removal-btn.manual:hover {
+    background: color-mix(in srgb, var(--success) 10%, transparent);
+  }
   .removal-btn.cancel {
     color: var(--warning);
     border: 1px solid color-mix(in srgb, var(--warning) 30%, transparent);
   }
-  .removal-btn.cancel:hover { background: color-mix(in srgb, var(--warning) 10%, transparent); }
+  .removal-btn.cancel:hover {
+    background: color-mix(in srgb, var(--warning) 10%, transparent);
+  }
   .removal-btn.delete {
     color: var(--error);
     border: 1px solid color-mix(in srgb, var(--error) 30%, transparent);
   }
-  .removal-btn.delete:hover { background: color-mix(in srgb, var(--error) 10%, transparent); }
+  .removal-btn.delete:hover {
+    background: color-mix(in srgb, var(--error) 10%, transparent);
+  }
 
   /* ── History Tab ── */
   .history-layout {
@@ -3385,8 +4324,12 @@
     gap: 5px;
   }
 
-  .history-section-label.success { color: var(--success); }
-  .history-section-label.failed  { color: var(--error); }
+  .history-section-label.success {
+    color: var(--success);
+  }
+  .history-section-label.failed {
+    color: var(--error);
+  }
 
   .history-goal-list {
     display: flex;
@@ -3405,8 +4348,12 @@
     transition: border-color 0.15s;
   }
 
-  .history-goal-item.completed { border-left: 3px solid var(--success); }
-  .history-goal-item.failed    { border-left: 3px solid var(--error); }
+  .history-goal-item.completed {
+    border-left: 3px solid var(--success);
+  }
+  .history-goal-item.failed {
+    border-left: 3px solid var(--error);
+  }
 
   .hgi-icon-left {
     width: 24px;
@@ -3464,14 +4411,23 @@
     text-align: right;
   }
 
-
   /* Advanced Analytics Styles */
-  .prediction-card  { grid-area: pred; }
-  .weekday-card     { grid-area: weekday; }
-  .temporality-card { grid-area: temp; }
-  .hourly-card      { grid-area: hourly; }
-  .funnel-card      { grid-area: funnel; }
-  
+  .prediction-card {
+    grid-area: pred;
+  }
+  .weekday-card {
+    grid-area: weekday;
+  }
+  .temporality-card {
+    grid-area: temp;
+  }
+  .hourly-card {
+    grid-area: hourly;
+  }
+  .funnel-card {
+    grid-area: funnel;
+  }
+
   .hourly-chart {
     display: flex;
     justify-content: space-between;
@@ -3489,14 +4445,19 @@
   .hour-bar-wrap {
     flex: 1;
     width: 10px;
-    background: rgba(255,255,255,0.02);
+    background: rgba(255, 255, 255, 0.02);
     border-radius: 5px;
     display: flex;
     flex-direction: column;
     justify-content: flex-end;
   }
-  .hourly-card { padding: 20px; }
-  .activity-tabs { display: flex; gap: 8px; }
+  .hourly-card {
+    padding: 20px;
+  }
+  .activity-tabs {
+    display: flex;
+    gap: 8px;
+  }
   .activity-tab {
     padding: 6px 12px;
     border: 1px solid var(--border);
@@ -3516,7 +4477,7 @@
     color: var(--xp);
     border-color: var(--xp);
   }
-  
+
   .hour-bar {
     width: 100%;
     background: linear-gradient(0deg, transparent, var(--xp));
@@ -3716,5 +4677,4 @@
       justify-content: center;
     }
   }
-
 </style>

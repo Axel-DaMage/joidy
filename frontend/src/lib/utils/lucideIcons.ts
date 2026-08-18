@@ -31,6 +31,27 @@ for (const [name, comp] of Object.entries(LucideIcons)) {
   }
 }
 
+// ── Legacy alias map ────────────────────────────────────────────────────────
+// lucide-svelte v1.0.0 renamed many icons (#783). Data-driven icon names
+// (streaks, achievements, DynamicIcon name="…") may still reference the old
+// PascalCase names — especially anything persisted in the DB. Map them to
+// their current equivalents so existing data keeps rendering without a
+// migration.
+const LEGACY_ALIASES: Record<string, string> = {
+  AlertTriangle: 'TriangleAlert',
+  BarChart: 'ChartColumn',
+  BarChart3: 'ChartNoAxesColumn',
+  CheckCircle: 'CircleCheckBig',
+  CheckSquare: 'SquareCheckBig',
+  Edit: 'SquarePen',
+  FileEdit: 'FilePen',
+  Filter: 'ListFilter',
+  Layout: 'LayoutDashboard',
+  Loader2: 'LoaderCircle',
+  PieChart: 'ChartPie',
+  DownloadCloud: 'CloudDownload',
+};
+
 /**
  * All available lucide icon names in PascalCase (e.g. "Search", "FileText").
  * Used by the icon picker to render its grid.
@@ -46,7 +67,9 @@ export const ALL_LUCIDE_ICON_NAMES: string[] = Array.from(_icons.keys()).sort();
  */
 export function getLucideIcon(name: string): any | null {
   if (!name) return null;
-  return _icons.get(name) ?? _icons.get(kebabToPascal(name)) ?? null;
+  const alias = LEGACY_ALIASES[name] ?? LEGACY_ALIASES[kebabToPascal(name)];
+  const resolved = alias ?? name;
+  return _icons.get(resolved) ?? _icons.get(kebabToPascal(resolved)) ?? null;
 }
 
 /**
@@ -64,5 +87,7 @@ export async function loadLucideIcon(name: string): Promise<any | null> {
  */
 export function hasLucideIcon(name: string): boolean {
   if (!name) return false;
-  return _icons.has(name) || _icons.has(kebabToPascal(name));
+  const alias = LEGACY_ALIASES[name] ?? LEGACY_ALIASES[kebabToPascal(name)];
+  const resolved = alias ?? name;
+  return _icons.has(resolved) || _icons.has(kebabToPascal(resolved));
 }

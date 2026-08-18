@@ -4,19 +4,25 @@
   import { dev } from '$app/environment';
   import { fly } from 'svelte/transition';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
-  import Plant          from '$lib/components/Plant.svelte';
-  import GalaxyModule   from '$lib/components/GalaxyModule.svelte';
+  import Plant from '$lib/components/Plant.svelte';
+  import GalaxyModule from '$lib/components/GalaxyModule.svelte';
   import MountainModule from '$lib/components/MountainModule.svelte';
-  import CityModule     from '$lib/components/CityModule.svelte';
-  import OrbitModule    from '$lib/components/OrbitModule.svelte';
-  import XPBar          from '$lib/components/XPBar.svelte';
+  import CityModule from '$lib/components/CityModule.svelte';
+  import OrbitModule from '$lib/components/OrbitModule.svelte';
+  import XPBar from '$lib/components/XPBar.svelte';
   import PomodoroWidget from '$lib/components/PomodoroWidget.svelte';
   import TimeWidget from '$lib/components/TimeWidget.svelte';
   import WeatherWidget from '$lib/components/WeatherWidget.svelte';
-  import Widget         from '$lib/components/Widget.svelte';
+  import Widget from '$lib/components/Widget.svelte';
   import GithubWidget from '$lib/components/GithubWidget.svelte';
   import DailyRecap from '$lib/components/DailyRecap.svelte';
-  import { totalXP, currentStreak, lastActivity, nextStageXP, globalLevel } from '$lib/stores/gamification';
+  import {
+    totalXP,
+    currentStreak,
+    lastActivity,
+    nextStageXP,
+    globalLevel,
+  } from '$lib/stores/gamification';
   import { openShare } from '$lib/stores/shareAchievement';
   import { Share2 } from 'lucide-svelte';
   import { notes, loadNotes, notesLoadedOnce } from '$lib/stores/notes';
@@ -32,19 +38,25 @@
   // ── Module carousel ────────────────────────────────────────────────────────
   // Labels are resolved via i18n at render time; `label` here is the i18n key suffix.
   const MODULES = [
-    { id: 'planta',  label: 'planta'  },
+    { id: 'planta', label: 'planta' },
     { id: 'galaxia', label: 'galaxia' },
     { id: 'montana', label: 'montana' },
-    { id: 'ciudad',  label: 'ciudad'  },
-    { id: 'orbita',  label: 'orbita'  },
+    { id: 'ciudad', label: 'ciudad' },
+    { id: 'orbita', label: 'orbita' },
   ];
 
-  let moduleIdx = 0;
-  let slideDir  = 1;
-  let modulePrefsReady = false;
+  let moduleIdx = $state(0);
+  let slideDir = $state(1);
+  let modulePrefsReady = $state(false);
 
-  function prevModule() { slideDir = -1; moduleIdx = (moduleIdx - 1 + MODULES.length) % MODULES.length; }
-  function nextModule() { slideDir =  1; moduleIdx = (moduleIdx + 1) % MODULES.length; }
+  function prevModule() {
+    slideDir = -1;
+    moduleIdx = (moduleIdx - 1 + MODULES.length) % MODULES.length;
+  }
+  function nextModule() {
+    slideDir = 1;
+    moduleIdx = (moduleIdx + 1) % MODULES.length;
+  }
 
   // ── Data ───────────────────────────────────────────────────────────────────
   let githubConnected = false;
@@ -128,7 +140,7 @@
     try {
       const [issuesRes, pullsRes] = await Promise.all([
         api.github.issues(filter),
-        api.github.pulls(filter)
+        api.github.pulls(filter),
       ]);
       githubIssues = (issuesRes.issues || []).slice(0, GH_ITEM_LIMIT);
       issueStats = issuesRes.stats || { open: 0, total: 0 };
@@ -143,10 +155,10 @@
         issueStats,
         prStats,
         repoColors,
-        ts: Date.now()
+        ts: Date.now(),
       });
-    } catch (e) { 
-      logger.error('GitHub error:', e); 
+    } catch (e) {
+      logger.error('GitHub error:', e);
       githubIssues = [];
       githubPRs = [];
     } finally {
@@ -171,11 +183,10 @@
       const status = await api.github.status();
       githubConnected = status.connected;
       if (githubConnected) {
-        const [reposRes] = await Promise.all([
-          api.github.repos(),
-          loadGitHubData(ghFilter),
-        ]);
-        repoColors = Object.fromEntries((reposRes.repos || []).map((r: any) => [r.full_name, r.color || 'var(--accent)']));
+        const [reposRes] = await Promise.all([api.github.repos(), loadGitHubData(ghFilter)]);
+        repoColors = Object.fromEntries(
+          (reposRes.repos || []).map((r: any) => [r.full_name, r.color || 'var(--accent)'])
+        );
       } else {
         githubIssues = [];
         githubPRs = [];
@@ -220,7 +231,7 @@
     if (!$notesLoadedOnce) {
       loadNotes();
     }
-    
+
     requestAnimationFrame(async () => {
       try {
         const status = await api.github.status();
@@ -228,9 +239,11 @@
         if (githubConnected) {
           const [reposRes] = await Promise.all([
             api.github.repos(),
-            (!cached || !isGithubCacheFresh(cached)) ? loadGitHubData(ghFilter) : Promise.resolve()
+            !cached || !isGithubCacheFresh(cached) ? loadGitHubData(ghFilter) : Promise.resolve(),
           ]);
-          repoColors = Object.fromEntries((reposRes.repos || []).map((r: any) => [r.full_name, r.color || 'var(--accent)']));
+          repoColors = Object.fromEntries(
+            (reposRes.repos || []).map((r: any) => [r.full_name, r.color || 'var(--accent)'])
+          );
           writeGithubCache({
             connected: githubConnected,
             filter: ghFilter,
@@ -240,13 +253,16 @@
             issueStats,
             prStats,
             repoColors,
-            ts: Date.now()
+            ts: Date.now(),
           });
         } else {
           clearGithubCache();
         }
-      } catch (e) { logger.error('GitHub error:', e); }
-      finally { githubStatusChecked = true; }
+      } catch (e) {
+        logger.error('GitHub error:', e);
+      } finally {
+        githubStatusChecked = true;
+      }
     });
 
     window.addEventListener('beforeunload', handleBeforeUnload);
@@ -256,8 +272,10 @@
 
   function handleBeforeUnload() {
     const scrollEls = document.querySelectorAll('[id^="panel-"]');
-    captureSnapshot('/', { moduleIdx, slideDir },
-      Array.from(scrollEls).map(el => ({ id: el.id, scrollTop: (el as HTMLElement).scrollTop }))
+    captureSnapshot(
+      '/',
+      { moduleIdx, slideDir },
+      Array.from(scrollEls).map((el) => ({ id: el.id, scrollTop: (el as HTMLElement).scrollTop }))
     );
     window.removeEventListener('joidy:github-connected', refreshGithubFromEvent);
     window.removeEventListener('joidy:github-disconnected', refreshGithubFromEvent);
@@ -268,7 +286,7 @@
       patchUserSettings({
         dashboard: {
           moduleId: MODULES[moduleIdx].id,
-        }
+        },
       });
     }
   });
@@ -297,8 +315,12 @@
   });
 
   // Widget renderers per panel
-  function leftWidgets(layout: typeof $dashboardLayout) { return layout.left; }
-  function rightWidgets(layout: typeof $dashboardLayout) { return layout.right; }
+  function leftWidgets(layout: typeof $dashboardLayout) {
+    return layout.left;
+  }
+  function rightWidgets(layout: typeof $dashboardLayout) {
+    return layout.right;
+  }
 
   // Resizable panel synced with notes
   let panelWidth = 260;
@@ -335,9 +357,21 @@
   {#if wid === 'plant-carousel'}
     <div class="widget-centered">
       <div class="module-nav">
-        <button class="nav-arrow" onclick={prevModule} title={$t('common.previous')} aria-label={$t('common.previous')}><DynamicIcon name="ChevronLeft" size={14}/></button>
-        <span class="module-label mono">{$t(`home.modules.${MODULES[moduleIdx].label}`).toUpperCase()}</span>
-        <button class="nav-arrow" onclick={nextModule} title={$t('common.next')} aria-label={$t('common.next')}><DynamicIcon name="ChevronRight" size={14}/></button>
+        <button
+          class="nav-arrow"
+          onclick={prevModule}
+          title={$t('common.previous')}
+          aria-label={$t('common.previous')}><DynamicIcon name="ChevronLeft" size={14} /></button
+        >
+        <span class="module-label mono"
+          >{$t(`home.modules.${MODULES[moduleIdx].label}`).toUpperCase()}</span
+        >
+        <button
+          class="nav-arrow"
+          onclick={nextModule}
+          title={$t('common.next')}
+          aria-label={$t('common.next')}><DynamicIcon name="ChevronRight" size={14} /></button
+        >
       </div>
       <div class="module-viewport">
         {#key moduleIdx}
@@ -359,8 +393,12 @@
       <div class="module-dots">
         {#each MODULES as _, idx}
           <button
-            class="dot" class:active={idx === moduleIdx}
-            onclick={() => { slideDir = idx > moduleIdx ? 1 : -1; moduleIdx = idx; }}
+            class="dot"
+            class:active={idx === moduleIdx}
+            onclick={() => {
+              slideDir = idx > moduleIdx ? 1 : -1;
+              moduleIdx = idx;
+            }}
             aria-label={$t(`home.modules.${MODULES[idx].label}`)}
           ></button>
         {/each}
@@ -433,18 +471,15 @@
 {/snippet}
 
 <div class="dashboard" style="--panel-w: {panelWidth}px">
-
   <DailyRecap />
 
   <!-- ── Left panel ─────────────────────────────────────────────────────────── -->
   <section class="plant-section">
-
     {#each $dashboardLayout.left as wid, i (wid)}
       <Widget id={wid}>
         {@render renderWidget(wid)}
       </Widget>
     {/each}
-
   </section>
 
   <!-- ── Resize handle ─────────────────────────────────────────────────────── -->
@@ -452,15 +487,12 @@
 
   <!-- ── Right panel ────────────────────────────────────────────────────────── -->
   <section class="activity-section">
-
     {#each $dashboardLayout.right as wid, i (wid)}
       <Widget id={wid}>
         {@render renderWidget(wid)}
       </Widget>
     {/each}
-
   </section>
-
 </div>
 
 <style>
@@ -512,37 +544,72 @@
   }
 
   .nav-arrow {
-    display: flex; align-items: center; justify-content: center;
-    width: 24px; height: 24px;
-    background: transparent; border: 1px solid var(--border); border-radius: var(--r);
-    color: var(--text-muted); cursor: pointer; transition: all var(--t-fast); flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all var(--t-fast);
+    flex-shrink: 0;
   }
-  .nav-arrow:hover  { border-color: var(--text-muted); color: var(--text-secondary); }
-  .nav-arrow:active { transform: scale(0.93); }
+  .nav-arrow:hover {
+    border-color: var(--text-muted);
+    color: var(--text-secondary);
+  }
+  .nav-arrow:active {
+    transform: scale(0.93);
+  }
 
   .module-viewport {
-    width: 170px; height: 170px;
-    position: relative; overflow: hidden;
-    display: flex; align-items: center; justify-content: center;
+    width: 170px;
+    height: 170px;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .module-slide {
-    position: absolute; inset: 0;
-    display: flex; align-items: center; justify-content: center;
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
-  .module-dots { display: flex; gap: 6px; align-items: center; }
+  .module-dots {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
 
   .dot {
-    width: 5px; height: 5px; border-radius: 50%;
-    background: var(--border); border: none; padding: 0;
-    cursor: pointer; transition: all var(--t-fast);
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--border);
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    transition: all var(--t-fast);
   }
-  .dot.active { background: var(--text-muted); width: 14px; border-radius: 3px; }
+  .dot.active {
+    background: var(--text-muted);
+    width: 14px;
+    border-radius: 3px;
+  }
 
   .wilt-notice {
     padding: var(--s2) var(--s3);
-    border: 1px solid var(--border); border-radius: var(--r); text-align: center;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    text-align: center;
   }
 
   .widget-centered {
@@ -554,11 +621,17 @@
     padding: 10px 0;
   }
 
-  .xp-section { width: 100%; max-width: 240px; }
+  .xp-section {
+    width: 100%;
+    max-width: 240px;
+  }
 
   .stats-row {
-    display: flex; align-items: center; gap: var(--s4);
-    width: 100%; max-width: 240px;
+    display: flex;
+    align-items: center;
+    gap: var(--s4);
+    width: 100%;
+    max-width: 240px;
   }
 
   .level-share-btn {
@@ -581,16 +654,35 @@
     color: var(--xp);
   }
 
-  .stat { display: flex; flex-direction: column; align-items: center; flex: 1; gap: 2px; }
-  .stat-value { font-size: 20px; font-weight: 300; color: var(--text-primary); line-height: 1; }
-  .stat-divider { width: 1px; height: 32px; background: var(--border); }
+  .stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+    gap: 2px;
+  }
+  .stat-value {
+    font-size: 20px;
+    font-weight: 300;
+    color: var(--text-primary);
+    line-height: 1;
+  }
+  .stat-divider {
+    width: 1px;
+    height: 32px;
+    background: var(--border);
+  }
 
   /* ── Right panel — identical to original ── */
   .activity-section {
-    display: flex; flex-direction: column; overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
   }
 
-  .recent-notes { flex: 1; }
+  .recent-notes {
+    flex: 1;
+  }
 
   .section-divider {
     border: 0;
@@ -599,28 +691,58 @@
     background: var(--border-light);
   }
 
-  .empty-state { padding: var(--s6) var(--s5); color: var(--text-muted); text-align: center; }
+  .empty-state {
+    padding: var(--s6) var(--s5);
+    color: var(--text-muted);
+    text-align: center;
+  }
 
-  .issues-list { display: flex; flex-direction: column; }
+  .issues-list {
+    display: flex;
+    flex-direction: column;
+  }
 
   .issue-item {
-    display: grid; grid-template-columns: 40px 1fr auto; gap: var(--s3);
-    align-items: center; padding: var(--s2) var(--s5);
+    display: grid;
+    grid-template-columns: 40px 1fr auto;
+    gap: var(--s3);
+    align-items: center;
+    padding: var(--s2) var(--s5);
     border-bottom: 1px solid var(--border-light);
-    text-decoration: none; color: var(--text-primary); transition: background var(--t-normal);
+    text-decoration: none;
+    color: var(--text-primary);
+    transition: background var(--t-normal);
   }
-  .issue-item:hover { background: var(--elevated); }
-  .issue-num   { color: var(--text-muted); }
-  .issue-title { font-size: 13px; }
-  .issue-repo  { color: var(--text-muted); font-size: 10px; white-space: nowrap; }
+  .issue-item:hover {
+    background: var(--elevated);
+  }
+  .issue-num {
+    color: var(--text-muted);
+  }
+  .issue-title {
+    font-size: 13px;
+  }
+  .issue-repo {
+    color: var(--text-muted);
+    font-size: 10px;
+    white-space: nowrap;
+  }
 
   /* ── Notes Grid ── */
   .fab {
     position: fixed;
-    bottom: calc(var(--statusbar-h) + 24px); right: 32px;
-    width: 44px; height: 44px; border-radius: 50%; padding: 0;
-    display: flex; align-items: center; justify-content: center;
-    z-index: var(--z-sticky); box-shadow: 0 0 0 1px var(--bg); text-decoration: none;
+    bottom: calc(var(--statusbar-h) + 24px);
+    right: 32px;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: var(--z-sticky);
+    box-shadow: 0 0 0 1px var(--bg);
+    text-decoration: none;
   }
 
   .github-widget {
@@ -630,7 +752,11 @@
     background: var(--surface);
   }
 
-  .empty-state.success { color: var(--success); text-align: center; padding: 12px; }
+  .empty-state.success {
+    color: var(--success);
+    text-align: center;
+    padding: 12px;
+  }
 
   /* ── Responsive ── */
 

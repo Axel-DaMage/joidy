@@ -695,7 +695,10 @@
             {#if githubAuthLoading}
               <span class="mono" style="font-size:12px; color: var(--text-muted);">
                 {#if githubUserCode}
-                  Código: <code style="margin-left:4px; color: var(--accent); font-weight:600; letter-spacing:0.05em;">{githubUserCode}</code>
+                  Código: <code
+                    style="margin-left:4px; color: var(--accent); font-weight:600; letter-spacing:0.05em;"
+                    >{githubUserCode}</code
+                  >
                 {:else}
                   Conectando…
                 {/if}
@@ -795,7 +798,7 @@
         {#if $deferredPrompt && !$isAppInstalled}
           <section class="section">
             <div class="section-title" style="color: var(--xp, var(--accent));">
-              <DynamicIcon name="DownloadCloud" size={12} /> Aplicación
+              <DynamicIcon name="CloudDownload" size={12} /> Aplicación
             </div>
             <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
               <p class="hint" style="margin-top: 0;">

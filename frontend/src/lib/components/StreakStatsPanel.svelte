@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { StreakStats } from '$lib/api';
-  import { BarChart3, Calendar } from 'lucide-svelte';
+  import { ChartNoAxesColumn, Calendar } from 'lucide-svelte';
   import { t } from 'svelte-i18n';
 
   export let stats: StreakStats | null = null;
@@ -9,7 +9,7 @@
 {#if stats}
   <div class="stats-panel">
     <div class="stats-header">
-      <BarChart3 size={12} />
+      <ChartNoAxesColumn size={12} />
       <span>RESUMEN GLOBAL</span>
     </div>
 
@@ -128,9 +128,19 @@
     border: 1px solid var(--border-light);
   }
 
-  .longest-label { color: var(--text-muted); }
-  .longest-name { color: var(--text-primary); font-size: 12px; }
-  .longest-days { color: var(--xp); margin-left: auto; font-size: 11px; font-weight: 600; }
+  .longest-label {
+    color: var(--text-muted);
+  }
+  .longest-name {
+    color: var(--text-primary);
+    font-size: 12px;
+  }
+  .longest-days {
+    color: var(--xp);
+    margin-left: auto;
+    font-size: 11px;
+    font-weight: 600;
+  }
 
   .tracker-row {
     display: flex;
@@ -140,5 +150,7 @@
     color: var(--text-muted);
   }
 
-  .sep { opacity: 0.3; }
+  .sep {
+    opacity: 0.3;
+  }
 </style>

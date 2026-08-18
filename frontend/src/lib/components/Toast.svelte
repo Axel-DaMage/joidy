@@ -7,14 +7,20 @@
 {#if $notifications.length > 0}
   <div class="toast-container">
     {#each $notifications as notif (notif.id)}
-      <button 
+      <button
         class="toast toast-{notif.type}"
         transition:fly={{ y: -20, duration: 200 }}
         onclick={() => dismissNotification(notif.id)}
       >
-        <DynamicIcon 
-          name={notif.type === 'success' ? 'CheckCircle' : notif.type === 'level' ? 'TrendingUp' : notif.type === 'error' ? 'AlertTriangle' : 'Info'} 
-          size={16} 
+        <DynamicIcon
+          name={notif.type === 'success'
+            ? 'CircleCheckBig'
+            : notif.type === 'level'
+              ? 'TrendingUp'
+              : notif.type === 'error'
+                ? 'TriangleAlert'
+                : 'Info'}
+          size={16}
         />
         <span class="toast-message">{notif.message}</span>
       </button>
@@ -41,7 +47,7 @@
     padding: 10px 14px;
     border-radius: var(--r, 8px);
     font-size: 13px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     pointer-events: auto;
     max-width: 320px;
     background: var(--elevated, #1a1a1a);
@@ -74,7 +80,11 @@
 
   .toast-level {
     border-color: var(--xp, #f59e0b);
-    background: linear-gradient(135deg, color-mix(in srgb, var(--xp, #f59e0b) 15%, var(--elevated, #1a1a1a)), transparent);
+    background: linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--xp, #f59e0b) 15%, var(--elevated, #1a1a1a)),
+      transparent
+    );
   }
   .toast-level :global(svg) {
     color: var(--xp, #f59e0b);

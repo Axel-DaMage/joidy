@@ -29,7 +29,7 @@
   async function reset(noteId: number) {
     try {
       await api.embeddings.resetDeadLetter(noteId);
-      failures = failures.filter(f => f.note_id !== noteId);
+      failures = failures.filter((f) => f.note_id !== noteId);
     } catch {
       // notification already shown by api.ts
     }
@@ -61,7 +61,7 @@
 
 <Card padding="md">
   <div class="dlq-header">
-    <h3><DynamicIcon name="AlertTriangle" /> Embeddings fallidos</h3>
+    <h3><DynamicIcon name="TriangleAlert" /> Embeddings fallidos</h3>
     {#if failures.length > 0}
       <button class="btn-sm btn-danger" onclick={purgeAll} disabled={purging}>
         {purging ? 'Purgando...' : 'Purgar todos'}
@@ -88,9 +88,7 @@
               <span class="dlq-error">{failure.last_error}</span>
             {/if}
           </div>
-          <button class="btn-sm" onclick={() => reset(failure.note_id)}>
-            Reintentar
-          </button>
+          <button class="btn-sm" onclick={() => reset(failure.note_id)}> Reintentar </button>
         </div>
       {/each}
     </div>

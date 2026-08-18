@@ -51,7 +51,11 @@
   import OfflineIndicator from '$lib/components/OfflineIndicator.svelte';
   import { initOfflineSync } from '$lib/stores/offlineSync';
   import ShareAchievementModal from '$lib/components/ShareAchievementModal.svelte';
-  import { initFocusModeConfig, queueNotificationIfActive, startFocusMode } from '$lib/stores/focusMode';
+  import {
+    initFocusModeConfig,
+    queueNotificationIfActive,
+    startFocusMode,
+  } from '$lib/stores/focusMode';
   import {
     initUsageTracking,
     trackPageView,
@@ -519,7 +523,7 @@
 
       {#if $showInstallBanner}
         <div class="pwa-banner" transition:fade={{ duration: 150 }}>
-          <DynamicIcon name="DownloadCloud" size={13} />
+          <DynamicIcon name="CloudDownload" size={13} />
           <span>{$t('pwa.installPrompt')}</span>
           <div class="pwa-actions">
             <button

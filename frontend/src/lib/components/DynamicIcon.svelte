@@ -70,7 +70,11 @@
   $: {
     const packName = pack || $activeIconPack;
     if (packName === 'phosphor' || packName === 'material') {
-      comp = phosphorMap[name] || Circle;
+      // Phosphor/Material only ship a curated subset. When the requested
+      // name isn't in the map, degrade gracefully to the matching lucide
+      // icon instead of a generic Circle so the UI never shows a blank
+      // circle (#783).
+      comp = phosphorMap[name] || (getLucideIcon(name) ?? Circle);
     } else {
       comp = getLucideIcon(name) ?? Circle;
     }

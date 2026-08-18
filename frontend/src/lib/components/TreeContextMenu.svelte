@@ -1,7 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher, onMount } from 'svelte';
   import type { FlatNode } from '$lib/utils/fileTree';
-  import { Edit, MoveRight, Trash2, FilePlus, FolderX } from 'lucide-svelte';
+  import { SquarePen, MoveRight, Trash2, FilePlus, FolderX } from 'lucide-svelte';
 
   export let x: number;
   export let y: number;
@@ -19,11 +19,21 @@
   function handleItem(action: string) {
     return () => {
       switch (action) {
-        case 'rename': dispatch('rename', { node }); break;
-        case 'move': dispatch('move', { node }); break;
-        case 'deleteNote': dispatch('deleteNote', { node }); break;
-        case 'newNoteInFolder': dispatch('newNoteInFolder', { node }); break;
-        case 'deleteFolder': dispatch('deleteFolder', { node }); break;
+        case 'rename':
+          dispatch('rename', { node });
+          break;
+        case 'move':
+          dispatch('move', { node });
+          break;
+        case 'deleteNote':
+          dispatch('deleteNote', { node });
+          break;
+        case 'newNoteInFolder':
+          dispatch('newNoteInFolder', { node });
+          break;
+        case 'deleteFolder':
+          dispatch('deleteFolder', { node });
+          break;
       }
       dispatch('close');
     };
@@ -58,10 +68,16 @@
   });
 </script>
 
-<div class="ctx-menu" bind:this={menuEl} style={style} onclick={(e) => e.stopPropagation()} oncontextmenu={(e) => e.stopPropagation()}>
+<div
+  class="ctx-menu"
+  bind:this={menuEl}
+  {style}
+  onclick={(e) => e.stopPropagation()}
+  oncontextmenu={(e) => e.stopPropagation()}
+>
   {#if node.type === 'file'}
     <button class="ctx-item" onclick={handleItem('rename')}>
-      <Edit size={12} /> Renombrar
+      <SquarePen size={12} /> Renombrar
     </button>
     <button class="ctx-item" onclick={handleItem('move')}>
       <MoveRight size={12} /> Mover a...
@@ -75,7 +91,7 @@
       <FilePlus size={12} /> Nueva nota aquí
     </button>
     <button class="ctx-item" onclick={handleItem('rename')}>
-      <Edit size={12} /> Renombrar
+      <SquarePen size={12} /> Renombrar
     </button>
     <button class="ctx-item ctx-danger" onclick={handleItem('deleteFolder')}>
       <FolderX size={12} /> Eliminar carpeta
@@ -91,7 +107,7 @@
     background: var(--surface, #fff);
     border: 1px solid var(--border, #ddd);
     border-radius: 6px;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
     padding: 4px 0;
     display: flex;
     flex-direction: column;
