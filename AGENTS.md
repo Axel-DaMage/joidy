@@ -135,9 +135,37 @@ Two concurrent asyncio tasks: `watch_vault()` (watches `/vault/*.md`, 2s debounc
 - Database is shared across all services (single PostgreSQL database via `DATABASE_URL`)
 - Config via Pydantic `Settings` from `.env`; no hardcoded values
 - `svelte-kit sync` runs on `postinstall` — can fail if `.svelte-kit/` has root-owned files
-- Vite HMR in Docker: `server.hmr.clientPort: 3000` + `host: localhost` (in `vite.config.ts`)
+- Vite HMR in Docker: `server.hmr.clientPort: 3000` + `host: 127.0.0.1` (in `vite.config.ts`, overridable via `JOIDY_HMR_HOST`). Using `localhost` breaks on hosts where it resolves to `::1` (IPv6) and Docker's IPv6 forwarding hangs.
 
 ## Workflow
 
 - Base branch for pull requests is `development`. Always create feature branches from `development` and open PRs against `development`, not `main`.
 - `main` is reserved for releases and should only be updated from `development` via release or hotfix PRs.
+
+## Docker Rebuild After Pull (STRICT)
+
+After **every** `git pull` (or merge that touches service code), the Docker images **MUST** be rebuilt from scratch before bringing services up. The `joidy up` CLI and `docker compose up -d` only consume pre-built images (`d4mag3/joidy-*:latest`) — they do **not** pick up source changes automatically. Running them without a rebuild means the containers serve stale code and fixes won't be visible.
+
+### Mandatory rebuild sequence
+
+```bash
+# 1. Stop and remove current containers
+joidy down
+
+# 2. Rebuild ALL 4 production images from source (no cache, pull fresh base images)
+#    Frontend MUST use --target production so it runs `node build` (not `vite dev`)
+docker build --no-cache --pull -t d4mag3/joidy-frontend:latest --target production ./frontend
+docker build --no-cache --pull -t d4mag3/joidy-api:latest        ./api
+docker build --no-cache --pull -t d4mag3/joidy-ai-service:latest ./ai-service
+docker build --no-cache --pull -t d4mag3/joidy-worker:latest     ./worker
+
+# 3. Bring services up with the fresh images
+joidy up
+```
+
+### Rules
+- **Never** run `joidy up` (or `docker compose up -d`) immediately after a pull without rebuilding first. The only exception is a pull that touches **only** docs, `.md` files, or files outside the 4 service directories.
+- **Never** use `docker compose -f docker-compose.yml -f docker-compose.dev.yml build` to rebuild production images — the dev overlay forces the `development` Dockerfile target (Vite dev server), which is wrong for production and bakes dev-only config (e.g. `vite.config.ts` HMR host) into the image.
+- The frontend production image requires `--target production` so the Dockerfile runs `npm run build` and serves the pre-compiled bundle with `node build` (SSR via `@sveltejs/adapter-node`).
+- Data volumes (`postgres_data`, `data/`) are preserved across rebuilds — only the images and containers are recreated. No user data is lost.
+- If only one service changed, you may rebuild just that image and `docker compose up -d --force-recreate <service>` to save time, but verify the other services are still on compatible images.
