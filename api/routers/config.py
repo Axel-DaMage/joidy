@@ -111,6 +111,13 @@ def update_config(update: ConfigUpdate):
 
     update_data = update.model_dump(exclude_none=True)
 
+    # Detect vault path change — Docker bind mounts are immutable, so changing
+    # OBSIDIAN_VAULT_PATH requires recreating the worker/api containers for the
+    # new path to take effect (#784).
+    old_vault = env_vars.get("OBSIDIAN_VAULT_PATH", "")
+    new_vault = update_data.get("obsidian_vault_path", "")
+    vault_changed = bool(new_vault) and new_vault != old_vault
+
     for short_key, env_key in CONFIG_KEYS.items():
         if short_key in update_data:
             value = update_data[short_key]
@@ -124,7 +131,15 @@ def update_config(update: ConfigUpdate):
         if value is not None and hasattr(settings, short_key):
             setattr(settings, short_key, value)
 
-    return {"status": "ok", "message": "Configuration updated."}
+    result: dict = {"status": "ok", "message": "Configuration updated."}
+    if vault_changed:
+        result["requires_restart"] = True
+        result["restart_reason"] = (
+            "Vault path changed. Docker bind mounts are immutable — "
+            "recreate the stack for the new path to take effect: "
+            "docker compose up -d --force-recreate worker api"
+        )
+    return result
 
 
 @router.get("/keys", dependencies=[Depends(get_current_user)])

@@ -351,13 +351,19 @@ export interface SyncConflict {
 export const api = {
   auth: {
     login: (password: string, username = 'user') =>
-      req<{ access_token: string; token_type: string }>('POST', '/auth/login', { password, username }),
+      req<{ access_token: string; token_type: string }>('POST', '/auth/login', {
+        password,
+        username,
+      }),
     status: () => req<{ enabled: boolean }>('GET', '/auth/status'),
   },
 
   notes: {
     list: (tag?: string, limit = 1000, skip = 0) =>
-      req<Note[]>('GET', `/notes/?limit=${limit}&skip=${skip}${tag ? `&tag=${encodeURIComponent(tag)}` : ''}`),
+      req<Note[]>(
+        'GET',
+        `/notes/?limit=${limit}&skip=${skip}${tag ? `&tag=${encodeURIComponent(tag)}` : ''}`
+      ),
     get: (id: number) => req<Note>('GET', `/notes/${id}`),
     create: (data: {
       title: string;
@@ -704,7 +710,13 @@ export const api = {
       github_client_secret?: string;
       telegram_bot_token?: string;
       telegram_allowed_user_id?: string;
-    }) => req<{ status: string; message: string }>('POST', '/config/', data),
+    }) =>
+      req<{
+        status: string;
+        message: string;
+        requires_restart?: boolean;
+        restart_reason?: string;
+      }>('POST', '/config/', data),
     keys: () =>
       req<{
         keys: { key: string; env_key: string; public: boolean; description: string }[];

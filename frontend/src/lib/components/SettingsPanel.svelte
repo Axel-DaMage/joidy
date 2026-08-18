@@ -32,6 +32,7 @@
   let configLoaded = false;
   let configSaving = false;
   let configMessage = '';
+  let configRestartNotice = '';
 
   let githubConnected = false;
   let githubUsername = '';
@@ -284,6 +285,7 @@
   async function saveConfig() {
     configSaving = true;
     configMessage = '';
+    configRestartNotice = '';
     try {
       // No enviamos github_token ni github_username desde el formulario general;
       // esos se manejan con el flujo OAuth dedicado.
@@ -293,6 +295,9 @@
       configuredKeys = Object.entries(configToSave)
         .filter(([k, v]) => v && k !== 'telegram_bot_token' && k !== 'telegram_allowed_user_id')
         .map(([k, v]) => k);
+      if (result.requires_restart && result.restart_reason) {
+        configRestartNotice = result.restart_reason;
+      }
       setTimeout(() => (configMessage = ''), 3000);
     } catch (e: any) {
       configMessage = 'Error: ' + (e.message || 'Failed to save');
@@ -868,6 +873,12 @@
           <span class="config-message-footer">{configMessage}</span>
         {/if}
       </div>
+      {#if configRestartNotice}
+        <div class="restart-notice">
+          <DynamicIcon name="TriangleAlert" size={14} />
+          <span>{configRestartNotice}</span>
+        </div>
+      {/if}
     </div>
   </div>
 {/if}
@@ -960,6 +971,23 @@
     font-size: 11px;
     color: var(--text-secondary);
     white-space: nowrap;
+  }
+
+  .restart-notice {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px 20px;
+    background: color-mix(in srgb, var(--warning, #f59e0b) 12%, var(--elevated, #1a1a1a));
+    border-top: 1px solid color-mix(in srgb, var(--warning, #f59e0b) 30%, transparent);
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .restart-notice :global(svg) {
+    color: var(--warning, #f59e0b);
+    flex-shrink: 0;
+    margin-top: 1px;
   }
 
   .section {
