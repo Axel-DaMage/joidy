@@ -21,6 +21,8 @@ RUN npm run build
 FROM base AS production
 COPY --from=build --chown=node:node /app/build ./build
 COPY --from=build --chown=node:node /app/package.json .
+COPY --from=build --chown=node:node /app/package-lock.json .
+RUN npm install --omit=dev --ignore-scripts
 USER node
 ENV NODE_ENV=production
 EXPOSE 3000

@@ -27,8 +27,10 @@ export default defineConfig({
       // When running inside Docker, the browser connects to the host-mapped
       // port. Without this, Vite tries to connect the WS to the container's
       // internal address and the browser gets a connection refused error.
+      // Use 127.0.0.1 (IPv4) instead of 'localhost' to avoid Docker's broken
+      // IPv6 forwarding on some hosts (e.g. Arch Linux) where ::1 hangs.
       clientPort: FRONTEND_PORT,
-      host: 'localhost',
+      host: process.env.JOIDY_HMR_HOST || '127.0.0.1',
     },
   },
   ssr: {
