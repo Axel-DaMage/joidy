@@ -31,8 +31,10 @@
 
   let configLoaded = false;
   let configSaving = false;
+  let configSaved = false;
   let configMessage = '';
   let configRestartNotice = '';
+  let savedTimer: ReturnType<typeof setTimeout> | null = null;
 
   let githubConnected = false;
   let githubUsername = '';
@@ -286,19 +288,26 @@
     configSaving = true;
     configMessage = '';
     configRestartNotice = '';
+    if (savedTimer) {
+      clearTimeout(savedTimer);
+      savedTimer = null;
+    }
     try {
       // No enviamos github_token ni github_username desde el formulario general;
       // esos se manejan con el flujo OAuth dedicado.
       const { github_token, github_username, ...configToSave } = systemConfig;
       const result = await api.config.update(configToSave);
-      configMessage = result.message;
       configuredKeys = Object.entries(configToSave)
         .filter(([k, v]) => v && k !== 'telegram_bot_token' && k !== 'telegram_allowed_user_id')
         .map(([k, v]) => k);
       if (result.requires_restart && result.restart_reason) {
         configRestartNotice = result.restart_reason;
       }
-      setTimeout(() => (configMessage = ''), 3000);
+      configSaved = true;
+      savedTimer = setTimeout(() => {
+        configSaved = false;
+        savedTimer = null;
+      }, 2500);
     } catch (e: any) {
       configMessage = 'Error: ' + (e.message || 'Failed to save');
     } finally {
@@ -862,15 +871,22 @@
       </div>
 
       <div class="panel-footer">
-        <button class="save-config-btn fixed-save" onclick={saveConfig} disabled={configSaving}>
+        <button
+          class="save-config-btn fixed-save"
+          class:saved={configSaved}
+          onclick={saveConfig}
+          disabled={configSaving}
+        >
           {#if configSaving}
             {$t('common.saving')}
+          {:else if configSaved}
+            <DynamicIcon name="CircleCheckBig" size={12} /> {$t('common.saved')}
           {:else}
             <DynamicIcon name="Save" size={12} /> {$t('common.save')}
           {/if}
         </button>
         {#if configMessage}
-          <span class="config-message-footer">{configMessage}</span>
+          <span class="config-message-footer error">{configMessage}</span>
         {/if}
       </div>
       {#if configRestartNotice}
@@ -971,6 +987,9 @@
     font-size: 11px;
     color: var(--text-secondary);
     white-space: nowrap;
+  }
+  .config-message-footer.error {
+    color: var(--error, #ef4444);
   }
 
   .restart-notice {
@@ -1305,6 +1324,9 @@
   .save-config-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+  .save-config-btn.saved {
+    background: var(--success, #22c55e);
   }
 
   .config-message {
