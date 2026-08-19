@@ -49,11 +49,11 @@
           {/if}
         </div>
       </div>
-      <div class="goal-state-indicator" class:active={goal.state === 'ACTIVE'} class:completed={goal.state === 'COMPLETED' || goal.is_completed} class:paused={goal.state === 'PAUSED'} class:failed={goal.state === 'FAILED'}>
-        {STATE_LABELS[goal.state] || goal.state}
-      </div>
     </div>
     <div class="card-title">{goal.title}</div>
+    <div class="goal-state-indicator" class:active={goal.state === 'ACTIVE'} class:completed={goal.state === 'COMPLETED' || goal.is_completed} class:paused={goal.state === 'PAUSED'} class:failed={goal.state === 'FAILED'}>
+      {STATE_LABELS[goal.state] || goal.state}
+    </div>
     {#if goal.description}
       <div class="card-description">{goal.description.substring(0, 80)}{goal.description.length > 80 ? '...' : ''}</div>
     {/if}
@@ -130,6 +130,7 @@
     text-align: center;
     position: relative;
     overflow: hidden;
+    aspect-ratio: 1;
   }
 
   .goal-card-main {
@@ -184,12 +185,12 @@
   .pin-btn {
     position: absolute;
     top: 0;
-    right: 0;
+    left: 0;
     width: 24px;
     height: 24px;
     border-radius: 6px;
-    background: var(--surface-hover);
-    border: 1px solid var(--border);
+    background: transparent;
+    border: none;
     color: var(--text-muted);
     display: flex;
     align-items: center;
