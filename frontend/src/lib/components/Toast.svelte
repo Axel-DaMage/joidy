@@ -2,26 +2,30 @@
   import { notifications, dismissNotification } from '$lib/stores/notifications';
   import { fly } from 'svelte/transition';
   import DynamicIcon from './DynamicIcon.svelte';
+
+  // Map each notification type to its icon name and accent color. Passing the
+  // color explicitly to DynamicIcon avoids the inline `color: inherit` style
+  // (set by DynamicIcon when no color prop is given) from overriding the
+  // `:global(svg)` CSS rules — which left icons uncolored and low-contrast in
+  // dark mode (#793).
+  const TYPE_CONFIG: Record<string, { icon: string; color: string }> = {
+    success: { icon: 'CircleCheckBig', color: 'var(--success, #22c55e)' },
+    level: { icon: 'TrendingUp', color: 'var(--xp, #f59e0b)' },
+    error: { icon: 'TriangleAlert', color: 'var(--error, #ef4444)' },
+    info: { icon: 'Info', color: 'var(--accent, #6366f1)' },
+  };
 </script>
 
 {#if $notifications.length > 0}
   <div class="toast-container">
     {#each $notifications as notif (notif.id)}
+      {@const cfg = TYPE_CONFIG[notif.type] ?? TYPE_CONFIG.info}
       <button
         class="toast toast-{notif.type}"
         transition:fly={{ y: -20, duration: 200 }}
         onclick={() => dismissNotification(notif.id)}
       >
-        <DynamicIcon
-          name={notif.type === 'success'
-            ? 'CircleCheckBig'
-            : notif.type === 'level'
-              ? 'TrendingUp'
-              : notif.type === 'error'
-                ? 'TriangleAlert'
-                : 'Info'}
-          size={16}
-        />
+        <DynamicIcon name={cfg.icon} size={16} color={cfg.color} />
         <span class="toast-message">{notif.message}</span>
       </button>
     {/each}
