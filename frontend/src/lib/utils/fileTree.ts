@@ -161,7 +161,8 @@ export function buildTree(
   showTrash = false, 
   showHidden = false, 
   sortMode: SortMode = 'az',
-  folderMeta: FolderMetaMap = {}
+  folderMeta: FolderMetaMap = {},
+  vaultFolders: string[] = []
 ): TreeNode[] {
   const root: Record<string, RawNode> = {};
 
@@ -197,6 +198,24 @@ export function buildTree(
       const key = '✦ joidy';
       if (!root[key]) root[key] = { type: 'folder', name: '✦ joidy', children: {} };
       root[key].children[note.title] = { type: 'file', name: note.title, note, children: {} };
+    }
+  }
+
+  // Seed real vault folders (e.g. freshly created empty folders) so they show up
+  // even when no note lives inside them yet. Only merge, never overwrite.
+  if (!search) {
+    for (const path of vaultFolders) {
+      const parts = path.split('/').filter(Boolean);
+      if (!parts.length) continue;
+      if (!showTrash && parts.some(p => p === '.trash')) continue;
+      if (!showHidden && parts.some(p => p !== '.trash' && p.startsWith('.'))) continue;
+      let node = root;
+      for (const seg of parts) {
+        if (!node[seg]) {
+          node[seg] = { type: 'folder', name: seg, children: {} };
+        }
+        node = node[seg].children;
+      }
     }
   }
 

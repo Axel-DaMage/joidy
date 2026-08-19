@@ -773,6 +773,7 @@ export const api = {
   },
 
   folders: {
+    list: () => req<{ folders: string[] }>('GET', '/folders/'),
     create: async (path: string) => {
       return req('POST', '/folders/', { path });
     },

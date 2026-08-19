@@ -71,6 +71,7 @@
   import { loadUserSettings, patchUserSettings } from '$lib/utils/userSettings';
   import { captureSnapshot, getSnapshot } from '$lib/stores/pageSnapshots';
   import { api, type Note } from '$lib/api';
+  import { logger } from '$lib/utils/logger';
   import { DEFAULT_GOAL_COLOR } from '$lib/utils/goalColors';
   import { t } from 'svelte-i18n';
 
@@ -85,6 +86,14 @@
   let dailyNotesConfigured = false;
   let deleteConfirm = false;
   let totalNotes = 0;
+
+  // Real vault folders (from GET /folders/) merged into the tree so empty
+  // folders created on disk actually show up.
+  let vaultFolders: string[] = [];
+  let vaultPath = '';
+  // When opening a "new note in folder", holds the folder path so the note is
+  // saved with a source_path inside it instead of the virtual "✦ joidy" folder.
+  let newNoteFolderPath: string | null = null;
 
   // Folder customization
   let editingFolder: string | null = null;
@@ -158,8 +167,9 @@
 
   function handleNewNoteInFolder() {
     if (!ctxMenu) return;
+    const path = ctxMenu.node.path;
     ctxMenu = null;
-    openNew();
+    openNew(path);
   }
 
   function handleDeleteFolder() {
@@ -172,7 +182,16 @@
       const ids = $notes
         .filter((n) => n.source_path && n.source_path.includes(path))
         .map((n) => n.id);
-      Promise.all(ids.map((id) => deleteNote(id))).then(() => loadNotes());
+      Promise.all(ids.map((id) => deleteNote(id)))
+        .then(async () => {
+          try {
+            await api.folders.delete(path);
+          } catch (e) {
+            logger.warn('[notes] Failed to delete folder on disk:', e);
+          }
+          await refreshTree();
+        })
+        .catch((e) => logger.error('[notes] Failed to delete folder notes:', e));
     }
   }
 
@@ -387,9 +406,29 @@
     $showTrash,
     $showHiddenFiles,
     sortMode,
-    $folderMetaStore
+    $folderMetaStore,
+    vaultFolders
   );
   $: flatNodes = flattenTree(tree, collapsed);
+
+  async function loadFolders() {
+    try {
+      const res = await api.folders.list();
+      vaultFolders = res.folders;
+    } catch (e) {
+      logger.warn('[notes] Failed to load vault folders:', e);
+    }
+  }
+
+  async function refreshTree() {
+    try {
+      const [ns, fs] = await Promise.all([api.notes.list(), api.folders.list()]);
+      notes.set(ns);
+      vaultFolders = fs.folders;
+    } catch (e) {
+      logger.error('[notes] Failed to refresh tree:', e);
+    }
+  }
   let historyStack: number[] = [];
   let historyIndex = -1;
   let isNavigatingHistory = false;
@@ -514,6 +553,7 @@
     // Kick off note loading (loads from cache synchronously inside loadNotes,
     // then fetches from API asynchronously).
     loadNotes();
+    loadFolders();
 
     // Wait one tick for Svelte to render the cached notes into the DOM.
     await tick();
@@ -535,6 +575,7 @@
     api.config
       .get()
       .then((config) => {
+        vaultPath = (config.obsidian_vault_path || '').trim();
         dailyNotesConfigured = Boolean(
           config.obsidian_vault_path?.trim() && config.daily_notes_folder?.trim()
         );
@@ -649,12 +690,13 @@
     ensureNoteEditor();
   }
 
-  function openNew() {
+  function openNew(folderPath?: string) {
     selectedNote = null;
     showEditor = true;
     editingNew = true;
     isMomentary = false;
     dailySourcePath = null;
+    newNoteFolderPath = folderPath ?? null;
     dailyInitialTitle = '';
     aiSuggestions.set([]);
     ensureNoteEditor();
@@ -666,6 +708,7 @@
     editingNew = true;
     isMomentary = true;
     dailySourcePath = null;
+    newNoteFolderPath = null;
     dailyInitialTitle = '';
     ensureNoteEditor();
   }
@@ -704,6 +747,7 @@
     isMomentary = false; // Usually daily notes are real
     dailyInitialTitle = today;
     dailySourcePath = buildDailySourcePath(vaultPath, dailyFolder, `${today}.md`);
+    newNoteFolderPath = null;
     aiSuggestions.set([]);
     ensureNoteEditor();
   }
@@ -712,6 +756,7 @@
     showEditor = false;
     selectedNote = null;
     dailySourcePath = null;
+    newNoteFolderPath = null;
     dailyInitialTitle = '';
     goto('/notes');
   }
@@ -724,7 +769,11 @@
     }
     if (editingNew) {
       if (dailyInitialTitle && !dailySourcePath) return;
-      const n = await createNote(title, content, tags, dailySourcePath);
+      let sp = dailySourcePath;
+      if (!sp && newNoteFolderPath && title.trim()) {
+        sp = buildDailySourcePath(vaultPath || '/vault', newNoteFolderPath, `${title.trim()}.md`);
+      }
+      const n = await createNote(title, content, tags, sp);
       if (n) {
         selectedNote = n;
         editingNew = false;
@@ -773,7 +822,7 @@
           class="icon-btn"
           title={$t('notesPage.createNote')}
           aria-label={$t('notesPage.createNote')}
-          onclick={openNew}><FilePen size={13} /></button
+          onclick={() => openNew()}><FilePen size={13} /></button
         >
         <button
           class="icon-btn"
@@ -1280,9 +1329,7 @@
                 await api.folders.create(targetPath);
                 updateFolderMeta(targetPath, { icon: newFolderIcon, color: newFolderColor });
                 creatingFolder = false;
-                // Refresh tree
-                const ns = await api.notes.list();
-                notes.set(ns);
+                await refreshTree();
               } catch (e) {
                 alert((e as any).message || 'Error al crear carpeta');
               }
@@ -1466,7 +1513,7 @@
               <DynamicIcon name="PenTool" size={13} /> Acciones Rápidas
             </div>
             <div class="dash-action-buttons">
-              <button class="dash-btn primary-dash-btn" onclick={openNew}>
+              <button class="dash-btn primary-dash-btn" onclick={() => openNew()}>
                 <FilePen size={16} /> Crear nota nueva
               </button>
               <button
