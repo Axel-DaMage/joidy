@@ -572,6 +572,41 @@
     return dates;
   });
 
+  // ── Monthly map state (#790) ──
+  let monthMapDate = $state(new Date());
+
+  let monthMapCells = $derived.by(() => {
+    const year = monthMapDate.getFullYear();
+    const month = monthMapDate.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    // Leading blanks: Mon=0 .. Sun=6
+    let startWeekday = firstDay.getDay() - 1;
+    if (startWeekday < 0) startWeekday = 6;
+    const cells: { dateStr: string | null; day: number | null; isToday: boolean; status: 'none' | 'assigned' | 'completed' | 'failed' }[] = [];
+    for (let i = 0; i < startWeekday; i++) {
+      cells.push({ dateStr: null, day: null, isToday: false, status: 'none' });
+    }
+    for (let d = 1; d <= lastDay.getDate(); d++) {
+      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const isToday = dateStr === todayIso;
+      const hData = historyData.find((h) => h.date === dateStr);
+      const hasAssignment = !!(assignments[dateStr] && assignments[dateStr].length > 0);
+      let status: 'none' | 'assigned' | 'completed' | 'failed' = hasAssignment ? 'assigned' : 'none';
+      if (hData?.failed) status = 'failed';
+      else if (hData?.checked) status = 'completed';
+      cells.push({ dateStr, day: d, isToday, status });
+    }
+    return cells;
+  });
+
+  function prevMonth() {
+    monthMapDate = new Date(monthMapDate.getFullYear(), monthMapDate.getMonth() - 1, 1);
+  }
+  function nextMonth() {
+    monthMapDate = new Date(monthMapDate.getFullYear(), monthMapDate.getMonth() + 1, 1);
+  }
+
   // ── Hierarchical planning helpers ──
   function getParentGoals(goalList: Goal[]) {
     return goalList.filter((g) => !g.parent_id || !goalList.some((p) => p.id === g.parent_id));
@@ -1430,6 +1465,40 @@
               {/each}
             </div>
           </div>
+
+          <!-- Monthly map (#790) -->
+          <div class="dash-card month-map-card">
+            <div class="dash-card-header month-map-header">
+              <Calendar size={14} />
+              <span>{monthMapDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</span>
+              <div class="month-map-nav">
+                <button class="month-nav-btn" onclick={prevMonth} aria-label={$t('goalsPage.prevDay')}>‹</button>
+                <button class="month-nav-btn" onclick={nextMonth} aria-label={$t('goalsPage.nextDay')}>›</button>
+              </div>
+            </div>
+            <div class="month-map-grid">
+              {#each ['L', 'M', 'X', 'J', 'V', 'S', 'D'] as dn}
+                <span class="month-map-dow">{dn}</span>
+              {/each}
+              {#each monthMapCells as cell}
+                {#if cell.dateStr}
+                  <button
+                    class="month-map-cell month-{cell.status}"
+                    class:month-today={cell.isToday}
+                    onclick={() => {
+                      currentTab = 'planning';
+                      selectedPlanningDate = cell.dateStr!;
+                    }}
+                    title={cell.dateStr}
+                  >
+                    {cell.day}
+                  </button>
+                {:else}
+                  <span class="month-map-cell month-empty"></span>
+                {/if}
+              {/each}
+            </div>
+          </div>
         </div>
       </div>
     {/if}
@@ -1443,12 +1512,9 @@
               {$t('goalsPage.goalList')}
             </div>
           </div>
-          <div
-            style="padding: 0 var(--s3) 8px; display: flex; justify-content: flex-end; border-bottom: 1px solid var(--border-light); margin-bottom: 8px;"
-          >
+          <div class="sort-control-centered">
             <select
-              class="input"
-              style="padding: 2px 8px; font-size: 11px; height: auto;"
+              class="input sort-select-square"
               bind:value={listSortBy}
             >
               <option value="recent">{$t('goalsPage.sortRecent')}</option>
@@ -2824,6 +2890,121 @@
 
   .dashboard-side-col > .dash-card {
     width: 100%;
+  }
+
+  .sort-control-centered {
+    display: flex;
+    justify-content: center;
+    padding: 0 0 8px 0;
+    border-bottom: 1px solid var(--border-light);
+    margin-bottom: 8px;
+  }
+  .sort-select-square {
+    padding: 6px 10px;
+    font-size: 11px;
+    height: auto;
+    width: auto;
+    min-width: 140px;
+    text-align: center;
+  }
+
+  /* ── Monthly map (#790) ── */
+  .month-map-card {
+    padding: 12px;
+  }
+  .month-map-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    position: relative;
+  }
+  .month-map-header > span {
+    flex: 1;
+    font-size: 12px;
+    text-transform: capitalize;
+  }
+  .month-map-nav {
+    display: flex;
+    gap: 4px;
+  }
+  .month-nav-btn {
+    width: 22px;
+    height: 22px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-secondary);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+  }
+  .month-nav-btn:hover {
+    background: var(--surface-hover);
+    color: var(--text-primary);
+  }
+  .month-map-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 3px;
+    margin-top: 10px;
+  }
+  .month-map-dow {
+    text-align: center;
+    font-size: 9px;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+    padding: 2px 0;
+  }
+  .month-map-cell {
+    aspect-ratio: 1;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 10px;
+    font-family: var(--font-mono);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.15s;
+    background: var(--surface);
+    color: var(--text-muted);
+  }
+  .month-map-cell:hover {
+    border-color: var(--text-muted);
+  }
+  .month-empty {
+    background: transparent;
+    border: none;
+    cursor: default;
+  }
+  .month-empty:hover {
+    border: none;
+  }
+  .month-assigned {
+    background: color-mix(in srgb, #facc15 25%, var(--surface));
+    border-color: #facc15;
+    color: #a16207;
+  }
+  .month-completed {
+    background: var(--success);
+    border-color: var(--success);
+    color: var(--bg);
+  }
+  .month-failed {
+    background: var(--error);
+    border-color: var(--error);
+    color: #fff;
+  }
+  .month-today {
+    background: var(--accent) !important;
+    border-color: var(--accent) !important;
+    color: #fff !important;
+    font-weight: 700;
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 40%, transparent);
   }
 
   .new-goal-cta {
