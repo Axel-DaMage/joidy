@@ -18,6 +18,7 @@
   } from 'lucide-svelte';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
   import NoteCard from '$lib/components/NoteCard.svelte';
+  import ModalDialog from '$lib/components/ModalDialog.svelte';
 
   // Lazy-load the heavy NoteEditor (1631 lines, pulls in highlight.js, marked,
   // dompurify, tiptap) so it is split into a separate chunk and only
@@ -83,7 +84,9 @@
   let dailySourcePath: string | null = null;
   let dailyInitialTitle = '';
   let dailyNotesConfigured = false;
-  let deleteConfirm = false;
+  let deleteModalOpen = false;
+  let deleteMode: 'single' | 'bulk' | 'ctx' = 'single';
+  let deleteCtxNoteId: number | null = null;
   let totalNotes = 0;
 
   // Folder customization
@@ -151,9 +154,9 @@
     }
     const note = ctxMenu.node.note;
     ctxMenu = null;
-    if (confirm(`¿Eliminar "${note.title}"?`)) {
-      deleteNote(note.id);
-    }
+    deleteMode = 'ctx';
+    deleteCtxNoteId = note.id;
+    deleteModalOpen = true;
   }
 
   function handleNewNoteInFolder() {
@@ -735,15 +738,21 @@
   }
 
   async function handleDelete() {
-    if (!deleteConfirm) {
-      deleteConfirm = true;
-      return;
-    }
-    if (selectedNote) {
+    deleteMode = 'single';
+    deleteModalOpen = true;
+  }
+
+  async function confirmDelete() {
+    if (deleteMode === 'bulk') {
+      deleteSelectedNotes();
+    } else if (deleteMode === 'ctx' && deleteCtxNoteId !== null) {
+      await deleteNote(deleteCtxNoteId);
+      deleteCtxNoteId = null;
+    } else if (deleteMode === 'single' && selectedNote) {
       await deleteNote(selectedNote.id);
-      deleteConfirm = false;
       closeEditor();
     }
+    deleteModalOpen = false;
   }
 
   // ── Dashboard Empty State ──
@@ -761,7 +770,7 @@
   onclick={() => {
     if (showSortMenu) showSortMenu = false;
   }}
-  onkeydown={(e) => e.key === 'Escape' && (deleteConfirm = false)}
+  onkeydown={(e) => e.key === 'Escape' && (deleteModalOpen = false)}
 />
 
 <div class="notes-page" class:dragging style="--panel-w: {panelWidth}px">
@@ -929,7 +938,8 @@
         <button
           class="bulk-btn danger"
           onclick={() => {
-            if (confirm(`¿Eliminar ${$selectedNoteIds.size} nota(s)?`)) deleteSelectedNotes();
+            deleteMode = 'bulk';
+            deleteModalOpen = true;
           }}
         >
           <svg
@@ -1408,18 +1418,6 @@
 
   <!-- ── Editor panel ──────────────────────────────────────────────────────── -->
   <div class="editor-panel">
-    {#if deleteConfirm}
-      <div class="delete-confirm-bar">
-        <span class="delete-confirm-text">¿Eliminar esta nota?</span>
-        <span class="delete-confirm-hint">{$t('notesPage.deleteHint')}</span>
-        <div class="delete-confirm-actions">
-          <button class="btn-cancel" onclick={() => (deleteConfirm = false)}
-            >{$t('notesPage.cancel')}</button
-          >
-          <button class="btn-danger" onclick={handleDelete}>{$t('notesPage.delete')}</button>
-        </div>
-      </div>
-    {/if}
     {#if showEditor}
       {#key editingNew ? (isMomentary ? 'momentary' : 'new') : selectedNote?.id}
         {#if NoteEditor}
@@ -1442,7 +1440,7 @@
       {/key}
     {:else}
       <div class="empty-dashboard">
-        <DynamicIcon name="Box" size={48} color="var(--border)" />
+        <DynamicIcon name="Box" size={32} color="var(--border)" />
 
         <div class="dash-search-container">
           <div class="dash-search">
@@ -1515,6 +1513,25 @@
     {/if}
   </div>
 </div>
+
+{#if deleteModalOpen}
+  <ModalDialog
+    open={true}
+    title={deleteMode === 'bulk'
+      ? `¿Eliminar ${$selectedNoteIds.size} nota${$selectedNoteIds.size !== 1 ? 's' : ''}?`
+      : $t('notesPage.delete')}
+    size="sm"
+    onClose={() => (deleteModalOpen = false)}
+  >
+    <p class="delete-modal-desc">{$t('notesPage.deleteHint')}</p>
+    <div class="delete-modal-actions">
+      <button class="btn btn-ghost" onclick={() => (deleteModalOpen = false)}
+        >{$t('notesPage.cancel')}</button
+      >
+      <button class="btn btn-danger" onclick={confirmDelete}>{$t('notesPage.delete')}</button>
+    </div>
+  </ModalDialog>
+{/if}
 
 <style>
   .notes-page {
@@ -1891,9 +1908,10 @@
     flex-direction: column;
     align-items: center;
     justify-content: start;
-    min-height: 100%;
-    gap: 30px;
-    padding: 60px 40px;
+    height: 100%;
+    overflow: hidden;
+    gap: 16px;
+    padding: 24px 32px;
     background: var(--bg);
     color: var(--text-primary);
   }
@@ -1928,9 +1946,12 @@
   .dash-widgets {
     display: grid;
     grid-template-columns: 1fr 1.2fr;
-    gap: 24px;
+    gap: 16px;
     width: 100%;
     max-width: 850px;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
   }
   .dash-quick-capture {
     width: 100%;
@@ -1940,7 +1961,7 @@
     background: var(--surface);
     border: 1px solid var(--border-light);
     border-radius: var(--r);
-    padding: 24px;
+    padding: 16px;
     display: flex;
     flex-direction: column;
     gap: 18px;
@@ -2311,54 +2332,24 @@
     opacity: 0.85;
   }
 
-  /* ── Delete confirmation bar ── */
-  .delete-confirm-bar {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 16px;
-    background: var(--surface);
-    border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
-  }
-  .delete-confirm-text {
+  /* ── Delete confirmation modal ── */
+  .delete-modal-desc {
     font-size: 13px;
-    color: var(--text-primary);
-    font-weight: 500;
-  }
-  .delete-confirm-hint {
-    font-size: 11px;
     color: var(--text-muted);
-    font-family: var(--font-mono);
-    flex: 1;
+    margin: 0 0 16px 0;
+    line-height: 1.5;
   }
-  .delete-confirm-actions {
+  .delete-modal-actions {
     display: flex;
-    gap: 6px;
-    flex-shrink: 0;
+    justify-content: flex-end;
+    gap: 10px;
   }
-  .delete-confirm-actions .btn-cancel,
-  .delete-confirm-actions .btn-danger {
-    padding: 6px 14px;
-    border-radius: var(--r);
-    font-size: 12px;
-    cursor: pointer;
-    border: 1px solid var(--border);
-    background: var(--bg);
-    color: var(--text-secondary);
-    font-family: var(--font-sans);
-    transition: all var(--t-fast);
-  }
-  .delete-confirm-actions .btn-cancel:hover {
-    border-color: var(--text-muted);
-    color: var(--text-primary);
-  }
-  .delete-confirm-actions .btn-danger {
+  .delete-modal-actions .btn-danger {
     background: var(--error);
     border-color: var(--error);
     color: #fff;
   }
-  .delete-confirm-actions .btn-danger:hover {
+  .delete-modal-actions .btn-danger:hover {
     opacity: 0.85;
   }
 
