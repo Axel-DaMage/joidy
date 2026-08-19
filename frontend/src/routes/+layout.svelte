@@ -10,6 +10,7 @@
   import CommandPalette from '$lib/components/CommandPalette.svelte';
   import FocusMode from '$lib/components/FocusMode.svelte';
   import Toast from '$lib/components/Toast.svelte';
+  import StatusBarGitHub from '$lib/components/StatusBarGitHub.svelte';
   import Login from '$lib/components/Login.svelte';
   import SetupWizard from '$lib/components/SetupWizard.svelte';
   import { api, type Goal, type PersonalStreak } from '$lib/api';
@@ -670,6 +671,9 @@
       </div>
 
       <div style="flex:1;"></div>
+
+      <!-- Assigned GitHub PRs / Issues (#792) -->
+      <StatusBarGitHub />
 
       <!-- Mini global Pomodoro -->
       <div
