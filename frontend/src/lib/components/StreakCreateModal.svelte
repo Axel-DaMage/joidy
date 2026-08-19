@@ -273,6 +273,7 @@
               class:theme-glass={theme === 'glass'}
               class:theme-sketch={theme === 'sketch'}
               style={previewStyle}
+              use:liquidGlass={{ enabled: theme === 'glass' }}
             >
               <div class="preview-icon">
                 {#if useIcon && icon}
