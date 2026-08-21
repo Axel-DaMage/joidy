@@ -1,6 +1,7 @@
 .PHONY: setup dev dev-d dev-reset prod stop restart logs logs-api logs-ai logs-worker build clean backup restore shell-api shell-worker migrate db-health test-api test-frontend test-frontend-e2e test lint lint-api fix-permissions install-deps doctor start
 
 COMPOSE_PROJECT ?= joidy
+DOCKER_COMPOSE := $(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || (command -v docker >/dev/null 2>&1 && echo "docker compose" || (command -v podman-compose >/dev/null 2>&1 && echo "podman-compose" || (command -v podman >/dev/null 2>&1 && echo "podman compose" || echo "docker compose"))))
 PLATFORM := $(shell uname -s | tr '[:upper:]' '[:lower:]')
 # Portable sed in-place: GNU sed uses -i, BSD sed (macOS) needs -i ''
 SED_INPLACE := $(shell sed --version >/dev/null 2>&1 && echo "sed -i" || echo "sed -i ''")
@@ -63,48 +64,48 @@ setup: ## First-time setup: copy .env, create data directories
 dev: ## Start all services in development mode (with hot reload)
 	@if [ ! -f .env ]; then echo "Run 'make setup' first"; exit 1; fi
 	@mkdir -p data/db data/uploads data/vault
-	docker compose -p $(COMPOSE_PROJECT) -f docker-compose.yml -f docker-compose.dev.yml up --build
+	$(DOCKER_COMPOSE) -p $(COMPOSE_PROJECT) -f docker-compose.yml -f docker-compose.dev.yml up --build
 
 dev-d: ## Start all services in development mode (detached)
 	@if [ ! -f .env ]; then echo "Run 'make setup' first"; exit 1; fi
 	@mkdir -p data/db data/uploads data/vault
-	docker compose -p $(COMPOSE_PROJECT) -f docker-compose.yml -f docker-compose.dev.yml up --build -d
+	$(DOCKER_COMPOSE) -p $(COMPOSE_PROJECT) -f docker-compose.yml -f docker-compose.dev.yml up --build -d
 
 dev-reset: ## Recreate all services in development mode from scratch (one command)
 	@if [ ! -f .env ]; then echo "Run 'make setup' first"; exit 1; fi
 	@mkdir -p data/db data/uploads data/vault
-	docker compose -p $(COMPOSE_PROJECT) -f docker-compose.yml -f docker-compose.dev.yml down --remove-orphans --volumes
-	docker compose -p $(COMPOSE_PROJECT) -f docker-compose.yml -f docker-compose.dev.yml up --build -d --force-recreate --remove-orphans --wait
+	$(DOCKER_COMPOSE) -p $(COMPOSE_PROJECT) -f docker-compose.yml -f docker-compose.dev.yml down --remove-orphans --volumes
+	$(DOCKER_COMPOSE) -p $(COMPOSE_PROJECT) -f docker-compose.yml -f docker-compose.dev.yml up --build -d --force-recreate --remove-orphans --wait
 	@echo "✓ Services recreated. Use 'make logs' to follow output."
 
 prod: ## Start all services in production mode
 	@if [ ! -f .env ]; then echo "Run 'make setup' first"; exit 1; fi
 	@mkdir -p data/db data/uploads data/vault
-	docker compose up --build -d
+	$(DOCKER_COMPOSE) up --build -d
 
 stop: ## Stop all services
-	docker compose down
+	$(DOCKER_COMPOSE) down
 
 restart: ## Restart all services
-	docker compose restart
+	$(DOCKER_COMPOSE) restart
 
 logs: ## Tail logs from all services
-	docker compose logs -f
+	$(DOCKER_COMPOSE) logs -f
 
 logs-api: ## Tail API logs
-	docker compose logs -f api
+	$(DOCKER_COMPOSE) logs -f api
 
 logs-ai: ## Tail AI service logs
-	docker compose logs -f ai-service
+	$(DOCKER_COMPOSE) logs -f ai-service
 
 logs-worker: ## Tail worker logs
-	docker compose logs -f worker
+	$(DOCKER_COMPOSE) logs -f worker
 
 build: ## Rebuild all Docker images
-	docker compose build --no-cache
+	$(DOCKER_COMPOSE) build --no-cache
 
 clean: ## Stop services and remove volumes, __pycache__ and MCP logs (WARNING: deletes nothing in data/)
-	docker compose down --remove-orphans
+	$(DOCKER_COMPOSE) down --remove-orphans
 	find . -type d -name __pycache__ -prune -exec rm -rf {} +
 	find . -type d -name .playwright-mcp -prune -exec rm -rf {} +
 	find . -type f -name '*.py[co]' -delete
@@ -120,33 +121,33 @@ restore: ## Restore from a backup file: make restore FILE=joidy-backup-xxx.tar.g
 	@echo "✓ Restored from $(FILE)"
 
 shell-api: ## Open a shell in the api container
-	docker compose exec api bash
+	$(DOCKER_COMPOSE) exec api bash
 
 shell-worker: ## Open a shell in the worker container
-	docker compose exec worker bash
+	$(DOCKER_COMPOSE) exec worker bash
 
 migrate: ## Run Alembic migrations up to head in api container
-	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm api sh -c "cd /app && alembic -c /app/alembic.ini upgrade head"
+	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml run --rm api sh -c "cd /app && alembic -c /app/alembic.ini upgrade head"
 
 db-health: ## Verify migration head and required core tables
-	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm api sh -c "cd /app && alembic -c /app/alembic.ini current && PYTHONPATH=/app python scripts/verify_db_health.py"
+	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml run --rm api sh -c "cd /app && alembic -c /app/alembic.ini current && PYTHONPATH=/app python scripts/verify_db_health.py"
 
 test-api: ## Run all API unit tests via pytest
-	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm api sh -c "cd /app && pytest --cov --cov-report=term-missing"
+	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml run --rm api sh -c "cd /app && pytest --cov --cov-report=term-missing"
 
 test-frontend: ## Run frontend unit tests (vitest) inside Docker
-	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm frontend npm run test:run
+	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml run --rm frontend npm run test:run
 
 test-frontend-e2e: ## Run frontend E2E tests (Playwright) — requires running stack
-	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm frontend npx playwright test
+	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml run --rm frontend npx playwright test
 
 test-frontend-check: ## Run frontend typechecking (svelte-check) inside Docker
-	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm frontend npm run check
+	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml run --rm frontend npm run check
 
 test: test-api test-frontend test-frontend-check ## Run all test suites (API + Frontend + typecheck)
 
 lint-api: ## Check syntax of all Python services via Docker (compileall)
-	docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm api python -m compileall -q /app/api /app/ai-service /app/worker || (echo "Syntax errors found"; exit 1)
+	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml run --rm api python -m compileall -q /app/api /app/ai-service /app/worker || (echo "Syntax errors found"; exit 1)
 
 lint: lint-api ## Run all linters and code checkers
 
@@ -187,14 +188,24 @@ doctor: ## Verify all prerequisites are met
 	@echo "Checking prerequisites..."
 	@echo ""
 	@EXIT_CODE=0; \
-	if ! command -v docker &> /dev/null; then \
-		echo "$(RED)✗$(NC) Docker not found"; \
-		EXIT_CODE=1; \
-	else \
+	if command -v docker &> /dev/null; then \
 		echo "$(GREEN)✓$(NC) Docker: $$(docker --version | head -n1)"; \
-	fi; \
-	if ! (command -v docker compose &> /dev/null || docker compose version &> /dev/null); then \
-		echo "$(RED)✗$(NC) Docker Compose not found"; \
+		if command -v docker-compose &> /dev/null || docker compose version &> /dev/null; then \
+			echo "$(GREEN)✓$(NC) Docker Compose: available"; \
+		else \
+			echo "$(RED)✗$(NC) Docker Compose not found"; \
+			EXIT_CODE=1; \
+		fi; \
+	elif command -v podman &> /dev/null; then \
+		echo "$(GREEN)✓$(NC) Podman: $$(podman --version | head -n1)"; \
+		if command -v podman-compose &> /dev/null || podman compose version &> /dev/null; then \
+			echo "$(GREEN)✓$(NC) Podman Compose: available"; \
+		else \
+			echo "$(RED)✗$(NC) Podman Compose not found"; \
+			EXIT_CODE=1; \
+		fi; \
+	else \
+		echo "$(RED)✗$(NC) Neither Docker nor Podman found"; \
 		EXIT_CODE=1; \
 	fi; \
 	if ! command -v make &> /dev/null; then \
@@ -277,18 +288,17 @@ start: ## 🚀 Quick start: setup + start all services
 	@echo ""
 	@echo "── $(BLUE)Joidy Quick Start$(NC) ────────────────────────────────"
 	@echo ""
-	@if ! command -v docker &> /dev/null; then \
-		echo "$(RED)Docker is not installed.$(NC)"; \
+	@if ! command -v docker &> /dev/null && ! command -v podman &> /dev/null; then \
+		echo "$(RED)Neither Docker nor Podman is installed.$(NC)"; \
 		echo ""; \
-		echo "$(YELLOW)Please install Docker first:$(NC)"; \
-		echo "  macOS:  https://docs.docker.com/desktop/install/mac-install/"; \
-		echo "  Linux:  https://docs.docker.com/engine/install/"; \
-		echo "  Windows: Use 'start.ps1' script instead"; \
+		echo "$(YELLOW)Please install Docker or Podman first:$(NC)"; \
+		echo "  Docker:  https://docs.docker.com/engine/install/"; \
+		echo "  Podman:  https://podman.io/docs/installation"; \
 		echo ""; \
 		exit 1; \
 	fi
-	@if ! (command -v docker compose &> /dev/null || docker compose version &> /dev/null); then \
-		echo "$(RED)Docker Compose is not available.$(NC)"; \
+	@if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null && ! command -v podman-compose &> /dev/null && ! podman compose version &> /dev/null; then \
+		echo "$(RED)Container Compose tool is not available.$(NC)"; \
 		exit 1; \
 	fi
 	@echo "Step 1: Setting up environment..."
@@ -343,7 +353,7 @@ start: ## 🚀 Quick start: setup + start all services
 	fi
 	@echo ""
 	@echo "Step 2: Starting services..."
-	@docker compose -p $(COMPOSE_PROJECT) -f docker-compose.yml -f docker-compose.dev.yml up --build -d
+	@$(DOCKER_COMPOSE) -p $(COMPOSE_PROJECT) -f docker-compose.yml -f docker-compose.dev.yml up --build -d
 	@echo ""
 	@echo "── $(GREEN)Joidy is running!$(NC) ───────────────────────────────"
 	@echo ""

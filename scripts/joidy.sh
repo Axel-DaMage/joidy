@@ -50,6 +50,20 @@ cd "$PROJECT_DIR"
 # Services that are stopped during hibernation
 HIBERNATE_SERVICES="ai-service worker"
 
+# Detect container engine
+if command -v docker-compose &>/dev/null; then
+  DOCKER_CMD="docker-compose"
+elif command -v docker &>/dev/null; then
+  DOCKER_CMD="docker compose"
+elif command -v podman-compose &>/dev/null; then
+  DOCKER_CMD="podman-compose"
+elif command -v podman &>/dev/null; then
+  DOCKER_CMD="podman compose"
+else
+  echo -e "${RED}✗ Error: Neither docker nor podman was found in PATH.${NC}" >&2
+  exit 1
+fi
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -106,7 +120,7 @@ print_access_url() {
 
 cmd_up() {
   print_status "Starting Joidy services..."
-  docker compose up -d
+  $DOCKER_CMD up -d
   print_status "Waiting for services to stabilize..."
   sleep 5
   cmd_status
@@ -115,7 +129,7 @@ cmd_up() {
 
 cmd_down() {
   print_status "Stopping all Joidy services..."
-  docker compose down
+  $DOCKER_CMD down
   print_ok "All services stopped."
 }
 
@@ -123,8 +137,8 @@ cmd_sleep() {
   print_status "Hibernating heavy services (ai-service, worker)..."
   for svc in $HIBERNATE_SERVICES; do
     # Check if the service is running by looking at docker compose ps output
-    if docker compose ps "$svc" 2>/dev/null | grep -q "$svc"; then
-      docker compose stop "$svc"
+    if $DOCKER_CMD ps "$svc" 2>/dev/null | grep -q "$svc"; then
+      $DOCKER_CMD stop "$svc"
       print_ok "Stopped $svc"
     else
       print_warn "$svc is already stopped"
@@ -139,11 +153,11 @@ cmd_wake() {
   print_status "Waking heavy services from hibernation..."
   for svc in $HIBERNATE_SERVICES; do
     # Check if the service is NOT running (use -a to include stopped containers)
-    if docker compose ps -a "$svc" 2>/dev/null | grep -q "$svc"; then
-      if docker compose ps "$svc" 2>/dev/null | grep -q "$svc"; then
+    if $DOCKER_CMD ps -a "$svc" 2>/dev/null | grep -q "$svc"; then
+      if $DOCKER_CMD ps "$svc" 2>/dev/null | grep -q "$svc"; then
         print_warn "$svc is already running"
       else
-        docker compose start "$svc"
+        $DOCKER_CMD start "$svc"
         print_ok "Started $svc"
       fi
     else
@@ -156,7 +170,7 @@ cmd_wake() {
 
 cmd_restart() {
   print_status "Restarting all Joidy services..."
-  docker compose restart
+  $DOCKER_CMD restart
   print_ok "All services restarted."
   print_access_url
 }
@@ -164,15 +178,15 @@ cmd_restart() {
 cmd_status() {
   print_status "Joidy service status:"
   echo ""
-  docker compose ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || docker compose ps
+  $DOCKER_CMD ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || $DOCKER_CMD ps
 }
 
 cmd_logs() {
   local svc="${1:-}"
   if [ -n "$svc" ]; then
-    docker compose logs -f "$svc"
+    $DOCKER_CMD logs -f "$svc"
   else
-    docker compose logs -f
+    $DOCKER_CMD logs -f
   fi
 }
 

@@ -47,6 +47,46 @@ Set-Location $ProjectDir
 
 $HIBERNATE_SERVICES = @("ai-service", "worker")
 
+function Test-Command($Command) {
+  $null = Get-Command $Command -ErrorAction SilentlyContinue
+  return $?
+}
+
+$script:containerComposeCmd = "docker compose"
+
+if (Test-Command "docker") {
+  if (Test-Command "docker-compose") {
+    $script:containerComposeCmd = "docker-compose"
+  } else {
+    $script:containerComposeCmd = "docker compose"
+  }
+} elseif (Test-Command "podman") {
+  if (Test-Command "podman-compose") {
+    $script:containerComposeCmd = "podman-compose"
+  } else {
+    $script:containerComposeCmd = "podman compose"
+  }
+} else {
+  Write-Host "✗ Neither Docker nor Podman is installed or in PATH" -ForegroundColor Red
+  exit 1
+}
+
+function Invoke-ComposeCommand {
+  param(
+    [Parameter(ValueFromRemainingArguments = $true)]
+    [string[]]$ArgsList
+  )
+  if ($script:containerComposeCmd -eq "docker compose") {
+    docker compose @ArgsList
+  } elseif ($script:containerComposeCmd -eq "docker-compose") {
+    docker-compose @ArgsList
+  } elseif ($script:containerComposeCmd -eq "podman compose") {
+    podman compose @ArgsList
+  } elseif ($script:containerComposeCmd -eq "podman-compose") {
+    podman-compose @ArgsList
+  }
+}
+
 function Write-Status($msg) { Write-Host "[$(Get-Date -Format 'HH:mm:ss')] $msg" -ForegroundColor Blue }
 function Write-Ok($msg)     { Write-Host "✓ $msg" -ForegroundColor Green }
 function Write-Warn($msg)   { Write-Host "⚠ $msg" -ForegroundColor Yellow }
@@ -85,7 +125,7 @@ function Write-AccessUrl {
 
 function Invoke-Up {
   Write-Status "Starting Joidy services..."
-  docker compose up -d
+  Invoke-ComposeCommand up -d
   Write-Status "Waiting for services to stabilize..."
   Start-Sleep -Seconds 5
   Invoke-Status
@@ -94,16 +134,16 @@ function Invoke-Up {
 
 function Invoke-Down {
   Write-Status "Stopping all Joidy services..."
-  docker compose down
+  Invoke-ComposeCommand down
   Write-Ok "All services stopped."
 }
 
 function Invoke-Sleep {
   Write-Status "Hibernating heavy services (ai-service, worker)..."
   foreach ($svc in $HIBERNATE_SERVICES) {
-    $running = docker compose ps $svc 2>$null
+    $running = Invoke-ComposeCommand ps $svc 2>$null
     if ($running -match $svc) {
-      docker compose stop $svc
+      Invoke-ComposeCommand stop $svc
       Write-Ok "Stopped $svc"
     } else {
       Write-Warn "$svc is already stopped"
@@ -117,13 +157,13 @@ function Invoke-Sleep {
 function Invoke-Wake {
   Write-Status "Waking heavy services from hibernation..."
   foreach ($svc in $HIBERNATE_SERVICES) {
-    $all = docker compose ps -a $svc 2>$null
+    $all = Invoke-ComposeCommand ps -a $svc 2>$null
     if ($all -match $svc) {
-      $running = docker compose ps $svc 2>$null
+      $running = Invoke-ComposeCommand ps $svc 2>$null
       if ($running -match $svc) {
         Write-Warn "$svc is already running"
       } else {
-        docker compose start $svc
+        Invoke-ComposeCommand start $svc
         Write-Ok "Started $svc"
       }
     } else {
@@ -136,7 +176,7 @@ function Invoke-Wake {
 
 function Invoke-Restart {
   Write-Status "Restarting all Joidy services..."
-  docker compose restart
+  Invoke-ComposeCommand restart
   Write-Ok "All services restarted."
   Write-AccessUrl
 }
@@ -144,14 +184,14 @@ function Invoke-Restart {
 function Invoke-Status {
   Write-Status "Joidy service status:"
   Write-Host ""
-  docker compose ps
+  Invoke-ComposeCommand ps
 }
 
 function Invoke-Logs {
   if ($Service) {
-    docker compose logs -f $Service
+    Invoke-ComposeCommand logs -f $Service
   } else {
-    docker compose logs -f
+    Invoke-ComposeCommand logs -f
   }
 }
 
