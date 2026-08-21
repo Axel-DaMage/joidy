@@ -7,6 +7,9 @@
   export let getKey: (item: any, index: number) => any = (item, i) => item.id ?? i;
   export let scrollTop = 0;
   export let onScrollChange: (scrollTop: number) => void = () => {};
+  // Fired when the user scrolls within `bottomThreshold` pixels of the end.
+  export let onNearBottom: () => void = () => {};
+  export let bottomThreshold = 300;
 
   let containerEl: HTMLElement;
   let containerHeight = 400;
@@ -75,6 +78,10 @@
     const target = e.target as HTMLElement;
     scrollTop = target.scrollTop;
     onScrollChange(scrollTop);
+    // Infinite scroll: fire onNearBottom when close to the bottom.
+    if (totalHeight - scrollTop - containerHeight < bottomThreshold) {
+      onNearBottom();
+    }
   }
 
   // Sync the container's scroll position when scrollTop is changed

@@ -627,6 +627,25 @@
     if (viewMode === 'tree') treeScrollTop = listScrollEl.scrollTop;
     else listScrollTop = listScrollEl.scrollTop;
     persistNotesPrefs();
+    // Infinite scroll for non-virtualized list mode.
+    maybeLoadMore();
+  }
+
+  // Infinite scroll: load next page when the user is near the bottom.
+  // Called from onListScroll (non-virtualized) and onNearBottom (virtualized).
+  function maybeLoadMore() {
+    if (viewMode !== 'list' || search || $loadingMore || !$hasMoreNotes) return;
+    if (listScrollEl) {
+      const { scrollTop, scrollHeight, clientHeight } = listScrollEl;
+      if (scrollHeight - scrollTop - clientHeight < 300) {
+        loadMore();
+      }
+    }
+  }
+
+  function handleNearBottom() {
+    if (viewMode !== 'list' || search || $loadingMore || !$hasMoreNotes) return;
+    loadMore();
   }
 
   // Called by VirtualList when its internal scroll position changes.
@@ -1188,6 +1207,7 @@
             itemHeight={52}
             bind:scrollTop={virtualScrollTop}
             onScrollChange={onVirtualScrollChange}
+            onNearBottom={handleNearBottom}
             let:item
             let:index
           >
@@ -1216,10 +1236,8 @@
         {/if}
       {/if}
 
-      {#if !$notesLoading && $hasMoreNotes && !search}
-        <button class="load-more-btn" onclick={() => loadMore()} disabled={$loadingMore}>
-          {$loadingMore ? $t('notesPage.loading') : $t('notesPage.loadMore')}
-        </button>
+      {#if $loadingMore}
+        <div class="loading-more-indicator">{$t('notesPage.loading')}</div>
       {/if}
     </div>
   </aside>
@@ -1803,26 +1821,12 @@
     font-size: 12px;
   }
 
-  .load-more-btn {
-    display: block;
-    width: 100%;
-    padding: 10px 12px;
-    margin-top: 4px;
-    border: none;
-    border-top: 1px solid var(--border);
-    background: transparent;
-    color: var(--text-muted);
-    font-size: 12px;
-    cursor: pointer;
+  .loading-more-indicator {
     text-align: center;
-  }
-  .load-more-btn:hover:not(:disabled) {
-    color: var(--text);
-    background: var(--hover-bg, rgba(128, 128, 128, 0.08));
-  }
-  .load-more-btn:disabled {
-    opacity: 0.6;
-    cursor: default;
+    padding: 10px 12px;
+    font-size: 12px;
+    color: var(--text-muted);
+    font-family: var(--mono-font, monospace);
   }
 
   /* ── Tree rows ── */
