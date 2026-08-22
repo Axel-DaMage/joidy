@@ -3,7 +3,10 @@ Description=Joidy Docker Services
 After=docker.service
 Requires=docker.service
 
-# Edit the paths below to match your Joidy checkout location, then:
+# The Joidy install path is read from /etc/joidy/path (written by the AUR
+# package). If the file is missing, the
+# fallback below assumes a git checkout at ~/joidy — edit it to match your
+# setup, then:
 #   cp joidy.service ~/.config/systemd/user/
 #   systemctl --user daemon-reload
 #   systemctl --user enable --now joidy
@@ -11,8 +14,7 @@ Requires=docker.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-WorkingDirectory=%h/Documents/Repos/Joidy
-ExecStart=/bin/bash %h/Documents/Repos/Joidy/scripts/joidy_startup.sh
+ExecStart=/bin/bash -c 'dir=$(cat /etc/joidy/path 2>/dev/null || echo "%h/joidy"); cd "$dir" && exec "$dir/scripts/joidy_startup.sh"'
 StandardOutput=journal
 StandardError=journal
 

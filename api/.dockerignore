@@ -2,9 +2,6 @@
 .gitignore
 .env
 data/
-node_modules/
-frontend/node_modules/
-frontend/.svelte-kit/
 __pycache__/
 *.pyc
 *.pyo
@@ -14,7 +11,11 @@ env/
 venv/
 .venv/
 .pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
 tests/
 .vscode/
 .idea/
 *.log
+README.md

@@ -1,9 +1,11 @@
-FROM node:22-slim AS base
+ARG NODE_VERSION=22
+
+FROM node:${NODE_VERSION}-slim AS base
 WORKDIR /app
 
 FROM base AS deps
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm npm ci
 RUN chown -R node:node /app
 
 FROM deps AS development
@@ -26,9 +28,9 @@ FROM base AS production
 COPY --from=build --chown=node:node /app/build ./build
 COPY --from=build --chown=node:node /app/package.json .
 COPY --from=build --chown=node:node /app/package-lock.json .
-RUN chown node:node /app
+RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev --ignore-scripts
+RUN chown -R node:node /app
 USER node
-RUN npm ci --omit=dev --ignore-scripts
 ENV NODE_ENV=production
 EXPOSE 3000
 CMD ["node", "build"]
