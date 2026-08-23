@@ -48,7 +48,7 @@
     "vitest": "^4.1.10"
   },
   "dependencies": {
-    "@tiptap/core": "^3.30.0",
+    "@tiptap/core": "^3.30.2",
     "@tiptap/extension-code-block-lowlight": "^3.30.0",
     "@tiptap/extension-image": "^3.30.0",
     "@tiptap/extension-link": "^3.30.0",
