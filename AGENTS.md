@@ -170,3 +170,24 @@ joidy up
 - The frontend production image requires `--target production` so the Dockerfile runs `npm run build` and serves the pre-compiled bundle with `node build` (SSR via `@sveltejs/adapter-node`).
 - Data volumes (`postgres_data`, `data/`) are preserved across rebuilds — only the images and containers are recreated. No user data is lost.
 - If only one service changed, you may rebuild just that image and `docker compose up -d --force-recreate <service>` to save time, but verify the other services are still on compatible images.
+
+## CI Policy
+
+GitHub Actions CI runs automatically for **all** pull requests, including forks and first-time contributors — no manual "Approve and run workflows" click is required (#811).
+
+### Settings (configured in repo Settings → Actions → General)
+
+- **Fork pull request workflows**: "Run workflows from fork pull requests **without approval**".
+  - This setting has no REST API endpoint for public personal repositories; it must be set in the GitHub UI. Re-verify it after repository transfers or visibility changes.
+- **Workflow permissions**: default `read` (least privilege), verified via `gh api repos/Axel-DaMage/joidy/actions/permissions/workflow`.
+- **Allow GitHub Actions to create/approve PRs**: disabled (`can_approve_pull_request_reviews: false`).
+
+### Workflow audit (safe for fork PRs)
+
+The workflows that trigger on `pull_request` (`ci.yml`, `worker-tests.yml`) run in the **fork's context** — they have no access to repository secrets. This is the safe trigger for untrusted code.
+
+Workflows that use secrets (`release.yml`, `publish.yml`) only trigger on `push: main`, `release: [published]`, or `workflow_dispatch` — never on pull requests. No workflow uses `pull_request_target` with secrets, so there is no injection vector from fork PRs.
+
+### Branch protection (follow-up)
+
+`development` should require status checks to pass before merge (all CI jobs: API Lint & Typecheck, Frontend Typecheck, Docker Build, Worker Tests) and require branches to be up to date. Linear history is not required (squash merge is fine).
