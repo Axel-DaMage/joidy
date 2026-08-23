@@ -27,6 +27,13 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      # TipTap packages share strict peer deps (e.g. @tiptap/pm must match
+      # @tiptap/core exactly). Bumping them individually causes ERESOLVE
+      # conflicts in CI. Group them so they always update together.
+      tiptap:
+        patterns:
+          - "@tiptap/*"
 
   # Docker — compose files
   - package-ecosystem: docker
