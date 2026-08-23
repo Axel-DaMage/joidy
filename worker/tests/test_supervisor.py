@@ -97,6 +97,32 @@ class SupervisorTest(unittest.TestCase):
         self.assertIn("t", snap)
         self.assertEqual(snap["t"]["state"], "stopped")
 
+    def test_not_marked_crashed_during_retry(self):
+        """During retry backoff the task must stay 'running', not 'crashed' —
+        otherwise /health oscillates 200/503 and the Docker healthcheck may
+        catch a 503 snapshot and mark the container unhealthy while it is
+        actively recovering (#815)."""
+        states_during_retry = []
+
+        async def factory():
+            raise RuntimeError("boom")
+
+        async def fake_sleep(d):
+            # Capture the state at the moment we enter the backoff sleep —
+            # this is when /health would be polled by Docker.
+            states_during_retry.append(task_status.snapshot().get("t", {}).get("state"))
+
+        with patch.object(worker_main.asyncio, "sleep", side_effect=fake_sleep):
+            asyncio.run(_supervise("t", factory))
+
+        # MAX_RESTARTS sleep calls happened; none should have seen "crashed".
+        self.assertEqual(len(states_during_retry), MAX_RESTARTS)
+        for state in states_during_retry:
+            self.assertNotEqual(state, "crashed")
+        # After giving up, the final state IS crashed.
+        snap = task_status.snapshot()
+        self.assertEqual(snap["t"]["state"], "crashed")
+
     def test_backoff_grows_exponentially_and_caps(self):
         delays = []
 

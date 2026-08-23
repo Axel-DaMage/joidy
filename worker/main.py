@@ -70,10 +70,9 @@ async def _supervise(name: str, coro_factory) -> None:
             except Exception as exc:
                 if restarts >= MAX_RESTARTS:
                     logger.exception(
-                        "[worker] Task %s crashed %d times in a row; giving up: %s",
+                        "[worker] Task %s crashed %d times in a row; giving up",
                         name,
                         restarts + 1,
-                        exc,
                     )
                     mark_crashed(name, exc)
                     return
@@ -87,9 +86,13 @@ async def _supervise(name: str, coro_factory) -> None:
                     backoff,
                     exc_info=True,
                 )
-                # Mark crashed transiently so /health can see the retry in
-                # flight, then flip back to running before the next attempt.
-                mark_crashed(name, exc)
+                # Do NOT mark crashed during retry — only mark it after
+                # MAX_RESTARTS consecutive failures (above). Marking crashed
+                # here would make /health oscillate between 200/503 during
+                # the backoff window, and the Docker healthcheck (10s
+                # interval, 5 retries) could catch a 503 snapshot and mark
+                # the container unhealthy while it is actively recovering
+                # — defeating the purpose of the retry (#815).
                 try:
                     await asyncio.sleep(backoff)
                 except asyncio.CancelledError:
