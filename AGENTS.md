@@ -164,6 +164,7 @@ joidy up
 ```
 
 ### Rules
+- Dockerfiles use BuildKit cache mounts (`RUN --mount=type=cache`) — the host needs the `docker-buildx` package (Arch: `sudo pacman -S docker-buildx`) for local `docker build`. CI uses `docker/setup-buildx-action`, so no change needed there.
 - **Never** run `joidy up` (or `docker compose up -d`) immediately after a pull without rebuilding first. The only exception is a pull that touches **only** docs, `.md` files, or files outside the 4 service directories.
 - **Never** use `docker compose -f docker-compose.yml -f docker-compose.dev.yml build` to rebuild production images — the dev overlay forces the `development` Dockerfile target (Vite dev server), which is wrong for production and bakes dev-only config (e.g. `vite.config.ts` HMR host) into the image.
 - The frontend production image requires `--target production` so the Dockerfile runs `npm run build` and serves the pre-compiled bundle with `node build` (SSR via `@sveltejs/adapter-node`).

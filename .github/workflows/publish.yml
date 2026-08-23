@@ -95,7 +95,7 @@ jobs:
             echo "arch=('any')"
             echo 'url="https://joidy-web.vercel.app"'
             echo "license=('GPL3')"
-            echo "depends=('docker' 'docker-compose')"
+            echo "depends=('docker')"
             echo 'source=("https://github.com/Axel-DaMage/joidy/archive/v${_tag}.tar.gz")'
             echo "sha256sums=('${SHA}')"
             echo ""
@@ -116,7 +116,6 @@ jobs:
             echo "arch = any"
             echo "license = GPL3"
             echo "depends = docker"
-            echo "depends = docker-compose"
             echo "source = https://github.com/Axel-DaMage/joidy/archive/v${VERSION}.tar.gz"
             echo "sha256sums = ${SHA}"
             echo "pkgname = joidy"
