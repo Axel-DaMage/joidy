@@ -22,6 +22,7 @@ CONFIG_KEYS = {
     "telegram_allowed_user_id": "TELEGRAM_ALLOWED_USER_ID",
     "secret_key": "SECRET_KEY",
     "app_env": "APP_ENV",
+    "ai_service_enabled": "AI_SERVICE_ENABLED",
 }
 
 PUBLIC_KEYS = {
@@ -36,6 +37,7 @@ PUBLIC_KEYS = {
     "telegram_allowed_user_id": False,
     "secret_key": False,
     "app_env": True,
+    "ai_service_enabled": True,
 }
 
 

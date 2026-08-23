@@ -38,6 +38,7 @@ services:
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-joidy}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-joidy}
       - AI_SERVICE_URL=http://ai-service:8002
+      - AI_SERVICE_ENABLED=${AI_SERVICE_ENABLED:-false}
       - WORKER_URL=http://worker:8001
       - APP_ENV=${APP_ENV:-production}
       - UPLOAD_DIR=/data/uploads
@@ -66,6 +67,11 @@ services:
 
   ai-service:
     image: ${DOCKER_REGISTRY:-d4mag3}/joidy-ai-service:${IMAGE_TAG:-latest}
+    # In production, the AI service is opt-in via Docker Compose profiles.
+    # It only starts with `docker compose --profile ai up`. In development,
+    # the dev overlay clears this profile so it always starts with `make dev`.
+    # See AGENTS.md § "AI Service" for details.
+    profiles: ["ai"]
     ports:
       - "${AI_SERVICE_PORT:-8002}:8002"
     volumes:
@@ -101,7 +107,6 @@ services:
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-joidy}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-joidy}
       - API_URL=http://api:8000
-      - AI_SERVICE_URL=http://ai-service:8002
       - VAULT_PATH=/vault
       - APP_ENV=${APP_ENV:-production}
       - PYTHONUNBUFFERED=1

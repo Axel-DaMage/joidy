@@ -24,6 +24,8 @@ def _session_or_none(db: Session | None) -> Session:
 
 async def _embeddings_available() -> bool:
     """Check (cached) whether the ai-service can produce embeddings."""
+    if not settings.ai_service_enabled:
+        return False
     global _embedding_health_cache
     now = time.monotonic()
     if _embedding_health_cache is not None and now - _embedding_health_cache[1] < _EMBEDDING_HEALTH_TTL:

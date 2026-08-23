@@ -39,7 +39,7 @@ from routers import (
 )
 from routers.integrations import github, google, spotify, strava
 from services.auth_service import get_current_user
-from fastapi import Depends
+from fastapi import Depends, HTTPException
 from services.response_cache import get_cache_stats
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -145,6 +145,11 @@ app = FastAPI(
         "- **Graph**: Tag co-occurrence knowledge graph\n"
     ),
     lifespan=lifespan,
+    # Disable auto-docs in production for security (reduces attack surface).
+    # Docs are still available in development via /docs and /redoc.
+    docs_url="/docs" if settings.app_env != "production" else None,
+    redoc_url="/redoc" if settings.app_env != "production" else None,
+    openapi_url="/openapi.json" if settings.app_env != "production" else None,
     openapi_tags=[
         {"name": "notes", "description": "Note CRUD, tags, WikiLinks, and AI embeddings"},
         {"name": "tags", "description": "Tag management and knowledge graph"},
@@ -296,25 +301,27 @@ async def health_ready():
     except Exception as e:
         checks["cache"] = f"error: {str(e)[:50]}"
 
-    # AI service check — short timeout to avoid blocking the health probe
-    # while still detecting real outages (the previous implementation was a
-    # hardcoded "ok" stub that masked a broken ai-service).
-    try:
-        import httpx
-        async with httpx.AsyncClient(timeout=2.0) as client:
-            r = await client.get(f"{settings.ai_service_url}/health")
-            if r.status_code == 200:
-                body = r.json()
-                # Distinguish "alive" from "fully functional": if the ai-service
-                # reports "degraded" (e.g. configured provider not available),
-                # surface that here too.
-                checks["ai_service"] = body.get("status", "ok")
-            else:
-                checks["ai_service"] = f"error: HTTP {r.status_code}"
-    except Exception as e:
-        checks["ai_service"] = f"unavailable: {str(e)[:40]}"
+    # AI service check — skipped entirely when AI_SERVICE_ENABLED=false
+    # (production without AI). Previously this reported "degraded" when the
+    # ai-service was down, which caused Docker healthcheck failures even
+    # though the core app was fully functional.
+    if not settings.ai_service_enabled:
+        checks["ai_service"] = "disabled"
+    else:
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=2.0) as client:
+                r = await client.get(f"{settings.ai_service_url}/health")
+                if r.status_code == 200:
+                    body = r.json()
+                    checks["ai_service"] = body.get("status", "ok")
+                else:
+                    checks["ai_service"] = f"error: HTTP {r.status_code}"
+        except Exception as e:
+            checks["ai_service"] = f"unavailable: {str(e)[:40]}"
 
-    all_ok = all(v == "ok" for v in checks.values())
+    # "disabled" is a valid state — only "ok" and "disabled" count as healthy
+    all_ok = all(v in ("ok", "disabled") for v in checks.values())
     return {
         "status": "ready" if all_ok else "degraded",
         "checks": checks,
@@ -329,7 +336,13 @@ def health_cache():
 
 @app.get("/debug", dependencies=[Depends(get_current_user)])
 def debug_info():
-    """Debug endpoint with safe diagnostic information."""
+    """Debug endpoint with safe diagnostic information.
+
+    Disabled in production — exposes internal counts and cache stats that
+    are useful for development but not for a public-facing deployment.
+    """
+    if settings.app_env == "production":
+        raise HTTPException(status_code=404, detail="Not Found")
     import sys
     from datetime import datetime, timezone
 

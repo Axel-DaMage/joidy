@@ -15,6 +15,16 @@ from datetime import datetime, date, timedelta, timezone
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
+
+def _ai_disabled_response(endpoint: str) -> dict:
+    """Standard response when AI_SERVICE_ENABLED=false.
+
+    Returns a 200 with a clear 'disabled' status so the frontend can
+    distinguish 'intentionally off' from 'service crashed'.
+    """
+    return {"status": "disabled", "ai_enabled": False, "endpoint": endpoint}
+
+
 class ClassifyRequest(BaseModel):
     note_id: int
     content: str
@@ -22,6 +32,8 @@ class ClassifyRequest(BaseModel):
 
 @router.post("/classify")
 async def classify(req: ClassifyRequest):
+    if not settings.ai_service_enabled:
+        return {**_ai_disabled_response("classify"), "note_id": req.note_id, "suggestions": []}
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
             headers = {"X-Request-ID": get_correlation_id()}
@@ -39,6 +51,8 @@ async def classify(req: ClassifyRequest):
 
 @router.get("/usage")
 async def usage():
+    if not settings.ai_service_enabled:
+        return {**_ai_disabled_response("usage"), "estimated_cost_usd": 0}
     async with httpx.AsyncClient(timeout=10.0) as client:
         try:
             headers = {"X-Request-ID": get_correlation_id()}
@@ -54,6 +68,8 @@ async def usage():
 @router.post("/cluster")
 async def cluster_notes(eps: float = 0.3, min_samples: int = 3, max_notes: int = 500):
     """Cluster notes by semantic similarity via the ai-service (#393)."""
+    if not settings.ai_service_enabled:
+        return {**_ai_disabled_response("cluster"), "clusters": [], "total_notes": 0}
     async with httpx.AsyncClient(timeout=60.0) as client:
         try:
             headers = {"X-Request-ID": get_correlation_id()}
@@ -80,6 +96,12 @@ async def daily_recap(
     Gathers notes created, XP gained, goals completed, and focus time,
     then asks the ai-service to generate a natural-language summary.
     """
+    if not settings.ai_service_enabled:
+        return {
+            **_ai_disabled_response("daily-recap"),
+            "recap": "El servicio de IA está deshabilitado.",
+            "suggestions": [],
+        }
     if target_date is None:
         target_date = get_local_today().isoformat()
 
@@ -214,6 +236,12 @@ async def chat(
     /chat endpoint. The response is returned without persisting chat history
     on the backend (history lives in the frontend sessionStorage).
     """
+    if not settings.ai_service_enabled:
+        return {
+            **_ai_disabled_response("chat"),
+            "response": "El asistente de IA está deshabilitado en este modo.",
+            "suggestions": [],
+        }
     context = _gather_chat_context(db)
 
     async with httpx.AsyncClient(timeout=60.0) as client:
