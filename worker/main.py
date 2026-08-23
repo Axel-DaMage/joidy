@@ -20,6 +20,17 @@ logger = logging.getLogger(__name__)
 SHUTDOWN_TIMEOUT = 15.0
 HEARTBEAT_INTERVAL = 30.0
 
+# Restart policy for crashed background tasks (#815). A cold-start race
+# (e.g. the API still running migrations) used to crash vault_watcher once
+# and leave it dead forever — the worker stayed unhealthy until a manual
+# `docker compose restart worker`. The supervisor now restarts the task
+# with exponential backoff up to MAX_RESTARTS times; only after that many
+# consecutive crashes does it surface as unhealthy (current behavior), so
+# a permanently broken task is still visible instead of looping silently.
+MAX_RESTARTS = 5
+INITIAL_BACKOFF = 1.0
+MAX_BACKOFF = 60.0
+
 
 async def _heartbeat(name: str) -> None:
     """Refresh the last-seen-alive timestamp for ``name`` while it runs."""
@@ -28,26 +39,64 @@ async def _heartbeat(name: str) -> None:
         await asyncio.sleep(HEARTBEAT_INTERVAL)
 
 
-async def _supervise(name: str, coro) -> None:
-    """Run a background task, surfacing crashes instead of swallowing them.
+async def _supervise(name: str, coro_factory) -> None:
+    """Run a background task with restart-on-crash semantics.
 
     Replaces the old ``asyncio.gather(..., return_exceptions=True)`` pattern
     (#644): exceptions are logged at ERROR level and recorded in the shared
-    task-status registry so ``/health`` reports ``degraded``. The exception is
-    not re-raised so a single crashed task does not take down its sibling —
-    the crash is surfaced via the health endpoint and the ERROR log instead.
+    task-status registry so ``/health`` reports ``degraded``.
+
+    ``coro_factory`` is a zero-arg callable returning a fresh coroutine each
+    call — a coroutine cannot be awaited twice, so a factory is required to
+    support restarts. On crash, the task is restarted with exponential
+    backoff (1s, 2s, 4s, ... capped at 60s) up to ``MAX_RESTARTS`` times
+    (#815). A task that crashes that many times in a row is marked crashed
+    (surfaced via /health) instead of looping forever. Clean completion
+    exits immediately; ``CancelledError`` (graceful shutdown) propagates.
     """
     record_start(name)
     heartbeat = asyncio.create_task(_heartbeat(name), name=f"{name}_heartbeat")
+    restarts = 0
+    backoff = INITIAL_BACKOFF
     try:
-        await coro
-    except asyncio.CancelledError:
-        mark_stopped(name)
-        raise
-    except Exception as exc:
-        logger.error("[worker] Task %s crashed: %s", name, exc, exc_info=True)
-        mark_crashed(name, exc)
-        return
+        while True:
+            try:
+                await coro_factory()
+                # Clean exit — task finished on its own. No restart.
+                return
+            except asyncio.CancelledError:
+                mark_stopped(name)
+                raise
+            except Exception as exc:
+                if restarts >= MAX_RESTARTS:
+                    logger.exception(
+                        "[worker] Task %s crashed %d times in a row; giving up: %s",
+                        name,
+                        restarts + 1,
+                        exc,
+                    )
+                    mark_crashed(name, exc)
+                    return
+                restarts += 1
+                logger.warning(
+                    "[worker] Task %s crashed (%d/%d): %s — restarting in %.1fs",
+                    name,
+                    restarts,
+                    MAX_RESTARTS,
+                    exc,
+                    backoff,
+                    exc_info=True,
+                )
+                # Mark crashed transiently so /health can see the retry in
+                # flight, then flip back to running before the next attempt.
+                mark_crashed(name, exc)
+                try:
+                    await asyncio.sleep(backoff)
+                except asyncio.CancelledError:
+                    mark_stopped(name)
+                    raise
+                backoff = min(backoff * 2, MAX_BACKOFF)
+                record_start(name)
     finally:
         heartbeat.cancel()
         with contextlib.suppress(asyncio.CancelledError):
@@ -63,8 +112,8 @@ async def main():
     start_metrics_server()
 
     tasks = [
-        asyncio.create_task(_supervise("vault_watcher", watch_vault()), name="vault_watcher"),
-        asyncio.create_task(_supervise("daily_writer", schedule_daily_writes()), name="daily_writer"),
+        asyncio.create_task(_supervise("vault_watcher", watch_vault), name="vault_watcher"),
+        asyncio.create_task(_supervise("daily_writer", schedule_daily_writes), name="daily_writer"),
     ]
 
     def shutdown(sig):
