@@ -515,17 +515,6 @@
     }
   }
 
-  // ── Edit goal modal state ──
-  let editingGoal = $state<Goal | null>(null);
-  let editTitle = $state('');
-  let editDescription = $state('');
-  let editTargetValue = $state(1);
-  let editFailConfig = $state<Goal['fail_config']>('STATIC');
-  let editMeasurement = $state<Goal['measurement_type']>('COUNT');
-  let editColor = $state(DEFAULT_GOAL_COLOR);
-  let editMaxAssignmentDays = $state<number | null>(null);
-  let editSaving = $state(false);
-
   // ── Analytics expandable state ──
   let showPerformanceChart = $state(true);
 
@@ -1064,28 +1053,6 @@
     ];
   });
 
-  async function saveEdit() {
-    if (!editingGoal) return;
-    editSaving = true;
-    try {
-      const result = await api.goals.update(editingGoal.id, {
-        title: editTitle,
-        description: editDescription,
-        target_value: editTargetValue,
-        fail_config: editFailConfig,
-        measurement_type: editMeasurement,
-        color: editColor,
-        max_assignment_days: editMaxAssignmentDays,
-      });
-      goals = goals.map((g) => (g.id === editingGoal!.id ? result : g));
-      editingGoal = null;
-    } catch (e) {
-      logger.error('Error al editar:', e);
-    } finally {
-      editSaving = false;
-    }
-  }
-
   function getGoalColor(goal: Goal): string {
     const colorMap: Record<string, string> = {
       DAILY: 'var(--today)',
@@ -1119,7 +1086,6 @@
         return;
       }
       showAddForm = false;
-      editingGoal = null;
     }
   }}
 />
@@ -2550,76 +2516,6 @@
         </div>
       </div>
     </div>
-  {/if}
-
-  {#if editingGoal}
-    <ModalDialog
-      open={true}
-      title={$t('goalsPage.editGoalModal')}
-      size="md"
-      onClose={() => (editingGoal = null)}
-    >
-      <div class="form-field">
-        <label class="label">{$t('goalsPage.title')}</label>
-        <input class="input w-full" bind:value={editTitle} />
-      </div>
-      <div class="form-field">
-        <label class="label">{$t('goalsPage.description')}</label>
-        <textarea class="input w-full" bind:value={editDescription} rows="2"></textarea>
-      </div>
-      <div class="form-row">
-        <div class="form-field" style="flex:1;">
-          <label class="label">{$t('goalsPage.measurement')}</label>
-          <select class="input w-full" bind:value={editMeasurement}>
-            <option value="COUNT">{$t('goalsPage.countNumeric')}</option>
-            <option value="BOOLEAN">{$t('goalsPage.booleanDone')}</option>
-            <option value="PERCENT">{$t('goalsPage.percent')}</option>
-          </select>
-        </div>
-        <div class="form-field" style="width:120px;">
-          <label class="label">{$t('goalsPage.target')}</label>
-          <input class="input w-full" type="number" bind:value={editTargetValue} min="1" />
-        </div>
-        <div class="form-field" style="width:100px;">
-          <label class="label">{$t('goalsPage.limitDaysLabel')}</label>
-          <input
-            class="input w-full"
-            type="number"
-            bind:value={editMaxAssignmentDays}
-            min="1"
-            placeholder="∞"
-          />
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-field" style="flex:1;">
-          <label class="label">{$t('goalsPage.failRule')}</label>
-          <select class="input w-full" bind:value={editFailConfig}>
-            <option value="STATIC">{$t('goalsPage.staticReset')}</option>
-            <option value="ROLLOVER">{$t('goalsPage.rolloverNext')}</option>
-            <option value="SNOWBALL">{$t('goalsPage.snowballSum')}</option>
-          </select>
-        </div>
-        <div class="form-field" style="width:80px;">
-          <label class="label">{$t('goalsPage.color')}</label>
-          <div class="color-custom" style="background: {editColor}; width:36px; height:36px;">
-            <input type="color" bind:value={editColor} class="color-picker" />
-          </div>
-        </div>
-      </div>
-      <div class="form-actions">
-        <button
-          class="btn btn-primary"
-          onclick={saveEdit}
-          disabled={editSaving || !editTitle.trim()}
-        >
-          {editSaving ? 'Guardando...' : 'Guardar cambios'}
-        </button>
-        <button class="btn btn-ghost" onclick={() => (editingGoal = null)}
-          >{$t('goalsPage.cancel')}</button
-        >
-      </div>
-    </ModalDialog>
   {/if}
 
   {#if pendingGoals.length > 0}

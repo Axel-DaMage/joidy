@@ -47,7 +47,6 @@
   let showSettings = false;
   let settingsSection: 'basics' | 'appearance' | 'advanced' = 'basics';
   let editTitle = '';
-  let editDescription = '';
   let editTemporality: Goal['temporality'] = 'DAILY';
   let editMeasurement: Goal['measurement_type'] = 'COUNT';
   let editTargetValue = 1;
@@ -98,7 +97,6 @@
   function openSettings() {
     if (!goal) return;
     editTitle = goal.title || '';
-    editDescription = goal.description || '';
     editTemporality = goal.temporality || 'DAILY';
     editMeasurement = goal.measurement_type || 'COUNT';
     editTargetValue = goal.target_value || 1;
@@ -129,7 +127,6 @@
     try {
       const result = await api.goals.update(goalId, {
         title: editTitle.trim(),
-        description: editDescription,
         temporality: editTemporality,
         measurement_type: editMeasurement,
         target_value: editTargetValue,
