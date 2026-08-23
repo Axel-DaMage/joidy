@@ -206,6 +206,8 @@ async def semantic_search(
     Embeds the query via the ai-service, then finds the top-K notes by
     cosine distance (``<=>``) from the stored embeddings.
     """
+    if not settings.ai_service_enabled:
+        raise HTTPException(status_code=503, detail="AI service is disabled")
     if not req.query.strip():
         return {"results": []}
 

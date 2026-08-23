@@ -37,6 +37,7 @@ services:
       - ${OBSIDIAN_VAULT_PATH:-./data/vault}:/vault
     environment:
       - APP_ENV=development
+      - AI_SERVICE_ENABLED=true
       - VAULT_PATH=/vault
       - OBSIDIAN_VAULT_PATH=/vault
     # The ./api:/app bind mount shadows the image's pre-chowned /app/data/logs,
@@ -48,6 +49,8 @@ services:
     command: sh -c "mkdir -p /app/data/logs 2>/dev/null || true; exec uvicorn main:app --host 0.0.0.0 --port 8000 --reload --reload-include '*.py' --reload-exclude '__pycache__/*' --reload-exclude '*.pyc'"
 
   ai-service:
+    # Clear the production profile so the AI service always starts in dev.
+    profiles: []
     build:
       context: ./ai-service
       dockerfile: Dockerfile

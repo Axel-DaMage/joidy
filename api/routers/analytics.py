@@ -114,6 +114,8 @@ def _activity(db: Session, days: int) -> dict:
 
 async def _ai_usage() -> dict:
     """Fetch monthly AI usage from the ai-service (best-effort)."""
+    if not settings.ai_service_enabled:
+        return {"ai_enabled": False, "estimated_cost_usd": 0, "status": "disabled"}
     async with httpx.AsyncClient(timeout=5.0) as client:
         try:
             headers = {"X-Request-ID": get_correlation_id()}
