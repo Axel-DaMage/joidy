@@ -175,7 +175,7 @@
 
   .goal-editor-card:hover {
     transform: translateY(-4px);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 8px 24px color-mix(in srgb, var(--text-primary) 15%, transparent);
   }
 
   .goal-editor-card.completed {
@@ -185,7 +185,7 @@
 
   .goal-editor-card.failed {
     border-color: var(--error);
-    background: rgba(239, 68, 68, 0.03);
+    background: color-mix(in srgb, var(--error) 3%, transparent);
   }
 
   .goal-editor-card.paused {
@@ -265,22 +265,22 @@
   }
 
   .goal-state-indicator.active {
-    background: rgba(251, 191, 36, 0.15);
-    color: #fbbf24;
+    background: color-mix(in srgb, var(--today) 15%, transparent);
+    color: var(--today);
   }
 
   .goal-state-indicator.completed {
-    background: rgba(16, 185, 129, 0.15);
+    background: color-mix(in srgb, var(--success) 15%, transparent);
     color: var(--success);
   }
 
   .goal-state-indicator.paused {
-    background: rgba(245, 158, 11, 0.15);
+    background: color-mix(in srgb, var(--warning) 15%, transparent);
     color: var(--warning);
   }
 
   .goal-state-indicator.failed {
-    background: rgba(239, 68, 68, 0.15);
+    background: color-mix(in srgb, var(--error) 15%, transparent);
     color: var(--error);
   }
 
@@ -329,8 +329,8 @@
   }
 
   .meta-item.config {
-    background: rgba(59, 130, 246, 0.1);
-    color: #3b82f6;
+    background: color-mix(in srgb, var(--link) 10%, transparent);
+    color: var(--link);
   }
 
   .card-progress {
