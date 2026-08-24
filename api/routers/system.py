@@ -1,8 +1,8 @@
 """System power management router.
 
 Provides endpoints to check service status and hibernate/wake/shutdown
-the Docker stack from the web UI. Uses aiodocker to communicate with
-the Docker Engine API via the mounted Docker socket.
+the container stack from the web UI. Uses aiodocker to communicate with
+the container engine API (Docker or Podman) via the mounted socket.
 """
 
 import logging
@@ -24,6 +24,12 @@ HIBERNATE_SERVICES = {"ai-service", "worker"}
 
 # All Joidy services to show in the status list (by compose service name).
 ALL_SERVICES = {"ai-service", "worker", "frontend", "api", "postgres"}
+
+# Compose label prefixes — Docker Compose uses "com.docker.compose.*",
+# podman-compose uses "io.podman.compose.*". `podman compose` (which wraps
+# docker-compose via the Podman Docker-compatible API) uses the Docker labels.
+# We support both so the power-management panel works regardless of engine.
+_COMPOSE_LABEL_PREFIXES = ("com.docker.compose", "io.podman.compose")
 
 # Services to stop during full shutdown (in order).
 # postgres and api are kept so the response can be sent and data isn't lost.
@@ -79,11 +85,18 @@ def _container_dict(container) -> dict:
 
 
 def _get_compose_project(container) -> str | None:
-    """Extract the Docker Compose project name from container labels."""
+    """Extract the compose project name from container labels.
+
+    Supports both Docker Compose (``com.docker.compose.project``) and
+    podman-compose (``io.podman.compose.project``) labels.
+    """
     data = _container_dict(container)
     labels = data.get("Labels") or {}
     if isinstance(labels, dict):
-        return labels.get("com.docker.compose.project")
+        for prefix in _COMPOSE_LABEL_PREFIXES:
+            val = labels.get(f"{prefix}.project")
+            if val:
+                return val
     return None
 
 
@@ -103,10 +116,10 @@ async def _detect_project_name(docker) -> str | None:
             data = _container_dict(c)
             labels = data.get("Labels") or {}
             if isinstance(labels, dict):
-                svc = labels.get("com.docker.compose.service")
+                svc = _get_compose_service(c)
                 state = data.get("State")
                 if svc == "api" and state == "running":
-                    _project_name = labels.get("com.docker.compose.project")
+                    _project_name = _get_compose_project(c)
                     return _project_name
     except Exception:
         pass
@@ -114,16 +127,25 @@ async def _detect_project_name(docker) -> str | None:
 
 
 def _get_compose_service(container) -> str | None:
-    """Extract the Docker Compose service name from container labels."""
+    """Extract the compose service name from container labels.
+
+    Supports both Docker Compose and podman-compose label schemes.
+    """
     data = _container_dict(container)
     labels = data.get("Labels") or {}
     if isinstance(labels, dict):
-        return labels.get("com.docker.compose.service")
-    # Docker API returns labels as a list of "key=value" strings in some versions
+        for prefix in _COMPOSE_LABEL_PREFIXES:
+            val = labels.get(f"{prefix}.service")
+            if val:
+                return val
+    # Docker/Podman API returns labels as a list of "key=value" strings in some versions
     if isinstance(labels, list):
         for label in labels:
-            if isinstance(label, str) and label.startswith("com.docker.compose.service="):
-                return label.split("=", 1)[1]
+            if isinstance(label, str):
+                for prefix in _COMPOSE_LABEL_PREFIXES:
+                    key = f"{prefix}.service="
+                    if label.startswith(key):
+                        return label.split("=", 1)[1]
     return None
 
 
