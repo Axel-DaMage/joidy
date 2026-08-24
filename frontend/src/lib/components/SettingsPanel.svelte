@@ -760,29 +760,30 @@
               </div>
               <button class="link-btn">Enlazar</button>
             </div>
-          {/if}
-          <div class="row">
-            <div class="row-label">
-              <span>Google Calendar & Tasks</span>
-              {#if googleConnected}<span class="badge badge-on" style="margin-left:4px"
-                  >Conectado</span
-                >{/if}
+            <div class="row">
+              <div class="row-label">
+                <span>Google Calendar & Tasks</span>
+                {#if googleConnected}<span class="badge badge-on" style="margin-left:4px"
+                    >Conectado</span
+                  >{/if}
+              </div>
+              {#if googleConnecting}
+                <span class="mono" style="font-size:12px; color: var(--text-muted);"
+                  >Conectando…</span
+                >
+              {:else if googleConnected}
+                <button
+                  class="link-btn"
+                  onclick={disconnectGoogle}
+                  style="background:var(--border); color:var(--text-secondary);">Desconectar</button
+                >
+              {:else}
+                <button class="link-btn" onclick={startGoogleAuth}>Enlazar</button>
+              {/if}
             </div>
-            {#if googleConnecting}
-              <span class="mono" style="font-size:12px; color: var(--text-muted);">Conectando…</span
-              >
-            {:else if googleConnected}
-              <button
-                class="link-btn"
-                onclick={disconnectGoogle}
-                style="background:var(--border); color:var(--text-secondary);">Desconectar</button
-              >
-            {:else}
-              <button class="link-btn" onclick={startGoogleAuth}>Enlazar</button>
+            {#if googleError}
+              <p class="hint" style="color:var(--danger)">{googleError}</p>
             {/if}
-          </div>
-          {#if googleError}
-            <p class="hint" style="color:var(--danger)">{googleError}</p>
           {/if}
         </section>
 
