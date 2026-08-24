@@ -720,10 +720,8 @@
             {:else if githubConnected}
               <div style="display:flex; align-items:center; gap:8px;">
                 <span class="mono" style="font-size:12px; color: var(--xp);">{githubUsername}</span>
-                <button
-                  class="link-btn"
-                  onclick={disconnectGithub}
-                  style="background:var(--border); color:var(--text-secondary);">Desconectar</button
+                <button class="link-btn disconnect-btn" onclick={disconnectGithub}
+                  >Desconectar</button
                 >
               </div>
             {:else}
@@ -772,10 +770,8 @@
                   >Conectando…</span
                 >
               {:else if googleConnected}
-                <button
-                  class="link-btn"
-                  onclick={disconnectGoogle}
-                  style="background:var(--border); color:var(--text-secondary);">Desconectar</button
+                <button class="link-btn disconnect-btn" onclick={disconnectGoogle}
+                  >Desconectar</button
                 >
               {:else}
                 <button class="link-btn" onclick={startGoogleAuth}>Enlazar</button>
@@ -904,7 +900,7 @@
   .backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.6);
+    background: color-mix(in srgb, var(--bg) 60%, transparent);
     z-index: var(--z-dropdown);
     display: flex;
     align-items: flex-start;
@@ -1100,6 +1096,17 @@
   }
   .link-btn.disabled:hover {
     opacity: 0.6;
+  }
+
+  .disconnect-btn {
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+  }
+  .disconnect-btn:hover {
+    background: var(--hover);
+    border-color: var(--text-muted);
+    color: var(--text-primary);
   }
 
   .row-label.disabled {
@@ -1313,7 +1320,7 @@
     background: var(--accent, var(--xp));
     border: none;
     border-radius: var(--r);
-    color: #fff;
+    color: var(--bg);
     font-size: 12px;
     font-family: var(--font-mono);
     cursor: pointer;
