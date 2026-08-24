@@ -20,11 +20,20 @@
     onTogglePin: (_id: number) => {},
     onClick: (_g: any) => {},
   };
-  const { tags, notes, getGoalColor, TEMPORALITY_LABELS, STATE_LABELS, formatFailConfig, onTogglePin, onClick } = ctx;
+  const {
+    tags,
+    notes,
+    getGoalColor,
+    TEMPORALITY_LABELS,
+    STATE_LABELS,
+    formatFailConfig,
+    onTogglePin,
+    onClick,
+  } = ctx;
 
   // Build Maps for O(1) lookups instead of linear searches
-  const tagsMap = new Map(tags.map(t => [t.id, t]));
-  const notesMap = new Map(notes.map(n => [n.id, n]));
+  const tagsMap = new Map(tags.map((t) => [t.id, t]));
+  const notesMap = new Map(notes.map((n) => [n.id, n]));
 </script>
 
 <div
@@ -51,11 +60,19 @@
       </div>
     </div>
     <div class="card-title">{goal.title}</div>
-    <div class="goal-state-indicator" class:active={goal.state === 'ACTIVE'} class:completed={goal.state === 'COMPLETED' || goal.is_completed} class:paused={goal.state === 'PAUSED'} class:failed={goal.state === 'FAILED'}>
+    <div
+      class="goal-state-indicator"
+      class:active={goal.state === 'ACTIVE'}
+      class:completed={goal.state === 'COMPLETED' || goal.is_completed}
+      class:paused={goal.state === 'PAUSED'}
+      class:failed={goal.state === 'FAILED'}
+    >
       {STATE_LABELS[goal.state] || goal.state}
     </div>
     {#if goal.description}
-      <div class="card-description">{goal.description.substring(0, 80)}{goal.description.length > 80 ? '...' : ''}</div>
+      <div class="card-description">
+        {goal.description.substring(0, 80)}{goal.description.length > 80 ? '...' : ''}
+      </div>
     {/if}
     <div class="card-meta">
       <div class="meta-item">
@@ -91,14 +108,22 @@
             {goal.current_value} / {goal.target_value}
           {/if}
         </span>
-        <span class="progress-pct">{(goal.state === 'COMPLETED' || goal.is_completed) ? 100 : goal.progress_pct}%</span>
+        <span class="progress-pct"
+          >{goal.state === 'COMPLETED' || goal.is_completed ? 100 : goal.progress_pct}%</span
+        >
       </div>
-      <ProgressBar value={(goal.state === 'COMPLETED' || goal.is_completed) ? 100 : goal.progress_pct} color="var(--goal-color)" height={6} />
+      <ProgressBar
+        value={goal.state === 'COMPLETED' || goal.is_completed ? 100 : goal.progress_pct}
+        color="var(--goal-color)"
+        height={6}
+      />
     </div>
     <div class="card-footer">
       <span class="goal-id">#{goal.id}</span>
       {#if goal.created_at}
-        <span class="goal-date">{$t('goalCard.created', { values: { date: goal.created_at.split('T')[0] } })}</span>
+        <span class="goal-date"
+          >{$t('goalCard.created', { values: { date: goal.created_at.split('T')[0] } })}</span
+        >
       {/if}
     </div>
   </button>
@@ -150,7 +175,7 @@
 
   .goal-editor-card:hover {
     transform: translateY(-4px);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 8px 24px color-mix(in srgb, var(--text-primary) 15%, transparent);
   }
 
   .goal-editor-card.completed {
@@ -160,7 +185,7 @@
 
   .goal-editor-card.failed {
     border-color: var(--error);
-    background: rgba(239, 68, 68, 0.03);
+    background: color-mix(in srgb, var(--error) 3%, transparent);
   }
 
   .goal-editor-card.paused {
@@ -233,22 +258,22 @@
   }
 
   .goal-state-indicator.active {
-    background: rgba(251, 191, 36, 0.15);
-    color: #fbbf24;
+    background: color-mix(in srgb, var(--today) 15%, transparent);
+    color: var(--today);
   }
 
   .goal-state-indicator.completed {
-    background: rgba(16, 185, 129, 0.15);
+    background: color-mix(in srgb, var(--success) 15%, transparent);
     color: var(--success);
   }
 
   .goal-state-indicator.paused {
-    background: rgba(245, 158, 11, 0.15);
+    background: color-mix(in srgb, var(--warning) 15%, transparent);
     color: var(--warning);
   }
 
   .goal-state-indicator.failed {
-    background: rgba(239, 68, 68, 0.15);
+    background: color-mix(in srgb, var(--error) 15%, transparent);
     color: var(--error);
   }
 
@@ -297,8 +322,8 @@
   }
 
   .meta-item.config {
-    background: rgba(59, 130, 246, 0.1);
-    color: #3b82f6;
+    background: color-mix(in srgb, var(--link) 10%, transparent);
+    color: var(--link);
   }
 
   .card-progress {

@@ -572,7 +572,12 @@
     // Leading blanks: Mon=0 .. Sun=6
     let startWeekday = firstDay.getDay() - 1;
     if (startWeekday < 0) startWeekday = 6;
-    const cells: { dateStr: string | null; day: number | null; isToday: boolean; status: 'none' | 'assigned' | 'completed' | 'failed' }[] = [];
+    const cells: {
+      dateStr: string | null;
+      day: number | null;
+      isToday: boolean;
+      status: 'none' | 'assigned' | 'completed' | 'failed';
+    }[] = [];
     for (let i = 0; i < startWeekday; i++) {
       cells.push({ dateStr: null, day: null, isToday: false, status: 'none' });
     }
@@ -581,7 +586,9 @@
       const isToday = dateStr === todayIso;
       const hData = historyData.find((h) => h.date === dateStr);
       const hasAssignment = !!(assignments[dateStr] && assignments[dateStr].length > 0);
-      let status: 'none' | 'assigned' | 'completed' | 'failed' = hasAssignment ? 'assigned' : 'none';
+      let status: 'none' | 'assigned' | 'completed' | 'failed' = hasAssignment
+        ? 'assigned'
+        : 'none';
       if (hData?.failed) status = 'failed';
       else if (hData?.checked) status = 'completed';
       cells.push({ dateStr, day: d, isToday, status });
@@ -1202,13 +1209,13 @@
                   {#if goal.state === 'COMPLETED' || goal.is_completed}
                     <span
                       class="status-badge success"
-                      style="background: rgba(16, 185, 129, 0.1); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.2);"
+                      style="background: color-mix(in srgb, var(--success) 10%, transparent); color: var(--success); border: 1px solid color-mix(in srgb, var(--success) 20%, transparent);"
                       >{$t('goalsPage.completed')}</span
                     >
                   {:else if goal.state === 'FAILED'}
                     <span
                       class="status-badge error"
-                      style="background: rgba(239, 68, 68, 0.1); color: var(--error); border: 1px solid rgba(239, 68, 68, 0.2);"
+                      style="background: color-mix(in srgb, var(--error) 10%, transparent); color: var(--error); border: 1px solid color-mix(in srgb, var(--error) 20%, transparent);"
                       >{$t('goalsPage.failed')}</span
                     >
                   {/if}
@@ -1242,7 +1249,7 @@
                   {#if goal.max_assignment_days}
                     <span
                       class="config-badge"
-                      style="background: rgba(59, 130, 246, 0.1); color: var(--text-muted); border: 1px solid rgba(59, 130, 246, 0.2);"
+                      style="background: color-mix(in srgb, var(--link) 10%, transparent); color: var(--text-muted); border: 1px solid color-mix(in srgb, var(--link) 20%, transparent);"
                       >{$t('goalsPage.limit', { values: { days: goal.max_assignment_days } })}</span
                     >
                   {/if}
@@ -1408,9 +1415,9 @@
                     selectedHistoryDate = day.dateStr;
                   }}
                   style="flex: 1; aspect-ratio: 1; border-radius: 4px; border: 1px solid {day.isToday
-                    ? '#fbbf24'
+                    ? 'var(--today)'
                     : 'var(--border)'}; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; background: {day.isToday
-                    ? '#fbbf24'
+                    ? 'var(--today)'
                     : day.hasActivity
                       ? 'var(--success)'
                       : 'var(--surface)'}; color: {day.isToday
@@ -1418,7 +1425,7 @@
                     : day.hasActivity
                       ? 'var(--bg)'
                       : 'var(--text-muted)'}; opacity: 1; {day.isToday
-                    ? 'box-shadow: 0 0 0 2px #fbbf24;'
+                    ? 'box-shadow: 0 0 0 2px var(--today);'
                     : ''}"
                 >
                   <span style="font-size: 10px; font-weight: bold; margin-bottom: 2px;"
@@ -1436,10 +1443,23 @@
           <div class="dash-card month-map-card">
             <div class="dash-card-header month-map-header">
               <Calendar size={14} />
-              <span>{monthMapDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</span>
+              <span
+                >{monthMapDate.toLocaleDateString(undefined, {
+                  month: 'long',
+                  year: 'numeric',
+                })}</span
+              >
               <div class="month-map-nav">
-                <button class="month-nav-btn" onclick={prevMonth} aria-label={$t('goalsPage.prevDay')}>‹</button>
-                <button class="month-nav-btn" onclick={nextMonth} aria-label={$t('goalsPage.nextDay')}>›</button>
+                <button
+                  class="month-nav-btn"
+                  onclick={prevMonth}
+                  aria-label={$t('goalsPage.prevDay')}>‹</button
+                >
+                <button
+                  class="month-nav-btn"
+                  onclick={nextMonth}
+                  aria-label={$t('goalsPage.nextDay')}>›</button
+                >
               </div>
             </div>
             <div class="month-map-grid">
@@ -1479,10 +1499,7 @@
             </div>
           </div>
           <div class="sort-control-centered">
-            <select
-              class="input sort-select-square"
-              bind:value={listSortBy}
-            >
+            <select class="input sort-select-square" bind:value={listSortBy}>
               <option value="recent">{$t('goalsPage.sortRecent')}</option>
               <option value="alpha">{$t('goalsPage.sortAlpha')}</option>
               <option value="state">{$t('goalsPage.sortState')}</option>
@@ -1522,14 +1539,14 @@
                     {#if goal.state === 'PAUSED'}
                       <span
                         class="status-badge"
-                        style="background: rgba(255,255,255,0.05); color: var(--text-muted); border: 1px solid rgba(255,255,255,0.1);"
+                        style="background: color-mix(in srgb, var(--text-primary) 5%, transparent); color: var(--text-muted); border: 1px solid color-mix(in srgb, var(--text-primary) 10%, transparent);"
                         >{$t('goalsPage.paused')}</span
                       >
                     {/if}
                     {#if goal.max_assignment_days}
                       <span
                         class="config-badge"
-                        style="margin-left: 8px; background: rgba(59, 130, 246, 0.1); color: var(--text-muted); border: 1px solid rgba(59, 130, 246, 0.2);"
+                        style="margin-left: 8px; background: color-mix(in srgb, var(--link) 10%, transparent); color: var(--text-muted); border: 1px solid color-mix(in srgb, var(--link) 20%, transparent);"
                         >{$t('goalsPage.limit', {
                           values: { days: goal.max_assignment_days },
                         })}</span
@@ -1602,9 +1619,9 @@
                     class:completed={status === 'COMPLETED'}
                     class:failed={status === 'FAILED'}
                     style="border-left: 3px solid {status === 'FAILED'
-                      ? '#ef4444'
+                      ? 'var(--error)'
                       : status === 'COMPLETED'
-                        ? '#10b981'
+                        ? 'var(--success)'
                         : getGoalColor(g)}; display:flex; align-items:center;"
                   >
                     <div style="display:flex; gap:6px; margin-right: 8px;">
@@ -1627,9 +1644,9 @@
                               name={g.fail_emoji}
                               size={16}
                               color={status === 'FAILED'
-                                ? '#ef4444'
+                                ? 'var(--error)'
                                 : status === 'COMPLETED'
-                                  ? '#10b981'
+                                  ? 'var(--success)'
                                   : getGoalColor(g)}
                             />
                           </span>
@@ -1652,7 +1669,7 @@
                         {#if g.max_assignment_days}
                           <span
                             class="config-badge"
-                            style="margin-left: 8px; background: rgba(59, 130, 246, 0.1); color: var(--text-muted); border: 1px solid rgba(59, 130, 246, 0.2);"
+                            style="margin-left: 8px; background: color-mix(in srgb, var(--link) 10%, transparent); color: var(--text-muted); border: 1px solid color-mix(in srgb, var(--link) 20%, transparent);"
                             >{$t('goalsPage.limit', {
                               values: { days: g.max_assignment_days },
                             })}</span
@@ -1786,7 +1803,7 @@
                 {#each goalsForDate.failed as g (g.id)}
                   <div
                     class="goal-card failed"
-                    style="border-left: 3px solid #ef4444; width: 100%;"
+                    style="border-left: 3px solid var(--error); width: 100%;"
                   >
                     <div class="goal-main">
                       <div class="goal-title">
@@ -1795,7 +1812,7 @@
                             class="emoji-badge"
                             style="display:flex; align-items:center; margin-right:8px;"
                           >
-                            <StreakIcon name={g.fail_emoji} size={16} color="#ef4444" />
+                            <StreakIcon name={g.fail_emoji} size={16} color="var(--error)" />
                           </span>
                         {/if}
                         {g.title}
@@ -1803,7 +1820,7 @@
                       <div class="goal-meta">
                         <span
                           class="tag-chip"
-                          style="background: #ef444420; border: 1px solid #ef4444; color: #ef4444;"
+                          style="background: color-mix(in srgb, var(--error) 12%, transparent); border: 1px solid var(--error); color: var(--error);"
                           >{TEMPORALITY_LABELS[g.temporality] || g.temporality}</span
                         >
                       </div>
@@ -1811,12 +1828,12 @@
                     <div class="goal-progress" style="width: 100px;">
                       <div class="progress-meta">
                         <span class="mono caption"></span>
-                        <span class="caption" style="color: #ef4444;">{g.progress_pct}%</span>
+                        <span class="caption" style="color: var(--error);">{g.progress_pct}%</span>
                       </div>
                       <div class="progress-track" style="height: 4px;">
                         <div
                           class="progress-fill"
-                          style="width: {g.progress_pct}%; background: #ef4444;"
+                          style="width: {g.progress_pct}%; background: var(--error);"
                         ></div>
                       </div>
                     </div>
@@ -2705,7 +2722,7 @@
     padding: 16px 16px 8px;
     border-bottom: 1px solid var(--border-light);
     margin-bottom: 8px;
-    background: rgba(255, 255, 255, 0.02);
+    background: color-mix(in srgb, var(--text-primary) 2%, transparent);
   }
 
   .status-badge {
@@ -2717,14 +2734,14 @@
     margin-left: 8px;
   }
   .status-badge.success {
-    background: rgba(16, 185, 129, 0.1);
-    color: #10b981;
-    border: 1px solid rgba(16, 185, 129, 0.2);
+    background: color-mix(in srgb, var(--success) 10%, transparent);
+    color: var(--success);
+    border: 1px solid color-mix(in srgb, var(--success) 20%, transparent);
   }
   .status-badge.error {
-    background: rgba(239, 68, 68, 0.1);
+    background: color-mix(in srgb, var(--error) 10%, transparent);
     color: var(--error);
-    border: 1px solid rgba(239, 68, 68, 0.2);
+    border: 1px solid color-mix(in srgb, var(--error) 20%, transparent);
   }
 
   .history-heatmap-wrap {
@@ -2881,9 +2898,9 @@
     border: none;
   }
   .month-assigned {
-    background: color-mix(in srgb, #facc15 25%, var(--surface));
-    border-color: #facc15;
-    color: #a16207;
+    background: color-mix(in srgb, var(--today) 25%, var(--surface));
+    border-color: var(--today);
+    color: var(--warning);
   }
   .month-completed {
     background: var(--success);
@@ -2893,12 +2910,12 @@
   .month-failed {
     background: var(--error);
     border-color: var(--error);
-    color: #fff;
+    color: var(--bg);
   }
   .month-today {
     background: var(--accent) !important;
     border-color: var(--accent) !important;
-    color: #fff !important;
+    color: var(--bg) !important;
     font-weight: 700;
     box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 40%, transparent);
   }
@@ -2926,7 +2943,7 @@
     position: fixed;
     inset: 0;
     z-index: var(--z-modal);
-    background: rgba(0, 0, 0, 0.75);
+    background: color-mix(in srgb, var(--bg) 75%, transparent);
     backdrop-filter: blur(4px);
     display: flex;
     align-items: center;
@@ -2935,7 +2952,7 @@
   .new-goal-panel {
     background: var(--surface);
     border: 1px solid var(--border);
-    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
+    box-shadow: 0 24px 80px color-mix(in srgb, var(--bg) 60%, transparent);
     display: flex;
     flex-direction: column;
     max-height: calc(100vh - 24px);
@@ -3488,7 +3505,7 @@
   }
   .goal-card.failed {
     border-color: var(--error);
-    background: rgba(255, 0, 0, 0.02);
+    background: color-mix(in srgb, var(--error) 2%, transparent);
   }
   .goal-card.paused {
     opacity: 0.55;
@@ -3505,9 +3522,9 @@
     line-height: 1.4;
   }
   .paused-badge {
-    background: rgba(245, 158, 11, 0.15);
+    background: color-mix(in srgb, var(--warning) 15%, transparent);
     color: var(--warning, #f59e0b);
-    border: 1px solid rgba(245, 158, 11, 0.3);
+    border: 1px solid color-mix(in srgb, var(--warning) 30%, transparent);
   }
   .goal-main {
     flex: 1;
@@ -3857,7 +3874,11 @@
   }
   .meter-fill {
     height: 100%;
-    background: linear-gradient(90deg, var(--success), #34d399);
+    background: linear-gradient(
+      90deg,
+      var(--success),
+      color-mix(in srgb, var(--success) 70%, var(--bg))
+    );
     border-radius: 2px;
     transition: width 1s ease-out;
   }
@@ -3877,7 +3898,7 @@
   .candle-chart-container {
     flex: 1;
     min-height: 80px;
-    background: rgba(0, 0, 0, 0.15);
+    background: color-mix(in srgb, var(--text-primary) 15%, transparent);
     border-radius: var(--r-sm, 8px);
     padding: var(--s2) var(--s3);
     position: relative;
@@ -3937,7 +3958,7 @@
   }
 
   .candle-svg {
-    filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.15));
+    filter: drop-shadow(0 0 2px color-mix(in srgb, var(--text-primary) 15%, transparent));
   }
   .candle-empty-state {
     display: flex;
@@ -3954,7 +3975,7 @@
     margin-left: auto;
     font-size: 9px;
     padding: 2px 6px;
-    background: rgba(255, 255, 255, 0.05);
+    background: color-mix(in srgb, var(--text-primary) 5%, transparent);
     border: 1px solid var(--border);
     border-radius: 4px;
     font-family: var(--font-mono);
@@ -4522,7 +4543,7 @@
   .hour-bar-wrap {
     flex: 1;
     width: 10px;
-    background: rgba(255, 255, 255, 0.02);
+    background: color-mix(in srgb, var(--text-primary) 2%, transparent);
     border-radius: 5px;
     display: flex;
     flex-direction: column;
@@ -4592,8 +4613,8 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    background: rgba(239, 68, 68, 0.1);
-    border: 1px solid rgba(239, 68, 68, 0.2);
+    background: color-mix(in srgb, var(--error) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--error) 20%, transparent);
     border-radius: 50%;
     width: 80px;
     height: 80px;
