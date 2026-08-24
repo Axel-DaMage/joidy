@@ -4,7 +4,7 @@
 
 ```yaml
 last_updated: 2026-08-24
-version: 1.0.0-beta
+version: 0.1.1
 ```
 
 ---
