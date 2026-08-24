@@ -8,7 +8,7 @@ import logging
 
 from config import settings
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
-from services.auth_service import verify_token
+from services.auth_service import verify_token, _effective_auth_password
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +58,7 @@ async def websocket_endpoint(
     In development without AUTH_PASSWORD, auth is bypassed.
     """
     # Authenticate: verify token if auth is configured
-    if settings.auth_password:
+    if _effective_auth_password():
         if not token:
             await websocket.close(code=4001, reason="Missing authentication token")
             return

@@ -11,6 +11,8 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from passlib.context import CryptContext
 
+from services.env_file import get_persisted
+
 logger = logging.getLogger(__name__)
 
 ALGORITHM = "HS256"
@@ -18,6 +20,27 @@ TOKEN_EXPIRE_HOURS = 24 * 7  # 1 week
 
 security = HTTPBearer(auto_error=False)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+def _effective_auth_password() -> str:
+    """Return the current AUTH_PASSWORD, reading from disk on every call.
+
+    Uvicorn runs with ``--workers 2``: ``settings.auth_password`` is loaded
+    once at startup and ``POST /config/setup`` only updates the worker that
+    served the request. Reading the persisted value here ensures every
+    worker sees the same password immediately after setup, with no restart
+    needed.
+    """
+    return get_persisted("AUTH_PASSWORD") or settings.auth_password or ""
+
+
+def _effective_secret_key() -> str:
+    """Return the current SECRET_KEY, reading from disk on every call.
+
+    Same cross-worker rationale as ``_effective_auth_password``: tokens
+    signed by the worker that ran setup must verify on its siblings.
+    """
+    return get_persisted("SECRET_KEY") or settings.secret_key or ""
 
 
 def verify_password(plain: str, hashed_or_plain: str) -> bool:
@@ -37,7 +60,8 @@ def hash_password(plain: str) -> str:
 
 def create_access_token(user_id: int, username: str = "user") -> str:
     """Create a JWT access token."""
-    if not settings.secret_key:
+    secret = _effective_secret_key()
+    if not secret:
         raise ValueError("SECRET_KEY not configured")
 
     expire = datetime.now(timezone.utc) + timedelta(hours=TOKEN_EXPIRE_HOURS)
@@ -46,17 +70,18 @@ def create_access_token(user_id: int, username: str = "user") -> str:
         "username": username,
         "exp": expire,
     }
-    return jwt.encode(to_encode, settings.secret_key, algorithm=ALGORITHM)
+    return jwt.encode(to_encode, secret, algorithm=ALGORITHM)
 
 
 def verify_token(token: str) -> dict | None:
     """Verify and decode a JWT token."""
-    if not settings.secret_key:
+    secret = _effective_secret_key()
+    if not secret:
         logger.warning("SECRET_KEY not configured, token verification skipped")
         return None
 
     try:
-        payload = jwt.decode(token, settings.secret_key, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, secret, algorithms=[ALGORITHM])
         return payload
     except jwt.ExpiredSignatureError:
         logger.warning("Token expired")
@@ -80,7 +105,8 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
     In production, auth is always required — missing AUTH_PASSWORD means
     no valid token can be issued, so all requests are rejected.
     """
-    if not settings.auth_password:
+    auth_password = _effective_auth_password()
+    if not auth_password:
         if settings.app_env == "production":
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,

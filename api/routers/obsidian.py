@@ -26,7 +26,7 @@ from config import settings
 from database import get_db
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, field_validator
-from services.auth_service import get_current_user_id
+from services.auth_service import get_current_user_id, _effective_auth_password
 from services.webhook_sync import process_webhook_event
 from sqlalchemy.orm import Session
 
@@ -67,7 +67,7 @@ def _verify_access(request: Request, secret: str, db: Session) -> None:
         return
 
     # No webhook secret configured — fall back to JWT auth in production
-    if not settings.auth_password:
+    if not _effective_auth_password():
         return  # dev mode: no auth configured, allow access
 
     auth_header = request.headers.get("Authorization", "")

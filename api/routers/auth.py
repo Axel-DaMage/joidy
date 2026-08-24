@@ -2,10 +2,14 @@
 Authentication endpoints.
 """
 
-from config import settings
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from services.auth_service import create_access_token, verify_password, hash_password
+from services.auth_service import (
+    create_access_token,
+    verify_password,
+    _effective_auth_password,
+    _effective_secret_key,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -31,10 +35,10 @@ def login(body: LoginRequest):
     to avoid credentials leaking into URLs, proxy access logs, and browser
     history (#647).
     """
-    if not settings.secret_key:
+    if not _effective_secret_key():
         raise HTTPException(status_code=500, detail="Server not configured for auth")
 
-    expected_password = settings.auth_password or ""
+    expected_password = _effective_auth_password()
     if expected_password and not verify_password(body.password, expected_password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
@@ -51,5 +55,5 @@ def auth_status():
     to avoid giving attackers a reconnaissance signal (#647).
     """
     return {
-        "enabled": bool(settings.secret_key),
+        "enabled": bool(_effective_secret_key()),
     }
