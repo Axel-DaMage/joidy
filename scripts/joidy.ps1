@@ -123,9 +123,27 @@ function Write-AccessUrl {
   Write-Host "╚══════════════════════════════════════════════╝" -ForegroundColor Green
 }
 
+function Get-AiProfileArgs {
+  $envFile = Join-Path $ProjectDir ".env"
+  if (Test-Path $envFile) {
+    $lines = Get-Content $envFile -ErrorAction SilentlyContinue
+    foreach ($line in $lines) {
+      if ($line -match '^\s*AI_SERVICE_ENABLED\s*=\s*true\s*$') {
+        return @("--profile", "ai")
+      }
+    }
+  }
+  return @()
+}
+
 function Invoke-Up {
   Write-Status "Starting Joidy services..."
-  Invoke-ComposeCommand up -d
+  $profile = Get-AiProfileArgs
+  if ($profile.Count -gt 0) {
+    Invoke-ComposeCommand @profile up -d
+  } else {
+    Invoke-ComposeCommand up -d
+  }
   Write-Status "Waiting for services to stabilize..."
   Start-Sleep -Seconds 5
   Invoke-Status
@@ -156,14 +174,15 @@ function Invoke-Sleep {
 
 function Invoke-Wake {
   Write-Status "Waking heavy services from hibernation..."
+  $profile = Get-AiProfileArgs
   foreach ($svc in $HIBERNATE_SERVICES) {
-    $all = Invoke-ComposeCommand ps -a $svc 2>$null
+    $all = Invoke-ComposeCommand @profile ps -a $svc 2>$null
     if ($all -match $svc) {
-      $running = Invoke-ComposeCommand ps $svc 2>$null
+      $running = Invoke-ComposeCommand @profile ps $svc 2>$null
       if ($running -match $svc) {
         Write-Warn "$svc is already running"
       } else {
-        Invoke-ComposeCommand start $svc
+        Invoke-ComposeCommand @profile start $svc
         Write-Ok "Started $svc"
       }
     } else {
@@ -176,7 +195,12 @@ function Invoke-Wake {
 
 function Invoke-Restart {
   Write-Status "Restarting all Joidy services..."
-  Invoke-ComposeCommand restart
+  $profile = Get-AiProfileArgs
+  if ($profile.Count -gt 0) {
+    Invoke-ComposeCommand @profile restart
+  } else {
+    Invoke-ComposeCommand restart
+  }
   Write-Ok "All services restarted."
   Write-AccessUrl
 }

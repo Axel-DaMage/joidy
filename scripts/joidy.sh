@@ -118,9 +118,22 @@ print_access_url() {
   echo -e "${GREEN}╚══════════════════════════════════════════════╝${NC}"
 }
 
+# Check whether the AI profile should be enabled by reading the .env file.
+ai_profile_args() {
+  if grep -q '^AI_SERVICE_ENABLED=true' "$PROJECT_DIR/.env" 2>/dev/null; then
+    echo "--profile ai"
+  fi
+}
+
 cmd_up() {
   print_status "Starting Joidy services..."
-  $DOCKER_CMD up -d
+  local profile
+  profile="$(ai_profile_args)"
+  if [ -n "$profile" ]; then
+    $DOCKER_CMD $profile up -d
+  else
+    $DOCKER_CMD up -d
+  fi
   print_status "Waiting for services to stabilize..."
   sleep 5
   cmd_status
@@ -151,13 +164,15 @@ cmd_sleep() {
 
 cmd_wake() {
   print_status "Waking heavy services from hibernation..."
+  local profile
+  profile="$(ai_profile_args)"
   for svc in $HIBERNATE_SERVICES; do
     # Check if the service is NOT running (use -a to include stopped containers)
-    if $DOCKER_CMD ps -a "$svc" 2>/dev/null | grep -q "$svc"; then
-      if $DOCKER_CMD ps "$svc" 2>/dev/null | grep -q "$svc"; then
+    if $DOCKER_CMD $profile ps -a "$svc" 2>/dev/null | grep -q "$svc"; then
+      if $DOCKER_CMD $profile ps "$svc" 2>/dev/null | grep -q "$svc"; then
         print_warn "$svc is already running"
       else
-        $DOCKER_CMD start "$svc"
+        $DOCKER_CMD $profile start "$svc"
         print_ok "Started $svc"
       fi
     else
@@ -170,7 +185,13 @@ cmd_wake() {
 
 cmd_restart() {
   print_status "Restarting all Joidy services..."
-  $DOCKER_CMD restart
+  local profile
+  profile="$(ai_profile_args)"
+  if [ -n "$profile" ]; then
+    $DOCKER_CMD $profile restart
+  else
+    $DOCKER_CMD restart
+  fi
   print_ok "All services restarted."
   print_access_url
 }
