@@ -23,7 +23,7 @@
 
 <style>
   .progress-track {
-    background: var(--border);
+    background: color-mix(in srgb, var(--text-primary) 10%, transparent);
     overflow: hidden;
     position: relative;
   }

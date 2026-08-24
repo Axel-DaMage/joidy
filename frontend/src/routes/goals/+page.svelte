@@ -3566,7 +3566,7 @@
     margin-bottom: 6px;
   }
   .progress-track {
-    background: var(--border);
+    background: color-mix(in srgb, var(--text-primary) 10%, transparent);
     border-radius: 4px;
     overflow: hidden;
   }

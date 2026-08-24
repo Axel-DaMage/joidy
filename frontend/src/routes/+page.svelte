@@ -593,14 +593,14 @@
     width: 5px;
     height: 5px;
     border-radius: 50%;
-    background: var(--border);
+    background: color-mix(in srgb, var(--text-primary) 20%, transparent);
     border: none;
     padding: 0;
     cursor: pointer;
     transition: all var(--t-fast);
   }
   .dot.active {
-    background: var(--text-muted);
+    background: var(--text-secondary);
     width: 14px;
     border-radius: 3px;
   }
