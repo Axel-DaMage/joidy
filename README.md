@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://img.shields.io/badge/JOIDY-v1.0.0--alpha-8B5CF6?style=for-the-badge" alt="Joidy">
+  <img src="https://img.shields.io/badge/JOIDY-v0.2.0-8B5CF6?style=for-the-badge" alt="Joidy">
 </p>
 
 <p align="center">
@@ -50,6 +50,14 @@ docker compose up -d
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Axel-DaMage/joidy/main/scripts/install.sh | bash
+```
+
+This clones the repo, copies `.env`, and installs the `joidy` CLI into `~/.local/bin`
+so you can manage the stack from anywhere. After the installer finishes, edit `.env`
+with your credentials and run:
+
+```bash
+joidy up
 ```
 
 **Windows (PowerShell):**
@@ -192,7 +200,7 @@ graph LR
     API[API 8000<br/>FastAPI]
     AI[AI 8002<br/>FastAPI]
     Worker[Worker 8001<br/>asyncio]
-    DB[(SQLite + sqlite-vec)]
+    DB[(PostgreSQL 16 + pgvector)]
     Vault[Obsidian Vault]
 
     User --> FE
@@ -212,9 +220,11 @@ See [QUICKSTART.md](QUICKSTART.md) for a step-by-step dev onboarding guide.
 
 ## Documentation
 
-- [Architecture](./ARCHITECTURE.md)
-- [Architecture Decision Records](./docs/ARCHITECTURE_DECISIONS.md)
-- [Frontend Architecture](./ARCHITECTURE_FRONTEND.md)
+- [Architecture](./docs/architecture.md)
+- [Architecture Decision Records](./docs/adr/README.md)
+- [Frontend Architecture](./docs/frontend.md)
+- [Database](./docs/database.md)
+- [Full docs index](./docs/index.md)
 
 ## License
 

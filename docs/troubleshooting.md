@@ -3,8 +3,8 @@
 ## Metadata
 
 ```yaml
-last_updated: 2024
-version: 1.0
+last_updated: 2026-08-16
+version: 0.2.0
 ```
 
 ---
@@ -292,6 +292,51 @@ npm run check
 ```
 
 ---
+
+### 3.4 Frontend container crash-loop / dead UI (`.svelte-kit` EACCES)
+
+**Síntoma:**
+- `make dev` arranca pero la UI en `http://localhost:3000` no carga (carga infinita o
+  conexión rechazada).
+- `docker compose ps` muestra el contenedor `frontend` en `unhealthy` (con el
+  healthcheck de `docker-compose.dev.yml`).
+- Los logs del frontend muestran un error de permisos al hacer `svelte-kit sync`:
+  ```
+  ERROR EACCES: permission denied, open '/app/.svelte-kit/env.d.ts'
+  ```
+- Nada parece roto si solo se revisa `make dev` (el contenedor reinicia en bucle).
+
+**Causa:** El contenedor de desarrollo del frontend corre como el usuario `node`
+(uid 1000). `frontend/.svelte-kit` es host-compilado por `svelte-kit` y, si se
+generó (o se tocó) con `sudo` —p. ej. tras `sudo make fix-permissions`—, queda
+propiedad de `root`. En el próximo arranque, `svelte-kit sync` no puede
+reescribir `env.d.ts` y Vite nunca llega a levantar.
+
+**Solución:**
+
+1. Comprobar la propiedad de `.svelte-kit`:
+   ```bash
+   ls -la frontend/.svelte-kit | head
+   ```
+
+2. Devolverle la propiedad a tu usuario (el healthcheck se apagará solo):
+   ```bash
+   sudo chown -R "$(id -u):$(id -g)" frontend/.svelte-kit
+   ```
+
+3. Reiniciar el frontend:
+   ```bash
+   docker compose restart frontend
+   ```
+
+4. Verificar:
+   ```bash
+   docker compose ps
+   docker compose logs frontend
+   ```
+
+**Prevención:** `make doctor` ya detecta `.svelte-kit` con permisos ridículos
+(propiedad de root / no escribible) antes de levantar la pila.
 
 ---
 

@@ -37,6 +37,28 @@ def test_export_notes_zip(client, db_session):
     resp = client.get("/export/notes/zip")
     assert resp.status_code == 200
     assert resp.headers["content-type"] == "application/zip"
+    assert resp.headers["content-disposition"].startswith("attachment; filename=")
+    # The body must be a valid ZIP archive containing the note file.
+    import io
+    import zipfile
+
+    zf = zipfile.ZipFile(io.BytesIO(resp.content))
+    names = zf.namelist()
+    assert len(names) >= 1
+    assert any(name.endswith(".md") for name in names)
+    body = zf.read(names[0]).decode("utf-8")
+    assert "# Hello" in body
+    assert "World" in body
+
+
+def test_export_notes_html_empty(client):
+    resp = client.get("/export/notes/html")
+    assert resp.status_code == 404
+
+
+def test_export_notes_zip_empty(client):
+    resp = client.get("/export/notes/zip")
+    assert resp.status_code == 404
 
 
 def test_export_notes_markdown_empty(client):

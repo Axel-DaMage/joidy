@@ -5,7 +5,8 @@ from unittest.mock import patch
 
 def test_vapid_public_key_unconfigured(client):
     resp = client.get("/push/vapid-public-key")
-    assert resp.status_code == 503
+    assert resp.status_code == 200
+    assert resp.json()["publicKey"] is None
 
 
 def test_subscribe_requires_keys(client):

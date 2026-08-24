@@ -10,6 +10,25 @@
     toggleTimer,
   } from '$lib/stores/pomodoro';
   import { notes } from '$lib/stores/notes';
+  import { use24HourClock } from '$lib/stores/settings';
+  import { getTimezone, formatClock } from '$lib/utils/clock';
+  import { t } from 'svelte-i18n';
+
+  // ── Wall clock (#706) ──────────────────────────────────────────────────────
+  // Large, readable clock at the top of the focus overlay. Respects the same
+  // timezone (joidy-timezone localStorage) and 24h/12h preference as TimeWidget.
+  let clockStr = $state('--:--:--');
+  let clockInterval: ReturnType<typeof setInterval> | null = null;
+
+  function updateFocusClock() {
+    clockStr = formatClock(getTimezone(), $use24HourClock);
+  }
+
+  // Re-format immediately when the 24h/12h preference changes.
+  $effect(() => {
+    $use24HourClock;
+    updateFocusClock();
+  });
 
   let reducedMotion = $state(false);
 
@@ -89,11 +108,14 @@
 
   onMount(() => {
     window.addEventListener('keydown', handleKeydown, true);
+    updateFocusClock();
+    clockInterval = setInterval(updateFocusClock, 1000);
   });
 
   onDestroy(() => {
     window.removeEventListener('keydown', handleKeydown, true);
     if (autoStopTimeout) clearTimeout(autoStopTimeout);
+    if (clockInterval) clearInterval(clockInterval);
   });
 
   function handleExit() {
@@ -107,11 +129,15 @@
     class="focus-overlay"
     role="dialog"
     aria-modal="true"
-    aria-label="Modo enfoque"
+    aria-label={$t('focus.modeLabel')}
     in:fade={reducedMotion ? { duration: 0 } : { duration: 220 }}
     out:fade={reducedMotion ? { duration: 0 } : { duration: 180 }}
   >
     <div class="focus-content">
+      <div class="focus-clock mono" aria-label={$t('focus.clock')} title={clockStr}>
+        {clockStr}
+      </div>
+
       {#if activeNoteTitle}
         <div class="focus-note-title" in:fade={{ duration: 200 }}>
           <Target size={13} />
@@ -120,7 +146,7 @@
       {:else}
         <div class="focus-note-title placeholder">
           <Target size={13} />
-          <span class="note-title-text">Sesión de enfoque</span>
+          <span class="note-title-text">{$t('focus.session')}</span>
         </div>
       {/if}
 
@@ -172,12 +198,12 @@
       {/if}
 
       {#if $queuedNotifications.length > 0}
-        <div class="queued-count" title="Notificaciones en cola">
+        <div class="queued-count" title={$t('focus.queuedNotifications')}>
           {$queuedNotifications.length} notificación{#if $queuedNotifications.length !== 1}s{/if} en cola
         </div>
       {/if}
 
-      <button class="exit-btn" onclick={handleExit} aria-label="Salir del modo enfoque">
+      <button class="exit-btn" onclick={handleExit} aria-label={$t('focus.exit')}>
         Salir del modo enfoque
       </button>
     </div>
@@ -194,6 +220,11 @@
   .focus-content {
     display: flex; flex-direction: column; align-items: center;
     gap: var(--s5); padding: var(--s6); max-width: 480px; width: 100%;
+  }
+  .focus-clock {
+    font-size: 34px; font-weight: 300; color: var(--text-secondary);
+    letter-spacing: 0.06em; line-height: 1; text-align: center;
+    opacity: 0.85; user-select: none;
   }
   .focus-note-title {
     display: flex; align-items: center; gap: 8px;

@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: pgvector/pgvector:pg16
+    image: ${POSTGRES_IMAGE:-pgvector/pgvector:pg16}
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-joidy}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required — set it in .env}
@@ -12,25 +12,43 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
     restart: unless-stopped
 
   api:
-    image: d4mag3/joidy-api:latest
+    image: ${DOCKER_REGISTRY:-d4mag3}/joidy-api:${IMAGE_TAG:-latest}
     ports:
       - "${API_PORT:-8000}:8000"
     volumes:
       - ./data/db:/data/db
       - ./data/uploads:/data/uploads
+      # NOTE: api keeps .env read-write on purpose — routers/config.py persists
+      # settings (e.g. GEMINI_API_KEY, OBSIDIAN_VAULT_PATH) to /app/.env.
       - ./.env:/app/.env
       - ${OBSIDIAN_VAULT_PATH:-./data/vault}:/vault
+      # Docker socket for power management (sleep/wake/shutdown from web UI).
+      # On Linux: ensure the container user can access the socket
+      #   (set DOCKER_GID in .env to your host's docker group GID, or use 0 for root).
+      # On Windows Docker Desktop: the socket is accessible by default.
+      - ${DOCKER_SOCK_PATH:-/var/run/docker.sock}:/var/run/docker.sock
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-joidy}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-joidy}
       - AI_SERVICE_URL=http://ai-service:8002
+      - AI_SERVICE_ENABLED=${AI_SERVICE_ENABLED:-false}
       - WORKER_URL=http://worker:8001
       - APP_ENV=${APP_ENV:-production}
       - UPLOAD_DIR=/data/uploads
       - OBSIDIAN_VAULT_PATH=/vault
       - VAULT_PATH=/vault
+      - DOCKER_SOCK_PATH=/var/run/docker.sock
+    # Add the host's docker group so the app user can access the Docker socket.
+    # Set DOCKER_GID in .env (find it with `getent group docker | cut -d: -f3` on Linux).
+    group_add:
+      - "${DOCKER_GID:-0}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -40,10 +58,20 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 1G
     restart: unless-stopped
 
   ai-service:
-    image: d4mag3/joidy-ai-service:latest
+    image: ${DOCKER_REGISTRY:-d4mag3}/joidy-ai-service:${IMAGE_TAG:-latest}
+    # In production, the AI service is opt-in via Docker Compose profiles.
+    # It only starts with `docker compose --profile ai up`. In development,
+    # the dev overlay clears this profile so it always starts with `make dev`.
+    # See AGENTS.md § "AI Service" for details.
+    profiles: ["ai"]
     ports:
       - "${AI_SERVICE_PORT:-8002}:8002"
     volumes:
@@ -61,18 +89,24 @@ services:
       timeout: 5s
       retries: 5
       start_period: 15s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 1536M
     restart: unless-stopped
 
   worker:
-    image: d4mag3/joidy-worker:latest
+    image: ${DOCKER_REGISTRY:-d4mag3}/joidy-worker:${IMAGE_TAG:-latest}
+    ports:
+      - "${WORKER_PORT:-8001}:8001"
     volumes:
       - ./data/db:/data/db
-      - ./.env:/app/.env
+      - ./.env:/app/.env:ro
       - ${OBSIDIAN_VAULT_PATH:-./data/vault}:/vault
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-joidy}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-joidy}
       - API_URL=http://api:8000
-      - AI_SERVICE_URL=http://ai-service:8002
       - VAULT_PATH=/vault
       - APP_ENV=${APP_ENV:-production}
       - PYTHONUNBUFFERED=1
@@ -80,15 +114,20 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import os, signal; os.kill(1, 0)\" || exit 1"]
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 15s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
     restart: unless-stopped
 
   frontend:
-    image: d4mag3/joidy-frontend:latest
+    image: ${DOCKER_REGISTRY:-d4mag3}/joidy-frontend:${IMAGE_TAG:-latest}
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
     environment:
@@ -96,6 +135,17 @@ services:
     depends_on:
       api:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
     restart: unless-stopped
 
 volumes:

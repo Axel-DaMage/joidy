@@ -8,6 +8,7 @@
   import { darkMode, devMode } from '$lib/stores/settings';
   import { isOpen, close } from '$lib/stores/commandPalette';
   import { get } from 'svelte/store';
+  import { t } from 'svelte-i18n';
 
   interface Command {
     type: string;
@@ -253,7 +254,7 @@
     class="cp-backdrop"
     role="dialog"
     aria-modal="true"
-    aria-label="Paleta de comandos"
+    aria-label={$t('commandPalette.label')}
     tabindex="-1"
     onclick={handleBackdropClick}
     transition:fade={{ duration: 100 }}
@@ -268,8 +269,8 @@
           bind:this={searchInput}
           bind:value={query}
           class="cp-input"
-          placeholder="Buscar comandos, notas, #etiquetas..."
-          aria-label="Buscar comandos"
+          placeholder={$t('commandPalette.searchPlaceholder')}
+          aria-label={$t('commandPalette.searchLabel')}
           autocomplete="off"
           spellcheck="false"
         />
@@ -278,7 +279,7 @@
 
       <div class="cp-body" bind:this={listEl}>
         {#if filteredItems.length === 0}
-          <div class="cp-empty">No se encontraron resultados</div>
+          <div class="cp-empty">{$t('commandPalette.noResults')}</div>
         {:else}
           {#each filteredItems as item, index (item.title + index)}
             {#if index === 0 || filteredItems[index - 1].type !== item.type}
@@ -410,5 +411,24 @@
     color: var(--text-muted);
     display: flex;
     align-items: center;
+  }
+
+  @media (max-width: 560px) {
+    .cp-backdrop {
+      padding-top: 8vh;
+      padding-left: var(--s2);
+      padding-right: var(--s2);
+    }
+    .cp-modal {
+      max-width: 100%;
+      max-height: 70vh;
+      border-radius: var(--r);
+    }
+    .cp-item {
+      padding: var(--s3_5) var(--s4);
+    }
+    .cp-item-title {
+      font-size: 14px;
+    }
   }
 </style>

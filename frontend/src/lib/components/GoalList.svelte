@@ -100,7 +100,7 @@
 
   .editor-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
     gap: 20px;
     width: 100%;
   }
@@ -108,6 +108,16 @@
   @media (max-width: 768px) {
     .editor-grid {
       grid-template-columns: 1fr;
+    }
+    .editor-grid-container {
+      padding: var(--s3);
+    }
+  }
+
+  @media (max-width: 480px) {
+    .editor-grid {
+      grid-template-columns: 1fr;
+      gap: var(--s3);
     }
   }
 </style>

@@ -5,6 +5,7 @@
   import type { GraphNode, GraphEdge } from '$lib/api';
   import { forceCollide } from 'd3';
   import type { NodeObject } from 'force-graph';
+  import { t } from 'svelte-i18n';
 
   // ForceGraph constructor is dynamically imported; typed loosely since
   // force-graph uses a Kapsule factory pattern with complex generics not
@@ -25,7 +26,7 @@
   let graph: any = null;
   let lastFocusId: number | string | null = null;
   let searchQuery = '';
-  
+
   // Toggles and Filter settings (Obsidian styles)
   let showNotes = true;
   let showTags = true;
@@ -74,11 +75,11 @@
   ];
 
   const COLORS = {
-    tag: '#1d9c73',        // Emerald Green (Obsidian Tag default)
-    note: '#8a8a8a',       // Slate Grey (Obsidian Note default)
+    tag: '#1d9c73', // Emerald Green (Obsidian Tag default)
+    note: '#8a8a8a', // Slate Grey (Obsidian Note default)
     unresolved: '#4f3e3e', // Dim crimson/dark grey (Obsidian Unresolved default)
-    selected: '#e8a838',   // Golden amber (Obsidian Selected default)
-    default: '#666666'
+    selected: '#e8a838', // Golden amber (Obsidian Selected default)
+    default: '#666666',
   } as const;
 
   // Use the `data` prop if provided (for timeline/search filtering, #373),
@@ -90,20 +91,21 @@
   $: {
     neighbors.clear();
     const edges = effectiveData.edges;
-    edges.forEach(edge => {
+    edges.forEach((edge) => {
       const s = typeof edge.source === 'object' ? (edge.source as GraphNode).id : edge.source;
       const t = typeof edge.target === 'object' ? (edge.target as GraphNode).id : edge.target;
-      
+
       if (!neighbors.has(s)) neighbors.set(s, new Set());
       if (!neighbors.has(t)) neighbors.set(t, new Set());
-      
+
       neighbors.get(s)!.add(t);
       neighbors.get(t)!.add(s);
     });
   }
 
   const getNodeType = (n: GraphNode) => n.type;
-  const getNodeLabel = (n: GraphNode) => n.type === 'note' ? (n.title || '') : (n.name || n.title || '');
+  const getNodeLabel = (n: GraphNode) =>
+    n.type === 'note' ? n.title || '' : n.name || n.title || '';
 
   // Hex to RGBA helper for semi-transparent fills
   function hexToRgba(hex: string, alpha: number): string {
@@ -143,7 +145,7 @@
         return labelLower.replace(/^#/, '') === targetTag;
       }
       if (node.type === 'note' && node.tags) {
-        return node.tags.some(t => t.toLowerCase().replace(/^#/, '') === targetTag);
+        return node.tags.some((t) => t.toLowerCase().replace(/^#/, '') === targetTag);
       }
       return false;
     }
@@ -165,12 +167,15 @@
 
     // 4. Default general text search: matches title, tags
     const searchMatch = labelLower.includes(q);
-    const tagMatch = node.tags ? node.tags.some(t => t.toLowerCase().includes(q)) : false;
+    const tagMatch = node.tags ? node.tags.some((t) => t.toLowerCase().includes(q)) : false;
     return searchMatch || tagMatch;
   }
 
   function addColorGroup() {
-    colorGroups = [...colorGroups, { query: '', color: COLOR_PRESETS[colorGroups.length % COLOR_PRESETS.length] }];
+    colorGroups = [
+      ...colorGroups,
+      { query: '', color: COLOR_PRESETS[colorGroups.length % COLOR_PRESETS.length] },
+    ];
     saveGroups();
   }
 
@@ -207,7 +212,7 @@
     const edges = src.edges.slice();
 
     // 1. Filter nodes based on visible types
-    let filteredNodes = nodes.filter(n => {
+    let filteredNodes = nodes.filter((n) => {
       if (n.type === 'note' && !showNotes) return false;
       if (n.type === 'tag' && !showTags) return false;
       if (n.type === 'unresolved' && !showUnresolved) return false;
@@ -215,12 +220,12 @@
       return true;
     });
 
-    let nodeIds = new Set(filteredNodes.map(n => n.id));
-    const getEdgeSourceId = (e: any) => typeof e.source === 'object' ? e.source.id : e.source;
-    const getEdgeTargetId = (e: any) => typeof e.target === 'object' ? e.target.id : e.target;
+    let nodeIds = new Set(filteredNodes.map((n) => n.id));
+    const getEdgeSourceId = (e: any) => (typeof e.source === 'object' ? e.source.id : e.source);
+    const getEdgeTargetId = (e: any) => (typeof e.target === 'object' ? e.target.id : e.target);
 
     // 2. Filter edges based on visible nodes and type
-    let filteredEdges = edges.filter(e => {
+    let filteredEdges = edges.filter((e) => {
       if (e.type === 'cooccurrence' && !showCooccurrences) return false;
       return nodeIds.has(getEdgeSourceId(e)) && nodeIds.has(getEdgeTargetId(e));
     });
@@ -234,10 +239,12 @@
         degree.set(s, (degree.get(s) ?? 0) + 1);
         degree.set(t, (degree.get(t) ?? 0) + 1);
       });
-      filteredNodes = filteredNodes.filter(n => (degree.get(n.id) ?? 0) > 0);
-      
-      const finalNodeIds = new Set(filteredNodes.map(n => n.id));
-      filteredEdges = filteredEdges.filter(e => finalNodeIds.has(getEdgeSourceId(e)) && finalNodeIds.has(getEdgeTargetId(e)));
+      filteredNodes = filteredNodes.filter((n) => (degree.get(n.id) ?? 0) > 0);
+
+      const finalNodeIds = new Set(filteredNodes.map((n) => n.id));
+      filteredEdges = filteredEdges.filter(
+        (e) => finalNodeIds.has(getEdgeSourceId(e)) && finalNodeIds.has(getEdgeTargetId(e))
+      );
     }
 
     graph.graphData({ nodes: filteredNodes, links: filteredEdges });
@@ -254,7 +261,8 @@
       .nodeCanvasObject((node: ForceGraphNode, ctx: CanvasRenderingContext2D, scale: number) => {
         const x = node.x;
         const y = node.y;
-        if (x === undefined || y === undefined || !Number.isFinite(x) || !Number.isFinite(y)) return;
+        if (x === undefined || y === undefined || !Number.isFinite(x) || !Number.isFinite(y))
+          return;
         const label = getNodeLabel(node);
         const isNote = node.type === 'note';
         const isTag = node.type === 'tag';
@@ -266,19 +274,20 @@
         // Selection & Hover States
         const isSelected = $selectedTag === node.id;
         const isHovered = hoveredNode?.id === node.id;
-        const isFocused = focusId !== null && (node.id === focusId);
+        const isFocused = focusId !== null && node.id === focusId;
         const isNeighborOfFocus = focus !== null && neighbors.get(focus)?.has(node.id);
 
         // Fading Logic
         const matchesSearch = q ? label.toLowerCase().includes(q) : true;
-        const focusDim = focus !== null ? (node.id === focus || isNeighborOfFocus ? 1.0 : 0.15) : 1.0;
+        const focusDim =
+          focus !== null ? (node.id === focus || isNeighborOfFocus ? 1.0 : 0.15) : 1.0;
         const searchDim = q ? (matchesSearch ? 1.0 : 0.15) : 1.0;
         const alpha = Math.min(focusDim, searchDim);
 
         ctx.globalAlpha = alpha;
 
         // Custom Color Queries Evaluation
-        let nodeColor: string = isTag ? COLORS.tag : (isUnresolved ? COLORS.unresolved : COLORS.note);
+        let nodeColor: string = isTag ? COLORS.tag : isUnresolved ? COLORS.unresolved : COLORS.note;
         for (const group of colorGroups) {
           if (matchesQuery(node, group.query)) {
             nodeColor = group.color;
@@ -301,14 +310,7 @@
           ctx.fill();
         } else {
           // Normal nodes draw with gradient fill
-          const gradient = ctx.createRadialGradient(
-            x - r * 0.3,
-            y - r * 0.3,
-            0,
-            x,
-            y,
-            r
-          );
+          const gradient = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, 0, x, y, r);
           gradient.addColorStop(0, lightenColor(nodeColor, 0.25));
           gradient.addColorStop(1, nodeColor);
           ctx.fillStyle = gradient;
@@ -337,11 +339,15 @@
         }
 
         // Draw label text
-        const showThisLabel = showLabels && (scale >= labelThreshold || isHovered || isSelected || isNeighborOfFocus);
+        const showThisLabel =
+          showLabels && (scale >= labelThreshold || isHovered || isSelected || isNeighborOfFocus);
         if (showThisLabel && label) {
           const fontSize = (10 * textScale) / scale;
           ctx.font = `${fontSize}px var(--font-sans, system-ui, -apple-system, sans-serif)`;
-          ctx.fillStyle = (hoveredNode?.id === node.id || $selectedTag === node.id) ? '#ffffff' : 'rgba(215, 215, 215, 0.8)';
+          ctx.fillStyle =
+            hoveredNode?.id === node.id || $selectedTag === node.id
+              ? '#ffffff'
+              : 'rgba(215, 215, 215, 0.8)';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'top';
           ctx.globalAlpha = alpha;
@@ -356,12 +362,12 @@
           baseWidth *= Math.sqrt(l.weight);
         }
         baseWidth *= linkThicknessScale;
-        
+
         if (focus === null) return baseWidth;
-        
+
         const sourceId = typeof l.source === 'object' ? (l.source as any).id : l.source;
         const targetId = typeof l.target === 'object' ? (l.target as any).id : l.target;
-        return (sourceId === focus || targetId === focus) ? baseWidth * 1.5 : baseWidth * 0.2;
+        return sourceId === focus || targetId === focus ? baseWidth * 1.5 : baseWidth * 0.2;
       })
       .linkColor((l: GraphEdge) => {
         const sourceId = typeof l.source === 'object' ? (l.source as any).id : l.source;
@@ -387,12 +393,13 @@
 
         return '#1b1b1b'; // dim non-connected lines
       })
-      .linkLineDash((l: GraphEdge) => l.type === 'cooccurrence' ? [3, 3] : []);
+      .linkLineDash((l: GraphEdge) => (l.type === 'cooccurrence' ? [3, 3] : []));
   }
 
   function focusOnNode(id: number | string) {
     if (!graph) return;
-    const node = graph.graphData().nodes.find((n: ForceGraphNode) => n.id === id) as ForceGraphNode | undefined;
+    const node = graph.graphData().nodes.find((n: ForceGraphNode) => n.id === id) as
+      ForceGraphNode | undefined;
     if (!node) return;
     graph.centerAt(node.x ?? 0, node.y ?? 0, 400);
     graph.zoom(1.2, 400);
@@ -461,7 +468,7 @@
       // Default presets
       colorGroups = [
         { query: 'tag:importante', color: '#f59e0b' },
-        { query: 'tag:idea', color: '#10b981' }
+        { query: 'tag:idea', color: '#10b981' },
       ];
     }
 
@@ -517,11 +524,14 @@
     }
 
     if (enableCollision) {
-      graph.d3Force('collide', forceCollide((node: any) => {
-        const isTag = node.type === 'tag';
-        const r = isTag ? 4.8 : 3.4;
-        return r + 8; // radius + padding for collision physics
-      }));
+      graph.d3Force(
+        'collide',
+        forceCollide((node: any) => {
+          const isTag = node.type === 'tag';
+          const r = isTag ? 4.8 : 3.4;
+          return r + 8; // radius + padding for collision physics
+        })
+      );
     } else {
       graph.d3Force('collide', null);
     }
@@ -541,284 +551,413 @@
 
 <div class="graph-wrapper" style="width:100%; height:100%; position:relative; min-height: 450px;">
   {#if !loaded}
-    <div class="graph-loading">Cargando grafo de conocimiento...</div>
+    <div class="graph-loading">{$t('knowledgeGraphForce.loading')}</div>
   {/if}
-  
+
   <div bind:this={containerEl} class="graph-canvas"></div>
 
   {#if loaded}
     <!-- GEAR / TOGGLE PANEL FLOATING BUTTON -->
-    <button 
-      class="settings-toggle-btn" 
-      class:panel-open={showSettingsPanel} 
-      title="Ajustes del Grafo" 
-      onclick={() => showSettingsPanel = !showSettingsPanel}
+    <button
+      class="settings-toggle-btn"
+      class:panel-open={showSettingsPanel}
+      title={$t('knowledgeGraphForce.settingsTitle')}
+      onclick={() => (showSettingsPanel = !showSettingsPanel)}
     >
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="gear-icon"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        class="gear-icon"
+        ><circle cx="12" cy="12" r="3"></circle><path
+          d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
+        ></path></svg
+      >
     </button>
 
     <!-- OBSIDIAN STYLE COLLAPSIBLE FLOATING SIDEBAR PANEL -->
-    <div class="settings-sidebar" class:open={showSettingsPanel}>
-      <div class="sidebar-header">
-        <h4>Ajustes del Grafo</h4>
-        <button class="close-panel-btn" onclick={() => showSettingsPanel = false} aria-label="Cerrar panel">×</button>
-      </div>
-
-      <div class="sidebar-scroll">
-        <!-- 1. FILTROS -->
-        <div class="accordion-item" class:active={activeSection === 'filters'}>
+    {#if showSettingsPanel}
+      <div class="settings-sidebar" class:open={showSettingsPanel}>
+        <div class="sidebar-header">
+          <h4>{$t('knowledgeGraphForce.settingsTitle')}</h4>
           <button
-            type="button"
-            class="accordion-header"
-            onclick={() => toggleSection('filters')}
-            aria-expanded={activeSection === 'filters'}
+            class="close-panel-btn"
+            onclick={() => (showSettingsPanel = false)}
+            aria-label={$t('knowledgeGraphForce.closePanel')}>×</button
           >
-            <span class="chevron" class:expanded={activeSection === 'filters'}>›</span>
-            <h5>Filtros</h5>
-          </button>
-          {#if activeSection === 'filters'}
-            <div class="accordion-content">
-              <div class="filter-search-wrap">
-                <input
-                  class="panel-search"
-                  type="text"
-                  placeholder="Buscar notas o tags..."
-                  bind:value={searchQuery}
-                  oninput={applyStyling}
-                />
-                {#if searchQuery}
-                  <button class="panel-search-clear" onclick={() => { searchQuery = ''; applyStyling(); }} aria-label="Limpiar búsqueda">×</button>
-                {/if}
-              </div>
-
-              <label class="toggle-control">
-                <span>Archivos</span>
-                <span class="switch">
-                  <input type="checkbox" bind:checked={showNotes} onchange={rebuildGraph} />
-                  <span class="slider"></span>
-                </span>
-              </label>
-
-              <label class="toggle-control">
-                <span>Etiquetas</span>
-                <span class="switch">
-                  <input type="checkbox" bind:checked={showTags} onchange={rebuildGraph} />
-                  <span class="slider"></span>
-                </span>
-              </label>
-
-              <label class="toggle-control">
-                <span>Archivos no existentes</span>
-                <span class="switch">
-                  <input type="checkbox" bind:checked={showUnresolved} onchange={rebuildGraph} />
-                  <span class="slider"></span>
-                </span>
-              </label>
-
-              <label class="toggle-control">
-                <span>Adjuntos</span>
-                <span class="switch">
-                  <input type="checkbox" bind:checked={showAttachments} onchange={rebuildGraph} />
-                  <span class="slider"></span>
-                </span>
-              </label>
-
-              <label class="toggle-control">
-                <span>Huérfanos</span>
-                <span class="switch">
-                  <input type="checkbox" bind:checked={showOrphans} onchange={rebuildGraph} />
-                  <span class="slider"></span>
-                </span>
-              </label>
-
-              <label class="toggle-control">
-                <span>Co-ocurrencias de etiquetas</span>
-                <span class="switch">
-                  <input type="checkbox" bind:checked={showCooccurrences} onchange={rebuildGraph} />
-                  <span class="slider"></span>
-                </span>
-              </label>
-            </div>
-          {/if}
         </div>
 
-        <!-- 2. GRUPOS DE COLOR -->
-        <div class="accordion-item" class:active={activeSection === 'groups'}>
-          <button
-            type="button"
-            class="accordion-header"
-            onclick={() => toggleSection('groups')}
-            aria-expanded={activeSection === 'groups'}
-          >
-            <span class="chevron" class:expanded={activeSection === 'groups'}>›</span>
-            <h5>Grupos de color</h5>
-          </button>
-          {#if activeSection === 'groups'}
-            <div class="accordion-content">
-              <p class="section-desc">Pinta nodos según consultas (ej. <code>tag:idea</code>, <code>title:nota</code>)</p>
-              
-              <div class="groups-list">
-                {#each colorGroups as group, idx}
-                  <div class="group-row">
-                    <input 
-                      type="color" 
-                      class="color-picker-input" 
-                      bind:value={group.color} 
-                      onchange={saveGroups} 
+        <div class="sidebar-scroll">
+          <!-- 1. FILTROS -->
+          <div class="accordion-item" class:active={activeSection === 'filters'}>
+            <button
+              type="button"
+              class="accordion-header"
+              onclick={() => toggleSection('filters')}
+              aria-expanded={activeSection === 'filters'}
+            >
+              <span class="chevron" class:expanded={activeSection === 'filters'}>›</span>
+              <h5>{$t('knowledgeGraphForce.filters')}</h5>
+            </button>
+            {#if activeSection === 'filters'}
+              <div class="accordion-content">
+                <div class="filter-search-wrap">
+                  <input
+                    class="panel-search"
+                    type="text"
+                    placeholder={$t('knowledgeGraphForce.searchPlaceholder')}
+                    bind:value={searchQuery}
+                    oninput={applyStyling}
+                  />
+                  {#if searchQuery}
+                    <button
+                      class="panel-search-clear"
+                      onclick={() => {
+                        searchQuery = '';
+                        applyStyling();
+                      }}
+                      aria-label={$t('knowledgeGraphForce.clearSearch')}>×</button
+                    >
+                  {/if}
+                </div>
+
+                <label class="toggle-control">
+                  <span>{$t('knowledgeGraphForce.files')}</span>
+                  <span class="switch">
+                    <input type="checkbox" bind:checked={showNotes} onchange={rebuildGraph} />
+                    <span class="slider"></span>
+                  </span>
+                </label>
+
+                <label class="toggle-control">
+                  <span>{$t('knowledgeGraphForce.tagsLabel')}</span>
+                  <span class="switch">
+                    <input type="checkbox" bind:checked={showTags} onchange={rebuildGraph} />
+                    <span class="slider"></span>
+                  </span>
+                </label>
+
+                <label class="toggle-control">
+                  <span>{$t('knowledgeGraphForce.nonExistentFiles')}</span>
+                  <span class="switch">
+                    <input type="checkbox" bind:checked={showUnresolved} onchange={rebuildGraph} />
+                    <span class="slider"></span>
+                  </span>
+                </label>
+
+                <label class="toggle-control">
+                  <span>{$t('knowledgeGraphForce.attachments')}</span>
+                  <span class="switch">
+                    <input type="checkbox" bind:checked={showAttachments} onchange={rebuildGraph} />
+                    <span class="slider"></span>
+                  </span>
+                </label>
+
+                <label class="toggle-control">
+                  <span>{$t('knowledgeGraphForce.orphans')}</span>
+                  <span class="switch">
+                    <input type="checkbox" bind:checked={showOrphans} onchange={rebuildGraph} />
+                    <span class="slider"></span>
+                  </span>
+                </label>
+
+                <label class="toggle-control">
+                  <span>{$t('knowledgeGraphForce.tagCooccurrences')}</span>
+                  <span class="switch">
+                    <input
+                      type="checkbox"
+                      bind:checked={showCooccurrences}
+                      onchange={rebuildGraph}
                     />
-                    <input 
-                      type="text" 
-                      class="group-query-input" 
-                      placeholder="tag:idea o palabra clave..." 
-                      bind:value={group.query} 
-                      oninput={saveGroups} 
-                    />
-                    <button class="group-delete-btn" title="Eliminar regla" aria-label="Eliminar regla" onclick={() => removeColorGroup(idx)}>×</button>
+                    <span class="slider"></span>
+                  </span>
+                </label>
+              </div>
+            {/if}
+          </div>
+
+          <!-- 2. GRUPOS DE COLOR -->
+          <div class="accordion-item" class:active={activeSection === 'groups'}>
+            <button
+              type="button"
+              class="accordion-header"
+              onclick={() => toggleSection('groups')}
+              aria-expanded={activeSection === 'groups'}
+            >
+              <span class="chevron" class:expanded={activeSection === 'groups'}>›</span>
+              <h5>{$t('knowledgeGraphForce.colorGroups')}</h5>
+            </button>
+            {#if activeSection === 'groups'}
+              <div class="accordion-content">
+                <p class="section-desc">
+                  Pinta nodos según consultas (ej. <code>tag:idea</code>, <code>title:nota</code>)
+                </p>
+
+                <div class="groups-list">
+                  {#each colorGroups as group, idx}
+                    <div class="group-row">
+                      <input
+                        type="color"
+                        class="color-picker-input"
+                        bind:value={group.color}
+                        onchange={saveGroups}
+                      />
+                      <input
+                        type="text"
+                        class="group-query-input"
+                        placeholder="tag:idea o palabra clave..."
+                        bind:value={group.query}
+                        oninput={saveGroups}
+                      />
+                      <button
+                        class="group-delete-btn"
+                        title={$t('knowledgeGraphForce.removeRule')}
+                        aria-label={$t('knowledgeGraphForce.removeRule')}
+                        onclick={() => removeColorGroup(idx)}>×</button
+                      >
+                    </div>
+                  {/each}
+                </div>
+
+                <button class="btn btn-ghost add-group-btn" onclick={addColorGroup}>
+                  + Añadir grupo
+                </button>
+              </div>
+            {/if}
+          </div>
+
+          <!-- 3. VISUALIZACIÓN -->
+          <div class="accordion-item" class:active={activeSection === 'display'}>
+            <button
+              type="button"
+              class="accordion-header"
+              onclick={() => toggleSection('display')}
+              aria-expanded={activeSection === 'display'}
+            >
+              <span class="chevron" class:expanded={activeSection === 'display'}>›</span>
+              <h5>{$t('knowledgeGraphForce.visualization')}</h5>
+            </button>
+            {#if activeSection === 'display'}
+              <div class="accordion-content">
+                <label class="toggle-control">
+                  <span>{$t('knowledgeGraphForce.showTextLabels')}</span>
+                  <span class="switch">
+                    <input type="checkbox" bind:checked={showLabels} onchange={applyStyling} />
+                    <span class="slider"></span>
+                  </span>
+                </label>
+
+                <label class="toggle-control">
+                  <span>{$t('knowledgeGraphForce.directionArrows')}</span>
+                  <span class="switch">
+                    <input type="checkbox" bind:checked={showArrows} />
+                    <span class="slider"></span>
+                  </span>
+                </label>
+
+                <label class="toggle-control">
+                  <span>{$t('knowledgeGraphForce.avoidOverlap')}</span>
+                  <span class="switch">
+                    <input type="checkbox" bind:checked={enableCollision} />
+                    <span class="slider"></span>
+                  </span>
+                </label>
+
+                <div class="slider-control">
+                  <div class="slider-lbl">
+                    <span>{$t('knowledgeGraphForce.nodeSize')}</span>
+                    <span>{nodeSizeScale.toFixed(1)}x</span>
                   </div>
-                {/each}
-              </div>
-
-              <button class="btn btn-ghost add-group-btn" onclick={addColorGroup}>
-                + Añadir grupo
-              </button>
-            </div>
-          {/if}
-        </div>
-
-        <!-- 3. VISUALIZACIÓN -->
-        <div class="accordion-item" class:active={activeSection === 'display'}>
-          <button
-            type="button"
-            class="accordion-header"
-            onclick={() => toggleSection('display')}
-            aria-expanded={activeSection === 'display'}
-          >
-            <span class="chevron" class:expanded={activeSection === 'display'}>›</span>
-            <h5>Visualización</h5>
-          </button>
-          {#if activeSection === 'display'}
-            <div class="accordion-content">
-              <label class="toggle-control">
-                <span>Mostrar etiquetas de texto</span>
-                <span class="switch">
-                  <input type="checkbox" bind:checked={showLabels} onchange={applyStyling} />
-                  <span class="slider"></span>
-                </span>
-              </label>
-
-              <label class="toggle-control">
-                <span>Flechas de dirección</span>
-                <span class="switch">
-                  <input type="checkbox" bind:checked={showArrows} />
-                  <span class="slider"></span>
-                </span>
-              </label>
-
-              <label class="toggle-control">
-                <span>Evitar solapamiento de nodos</span>
-                <span class="switch">
-                  <input type="checkbox" bind:checked={enableCollision} />
-                  <span class="slider"></span>
-                </span>
-              </label>
-
-              <div class="slider-control">
-                <div class="slider-lbl">
-                  <span>Tamaño del nodo</span>
-                  <span>{nodeSizeScale.toFixed(1)}x</span>
+                  <input
+                    type="range"
+                    min="0.5"
+                    max="3.0"
+                    step="0.1"
+                    bind:value={nodeSizeScale}
+                    oninput={applyStyling}
+                  />
                 </div>
-                <input type="range" min="0.5" max="3.0" step="0.1" bind:value={nodeSizeScale} oninput={applyStyling} />
-              </div>
 
-              <div class="slider-control">
-                <div class="slider-lbl">
-                  <span>Grosor de línea</span>
-                  <span>{linkThicknessScale.toFixed(1)}x</span>
+                <div class="slider-control">
+                  <div class="slider-lbl">
+                    <span>{$t('knowledgeGraphForce.lineWidth')}</span>
+                    <span>{linkThicknessScale.toFixed(1)}x</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.1"
+                    max="3.0"
+                    step="0.1"
+                    bind:value={linkThicknessScale}
+                    oninput={applyStyling}
+                  />
                 </div>
-                <input type="range" min="0.1" max="3.0" step="0.1" bind:value={linkThicknessScale} oninput={applyStyling} />
-              </div>
 
-              <div class="slider-control">
-                <div class="slider-lbl">
-                  <span>Escala del texto</span>
-                  <span>{textScale.toFixed(1)}x</span>
+                <div class="slider-control">
+                  <div class="slider-lbl">
+                    <span>{$t('knowledgeGraphForce.textScale')}</span>
+                    <span>{textScale.toFixed(1)}x</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.5"
+                    max="2.0"
+                    step="0.1"
+                    bind:value={textScale}
+                    oninput={applyStyling}
+                  />
                 </div>
-                <input type="range" min="0.5" max="2.0" step="0.1" bind:value={textScale} oninput={applyStyling} />
-              </div>
 
-              <div class="slider-control">
-                <div class="slider-lbl">
-                  <span>Umbral de desvanecimiento</span>
-                  <span>{labelThreshold.toFixed(1)}</span>
+                <div class="slider-control">
+                  <div class="slider-lbl">
+                    <span>{$t('knowledgeGraphForce.fadeThreshold')}</span>
+                    <span>{labelThreshold.toFixed(1)}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.2"
+                    max="2.5"
+                    step="0.1"
+                    bind:value={labelThreshold}
+                    oninput={applyStyling}
+                  />
                 </div>
-                <input type="range" min="0.2" max="2.5" step="0.1" bind:value={labelThreshold} oninput={applyStyling} />
               </div>
-            </div>
-          {/if}
-        </div>
+            {/if}
+          </div>
 
-        <!-- 4. FUERZAS FÍSICAS -->
-        <div class="accordion-item" class:active={activeSection === 'forces'}>
-          <button
-            type="button"
-            class="accordion-header"
-            onclick={() => toggleSection('forces')}
-            aria-expanded={activeSection === 'forces'}
-          >
-            <span class="chevron" class:expanded={activeSection === 'forces'}>›</span>
-            <h5>Fuerzas</h5>
-          </button>
-          {#if activeSection === 'forces'}
-            <div class="accordion-content">
-              <div class="slider-control">
-                <div class="slider-lbl">
-                  <span>Repulsión (Fuerza de carga)</span>
-                  <span>{repelForce}</span>
+          <!-- 4. FUERZAS FÍSICAS -->
+          <div class="accordion-item" class:active={activeSection === 'forces'}>
+            <button
+              type="button"
+              class="accordion-header"
+              onclick={() => toggleSection('forces')}
+              aria-expanded={activeSection === 'forces'}
+            >
+              <span class="chevron" class:expanded={activeSection === 'forces'}>›</span>
+              <h5>{$t('knowledgeGraphForce.forces')}</h5>
+            </button>
+            {#if activeSection === 'forces'}
+              <div class="accordion-content">
+                <div class="slider-control">
+                  <div class="slider-lbl">
+                    <span>{$t('knowledgeGraphForce.repulsion')}</span>
+                    <span>{repelForce}</span>
+                  </div>
+                  <input type="range" min="30" max="600" step="10" bind:value={repelForce} />
                 </div>
-                <input type="range" min="30" max="600" step="10" bind:value={repelForce} />
-              </div>
 
-              <div class="slider-control">
-                <div class="slider-lbl">
-                  <span>Distancia de enlace</span>
-                  <span>{linkDistance}px</span>
+                <div class="slider-control">
+                  <div class="slider-lbl">
+                    <span>{$t('knowledgeGraphForce.linkDistance')}</span>
+                    <span>{linkDistance}px</span>
+                  </div>
+                  <input type="range" min="15" max="180" step="5" bind:value={linkDistance} />
                 </div>
-                <input type="range" min="15" max="180" step="5" bind:value={linkDistance} />
-              </div>
 
-              <div class="slider-control">
-                <div class="slider-lbl">
-                  <span>Atracción de enlace</span>
-                  <span>{linkForce.toFixed(1)}</span>
+                <div class="slider-control">
+                  <div class="slider-lbl">
+                    <span>{$t('knowledgeGraphForce.linkAttraction')}</span>
+                    <span>{linkForce.toFixed(1)}</span>
+                  </div>
+                  <input type="range" min="0.1" max="2.0" step="0.1" bind:value={linkForce} />
                 </div>
-                <input type="range" min="0.1" max="2.0" step="0.1" bind:value={linkForce} />
-              </div>
 
-              <button class="btn btn-ghost reset-btn" onclick={resetForces}>
-                Reestablecer fuerzas predeterminadas
-              </button>
-            </div>
-          {/if}
+                <button class="btn btn-ghost reset-btn" onclick={resetForces}>
+                  Reestablecer fuerzas predeterminadas
+                </button>
+              </div>
+            {/if}
+          </div>
         </div>
       </div>
-    </div>
+    {/if}
 
     <!-- PERSISTENT RIGHT TOOLBAR CONTROLS (FIT, ZOOM, MINIMAP) -->
     <div class="graph-quick-actions">
-      <button class="quick-btn" title="Acercar" onclick={zoomIn}>
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="action-icon"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+      <button class="quick-btn" title={$t('knowledgeGraphForce.zoomIn')} onclick={zoomIn}>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          class="action-icon"
+          ><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line
+            x1="8"
+            y1="12"
+            x2="16"
+            y2="12"
+          ></line></svg
+        >
       </button>
-      <button class="quick-btn" title="Alejar" onclick={zoomOut}>
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="action-icon"><circle cx="12" cy="12" r="10"></circle><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+      <button class="quick-btn" title={$t('knowledgeGraphForce.zoomOut')} onclick={zoomOut}>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          class="action-icon"
+          ><circle cx="12" cy="12" r="10"></circle><line x1="8" y1="12" x2="16" y2="12"></line></svg
+        >
       </button>
-      <button class="quick-btn" title="Ajustar a pantalla" onclick={zoomToFit}>
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="action-icon"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="9" x2="15" y2="15"></line><line x1="15" y1="9" x2="9" y2="15"></line></svg>
+      <button class="quick-btn" title={$t('knowledgeGraphForce.fitToScreen')} onclick={zoomToFit}>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          class="action-icon"
+          ><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line
+            x1="9"
+            y1="9"
+            x2="15"
+            y2="15"
+          ></line><line x1="15" y1="9" x2="9" y2="15"></line></svg
+        >
       </button>
-      <button class="quick-btn" title="Centrar" onclick={resetView}>
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="action-icon"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle></svg>
+      <button class="quick-btn" title={$t('knowledgeGraphForce.center')} onclick={resetView}>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          class="action-icon"
+          ><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle></svg
+        >
       </button>
-      <button class="quick-btn" title="Limpiar selección" onclick={clearHighlights}>
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="action-icon"><path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"></path><line x1="18" y1="9" x2="12" y2="15"></line><line x1="12" y1="9" x2="18" y2="15"></line></svg>
+      <button class="quick-btn" title={$t('knowledgeGraphForce.clearSelection')} onclick={clearHighlights}>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          class="action-icon"
+          ><path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"></path><line
+            x1="18"
+            y1="9"
+            x2="12"
+            y2="15"
+          ></line><line x1="12" y1="9" x2="18" y2="15"></line></svg
+        >
       </button>
     </div>
   {/if}
@@ -870,7 +1009,9 @@
     z-index: var(--z-modal);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
     backdrop-filter: blur(12px);
-    transition: all 0.25s ease, opacity 0.2s ease;
+    transition:
+      all 0.25s ease,
+      opacity 0.2s ease;
     opacity: 0.4;
   }
 
@@ -1023,8 +1164,14 @@
   }
 
   @keyframes slideDown {
-    from { opacity: 0; transform: translateY(-4px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 
   .section-desc {
@@ -1111,20 +1258,20 @@
     right: 0;
     bottom: 0;
     background-color: rgba(255, 255, 255, 0.12);
-    transition: .2s;
+    transition: 0.2s;
     border-radius: 16px;
     border: 1.5px solid rgba(255, 255, 255, 0.08);
   }
 
   .slider:before {
     position: absolute;
-    content: "";
+    content: '';
     height: 10px;
     width: 10px;
     left: 2px;
     bottom: 1.5px;
     background-color: #ffffff;
-    transition: .2s;
+    transition: 0.2s;
     border-radius: 50%;
   }
 
@@ -1244,7 +1391,7 @@
     color: rgba(255, 255, 255, 0.4);
   }
 
-  .slider-control input[type="range"] {
+  .slider-control input[type='range'] {
     width: 100%;
     height: 3px;
     background: rgba(255, 255, 255, 0.1);

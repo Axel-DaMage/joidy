@@ -1,10 +1,18 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { goto } from '$app/navigation';
   import TopicClusters from '$lib/components/TopicClusters.svelte';
   import { graphData, graphLoading, loadGraph, selectedTag } from '$lib/stores/graph';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
   import { devMode } from '$lib/stores/settings';
   import type { GraphNode, GraphEdge } from '$lib/api';
+  import { t } from 'svelte-i18n';
+
+  // Redirect to home when dev mode is off — dev routes should not be
+  // accessible via direct URL in production (#649).
+  $effect(() => {
+    if (!$devMode) goto('/');
+  });
 
   // Lazy-load the heavy graph component (d3 + force-graph, 1300+ lines) so it
   // is split into a separate chunk and only downloaded when the user actually
@@ -77,19 +85,19 @@
 </script>
 
 <svelte:head>
-  <title>Grafo de Conocimiento — Joidy</title>
+  <title>{$t('graph.pageTitle')}</title>
 </svelte:head>
 
 {#if $devMode}
 <div class="graph-page">
   <div class="graph-header">
     <div>
-      <h3>Grafo de conocimiento</h3>
+      <h3>{$t('graph.title')}</h3>
       <span class="stats">
-        <span class="stat"><span class="dot note"></span>{noteCount} notas</span>
+        <span class="stat"><span class="dot note"></span>{noteCount} {$t('home.notes')}</span>
         <span class="stat"><span class="dot tag"></span>{tagCount} tags</span>
         <span class="stat">{linkCount} links</span>
-        <span class="stat">{taggedCount} etiquetas</span>
+        <span class="stat">{taggedCount} {$t('analytics.tags')}</span>
       </span>
     </div>
     {#if $selectedTag !== null}
@@ -121,26 +129,26 @@
     <input
       type="text"
       class="graph-search-input"
-      placeholder="Buscar en grafo..."
+      placeholder={$t('graph.searchPlaceholder')}
       bind:value={graphSearch}
     />
   </div>
 
   <div class="graph-container" bind:this={containerEl}>
     {#if $graphLoading}
-      <div class="loading-state caption">Cargando grafo...</div>
+      <div class="loading-state caption">{$t('graph.loading')}</div>
     {:else if filteredGraphData.nodes.length === 0}
       <div class="loading-state caption">
         {#if $graphData.nodes.length === 0}
-          Sin datos aún. Crea notas y agrega tags para ver el grafo.
+          {$t('graph.noData')}
         {:else}
-          Sin resultados para el filtro actual.
+          {$t('graph.noResults')}
         {/if}
       </div>
     {:else if KnowledgeGraphForce}
       <svelte:component this={KnowledgeGraphForce} width={w} height={h} focusId={$selectedTag} />
     {:else}
-      <div class="loading-state caption">Cargando grafo...</div>
+      <div class="loading-state caption">{$t('graph.loading')}</div>
     {/if}
   </div>
 
@@ -159,8 +167,8 @@
 <div class="construction-page">
   <div class="construction-box">
     <DynamicIcon name="Network" size={48} />
-    <h3>En Construcción</h3>
-    <p>Activa el Modo Desarrollo en Ajustes para acceder al Grafo de Conocimiento.</p>
+    <h3>{$t('graph.construction')}</h3>
+    <p>{$t('graph.constructionHint')}</p>
   </div>
 </div>
 {/if}
@@ -218,7 +226,7 @@
     position: relative;
     min-height: 0;
     background: var(--bg);
-    z-index: var(--z-base); /* Ensure graph content (incl. settings panel) is above the nav sidebar (#274) */
+    z-index: var(--z-sticky); /* Ensure graph content (incl. settings panel) is above the nav sidebar (#274) */
   }
 
   .loading-state {

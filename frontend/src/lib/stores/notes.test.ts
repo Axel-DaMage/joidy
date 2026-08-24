@@ -105,7 +105,7 @@ describe('loadNotes', () => {
   it('passes the tag filter to the API', async () => {
     apiMock.notes.list.mockResolvedValue([]);
     await loadNotes('work');
-    expect(apiMock.notes.list).toHaveBeenCalledWith('work');
+    expect(apiMock.notes.list).toHaveBeenCalledWith('work', 200, 0);
   });
 
   it('does not throw when the API fails', async () => {

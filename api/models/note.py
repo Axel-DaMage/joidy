@@ -3,7 +3,7 @@ from datetime import datetime
 from database import Base
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, func
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, backref
 
 class NoteEmbedding(Base):
     __tablename__ = "note_embeddings"
@@ -68,8 +68,8 @@ class NoteLink(Base):
     # Optional: context where the link was found
     context_text: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    source_note: Mapped["Note"] = relationship("Note", foreign_keys=[source_note_id], backref="out_links")
-    target_note: Mapped["Note"] = relationship("Note", foreign_keys=[target_note_id], backref="in_links")
+    source_note: Mapped["Note"] = relationship("Note", foreign_keys=[source_note_id], backref=backref("out_links", cascade="all, delete-orphan"))
+    target_note: Mapped["Note"] = relationship("Note", foreign_keys=[target_note_id], backref=backref("in_links", cascade="all, delete-orphan"))
 
     __table_args__ = (
         # The composite PK (source_note_id, target_note_id) covers lookups by

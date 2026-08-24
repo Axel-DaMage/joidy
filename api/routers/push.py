@@ -21,10 +21,10 @@ class PushMessageIn(BaseModel):
 
 
 @router.get("/vapid-public-key")
-def get_vapid_public_key():
-    if not settings.vapid_public_key:
-        raise HTTPException(status_code=503, detail="VAPID not configured")
-    return {"publicKey": settings.vapid_public_key}
+def get_vapid_public_key(user_id: int = Depends(get_current_user)):
+    # Return null instead of 503 when VAPID is not configured —
+    # lets the frontend gracefully disable push notifications (#549)
+    return {"publicKey": settings.vapid_public_key or None}
 
 
 @router.post("/subscribe")

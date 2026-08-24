@@ -29,7 +29,7 @@ async def _get_auth_token(client: httpx.AsyncClient) -> str | None:
     try:
         resp = await client.post(
             f"{settings.api_url}/auth/login",
-            params={"password": settings.auth_password},
+            json={"password": settings.auth_password},
         )
         resp.raise_for_status()
         _auth_token = resp.json().get("access_token")

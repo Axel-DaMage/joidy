@@ -3,6 +3,7 @@
   import { Check, Settings, X } from 'lucide-svelte';
   import StreakIcon from './StreakIcon.svelte';
   import { liquidGlass } from '$lib/actions/liquidGlass';
+  import { t } from 'svelte-i18n';
 
   export let streak: any;
   export let selected: boolean = false;
@@ -34,7 +35,7 @@
   <button
     class="streak-item-main"
     onclick={() => dispatch('select', streak.id)}
-    aria-label="Seleccionar racha: {streak.name}"
+    aria-label={$t('streakList.selectStreak', { values: { name: streak.name } })}
   >
     <div class="item-icon">
       {#if streak.icon && streak.icon.length > 0}
@@ -69,16 +70,16 @@
     <button
       class="item-action-btn"
       onclick={(e) => { e.stopPropagation(); dispatch('edit', streak); }}
-      title="Editar racha"
-      aria-label="Editar racha: {streak.name}"
+      title={$t('streakList.editStreak')}
+      aria-label={$t('streakList.editStreakName', { values: { name: streak.name } })}
     >
       <Settings size={12} />
     </button>
     <button
       class="item-action-btn danger"
       onclick={(e) => { e.stopPropagation(); dispatch('delete', streak.id); }}
-      title="Eliminar racha"
-      aria-label="Eliminar racha: {streak.name}"
+      title={$t('streakList.deleteStreak')}
+      aria-label={$t('streakList.deleteStreakName', { values: { name: streak.name } })}
     >
       <X size={12} />
     </button>

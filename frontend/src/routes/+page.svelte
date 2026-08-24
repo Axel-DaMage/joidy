@@ -4,25 +4,27 @@
   import { dev } from '$app/environment';
   import { fly } from 'svelte/transition';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
-  import Plant          from '$lib/components/Plant.svelte';
-  import GalaxyModule   from '$lib/components/GalaxyModule.svelte';
+  import Plant from '$lib/components/Plant.svelte';
+  import GalaxyModule from '$lib/components/GalaxyModule.svelte';
   import MountainModule from '$lib/components/MountainModule.svelte';
-  import CityModule     from '$lib/components/CityModule.svelte';
-  import OrbitModule    from '$lib/components/OrbitModule.svelte';
-  import XPBar          from '$lib/components/XPBar.svelte';
-  import NoteCard       from '$lib/components/NoteCard.svelte';
+  import CityModule from '$lib/components/CityModule.svelte';
+  import OrbitModule from '$lib/components/OrbitModule.svelte';
+  import XPBar from '$lib/components/XPBar.svelte';
   import PomodoroWidget from '$lib/components/PomodoroWidget.svelte';
-  import { Target } from 'lucide-svelte';
-  import { startFocusMode } from '$lib/stores/focusMode';
   import TimeWidget from '$lib/components/TimeWidget.svelte';
   import WeatherWidget from '$lib/components/WeatherWidget.svelte';
-  import Widget         from '$lib/components/Widget.svelte';
+  import Widget from '$lib/components/Widget.svelte';
   import GithubWidget from '$lib/components/GithubWidget.svelte';
   import DailyRecap from '$lib/components/DailyRecap.svelte';
-  import { totalXP, currentStreak, lastActivity, nextStageXP, globalLevel } from '$lib/stores/gamification';
+  import {
+    totalXP,
+    currentStreak,
+    lastActivity,
+    nextStageXP,
+    globalLevel,
+  } from '$lib/stores/gamification';
   import { openShare } from '$lib/stores/shareAchievement';
   import { Share2 } from 'lucide-svelte';
-  import ActivityProgress from '$lib/components/ActivityProgress.svelte';
   import { notes, loadNotes, notesLoadedOnce } from '$lib/stores/notes';
   import { dashboardLayout } from '$lib/stores/layout';
   import { accentColors } from '$lib/stores/settings';
@@ -31,22 +33,30 @@
   import { captureSnapshot, getSnapshot } from '$lib/stores/pageSnapshots';
   import { routeCache } from '$lib/stores/routeCache';
   import { logger } from '$lib/utils/logger';
+  import { t } from 'svelte-i18n';
 
   // ── Module carousel ────────────────────────────────────────────────────────
+  // Labels are resolved via i18n at render time; `label` here is the i18n key suffix.
   const MODULES = [
-    { id: 'planta',  label: 'Planta'  },
-    { id: 'galaxia', label: 'Galaxia' },
-    { id: 'montana', label: 'Montaña' },
-    { id: 'ciudad',  label: 'Ciudad'  },
-    { id: 'orbita',  label: 'Órbita'  },
+    { id: 'planta', label: 'planta' },
+    { id: 'galaxia', label: 'galaxia' },
+    { id: 'montana', label: 'montana' },
+    { id: 'ciudad', label: 'ciudad' },
+    { id: 'orbita', label: 'orbita' },
   ];
 
-  let moduleIdx = 0;
-  let slideDir  = 1;
-  let modulePrefsReady = false;
+  let moduleIdx = $state(0);
+  let slideDir = $state(1);
+  let modulePrefsReady = $state(false);
 
-  function prevModule() { slideDir = -1; moduleIdx = (moduleIdx - 1 + MODULES.length) % MODULES.length; }
-  function nextModule() { slideDir =  1; moduleIdx = (moduleIdx + 1) % MODULES.length; }
+  function prevModule() {
+    slideDir = -1;
+    moduleIdx = (moduleIdx - 1 + MODULES.length) % MODULES.length;
+  }
+  function nextModule() {
+    slideDir = 1;
+    moduleIdx = (moduleIdx + 1) % MODULES.length;
+  }
 
   // ── Data ───────────────────────────────────────────────────────────────────
   let githubConnected = false;
@@ -130,7 +140,7 @@
     try {
       const [issuesRes, pullsRes] = await Promise.all([
         api.github.issues(filter),
-        api.github.pulls(filter)
+        api.github.pulls(filter),
       ]);
       githubIssues = (issuesRes.issues || []).slice(0, GH_ITEM_LIMIT);
       issueStats = issuesRes.stats || { open: 0, total: 0 };
@@ -145,10 +155,10 @@
         issueStats,
         prStats,
         repoColors,
-        ts: Date.now()
+        ts: Date.now(),
       });
-    } catch (e) { 
-      logger.error('GitHub error:', e); 
+    } catch (e) {
+      logger.error('GitHub error:', e);
       githubIssues = [];
       githubPRs = [];
     } finally {
@@ -163,19 +173,39 @@
 
   function setGhType(t: string) {
     ghType = t;
+    loadGitHubData(ghFilter);
   }
 
-  $: isWilted = (() => {
+  /** Re-check GitHub connection status and reload data (used when the user
+   *  connects/disconnects GitHub from the Settings panel). */
+  async function refreshGithubFromEvent() {
+    try {
+      const status = await api.github.status();
+      githubConnected = status.connected;
+      if (githubConnected) {
+        const [reposRes] = await Promise.all([api.github.repos(), loadGitHubData(ghFilter)]);
+        repoColors = Object.fromEntries(
+          (reposRes.repos || []).map((r: any) => [r.full_name, r.color || 'var(--accent)'])
+        );
+      } else {
+        githubIssues = [];
+        githubPRs = [];
+        clearGithubCache();
+      }
+    } catch (e) {
+      logger.error('GitHub refresh error:', e);
+    }
+  }
+
+  let isWilted = $derived.by(() => {
     if (!$lastActivity) return false;
     const last = new Date($lastActivity);
     if (isNaN(last.getTime())) return false;
     return (Date.now() - last.getTime()) / 86400000 > 2;
-  })();
+  });
 
   let githubStatusChecked = false;
   let ttiMeasured = false;
-
-  $: recentNotes = $notes.slice(0, 5);
 
   onMount(() => {
     if (typeof performance !== 'undefined') {
@@ -201,7 +231,7 @@
     if (!$notesLoadedOnce) {
       loadNotes();
     }
-    
+
     requestAnimationFrame(async () => {
       try {
         const status = await api.github.status();
@@ -209,9 +239,11 @@
         if (githubConnected) {
           const [reposRes] = await Promise.all([
             api.github.repos(),
-            (!cached || !isGithubCacheFresh(cached)) ? loadGitHubData(ghFilter) : Promise.resolve()
+            !cached || !isGithubCacheFresh(cached) ? loadGitHubData(ghFilter) : Promise.resolve(),
           ]);
-          repoColors = Object.fromEntries((reposRes.repos || []).map((r: any) => [r.full_name, r.color || 'var(--accent)']));
+          repoColors = Object.fromEntries(
+            (reposRes.repos || []).map((r: any) => [r.full_name, r.color || 'var(--accent)'])
+          );
           writeGithubCache({
             connected: githubConnected,
             filter: ghFilter,
@@ -221,68 +253,98 @@
             issueStats,
             prStats,
             repoColors,
-            ts: Date.now()
+            ts: Date.now(),
           });
         } else {
           clearGithubCache();
         }
-      } catch (e) { logger.error('GitHub error:', e); }
-      finally { githubStatusChecked = true; }
+      } catch (e) {
+        logger.error('GitHub error:', e);
+      } finally {
+        githubStatusChecked = true;
+      }
     });
 
     window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('joidy:github-connected', refreshGithubFromEvent);
+    window.addEventListener('joidy:github-disconnected', refreshGithubFromEvent);
   });
 
   function handleBeforeUnload() {
     const scrollEls = document.querySelectorAll('[id^="panel-"]');
-    captureSnapshot('/', { moduleIdx, slideDir }, 
-      Array.from(scrollEls).map(el => ({ id: el.id, scrollTop: (el as HTMLElement).scrollTop }))
+    captureSnapshot(
+      '/',
+      { moduleIdx, slideDir },
+      Array.from(scrollEls).map((el) => ({ id: el.id, scrollTop: (el as HTMLElement).scrollTop }))
     );
+    window.removeEventListener('joidy:github-connected', refreshGithubFromEvent);
+    window.removeEventListener('joidy:github-disconnected', refreshGithubFromEvent);
   }
 
-  $: if (modulePrefsReady && MODULES[moduleIdx]) {
-    patchUserSettings({
-      dashboard: {
-        moduleId: MODULES[moduleIdx].id,
-      }
-    });
-  }
+  $effect(() => {
+    if (modulePrefsReady && MODULES[moduleIdx]) {
+      patchUserSettings({
+        dashboard: {
+          moduleId: MODULES[moduleIdx].id,
+        },
+      });
+    }
+  });
 
-  $: if (!ttiMeasured && githubStatusChecked && $notesLoadedOnce) {
-    ttiMeasured = true;
-    if (typeof performance !== 'undefined') {
-      performance.mark('dashboard-interactive');
-      performance.measure('dashboard-tti', 'dashboard-mount', 'dashboard-interactive');
-      const entry = performance.getEntriesByName('dashboard-tti').slice(-1)[0];
-      if (entry) {
-        try {
-          if (typeof localStorage !== 'undefined') {
-            localStorage.setItem('joidy_dashboard_tti_ms', Math.round(entry.duration).toString());
+  $effect(() => {
+    if (!ttiMeasured && githubStatusChecked && $notesLoadedOnce) {
+      ttiMeasured = true;
+      if (typeof performance !== 'undefined') {
+        performance.mark('dashboard-interactive');
+        performance.measure('dashboard-tti', 'dashboard-mount', 'dashboard-interactive');
+        const entry = performance.getEntriesByName('dashboard-tti').slice(-1)[0];
+        if (entry) {
+          try {
+            if (typeof localStorage !== 'undefined') {
+              localStorage.setItem('joidy_dashboard_tti_ms', Math.round(entry.duration).toString());
+            }
+          } catch {
+            // Ignore storage failures
           }
-        } catch {
-          // Ignore storage failures
-        }
-        if (dev) {
-          logger.info(`Dashboard TTI: ${Math.round(entry.duration)}ms`);
+          if (dev) {
+            logger.info(`Dashboard TTI: ${Math.round(entry.duration)}ms`);
+          }
         }
       }
     }
-  }
+  });
 
   // Widget renderers per panel
-  function leftWidgets(layout: typeof $dashboardLayout) { return layout.left; }
-  function rightWidgets(layout: typeof $dashboardLayout) { return layout.right; }
+  function leftWidgets(layout: typeof $dashboardLayout) {
+    return layout.left;
+  }
+  function rightWidgets(layout: typeof $dashboardLayout) {
+    return layout.right;
+  }
 
   // Resizable panel synced with notes
   let panelWidth = 260;
 
+  // Responsive module size — smaller on narrow viewports
+  let moduleSize = $state(160);
+  function updateModuleSize() {
+    if (typeof window === 'undefined') return;
+    moduleSize = window.innerWidth <= 480 ? 110 : window.innerWidth <= 768 ? 130 : 160;
+  }
+  $effect(() => {
+    if (typeof window === 'undefined') return;
+    updateModuleSize();
+    window.addEventListener('resize', updateModuleSize);
+    return () => window.removeEventListener('resize', updateModuleSize);
+  });
+
   // Level milestones that warrant a shareable achievement card.
   const LEVEL_MILESTONES = [10, 25, 50, 75, 100];
-  $: isLevelMilestone = LEVEL_MILESTONES.includes($globalLevel);
+  let isLevelMilestone = $derived(LEVEL_MILESTONES.includes($globalLevel));
 
   function shareLevel() {
     openShare({
-      title: 'Nivel alcanzado',
+      title: $t('home.levelReached'),
       icon: 'TrendingUp',
       value: `NVL ${$globalLevel}`,
       subtitle: `${$totalXP.toLocaleString()} XP`,
@@ -295,23 +357,35 @@
   {#if wid === 'plant-carousel'}
     <div class="widget-centered">
       <div class="module-nav">
-        <button class="nav-arrow" onclick={prevModule} title="Anterior" aria-label="Anterior"><DynamicIcon name="ChevronLeft" size={14}/></button>
-        <span class="module-label mono">{MODULES[moduleIdx].label.toUpperCase()}</span>
-        <button class="nav-arrow" onclick={nextModule} title="Siguiente" aria-label="Siguiente"><DynamicIcon name="ChevronRight" size={14}/></button>
+        <button
+          class="nav-arrow"
+          onclick={prevModule}
+          title={$t('common.previous')}
+          aria-label={$t('common.previous')}><DynamicIcon name="ChevronLeft" size={14} /></button
+        >
+        <span class="module-label mono"
+          >{$t(`home.modules.${MODULES[moduleIdx].label}`).toUpperCase()}</span
+        >
+        <button
+          class="nav-arrow"
+          onclick={nextModule}
+          title={$t('common.next')}
+          aria-label={$t('common.next')}><DynamicIcon name="ChevronRight" size={14} /></button
+        >
       </div>
       <div class="module-viewport">
         {#key moduleIdx}
           <div class="module-slide" in:fly={{ x: slideDir * 40, duration: 220, opacity: 0 }}>
             {#if MODULES[moduleIdx].id === 'planta'}
-              <Plant size={160} wilted={isWilted} />
+              <Plant size={moduleSize} wilted={isWilted} />
             {:else if MODULES[moduleIdx].id === 'galaxia'}
-              <GalaxyModule size={160} />
+              <GalaxyModule size={moduleSize} />
             {:else if MODULES[moduleIdx].id === 'montana'}
-              <MountainModule size={160} />
+              <MountainModule size={moduleSize} />
             {:else if MODULES[moduleIdx].id === 'ciudad'}
-              <CityModule size={160} />
+              <CityModule size={moduleSize} />
             {:else if MODULES[moduleIdx].id === 'orbita'}
-              <OrbitModule size={160} />
+              <OrbitModule size={moduleSize} />
             {/if}
           </div>
         {/key}
@@ -319,9 +393,13 @@
       <div class="module-dots">
         {#each MODULES as _, idx}
           <button
-            class="dot" class:active={idx === moduleIdx}
-            onclick={() => { slideDir = idx > moduleIdx ? 1 : -1; moduleIdx = idx; }}
-            aria-label={MODULES[idx].label}
+            class="dot"
+            class:active={idx === moduleIdx}
+            onclick={() => {
+              slideDir = idx > moduleIdx ? 1 : -1;
+              moduleIdx = idx;
+            }}
+            aria-label={$t(`home.modules.${MODULES[idx].label}`)}
           ></button>
         {/each}
       </div>
@@ -331,62 +409,48 @@
       <div class="stats-row">
         <div class="stat">
           <span class="stat-value mono">{$currentStreak}</span>
-          <span class="stat-label label">días</span>
+          <span class="stat-label label">{$t('home.days')}</span>
         </div>
         <div class="stat-divider"></div>
         <div class="stat">
           {#if $nextStageXP}
             <span class="stat-value mono">{$totalXP.toLocaleString()}</span>
-            <span class="stat-label label">xp</span>
+            <span class="stat-label label">{$t('home.xp')}</span>
           {:else}
             <span class="stat-value mono" style="color: var(--text-primary);">MAX</span>
-            <span class="stat-label label">xp</span>
+            <span class="stat-label label">{$t('home.xp')}</span>
           {/if}
         </div>
         <div class="stat-divider"></div>
         <div class="stat">
           <span class="stat-value mono">{$notes.length}</span>
-          <span class="stat-label label">notas</span>
+          <span class="stat-label label">{$t('home.notes')}</span>
         </div>
       </div>
       {#if isLevelMilestone}
         <button
           class="level-share-btn"
           onclick={shareLevel}
-          title="Compartir nivel"
-          aria-label="Compartir nivel {$globalLevel}"
+          title={$t('home.shareLevel')}
+          aria-label="{$t('home.shareLevel')} {$globalLevel}"
         >
           <Share2 size={11} />
-          <span>Compartir nivel</span>
+          <span>{$t('home.shareLevel')}</span>
         </button>
       {/if}
     </div>
-  {:else if wid === 'activity-progress'}
-    <ActivityProgress />
   {:else if wid === 'time-widget'}
     <TimeWidget />
   {:else if wid === 'weather-widget'}
     <WeatherWidget />
   {:else if wid === 'pomodoro'}
     <PomodoroWidget />
-    <button class="focus-mode-btn" onclick={() => startFocusMode()} aria-label="Iniciar modo enfoque">
-      <Target size={16} />
-      Modo Enfoque
-    </button>
+  {:else if wid === 'quick-capture'}
+    <!-- quick-capture widget moved to notes page -->
+  {:else if wid === 'mood-tracker'}
+    <!-- mood-tracker widget removed from dashboard per user request -->
   {:else if wid === 'recent-notes'}
-    <div class="section-header">
-      <h4 style="color: {$accentColors[0]}">Notas recientes</h4>
-      <a href="/notes" class="btn btn-ghost" style="font-size:11px; padding:2px 8px;">ver todas →</a>
-    </div>
-    <div class="recent-notes">
-      {#if recentNotes.length === 0}
-        <div class="empty-state"><span class="caption">No hay notas aún.</span></div>
-      {:else}
-        {#each recentNotes as note}
-          <NoteCard {note} showTags={false} on:select={() => goto(`/notes?id=${note.id}`)} />
-        {/each}
-      {/if}
-    </div>
+    <!-- recent-notes widget removed from dashboard per user request -->
   {:else if wid === 'github-issues'}
     <GithubWidget
       accentColor={$accentColors[1]}
@@ -407,18 +471,15 @@
 {/snippet}
 
 <div class="dashboard" style="--panel-w: {panelWidth}px">
-
   <DailyRecap />
 
   <!-- ── Left panel ─────────────────────────────────────────────────────────── -->
   <section class="plant-section">
-
     {#each $dashboardLayout.left as wid, i (wid)}
       <Widget id={wid}>
         {@render renderWidget(wid)}
       </Widget>
     {/each}
-
   </section>
 
   <!-- ── Resize handle ─────────────────────────────────────────────────────── -->
@@ -426,15 +487,12 @@
 
   <!-- ── Right panel ────────────────────────────────────────────────────────── -->
   <section class="activity-section">
-
     {#each $dashboardLayout.right as wid, i (wid)}
       <Widget id={wid}>
         {@render renderWidget(wid)}
       </Widget>
     {/each}
-
   </section>
-
 </div>
 
 <style>
@@ -457,6 +515,17 @@
     background: var(--bg);
   }
 
+  /* Mobile: allow natural flow */
+  @media (max-width: 768px) {
+    .plant-section {
+      overflow: visible;
+      padding: var(--s3) var(--s3) var(--s4);
+    }
+    .activity-section {
+      overflow: visible;
+    }
+  }
+
   /* ── Module navigation ── */
   .module-nav {
     display: flex;
@@ -475,37 +544,72 @@
   }
 
   .nav-arrow {
-    display: flex; align-items: center; justify-content: center;
-    width: 24px; height: 24px;
-    background: transparent; border: 1px solid var(--border); border-radius: var(--r);
-    color: var(--text-muted); cursor: pointer; transition: all var(--t-fast); flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all var(--t-fast);
+    flex-shrink: 0;
   }
-  .nav-arrow:hover  { border-color: var(--text-muted); color: var(--text-secondary); }
-  .nav-arrow:active { transform: scale(0.93); }
+  .nav-arrow:hover {
+    border-color: var(--text-muted);
+    color: var(--text-secondary);
+  }
+  .nav-arrow:active {
+    transform: scale(0.93);
+  }
 
   .module-viewport {
-    width: 170px; height: 170px;
-    position: relative; overflow: hidden;
-    display: flex; align-items: center; justify-content: center;
+    width: 170px;
+    height: 170px;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .module-slide {
-    position: absolute; inset: 0;
-    display: flex; align-items: center; justify-content: center;
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
-  .module-dots { display: flex; gap: 6px; align-items: center; }
+  .module-dots {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
 
   .dot {
-    width: 5px; height: 5px; border-radius: 50%;
-    background: var(--border); border: none; padding: 0;
-    cursor: pointer; transition: all var(--t-fast);
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--text-primary) 20%, transparent);
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    transition: all var(--t-fast);
   }
-  .dot.active { background: var(--text-muted); width: 14px; border-radius: 3px; }
+  .dot.active {
+    background: var(--text-secondary);
+    width: 14px;
+    border-radius: 3px;
+  }
 
   .wilt-notice {
     padding: var(--s2) var(--s3);
-    border: 1px solid var(--border); border-radius: var(--r); text-align: center;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    text-align: center;
   }
 
   .widget-centered {
@@ -517,11 +621,17 @@
     padding: 10px 0;
   }
 
-  .xp-section { width: 100%; max-width: 240px; }
+  .xp-section {
+    width: 100%;
+    max-width: 240px;
+  }
 
   .stats-row {
-    display: flex; align-items: center; gap: var(--s4);
-    width: 100%; max-width: 240px;
+    display: flex;
+    align-items: center;
+    gap: var(--s4);
+    width: 100%;
+    max-width: 240px;
   }
 
   .level-share-btn {
@@ -544,16 +654,35 @@
     color: var(--xp);
   }
 
-  .stat { display: flex; flex-direction: column; align-items: center; flex: 1; gap: 2px; }
-  .stat-value { font-size: 20px; font-weight: 300; color: var(--text-primary); line-height: 1; }
-  .stat-divider { width: 1px; height: 32px; background: var(--border); }
+  .stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+    gap: 2px;
+  }
+  .stat-value {
+    font-size: 20px;
+    font-weight: 300;
+    color: var(--text-primary);
+    line-height: 1;
+  }
+  .stat-divider {
+    width: 1px;
+    height: 32px;
+    background: var(--border);
+  }
 
   /* ── Right panel — identical to original ── */
   .activity-section {
-    display: flex; flex-direction: column; overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
   }
 
-  .recent-notes { flex: 1; }
+  .recent-notes {
+    flex: 1;
+  }
 
   .section-divider {
     border: 0;
@@ -562,28 +691,58 @@
     background: var(--border-light);
   }
 
-  .empty-state { padding: var(--s6) var(--s5); color: var(--text-muted); text-align: center; }
+  .empty-state {
+    padding: var(--s6) var(--s5);
+    color: var(--text-muted);
+    text-align: center;
+  }
 
-  .issues-list { display: flex; flex-direction: column; }
+  .issues-list {
+    display: flex;
+    flex-direction: column;
+  }
 
   .issue-item {
-    display: grid; grid-template-columns: 40px 1fr auto; gap: var(--s3);
-    align-items: center; padding: var(--s2) var(--s5);
+    display: grid;
+    grid-template-columns: 40px 1fr auto;
+    gap: var(--s3);
+    align-items: center;
+    padding: var(--s2) var(--s5);
     border-bottom: 1px solid var(--border-light);
-    text-decoration: none; color: var(--text-primary); transition: background var(--t-normal);
+    text-decoration: none;
+    color: var(--text-primary);
+    transition: background var(--t-normal);
   }
-  .issue-item:hover { background: var(--elevated); }
-  .issue-num   { color: var(--text-muted); }
-  .issue-title { font-size: 13px; }
-  .issue-repo  { color: var(--text-muted); font-size: 10px; white-space: nowrap; }
+  .issue-item:hover {
+    background: var(--elevated);
+  }
+  .issue-num {
+    color: var(--text-muted);
+  }
+  .issue-title {
+    font-size: 13px;
+  }
+  .issue-repo {
+    color: var(--text-muted);
+    font-size: 10px;
+    white-space: nowrap;
+  }
 
   /* ── Notes Grid ── */
   .fab {
     position: fixed;
-    bottom: calc(var(--statusbar-h) + 24px); right: 32px;
-    width: 44px; height: 44px; border-radius: 50%; padding: 0;
-    display: flex; align-items: center; justify-content: center;
-    z-index: var(--z-sticky); box-shadow: 0 0 0 1px var(--bg); text-decoration: none;
+    bottom: calc(var(--statusbar-h) + 24px);
+    right: 32px;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: var(--z-sticky);
+    box-shadow: 0 0 0 1px var(--bg);
+    text-decoration: none;
   }
 
   .github-widget {
@@ -593,18 +752,38 @@
     background: var(--surface);
   }
 
-  .empty-state.success { color: var(--success); text-align: center; padding: 12px; }
+  .empty-state.success {
+    color: var(--success);
+    text-align: center;
+    padding: 12px;
+  }
 
   /* ── Responsive ── */
+
+  /* Tablet — narrow the left panel and reduce gaps */
+  @media (max-width: 1024px) {
+    .dashboard {
+      grid-template-columns: minmax(180px, 220px) 5px 1fr;
+    }
+    .plant-section {
+      padding: var(--s3) var(--s4) var(--s3);
+    }
+    .module-viewport {
+      width: 140px;
+      height: 140px;
+    }
+  }
+
   @media (max-width: 768px) {
     .dashboard {
       grid-template-columns: 1fr;
-      grid-template-rows: auto auto 1fr;
+      grid-template-rows: auto;
     }
 
     .plant-section {
       padding: var(--s3) var(--s3) var(--s2);
       gap: var(--s2);
+      overflow: visible;
     }
 
     .resize-handle.static {
@@ -612,7 +791,7 @@
     }
 
     .activity-section {
-      overflow-y: auto;
+      overflow: visible;
     }
 
     .stats-row {
@@ -671,25 +850,10 @@
       min-width: 60px;
       font-size: 9px;
     }
-  }
 
-.focus-mode-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  margin-top: 8px;
-  padding: 8px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-md, 8px);
-  background: var(--surface);
-  color: var(--text-primary);
-  font-size: 13px;
-  cursor: pointer;
-  transition: background 0.2s, border-color 0.2s;
-}
-.focus-mode-btn:hover {
-  background: var(--elevated);
-  border-color: var(--accent);
-}
+    .fab {
+      right: var(--s2);
+      bottom: calc(60px + var(--s2));
+    }
+  }
 </style>

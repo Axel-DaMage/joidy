@@ -3,6 +3,7 @@
   import * as d3 from 'd3';
   import { graphData, selectedTag } from '$lib/stores/graph';
   import type { GraphNode, GraphEdge } from '$lib/api';
+  import { t } from 'svelte-i18n';
 
   export let width = 800;
   export let height = 600;
@@ -481,34 +482,34 @@
       <input
         class="graph-search"
         type="search"
-        placeholder="Buscar nodos..."
+        placeholder={$t('knowledgeGraph.searchPlaceholder')}
         bind:value={searchQuery}
         oninput={rerender}
       />
       {#if searchQuery.trim().length > 0}
-        <button class="search-clear" onclick={clearHighlights} aria-label="Limpiar busqueda">×</button>
+        <button class="search-clear" onclick={clearHighlights} aria-label={$t('knowledgeGraph.clearSearch')}>×</button>
       {/if}
     </div>
-    <button class="btn btn-ghost btn-icon" title="Alternar etiquetas" aria-label="Alternar etiquetas" onclick={() => { showLabels = !showLabels; rerender(); }}>
+    <button class="btn btn-ghost btn-icon" title={$t('knowledgeGraph.toggleLabels')} aria-label={$t('knowledgeGraph.toggleLabels')} onclick={() => { showLabels = !showLabels; rerender(); }}>
       <span style="font-size:10px; font-family: var(--font-mono);">Aa</span>
     </button>
-    <button class="btn btn-ghost btn-icon" title="Particulas" aria-label="Partículas" class:active={showParticles} onclick={() => { showParticles = !showParticles; }}>
+    <button class="btn btn-ghost btn-icon" title={$t('knowledgeGraph.particles')} aria-label={$t('knowledgeGraph.particles')} class:active={showParticles} onclick={() => { showParticles = !showParticles; }}>
       <span style="font-size:12px;">✨</span>
     </button>
-    <button class="btn btn-ghost btn-icon" title="Ajustar" aria-label="Ajustar" onclick={recenter}>
+    <button class="btn btn-ghost btn-icon" title={$t('knowledgeGraph.fit')} aria-label={$t('knowledgeGraph.fit')} onclick={recenter}>
       <span style="font-size:11px;">⊡</span>
     </button>
-    <button class="btn btn-ghost btn-icon" title="Restablecer vista" aria-label="Restablecer vista" onclick={resetView}>
+    <button class="btn btn-ghost btn-icon" title={$t('knowledgeGraph.resetView')} aria-label={$t('knowledgeGraph.resetView')} onclick={resetView}>
       <span style="font-size:11px;">⊙</span>
     </button>
-    <button class="btn btn-ghost btn-icon" title="Ocultar huerfanos" aria-label="Ocultar huérfanos" class:active={!showOrphans} onclick={() => { showOrphans = !showOrphans; rerender(); }}>
+    <button class="btn btn-ghost btn-icon" title={$t('knowledgeGraph.hideOrphans')} aria-label={$t('knowledgeGraph.hideOrphans')} class:active={!showOrphans} onclick={() => { showOrphans = !showOrphans; rerender(); }}>
       <span style="font-size:11px;">◌</span>
     </button>
     <div class="filter-group">
       <select bind:value={filterType} onchange={rerender}>
-        <option value="all">Todo</option>
-        <option value="notes">Notas</option>
-        <option value="tags">Tags</option>
+        <option value="all">{$t('knowledgeGraph.all')}</option>
+        <option value="notes">{$t('knowledgeGraph.notes')}</option>
+        <option value="tags">{$t('knowledgeGraph.tags')}</option>
       </select>
     </div>
   </div>

@@ -11,16 +11,15 @@ import hljs from 'highlight.js';
 
 // Configure marked with GFM and syntax highlighting via highlight.js
 const renderer = new marked.Renderer();
-renderer.code = (code: string, infostring: string | undefined, _escaped: boolean) => {
-  const lang = infostring || '';
+renderer.code = ({ text, lang }) => {
   const language = lang && hljs.getLanguage(lang) ? lang : '';
   let highlighted: string;
   try {
     highlighted = language
-      ? hljs.highlight(code, { language }).value
-      : hljs.highlightAuto(code).value;
+      ? hljs.highlight(text, { language }).value
+      : hljs.highlightAuto(text).value;
   } catch {
-    highlighted = code;
+    highlighted = text;
   }
   return `<pre><code class="hljs language-${language || 'auto'}">${highlighted}</code></pre>`;
 };

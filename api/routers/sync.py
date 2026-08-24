@@ -5,12 +5,16 @@ Provides endpoints to list and resolve sync conflicts between
 Joidy and external sources (e.g. Obsidian).
 """
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator
 from services.sync_service import list_conflicts, resolve_conflict
 from sqlalchemy.orm import Session
 
 from database import get_db
+from models.note import Note
+from models.sync_state import SyncState
 
 router = APIRouter(prefix="/sync", tags=["sync"])
 
@@ -64,3 +68,36 @@ def resolve_note_conflict(
         raise HTTPException(status_code=400, detail=result["message"])
 
     return result
+
+
+@router.get("/status")
+def get_sync_status(db: Session = Depends(get_db)):
+    """Return the current vault sync status (#73).
+
+    Provides the last sync time, the number of pending conflicts, and the
+    total number of notes synced from Obsidian. The frontend polls this on
+    load to display a sync status indicator.
+    """
+    # Most recent successful sync across all notes.
+    last_sync_row = (
+        db.query(SyncState.last_synced_at)
+        .filter(SyncState.last_synced_at.isnot(None))
+        .order_by(SyncState.last_synced_at.desc())
+        .first()
+    )
+    last_sync_time = None
+    if last_sync_row and last_sync_row[0] is not None:
+        last_sync_time = last_sync_row[0].isoformat() + "Z"
+
+    # Pending (unresolved) conflicts.
+    pending_conflicts = db.query(SyncState).filter(SyncState.conflict.is_(True)).count()
+
+    # Total notes synced from Obsidian.
+    total_synced = db.query(Note).filter(Note.source == "obsidian").count()
+
+    return {
+        "last_sync_time": last_sync_time,
+        "pending_conflicts": pending_conflicts,
+        "total_synced": total_synced,
+        "server_time": datetime.now(timezone.utc).isoformat() + "Z",
+    }

@@ -6,8 +6,9 @@ const ONBOARDING_KEY = 'joidy-onboarding-complete';
 
 export interface OnboardingStep {
   id: string;
-  title: string;
-  content: string;
+  /** i18n key prefix, e.g. "onboarding.welcome" — title/content resolved via $t(). */
+  titleKey: string;
+  contentKey: string;
   /** CSS selector for the element to spotlight. null = centered (no target). */
   target: string | null;
 }
@@ -15,44 +16,38 @@ export interface OnboardingStep {
 export const ONBOARDING_STEPS: OnboardingStep[] = [
   {
     id: 'welcome',
-    title: 'Bienvenida a Joidy',
-    content:
-      'Tu sistema personal de gestión del conocimiento con gamificación. Aquí tomarás notas, establecerás metas y harás crecer una planta mientras mantienes rachas diarias.',
+    titleKey: 'onboarding.welcome.title',
+    contentKey: 'onboarding.welcome.content',
     target: null,
   },
   {
     id: 'notes',
-    title: 'Crea tu primera nota',
-    content:
-      'En la página de Notas puedes crear y organizar tu conocimiento. Cada nota admite etiquetas, iconos y colores, y se sincroniza con tu bóveda de Obsidian.',
+    titleKey: 'onboarding.notes.title',
+    contentKey: 'onboarding.notes.content',
     target: 'a.nav-item[href="/notes"]',
   },
   {
     id: 'tags',
-    title: 'Tags y grafo',
-    content:
-      'Etiqueta tus notas para conectarlas. El Grafo visualiza cómo se relacionan tus notas a través de los tags, revelando patrones y temas en tu conocimiento.',
+    titleKey: 'onboarding.tags.title',
+    contentKey: 'onboarding.tags.content',
     target: 'a.nav-item[href="/graph"]',
   },
   {
     id: 'goals',
-    title: 'Tu primera meta',
-    content:
-      'Establece metas con temporalidades (diaria, semanal, mensual o anual). Completar metas te da XP y alimenta tu progreso. Empieza con algo pequeño y alcanzable.',
+    titleKey: 'onboarding.goals.title',
+    contentKey: 'onboarding.goals.content',
     target: 'a.nav-item[href="/goals"]',
   },
   {
     id: 'streaks',
-    title: 'Rachas y planta',
-    content:
-      'Mantén una racha diaria de actividad. Cada día que interactúas con Joidy ganas XP y tu planta crece: de semilla a árbol. ¡No rompas la cadena!',
+    titleKey: 'onboarding.streaks.title',
+    contentKey: 'onboarding.streaks.content',
     target: 'a.nav-item[href="/streaks"]',
   },
   {
     id: 'obsidian',
-    title: 'Conecta Obsidian (opcional)',
-    content:
-      'Joidy se sincroniza con tu bóveda de Obsidian para mantener tus notas en formato Markdown. Puedes configurarlo ahora desde Ajustes, o saltar este paso y hacerlo más tarde.',
+    titleKey: 'onboarding.obsidian.title',
+    contentKey: 'onboarding.obsidian.content',
     target: null,
   },
 ];
@@ -114,11 +109,11 @@ function createOnboardingStore() {
       }
     },
     startTour() {
-      update(state => ({ ...state, currentStep: 0, active: true }));
+      update((state) => ({ ...state, currentStep: 0, active: true }));
       if (browser) localStorage.removeItem(ONBOARDING_KEY);
     },
     nextStep() {
-      update(state => {
+      update((state) => {
         const next = state.currentStep + 1;
         if (next >= ONBOARDING_STEPS.length) {
           markCompleted();
@@ -128,7 +123,7 @@ function createOnboardingStore() {
       });
     },
     prevStep() {
-      update(state => ({ ...state, currentStep: Math.max(0, state.currentStep - 1) }));
+      update((state) => ({ ...state, currentStep: Math.max(0, state.currentStep - 1) }));
     },
     skipTour() {
       markCompleted();
@@ -144,7 +139,7 @@ function createOnboardingStore() {
       set({ completed: true, currentStep: 0, active: false });
     },
     close() {
-      update(state => ({ ...state, active: false }));
+      update((state) => ({ ...state, active: false }));
     },
   };
 }

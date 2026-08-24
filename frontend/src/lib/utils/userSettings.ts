@@ -21,6 +21,13 @@ export interface UserSettings {
   streaksUi?: {
     panelWidth?: number;
   };
+  goalsUi?: {
+    pinnedGoalIds?: number[];
+  };
+  statusBarUi?: {
+    showAssignedIssues?: boolean;
+    showAssignedPRs?: boolean;
+  };
 }
 
 const KEY = 'joidy-user-settings-v1';
@@ -75,6 +82,8 @@ export function patchUserSettings(patch: Partial<UserSettings>): void {
     pomodoro: { ...current.pomodoro, ...patch.pomodoro },
     notesUi: { ...current.notesUi, ...patch.notesUi },
     streaksUi: { ...current.streaksUi, ...patch.streaksUi },
+    goalsUi: { ...current.goalsUi, ...patch.goalsUi },
+    statusBarUi: { ...current.statusBarUi, ...patch.statusBarUi },
   };
   localStorage.setItem(KEY, JSON.stringify(next));
 }

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { fetchWeather, type WeatherData } from '$lib/services/weatherService';
+  import { t } from 'svelte-i18n';
 
   let weather: WeatherData | null = null;
   let loading = true;
@@ -56,7 +57,7 @@
       <span class="weather-icon">{getEmoji(weather.code, weather.isDay)}</span>
       <span class="weather-temp">{weather.temp}°</span>
       <span class="weather-location">{weather.location}</span>
-      <button class="weather-refresh" onclick={loadWeather} title="Actualizar" aria-label="Actualizar">↻</button>
+      <button class="weather-refresh" onclick={loadWeather} title={$t('widgets.refresh')} aria-label={$t('widgets.refresh')}>↻</button>
     </div>
   {/if}
 </div>

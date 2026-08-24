@@ -3,6 +3,7 @@
   import StreakIcon from './StreakIcon.svelte';
   import ProgressBar from './ProgressBar.svelte';
   import { getGoalContext } from '$lib/stores/goalContext';
+  import { t } from 'svelte-i18n';
 
   export let goal: any;
   export let pinned: boolean = false;
@@ -19,11 +20,20 @@
     onTogglePin: (_id: number) => {},
     onClick: (_g: any) => {},
   };
-  const { tags, notes, getGoalColor, TEMPORALITY_LABELS, STATE_LABELS, formatFailConfig, onTogglePin, onClick } = ctx;
+  const {
+    tags,
+    notes,
+    getGoalColor,
+    TEMPORALITY_LABELS,
+    STATE_LABELS,
+    formatFailConfig,
+    onTogglePin,
+    onClick,
+  } = ctx;
 
   // Build Maps for O(1) lookups instead of linear searches
-  const tagsMap = new Map(tags.map(t => [t.id, t]));
-  const notesMap = new Map(notes.map(n => [n.id, n]));
+  const tagsMap = new Map(tags.map((t) => [t.id, t]));
+  const notesMap = new Map(notes.map((n) => [n.id, n]));
 </script>
 
 <div
@@ -36,7 +46,7 @@
   <button
     class="goal-card-main"
     onclick={() => onClick(goal)}
-    aria-label="Abrir objetivo: {goal.title}"
+    aria-label={$t('goalCard.openGoal', { values: { title: goal.title } })}
   >
     <div class="card-header">
       <div class="card-header-left">
@@ -48,13 +58,21 @@
           {/if}
         </div>
       </div>
-      <div class="goal-state-indicator" class:active={goal.state === 'ACTIVE'} class:completed={goal.state === 'COMPLETED' || goal.is_completed} class:paused={goal.state === 'PAUSED'} class:failed={goal.state === 'FAILED'}>
-        {STATE_LABELS[goal.state] || goal.state}
-      </div>
     </div>
     <div class="card-title">{goal.title}</div>
+    <div
+      class="goal-state-indicator"
+      class:active={goal.state === 'ACTIVE'}
+      class:completed={goal.state === 'COMPLETED' || goal.is_completed}
+      class:paused={goal.state === 'PAUSED'}
+      class:failed={goal.state === 'FAILED'}
+    >
+      {STATE_LABELS[goal.state] || goal.state}
+    </div>
     {#if goal.description}
-      <div class="card-description">{goal.description.substring(0, 80)}{goal.description.length > 80 ? '...' : ''}</div>
+      <div class="card-description">
+        {goal.description.substring(0, 80)}{goal.description.length > 80 ? '...' : ''}
+      </div>
     {/if}
     <div class="card-meta">
       <div class="meta-item">
@@ -90,14 +108,22 @@
             {goal.current_value} / {goal.target_value}
           {/if}
         </span>
-        <span class="progress-pct">{(goal.state === 'COMPLETED' || goal.is_completed) ? 100 : goal.progress_pct}%</span>
+        <span class="progress-pct"
+          >{goal.state === 'COMPLETED' || goal.is_completed ? 100 : goal.progress_pct}%</span
+        >
       </div>
-      <ProgressBar value={(goal.state === 'COMPLETED' || goal.is_completed) ? 100 : goal.progress_pct} color="var(--goal-color)" height={6} />
+      <ProgressBar
+        value={goal.state === 'COMPLETED' || goal.is_completed ? 100 : goal.progress_pct}
+        color="var(--goal-color)"
+        height={6}
+      />
     </div>
     <div class="card-footer">
       <span class="goal-id">#{goal.id}</span>
       {#if goal.created_at}
-        <span class="goal-date">Creado: {goal.created_at.split('T')[0]}</span>
+        <span class="goal-date"
+          >{$t('goalCard.created', { values: { date: goal.created_at.split('T')[0] } })}</span
+        >
       {/if}
     </div>
   </button>
@@ -121,14 +147,15 @@
     background: var(--surface);
     border: 2px solid var(--goal-color);
     border-radius: 12px;
-    padding: 20px;
+    padding: 14px 16px;
     transition: all 0.25s ease;
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    text-align: left;
+    gap: 8px;
+    text-align: center;
     position: relative;
     overflow: hidden;
+    aspect-ratio: 1;
   }
 
   .goal-card-main {
@@ -136,18 +163,19 @@
     border: none;
     padding: 0;
     cursor: pointer;
-    text-align: left;
+    text-align: center;
     color: inherit;
     font: inherit;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 8px;
     flex: 1;
+    align-items: center;
   }
 
   .goal-editor-card:hover {
     transform: translateY(-4px);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 8px 24px color-mix(in srgb, var(--text-primary) 15%, transparent);
   }
 
   .goal-editor-card.completed {
@@ -157,7 +185,7 @@
 
   .goal-editor-card.failed {
     border-color: var(--error);
-    background: rgba(239, 68, 68, 0.03);
+    background: color-mix(in srgb, var(--error) 3%, transparent);
   }
 
   .goal-editor-card.paused {
@@ -167,25 +195,27 @@
 
   .card-header {
     display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    position: relative;
   }
 
   .card-header-left {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
   }
 
   .pin-btn {
     position: absolute;
-    top: 16px;
-    right: 16px;
-    width: 28px;
-    height: 28px;
+    top: 0;
+    left: 0;
+    width: 24px;
+    height: 24px;
     border-radius: 6px;
-    background: var(--surface-hover);
-    border: 1px solid var(--border);
+    background: transparent;
+    border: none;
     color: var(--text-muted);
     display: flex;
     align-items: center;
@@ -193,6 +223,12 @@
     cursor: pointer;
     transition: all 0.2s ease;
     z-index: var(--z-base);
+    opacity: 0;
+  }
+
+  .goal-editor-card:hover .pin-btn,
+  .pin-btn:focus-visible {
+    opacity: 1;
   }
 
   .pin-btn:hover {
@@ -204,6 +240,7 @@
     background: var(--accent);
     border-color: var(--accent);
     color: var(--bg);
+    opacity: 1;
   }
 
   .goal-icon {
@@ -228,53 +265,56 @@
   }
 
   .goal-state-indicator.active {
-    background: rgba(251, 191, 36, 0.15);
-    color: #fbbf24;
+    background: color-mix(in srgb, var(--today) 15%, transparent);
+    color: var(--today);
   }
 
   .goal-state-indicator.completed {
-    background: rgba(16, 185, 129, 0.15);
+    background: color-mix(in srgb, var(--success) 15%, transparent);
     color: var(--success);
   }
 
   .goal-state-indicator.paused {
-    background: rgba(245, 158, 11, 0.15);
+    background: color-mix(in srgb, var(--warning) 15%, transparent);
     color: var(--warning);
   }
 
   .goal-state-indicator.failed {
-    background: rgba(239, 68, 68, 0.15);
+    background: color-mix(in srgb, var(--error) 15%, transparent);
     color: var(--error);
   }
 
   .card-title {
-    font-size: 16px;
+    font-size: 14px;
     font-weight: 600;
     color: var(--text-primary);
-    line-height: 1.4;
+    line-height: 1.3;
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     line-clamp: 2;
     overflow: hidden;
+    text-align: center;
   }
 
   .card-description {
-    font-size: 12px;
+    font-size: 11px;
     color: var(--text-muted);
-    line-height: 1.5;
+    line-height: 1.4;
     display: -webkit-box;
-    -webkit-line-clamp: 2;
+    -webkit-line-clamp: 1;
     -webkit-box-orient: vertical;
-    line-clamp: 2;
+    line-clamp: 1;
     overflow: hidden;
+    text-align: center;
   }
 
   .card-meta {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 4px;
+    gap: 6px;
+    margin-top: 2px;
+    justify-content: center;
   }
 
   .meta-item {
@@ -289,21 +329,22 @@
   }
 
   .meta-item.config {
-    background: rgba(59, 130, 246, 0.1);
-    color: #3b82f6;
+    background: color-mix(in srgb, var(--link) 10%, transparent);
+    color: var(--link);
   }
 
   .card-progress {
-    margin-top: 8px;
-    padding-top: 12px;
+    margin-top: 4px;
+    padding-top: 8px;
     border-top: 1px solid var(--border-light);
+    width: 100%;
   }
 
   .progress-info {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
   }
 
   .progress-text {
@@ -322,11 +363,12 @@
 
   .card-footer {
     display: flex;
-    justify-content: space-between;
+    justify-content: center;
     align-items: center;
+    gap: 8px;
     font-size: 10px;
     color: var(--text-disabled);
-    margin-top: 4px;
+    margin-top: 2px;
   }
 
   .goal-id {

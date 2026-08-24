@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { use24HourClock } from '$lib/stores/settings';
-  import { getLocale } from '$lib/stores/locale';
+  import { getTimezone, formatClock } from '$lib/utils/clock';
+  import { t } from 'svelte-i18n';
 
   // ── Timezone ───────────────────────────────────────────────────────────────
   const TZ_MAP: Record<string, string> = {
@@ -47,11 +48,7 @@
   let tzError = '';
 
   function initTimezone() {
-    const saved = localStorage.getItem('joidy-timezone');
-    if (saved) { timezone = saved; return; }
-    try {
-      timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    } catch { timezone = 'UTC'; }
+    timezone = getTimezone();
   }
 
   function setTimezone(tz: string) {
@@ -78,15 +75,7 @@
   let clockStr = '--:--:--';
 
   function updateClock() {
-    try {
-      clockStr = new Date().toLocaleTimeString(getLocale(), {
-        timeZone: timezone,
-        hour:     $use24HourClock ? '2-digit' : 'numeric',
-        minute:   '2-digit',
-        second:   '2-digit',
-        hour12:   !$use24HourClock,
-      });
-    } catch { clockStr = '--:--:--'; }
+    clockStr = formatClock(timezone, $use24HourClock);
   }
 
   let clockInterval: ReturnType<typeof setInterval> | null = null;
@@ -114,11 +103,11 @@
           <input
             class="tz-input mono"
             bind:value={tzInput}
-            placeholder="Chile, Europe/Madrid, UTC..."
+            placeholder={$t('widgets.timezonePlaceholder')}
             onkeydown={(e) => e.key === 'Enter' && applyTzInput()}
             autofocus
           />
-          <button class="tz-close-ui" onclick={() => showTzPicker = false} title="Cerrar" aria-label="Cerrar">✕</button>
+          <button class="tz-close-ui" onclick={() => showTzPicker = false} title={$t('widgets.close')} aria-label={$t('widgets.close')}>✕</button>
         </div>
         {#if tzError}<span class="tz-error">{tzError}</span>{/if}
         <div class="tz-presets">
@@ -131,8 +120,8 @@
       <button
         class="clock mono"
         onclick={() => showTzPicker = true}
-        title="Cambiar zona horaria"
-        aria-label="Cambiar zona horaria"
+        title={$t('widgets.changeTimezone')}
+        aria-label={$t('widgets.changeTimezone')}
         aria-haspopup="dialog"
         aria-expanded={showTzPicker}
       >
@@ -165,10 +154,13 @@
   .clock {
     font-size: 22px;
     font-weight: 300;
-    color: var(--text-secondary);
+    color: var(--text-primary);
     letter-spacing: 0.08em;
     cursor: pointer;
     transition: color var(--t-fast);
+    background: transparent;
+    border: none;
+    padding: 0;
   }
   .clock:hover { color: var(--xp); }
 

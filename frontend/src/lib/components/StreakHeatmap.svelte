@@ -1,10 +1,11 @@
 <script lang="ts">
   import StreakIcon from './StreakIcon.svelte';
-  import type { StreakDay } from "$lib/api";
+  import type { StreakDay } from '$lib/api';
+  import { t } from 'svelte-i18n';
 
   let {
     history = [],
-    color = "#c8a96e",
+    color = '#c8a96e',
     startDate = null,
     targetDate = null,
     /** ISO date string currently highlighted by the parent */
@@ -25,13 +26,13 @@
     hideTabs?: boolean;
   } = $props();
 
-  type ViewMode = "week" | "month" | "year";
+  type ViewMode = 'week' | 'month' | 'year';
 
   function getInitialView(): ViewMode {
-    if (typeof localStorage === 'undefined') return "year";
+    if (typeof localStorage === 'undefined') return 'year';
     const saved = localStorage.getItem('goals.historyView');
     if (saved === 'week' || saved === 'month' || saved === 'year') return saved;
-    return "year";
+    return 'year';
   }
 
   let view: ViewMode = $state(getInitialView());
@@ -46,8 +47,8 @@
 
   function localIso(date: Date) {
     const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const day = String(date.getDate()).padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
   }
 
@@ -87,10 +88,20 @@
     return newMap;
   });
 
-  const DAY_NAMES = ["LUN", "MAR", "MIÉ", "JUE", "VIE", "SÁB", "DOM"];
+  const DAY_NAMES = ['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB', 'DOM'];
   const MONTH_NAMES = [
-    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-    "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+    'Enero',
+    'Febrero',
+    'Marzo',
+    'Abril',
+    'Mayo',
+    'Junio',
+    'Julio',
+    'Agosto',
+    'Septiembre',
+    'Octubre',
+    'Noviembre',
+    'Diciembre',
   ];
 
   const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -160,20 +171,26 @@
   function shiftYearMonth(offset: number) {
     const nextCursor = new Date(yearCursor.getFullYear(), yearCursor.getMonth() + offset, 1);
     if (monthKey(nextCursor) < monthKey(minYearMonth)) return;
-    
-    const maxFuture = (maxFutureMonths && !Number.isNaN(maxFutureMonths)) ? maxFutureMonths : 0;
+
+    const maxFuture = maxFutureMonths && !Number.isNaN(maxFutureMonths) ? maxFutureMonths : 0;
     if (monthKey(nextCursor) > monthKey(currentMonthStart) + maxFuture) return;
-    
+
     yearCursor = nextCursor;
   }
 
   function handleYearKeyboardNav(event: KeyboardEvent) {
-    if (view !== "year") return;
+    if (view !== 'year') return;
     const target = event.target as HTMLElement | null;
     const tag = target?.tagName;
-    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target?.isContentEditable) return;
-    if (event.key === "ArrowLeft") { event.preventDefault(); shiftYearMonth(-1); }
-    else if (event.key === "ArrowRight") { event.preventDefault(); shiftYearMonth(1); }
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target?.isContentEditable)
+      return;
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      shiftYearMonth(-1);
+    } else if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      shiftYearMonth(1);
+    }
   }
 
   function selectDay(iso: string) {
@@ -201,16 +218,22 @@
 <div class="activity" style="--ac: {color};">
   {#if !hideTabs}
     <div class="tabs">
-      <button class="tab" class:on={view === "week"} onclick={() => (view = "week")}>Semana</button>
-      <button class="tab" class:on={view === "month"} onclick={() => (view = "month")}>Mes</button>
-      <button class="tab" class:on={view === "year"} onclick={() => (view = "year")}>Año</button>
+      <button class="tab" class:on={view === 'week'} onclick={() => (view = 'week')}
+        >{$t('streakHeatmap.week')}</button
+      >
+      <button class="tab" class:on={view === 'month'} onclick={() => (view = 'month')}
+        >{$t('streakHeatmap.month')}</button
+      >
+      <button class="tab" class:on={view === 'year'} onclick={() => (view = 'year')}
+        >{$t('streakHeatmap.year')}</button
+      >
     </div>
   {/if}
 
   <div class="view-title-row">
-    {#if view === "week"}
-      <span class="title">Semana actual</span>
-    {:else if view === "month"}
+    {#if view === 'week'}
+      <span class="title">{$t('streakHeatmap.currentWeek')}</span>
+    {:else if view === 'month'}
       <span class="title">{MONTH_LABEL}</span>
     {:else}
       <button
@@ -218,7 +241,7 @@
         class:disabled={!canGoPrev}
         onclick={() => shiftYearMonth(-1)}
         disabled={!canGoPrev}
-        aria-label="Año anterior"
+        aria-label={$t('streakHeatmap.prevYear')}
       >
         ‹
       </button>
@@ -228,7 +251,7 @@
         class:disabled={!canGoNext}
         onclick={() => shiftYearMonth(1)}
         disabled={!canGoNext}
-        aria-label="Año siguiente"
+        aria-label={$t('streakHeatmap.nextYear')}
       >
         ›
       </button>
@@ -236,7 +259,7 @@
   </div>
 
   <div class="view-area">
-    {#if view === "week"}
+    {#if view === 'week'}
       <div class="week-wrap">
         <div class="mhdr">
           {#each DAY_NAMES as label}
@@ -256,19 +279,21 @@
               title={day.iso}
             >
               <div class="wd-num-wrap">
-                <span class="wd-num"
+                <span
+                  class="wd-num"
                   class:today-num={day.isToday}
                   class:checked-num={day.checked && !day.isToday}
                   class:failed-num={day.failed && !day.checked && !day.isToday}
                   class:target-num={day.isTarget}
                   class:selected-num={day.isSelected && !day.isToday && !day.checked && !day.failed}
-                >{day.dayNum}</span>
+                  >{day.dayNum}</span
+                >
               </div>
             </button>
           {/each}
         </div>
       </div>
-    {:else if view === "month"}
+    {:else if view === 'month'}
       <div class="month-wrap">
         <div class="mhdr">
           {#each DAY_NAMES as label}
@@ -291,7 +316,17 @@
                 disabled={!cell.inMonth}
               >
                 {#if cell.inMonth}
-                  <span class="mday" class:on={cell.checked && !cell.isToday} class:mtoday={cell.isToday} class:mfailed={cell.failed && !cell.checked && !cell.isToday} class:mtarget={cell.isTarget} class:mselected={cell.isSelected && !cell.isToday && !cell.checked && !cell.failed}>{cell.dayNum}</span>
+                  <span
+                    class="mday"
+                    class:on={cell.checked && !cell.isToday}
+                    class:mtoday={cell.isToday}
+                    class:mfailed={cell.failed && !cell.checked && !cell.isToday}
+                    class:mtarget={cell.isTarget}
+                    class:mselected={cell.isSelected &&
+                      !cell.isToday &&
+                      !cell.checked &&
+                      !cell.failed}>{cell.dayNum}</span
+                  >
                 {/if}
               </button>
             {/each}
@@ -322,7 +357,17 @@
                   disabled={!cell.inMonth}
                 >
                   {#if cell.inMonth}
-                    <span class="mday" class:on={cell.checked && !cell.isToday} class:mtoday={cell.isToday} class:mfailed={cell.failed && !cell.checked && !cell.isToday} class:mtarget={cell.isTarget} class:mselected={cell.isSelected && !cell.isToday && !cell.checked && !cell.failed}>{cell.dayNum}</span>
+                    <span
+                      class="mday"
+                      class:on={cell.checked && !cell.isToday}
+                      class:mtoday={cell.isToday}
+                      class:mfailed={cell.failed && !cell.checked && !cell.isToday}
+                      class:mtarget={cell.isTarget}
+                      class:mselected={cell.isSelected &&
+                        !cell.isToday &&
+                        !cell.checked &&
+                        !cell.failed}>{cell.dayNum}</span
+                    >
                   {/if}
                 </button>
               {/each}
@@ -367,7 +412,9 @@
     letter-spacing: 0.04em;
   }
 
-  .tab:hover { color: var(--text-muted); }
+  .tab:hover {
+    color: var(--text-muted);
+  }
 
   .tab.on {
     background: var(--surface);
@@ -394,6 +441,7 @@
     justify-content: center;
     gap: 16px;
     width: 100%;
+    margin-bottom: 8px;
   }
 
   .title {
@@ -448,14 +496,29 @@
     margin-left: -1px;
     margin-top: -1px;
     cursor: pointer;
-    transition: border-color 0.15s, background 0.15s;
+    transition:
+      border-color 0.15s,
+      background 0.15s;
     padding: 0;
   }
 
-  .week-col:first-child { margin-left: 0; }
-  .week-col:hover { border-color: var(--ac); z-index: var(--z-base); background: color-mix(in srgb, var(--ac) 8%, var(--surface)); }
-  .week-col.checked { border-color: var(--ac); z-index: var(--z-base); }
-  .week-col.selected { border-color: var(--ac); box-shadow: 0 0 0 2px var(--ac); z-index: 3; }
+  .week-col:first-child {
+    margin-left: 0;
+  }
+  .week-col:hover {
+    border-color: var(--ac);
+    z-index: var(--z-base);
+    background: color-mix(in srgb, var(--ac) 8%, var(--surface));
+  }
+  .week-col.checked {
+    border-color: var(--ac);
+    z-index: var(--z-base);
+  }
+  .week-col.selected {
+    border-color: var(--ac);
+    box-shadow: 0 0 0 2px var(--ac);
+    z-index: 3;
+  }
 
   /* ── Day number / emoji ── */
   .wd-num-wrap {
@@ -478,7 +541,8 @@
     transition: all 0.2s;
   }
 
-  .week-col.failed, .mcell.failed {
+  .week-col.failed,
+  .mcell.failed {
     border-color: var(--error);
     z-index: var(--z-base);
   }
@@ -515,22 +579,36 @@
     font-weight: 700;
   }
 
-  .wd-num.today-num, .mday.mtoday { font-weight: 700; }
-  .wd-num.checked-num, .mday.on { font-weight: 600; }
-  .wd-num.failed-num, .mday.mfailed { font-weight: 600; }
+  .wd-num.today-num,
+  .mday.mtoday {
+    font-weight: 700;
+  }
+  .wd-num.checked-num,
+  .mday.on {
+    font-weight: 600;
+  }
+  .wd-num.failed-num,
+  .mday.mfailed {
+    font-weight: 600;
+  }
 
   .wd-num.selected-num,
   .mday.mselected {
     box-shadow: 0 0 0 2px var(--ac);
   }
 
-  .wd-num.target-num, .mday.mtarget {
+  .wd-num.target-num,
+  .mday.mtarget {
     background: var(--target);
     color: #000;
     font-weight: 700;
   }
 
-  .week-col.target, .mcell.target { border-color: var(--target); z-index: 2; }
+  .week-col.target,
+  .mcell.target {
+    border-color: var(--target);
+    z-index: 2;
+  }
 
   /* ── Month grid ── */
   .mgrid {
@@ -553,7 +631,9 @@
     align-items: center;
     justify-content: center;
     background: var(--surface);
-    transition: box-shadow 0.15s, background 0.15s;
+    transition:
+      box-shadow 0.15s,
+      background 0.15s;
     cursor: pointer;
     border: none;
     padding: 0;
@@ -565,20 +645,36 @@
     z-index: var(--z-base);
   }
 
-  .mcell.checked { box-shadow: inset 0 0 0 1px var(--ac); z-index: var(--z-base); }
-  .mcell.failed:not(.checked) { box-shadow: inset 0 0 0 1px var(--error); }
-  .mcell.today { box-shadow: inset 0 0 0 1px var(--today); z-index: 4; }
-  .mcell.selected { box-shadow: inset 0 0 0 2px var(--ac); z-index: 3; }
-  .mcell.today.selected { box-shadow: inset 0 0 0 2px var(--today); z-index: 5; }
+  .mcell.checked {
+    box-shadow: inset 0 0 0 1px var(--ac);
+    z-index: var(--z-base);
+  }
+  .mcell.failed:not(.checked) {
+    box-shadow: inset 0 0 0 1px var(--error);
+  }
+  .mcell.today {
+    box-shadow: inset 0 0 0 1px var(--today);
+    z-index: 4;
+  }
+  .mcell.selected {
+    box-shadow: inset 0 0 0 2px var(--ac);
+    z-index: 3;
+  }
+  .mcell.today.selected {
+    box-shadow: inset 0 0 0 2px var(--today);
+    z-index: 5;
+  }
 
   .mcell.empty {
-    background: #000;
+    background: var(--elevated);
     opacity: 1;
     cursor: default;
     pointer-events: none;
   }
 
-  .mcell:disabled { cursor: default; }
+  .mcell:disabled {
+    cursor: default;
+  }
 
   .mday {
     width: 38px;
@@ -602,7 +698,9 @@
     margin: 0 auto;
   }
 
-  .year-wrap .month-wrap { max-width: 560px; }
+  .year-wrap .month-wrap {
+    max-width: 560px;
+  }
 
   .nav-btn {
     display: flex;
@@ -620,7 +718,11 @@
     transition: all 0.2s;
   }
 
-  .nav-btn:hover { color: var(--ac); border-color: var(--ac); background: var(--surface-hover); }
+  .nav-btn:hover {
+    color: var(--ac);
+    border-color: var(--ac);
+    background: var(--surface-hover);
+  }
 
   .nav-btn.disabled,
   .nav-btn:disabled {
@@ -628,5 +730,30 @@
     cursor: not-allowed;
     color: var(--text-disabled);
     border-color: var(--border);
+  }
+
+  @media (max-width: 480px) {
+    .wd-num,
+    .mday {
+      width: 30px;
+      height: 30px;
+      font-size: 14px;
+    }
+    .view-title-row {
+      gap: var(--s3);
+    }
+    .tab {
+      padding: var(--s1) var(--s2_5);
+      font-size: 10px;
+    }
+  }
+
+  @media (max-width: 360px) {
+    .wd-num,
+    .mday {
+      width: 26px;
+      height: 26px;
+      font-size: 12px;
+    }
   }
 </style>

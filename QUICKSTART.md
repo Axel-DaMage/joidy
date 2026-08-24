@@ -70,7 +70,7 @@ graph LR
     API[API 8000<br/>FastAPI]
     AI[AI 8002<br/>FastAPI]
     Worker[Worker 8001<br/>asyncio]
-    DB[(SQLite + sqlite-vec)]
+    DB[(PostgreSQL 16 + pgvector)]
     Vault[Obsidian Vault]
 
     User --> FE
@@ -101,7 +101,7 @@ graph LR
 2. Si es la primera vez, elige contraseña maestra o accede con la configurada en `.env`.
 3. Crea una nota desde `/notes`.
 4. Crea una racha desde `/streaks`.
-5. Explora el dashboard y las integraciones en `/integraciones`.
+5. Abre Ajustes y configura tus integraciones en la sección "Integraciones".
 
 ## 7. Desarrollo sin Docker (no recomendado)
 
@@ -112,11 +112,11 @@ Si prefieres correr sin Docker, necesitas:
 - Python 3.12+ en `ai-service/`: `pip install -r requirements.txt && uvicorn main:app --reload --port 8002`
 - Worker: `python main.py` dentro de `worker/`
 
-Recuerda que la base de datos SQLite se comparte entre servicios, así que debe estar en una ruta accesible.
+Recuerda que la base de datos PostgreSQL (con la extensión `pgvector`) se comparte entre servicios vía `DATABASE_URL`, así que necesitas una instancia accesible (local o remota).
 
 ## 8. Convenciones útiles
 
-- Cada servicio tiene su propio `README.md` o `ARCHITECTURE.md`.
+- Cada servicio tiene su propio `README.md`. La arquitectura general está en `docs/`.
 - El frontend usa Svelte stores en `frontend/src/lib/stores/`.
 - El backend separa `routers/` (HTTP), `services/` (lógica) y `models/` (SQLAlchemy).
 - `make lint` ejecuta `python -m compileall` en todos los servicios Python.
@@ -132,5 +132,7 @@ Recuerda que la base de datos SQLite se comparte entre servicios, así que debe 
 
 ---
 
-Para más detalles técnicos del frontend ver `ARCHITECTURE_FRONTEND.md`.
-Para la arquitectura general ver `ARCHITECTURE.md`.
+Para más detalles técnicos del frontend ver `docs/frontend.md`.
+Para la arquitectura general ver `docs/architecture.md`.
+Para el esquema de base de datos ver `docs/database.md`.
+Para el índice completo de documentación ver `docs/index.md`.

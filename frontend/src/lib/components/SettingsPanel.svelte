@@ -2,21 +2,39 @@
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
   import { browser } from '$app/environment';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
-  import { accentColors, activeIconPack, showFrontmatter, showTrash, showHiddenFiles, writeInObsidian, use24HourClock, hideTagsLine, darkMode, devMode, themeMode, type IconPack, type ThemeMode, MAX_COLORS } from '$lib/stores/settings';
+  import {
+    accentColors,
+    activeIconPack,
+    showFrontmatter,
+    showTrash,
+    showHiddenFiles,
+    writeInObsidian,
+    use24HourClock,
+    hideTagsLine,
+    devMode,
+    themeMode,
+    type IconPack,
+    type ThemeMode,
+    MAX_COLORS,
+  } from '$lib/stores/settings';
   import { api } from '$lib/api';
   import { logger } from '$lib/utils/logger';
   import { deferredPrompt, isAppInstalled, showInstallBanner } from '$lib/stores/pwa';
   import { showNotification } from '$lib/stores/notifications';
+  import { locale as localeStore, setLocale } from '$lib/stores/locale';
+  import { t } from 'svelte-i18n';
+  import { mapToSupportedLocale, SUPPORTED_LOCALES, type SupportedLocale } from '$lib/i18n';
 
   export let open = false;
 
   const dispatch = createEventDispatcher<{ close: void }>();
 
-  
-
   let configLoaded = false;
   let configSaving = false;
+  let configSaved = false;
   let configMessage = '';
+  let configRestartNotice = '';
+  let savedTimer: ReturnType<typeof setTimeout> | null = null;
 
   let githubConnected = false;
   let githubUsername = '';
@@ -48,6 +66,30 @@
   };
 
   let configuredKeys: string[] = [];
+
+  // ── Power management state ────────────────────────────────────────────────
+  let powerStatus: {
+    docker_available: boolean;
+    services: {
+      name: string;
+      status: 'running' | 'stopped' | 'unknown';
+      healthy: boolean | null;
+    }[];
+    hibernating: boolean;
+  } | null = null;
+  let powerLoading = false;
+  let powerActionLoading: 'sleep' | 'wake' | 'shutdown' | null = null;
+  let powerError = '';
+  let powerMessage = '';
+  let shutdownConfirm = false;
+
+  const SERVICE_LABELS: Record<string, string> = {
+    postgres: 'PostgreSQL',
+    api: 'API',
+    'ai-service': 'AI Service',
+    worker: 'Worker',
+    frontend: 'Frontend',
+  };
 
   onMount(async () => {
     if (open) {
@@ -94,9 +136,75 @@
       configLoaded = true;
       await checkGithubStatus();
       await checkGoogleStatus();
+      await loadPowerStatus();
     } catch (e) {
       logger.error('Failed to load config:', e);
       configLoaded = true;
+    }
+  }
+
+  async function loadPowerStatus() {
+    powerLoading = true;
+    powerError = '';
+    try {
+      powerStatus = await api.power.status();
+    } catch (e: any) {
+      powerStatus = null;
+      powerError = e.message || 'No se pudo obtener el estado de los servicios';
+    } finally {
+      powerLoading = false;
+    }
+  }
+
+  async function hibernateServices() {
+    powerActionLoading = 'sleep';
+    powerError = '';
+    powerMessage = '';
+    try {
+      const result = await api.power.sleep();
+      powerMessage = result.message;
+      showNotification(result.message, 'success');
+      await loadPowerStatus();
+    } catch (e: any) {
+      powerError = e.message || 'Error al hibernar servicios';
+      showNotification(powerError, 'error');
+    } finally {
+      powerActionLoading = null;
+    }
+  }
+
+  async function wakeServices() {
+    powerActionLoading = 'wake';
+    powerError = '';
+    powerMessage = '';
+    try {
+      const result = await api.power.wake();
+      powerMessage = result.message;
+      showNotification(result.message, 'success');
+      await loadPowerStatus();
+    } catch (e: any) {
+      powerError = e.message || 'Error al despertar servicios';
+      showNotification(powerError, 'error');
+    } finally {
+      powerActionLoading = null;
+    }
+  }
+
+  async function shutdownServices() {
+    powerActionLoading = 'shutdown';
+    powerError = '';
+    powerMessage = '';
+    try {
+      const result = await api.power.shutdown();
+      powerMessage = result.message;
+      showNotification(result.message, 'info');
+      await loadPowerStatus();
+    } catch (e: any) {
+      powerError = e.message || 'Error al apagar servicios';
+      showNotification(powerError, 'error');
+    } finally {
+      powerActionLoading = null;
+      shutdownConfirm = false;
     }
   }
 
@@ -105,7 +213,6 @@
       const status = await api.github.status();
       githubConnected = status.connected;
       githubUsername = status.username || '';
-  
     } catch (e) {
       githubConnected = false;
       githubUsername = '';
@@ -163,6 +270,9 @@
         await checkGithubStatus();
         clearGithubAuth();
         showNotification('GitHub conectado correctamente', 'success');
+        // Notify other components (e.g. the dashboard) to refresh GitHub data
+        // without requiring a manual page reload.
+        window.dispatchEvent(new CustomEvent('joidy:github-connected'));
         return;
       }
       if (result.status === 'denied') {
@@ -198,13 +308,24 @@
     await api.config.update({ github_token: '', github_username: '' });
     await checkGithubStatus();
     showNotification('GitHub desconectado', 'info');
+    window.dispatchEvent(new CustomEvent('joidy:github-disconnected'));
   }
 
-  async function openGoogleCalendarLink() { window.open('https://calendar.google.com', '_blank'); }
-  async function openGoogleTasksLink() { window.open('https://tasksboard.com', '_blank'); }
-  async function openGoogleContactsLink() { window.open('https://contacts.google.com', '_blank'); }
-  async function openStravaLink() { window.open('https://strava.com', '_blank'); }
-  async function openGmailLink() { window.open('https://mail.google.com', '_blank'); }
+  async function openGoogleCalendarLink() {
+    window.open('https://calendar.google.com', '_blank');
+  }
+  async function openGoogleTasksLink() {
+    window.open('https://tasksboard.com', '_blank');
+  }
+  async function openGoogleContactsLink() {
+    window.open('https://contacts.google.com', '_blank');
+  }
+  async function openStravaLink() {
+    window.open('https://strava.com', '_blank');
+  }
+  async function openGmailLink() {
+    window.open('https://mail.google.com', '_blank');
+  }
 
   async function checkGoogleStatus() {
     try {
@@ -233,7 +354,10 @@
         }
       }, 3000);
       // Stop polling after 5 minutes
-      setTimeout(() => { clearInterval(pollInterval); googleConnecting = false; }, 300000);
+      setTimeout(() => {
+        clearInterval(pollInterval);
+        googleConnecting = false;
+      }, 300000);
     } catch (e: any) {
       googleError = e.message || 'Error iniciando autenticación con Google';
       googleConnecting = false;
@@ -253,16 +377,27 @@
   async function saveConfig() {
     configSaving = true;
     configMessage = '';
+    configRestartNotice = '';
+    if (savedTimer) {
+      clearTimeout(savedTimer);
+      savedTimer = null;
+    }
     try {
       // No enviamos github_token ni github_username desde el formulario general;
       // esos se manejan con el flujo OAuth dedicado.
       const { github_token, github_username, ...configToSave } = systemConfig;
       const result = await api.config.update(configToSave);
-      configMessage = result.message;
       configuredKeys = Object.entries(configToSave)
         .filter(([k, v]) => v && k !== 'telegram_bot_token' && k !== 'telegram_allowed_user_id')
         .map(([k, v]) => k);
-      setTimeout(() => configMessage = '', 3000);
+      if (result.requires_restart && result.restart_reason) {
+        configRestartNotice = result.restart_reason;
+      }
+      configSaved = true;
+      savedTimer = setTimeout(() => {
+        configSaved = false;
+        savedTimer = null;
+      }, 2500);
     } catch (e: any) {
       configMessage = 'Error: ' + (e.message || 'Failed to save');
     } finally {
@@ -274,14 +409,24 @@
     return configuredKeys.includes(key);
   }
 
-  const ICON_PACKS: { value: IconPack, label: string }[] = [
+  const ICON_PACKS: { value: IconPack; label: string }[] = [
     { value: 'lucide', label: 'Lucide (Por Defecto)' },
     { value: 'phosphor', label: 'Phosphor' },
-    { value: 'material', label: 'Material' }
+    { value: 'material', label: 'Material' },
   ];
 
-  function toggleTheme() {
-    darkMode.toggle();
+  // Language selector options (#370). The store holds the full BCP-47 tag
+  // (e.g. "es-CL"); we map it to a supported base locale for the dropdown.
+  const LANGUAGE_OPTIONS: { value: SupportedLocale; label: string }[] = [
+    { value: 'es', label: 'Español' },
+    { value: 'en', label: 'English' },
+  ];
+
+  $: currentLocale = mapToSupportedLocale($localeStore);
+
+  function onLocaleChange(e: Event) {
+    const value = (e.target as HTMLSelectElement).value as SupportedLocale;
+    setLocale(value);
   }
 
   function onColorPicker(i: number, e: Event) {
@@ -294,9 +439,10 @@
     if (/^#[0-9a-fA-F]{6}$/.test(full)) accentColors.setColor(i, full);
   }
 
-  $: gradientPreview = $accentColors.length === 1
-    ? $accentColors[0]
-    : `linear-gradient(to right, ${$accentColors.join(', ')})`;
+  $: gradientPreview =
+    $accentColors.length === 1
+      ? $accentColors[0]
+      : `linear-gradient(to right, ${$accentColors.join(', ')})`;
 
   let offsetPx = 0;
   let isDragging = false;
@@ -322,16 +468,16 @@
   }
 
   function lerp(c1: string, c2: string, t: number): string {
-    const r1 = parseInt(c1.slice(1,3), 16);
-    const g1 = parseInt(c1.slice(3,5), 16);
-    const b1 = parseInt(c1.slice(5,7), 16);
-    const r2 = parseInt(c2.slice(1,3), 16);
-    const g2 = parseInt(c2.slice(3,5), 16);
-    const b2 = parseInt(c2.slice(5,7), 16);
+    const r1 = parseInt(c1.slice(1, 3), 16);
+    const g1 = parseInt(c1.slice(3, 5), 16);
+    const b1 = parseInt(c1.slice(5, 7), 16);
+    const r2 = parseInt(c2.slice(1, 3), 16);
+    const g2 = parseInt(c2.slice(3, 5), 16);
+    const b2 = parseInt(c2.slice(5, 7), 16);
     const r = Math.round(r1 + (r2 - r1) * t);
     const g = Math.round(g1 + (g2 - g1) * t);
     const b = Math.round(b1 + (b2 - b1) * t);
-    return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
+    return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
   }
 
   function onGradientMouseDown(e: MouseEvent) {
@@ -384,61 +530,75 @@
   <div class="backdrop" role="presentation" onclick={onBackdropClick}>
     <div class="panel">
       <div class="panel-header">
-        <span class="mono" style="font-size:12px; letter-spacing:0.08em;">AJUSTES</span>
-        <button class="close-btn" onclick={close} aria-label="Cerrar"><DynamicIcon name="X" size={14} /></button>
+        <span class="mono" style="font-size:12px; letter-spacing:0.08em;"
+          >{$t('settings.title')}</span
+        >
+        <button class="close-btn" onclick={close} aria-label={$t('common.close')}
+          ><DynamicIcon name="X" size={14} /></button
+        >
       </div>
 
       <div class="panel-body">
-
         <!-- Apariencia -->
         <section class="section">
-          <div class="section-title" style="color: var(--xp, var(--accent));">Apariencia</div>
-          <div class="row">
-            <div class="row-label">
-              {#if $darkMode}<DynamicIcon name="Moon" size={13} />{:else}<DynamicIcon name="Sun" size={13} />{/if}
-              <span>Tema</span>
-            </div>
-            <button class="toggle" onclick={toggleTheme}>
-              <span class:active={$darkMode}>oscuro</span>
-              <span class="divider">|</span>
-              <span class:active={!$darkMode}>claro</span>
-            </button>
+          <div class="section-title" style="color: var(--xp, var(--accent));">
+            {$t('settings.appearance')}
           </div>
-
           <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
             <div class="row-label">
               <DynamicIcon name="Sparkles" size={13} />
-              <span>Modo de tema</span>
+              <span>{$t('settings.theme')}</span>
             </div>
             <div class="theme-mode-options">
               <label class="theme-mode-option" class:active={$themeMode === 'light'}>
-                <input type="radio" name="theme-mode" value="light" checked={$themeMode === 'light'} onchange={() => themeMode.set('light')} />
-                <span>Claro</span>
+                <input
+                  type="radio"
+                  name="theme-mode"
+                  value="light"
+                  checked={$themeMode === 'light'}
+                  onchange={() => themeMode.set('light')}
+                />
+                <DynamicIcon name="Sun" size={14} />
+                <span>{$t('settings.themeLight')}</span>
               </label>
               <label class="theme-mode-option" class:active={$themeMode === 'dark'}>
-                <input type="radio" name="theme-mode" value="dark" checked={$themeMode === 'dark'} onchange={() => themeMode.set('dark')} />
-                <span>Oscuro</span>
-              </label>
-              <label class="theme-mode-option" class:active={$themeMode === 'auto'}>
-                <input type="radio" name="theme-mode" value="auto" checked={$themeMode === 'auto'} onchange={() => themeMode.set('auto')} />
-                <span>Automático</span>
+                <input
+                  type="radio"
+                  name="theme-mode"
+                  value="dark"
+                  checked={$themeMode === 'dark'}
+                  onchange={() => themeMode.set('dark')}
+                />
+                <DynamicIcon name="Moon" size={14} />
+                <span>{$t('settings.themeDark')}</span>
               </label>
             </div>
-            {#if $themeMode === 'auto'}
-              <p class="hint" style="margin-top: 2px;">El tema cambiará según la hora del día y la estación</p>
-            {/if}
           </div>
 
           <div class="row">
             <div class="row-label">
               <DynamicIcon name="Clock3" size={13} />
-              <span>Formato de hora</span>
+              <span>{$t('settings.timeFormat')}</span>
             </div>
             <button class="toggle" onclick={() => use24HourClock.toggle()}>
               <span class:active={$use24HourClock}>24h</span>
               <span class="sep">/</span>
               <span class:active={!$use24HourClock}>12h</span>
             </button>
+          </div>
+
+          <!-- Language selector (#370) -->
+          <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
+            <div class="row-label">
+              <DynamicIcon name="Languages" size={13} />
+              <span>{$t('settings.language')}</span>
+            </div>
+            <select class="setting-input mono" value={currentLocale} onchange={onLocaleChange}>
+              {#each LANGUAGE_OPTIONS as lang}
+                <option value={lang.value}>{lang.label}</option>
+              {/each}
+            </select>
+            <p class="hint" style="margin-top: 2px;">{$t('settings.languageHint')}</p>
           </div>
 
           <!-- Gradient preview bar -->
@@ -472,7 +632,12 @@
                   placeholder="#c8a96e"
                 />
                 {#if $accentColors.length > 1}
-                  <button class="color-rm" onclick={() => accentColors.removeColor(i)} title="Quitar" aria-label="Quitar">
+                  <button
+                    class="color-rm"
+                    onclick={() => accentColors.removeColor(i)}
+                    title="Quitar"
+                    aria-label="Quitar"
+                  >
                     <DynamicIcon name="Minus" size={10} />
                   </button>
                 {/if}
@@ -487,16 +652,21 @@
           {/if}
 
           <!-- Icon Packs Selector -->
-          <div class="row" style="margin-top: 16px; flex-direction: column; align-items: stretch; gap: 8px;">
+          <div
+            class="row"
+            style="margin-top: 16px; flex-direction: column; align-items: stretch; gap: 8px;"
+          >
             <div class="row-label"><span>Set de Iconos (Alternativa Emojis)</span></div>
             <select class="setting-input mono" bind:value={$activeIconPack}>
               {#each ICON_PACKS as pack}
                 <option value={pack.value}>{pack.label}</option>
               {/each}
             </select>
-            <p class="hint" style="margin-top: 2px;">Los iconos cambiarán en los conectores y notas.</p>
+            <p class="hint" style="margin-top: 2px;">
+              Los iconos cambiarán en los conectores y notas.
+            </p>
           </div>
-</section>
+        </section>
 
         <!-- Avanzado -->
         <section class="section">
@@ -563,9 +733,18 @@
               <span>Directorio del Vault</span>
               {#if isConfigured('obsidian_vault_path')}<span class="configured-badge">✓</span>{/if}
             </div>
-            <div style="display: flex; align-items: center; gap: 2px; padding: 0 10px; background: var(--elevated); border: 1px solid var(--border); border-radius: var(--r);" class="input-wrapper">
+            <div
+              style="display: flex; align-items: center; gap: 2px; padding: 0 10px; background: var(--elevated); border: 1px solid var(--border); border-radius: var(--r);"
+              class="input-wrapper"
+            >
               <span class="mono" style="color: var(--text-disabled); font-size: 11px;">~</span>
-              <input type="text" class="setting-input mono" style="border: none; background: transparent; flex: 1; padding-left: 2px;" placeholder="/Documentos/ObsidianVault" bind:value={systemConfig.obsidian_vault_path} />
+              <input
+                type="text"
+                class="setting-input mono"
+                style="border: none; background: transparent; flex: 1; padding-left: 2px;"
+                placeholder="/Documentos/ObsidianVault"
+                bind:value={systemConfig.obsidian_vault_path}
+              />
             </div>
           </div>
           <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
@@ -573,9 +752,18 @@
               <span>Carpeta de notas diarias</span>
               {#if isConfigured('daily_notes_folder')}<span class="configured-badge">✓</span>{/if}
             </div>
-            <div style="display: flex; align-items: center; gap: 2px; padding: 0 10px; background: var(--elevated); border: 1px solid var(--border); border-radius: var(--r);" class="input-wrapper">
+            <div
+              style="display: flex; align-items: center; gap: 2px; padding: 0 10px; background: var(--elevated); border: 1px solid var(--border); border-radius: var(--r);"
+              class="input-wrapper"
+            >
               <span class="mono" style="color: var(--text-disabled); font-size: 11px;">~</span>
-              <input type="text" class="setting-input mono" style="border: none; background: transparent; flex: 1; padding-left: 2px;" placeholder="Ejemplo/Daily" bind:value={systemConfig.daily_notes_folder} />
+              <input
+                type="text"
+                class="setting-input mono"
+                style="border: none; background: transparent; flex: 1; padding-left: 2px;"
+                placeholder="Ejemplo/Daily"
+                bind:value={systemConfig.daily_notes_folder}
+              />
             </div>
           </div>
           <div class="row">
@@ -598,7 +786,7 @@
           </p>
         </section>
 
-                <!-- Integraciones -->
+        <!-- Integraciones -->
         <section class="section">
           <div class="section-title" style="color: var(--xp, var(--accent));">
             <DynamicIcon name="GitBranch" size={12} /> Integraciones
@@ -611,7 +799,10 @@
             {#if githubAuthLoading}
               <span class="mono" style="font-size:12px; color: var(--text-muted);">
                 {#if githubUserCode}
-                  Código: <code style="margin-left:4px;">{githubUserCode}</code>
+                  Código: <code
+                    style="margin-left:4px; color: var(--accent); font-weight:600; letter-spacing:0.05em;"
+                    >{githubUserCode}</code
+                  >
                 {:else}
                   Conectando…
                 {/if}
@@ -619,152 +810,244 @@
             {:else if githubConnected}
               <div style="display:flex; align-items:center; gap:8px;">
                 <span class="mono" style="font-size:12px; color: var(--xp);">{githubUsername}</span>
-                <button class="link-btn" onclick={disconnectGithub} style="background:var(--border); color:var(--text-secondary);">Desconectar</button>
+                <button class="link-btn disconnect-btn" onclick={disconnectGithub}
+                  >Desconectar</button
+                >
               </div>
             {:else}
-              <button class="link-btn" onclick={startGithubAuth} disabled={githubAuthLoading}>Enlazar</button>
+              <button class="link-btn" onclick={startGithubAuth} disabled={githubAuthLoading}
+                >Enlazar</button
+              >
             {/if}
           </div>
-          {#if githubAuthLoading && githubUserCode}
-            <p class="hint">
-              Abre <a href={githubVerificationUri} target="_blank">{githubVerificationUri}</a> e introduce el código <code>{githubUserCode}</code> para autorizar a Joidy.
-              {#if githubAuthError}
-                <br /><span style="color:var(--danger)">{githubAuthError}</span>
-              {/if}
-            </p>
-          {:else if githubAuthError && !githubAuthLoading}
+          {#if githubAuthError && !githubAuthLoading}
             <p class="hint" style="color:var(--danger)">{githubAuthError}</p>
           {/if}
-          <div class="row">
-            <div class="row-label disabled">
-              <span>Google Contacts</span>
-              <span class="badge badge-off" style="margin-left:4px">En desarrollo (#43)</span>
+          {#if $devMode}
+            <div class="row">
+              <div class="row-label">
+                <span>Google Contacts</span>
+              </div>
+              <button class="link-btn" onclick={openGoogleContactsLink}>Enlazar</button>
             </div>
-            <button class="link-btn disabled">Futura integración</button>
-          </div>
-          <div class="row">
-            <div class="row-label disabled">
-              <span>Strava</span>
-              <span class="badge badge-off" style="margin-left:4px">En desarrollo (#44)</span>
+            <div class="row">
+              <div class="row-label">
+                <span>Strava</span>
+              </div>
+              <button class="link-btn" onclick={openStravaLink}>Enlazar</button>
             </div>
-            <button class="link-btn disabled">Futura integración</button>
-          </div>
-          <div class="row">
-            <div class="row-label disabled">
-              <span>Gmail</span>
-              <span class="badge badge-off" style="margin-left:4px">En desarrollo (#42)</span>
+            <div class="row">
+              <div class="row-label">
+                <span>Gmail</span>
+              </div>
+              <button class="link-btn" onclick={openGmailLink}>Enlazar</button>
             </div>
-            <button class="link-btn disabled">Futura integración</button>
-          </div>
-          <div class="row">
-            <div class="row-label disabled">
-              <span>Spotify</span>
-              <span class="badge badge-off" style="margin-left:4px">En desarrollo (#45)</span>
+            <div class="row">
+              <div class="row-label">
+                <span>Spotify</span>
+              </div>
+              <button class="link-btn">Enlazar</button>
             </div>
-            <button class="link-btn disabled">Futura integración</button>
-          </div>
-          <div class="row">
-            <div class="row-label">
-              <span>Google Calendar & Tasks</span>
-              {#if googleConnected}<span class="badge badge-on" style="margin-left:4px">Conectado</span>{/if}
+            <div class="row">
+              <div class="row-label">
+                <span>Google Calendar & Tasks</span>
+                {#if googleConnected}<span class="badge badge-on" style="margin-left:4px"
+                    >Conectado</span
+                  >{/if}
+              </div>
+              {#if googleConnecting}
+                <span class="mono" style="font-size:12px; color: var(--text-muted);"
+                  >Conectando…</span
+                >
+              {:else if googleConnected}
+                <button class="link-btn disconnect-btn" onclick={disconnectGoogle}
+                  >Desconectar</button
+                >
+              {:else}
+                <button class="link-btn" onclick={startGoogleAuth}>Enlazar</button>
+              {/if}
             </div>
-            {#if googleConnecting}
-              <span class="mono" style="font-size:12px; color: var(--text-muted);">Conectando…</span>
-            {:else if googleConnected}
-              <button class="link-btn" onclick={disconnectGoogle} style="background:var(--border); color:var(--text-secondary);">Desconectar</button>
-            {:else}
-              <button class="link-btn" onclick={startGoogleAuth}>Enlazar</button>
+            {#if googleError}
+              <p class="hint" style="color:var(--danger)">{googleError}</p>
             {/if}
-          </div>
-          {#if googleError}
-            <p class="hint" style="color:var(--danger)">{googleError}</p>
           {/if}
         </section>
 
-        <!-- IA -->
-        <section class="section">
-          <div class="section-title" style="color: var(--xp, var(--accent));">
-            <DynamicIcon name="Zap" size={12} /> IA
-          </div>
-          <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
-            <div class="row-label">
-              <span>Gemini API Key</span>
-              {#if isConfigured('gemini_api_key')}<span class="configured-badge">✓</span>{/if}
-              <span class="badge badge-off" style="margin-left:auto">En desarrollo (#41)</span>
+        {#if $devMode}
+          <!-- IA -->
+          <section class="section">
+            <div class="section-title" style="color: var(--xp, var(--accent));">
+              <DynamicIcon name="Zap" size={12} /> IA
             </div>
-            <input type="password" class="setting-input mono" placeholder="AIzaSy..." bind:value={systemConfig.gemini_api_key} />
-          </div>
-          <p class="hint">
-            Habilita auto-tagging y búsqueda semántica.
-          </p>
-        </section>
+            <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
+              <div class="row-label">
+                <span>Gemini API Key</span>
+                {#if isConfigured('gemini_api_key')}<span class="configured-badge">✓</span>{/if}
+              </div>
+              <input
+                type="password"
+                class="setting-input mono"
+                placeholder="AIzaSy..."
+                bind:value={systemConfig.gemini_api_key}
+              />
+            </div>
+            <p class="hint">Habilita auto-tagging y búsqueda semántica.</p>
+          </section>
+        {/if}
 
         <!-- Aplicación (PWA) -->
         {#if $deferredPrompt && !$isAppInstalled}
           <section class="section">
             <div class="section-title" style="color: var(--xp, var(--accent));">
-              <DynamicIcon name="DownloadCloud" size={12} /> Aplicación
+              <DynamicIcon name="CloudDownload" size={12} /> Aplicación
             </div>
             <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
-              <p class="hint" style="margin-top: 0;">Instala Joidy en tu dispositivo para acceso rápido y sin conexión.</p>
-              <button class="save-config-btn" style="background: var(--xp);" onclick={async () => {
-                $deferredPrompt.prompt();
-                const { outcome } = await $deferredPrompt.userChoice;
-                if (outcome === 'accepted') {
-                  showInstallBanner.set(false);
-                }
-                deferredPrompt.set(null);
-              }}>
+              <p class="hint" style="margin-top: 0;">
+                Instala Joidy en tu dispositivo para acceso rápido y sin conexión.
+              </p>
+              <button
+                class="save-config-btn"
+                style="background: var(--xp);"
+                onclick={async () => {
+                  $deferredPrompt.prompt();
+                  const { outcome } = await $deferredPrompt.userChoice;
+                  if (outcome === 'accepted') {
+                    showInstallBanner.set(false);
+                  }
+                  deferredPrompt.set(null);
+                }}
+              >
                 <DynamicIcon name="Download" size={12} /> Instalar Joidy
               </button>
             </div>
           </section>
         {/if}
 
+        <!-- Servicios (Power Management) -->
+        <section class="section">
+          <div class="section-title" style="color: var(--xp, var(--accent));">
+            <DynamicIcon name="Power" size={12} /> Servicios
+          </div>
+
+          {#if powerLoading}
+            <p class="hint">Cargando estado de servicios…</p>
+          {:else if !powerStatus || !powerStatus.docker_available}
+            <p class="hint">
+              Docker no está disponible. Usa la CLI (<span class="mono">joidy down</span>) para
+              detener servicios.
+            </p>
+          {:else}
+            <!-- Service status list -->
+            <div class="power-service-list">
+              {#each powerStatus.services as svc}
+                <div class="power-service-row">
+                  <span class="power-service-name">{SERVICE_LABELS[svc.name] || svc.name}</span>
+                  <span
+                    class="power-service-badge"
+                    class:running={svc.status === 'running'}
+                    class:stopped={svc.status !== 'running'}
+                  >
+                    {#if svc.status === 'running'}
+                      {#if svc.healthy === false}
+                        ⚠ unhealthy
+                      {:else}
+                        ● running
+                      {/if}
+                    {:else}
+                      ○ stopped
+                    {/if}
+                  </span>
+                </div>
+              {/each}
+            </div>
+
+            {#if powerError}
+              <p class="hint" style="color: var(--error);">{powerError}</p>
+            {/if}
+            {#if powerMessage}
+              <p class="hint" style="color: var(--success);">{powerMessage}</p>
+            {/if}
+
+            <!-- Action buttons -->
+            <div class="power-actions">
+              {#if powerStatus.hibernating}
+                <button
+                  class="power-btn wake"
+                  onclick={wakeServices}
+                  disabled={powerActionLoading !== null}
+                >
+                  {#if powerActionLoading === 'wake'}
+                    <DynamicIcon name="LoaderCircle" size={12} /> Despertando…
+                  {:else}
+                    <DynamicIcon name="Sun" size={12} /> Despertar
+                  {/if}
+                </button>
+              {:else}
+                <button
+                  class="power-btn sleep"
+                  onclick={hibernateServices}
+                  disabled={powerActionLoading !== null}
+                  title="Detiene AI Service y Worker para ahorrar recursos"
+                >
+                  {#if powerActionLoading === 'sleep'}
+                    <DynamicIcon name="LoaderCircle" size={12} /> Hibernando…
+                  {:else}
+                    <DynamicIcon name="Moon" size={12} /> Hibernar
+                  {/if}
+                </button>
+              {/if}
+
+              {#if !shutdownConfirm}
+                <button
+                  class="power-btn shutdown"
+                  onclick={() => (shutdownConfirm = true)}
+                  disabled={powerActionLoading !== null}
+                  title="Detiene todos los servicios excepto la API y la base de datos"
+                >
+                  <DynamicIcon name="Power" size={12} /> Apagar
+                </button>
+              {:else}
+                <button
+                  class="power-btn shutdown-confirm"
+                  onclick={shutdownServices}
+                  disabled={powerActionLoading !== null}
+                >
+                  {#if powerActionLoading === 'shutdown'}
+                    <DynamicIcon name="LoaderCircle" size={12} /> Apagando…
+                  {:else}
+                    <DynamicIcon name="TriangleAlert" size={12} /> Confirmar apagado
+                  {/if}
+                </button>
+                <button
+                  class="power-btn cancel"
+                  onclick={() => (shutdownConfirm = false)}
+                  disabled={powerActionLoading !== null}
+                >
+                  Cancelar
+                </button>
+              {/if}
+            </div>
+
+            <p class="hint">
+              <strong>Hibernar</strong> detiene AI Service y Worker (la API y la base de datos
+              siguen disponibles). <strong>Apagar</strong> detiene todo excepto la API y la base de
+              datos — usa <span class="mono">joidy up</span> para reiniciar.
+            </p>
+          {/if}
+        </section>
+
         <!-- Repositorio -->
         <section class="section">
           <div class="row">
             <div class="row-label"><span>Repositorio</span></div>
-            <a href="https://github.com/Axel-DaMage/joidy" target="_blank" rel="noopener" class="mono" style="font-size:11px; color: var(--text-secondary);">github.com/Axel-DaMage/joidy</a>
-          </div>
-        </section>
-
-        <!-- Exportar Datos -->
-        <section class="section">
-          <div class="section-title" style="color: var(--xp, var(--accent));">
-            <DynamicIcon name="Download" size={12} /> Exportar Datos
-          </div>
-          <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px;">
-            <a 
-              href={api.export.markdownUrl()} 
-              download 
-              class="save-config-btn" 
-              style="display: flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; text-align: center; height: 32px; background: var(--elevated); border: 1px solid var(--border); color: var(--text-primary); font-size: 11px;"
+            <a
+              href="https://github.com/Axel-DaMage/joidy"
+              target="_blank"
+              rel="noopener"
+              class="mono"
+              style="font-size:11px; color: var(--text-secondary);">github.com/Axel-DaMage/joidy</a
             >
-              <DynamicIcon name="FileText" size={12} /> Descargar Markdown Único
-            </a>
-            
-            <a 
-              href={api.export.htmlUrl()} 
-              download 
-              class="save-config-btn" 
-              style="display: flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; text-align: center; height: 32px; background: var(--elevated); border: 1px solid var(--border); color: var(--text-primary); font-size: 11px;"
-            >
-              <DynamicIcon name="Code" size={12} /> Descargar HTML Único
-            </a>
-            
-            <a 
-              href={api.export.zipUrl()} 
-              download 
-              class="save-config-btn" 
-              style="display: flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; text-align: center; height: 32px; background: var(--elevated); border: 1px solid var(--border); color: var(--text-primary); font-size: 11px;"
-            >
-              <DynamicIcon name="FolderArchive" size={12} /> Descargar Todas en ZIP
-            </a>
           </div>
-          <p class="hint">
-            Crea una copia de seguridad local de todos tus conocimientos acumulados en Joidy.
-          </p>
         </section>
 
         <!-- Desarrollador -->
@@ -783,29 +1066,35 @@
               <span class:active={$devMode}>on</span>
             </button>
           </div>
-          <p class="hint">
-            Activa para mostrar páginas en desarrollo y contenido avanzado.
-          </p>
+          <p class="hint">Activa para mostrar contenido avanzado e integraciones experimentales.</p>
         </section>
-
       </div>
 
       <div class="panel-footer">
         <button
           class="save-config-btn fixed-save"
+          class:saved={configSaved}
           onclick={saveConfig}
           disabled={configSaving}
         >
           {#if configSaving}
-            Guardando...
+            {$t('common.saving')}
+          {:else if configSaved}
+            <DynamicIcon name="CircleCheckBig" size={12} /> {$t('common.saved')}
           {:else}
-            <DynamicIcon name="Save" size={12} /> Guardar
+            <DynamicIcon name="Save" size={12} /> {$t('common.save')}
           {/if}
         </button>
         {#if configMessage}
-          <span class="config-message-footer">{configMessage}</span>
+          <span class="config-message-footer error">{configMessage}</span>
         {/if}
       </div>
+      {#if configRestartNotice}
+        <div class="restart-notice">
+          <DynamicIcon name="TriangleAlert" size={14} />
+          <span>{configRestartNotice}</span>
+        </div>
+      {/if}
     </div>
   </div>
 {/if}
@@ -814,14 +1103,16 @@
   .backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.6);
+    background: color-mix(in srgb, var(--bg) 60%, transparent);
     z-index: var(--z-dropdown);
+    display: flex;
     align-items: flex-start;
     justify-content: flex-end;
   }
 
   .panel {
-    width: 340px;
+    width: 480px;
+    max-width: 100%;
     height: 100%;
     background: var(--surface);
     border-left: 1px solid var(--border);
@@ -832,8 +1123,14 @@
   }
 
   @keyframes slideIn {
-    from { transform: translateX(100%); opacity: 0; }
-    to   { transform: translateX(0);    opacity: 1; }
+    from {
+      transform: translateX(100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
   }
 
   .panel-header {
@@ -856,7 +1153,9 @@
     border-radius: var(--r);
     transition: color var(--t-fast);
   }
-  .close-btn:hover { color: var(--text-primary); }
+  .close-btn:hover {
+    color: var(--text-primary);
+  }
 
   .panel-body {
     flex: 1;
@@ -888,6 +1187,26 @@
     font-size: 11px;
     color: var(--text-secondary);
     white-space: nowrap;
+  }
+  .config-message-footer.error {
+    color: var(--error, #ef4444);
+  }
+
+  .restart-notice {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px 20px;
+    background: color-mix(in srgb, var(--warning, #f59e0b) 12%, var(--elevated, #1a1a1a));
+    border-top: 1px solid color-mix(in srgb, var(--warning, #f59e0b) 30%, transparent);
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .restart-notice :global(svg) {
+    color: var(--warning, #f59e0b);
+    flex-shrink: 0;
+    margin-top: 1px;
   }
 
   .section {
@@ -948,9 +1267,16 @@
     white-space: nowrap;
     transition: border-color var(--t-fast);
   }
-  .toggle:hover { border-color: var(--text-muted); }
-  .toggle .active { color: var(--text-primary); }
-  .toggle .sep, .toggle .divider { color: var(--border); }
+  .toggle:hover {
+    border-color: var(--text-muted);
+  }
+  .toggle .active {
+    color: var(--text-primary);
+  }
+  .toggle .sep,
+  .toggle .divider {
+    color: var(--border);
+  }
 
   .link-btn {
     background: var(--accent);
@@ -962,14 +1288,29 @@
     cursor: pointer;
     font-family: var(--font-mono);
   }
-  .link-btn:hover { opacity: 0.9; }
+  .link-btn:hover {
+    opacity: 0.9;
+  }
 
   .link-btn.disabled {
     background: var(--border);
     color: var(--text-muted);
     cursor: not-allowed;
   }
-  .link-btn.disabled:hover { opacity: 0.6; }
+  .link-btn.disabled:hover {
+    opacity: 0.6;
+  }
+
+  .disconnect-btn {
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+  }
+  .disconnect-btn:hover {
+    background: var(--hover);
+    border-color: var(--text-muted);
+    color: var(--text-primary);
+  }
 
   .row-label.disabled {
     color: var(--text-muted);
@@ -1094,7 +1435,9 @@
     outline: none;
     transition: border-color var(--t-fast);
   }
-  .hex-input:focus { border-color: var(--text-muted); }
+  .hex-input:focus {
+    border-color: var(--text-muted);
+  }
 
   .setting-input {
     background: var(--elevated);
@@ -1107,8 +1450,10 @@
     transition: border-color var(--t-fast);
     width: 100%;
   }
-  .setting-input:focus { outline: none; }
-  
+  .setting-input:focus {
+    outline: none;
+  }
+
   .input-wrapper:focus-within {
     border-color: var(--text-muted);
   }
@@ -1125,9 +1470,14 @@
     color: var(--text-muted);
     cursor: pointer;
     flex-shrink: 0;
-    transition: color var(--t-fast), border-color var(--t-fast);
+    transition:
+      color var(--t-fast),
+      border-color var(--t-fast);
   }
-  .color-rm:hover { color: var(--error); border-color: var(--error); }
+  .color-rm:hover {
+    color: var(--error);
+    border-color: var(--error);
+  }
 
   .add-color-btn {
     display: flex;
@@ -1143,9 +1493,14 @@
     cursor: pointer;
     width: 100%;
     justify-content: center;
-    transition: color var(--t-fast), border-color var(--t-fast);
+    transition:
+      color var(--t-fast),
+      border-color var(--t-fast);
   }
-  .add-color-btn:hover { color: var(--text-secondary); border-color: var(--text-muted); }
+  .add-color-btn:hover {
+    color: var(--text-secondary);
+    border-color: var(--text-muted);
+  }
   .add-color-btn:focus-visible {
     outline: none;
     border-color: var(--xp);
@@ -1168,14 +1523,22 @@
     background: var(--accent, var(--xp));
     border: none;
     border-radius: var(--r);
-    color: #fff;
+    color: var(--bg);
     font-size: 12px;
     font-family: var(--font-mono);
     cursor: pointer;
     transition: opacity var(--t-fast);
   }
-  .save-config-btn:hover:not(:disabled) { opacity: 0.9; }
-  .save-config-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .save-config-btn:hover:not(:disabled) {
+    opacity: 0.9;
+  }
+  .save-config-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .save-config-btn.saved {
+    background: var(--success, #22c55e);
+  }
 
   .config-message {
     font-size: 11px;
@@ -1203,9 +1566,156 @@
     font-family: var(--font-mono);
     color: var(--text-muted);
     cursor: pointer;
-    transition: border-color var(--t-fast), color var(--t-fast);
+    transition:
+      border-color var(--t-fast),
+      color var(--t-fast);
   }
-  .theme-mode-option:hover { border-color: var(--text-muted); }
-  .theme-mode-option.active { border-color: var(--xp); color: var(--text-primary); }
-  .theme-mode-option input { position: absolute; opacity: 0; width: 0; height: 0; }
+  .theme-mode-option:hover {
+    border-color: var(--text-muted);
+  }
+  .theme-mode-option.active {
+    border-color: var(--xp);
+    color: var(--text-primary);
+  }
+  .theme-mode-option input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+
+  @media (max-width: 520px) {
+    .panel {
+      width: 100%;
+    }
+    .panel-header,
+    .panel-footer {
+      padding-left: var(--s3);
+      padding-right: var(--s3);
+    }
+    .section {
+      padding: var(--s3);
+    }
+    .config-message-footer {
+      white-space: normal;
+    }
+  }
+
+  @media (max-width: 380px) {
+    .panel-header {
+      padding: 10px var(--s2);
+    }
+    .section {
+      padding: var(--s2) var(--s3);
+    }
+    .toggle {
+      white-space: normal;
+    }
+  }
+
+  /* ── Power management ──────────────────────────────────────────────────── */
+  .power-service-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 10px;
+  }
+
+  .power-service-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 8px;
+    border-radius: var(--r);
+    background: var(--surface);
+    font-size: 11px;
+  }
+
+  .power-service-name {
+    color: var(--text-secondary);
+    font-weight: 500;
+  }
+
+  .power-service-badge {
+    font-size: 10px;
+    font-family: var(--font-mono);
+    letter-spacing: 0.02em;
+  }
+
+  .power-service-badge.running {
+    color: var(--success);
+  }
+
+  .power-service-badge.stopped {
+    color: var(--text-disabled);
+  }
+
+  .power-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+
+  .power-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    background: var(--surface);
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-family: var(--font-sans);
+    cursor: pointer;
+    transition: all var(--t-fast);
+  }
+
+  .power-btn:hover:not(:disabled) {
+    background: var(--elevated);
+    border-color: var(--text-muted);
+    color: var(--text-primary);
+  }
+
+  .power-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .power-btn.sleep:hover:not(:disabled) {
+    border-color: var(--info, var(--accent));
+    color: var(--info, var(--accent));
+  }
+
+  .power-btn.wake:hover:not(:disabled) {
+    border-color: var(--success);
+    color: var(--success);
+  }
+
+  .power-btn.shutdown {
+    border-color: color-mix(in srgb, var(--error) 40%, var(--border));
+    color: var(--error);
+  }
+
+  .power-btn.shutdown:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--error) 10%, transparent);
+    border-color: var(--error);
+  }
+
+  .power-btn.shutdown-confirm {
+    background: var(--error);
+    border-color: var(--error);
+    color: white;
+    font-weight: 600;
+  }
+
+  .power-btn.shutdown-confirm:hover:not(:disabled) {
+    opacity: 0.9;
+  }
+
+  .power-btn.cancel {
+    font-size: 10px;
+    padding: 6px 10px;
+  }
 </style>

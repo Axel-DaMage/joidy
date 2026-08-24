@@ -1,18 +1,24 @@
 <script lang="ts">
   import { syncStore, type SyncConflict, type ConflictResolution } from '$lib/stores/sync';
   import ModalDialog from './ModalDialog.svelte';
-  import { AlertTriangle, FileText, Upload, Download, GitMerge } from 'lucide-svelte';
+  import { TriangleAlert, FileText, Upload, Download, GitMerge } from 'lucide-svelte';
+  import { t } from 'svelte-i18n';
 
   let selectedConflict: SyncConflict | null = null;
   let resolution: ConflictResolution | null = null;
   let mergedContent = '';
   let resolving = false;
 
-  // Auto-open modal when conflicts exist
-  $: if ($syncStore.conflicts.length > 0 && !selectedConflict) {
-    selectedConflict = $syncStore.conflicts[0];
-    resolution = null;
-    mergedContent = '';
+  // Auto-open modal only for conflicts the user hasn't dismissed this session.
+  // The dismissed set lives in the syncStore so it persists across navigations
+  // (component is recreated on each route change, local state would be lost).
+  $: {
+    const undismissed = $syncStore.conflicts.filter((c) => !$syncStore.dismissed.has(c.note_id));
+    if (undismissed.length > 0 && !selectedConflict) {
+      selectedConflict = undismissed[0];
+      resolution = null;
+      mergedContent = '';
+    }
   }
 
   $: if ($syncStore.conflicts.length === 0) {
@@ -36,6 +42,9 @@
   }
 
   function handleSkip() {
+    if (selectedConflict) {
+      syncStore.dismissConflict(selectedConflict.note_id);
+    }
     selectedConflict = null;
     resolution = null;
     mergedContent = '';
@@ -43,15 +52,10 @@
 </script>
 
 {#if selectedConflict}
-  <ModalDialog
-    open={true}
-    title="Conflicto de Sincronización"
-    size="lg"
-    onClose={handleSkip}
-  >
+  <ModalDialog open={true} title={$t('conflict.title')} size="lg" onClose={handleSkip}>
     <div class="conflict-info">
       <div class="conflict-icon">
-        <AlertTriangle size={24} color="var(--warning)" />
+        <TriangleAlert size={24} color="var(--warning)" />
       </div>
       <p class="conflict-desc">
         Se detectaron cambios simultáneos en <strong>{selectedConflict.title}</strong>
@@ -61,16 +65,16 @@
 
     <div class="conflict-meta">
       <div class="meta-item">
-        <span class="meta-label">Archivo</span>
+        <span class="meta-label">{$t('conflict.file')}</span>
         <span class="meta-value">{selectedConflict.source_path}</span>
       </div>
       <div class="meta-row">
         <div class="meta-item">
-          <span class="meta-label">Local (Joidy)</span>
+          <span class="meta-label">{$t('conflict.local')}</span>
           <span class="meta-value">{selectedConflict.local_mtime ?? '—'}</span>
         </div>
         <div class="meta-item">
-          <span class="meta-label">Remoto (Obsidian)</span>
+          <span class="meta-label">{$t('conflict.remote')}</span>
           <span class="meta-value">{selectedConflict.remote_mtime ?? '—'}</span>
         </div>
       </div>
@@ -80,49 +84,48 @@
       <button
         class="resolution-btn"
         class:active={resolution === 'keep_local'}
-        onclick={() => resolution = 'keep_local'}
+        onclick={() => (resolution = 'keep_local')}
       >
         <FileText size={18} />
         <div class="resolution-text">
-          <span class="resolution-title">Mantener Local</span>
-          <span class="resolution-desc">Descartar cambios de Obsidian, conservar Joidy</span>
+          <span class="resolution-title">{$t('conflict.keepLocal')}</span>
+          <span class="resolution-desc">{$t('conflict.keepLocalDesc')}</span>
         </div>
       </button>
 
       <button
         class="resolution-btn"
         class:active={resolution === 'keep_remote'}
-        onclick={() => resolution = 'keep_remote'}
+        onclick={() => (resolution = 'keep_remote')}
       >
         <Download size={18} />
         <div class="resolution-text">
-          <span class="resolution-title">Mantener Remoto</span>
-          <span class="resolution-desc">Sobrescribir Joidy con el contenido de Obsidian</span>
+          <span class="resolution-title">{$t('conflict.keepRemote')}</span>
+          <span class="resolution-desc">{$t('conflict.keepRemoteDesc')}</span>
         </div>
       </button>
 
       <button
         class="resolution-btn"
         class:active={resolution === 'merge'}
-        onclick={() => resolution = 'merge'}
+        onclick={() => (resolution = 'merge')}
       >
         <GitMerge size={18} />
         <div class="resolution-text">
-          <span class="resolution-title">Fusionar Manualmente</span>
-          <span class="resolution-desc">Editar el contenido combinado</span>
+          <span class="resolution-title">{$t('conflict.mergeManual')}</span>
+          <span class="resolution-desc">{$t('conflict.mergeManualDesc')}</span>
         </div>
       </button>
     </div>
 
     {#if resolution === 'merge'}
       <div class="merge-editor">
-        <label class="label">Contenido fusionado</label>
+        <label class="label">{$t('conflict.mergedContent')}</label>
         <textarea
           class="input w-full"
           bind:value={mergedContent}
           rows="10"
-          placeholder="Pega o edita el contenido combinado aquí..."
-        ></textarea>
+          placeholder={$t('conflict.mergePlaceholder')}></textarea>
       </div>
     {/if}
 
@@ -133,7 +136,7 @@
     {/if}
 
     {#snippet footer()}
-      <button class="btn btn-ghost" onclick={handleSkip}>Saltar</button>
+      <button class="btn btn-ghost" onclick={handleSkip}>{$t('conflict.skip')}</button>
       <button
         class="btn btn-primary"
         onclick={handleResolve}

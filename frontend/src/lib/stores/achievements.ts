@@ -11,17 +11,37 @@ export interface Achievement {
 }
 
 const ACHIEVEMENTS_CONFIG: Omit<Achievement, 'unlocked' | 'unlockedAt'>[] = [
-  { id: 'first_note', title: 'Primera Nota', description: 'Crea tu primera nota', icon: 'FileText' },
+  {
+    id: 'first_note',
+    title: 'Primera Nota',
+    description: 'Crea tu primera nota',
+    icon: 'FileText',
+  },
   { id: 'ten_notes', title: 'Coleccionista', description: 'Crea 10 notas', icon: 'Files' },
   { id: 'fifty_notes', title: 'Bibliotecario', description: 'Crea 50 notas', icon: 'Library' },
   { id: 'first_goal', title: 'Objetivo', description: 'Crea tu primera meta', icon: 'Target' },
-  { id: 'goal_completed', title: 'Exitoso', description: 'Completa una meta', icon: 'CheckCircle' },
+  {
+    id: 'goal_completed',
+    title: 'Exitoso',
+    description: 'Completa una meta',
+    icon: 'CircleCheckBig',
+  },
   { id: 'week_streak', title: 'Consistente', description: '7 días de racha', icon: 'Flame' },
   { id: 'month_streak', title: 'Dedicado', description: '30 días de racha', icon: 'Trophy' },
   { id: 'first_tag', title: 'Organizador', description: 'Crea tu primera etiqueta', icon: 'Tag' },
   { id: 'ten_skills', title: 'Aprendiz', description: 'Desbloquea 10 habilidades', icon: 'Zap' },
-  { id: 'plant_sprout', title: 'Germinación', description: 'Tu planta reacha la etapa de brote', icon: 'Sprout' },
-  { id: 'plant_tree', title: 'Árbol', description: 'Tu planta reacha la etapa de árbol', icon: 'TreeDeciduous' },
+  {
+    id: 'plant_sprout',
+    title: 'Germinación',
+    description: 'Tu planta reacha la etapa de brote',
+    icon: 'Sprout',
+  },
+  {
+    id: 'plant_tree',
+    title: 'Árbol',
+    description: 'Tu planta reacha la etapa de árbol',
+    icon: 'TreeDeciduous',
+  },
 ];
 
 const STORAGE_KEY = 'joidy-achievements';
@@ -32,20 +52,20 @@ function loadAchievements(): Achievement[] {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       const unlocked = JSON.parse(saved) as Record<string, string>;
-      return ACHIEVEMENTS_CONFIG.map(a => ({
+      return ACHIEVEMENTS_CONFIG.map((a) => ({
         ...a,
         unlocked: !!unlocked[a.id],
         unlockedAt: unlocked[a.id] || undefined,
       }));
     }
   } catch {}
-  return ACHIEVEMENTS_CONFIG.map(a => ({ ...a, unlocked: false }));
+  return ACHIEVEMENTS_CONFIG.map((a) => ({ ...a, unlocked: false }));
 }
 
 function saveAchievements(achievements: Achievement[]) {
   if (!browser) return;
   const unlocked: Record<string, string> = {};
-  achievements.forEach(a => {
+  achievements.forEach((a) => {
     if (a.unlocked && a.unlockedAt) {
       unlocked[a.id] = a.unlockedAt;
     }
@@ -62,8 +82,8 @@ function createAchievementsStore() {
       set(loadAchievements());
     },
     unlock(achievementId: string) {
-      update(achievements => {
-        const idx = achievements.findIndex(a => a.id === achievementId);
+      update((achievements) => {
+        const idx = achievements.findIndex((a) => a.id === achievementId);
         if (idx !== -1 && !achievements[idx].unlocked) {
           const updated = [...achievements];
           updated[idx] = {
@@ -78,10 +98,10 @@ function createAchievementsStore() {
       });
     },
     getUnlockedCount(): number {
-      return get({ subscribe }).filter(a => a.unlocked).length;
+      return get({ subscribe }).filter((a) => a.unlocked).length;
     },
     isUnlocked(achievementId: string): boolean {
-      return get({ subscribe }).find(a => a.id === achievementId)?.unlocked || false;
+      return get({ subscribe }).find((a) => a.id === achievementId)?.unlocked || false;
     },
   };
 }
@@ -89,7 +109,8 @@ function createAchievementsStore() {
 export const achievements = createAchievementsStore();
 
 export function checkAndUnlockAchievement(
-  condition: 'note_count' | 'goal_completed' | 'streak_days' | 'tag_count' | 'skill_count' | 'plant_stage',
+  condition:
+    'note_count' | 'goal_completed' | 'streak_days' | 'tag_count' | 'skill_count' | 'plant_stage',
   value: number
 ) {
   const rules: Record<string, number | string> = {

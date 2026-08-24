@@ -2,6 +2,7 @@
   import { fade, scale } from 'svelte/transition';
   import { X } from 'lucide-svelte';
   import { focusTrap } from '$lib/actions/focusTrap';
+  import { t } from 'svelte-i18n';
 
   let {
     open = false,
@@ -46,7 +47,7 @@
     >
       <div class="modal-header">
         <h3 class="modal-title">{title}</h3>
-        <button class="modal-close" onclick={() => onClose?.()} aria-label="Cerrar">
+        <button class="modal-close" onclick={() => onClose?.()} aria-label={$t('modalDialog.close')}>
           <X size={18} />
         </button>
       </div>
@@ -136,5 +137,29 @@
     justify-content: flex-end;
     gap: 12px;
     flex-shrink: 0;
+  }
+
+  @media (max-width: 480px) {
+    .modal-overlay {
+      padding: var(--s2);
+    }
+    .modal {
+      max-height: calc(100vh - 16px);
+      border-radius: var(--r);
+    }
+    .modal-sm,
+    .modal-md,
+    .modal-lg {
+      max-width: 100%;
+    }
+    .modal-header,
+    .modal-body,
+    .modal-footer {
+      padding-left: var(--s3);
+      padding-right: var(--s3);
+    }
+    .modal-title {
+      font-size: 14px;
+    }
   }
 </style>

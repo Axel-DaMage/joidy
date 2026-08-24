@@ -18,6 +18,7 @@ from models.config import SystemConfig
 from models.gamification import StreakRecord, UserStats, XPEvent
 from repositories import ConfigRepository, StreakRecordRepository, UserStatsRepository, XPEventRepository
 from services.response_cache import clear_api_caches
+from services.timezone_utils import get_local_today
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -149,8 +150,13 @@ GRACE_PERIOD_DAYS = 1  # One missed day forgiven per week
 
 
 def _today_utc() -> date:
-    """Return today's date in UTC to avoid timezone-related streak bugs."""
-    return datetime.now(timezone.utc).date()
+    """Return today's date in the configured user timezone.
+
+    Despite the legacy name, this now respects ``settings.user_timezone`` so
+    streak day-boundaries follow the user-local calendar day instead of the
+    server UTC day. See issue #650.
+    """
+    return get_local_today()
 
 
 @dataclass

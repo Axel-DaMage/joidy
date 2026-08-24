@@ -1,9 +1,10 @@
 <script lang="ts">
   import { tick } from 'svelte';
-  import { Send, Sparkles, Trash2, Loader2 } from 'lucide-svelte';
+  import { Send, Sparkles, Trash2, LoaderCircle } from 'lucide-svelte';
   import { marked } from 'marked';
   import DOMPurify from 'dompurify';
   import { messages, isLoading, suggestions, sendMessage, clearChat } from '$lib/stores/chat';
+  import { t } from 'svelte-i18n';
 
   marked.use({ gfm: true, breaks: true });
 
@@ -63,10 +64,10 @@
   <div class="chat-header">
     <div class="chat-title">
       <Sparkles size={18} />
-      <span>Asistente Joidy</span>
+      <span>{$t('chat.assistantName')}</span>
     </div>
     {#if !isEmpty}
-      <button class="clear-btn" onclick={clearChat} title="Limpiar conversación">
+      <button class="clear-btn" onclick={clearChat} title={$t('chat.clearConversation')}>
         <Trash2 size={15} />
       </button>
     {/if}
@@ -76,13 +77,17 @@
     {#if isEmpty}
       <div class="empty-state">
         <div class="empty-icon"><Sparkles size={28} /></div>
-        <h3>Conversa con tu asistente</h3>
+        <h3>{$t('chat.welcomeTitle')}</h3>
         <p class="empty-hint">
           Pregunta sobre tus notas, metas y progreso. Joidy usa tu contexto personal para responder.
         </p>
         <div class="suggestions">
           {#each defaultSuggestions as s}
-            <button class="suggestion-chip" onclick={() => handleSuggestion(s)} disabled={$isLoading}>
+            <button
+              class="suggestion-chip"
+              onclick={() => handleSuggestion(s)}
+              disabled={$isLoading}
+            >
               {s}
             </button>
           {/each}
@@ -104,8 +109,8 @@
       {#if $isLoading}
         <div class="msg assistant">
           <div class="bubble loading-bubble">
-            <Loader2 size={16} class="spin" />
-            <span>Pensando…</span>
+            <LoaderCircle size={16} class="spin" />
+            <span>{$t('chat.thinking')}</span>
           </div>
         </div>
       {/if}
@@ -126,11 +131,15 @@
     <textarea
       bind:value={input}
       onkeydown={handleKeydown}
-      placeholder="Escribe un mensaje… (Enter para enviar, Shift+Enter para salto de línea)"
+      placeholder={$t('chat.inputPlaceholder')}
       rows="1"
-      disabled={$isLoading}
-    ></textarea>
-    <button class="send-btn" onclick={handleSend} disabled={$isLoading || !input.trim()} title="Enviar">
+      disabled={$isLoading}></textarea>
+    <button
+      class="send-btn"
+      onclick={handleSend}
+      disabled={$isLoading || !input.trim()}
+      title={$t('chat.send')}
+    >
       <Send size={17} />
     </button>
   </div>
@@ -171,7 +180,9 @@
     padding: var(--s1, 4px);
     border-radius: var(--r, 4px);
     display: flex;
-    transition: color var(--t-fast, 50ms), background var(--t-fast, 50ms);
+    transition:
+      color var(--t-fast, 50ms),
+      background var(--t-fast, 50ms);
   }
   .clear-btn:hover {
     color: var(--error, #ef4444);
@@ -223,7 +234,9 @@
     border-radius: var(--r-lg, 8px);
     cursor: pointer;
     font-size: 0.85rem;
-    transition: border-color var(--t-fast, 50ms), background var(--t-fast, 50ms);
+    transition:
+      border-color var(--t-fast, 50ms),
+      background var(--t-fast, 50ms);
   }
   .suggestion-chip:hover:not(:disabled) {
     border-color: var(--xp, #c8a96e);
@@ -288,16 +301,30 @@
     animation: spin 1s linear infinite;
   }
   @keyframes spin {
-    to { transform: rotate(360deg); }
+    to {
+      transform: rotate(360deg);
+    }
   }
-  .markdown :global(p) { margin: 0 0 var(--s2, 8px); }
-  .markdown :global(p:last-child) { margin-bottom: 0; }
+  .markdown :global(p) {
+    margin: 0 0 var(--s2, 8px);
+  }
+  .markdown :global(p:last-child) {
+    margin-bottom: 0;
+  }
   .markdown :global(ul),
-  .markdown :global(ol) { margin: 0 0 var(--s2, 8px); padding-left: var(--s5, 24px); }
-  .markdown :global(li) { margin: var(--s1, 4px) 0; }
+  .markdown :global(ol) {
+    margin: 0 0 var(--s2, 8px);
+    padding-left: var(--s5, 24px);
+  }
+  .markdown :global(li) {
+    margin: var(--s1, 4px) 0;
+  }
   .markdown :global(h1),
   .markdown :global(h2),
-  .markdown :global(h3) { margin: var(--s3, 12px) 0 var(--s2, 8px); font-size: 0.95rem; }
+  .markdown :global(h3) {
+    margin: var(--s3, 12px) 0 var(--s2, 8px);
+    font-size: 0.95rem;
+  }
   .markdown :global(code) {
     background: var(--hover, #0c0c0c);
     padding: 2px var(--s1, 4px);
@@ -312,15 +339,22 @@
     overflow-x: auto;
     margin: 0 0 var(--s2, 8px);
   }
-  .markdown :global(pre code) { background: none; padding: 0; }
+  .markdown :global(pre code) {
+    background: none;
+    padding: 0;
+  }
   .markdown :global(blockquote) {
     border-left: 3px solid var(--xp, #c8a96e);
     margin: 0 0 var(--s2, 8px);
     padding-left: var(--s3, 12px);
     color: var(--text-muted, #888);
   }
-  .markdown :global(a) { color: var(--link, #3b82f6); }
-  .markdown :global(strong) { font-weight: 600; }
+  .markdown :global(a) {
+    color: var(--link, #3b82f6);
+  }
+  .markdown :global(strong) {
+    font-weight: 600;
+  }
   .chat-input {
     display: flex;
     align-items: flex-end;
@@ -361,7 +395,9 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: opacity var(--t-fast, 50ms), background var(--t-fast, 50ms);
+    transition:
+      opacity var(--t-fast, 50ms),
+      background var(--t-fast, 50ms);
   }
   .send-btn:hover:not(:disabled) {
     opacity: 0.9;
@@ -371,6 +407,8 @@
     cursor: not-allowed;
   }
   @media (max-width: 768px) {
-    .bubble { max-width: 90%; }
+    .bubble {
+      max-width: 90%;
+    }
   }
 </style>

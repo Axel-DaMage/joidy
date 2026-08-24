@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { StreakStats } from '$lib/api';
-  import { BarChart3, Calendar } from 'lucide-svelte';
+  import { ChartNoAxesColumn, Calendar } from 'lucide-svelte';
+  import { t } from 'svelte-i18n';
 
   export let stats: StreakStats | null = null;
 </script>
@@ -8,28 +9,28 @@
 {#if stats}
   <div class="stats-panel">
     <div class="stats-header">
-      <BarChart3 size={12} />
+      <ChartNoAxesColumn size={12} />
       <span>RESUMEN GLOBAL</span>
     </div>
 
     <div class="stats-grid">
       <div class="stat-block">
         <span class="stat-val mono">{stats.total_active}</span>
-        <span class="stat-lbl">Activas</span>
+        <span class="stat-lbl">{$t('streakStats.active')}</span>
       </div>
       <div class="stat-block">
         <span class="stat-val mono">{stats.total_archived}</span>
-        <span class="stat-lbl">Archivadas</span>
+        <span class="stat-lbl">{$t('streakStats.archived')}</span>
       </div>
       <div class="stat-block">
         <span class="stat-val mono">{stats.longest_ever}</span>
-        <span class="stat-lbl">Récord</span>
+        <span class="stat-lbl">{$t('streakStats.record')}</span>
       </div>
     </div>
 
     {#if stats.longest_name}
       <div class="longest-info">
-        <span class="longest-label">Racha más larga:</span>
+        <span class="longest-label">{$t('streakStats.longestStreak')}</span>
         <span class="longest-name mono">{stats.longest_name}</span>
         <span class="longest-days">{stats.longest_ever} días</span>
       </div>
@@ -71,6 +72,26 @@
     gap: 8px;
   }
 
+  @media (max-width: 480px) {
+    .stats-grid {
+      grid-template-columns: repeat(3, 1fr);
+      gap: var(--s1);
+    }
+    .stat-block {
+      padding: var(--s1_5) var(--s0_5);
+    }
+    .stat-val {
+      font-size: 15px;
+    }
+  }
+
+  @media (max-width: 360px) {
+    .stats-grid {
+      grid-template-columns: 1fr;
+      gap: var(--s1_5);
+    }
+  }
+
   .stat-block {
     display: flex;
     flex-direction: column;
@@ -107,9 +128,19 @@
     border: 1px solid var(--border-light);
   }
 
-  .longest-label { color: var(--text-muted); }
-  .longest-name { color: var(--text-primary); font-size: 12px; }
-  .longest-days { color: var(--xp); margin-left: auto; font-size: 11px; font-weight: 600; }
+  .longest-label {
+    color: var(--text-muted);
+  }
+  .longest-name {
+    color: var(--text-primary);
+    font-size: 12px;
+  }
+  .longest-days {
+    color: var(--xp);
+    margin-left: auto;
+    font-size: 11px;
+    font-weight: 600;
+  }
 
   .tracker-row {
     display: flex;
@@ -119,5 +150,7 @@
     color: var(--text-muted);
   }
 
-  .sep { opacity: 0.3; }
+  .sep {
+    opacity: 0.3;
+  }
 </style>

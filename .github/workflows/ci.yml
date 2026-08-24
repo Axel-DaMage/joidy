@@ -35,7 +35,7 @@ jobs:
       LOG_DIR: logs
       SECRET_KEY: ci-secret-not-for-production
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Python
         uses: actions/setup-python@v7
@@ -43,7 +43,7 @@ jobs:
           python-version: '3.12'
 
       - name: Cache pip
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ hashFiles('api/requirements.txt') }}
@@ -75,12 +75,12 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 
@@ -92,6 +92,10 @@ jobs:
         working-directory: frontend
         run: npm run check
 
+      - name: Production build
+        working-directory: frontend
+        run: npm run build
+
       - name: Unit tests
         working-directory: frontend
         run: npm run test:run
@@ -102,10 +106,50 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
+
+      # Pre-build each image with a BuildKit GHA cache (same pattern as
+      # publish.yml), tagged exactly as compose expects, then loaded into the
+      # local daemon so `compose up` uses them instead of rebuilding.
+      - name: Build api image (BuildKit GHA cache)
+        uses: docker/build-push-action@v7
+        with:
+          context: ./api
+          load: true
+          tags: d4mag3/joidy-api:latest
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+
+      - name: Build ai-service image (BuildKit GHA cache)
+        uses: docker/build-push-action@v7
+        with:
+          context: ./ai-service
+          load: true
+          tags: d4mag3/joidy-ai-service:latest
+          cache-from: type=gha,scope=ai-service
+          cache-to: type=gha,mode=max,scope=ai-service
+
+      - name: Build worker image (BuildKit GHA cache)
+        uses: docker/build-push-action@v7
+        with:
+          context: ./worker
+          load: true
+          tags: d4mag3/joidy-worker:latest
+          cache-from: type=gha,scope=worker
+          cache-to: type=gha,mode=max,scope=worker
+
+      - name: Build frontend image (BuildKit GHA cache)
+        uses: docker/build-push-action@v7
+        with:
+          context: ./frontend
+          target: development
+          load: true
+          tags: d4mag3/joidy-frontend:latest
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
 
       - name: Prepare environment
         run: |
@@ -115,9 +159,9 @@ jobs:
           sed -i 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=joidy-ci/' .env
           mkdir -p data/db data/uploads data/vault
 
-      - name: Build and start Docker images
+      - name: Start services
         run: |
-          timeout 300 docker compose -f docker-compose.yml -f docker-compose.dev.yml build
+          # Images were pre-built above with the same tags compose expects.
           # Start backend services first (frontend depends on API health,
           # which may take time on first run due to migrations)
           docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres
@@ -147,7 +191,7 @@ jobs:
     name: Security Scanning
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Python
         uses: actions/setup-python@v7
@@ -174,9 +218,9 @@ jobs:
         continue-on-error: true
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 

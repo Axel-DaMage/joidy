@@ -2,6 +2,7 @@
   import { api } from '$lib/api';
   import { showNotification } from '$lib/stores/notifications';
   import DynamicIcon from './DynamicIcon.svelte';
+  import { t } from 'svelte-i18n';
 
   let password = '';
   let confirmPassword = '';
@@ -14,7 +15,7 @@
       showNotification('Las contraseñas no coinciden', 'error');
       return;
     }
-    
+
     if (password.length < 4) {
       showNotification('La contraseña debe tener al menos 4 caracteres', 'error');
       return;
@@ -39,50 +40,84 @@
 <div class="setup-wrapper">
   <div class="setup-card">
     <div class="logo mono">JOIDY</div>
-    
+
     {#if step === 1}
       <div class="step-content slide-in">
         <div class="icon-wrap">
           <DynamicIcon name="Sparkles" size={32} color="var(--xp)" />
         </div>
         <h2 class="title">¡Bienvenido a Joidy!</h2>
-        <p class="desc">Parece que es tu primera vez aquí. Vamos a realizar una configuración rápida para asegurar tu sistema antes de comenzar.</p>
-        <button class="btn btn-primary" onclick={() => step = 2}>Comenzar Setup</button>
+        <p class="desc">{$t('setupWizard.introDesc')}</p>
+        <button class="btn btn-primary" onclick={() => (step = 2)}
+          >{$t('setupWizard.startSetup')}</button
+        >
       </div>
     {:else if step === 2}
       <div class="step-content slide-in">
-        <h2 class="title">Asegura tu sistema</h2>
-        <p class="desc">Define una contraseña maestra. Esta será la única forma de acceder a Joidy.</p>
-        
-        <form onsubmit={(e) => { e.preventDefault(); if(password && confirmPassword) step = 3; }}>
+        <h2 class="title">{$t('setupWizard.secureTitle')}</h2>
+        <p class="desc">{$t('setupWizard.secureDesc')}</p>
+
+        <form
+          onsubmit={(e) => {
+            e.preventDefault();
+            if (password && confirmPassword) step = 3;
+          }}
+        >
           <div class="field">
-            <label for="pwd">Contraseña Maestra</label>
-            <input id="pwd" type="password" bind:value={password} class="input" required autofocus />
+            <label for="pwd">{$t('setupWizard.masterPassword')}</label>
+            <input
+              id="pwd"
+              type="password"
+              bind:value={password}
+              class="input"
+              required
+              autofocus
+            />
           </div>
           <div class="field" style="margin-top: 12px;">
-            <label for="pwd2">Confirmar Contraseña</label>
+            <label for="pwd2">{$t('setupWizard.confirmPassword')}</label>
             <input id="pwd2" type="password" bind:value={confirmPassword} class="input" required />
           </div>
-          
+
           <div class="actions">
-            <button type="button" class="btn btn-ghost" onclick={() => step = 1}>Atrás</button>
-            <button type="submit" class="btn btn-primary" disabled={!password || !confirmPassword}>Siguiente</button>
+            <button type="button" class="btn btn-ghost" onclick={() => (step = 1)}
+              >{$t('setupWizard.back')}</button
+            >
+            <button type="submit" class="btn btn-primary" disabled={!password || !confirmPassword}
+              >{$t('setupWizard.next')}</button
+            >
           </div>
         </form>
       </div>
     {:else if step === 3}
       <div class="step-content slide-in">
-        <h2 class="title">Conecta tu Vault (Opcional)</h2>
-        <p class="desc">Si usas Obsidian, introduce la ruta absoluta a tu bóveda. Si no, déjalo en blanco y Joidy usará su almacenamiento interno.</p>
-        
-        <form onsubmit={(e) => { e.preventDefault(); handleSetup(); }}>
+        <h2 class="title">{$t('setupWizard.vaultTitle')}</h2>
+        <p class="desc">{$t('setupWizard.vaultDesc')}</p>
+
+        <form
+          onsubmit={(e) => {
+            e.preventDefault();
+            handleSetup();
+          }}
+        >
           <div class="field">
-            <label for="vault">Ruta Absoluta (Ej. home/user/Documents/Vault)</label>
-            <input id="vault" type="text" bind:value={vaultPath} class="input mono" placeholder="home/usuario/Documents/Vault" />
+            <label for="vault">{$t('setupWizard.vaultPath')}</label>
+            <input
+              id="vault"
+              type="text"
+              bind:value={vaultPath}
+              class="input mono"
+              placeholder="home/usuario/Documents/Vault"
+            />
           </div>
-          
+
           <div class="actions">
-            <button type="button" class="btn btn-ghost" onclick={() => step = 2} disabled={loading}>Atrás</button>
+            <button
+              type="button"
+              class="btn btn-ghost"
+              onclick={() => (step = 2)}
+              disabled={loading}>{$t('setupWizard.back')}</button
+            >
             <button type="submit" class="btn btn-primary" disabled={loading}>
               {loading ? 'Guardando...' : 'Finalizar Configuración'}
             </button>
@@ -92,10 +127,10 @@
     {:else if step === 4}
       <div class="step-content slide-in">
         <div class="icon-wrap">
-          <DynamicIcon name="CheckCircle" size={40} color="var(--success)" />
+          <DynamicIcon name="CircleCheckBig" size={40} color="var(--success)" />
         </div>
         <h2 class="title" style="color: var(--success);">¡Todo Listo!</h2>
-        <p class="desc">Tu entorno ha sido asegurado y configurado con éxito. Redirigiendo al sistema...</p>
+        <p class="desc">{$t('setupWizard.doneDesc')}</p>
       </div>
     {/if}
   </div>
@@ -110,7 +145,7 @@
     background: var(--bg);
     color: var(--text-primary);
   }
-  
+
   .setup-card {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -122,7 +157,7 @@
     text-align: center;
     overflow: hidden;
   }
-  
+
   .logo {
     font-size: 20px;
     letter-spacing: 0.12em;
@@ -139,7 +174,7 @@
     display: flex;
     justify-content: center;
   }
-  
+
   .title {
     font-size: 20px;
     font-weight: 600;
@@ -153,7 +188,7 @@
     line-height: 1.5;
     margin-bottom: 24px;
   }
-  
+
   .step-content {
     display: flex;
     flex-direction: column;
@@ -165,22 +200,28 @@
   }
 
   @keyframes slideIn {
-    from { opacity: 0; transform: translateX(20px); }
-    to { opacity: 1; transform: translateX(0); }
+    from {
+      opacity: 0;
+      transform: translateX(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
   }
-  
+
   .field {
     display: flex;
     flex-direction: column;
     gap: 8px;
   }
-  
+
   .field label {
     font-size: 12px;
     font-weight: 500;
     color: var(--text-secondary);
   }
-  
+
   .input {
     background: var(--bg);
     border: 1px solid var(--border);
@@ -191,11 +232,11 @@
     outline: none;
     transition: border-color 0.2s;
   }
-  
+
   .input:focus {
     border-color: var(--xp);
   }
-  
+
   .actions {
     display: flex;
     justify-content: space-between;
@@ -213,17 +254,17 @@
     border: none;
     flex: 1;
   }
-  
+
   .btn-primary {
     background: var(--xp);
     color: #000;
   }
-  
+
   .btn-primary:hover:not(:disabled) {
     opacity: 0.9;
     transform: translateY(-1px);
   }
-  
+
   .btn-primary:disabled {
     opacity: 0.5;
     cursor: not-allowed;

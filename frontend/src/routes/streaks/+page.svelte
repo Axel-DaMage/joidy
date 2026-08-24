@@ -2,19 +2,43 @@
   import { onMount, onDestroy } from 'svelte';
   import { scale } from 'svelte/transition';
   import { X, Snowflake, ChevronRight } from 'lucide-svelte';
-    import { Shuffle, CheckCheck } from 'lucide-svelte';
+  import { Shuffle, CheckCheck } from 'lucide-svelte';
   import StreakListItem from '$lib/components/StreakListItem.svelte';
-  import StreakCreateModal from '$lib/components/StreakCreateModal.svelte';
-  import StreakHeatmap from '$lib/components/StreakHeatmap.svelte';
   import StreakStatsPanel from '$lib/components/StreakStatsPanel.svelte';
   import StreakListPanel from '$lib/components/StreakListPanel.svelte';
   import { api, type PersonalStreak, type StreakStats } from '$lib/api';
-  import { loadUserSettings, patchUserSettings, getCachedData, setCachedData } from '$lib/utils/userSettings';
+  import {
+    loadUserSettings,
+    patchUserSettings,
+    getCachedData,
+    setCachedData,
+  } from '$lib/utils/userSettings';
   import { captureSnapshot, getSnapshot } from '$lib/stores/pageSnapshots';
   import { locale as localeStore } from '$lib/stores/locale';
   import { openShare } from '$lib/stores/shareAchievement';
   import { logger } from '$lib/utils/logger';
   import { Share2 } from 'lucide-svelte';
+  import { t } from 'svelte-i18n';
+
+  // Lazy-load heavy components so they are split into separate chunks and
+  // only downloaded when actually needed (#347).
+  // StreakCreateModal (558 lines) — loaded when the user opens the create/edit modal.
+  let StreakCreateModal: typeof import('$lib/components/StreakCreateModal.svelte').default | null =
+    null;
+  function ensureStreakCreateModal() {
+    if (!StreakCreateModal) {
+      import('$lib/components/StreakCreateModal.svelte').then(
+        (m) => (StreakCreateModal = m.default)
+      );
+    }
+  }
+  // StreakHeatmap (561 lines) — loaded when a streak is selected for detail view.
+  let StreakHeatmap: typeof import('$lib/components/StreakHeatmap.svelte').default | null = null;
+  function ensureStreakHeatmap() {
+    if (!StreakHeatmap) {
+      import('$lib/components/StreakHeatmap.svelte').then((m) => (StreakHeatmap = m.default));
+    }
+  }
 
   let streaks: PersonalStreak[] = [];
   let stats: StreakStats | null = null;
@@ -27,7 +51,7 @@
 
   // ── Selection ─────────────────────────────────────────────────────────────
   let selectedId: number | null = null;
-  $: selected = streaks.find(s => s.id === selectedId) || null;
+  $: selected = streaks.find((s) => s.id === selectedId) || null;
 
   // ── Filter / Search ───────────────────────────────────────────────────────
   let searchQuery = '';
@@ -38,9 +62,9 @@
   let deleteConfirmName: string = '';
   let deleteConfirmTheme = 'solid';
 
-  $: visibleStreaks = streaks.filter(s => showArchived ? s.is_archived : !s.is_archived);
+  $: visibleStreaks = streaks.filter((s) => (showArchived ? s.is_archived : !s.is_archived));
 
-  $: filteredStreaks = visibleStreaks.filter(s => {
+  $: filteredStreaks = visibleStreaks.filter((s) => {
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       return s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q);
@@ -48,9 +72,11 @@
     return true;
   });
 
-  $: pendingCount = filteredStreaks.filter(s => !s.today_checked && !s.is_archived).length;
-  $: doneCount = filteredStreaks.filter(s => s.today_checked).length;
-  $: activeCheckinCandidates = streaks.filter(s => !s.is_archived && !s.today_checked && !isStreakCompleted(s));
+  $: pendingCount = filteredStreaks.filter((s) => !s.today_checked && !s.is_archived).length;
+  $: doneCount = filteredStreaks.filter((s) => s.today_checked).length;
+  $: activeCheckinCandidates = streaks.filter(
+    (s) => !s.is_archived && !s.today_checked && !isStreakCompleted(s)
+  );
 
   // ── Modal ─────────────────────────────────────────────────────────────────
   let showModal = false;
@@ -70,7 +96,7 @@
   // ── Load ──────────────────────────────────────────────────────────────────
   onMount(async () => {
     mounted = true;
-    
+
     const savedNotesUi = loadUserSettings().notesUi;
     if (savedNotesUi?.panelWidth !== undefined) {
       panelWidth = Number(savedNotesUi.panelWidth);
@@ -81,14 +107,15 @@
       selectedId = snap.state.selectedId ?? null;
       showArchived = snap.state.showArchived ?? false;
       searchQuery = snap.state.searchQuery ?? '';
+      if (selectedId) ensureStreakHeatmap();
     }
-    
+
     const cached = getCachedData<PersonalStreak[]>('streaks');
     const cachedStats = getCachedData<StreakStats>('stats');
     if (cached) streaks = cached;
     if (cachedStats) stats = cachedStats;
     if (cached) loading = false;
-    
+
     try {
       const [s, st] = await Promise.all([
         api.personalStreaks.list({ include_archived: true }),
@@ -100,11 +127,14 @@
       setCachedData('stats', st);
     } catch (e) {
       if (!cached || !cachedStats) {
-        error = 'Error de conexión con el sistema de rachas.';
+        error = $t('streaks.connectionError');
         logger.error('[streaks]', e);
       }
     } finally {
-      if (selectedId && !streaks.find(s => s.id === selectedId)) selectedId = streaks[0]?.id ?? null;
+      loading = false;
+      if (selectedId && !streaks.find((s) => s.id === selectedId))
+        selectedId = streaks[0]?.id ?? null;
+      if (selectedId) ensureStreakHeatmap();
     }
 
     window.addEventListener('beforeunload', handleBeforeUnload);
@@ -114,10 +144,9 @@
 
   function handleBeforeUnload() {
     const scrollEl = document.getElementById('streaks-list');
-    captureSnapshot('/streaks',
-      { selectedId, showArchived, searchQuery },
-      [{ id: 'streaks-list', scrollTop: scrollEl?.scrollTop ?? 0 }]
-    );
+    captureSnapshot('/streaks', { selectedId, showArchived, searchQuery }, [
+      { id: 'streaks-list', scrollTop: scrollEl?.scrollTop ?? 0 },
+    ]);
   }
 
   // ── Actions ───────────────────────────────────────────────────────────────
@@ -130,13 +159,14 @@
     try {
       if (targetId !== null) {
         const updated = await api.personalStreaks.update(targetId, data);
-        streaks = streaks.map(s => s.id === targetId ? updated : s);
+        streaks = streaks.map((s) => (s.id === targetId ? updated : s));
       } else {
         const created = await api.personalStreaks.create(data);
         streaks = [...streaks, created];
         // Force reactivity
         streaks = streaks;
         selectedId = created.id;
+        ensureStreakHeatmap();
       }
       stats = await api.personalStreaks.stats();
       notifyStreaksUpdated();
@@ -147,10 +177,10 @@
 
   async function archiveStreak(id: number, archived: boolean) {
     try {
-      const streak = streaks.find(s => s.id === id);
+      const streak = streaks.find((s) => s.id === id);
       if (!streak) return;
       const updated = await api.personalStreaks.update(id, { is_archived: archived });
-      streaks = streaks.map(s => s.id === id ? updated : s);
+      streaks = streaks.map((s) => (s.id === id ? updated : s));
       if (selectedId === id) selectedId = null;
       stats = await api.personalStreaks.stats();
       notifyStreaksUpdated();
@@ -167,18 +197,19 @@
     try {
       const today = new Date();
       const localDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-      
+
       const updated = await api.personalStreaks.checkin(id, {
         note: checkinNote || undefined,
-        check_date: localDate
+        check_date: localDate,
       });
-      streaks = streaks.map(s => s.id === id ? updated : s);
+      streaks = streaks.map((s) => (s.id === id ? updated : s));
       checkinNote = '';
       showCheckinExtra = false;
       stats = await api.personalStreaks.stats();
       notifyStreaksUpdated();
     } finally {
-      busy.delete(id); busy = new Set(busy);
+      busy.delete(id);
+      busy = new Set(busy);
     }
   }
 
@@ -187,10 +218,14 @@
     try {
       const today = new Date();
       const localDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-      
-      const results = await Promise.all(activeCheckinCandidates.map(s => api.personalStreaks.checkin(s.id, { check_date: localDate })));
-      const updatedById = new Map(results.map(s => [s.id, s]));
-      streaks = streaks.map(s => updatedById.get(s.id) ?? s);
+
+      const results = await Promise.all(
+        activeCheckinCandidates.map((s) =>
+          api.personalStreaks.checkin(s.id, { check_date: localDate })
+        )
+      );
+      const updatedById = new Map(results.map((s) => [s.id, s]));
+      streaks = streaks.map((s) => updatedById.get(s.id) ?? s);
       stats = await api.personalStreaks.stats();
       notifyStreaksUpdated();
     } catch (e) {
@@ -202,6 +237,7 @@
     if (filteredStreaks.length === 0) return;
     const next = filteredStreaks[Math.floor(Math.random() * filteredStreaks.length)];
     selectedId = next.id;
+    ensureStreakHeatmap();
   }
 
   function toggleArchivedView() {
@@ -216,11 +252,12 @@
     busy = new Set(busy).add(id);
     try {
       const updated = await api.personalStreaks.undo(id);
-      streaks = streaks.map(s => s.id === id ? updated : s);
+      streaks = streaks.map((s) => (s.id === id ? updated : s));
       stats = await api.personalStreaks.stats();
       notifyStreaksUpdated();
     } finally {
-      busy.delete(id); busy = new Set(busy);
+      busy.delete(id);
+      busy = new Set(busy);
     }
   }
 
@@ -229,12 +266,13 @@
     busy = new Set(busy).add(id);
     try {
       const updated = await api.personalStreaks.freeze(id);
-      streaks = streaks.map(s => s.id === id ? updated : s);
+      streaks = streaks.map((s) => (s.id === id ? updated : s));
       notifyStreaksUpdated();
     } catch (e: any) {
       logger.error('[streaks] freeze error:', e);
     } finally {
-      busy.delete(id); busy = new Set(busy);
+      busy.delete(id);
+      busy = new Set(busy);
     }
   }
 
@@ -242,16 +280,16 @@
 
   async function deleteStreak(id: number) {
     if (deleteConfirm !== id) {
-      const streak = streaks.find(s => s.id === id);
+      const streak = streaks.find((s) => s.id === id);
       deleteConfirm = id;
-      deleteConfirmName = streak?.name || 'Sin nombre';
+      deleteConfirmName = streak?.name || $t('streaks.noName');
       deleteConfirmTheme = streak?.theme || 'solid';
       return;
     }
     if (deleteTimeoutId) clearTimeout(deleteTimeoutId);
     try {
       await api.personalStreaks.delete(id);
-      streaks = streaks.filter(s => s.id !== id);
+      streaks = streaks.filter((s) => s.id !== id);
       if (selectedId === id) selectedId = null;
       stats = await api.personalStreaks.stats();
       notifyStreaksUpdated();
@@ -275,11 +313,13 @@
   function openCreate() {
     editTarget = null;
     showModal = true;
+    ensureStreakCreateModal();
   }
 
   function openEdit(s: PersonalStreak) {
     editTarget = s;
     showModal = true;
+    ensureStreakCreateModal();
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
@@ -289,7 +329,10 @@
   }
 
   function freqLabel(s: PersonalStreak): string {
-    return s.description?.trim() || (s.frequency === 'every_n' && s.frequency_days > 1 ? `cada ${s.frequency_days}d` : 'diaria');
+    return (
+      s.description?.trim() ||
+      (s.frequency === 'every_n' && s.frequency_days > 1 ? `cada ${s.frequency_days}d` : 'diaria')
+    );
   }
 
   // Completion detection
@@ -321,7 +364,7 @@
       title: s.name,
       icon: 'Flame',
       value: `${s.current_streak}`,
-      subtitle: 'días de racha',
+      subtitle: $t('streaks.streakDays'),
       color: s.color || 'var(--xp)',
     });
   }
@@ -346,7 +389,10 @@
         {getDaysForCompletion}
         onToggleArchive={toggleArchivedView}
         onCreate={openCreate}
-        onSelect={(id) => selectedId = id}
+        onSelect={(id) => {
+          selectedId = id;
+          ensureStreakHeatmap();
+        }}
         onEdit={openEdit}
         onDelete={deleteStreak}
       />
@@ -364,12 +410,24 @@
           >
             <button
               class="detail-exit-btn"
-              onclick={() => selectedId = null}
-              title="Volver al menú"
-              aria-label="Volver al menú"
+              onclick={() => (selectedId = null)}
+              title={$t('streaks.backToMenu')}
+              aria-label={$t('streaks.backToMenu')}
             >
               <X size={14} />
             </button>
+
+            {#if !isStreakCompleted(selected) && isStreakMilestone(selected)}
+              <button
+                class="streak-share-btn"
+                onclick={() => shareStreak(selected)}
+                title={$t('streaks.shareMilestone')}
+                aria-label={$t('streaks.shareStreak', { values: { name: selected.name } })}
+              >
+                <Share2 size={13} />
+                <span>{$t('streaks.share')}</span>
+              </button>
+            {/if}
 
             <div class="top-metrics">
               <!-- Streak counter -->
@@ -377,53 +435,61 @@
                 <div class="counter-stack">
                   <h2
                     class="counter-title mono"
-                    style="--title-accent: {isStreakCompleted(selected) ? 'var(--target)' : (selected.color || 'var(--xp)')};"
+                    style="--title-accent: {isStreakCompleted(selected)
+                      ? 'var(--target)'
+                      : selected.color || 'var(--xp)'};"
                     title={selected.name}
                   >
                     {selected.name}
                   </h2>
                   <button
                     class="counter-ring"
-                    style="--ring-color: {isStreakCompleted(selected) ? 'var(--target)' : (selected.color || 'var(--xp)')};"
-                    onclick={() => !selected.is_archived && !selected.today_checked && !isStreakCompleted(selected) && checkin(selected.id)}
-                    disabled={selected.is_archived || selected.today_checked || busy.has(selected.id) || isStreakCompleted(selected)}
-                    title={isStreakCompleted(selected) ? 'Racha completada' : (selected.today_checked ? 'Ya hiciste check-in hoy' : 'Hacer check-in')}
-                    aria-label={isStreakCompleted(selected) ? 'Racha completada' : (selected.today_checked ? 'Ya hiciste check-in hoy' : 'Hacer check-in')}
+                    style="--ring-color: {isStreakCompleted(selected)
+                      ? 'var(--target)'
+                      : selected.color || 'var(--xp)'};"
+                    onclick={() =>
+                      !selected.is_archived &&
+                      !selected.today_checked &&
+                      !isStreakCompleted(selected) &&
+                      checkin(selected.id)}
+                    disabled={selected.is_archived ||
+                      selected.today_checked ||
+                      busy.has(selected.id) ||
+                      isStreakCompleted(selected)}
+                    title={isStreakCompleted(selected)
+                      ? $t('streaks.streakCompleted')
+                      : selected.today_checked
+                        ? $t('streaks.alreadyCheckedIn')
+                        : $t('streaks.checkIn')}
+                    aria-label={isStreakCompleted(selected)
+                      ? $t('streaks.streakCompleted')
+                      : selected.today_checked
+                        ? $t('streaks.alreadyCheckedIn')
+                        : $t('streaks.checkIn')}
                   >
                     {#if isStreakCompleted(selected)}
                       <span class="counter-num mono" style="color: var(--target);">✓</span>
-                      <span class="counter-label mono">FINALIZADO</span>
+                      <span class="counter-label mono">{$t('streaks.finished')}</span>
                     {:else}
                       <span class="counter-num mono">{selected.current_streak}</span>
-                      <span class="counter-label mono">DÍAS</span>
+                      <span class="counter-label mono">{$t('streaks.days')}</span>
                     {/if}
                   </button>
-                  {#if !isStreakCompleted(selected) && isStreakMilestone(selected)}
-                    <button
-                      class="streak-share-btn"
-                      onclick={() => shareStreak(selected)}
-                      title="Compartir hito de racha"
-                      aria-label="Compartir racha {selected.name}"
-                    >
-                      <Share2 size={13} />
-                      <span>Compartir</span>
-                    </button>
-                  {/if}
                 </div>
               </div>
 
               <!-- Vertical stats panel -->
               <div class="detail-stats">
                 <div class="dstat-row">
-                  <span class="dstat-lbl">Actual</span>
+                  <span class="dstat-lbl">{$t('streaks.current')}</span>
                   <span class="dstat-val mono">{selected.current_streak}</span>
                 </div>
                 <div class="dstat-row">
-                  <span class="dstat-lbl">Mejor</span>
+                  <span class="dstat-lbl">{$t('streaks.best')}</span>
                   <span class="dstat-val mono">{selected.longest_streak}</span>
                 </div>
                 <div class="dstat-row">
-                  <span class="dstat-lbl">Check-ins</span>
+                  <span class="dstat-lbl">{$t('streaks.checkIns')}</span>
                   <span class="dstat-val mono">{selected.total_checkins}</span>
                 </div>
               </div>
@@ -431,12 +497,21 @@
 
             <!-- Activity calendar -->
             <div class="heatmap-section">
-              <StreakHeatmap
-                history={selected.history}
-                color={selected.color || 'var(--xp)'}
-                startDate={selected.start_date}
-                targetDate={selected.target_date}
-              />
+              {#if StreakHeatmap}
+                <StreakHeatmap
+                  history={selected.history}
+                  color={selected.color || 'var(--xp)'}
+                  startDate={selected.start_date}
+                  targetDate={selected.target_date}
+                />
+              {:else}
+                <div
+                  class="caption"
+                  style="padding: 24px; text-align: center; color: var(--text-muted);"
+                >
+                  {$t('streaks.loadingCalendar')}
+                </div>
+              {/if}
             </div>
 
             <!-- Footer: dates + actions, sticky at bottom -->
@@ -444,23 +519,39 @@
               <div class="dates-info">
                 {#if selected.start_date}
                   <div class="date-item">
-                    <span class="date-label">Inicio</span>
-                    <span class="date-val mono">{new Date(selected.start_date).toLocaleDateString($localeStore, { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                    <span class="date-label">{$t('streaks.startDate')}</span>
+                    <span class="date-val mono"
+                      >{new Date(selected.start_date).toLocaleDateString($localeStore, {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric',
+                      })}</span
+                    >
                   </div>
                 {/if}
                 {#if selected.target_date}
                   <div class="date-item">
-                    <span class="date-label">Objetivo</span>
-                    <span class="date-val mono">{new Date(selected.target_date).toLocaleDateString($localeStore, { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                    <span class="date-label">{$t('streaks.targetDate')}</span>
+                    <span class="date-val mono"
+                      >{new Date(selected.target_date).toLocaleDateString($localeStore, {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric',
+                      })}</span
+                    >
                   </div>
                 {/if}
                 <div class="date-item">
-                  <span class="date-label">Creada</span>
-                  <span class="date-val mono">{new Date(selected.created_at).toLocaleDateString($localeStore, { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                  <span class="date-label">{$t('streaks.createdDate')}</span>
+                  <span class="date-val mono"
+                    >{new Date(selected.created_at).toLocaleDateString($localeStore, {
+                      day: 'numeric',
+                      month: 'short',
+                      year: 'numeric',
+                    })}</span
+                  >
                 </div>
               </div>
-
-
             </div>
           </div>
         {:else}
@@ -472,26 +563,26 @@
                   class="action-pill"
                   onclick={checkinAllCurrent}
                   disabled={activeCheckinCandidates.length === 0}
-                  title="Hacer check-in de todas las rachas activas"
+                  title={$t('streaks.checkInAll')}
                 >
                   <CheckCheck size={14} />
-                  <span>Check-in de todas</span>
+                  <span>{$t('streaks.checkInAllBtn')}</span>
                 </button>
                 <button
                   class="action-pill"
                   onclick={openRandomStreak}
                   disabled={filteredStreaks.length === 0}
-                  title="Entrar a una racha random"
+                  title={$t('streaks.randomStreak')}
                 >
                   <Shuffle size={14} />
-                  <span>Racha random</span>
+                  <span>{$t('streaks.randomStreakBtn')}</span>
                 </button>
               </div>
               <StreakStatsPanel {stats} />
             {/if}
             <div class="no-sel-hint">
               <ChevronRight size={14} />
-              <span>Selecciona una racha para ver detalles</span>
+              <span>{$t('streaks.selectStreakHint')}</span>
             </div>
           </div>
         {/if}
@@ -504,8 +595,8 @@
 <svelte:window onkeydown={(e) => e.key === 'Escape' && (deleteConfirm = null)} />
 {#if deleteConfirm !== null}
   <div class="modal-backdrop">
-    <div 
-      class="delete-modal" 
+    <div
+      class="delete-modal"
       class:theme-sketch={deleteConfirmTheme === 'sketch'}
       class:theme-glow={deleteConfirmTheme === 'glow'}
       class:theme-gradient={deleteConfirmTheme === 'gradient'}
@@ -517,31 +608,45 @@
         <div class="delete-modal-icon">
           <X size={32} />
         </div>
-        <h2 class="delete-modal-title">Eliminar racha</h2>
+        <h2 class="delete-modal-title">{$t('streaks.deleteStreak')}</h2>
         <p class="delete-modal-text">
-          ¿Estás seguro de que quieres eliminar <strong>{deleteConfirmName}</strong>?
+          {$t('streaks.deleteConfirmPrefix')} <strong>{deleteConfirmName}</strong>{$t(
+            'streaks.deleteConfirmSuffix'
+          )}
         </p>
-        <p class="delete-modal-warning">Esta acción no se puede deshacer.</p>
+        <p class="delete-modal-warning">{$t('streaks.deleteWarning')}</p>
       </div>
       <div class="delete-modal-buttons">
-        <button class="btn-cancel" onclick={cancelDelete}>Cancelar</button>
-        <button class="btn-danger" onclick={() => deleteConfirm !== null && deleteStreak(deleteConfirm)}>Eliminar</button>
+        <button class="btn-cancel" onclick={cancelDelete}>{$t('common.cancel')}</button>
+        <button
+          class="btn-danger"
+          onclick={() => deleteConfirm !== null && deleteStreak(deleteConfirm)}
+          >{$t('common.delete')}</button
+        >
       </div>
     </div>
   </div>
 {/if}
 
-<StreakCreateModal
-  bind:open={showModal}
-  editStreak={editTarget}
-  on:close={() => { showModal = false; editTarget = null; }}
-  on:save={handleSave}
-  on:archive={() => editTarget?.id != null && archiveStreak(editTarget.id, !editTarget.is_archived)}
-/>
+{#if StreakCreateModal}
+  <StreakCreateModal
+    bind:open={showModal}
+    editStreak={editTarget}
+    on:close={() => {
+      showModal = false;
+      editTarget = null;
+    }}
+    on:save={handleSave}
+    on:archive={() =>
+      editTarget?.id != null && archiveStreak(editTarget.id, !editTarget.is_archived)}
+  />
+{/if}
 
 <style>
   .streaks-page {
-    height: 100%; width: 100%; background: var(--bg);
+    height: 100%;
+    width: 100%;
+    background: var(--bg);
     overflow: hidden;
   }
 
@@ -559,12 +664,15 @@
      RIGHT PANEL
      ═══════════════════════════════════════════════════════════════════════ */
   .detail-panel {
-    height: 100%; overflow: hidden;
+    height: 100%;
+    overflow: hidden;
   }
 
   .detail-content {
     padding: 0 20px 2px;
-    display: flex; flex-direction: column; gap: 2px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
     height: 100%;
     overflow: hidden;
     position: relative;
@@ -611,7 +719,9 @@
 
   /* Counter */
   .counter-section {
-    display: flex; align-items: center; justify-content: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     height: 100%;
   }
 
@@ -624,6 +734,10 @@
   }
 
   .streak-share-btn {
+    position: absolute;
+    bottom: 16px;
+    left: 16px;
+    z-index: var(--z-base);
     display: inline-flex;
     align-items: center;
     gap: 5px;
@@ -658,29 +772,50 @@
   }
 
   .counter-ring {
-    display: flex; flex-direction: column; align-items: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
     justify-content: center;
-    width: 96px; height: 96px;
+    width: 96px;
+    height: 96px;
     border-radius: 50%;
     border: 2px solid var(--ring-color);
-    box-shadow: 0 0 30px color-mix(in srgb, var(--ring-color) 15%, transparent),
-                inset 0 0 20px color-mix(in srgb, var(--ring-color) 5%, transparent);
+    box-shadow:
+      0 0 30px color-mix(in srgb, var(--ring-color) 15%, transparent),
+      inset 0 0 20px color-mix(in srgb, var(--ring-color) 5%, transparent);
     background: var(--surface);
     cursor: pointer;
     padding: 0;
     appearance: none;
     -webkit-appearance: none;
+    transition:
+      opacity 0.3s ease,
+      border-color 0.3s ease,
+      box-shadow 0.3s ease;
   }
-  .counter-ring:disabled { cursor: default; opacity: 0.95; }
-  .counter-ring:focus-visible { outline: 1px solid var(--ring-color); outline-offset: 3px; }
+  .counter-ring:disabled {
+    cursor: default;
+    opacity: 0.95;
+  }
+  .counter-ring:focus-visible {
+    outline: 1px solid var(--ring-color);
+    outline-offset: 3px;
+  }
 
   .counter-num {
-    font-size: 36px; font-weight: 700;
-    color: var(--text-primary); line-height: 1;
+    font-size: 36px;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1;
+    transition:
+      opacity 0.25s ease,
+      transform 0.25s ease;
   }
   .counter-label {
-    font-size: 9px; color: var(--text-muted);
-    letter-spacing: 0.15em; margin-top: 2px;
+    font-size: 9px;
+    color: var(--text-muted);
+    letter-spacing: 0.15em;
+    margin-top: 2px;
   }
 
   /* Stats panel */
@@ -703,9 +838,21 @@
     padding: 0;
     min-height: 28px;
   }
-  .dstat-row + .dstat-row { border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent); }
-  .dstat-val { font-size: 17px; font-weight: 600; color: var(--text-primary); line-height: 1; }
-  .dstat-lbl { font-size: 9px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  .dstat-row + .dstat-row {
+    border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  }
+  .dstat-val {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1;
+  }
+  .dstat-lbl {
+    font-size: 9px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
 
   /* Heatmap section */
   .heatmap-section {
@@ -722,28 +869,47 @@
   /* Footer (dates + actions) */
   .detail-footer {
     margin-top: auto;
-    display: flex; flex-direction: column; gap: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
     border-top: 1px solid var(--border-light);
     padding-top: 4px;
   }
 
   /* Dates */
   .dates-info {
-    display: flex; gap: 16px; flex-wrap: wrap; justify-content: center;
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    justify-content: center;
   }
 
-  .date-item { display: flex; flex-direction: column; gap: 2px; align-items: center; }
-  .date-label { font-size: 9px; color: var(--text-disabled); text-transform: uppercase; letter-spacing: 0.05em; }
-  .date-val { font-size: 11px; color: var(--text-secondary); }
-
-
+  .date-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    align-items: center;
+  }
+  .date-label {
+    font-size: 9px;
+    color: var(--text-disabled);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .date-val {
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
 
   /* No selection */
   .no-selection {
     height: 100%;
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    padding: 40px; gap: 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    gap: 24px;
   }
 
   .no-selection-actions {
@@ -782,83 +948,130 @@
   }
 
   .no-sel-hint {
-    display: flex; align-items: center; gap: 6px;
-    font-size: 12px; color: var(--text-disabled);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-disabled);
     animation: pulse-hint 2s ease-in-out infinite;
   }
 
   @keyframes pulse-hint {
-    0%, 100% { opacity: 0.4; }
-    50%      { opacity: 0.8; }
+    0%,
+    100% {
+      opacity: 0.4;
+    }
+    50% {
+      opacity: 0.8;
+    }
   }
 
   /* Delete confirmation modal */
   .modal-backdrop {
-    position: fixed; inset: 0; z-index: var(--z-overlay);
-    background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(4px);
-    display: flex; align-items: center; justify-content: center;
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-overlay);
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .delete-modal {
-    width: 90%; max-width: 400px;
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: 12px; overflow: hidden;
+    width: 90%;
+    max-width: 400px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-    display: flex; flex-direction: column;
+    display: flex;
+    flex-direction: column;
   }
 
   .delete-modal-content {
     padding: 32px 24px 24px;
-    display: flex; flex-direction: column; gap: 12px;
-    align-items: center; text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    align-items: center;
+    text-align: center;
   }
 
   .delete-modal-icon {
-    color: var(--error); opacity: 0.8; display: flex;
+    color: var(--error);
+    opacity: 0.8;
+    display: flex;
   }
 
   .delete-modal-title {
-    font-size: 18px; font-weight: 600;
-    color: var(--text-primary); margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
   }
 
   .delete-modal-text {
-    font-size: 14px; color: var(--text-secondary);
-    margin: 0; line-height: 1.5;
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin: 0;
+    line-height: 1.5;
   }
 
   .delete-modal-text strong {
-    color: var(--text-primary); font-weight: 600;
+    color: var(--text-primary);
+    font-weight: 600;
   }
 
   .delete-modal-warning {
-    font-size: 12px; color: var(--text-disabled);
-    margin: 0; line-height: 1.4; font-style: italic;
+    font-size: 12px;
+    color: var(--text-disabled);
+    margin: 0;
+    line-height: 1.4;
+    font-style: italic;
   }
 
   .delete-modal-buttons {
-    display: flex; gap: 8px; padding: 16px 24px;
+    display: flex;
+    gap: 8px;
+    padding: 16px 24px;
     border-top: 1px solid var(--border-light);
     background: var(--elevated);
   }
 
   .btn-cancel {
-    flex: 1; padding: 10px 16px;
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: 6px; color: var(--text-secondary);
-    font-size: 13px; font-weight: 500;
-    cursor: pointer; transition: all 0.15s;
+    flex: 1;
+    padding: 10px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
   }
-  .btn-cancel:hover { border-color: var(--text-muted); color: var(--text-primary); }
+  .btn-cancel:hover {
+    border-color: var(--text-muted);
+    color: var(--text-primary);
+  }
 
   .btn-danger {
-    flex: 1; padding: 10px 16px;
-    background: var(--error); border: none;
-    border-radius: 6px; color: white;
-    font-size: 13px; font-weight: 600;
-    cursor: pointer; transition: all 0.15s;
+    flex: 1;
+    padding: 10px 16px;
+    background: var(--error);
+    border: none;
+    border-radius: 6px;
+    color: white;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
   }
-  .btn-danger:hover { opacity: 0.9; }
+  .btn-danger:hover {
+    opacity: 0.9;
+  }
 
   /* Sketch theme for delete modal */
   .delete-modal.theme-sketch {
@@ -920,7 +1133,7 @@
       linear-gradient(90deg, rgba(0, 0, 0, 0.1) 1px, transparent 1px);
     background-size: 3px 3px;
     border: 1px solid color-mix(in srgb, var(--theme-ac) 70%, black);
-    box-shadow: inset 0 0 10px rgba(0,0,0,0.15);
+    box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.15);
   }
   .delete-modal.theme-lcd .delete-modal-icon,
   .delete-modal.theme-lcd .delete-modal-title,
@@ -957,10 +1170,18 @@
   }
 
   /* ── Responsive ── */
+
+  /* Tablet — narrow the list panel */
+  @media (max-width: 1024px) {
+    .streaks-layout {
+      grid-template-columns: minmax(200px, 240px) 5px 1fr;
+    }
+  }
+
   @media (max-width: 768px) {
     .streaks-layout {
       grid-template-columns: 1fr;
-      grid-template-rows: auto 1fr;
+      grid-template-rows: auto;
     }
 
     .resize-handle.static {
@@ -1056,6 +1277,20 @@
 
     .delete-modal-content {
       padding: var(--s4) var(--s3) var(--s3);
+    }
+  }
+
+  @media (max-width: 360px) {
+    .no-selection {
+      padding: var(--s3) var(--s2);
+      gap: var(--s3);
+    }
+    .counter-ring {
+      width: 60px;
+      height: 60px;
+    }
+    .counter-num {
+      font-size: 18px;
     }
   }
 </style>

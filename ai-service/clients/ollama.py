@@ -1,13 +1,11 @@
 import logging
 
 import aiohttp
+from config import settings
 
 from .base import BaseLLMClient, EmbeddingClient
 
 logger = logging.getLogger(__name__)
-
-# Shared timeout for all Ollama requests.
-_OLLAMA_TIMEOUT = aiohttp.ClientTimeout(total=60)
 
 
 class OllamaClient(BaseLLMClient, EmbeddingClient):
@@ -23,7 +21,9 @@ class OllamaClient(BaseLLMClient, EmbeddingClient):
 
     async def _get_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
-            self._session = aiohttp.ClientSession(timeout=_OLLAMA_TIMEOUT)
+            total = settings.embed_timeout if self._is_embedding else settings.llm_timeout
+            timeout = aiohttp.ClientTimeout(total=total, connect=settings.connect_timeout)
+            self._session = aiohttp.ClientSession(timeout=timeout)
         return self._session
 
     async def close(self) -> None:
@@ -66,3 +66,12 @@ class OllamaClient(BaseLLMClient, EmbeddingClient):
                 raise Exception(f"Ollama generate failed: {await resp.text()}")
             data = await resp.json()
             return data["response"]
+
+    async def health_check(self) -> bool:
+        """Check if Ollama is reachable via GET /api/tags (lightweight, no model load)."""
+        try:
+            session = await self._get_session()
+            async with session.get(f"{self._base_url}/api/tags") as resp:
+                return resp.status == 200
+        except Exception:
+            return False

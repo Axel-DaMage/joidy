@@ -31,9 +31,58 @@ ai_rag_errors = Counter('ai_rag_errors_total', 'RAG errors', ['provider'])
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
-    logging.getLogger(__name__).info("[ai-service] Starting up")
+    logger = logging.getLogger(__name__)
+    logger.info("[ai-service] Starting up")
+
+    # Startup validation: check that the configured model providers are
+    # actually available. If not, log a clear error so operators can fix
+    # the configuration. The service still starts so /health can report
+    # the degraded state (#642).
+    available = settings.available_providers
+    llm_provider = settings.llm_provider
+    emb_provider = settings.embedding_provider
+
+    if not available:
+        logger.info("[ai-service] No AI providers configured — AI features disabled")
+    else:
+        if not settings.is_llm_configured:
+            logger.error(
+                f"[ai-service] LLM model '{settings.llm_model}' uses provider "
+                f"'{llm_provider}' which is NOT configured. "
+                f"Available providers: {available}. "
+                f"Set LLM_MODEL to use an available provider (e.g. 'ollama:llama3')."
+            )
+        if not settings.is_embedding_configured:
+            logger.error(
+                f"[ai-service] Embedding model '{settings.embedding_model}' uses provider "
+                f"'{emb_provider}' which is NOT configured. "
+                f"Available providers: {available}. "
+                f"Set EMBEDDING_MODEL to use an available provider (e.g. 'ollama:nomic-embed-text')."
+            )
+
+        if settings.is_ai_enabled:
+            # Ping configured providers and log availability (#568).
+            try:
+                llm_client = get_llm_client()
+                llm_healthy = await llm_client.health_check()
+                logger.info(f"[ai-service] LLM provider '{llm_client.provider_name}' health: {'OK' if llm_healthy else 'UNREACHABLE'}")
+            except Exception as exc:
+                logger.warning(f"[ai-service] LLM health check failed: {exc}")
+
+            try:
+                emb_client = get_embedding_client()
+                emb_healthy = await emb_client.health_check()
+                logger.info(f"[ai-service] Embedding provider '{emb_client.provider_name}' health: {'OK' if emb_healthy else 'UNREACHABLE'}")
+            except Exception as exc:
+                logger.warning(f"[ai-service] Embedding health check failed: {exc}")
+        else:
+            logger.warning(
+                "[ai-service] AI features disabled — configured model providers "
+                "are not available. See errors above."
+            )
+
     yield
-    logging.getLogger(__name__).info("[ai-service] Shutting down")
+    logger.info("[ai-service] Shutting down")
 
 
 app = FastAPI(title="Joidy AI Service", version="0.2.0", lifespan=lifespan)
@@ -140,8 +189,16 @@ def _get_provider_info():
     }
 
 
+def _has_fallback() -> bool:
+    """Check if Ollama fallback is available for the configured primary provider."""
+    available = settings.available_providers
+    llm_provider = settings.llm_model.split(":", 1)[0] if ":" in settings.llm_model else "gemini"
+    emb_provider = settings.embedding_model.split(":", 1)[0] if ":" in settings.embedding_model else "gemini"
+    return "ollama" in available and (llm_provider != "ollama" or emb_provider != "ollama")
+
+
 @app.get("/health")
-def health():
+async def health():
     provider_info = _get_provider_info()
     # The service is "degraded" if the configured LLM/embedding provider is
     # not actually available (e.g. GEMINI_API_KEY not set but model is gemini:*).
@@ -153,6 +210,7 @@ def health():
         "service": "joidy-ai",
         "ai_enabled": settings.is_ai_enabled,
         "provider": provider_info,
+        "fallback_enabled": _has_fallback(),
     }
 
 
@@ -434,16 +492,17 @@ async def cluster_notes(eps: float = 0.3, min_samples: int = 3, max_notes: int =
     from database import engine
     from sqlalchemy import text as sql_text
 
-    rows = engine.connect().execute(
-        sql_text("""
-            SELECT ne.note_id, ne.embedding
-            FROM note_embeddings ne
-            JOIN notes n ON n.id = ne.note_id
-            ORDER BY n.created_at DESC
-            LIMIT :max_notes
-        """),
-        {"max_notes": max_notes},
-    ).fetchall()
+    with engine.connect() as conn:
+        rows = conn.execute(
+            sql_text("""
+                SELECT ne.note_id, ne.embedding
+                FROM note_embeddings ne
+                JOIN notes n ON n.id = ne.note_id
+                ORDER BY n.created_at DESC
+                LIMIT :max_notes
+            """),
+            {"max_notes": max_notes},
+        ).fetchall()
 
     if len(rows) < min_samples:
         return {"clusters": [], "total_notes": len(rows)}
@@ -471,22 +530,26 @@ async def cluster_notes(eps: float = 0.3, min_samples: int = 3, max_notes: int =
         if label != -1:  # -1 = noise
             clusters[label].append(note_ids[idx])
 
-    # Fetch titles for representative notes (closest to centroid)
+    # Fetch titles for representative notes (closest to centroid).
+    # Use a single connection for all cluster lookups to avoid exhausting the
+    # pool, and use parameterized placeholders to prevent SQL injection (#610).
     cluster_results = []
-    for label, ids in clusters.items():
-        # Get the note titles
-        placeholders = ','.join(str(i) for i in ids)
-        title_rows = engine.connect().execute(
-            sql_text(f"SELECT id, title FROM notes WHERE id IN ({placeholders})")
-        ).fetchall()
-        title_map = {r[0]: r[1] for r in title_rows}
-        cluster_results.append({
-            "cluster_id": int(label),
-            "note_ids": ids,
-            "note_count": len(ids),
-            "representative_title": title_map.get(ids[0], "Unknown"),
-            "titles": [title_map.get(i, "Unknown") for i in ids[:5]],
-        })
+    with engine.connect() as conn:
+        for label, ids in clusters.items():
+            params = {f"id_{idx}": i for idx, i in enumerate(ids)}
+            placeholders = ", ".join(f":id_{idx}" for idx in range(len(ids)))
+            title_rows = conn.execute(
+                sql_text(f"SELECT id, title FROM notes WHERE id IN ({placeholders})"),
+                params,
+            ).fetchall()
+            title_map = {r[0]: r[1] for r in title_rows}
+            cluster_results.append({
+                "cluster_id": int(label),
+                "note_ids": ids,
+                "note_count": len(ids),
+                "representative_title": title_map.get(ids[0], "Unknown"),
+                "titles": [title_map.get(i, "Unknown") for i in ids[:5]],
+            })
 
     # Sort by cluster size descending
     cluster_results.sort(key=lambda c: c["note_count"], reverse=True)

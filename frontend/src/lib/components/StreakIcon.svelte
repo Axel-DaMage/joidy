@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Circle } from 'lucide-svelte';
-  import * as LucideIcons from 'lucide-svelte';
+  import { getLucideIcon } from '$lib/utils/lucideIcons';
 
   export let name: string = '';
   export let size: number = 18;
@@ -10,13 +10,17 @@
 
   $: isEmoji = emojiRegex.test(name);
 
-  // Convert kebab-case to PascalCase (e.g. "book-open" → "BookOpen")
-  function toPascalCase(s: string): string {
-    return s.split('-').map(p => p.charAt(0).toUpperCase() + p.slice(1)).join('');
+  // Lucide icons are resolved synchronously from the bundled namespace
+  // import — no async placeholder flicker (#693). Falls back to `Circle`
+  // for unknown names.
+  let lucideComp: any = Circle;
+  $: {
+    if (!name) {
+      lucideComp = Circle;
+    } else {
+      lucideComp = getLucideIcon(name) ?? Circle;
+    }
   }
-
-  // Synchronous lookup — handles both PascalCase and kebab-case names
-  $: lucideComp = name ? ((LucideIcons as any)[name] || (LucideIcons as any)[toPascalCase(name)] || Circle) : Circle;
 </script>
 
 {#if isEmoji}
@@ -31,6 +35,7 @@
     this={lucideComp}
     {size}
     {color}
-    style="width: {size}px; height: {size}px; color: {color || 'inherit'}; display: inline-flex; flex-shrink: 0;"
+    style="width: {size}px; height: {size}px; color: {color ||
+      'inherit'}; display: inline-flex; flex-shrink: 0;"
   />
 {/if}

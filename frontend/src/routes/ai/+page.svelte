@@ -1,19 +1,39 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { goto } from '$app/navigation';
   import { api } from '$lib/api';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
-  import ChatInterface from '$lib/components/ChatInterface.svelte';
   import { devMode } from '$lib/stores/settings';
+  import { t } from 'svelte-i18n';
+
+  // Redirect to home when dev mode is off — dev routes should not be
+  // accessible via direct URL in production (#649).
+  $effect(() => {
+    if (!$devMode) goto('/');
+  });
 
   let usage = $state<{ ai_enabled: boolean; estimated_cost_usd: number } | null>(null);
   let loadingUsage = $state(true);
 
+  // Lazy-load the heavy ChatInterface (376 lines, pulls in marked, dompurify)
+  // so it is split into a separate chunk and only downloaded when the AI page
+  // is opened (#347).
+  let ChatInterface = $state<typeof import('$lib/components/ChatInterface.svelte').default | null>(
+    null
+  );
+  $effect(() => {
+    if (!ChatInterface) {
+      import('$lib/components/ChatInterface.svelte').then((m) => (ChatInterface = m.default));
+    }
+  });
+
   // Lazy-load DeadLetterQueue — only shown in dev mode, so defer the chunk
   // until the user actually enables it (#347).
-  let DeadLetterQueue: typeof import('$lib/components/DeadLetterQueue.svelte').default | null = null;
+  let DeadLetterQueue: typeof import('$lib/components/DeadLetterQueue.svelte').default | null =
+    null;
   $effect(() => {
     if ($devMode && !DeadLetterQueue) {
-      import('$lib/components/DeadLetterQueue.svelte').then(m => DeadLetterQueue = m.default);
+      import('$lib/components/DeadLetterQueue.svelte').then((m) => (DeadLetterQueue = m.default));
     }
   });
 
@@ -30,42 +50,55 @@
 
 <div class="ai-page">
   <div class="ai-header">
-    <h2><DynamicIcon name="Brain" /> Inteligencia Artificial</h2>
+    <h2><DynamicIcon name="Brain" /> {$t('ai.title')}</h2>
     <div class="ai-status">
       {#if loadingUsage}
-        <span class="status-pill muted">Verificando…</span>
+        <span class="status-pill muted">{$t('ai.checking')}</span>
       {:else if usage}
-        <span class="status-pill" class:enabled={usage.ai_enabled} class:disabled={!usage.ai_enabled}>
-          {usage.ai_enabled ? 'IA activa' : 'IA inactiva'}
+        <span
+          class="status-pill"
+          class:enabled={usage.ai_enabled}
+          class:disabled={!usage.ai_enabled}
+        >
+          {usage.ai_enabled ? $t('ai.active') : $t('ai.inactive')}
         </span>
       {/if}
     </div>
-
   </div>
 
   <div class="ai-content">
-    <ChatInterface />
+    {#if ChatInterface}
+      <svelte:component this={ChatInterface} />
+    {:else}
+      <div class="caption" style="padding: 24px; text-align: center; color: var(--text-muted);">
+        {$t('ai.loadingChat')}
+      </div>
+    {/if}
   </div>
 
   {#if $devMode}
     <details class="dev-section">
-      <summary>Modo dev — Estado del servicio & cola de errores</summary>
+      <summary>{$t('ai.devSection')}</summary>
       <div class="dev-grid">
         <div class="dev-card">
-          <h3><DynamicIcon name="Activity" /> Estado del servicio</h3>
+          <h3><DynamicIcon name="Activity" /> {$t('ai.serviceStatus')}</h3>
           {#if usage}
             <p class="stat">
-              <span class="stat-label">API Key configurada:</span>
-              <span class="stat-value" class:enabled={usage.ai_enabled} class:disabled={!usage.ai_enabled}>
-                {usage.ai_enabled ? 'Sí' : 'No'}
+              <span class="stat-label">{$t('ai.apiKeyConfigured')}</span>
+              <span
+                class="stat-value"
+                class:enabled={usage.ai_enabled}
+                class:disabled={!usage.ai_enabled}
+              >
+                {usage.ai_enabled ? $t('ai.yes') : $t('ai.no')}
               </span>
             </p>
             <p class="stat">
-              <span class="stat-label">Costo estimado:</span>
+              <span class="stat-label">{$t('ai.estimatedCost')}</span>
               <span class="stat-value">${usage.estimated_cost_usd.toFixed(4)} USD</span>
             </p>
           {:else}
-            <p class="muted">No se pudo obtener el estado.</p>
+            <p class="muted">{$t('ai.statusUnavailable')}</p>
           {/if}
         </div>
         {#if DeadLetterQueue}<svelte:component this={DeadLetterQueue} />{/if}
@@ -163,8 +196,12 @@
   .stat-label {
     color: var(--text-muted, #888);
   }
-  .stat-value.enabled { color: var(--success, #10b981); }
-  .stat-value.disabled { color: var(--error, #ef4444); }
+  .stat-value.enabled {
+    color: var(--success, #10b981);
+  }
+  .stat-value.disabled {
+    color: var(--error, #ef4444);
+  }
   .muted {
     color: var(--text-muted, #888);
     font-size: 0.85rem;
@@ -177,8 +214,12 @@
       font-size: 1rem;
     }
   }
-  .stat-value.enabled { color: var(--color-success, #38a169); }
-  .stat-value.disabled { color: var(--color-error, #e53e3e); }
+  .stat-value.enabled {
+    color: var(--color-success, #38a169);
+  }
+  .stat-value.disabled {
+    color: var(--color-error, #e53e3e);
+  }
 
   /* ── Responsive ── */
   @media (max-width: 768px) {

@@ -88,6 +88,6 @@ plus a factory entry.
 
 ## See Also
 
-- [ARCHITECTURE.md](../ARCHITECTURE.md) — system overview and data flow
+- [Architecture](../docs/architecture.md) — system overview and data flow
 - [AGENTS.md](../AGENTS.md) — agent instructions, commands, known issues
 - [docs/](../docs/) — architecture decision records and guides

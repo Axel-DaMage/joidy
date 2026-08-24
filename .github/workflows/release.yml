@@ -2,8 +2,19 @@ name: Release
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g. v0.2.0, v0.2.1-alpha.1). Leave empty to auto-bump.'
+        required: false
+        default: ''
+      prerelease:
+        description: 'Mark as pre-release (alpha/beta/rc)'
+        type: boolean
+        required: false
+        default: true
 
 permissions:
   contents: write
@@ -14,13 +25,107 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create Release
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.version }}" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            # Auto-bump: find latest semver tag and increment the patch version.
+            # Pre-release tags (alpha/beta/rc) are skipped when looking for
+            # the latest stable release to bump from.
+            LATEST=$(git tag -l 'v[0-9]*' | grep -v '-' | sort -V | tail -1)
+            if [ -z "$LATEST" ]; then
+              VERSION="v0.1.0"
+            else
+              # Strip leading 'v' and bump patch
+              BASE="${LATEST#v}"
+              MAJOR=$(echo "$BASE" | cut -d. -f1)
+              MINOR=$(echo "$BASE" | cut -d. -f2)
+              PATCH=$(echo "$BASE" | cut -d. -f3)
+              PATCH=$((PATCH + 1))
+              VERSION="v${MAJOR}.${MINOR}.${PATCH}"
+            fi
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          VERSION_CLEAN="${VERSION#v}"
+          echo "version_clean=${VERSION_CLEAN}" >> "$GITHUB_OUTPUT"
+          # Auto-detect prerelease: anything with a hyphen suffix (alpha/beta/rc)
+          # is a pre-release. Manual dispatch can override via input.
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            PRERELEASE="${{ inputs.prerelease }}"
+          else
+            case "$VERSION" in
+              *-*) PRERELEASE=true ;;
+              *) PRERELEASE=false ;;
+            esac
+          fi
+          echo "prerelease=${PRERELEASE}" >> "$GITHUB_OUTPUT"
+
+      - name: Bump version strings
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          VERSION_CLEAN="${{ steps.version.outputs.version_clean }}"
+          TODAY=$(date +%Y-%m-%d)
+
+          # README badge
+          sed -i "s|badge/JOIDY-v[0-9a-z.\-]*-[0-9A-Fa-f]*|badge/JOIDY-v${VERSION_CLEAN}|" README.md
+
+          # AUR PKGBUILD
+          sed -i "s|^pkgver=.*|pkgver=${VERSION_CLEAN}|" aur/PKGBUILD
+          sed -i "s|archive/v[0-9a-z.\-]*\.tar\.gz|archive/v${VERSION_CLEAN}.tar.gz|" aur/PKGBUILD
+
+          # AUR .SRCINFO
+          sed -i "s|^pkgver = .*|pkgver = ${VERSION_CLEAN}|" aur/.SRCINFO
+          sed -i "s|archive/v[0-9a-z.\-]*\.tar\.gz|archive/v${VERSION_CLEAN}.tar.gz|" aur/.SRCINFO
+
+          # docs metadata (index.md, api.md, architecture.md)
+          for f in docs/index.md docs/api.md docs/architecture.md; do
+            [ -f "$f" ] && sed -i "s|^version: [0-9a-z.\-]*|version: ${VERSION_CLEAN}|" "$f"
+          done
+
+          # docs/troubleshooting.md
+          sed -i "s|^last_updated: .*|last_updated: ${TODAY}|" docs/troubleshooting.md
+          sed -i "s|^version: [0-9a-z.\-]*|version: ${VERSION_CLEAN}|" docs/troubleshooting.md
+
+          # CHANGELOG.md: move [Unreleased] body to new version section
+          # This is handled manually for major releases; for auto-bump
+          # patch releases the [Unreleased] section stays as-is and the
+          # new tag is referenced at the bottom.
+          # Update compare links
+          sed -i "s|\[unreleased\]: .*/compare/v[0-9a-z.\-]*\.\.\.HEAD|[unreleased]: https://github.com/Axel-DaMage/joidy/compare/v${VERSION_CLEAN}...HEAD|" CHANGELOG.md
+
+          # Show what changed
+          git diff --stat
+
+      - name: Commit version bump
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add -A
+          if ! git diff --quiet --cached; then
+            git commit -m "chore: bump version strings to ${VERSION}"
+            git push
+          fi
+
+      - name: Create tag and release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" \
-            --title "Joidy ${GITHUB_REF_NAME}" \
-            --generate-notes \
-            --verify-tag
+          VERSION="${{ steps.version.outputs.version }}"
+          PRERELEASE="${{ steps.version.outputs.prerelease }}"
+          # Tag the commit with the version bump.
+          git tag "$VERSION"
+          git push origin "$VERSION"
+          ARGS=(--title "Joidy ${VERSION}" --generate-notes --verify-tag)
+          if [ "$PRERELEASE" = "true" ]; then
+            PREPEND=$(printf '## ⚠️ Pre-Release — Non-Production Ready\n\nThis is a **pre-release**. Expect breaking changes, bugs, and incomplete features. Do **not** use in production.\n\n')
+            ARGS+=(--prerelease --notes-prepend "$PREPEND")
+          fi
+          gh release create "$VERSION" "${ARGS[@]}"

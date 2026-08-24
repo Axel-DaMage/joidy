@@ -63,12 +63,12 @@ Port overrides: `FRONTEND_PORT`, `API_PORT`, `AI_SERVICE_PORT`, `WORKER_PORT`.
 |-------------|---------|----------|-------|
 | **Gemini AI** | ✅ `ai-service` | ⚠️ Placeholder UI | #41 |
 | **GitHub** | ✅ `auth/github` | ✅ Unified integrations page | #120 |
-| **Gmail** | ❌ None | ❌ None | #42 |
-| **Contacts** | ❌ None | ❌ None | #43 |
-| **Strava** | ❌ None | ❌ None | #44 |
-| **Spotify** | ❌ None | ❌ None | #45 |
-| **G Calendar**| ❌ None | ❌ None | #2 |
-| **G Tasks** | ❌ None | ❌ None | #2 |
+| **Google Calendar** | ⚠️ `integrations/google` scaffold | ⚠️ Partial | #2 |
+| **Google Tasks** | ⚠️ `integrations/google` scaffold | ⚠️ Partial | #2 |
+| **Gmail** | ❌ None (Google OAuth scaffold only) | ❌ None | #42 |
+| **Contacts** | ❌ None (Google OAuth scaffold only) | ❌ None | #43 |
+| **Strava** | ⚠️ `integrations/strava` scaffold | ❌ None | #44 |
+| **Spotify** | ⚠️ `integrations/spotify` scaffold | ❌ None | #45 |
 
 ## Architecture
 
@@ -115,16 +115,18 @@ Two concurrent asyncio tasks: `watch_vault()` (watches `/vault/*.md`, 2s debounc
 - Uses `pytest` for API tests (`pytest` discover under `tests/`), with `unittest` style fixtures in `conftest.py`
 - Single test: `PYTHONPATH=/app python -m unittest tests.test_file`
 - Ruff config exists in `pyproject.toml` + `.pre-commit-config.yaml`, but pre-commit is not installed by default and CI does not run ruff. Run `ruff check` / `ruff format` manually if desired.
-- CI: `compileall`, `unittest`, `npm run check`, Docker build
+- CI: `compileall`, `unittest`, `npm run check`, `npm run build`, Docker build
 
 ## Known Issues (from code audit)
-1. CORS allows `*` in non-production — needs config
+1. ~~CORS allows `*` in non-production~~ — **Fixed**: `_get_cors_origins()` in `api/main.py` respects `cors_allowed_origins` setting; dev fallback only. Same in `ai-service/main.py`.
 2. Auth JWT is now enforced on all data/mutation endpoints (except `/auth/*`, `/config`, and `/ws`)
-3. Embedding retry has edge cases (`EmbeddingFailure` table)
-4. Skill tree can have cycles if circular parent created manually
-5. Response cache is a placeholder
-6. Tag co-occurrences O(n²) — should pre-calc on write
-7. Vault watcher can leave orphaned tasks in edge cases
+3. ~~Embedding retry has edge cases~~ — **Fixed**: `EmbeddingFailureRepository` dead-letter logic corrected (#612). `embedding_service.py` retry/dead-letter functions are correct and used by routers.
+4. ~~Skill tree can have cycles if circular parent created manually~~ — **Fixed**: `set_parent` in `api/routers/tags.py` walks the parent chain and rejects circular references.
+5. ~~Response cache is a placeholder~~ — **Fixed**: `api/services/response_cache.py` has a full TTL cache with stats, eviction, and registered clearers.
+6. ~~Tag co-occurrences O(n²)~~ — **Fixed**: `api/services/tag_graph.py` pre-calculates co-occurrences on write via `sync_tag_cooccurrences_for_tags`, called on every note create/update/delete.
+7. ~~Vault watcher can leave orphaned tasks~~ — **Fixed**: `worker/watchers/vault_watcher.py` has `PersistentEventLog` for crash recovery, `_in_flight` task tracking, graceful two-phase shutdown with `asyncio.shield`, and per-file locks.
+8. ai-service `/cluster` endpoint had connection leak + SQL injection — **Fixed** (#610).
+9. ai-service database engine missing `pool_pre_ping`/`pool_recycle` — **Fixed** (#611).
 
 ## Constraints
 - Never commit `.env` or `data/` (in `.gitignore`)
@@ -133,9 +135,59 @@ Two concurrent asyncio tasks: `watch_vault()` (watches `/vault/*.md`, 2s debounc
 - Database is shared across all services (single PostgreSQL database via `DATABASE_URL`)
 - Config via Pydantic `Settings` from `.env`; no hardcoded values
 - `svelte-kit sync` runs on `postinstall` — can fail if `.svelte-kit/` has root-owned files
-- Vite HMR in Docker: `server.hmr.clientPort: 3000` + `host: localhost` (in `vite.config.ts`)
+- Vite HMR in Docker: `server.hmr.clientPort: 3000` + `host: 127.0.0.1` (in `vite.config.ts`, overridable via `JOIDY_HMR_HOST`). Using `localhost` breaks on hosts where it resolves to `::1` (IPv6) and Docker's IPv6 forwarding hangs.
 
 ## Workflow
 
 - Base branch for pull requests is `development`. Always create feature branches from `development` and open PRs against `development`, not `main`.
 - `main` is reserved for releases and should only be updated from `development` via release or hotfix PRs.
+
+## Docker Rebuild After Pull (STRICT)
+
+After **every** `git pull` (or merge that touches service code), the Docker images **MUST** be rebuilt from scratch before bringing services up. The `joidy up` CLI and `docker compose up -d` only consume pre-built images (`d4mag3/joidy-*:latest`) — they do **not** pick up source changes automatically. Running them without a rebuild means the containers serve stale code and fixes won't be visible.
+
+### Mandatory rebuild sequence
+
+```bash
+# 1. Stop and remove current containers
+joidy down
+
+# 2. Rebuild ALL 4 production images from source (no cache, pull fresh base images)
+#    Frontend MUST use --target production so it runs `node build` (not `vite dev`)
+docker build --no-cache --pull -t d4mag3/joidy-frontend:latest --target production ./frontend
+docker build --no-cache --pull -t d4mag3/joidy-api:latest        ./api
+docker build --no-cache --pull -t d4mag3/joidy-ai-service:latest ./ai-service
+docker build --no-cache --pull -t d4mag3/joidy-worker:latest     ./worker
+
+# 3. Bring services up with the fresh images
+joidy up
+```
+
+### Rules
+- Dockerfiles use BuildKit cache mounts (`RUN --mount=type=cache`) — the host needs the `docker-buildx` package (Arch: `sudo pacman -S docker-buildx`) for local `docker build`. CI uses `docker/setup-buildx-action`, so no change needed there.
+- **Never** run `joidy up` (or `docker compose up -d`) immediately after a pull without rebuilding first. The only exception is a pull that touches **only** docs, `.md` files, or files outside the 4 service directories.
+- **Never** use `docker compose -f docker-compose.yml -f docker-compose.dev.yml build` to rebuild production images — the dev overlay forces the `development` Dockerfile target (Vite dev server), which is wrong for production and bakes dev-only config (e.g. `vite.config.ts` HMR host) into the image.
+- The frontend production image requires `--target production` so the Dockerfile runs `npm run build` and serves the pre-compiled bundle with `node build` (SSR via `@sveltejs/adapter-node`).
+- Data volumes (`postgres_data`, `data/`) are preserved across rebuilds — only the images and containers are recreated. No user data is lost.
+- If only one service changed, you may rebuild just that image and `docker compose up -d --force-recreate <service>` to save time, but verify the other services are still on compatible images.
+
+## CI Policy
+
+GitHub Actions CI runs automatically for **all** pull requests, including forks and first-time contributors — no manual "Approve and run workflows" click is required (#811).
+
+### Settings (configured in repo Settings → Actions → General)
+
+- **Fork pull request workflows**: "Run workflows from fork pull requests **without approval**".
+  - This setting has no REST API endpoint for public personal repositories; it must be set in the GitHub UI. Re-verify it after repository transfers or visibility changes.
+- **Workflow permissions**: default `read` (least privilege), verified via `gh api repos/Axel-DaMage/joidy/actions/permissions/workflow`.
+- **Allow GitHub Actions to create/approve PRs**: disabled (`can_approve_pull_request_reviews: false`).
+
+### Workflow audit (safe for fork PRs)
+
+The workflows that trigger on `pull_request` (`ci.yml`, `worker-tests.yml`) run in the **fork's context** — they have no access to repository secrets. This is the safe trigger for untrusted code.
+
+Workflows that use secrets (`release.yml`, `publish.yml`) only trigger on `push: main`, `release: [published]`, or `workflow_dispatch` — never on pull requests. No workflow uses `pull_request_target` with secrets, so there is no injection vector from fork PRs.
+
+### Branch protection (follow-up)
+
+`development` should require status checks to pass before merge (all CI jobs: API Lint & Typecheck, Frontend Typecheck, Docker Build, Worker Tests) and require branches to be up to date. Linear history is not required (squash merge is fine).

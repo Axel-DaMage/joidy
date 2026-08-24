@@ -9,6 +9,7 @@
   import DynamicIcon from './DynamicIcon.svelte';
   import { extractFrontmatter, getFileIcon } from '$lib/utils/fileTree';
   import { getLocale } from '$lib/stores/locale';
+  import { t } from 'svelte-i18n';
 
   export let note: Note;
   export let active = false;
@@ -82,7 +83,7 @@
     <span class="note-title truncate">{note.title}</span>
     <span class="note-date caption">{formatDate(note.created_at)}</span>
     {#if !bulkMode}
-      <button type="button" class="note-settings-btn" title="Personalizar" aria-label="Personalizar" onclick={onCustomize}>
+      <button type="button" class="note-settings-btn" title={$t('noteCard.customize')} aria-label={$t('noteCard.customize')} onclick={onCustomize}>
         <Settings size={10} />
       </button>
     {/if}

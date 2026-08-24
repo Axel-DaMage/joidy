@@ -5,8 +5,12 @@
   export let itemHeight = 32; // This now acts as a default/fallback height
   export let buffer = 5;
   export let getKey: (item: any, index: number) => any = (item, i) => item.id ?? i;
+  export let scrollTop = 0;
+  export let onScrollChange: (scrollTop: number) => void = () => {};
+  // Fired when the user scrolls within `bottomThreshold` pixels of the end.
+  export let onNearBottom: () => void = () => {};
+  export let bottomThreshold = 300;
 
-  let scrollTop = 0;
   let containerEl: HTMLElement;
   let containerHeight = 400;
 
@@ -37,8 +41,17 @@
 
   // Binary search for start index (since positions is sorted)
   function findIndex(scrollTop: number) {
+    if (positions.length === 0) return 0;
+    // If the query point is beyond the last item (scrolled to the bottom),
+    // return the last index instead of falling through to 0 — otherwise
+    // endIndex collapses below startIndex and the list renders nothing
+    // (the user sees a black/empty gap at the bottom of the list).
+    const lastIdx = positions.length - 1;
+    if (positions[lastIdx] + (heights[lastIdx] || itemHeight) <= scrollTop) {
+      return lastIdx;
+    }
     let low = 0;
-    let high = positions.length - 1;
+    let high = lastIdx;
     while (low <= high) {
       const mid = Math.floor((low + high) / 2);
       const pos = positions[mid];
@@ -64,6 +77,17 @@
   function onScroll(e: Event) {
     const target = e.target as HTMLElement;
     scrollTop = target.scrollTop;
+    onScrollChange(scrollTop);
+    // Infinite scroll: fire onNearBottom when close to the bottom.
+    if (totalHeight - scrollTop - containerHeight < bottomThreshold) {
+      onNearBottom();
+    }
+  }
+
+  // Sync the container's scroll position when scrollTop is changed
+  // externally (e.g. scroll restoration via bind:scrollTop).
+  $: if (containerEl && scrollTop !== containerEl.scrollTop) {
+    containerEl.scrollTop = scrollTop;
   }
 
   let ro: ResizeObserver;

@@ -2,7 +2,7 @@ from datetime import datetime
 
 from database import Base
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, func
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, backref
 
 
 class SyncState(Base):
@@ -23,4 +23,4 @@ class SyncState(Base):
         DateTime, server_default=func.now(), onupdate=func.now()
     )
 
-    note: Mapped["Note"] = relationship("Note", backref="sync_state")
+    note: Mapped["Note"] = relationship("Note", backref=backref("sync_state", cascade="all, delete-orphan"))

@@ -4,6 +4,7 @@
   import Card from './Card.svelte';
   import DynamicIcon from './DynamicIcon.svelte';
   import { getLocale } from '$lib/stores/locale';
+  import { t } from 'svelte-i18n';
 
   let failures = $state<EmbeddingFailure[]>([]);
   let loading = $state(true);
@@ -28,7 +29,7 @@
   async function reset(noteId: number) {
     try {
       await api.embeddings.resetDeadLetter(noteId);
-      failures = failures.filter(f => f.note_id !== noteId);
+      failures = failures.filter((f) => f.note_id !== noteId);
     } catch {
       // notification already shown by api.ts
     }
@@ -60,7 +61,7 @@
 
 <Card padding="md">
   <div class="dlq-header">
-    <h3><DynamicIcon name="AlertTriangle" /> Embeddings fallidos</h3>
+    <h3><DynamicIcon name="TriangleAlert" /> Embeddings fallidos</h3>
     {#if failures.length > 0}
       <button class="btn-sm btn-danger" onclick={purgeAll} disabled={purging}>
         {purging ? 'Purgando...' : 'Purgar todos'}
@@ -69,11 +70,11 @@
   </div>
 
   {#if loading}
-    <p class="muted">Cargando...</p>
+    <p class="muted">{$t('deadLetter.loading')}</p>
   {:else if error}
     <p class="muted">{error}</p>
   {:else if failures.length === 0}
-    <p class="muted">No hay embeddings fallidos.</p>
+    <p class="muted">{$t('deadLetter.noFailures')}</p>
   {:else}
     <div class="dlq-list">
       {#each failures as failure (failure.note_id)}
@@ -87,9 +88,7 @@
               <span class="dlq-error">{failure.last_error}</span>
             {/if}
           </div>
-          <button class="btn-sm" onclick={() => reset(failure.note_id)}>
-            Reintentar
-          </button>
+          <button class="btn-sm" onclick={() => reset(failure.note_id)}> Reintentar </button>
         </div>
       {/each}
     </div>

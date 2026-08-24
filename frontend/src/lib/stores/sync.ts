@@ -17,6 +17,9 @@ interface SyncState {
   conflicts: SyncConflict[];
   loading: boolean;
   lastChecked: number | null;
+  /** Note IDs the user has skipped this session — prevents the modal
+   *  from re-opening on every navigation (#550 regression). */
+  dismissed: Set<number>;
 }
 
 const POLL_INTERVAL = 30_000; // 30 seconds
@@ -26,6 +29,7 @@ function createSyncStore() {
     conflicts: [],
     loading: false,
     lastChecked: null,
+    dismissed: new Set(),
   });
 
   let pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -35,6 +39,7 @@ function createSyncStore() {
     try {
       const data = await api.sync.conflicts();
       update(s => ({
+        ...s,
         conflicts: data.conflicts,
         loading: false,
         lastChecked: Date.now(),
@@ -83,13 +88,23 @@ function createSyncStore() {
     }
   }
 
+  /** Mark a conflict as dismissed so the modal doesn't re-open on
+   *  subsequent navigations within the same session (#550). */
+  function dismissConflict(noteId: number): void {
+    update(s => ({
+      ...s,
+      dismissed: new Set([...s.dismissed, noteId]),
+    }));
+  }
+
   return {
     subscribe,
     checkConflicts,
     resolveConflict,
+    dismissConflict,
     startPolling,
     stopPolling,
-    reset: () => set({ conflicts: [], loading: false, lastChecked: null }),
+    reset: () => set({ conflicts: [], loading: false, lastChecked: null, dismissed: new Set() }),
   };
 }
 

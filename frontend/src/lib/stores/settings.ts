@@ -1,14 +1,9 @@
 import { writable, derived } from 'svelte/store';
 import { browser } from '$app/environment';
-import {
-  startAutoTheme,
-  stopAutoTheme,
-  clearDynamicTheme,
-} from '$lib/utils/dynamicTheme';
 
-const COLORS_KEY     = 'joidy-accent-colors';
+const COLORS_KEY = 'joidy-accent-colors';
 const DEFAULT_COLORS = ['#c8a96e'];
-const MAX_COLORS     = 3;
+const MAX_COLORS = 3;
 
 function isValidHex(v: string) {
   return /^#[0-9a-fA-F]{6}$/.test(v);
@@ -16,11 +11,15 @@ function isValidHex(v: string) {
 
 function hexToRgb(hex: string): [number, number, number] {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  return result ? [parseInt(result[1], 16), parseInt(result[2], 16), parseInt(result[3], 16)] : [0, 0, 0];
+  return result
+    ? [parseInt(result[1], 16), parseInt(result[2], 16), parseInt(result[3], 16)]
+    : [0, 0, 0];
 }
 
 function getLuminance(r: number, g: number, b: number): number {
-  const [rs, gs, bs] = [r / 255, g / 255, b / 255].map(v => v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+  const [rs, gs, bs] = [r / 255, g / 255, b / 255].map((v) =>
+    v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)
+  );
   return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs;
 }
 
@@ -53,7 +52,9 @@ function loadColors(): string[] {
       const parsed: unknown = JSON.parse(saved);
       return normalizeColors(parsed);
     }
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
   return [...DEFAULT_COLORS];
 }
 
@@ -66,9 +67,11 @@ function persist(colors: string[]) {
 function applyColors(colors: string[]) {
   if (!browser) return;
   const primary = colors[0];
-  const secondary = colors.length > 1 ? colors[1] : `color-mix(in srgb, ${primary} 70%, var(--text-primary))`;
-  const tertiary = colors.length > 2 ? colors[2] : `color-mix(in srgb, ${secondary} 70%, var(--text-primary))`;
-  
+  const secondary =
+    colors.length > 1 ? colors[1] : `color-mix(in srgb, ${primary} 70%, var(--text-primary))`;
+  const tertiary =
+    colors.length > 2 ? colors[2] : `color-mix(in srgb, ${secondary} 70%, var(--text-primary))`;
+
   const secondaryPlain = colors[1] ?? primary;
   const tertiaryPlain = colors[2] ?? secondaryPlain;
   const gradient = computeGradient(colors);
@@ -109,7 +112,7 @@ function createAccentStore() {
 
     setColor(index: number, color: string) {
       if (!isValidHex(color)) return;
-      update(prev => {
+      update((prev) => {
         if (index < 0 || index >= prev.length) return prev;
         const next = [...prev];
         next[index] = color;
@@ -120,7 +123,7 @@ function createAccentStore() {
     },
 
     addColor() {
-      update(prev => {
+      update((prev) => {
         if (prev.length >= MAX_COLORS) return prev;
         const next = [...prev, prev[prev.length - 1]];
         persist(next);
@@ -130,7 +133,7 @@ function createAccentStore() {
     },
 
     removeColor(index: number) {
-      update(prev => {
+      update((prev) => {
         if (prev.length <= 1) return prev;
         const next = prev.filter((_, i) => i !== index);
         persist(next);
@@ -145,7 +148,7 @@ export const accentColors = createAccentStore();
 
 // Single-color convenience (primary accent)
 export const accentColor = {
-  subscribe: derived(accentColors, c => c[0]).subscribe,
+  subscribe: derived(accentColors, (c) => c[0]).subscribe,
   init: () => accentColors.init(),
 };
 
@@ -165,7 +168,7 @@ function createIconPackStore() {
     set: (val: IconPack) => {
       if (browser) localStorage.setItem('joidy-icon-pack', val);
       set(val);
-    }
+    },
   };
 }
 export const activeIconPack = createIconPackStore();
@@ -190,48 +193,43 @@ function createBooleanStore(key: string, defaultValue: boolean = false) {
       if (browser) localStorage.setItem(key, String(val));
       set(val);
     },
-    toggle: () => update(v => {
-      ensureInit();
-      const next = !v;
-      if (browser) localStorage.setItem(key, String(next));
-      return next;
-    })
+    toggle: () =>
+      update((v) => {
+        ensureInit();
+        const next = !v;
+        if (browser) localStorage.setItem(key, String(next));
+        return next;
+      }),
   };
 }
 
 export const showFrontmatter = createBooleanStore('joidy-show-frontmatter', false);
-export const showTrash       = createBooleanStore('joidy-show-trash', true);
+export const showTrash = createBooleanStore('joidy-show-trash', true);
 export const showHiddenFiles = createBooleanStore('joidy-show-hidden', false);
 export const writeInObsidian = createBooleanStore('joidy-write-obsidian', false);
-export const use24HourClock  = createBooleanStore('joidy-use-24h-clock', true);
-export const hideTagsLine    = createBooleanStore('joidy-hide-tags-line', true);
+export const use24HourClock = createBooleanStore('joidy-use-24h-clock', true);
+export const hideTagsLine = createBooleanStore('joidy-hide-tags-line', true);
 
 export const darkMode = createBooleanStore('joidy-dark-mode', true);
 
-export type ThemeMode = 'light' | 'dark' | 'auto';
+export type ThemeMode = 'light' | 'dark';
 const THEME_MODE_KEY = 'joidy-theme-mode';
 
 function createThemeModeStore() {
-  const { subscribe, set } = writable<ThemeMode>('light');
+  const { subscribe, set } = writable<ThemeMode>('dark');
   let _initialized = false;
 
   function applyMode(mode: ThemeMode) {
     if (!browser) return;
-    if (mode === 'auto') {
-      document.documentElement.setAttribute('data-theme', 'dark');
-      startAutoTheme();
-    } else {
-      stopAutoTheme();
-      clearDynamicTheme();
-      document.documentElement.setAttribute('data-theme', mode);
-    }
+    document.documentElement.setAttribute('data-theme', mode);
   }
 
   return {
     subscribe: (run: (v: ThemeMode) => void, invalidate?: () => void) => {
       if (!_initialized && browser) {
         _initialized = true;
-        const saved = (localStorage.getItem(THEME_MODE_KEY) as ThemeMode) || 'light';
+        const raw = localStorage.getItem(THEME_MODE_KEY);
+        const saved: ThemeMode = raw === 'light' || raw === 'dark' ? raw : 'dark';
         set(saved);
         applyMode(saved);
       }
@@ -246,7 +244,8 @@ function createThemeModeStore() {
     init: () => {
       if (!browser) return;
       _initialized = true;
-      const saved = (localStorage.getItem(THEME_MODE_KEY) as ThemeMode) || 'light';
+      const raw = localStorage.getItem(THEME_MODE_KEY);
+      const saved: ThemeMode = raw === 'light' || raw === 'dark' ? raw : 'dark';
       set(saved);
       applyMode(saved);
     },
@@ -259,14 +258,17 @@ export function initTheme(): (() => void) | void {
   // Return the unsubscribe function so the caller can clean it up.
   // Previously the subscription was auto-unsubscribed immediately via `()`,
   // which meant theme changes after init were never applied (#265).
-  return darkMode.subscribe(dark => {
+  return darkMode.subscribe((dark) => {
     if (browser) {
       document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
     }
   });
 }
 
-export interface FolderMeta { icon: string; color: string; }
+export interface FolderMeta {
+  icon: string;
+  color: string;
+}
 type FolderMetaMap = Record<string, FolderMeta>;
 const FOLDER_META_KEY = 'joidy-folder-meta';
 
@@ -275,7 +277,9 @@ function loadFolderMeta(): FolderMetaMap {
   try {
     const raw = localStorage.getItem(FOLDER_META_KEY);
     return raw ? JSON.parse(raw) : {};
-  } catch { return {}; }
+  } catch {
+    return {};
+  }
 }
 
 function persistFolderMeta(meta: FolderMetaMap) {
@@ -287,7 +291,7 @@ function persistFolderMeta(meta: FolderMetaMap) {
 export const folderMetaStore = writable<FolderMetaMap>(loadFolderMeta());
 
 export function updateFolderMeta(path: string, meta: FolderMeta) {
-  folderMetaStore.update(m => {
+  folderMetaStore.update((m) => {
     const next = { ...m, [path]: meta };
     persistFolderMeta(next);
     return next;
@@ -321,7 +325,7 @@ function createDevModeStore() {
       set(false);
     },
     toggle: () => {
-      update(v => {
+      update((v) => {
         const newVal = !v;
         persistDevMode(newVal);
         return newVal;

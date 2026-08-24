@@ -164,7 +164,7 @@ async def get_auth_token(client: httpx.AsyncClient, *, force: bool = False) -> s
                 cid = get_correlation_id()
                 r = await client.post(
                     f"{settings.api_url}/auth/login",
-                    params={"password": settings.auth_password},
+                    json={"password": settings.auth_password},
                     headers={"X-Request-ID": cid},
                     timeout=10.0,
                 )

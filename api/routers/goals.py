@@ -2,7 +2,7 @@ import re
 from datetime import datetime, timezone
 
 from database import get_db
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from models.goal import (
     Goal,
     GoalFailConfig,
@@ -195,16 +195,10 @@ def _serialize_goal(goal: Goal, db: Session, precalculated_progress: float | Non
 
 @router.get("/")
 def list_goals(
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=1000),
     db: Session = Depends(get_db),
 ):
-    if skip < 0:
-        skip = 0
-    if limit < 1:
-        limit = 1
-    if limit > 1000:
-        limit = 1000
     evaluate_active_goals(db)
     goals = (
         db.query(Goal)

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
   import { RotateCcw, SkipForward } from 'lucide-svelte';
+  import { t } from 'svelte-i18n';
 
   // ── Timer ──────────────────────────────────────────────────────────────────
   import {
@@ -29,7 +30,7 @@
 
   <!-- Big ring -->
   <div class="ring-wrap">
-    <svg width="150" height="150" viewBox="0 0 150 150" class="ring-svg">
+    <svg viewBox="0 0 150 150" class="ring-svg">
       <defs>
         <linearGradient id="pomodoroRingBlend" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stop-color="var(--xp)" />
@@ -65,10 +66,10 @@
 
   <div class="controls-row">
     <button class="ctrl-main" class:active={$running} onclick={toggleTimer}>
-      {$running ? 'Pausar' : 'Iniciar'}
+      {$running ? $t('widgets.pause') : $t('widgets.start')}
     </button>
-    <button class="ctrl-icon" onclick={resetTimer} title="Reiniciar" aria-label="Reiniciar"><RotateCcw size={11}/></button>
-    <button class="ctrl-icon" onclick={skipTimer}  title="Saltar" aria-label="Saltar"><SkipForward size={11}/></button>
+    <button class="ctrl-icon" onclick={resetTimer} title={$t('widgets.reset')} aria-label={$t('widgets.reset')}><RotateCcw size={11}/></button>
+    <button class="ctrl-icon" onclick={skipTimer}  title={$t('widgets.skip')} aria-label={$t('widgets.skip')}><SkipForward size={11}/></button>
   </div>
 
   <div class="duration-row">
@@ -111,7 +112,11 @@
     flex-shrink: 0;
   }
 
-  .ring-svg { display: block; }
+  .ring-svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
 
   .ring-overlay {
     position: absolute;
@@ -230,5 +235,29 @@
   .dur-sep {
     font-size: 9px;
     color: var(--text-disabled, var(--border));
+  }
+
+  @media (max-width: 768px) {
+    .ring-wrap {
+      width: 130px;
+      height: 130px;
+    }
+    .timer {
+      font-size: 28px;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .ring-wrap {
+      width: 120px;
+      height: 120px;
+    }
+    .timer {
+      font-size: 26px;
+    }
+    .ctrl-main {
+      padding: 5px var(--s3_5);
+      min-width: 64px;
+    }
   }
 </style>

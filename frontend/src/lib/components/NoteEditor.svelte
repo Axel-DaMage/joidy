@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher, onDestroy, onMount, tick, untrack } from 'svelte';
-  import { Eye, EyeOff, Save, Trash2, X, Settings, Search, Maximize, ChevronLeft, ChevronRight, Download, RotateCcw, Bold, Italic, Strikethrough, Heading1, Heading2, Heading3, List, ListOrdered, Link, Quote, Code, Image, Paperclip } from 'lucide-svelte';
+  import { Eye, EyeOff, Save, Trash2, X, Settings, Search, Maximize, ChevronLeft, ChevronRight, Download, RotateCcw, Bold, Italic, Strikethrough, Heading1, Heading2, Heading3, List, ListOrdered, Link, Quote, Code, Image, Paperclip, Type } from 'lucide-svelte';
   import DynamicIcon from './DynamicIcon.svelte';
   import LazyIconPicker from './LazyIconPicker.svelte';
   import 'highlight.js/styles/github-dark.css';
@@ -15,6 +15,7 @@
   import { downloadMarkdown, downloadHTML, copyNoteAsMarkdown } from '$lib/utils/export';
   import { showNotification } from '$lib/stores/gamification';
   import WysiwygEditor from './WysiwygEditor.svelte';
+  import { t } from 'svelte-i18n';
 
   const AUTOSAVE_DELAY = 2000;
   const DRAFT_PREFIX = 'joidy-draft-';
@@ -214,7 +215,10 @@
     return val;
   })());
 
-  // Debounced content for expensive operations (markdown render + syntax highlight)
+  // Debounced content for the expensive full markdown render (preview mode:
+  // marked + DOMPurify + highlight.js). The editor syntax highlight uses a
+  // faster rAF-based update (see editorHighlightedHtml) so typed text is styled
+  // immediately instead of lagging 300ms (#703).
   let debouncedContent = $state(visibleEditorContent);
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -725,7 +729,29 @@
     return html;
   }
 
-  let editorHighlightedHtml = $derived(highlightMarkdown(debouncedContent));
+  // Editor syntax highlight: update on the next animation frame instead of the
+  // 300ms debounce. rAF coalesces multiple keystrokes into a single ~16ms
+  // render, so typed characters are styled immediately without re-running the
+  // regex highlighter more than once per frame (#703).
+  let editorHighlightedHtml = $state(highlightMarkdown(visibleEditorContent));
+  let highlightRaf: ReturnType<typeof requestAnimationFrame> | null = null;
+
+  $effect(() => {
+    const current = visibleEditorContent;
+    if (typeof requestAnimationFrame === 'function') {
+      if (highlightRaf !== null) cancelAnimationFrame(highlightRaf);
+      highlightRaf = requestAnimationFrame(() => {
+        editorHighlightedHtml = highlightMarkdown(current);
+        highlightRaf = null;
+      });
+    } else {
+      editorHighlightedHtml = highlightMarkdown(current);
+    }
+  });
+
+  onDestroy(() => {
+    if (highlightRaf !== null) cancelAnimationFrame(highlightRaf);
+  });
 </script>
 
 <svelte:window onkeydown={onKeydown} />
@@ -735,8 +761,8 @@
     <div class="recovery-banner">
       <RotateCcw size={12} />
       <span>¿Recuperar borrador no guardado?</span>
-      <button class="recovery-btn" onclick={applyDraft}>Recuperar</button>
-      <button class="recovery-btn secondary" onclick={dismissDraft}>Descartar</button>
+      <button class="recovery-btn" onclick={applyDraft}>{$t('noteEditor.recover')}</button>
+      <button class="recovery-btn secondary" onclick={dismissDraft}>{$t('noteEditor.discard')}</button>
     </div>
   {/if}
 
@@ -746,10 +772,10 @@
     <div class="toolbar-left">
       {#if !momentary && note}
       <div class="nav-controls toolbar-nav">
-        <button class="toolbar-btn icon-only" disabled={!hasPrev} onclick={() => dispatch('prev')} title="Nota anterior (Alt + ←)" aria-label="Nota anterior">
+        <button class="toolbar-btn icon-only" disabled={!hasPrev} onclick={() => dispatch('prev')} title={$t('noteEditor.prevNote')} aria-label={$t('noteEditor.prevNoteShort')}>
           <ChevronLeft size={14} />
         </button>
-        <button class="toolbar-btn icon-only" disabled={!hasNext} onclick={() => dispatch('next')} title="Siguiente nota (Alt + →)" aria-label="Siguiente nota">
+        <button class="toolbar-btn icon-only" disabled={!hasNext} onclick={() => dispatch('next')} title={$t('noteEditor.nextNote')} aria-label={$t('noteEditor.nextNoteShort')}>
           <ChevronRight size={14} />
         </button>
       </div>
@@ -758,55 +784,55 @@
       <div class="format-divider"></div>
 
       <div class="format-toolbar">
-        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('bold')} title="Negrita (Ctrl+B)" aria-label="Negrita">
+        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('bold')} title={$t('noteEditor.bold')} aria-label={$t('noteEditor.boldShort')}>
           <Bold size={13} />
         </button>
-        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('italic')} title="Cursiva (Ctrl+I)" aria-label="Cursiva">
+        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('italic')} title={$t('noteEditor.italic')} aria-label={$t('noteEditor.italicShort')}>
           <Italic size={13} />
         </button>
-        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('strikethrough')} title="Tachado" aria-label="Tachado">
+        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('strikethrough')} title={$t('noteEditor.strikethrough')} aria-label={$t('noteEditor.strikethrough')}>
           <Strikethrough size={13} />
         </button>
 
         <div class="format-divider"></div>
 
-        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('h1')} title="Título 1" aria-label="Título 1">
+        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('h1')} title={$t('noteEditor.h1')} aria-label={$t('noteEditor.h1')}>
           <Heading1 size={13} />
         </button>
-        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('h2')} title="Título 2" aria-label="Título 2">
+        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('h2')} title={$t('noteEditor.h2')} aria-label={$t('noteEditor.h2')}>
           <Heading2 size={13} />
         </button>
-        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('h3')} title="Título 3" aria-label="Título 3">
+        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('h3')} title={$t('noteEditor.h3')} aria-label={$t('noteEditor.h3')}>
           <Heading3 size={13} />
         </button>
 
         <div class="format-divider"></div>
 
-        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('ul')} title="Lista desordenada" aria-label="Lista desordenada">
+        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('ul')} title={$t('noteEditor.ul')} aria-label={$t('noteEditor.ul')}>
           <List size={13} />
         </button>
-        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('ol')} title="Lista ordenada" aria-label="Lista ordenada">
+        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('ol')} title={$t('noteEditor.ol')} aria-label={$t('noteEditor.ol')}>
           <ListOrdered size={13} />
         </button>
 
         <div class="format-divider"></div>
 
-        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('link')} title="Enlace" aria-label="Enlace">
+        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('link')} title={$t('noteEditor.link')} aria-label={$t('noteEditor.link')}>
           <Link size={13} />
         </button>
-        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('quote')} title="Cita" aria-label="Cita">
+        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('quote')} title={$t('noteEditor.quote')} aria-label={$t('noteEditor.quote')}>
           <Quote size={13} />
         </button>
-        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('code')} title="Bloque de código" aria-label="Bloque de código">
+        <button class="toolbar-btn icon-only" onclick={() => formatMarkdown('code')} title={$t('noteEditor.code')} aria-label={$t('noteEditor.code')}>
           <Code size={13} />
         </button>
 
         <div class="format-divider"></div>
 
-        <button class="toolbar-btn icon-only" onclick={openImageUpload} disabled={uploading} title="Insertar imagen" aria-label="Insertar imagen">
+        <button class="toolbar-btn icon-only" onclick={openImageUpload} disabled={uploading} title={$t('noteEditor.image')} aria-label={$t('noteEditor.image')}>
           <Image size={13} />
         </button>
-        <button class="toolbar-btn icon-only" onclick={openFileUpload} disabled={uploading} title="Adjuntar archivo" aria-label="Adjuntar archivo">
+        <button class="toolbar-btn icon-only" onclick={openFileUpload} disabled={uploading} title={$t('noteEditor.file')} aria-label={$t('noteEditor.file')}>
           <Paperclip size={13} />
         </button>
       </div>
@@ -822,8 +848,8 @@
         class="toolbar-btn icon-only"
         class:active={zenMode}
         onclick={() => zenMode = !zenMode}
-        title="Modo Zen (Esc para salir)"
-        aria-label="Modo Zen"
+        title={$t('noteEditor.zenMode')}
+        aria-label={$t('noteEditor.zenModeShort')}
       >
         <Maximize size={14} />
       </button>
@@ -832,9 +858,10 @@
         class="toolbar-btn"
         class:active={wysiwygMode}
         onclick={() => wysiwygMode = !wysiwygMode}
-        title="Editor visual (WYSIWYG)"
+        title={$t('noteEditor.wysiwyg')}
+        aria-label={$t('noteEditor.wysiwygShort')}
       >
-        <Eye size={14} />
+        <Type size={14} />
         <span>{wysiwygMode ? 'Raw' : 'Visual'}</span>
       </button>
 
@@ -842,7 +869,8 @@
         class="toolbar-btn"
         class:active={previewMode}
         onclick={() => previewMode = !previewMode}
-        title="Alternar preview (Ctrl+P)"
+        title={$t('noteEditor.preview')}
+        aria-label={$t('noteEditor.previewShort')}
       >
         {#if previewMode}<EyeOff size={14} />{:else}<Eye size={14} />{/if}
         <span>{previewMode ? 'Editor' : 'Vista previa'}</span>
@@ -864,10 +892,11 @@
       {/if}
 
       {#if note}
-        <div style="position: relative; display: inline-block;">
+        <div style="position: relative; display: inline-block; z-index: {showExportMenu ? 'var(--z-overlay)' : 'auto'};">
           <button
             class="toolbar-btn"
             class:active={showExportMenu}
+            style="position: relative; z-index: var(--z-overlay);"
             onclick={() => showExportMenu = !showExportMenu}
             title="Exportar nota"
           >
@@ -1102,16 +1131,20 @@
   /* ── Toolbar ── */
   .toolbar {
     display: flex;
+    flex-wrap: nowrap;
     align-items: center;
     justify-content: space-between;
-    padding: 6px 20px;
+    padding: 4px 12px;
     border-bottom: 1px solid var(--border);
     background: var(--surface);
     flex-shrink: 0;
-    gap: var(--s3);
+    gap: var(--s2);
     position: relative;
     z-index: 20;
+    overflow-x: auto;
+    scrollbar-width: none;
   }
+  .toolbar::-webkit-scrollbar { display: none; }
 
   /* Icon customize modal */
   .folder-modal-backdrop {
@@ -1183,48 +1216,62 @@
   .toolbar-left {
     display: flex;
     align-items: center;
-    gap: var(--s2);
+    gap: 2px;
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
   }
 
   .toolbar-right {
     display: flex;
     align-items: center;
-    gap: var(--s2);
+    gap: 2px;
+    flex-shrink: 0;
+    flex-wrap: nowrap;
+    justify-content: flex-end;
   }
 
   .format-toolbar {
     display: flex;
     align-items: center;
     gap: 2px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    min-width: 0;
+  }
+  .format-toolbar::-webkit-scrollbar {
+    display: none;
   }
 
   .format-divider {
     width: 1px;
-    height: 18px;
+    height: 14px;
     background: var(--border);
-    margin: 0 4px;
+    margin: 0 2px;
     flex-shrink: 0;
   }
 
   .stat {
-    font-size: 11px;
+    font-size: 10px;
     font-family: var(--font-mono);
     color: var(--text-muted);
+    white-space: nowrap;
   }
 
   .toolbar-btn {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    padding: 4px 10px;
+    gap: 4px;
+    padding: 3px 7px;
     border: 1px solid var(--border);
     border-radius: var(--r);
     background: transparent;
     color: var(--text-secondary);
-    font-size: 11px;
+    font-size: 10px;
     font-family: var(--font-sans);
     cursor: pointer;
     transition: all var(--t-fast);
+    white-space: nowrap;
   }
   .toolbar-btn:hover { background: var(--elevated); color: var(--text-primary); }
   .toolbar-btn.active { border-color: var(--text-secondary); color: var(--text-primary); }

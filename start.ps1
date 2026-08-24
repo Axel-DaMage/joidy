@@ -45,36 +45,67 @@ Write-Host ""
 Write-Host "${Blue}═══ Joidy Quick Start (Windows) ═══${Reset}" -ForegroundColor Cyan
 Write-Host ""
 
-# Step 0: Check Docker
+# Step 0: Check Container Engine (Docker or Podman)
 $script:step++
-Write-Step "Checking Docker..."
+Write-Step "Checking Container Engine..."
 
-if (-not (Test-Command "docker")) {
-    Write-Error "Docker is not installed or not in PATH"
+$script:containerEngine = "docker"
+$script:containerComposeCmd = "docker compose"
+
+if (Test-Command "docker") {
+    $dockerVersion = docker --version 2>&1
+    Write-Success "Docker: $dockerVersion"
+
+    # Check Docker Compose
+    $dockerComposeAvailable = $false
+    if (Test-Command "docker-compose") {
+        $script:containerComposeCmd = "docker-compose"
+        $dockerComposeAvailable = $true
+        Write-Success "Docker Compose (standalone): available"
+    } elseif ((docker compose version 2>&1) -match "Docker Compose") {
+        $script:containerComposeCmd = "docker compose"
+        $dockerComposeAvailable = $true
+        Write-Success "Docker Compose (plugin): available"
+    }
+
+    if (-not $dockerComposeAvailable) {
+        Write-Error "Docker Compose is not available"
+        Write-Host "Please ensure Docker Desktop includes Docker Compose."
+        exit 1
+    }
+} elseif (Test-Command "podman") {
+    $script:containerEngine = "podman"
+    $podmanVersion = podman --version 2>&1
+    Write-Success "Podman: $podmanVersion"
+
+    # Check Podman Compose
+    $podmanComposeAvailable = $false
+    if (Test-Command "podman-compose") {
+        $script:containerComposeCmd = "podman-compose"
+        $podmanComposeAvailable = $true
+        Write-Success "Podman Compose (standalone): available"
+    } elseif ((podman compose version 2>&1) -match "podman-compose" -or $LASTEXITCODE -eq 0) {
+        $script:containerComposeCmd = "podman compose"
+        $podmanComposeAvailable = $true
+        Write-Success "Podman Compose (via podman compose): available"
+    }
+
+    if (-not $podmanComposeAvailable) {
+        Write-Warn "Podman is installed, but Podman Compose was not found"
+        Write-Host ""
+        Write-Host "${Yellow}Please install podman-compose:${Reset}"
+        Write-Host "  pip install podman-compose"
+        Write-Host ""
+        exit 1
+    }
+} else {
+    Write-Error "Neither Docker nor Podman is installed or in PATH"
     Write-Host ""
-    Write-Host "${Yellow}Please install Docker Desktop:${Reset}"
-    Write-Host "  https://docs.docker.com/desktop/install/windows-install/"
+    Write-Host "${Yellow}Please install Docker Desktop or Podman:${Reset}"
+    Write-Host "  Docker:  https://docs.docker.com/desktop/install/windows-install/"
+    Write-Host "  Podman:  https://podman.io/docs/installation"
     Write-Host ""
     Write-Host "After installation, restart your terminal and run this script again."
-    exit 1
-}
-
-$dockerVersion = docker --version 2>&1
-Write-Success "Docker: $dockerVersion"
-
-# Check Docker Compose
-$dockerComposeAvailable = $false
-if (Test-Command "docker-compose") {
-    $dockerComposeAvailable = $true
-    Write-Success "Docker Compose (standalone): available"
-} elseif ((docker compose version 2>&1) -match "Docker Compose") {
-    $dockerComposeAvailable = $true
-    Write-Success "Docker Compose (plugin): available"
-}
-
-if (-not $dockerComposeAvailable) {
-    Write-Error "Docker Compose is not available"
-    Write-Host "Please ensure Docker Desktop includes Docker Compose."
     exit 1
 }
 
@@ -163,6 +194,15 @@ if ([string]::IsNullOrEmpty($secretKey) -or $secretKey -eq "change_this_to_a_ran
     Write-Success "Generated new SECRET_KEY"
 }
 
+# Check/Generate POSTGRES_PASSWORD
+$postgresPassword = $envVars["POSTGRES_PASSWORD"]
+if ([string]::IsNullOrEmpty($postgresPassword)) {
+    # Generate a random password
+    $newPassword = -join ((65..90) + (97..122) + (48..57) | Get-Random -Count 24 | ForEach-Object {[char]$_})
+    (Get-Content ".env") -replace 'POSTGRES_PASSWORD=.*', "POSTGRES_PASSWORD=$newPassword" | Set-Content ".env"
+    Write-Success "Generated new POSTGRES_PASSWORD"
+}
+
 # Step 3: Start services
 $script:step++
 Write-Step "Starting services..."
@@ -174,11 +214,36 @@ if (-not (Test-Path "docker-compose.yml")) {
 }
 
 $devCompose = "docker-compose.dev.yml"
-if (-not (Test-Path $devCompose)) {
-    Write-Warn "$devCompose not found, using default compose file"
-    docker compose -p $script:projectName up --build -d
-} else {
-    docker compose -p $script:projectName -f docker-compose.yml -f $devCompose up --build -d
+$devComposeActive = Test-Path $devCompose
+
+if ($script:containerComposeCmd -eq "docker compose") {
+    if ($devComposeActive) {
+        docker compose -p $script:projectName -f docker-compose.yml -f $devCompose up --build -d
+    } else {
+        Write-Warn "$devCompose not found, using default compose file"
+        docker compose -p $script:projectName up --build -d
+    }
+} elseif ($script:containerComposeCmd -eq "docker-compose") {
+    if ($devComposeActive) {
+        docker-compose -p $script:projectName -f docker-compose.yml -f $devCompose up --build -d
+    } else {
+        Write-Warn "$devCompose not found, using default compose file"
+        docker-compose -p $script:projectName up --build -d
+    }
+} elseif ($script:containerComposeCmd -eq "podman compose") {
+    if ($devComposeActive) {
+        podman compose -p $script:projectName -f docker-compose.yml -f $devCompose up --build -d
+    } else {
+        Write-Warn "$devCompose not found, using default compose file"
+        podman compose -p $script:projectName up --build -d
+    }
+} elseif ($script:containerComposeCmd -eq "podman-compose") {
+    if ($devComposeActive) {
+        podman-compose -p $script:projectName -f docker-compose.yml -f $devCompose up --build -d
+    } else {
+        Write-Warn "$devCompose not found, using default compose file"
+        podman-compose -p $script:projectName up --build -d
+    }
 }
 
 if ($LASTEXITCODE -ne 0) {
@@ -195,6 +260,6 @@ Write-Host ""
 Write-Host "  ${Green}Web App:${Reset}   http://localhost:3000"
 Write-Host "  ${Green}API Docs:${Reset}  http://localhost:8000/docs"
 Write-Host ""
-Write-Host "To view logs:  docker compose logs -f"
-Write-Host "To stop:       docker compose down"
+Write-Host "To view logs:  $($script:containerComposeCmd) logs -f"
+Write-Host "To stop:       $($script:containerComposeCmd) down"
 Write-Host ""

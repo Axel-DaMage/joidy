@@ -3,6 +3,7 @@
   import { session, saveToken } from '$lib/stores/session';
   import { showNotification } from '$lib/stores/notifications';
   import { getLocale } from '$lib/stores/locale';
+  import { t } from 'svelte-i18n';
   import { logger } from '$lib/utils/logger';
 
   let password = '';
@@ -45,20 +46,20 @@
 <div class="login-wrapper">
   <div class="login-card">
     <div class="logo mono">JOIDY</div>
-    <p class="subtitle">Conocimiento Gamificado</p>
-    
+    <p class="subtitle">{$t('login.subtitle')}</p>
+
     <form onsubmit={(e) => { e.preventDefault(); handleLogin(); }}>
       <div class="field">
-        <label for="username">Usuario</label>
+        <label for="username">{$t('login.username')}</label>
         <input id="username" type="text" bind:value={username} class="input" />
       </div>
       <div class="field">
-        <label for="password">Contraseña</label>
-        <input id="password" type="password" bind:value={password} class="input" placeholder="Tu contraseña maestra" />
+        <label for="password">{$t('login.password')}</label>
+        <input id="password" type="password" bind:value={password} class="input" placeholder={$t('login.passwordPlaceholder')} />
       </div>
-      
+
       <button type="submit" class="btn btn-primary" disabled={loading}>
-        {loading ? 'Entrando...' : 'Entrar'}
+        {loading ? $t('login.entering') : $t('login.enter')}
       </button>
     </form>
   </div>
@@ -154,5 +155,37 @@
   .btn-primary:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  @media (max-width: 480px) {
+    .login-wrapper {
+      padding: var(--s4);
+    }
+    .login-card {
+      padding: var(--s5) var(--s4_5);
+      border-radius: var(--r);
+    }
+    .logo {
+      font-size: 20px;
+    }
+    .subtitle {
+      font-size: 13px;
+      margin-bottom: var(--s4_5);
+    }
+    .input {
+      padding: var(--s3) var(--s3_5);
+      font-size: 16px; /* prevents iOS zoom on focus */
+    }
+    .btn-primary {
+      padding: var(--s3_5);
+      font-size: 15px;
+    }
+  }
+
+  @supports (padding: env(safe-area-inset-top)) {
+    .login-wrapper {
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+    }
   }
 </style>

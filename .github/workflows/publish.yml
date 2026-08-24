@@ -22,8 +22,8 @@ jobs:
       matrix:
         service: [api, frontend, ai-service, worker]
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/login-action@v4.5.2
+      - uses: actions/checkout@v7
+      - uses: docker/login-action@v4.6.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -36,7 +36,7 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest
-      - uses: docker/build-push-action@v5
+      - uses: docker/build-push-action@v7
         with:
           context: ./${{ matrix.service }}
           push: true
@@ -50,7 +50,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'release' || inputs.version != ''
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Update homebrew-tap formula
         run: |
           VERSION="${{ inputs.version || github.ref_name }}"
@@ -95,15 +95,16 @@ jobs:
             echo "arch=('any')"
             echo 'url="https://joidy-web.vercel.app"'
             echo "license=('GPL3')"
-            echo "depends=('docker' 'docker-compose')"
+            echo "depends=('docker')"
             echo 'source=("https://github.com/Axel-DaMage/joidy/archive/v${_tag}.tar.gz")'
             echo "sha256sums=('${SHA}')"
             echo ""
             echo "package() {"
             echo '  cd "${srcdir}/joidy-${_tag}"'
-            echo '  install -Dm755 bin/joidy "${pkgdir}/usr/bin/joidy"'
+            echo '  install -Dm755 scripts/joidy.sh "${pkgdir}/usr/bin/joidy"'
             echo '  install -Dm644 docker-compose.yml "${pkgdir}/usr/share/joidy/docker-compose.yml"'
             echo '  install -Dm644 .env.example "${pkgdir}/usr/share/joidy/.env.example"'
+            echo '  install -Dm644 /dev/stdin "${pkgdir}/etc/joidy/path" <<<"/usr/share/joidy"'
             echo "}"
           } > PKGBUILD
           {
@@ -115,7 +116,6 @@ jobs:
             echo "arch = any"
             echo "license = GPL3"
             echo "depends = docker"
-            echo "depends = docker-compose"
             echo "source = https://github.com/Axel-DaMage/joidy/archive/v${VERSION}.tar.gz"
             echo "sha256sums = ${SHA}"
             echo "pkgname = joidy"

@@ -9,6 +9,89 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- _Nothing yet_
+
+### Changed
+
+- _Nothing yet_
+
+### Fixed
+
+- _Nothing yet_
+
+### Removed
+
+- _Nothing yet_
+
+### Security
+
+- _Nothing yet_
+
+## [1.0.0-beta] - 2026-08-24
+
+### Added
+
+- **Service power management UI** in settings panel — hibernate, wake, and shutdown services from the web UI (#870, #871)
+- **Podman compatibility** in start scripts and Makefile (#810)
+- **Infinite scroll** for notes list (#809)
+- **Assigned GitHub PRs and issues** in the status bar (#792, #805)
+- **Monthly calendar map** and centered planning sort control (#783, #790, #804)
+- **Goal settings 3-lists-at-once** with folded description into note (#788, #789, #803)
+- **GoalCard polish** — borderless pin, state below title, square cards (#785, #786, #787, #801)
+- **Professional responsive design** across all pages and components (#732)
+- **LAN IP display** after `joidy up`/`restart`
+- **Doctor command** to detect root-owned `.svelte-kit` before `make dev` (#781, #782)
+- **Auto-install joidy CLI** into `~/.local/bin`
+- **PowerShell installer** and `--profile ai` handling in CLI/autostart (#848, #850, #858)
+- **Self-hosted Geist fonts** removing Google Fonts CDN dependency (#846, #859)
+- **Disable AI service in production** + harden API for stable release (#845)
+- **Worker crash recovery** with exponential backoff via supervisor (#818)
+- **Alembic migration serialization** across uvicorn workers via `pg_advisory_lock` (#817)
+- **CI fork PR auto-approval** policy documented (#811, #819)
+
+### Changed
+
+- **Infra audit fixes** — parameterized Docker images, multi-stage builds, cache mounts, security gaps (#812)
+- **Goal description** removed as separate field, folded into note editor (#789)
+- **Sidebar nav order** swapped streaks and goals (#773)
+- **Version strings** aligned to 0.2.0 with automated future bumps (#754)
+- **Docs consolidated** — removed duplicated content and legacy ADR (#755, #758)
+- **Dependabot updates**: vitest 4.1.11, @vitest/coverage-v8 4.1.11, typescript-eslint 8.67.0, svelte 5.56.9, @tiptap/* 3.30.2, uvicorn 0.52.4, openai 3.3.1, anthropic 0.125.0, cohere 7.0.9, pytest 9.1.1, sqlalchemy 2.0.52, pydantic-settings 2.15.0, alembic 1.19.1, aiofiles 25.1.0, pywebpush 2.4.0, aiodocker 0.27.0, marked 18.0.10, @sveltejs/kit 2.70.3, svelte-check 4.7.6
+
+### Fixed
+
+- **Streak timezone mismatch** — counter showed 0 before check-in due to frontend/backend UTC offset (#864, #868)
+- **Check-in layout shift** — smooth transitions added, share button repositioned to corner (#862, #863, #867)
+- **Progress track and module dots** hardcoded to dark theme via `var(--border)` (#865, #866, #869)
+- **Theme-aware disconnect buttons** and settings panel colors (#844, #857)
+- **Hardcoded dark colors in goals** replaced with theme-aware CSS variables (#839, #842, #861)
+- **StreakHeatmap** theme-aware empty cells + year view spacing (#840, #843, #855)
+- **Resize handle** redesigned to be theme-aware and minimalist (#841, #856)
+- **Goal pin icon** now shows only on hover (#838, #854)
+- **Google Calendar & Tasks** hidden behind dev mode (#851, #853)
+- **Note delete confirmation** modal + empty-state one-page (#791, #795, #802)
+- **LiquidGlass action** applied to streak Glass theme preview (#784, #800)
+- **Toast icon color** for dark-mode contrast (#793, #798)
+- **Broken icons** and non-reactive dashboard carousel (#783)
+- **Production image** permission-safe and self-contained
+- **Vite HMR** uses IPv4 to fix Docker networking
+- **Vault path change** warns user when container recreation is needed (#784)
+- **make db-health** repaired and stray version strings aligned
+- **Playwright config** and stale E2E selectors (#776, #777)
+- **Goal creation modal** columns balanced, internal scroll fixed (#764)
+- **Goals page** tabs and editor overflow on mobile
+- **Notes folder creation** and empty vault folders visible in tree
+- **Power management** runtime bugs found during testing
+
+### Security
+
+- **AI service disabled in production** by default (#845)
+- **API hardened** for stable release — internal secret validation, reduced attack surface (#845)
+
+## [0.2.0] - 2026-08-16
+
+### Added
+
 - **Security hardening**: JWT auth enforced on all data/mutation endpoints, API keys/secrets exposure fixed, XSS & input sanitization, CORS & WebSocket auth, ai-service hardening, all containers run as non-root user (#322, #323, #324, #325, #326, #327, #329, #358, #376, #377, #378, #379, #380, #397, #408, #416, #417, #418, #419, #422, #423)
 - **Google Calendar & Tasks OAuth integration** (#2, #374)
 - **WYSIWYG markdown editor** with TipTap (#6, #344)
@@ -123,5 +206,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Responsive base layout and mobile streak actions.
 - CI pipeline: API tests, frontend typecheck, Docker build smoke test.
 
-[unreleased]: https://github.com/Axel-DaMage/joidy/compare/v0.1.0...HEAD
+[unreleased]: https://github.com/Axel-DaMage/joidy/compare/v1.0.0-beta...HEAD
+[1.0.0-beta]: https://github.com/Axel-DaMage/joidy/compare/v0.2.0...v1.0.0-beta
+[0.2.0]: https://github.com/Axel-DaMage/joidy/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Axel-DaMage/joidy/releases/tag/v0.1.0

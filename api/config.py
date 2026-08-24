@@ -6,6 +6,7 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql://joidy:joidy@postgres:5432/joidy"
     ai_service_url: str = "http://ai-service:8002"
+    ai_service_enabled: bool = True  # Set to false in production to skip AI calls
     worker_url: str = "http://worker:8001"
     secret_key: str = ""
     internal_secret: str = ""  # Shared secret for API → ai-service auth
@@ -59,6 +60,11 @@ class Settings(BaseSettings):
     spotify_client_id: str = ""
     spotify_client_secret: str = ""
     spotify_redirect_uri: str = ""
+
+    # User timezone for day-boundary calculations (streaks, gamification, mood).
+    # IANA zone name (e.g. "America/Santiago", "Europe/Madrid"). Defaults to UTC
+    # so behaviour is unchanged when not configured. See issue #650.
+    user_timezone: str = "UTC"
 
 
 settings = Settings()

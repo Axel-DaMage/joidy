@@ -6,6 +6,7 @@
   import type { PersonalStreak } from '$lib/api';
   import { liquidGlass } from '$lib/actions/liquidGlass';
   import { getContrastColor } from '$lib/stores/settings';
+  import { t } from 'svelte-i18n';
 
   export let open = false;
   export let editStreak: PersonalStreak | null = null;
@@ -40,18 +41,16 @@
 
   // ── Presets ─────────────────────────────────────────────────────────────────
   const COLOR_PRESETS = [
-    { name: 'Gold',      hex: '#c8a96e' },
-    { name: 'Esmeralda', hex: '#10b981' },
-    { name: 'Cyan',      hex: '#06b6d4' },
-    { name: 'Azul',      hex: '#3b82f6' },
-    { name: 'Violeta',   hex: '#8b5cf6' },
-    { name: 'Rosa',      hex: '#ec4899' },
-    { name: 'Ámbar',     hex: '#f59e0b' },
-    { name: 'Coral',     hex: '#ef4444' },
-    { name: 'Lima',      hex: '#84cc16' },
-    { name: 'Slate',     hex: '#64748b' },
-    { name: 'Teal',      hex: '#14b8a6' },
-    { name: 'Blanco',    hex: '#e2e8f0' },
+    { name: 'Rojo',     hex: '#ef4444' },
+    { name: 'Coral',    hex: '#f97316' },
+    { name: 'Ámbar',    hex: '#f59e0b' },
+    { name: 'Lima',     hex: '#84cc16' },
+    { name: 'Esmeralda',hex: '#10b981' },
+    { name: 'Cian',     hex: '#06b6d4' },
+    { name: 'Azul',     hex: '#3b82f6' },
+    { name: 'Violeta',  hex: '#8b5cf6' },
+    { name: 'Rosa',     hex: '#ec4899' },
+    { name: 'Slate',    hex: '#64748b' },
   ];
 
   const EMOJIS = Array.from(new Set([
@@ -189,123 +188,160 @@
 
 {#if open}
   <div class="modal-backdrop" role="presentation" onclick={onBackdrop}>
-    <div class="modal-panel" role="dialog" aria-modal="true" aria-label="Crear racha" onclick={(e) => e.stopPropagation()}>
+    <div class="modal-panel" role="dialog" aria-modal="true" aria-label={$t('streakCreateModal.createTitle')} onclick={(e) => e.stopPropagation()}>
       <div class="modal-header">
         <span class="modal-title mono">{isEdit ? 'EDITAR RACHA' : 'NUEVA RACHA'}</span>
-        <button class="close-btn" onclick={close} aria-label="Cerrar"><X size={14} /></button>
+        <button class="close-btn" onclick={close} aria-label={$t('streakCreateModal.close')}><X size={14} /></button>
       </div>
 
       <div class="modal-body">
-        <div class="preview-card" class:theme-gradient={theme === 'gradient'} style={previewStyle}>
-          <div class="preview-icon">
-            {#if useIcon && icon}
-              <StreakIcon name={icon} size={24} />
-            {:else}
-              <span class="preview-emoji">{emoji}</span>
+        <div class="modal-grid">
+          <!-- Left column: hard data -->
+          <div class="modal-col modal-col-data">
+            <div class="field">
+              <label>{$t('streakCreateModal.name')}</label>
+              <input bind:value={name} placeholder={$t('streakCreateModal.namePlaceholder')} autofocus />
+            </div>
+
+            <div class="field">
+              <label>{$t('streakCreateModal.description')} <span class="optional">{$t('streakCreateModal.optional')}</span></label>
+              <input bind:value={description} placeholder={$t('streakCreateModal.descriptionPlaceholder')} />
+            </div>
+
+            <div class="field">
+              <label>{$t('streakCreateModal.frequency')}</label>
+              <div class="freq-row">
+                <button class="freq-btn" class:selected={frequency === 'daily'} onclick={() => { frequency = 'daily'; frequencyDays = 1; }}>{$t('streakCreateModal.daily')}</button>
+                <button class="freq-btn" class:selected={frequency === 'weekly'} onclick={() => { frequency = 'weekly'; frequencyDays = 1; }}>{$t('streakCreateModal.weekly')}</button>
+                <button class="freq-btn" class:selected={frequency === 'monthly'} onclick={() => { frequency = 'monthly'; frequencyDays = 1; }}>{$t('streakCreateModal.monthly')}</button>
+                <button class="freq-btn" class:selected={frequency === 'every_n'} onclick={() => { frequency = 'every_n'; }}>cada N</button>
+              </div>
+            </div>
+
+            {#if frequency === 'every_n'}
+              <div class="freq-n-row">
+                <span class="freq-n-label">{$t('streakCreateModal.every')}</span>
+                <input type="number" bind:value={frequencyDays} min="1" max="365" class="freq-n-input" />
+                <span class="freq-n-label">días</span>
+              </div>
             {/if}
-          </div>
-          <div class="preview-info">
-            <span class="preview-name">{name || 'Nombre de la racha'}</span>
-            <span class="preview-meta mono">{name ? previewFreqLabel() : 'frecuencia'}</span>
-          </div>
-        </div>
 
-        <div class="field">
-          <label>Nombre</label>
-          <input bind:value={name} placeholder="Ej: Meditación, Lectura, Ejercicio..." autofocus />
-        </div>
+            <div class="field">
+              <label><Calendar size={11} /> Fecha de inicio</label>
+              <input type="date" bind:value={startDate} disabled={isEdit} />
+            </div>
 
-        <div class="field">
-          <label>Descripción <span class="optional">(opcional)</span></label>
-          <input bind:value={description} placeholder="Mi motivación, mi meta..." />
-        </div>
+            <div class="field">
+              <label><Target size={11} /> Fecha objetivo <span class="optional">(op.)</span></label>
+              <input type="date" bind:value={targetDate} />
+            </div>
 
-        <div class="field">
-          <label>Frecuencia</label>
-          <div class="freq-row">
-            <button class="freq-btn" class:selected={frequency === 'daily'} onclick={() => { frequency = 'daily'; frequencyDays = 1; }}>Diaria</button>
-            <button class="freq-btn" class:selected={frequency === 'weekly'} onclick={() => { frequency = 'weekly'; frequencyDays = 1; }}>Semanal</button>
-            <button class="freq-btn" class:selected={frequency === 'monthly'} onclick={() => { frequency = 'monthly'; frequencyDays = 1; }}>Mensual</button>
-            <button class="freq-btn" class:selected={frequency === 'every_n'} onclick={() => { frequency = 'every_n'; }}>cada N</button>
-          </div>
-        </div>
+            <div class="field">
+              <label><Clock size={11} /> Días desde inicio</label>
+              <input type="number" bind:value={offset} min="0" disabled={isEdit} placeholder={$t('streakCreateModal.offsetPlaceholder')} />
+              <span class="field-hint">{isEdit ? 'Este valor no se puede modificar una vez creada la racha' : 'Se calcula automáticamente desde la fecha de inicio'}</span>
+            </div>
 
-        {#if frequency === 'every_n'}
-          <div class="freq-n-row">
-            <span class="freq-n-label">Cada</span>
-            <input type="number" bind:value={frequencyDays} min="1" max="365" class="freq-n-input" />
-            <span class="freq-n-label">días</span>
-          </div>
-        {/if}
+            <div class="field">
+              <label><Snowflake size={11} /> Freezes (escudos)</label>
+              <input type="number" bind:value={freezeCount} min="0" max="30" />
+              <span class="field-hint">{$t('streakCreateModal.freezeHint')}</span>
+            </div>
 
-        <div class="field">
-          <label>Icono</label>
-          <div class="icon-toggle-row">
-            <button class="icon-type-btn" class:selected={!useIcon} onclick={() => useIcon = false}>Emoji</button>
-            <button class="icon-type-btn" class:selected={useIcon} onclick={() => { useIcon = true; if (!icon) icon = 'Flame'; }}>Icono</button>
-          </div>
-        </div>
-
-        {#if !useIcon}
-          <div class="field">
-            <div class="emoji-grid">
-              {#each EMOJIS as e}
-                <button class="emoji-btn" class:selected={emoji === e} onclick={() => emoji = e}>{e}</button>
-              {/each}
+            <div class="field">
+              <label>{$t('streakCreateModal.visualTheme')}</label>
+              <div class="theme-grid">
+                {#each THEMES as themeOpt}
+                  <button class="theme-btn" class:selected={theme === themeOpt.id} onclick={() => theme = themeOpt.id}>
+                    {themeOpt.label}
+                  </button>
+                {/each}
+              </div>
             </div>
           </div>
-        {:else}
-          <div class="field">
-            <LazyIconPicker selected={icon} color={color} onSelect={(ic) => icon = ic} />
-          </div>
-        {/if}
 
-        <div class="field">
-          <label>Color</label>
-          <div class="color-grid">
-            {#each COLOR_PRESETS as c}
-              <button
-                class="color-btn"
-                class:selected={color === c.hex}
-                style="--btn-color: {c.hex}; background: {c.hex};"
-                onclick={() => color = c.hex}
-              />
-            {/each}
-          </div>
-        </div>
+          <!-- Right column: preview + customization -->
+          <div class="modal-col modal-col-preview">
+            <div
+              class="preview-card"
+              class:theme-solid={theme === 'solid'}
+              class:theme-gradient={theme === 'gradient'}
+              class:theme-glow={theme === 'glow'}
+              class:theme-minimal={theme === 'minimal'}
+              class:theme-lcd={theme === 'lcd'}
+              class:theme-neon={theme === 'neon'}
+              class:theme-glass={theme === 'glass'}
+              class:theme-sketch={theme === 'sketch'}
+              style={previewStyle}
+              use:liquidGlass={{ enabled: theme === 'glass' }}
+            >
+              <div class="preview-icon">
+                {#if useIcon && icon}
+                  <StreakIcon name={icon} size={24} />
+                {:else}
+                  <span class="preview-emoji">{emoji}</span>
+                {/if}
+              </div>
+              <div class="preview-info">
+                <span class="preview-name">{name || 'Nombre de la racha'}</span>
+                <span class="preview-meta mono">{name ? previewFreqLabel() : 'frecuencia'}</span>
+              </div>
+            </div>
 
-        <div class="field">
-          <label>Tema visual</label>
-          <div class="theme-grid">
-            {#each THEMES as t}
-              <button class="theme-btn" class:selected={theme === t.id} onclick={() => theme = t.id}>
-                {t.label}
-              </button>
-            {/each}
-          </div>
-        </div>
+            <div class="field">
+              <label>{$t('streakCreateModal.icon')}</label>
+              <div class="icon-toggle-row">
+                <button class="icon-type-btn" class:selected={!useIcon} onclick={() => useIcon = false}>{$t('streakCreateModal.emoji')}</button>
+                <button class="icon-type-btn" class:selected={useIcon} onclick={() => { useIcon = true; if (!icon) icon = 'Flame'; }}>{$t('streakCreateModal.icon')}</button>
+              </div>
+            </div>
 
-        <div class="field-row">
-          <div class="field half">
-            <label><Calendar size={11} /> Fecha de inicio</label>
-            <input type="date" bind:value={startDate} disabled={isEdit} />
-          </div>
-          <div class="field half">
-            <label><Target size={11} /> Fecha objetivo <span class="optional">(op.)</span></label>
-            <input type="date" bind:value={targetDate} />
-          </div>
-        </div>
+            {#if !useIcon}
+              <div class="field icon-picker-field">
+                <div class="emoji-grid">
+                  {#each EMOJIS as e}
+                    <button class="emoji-btn" class:selected={emoji === e} onclick={() => emoji = e}>{e}</button>
+                  {/each}
+                </div>
+              </div>
+            {:else}
+              <div class="field icon-picker-field">
+                <LazyIconPicker selected={icon} color={color} onSelect={(ic) => icon = ic} />
+              </div>
+            {/if}
 
-        <div class="field-row">
-          <div class="field half">
-            <label><Clock size={11} /> Días desde inicio</label>
-            <input type="number" bind:value={offset} min="0" disabled={isEdit} placeholder="Calculado automáticamente" />
-            <span class="field-hint">{isEdit ? 'Este valor no se puede modificar una vez creada la racha' : 'Se calcula automáticamente desde la fecha de inicio'}</span>
-          </div>
-          <div class="field half">
-            <label><Snowflake size={11} /> Freezes (escudos)</label>
-            <input type="number" bind:value={freezeCount} min="0" max="30" />
-            <span class="field-hint">Protegen tu racha si fallas un día.</span>
+            <div class="field">
+              <label>{$t('streakCreateModal.color')}</label>
+              <div class="color-grid">
+                {#each COLOR_PRESETS as c}
+                  <button
+                    class="color-btn"
+                    class:selected={color === c.hex}
+                    style="--btn-color: {c.hex}; background: {c.hex};"
+                    onclick={() => color = c.hex}
+                    title={c.name}
+                    aria-label={c.name}
+                  />
+                {/each}
+              </div>
+              <div class="color-manual-row">
+                <div class="color-swatch-wrapper" style="background: {color};">
+                  <input
+                    type="color"
+                    class="color-swatch"
+                    value={color}
+                    oninput={(e) => color = e.currentTarget.value}
+                  />
+                </div>
+                <input
+                  type="text"
+                  class="hex-input mono"
+                  maxlength="7"
+                  bind:value={color}
+                  placeholder="#c8a96e"
+                />
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -317,9 +353,9 @@
             {editStreak?.is_archived ? 'Desarchivar' : 'Archivar'}
           </button>
         {/if}
-        <button class="btn-cancel" onclick={close}>Cancelar</button>
+        <button class="btn-cancel" onclick={close}>{$t('streakCreateModal.cancel')}</button>
         <button class="btn-save" disabled={!canSave} onclick={save} style="--btn-color: {color};">
-          {isEdit ? 'Actualizar' : 'Crear Racha'}
+          {isEdit ? $t('streakCreateModal.update') : $t('streakCreateModal.create')}
         </button>
       </div>
     </div>
@@ -334,7 +370,7 @@
   }
 
   .modal-panel {
-    width: 520px;
+    width: 760px;
     height: auto;
     max-width: calc(100vw - 24px);
     max-height: calc(100vh - 24px);
@@ -365,12 +401,24 @@
     display: flex; flex-direction: column; gap: 16px;
   }
 
+  .modal-grid {
+    display: grid;
+    grid-template-columns: 0.85fr 1.15fr;
+    gap: 20px;
+  }
+
+  .modal-col {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
   /* Preview card */
   .preview-card {
-    display: flex; align-items: center; gap: 10px;
-    padding: 10px 12px;
+    display: flex; align-items: center; gap: 16px;
+    padding: 18px 20px;
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 10px;
     background: var(--surface);
     position: relative;
     overflow: hidden;
@@ -407,24 +455,92 @@
       );
   }
 
-  .preview-icon {
-    flex-shrink: 0;
-    width: 28px;
-    text-align: center;
-    font-size: 20px;
+  .preview-card.theme-glow {
+    border-color: color-mix(in srgb, var(--theme-ac) 22%, var(--border));
+    box-shadow:
+      0 0 14px color-mix(in srgb, var(--theme-ac) 12%, transparent),
+      inset 0 0 0 1px color-mix(in srgb, var(--theme-ac) 14%, transparent);
   }
 
-  .preview-emoji { font-size: 20px; }
+  .preview-card.theme-glow::before {
+    opacity: 1;
+    background:
+      radial-gradient(
+        120% 90% at 50% 50%,
+        color-mix(in srgb, var(--theme-ac) 12%, transparent) 0%,
+        transparent 70%
+      );
+  }
+
+  .preview-card.theme-minimal {
+    background: color-mix(in srgb, var(--theme-ac) 8%, transparent);
+    border: 1px solid transparent;
+  }
+
+  .preview-card.theme-lcd {
+    background-color: var(--theme-ac);
+    background-image:
+      linear-gradient(rgba(0, 0, 0, 0.1) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 0, 0, 0.1) 1px, transparent 1px);
+    background-size: 3px 3px;
+    border: 1px solid color-mix(in srgb, var(--theme-ac) 70%, black);
+    box-shadow: inset 0 0 10px rgba(0,0,0,0.15);
+  }
+  .preview-card.theme-lcd .preview-name {
+    color: color-mix(in srgb, var(--theme-ac) 20%, black); font-weight: 700;
+  }
+  .preview-card.theme-lcd .preview-meta {
+    color: color-mix(in srgb, var(--theme-ac) 20%, black); opacity: 0.7; font-weight: 600;
+  }
+  .preview-card.theme-lcd .preview-emoji,
+  .preview-card.theme-lcd .preview-icon :global(svg) {
+    filter: grayscale(1) brightness(0) opacity(0.8);
+  }
+
+  .preview-card.theme-neon {
+    background: color-mix(in srgb, var(--theme-ac) 8%, var(--surface));
+    border: 1px solid var(--theme-ac);
+    box-shadow: 0 0 10px color-mix(in srgb, var(--theme-ac) 25%, transparent);
+  }
+  .preview-card.theme-neon .preview-name {
+    text-shadow: 0 0 10px var(--theme-ac);
+  }
+
+  .preview-card.theme-glass {
+    border: 1px solid transparent;
+  }
+
+  .preview-card.theme-solid {
+    background: transparent;
+    border: 1px solid var(--theme-ac);
+  }
+
+  .preview-card.theme-sketch {
+    border: 1px dashed var(--theme-ac); border-radius: 2px;
+  }
+
+  .preview-icon {
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    font-size: 22px;
+  }
+
+  .preview-emoji { font-size: 22px; }
   .preview-info {
     flex: 1;
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 1px;
+    gap: 3px;
   }
 
   .preview-name {
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 500;
     color: var(--text-primary);
     white-space: nowrap;
@@ -433,8 +549,8 @@
   }
 
   .preview-meta {
-    font-size: 9px;
-    color: var(--text-disabled);
+    font-size: 10px;
+    color: var(--text-muted);
   }
 
   /* Fields */
@@ -442,7 +558,8 @@
   .field label {
     font-size: 11px; color: var(--text-muted); text-transform: uppercase;
     letter-spacing: 0.05em; font-family: var(--font-mono);
-    display: flex; align-items: center; gap: 4px;
+    display: flex; align-items: center; justify-content: center; gap: 4px;
+    text-align: center;
   }
   .optional { font-size: 9px; color: var(--text-disabled); text-transform: lowercase; }
 
@@ -466,10 +583,11 @@
 
   .field-hint {
     font-size: 10px; color: var(--text-disabled); line-height: 1.3;
+    min-height: 26px;
   }
 
-  .field-row { display: flex; gap: 12px; }
-  .field.half { flex: 1; }
+  .field-row { display: flex; gap: 12px; align-items: flex-start; }
+  .field.half { flex: 1; min-width: 0; }
 
   /* Frequency */
   .freq-row { display: flex; gap: 6px; }
@@ -483,7 +601,25 @@
   .freq-btn.selected { border-color: var(--text-primary); color: var(--text-primary); }
 
   .freq-n-row {
-    display: flex; align-items: center; gap: 8px; margin-top: 6px;
+    display: flex; align-items: center; gap: 8px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 4px; padding: 8px 12px;
+  }
+  .freq-n-label {
+    font-size: 12px; color: var(--text-muted); font-family: var(--font-mono);
+    white-space: nowrap;
+  }
+  .freq-n-input {
+    width: 60px;
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 4px; padding: 4px 8px; color: var(--text-primary);
+    font-size: 13px; outline: none; text-align: center;
+    -moz-appearance: textfield; appearance: textfield;
+  }
+  .freq-n-input:focus { border-color: var(--text-muted); }
+  .freq-n-input::-webkit-outer-spin-button,
+  .freq-n-input::-webkit-inner-spin-button {
+    -webkit-appearance: none; margin: 0;
   }
 
   /* Icon toggles */
@@ -496,13 +632,26 @@
   }
   .icon-type-btn.selected { border-color: var(--text-primary); color: var(--text-primary); }
 
+  /* Icon picker field — fixed height container so switching between
+     emoji and icon modes does not resize the modal. */
+  .icon-picker-field {
+    height: 320px;
+    min-height: 320px;
+    max-height: 320px;
+    overflow: hidden;
+  }
+  .icon-picker-field > :global(*) {
+    height: 100%;
+    min-height: 0;
+    max-height: 100%;
+  }
+
   /* Emoji grid */
   .emoji-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
     gap: 4px;
-    min-height: 220px;
-    max-height: 300px;
+    height: 100%;
     overflow-y: auto;
     padding: 4px;
     align-content: start;
@@ -518,14 +667,92 @@
   .emoji-btn.selected { border-color: var(--text-primary); background: var(--elevated); }
 
   /* Theme selector */
+  .theme-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+  }
   .theme-btn {
-    flex: 1; padding: 6px; font-size: 11px;
+    padding: 8px 4px; font-size: 11px;
     background: var(--surface); border: 1px solid var(--border);
     border-radius: 4px; color: var(--text-muted);
     cursor: pointer; transition: all 0.15s; font-family: var(--font-mono);
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .theme-btn:hover { border-color: var(--text-muted); }
   .theme-btn.selected { border-color: var(--text-primary); color: var(--text-primary); }
+
+  /* Color picker */
+  .color-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(32px, 1fr));
+    gap: 6px;
+    padding: 4px;
+  }
+  .color-btn {
+    width: 32px; height: 32px;
+    border: 2px solid transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+    padding: 0;
+  }
+  .color-btn:hover {
+    transform: scale(1.1);
+    border-color: var(--text-muted);
+  }
+  .color-btn.selected {
+    border-color: var(--text-primary);
+    box-shadow: 0 0 0 1px var(--bg), 0 0 0 3px var(--text-primary);
+  }
+
+  /* Manual color picker */
+  .color-manual-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .color-swatch-wrapper {
+    width: 36px;
+    height: 36px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    flex-shrink: 0;
+    overflow: hidden;
+    position: relative;
+    cursor: pointer;
+  }
+  .color-swatch {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    opacity: 0;
+  }
+  .color-swatch::-webkit-color-swatch-wrapper { padding: 0; }
+  .color-swatch::-webkit-color-swatch { border: none; }
+  .color-swatch::-moz-color-swatch { border: none; }
+  .hex-input {
+    width: 90px;
+    flex: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-size: 13px;
+    color: var(--text-primary);
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .hex-input:focus { border-color: var(--text-muted); }
 
   /* Footer */
   .modal-footer {
@@ -621,5 +848,14 @@
       max-width: none;
       max-height: calc(100vh - 16px);
     }
+    .modal-grid {
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+    .theme-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+    /* Preview first on mobile, then data fields */
+    .modal-col-preview { order: -1; }
   }
 </style>

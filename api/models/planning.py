@@ -1,7 +1,7 @@
 from datetime import date, datetime
 
 from database import Base
-from sqlalchemy import Date, DateTime, ForeignKey, Integer
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 
@@ -11,6 +11,6 @@ class PlanningAssignment(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     goal_id: Mapped[int] = mapped_column(Integer, ForeignKey("goals.id", ondelete="CASCADE"), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     goal = relationship("Goal")

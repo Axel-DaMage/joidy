@@ -1,5 +1,6 @@
 <script lang="ts">
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
+  import { t } from 'svelte-i18n';
 
   export let accentColor = '#6366F1';
   export let githubConnected = false;
@@ -31,19 +32,19 @@
   <div class="gh-heading">
     <h4 style="color: {accentColor}">GitHub</h4>
     {#if githubLoading}
-      <span class="gh-updating" title="Actualizando"></span>
+      <span class="gh-updating" title={$t('widgets.ghUpdating')}></span>
     {/if}
   </div>
   <div class="gh-filters">
     <div class="gh-filter">
-      <button class="filter-btn" class:active={ghType === 'all'} onclick={() => onSetType('all')}>Todo</button>
-      <button class="filter-btn" class:active={ghType === 'issues'} onclick={() => onSetType('issues')}>Issues</button>
+      <button class="filter-btn" class:active={ghType === 'all'} onclick={() => onSetType('all')}>{$t('widgets.ghAll')}</button>
+      <button class="filter-btn" class:active={ghType === 'issues'} onclick={() => onSetType('issues')}>{$t('widgets.ghIssues')}</button>
       <button class="filter-btn" class:active={ghType === 'prs'} onclick={() => onSetType('prs')}>PRs</button>
     </div>
     <span class="gh-filter-divider">|</span>
     <div class="gh-filter">
-      <button class="filter-btn" class:active={ghFilter === 'created'} onclick={() => onSetFilter('created')}>Creados</button>
-      <button class="filter-btn" class:active={ghFilter === 'assigned'} onclick={() => onSetFilter('assigned')}>Asignados</button>
+      <button class="filter-btn" class:active={ghFilter === 'created'} onclick={() => onSetFilter('created')}>{$t('widgets.ghCreated')}</button>
+      <button class="filter-btn" class:active={ghFilter === 'assigned'} onclick={() => onSetFilter('assigned')}>{$t('widgets.ghAssigned')}</button>
     </div>
   </div>
 </div>
@@ -96,10 +97,10 @@
         <div class="stat-divider"></div>
         <div class="stat"><span class="stat-value mono">{prStats.total}</span><span class="stat-label label">prs</span></div>
       </div>
-      <div class="empty-state success">✓ Sin pendientes</div>
+      <div class="empty-state success">{$t('widgets.ghNoPending')}</div>
     {/if}
     {:else}
-      <div class="empty-state"><span class="caption">Conecta GitHub</span></div>
+      <div class="empty-state"><span class="caption">{$t('widgets.ghConnect')}</span></div>
     {/if}
   </div>
 
@@ -151,6 +152,10 @@
   .github-body {
     --gh-item-h: 48px;
     height: calc(var(--gh-item-h) * var(--gh-items-max));
+    overflow-y: auto;
+  }
+  .github-body:has(.empty-state) {
+    height: auto;
   }
   .gh-item {
     display: flex; align-items: center; gap: 8px;
@@ -214,5 +219,44 @@
     0% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.45); opacity: 1; }
     70% { box-shadow: 0 0 0 6px rgba(99, 102, 241, 0); opacity: 0.6; }
     100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); opacity: 1; }
+  }
+
+  @media (max-width: 768px) {
+    .github-header {
+      flex-direction: column;
+      align-items: stretch;
+      gap: var(--s2);
+      min-height: auto;
+      padding: var(--s2) var(--s3);
+    }
+    .gh-filters {
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .filter-btn {
+      min-width: 48px;
+    }
+    .github-body {
+      --gh-item-h: 40px;
+      max-height: 280px;
+    }
+    .github-summary {
+      gap: var(--s3);
+      padding: var(--s3);
+    }
+  }
+
+  @media (max-width: 480px) {
+    .gh-filters {
+      flex-direction: column;
+      gap: var(--s1);
+    }
+    .filter-btn {
+      width: 100%;
+      min-width: unset;
+    }
+    .gh-filter-divider {
+      display: none;
+    }
   }
 </style>

@@ -8,11 +8,22 @@ from models.gamification import UserStats
 from models.note import Note, NoteTag, Tag
 from pydantic import BaseModel
 from services.auth_service import get_current_user
+from services.timezone_utils import get_local_today, to_utc_datetime
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from datetime import datetime, date, timedelta, timezone
 
 router = APIRouter(prefix="/ai", tags=["ai"])
+
+
+def _ai_disabled_response(endpoint: str) -> dict:
+    """Standard response when AI_SERVICE_ENABLED=false.
+
+    Returns a 200 with a clear 'disabled' status so the frontend can
+    distinguish 'intentionally off' from 'service crashed'.
+    """
+    return {"status": "disabled", "ai_enabled": False, "endpoint": endpoint}
+
 
 class ClassifyRequest(BaseModel):
     note_id: int
@@ -21,6 +32,8 @@ class ClassifyRequest(BaseModel):
 
 @router.post("/classify")
 async def classify(req: ClassifyRequest):
+    if not settings.ai_service_enabled:
+        return {**_ai_disabled_response("classify"), "note_id": req.note_id, "suggestions": []}
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
             headers = {"X-Request-ID": get_correlation_id()}
@@ -38,6 +51,8 @@ async def classify(req: ClassifyRequest):
 
 @router.get("/usage")
 async def usage():
+    if not settings.ai_service_enabled:
+        return {**_ai_disabled_response("usage"), "estimated_cost_usd": 0}
     async with httpx.AsyncClient(timeout=10.0) as client:
         try:
             headers = {"X-Request-ID": get_correlation_id()}
@@ -53,6 +68,8 @@ async def usage():
 @router.post("/cluster")
 async def cluster_notes(eps: float = 0.3, min_samples: int = 3, max_notes: int = 500):
     """Cluster notes by semantic similarity via the ai-service (#393)."""
+    if not settings.ai_service_enabled:
+        return {**_ai_disabled_response("cluster"), "clusters": [], "total_notes": 0}
     async with httpx.AsyncClient(timeout=60.0) as client:
         try:
             headers = {"X-Request-ID": get_correlation_id()}
@@ -79,16 +96,24 @@ async def daily_recap(
     Gathers notes created, XP gained, goals completed, and focus time,
     then asks the ai-service to generate a natural-language summary.
     """
+    if not settings.ai_service_enabled:
+        return {
+            **_ai_disabled_response("daily-recap"),
+            "recap": "El servicio de IA está deshabilitado.",
+            "suggestions": [],
+        }
     if target_date is None:
-        target_date = date.today().isoformat()
+        target_date = get_local_today().isoformat()
 
     try:
         day = datetime.strptime(target_date, "%Y-%m-%d").date()
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid date format, use YYYY-MM-DD")
 
-    start = datetime.combine(day, datetime.min.time(), tzinfo=timezone.utc)
-    end = start + timedelta(days=1)
+    # Query the DB using UTC boundaries that correspond to the user-local day,
+    # since created_at/updated_at/completed_at are stored as UTC timestamps.
+    start = to_utc_datetime(day)
+    end = to_utc_datetime(day + timedelta(days=1))
 
     # Gather the day's activity from the DB
     notes_created = db.query(Note).filter(Note.created_at >= start, Note.created_at < end).all()
@@ -211,6 +236,12 @@ async def chat(
     /chat endpoint. The response is returned without persisting chat history
     on the backend (history lives in the frontend sessionStorage).
     """
+    if not settings.ai_service_enabled:
+        return {
+            **_ai_disabled_response("chat"),
+            "response": "El asistente de IA está deshabilitado en este modo.",
+            "suggestions": [],
+        }
     context = _gather_chat_context(db)
 
     async with httpx.AsyncClient(timeout=60.0) as client:

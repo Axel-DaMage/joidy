@@ -2,13 +2,9 @@
   import { browser } from '$app/environment';
   import { onMount } from 'svelte';
   import { fade } from 'svelte/transition';
-  import { RefreshCw, CloudOff, CheckCircle, Loader } from 'lucide-svelte';
-  import {
-    isOnline,
-    pendingChanges,
-    syncStatus,
-    forceSync,
-  } from '$lib/stores/offlineSync';
+  import { RefreshCw, CloudOff, CircleCheckBig, Loader } from 'lucide-svelte';
+  import { t } from 'svelte-i18n';
+  import { isOnline, pendingChanges, syncStatus, forceSync } from '$lib/stores/offlineSync';
 
   let showOnlinePill = false;
   let onlinePillTimer: ReturnType<typeof setTimeout> | null = null;
@@ -43,22 +39,40 @@
 </script>
 
 {#if visible}
-  <div class="offline-indicator" class:offline={!$isOnline} class:syncing={$syncStatus === 'syncing'} class:online={$isOnline && showOnlinePill} transition:fade={{ duration: 200 }}>
+  <div
+    class="offline-indicator"
+    class:offline={!$isOnline}
+    class:syncing={$syncStatus === 'syncing'}
+    class:online={$isOnline && showOnlinePill}
+    transition:fade={{ duration: 200 }}
+  >
     {#if $syncStatus === 'syncing'}
       <Loader size={14} class="spin" />
-      <span>Sincronizando...</span>
+      <span>{$t('offline.syncing')}</span>
     {:else if !$isOnline}
       <CloudOff size={14} />
-      <span>Offline — {$pendingChanges} {#if $pendingChanges === 1}cambio pendiente{:else}cambios pendientes{/if}</span>
+      <span
+        >{$t('offline.offline', {
+          values: {
+            pending: $pendingChanges,
+            change:
+              $pendingChanges === 1 ? $t('offline.pendingChange') : $t('offline.pendingChanges'),
+          },
+        })}</span
+      >
       {#if $pendingChanges > 0}
-        <button class="sync-btn" onclick={() => forceSync().catch(() => {})} aria-label="Forzar sincronización">
+        <button
+          class="sync-btn"
+          onclick={() => forceSync().catch(() => {})}
+          aria-label={$t('offline.forceSync')}
+        >
           <RefreshCw size={12} />
-          Forzar sync
+          {$t('offline.forceSync')}
         </button>
       {/if}
     {:else if showOnlinePill}
-      <CheckCircle size={14} />
-      <span>En línea</span>
+      <CircleCheckBig size={14} />
+      <span>{$t('offline.online')}</span>
     {/if}
   </div>
 {/if}
@@ -123,8 +137,12 @@
     animation: spin 1s linear infinite;
   }
   @keyframes spin {
-    from { transform: rotate(0deg); }
-    to   { transform: rotate(360deg); }
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
   }
 
   @media (max-width: 600px) {
