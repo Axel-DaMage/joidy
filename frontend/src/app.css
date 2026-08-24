@@ -482,7 +482,7 @@ textarea.input {
 /* ── Progress bars ───────────────────────────────────────────────────────────── */
 .progress-track {
   height: 2px;
-  background: var(--border);
+  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
   border-radius: 1px;
   overflow: hidden;
 }
