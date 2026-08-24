@@ -24,6 +24,11 @@ param(
   [string]$Service = ""
 )
 
+function Write-Status($msg) { Write-Host "[$(Get-Date -Format 'HH:mm:ss')] $msg" -ForegroundColor Blue }
+function Write-Ok($msg)     { Write-Host "✓ $msg" -ForegroundColor Green }
+function Write-Warn($msg)   { Write-Host "⚠ $msg" -ForegroundColor Yellow }
+function Write-Err($msg)    { Write-Host "✗ $msg" -ForegroundColor Red }
+
 # Resolve project directory.
 # Priority: JOIDY_DIR env var → ~/.config/joidy/path file → script location (../)
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -44,6 +49,89 @@ if (-not (Test-Path "$ProjectDir\docker-compose.yml")) {
 }
 
 Set-Location $ProjectDir
+
+# ─── .env bootstrap ───────────────────────────────────────────────
+# Resolve which .env file to use:
+# 1. $ProjectDir\.env           (git-clone install — writable)
+# 2. $env:USERPROFILE\.config\joidy\.env  (AUR/system install — project dir is read-only)
+# 3. Auto-create from .env.example with generated secrets
+$ConfigDirJoidy = Join-Path $env:USERPROFILE ".config\joidy"
+$EnvFile = ""
+$EnvFileArg = @()
+
+if (Test-Path "$ProjectDir\.env") {
+  $EnvFile = "$ProjectDir\.env"
+} elseif ((Test-Path "$ProjectDir\.env.example") -and -not (Test-Path "$ProjectDir\.env")) {
+  # Check if project dir is writable
+  $canWrite = $false
+  try {
+    $testFile = Join-Path $ProjectDir ".joidy_write_test"
+    [System.IO.File]::WriteAllText($testFile, "test")
+    Remove-Item $testFile -Force
+    $canWrite = $true
+  } catch {
+    $canWrite = $false
+  }
+
+  if ($canWrite) {
+    Copy-Item "$ProjectDir\.env.example" "$ProjectDir\.env"
+    $EnvFile = "$ProjectDir\.env"
+    Write-Status "Created .env from .env.example"
+  } else {
+    # Project dir is read-only — use user config dir
+    if (-not (Test-Path $ConfigDirJoidy)) {
+      New-Item -ItemType Directory -Path $ConfigDirJoidy -Force | Out-Null
+    }
+    $EnvFile = Join-Path $ConfigDirJoidy ".env"
+    if (-not (Test-Path $EnvFile)) {
+      Copy-Item "$ProjectDir\.env.example" $EnvFile
+      Write-Status "Created .env in $ConfigDirJoidy (project dir is read-only)"
+    }
+    $EnvFileArg = @("--env-file", $EnvFile)
+  }
+}
+
+# Auto-generate required secrets if empty or placeholder
+function Generate-Secret($Length) {
+  $bytes = New-Object byte[] $Length
+  (New-Object Security.Cryptography.RandomNumberGenerator).GetBytes($bytes)
+  return -join ($bytes | ForEach-Object { $_.ToString("x2") })
+}
+
+if ($EnvFile -and (Test-Path $EnvFile)) {
+  $envContent = Get-Content $EnvFile -Raw
+  $changed = $false
+
+  # POSTGRES_PASSWORD
+  if ($envContent -match '(?m)^POSTGRES_PASSWORD=\s*$') {
+    $newPw = Generate-Secret 24
+    $envContent = $envContent -replace '(?m)^POSTGRES_PASSWORD=.*', "POSTGRES_PASSWORD=$newPw"
+    Write-Ok "Generated POSTGRES_PASSWORD"
+    $changed = $true
+  }
+
+  # SECRET_KEY
+  if ($envContent -match '(?m)^SECRET_KEY=(\s*|change_this_to_a_random_secret_key)\s*$') {
+    $newSk = Generate-Secret 32
+    $envContent = $envContent -replace '(?m)^SECRET_KEY=.*', "SECRET_KEY=$newSk"
+    Write-Ok "Generated SECRET_KEY"
+    $changed = $true
+  }
+
+  # GRAFANA_ADMIN_PASSWORD
+  if ($envContent -match '(?m)^GRAFANA_ADMIN_PASSWORD=\s*$') {
+    $newGrafanaPw = Generate-Secret 24
+    $envContent = $envContent -replace '(?m)^GRAFANA_ADMIN_PASSWORD=.*', "GRAFANA_ADMIN_PASSWORD=$newGrafanaPw"
+    Write-Ok "Generated GRAFANA_ADMIN_PASSWORD"
+    $changed = $true
+  }
+
+  if ($changed) {
+    $envContent | Set-Content $EnvFile -NoNewline
+    Write-Warn "Auto-generated required secrets in $EnvFile"
+    Write-Warn "Edit $EnvFile to add: GEMINI_API_KEY, OBSIDIAN_VAULT_PATH, etc."
+  }
+}
 
 $HIBERNATE_SERVICES = @("ai-service", "worker")
 
@@ -87,11 +175,6 @@ function Invoke-ComposeCommand {
   }
 }
 
-function Write-Status($msg) { Write-Host "[$(Get-Date -Format 'HH:mm:ss')] $msg" -ForegroundColor Blue }
-function Write-Ok($msg)     { Write-Host "✓ $msg" -ForegroundColor Green }
-function Write-Warn($msg)   { Write-Host "⚠ $msg" -ForegroundColor Yellow }
-function Write-Err($msg)    { Write-Host "✗ $msg" -ForegroundColor Red }
-
 function Get-LanIp {
   # Try to get the first non-loopback IPv4 address
   $ip = "localhost"
@@ -124,9 +207,8 @@ function Write-AccessUrl {
 }
 
 function Get-AiProfileArgs {
-  $envFile = Join-Path $ProjectDir ".env"
-  if (Test-Path $envFile) {
-    $lines = Get-Content $envFile -ErrorAction SilentlyContinue
+  if ($EnvFile -and (Test-Path $EnvFile)) {
+    $lines = Get-Content $EnvFile -ErrorAction SilentlyContinue
     foreach ($line in $lines) {
       if ($line -match '^\s*AI_SERVICE_ENABLED\s*=\s*true\s*$') {
         return @("--profile", "ai")
@@ -140,9 +222,9 @@ function Invoke-Up {
   Write-Status "Starting Joidy services..."
   $profile = Get-AiProfileArgs
   if ($profile.Count -gt 0) {
-    Invoke-ComposeCommand @profile up -d
+    Invoke-ComposeCommand @EnvFileArg @profile up -d
   } else {
-    Invoke-ComposeCommand up -d
+    Invoke-ComposeCommand @EnvFileArg up -d
   }
   Write-Status "Waiting for services to stabilize..."
   Start-Sleep -Seconds 5
@@ -152,16 +234,16 @@ function Invoke-Up {
 
 function Invoke-Down {
   Write-Status "Stopping all Joidy services..."
-  Invoke-ComposeCommand down
+  Invoke-ComposeCommand @EnvFileArg down
   Write-Ok "All services stopped."
 }
 
 function Invoke-Sleep {
   Write-Status "Hibernating heavy services (ai-service, worker)..."
   foreach ($svc in $HIBERNATE_SERVICES) {
-    $running = Invoke-ComposeCommand ps $svc 2>$null
+    $running = Invoke-ComposeCommand @EnvFileArg ps $svc 2>$null
     if ($running -match $svc) {
-      Invoke-ComposeCommand stop $svc
+      Invoke-ComposeCommand @EnvFileArg stop $svc
       Write-Ok "Stopped $svc"
     } else {
       Write-Warn "$svc is already stopped"
@@ -176,13 +258,13 @@ function Invoke-Wake {
   Write-Status "Waking heavy services from hibernation..."
   $profile = Get-AiProfileArgs
   foreach ($svc in $HIBERNATE_SERVICES) {
-    $all = Invoke-ComposeCommand @profile ps -a $svc 2>$null
+    $all = Invoke-ComposeCommand @EnvFileArg @profile ps -a $svc 2>$null
     if ($all -match $svc) {
-      $running = Invoke-ComposeCommand @profile ps $svc 2>$null
+      $running = Invoke-ComposeCommand @EnvFileArg @profile ps $svc 2>$null
       if ($running -match $svc) {
         Write-Warn "$svc is already running"
       } else {
-        Invoke-ComposeCommand @profile start $svc
+        Invoke-ComposeCommand @EnvFileArg @profile start $svc
         Write-Ok "Started $svc"
       }
     } else {
@@ -197,9 +279,9 @@ function Invoke-Restart {
   Write-Status "Restarting all Joidy services..."
   $profile = Get-AiProfileArgs
   if ($profile.Count -gt 0) {
-    Invoke-ComposeCommand @profile restart
+    Invoke-ComposeCommand @EnvFileArg @profile restart
   } else {
-    Invoke-ComposeCommand restart
+    Invoke-ComposeCommand @EnvFileArg restart
   }
   Write-Ok "All services restarted."
   Write-AccessUrl
@@ -208,14 +290,14 @@ function Invoke-Restart {
 function Invoke-Status {
   Write-Status "Joidy service status:"
   Write-Host ""
-  Invoke-ComposeCommand ps
+  Invoke-ComposeCommand @EnvFileArg ps
 }
 
 function Invoke-Logs {
   if ($Service) {
-    Invoke-ComposeCommand logs -f $Service
+    Invoke-ComposeCommand @EnvFileArg logs -f $Service
   } else {
-    Invoke-ComposeCommand logs -f
+    Invoke-ComposeCommand @EnvFileArg logs -f
   }
 }
 
@@ -232,6 +314,11 @@ function Show-Help {
   Write-Host "  joidy logs       Tail logs (all services)"
   Write-Host "  joidy logs api   Tail logs for a specific service"
   Write-Host "  joidy help       Show this help message"
+  Write-Host ""
+  Write-Host "On first run, .env is auto-created from .env.example with generated"
+  Write-Host "POSTGRES_PASSWORD, SECRET_KEY, and GRAFANA_ADMIN_PASSWORD."
+  Write-Host "For system installs (read-only project dir), .env is stored in"
+  Write-Host "~/.config/joidy/.env. Edit it to add GEMINI_API_KEY, OBSIDIAN_VAULT_PATH, etc."
   Write-Host ""
   Write-Host "The project directory is auto-detected from the script location."
 }
