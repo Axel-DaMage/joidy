@@ -1873,7 +1873,7 @@
     padding: 10px 12px;
     font-size: 12px;
     color: var(--text-muted);
-    font-family: var(--mono-font, monospace);
+    font-family: var(--font-mono);
   }
 
   /* ── Tree rows ── */
