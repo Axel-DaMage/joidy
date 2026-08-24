@@ -686,7 +686,12 @@ export const api = {
   config: {
     setupStatus: () => req<{ needs_setup: boolean }>('GET', '/config/setup-status'),
     setup: (auth_password: string, obsidian_vault_path?: string) =>
-      req<{ status: string; message: string }>('POST', '/config/setup', {
+      req<{
+        status: string;
+        message: string;
+        requires_restart?: boolean;
+        restart_reason?: string;
+      }>('POST', '/config/setup', {
         auth_password,
         obsidian_vault_path,
       }),

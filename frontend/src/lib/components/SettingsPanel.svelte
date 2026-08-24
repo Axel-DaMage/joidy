@@ -21,6 +21,7 @@
   import { logger } from '$lib/utils/logger';
   import { deferredPrompt, isAppInstalled, showInstallBanner } from '$lib/stores/pwa';
   import { showNotification } from '$lib/stores/notifications';
+  import { session } from '$lib/stores/session';
   import { locale as localeStore, setLocale } from '$lib/stores/locale';
   import { t } from 'svelte-i18n';
   import { mapToSupportedLocale, SUPPORTED_LOCALES, type SupportedLocale } from '$lib/i18n';
@@ -206,6 +207,14 @@
       powerActionLoading = null;
       shutdownConfirm = false;
     }
+  }
+
+  // The JWT is stateless, so signing out is purely client-side: drop the stored
+  // session and reload so +layout.svelte falls back to the login screen.
+  function logout() {
+    session.logout();
+    showNotification($t('settings.session.loggedOut'), 'success');
+    setTimeout(() => window.location.reload(), 400);
   }
 
   async function checkGithubStatus() {
@@ -922,6 +931,25 @@
             </div>
           </section>
         {/if}
+
+        <!-- Sesión -->
+        <section class="section">
+          <div class="section-title" style="color: var(--xp, var(--accent));">
+            <DynamicIcon name="UserRound" size={12} />
+            {$t('settings.session.title')}
+          </div>
+          <div class="row">
+            <div class="row-label">
+              <DynamicIcon name="AtSign" size={13} />
+              <span>{$session?.username || $t('settings.session.noUser')}</span>
+            </div>
+            <button class="power-btn logout" onclick={logout}>
+              <DynamicIcon name="LogOut" size={12} />
+              {$t('settings.session.logout')}
+            </button>
+          </div>
+          <p class="hint">{$t('settings.session.hint')}</p>
+        </section>
 
         <!-- Servicios (Power Management) -->
         <section class="section">
@@ -1717,5 +1745,16 @@
   .power-btn.cancel {
     font-size: 10px;
     padding: 6px 10px;
+  }
+
+  .power-btn.logout {
+    border-color: color-mix(in srgb, var(--error) 40%, var(--border));
+    color: var(--error);
+  }
+
+  .power-btn.logout:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--error) 10%, transparent);
+    border-color: var(--error);
+    color: var(--error);
   }
 </style>

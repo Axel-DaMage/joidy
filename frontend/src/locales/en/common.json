@@ -80,7 +80,14 @@
     "themeDark": "Dark",
     "timeFormat": "Time format",
     "language": "Language",
-    "languageHint": "The interface language"
+    "languageHint": "The interface language",
+    "session": {
+      "title": "Session",
+      "logout": "Log out",
+      "noUser": "No session",
+      "loggedOut": "Signed out",
+      "hint": "Log out to go back to the login screen."
+    }
   },
   "quickCapture": {
     "placeholder": "Capture a quick idea...",

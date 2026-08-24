@@ -80,7 +80,14 @@
     "themeDark": "Oscuro",
     "timeFormat": "Formato de hora",
     "language": "Idioma",
-    "languageHint": "El idioma de la interfaz"
+    "languageHint": "El idioma de la interfaz",
+    "session": {
+      "title": "Sesión",
+      "logout": "Cerrar sesión",
+      "noUser": "Sin sesión",
+      "loggedOut": "Sesión cerrada",
+      "hint": "Cierra la sesión para volver a la pantalla de inicio de sesión."
+    }
   },
   "quickCapture": {
     "placeholder": "Captura una idea rápida...",

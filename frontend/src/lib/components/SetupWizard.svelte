@@ -9,6 +9,7 @@
   let vaultPath = '';
   let loading = false;
   let step = 1; // 1: Welcome, 2: Password, 3: Vault, 4: Done
+  let restartNotice = '';
 
   async function handleSetup() {
     if (password !== confirmPassword) {
@@ -23,12 +24,17 @@
 
     loading = true;
     try {
-      await api.config.setup(password, vaultPath || undefined);
+      const res = await api.config.setup(password, vaultPath || undefined);
       showNotification('¡Configuración completada!', 'success');
+      restartNotice = res.requires_restart ? res.restart_reason || '' : '';
       step = 4;
-      setTimeout(() => {
-        window.location.reload();
-      }, 2000);
+      // Wait longer when a restart is pending so the notice stays readable.
+      setTimeout(
+        () => {
+          window.location.reload();
+        },
+        restartNotice ? 6000 : 2000
+      );
     } catch (e: any) {
       showNotification(e.message || 'Error al configurar el sistema', 'error');
     } finally {
@@ -131,6 +137,9 @@
         </div>
         <h2 class="title" style="color: var(--success);">¡Todo Listo!</h2>
         <p class="desc">{$t('setupWizard.doneDesc')}</p>
+        {#if restartNotice}
+          <p class="restart-notice mono">{restartNotice}</p>
+        {/if}
       </div>
     {/if}
   </div>
@@ -187,6 +196,16 @@
     font-size: 13px;
     line-height: 1.5;
     margin-bottom: 24px;
+  }
+
+  .restart-notice {
+    color: var(--text-muted);
+    font-size: 11px;
+    line-height: 1.5;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    background: var(--elevated);
   }
 
   .step-content {
