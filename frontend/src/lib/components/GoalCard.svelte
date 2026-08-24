@@ -20,11 +20,20 @@
     onTogglePin: (_id: number) => {},
     onClick: (_g: any) => {},
   };
-  const { tags, notes, getGoalColor, TEMPORALITY_LABELS, STATE_LABELS, formatFailConfig, onTogglePin, onClick } = ctx;
+  const {
+    tags,
+    notes,
+    getGoalColor,
+    TEMPORALITY_LABELS,
+    STATE_LABELS,
+    formatFailConfig,
+    onTogglePin,
+    onClick,
+  } = ctx;
 
   // Build Maps for O(1) lookups instead of linear searches
-  const tagsMap = new Map(tags.map(t => [t.id, t]));
-  const notesMap = new Map(notes.map(n => [n.id, n]));
+  const tagsMap = new Map(tags.map((t) => [t.id, t]));
+  const notesMap = new Map(notes.map((n) => [n.id, n]));
 </script>
 
 <div
@@ -51,11 +60,19 @@
       </div>
     </div>
     <div class="card-title">{goal.title}</div>
-    <div class="goal-state-indicator" class:active={goal.state === 'ACTIVE'} class:completed={goal.state === 'COMPLETED' || goal.is_completed} class:paused={goal.state === 'PAUSED'} class:failed={goal.state === 'FAILED'}>
+    <div
+      class="goal-state-indicator"
+      class:active={goal.state === 'ACTIVE'}
+      class:completed={goal.state === 'COMPLETED' || goal.is_completed}
+      class:paused={goal.state === 'PAUSED'}
+      class:failed={goal.state === 'FAILED'}
+    >
       {STATE_LABELS[goal.state] || goal.state}
     </div>
     {#if goal.description}
-      <div class="card-description">{goal.description.substring(0, 80)}{goal.description.length > 80 ? '...' : ''}</div>
+      <div class="card-description">
+        {goal.description.substring(0, 80)}{goal.description.length > 80 ? '...' : ''}
+      </div>
     {/if}
     <div class="card-meta">
       <div class="meta-item">
@@ -91,14 +108,22 @@
             {goal.current_value} / {goal.target_value}
           {/if}
         </span>
-        <span class="progress-pct">{(goal.state === 'COMPLETED' || goal.is_completed) ? 100 : goal.progress_pct}%</span>
+        <span class="progress-pct"
+          >{goal.state === 'COMPLETED' || goal.is_completed ? 100 : goal.progress_pct}%</span
+        >
       </div>
-      <ProgressBar value={(goal.state === 'COMPLETED' || goal.is_completed) ? 100 : goal.progress_pct} color="var(--goal-color)" height={6} />
+      <ProgressBar
+        value={goal.state === 'COMPLETED' || goal.is_completed ? 100 : goal.progress_pct}
+        color="var(--goal-color)"
+        height={6}
+      />
     </div>
     <div class="card-footer">
       <span class="goal-id">#{goal.id}</span>
       {#if goal.created_at}
-        <span class="goal-date">{$t('goalCard.created', { values: { date: goal.created_at.split('T')[0] } })}</span>
+        <span class="goal-date"
+          >{$t('goalCard.created', { values: { date: goal.created_at.split('T')[0] } })}</span
+        >
       {/if}
     </div>
   </button>
@@ -198,6 +223,12 @@
     cursor: pointer;
     transition: all 0.2s ease;
     z-index: var(--z-base);
+    opacity: 0;
+  }
+
+  .goal-editor-card:hover .pin-btn,
+  .pin-btn:focus-visible {
+    opacity: 1;
   }
 
   .pin-btn:hover {
@@ -209,6 +240,7 @@
     background: var(--accent);
     border-color: var(--accent);
     color: var(--bg);
+    opacity: 1;
   }
 
   .goal-icon {
