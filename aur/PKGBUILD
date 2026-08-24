@@ -8,8 +8,10 @@ arch=('any')
 url="https://joidy-web.vercel.app"
 license=('GPL3')
 depends=('docker')
-source=("https://github.com/Axel-DaMage/joidy/archive/v${_tag}.tar.gz")
-sha256sums=('SKIP')
+install=joidy.install
+source=("https://github.com/Axel-DaMage/joidy/archive/v${_tag}.tar.gz"
+        "joidy.install")
+sha256sums=('SKIP' 'SKIP')
 
 package() {
   cd "${srcdir}/joidy-${_tag}"
