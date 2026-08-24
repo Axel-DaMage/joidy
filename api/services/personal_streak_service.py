@@ -47,19 +47,32 @@ def backfill_streak_history(db: Session, streak: PersonalStreak) -> None:
 
 
 def compute_streak(checkin_dates: list[date], frequency: str = "daily", frequency_days: int = 1) -> tuple[int, int]:
-    """Returns (current_streak, longest_streak) considering frequency settings."""
+    """Returns (current_streak, longest_streak) considering frequency settings.
+
+    Uses the most recent check-in date as the reference point when today is
+    not in the check-in set, instead of relying solely on get_local_today().
+    This avoids timezone mismatches between the frontend (which sends local
+    browser dates) and the backend (which defaults to UTC). See issue #864.
+    """
     if not checkin_dates:
         return 0, 0
 
     dates_set = set(checkin_dates)
     today = get_local_today()
+    # Use the most recent check-in date as the reference "today" when the
+    # server's today is not in the check-in set. This handles the case where
+    # the user's local date differs from the server's UTC date.
+    most_recent = max(dates_set)
 
     if frequency == "every_n" and frequency_days > 1:
         sorted_dates = sorted(dates_set, reverse=True)
         current = 0
         for i, d in enumerate(sorted_dates):
             if i == 0:
-                if (today - d).days > frequency_days:
+                # Allow the most recent check-in to be within frequency_days
+                # of either server-today or the most recent check-in date.
+                reference = today if today in dates_set else most_recent
+                if (reference - d).days > frequency_days:
                     break
                 current = 1
             else:
@@ -82,10 +95,14 @@ def compute_streak(checkin_dates: list[date], frequency: str = "daily", frequenc
         return current, max(longest, run) if sorted_asc else 0
     else:
         current = 0
+        # Start from server-today; if not checked in, try yesterday; if
+        # neither is in the set, fall back to the most recent check-in date
+        # to avoid showing 0 when the timezone offset causes a date mismatch.
         cursor = today
-
         if cursor not in dates_set:
             cursor -= timedelta(days=1)
+        if cursor not in dates_set:
+            cursor = most_recent
 
         while cursor in dates_set:
             current += 1

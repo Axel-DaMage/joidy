@@ -64,12 +64,19 @@ def _backfill_streak_history(db: Session, streak: PersonalStreak):
 # ── Streak computation ─────────────────────────────────────────────────────────
 
 def _compute_streak(checkin_dates: list[date], frequency: str = "daily", frequency_days: int = 1) -> tuple[int, int]:
-    """Returns (current_streak, longest_streak) considering frequency settings."""
+    """Returns (current_streak, longest_streak) considering frequency settings.
+
+    Uses the most recent check-in date as the reference point when today is
+    not in the check-in set, instead of relying solely on get_local_today().
+    This avoids timezone mismatches between the frontend (which sends local
+    browser dates) and the backend (which defaults to UTC). See issue #864.
+    """
     if not checkin_dates:
         return 0, 0
 
     dates_set = set(checkin_dates)
     today = get_local_today()
+    most_recent = max(dates_set)
 
     if frequency == "every_n" and frequency_days > 1:
         # For every-N-days: streak counts how many consecutive "on-time" check-ins
@@ -78,8 +85,10 @@ def _compute_streak(checkin_dates: list[date], frequency: str = "daily", frequen
         # Walk from most recent check-in backwards
         for i, d in enumerate(sorted_dates):
             if i == 0:
-                # Most recent must be within frequency_days of today
-                if (today - d).days > frequency_days:
+                # Most recent must be within frequency_days of today or the
+                # most recent check-in date (timezone-safe reference).
+                reference = today if today in dates_set else most_recent
+                if (reference - d).days > frequency_days:
                     break
                 current = 1
             else:
@@ -102,14 +111,17 @@ def _compute_streak(checkin_dates: list[date], frequency: str = "daily", frequen
                 run = 1
         return current, max(longest, run) if sorted_asc else 0
     else:
-        # Daily: original logic
+        # Daily: original logic with timezone-safe fallback
         current = 0
         cursor = today
 
-        # If today is not checked in, we should check yesterday.
-        # The user still has time today to maintain the streak.
+        # If today is not checked in, try yesterday.
         if cursor not in dates_set:
             cursor -= timedelta(days=1)
+        # If neither today nor yesterday is in the set, fall back to the
+        # most recent check-in date to avoid showing 0 due to timezone offset.
+        if cursor not in dates_set:
+            cursor = most_recent
 
         while cursor in dates_set:
             current += 1
@@ -138,15 +150,30 @@ def _streak_to_dict(streak: PersonalStreak, days_history: int = 365) -> dict:
     effective_current = current + streak.offset
     effective_longest = max(longest + streak.offset, streak.best_streak) if longest > 0 else max(streak.offset, streak.best_streak)
 
+    # Timezone-safe "today" reference: if the server's UTC today is not in
+    # the check-in set but the most recent check-in is within 1 day, use it
+    # as the reference for today_checked and history. See issue #864.
+    dates_set = set(checkin_dates)
+    if dates_set:
+        most_recent = max(dates_set)
+        # Use most_recent as "today" if it's within 1 day of server-today
+        # (handles UTC offset where user's local date differs from server).
+        if today not in dates_set and abs((today - most_recent).days) <= 1:
+            effective_today = most_recent
+        else:
+            effective_today = today
+    else:
+        effective_today = today
+
     # History for heatmap (last N days)
     history = []
     if days_history > 0:
         for i in range(days_history - 1, -1, -1):
-            d = today - timedelta(days=i)
+            d = effective_today - timedelta(days=i)
             checkin = checkin_map.get(d)
             entry = {
                 "date": d.isoformat(),
-                "checked": d in set(checkin_dates),
+                "checked": d in dates_set,
             }
             if checkin:
                 entry["note"] = checkin.note or ""
@@ -157,7 +184,7 @@ def _streak_to_dict(streak: PersonalStreak, days_history: int = 365) -> dict:
     days_remaining = None
     completion_pct = None
     if streak.target_date:
-        days_remaining = max(0, (streak.target_date - today).days)
+        days_remaining = max(0, (streak.target_date - effective_today).days)
         if streak.start_date:
             total_span = (streak.target_date - streak.start_date).days
             elapsed = (today - streak.start_date).days
@@ -191,7 +218,7 @@ def _streak_to_dict(streak: PersonalStreak, days_history: int = 365) -> dict:
         "freeze_used": streak.freeze_used or 0,
         "days_remaining": days_remaining,
         "completion_pct": completion_pct,
-        "today_checked": today in set(checkin_dates),
+        "today_checked": effective_today in dates_set,
         "history": history,
         "created_at": streak.created_at.isoformat(),
     }
