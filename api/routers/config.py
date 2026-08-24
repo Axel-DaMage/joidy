@@ -1,14 +1,13 @@
-from pathlib import Path
+import secrets
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from services.auth_service import get_current_user, hash_password
+from services.env_file import ENV_FILE, read_env, write_env  # noqa: F401  (ENV_FILE re-exported)
 
 from config import settings
 
 router = APIRouter(prefix="/config", tags=["config"])
-
-ENV_FILE = Path("/app/.env") if Path("/app").exists() else Path(__file__).parent.parent.parent / ".env"
 
 CONFIG_KEYS = {
     "gemini_api_key": "GEMINI_API_KEY",
@@ -39,26 +38,6 @@ PUBLIC_KEYS = {
     "app_env": True,
     "ai_service_enabled": True,
 }
-
-
-def read_env() -> dict:
-    env_vars = {}
-    if ENV_FILE.exists():
-        with open(ENV_FILE) as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    key, value = line.split("=", 1)
-                    env_vars[key.strip()] = value.strip()
-    return env_vars
-
-
-def write_env(env_vars: dict) -> None:
-    with open(ENV_FILE, "w") as f:
-        f.write("# Joidy Configuration\n")
-        f.write("# Edit this file or use the web interface\n\n")
-        for key, value in env_vars.items():
-            f.write(f"{key}={value}\n")
 
 
 class ConfigResponse(BaseModel):
@@ -199,7 +178,6 @@ def get_gamification_config():
         streak_milestones=STREAK_MILESTONES
     )
 
-import secrets
 
 class SetupRequest(BaseModel):
     auth_password: str
@@ -238,14 +216,18 @@ def perform_setup(req: SetupRequest):
         
     write_env(env_vars)
     
-    # Reload settings in memory
+    # Reload settings in memory (best-effort — the authoritative source is
+    # now the .env file, which every worker reads via get_persisted()).
     import os
-    from config import settings
     settings.auth_password = hash_password(req.auth_password)
     settings.secret_key = env_vars["SECRET_KEY"]
     if req.obsidian_vault_path:
         os.environ["OBSIDIAN_VAULT_PATH"] = req.obsidian_vault_path
         settings.obsidian_vault_path = req.obsidian_vault_path
-    
-    return {"status": "ok", "message": "Setup completed"}
+
+    return {
+        "status": "ok",
+        "message": "Setup completed",
+        "requires_restart": False,
+    }
 
