@@ -33,10 +33,23 @@ if ($PSVersionTable.Platform -ne "Win32NT" -and (-not $osEnv -or -not $osEnv.Con
   exit 1
 }
 
+# Detect whether the AI profile should be enabled by reading the .env file.
+$AiProfileArg = ""
+$EnvFile = Join-Path $ProjectDir ".env"
+if (Test-Path $EnvFile) {
+  $envLines = Get-Content $EnvFile -ErrorAction SilentlyContinue
+  foreach ($line in $envLines) {
+    if ($line -match '^\s*AI_SERVICE_ENABLED\s*=\s*true\s*$') {
+      $AiProfileArg = "--profile ai "
+      break
+    }
+  }
+}
+
 # Create the scheduled task action
 $Action = New-ScheduledTaskAction `
   -Execute "powershell.exe" `
-  -Argument "-NoProfile -WindowStyle Hidden -Command `"Set-Location '$ProjectDir'; docker compose up -d`""
+  -Argument "-NoProfile -WindowStyle Hidden -Command `"Set-Location '$ProjectDir'; docker compose ${AiProfileArg}up -d`""
 
 # Trigger at user logon
 $Trigger = New-ScheduledTaskTrigger -AtLogOn
