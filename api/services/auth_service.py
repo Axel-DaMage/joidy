@@ -47,8 +47,13 @@ def verify_password(plain: str, hashed_or_plain: str) -> bool:
     """Verify a password against a stored hash or plaintext.
 
     Supports bcrypt hashes (starting with $2b$) and plaintext for backward compat.
+
+    Service-to-service shortcut: if the caller sends the hash itself (e.g. the
+    worker reading AUTH_PASSWORD from .env), accept it without re-hashing.
     """
     if hashed_or_plain.startswith("$2b$"):
+        if plain == hashed_or_plain:
+            return True
         return pwd_context.verify(plain, hashed_or_plain)
     return plain == hashed_or_plain
 
