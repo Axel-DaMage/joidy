@@ -70,6 +70,26 @@ fi
 
 cd "$PROJECT_DIR"
 
+# ─── Container engine detection ───────────────────────────────────
+# Detect the engine early so the env bootstrap can make engine-specific
+# decisions (e.g. skip DOCKER_GID for Podman rootless, set socket path).
+# Priority: docker-compose → docker compose → podman compose → podman-compose.
+CONTAINER_ENGINE="docker"
+if command -v docker-compose &>/dev/null; then
+  DOCKER_CMD="docker-compose"
+elif command -v docker &>/dev/null; then
+  DOCKER_CMD="docker compose"
+elif command -v podman &>/dev/null && podman compose version &>/dev/null 2>&1; then
+  DOCKER_CMD="podman compose"
+  CONTAINER_ENGINE="podman"
+elif command -v podman-compose &>/dev/null; then
+  DOCKER_CMD="podman-compose"
+  CONTAINER_ENGINE="podman"
+else
+  echo -e "${RED}✗ Error: Neither docker nor podman was found in PATH.${NC}" >&2
+  exit 1
+fi
+
 # ─── .env bootstrap ───────────────────────────────────────────────
 # Resolve which .env file to use:
 # 1. $PROJECT_DIR/.env          (git-clone install — writable)
@@ -138,23 +158,78 @@ if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
     print_warn "Auto-generated required secrets in $ENV_FILE"
     print_warn "Edit $ENV_FILE to add: GEMINI_API_KEY, OBSIDIAN_VAULT_PATH, etc."
   fi
+  # DOCKER_GID — group owning the Docker socket. The API joins it via
+  # `group_add` so the web UI (Settings → Servicios) can query and stop/start
+  # services. Without it the default is 0 (root), which cannot read
+  # /var/run/docker.sock on Linux and the panel reports Docker as unavailable.
+  # Skip for Podman: rootless containers already have socket access via UID
+  # mapping, so no group_add is needed.
+  if [ "$CONTAINER_ENGINE" != "podman" ]; then
+    DOCKER_GID_CURRENT=$(grep -E '^DOCKER_GID=' "$ENV_FILE" | cut -d'=' -f2-)
+    if [ -z "$DOCKER_GID_CURRENT" ]; then
+      DOCKER_SOCK=$(grep -E '^DOCKER_SOCK_PATH=' "$ENV_FILE" | cut -d'=' -f2-)
+      [ -z "$DOCKER_SOCK" ] && DOCKER_SOCK="/var/run/docker.sock"
+      DETECTED_GID=""
+      if [ -S "$DOCKER_SOCK" ]; then
+        DETECTED_GID=$(stat -c '%g' "$DOCKER_SOCK" 2>/dev/null || stat -f '%g' "$DOCKER_SOCK" 2>/dev/null || true)
+      fi
+      if [ -n "$DETECTED_GID" ]; then
+        if grep -qE '^#?DOCKER_GID=' "$ENV_FILE"; then
+          sed -i "s|^#\?DOCKER_GID=.*|DOCKER_GID=${DETECTED_GID}|" "$ENV_FILE"
+        else
+          printf '\nDOCKER_GID=%s\n' "$DETECTED_GID" >>"$ENV_FILE"
+        fi
+        print_ok "Detected Docker socket group (DOCKER_GID=${DETECTED_GID})"
+      fi
+    fi
+  fi
 fi
+
+# ─── Bind-mount sources ───────────────────────────────────────────
+# Compose resolves relative volumes against the compose file directory, which
+# is read-only on system installs (/usr/share/joidy). Mounting a non-existent
+# ./.env made Docker create a *directory* at /app/.env, so every /config
+# request returned 500, and ./data was owned by root so the worker could not
+# write its event log. Point both at real, writable paths instead.
+if [ -n "$ENV_FILE" ]; then
+  export JOIDY_ENV_FILE="$ENV_FILE"
+fi
+if [ -w "$PROJECT_DIR" ]; then
+  export JOIDY_DATA_DIR="$PROJECT_DIR/data"
+else
+  export JOIDY_DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/joidy/data"
+fi
+mkdir -p "$JOIDY_DATA_DIR/db" "$JOIDY_DATA_DIR/uploads" "$JOIDY_DATA_DIR/vault"
 
 # Services that are stopped during hibernation
 HIBERNATE_SERVICES="ai-service worker"
 
-# Detect container engine
-if command -v docker-compose &>/dev/null; then
-  DOCKER_CMD="docker-compose"
-elif command -v docker &>/dev/null; then
-  DOCKER_CMD="docker compose"
-elif command -v podman-compose &>/dev/null; then
-  DOCKER_CMD="podman-compose"
-elif command -v podman &>/dev/null; then
-  DOCKER_CMD="podman compose"
-else
-  echo -e "${RED}✗ Error: Neither docker nor podman was found in PATH.${NC}" >&2
-  exit 1
+# ─── Podman socket setup ──────────────────────────────────────────
+# Podman rootless uses a per-user socket at $XDG_RUNTIME_DIR/podman/podman.sock
+# (typically /run/user/$UID/podman/podman.sock), owned by the user — no group
+# needed. Docker uses /var/run/docker.sock owned by the docker group.
+# We set DOCKER_SOCK_PATH so compose mounts the right socket, and skip DOCKER_GID
+# detection for Podman since rootless containers already have socket access.
+if [ "$CONTAINER_ENGINE" = "podman" ]; then
+  PODMAN_SOCK="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/podman/podman.sock"
+  if [ -S "$PODMAN_SOCK" ]; then
+    export DOCKER_SOCK_PATH="$PODMAN_SOCK"
+    # Ensure the env file has the Podman socket path for compose
+    if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
+      CURRENT_SOCK=$(grep -E '^DOCKER_SOCK_PATH=' "$ENV_FILE" | cut -d'=' -f2-)
+      if [ "$CURRENT_SOCK" != "$PODMAN_SOCK" ]; then
+        if grep -qE '^#?DOCKER_SOCK_PATH=' "$ENV_FILE"; then
+          sed -i "s|^#\?DOCKER_SOCK_PATH=.*|DOCKER_SOCK_PATH=${PODMAN_SOCK}|" "$ENV_FILE"
+        else
+          printf '\nDOCKER_SOCK_PATH=%s\n' "$PODMAN_SOCK" >>"$ENV_FILE"
+        fi
+        print_ok "Set DOCKER_SOCK_PATH for Podman ($PODMAN_SOCK)"
+      fi
+    fi
+  else
+    print_warn "Podman socket not found at $PODMAN_SOCK"
+    print_warn "Enable it with: systemctl --user enable --now podman.socket"
+  fi
 fi
 
 # Detect the LAN IP address (exclude loopback, docker, virbr, etc.)

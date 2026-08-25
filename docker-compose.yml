@@ -24,16 +24,19 @@ services:
     ports:
       - "${API_PORT:-8000}:8000"
     volumes:
-      - ./data/db:/data/db
-      - ./data/uploads:/data/uploads
+      - ${JOIDY_DATA_DIR:-./data}/db:/data/db
+      - ${JOIDY_DATA_DIR:-./data}/uploads:/data/uploads
       # NOTE: api keeps .env read-write on purpose — routers/config.py persists
       # settings (e.g. GEMINI_API_KEY, OBSIDIAN_VAULT_PATH) to /app/.env.
-      - ./.env:/app/.env
+      # JOIDY_ENV_FILE lets read-only installs (AUR) point at ~/.config/joidy/.env;
+      # if the source file is missing Docker creates a directory here instead and
+      # every /config request fails.
+      - ${JOIDY_ENV_FILE:-./.env}:/app/.env
       - ${OBSIDIAN_VAULT_PATH:-./data/vault}:/vault
-      # Docker socket for power management (sleep/wake/shutdown from web UI).
-      # On Linux: ensure the container user can access the socket
-      #   (set DOCKER_GID in .env to your host's docker group GID, or use 0 for root).
-      # On Windows Docker Desktop: the socket is accessible by default.
+      # Container engine socket for power management (sleep/wake/shutdown from web UI).
+      # Docker: /var/run/docker.sock (set DOCKER_GID in .env to the docker group GID)
+      # Podman rootless: /run/user/$UID/podman/podman.sock (no DOCKER_GID needed)
+      # `joidy up` detects the engine and sets DOCKER_SOCK_PATH automatically.
       - ${DOCKER_SOCK_PATH:-/var/run/docker.sock}:/var/run/docker.sock
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-joidy}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-joidy}
@@ -45,8 +48,8 @@ services:
       - OBSIDIAN_VAULT_PATH=/vault
       - VAULT_PATH=/vault
       - DOCKER_SOCK_PATH=/var/run/docker.sock
-    # Add the host's docker group so the app user can access the Docker socket.
-    # Set DOCKER_GID in .env (find it with `getent group docker | cut -d: -f3` on Linux).
+    # Add the host's docker group so the app user can access the Docker socket
+    # (Docker only — Podman rootless doesn't need this). Set DOCKER_GID in .env.
     group_add:
       - "${DOCKER_GID:-0}"
     depends_on:
@@ -75,8 +78,8 @@ services:
     ports:
       - "${AI_SERVICE_PORT:-8002}:8002"
     volumes:
-      - ./data/db:/data/db
-      - ./.env:/app/.env:ro
+      - ${JOIDY_DATA_DIR:-./data}/db:/data/db
+      - ${JOIDY_ENV_FILE:-./.env}:/app/.env:ro
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-joidy}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-joidy}
       - APP_ENV=${APP_ENV:-production}
@@ -101,8 +104,8 @@ services:
     ports:
       - "${WORKER_PORT:-8001}:8001"
     volumes:
-      - ./data/db:/data/db
-      - ./.env:/app/.env:ro
+      - ${JOIDY_DATA_DIR:-./data}/db:/data/db
+      - ${JOIDY_ENV_FILE:-./.env}:/app/.env:ro
       - ${OBSIDIAN_VAULT_PATH:-./data/vault}:/vault
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-joidy}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-joidy}

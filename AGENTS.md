@@ -128,6 +128,33 @@ Two concurrent asyncio tasks: `watch_vault()` (watches `/vault/*.md`, 2s debounc
 8. ai-service `/cluster` endpoint had connection leak + SQL injection — **Fixed** (#610).
 9. ai-service database engine missing `pool_pre_ping`/`pool_recycle` — **Fixed** (#611).
 
+## System Install (AUR) vs Git Clone
+
+`joidy` (the CLI in `scripts/joidy.sh`) resolves `PROJECT_DIR` to the install dir
+(`/usr/share/joidy` for AUR, read-only) and its `.env` to `~/.config/joidy/.env`.
+Compose resolves *relative* bind mounts against the compose file directory, so on a
+system install `./.env` and `./data` pointed inside the read-only install dir:
+
+- Missing `./.env` → Docker creates `/app/.env` as a **directory** → `read_env()` in
+  `api/routers/config.py` raised `IsADirectoryError` → every `/config` request 500'd
+  and the settings page broke. Guarded with `is_file()`; mount is now
+  `${JOIDY_ENV_FILE:-./.env}`, exported by the CLI.
+- `./data` root-owned → worker could not write its persistent event log
+  (crash recovery disabled). Mount is now `${JOIDY_DATA_DIR:-./data}`; the CLI points
+  it at `~/.local/share/joidy/data` when the install dir is not writable.
+
+Consequence: the CLI's `.env` and the repo's `.env` are **different files**. They can
+drift — notably `POSTGRES_PASSWORD`, which only applies at `initdb`. If the volume was
+created with one password and the CLI later generates another, the API dies on startup
+with `FATAL: password authentication failed for user "joidy"`. Fix without data loss:
+`docker exec joidy-postgres-1 psql -U joidy -d joidy -c "ALTER USER joidy WITH PASSWORD '<env value>'"`
+(local socket auth is `trust`, so this works even when TCP auth fails).
+
+`DOCKER_GID` must match the group owning `/var/run/docker.sock` (`getent group docker`),
+otherwise the API joins group 0, `/system/power/status` returns
+`docker_available: false`, and Settings → Servicios shows "Docker no está disponible".
+`joidy up` now autodetects it.
+
 ## Constraints
 - Never commit `.env` or `data/` (in `.gitignore`)
 - API must be healthy before other services start (`depends_on: condition: service_healthy`)
