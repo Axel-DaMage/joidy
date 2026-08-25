@@ -411,6 +411,7 @@ resolve_ports() {
   [ "$ai" != "$ai_def" ] && print_warn "AI_SERVICE_PORT bumped ${ai_def}→${ai}"
   [ "$worker" != "$worker_def" ] && print_warn "WORKER_PORT bumped ${worker_def}→${worker}"
   [ "$frontend" != "$frontend_def" ] && print_warn "FRONTEND_PORT bumped ${frontend_def}→${frontend}"
+  return 0
 }
 
 cmd_up() {
