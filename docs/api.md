@@ -3,7 +3,7 @@
 ## Metadata
 
 ```yaml
-version: 0.1.3
+version: 1.0.0-beta.3
 base_url: http://localhost:8000
 docs_url: http://localhost:8000/docs
 framework: FastAPI
