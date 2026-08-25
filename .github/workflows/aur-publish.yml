@@ -1,8 +1,8 @@
-# Requires the `AUR_SSH_PRIVATE_KEY` secret — an SSH private key authorized
+# Requires the `AUR_SSH_KEY` secret — an SSH private key authorized
 # to push to the AUR package `joidy` (ssh://aur@aur.archlinux.org/joidy.git).
 # Generate one: ssh-keygen -t ed25519 -f aur_key -C "github-actions-joidy"
 # Add the public key to your AUR account: https://aur.archlinux.org/account/...
-# Add the private key as a repository secret: AUR_SSH_PRIVATE_KEY
+# Add the private key as a repository secret: AUR_SSH_KEY
 name: Publish AUR
 
 on:
@@ -54,7 +54,7 @@ jobs:
       - name: Configure SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.AUR_SSH_PRIVATE_KEY }}" > ~/.ssh/aur_key
+          echo "${{ secrets.AUR_SSH_KEY }}" > ~/.ssh/aur_key
           chmod 600 ~/.ssh/aur_key
           echo "Host aur.archlinux.org" >> ~/.ssh/config
           echo "  HostName aur.archlinux.org" >> ~/.ssh/config
