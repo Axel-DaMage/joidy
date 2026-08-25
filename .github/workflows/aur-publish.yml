@@ -1,0 +1,101 @@
+# Requires the `AUR_SSH_PRIVATE_KEY` secret — an SSH private key authorized
+# to push to the AUR package `joidy` (ssh://aur@aur.archlinux.org/joidy.git).
+# Generate one: ssh-keygen -t ed25519 -f aur_key -C "github-actions-joidy"
+# Add the public key to your AUR account: https://aur.archlinux.org/account/...
+# Add the private key as a repository secret: AUR_SSH_PRIVATE_KEY
+name: Publish AUR
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (e.g. v1.0.0-beta.3). Leave empty to use latest release.'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish to AUR
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.version }}" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Publishing AUR package for ${VERSION}"
+
+      - name: Verify AUR files are up to date
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          VERSION_CLEAN="${VERSION#v}"
+          PKGBUILD_VER=$(grep '^pkgver=' aur/PKGBUILD | cut -d= -f2)
+          if [ "$PKGBUILD_VER" != "$VERSION_CLEAN" ]; then
+            echo "::error::aur/PKGBUILD pkgver ($PKGBUILD_VER) does not match release version ($VERSION_CLEAN)"
+            echo "The release workflow should have updated these files. Check release.yml."
+            exit 1
+          fi
+          echo "AUR files are up to date (pkgver=$PKGBUILD_VER)"
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.AUR_SSH_PRIVATE_KEY }}" > ~/.ssh/aur_key
+          chmod 600 ~/.ssh/aur_key
+          echo "Host aur.archlinux.org" >> ~/.ssh/config
+          echo "  HostName aur.archlinux.org" >> ~/.ssh/config
+          echo "  User aur" >> ~/.ssh/config
+          echo "  IdentityFile ~/.ssh/aur_key" >> ~/.ssh/config
+          echo "  StrictHostKeyChecking no" >> ~/.ssh/config
+          ssh-keyscan aur.archlinux.org >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Publish to AUR
+        env:
+          GIT_SSH_COMMAND: "ssh -i ~/.ssh/aur_key -o StrictHostKeyChecking=no"
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          # Clone the AUR repo
+          git clone "ssh://aur@aur.archlinux.org/joidy.git" /tmp/aur
+          cd /tmp/aur
+
+          # Configure git
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+          # Copy updated files from the joidy repo
+          cp "$GITHUB_WORKSPACE/aur/PKGBUILD" .
+          cp "$GITHUB_WORKSPACE/aur/.SRCINFO" .
+          cp "$GITHUB_WORKSPACE/aur/joidy.install" .
+
+          # Check if there are changes
+          if git diff --quiet; then
+            echo "No changes to AUR package — already up to date"
+            exit 0
+          fi
+
+          # Commit and push
+          git add PKGBUILD .SRCINFO joidy.install
+          git commit -m "Update to ${VERSION}"
+          git push origin master
+
+          echo "Published joidy ${VERSION} to AUR"
+
+      - name: Cleanup SSH
+        if: always()
+        run: |
+          rm -f ~/.ssh/aur_key
+          rm -f ~/.ssh/config
