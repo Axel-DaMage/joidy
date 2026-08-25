@@ -4,6 +4,7 @@
 
 ```yaml
 version: 1.0.0-beta.2
+version: 0.1.1
 base_url: http://localhost:8000
 docs_url: http://localhost:8000/docs
 framework: FastAPI

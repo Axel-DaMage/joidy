@@ -1,5 +1,6 @@
 <p align="center">
   <img src="https://img.shields.io/badge/JOIDY-v1.0.0-beta.2?style=for-the-badge" alt="Joidy">
+  <img src="https://img.shields.io/badge/JOIDY-v0.1.1ta?style=for-the-badge" alt="Joidy">
 </p>
 
 <p align="center">
