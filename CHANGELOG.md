@@ -229,7 +229,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Responsive base layout and mobile streak actions.
 - CI pipeline: API tests, frontend typecheck, Docker build smoke test.
 
-[unreleased]: https://github.com/Axel-DaMage/joidy/compare/v0.1.3...HEAD
+[unreleased]: https://github.com/Axel-DaMage/joidy/compare/v1.0.0-beta.3...HEAD
 [1.0.0-beta.3]: https://github.com/Axel-DaMage/joidy/compare/v1.0.0-beta.2...v1.0.0-beta.3
 [1.0.0-beta.2]: https://github.com/Axel-DaMage/joidy/compare/v1.0.0-beta.1...v1.0.0-beta.2
 [1.0.0-beta.1]: https://github.com/Axel-DaMage/joidy/compare/v1.0.0-beta...v1.0.0-beta.1
