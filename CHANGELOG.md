@@ -27,6 +27,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - _Nothing yet_
 
+## [1.0.0-beta.2] - 2026-08-24
+
+### Added
+
+- **Podman rootless support** alongside Docker — CLI auto-detects engine, socket, and group; compose file and system router handle both label formats (`com.docker.compose.*` and `io.podman.compose.*`)
+- **Logout button** in Settings panel with session display and i18n (EN/ES)
+- **Service-to-service auth shortcut** — worker can authenticate with the bcrypt-hashed AUTH_PASSWORD stored in `.env` without knowing the plaintext
+
+### Changed
+
+- `AUTH_PASSWORD` and `SECRET_KEY` are now read from disk on every auth operation via `get_persisted()`, ensuring all Uvicorn workers see the same credentials immediately after setup without requiring a restart
+- `POST /config/setup` no longer returns `requires_restart: true` — the cross-worker fix makes restart unnecessary
+- `.env` updates via `write_env()` now preserve existing comments, blank lines, and commented-out template entries instead of rewriting the file as a flat key-value list
+- `joidy.sh` CLI detects container engine (docker-compose → docker compose → podman compose → podman-compose) and auto-detects Docker socket group ID
+- `docker-compose.yml` uses configurable `DOCKER_SOCK_PATH` and `DOCKER_GID` with engine-agnostic comments
+- `.env.example` documents `DOCKER_SOCK_PATH` and `DOCKER_GID` for both Docker and Podman
+
+### Fixed
+
+- **`/config` HTTP 500** when `.env` bind mount is a directory — Docker creates a directory at `/app/.env` when the host-side bind source doesn't exist (system installs); `read_env()` now uses `Path.is_file()` instead of `exists()` (#876)
+- **Cross-worker auth inconsistency** — Uvicorn `--workers 2` meant setup only updated the worker that served the request; siblings kept stale empty credentials; all workers now read from disk on every request
+- **Worker 401 authentication failure** — `POST /config/setup` stores `AUTH_PASSWORD` as a bcrypt hash, but the worker sends that hash as the password to `/auth/login`; `verify_password()` now accepts the hash verbatim as a service-to-service shortcut
+- **`.env` comments lost on update** — previous `write_env()` rewrote the file as a flat `KEY=VALUE` list, deleting all comments and commented-out template entries; new implementation updates active assignments in place and preserves the file layout
+
 ## [0.2.0] - 2026-08-16
 
 ### Added
@@ -145,6 +169,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Responsive base layout and mobile streak actions.
 - CI pipeline: API tests, frontend typecheck, Docker build smoke test.
 
-[unreleased]: https://github.com/Axel-DaMage/joidy/compare/v1.0.0-beta.1...HEAD
+[unreleased]: https://github.com/Axel-DaMage/joidy/compare/v1.0.0-beta.2...HEAD
+[1.0.0-beta.2]: https://github.com/Axel-DaMage/joidy/compare/v1.0.0-beta.1...v1.0.0-beta.2
 [0.2.0]: https://github.com/Axel-DaMage/joidy/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Axel-DaMage/joidy/releases/tag/v0.1.0
