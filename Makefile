@@ -6,6 +6,12 @@ PLATFORM := $(shell uname -s | tr '[:upper:]' '[:lower:]')
 # Portable sed in-place: GNU sed uses -i, BSD sed (macOS) needs -i ''
 SED_INPLACE := $(shell sed --version >/dev/null 2>&1 && echo "sed -i" || echo "sed -i ''")
 
+# Host UID/GID passed to the dev compose overlay so dev containers run as the
+# host user and bind-mounted artifacts (.svelte-kit, data/logs) never need sudo
+# to clean (#886). Resolved by make (not the shell) to avoid bash's readonly UID.
+HOST_UID := $(shell id -u)
+HOST_GID := $(shell id -g)
+
 RED := \033[0;31m
 GREEN := \033[0;32m
 YELLOW := \033[0;33m
@@ -66,24 +72,24 @@ dev: ## Start all services in development mode (with hot reload)
 	@mkdir -p data/db data/uploads data/vault
 	@. .env 2>/dev/null || true; \
 	case "$$OBSIDIAN_VAULT_PATH" in ~/*) export OBSIDIAN_VAULT_PATH="$(HOME)/$${OBSIDIAN_VAULT_PATH#~/}";; ~) export OBSIDIAN_VAULT_PATH="$(HOME)";; esac; \
-	$(DOCKER_COMPOSE) -p $(COMPOSE_PROJECT) -f docker-compose.yml -f docker-compose.dev.yml --profile ai up --build
+	UID=$(HOST_UID) GID=$(HOST_GID) $(DOCKER_COMPOSE) -p $(COMPOSE_PROJECT) -f docker-compose.yml -f docker-compose.dev.yml --profile ai up --build
 
 dev-d: ## Start all services in development mode (detached)
 	@if [ ! -f .env ]; then echo "Run 'make setup' first"; exit 1; fi
 	@mkdir -p data/db data/uploads data/vault
 	@. .env 2>/dev/null || true; \
 	case "$$OBSIDIAN_VAULT_PATH" in ~/*) export OBSIDIAN_VAULT_PATH="$(HOME)/$${OBSIDIAN_VAULT_PATH#~/}";; ~) export OBSIDIAN_VAULT_PATH="$(HOME)";; esac; \
-	$(DOCKER_COMPOSE) -p $(COMPOSE_PROJECT) -f docker-compose.yml -f docker-compose.dev.yml --profile ai up --build -d
+	UID=$(HOST_UID) GID=$(HOST_GID) $(DOCKER_COMPOSE) -p $(COMPOSE_PROJECT) -f docker-compose.yml -f docker-compose.dev.yml --profile ai up --build -d
 
 dev-reset: ## Recreate all services in development mode from scratch (one command)
 	@if [ ! -f .env ]; then echo "Run 'make setup' first"; exit 1; fi
 	@mkdir -p data/db data/uploads data/vault
 	@. .env 2>/dev/null || true; \
 	case "$$OBSIDIAN_VAULT_PATH" in ~/*) export OBSIDIAN_VAULT_PATH="$(HOME)/$${OBSIDIAN_VAULT_PATH#~/}";; ~) export OBSIDIAN_VAULT_PATH="$(HOME)";; esac; \
-	$(DOCKER_COMPOSE) -p $(COMPOSE_PROJECT) -f docker-compose.yml -f docker-compose.dev.yml --profile ai down --remove-orphans --volumes
+	UID=$(HOST_UID) GID=$(HOST_GID) $(DOCKER_COMPOSE) -p $(COMPOSE_PROJECT) -f docker-compose.yml -f docker-compose.dev.yml --profile ai down --remove-orphans --volumes
 	@. .env 2>/dev/null || true; \
 	case "$$OBSIDIAN_VAULT_PATH" in ~/*) export OBSIDIAN_VAULT_PATH="$(HOME)/$${OBSIDIAN_VAULT_PATH#~/}";; ~) export OBSIDIAN_VAULT_PATH="$(HOME)";; esac; \
-	$(DOCKER_COMPOSE) -p $(COMPOSE_PROJECT) -f docker-compose.yml -f docker-compose.dev.yml --profile ai up --build -d --force-recreate --remove-orphans --wait
+	UID=$(HOST_UID) GID=$(HOST_GID) $(DOCKER_COMPOSE) -p $(COMPOSE_PROJECT) -f docker-compose.yml -f docker-compose.dev.yml --profile ai up --build -d --force-recreate --remove-orphans --wait
 	@echo "✓ Services recreated. Use 'make logs' to follow output."
 
 prod: ## Start all services in production mode
@@ -161,8 +167,8 @@ lint-api: ## Check syntax of all Python services via Docker (compileall)
 
 lint: lint-api ## Run all linters and code checkers
 
-fix-permissions: ## Fix project permissions (run once with sudo make fix-permissions)
-	sudo bash scripts/fix-permissions.sh
+fix-permissions: ## Clean Docker artifacts and fix project permissions (no sudo needed since #886)
+	bash scripts/fix-permissions.sh
 
 # ─────────────────────────────────────────────────
 # Quick Start Commands (Linux/Mac)
@@ -273,14 +279,15 @@ doctor: ## Verify all prerequisites are met
 	echo ""; \
 	if [ -d "frontend/.svelte-kit" ]; then \
 		if [ -e "frontend/.svelte-kit/env.d.ts" ] && [ ! -w "frontend/.svelte-kit/env.d.ts" ]; then \
-			echo "$(YELLOW)⚠$(NC) frontend/.svelte-kit/env.d.ts is not writable (likely root-owned)"; \
-			echo "  The frontend dev container (uid 1000) will crash on start with EACCES"; \
-			echo "  Run: sudo make fix-permissions"; \
+			echo "$(YELLOW)⚠$(NC) frontend/.svelte-kit/env.d.ts is not writable (legacy root-owned)"; \
+			echo "  The frontend dev container will crash on start with EACCES."; \
+			echo "  One-time cleanup (then never again, dev runs as your UID since #886):"; \
+			echo "    sudo chown -R \"\$$(id -u):\$$(id -g)\" frontend/.svelte-kit"; \
 			EXIT_CODE=1; \
 		elif [ ! -w "frontend/.svelte-kit" ]; then \
-			echo "$(YELLOW)⚠$(NC) frontend/.svelte-kit is not writable (likely root-owned)"; \
-			echo "  The frontend dev container (uid 1000) will crash on start with EACCES"; \
-			echo "  Run: sudo make fix-permissions"; \
+			echo "$(YELLOW)⚠$(NC) frontend/.svelte-kit is not writable (legacy root-owned)"; \
+			echo "  One-time cleanup (then never again, dev runs as your UID since #886):"; \
+			echo "    sudo chown -R \"\$$(id -u):\$$(id -g)\" frontend/.svelte-kit"; \
 			EXIT_CODE=1; \
 		else \
 			echo "$(GREEN)✓$(NC) frontend/.svelte-kit is writable"; \

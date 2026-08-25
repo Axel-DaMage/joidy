@@ -1,9 +1,17 @@
 services:
+  # Dev containers run as the host UID/GID (exported by the Makefile dev
+  # targets, defaulting to 1000) so bind-mounted artifacts — frontend/.svelte-kit,
+  # api/data/logs, etc. — are owned by the host user and never need sudo to
+  # clean, even when the host UID is not 1000 (#886).
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
       target: development
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+    user: ${UID:-1000}:${GID:-1000}
     volumes:
       - ./frontend:/app
       - /app/node_modules
@@ -13,11 +21,10 @@ services:
       - VITE_API_URL=http://localhost:${API_PORT:-8000}
       - VITE_INTERNAL_API_URL=http://api:8000
     command: npm run dev -- --host 0.0.0.0 --port 3000
-    # The dev container runs as uid 1000 (node). When frontend/.svelte-kit is
-    # root-owned (e.g. after `sudo make fix-permissions`), svelte-kit sync
-    # crashes on EACCES before Vite starts. The healthcheck surfaces that
-    # crash-loop as "unhealthy" in `docker compose ps` so it is visible
-    # instead of a silently dead UI.
+    # The dev container runs as the host UID. A leftover root-owned .svelte-kit
+    # (e.g. from a previous `sudo make fix-permissions`) still crashes
+    # svelte-kit sync on EACCES; the healthcheck surfaces that crash-loop as
+    # "unhealthy" in `docker compose ps` instead of a silently dead UI.
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 10s
@@ -29,6 +36,10 @@ services:
     build:
       context: ./api
       dockerfile: Dockerfile
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+    user: ${UID:-1000}:${GID:-1000}
     volumes:
       - ./api:/app
       - ./data/db:/data/db
@@ -41,11 +52,10 @@ services:
       - VAULT_PATH=/vault
       - OBSIDIAN_VAULT_PATH=/vault
     # The ./api:/app bind mount shadows the image's pre-chowned /app/data/logs,
-    # so this mkdir runs against the host checkout and fails whenever the host
-    # UID differs from the container's app user (uid 1000) — e.g. in CI, where
-    # it crash-looped the container before uvicorn ever started (#622).
-    # Keep it best-effort: logging_config.py already creates the directory and
-    # degrades to console-only logging when it is not writable.
+    # so this mkdir runs against the host checkout. With the host UID/GID match
+    # above it now succeeds; keep it best-effort anyway so a stale root-owned
+    # checkout (pre-#886) still boots — logging_config.py degrades to
+    # console-only logging when the dir is not writable (#622).
     command: sh -c "mkdir -p /app/data/logs 2>/dev/null || true; exec uvicorn main:app --host 0.0.0.0 --port 8000 --reload --reload-include '*.py' --reload-exclude '__pycache__/*' --reload-exclude '*.pyc'"
 
   ai-service:
@@ -54,6 +64,10 @@ services:
     build:
       context: ./ai-service
       dockerfile: Dockerfile
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+    user: ${UID:-1000}:${GID:-1000}
     volumes:
       - ./ai-service:/app
       - ./data/db:/data/db
@@ -64,6 +78,10 @@ services:
     build:
       context: ./worker
       dockerfile: Dockerfile
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+    user: ${UID:-1000}:${GID:-1000}
     ports:
       - "${WORKER_PORT:-8001}:8001"
     volumes:

@@ -29,8 +29,12 @@ WORKDIR /app
 
 COPY --from=deps /install /usr/local
 
-# Create non-root user (uid 1000 matches typical host user for dev volume mounts)
-RUN addgroup --system --gid 1000 app && adduser --system --uid 1000 --ingroup app app
+# Create non-root user. Defaults to uid/gid 1000 (matches typical host user).
+# In development, docker-compose.dev.yml passes the host UID/GID as build args
+# so bind-mounted files are written as the host user and never need sudo (#886).
+ARG UID=1000
+ARG GID=1000
+RUN addgroup --system --gid ${GID} app && adduser --system --uid ${UID} --ingroup app app
 
 COPY --chown=app:app . .
 
