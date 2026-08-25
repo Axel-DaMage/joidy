@@ -161,7 +161,7 @@ otherwise the API joins group 0, `/system/power/status` returns
 - AI features disabled without `GEMINI_API_KEY`; API still works
 - Database is shared across all services (single PostgreSQL database via `DATABASE_URL`)
 - Config via Pydantic `Settings` from `.env`; no hardcoded values
-- `svelte-kit sync` runs on `postinstall` — can fail if `.svelte-kit/` has root-owned files
+- `svelte-kit sync` runs on `postinstall` — can fail if `.svelte-kit/` has root-owned files (legacy only: since #886 the dev containers run as the host UID/GID via `docker-compose.dev.yml` build args + `user:`, so `make dev` never creates root-owned `.svelte-kit` and `make fix-permissions` no longer needs `sudo`).
 - Vite HMR in Docker: `server.hmr.clientPort: 3000` + `host: 127.0.0.1` (in `vite.config.ts`, overridable via `JOIDY_HMR_HOST`). Using `localhost` breaks on hosts where it resolves to `::1` (IPv6) and Docker's IPv6 forwarding hangs.
 
 ## Workflow

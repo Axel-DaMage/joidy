@@ -306,11 +306,11 @@ npm run check
   ```
 - Nada parece roto si solo se revisa `make dev` (el contenedor reinicia en bucle).
 
-**Causa:** El contenedor de desarrollo del frontend corre como el usuario `node`
-(uid 1000). `frontend/.svelte-kit` es host-compilado por `svelte-kit` y, si se
-generó (o se tocó) con `sudo` —p. ej. tras `sudo make fix-permissions`—, queda
-propiedad de `root`. En el próximo arranque, `svelte-kit sync` no puede
-reescribir `env.d.ts` y Vite nunca llega a levantar.
+**Causa:** `frontend/.svelte-kit` quedó propiedad de `root` (o de otro UID) en el
+host, por lo que `svelte-kit sync` no puede reescribir `env.d.ts` y Vite nunca
+llega a levantar. Desde #886 los contenedores dev corren con el UID/GID del host,
+así que esto **ya no ocurre en arranques nuevos** — solo aparece en checkouts
+heredados de antes del fix o si se ejecutó `sudo` contra el árbol.
 
 **Solución:**
 
@@ -319,7 +319,8 @@ reescribir `env.d.ts` y Vite nunca llega a levantar.
    ls -la frontend/.svelte-kit | head
    ```
 
-2. Devolverle la propiedad a tu usuario (el healthcheck se apagará solo):
+2. Devolverle la propiedad a tu usuario (limpieza **única**, el healthcheck se
+   apagará solo):
    ```bash
    sudo chown -R "$(id -u):$(id -g)" frontend/.svelte-kit
    ```
@@ -335,8 +336,10 @@ reescribir `env.d.ts` y Vite nunca llega a levantar.
    docker compose logs frontend
    ```
 
-**Prevención:** `make doctor` ya detecta `.svelte-kit` con permisos ridículos
-(propiedad de root / no escribible) antes de levantar la pila.
+**Prevención:** Desde #886 `make dev` pasa tu UID/GID a los contenedores dev, así
+`frontend/.svelte-kit` se genera propiedad de tu usuario y **nunca más** hace falta
+`sudo`. `make fix-permissions` tampoco requiere `sudo`. `make doctor` sigue
+detectando un `.svelte-kit` no escribible (heredado) antes de levantar la pila.
 
 ---
 

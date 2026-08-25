@@ -9,8 +9,17 @@ RUN --mount=type=cache,target=/root/.npm npm ci
 RUN chown -R node:node /app
 
 FROM deps AS development
-COPY --chown=node:node . .
-USER node
+# Run the dev server as the host UID/GID (passed via docker-compose.dev.yml build
+# args, defaulting to 1000). With a bind-mounted ./frontend:/app this ensures
+# svelte-kit sync writes frontend/.svelte-kit/* owned by the host user, so no
+# sudo is ever needed to clean them — even when the host UID is not 1000 (#886).
+ARG UID=1000
+ARG GID=1000
+RUN getent group ${GID} >/dev/null || groupadd -g ${GID} appuser \
+ && id -u ${UID} >/dev/null 2>&1 || useradd -u ${UID} -g ${GID} -m -s /bin/bash appuser
+RUN chown -R ${UID}:${GID} /app
+COPY --chown=${UID}:${GID} . .
+USER ${UID}:${GID}
 EXPOSE 3000
 CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
 
