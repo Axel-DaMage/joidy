@@ -61,6 +61,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Worker 401 authentication failure** — `POST /config/setup` stores `AUTH_PASSWORD` as a bcrypt hash, but the worker sends that hash as the password to `/auth/login`; `verify_password()` now accepts the hash verbatim as a service-to-service shortcut
 - **`.env` comments lost on update** — previous `write_env()` rewrote the file as a flat `KEY=VALUE` list, deleting all comments and commented-out template entries; new implementation updates active assignments in place and preserves the file layout
 
+## [1.0.0-beta.1] - 2026-08-24
+
+### Fixed
+
+- **CLI auto-bootstrap .env on first run** — AUR/system installs no longer fail with missing `POSTGRES_PASSWORD`; `.env` is auto-created in `~/.config/joidy/.env` with generated secrets (#873, #874)
+
+## [1.0.0-beta] - 2026-08-24
+
+### Added
+
+- Service power management UI in settings panel — hibernate, wake, and shutdown services from the web UI (#870, #871)
+- Podman compatibility in start scripts and Makefile (#810)
+- Infinite scroll for notes list (#809)
+- Assigned GitHub PRs and issues in the status bar (#792, #805)
+- Monthly calendar map and centered planning sort control (#783, #790, #804)
+- Goal settings 3-lists-at-once with folded description into note (#788, #789, #803)
+- GoalCard polish — borderless pin, state below title, square cards (#785, #786, #787, #801)
+- Professional responsive design across all pages and components (#732)
+- LAN IP display after `joidy up`/`restart`
+- Doctor command to detect root-owned `.svelte-kit` before `make dev` (#781, #782)
+- Auto-install joidy CLI into `~/.local/bin`
+- PowerShell installer and `--profile ai` handling in CLI/autostart (#848, #850, #858)
+- Self-hosted Geist fonts removing Google Fonts CDN dependency (#846, #859)
+- Disable AI service in production + harden API for stable release (#845)
+- Worker crash recovery with exponential backoff via supervisor (#818)
+- Alembic migration serialization across uvicorn workers via `pg_advisory_lock` (#817)
+- CI fork PR auto-approval policy documented (#811, #819)
+
+### Fixed
+
+- Streak timezone mismatch — counter showed 0 before check-in due to frontend/backend UTC offset (#864, #868)
+- Check-in layout shift — smooth transitions added, share button repositioned to corner (#862, #863, #867)
+- Progress track and module dots hardcoded to dark theme via `var(--border)` (#865, #866, #869)
+- Theme-aware disconnect buttons and settings panel colors (#844, #857)
+- Hardcoded dark colors in goals replaced with theme-aware CSS variables (#839, #842, #861)
+- StreakHeatmap theme-aware empty cells + year view spacing (#840, #843, #855)
+- Resize handle redesigned to be theme-aware and minimalist (#841, #856)
+- Goal pin icon now shows only on hover (#838, #854)
+- Google Calendar & Tasks hidden behind dev mode (#851, #853)
+
+### Security
+
+- AI service disabled in production by default (#845)
+- API hardened for stable release — internal secret validation, reduced attack surface (#845)
+
+### Changed
+
+- Infra audit fixes — parameterized Docker images, multi-stage builds, cache mounts (#812)
+- Dependabot updates: vitest, svelte, typescript-eslint, tiptap, uvicorn, openai, anthropic, cohere, pytest, sqlalchemy, and more
+
 ## [0.2.0] - 2026-08-16
 
 ### Added
@@ -182,5 +232,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [unreleased]: https://github.com/Axel-DaMage/joidy/compare/v1.0.0-beta.3...HEAD
 [1.0.0-beta.3]: https://github.com/Axel-DaMage/joidy/compare/v1.0.0-beta.2...v1.0.0-beta.3
 [1.0.0-beta.2]: https://github.com/Axel-DaMage/joidy/compare/v1.0.0-beta.1...v1.0.0-beta.2
+[1.0.0-beta.1]: https://github.com/Axel-DaMage/joidy/compare/v1.0.0-beta...v1.0.0-beta.1
+[1.0.0-beta]: https://github.com/Axel-DaMage/joidy/compare/v0.2.0...v1.0.0-beta
 [0.2.0]: https://github.com/Axel-DaMage/joidy/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Axel-DaMage/joidy/releases/tag/v0.1.0
