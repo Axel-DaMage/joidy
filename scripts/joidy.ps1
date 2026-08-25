@@ -131,6 +131,24 @@ if ($EnvFile -and (Test-Path $EnvFile)) {
     Write-Warn "Auto-generated required secrets in $EnvFile"
     Write-Warn "Edit $EnvFile to add: GEMINI_API_KEY, OBSIDIAN_VAULT_PATH, etc."
   }
+
+  # Expand ~ in OBSIDIAN_VAULT_PATH — Docker bind mounts require absolute
+  # paths and do not expand `~`. The settings UI lets users enter home-relative
+  # paths (e.g. ~/Documentos/notas/mi-vault). Export the expanded value for
+  # this compose run; .env keeps the raw ~/... form so the UI stays clean.
+  if ($envContent -match '(?m)^OBSIDIAN_VAULT_PATH=(.+)$') {
+    $vaultRaw = $Matches[1].Trim()
+    $vaultExpanded = $vaultRaw
+    if ($vaultRaw -eq '~') {
+      $vaultExpanded = $HOME
+    } elseif ($vaultRaw -match '^~/(.*)') {
+      $vaultExpanded = Join-Path $HOME $Matches[1]
+    }
+    if ($vaultExpanded -ne $vaultRaw) {
+      Write-Ok "Expanded OBSIDIAN_VAULT_PATH: $vaultRaw -> $vaultExpanded"
+    }
+    $env:OBSIDIAN_VAULT_PATH = $vaultExpanded
+  }
 }
 
 $HIBERNATE_SERVICES = @("ai-service", "worker")

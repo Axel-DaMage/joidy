@@ -22,6 +22,11 @@
 #   joidy logs     Tail logs (all services)
 #   joidy logs api Tail logs for a specific service
 #   joidy help     Show this help message
+#
+# Port fallback: if a service's host port is already bound by a foreign
+# process, `joidy up` tries up to 5 subsequent ports before aborting (so the
+# stack is never left half-started). Ports held by the joidy compose project's
+# own containers are reused (idempotent re-runs).
 
 set -e
 
@@ -67,6 +72,10 @@ if [ ! -f "$PROJECT_DIR/docker-compose.yml" ]; then
   echo "Set JOIDY_DIR env var or create ~/.config/joidy/path with the project path." >&2
   exit 1
 fi
+
+# Compose project name = lowercased basename of the project dir. Used to tell
+# our own containers apart from foreign ones holding a port we want to bind.
+COMPOSE_PROJECT="$(basename "$PROJECT_DIR" | tr '[:upper:]' '[:lower:]')"
 
 cd "$PROJECT_DIR"
 
@@ -185,6 +194,29 @@ if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
   fi
 fi
 
+# ─── Expand ~ in OBSIDIAN_VAULT_PATH ───────────────────────────────
+# Docker bind mounts do NOT expand `~` — they require absolute host paths.
+# The settings UI and Setup Wizard let users enter home-relative paths
+# (e.g. ~/Documentos/notas/mi-vault). Expand `~` to $HOME here and export it
+# so compose receives an absolute path. The raw value is kept in .env so the
+# UI always shows the clean ~/... form the user typed.
+if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
+  VAULT_RAW=$(grep -E '^OBSIDIAN_VAULT_PATH=' "$ENV_FILE" | head -1 | cut -d'=' -f2-)
+  if [ -n "$VAULT_RAW" ]; then
+    VAULT_EXPANDED="$VAULT_RAW"
+    # Expand leading ~/ or bare ~ to $HOME
+    case "$VAULT_RAW" in
+      \~/*) VAULT_EXPANDED="${HOME}/${VAULT_RAW#~/}" ;;
+      \~)   VAULT_EXPANDED="$HOME" ;;
+    esac
+    if [ "$VAULT_EXPANDED" != "$VAULT_RAW" ]; then
+      print_ok "Expanded OBSIDIAN_VAULT_PATH: ${VAULT_RAW} → ${VAULT_EXPANDED}"
+    fi
+    # Export so compose uses the expanded value (overrides .env for this run)
+    export OBSIDIAN_VAULT_PATH="$VAULT_EXPANDED"
+  fi
+fi
+
 # ─── Bind-mount sources ───────────────────────────────────────────
 # Compose resolves relative volumes against the compose file directory, which
 # is read-only on system installs (/usr/share/joidy). Mounting a non-existent
@@ -270,8 +302,120 @@ ai_profile_args() {
   fi
 }
 
+# ─── Port fallback helpers ─────────────────────────────────────────
+# Before `joidy up`, resolve a free host port for each service. If the
+# configured port is busy by a foreign process, try up to 5 subsequent ports.
+# Ports held by our own compose project's containers are reused (idempotent).
+# If no free port is found, abort without running `compose up`.
+
+# Read a port setting: env var → .env file → default.
+read_port() {
+  local var="$1" default="$2" val=""
+  if [ -n "${!var:-}" ]; then
+    val="${!var}"
+  elif [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
+    val=$(grep -E "^${var}=" "$ENV_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
+  fi
+  [ -z "$val" ] && val="$default"
+  echo "$val"
+}
+
+# Is anything listening on $1 (TCP, any interface)?
+port_in_use() {
+  local port="$1"
+  if command -v ss &>/dev/null; then
+    ss -tlnH 2>/dev/null | awk '{print $4}' | grep -qE ":${port}$"
+  elif command -v netstat &>/dev/null; then
+    netstat -tlnH 2>/dev/null | awk '{print $4}' | grep -qE ":${port}$"
+  else
+    return 1 # cannot check — assume free
+  fi
+}
+
+# Is $1 held by a container of our own compose project? (Docker only)
+port_held_by_self() {
+  local port="$1"
+  [ "$CONTAINER_ENGINE" = "docker" ] || return 1
+  command -v docker &>/dev/null || return 1
+  docker ps --no-trunc \
+    --filter "label=com.docker.compose.project=${COMPOSE_PROJECT}" \
+    --format '{{.Ports}}' 2>/dev/null | grep -qE ":${port}->"
+}
+
+# Is $1 available for us to bind? (free, or already held by our own stack)
+port_available() {
+  local port="$1"
+  if ! port_in_use "$port"; then
+    return 0
+  fi
+  port_held_by_self "$port"
+}
+
+# Find a free port starting at $1, trying up to 5 subsequent ports (6 tries).
+# Skips ports already assigned to another joidy service in this run.
+# Echoes the chosen port; returns 1 if none free.
+find_free_port() {
+  local start="$1" port offset p
+  for offset in 0 1 2 3 4 5; do
+    port=$((start + offset))
+    # Skip ports already claimed by another joidy service this run
+    for p in "${RESOLVED_PORTS[@]:-}"; do
+      [ "$p" = "$port" ] && continue 2
+    done
+    if port_available "$port"; then
+      echo "$port"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Resolve free host ports for all 4 services and export them. Aborts (exit 1)
+# without invoking compose if any service cannot get a free port.
+resolve_ports() {
+  local api_def ai_def worker_def frontend_def
+  api_def=$(read_port API_PORT 8000)
+  ai_def=$(read_port AI_SERVICE_PORT 8002)
+  worker_def=$(read_port WORKER_PORT 8001)
+  frontend_def=$(read_port FRONTEND_PORT 3000)
+
+  RESOLVED_PORTS=()
+  local api ai worker frontend
+  api=$(find_free_port "$api_def") || {
+    print_err "No free port for api (tried ${api_def}..$((api_def + 5))) — aborting."
+    exit 1
+  }
+  RESOLVED_PORTS+=("$api")
+  ai=$(find_free_port "$ai_def") || {
+    print_err "No free port for ai-service (tried ${ai_def}..$((ai_def + 5))) — aborting."
+    exit 1
+  }
+  RESOLVED_PORTS+=("$ai")
+  worker=$(find_free_port "$worker_def") || {
+    print_err "No free port for worker (tried ${worker_def}..$((worker_def + 5))) — aborting."
+    exit 1
+  }
+  RESOLVED_PORTS+=("$worker")
+  frontend=$(find_free_port "$frontend_def") || {
+    print_err "No free port for frontend (tried ${frontend_def}..$((frontend_def + 5))) — aborting."
+    exit 1
+  }
+  RESOLVED_PORTS+=("$frontend")
+
+  export API_PORT="$api"
+  export AI_SERVICE_PORT="$ai"
+  export WORKER_PORT="$worker"
+  export FRONTEND_PORT="$frontend"
+
+  [ "$api" != "$api_def" ] && print_warn "API_PORT bumped ${api_def}→${api}"
+  [ "$ai" != "$ai_def" ] && print_warn "AI_SERVICE_PORT bumped ${ai_def}→${ai}"
+  [ "$worker" != "$worker_def" ] && print_warn "WORKER_PORT bumped ${worker_def}→${worker}"
+  [ "$frontend" != "$frontend_def" ] && print_warn "FRONTEND_PORT bumped ${frontend_def}→${frontend}"
+}
+
 cmd_up() {
   print_status "Starting Joidy services..."
+  resolve_ports
   local profile
   profile="$(ai_profile_args)"
   if [ -n "$profile" ]; then
@@ -377,6 +521,12 @@ For AUR installs (read-only /usr/share/joidy), .env is stored in
 ~/.config/joidy/.env. Edit it to add GEMINI_API_KEY, OBSIDIAN_VAULT_PATH, etc.
 
 The project directory is auto-detected from the script location.
+
+Port fallback: `joidy up` checks the host ports for api (8000), ai-service
+(8002), worker (8001) and frontend (3000). If a port is already bound by a
+foreign process, it tries up to 5 subsequent ports; if none are free, it
+aborts without starting any service (no half-started stack). Ports held by
+joidy's own containers are reused, so re-running `joidy up` is idempotent.
 HELP
 }
 

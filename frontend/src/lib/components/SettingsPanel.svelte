@@ -746,15 +746,19 @@
               style="display: flex; align-items: center; gap: 2px; padding: 0 10px; background: var(--elevated); border: 1px solid var(--border); border-radius: var(--r);"
               class="input-wrapper"
             >
-              <span class="mono" style="color: var(--text-disabled); font-size: 11px;">~</span>
               <input
                 type="text"
                 class="setting-input mono"
                 style="border: none; background: transparent; flex: 1; padding-left: 2px;"
-                placeholder="/Documentos/ObsidianVault"
+                placeholder="~/Documentos/notas/mi-vault"
                 bind:value={systemConfig.obsidian_vault_path}
               />
             </div>
+            <p class="hint">
+              Ruta a tu vault desde tu <code>home</code>. Ej:
+              <code>~/Documentos/notas/mi-vault</code>. Al guardar, <code>joidy up</code> expande
+              <code>~</code> automáticamente.
+            </p>
           </div>
           <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
             <div class="row-label">

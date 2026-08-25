@@ -27,6 +27,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - _Nothing yet_
 
+## [1.0.0-beta.3] - 2026-08-24
+
+### Added
+
+- **Port fallback for `joidy up`** — if a service's host port is already bound by a foreign process, the CLI tries up to 5 subsequent ports before aborting (no half-started stack). Ports held by joidy's own compose project are reused, so re-running `joidy up` is idempotent (#879)
+
+### Fixed
+
+- **`~` not expanded in `OBSIDIAN_VAULT_PATH`** — Docker bind mounts do not expand `~`, so a vault path like `~/Documentos/notas/mi-vault` resolved to a broken relative path and the worker/api containers mounted the wrong directory. The CLI (`joidy.sh`, `joidy.ps1`, `start.ps1`) and Makefile targets now expand `~` to `$HOME` and export the absolute path for compose. The settings UI and Setup Wizard show examples and hints about `~` support (#880)
+
 ## [1.0.0-beta.2] - 2026-08-24
 
 ### Added
@@ -219,7 +229,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Responsive base layout and mobile streak actions.
 - CI pipeline: API tests, frontend typecheck, Docker build smoke test.
 
-[unreleased]: https://github.com/Axel-DaMage/joidy/compare/v0.1.2...HEAD
+[unreleased]: https://github.com/Axel-DaMage/joidy/compare/v1.0.0-beta.3...HEAD
+[1.0.0-beta.3]: https://github.com/Axel-DaMage/joidy/compare/v1.0.0-beta.2...v1.0.0-beta.3
 [1.0.0-beta.2]: https://github.com/Axel-DaMage/joidy/compare/v1.0.0-beta.1...v1.0.0-beta.2
 [1.0.0-beta.1]: https://github.com/Axel-DaMage/joidy/compare/v1.0.0-beta...v1.0.0-beta.1
 [1.0.0-beta]: https://github.com/Axel-DaMage/joidy/compare/v0.2.0...v1.0.0-beta

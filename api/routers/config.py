@@ -141,7 +141,7 @@ def get_available_keys():
 def get_key_description(key: str) -> str:
     descriptions = {
         "gemini_api_key": "API key for Google Gemini AI",
-        "obsidian_vault_path": "Absolute path to your Obsidian vault",
+        "obsidian_vault_path": "Path to your Obsidian vault (supports ~ for home-relative, expanded by `joidy up`)",
         "daily_notes_folder": "Relative folder inside your vault for daily notes",
         "github_token": "GitHub Personal Access Token",
         "github_username": "GitHub username",

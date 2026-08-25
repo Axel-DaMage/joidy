@@ -113,8 +113,11 @@
               type="text"
               bind:value={vaultPath}
               class="input mono"
-              placeholder="home/usuario/Documents/Vault"
+              placeholder="~/Documentos/notas/mi-vault"
             />
+            <span class="field-hint mono"
+              >Ej: ~/Documentos/notas/mi-vault — <code>joidy up</code> expande <code>~</code> automáticamente</span
+            >
           </div>
 
           <div class="actions">
@@ -239,6 +242,21 @@
     font-size: 12px;
     font-weight: 500;
     color: var(--text-secondary);
+  }
+
+  .field-hint {
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+
+  .field-hint code {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-secondary);
+    background: var(--elevated);
+    padding: 1px 4px;
+    border-radius: 3px;
   }
 
   .input {

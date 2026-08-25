@@ -166,9 +166,9 @@ if ([string]::IsNullOrEmpty($geminiKey) -or $geminiKey -eq "your_gemini_api_key_
 
 # Check OBSIDIAN_VAULT_PATH
 $vaultPath = $envVars["OBSIDIAN_VAULT_PATH"]
-if ([string]::IsNullOrEmpty($vaultPath) -or $vaultPath -eq "/path/to/your/obsidian/vault") {
+if ([string]::IsNullOrEmpty($vaultPath) -or $vaultPath -eq "/path/to/your/obsidian/vault" -or $vaultPath -eq "~/Documentos/notas/mi-vault") {
     Write-Warn "OBSIDIAN_VAULT_PATH not set"
-    Write-Host "  Enter the full path to your Obsidian vault (e.g., C:\Users\You\Documents\Obsidian):"
+    Write-Host "  Enter the path to your Obsidian vault (e.g., ~/Documents/notes/my-vault or C:\Users\You\Documents\Obsidian):"
     $newVaultPath = Read-Host "  Vault path (press Enter to skip)"
     if (-not [string]::IsNullOrEmpty($newVaultPath)) {
         $newVaultPath = $newVaultPath -replace '\\', '/'
@@ -178,7 +178,11 @@ if ([string]::IsNullOrEmpty($vaultPath) -or $vaultPath -eq "/path/to/your/obsidi
     }
 } else {
     Write-Success "OBSIDIAN_VAULT_PATH: $vaultPath"
-    if (Test-Path $vaultPath) {
+    # Expand ~ for the existence check
+    $checkPath = $vaultPath
+    if ($checkPath -eq '~') { $checkPath = $HOME }
+    elseif ($checkPath -match '^~/(.*)') { $checkPath = Join-Path $HOME $Matches[1] }
+    if (Test-Path $checkPath) {
         Write-Success "Vault directory exists"
     } else {
         Write-Warn "Vault directory does not exist yet"
@@ -206,6 +210,36 @@ if ([string]::IsNullOrEmpty($postgresPassword)) {
 # Step 3: Start services
 $script:step++
 Write-Step "Starting services..."
+
+# Expand ~ in OBSIDIAN_VAULT_PATH — Docker bind mounts do not expand `~`.
+# Export the expanded value so compose receives an absolute host path.
+if ($env:OBSIDIAN_VAULT_PATH) {
+    $vaultRaw = $env:OBSIDIAN_VAULT_PATH
+    if ($vaultRaw -eq '~') {
+        $env:OBSIDIAN_VAULT_PATH = $HOME
+    } elseif ($vaultRaw -match '^~/(.*)') {
+        $env:OBSIDIAN_VAULT_PATH = Join-Path $HOME $Matches[1]
+    }
+    if ($env:OBSIDIAN_VAULT_PATH -ne $vaultRaw) {
+        Write-Ok "Expanded OBSIDIAN_VAULT_PATH: $vaultRaw -> $env:OBSIDIAN_VAULT_PATH"
+    }
+} else {
+    # Read from .env if not already in the environment
+    $envContent = Get-Content ".env" -Raw
+    if ($envContent -match '(?m)^OBSIDIAN_VAULT_PATH=(.+)$') {
+        $vaultRaw = $Matches[1].Trim()
+        if ($vaultRaw -eq '~') {
+            $env:OBSIDIAN_VAULT_PATH = $HOME
+        } elseif ($vaultRaw -match '^~/(.*)') {
+            $env:OBSIDIAN_VAULT_PATH = Join-Path $HOME $Matches[1]
+        } else {
+            $env:OBSIDIAN_VAULT_PATH = $vaultRaw
+        }
+        if ($env:OBSIDIAN_VAULT_PATH -ne $vaultRaw) {
+            Write-Ok "Expanded OBSIDIAN_VAULT_PATH: $vaultRaw -> $env:OBSIDIAN_VAULT_PATH"
+        }
+    }
+}
 
 # Check if compose files exist
 if (-not (Test-Path "docker-compose.yml")) {

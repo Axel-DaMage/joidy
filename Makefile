@@ -45,7 +45,7 @@ setup: ## First-time setup: copy .env, create data directories
 		echo "$(YELLOW)Next steps:$(NC)"; \
 		echo "  1. Edit .env with your API keys"; \
 		echo "     - GEMINI_API_KEY: get free at https://aistudio.google.com/"; \
-		echo "     - OBSIDIAN_VAULT_PATH: absolute path to your vault"; \
+		echo "     - OBSIDIAN_VAULT_PATH: path to your vault (supports ~, e.g. ~/Documentos/notas/mi-vault)"; \
 		echo "  2. Run: make dev"; \
 	else \
 		echo "$(GREEN)✓$(NC) .env already exists"; \
@@ -64,23 +64,33 @@ setup: ## First-time setup: copy .env, create data directories
 dev: ## Start all services in development mode (with hot reload)
 	@if [ ! -f .env ]; then echo "Run 'make setup' first"; exit 1; fi
 	@mkdir -p data/db data/uploads data/vault
+	@. .env 2>/dev/null || true; \
+	case "$$OBSIDIAN_VAULT_PATH" in ~/*) export OBSIDIAN_VAULT_PATH="$(HOME)/$${OBSIDIAN_VAULT_PATH#~/}";; ~) export OBSIDIAN_VAULT_PATH="$(HOME)";; esac; \
 	$(DOCKER_COMPOSE) -p $(COMPOSE_PROJECT) -f docker-compose.yml -f docker-compose.dev.yml --profile ai up --build
 
 dev-d: ## Start all services in development mode (detached)
 	@if [ ! -f .env ]; then echo "Run 'make setup' first"; exit 1; fi
 	@mkdir -p data/db data/uploads data/vault
+	@. .env 2>/dev/null || true; \
+	case "$$OBSIDIAN_VAULT_PATH" in ~/*) export OBSIDIAN_VAULT_PATH="$(HOME)/$${OBSIDIAN_VAULT_PATH#~/}";; ~) export OBSIDIAN_VAULT_PATH="$(HOME)";; esac; \
 	$(DOCKER_COMPOSE) -p $(COMPOSE_PROJECT) -f docker-compose.yml -f docker-compose.dev.yml --profile ai up --build -d
 
 dev-reset: ## Recreate all services in development mode from scratch (one command)
 	@if [ ! -f .env ]; then echo "Run 'make setup' first"; exit 1; fi
 	@mkdir -p data/db data/uploads data/vault
+	@. .env 2>/dev/null || true; \
+	case "$$OBSIDIAN_VAULT_PATH" in ~/*) export OBSIDIAN_VAULT_PATH="$(HOME)/$${OBSIDIAN_VAULT_PATH#~/}";; ~) export OBSIDIAN_VAULT_PATH="$(HOME)";; esac; \
 	$(DOCKER_COMPOSE) -p $(COMPOSE_PROJECT) -f docker-compose.yml -f docker-compose.dev.yml --profile ai down --remove-orphans --volumes
+	@. .env 2>/dev/null || true; \
+	case "$$OBSIDIAN_VAULT_PATH" in ~/*) export OBSIDIAN_VAULT_PATH="$(HOME)/$${OBSIDIAN_VAULT_PATH#~/}";; ~) export OBSIDIAN_VAULT_PATH="$(HOME)";; esac; \
 	$(DOCKER_COMPOSE) -p $(COMPOSE_PROJECT) -f docker-compose.yml -f docker-compose.dev.yml --profile ai up --build -d --force-recreate --remove-orphans --wait
 	@echo "✓ Services recreated. Use 'make logs' to follow output."
 
 prod: ## Start all services in production mode
 	@if [ ! -f .env ]; then echo "Run 'make setup' first"; exit 1; fi
 	@mkdir -p data/db data/uploads data/vault
+	@. .env 2>/dev/null || true; \
+	case "$$OBSIDIAN_VAULT_PATH" in ~/*) export OBSIDIAN_VAULT_PATH="$(HOME)/$${OBSIDIAN_VAULT_PATH#~/}";; ~) export OBSIDIAN_VAULT_PATH="$(HOME)";; esac; \
 	$(DOCKER_COMPOSE) up --build -d
 
 stop: ## Stop all services
@@ -241,12 +251,14 @@ doctor: ## Verify all prerequisites are met
 	else \
 		echo "$(GREEN)✓$(NC) GEMINI_API_KEY configured"; \
 	fi; \
-	if [ -z "$$OBSIDIAN_VAULT_PATH" ] || [ "$$OBSIDIAN_VAULT_PATH" = "/path/to/your/obsidian/vault" ]; then \
+	if [ -z "$$OBSIDIAN_VAULT_PATH" ] || [ "$$OBSIDIAN_VAULT_PATH" = "/path/to/your/obsidian/vault" ] || [ "$$OBSIDIAN_VAULT_PATH" = "~/Documentos/notas/mi-vault" ]; then \
 		echo "$(YELLOW)⚠$(NC) OBSIDIAN_VAULT_PATH not configured"; \
 		EXIT_CODE=1; \
 	else \
 		echo "$(GREEN)✓$(NC) OBSIDIAN_VAULT_PATH: $$OBSIDIAN_VAULT_PATH"; \
-		if [ -d "$$OBSIDIAN_VAULT_PATH" ]; then \
+		VAULT_CHECK="$$OBSIDIAN_VAULT_PATH"; \
+		case "$$VAULT_CHECK" in ~/*) VAULT_CHECK="$(HOME)/$${VAULT_CHECK#~/}";; ~) VAULT_CHECK="$(HOME)";; esac; \
+		if [ -d "$$VAULT_CHECK" ]; then \
 			echo "$(GREEN)  ✓ Vault directory exists$(NC)"; \
 		else \
 			echo "$(YELLOW)  ⚠ Vault directory does not exist yet$(NC)"; \
@@ -326,11 +338,11 @@ start: ## 🚀 Quick start: setup + start all services
 		fi; \
 	fi
 	@. .env 2>/dev/null || true; \
-	if [ -z "$$OBSIDIAN_VAULT_PATH" ] || [ "$$OBSIDIAN_VAULT_PATH" = "/path/to/your/obsidian/vault" ]; then \
+	if [ -z "$$OBSIDIAN_VAULT_PATH" ] || [ "$$OBSIDIAN_VAULT_PATH" = "/path/to/your/obsidian/vault" ] || [ "$$OBSIDIAN_VAULT_PATH" = "~/Documentos/notas/mi-vault" ]; then \
 		echo ""; \
 		echo "$(YELLOW)⚠ OBSIDIAN_VAULT_PATH not set in .env$(NC)"; \
-		echo "  Enter the absolute path to your Obsidian vault:"; \
-		echo "  (e.g., /home/username/Documents/Obsidian)"; \
+		echo "  Enter the path to your Obsidian vault (supports ~):"; \
+		echo "  (e.g., ~/Documentos/notas/mi-vault or /home/username/Documents/Obsidian)"; \
 		echo ""; \
 		echo -n "$(BLUE)Vault path (or press Enter to skip):$(NC) "; \
 		read -r VAULT_PATH; \
@@ -353,7 +365,9 @@ start: ## 🚀 Quick start: setup + start all services
 	fi
 	@echo ""
 	@echo "Step 2: Starting services..."
-	@$(DOCKER_COMPOSE) -p $(COMPOSE_PROJECT) -f docker-compose.yml -f docker-compose.dev.yml up --build -d
+	@. .env 2>/dev/null || true; \
+	case "$$OBSIDIAN_VAULT_PATH" in ~/*) export OBSIDIAN_VAULT_PATH="$(HOME)/$${OBSIDIAN_VAULT_PATH#~/}";; ~) export OBSIDIAN_VAULT_PATH="$(HOME)";; esac; \
+	$(DOCKER_COMPOSE) -p $(COMPOSE_PROJECT) -f docker-compose.yml -f docker-compose.dev.yml up --build -d
 	@echo ""
 	@echo "── $(GREEN)Joidy is running!$(NC) ───────────────────────────────"
 	@echo ""
