@@ -481,8 +481,8 @@
     "back": "Atrás",
     "next": "Siguiente",
     "vaultTitle": "Conecta tu Vault (Opcional)",
-    "vaultDesc": "Si usas Obsidian, introduce la ruta absoluta a tu bóveda. Si no, déjalo en blanco y Joidy usará su almacenamiento interno.",
-    "vaultPath": "Ruta Absoluta (Ej. home/user/Documents/Vault)",
+    "vaultDesc": "Si usas Obsidian, introduce la ruta a tu bóveda (ej: ~/Documentos/notas/mi-vault). Si no, déjalo en blanco y Joidy usará su almacenamiento interno.",
+    "vaultPath": "Ruta del Vault (ej: ~/Documentos/notas/mi-vault)",
     "doneDesc": "Tu entorno ha sido asegurado y configurado con éxito. Redirigiendo al sistema..."
   },
   "folderPicker": {

@@ -7,7 +7,7 @@ post_install() {
   echo ""
   echo "  Edit ~/.config/joidy/.env to add your credentials:"
   echo "    - GEMINI_API_KEY:     https://aistudio.google.com/app/apikey"
-  echo "    - OBSIDIAN_VAULT_PATH: absolute path to your Obsidian vault"
+  echo "    - OBSIDIAN_VAULT_PATH: path to your Obsidian vault (supports ~, e.g. ~/Documentos/notas/mi-vault)"
   echo ""
   echo "  Then run: joidy up"
   echo ""

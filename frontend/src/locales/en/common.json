@@ -481,8 +481,8 @@
     "back": "Back",
     "next": "Next",
     "vaultTitle": "Connect your Vault (Optional)",
-    "vaultDesc": "If you use Obsidian, enter the absolute path to your vault. Otherwise, leave it blank and Joidy will use its internal storage.",
-    "vaultPath": "Absolute Path (e.g. home/user/Documents/Vault)",
+    "vaultDesc": "If you use Obsidian, enter the path to your vault (e.g. ~/Documents/notes/my-vault). Otherwise, leave it blank and Joidy will use its internal storage.",
+    "vaultPath": "Vault Path (e.g. ~/Documents/notes/my-vault)",
     "doneDesc": "Your environment has been secured and configured successfully. Redirecting to the system..."
   },
   "folderPicker": {
