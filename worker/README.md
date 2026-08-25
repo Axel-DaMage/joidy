@@ -37,7 +37,7 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up worker
 Key variables consumed by this service (see root [`.env.example`](../.env.example)
 for the full list — do not duplicate here):
 
-- `OBSIDIAN_VAULT_PATH` — absolute host path to the Obsidian vault
+- `OBSIDIAN_VAULT_PATH` — host path to the Obsidian vault (supports `~`, expanded by `joidy up`)
   (mounted read-only at `/vault` inside the container)
 - `DATABASE_URL` — shared PostgreSQL connection
 - `WORKER_PORT` — override the default 8001 (healthcheck only)

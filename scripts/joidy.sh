@@ -194,6 +194,29 @@ if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
   fi
 fi
 
+# ─── Expand ~ in OBSIDIAN_VAULT_PATH ───────────────────────────────
+# Docker bind mounts do NOT expand `~` — they require absolute host paths.
+# The settings UI and Setup Wizard let users enter home-relative paths
+# (e.g. ~/Documentos/notas/mi-vault). Expand `~` to $HOME here and export it
+# so compose receives an absolute path. The raw value is kept in .env so the
+# UI always shows the clean ~/... form the user typed.
+if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
+  VAULT_RAW=$(grep -E '^OBSIDIAN_VAULT_PATH=' "$ENV_FILE" | head -1 | cut -d'=' -f2-)
+  if [ -n "$VAULT_RAW" ]; then
+    VAULT_EXPANDED="$VAULT_RAW"
+    # Expand leading ~/ or bare ~ to $HOME
+    case "$VAULT_RAW" in
+      \~/*) VAULT_EXPANDED="${HOME}/${VAULT_RAW#~/}" ;;
+      \~)   VAULT_EXPANDED="$HOME" ;;
+    esac
+    if [ "$VAULT_EXPANDED" != "$VAULT_RAW" ]; then
+      print_ok "Expanded OBSIDIAN_VAULT_PATH: ${VAULT_RAW} → ${VAULT_EXPANDED}"
+    fi
+    # Export so compose uses the expanded value (overrides .env for this run)
+    export OBSIDIAN_VAULT_PATH="$VAULT_EXPANDED"
+  fi
+fi
+
 # ─── Bind-mount sources ───────────────────────────────────────────
 # Compose resolves relative volumes against the compose file directory, which
 # is read-only on system installs (/usr/share/joidy). Mounting a non-existent

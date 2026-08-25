@@ -116,7 +116,7 @@ echo ""
 echo -e "${YELLOW}Next steps:${NC}"
 echo "  1. Edit $DIR/.env with your credentials:"
 echo "     - GEMINI_API_KEY:    get free at https://aistudio.google.com/"
-echo "     - OBSIDIAN_VAULT_PATH: absolute path to your Obsidian vault"
+echo "     - OBSIDIAN_VAULT_PATH: path to your Obsidian vault (supports ~, e.g. ~/Documentos/notas/mi-vault)"
 echo "     - SECRET_KEY:        run: openssl rand -hex 32"
 echo ""
 if [ "$PATH_UPDATED" = "1" ]; then
