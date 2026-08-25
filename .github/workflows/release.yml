@@ -140,7 +140,12 @@ jobs:
           git push origin "$VERSION"
           ARGS=(--title "Joidy ${VERSION}" --generate-notes --verify-tag)
           if [ "$PRERELEASE" = "true" ]; then
-            PREPEND=$(printf '## ⚠️ Pre-Release — Non-Production Ready\n\nThis is a **pre-release**. Expect breaking changes, bugs, and incomplete features. Do **not** use in production.\n\n')
-            ARGS+=(--prerelease --notes-prepend "$PREPEND")
+            ARGS+=(--prerelease)
           fi
           gh release create "$VERSION" "${ARGS[@]}"
+          # Prepend pre-release warning (gh CLI on runners doesn't support --notes-prepend)
+          if [ "$PRERELEASE" = "true" ]; then
+            PREPEND=$(printf '## ⚠️ Pre-Release — Non-Production Ready\n\nThis is a **pre-release**. Expect breaking changes, bugs, and incomplete features. Do **not** use in production.\n\n')
+            BODY=$(gh release view "$VERSION" --json body -q .body)
+            gh release edit "$VERSION" --notes "${PREPEND}${BODY}"
+          fi
