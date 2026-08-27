@@ -56,3 +56,9 @@ scratch/
 .idea/
 *.swp
 *.swo
+
+# AUR build artifacts
+aur/*.pkg.tar.*
+aur/src/
+aur/pkg/
+aur/*.tar.gz

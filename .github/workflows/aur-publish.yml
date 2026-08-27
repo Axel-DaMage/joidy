@@ -43,9 +43,10 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           VERSION_CLEAN="${VERSION#v}"
+          VERSION_AUR="${VERSION_CLEAN//-/_}"
           PKGBUILD_VER=$(grep '^pkgver=' aur/PKGBUILD | cut -d= -f2)
-          if [ "$PKGBUILD_VER" != "$VERSION_CLEAN" ]; then
-            echo "::error::aur/PKGBUILD pkgver ($PKGBUILD_VER) does not match release version ($VERSION_CLEAN)"
+          if [ "$PKGBUILD_VER" != "$VERSION_AUR" ]; then
+            echo "::error::aur/PKGBUILD pkgver ($PKGBUILD_VER) does not match release version ($VERSION_AUR)"
             echo "The release workflow should have updated these files. Check release.yml."
             exit 1
           fi
