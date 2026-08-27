@@ -131,7 +131,7 @@ jobs:
 
       - name: Create tag and release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           PRERELEASE="${{ steps.version.outputs.prerelease }}"
