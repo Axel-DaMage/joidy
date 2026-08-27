@@ -91,13 +91,13 @@ jobs:
           # README badge
           sed -i "s|badge/JOIDY-v[0-9a-z.\-]*-[0-9A-Fa-f]*|badge/JOIDY-v${VERSION_CLEAN}|" README.md
 
-          # AUR PKGBUILD
-          sed -i "s|^pkgver=.*|pkgver=${VERSION_CLEAN}|" aur/PKGBUILD
-          sed -i "s|archive/v[0-9a-z.\-]*\.tar\.gz|archive/v${VERSION_CLEAN}.tar.gz|" aur/PKGBUILD
+          # AUR PKGBUILD & .SRCINFO (Arch package version forbids hyphens)
+          VERSION_AUR="${VERSION_CLEAN//-/_}"
+          sed -i "s|^pkgver=.*|pkgver=${VERSION_AUR}|" aur/PKGBUILD
+          sed -i "s|archive/v[0-9a-z.\-_]*\.tar\.gz|archive/v${VERSION_CLEAN}.tar.gz|" aur/PKGBUILD
 
-          # AUR .SRCINFO
-          sed -i "s|^pkgver = .*|pkgver = ${VERSION_CLEAN}|" aur/.SRCINFO
-          sed -i "s|archive/v[0-9a-z.\-]*\.tar\.gz|archive/v${VERSION_CLEAN}.tar.gz|" aur/.SRCINFO
+          sed -i "s|^pkgver = .*|pkgver = ${VERSION_AUR}|" aur/.SRCINFO
+          sed -i "s|archive/v[0-9a-z.\-_]*\.tar\.gz|archive/v${VERSION_CLEAN}.tar.gz|" aur/.SRCINFO
 
           # docs metadata (index.md, api.md, architecture.md)
           for f in docs/index.md docs/api.md docs/architecture.md; do
