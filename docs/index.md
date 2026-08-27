@@ -5,7 +5,7 @@
 ```yaml
 project: Joidy
 type: Sistema de Gestión del Conocimiento con Gamificación
-version: 1.0.0-beta.3
+version: 1.0.0-beta.4
 framework: Monorepo Docker
 docs_version: 2.0
 ```
