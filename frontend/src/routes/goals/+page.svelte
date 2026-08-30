@@ -49,7 +49,7 @@
   } from '$lib/utils/userSettings';
   import { logger } from '$lib/utils/logger';
   import {
-    GOAL_COLOR_PRESETS,
+    GOALS_SPECIFIC_COLOR_PRESETS,
     DEFAULT_GOAL_COLOR,
     TEMPORALITY_COLORS,
   } from '$lib/utils/goalColors';
@@ -273,7 +273,7 @@
     FAILED: 'Fallido',
     CANCELLED: 'Cancelado',
   };
-  const COLOR_PRESETS = GOAL_COLOR_PRESETS;
+  const COLOR_PRESETS = GOALS_SPECIFIC_COLOR_PRESETS;
 
   // New goal form
   let newTitle = $state('');

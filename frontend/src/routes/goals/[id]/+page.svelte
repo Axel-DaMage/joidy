@@ -6,7 +6,7 @@
   import { logger } from '$lib/utils/logger';
   import LazyIconPicker from '$lib/components/LazyIconPicker.svelte';
   import StreakIcon from '$lib/components/StreakIcon.svelte';
-  import { GOAL_COLOR_PRESETS, DEFAULT_GOAL_COLOR } from '$lib/utils/goalColors';
+  import { GOALS_SPECIFIC_COLOR_PRESETS, DEFAULT_GOAL_COLOR } from '$lib/utils/goalColors';
   import { t } from 'svelte-i18n';
 
   // Lazy-load the heavy GoalEditor (461 lines, pulls in marked, dompurify,
@@ -42,7 +42,7 @@
   ]));
 
   const TEMPORALITIES: Goal['temporality'][] = ['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL'];
-  const COLOR_PRESETS = GOAL_COLOR_PRESETS;
+  const COLOR_PRESETS = GOALS_SPECIFIC_COLOR_PRESETS;
 
   let showSettings = false;
   let settingsSection: 'basics' | 'appearance' | 'advanced' = 'basics';
