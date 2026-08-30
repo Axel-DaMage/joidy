@@ -221,7 +221,25 @@ def create_goal(data: GoalCreate, db: Session = Depends(get_db)):
     # New goal has no id yet, so only parent existence can be violated, but
     # validate anyway for consistency and to reject non-existent parents.
     validate_goal_parent(db, goal_id=None, parent_id=data.parent_id)
-    goal = Goal(**data.model_dump())
+    
+    note_id = data.note_id
+    if note_id is None:
+        from services.note_service import create_note as create_note_service
+        note_title = f"{data.title}"
+        note_content = f"# Objetivo: {data.title}\n\nEscribe aquí tus estrategias, pasos y registros para este objetivo.\n"
+        note, _ = create_note_service(
+            db,
+            title=note_title,
+            content=note_content,
+            tags=[],
+            source="joidy",
+            source_path=None
+        )
+        note_id = note.id
+
+    goal_data = data.model_dump()
+    goal_data["note_id"] = note_id
+    goal = Goal(**goal_data)
     db.add(goal)
     db.commit()
     db.refresh(goal)

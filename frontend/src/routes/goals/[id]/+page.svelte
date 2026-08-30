@@ -41,7 +41,7 @@
     '🥇','🥈','🥉','🏆','🎖️','🏅','⭐','🌟','✨','💫','🎊','🎉','🎁'
   ]));
 
-  const TEMPORALITIES: Goal['temporality'][] = ['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL'];
+  const TEMPORALITIES: Goal['temporality'][] = ['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL', 'ONEOFF'];
   const COLOR_PRESETS = GOALS_SPECIFIC_COLOR_PRESETS;
 
   let showSettings = false;

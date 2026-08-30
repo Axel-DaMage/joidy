@@ -30,4 +30,5 @@ export const TEMPORALITY_COLORS: Record<string, string> = {
   'WEEKLY':  '#22d3d3',
   'MONTHLY': '#a78bfa',
   'ANNUAL':  '#f59e0b',
+  'ONEOFF':  '#ec4899',
 };
