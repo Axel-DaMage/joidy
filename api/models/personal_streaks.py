@@ -48,6 +48,7 @@ class PersonalStreak(Base):
         # list_streaks filters on is_archived and category on every request (#403).
         Index("ix_personal_streaks_is_archived", "is_archived"),
         Index("ix_personal_streaks_category", "category"),
+        Index("ix_personal_streaks_active", "id", postgresql_where=(is_archived == False)),
     )
 
 
@@ -63,4 +64,7 @@ class StreakCheckIn(Base):
 
     streak = relationship("PersonalStreak", back_populates="checkins")
 
-    __table_args__ = (UniqueConstraint("streak_id", "check_date", name="uq_streak_checkin_date"),)
+    __table_args__ = (
+        UniqueConstraint("streak_id", "check_date", name="uq_streak_checkin_date"),
+        Index("ix_streak_checkins_query", "streak_id", "check_date"),
+    )

@@ -11,6 +11,16 @@ class NoteEmbedding(Base):
     note_id: Mapped[int] = mapped_column(Integer, ForeignKey("notes.id", ondelete="CASCADE"), primary_key=True)
     embedding = mapped_column(Vector(768)) # Using Gemini embedding size by default, or adapt if necessary
 
+    __table_args__ = (
+        Index(
+            "ix_note_embeddings_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
+    )
+
+
 class Note(Base):
     __tablename__ = "notes"
 
