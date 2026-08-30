@@ -49,7 +49,7 @@
   } from '$lib/utils/userSettings';
   import { logger } from '$lib/utils/logger';
   import {
-    GOAL_COLOR_PRESETS,
+    GOALS_SPECIFIC_COLOR_PRESETS,
     DEFAULT_GOAL_COLOR,
     TEMPORALITY_COLORS,
   } from '$lib/utils/goalColors';
@@ -259,12 +259,13 @@
     ])
   );
 
-  const TEMPORALITIES: Goal['temporality'][] = ['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL'];
+  const TEMPORALITIES: Goal['temporality'][] = ['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL', 'ONEOFF'];
   const TEMPORALITY_LABELS: Record<string, string> = {
     DAILY: 'Diario',
     WEEKLY: 'Semanal',
     MONTHLY: 'Mensual',
     ANNUAL: 'Anual',
+    ONEOFF: 'Única',
   };
   const STATE_LABELS: Record<string, string> = {
     ACTIVE: 'Activo',
@@ -273,7 +274,7 @@
     FAILED: 'Fallido',
     CANCELLED: 'Cancelado',
   };
-  const COLOR_PRESETS = GOAL_COLOR_PRESETS;
+  const COLOR_PRESETS = GOALS_SPECIFIC_COLOR_PRESETS;
 
   // New goal form
   let newTitle = $state('');
