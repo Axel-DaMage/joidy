@@ -1062,11 +1062,15 @@
   });
 
   function getGoalColor(goal: Goal): string {
+    if (goal.color) {
+      return goal.color;
+    }
     const colorMap: Record<string, string> = {
       DAILY: 'var(--today)',
       WEEKLY: TEMPORALITY_COLORS['WEEKLY'],
       MONTHLY: 'var(--link)',
       ANNUAL: TEMPORALITY_COLORS['ANNUAL'],
+      ONEOFF: TEMPORALITY_COLORS['ONEOFF'],
       ACTIVE: 'var(--today)',
       COMPLETED: 'var(--target)',
       PAUSED: 'var(--error)',
