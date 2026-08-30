@@ -54,6 +54,8 @@ def _parse_temporality(text: str) -> GoalTemporality:
         return GoalTemporality.MONTHLY
     if text in ["anual", "annual"]:
         return GoalTemporality.ANNUAL
+    if text in ["oneoff", "one-off", "unica", "única", "once"]:
+        return GoalTemporality.ONEOFF
     return GoalTemporality.DAILY
 
 def _parse_fail_config(text: str) -> GoalFailConfig:
@@ -241,6 +243,15 @@ def evaluate_active_goals(db: Session):
         elif goal.temporality == GoalTemporality.ANNUAL:
             if today.year != goal.created_at.year:
                 expired = True
+
+        if goal.temporality == GoalTemporality.ONEOFF:
+            progress = progress_by_goal.get(goal.id, 0.0)
+            if progress >= goal.target_value:
+                goal.state = GoalState.COMPLETED
+                goal.is_completed = True
+                goal.completed_at = now
+                goal.current_value = progress
+            continue
 
         if expired:
             _process_goal_failure(db, goal, now, progress_by_goal.get(goal.id))
