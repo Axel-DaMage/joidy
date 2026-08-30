@@ -189,7 +189,7 @@ export interface Goal {
   title: string;
   description: string;
   source_path: string | null;
-  temporality: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'ANNUAL';
+  temporality: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'ANNUAL' | 'ONEOFF';
   measurement_type: 'COUNT' | 'BOOLEAN' | 'PERCENT';
   target_value: number;
   current_value: number;
