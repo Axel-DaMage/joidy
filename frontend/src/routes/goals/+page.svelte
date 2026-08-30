@@ -448,7 +448,7 @@
     try {
       const g = await api.goals.create({
         title: newTitle.trim(),
-        description: newDescription,
+        description: '',
         target_value: newTargetValue,
         temporality: newTemporality,
         measurement_type: newMeasurement,
@@ -466,6 +466,9 @@
       newTagId = null;
       newNoteId = null;
       newMaxAssignmentDays = null;
+      if (g.note_id) {
+        goto(`/notes?id=${g.note_id}`);
+      }
     } catch (e) {
       addError = 'Error al crear el objetivo.';
     } finally {
@@ -1254,9 +1257,16 @@
                     >
                   {/if}
                 </div>
-                {#if goal.description}
-                  <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
-                    {goal.description}
+                {#if goal.note_id}
+                  <div style="margin-top: 8px;">
+                    <button
+                      class="dash-btn secondary-dash-btn"
+                      style="font-size: 11px; padding: 4px 8px; width: fit-content; display: inline-flex; align-items: center; gap: 4px;"
+                      onclick={() => goto(`/notes?id=${goal.note_id}`)}
+                    >
+                      <span class="icon">📝</span>
+                      <span>Ver/Editar Nota del Objetivo</span>
+                    </button>
                   </div>
                 {/if}
               </div>
@@ -2278,21 +2288,7 @@
                   autofocus
                 />
               </div>
-              <div class="form-field">
-                <label class="label"
-                  >{$t('goalsPage.description')}
-                  <span class="optional">{$t('goalsPage.optional')}</span></label
-                >
-                <textarea
-                  class="input w-full"
-                  bind:value={newDescription}
-                  placeholder={$t('goalsPage.descriptionPlaceholder')}
-                  maxlength="63"
-                  rows="2"
-                  onkeydown={(e) => e.key === 'Enter' && e.preventDefault()}
-                  oninput={(e) => (newDescription = e.currentTarget.value.replace(/\n/g, ''))}
-                ></textarea>
-              </div>
+
               <div class="form-field">
                 <label class="label">{$t('goalsPage.repeatFrequency')}</label>
                 <div class="ng-freq-grid">
