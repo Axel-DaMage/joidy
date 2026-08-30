@@ -223,5 +223,27 @@ class TestGetGoalStreak(GoalServiceTestBase):
             self.assertEqual(result["best_streak"], 3)
 
 
+class TestEvaluateONEOFFGoals(GoalServiceTestBase):
+    def test_oneoff_goal_completion(self) -> None:
+        with self.Session() as db:
+            goal = Goal(
+                title="One-off Goal",
+                temporality=GoalTemporality.ONEOFF,
+                state=GoalState.ACTIVE,
+                target_value=5.0,
+                current_value=5.0,
+            )
+            db.add(goal)
+            db.commit()
+
+            from services.goal_service import evaluate_active_goals
+            evaluate_active_goals(db)
+            db.refresh(goal)
+
+            self.assertEqual(goal.state, GoalState.COMPLETED)
+            self.assertTrue(goal.is_completed)
+            self.assertIsNotNone(goal.completed_at)
+
+
 if __name__ == "__main__":
     unittest.main()
