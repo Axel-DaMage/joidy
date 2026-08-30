@@ -702,6 +702,9 @@ export const api = {
         obsidian_vault_path: string | null;
         daily_notes_folder: string | null;
         github_username: string | null;
+        github_token: string | null;
+        github_client_id: string | null;
+        github_client_secret: string | null;
         app_env: string | null;
         configured_keys: string[];
       }>('GET', '/config/'),

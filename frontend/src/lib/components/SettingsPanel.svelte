@@ -62,6 +62,8 @@
     daily_notes_folder: '',
     github_token: '',
     github_username: '',
+    github_client_id: '',
+    github_client_secret: '',
     telegram_bot_token: '',
     telegram_allowed_user_id: '',
   };
@@ -131,6 +133,8 @@
         daily_notes_folder: config.daily_notes_folder || '',
         github_token: '',
         github_username: config.github_username || '',
+        github_client_id: config.github_client_id || '',
+        github_client_secret: config.github_client_secret || '',
         telegram_bot_token: '',
         telegram_allowed_user_id: '',
       };
@@ -392,12 +396,16 @@
       savedTimer = null;
     }
     try {
-      // No enviamos github_token ni github_username desde el formulario general;
-      // esos se manejan con el flujo OAuth dedicado.
-      const { github_token, github_username, ...configToSave } = systemConfig;
+      const configToSave: Record<string, any> = { ...systemConfig };
+      // Omit empty secrets so we don't overwrite existing configured values with empty strings
+      if (!configToSave.github_token) delete configToSave.github_token;
+      if (!configToSave.github_client_id) delete configToSave.github_client_id;
+      if (!configToSave.github_client_secret) delete configToSave.github_client_secret;
+      if (!configToSave.github_username) delete configToSave.github_username;
+
       const result = await api.config.update(configToSave);
-      configuredKeys = Object.entries(configToSave)
-        .filter(([k, v]) => v && k !== 'telegram_bot_token' && k !== 'telegram_allowed_user_id')
+      configuredKeys = Object.entries(systemConfig)
+        .filter(([k, v]) => (v || isConfigured(k)) && k !== 'telegram_bot_token' && k !== 'telegram_allowed_user_id')
         .map(([k, v]) => k);
       if (result.requires_restart && result.restart_reason) {
         configRestartNotice = result.restart_reason;
@@ -836,6 +844,67 @@
           {#if githubAuthError && !githubAuthLoading}
             <p class="hint" style="color:var(--danger)">{githubAuthError}</p>
           {/if}
+
+          <!-- GitHub Manual Config -->
+          <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 8px; border-left: 2px solid var(--border); padding-left: 12px; margin-left: 4px;">
+            <p class="hint" style="margin-top: 0; font-weight: 500;">Configuración manual de GitHub:</p>
+            
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+              <div class="row-label" style="font-size: 11px;">
+                <span>Personal Access Token (PAT)</span>
+                {#if isConfigured('github_token')}<span class="configured-badge">✓</span>{/if}
+              </div>
+              <input
+                type="password"
+                class="setting-input mono"
+                style="font-size: 11px; padding: 4px 8px;"
+                placeholder="ghp_..."
+                bind:value={systemConfig.github_token}
+              />
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+              <div class="row-label" style="font-size: 11px;">
+                <span>GitHub OAuth Client ID</span>
+                {#if isConfigured('github_client_id')}<span class="configured-badge">✓</span>{/if}
+              </div>
+              <input
+                type="text"
+                class="setting-input mono"
+                style="font-size: 11px; padding: 4px 8px;"
+                placeholder="Ov23..."
+                bind:value={systemConfig.github_client_id}
+              />
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+              <div class="row-label" style="font-size: 11px;">
+                <span>GitHub OAuth Client Secret</span>
+                {#if isConfigured('github_client_secret')}<span class="configured-badge">✓</span>{/if}
+              </div>
+              <input
+                type="password"
+                class="setting-input mono"
+                style="font-size: 11px; padding: 4px 8px;"
+                placeholder="client_secret_..."
+                bind:value={systemConfig.github_client_secret}
+              />
+            </div>
+            
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+              <div class="row-label" style="font-size: 11px;">
+                <span>GitHub Username</span>
+                {#if isConfigured('github_username')}<span class="configured-badge">✓</span>{/if}
+              </div>
+              <input
+                type="text"
+                class="setting-input mono"
+                style="font-size: 11px; padding: 4px 8px;"
+                placeholder="username"
+                bind:value={systemConfig.github_username}
+              />
+            </div>
+          </div>
           {#if $devMode}
             <div class="row">
               <div class="row-label">

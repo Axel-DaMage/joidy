@@ -45,6 +45,9 @@ class ConfigResponse(BaseModel):
     obsidian_vault_path: str | None = None
     daily_notes_folder: str | None = None
     github_username: str | None = None
+    github_token: str | None = None
+    github_client_id: str | None = None
+    github_client_secret: str | None = None
     app_env: str | None = None
     configured_keys: list[str]
 
