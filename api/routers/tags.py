@@ -115,7 +115,8 @@ def _cached_tag_graph(db: Session):
             edges.append({"source": -tag.parent_id, "target": -tag.id, "type": "hierarchy", "weight": 1})
 
     # Notes as nodes (positive IDs)
-    notes = db.query(Note).options(selectinload(Note.tags).selectinload(NoteTag.tag)).all()
+    from sqlalchemy.orm import defer
+    notes = db.query(Note).options(defer(Note.content), selectinload(Note.tags).selectinload(NoteTag.tag)).all()
     note_links = db.query(NoteLink).all()
     note_tag_relations = db.query(NoteTag).all()
 
@@ -133,7 +134,10 @@ def _cached_tag_graph(db: Session):
     existing_titles = {n.title.lower().strip() for n in notes}
     unresolved_nodes = {}
 
+    from sqlalchemy import inspect
     for note in notes:
+        if "content" in inspect(note).unloaded:
+            continue
         # Regex to find WikiLinks [[Link Title]]
         links = re.findall(r"\[\[\s*([^\]|]+?)\s*(?:\|[^\]]+)?\]\]", note.content)
         for link_title in set(links):

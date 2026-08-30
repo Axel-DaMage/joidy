@@ -414,6 +414,18 @@ resolve_ports() {
   return 0
 }
 
+cmd_pull() {
+  print_status "Pulling latest Joidy images..."
+  local profile
+  profile="$(ai_profile_args)"
+  if [ -n "$profile" ]; then
+    $DOCKER_CMD $ENV_FILE_ARG $profile pull || print_warn "Could not pull latest images, using local/cached images."
+  else
+    $DOCKER_CMD $ENV_FILE_ARG pull || print_warn "Could not pull latest images, using local/cached images."
+  fi
+  print_ok "Pull complete."
+}
+
 cmd_up() {
   print_status "Starting Joidy services..."
   resolve_ports
@@ -512,6 +524,7 @@ Usage:
   joidy wake       Restart heavy services from hibernation
   joidy restart    Restart all services
   joidy status     Show service status
+  joidy pull       Pull latest images
   joidy logs       Tail logs (all services)
   joidy logs api   Tail logs for a specific service
   joidy help       Show this help message
@@ -539,6 +552,7 @@ case "${1:-help}" in
   wake)     cmd_wake ;;
   restart)  cmd_restart ;;
   status)   cmd_status ;;
+  pull)     cmd_pull ;;
   logs)     cmd_logs "${2:-}" ;;
   help|--help|-h) cmd_help ;;
   *)

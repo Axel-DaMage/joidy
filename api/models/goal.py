@@ -22,6 +22,7 @@ class GoalTemporality(str, PyEnum):
     WEEKLY = "WEEKLY"
     MONTHLY = "MONTHLY"
     ANNUAL = "ANNUAL"
+    ONEOFF = "ONEOFF"
 
 
 class GoalMeasurement(str, PyEnum):
