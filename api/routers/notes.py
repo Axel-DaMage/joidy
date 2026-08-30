@@ -178,7 +178,8 @@ def list_notes(
     db: Session = Depends(get_db),
     response: Response = None,
 ):
-    query = db.query(Note).options(selectinload(Note.tags).selectinload(NoteTag.tag))
+    from sqlalchemy.orm import defer
+    query = db.query(Note).options(defer(Note.content), selectinload(Note.tags).selectinload(NoteTag.tag))
     if tag:
         query = query.join(NoteTag).join(Tag).filter(Tag.name == tag.lower())
     if source_path:
@@ -245,10 +246,10 @@ async def semantic_search(
     if not note_ids:
         return {"results": []}
 
-    # 3. Fetch note details
+    from sqlalchemy.orm import defer
     notes = (
         db.query(Note)
-        .options(selectinload(Note.tags).selectinload(NoteTag.tag))
+        .options(defer(Note.content), selectinload(Note.tags).selectinload(NoteTag.tag))
         .filter(Note.id.in_(note_ids))
         .all()
     )

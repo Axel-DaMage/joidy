@@ -55,10 +55,16 @@ def write_to_vault(note: Note, from_vault: bool = False) -> bool:
 
 
 def note_to_response(note: Note) -> dict:
+    from sqlalchemy import inspect
+    insp = inspect(note)
+    content = ""
+    if "content" not in insp.unloaded:
+        content = note.content
+
     return {
         "id": note.id,
         "title": note.title,
-        "content": note.content,
+        "content": content,
         "source": note.source,
         "source_path": note.source_path,
         "tags": [nt.tag.name for nt in note.tags if nt.tag],
