@@ -375,6 +375,15 @@
   let loadError = $state('');
   let streakData = $state({ current_streak: 0, best_streak: 0 });
 
+  function deduplicateGoals(arr: Goal[]): Goal[] {
+    const seen = new Set<number>();
+    return arr.filter((g) => {
+      if (seen.has(g.id)) return false;
+      seen.add(g.id);
+      return true;
+    });
+  }
+
   onMount(async () => {
     // restore UI state immediately to prevent flash
     try {
@@ -394,7 +403,7 @@
 
     const cachedGoals = getCachedData<Goal[]>('goals');
     const cachedTags = getCachedData<TagType[]>('tags');
-    if (cachedGoals) goals = cachedGoals;
+    if (cachedGoals) goals = deduplicateGoals(cachedGoals);
     if (cachedTags) tags = cachedTags;
 
     // Restore pinned goals from localStorage
@@ -409,7 +418,9 @@
 
     try {
       // Load only essential data immediately (goals + tags)
-      [goals, tags] = await Promise.all([api.goals.list(), api.tags.list()]);
+      const [fetchedGoals, fetchedTags] = await Promise.all([api.goals.list(), api.tags.list()]);
+      goals = deduplicateGoals(fetchedGoals);
+      tags = fetchedTags;
       setCachedData('goals', goals);
       setCachedData('tags', tags);
     } catch (e) {
