@@ -21,6 +21,15 @@ services:
       - VITE_API_URL=http://localhost:${API_PORT:-8000}
       - VITE_INTERNAL_API_URL=http://api:8000
     command: npm run dev -- --host 0.0.0.0 --port 3000
+    # Vite dev (esbuild + SSR module runner) needs far more CPU/RAM than the
+    # production node server. The 0.5cpu/512M limits in docker-compose.yml
+    # throttle module compilation so hard the SSR transport invoke times out
+    # after 60s and the page never loads (HTTP 500 → healthcheck "unhealthy").
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4G
     # The dev container runs as the host UID. A leftover root-owned .svelte-kit
     # (e.g. from a previous `sudo make fix-permissions`) still crashes
     # svelte-kit sync on EACCES; the healthcheck surfaces that crash-loop as
