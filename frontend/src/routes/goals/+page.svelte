@@ -839,7 +839,7 @@
   });
 
   let progressOverview = $derived.by(() => {
-    return ['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL'].map((temp) => {
+    return ['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL', 'ONEOFF'].map((temp) => {
       const tempGoals = goals.filter((g) => g.temporality === temp && g.state !== 'CANCELLED');
       const avgProgress =
         tempGoals.length > 0
@@ -1332,6 +1332,15 @@
                   >
                     <Check size={14} />
                   </button>
+                {:else if goal.state === 'FAILED'}
+                  <button
+                    class="btn btn-ghost text-success"
+                    title={$t('goalsPage.complete')}
+                    aria-label={$t('goalsPage.completeGoal')}
+                    onclick={() => completeGoal(goal.id)}
+                  >
+                    <Check size={14} />
+                  </button>
                 {:else if goal.state === 'PAUSED'}
                   <button
                     class="btn btn-ghost text-muted"
@@ -1618,12 +1627,12 @@
           </div>
 
           <div class="history-goal-list" style="width:100%">
-            {#each ['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL'] as temp}
+            {#each ['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL', 'ONEOFF'] as temp}
               {@const normDate = getNormalizedDate(
                 selectedPlanningDate,
-                temp as 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'ANNUAL'
+                temp as 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'ANNUAL' | 'ONEOFF'
               )}
-              {@const assignedIds = assignments[normDate] || []}
+              {@const assignedIds = Array.from(new Set(assignments[normDate] || []))}
               {@const filteredGoals = assignedIds
                 .map((id) => goals.find((g) => g.id === id))
                 .filter((g): g is Goal => g !== undefined && Boolean(g) && g.temporality === temp)}
@@ -1636,7 +1645,9 @@
                       ? 'Semana'
                       : temp === 'MONTHLY'
                         ? 'Mes'
-                        : 'Año'}
+                        : temp === 'ANNUAL'
+                          ? 'Año'
+                          : 'Único'}
                 </div>
                 {#each filteredGoals as g (g.id)}
                   {@const status = getGoalStatusOnDate(g, selectedPlanningDate)}
@@ -1708,7 +1719,7 @@
               {/if}
             {/each}
 
-            {#if !(['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL'] as const).some( (temp) => (assignments[getNormalizedDate(selectedPlanningDate, temp as 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'ANNUAL')] || []).some((id) => goals.find((g) => g.id === id)?.temporality === temp) )}
+            {#if !(['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL', 'ONEOFF'] as const).some( (temp) => (assignments[getNormalizedDate(selectedPlanningDate, temp as 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'ANNUAL' | 'ONEOFF')] || []).some((id) => goals.find((g) => g.id === id)?.temporality === temp) )}
               <div
                 class="history-detail-empty"
                 style="padding: 2rem; border: 1px dashed var(--border); border-radius: var(--r); margin: 1rem;"
@@ -2320,7 +2331,9 @@
                           ? 'Semanal'
                           : temp === 'MONTHLY'
                             ? 'Mensual'
-                            : 'Anual'}
+                            : temp === 'ANNUAL'
+                              ? 'Anual'
+                              : 'Único'}
                     </button>
                   {/each}
                 </div>

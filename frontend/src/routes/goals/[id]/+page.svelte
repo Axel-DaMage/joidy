@@ -227,7 +227,7 @@
               <div class="ng-freq-grid">
                 {#each TEMPORALITIES as temp}
                   <button class="ng-freq-btn" class:active={editTemporality === temp} onclick={() => editTemporality = temp}>
-                    {temp === 'DAILY' ? 'Diario' : temp === 'WEEKLY' ? 'Semanal' : temp === 'MONTHLY' ? 'Mensual' : 'Anual'}
+                    {temp === 'DAILY' ? 'Diario' : temp === 'WEEKLY' ? 'Semanal' : temp === 'MONTHLY' ? 'Mensual' : temp === 'ANNUAL' ? 'Anual' : 'Único'}
                   </button>
                 {/each}
               </div>

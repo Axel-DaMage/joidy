@@ -384,12 +384,45 @@ def complete_goal(
     goal = db.query(Goal).filter(Goal.id == goal_id).first()
     if not goal:
         raise HTTPException(status_code=404, detail="Goal not found")
+    
+    was_failed = (goal.state == GoalState.FAILED)
+    old_current = goal.current_value
+    
     goal.is_completed = True
     goal.state = GoalState.COMPLETED
     goal.completed_at = datetime.now(timezone.utc)
     goal.current_value = get_goal_progress(goal, db)
+    
+    # Adjust descendant goals if this was a late completion of a failed goal
+    child = None
+    if was_failed:
+        child = (
+            db.query(Goal)
+            .filter(
+                Goal.title == goal.title,
+                Goal.state == GoalState.ACTIVE,
+                Goal.created_at > goal.created_at
+            )
+            .order_by(Goal.created_at.asc())
+            .first()
+        )
+        if child and goal.fail_config == GoalFailConfig.SNOWBALL:
+            shortfall = max(0.0, goal.target_value - old_current)
+            child.target_value = max(goal.target_value, child.target_value - shortfall)
+            db.add(child)
+
     gami = process_event(db, "goal_completed", {"goal_id": goal_id, "title": goal.title})
     db.commit()
+    db.refresh(goal)
+    if child:
+        db.refresh(child)
+
+    # Sync updates back to the vault
+    obj_dir = get_objectives_dir()
+    if obj_dir:
+        _write_goal_file(db, goal, obj_dir)
+        if child:
+            _write_goal_file(db, child, obj_dir)
 
     return {"goal": _serialize_goal(goal, db), "gamification": vars(gami)}
 
