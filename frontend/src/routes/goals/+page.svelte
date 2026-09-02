@@ -305,18 +305,7 @@
   let historyData = $state<any[]>([]);
   $effect(() => {
     const dataMap = new Map();
-    // Procesar completados
-    for (const g of goals) {
-      if ((g.state === 'COMPLETED' || g.is_completed) && g.completed_at) {
-        const date = g.completed_at.split('T')[0];
-        if (!dataMap.has(date)) {
-          dataMap.set(date, { date, checked: true, failed: false, failEmoji: null });
-        } else {
-          dataMap.get(date).checked = true;
-        }
-      }
-    }
-    // Procesar fallidos (los fallos sobrescriben o se añaden a la visualización)
+    // Procesar fallidos
     for (const g of goals) {
       if (g.state === 'FAILED' && g.updated_at) {
         const date = g.updated_at.split('T')[0];
@@ -325,6 +314,17 @@
         } else {
           dataMap.get(date).failed = true;
           dataMap.get(date).failEmoji = g.fail_emoji;
+        }
+      }
+    }
+    // Procesar completados (los completados se superponen y tienen prioridad sobre fallidos)
+    for (const g of goals) {
+      if ((g.state === 'COMPLETED' || g.is_completed) && g.completed_at) {
+        const date = g.completed_at.split('T')[0];
+        if (!dataMap.has(date)) {
+          dataMap.set(date, { date, checked: true, failed: false, failEmoji: null });
+        } else {
+          dataMap.get(date).checked = true;
         }
       }
     }
@@ -604,8 +604,8 @@
       let status: 'none' | 'assigned' | 'completed' | 'failed' = hasAssignment
         ? 'assigned'
         : 'none';
-      if (hData?.failed) status = 'failed';
-      else if (hData?.checked) status = 'completed';
+      if (hData?.checked) status = 'completed';
+      else if (hData?.failed) status = 'failed';
       cells.push({ dateStr, day: d, isToday, status });
     }
     return cells;
@@ -1398,14 +1398,20 @@
             {/if}
             {#each upcomingTasks as task}
               {@const g = task.goal}
-              <button
+              <div
                 class="goal-card"
-                style="text-align: left; cursor: pointer; height: fit-content; border-left: 3px solid {getGoalColor(
+                style="text-align: left; height: fit-content; border-left: 3px solid {getGoalColor(
                   g
                 )}; display:flex; align-items:center; width: 100%;"
-                onclick={() => goto(`/goals/${g.id}`)}
               >
-                <div class="goal-main" style="flex: 1;">
+                <div
+                  class="goal-main"
+                  style="flex: 1; cursor: pointer;"
+                  onclick={() => goto(`/goals/${g.id}`)}
+                  role="button"
+                  tabindex="0"
+                  onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && goto(`/goals/${g.id}`)}
+                >
                   <div class="goal-title">
                     {#if g.fail_emoji}
                       <span
@@ -1428,7 +1434,25 @@
                     >
                   </div>
                 </div>
-              </button>
+                <div class="goal-actions">
+                  <button
+                    class="btn btn-ghost text-success"
+                    title={$t('goalsPage.complete')}
+                    aria-label={$t('goalsPage.completeGoal')}
+                    onclick={() => completeGoal(g.id)}
+                  >
+                    <Check size={14} />
+                  </button>
+                  <button
+                    class="btn btn-ghost text-muted"
+                    title={$t('goalsPage.cancel')}
+                    aria-label={$t('goalsPage.cancelGoal')}
+                    onclick={() => updateGoalState(g.id, 'CANCELLED')}
+                  >
+                    <Ban size={14} />
+                  </button>
+                </div>
+              </div>
             {/each}
           </div>
         </div>
