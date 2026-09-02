@@ -20,6 +20,27 @@ JOIDY_HEADER = "joidy_managed: true"
 OBJECTIVES_DIR = "Objetivos"
 
 
+def _serialize_value(value):
+    """Serialize a metadata value for frontmatter.
+
+    SQLAlchemy enums render as ``GoalTemporality.DAILY`` via f-strings; write
+    the plain enum value (``DAILY``) instead so files stay parseable.
+    """
+    import enum
+
+    if isinstance(value, enum.Enum):
+        return value.value
+    return value
+
+
+def _normalize_enum_value(value):
+    """Accept legacy frontmatter values like ``GoalTemporality.DAILY``
+    (written before enum serialization was fixed) and return ``DAILY``."""
+    if isinstance(value, str) and "." in value:
+        return value.rsplit(".", 1)[-1]
+    return value
+
+
 def get_vault_path() -> Path | None:
     vault = settings.obsidian_vault_path
     if not vault:
@@ -103,7 +124,7 @@ def update_goal_file(goal_id: int, title: str, content: str, metadata: dict) -> 
 
     content_lines = ["---"]
     for k, v in meta.items():
-        content_lines.append(f"{k}: {v}")
+        content_lines.append(f"{k}: {_serialize_value(v)}")
     content_lines.append("---\n")
     content_lines.append(f"# {title}\n")
     if content:
@@ -136,6 +157,7 @@ def restore_goals_from_vault(db: Session) -> dict:
 
     restored = 0
     skipped = 0
+    failed = 0
 
     for f in sorted(obj_dir.glob("*.md")):
         content = f.read_text(encoding="utf-8")
@@ -153,37 +175,50 @@ def restore_goals_from_vault(db: Session) -> dict:
         except (ValueError, TypeError):
             continue
 
-        existing = db.query(Goal).filter(Goal.id == goal_id).first()
-        if existing:
-            skipped += 1
+        try:
+            # Savepoint per goal: one malformed/corrupt file must not abort
+            # the whole restore (e.g. legacy files with enum values written
+            # as "GoalTemporality.DAILY").
+            with db.begin_nested():
+                existing = db.query(Goal).filter(Goal.id == goal_id).first()
+                if existing:
+                    skipped += 1
+                    continue
+
+                goal = Goal(
+                    id=goal_id,
+                    title=parsed.get("title", "Untitled"),
+                    description=parsed.get("content", ""),
+                    temporality=_normalize_enum_value(parsed.get("temporality", "DAILY")),
+                    measurement_type=_normalize_enum_value(parsed.get("measurement_type", "COUNT")),
+                    target_value=float(parsed.get("target_value", 1.0) or 1.0),
+                    current_value=float(parsed.get("current_value", 0.0) or 0.0),
+                    state=_normalize_enum_value(parsed.get("state", "ACTIVE")),
+                    fail_config=_normalize_enum_value(parsed.get("fail_config", "STATIC")),
+                    fail_emoji=parsed.get("fail_emoji", "🔴"),
+                    color=parsed.get("color", "#c8a96e"),
+                    theme=parsed.get("theme", "solid"),
+                    max_assignment_days=int(parsed["max_assignment_days"]) if parsed.get("max_assignment_days") and parsed["max_assignment_days"] != "None" else None,
+                    note_id=int(parsed["note_id"]) if parsed.get("note_id") and parsed["note_id"] != "None" else None,
+                    tag_id=int(parsed["tag_id"]) if parsed.get("tag_id") and parsed["tag_id"] != "None" else None,
+                    parent_id=int(parsed["parent_id"]) if parsed.get("parent_id") and parsed["parent_id"] != "None" else None,
+                    is_completed=str(parsed.get("is_completed", "")).lower() == "true",
+                    completed_at=datetime.fromisoformat(parsed["completed_at"]) if parsed.get("completed_at") and parsed["completed_at"] != "None" else None,
+                    source_path=str(f.relative_to(f.parents[1])),
+                )
+                db.add(goal)
+                db.flush()
+            restored += 1
+        except Exception:
+            db.rollback()
+            failed += 1
             continue
 
-        goal = Goal(
-            id=goal_id,
-            title=parsed.get("title", "Untitled"),
-            description=parsed.get("content", ""),
-            temporality=parsed.get("temporality", "DAILY"),
-            measurement_type=parsed.get("measurement_type", "COUNT"),
-            target_value=float(parsed.get("target_value", 1.0) or 1.0),
-            current_value=float(parsed.get("current_value", 0.0) or 0.0),
-            state=parsed.get("state", "ACTIVE"),
-            fail_config=parsed.get("fail_config", "STATIC"),
-            fail_emoji=parsed.get("fail_emoji", "🔴"),
-            color=parsed.get("color", "#c8a96e"),
-            theme=parsed.get("theme", "solid"),
-            max_assignment_days=int(parsed["max_assignment_days"]) if parsed.get("max_assignment_days") and parsed["max_assignment_days"] != "None" else None,
-            note_id=int(parsed["note_id"]) if parsed.get("note_id") and parsed["note_id"] != "None" else None,
-            tag_id=int(parsed["tag_id"]) if parsed.get("tag_id") and parsed["tag_id"] != "None" else None,
-            parent_id=int(parsed["parent_id"]) if parsed.get("parent_id") and parsed["parent_id"] != "None" else None,
-            is_completed=str(parsed.get("is_completed", "")).lower() == "true",
-            completed_at=datetime.fromisoformat(parsed["completed_at"]) if parsed.get("completed_at") and parsed["completed_at"] != "None" else None,
-            source_path=str(f.relative_to(f.parents[1])),
-        )
-        db.add(goal)
-        restored += 1
-
     db.commit()
-    return {"status": "ok", "restored": restored, "skipped": skipped}
+    result = {"status": "ok", "restored": restored, "skipped": skipped}
+    if failed:
+        result["failed"] = failed
+    return result
 
 
 def write_daily(db: Session, target_date: date | None = None) -> bool:
@@ -266,7 +301,7 @@ def _write_goal_file(db: Session, goal: Goal, obj_dir: Path) -> Path | None:
     content_lines = ["---"]
     for k, v in frontmatter.items():
         if v is not None:
-            content_lines.append(f"{k}: {v}")
+            content_lines.append(f"{k}: {_serialize_value(v)}")
     content_lines.append("---\n")
 
     content_lines.append(f"# {goal.title}\n")

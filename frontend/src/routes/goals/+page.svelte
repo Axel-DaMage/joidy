@@ -49,7 +49,7 @@
   } from '$lib/utils/userSettings';
   import { logger } from '$lib/utils/logger';
   import {
-    GOAL_COLOR_PRESETS,
+    GOALS_SPECIFIC_COLOR_PRESETS,
     DEFAULT_GOAL_COLOR,
     TEMPORALITY_COLORS,
   } from '$lib/utils/goalColors';
@@ -259,12 +259,13 @@
     ])
   );
 
-  const TEMPORALITIES: Goal['temporality'][] = ['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL'];
+  const TEMPORALITIES: Goal['temporality'][] = ['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL', 'ONEOFF'];
   const TEMPORALITY_LABELS: Record<string, string> = {
     DAILY: 'Diario',
     WEEKLY: 'Semanal',
     MONTHLY: 'Mensual',
     ANNUAL: 'Anual',
+    ONEOFF: 'Única',
   };
   const STATE_LABELS: Record<string, string> = {
     ACTIVE: 'Activo',
@@ -273,7 +274,7 @@
     FAILED: 'Fallido',
     CANCELLED: 'Cancelado',
   };
-  const COLOR_PRESETS = GOAL_COLOR_PRESETS;
+  const COLOR_PRESETS = GOALS_SPECIFIC_COLOR_PRESETS;
 
   // New goal form
   let newTitle = $state('');
@@ -304,18 +305,7 @@
   let historyData = $state<any[]>([]);
   $effect(() => {
     const dataMap = new Map();
-    // Procesar completados
-    for (const g of goals) {
-      if ((g.state === 'COMPLETED' || g.is_completed) && g.completed_at) {
-        const date = g.completed_at.split('T')[0];
-        if (!dataMap.has(date)) {
-          dataMap.set(date, { date, checked: true, failed: false, failEmoji: null });
-        } else {
-          dataMap.get(date).checked = true;
-        }
-      }
-    }
-    // Procesar fallidos (los fallos sobrescriben o se añaden a la visualización)
+    // Procesar fallidos
     for (const g of goals) {
       if (g.state === 'FAILED' && g.updated_at) {
         const date = g.updated_at.split('T')[0];
@@ -324,6 +314,17 @@
         } else {
           dataMap.get(date).failed = true;
           dataMap.get(date).failEmoji = g.fail_emoji;
+        }
+      }
+    }
+    // Procesar completados (los completados se superponen y tienen prioridad sobre fallidos)
+    for (const g of goals) {
+      if ((g.state === 'COMPLETED' || g.is_completed) && g.completed_at) {
+        const date = g.completed_at.split('T')[0];
+        if (!dataMap.has(date)) {
+          dataMap.set(date, { date, checked: true, failed: false, failEmoji: null });
+        } else {
+          dataMap.get(date).checked = true;
         }
       }
     }
@@ -374,6 +375,15 @@
   let loadError = $state('');
   let streakData = $state({ current_streak: 0, best_streak: 0 });
 
+  function deduplicateGoals(arr: Goal[]): Goal[] {
+    const seen = new Set<number>();
+    return arr.filter((g) => {
+      if (seen.has(g.id)) return false;
+      seen.add(g.id);
+      return true;
+    });
+  }
+
   onMount(async () => {
     // restore UI state immediately to prevent flash
     try {
@@ -393,7 +403,7 @@
 
     const cachedGoals = getCachedData<Goal[]>('goals');
     const cachedTags = getCachedData<TagType[]>('tags');
-    if (cachedGoals) goals = cachedGoals;
+    if (cachedGoals) goals = deduplicateGoals(cachedGoals);
     if (cachedTags) tags = cachedTags;
 
     // Restore pinned goals from localStorage
@@ -408,7 +418,9 @@
 
     try {
       // Load only essential data immediately (goals + tags)
-      [goals, tags] = await Promise.all([api.goals.list(), api.tags.list()]);
+      const [fetchedGoals, fetchedTags] = await Promise.all([api.goals.list(), api.tags.list()]);
+      goals = deduplicateGoals(fetchedGoals);
+      tags = fetchedTags;
       setCachedData('goals', goals);
       setCachedData('tags', tags);
     } catch (e) {
@@ -448,7 +460,7 @@
     try {
       const g = await api.goals.create({
         title: newTitle.trim(),
-        description: newDescription,
+        description: '',
         target_value: newTargetValue,
         temporality: newTemporality,
         measurement_type: newMeasurement,
@@ -466,6 +478,9 @@
       newTagId = null;
       newNoteId = null;
       newMaxAssignmentDays = null;
+      if (g.note_id) {
+        goto(`/notes?id=${g.note_id}`);
+      }
     } catch (e) {
       addError = 'Error al crear el objetivo.';
     } finally {
@@ -589,8 +604,8 @@
       let status: 'none' | 'assigned' | 'completed' | 'failed' = hasAssignment
         ? 'assigned'
         : 'none';
-      if (hData?.failed) status = 'failed';
-      else if (hData?.checked) status = 'completed';
+      if (hData?.checked) status = 'completed';
+      else if (hData?.failed) status = 'failed';
       cells.push({ dateStr, day: d, isToday, status });
     }
     return cells;
@@ -824,7 +839,7 @@
   });
 
   let progressOverview = $derived.by(() => {
-    return ['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL'].map((temp) => {
+    return ['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL', 'ONEOFF'].map((temp) => {
       const tempGoals = goals.filter((g) => g.temporality === temp && g.state !== 'CANCELLED');
       const avgProgress =
         tempGoals.length > 0
@@ -1061,11 +1076,15 @@
   });
 
   function getGoalColor(goal: Goal): string {
+    if (goal.color) {
+      return goal.color;
+    }
     const colorMap: Record<string, string> = {
       DAILY: 'var(--today)',
       WEEKLY: TEMPORALITY_COLORS['WEEKLY'],
       MONTHLY: 'var(--link)',
       ANNUAL: TEMPORALITY_COLORS['ANNUAL'],
+      ONEOFF: TEMPORALITY_COLORS['ONEOFF'],
       ACTIVE: 'var(--today)',
       COMPLETED: 'var(--target)',
       PAUSED: 'var(--error)',
@@ -1254,9 +1273,16 @@
                     >
                   {/if}
                 </div>
-                {#if goal.description}
-                  <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
-                    {goal.description}
+                {#if goal.note_id}
+                  <div style="margin-top: 8px;">
+                    <button
+                      class="dash-btn secondary-dash-btn"
+                      style="font-size: 11px; padding: 4px 8px; width: fit-content; display: inline-flex; align-items: center; gap: 4px;"
+                      onclick={() => goto(`/notes?id=${goal.note_id}`)}
+                    >
+                      <span class="icon">📝</span>
+                      <span>Ver/Editar Nota del Objetivo</span>
+                    </button>
                   </div>
                 {/if}
               </div>
@@ -1298,6 +1324,15 @@
                   >
                     <Pause size={14} />
                   </button>
+                  <button
+                    class="btn btn-ghost text-success"
+                    title={$t('goalsPage.complete')}
+                    aria-label={$t('goalsPage.completeGoal')}
+                    onclick={() => completeGoal(goal.id)}
+                  >
+                    <Check size={14} />
+                  </button>
+                {:else if goal.state === 'FAILED'}
                   <button
                     class="btn btn-ghost text-success"
                     title={$t('goalsPage.complete')}
@@ -1363,14 +1398,20 @@
             {/if}
             {#each upcomingTasks as task}
               {@const g = task.goal}
-              <button
+              <div
                 class="goal-card"
-                style="text-align: left; cursor: pointer; height: fit-content; border-left: 3px solid {getGoalColor(
+                style="text-align: left; height: fit-content; border-left: 3px solid {getGoalColor(
                   g
                 )}; display:flex; align-items:center; width: 100%;"
-                onclick={() => goto(`/goals/${g.id}`)}
               >
-                <div class="goal-main" style="flex: 1;">
+                <div
+                  class="goal-main"
+                  style="flex: 1; cursor: pointer;"
+                  onclick={() => goto(`/goals/${g.id}`)}
+                  role="button"
+                  tabindex="0"
+                  onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && goto(`/goals/${g.id}`)}
+                >
                   <div class="goal-title">
                     {#if g.fail_emoji}
                       <span
@@ -1393,7 +1434,25 @@
                     >
                   </div>
                 </div>
-              </button>
+                <div class="goal-actions">
+                  <button
+                    class="btn btn-ghost text-success"
+                    title={$t('goalsPage.complete')}
+                    aria-label={$t('goalsPage.completeGoal')}
+                    onclick={() => completeGoal(g.id)}
+                  >
+                    <Check size={14} />
+                  </button>
+                  <button
+                    class="btn btn-ghost text-muted"
+                    title={$t('goalsPage.cancel')}
+                    aria-label={$t('goalsPage.cancelGoal')}
+                    onclick={() => updateGoalState(g.id, 'CANCELLED')}
+                  >
+                    <Ban size={14} />
+                  </button>
+                </div>
+              </div>
             {/each}
           </div>
         </div>
@@ -1592,12 +1651,12 @@
           </div>
 
           <div class="history-goal-list" style="width:100%">
-            {#each ['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL'] as temp}
+            {#each ['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL', 'ONEOFF'] as temp}
               {@const normDate = getNormalizedDate(
                 selectedPlanningDate,
-                temp as 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'ANNUAL'
+                temp as 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'ANNUAL' | 'ONEOFF'
               )}
-              {@const assignedIds = assignments[normDate] || []}
+              {@const assignedIds = Array.from(new Set(assignments[normDate] || []))}
               {@const filteredGoals = assignedIds
                 .map((id) => goals.find((g) => g.id === id))
                 .filter((g): g is Goal => g !== undefined && Boolean(g) && g.temporality === temp)}
@@ -1610,7 +1669,9 @@
                       ? 'Semana'
                       : temp === 'MONTHLY'
                         ? 'Mes'
-                        : 'Año'}
+                        : temp === 'ANNUAL'
+                          ? 'Año'
+                          : 'Único'}
                 </div>
                 {#each filteredGoals as g (g.id)}
                   {@const status = getGoalStatusOnDate(g, selectedPlanningDate)}
@@ -1682,7 +1743,7 @@
               {/if}
             {/each}
 
-            {#if !(['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL'] as const).some( (temp) => (assignments[getNormalizedDate(selectedPlanningDate, temp as 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'ANNUAL')] || []).some((id) => goals.find((g) => g.id === id)?.temporality === temp) )}
+            {#if !(['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL', 'ONEOFF'] as const).some( (temp) => (assignments[getNormalizedDate(selectedPlanningDate, temp as 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'ANNUAL' | 'ONEOFF')] || []).some((id) => goals.find((g) => g.id === id)?.temporality === temp) )}
               <div
                 class="history-detail-empty"
                 style="padding: 2rem; border: 1px dashed var(--border); border-radius: var(--r); margin: 1rem;"
@@ -2278,21 +2339,7 @@
                   autofocus
                 />
               </div>
-              <div class="form-field">
-                <label class="label"
-                  >{$t('goalsPage.description')}
-                  <span class="optional">{$t('goalsPage.optional')}</span></label
-                >
-                <textarea
-                  class="input w-full"
-                  bind:value={newDescription}
-                  placeholder={$t('goalsPage.descriptionPlaceholder')}
-                  maxlength="63"
-                  rows="2"
-                  onkeydown={(e) => e.key === 'Enter' && e.preventDefault()}
-                  oninput={(e) => (newDescription = e.currentTarget.value.replace(/\n/g, ''))}
-                ></textarea>
-              </div>
+
               <div class="form-field">
                 <label class="label">{$t('goalsPage.repeatFrequency')}</label>
                 <div class="ng-freq-grid">
@@ -2308,7 +2355,9 @@
                           ? 'Semanal'
                           : temp === 'MONTHLY'
                             ? 'Mensual'
-                            : 'Anual'}
+                            : temp === 'ANNUAL'
+                              ? 'Anual'
+                              : 'Único'}
                     </button>
                   {/each}
                 </div>

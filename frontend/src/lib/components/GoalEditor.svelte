@@ -111,10 +111,14 @@
       e.preventDefault();
       previewMode = !previewMode;
     }
-    if (e.key === 'Escape' && zenMode) {
+    if (e.key === 'Escape') {
       e.preventDefault();
       e.stopPropagation();
-      zenMode = false;
+      if (zenMode) {
+        zenMode = false;
+      } else {
+        dispatch('cancel');
+      }
     }
   }
 
