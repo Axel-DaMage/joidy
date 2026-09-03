@@ -67,6 +67,7 @@
   }
   onDestroy(() => {
     if (typeof document !== 'undefined') document.body.classList.remove('zen-mode-active');
+    if (highlightRaf !== null) cancelAnimationFrame(highlightRaf);
   });
 
   $: if (goal) {
@@ -79,7 +80,10 @@
   $: lineCount = Math.max(1, visibleContent.split('\n').length);
   $: lineNumbers = Array.from({ length: lineCount }, (_, i) => i + 1);
 
-  // Debounced content for expensive markdown rendering
+  // Debounced content for the expensive full markdown render (preview mode:
+  // marked + DOMPurify + highlight.js). The editor syntax highlight uses a
+  // faster rAF-based update (see editorHighlightedHtml) so typed text is styled
+  // immediately instead of lagging 300ms (#936).
   let debouncedContent = content;
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
   $: {
@@ -88,7 +92,6 @@
     debounceTimer = setTimeout(() => {
       debouncedContent = current;
       renderedHtml = renderMarkdown(current);
-      editorHighlightedHtml = highlightMarkdown(current);
     }, 300);
   }
   $: renderedHtml = renderMarkdown(debouncedContent);
@@ -169,7 +172,25 @@
     return html;
   }
 
-  $: editorHighlightedHtml = highlightMarkdown(debouncedContent);
+  // Editor syntax highlight: update on the next animation frame instead of the
+  // 300ms debounce. rAF coalesces multiple keystrokes into a single ~16ms
+  // render, so typed characters are styled immediately without re-running the
+  // regex highlighter more than once per frame (#703, #936).
+  let editorHighlightedHtml = highlightMarkdown(content);
+  let highlightRaf: ReturnType<typeof requestAnimationFrame> | null = null;
+
+  $: {
+    const current = visibleContent;
+    if (typeof requestAnimationFrame === 'function') {
+      if (highlightRaf !== null) cancelAnimationFrame(highlightRaf);
+      highlightRaf = requestAnimationFrame(() => {
+        editorHighlightedHtml = highlightMarkdown(current);
+        highlightRaf = null;
+      });
+    } else {
+      editorHighlightedHtml = highlightMarkdown(current);
+    }
+  }
 </script>
 
 <svelte:window onkeydown={onKeydown} />
