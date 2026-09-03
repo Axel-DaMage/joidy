@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Pin, PinOff, Target, Clock, Tag, FileText, Settings } from 'lucide-svelte';
+  import { Pin, PinOff, Target, Clock, Tag, FileText, Settings, CheckCircle2, Trash2 } from 'lucide-svelte';
   import StreakIcon from './StreakIcon.svelte';
   import ProgressBar from './ProgressBar.svelte';
   import { getGoalContext } from '$lib/stores/goalContext';
@@ -19,6 +19,8 @@
     formatFailConfig: (_c: string) => '',
     onTogglePin: (_id: number) => {},
     onClick: (_g: any) => {},
+    onComplete: undefined,
+    onDelete: undefined,
   };
   const {
     tags,
@@ -29,11 +31,27 @@
     formatFailConfig,
     onTogglePin,
     onClick,
+    onComplete,
+    onDelete,
   } = ctx;
 
   // Build Maps for O(1) lookups instead of linear searches
   const tagsMap = new Map(tags.map((t) => [t.id, t]));
   const notesMap = new Map(notes.map((n) => [n.id, n]));
+
+  let deleteConfirming = false;
+  let deleteTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function handleDeleteClick(id: number) {
+    if (!deleteConfirming) {
+      deleteConfirming = true;
+      deleteTimer = setTimeout(() => (deleteConfirming = false), 3000);
+      return;
+    }
+    if (deleteTimer) clearTimeout(deleteTimer);
+    deleteConfirming = false;
+    onDelete?.(id);
+  }
 </script>
 
 <div
@@ -127,19 +145,45 @@
       {/if}
     </div>
   </button>
-  <button
-    class="pin-btn"
-    class:pinned
-    onclick={() => onTogglePin(goal.id)}
-    title={pinned ? 'Desfijar' : 'Fijar'}
-    aria-label={pinned ? 'Desfijar objetivo' : 'Fijar objetivo'}
-  >
-    {#if pinned}
-      <Pin size={14} fill="currentColor" />
-    {:else}
-      <PinOff size={14} />
+  <div class="card-actions-bar">
+    {#if onComplete}
+      <button
+        class="card-action-btn complete-btn"
+        class:completed={goal.state === 'COMPLETED' || goal.is_completed}
+        onclick={(e) => { e.stopPropagation(); onComplete?.(goal.id); }}
+        title={goal.state === 'COMPLETED' || goal.is_completed ? 'Marcar como pendiente' : 'Completar objetivo'}
+        aria-label="Completar objetivo"
+      >
+        <CheckCircle2 size={14} />
+      </button>
     {/if}
-  </button>
+
+    {#if onDelete}
+      <button
+        class="card-action-btn delete-btn"
+        class:confirming={deleteConfirming}
+        onclick={(e) => { e.stopPropagation(); handleDeleteClick(goal.id); }}
+        title={deleteConfirming ? 'Haz clic de nuevo para eliminar' : 'Eliminar objetivo'}
+        aria-label="Eliminar objetivo"
+      >
+        <Trash2 size={14} />
+      </button>
+    {/if}
+
+    <button
+      class="card-action-btn pin-btn"
+      class:pinned
+      onclick={(e) => { e.stopPropagation(); onTogglePin(goal.id); }}
+      title={pinned ? 'Desfijar' : 'Fijar'}
+      aria-label={pinned ? 'Desfijar objetivo' : 'Fijar objetivo'}
+    >
+      {#if pinned}
+        <Pin size={14} fill="currentColor" />
+      {:else}
+        <PinOff size={14} />
+      {/if}
+    </button>
+  </div>
 </div>
 
 <style>
@@ -207,33 +251,62 @@
     gap: 8px;
   }
 
-  .pin-btn {
+  .card-actions-bar {
     position: absolute;
-    top: 0;
-    left: 0;
-    width: 24px;
-    height: 24px;
+    top: 8px;
+    right: 8px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    z-index: var(--z-base, 10);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+  }
+
+  .goal-editor-card:hover .card-actions-bar,
+  .card-actions-bar:focus-within {
+    opacity: 1;
+  }
+
+  .card-action-btn {
+    width: 26px;
+    height: 26px;
     border-radius: 6px;
-    background: transparent;
-    border: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
     color: var(--text-muted);
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
     transition: all 0.2s ease;
-    z-index: var(--z-base);
-    opacity: 0;
   }
 
-  .goal-editor-card:hover .pin-btn,
-  .pin-btn:focus-visible {
-    opacity: 1;
-  }
-
-  .pin-btn:hover {
+  .card-action-btn:hover {
     background: var(--surface-active);
-    color: var(--accent);
+    color: var(--text-primary);
+  }
+
+  .complete-btn:hover {
+    color: var(--success, #22c55e);
+    border-color: var(--success, #22c55e);
+  }
+
+  .complete-btn.completed {
+    background: var(--success, #22c55e);
+    border-color: var(--success, #22c55e);
+    color: #ffffff;
+  }
+
+  .delete-btn:hover {
+    color: #ef4444;
+    border-color: #ef4444;
+  }
+
+  .delete-btn.confirming {
+    background: #ef4444;
+    border-color: #ef4444;
+    color: #ffffff;
   }
 
   .pin-btn.pinned {
