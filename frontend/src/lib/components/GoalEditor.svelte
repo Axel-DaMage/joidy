@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher, onDestroy } from 'svelte';
-  import { Eye, EyeOff, Save, Trash2, X, Maximize, ChevronLeft, ChevronRight, Settings } from 'lucide-svelte';
+  import { Eye, EyeOff, Save, Trash2, X, Maximize, ChevronLeft, ChevronRight, Settings, CheckCircle2 } from 'lucide-svelte';
   import { marked } from 'marked';
   import DOMPurify from 'dompurify';
   import hljs from 'highlight.js';
@@ -41,6 +41,7 @@
     save: { title: string; content: string };
     cancel: void;
     delete: void;
+    complete: void;
     edit: void;
   }>();
 
@@ -49,6 +50,16 @@
   let saved = false;
   let previewMode = false;
   let zenMode = false;
+  let deleteConfirm = false;
+
+  function handleDeleteClick() {
+    if (!deleteConfirm) {
+      deleteConfirm = true;
+      setTimeout(() => (deleteConfirm = false), 3000);
+      return;
+    }
+    dispatch('delete');
+  }
 
   // Sync zen mode with body class to hide layout chrome (#270)
   $: if (typeof document !== 'undefined') {
@@ -194,6 +205,16 @@
       </button>
 
       <button
+        class="toolbar-btn complete-btn"
+        class:completed={goal?.is_completed}
+        onclick={() => dispatch('complete')}
+        title={goal?.is_completed ? 'Marcar como pendiente' : 'Completar objetivo'}
+      >
+        <CheckCircle2 size={14} />
+        <span>{goal?.is_completed ? 'Completado' : 'Completar'}</span>
+      </button>
+
+      <button
         class="toolbar-btn save-btn"
         class:saved
         onclick={handleSave}
@@ -207,6 +228,16 @@
       <button class="toolbar-btn" onclick={() => dispatch('edit')} title={$t('goalEditor.editGoalSettings')}>
         <Settings size={14} />
         <span>{$t('goalEditor.settings')}</span>
+      </button>
+
+      <button
+        class="toolbar-btn delete-btn"
+        class:confirming={deleteConfirm}
+        onclick={handleDeleteClick}
+        title={deleteConfirm ? 'Haz clic de nuevo para eliminar' : 'Eliminar objetivo'}
+      >
+        <Trash2 size={14} />
+        <span>{deleteConfirm ? '¿Eliminar?' : 'Eliminar'}</span>
       </button>
 
       <button class="toolbar-btn" onclick={() => dispatch('cancel')} title={$t('goalEditor.close')} aria-label={$t('goalEditor.close')}>
@@ -324,6 +355,14 @@
   .save-btn { border-color: var(--accent); color: var(--accent); }
   .save-btn:hover { background: var(--accent); color: var(--accent-contrast-text, var(--bg)); }
   .save-btn.saved { background: var(--success); border-color: var(--success); color: var(--text-primary); }
+
+  .complete-btn { border-color: var(--success, #22c55e); color: var(--success, #22c55e); }
+  .complete-btn:hover { background: color-mix(in srgb, var(--success, #22c55e) 15%, transparent); }
+  .complete-btn.completed { background: var(--success, #22c55e); color: #ffffff; }
+
+  .delete-btn { border-color: color-mix(in srgb, #ef4444 50%, var(--border)); color: #ef4444; }
+  .delete-btn:hover { background: color-mix(in srgb, #ef4444 15%, transparent); border-color: #ef4444; }
+  .delete-btn.confirming { background: #ef4444; color: #ffffff; border-color: #ef4444; font-weight: 600; }
 
   .save-status {
     display: inline-block;
