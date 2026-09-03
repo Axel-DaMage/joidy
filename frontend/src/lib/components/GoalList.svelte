@@ -19,6 +19,7 @@
     onTogglePin: (id: number) => void;
     onClick: (goal: Goal) => void;
     onComplete?: (id: number) => void;
+    onFail?: (id: number) => void;
     onDelete?: (id: number) => void;
   }
 
@@ -36,6 +37,7 @@
     onTogglePin,
     onClick,
     onComplete,
+    onFail,
     onDelete,
   }: Props = $props();
 
@@ -51,6 +53,7 @@
     onTogglePin,
     onClick,
     onComplete,
+    onFail,
     onDelete,
   });
 

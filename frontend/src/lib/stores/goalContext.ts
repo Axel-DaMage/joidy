@@ -16,6 +16,7 @@ export interface GoalContextValue {
   onTogglePin: (id: number) => void;
   onClick: (goal: Goal) => void;
   onComplete?: (id: number) => void;
+  onFail?: (id: number) => void;
   onDelete?: (id: number) => void;
 }
 
