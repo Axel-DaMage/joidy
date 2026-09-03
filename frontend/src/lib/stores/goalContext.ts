@@ -15,6 +15,8 @@ export interface GoalContextValue {
   formatFailConfig: (config: string) => string;
   onTogglePin: (id: number) => void;
   onClick: (goal: Goal) => void;
+  onComplete?: (id: number) => void;
+  onDelete?: (id: number) => void;
 }
 
 const KEY = Symbol('goal-context');

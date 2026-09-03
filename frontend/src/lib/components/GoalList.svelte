@@ -18,6 +18,8 @@
     formatFailConfig: (config: string) => string;
     onTogglePin: (id: number) => void;
     onClick: (goal: Goal) => void;
+    onComplete?: (id: number) => void;
+    onDelete?: (id: number) => void;
   }
 
   let {
@@ -33,6 +35,8 @@
     formatFailConfig,
     onTogglePin,
     onClick,
+    onComplete,
+    onDelete,
   }: Props = $props();
 
   // Set the shared context once so GoalCard can consume tags, notes, callbacks,
@@ -46,6 +50,8 @@
     formatFailConfig,
     onTogglePin,
     onClick,
+    onComplete,
+    onDelete,
   });
 
   function filteredGoals(goals: Goal[], query: string, filter: string | null, pinned: Set<number>) {

@@ -2649,6 +2649,8 @@
         {formatFailConfig}
         onTogglePin={togglePinned}
         onClick={openGoalEditor}
+        onComplete={completeGoal}
+        onDelete={deleteGoal}
       />
     </div>
   {/if}
