@@ -173,6 +173,31 @@
   function handleCancel() {
     goto('/goals');
   }
+
+  async function handleComplete() {
+    if (!goal) return;
+    try {
+      if (goal.is_completed) {
+        const updated = await api.goals.update(goalId, { state: 'ACTIVE' });
+        goal = updated;
+      } else {
+        const res = await api.goals.complete(goalId);
+        goal = res.goal;
+      }
+    } catch (e) {
+      logger.error('Error al cambiar estado de completado:', e);
+    }
+  }
+
+  async function handleDelete() {
+    if (!goal) return;
+    try {
+      await api.goals.delete(goalId);
+      goto('/goals');
+    } catch (e) {
+      logger.error('Error al eliminar objetivo:', e);
+    }
+  }
 </script>
 
 <div class="goal-detail-page">
@@ -189,6 +214,8 @@
         on:save={handleSave}
         on:edit={openSettings}
         on:cancel={handleCancel}
+        on:complete={handleComplete}
+        on:delete={handleDelete}
       />
     {:else}
       <div class="loading">{$t('goalDetail.editorLoading')}</div>
