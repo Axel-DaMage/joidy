@@ -89,9 +89,10 @@ jobs:
           fi
 
           # Commit and push
+          git checkout -B master
           git add PKGBUILD .SRCINFO joidy.install
           git commit -m "Update to ${VERSION}"
-          git push origin master
+          git push origin HEAD:master
 
           echo "Published joidy ${VERSION} to AUR"
 
