@@ -428,6 +428,27 @@ def complete_goal(
     return {"goal": _serialize_goal(goal, db), "gamification": vars(gami)}
 
 
+@router.post("/{goal_id}/fail")
+def fail_goal(
+    goal_id: int,
+    db: Session = Depends(get_db),
+):
+    goal = db.query(Goal).filter(Goal.id == goal_id).first()
+    if not goal:
+        raise HTTPException(status_code=404, detail="Goal not found")
+
+    goal.state = GoalState.FAILED
+    goal.current_value = get_goal_progress(goal, db)
+    db.commit()
+    db.refresh(goal)
+
+    obj_dir = get_objectives_dir()
+    if obj_dir:
+        _write_goal_file(db, goal, obj_dir)
+
+    return _serialize_goal(goal, db)
+
+
 @router.delete("/{goal_id}", status_code=204)
 def delete_goal(goal_id: int, db: Session = Depends(get_db)):
     goal = db.query(Goal).filter(Goal.id == goal_id).first()

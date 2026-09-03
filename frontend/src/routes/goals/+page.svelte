@@ -495,6 +495,15 @@
     showXPGain(result.gamification.xp_awarded);
   }
 
+  async function failGoal(id: number) {
+    try {
+      const result = await api.goals.fail(id);
+      goals = goals.map((g) => (g.id === id ? result : g));
+    } catch (e) {
+      logger.error('Error al marcar como fallido:', e);
+    }
+  }
+
   async function updateGoalState(id: number, state: 'ACTIVE' | 'PAUSED' | 'CANCELLED') {
     try {
       const result = await api.goals.update(id, { state });
@@ -2650,6 +2659,7 @@
         onTogglePin={togglePinned}
         onClick={openGoalEditor}
         onComplete={completeGoal}
+        onFail={failGoal}
         onDelete={deleteGoal}
       />
     </div>

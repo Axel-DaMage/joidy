@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Pin, PinOff, Target, Clock, Tag, FileText, Settings, CheckCircle2, Trash2 } from 'lucide-svelte';
+  import { Pin, PinOff, Target, Clock, Tag, FileText, Settings, CheckCircle2, XCircle, Trash2 } from 'lucide-svelte';
   import StreakIcon from './StreakIcon.svelte';
   import ProgressBar from './ProgressBar.svelte';
   import { getGoalContext } from '$lib/stores/goalContext';
@@ -20,6 +20,7 @@
     onTogglePin: (_id: number) => {},
     onClick: (_g: any) => {},
     onComplete: undefined,
+    onFail: undefined,
     onDelete: undefined,
   };
   const {
@@ -32,6 +33,7 @@
     onTogglePin,
     onClick,
     onComplete,
+    onFail,
     onDelete,
   } = ctx;
 
@@ -155,6 +157,18 @@
         aria-label="Completar objetivo"
       >
         <CheckCircle2 size={14} />
+      </button>
+    {/if}
+
+    {#if onFail}
+      <button
+        class="card-action-btn fail-btn"
+        class:failed={goal.state === 'FAILED'}
+        onclick={(e) => { e.stopPropagation(); onFail?.(goal.id); }}
+        title="Marcar como fallido"
+        aria-label="Marcar como fallido"
+      >
+        <XCircle size={14} />
       </button>
     {/if}
 
@@ -291,6 +305,17 @@
   .complete-btn.completed {
     background: var(--success, #22c55e);
     border-color: var(--success, #22c55e);
+    color: #ffffff;
+  }
+
+  .fail-btn:hover {
+    color: var(--error, #ef4444);
+    border-color: var(--error, #ef4444);
+  }
+
+  .fail-btn.failed {
+    background: var(--error, #ef4444);
+    border-color: var(--error, #ef4444);
     color: #ffffff;
   }
 
