@@ -122,7 +122,7 @@ jobs:
           } > .SRCINFO
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-          git checkout -B master
+          git checkout -B master origin/master
           git add PKGBUILD .SRCINFO
           git commit -m "update to ${VERSION}"
-          git push origin HEAD:master
+          git push origin master
