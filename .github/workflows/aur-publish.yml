@@ -72,6 +72,7 @@ jobs:
           # Clone the AUR repo
           git clone "ssh://aur@aur.archlinux.org/joidy.git" /tmp/aur
           cd /tmp/aur
+          git checkout -B master origin/master
 
           # Configure git
           git config user.name "github-actions"
@@ -89,7 +90,6 @@ jobs:
           fi
 
           # Commit and push
-          git checkout -B master origin/master
           git add PKGBUILD .SRCINFO joidy.install
           git commit -m "Update to ${VERSION}"
           git push origin master
