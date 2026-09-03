@@ -258,28 +258,24 @@
     display: flex;
     align-items: center;
     gap: 4px;
-    z-index: var(--z-base, 10);
-    opacity: 0;
-    transition: opacity 0.2s ease;
-  }
-
-  .goal-editor-card:hover .card-actions-bar,
-  .card-actions-bar:focus-within {
+    z-index: 15;
     opacity: 1;
+    transition: opacity 0.2s ease;
   }
 
   .card-action-btn {
     width: 26px;
     height: 26px;
     border-radius: 6px;
-    background: var(--surface);
+    background: var(--elevated, var(--surface));
     border: 1px solid var(--border);
-    color: var(--text-muted);
+    color: var(--text-secondary);
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
     transition: all 0.2s ease;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
   }
 
   .card-action-btn:hover {
