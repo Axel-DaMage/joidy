@@ -44,7 +44,7 @@ def validate_goal_parent(db: Session, goal_id: int | None, parent_id: int | None
 
 def _parse_temporality(text: str) -> GoalTemporality:
     if not text:
-        return GoalTemporality.DAILY
+        return GoalTemporality.ONEOFF
     text = text.lower()
     if text in ["diario", "daily"]:
         return GoalTemporality.DAILY
@@ -54,9 +54,9 @@ def _parse_temporality(text: str) -> GoalTemporality:
         return GoalTemporality.MONTHLY
     if text in ["anual", "annual"]:
         return GoalTemporality.ANNUAL
-    if text in ["oneoff", "one-off", "unica", "única", "once"]:
+    if text in ["oneoff", "one-off", "unica", "única", "once", "indefinido", "indefinida"]:
         return GoalTemporality.ONEOFF
-    return GoalTemporality.DAILY
+    return GoalTemporality.ONEOFF
 
 def _parse_fail_config(text: str) -> GoalFailConfig:
     if not text:

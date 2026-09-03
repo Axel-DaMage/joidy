@@ -93,7 +93,7 @@ Some other text here
         content = "# Objetivo: Hacer ejercicio"
         goals = parse_goals_from_content(content)
         self.assertEqual(len(goals), 1)
-        self.assertEqual(goals[0]["temporality"], GoalTemporality.DAILY)
+        self.assertEqual(goals[0]["temporality"], GoalTemporality.ONEOFF)
 
 
 class TestSyncGoalsFromNote(GoalServiceTestBase):
