@@ -191,15 +191,15 @@
     background: var(--surface);
     border: 2px solid var(--goal-color);
     border-radius: 12px;
-    padding: 14px 16px;
+    padding: 12px 14px;
     transition: all 0.25s ease;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
     text-align: center;
     position: relative;
     overflow: hidden;
-    aspect-ratio: 1;
+    height: auto;
   }
 
   .goal-card-main {
