@@ -40,7 +40,7 @@ class GoalCreate(BaseModel):
     """Schema for creating a new goal."""
     title: str
     description: str = ""
-    temporality: GoalTemporality = GoalTemporality.DAILY
+    temporality: GoalTemporality = GoalTemporality.ONEOFF
     measurement_type: GoalMeasurement = GoalMeasurement.COUNT
     target_value: float = 1.0
     state: GoalState = GoalState.ACTIVE
@@ -147,7 +147,7 @@ class GoalUpdate(BaseModel):
 class GoalContent(BaseModel):
     title: str
     content: str
-    temporality: GoalTemporality = GoalTemporality.DAILY
+    temporality: GoalTemporality = GoalTemporality.ONEOFF
     measurement_type: GoalMeasurement = GoalMeasurement.COUNT
     target_value: float = 1.0
     state: GoalState = GoalState.ACTIVE

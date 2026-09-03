@@ -259,13 +259,13 @@
     ])
   );
 
-  const TEMPORALITIES: Goal['temporality'][] = ['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL', 'ONEOFF'];
+  const TEMPORALITIES: Goal['temporality'][] = ['ONEOFF', 'DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL'];
   const TEMPORALITY_LABELS: Record<string, string> = {
+    ONEOFF: 'Indefinido',
     DAILY: 'Diario',
     WEEKLY: 'Semanal',
     MONTHLY: 'Mensual',
     ANNUAL: 'Anual',
-    ONEOFF: 'Única',
   };
   const STATE_LABELS: Record<string, string> = {
     ACTIVE: 'Activo',
@@ -280,7 +280,7 @@
   let newTitle = $state('');
   let newDescription = $state('');
   let newTargetValue = $state(1);
-  let newTemporality = $state<Goal['temporality']>('DAILY');
+  let newTemporality = $state<Goal['temporality']>('ONEOFF');
   let newMeasurement = $state<Goal['measurement_type']>('COUNT');
   let newFailConfig = $state<Goal['fail_config']>('STATIC');
   let newFailEmoji = $state('🔴');
