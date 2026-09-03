@@ -273,27 +273,52 @@ def _process_goal_failure(db: Session, goal: Goal, now: datetime, progress: floa
         goal.current_value = progress
         return
 
+    new_goal = None
     if goal.fail_config == GoalFailConfig.ROLLOVER:
-        # Rollover goals never automatically transition to FAILED state.
-        # They carry over to the new day seamlessly while staying ACTIVE.
+        # Rollover goals carry over seamlessly without generating a FAILED entry in history.
         goal.state = GoalState.ACTIVE
         goal.created_at = now
         goal.current_value = 0.0
     elif goal.fail_config == GoalFailConfig.SNOWBALL:
+        # Snowball goals mark the expired period's goal as FAILED (recording 1 failed goal in history for that day),
+        # then spawn the accumulated goal for the new period.
         shortfall = max(0.0, goal.target_value - progress)
-        goal.state = GoalState.ACTIVE
-        goal.target_value = goal.target_value + shortfall
-        goal.created_at = now
-        goal.current_value = 0.0
+        new_target = goal.target_value + shortfall
+
+        goal.state = GoalState.FAILED
+        goal.current_value = progress
+
+        new_goal = Goal(
+            title=goal.title,
+            description=goal.description,
+            temporality=goal.temporality,
+            measurement_type=goal.measurement_type,
+            target_value=new_target,
+            current_value=0.0,
+            state=GoalState.ACTIVE,
+            fail_config=goal.fail_config,
+            fail_emoji=goal.fail_emoji,
+            color=goal.color,
+            theme=goal.theme,
+            note_id=goal.note_id,
+            tag_id=goal.tag_id,
+            parent_id=goal.parent_id or goal.id,
+        )
+        GoalRepository(db).add(new_goal)
     else:
         goal.state = GoalState.FAILED
         goal.current_value = progress
+
+    if new_goal:
+        db.flush()
 
     try:
         from services.joidy_vault_writer import _write_goal_file, get_objectives_dir
         obj_dir = get_objectives_dir()
         if obj_dir:
             _write_goal_file(db, goal, obj_dir)
+            if new_goal:
+                _write_goal_file(db, new_goal, obj_dir)
     except Exception as e:
         import logging
         logging.getLogger(__name__).warning("Failed to write updated goal file: %s", e)
