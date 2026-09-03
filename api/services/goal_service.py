@@ -100,6 +100,7 @@ def parse_goals_from_content(content: str) -> list[dict]:
         goals.append({
             "title": title,
             "temporality": _parse_temporality(period),
+            "has_explicit_temporality": period is not None,
             "fail_config": _parse_fail_config(fail_mode),
             "target_value": target_value,
             "measurement_type": measurement_type,
@@ -118,17 +119,19 @@ def sync_goals_from_note(db: Session, note_id: int, content: str):
 
     # Get existing goals linked to this note
     existing_goals = GoalRepository(db).get_by_note(note_id)
-    existing_by_title = {g.title: g for g in existing_goals}
+    existing_by_title = {g.title.strip().lower(): g for g in existing_goals}
 
     # Update or Create
     processed_titles = set()
     for pdata in parsed_goals:
-        title = pdata["title"]
-        processed_titles.add(title)
+        raw_title = pdata["title"]
+        norm_title = raw_title.strip().lower()
+        processed_titles.add(norm_title)
 
-        if title in existing_by_title:
-            g = existing_by_title[title]
-            g.temporality = pdata["temporality"]
+        if norm_title in existing_by_title:
+            g = existing_by_title[norm_title]
+            if pdata.get("has_explicit_temporality"):
+                g.temporality = pdata["temporality"]
             g.fail_config = pdata["fail_config"]
             # Only update target if not already completed? We can overwrite.
             if g.state == GoalState.ACTIVE:
@@ -136,7 +139,7 @@ def sync_goals_from_note(db: Session, note_id: int, content: str):
                 g.measurement_type = pdata["measurement_type"]
         else:
             new_goal = Goal(
-                title=title,
+                title=raw_title,
                 temporality=pdata["temporality"],
                 fail_config=pdata["fail_config"],
                 target_value=pdata["target_value"],
@@ -149,7 +152,7 @@ def sync_goals_from_note(db: Session, note_id: int, content: str):
     # Flag goals that were removed from the note content as pending_removal
     # instead of silently cancelling — the user decides via the Modal de Consistencia
     for g in existing_goals:
-        if g.title not in processed_titles and g.state in (GoalState.ACTIVE, GoalState.PAUSED):
+        if g.title.strip().lower() not in processed_titles and g.state in (GoalState.ACTIVE, GoalState.PAUSED):
             g.pending_removal = True
 
     db.flush()
