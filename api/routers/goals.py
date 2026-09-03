@@ -233,7 +233,8 @@ def create_goal(data: GoalCreate, db: Session = Depends(get_db)):
             content=note_content,
             tags=[],
             source="joidy",
-            source_path=None
+            source_path=None,
+            sync_goals=False,
         )
         note_id = note.id
 
