@@ -76,11 +76,11 @@ Port overrides: `FRONTEND_PORT`, `API_PORT`, `AI_SERVICE_PORT`, `WORKER_PORT`.
 ```
 main.py → routers/*.py → services/*.py → models/*.py
 ```
-- **routers/**: HTTP endpoints, Pydantic validation only
-- **services/**: Business logic + DB ops
-- **models/**: SQLAlchemy ORM
-- **alembic/versions/**: 7 migration files (`make migrate`)
-- **tests/**: 31 test files (unittest)
+- **routers/**: 24 HTTP routers (`notes.py`, `goals.py`, `personal_streaks.py`, `system.py`, `ai.py`, `tags.py`, `config.py`, `sync.py`, `websocket.py`, etc.), Pydantic validation only
+- **services/**: 25 business logic + DB service modules (`goal_service.py`, `note_service.py`, `gamification_engine.py`, `personal_streak_service.py`, `sync_service.py`, `response_cache.py`, `joidy_vault_writer.py`, etc.)
+- **models/**: SQLAlchemy ORM models registered in `models/__init__.py`
+- **alembic/versions/**: 11 migration files (`make migrate`)
+- **tests/**: 43 test files (`api/tests/`, pytest with unittest-compatible fixtures)
 
 Internal comms:
 - API → AI: `http://ai-service:8002`
@@ -89,18 +89,18 @@ Internal comms:
 - Worker → Vault: reads `/vault` (host: `OBSIDIAN_VAULT_PATH`)
 
 ### AI Service (`ai-service/`)
-Factory pattern (`clients/`) for 6 providers (Gemini, OpenAI, Anthropic, Cohere, Ollama, OpenRouter). Endpoints: `/embed`, `/classify`, `/rag`.
+Factory pattern (`clients/`) for 6 providers (Gemini, OpenAI, Anthropic, Cohere, Ollama, OpenRouter). Endpoints: `/embed`, `/classify`, `/rag`. Tests in `ai-service/tests/`.
 
 ### Worker
-Two concurrent asyncio tasks: `watch_vault()` (watches `/vault/*.md`, 2s debounce) + `schedule_daily_writes()` (writes _joidy/ files at midnight).
+Two concurrent asyncio tasks: `watch_vault()` (watches `/vault/*.md`, 2s debounce) + `schedule_daily_writes()` (writes _joidy/ files at midnight). Lightweight HTTP server on port 8001 exposes `/metrics` and `/health`. Tests in `worker/tests/`.
 
 ### Frontend (`frontend/src/`)
 - `routes/`: SvelteKit pages (notes, goals, graph, skills, streaks, ai, etc.)
-- `lib/stores/`: 24 Svelte stores (notes, gamification, pomodoro, graph, settings, etc.)
-- `lib/actions/`: Svelte actions (focusTrap, liquidGlass)
+- `lib/stores/`: Svelte stores (`notes.ts`, `gamification.ts`, `pomodoro.ts`, `graph.ts`, `settings.ts`, `focusMode.ts`, `offlineSync.ts`, `ui.ts`, etc.)
+- `lib/actions/`: Svelte actions (`focusTrap`, `liquidGlass`)
 - `lib/api.ts`: API client wrapper
-- `lib/components/`: Reusable Svelte components (Modal, DynamicIcon, GoalCard, StreakListItem, etc.)
-- `lib/utils/logger.ts`: `logger.info()` / `logger.log()` / `logger.debug()` / `logger.warn()` / `logger.error()` — the logging convention used across the codebase (imported in 9+ files). Dev Mode is stored in localStorage key `joidy-dev-mode`, toggled in Settings. Pages under development show "En Construccion" unless dev mode is ON.
+- `lib/components/`: Reusable Svelte components (`Modal`, `DynamicIcon`, `GoalCard`, `StreakListItem`, etc.)
+- `lib/utils/logger.ts`: `logger.info()` / `logger.log()` / `logger.debug()` / `logger.warn()` / `logger.error()` — the logging convention used across the codebase. Dev Mode is stored in localStorage key `joidy-dev-mode`, toggled in Settings. Pages under development show "En Construcción" unless dev mode is ON.
 
 #### Icon Usage Convention (#257)
 - **Static UI icons** (always the same icon, e.g. close button, search): Import directly from `lucide-svelte` — `import { Search, X } from 'lucide-svelte'`. This is tree-shakeable and more efficient.
@@ -111,11 +111,24 @@ Two concurrent asyncio tasks: `watch_vault()` (watches `/vault/*.md`, 2s debounc
 ### Gamification
 `api/services/gamification_engine.py`: XP events (note_created +10, note_edited +5, daily_activity +15, goal_completed +50), streaks (7/30/100/365d → +100 XP), plant stages (0→semilla, 300→brote, 1200→planton, 4000→joven, 10000→madura, 25000→floreciendo, 60000→arbol). Grace period: 1 missed day/week.
 
+## Agent-First Execution Tips
+
+When working as an autonomous coding agent on this codebase:
+- **Fast Syntax Checks**: Run `python -m compileall -q api ai-service worker` from host to verify Python code across all 3 backend services in <1s without starting Docker.
+- **Fast Frontend Checks**: In `frontend/`, run `npm run check` for full Svelte + TypeScript typechecking, and `npm run test:run` for Vitest unit tests without needing Docker.
+- **Targeted Unit Tests (Docker)**:
+  - Run a single test file: `docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm api pytest tests/test_goal_service.py`
+  - Run a specific test method: `docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm api pytest tests/test_goal_service.py -k "test_method_name"`
+- **Minimize Context & Token Overhead**:
+  - Prefer targeted grep/find over reading large files whole (`api/main.py` is >400 lines, `frontend/src/routes/+layout.svelte` is >30KB).
+  - Check `models/__init__.py`, `api/routers/`, and `api/services/` for module layout before generating new entities or endpoints.
+- **Non-root Host Permissions**:
+  - Dev containers run as `HOST_UID:HOST_GID` (default 1000). Never introduce root-owned generated files. Run `make fix-permissions` if needed.
+
 ## Testing Quirks
-- Uses `pytest` for API tests (`pytest` discover under `tests/`), with `unittest` style fixtures in `conftest.py`
-- Single test: `PYTHONPATH=/app python -m unittest tests.test_file`
-- Ruff config exists in `pyproject.toml` + `.pre-commit-config.yaml`, but pre-commit is not installed by default and CI does not run ruff. Run `ruff check` / `ruff format` manually if desired.
-- CI: `compileall`, `unittest`, `npm run check`, `npm run build`, Docker build
+- Uses `pytest` for API tests (`pytest` discover under `api/tests/`), with `unittest` style fixtures in `conftest.py`
+- Single test: `docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm api pytest tests/test_file.py`
+- Ruff config exists in `pyproject.toml` + `.pre-commit-config.yaml`. CI checks `compileall`, `pytest`, `npm run check`, `npm run build`, and Docker build.
 
 ## Known Issues (from code audit)
 1. ~~CORS allows `*` in non-production~~ — **Fixed**: `_get_cors_origins()` in `api/main.py` respects `cors_allowed_origins` setting; dev fallback only. Same in `ai-service/main.py`.
