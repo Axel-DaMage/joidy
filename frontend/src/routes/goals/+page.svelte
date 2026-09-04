@@ -2661,6 +2661,12 @@
         onComplete={completeGoal}
         onFail={failGoal}
         onDelete={deleteGoal}
+        onArchive={(id) => {
+          const target = goals.find((g) => g.id === id);
+          if (target) {
+            updateGoalState(id, target.state === 'CANCELLED' ? 'ACTIVE' : 'CANCELLED');
+          }
+        }}
       />
     </div>
   {/if}

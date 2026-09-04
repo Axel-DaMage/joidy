@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Pin, PinOff, Target, Clock, Tag, FileText, Settings, CheckCircle2, XCircle, Trash2 } from 'lucide-svelte';
+  import { Pin, PinOff, Target, Clock, Tag, FileText, Settings, CheckCircle2, XCircle, Trash2, Archive, ArchiveRestore } from 'lucide-svelte';
   import StreakIcon from './StreakIcon.svelte';
   import ProgressBar from './ProgressBar.svelte';
   import { getGoalContext } from '$lib/stores/goalContext';
@@ -22,6 +22,7 @@
     onComplete: undefined,
     onFail: undefined,
     onDelete: undefined,
+    onArchive: undefined,
   };
   const {
     tags,
@@ -35,6 +36,7 @@
     onComplete,
     onFail,
     onDelete,
+    onArchive,
   } = ctx;
 
   // Build Maps for O(1) lookups instead of linear searches
@@ -61,8 +63,25 @@
   class:completed={goal.state === 'COMPLETED' || goal.is_completed}
   class:failed={goal.state === 'FAILED'}
   class:paused={goal.state === 'PAUSED'}
+  class:archived={goal.state === 'CANCELLED'}
   style="--goal-color: {getGoalColor(goal)}"
 >
+  <div class="card-top-left-actions">
+    <button
+      class="card-action-btn pin-btn"
+      class:pinned
+      onclick={(e) => { e.stopPropagation(); onTogglePin(goal.id); }}
+      title={pinned ? $t('goalCard.unpin') : $t('goalCard.pin')}
+      aria-label={pinned ? $t('goalCard.unpin') : $t('goalCard.pin')}
+    >
+      {#if pinned}
+        <Pin size={14} fill="currentColor" />
+      {:else}
+        <PinOff size={14} />
+      {/if}
+    </button>
+  </div>
+
   <button
     class="goal-card-main"
     onclick={() => onClick(goal)}
@@ -86,6 +105,7 @@
       class:completed={goal.state === 'COMPLETED' || goal.is_completed}
       class:paused={goal.state === 'PAUSED'}
       class:failed={goal.state === 'FAILED'}
+      class:archived={goal.state === 'CANCELLED'}
     >
       {STATE_LABELS[goal.state] || goal.state}
     </div>
@@ -153,8 +173,8 @@
         class="card-action-btn complete-btn"
         class:completed={goal.state === 'COMPLETED' || goal.is_completed}
         onclick={(e) => { e.stopPropagation(); onComplete?.(goal.id); }}
-        title={goal.state === 'COMPLETED' || goal.is_completed ? 'Marcar como pendiente' : 'Completar objetivo'}
-        aria-label="Completar objetivo"
+        title={goal.state === 'COMPLETED' || goal.is_completed ? $t('goalCard.markPending') : $t('goalCard.complete')}
+        aria-label={$t('goalCard.complete')}
       >
         <CheckCircle2 size={14} />
       </button>
@@ -165,10 +185,26 @@
         class="card-action-btn fail-btn"
         class:failed={goal.state === 'FAILED'}
         onclick={(e) => { e.stopPropagation(); onFail?.(goal.id); }}
-        title="Marcar como fallido"
-        aria-label="Marcar como fallido"
+        title={$t('goalCard.fail')}
+        aria-label={$t('goalCard.fail')}
       >
         <XCircle size={14} />
+      </button>
+    {/if}
+
+    {#if onArchive}
+      <button
+        class="card-action-btn archive-btn"
+        class:archived={goal.state === 'CANCELLED'}
+        onclick={(e) => { e.stopPropagation(); onArchive?.(goal.id); }}
+        title={goal.state === 'CANCELLED' ? $t('goalCard.unarchive') : $t('goalCard.archive')}
+        aria-label={goal.state === 'CANCELLED' ? $t('goalCard.unarchive') : $t('goalCard.archive')}
+      >
+        {#if goal.state === 'CANCELLED'}
+          <ArchiveRestore size={14} />
+        {:else}
+          <Archive size={14} />
+        {/if}
       </button>
     {/if}
 
@@ -177,26 +213,12 @@
         class="card-action-btn delete-btn"
         class:confirming={deleteConfirming}
         onclick={(e) => { e.stopPropagation(); handleDeleteClick(goal.id); }}
-        title={deleteConfirming ? 'Haz clic de nuevo para eliminar' : 'Eliminar objetivo'}
-        aria-label="Eliminar objetivo"
+        title={deleteConfirming ? $t('goalCard.deleteConfirm') : $t('goalCard.delete')}
+        aria-label={$t('goalCard.delete')}
       >
         <Trash2 size={14} />
       </button>
     {/if}
-
-    <button
-      class="card-action-btn pin-btn"
-      class:pinned
-      onclick={(e) => { e.stopPropagation(); onTogglePin(goal.id); }}
-      title={pinned ? 'Desfijar' : 'Fijar'}
-      aria-label={pinned ? 'Desfijar objetivo' : 'Fijar objetivo'}
-    >
-      {#if pinned}
-        <Pin size={14} fill="currentColor" />
-      {:else}
-        <PinOff size={14} />
-      {/if}
-    </button>
   </div>
 </div>
 
@@ -251,6 +273,25 @@
     opacity: 0.6;
   }
 
+  .goal-editor-card.archived {
+    border-style: dotted;
+    opacity: 0.55;
+    filter: grayscale(0.25);
+  }
+
+  .card-top-left-actions {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    z-index: 15;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+  }
+
   .card-header {
     display: flex;
     justify-content: center;
@@ -273,8 +314,17 @@
     align-items: center;
     gap: 4px;
     z-index: 15;
-    opacity: 1;
+    opacity: 0;
+    pointer-events: none;
     transition: opacity 0.2s ease;
+  }
+
+  .goal-editor-card:hover .card-actions-bar,
+  .goal-editor-card:hover .card-top-left-actions,
+  .goal-editor-card:focus-within .card-actions-bar,
+  .goal-editor-card:focus-within .card-top-left-actions {
+    opacity: 1;
+    pointer-events: auto;
   }
 
   .card-action-btn {
@@ -317,6 +367,16 @@
     background: var(--error, #ef4444);
     border-color: var(--error, #ef4444);
     color: #ffffff;
+  }
+
+  .archive-btn:hover {
+    color: var(--warning, #f59e0b);
+    border-color: var(--warning, #f59e0b);
+  }
+
+  .archive-btn.archived {
+    background: color-mix(in srgb, var(--warning, #f59e0b) 15%, transparent);
+    color: var(--warning, #f59e0b);
   }
 
   .delete-btn:hover {
@@ -376,6 +436,11 @@
   .goal-state-indicator.failed {
     background: color-mix(in srgb, var(--error) 15%, transparent);
     color: var(--error);
+  }
+
+  .goal-state-indicator.archived {
+    background: color-mix(in srgb, var(--text-muted) 15%, transparent);
+    color: var(--text-muted);
   }
 
   .card-title {
