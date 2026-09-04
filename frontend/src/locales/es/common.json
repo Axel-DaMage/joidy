@@ -222,7 +222,9 @@
     "color": "Color",
     "keepManual": "Mantener como progreso manual",
     "cancelArchive": "Cancelar (archivar sin penalización)",
-    "deletePermanent": "Eliminar permanentemente"
+    "deletePermanent": "Eliminar permanentemente",
+    "deleteGoalConfirmTitle": "Eliminar objetivo",
+    "deleteGoalConfirmMessage": "¿Seguro que deseas eliminar \"{title}\"? Esta acción es permanente."
   },
   "notesPage": {
     "createNote": "Crear nota",
