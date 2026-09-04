@@ -372,7 +372,16 @@
   },
   "goalCard": {
     "openGoal": "Open goal: {title}",
-    "created": "Created: {date}"
+    "created": "Created: {date}",
+    "pin": "Pin",
+    "unpin": "Unpin",
+    "complete": "Complete goal",
+    "markPending": "Mark as pending",
+    "fail": "Mark as failed",
+    "delete": "Delete goal",
+    "deleteConfirm": "Click again to delete",
+    "archive": "Archive goal",
+    "unarchive": "Unarchive goal"
   },
   "deadLetter": {
     "loading": "Loading...",
@@ -447,7 +456,7 @@
     "pinned": "Pinned",
     "active": "Active",
     "completed": "Completed",
-    "paused": "Paused",
+    "archived": "Archived",
     "failed": "Failed"
   },
   "chat": {

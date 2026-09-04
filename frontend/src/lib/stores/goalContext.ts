@@ -18,6 +18,7 @@ export interface GoalContextValue {
   onComplete?: (id: number) => void;
   onFail?: (id: number) => void;
   onDelete?: (goal: Goal) => void;
+  onArchive?: (id: number) => void;
 }
 
 const KEY = Symbol('goal-context');
