@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Pin, PinOff, Target, Clock, Tag, FileText, Settings, CheckCircle2, XCircle, Trash2 } from 'lucide-svelte';
+  import { Pin, PinOff, Target, Clock, Tag, FileText, Settings, CheckCircle2, XCircle, Trash2, X } from 'lucide-svelte';
   import StreakIcon from './StreakIcon.svelte';
   import ProgressBar from './ProgressBar.svelte';
   import { getGoalContext } from '$lib/stores/goalContext';
@@ -40,20 +40,6 @@
   // Build Maps for O(1) lookups instead of linear searches
   const tagsMap = new Map(tags.map((t) => [t.id, t]));
   const notesMap = new Map(notes.map((n) => [n.id, n]));
-
-  let deleteConfirming = false;
-  let deleteTimer: ReturnType<typeof setTimeout> | null = null;
-
-  function handleDeleteClick(id: number) {
-    if (!deleteConfirming) {
-      deleteConfirming = true;
-      deleteTimer = setTimeout(() => (deleteConfirming = false), 3000);
-      return;
-    }
-    if (deleteTimer) clearTimeout(deleteTimer);
-    deleteConfirming = false;
-    onDelete?.(id);
-  }
 </script>
 
 <div
@@ -175,12 +161,11 @@
     {#if onDelete}
       <button
         class="card-action-btn delete-btn"
-        class:confirming={deleteConfirming}
-        onclick={(e) => { e.stopPropagation(); handleDeleteClick(goal.id); }}
-        title={deleteConfirming ? 'Haz clic de nuevo para eliminar' : 'Eliminar objetivo'}
+        onclick={(e) => { e.stopPropagation(); onDelete?.(goal); }}
+        title="Eliminar objetivo"
         aria-label="Eliminar objetivo"
       >
-        <Trash2 size={14} />
+        <X size={14} />
       </button>
     {/if}
 
@@ -322,12 +307,6 @@
   .delete-btn:hover {
     color: #ef4444;
     border-color: #ef4444;
-  }
-
-  .delete-btn.confirming {
-    background: #ef4444;
-    border-color: #ef4444;
-    color: #ffffff;
   }
 
   .pin-btn.pinned {
