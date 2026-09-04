@@ -11,7 +11,9 @@ WORKDIR /app
 # Switch apt sources to HTTPS (Fastly 403s on HTTP from Docker build network)
 RUN sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
@@ -31,7 +33,9 @@ WORKDIR /app
 RUN sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources
 
 # curl is needed for the container healthcheck
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
@@ -51,5 +55,8 @@ COPY --chown=app:app . .
 RUN mkdir -p /app/data/logs && chown -R app:app /app/data
 
 USER app
+
+HEALTHCHECK --interval=10s --timeout=5s --retries=5 --start-period=20s \
+  CMD curl -f http://localhost:8000/health/ready || exit 1
 
 CMD ["/bin/sh", "-c", "rm -rf alembic/versions/__pycache__ && exec uvicorn main:app --host 0.0.0.0 --port 8000 --workers ${WEB_CONCURRENCY:-2} --timeout-keep-alive ${UVICORN_TIMEOUT_KEEP_ALIVE:-5} --proxy-headers --forwarded-allow-ips='*'"]
