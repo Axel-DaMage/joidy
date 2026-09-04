@@ -222,7 +222,9 @@
     "color": "Color",
     "keepManual": "Keep as manual progress",
     "cancelArchive": "Cancel (archive without penalty)",
-    "deletePermanent": "Delete permanently"
+    "deletePermanent": "Delete permanently",
+    "deleteGoalConfirmTitle": "Delete goal",
+    "deleteGoalConfirmMessage": "Are you sure you want to delete \"{title}\"? This action is permanent."
   },
   "notesPage": {
     "createNote": "Create note",

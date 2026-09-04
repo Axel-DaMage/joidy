@@ -20,7 +20,7 @@
     onClick: (goal: Goal) => void;
     onComplete?: (id: number) => void;
     onFail?: (id: number) => void;
-    onDelete?: (id: number) => void;
+    onDelete?: (goal: Goal) => void;
     onArchive?: (id: number) => void;
   }
 
