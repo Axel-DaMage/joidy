@@ -1,6 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
   import { browser } from '$app/environment';
+  import { ExternalLink } from 'lucide-svelte';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
   import {
     accentColors,
@@ -851,7 +852,16 @@
             
             <div style="display: flex; flex-direction: column; gap: 4px;">
               <div class="row-label" style="font-size: 11px;">
-                <span>Personal Access Token (PAT)</span>
+                <a
+                  href="https://github.com/settings/tokens/new"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="external-setting-link"
+                  title="Abrir página para generar un Personal Access Token (PAT) en GitHub"
+                >
+                  <span>Personal Access Token (PAT)</span>
+                  <ExternalLink size={10} />
+                </a>
                 {#if isConfigured('github_token')}<span class="configured-badge">✓</span>{/if}
               </div>
               <input
@@ -865,7 +875,16 @@
 
             <div style="display: flex; flex-direction: column; gap: 4px;">
               <div class="row-label" style="font-size: 11px;">
-                <span>GitHub OAuth Client ID</span>
+                <a
+                  href="https://github.com/settings/developers"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="external-setting-link"
+                  title="Abrir GitHub Developer Settings para gestionar OAuth Apps"
+                >
+                  <span>GitHub OAuth Client ID</span>
+                  <ExternalLink size={10} />
+                </a>
                 {#if isConfigured('github_client_id')}<span class="configured-badge">✓</span>{/if}
               </div>
               <input
@@ -879,7 +898,16 @@
 
             <div style="display: flex; flex-direction: column; gap: 4px;">
               <div class="row-label" style="font-size: 11px;">
-                <span>GitHub OAuth Client Secret</span>
+                <a
+                  href="https://github.com/settings/developers"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="external-setting-link"
+                  title="Abrir GitHub Developer Settings para gestionar OAuth Apps"
+                >
+                  <span>GitHub OAuth Client Secret</span>
+                  <ExternalLink size={10} />
+                </a>
                 {#if isConfigured('github_client_secret')}<span class="configured-badge">✓</span>{/if}
               </div>
               <input
@@ -1612,6 +1640,19 @@
     font-size: 10px;
     color: var(--success);
     margin-left: 4px;
+  }
+
+  .external-setting-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--text-secondary);
+    text-decoration: none;
+    transition: color var(--t-fast);
+  }
+  .external-setting-link:hover {
+    color: var(--accent, var(--xp));
+    text-decoration: underline;
   }
 
   .save-config-btn {

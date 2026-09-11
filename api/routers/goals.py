@@ -40,7 +40,7 @@ class GoalCreate(BaseModel):
     """Schema for creating a new goal."""
     title: str
     description: str = ""
-    temporality: GoalTemporality = GoalTemporality.DAILY
+    temporality: GoalTemporality = GoalTemporality.ONEOFF
     measurement_type: GoalMeasurement = GoalMeasurement.COUNT
     target_value: float = 1.0
     state: GoalState = GoalState.ACTIVE
@@ -147,7 +147,7 @@ class GoalUpdate(BaseModel):
 class GoalContent(BaseModel):
     title: str
     content: str
-    temporality: GoalTemporality = GoalTemporality.DAILY
+    temporality: GoalTemporality = GoalTemporality.ONEOFF
     measurement_type: GoalMeasurement = GoalMeasurement.COUNT
     target_value: float = 1.0
     state: GoalState = GoalState.ACTIVE
@@ -233,7 +233,8 @@ def create_goal(data: GoalCreate, db: Session = Depends(get_db)):
             content=note_content,
             tags=[],
             source="joidy",
-            source_path=None
+            source_path=None,
+            sync_goals=False,
         )
         note_id = note.id
 
@@ -425,6 +426,27 @@ def complete_goal(
             _write_goal_file(db, child, obj_dir)
 
     return {"goal": _serialize_goal(goal, db), "gamification": vars(gami)}
+
+
+@router.post("/{goal_id}/fail")
+def fail_goal(
+    goal_id: int,
+    db: Session = Depends(get_db),
+):
+    goal = db.query(Goal).filter(Goal.id == goal_id).first()
+    if not goal:
+        raise HTTPException(status_code=404, detail="Goal not found")
+
+    goal.state = GoalState.FAILED
+    goal.current_value = get_goal_progress(goal, db)
+    db.commit()
+    db.refresh(goal)
+
+    obj_dir = get_objectives_dir()
+    if obj_dir:
+        _write_goal_file(db, goal, obj_dir)
+
+    return _serialize_goal(goal, db)
 
 
 @router.delete("/{goal_id}", status_code=204)

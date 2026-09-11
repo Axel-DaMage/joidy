@@ -93,7 +93,7 @@ Some other text here
         content = "# Objetivo: Hacer ejercicio"
         goals = parse_goals_from_content(content)
         self.assertEqual(len(goals), 1)
-        self.assertEqual(goals[0]["temporality"], GoalTemporality.DAILY)
+        self.assertEqual(goals[0]["temporality"], GoalTemporality.ONEOFF)
 
 
 class TestSyncGoalsFromNote(GoalServiceTestBase):
@@ -243,6 +243,18 @@ class TestEvaluateONEOFFGoals(GoalServiceTestBase):
             self.assertEqual(goal.state, GoalState.COMPLETED)
             self.assertTrue(goal.is_completed)
             self.assertIsNotNone(goal.completed_at)
+
+
+class TestGoalCreationNoDuplicates(GoalServiceTestBase):
+    def test_create_goal_does_not_duplicate_entries(self) -> None:
+        with self.Session() as db:
+            from routers.goals import create_goal, GoalCreate
+            data = GoalCreate(title="Single Goal Test", temporality=GoalTemporality.DAILY)
+            result = create_goal(data, db)
+            
+            goals = db.query(Goal).filter(Goal.title == "Single Goal Test").all()
+            self.assertEqual(len(goals), 1)
+            self.assertEqual(goals[0].id, result["id"])
 
 
 if __name__ == "__main__":

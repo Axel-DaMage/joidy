@@ -44,7 +44,7 @@ def validate_goal_parent(db: Session, goal_id: int | None, parent_id: int | None
 
 def _parse_temporality(text: str) -> GoalTemporality:
     if not text:
-        return GoalTemporality.DAILY
+        return GoalTemporality.ONEOFF
     text = text.lower()
     if text in ["diario", "daily"]:
         return GoalTemporality.DAILY
@@ -54,9 +54,9 @@ def _parse_temporality(text: str) -> GoalTemporality:
         return GoalTemporality.MONTHLY
     if text in ["anual", "annual"]:
         return GoalTemporality.ANNUAL
-    if text in ["oneoff", "one-off", "unica", "única", "once"]:
+    if text in ["oneoff", "one-off", "unica", "única", "once", "indefinido", "indefinida"]:
         return GoalTemporality.ONEOFF
-    return GoalTemporality.DAILY
+    return GoalTemporality.ONEOFF
 
 def _parse_fail_config(text: str) -> GoalFailConfig:
     if not text:
@@ -100,6 +100,7 @@ def parse_goals_from_content(content: str) -> list[dict]:
         goals.append({
             "title": title,
             "temporality": _parse_temporality(period),
+            "has_explicit_temporality": period is not None,
             "fail_config": _parse_fail_config(fail_mode),
             "target_value": target_value,
             "measurement_type": measurement_type,
@@ -118,17 +119,19 @@ def sync_goals_from_note(db: Session, note_id: int, content: str):
 
     # Get existing goals linked to this note
     existing_goals = GoalRepository(db).get_by_note(note_id)
-    existing_by_title = {g.title: g for g in existing_goals}
+    existing_by_title = {g.title.strip().lower(): g for g in existing_goals}
 
     # Update or Create
     processed_titles = set()
     for pdata in parsed_goals:
-        title = pdata["title"]
-        processed_titles.add(title)
+        raw_title = pdata["title"]
+        norm_title = raw_title.strip().lower()
+        processed_titles.add(norm_title)
 
-        if title in existing_by_title:
-            g = existing_by_title[title]
-            g.temporality = pdata["temporality"]
+        if norm_title in existing_by_title:
+            g = existing_by_title[norm_title]
+            if pdata.get("has_explicit_temporality"):
+                g.temporality = pdata["temporality"]
             g.fail_config = pdata["fail_config"]
             # Only update target if not already completed? We can overwrite.
             if g.state == GoalState.ACTIVE:
@@ -136,7 +139,7 @@ def sync_goals_from_note(db: Session, note_id: int, content: str):
                 g.measurement_type = pdata["measurement_type"]
         else:
             new_goal = Goal(
-                title=title,
+                title=raw_title,
                 temporality=pdata["temporality"],
                 fail_config=pdata["fail_config"],
                 target_value=pdata["target_value"],
@@ -149,7 +152,7 @@ def sync_goals_from_note(db: Session, note_id: int, content: str):
     # Flag goals that were removed from the note content as pending_removal
     # instead of silently cancelling — the user decides via the Modal de Consistencia
     for g in existing_goals:
-        if g.title not in processed_titles and g.state in (GoalState.ACTIVE, GoalState.PAUSED):
+        if g.title.strip().lower() not in processed_titles and g.state in (GoalState.ACTIVE, GoalState.PAUSED):
             g.pending_removal = True
 
     db.flush()
@@ -270,31 +273,21 @@ def _process_goal_failure(db: Session, goal: Goal, now: datetime, progress: floa
         goal.current_value = progress
         return
 
-    goal.state = GoalState.FAILED
-    goal.current_value = progress
-
     new_goal = None
     if goal.fail_config == GoalFailConfig.ROLLOVER:
-        new_goal = Goal(
-            title=goal.title,
-            description=goal.description,
-            temporality=goal.temporality,
-            measurement_type=goal.measurement_type,
-            target_value=goal.target_value,
-            current_value=0.0,
-            state=GoalState.ACTIVE,
-            fail_config=goal.fail_config,
-            fail_emoji=goal.fail_emoji,
-            color=goal.color,
-            theme=goal.theme,
-            note_id=goal.note_id,
-            tag_id=goal.tag_id,
-            parent_id=goal.parent_id or goal.id,
-        )
-        GoalRepository(db).add(new_goal)
+        # Rollover goals carry over seamlessly without generating a FAILED entry in history.
+        goal.state = GoalState.ACTIVE
+        goal.created_at = now
+        goal.current_value = 0.0
     elif goal.fail_config == GoalFailConfig.SNOWBALL:
-        shortfall = goal.target_value - progress
+        # Snowball goals mark the expired period's goal as FAILED (recording 1 failed goal in history for that day),
+        # then spawn the accumulated goal for the new period.
+        shortfall = max(0.0, goal.target_value - progress)
         new_target = goal.target_value + shortfall
+
+        goal.state = GoalState.FAILED
+        goal.current_value = progress
+
         new_goal = Goal(
             title=goal.title,
             description=goal.description,
@@ -312,17 +305,23 @@ def _process_goal_failure(db: Session, goal: Goal, now: datetime, progress: floa
             parent_id=goal.parent_id or goal.id,
         )
         GoalRepository(db).add(new_goal)
+    else:
+        goal.state = GoalState.FAILED
+        goal.current_value = progress
 
     if new_goal:
         db.flush()
-        try:
-            from services.joidy_vault_writer import _write_goal_file, get_objectives_dir
-            obj_dir = get_objectives_dir()
-            if obj_dir:
+
+    try:
+        from services.joidy_vault_writer import _write_goal_file, get_objectives_dir
+        obj_dir = get_objectives_dir()
+        if obj_dir:
+            _write_goal_file(db, goal, obj_dir)
+            if new_goal:
                 _write_goal_file(db, new_goal, obj_dir)
-        except Exception as e:
-            import logging
-            logging.getLogger(__name__).warning("Failed to write rolled-over goal file: %s", e)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("Failed to write updated goal file: %s", e)
 
 
 def get_goal_streak(db: Session) -> dict:

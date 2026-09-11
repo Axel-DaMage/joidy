@@ -93,6 +93,7 @@ def db_session():
         with engine.connect() as conn:
             conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
             conn.commit()
+        import models  # noqa: F401
         Base.metadata.create_all(engine)
     else:
         engine = create_engine(

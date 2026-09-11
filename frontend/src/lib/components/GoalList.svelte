@@ -18,6 +18,10 @@
     formatFailConfig: (config: string) => string;
     onTogglePin: (id: number) => void;
     onClick: (goal: Goal) => void;
+    onComplete?: (id: number) => void;
+    onFail?: (id: number) => void;
+    onDelete?: (goal: Goal) => void;
+    onArchive?: (id: number) => void;
   }
 
   let {
@@ -33,6 +37,10 @@
     formatFailConfig,
     onTogglePin,
     onClick,
+    onComplete,
+    onFail,
+    onDelete,
+    onArchive,
   }: Props = $props();
 
   // Set the shared context once so GoalCard can consume tags, notes, callbacks,
@@ -46,6 +54,10 @@
     formatFailConfig,
     onTogglePin,
     onClick,
+    onComplete,
+    onFail,
+    onDelete,
+    onArchive,
   });
 
   function filteredGoals(goals: Goal[], query: string, filter: string | null, pinned: Set<number>) {
@@ -65,6 +77,9 @@
       } else {
         result = result.filter(g => g.state === filter);
       }
+    } else {
+      // "Todos" filter (filter === null) excludes archived/cancelled goals
+      result = result.filter(g => g.state !== 'CANCELLED');
     }
     return [...result].sort((a, b) => {
       const aPinned = pinned.has(a.id) ? 0 : 1;

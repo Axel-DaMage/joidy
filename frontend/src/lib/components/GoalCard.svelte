@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Pin, PinOff, Target, Clock, Tag, FileText, Settings } from 'lucide-svelte';
+  import { Pin, PinOff, Target, Clock, Tag, FileText, Settings, CheckCircle2, XCircle, Trash2, X, Archive, ArchiveRestore } from 'lucide-svelte';
   import StreakIcon from './StreakIcon.svelte';
   import ProgressBar from './ProgressBar.svelte';
   import { getGoalContext } from '$lib/stores/goalContext';
@@ -19,6 +19,10 @@
     formatFailConfig: (_c: string) => '',
     onTogglePin: (_id: number) => {},
     onClick: (_g: any) => {},
+    onComplete: undefined,
+    onFail: undefined,
+    onDelete: undefined,
+    onArchive: undefined,
   };
   const {
     tags,
@@ -29,6 +33,10 @@
     formatFailConfig,
     onTogglePin,
     onClick,
+    onComplete,
+    onFail,
+    onDelete,
+    onArchive,
   } = ctx;
 
   // Build Maps for O(1) lookups instead of linear searches
@@ -41,8 +49,25 @@
   class:completed={goal.state === 'COMPLETED' || goal.is_completed}
   class:failed={goal.state === 'FAILED'}
   class:paused={goal.state === 'PAUSED'}
+  class:archived={goal.state === 'CANCELLED'}
   style="--goal-color: {getGoalColor(goal)}"
 >
+  <div class="card-top-left-actions">
+    <button
+      class="card-action-btn pin-btn"
+      class:pinned
+      onclick={(e) => { e.stopPropagation(); onTogglePin(goal.id); }}
+      title={pinned ? $t('goalCard.unpin') : $t('goalCard.pin')}
+      aria-label={pinned ? $t('goalCard.unpin') : $t('goalCard.pin')}
+    >
+      {#if pinned}
+        <Pin size={14} fill="currentColor" />
+      {:else}
+        <PinOff size={14} />
+      {/if}
+    </button>
+  </div>
+
   <button
     class="goal-card-main"
     onclick={() => onClick(goal)}
@@ -66,6 +91,7 @@
       class:completed={goal.state === 'COMPLETED' || goal.is_completed}
       class:paused={goal.state === 'PAUSED'}
       class:failed={goal.state === 'FAILED'}
+      class:archived={goal.state === 'CANCELLED'}
     >
       {STATE_LABELS[goal.state] || goal.state}
     </div>
@@ -127,19 +153,58 @@
       {/if}
     </div>
   </button>
-  <button
-    class="pin-btn"
-    class:pinned
-    onclick={() => onTogglePin(goal.id)}
-    title={pinned ? 'Desfijar' : 'Fijar'}
-    aria-label={pinned ? 'Desfijar objetivo' : 'Fijar objetivo'}
-  >
-    {#if pinned}
-      <Pin size={14} fill="currentColor" />
-    {:else}
-      <PinOff size={14} />
+  <div class="card-actions-bar">
+    {#if onComplete}
+      <button
+        class="card-action-btn complete-btn"
+        class:completed={goal.state === 'COMPLETED' || goal.is_completed}
+        onclick={(e) => { e.stopPropagation(); onComplete?.(goal.id); }}
+        title={goal.state === 'COMPLETED' || goal.is_completed ? $t('goalCard.markPending') : $t('goalCard.complete')}
+        aria-label={$t('goalCard.complete')}
+      >
+        <CheckCircle2 size={14} />
+      </button>
     {/if}
-  </button>
+
+    {#if onFail}
+      <button
+        class="card-action-btn fail-btn"
+        class:failed={goal.state === 'FAILED'}
+        onclick={(e) => { e.stopPropagation(); onFail?.(goal.id); }}
+        title={$t('goalCard.fail')}
+        aria-label={$t('goalCard.fail')}
+      >
+        <XCircle size={14} />
+      </button>
+    {/if}
+
+    {#if onArchive}
+      <button
+        class="card-action-btn archive-btn"
+        class:archived={goal.state === 'CANCELLED'}
+        onclick={(e) => { e.stopPropagation(); onArchive?.(goal.id); }}
+        title={goal.state === 'CANCELLED' ? $t('goalCard.unarchive') : $t('goalCard.archive')}
+        aria-label={goal.state === 'CANCELLED' ? $t('goalCard.unarchive') : $t('goalCard.archive')}
+      >
+        {#if goal.state === 'CANCELLED'}
+          <ArchiveRestore size={14} />
+        {:else}
+          <Archive size={14} />
+        {/if}
+      </button>
+    {/if}
+
+    {#if onDelete}
+      <button
+        class="card-action-btn delete-btn"
+        onclick={(e) => { e.stopPropagation(); onDelete?.(goal); }}
+        title={$t('goalCard.delete')}
+        aria-label={$t('goalCard.delete')}
+      >
+        <X size={14} />
+      </button>
+    {/if}
+  </div>
 </div>
 
 <style>
@@ -147,15 +212,15 @@
     background: var(--surface);
     border: 2px solid var(--goal-color);
     border-radius: 12px;
-    padding: 14px 16px;
+    padding: 12px 14px;
     transition: all 0.25s ease;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
     text-align: center;
     position: relative;
     overflow: hidden;
-    aspect-ratio: 1;
+    height: auto;
   }
 
   .goal-card-main {
@@ -193,6 +258,25 @@
     opacity: 0.6;
   }
 
+  .goal-editor-card.archived {
+    border-style: dotted;
+    opacity: 0.55;
+    filter: grayscale(0.25);
+  }
+
+  .card-top-left-actions {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    z-index: 15;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+  }
+
   .card-header {
     display: flex;
     justify-content: center;
@@ -207,33 +291,82 @@
     gap: 8px;
   }
 
-  .pin-btn {
+  .card-actions-bar {
     position: absolute;
-    top: 0;
-    left: 0;
-    width: 24px;
-    height: 24px;
+    top: 8px;
+    right: 8px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    z-index: 15;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+  }
+
+  .goal-editor-card:hover .card-actions-bar,
+  .goal-editor-card:hover .card-top-left-actions,
+  .goal-editor-card:focus-within .card-actions-bar,
+  .goal-editor-card:focus-within .card-top-left-actions {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .card-action-btn {
+    width: 26px;
+    height: 26px;
     border-radius: 6px;
-    background: transparent;
-    border: none;
-    color: var(--text-muted);
+    background: var(--elevated, var(--surface));
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
     transition: all 0.2s ease;
-    z-index: var(--z-base);
-    opacity: 0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
   }
 
-  .goal-editor-card:hover .pin-btn,
-  .pin-btn:focus-visible {
-    opacity: 1;
-  }
-
-  .pin-btn:hover {
+  .card-action-btn:hover {
     background: var(--surface-active);
-    color: var(--accent);
+    color: var(--text-primary);
+  }
+
+  .complete-btn:hover {
+    color: var(--success, #22c55e);
+    border-color: var(--success, #22c55e);
+  }
+
+  .complete-btn.completed {
+    background: var(--success, #22c55e);
+    border-color: var(--success, #22c55e);
+    color: #ffffff;
+  }
+
+  .fail-btn:hover {
+    color: var(--error, #ef4444);
+    border-color: var(--error, #ef4444);
+  }
+
+  .fail-btn.failed {
+    background: var(--error, #ef4444);
+    border-color: var(--error, #ef4444);
+    color: #ffffff;
+  }
+
+  .archive-btn:hover {
+    color: var(--warning, #f59e0b);
+    border-color: var(--warning, #f59e0b);
+  }
+
+  .archive-btn.archived {
+    background: color-mix(in srgb, var(--warning, #f59e0b) 15%, transparent);
+    color: var(--warning, #f59e0b);
+  }
+
+  .delete-btn:hover {
+    color: #ef4444;
+    border-color: #ef4444;
   }
 
   .pin-btn.pinned {
@@ -282,6 +415,11 @@
   .goal-state-indicator.failed {
     background: color-mix(in srgb, var(--error) 15%, transparent);
     color: var(--error);
+  }
+
+  .goal-state-indicator.archived {
+    background: color-mix(in srgb, var(--text-muted) 15%, transparent);
+    color: var(--text-muted);
   }
 
   .card-title {

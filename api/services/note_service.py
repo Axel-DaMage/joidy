@@ -115,6 +115,7 @@ def create_note(
     source_path: str | None,
     rebuild_derived_data: bool = True,
     from_vault: bool = False,
+    sync_goals: bool = True,
 ):
     title = sanitize_title(title)
     content = sanitize_content(content)
@@ -134,7 +135,8 @@ def create_note(
     gami = process_event(db, event, {"note_id": note.id})
 
     sync_note_links(db, note.id, content)
-    sync_goals_from_note(db, note.id, content)
+    if sync_goals:
+        sync_goals_from_note(db, note.id, content)
     if rebuild_derived_data:
         sync_tag_cooccurrences_for_tags(db, touched_tag_ids)
 

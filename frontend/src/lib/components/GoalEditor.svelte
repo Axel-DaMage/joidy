@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher, onDestroy } from 'svelte';
-  import { Eye, EyeOff, Save, Trash2, X, Maximize, ChevronLeft, ChevronRight, Settings } from 'lucide-svelte';
+  import { Eye, EyeOff, Save, Trash2, X, Maximize, ChevronLeft, ChevronRight, Settings, CheckCircle2 } from 'lucide-svelte';
   import { marked } from 'marked';
   import DOMPurify from 'dompurify';
   import hljs from 'highlight.js';
@@ -41,6 +41,7 @@
     save: { title: string; content: string };
     cancel: void;
     delete: void;
+    complete: void;
     edit: void;
   }>();
 
@@ -49,6 +50,16 @@
   let saved = false;
   let previewMode = false;
   let zenMode = false;
+  let deleteConfirm = false;
+
+  function handleDeleteClick() {
+    if (!deleteConfirm) {
+      deleteConfirm = true;
+      setTimeout(() => (deleteConfirm = false), 3000);
+      return;
+    }
+    dispatch('delete');
+  }
 
   // Sync zen mode with body class to hide layout chrome (#270)
   $: if (typeof document !== 'undefined') {
@@ -56,6 +67,7 @@
   }
   onDestroy(() => {
     if (typeof document !== 'undefined') document.body.classList.remove('zen-mode-active');
+    if (highlightRaf !== null) cancelAnimationFrame(highlightRaf);
   });
 
   $: if (goal) {
@@ -68,7 +80,10 @@
   $: lineCount = Math.max(1, visibleContent.split('\n').length);
   $: lineNumbers = Array.from({ length: lineCount }, (_, i) => i + 1);
 
-  // Debounced content for expensive markdown rendering
+  // Debounced content for the expensive full markdown render (preview mode:
+  // marked + DOMPurify + highlight.js). The editor syntax highlight uses a
+  // faster rAF-based update (see editorHighlightedHtml) so typed text is styled
+  // immediately instead of lagging 300ms (#936).
   let debouncedContent = content;
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
   $: {
@@ -77,7 +92,6 @@
     debounceTimer = setTimeout(() => {
       debouncedContent = current;
       renderedHtml = renderMarkdown(current);
-      editorHighlightedHtml = highlightMarkdown(current);
     }, 300);
   }
   $: renderedHtml = renderMarkdown(debouncedContent);
@@ -158,7 +172,25 @@
     return html;
   }
 
-  $: editorHighlightedHtml = highlightMarkdown(debouncedContent);
+  // Editor syntax highlight: update on the next animation frame instead of the
+  // 300ms debounce. rAF coalesces multiple keystrokes into a single ~16ms
+  // render, so typed characters are styled immediately without re-running the
+  // regex highlighter more than once per frame (#703, #936).
+  let editorHighlightedHtml = highlightMarkdown(content);
+  let highlightRaf: ReturnType<typeof requestAnimationFrame> | null = null;
+
+  $: {
+    const current = visibleContent;
+    if (typeof requestAnimationFrame === 'function') {
+      if (highlightRaf !== null) cancelAnimationFrame(highlightRaf);
+      highlightRaf = requestAnimationFrame(() => {
+        editorHighlightedHtml = highlightMarkdown(current);
+        highlightRaf = null;
+      });
+    } else {
+      editorHighlightedHtml = highlightMarkdown(current);
+    }
+  }
 </script>
 
 <svelte:window onkeydown={onKeydown} />
@@ -194,6 +226,16 @@
       </button>
 
       <button
+        class="toolbar-btn complete-btn"
+        class:completed={goal?.is_completed}
+        onclick={() => dispatch('complete')}
+        title={goal?.is_completed ? 'Marcar como pendiente' : 'Completar objetivo'}
+      >
+        <CheckCircle2 size={14} />
+        <span>{goal?.is_completed ? 'Completado' : 'Completar'}</span>
+      </button>
+
+      <button
         class="toolbar-btn save-btn"
         class:saved
         onclick={handleSave}
@@ -207,6 +249,16 @@
       <button class="toolbar-btn" onclick={() => dispatch('edit')} title={$t('goalEditor.editGoalSettings')}>
         <Settings size={14} />
         <span>{$t('goalEditor.settings')}</span>
+      </button>
+
+      <button
+        class="toolbar-btn delete-btn"
+        class:confirming={deleteConfirm}
+        onclick={handleDeleteClick}
+        title={deleteConfirm ? 'Haz clic de nuevo para eliminar' : 'Eliminar objetivo'}
+      >
+        <Trash2 size={14} />
+        <span>{deleteConfirm ? '¿Eliminar?' : 'Eliminar'}</span>
       </button>
 
       <button class="toolbar-btn" onclick={() => dispatch('cancel')} title={$t('goalEditor.close')} aria-label={$t('goalEditor.close')}>
@@ -324,6 +376,14 @@
   .save-btn { border-color: var(--accent); color: var(--accent); }
   .save-btn:hover { background: var(--accent); color: var(--accent-contrast-text, var(--bg)); }
   .save-btn.saved { background: var(--success); border-color: var(--success); color: var(--text-primary); }
+
+  .complete-btn { border-color: var(--success, #22c55e); color: var(--success, #22c55e); }
+  .complete-btn:hover { background: color-mix(in srgb, var(--success, #22c55e) 15%, transparent); }
+  .complete-btn.completed { background: var(--success, #22c55e); color: #ffffff; }
+
+  .delete-btn { border-color: color-mix(in srgb, #ef4444 50%, var(--border)); color: #ef4444; }
+  .delete-btn:hover { background: color-mix(in srgb, #ef4444 15%, transparent); border-color: #ef4444; }
+  .delete-btn.confirming { background: #ef4444; color: #ffffff; border-color: #ef4444; font-weight: 600; }
 
   .save-status {
     display: inline-block;

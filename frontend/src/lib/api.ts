@@ -454,6 +454,7 @@ export const api = {
     update: (id: number, data: Partial<Goal>) => req<Goal>('PUT', `/goals/${id}`, data),
     complete: (id: number) =>
       req<{ goal: Goal; gamification: GamificationResult }>('POST', `/goals/${id}/complete`),
+    fail: (id: number) => req<Goal>('POST', `/goals/${id}/fail`),
     delete: (id: number) => req<void>('DELETE', `/goals/${id}`),
     streak: () => req<{ current_streak: number; best_streak: number }>('GET', '/goals/streak'),
     resolveRemoval: (id: number, action: 'delete' | 'manual' | 'cancel') =>

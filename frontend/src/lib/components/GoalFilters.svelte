@@ -42,9 +42,9 @@
       >{$t('goalFilters.completed')}</button>
       <button
         class="filter-btn"
-        class:active={filter === 'PAUSED'}
-        onclick={() => filter = 'PAUSED'}
-      >{$t('goalFilters.paused')}</button>
+        class:active={filter === 'CANCELLED'}
+        onclick={() => filter = 'CANCELLED'}
+      >{$t('goalFilters.archived')}</button>
       <button
         class="filter-btn"
         class:active={filter === 'FAILED'}

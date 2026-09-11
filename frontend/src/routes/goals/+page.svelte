@@ -259,13 +259,13 @@
     ])
   );
 
-  const TEMPORALITIES: Goal['temporality'][] = ['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL', 'ONEOFF'];
+  const TEMPORALITIES: Goal['temporality'][] = ['ONEOFF', 'DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL'];
   const TEMPORALITY_LABELS: Record<string, string> = {
+    ONEOFF: 'Indefinido',
     DAILY: 'Diario',
     WEEKLY: 'Semanal',
     MONTHLY: 'Mensual',
     ANNUAL: 'Anual',
-    ONEOFF: 'Única',
   };
   const STATE_LABELS: Record<string, string> = {
     ACTIVE: 'Activo',
@@ -276,11 +276,14 @@
   };
   const COLOR_PRESETS = GOALS_SPECIFIC_COLOR_PRESETS;
 
+  // Deletion confirmation modal state
+  let goalToDelete = $state<Goal | null>(null);
+
   // New goal form
   let newTitle = $state('');
   let newDescription = $state('');
   let newTargetValue = $state(1);
-  let newTemporality = $state<Goal['temporality']>('DAILY');
+  let newTemporality = $state<Goal['temporality']>('ONEOFF');
   let newMeasurement = $state<Goal['measurement_type']>('COUNT');
   let newFailConfig = $state<Goal['fail_config']>('STATIC');
   let newFailEmoji = $state('🔴');
@@ -495,12 +498,36 @@
     showXPGain(result.gamification.xp_awarded);
   }
 
+  async function failGoal(id: number) {
+    try {
+      const result = await api.goals.fail(id);
+      goals = goals.map((g) => (g.id === id ? result : g));
+    } catch (e) {
+      logger.error('Error al marcar como fallido:', e);
+    }
+  }
+
   async function updateGoalState(id: number, state: 'ACTIVE' | 'PAUSED' | 'CANCELLED') {
     try {
       const result = await api.goals.update(id, { state });
       goals = goals.map((g) => (g.id === id ? result : g));
     } catch (e) {
       logger.error('Error al actualizar estado:', e);
+    }
+  }
+
+  function confirmDeleteGoal(goal: Goal) {
+    goalToDelete = goal;
+  }
+
+  async function handleConfirmDeleteGoal() {
+    if (!goalToDelete) return;
+    try {
+      await api.goals.delete(goalToDelete.id);
+      goals = goals.filter((g) => g.id !== goalToDelete!.id);
+      goalToDelete = null;
+    } catch (e) {
+      logger.error('Error al eliminar objetivo:', e);
     }
   }
 
@@ -2649,8 +2676,46 @@
         {formatFailConfig}
         onTogglePin={togglePinned}
         onClick={openGoalEditor}
+        onComplete={completeGoal}
+        onFail={failGoal}
+        onDelete={confirmDeleteGoal}
+        onArchive={(id) => {
+          const target = goals.find((g) => g.id === id);
+          if (target) {
+            updateGoalState(id, target.state === 'CANCELLED' ? 'ACTIVE' : 'CANCELLED');
+          }
+        }}
       />
     </div>
+  {/if}
+
+  {#if goalToDelete}
+    <ModalDialog
+      open={true}
+      title={$t('goalsPage.deleteGoalConfirmTitle')}
+      size="sm"
+      onClose={() => (goalToDelete = null)}
+    >
+      <p style="margin: 0 0 16px; font-size: 14px; line-height: 1.5; color: var(--text-primary);">
+        {$t('goalsPage.deleteGoalConfirmMessage', { values: { title: goalToDelete.title } })}
+      </p>
+      {#snippet footer()}
+        <button
+          type="button"
+          class="btn btn-ghost"
+          onclick={() => (goalToDelete = null)}
+        >
+          {$t('goalsPage.cancel')}
+        </button>
+        <button
+          type="button"
+          class="btn btn-danger"
+          onclick={handleConfirmDeleteGoal}
+        >
+          {$t('goalsPage.delete')}
+        </button>
+      {/snippet}
+    </ModalDialog>
   {/if}
 </div>
 
