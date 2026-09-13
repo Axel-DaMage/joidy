@@ -661,10 +661,14 @@
       <div class="status-live" title={$t('layout.currentStatus')}>
         <span class="status-pill status-time mono">{currentTime}</span>
         <span class="status-pill status-date">{currentDate}</span>
-        <span class="status-pill status-tasks">{pendingTasks} {$t('common.tasks')}</span>
+        <span
+          class="status-pill status-tasks"
+          class:has-pending={pendingTasks > 0}
+          class:is-completed={pendingTasks === 0}
+        >{pendingTasks} {$t('common.tasks')}</span>
         {#if pendingStreaks > 0}
-          <span class="status-pill status-streak-alert" title={$t('status.pendingStreaks')}>
-            <DynamicIcon name="Flame" size={12} color="var(--xp)" />
+          <span class="status-pill status-streak-alert has-pending" title={$t('status.pendingStreaks')}>
+            <DynamicIcon name="Flame" size={12} color="var(--accent-contrast, var(--warning, #f59e0b))" />
             <span>{pendingStreaks}</span>
           </span>
         {/if}
@@ -857,9 +861,24 @@
   }
 
   .status-streak-alert {
-    border-color: color-mix(in srgb, var(--xp) 65%, var(--border));
-    background: color-mix(in srgb, var(--xp) 18%, transparent);
+    border-color: color-mix(in srgb, var(--accent-contrast, var(--xp)) 65%, var(--border));
+    background: color-mix(in srgb, var(--accent-contrast, var(--xp)) 18%, transparent);
+    color: var(--accent-contrast, var(--xp));
     font-weight: 600;
+  }
+
+  .status-tasks.has-pending,
+  .status-streak-alert.has-pending {
+    color: var(--accent-contrast, var(--warning, #f59e0b));
+    border-color: color-mix(in srgb, var(--accent-contrast, var(--warning, #f59e0b)) 50%, var(--border));
+    background: color-mix(in srgb, var(--accent-contrast, var(--warning, #f59e0b)) 16%, transparent);
+    font-weight: 600;
+  }
+
+  .status-tasks.is-completed {
+    color: var(--success, #10b981);
+    border-color: color-mix(in srgb, var(--success, #10b981) 35%, var(--border));
+    background: color-mix(in srgb, var(--success, #10b981) 12%, transparent);
   }
 
   @media (max-width: 900px) {

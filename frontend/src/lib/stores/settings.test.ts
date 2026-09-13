@@ -20,6 +20,7 @@ import {
   updateFolderMeta,
   initTheme,
   getContrastColor,
+  getComplementaryColor,
   hexToRgb,
   getLuminance,
   MAX_COLORS,
@@ -98,6 +99,14 @@ describe('accentColors store', () => {
     expect(get(accentColors)).toEqual(['#ff0000', '#00ff00']);
     // CSS variables applied to documentElement
     expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#ff0000');
+    expect(document.documentElement.style.getPropertyValue('--accent-contrast')).toBeDefined();
+    expect(document.documentElement.style.getPropertyValue('--accent-contrast').length).toBeGreaterThan(0);
+  });
+
+  it('getComplementaryColor rotates hue to provide contrast', () => {
+    const comp = getComplementaryColor('#ff0000'); // red hue 0 -> cyan hue 180
+    expect(comp).toMatch(/^#[0-9a-fA-F]{6}$/);
+    expect(comp).not.toBe('#ff0000');
   });
 
   it('init() falls back to defaults for invalid stored data', () => {

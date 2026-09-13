@@ -37,6 +37,7 @@
 
   /* Accents — used sparingly */
   --accent: #e0e0e0; /* Primary interactive elements */
+  --accent-contrast: #f59e0b; /* Dynamic complementary contrast color (JS-overridden) */
   --xp: #c8a96e; /* Primary accent color (JS-overridden) */
   --xp-2: #9f8660; /* Secondary accent color (JS-overridden) */
   --xp-3: #7e6a4d; /* Tertiary accent color (JS-overridden) */

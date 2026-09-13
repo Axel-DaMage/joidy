@@ -29,7 +29,86 @@ function getContrastColor(hex: string): string {
   return luminance > 0.179 ? '#000000' : '#ffffff';
 }
 
-export { getContrastColor, hexToRgb, getLuminance };
+function rgbToHsl(r: number, g: number, b: number): [number, number, number] {
+  r /= 255;
+  g /= 255;
+  b /= 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  let h = 0;
+  let s = 0;
+  const l = (max + min) / 2;
+
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case r:
+        h = (g - b) / d + (g < b ? 6 : 0);
+        break;
+      case g:
+        h = (b - r) / d + 2;
+        break;
+      case b:
+        h = (r - g) / d + 4;
+        break;
+    }
+    h /= 6;
+  }
+
+  return [Math.round(h * 360), Math.round(s * 100), Math.round(l * 100)];
+}
+
+function hslToRgb(h: number, s: number, l: number): [number, number, number] {
+  h = (h % 360 + 360) % 360;
+  s = Math.max(0, Math.min(100, s)) / 100;
+  l = Math.max(0, Math.min(100, l)) / 100;
+
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = l - c / 2;
+  let r = 0;
+  let g = 0;
+  let b = 0;
+
+  if (h < 60) {
+    r = c; g = x; b = 0;
+  } else if (h < 120) {
+    r = x; g = c; b = 0;
+  } else if (h < 180) {
+    r = 0; g = c; b = x;
+  } else if (h < 240) {
+    r = 0; g = x; b = c;
+  } else if (h < 300) {
+    r = x; g = 0; b = c;
+  } else {
+    r = c; g = 0; b = x;
+  }
+
+  return [
+    Math.round((r + m) * 255),
+    Math.round((g + m) * 255),
+    Math.round((b + m) * 255)
+  ];
+}
+
+function getComplementaryColor(hex: string): string {
+  if (!isValidHex(hex)) return '#f59e0b';
+  const [r, g, b] = hexToRgb(hex);
+  const [h, s, l] = rgbToHsl(r, g, b);
+
+  // Rotate hue by 180 degrees for complementary contrast
+  const compH = (h + 180) % 360;
+  // Ensure enough saturation and pleasant lightness for contrast against dark UI backgrounds
+  const compS = s < 30 ? 80 : Math.min(95, Math.max(65, s));
+  const compL = Math.min(72, Math.max(52, l));
+
+  const [cr, cg, cb] = hslToRgb(compH, compS, compL);
+  const toHex = (n: number) => n.toString(16).padStart(2, '0');
+  return `#${toHex(cr)}${toHex(cg)}${toHex(cb)}`;
+}
+
+export { getContrastColor, getComplementaryColor, hexToRgb, getLuminance, rgbToHsl, hslToRgb };
 
 function computeGradient(colors: string[]): string {
   if (colors.length === 1) return colors[0];
@@ -82,6 +161,9 @@ function applyColors(colors: string[]) {
   const contrastText = getContrastColor(primary);
   document.documentElement.style.setProperty('--accent-contrast-text', contrastText);
   document.documentElement.style.setProperty('--xp-contrast-text', contrastText);
+
+  const dynamicContrast = getComplementaryColor(primary);
+  document.documentElement.style.setProperty('--accent-contrast', dynamicContrast);
 
   document.documentElement.style.setProperty('--xp', primary);
   document.documentElement.style.setProperty('--xp-2', secondaryPlain);
