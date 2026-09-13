@@ -132,8 +132,27 @@ class ComputeStreakEveryNTest(PersonalStreakTestBase):
         current, longest = compute_streak(dates, frequency="every_n", frequency_days=3)
         self.assertEqual(current, 1)
 
+    def test_snowball_mode_never_breaks_streak_on_missed_days(self):
+        today = self._today()
+        # Non-consecutive dates with big gaps
+        dates = [today, today - timedelta(days=5), today - timedelta(days=20)]
+        current, longest = compute_streak(dates, snowball_mode=True)
+        self.assertEqual(current, 3)
+        self.assertEqual(longest, 3)
+
 
 class CalculateStreakStatsTest(PersonalStreakTestBase):
+    def test_snowball_mode_streak_stats(self):
+        db = self.Session()
+        streak = self._create_streak(db, snowball_mode=True)
+        today = self._today()
+        self._add_checkin(db, streak, today - timedelta(days=10))
+        self._add_checkin(db, streak, today - timedelta(days=2))
+        db.refresh(streak)
+        stats = calculate_streak_stats(streak)
+        self.assertEqual(stats["current_streak"], 2)
+        self.assertEqual(stats["longest_streak"], 2)
+        db.close()
     def test_stats_reflect_checkins(self):
         db = self.Session()
         streak = self._create_streak(db)

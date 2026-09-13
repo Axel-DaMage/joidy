@@ -18,6 +18,7 @@
       color: string; theme: string; category: string;
       start_date: string | null; target_date: string | null;
       offset: number; frequency: string; frequency_days: number;
+      snowball_mode: boolean;
       freeze_count: number;
     };
     archive: void;
@@ -36,6 +37,7 @@
   let offset = 0;
   let frequency = 'daily';
   let frequencyDays = 1;
+  let snowballMode = false;
   let freezeCount = 0;
   let useIcon = false;
 
@@ -124,6 +126,7 @@
       offset = editStreak.offset;
       frequency = editStreak.frequency || 'daily';
       frequencyDays = editStreak.frequency_days || 1;
+      snowballMode = !!editStreak.snowball_mode;
       freezeCount = editStreak.freeze_count || 0;
     } else {
       resetForm();
@@ -136,7 +139,7 @@
     description = ''; color = '#c8a96e'; theme = 'solid';
     category = 'general'; startDate = new Date().toISOString().split('T')[0];
     targetDate = ''; offset = 0; frequency = 'daily';
-    frequencyDays = 1; freezeCount = 0;
+    frequencyDays = 1; snowballMode = false; freezeCount = 0;
   }
 
   function close() { dispatch('close'); }
@@ -156,6 +159,7 @@
       offset,
       frequency,
       frequency_days: Math.max(1, frequencyDays),
+      snowball_mode: snowballMode,
       freeze_count: freezeCount,
     });
     // Don't call close() here — let the parent close after it processes save
@@ -179,8 +183,12 @@
   $: previewStyle = `--theme-ac: ${color};`;
 
   function previewFreqLabel(): string {
-    if (frequency === 'every_n' && frequencyDays > 1) return `cada ${frequencyDays}d`;
-    return 'diaria';
+    if (frequency === 'weekly') return $t('streakCreateModal.weekly');
+    if (frequency === 'monthly') return $t('streakCreateModal.monthly');
+    if (frequency === 'every_n' && frequencyDays > 1) {
+      return $t('streaks.everyNDays', { values: { n: frequencyDays } });
+    }
+    return $t('streakCreateModal.daily');
   }
 </script>
 
@@ -214,7 +222,7 @@
                 <button class="freq-btn" class:selected={frequency === 'daily'} onclick={() => { frequency = 'daily'; frequencyDays = 1; }}>{$t('streakCreateModal.daily')}</button>
                 <button class="freq-btn" class:selected={frequency === 'weekly'} onclick={() => { frequency = 'weekly'; frequencyDays = 1; }}>{$t('streakCreateModal.weekly')}</button>
                 <button class="freq-btn" class:selected={frequency === 'monthly'} onclick={() => { frequency = 'monthly'; frequencyDays = 1; }}>{$t('streakCreateModal.monthly')}</button>
-                <button class="freq-btn" class:selected={frequency === 'every_n'} onclick={() => { frequency = 'every_n'; }}>cada N</button>
+                <button class="freq-btn" class:selected={frequency === 'every_n'} onclick={() => { frequency = 'every_n'; }}>{$t('streakCreateModal.everyN')}</button>
               </div>
             </div>
 
@@ -222,7 +230,7 @@
               <div class="freq-n-row">
                 <span class="freq-n-label">{$t('streakCreateModal.every')}</span>
                 <input type="number" bind:value={frequencyDays} min="1" max="365" class="freq-n-input" />
-                <span class="freq-n-label">días</span>
+                <span class="freq-n-label">{$t('streakCreateModal.days')}</span>
               </div>
             {/if}
 
@@ -246,6 +254,14 @@
               <label><Snowflake size={11} /> Freezes (escudos)</label>
               <input type="number" bind:value={freezeCount} min="0" max="30" />
               <span class="field-hint">{$t('streakCreateModal.freezeHint')}</span>
+            </div>
+
+            <div class="field">
+              <label class="checkbox-label">
+                <input type="checkbox" bind:checked={snowballMode} class="snowball-checkbox" />
+                <span>Modo persistente / Bola de nieve (nunca falla)</span>
+              </label>
+              <span class="field-hint">Si omites algún día, la racha nunca se reinicia ni se rompe; se conserva para seguir acumulando.</span>
             </div>
 
             <div class="field">
@@ -284,7 +300,7 @@
               </div>
               <div class="preview-info">
                 <span class="preview-name">{name || 'Nombre de la racha'}</span>
-                <span class="preview-meta mono">{name ? previewFreqLabel() : 'frecuencia'}</span>
+                <span class="preview-meta mono">{name ? previewFreqLabel() : $t('streakCreateModal.frequencyPlaceholder')}</span>
               </div>
             </div>
 
@@ -498,12 +514,17 @@
   }
 
   .preview-card.theme-neon {
-    background: color-mix(in srgb, var(--theme-ac) 8%, var(--surface));
-    border: 1px solid var(--theme-ac);
-    box-shadow: 0 0 10px color-mix(in srgb, var(--theme-ac) 25%, transparent);
+    background: radial-gradient(ellipse at 30% 50%, color-mix(in srgb, var(--theme-ac) 14%, transparent) 0%, transparent 75%), var(--surface);
+    border: 1px solid color-mix(in srgb, var(--theme-ac) 50%, var(--border));
+    box-shadow: 0 0 16px color-mix(in srgb, var(--theme-ac) 20%, transparent);
   }
   .preview-card.theme-neon .preview-name {
-    text-shadow: 0 0 10px var(--theme-ac);
+    color: var(--text-primary);
+    font-weight: 600;
+    text-shadow: 0 0 8px color-mix(in srgb, var(--theme-ac) 45%, transparent);
+  }
+  .preview-card.theme-neon .preview-meta {
+    color: var(--text-muted);
   }
 
   .preview-card.theme-glass {
@@ -588,6 +609,24 @@
 
   .field-row { display: flex; gap: 12px; align-items: flex-start; }
   .field.half { flex: 1; min-width: 0; }
+
+  .checkbox-label {
+    display: flex !important;
+    align-items: center;
+    justify-content: flex-start !important;
+    gap: 8px;
+    cursor: pointer;
+    text-transform: none !important;
+    font-size: 12px !important;
+    color: var(--text-primary) !important;
+  }
+
+  .snowball-checkbox {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent, var(--xp));
+    cursor: pointer;
+  }
 
   /* Frequency */
   .freq-row { display: flex; gap: 6px; }

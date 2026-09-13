@@ -48,7 +48,7 @@
       <span class="item-name">{streak.name}</span>
       <span class="item-meta mono">
         {#if isStreakCompleted(streak)}
-          Finalizado {getDaysForCompletion(streak)} días
+          {$t('streaks.completedDays', { values: { progress: getDaysForCompletion(streak) } })}
         {:else}
           {freqLabel(streak)}
         {/if}
@@ -178,12 +178,22 @@
   }
 
   .streak-item.theme-neon {
-    background: color-mix(in srgb, var(--theme-ac) 8%, var(--surface));
-    border: 1px solid var(--theme-ac);
-    box-shadow: 0 0 10px color-mix(in srgb, var(--theme-ac) 25%, transparent);
+    background: radial-gradient(ellipse at 30% 50%, color-mix(in srgb, var(--theme-ac) 14%, transparent) 0%, transparent 75%), var(--surface);
+    border: 1px solid color-mix(in srgb, var(--theme-ac) 50%, var(--border));
+    box-shadow: 0 0 16px color-mix(in srgb, var(--theme-ac) 20%, transparent);
   }
-  .streak-item.theme-neon .item-name, .streak-item.theme-neon .item-num {
-    text-shadow: 0 0 10px var(--theme-ac);
+  .streak-item.theme-neon .item-name {
+    color: var(--text-primary);
+    font-weight: 600;
+    text-shadow: 0 0 8px color-mix(in srgb, var(--theme-ac) 45%, transparent);
+  }
+  .streak-item.theme-neon .item-num {
+    color: var(--text-primary);
+    font-weight: 700;
+    text-shadow: 0 0 8px color-mix(in srgb, var(--theme-ac) 45%, transparent);
+  }
+  .streak-item.theme-neon .item-meta {
+    color: var(--text-muted);
   }
 
   .streak-item.theme-glass {

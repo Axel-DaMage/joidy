@@ -48,6 +48,9 @@
   let githubPollInterval = 5;
   let githubExpiresAt = 0;
   let githubPollTimer: ReturnType<typeof setTimeout> | null = null;
+  let githubUsernameInput = '';
+  let githubConnectingUsername = false;
+  let showAdvancedGithub = false;
 
   let googleConnected = false;
   let googleConnecting = false;
@@ -227,9 +230,37 @@
       const status = await api.github.status();
       githubConnected = status.connected;
       githubUsername = status.username || '';
+      if (githubUsername && !githubUsernameInput) {
+        githubUsernameInput = githubUsername;
+      }
     } catch (e) {
       githubConnected = false;
       githubUsername = '';
+    }
+  }
+
+  async function connectGithubByUsername() {
+    const trimmed = (githubUsernameInput || '').trim();
+    if (!trimmed) {
+      githubAuthError = 'Ingresa un nombre de usuario de GitHub';
+      return;
+    }
+    githubConnectingUsername = true;
+    githubAuthError = '';
+    try {
+      await api.config.update({ github_username: trimmed, github_token: '' });
+      systemConfig.github_username = trimmed;
+      await checkGithubStatus();
+      if (githubConnected) {
+        showNotification(`GitHub conectado con @${githubUsername || trimmed}`, 'success');
+        window.dispatchEvent(new CustomEvent('joidy:github-connected'));
+      } else {
+        githubAuthError = `No se encontró el usuario @${trimmed} en GitHub`;
+      }
+    } catch (e: any) {
+      githubAuthError = e.message || 'Error al conectar con usuario de GitHub';
+    } finally {
+      githubConnectingUsername = false;
     }
   }
 
@@ -813,8 +844,10 @@
           <div class="section-title" style="color: var(--xp, var(--accent));">
             <DynamicIcon name="GitBranch" size={12} /> Integraciones
           </div>
+          <!-- GitHub Integration -->
           <div class="row">
             <div class="row-label">
+              <DynamicIcon name="Github" size={13} />
               <span>GitHub</span>
               {#if githubConnected}<span class="configured-badge">✓</span>{/if}
             </div>
@@ -831,108 +864,135 @@
               </span>
             {:else if githubConnected}
               <div style="display:flex; align-items:center; gap:8px;">
-                <span class="mono" style="font-size:12px; color: var(--xp);">{githubUsername}</span>
+                <span class="mono" style="font-size:12px; color: var(--xp);">@{githubUsername}</span>
                 <button class="link-btn disconnect-btn" onclick={disconnectGithub}
                   >Desconectar</button
                 >
               </div>
             {:else}
               <button class="link-btn" onclick={startGithubAuth} disabled={githubAuthLoading}
-                >Enlazar</button
+                >Conectar OAuth</button
               >
             {/if}
           </div>
-          {#if githubAuthError && !githubAuthLoading}
-            <p class="hint" style="color:var(--danger)">{githubAuthError}</p>
+
+          {#if !githubConnected}
+            <!-- Conexión rápida por usuario -->
+            <div style="margin-top: 8px; display: flex; gap: 8px; align-items: center;">
+              <input
+                type="text"
+                class="setting-input mono"
+                style="font-size: 12px; padding: 6px 10px; flex: 1;"
+                placeholder="Tu usuario de GitHub (ej: torvalds)"
+                bind:value={githubUsernameInput}
+                onkeydown={(e) => { if (e.key === 'Enter') connectGithubByUsername(); }}
+              />
+              <button
+                class="link-btn"
+                style="white-space: nowrap; padding: 6px 14px;"
+                onclick={connectGithubByUsername}
+                disabled={githubConnectingUsername || !githubUsernameInput.trim()}
+              >
+                {githubConnectingUsername ? 'Verificando…' : 'Conectar usuario'}
+              </button>
+            </div>
+            <p class="hint" style="margin-top: 4px;">
+              Conecta sólo con tu nombre de usuario para ver repositorios, issues y pulls públicos sin requerir tokens ni OAuth.
+            </p>
           {/if}
 
-          <!-- GitHub Manual Config -->
-          <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 8px; border-left: 2px solid var(--border); padding-left: 12px; margin-left: 4px;">
-            <p class="hint" style="margin-top: 0; font-weight: 500;">Configuración manual de GitHub:</p>
-            
-            <div style="display: flex; flex-direction: column; gap: 4px;">
-              <div class="row-label" style="font-size: 11px;">
-                <a
-                  href="https://github.com/settings/tokens/new"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="external-setting-link"
-                  title="Abrir página para generar un Personal Access Token (PAT) en GitHub"
-                >
-                  <span>Personal Access Token (PAT)</span>
-                  <ExternalLink size={10} />
-                </a>
-                {#if isConfigured('github_token')}<span class="configured-badge">✓</span>{/if}
-              </div>
-              <input
-                type="password"
-                class="setting-input mono"
-                style="font-size: 11px; padding: 4px 8px;"
-                placeholder="ghp_..."
-                bind:value={systemConfig.github_token}
-              />
-            </div>
+          {#if githubAuthError && !githubAuthLoading}
+            <p class="hint" style="color:var(--danger); margin-top: 6px;">{githubAuthError}</p>
+          {/if}
 
-            <div style="display: flex; flex-direction: column; gap: 4px;">
-              <div class="row-label" style="font-size: 11px;">
-                <a
-                  href="https://github.com/settings/developers"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="external-setting-link"
-                  title="Abrir GitHub Developer Settings para gestionar OAuth Apps"
-                >
-                  <span>GitHub OAuth Client ID</span>
-                  <ExternalLink size={10} />
-                </a>
-                {#if isConfigured('github_client_id')}<span class="configured-badge">✓</span>{/if}
-              </div>
-              <input
-                type="text"
-                class="setting-input mono"
-                style="font-size: 11px; padding: 4px 8px;"
-                placeholder="Ov23..."
-                bind:value={systemConfig.github_client_id}
-              />
-            </div>
-
-            <div style="display: flex; flex-direction: column; gap: 4px;">
-              <div class="row-label" style="font-size: 11px;">
-                <a
-                  href="https://github.com/settings/developers"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="external-setting-link"
-                  title="Abrir GitHub Developer Settings para gestionar OAuth Apps"
-                >
-                  <span>GitHub OAuth Client Secret</span>
-                  <ExternalLink size={10} />
-                </a>
-                {#if isConfigured('github_client_secret')}<span class="configured-badge">✓</span>{/if}
-              </div>
-              <input
-                type="password"
-                class="setting-input mono"
-                style="font-size: 11px; padding: 4px 8px;"
-                placeholder="client_secret_..."
-                bind:value={systemConfig.github_client_secret}
-              />
-            </div>
-            
-            <div style="display: flex; flex-direction: column; gap: 4px;">
-              <div class="row-label" style="font-size: 11px;">
-                <span>GitHub Username</span>
-                {#if isConfigured('github_username')}<span class="configured-badge">✓</span>{/if}
-              </div>
-              <input
-                type="text"
-                class="setting-input mono"
-                style="font-size: 11px; padding: 4px 8px;"
-                placeholder="username"
-                bind:value={systemConfig.github_username}
-              />
-            </div>
+          <!-- Botón para alternar configuración manual/avanzada -->
+          <div style="margin-top: 10px;">
+            <button
+              type="button"
+              class="toggle"
+              style="font-size: 10px; padding: 3px 8px;"
+              onclick={() => (showAdvancedGithub = !showAdvancedGithub)}
+            >
+              <DynamicIcon name="SlidersHorizontal" size={11} />
+              <span>{showAdvancedGithub ? 'Ocultar configuración avanzada' : 'Configuración avanzada (Tokens / OAuth App)'}</span>
+            </button>
           </div>
+
+          {#if showAdvancedGithub}
+            <!-- GitHub Manual / Advanced Config -->
+            <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px; border-left: 2px solid var(--border); padding-left: 12px; margin-left: 4px;">
+              <p class="hint" style="margin-top: 0; font-weight: 500;">Credenciales avanzadas de GitHub:</p>
+              
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                <div class="row-label" style="font-size: 11px;">
+                  <a
+                    href="https://github.com/settings/tokens/new"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="external-setting-link"
+                    title="Abrir página para generar un Personal Access Token (PAT) en GitHub"
+                  >
+                    <span>Personal Access Token (PAT)</span>
+                    <ExternalLink size={10} />
+                  </a>
+                  {#if isConfigured('github_token')}<span class="configured-badge">✓</span>{/if}
+                </div>
+                <input
+                  type="password"
+                  class="setting-input mono"
+                  style="font-size: 11px; padding: 4px 8px;"
+                  placeholder="ghp_..."
+                  bind:value={systemConfig.github_token}
+                />
+              </div>
+
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                <div class="row-label" style="font-size: 11px;">
+                  <a
+                    href="https://github.com/settings/developers"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="external-setting-link"
+                    title="Abrir GitHub Developer Settings para gestionar OAuth Apps"
+                  >
+                    <span>GitHub OAuth Client ID</span>
+                    <ExternalLink size={10} />
+                  </a>
+                  {#if isConfigured('github_client_id')}<span class="configured-badge">✓</span>{/if}
+                </div>
+                <input
+                  type="text"
+                  class="setting-input mono"
+                  style="font-size: 11px; padding: 4px 8px;"
+                  placeholder="Ov23..."
+                  bind:value={systemConfig.github_client_id}
+                />
+              </div>
+
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                <div class="row-label" style="font-size: 11px;">
+                  <a
+                    href="https://github.com/settings/developers"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="external-setting-link"
+                    title="Abrir GitHub Developer Settings para gestionar OAuth Apps"
+                  >
+                    <span>GitHub OAuth Client Secret</span>
+                    <ExternalLink size={10} />
+                  </a>
+                  {#if isConfigured('github_client_secret')}<span class="configured-badge">✓</span>{/if}
+                </div>
+                <input
+                  type="password"
+                  class="setting-input mono"
+                  style="font-size: 11px; padding: 4px 8px;"
+                  placeholder="client_secret_..."
+                  bind:value={systemConfig.github_client_secret}
+                />
+              </div>
+            </div>
+          {/if}
           {#if $devMode}
             <div class="row">
               <div class="row-label">

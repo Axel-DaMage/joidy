@@ -259,6 +259,7 @@ export interface PersonalStreak {
   offset: number;
   frequency: string;
   frequency_days: number;
+  snowball_mode?: boolean;
   is_archived: boolean;
   current_streak: number;
   longest_streak: number;

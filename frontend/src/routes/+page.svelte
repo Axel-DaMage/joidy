@@ -68,6 +68,7 @@
   let prStats = { open: 0, total: 0 };
   let ghFilter = 'created';
   let ghType = 'all';
+  let activityTab: 'github' | 'recent-notes' = 'recent-notes';
   const GH_ITEM_LIMIT = 9;
   const GH_CACHE_KEY = 'joidy_github_cache_v1';
   const GH_CACHE_TTL_MS = 1000 * 60 * 10;
@@ -176,6 +177,19 @@
     loadGitHubData(ghFilter);
   }
 
+  function setActivityTab(tab: 'github' | 'recent-notes') {
+    activityTab = tab;
+    patchUserSettings({ dashboard: { activityTab: tab } });
+  }
+
+  let recentNotes = $derived(
+    [...$notes].sort((a, b) => {
+      const dateA = new Date(a.updated_at || a.created_at).getTime();
+      const dateB = new Date(b.updated_at || b.created_at).getTime();
+      return dateB - dateA;
+    })
+  );
+
   /** Re-check GitHub connection status and reload data (used when the user
    *  connects/disconnects GitHub from the Settings panel). */
   async function refreshGithubFromEvent() {
@@ -191,6 +205,7 @@
         githubIssues = [];
         githubPRs = [];
         clearGithubCache();
+        activityTab = 'recent-notes';
       }
     } catch (e) {
       logger.error('GitHub refresh error:', e);
@@ -222,9 +237,14 @@
       slideDir = snap.state.slideDir ?? 1;
     }
 
-    const savedNotesUi = loadUserSettings().notesUi;
+    const savedUserSettings = loadUserSettings();
+    const savedNotesUi = savedUserSettings.notesUi;
     if (savedNotesUi?.panelWidth !== undefined) {
       panelWidth = Number(savedNotesUi.panelWidth);
+    }
+    const savedActivityTab = savedUserSettings.dashboard?.activityTab;
+    if (savedActivityTab) {
+      activityTab = savedActivityTab;
     }
     modulePrefsReady = true;
 
@@ -255,8 +275,12 @@
             repoColors,
             ts: Date.now(),
           });
+          if (!savedActivityTab) {
+            activityTab = 'github';
+          }
         } else {
           clearGithubCache();
+          activityTab = 'recent-notes';
         }
       } catch (e) {
         logger.error('GitHub error:', e);
@@ -466,6 +490,9 @@
       itemLimit={GH_ITEM_LIMIT}
       onSetFilter={setGhFilter}
       onSetType={setGhType}
+      activeTab={activityTab}
+      onTabChange={setActivityTab}
+      {recentNotes}
     />
   {/if}
 {/snippet}

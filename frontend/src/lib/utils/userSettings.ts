@@ -2,6 +2,7 @@ export interface UserSettings {
   dashboard?: {
     moduleId?: string;
     panelWidth?: number;
+    activityTab?: 'github' | 'recent-notes';
   };
   pomodoro?: {
     workMins?: number;

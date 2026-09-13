@@ -1,5 +1,8 @@
 <script lang="ts">
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
+  import NoteCard from '$lib/components/NoteCard.svelte';
+  import { goto } from '$app/navigation';
+  import type { Note } from '$lib/api';
   import { t } from 'svelte-i18n';
 
   export let accentColor = '#6366F1';
@@ -16,6 +19,18 @@
   export let onSetFilter: (filter: string) => void;
   export let onSetType: (type: string) => void;
 
+  export let activeTab: 'github' | 'recent-notes' = 'github';
+  export let onTabChange: ((tab: 'github' | 'recent-notes') => void) | undefined = undefined;
+  export let recentNotes: Note[] = [];
+
+  function handleTabClick(tab: 'github' | 'recent-notes') {
+    if (onTabChange) {
+      onTabChange(tab);
+    } else {
+      activeTab = tab;
+    }
+  }
+
   function getPrBadgeInfo(pr: any): { icon: string; color: string } {
     if (pr.merged_at) return { icon: 'GitMerge', color: '#8250DF' };
     if (pr.state === 'open') return { icon: 'GitPullRequest', color: '#238636' };
@@ -30,26 +45,55 @@
 
 <div class="section-header github-header">
   <div class="gh-heading">
-    <h4 style="color: {accentColor}">GitHub</h4>
-    {#if githubLoading}
-      <span class="gh-updating" title={$t('widgets.ghUpdating')}></span>
+    {#if githubConnected}
+      <div class="header-tabs">
+        <button
+          type="button"
+          class="header-tab-btn"
+          class:active={activeTab === 'github'}
+          onclick={() => handleTabClick('github')}
+        >
+          <span style={activeTab === 'github' ? `color: ${accentColor}` : ''}>{$t('widgets.tabGithub')}</span>
+          {#if activeTab === 'github' && githubLoading}
+            <span class="gh-updating" title={$t('widgets.ghUpdating')}></span>
+          {/if}
+        </button>
+        <button
+          type="button"
+          class="header-tab-btn"
+          class:active={activeTab === 'recent-notes'}
+          onclick={() => handleTabClick('recent-notes')}
+        >
+          <span style={activeTab === 'recent-notes' ? `color: ${accentColor}` : ''}>{$t('widgets.tabRecentNotes')}</span>
+        </button>
+      </div>
+    {:else}
+      <h4 style="color: {accentColor}">{$t('widgets.tabRecentNotes')}</h4>
     {/if}
   </div>
-  <div class="gh-filters">
-    <div class="gh-filter">
-      <button class="filter-btn" class:active={ghType === 'all'} onclick={() => onSetType('all')}>{$t('widgets.ghAll')}</button>
-      <button class="filter-btn" class:active={ghType === 'issues'} onclick={() => onSetType('issues')}>{$t('widgets.ghIssues')}</button>
-      <button class="filter-btn" class:active={ghType === 'prs'} onclick={() => onSetType('prs')}>PRs</button>
+
+  {#if githubConnected && activeTab === 'github'}
+    <div class="gh-filters">
+      <div class="gh-filter">
+        <button class="filter-btn" class:active={ghType === 'all'} onclick={() => onSetType('all')}>{$t('widgets.ghAll')}</button>
+        <button class="filter-btn" class:active={ghType === 'issues'} onclick={() => onSetType('issues')}>{$t('widgets.ghIssues')}</button>
+        <button class="filter-btn" class:active={ghType === 'prs'} onclick={() => onSetType('prs')}>PRs</button>
+      </div>
+      <span class="gh-filter-divider">|</span>
+      <div class="gh-filter">
+        <button class="filter-btn" class:active={ghFilter === 'created'} onclick={() => onSetFilter('created')}>{$t('widgets.ghCreated')}</button>
+        <button class="filter-btn" class:active={ghFilter === 'assigned'} onclick={() => onSetFilter('assigned')}>{$t('widgets.ghAssigned')}</button>
+      </div>
     </div>
-    <span class="gh-filter-divider">|</span>
-    <div class="gh-filter">
-      <button class="filter-btn" class:active={ghFilter === 'created'} onclick={() => onSetFilter('created')}>{$t('widgets.ghCreated')}</button>
-      <button class="filter-btn" class:active={ghFilter === 'assigned'} onclick={() => onSetFilter('assigned')}>{$t('widgets.ghAssigned')}</button>
+  {:else}
+    <div class="recent-notes-actions">
+      <a href="/notes" class="view-all-link">{$t('widgets.viewAllNotes')}</a>
     </div>
-  </div>
+  {/if}
 </div>
-  <div class="github-body" style="--gh-items-max: {itemLimit}">
-    {#if githubConnected}
+
+<div class="github-body" style="--gh-items-max: {itemLimit}">
+  {#if githubConnected && activeTab === 'github'}
     {#if githubLoading && githubIssues.length === 0 && githubPRs.length === 0}
       <div class="github-skeleton">
         {#each Array(itemLimit) as _, idx}
@@ -99,10 +143,24 @@
       </div>
       <div class="empty-state success">{$t('widgets.ghNoPending')}</div>
     {/if}
+  {:else}
+    {#if recentNotes.length > 0}
+      <div class="recent-notes-list">
+        {#each recentNotes.slice(0, itemLimit) as note (note.id)}
+          <NoteCard
+            {note}
+            showTags={true}
+            on:select={() => goto(`/notes?id=${note.id}`)}
+          />
+        {/each}
+      </div>
     {:else}
-      <div class="empty-state"><span class="caption">{$t('widgets.ghConnect')}</span></div>
+      <div class="empty-state">
+        <span class="caption">{$t('widgets.recentNotesEmpty')}</span>
+      </div>
     {/if}
-  </div>
+  {/if}
+</div>
 
 <style>
   .github-header {
@@ -118,6 +176,59 @@
   .gh-heading {
     display: flex; align-items: center; gap: 8px;
     flex-shrink: 0;
+  }
+
+  .header-tabs {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .header-tab-btn {
+    background: transparent;
+    border: none;
+    padding: 2px 0;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--text-base, 14px);
+    font-weight: 600;
+    color: var(--text-muted);
+    border-bottom: 2px solid transparent;
+    transition: all var(--t-fast);
+  }
+
+  .header-tab-btn:hover {
+    color: var(--text-secondary);
+  }
+
+  .header-tab-btn.active {
+    border-bottom-color: var(--accent);
+  }
+
+  .recent-notes-actions {
+    display: flex;
+    align-items: center;
+  }
+
+  .view-all-link {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-decoration: none;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: all var(--t-fast);
+  }
+
+  .view-all-link:hover {
+    color: var(--accent);
+    background: var(--elevated);
+  }
+
+  .recent-notes-list {
+    display: flex;
+    flex-direction: column;
   }
 
   .gh-updating {

@@ -46,8 +46,17 @@ def backfill_streak_history(db: Session, streak: PersonalStreak) -> None:
         db.refresh(streak)
 
 
-def compute_streak(checkin_dates: list[date], frequency: str = "daily", frequency_days: int = 1) -> tuple[int, int]:
+def compute_streak(
+    checkin_dates: list[date],
+    frequency: str = "daily",
+    frequency_days: int = 1,
+    snowball_mode: bool = False,
+) -> tuple[int, int]:
     """Returns (current_streak, longest_streak) considering frequency settings.
+
+    In snowball_mode (persistent streak), missed days never break or reset
+    the counter — the streak continues accumulating continuously like a
+    snowball.
 
     Uses the most recent check-in date as the reference point when today is
     not in the check-in set, instead of relying solely on get_local_today().
@@ -58,6 +67,10 @@ def compute_streak(checkin_dates: list[date], frequency: str = "daily", frequenc
         return 0, 0
 
     dates_set = set(checkin_dates)
+
+    if snowball_mode:
+        count = len(dates_set)
+        return count, count
     today = get_local_today()
     # Use the most recent check-in date as the reference "today" when the
     # server's today is not in the check-in set. This handles the case where
@@ -127,7 +140,8 @@ def calculate_streak_stats(streak: PersonalStreak) -> dict:
     current, longest = compute_streak(
         checkin_dates,
         streak.frequency or "daily",
-        streak.frequency_days or 1
+        streak.frequency_days or 1,
+        snowball_mode=bool(getattr(streak, "snowball_mode", False)),
     )
     return {
         "current_streak": current,
