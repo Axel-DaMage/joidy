@@ -171,8 +171,8 @@
         class="card-action-btn fail-btn"
         class:failed={goal.state === 'FAILED'}
         onclick={(e) => { e.stopPropagation(); onFail?.(goal.id); }}
-        title={$t('goalCard.fail')}
-        aria-label={$t('goalCard.fail')}
+        title={goal.state === 'FAILED' ? $t('goalCard.unfail') : $t('goalCard.fail')}
+        aria-label={goal.state === 'FAILED' ? $t('goalCard.unfail') : $t('goalCard.fail')}
       >
         <XCircle size={14} />
       </button>

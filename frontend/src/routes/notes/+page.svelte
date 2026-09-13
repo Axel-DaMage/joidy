@@ -79,6 +79,7 @@
   // ── State ────────────────────────────────────────────────────────────────────
   let search = '';
   let selectedNote: Note | null = null;
+  let loadingNoteContent = false;
   let showEditor = false;
   let editingNew = false;
   let viewMode: 'tree' | 'list' = 'tree';
@@ -700,7 +701,7 @@
   }
 
   // ── Note actions ─────────────────────────────────────────────────────────────
-  function openNote(note: Note) {
+  async function openNote(note: Note) {
     if (selectedId !== String(note.id)) {
       goto(`/notes?id=${note.id}`, { keepFocus: true, noScroll: true });
     }
@@ -710,6 +711,25 @@
     editingNew = false;
     aiSuggestions.set([]);
     ensureNoteEditor();
+
+    // Notes fetched via list_notes have content deferred (content: "").
+    // Fetch full note content if empty or to ensure freshness.
+    const noteId = note.id;
+    loadingNoteContent = true;
+    try {
+      const fullNote = await api.notes.get(noteId);
+      // Ensure the user hasn't switched to another note while fetching
+      if (selectedNote?.id === noteId) {
+        selectedNote = fullNote;
+        notes.update((ns) => ns.map((n) => (n.id === noteId ? fullNote : n)));
+      }
+    } catch (e) {
+      logger.error('[notes] Failed to load note details:', e);
+    } finally {
+      if (selectedNote?.id === noteId) {
+        loadingNoteContent = false;
+      }
+    }
   }
 
   function openNew(folderPath?: string) {
@@ -777,6 +797,7 @@
   function closeEditor() {
     showEditor = false;
     selectedNote = null;
+    loadingNoteContent = false;
     dailySourcePath = null;
     newNoteFolderPath = null;
     dailyInitialTitle = '';

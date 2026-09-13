@@ -378,6 +378,7 @@
     "complete": "Completar objetivo",
     "markPending": "Marcar como pendiente",
     "fail": "Marcar como fallido",
+    "unfail": "Reactivar objetivo",
     "delete": "Eliminar objetivo",
     "deleteConfirm": "Haz clic de nuevo para eliminar",
     "archive": "Archivar objetivo",

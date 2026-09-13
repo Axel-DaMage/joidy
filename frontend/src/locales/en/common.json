@@ -378,6 +378,7 @@
     "complete": "Complete goal",
     "markPending": "Mark as pending",
     "fail": "Mark as failed",
+    "unfail": "Reactivate goal",
     "delete": "Delete goal",
     "deleteConfirm": "Click again to delete",
     "archive": "Archive goal",
