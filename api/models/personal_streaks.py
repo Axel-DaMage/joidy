@@ -30,6 +30,7 @@ class PersonalStreak(Base):
     offset = Column(Integer, default=0)                # For migrating streaks from other apps
     frequency = Column(String, default="daily")        # 'daily' | 'every_n'
     frequency_days = Column(Integer, default=1)        # Every N days (1 = daily)
+    snowball_mode = Column(Boolean, default=False)     # True = streak never fails/resets on missed days
     is_archived = Column(Boolean, default=False)
     best_streak = Column(Integer, default=0)           # Historical record
     total_checkins = Column(Integer, default=0)        # Accumulated check-in count
