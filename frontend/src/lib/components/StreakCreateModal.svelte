@@ -498,12 +498,17 @@
   }
 
   .preview-card.theme-neon {
-    background: color-mix(in srgb, var(--theme-ac) 8%, var(--surface));
-    border: 1px solid var(--theme-ac);
-    box-shadow: 0 0 10px color-mix(in srgb, var(--theme-ac) 25%, transparent);
+    background: radial-gradient(ellipse at 30% 50%, color-mix(in srgb, var(--theme-ac) 14%, transparent) 0%, transparent 75%), var(--surface);
+    border: 1px solid color-mix(in srgb, var(--theme-ac) 50%, var(--border));
+    box-shadow: 0 0 16px color-mix(in srgb, var(--theme-ac) 20%, transparent);
   }
   .preview-card.theme-neon .preview-name {
-    text-shadow: 0 0 10px var(--theme-ac);
+    color: var(--text-primary);
+    font-weight: 600;
+    text-shadow: 0 0 8px color-mix(in srgb, var(--theme-ac) 45%, transparent);
+  }
+  .preview-card.theme-neon .preview-meta {
+    color: var(--text-muted);
   }
 
   .preview-card.theme-glass {
