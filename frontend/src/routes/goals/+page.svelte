@@ -3130,6 +3130,28 @@
     display: none;
   }
 
+  .history-close-btn {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    line-height: 1;
+    transition: all var(--duration-fast) ease;
+    flex-shrink: 0;
+  }
+
+  .history-close-btn:hover {
+    color: var(--text-primary);
+    background: var(--surface-hover);
+    border-color: var(--border-hover, var(--border));
+  }
+
   .new-goal-body {
     flex: 1;
     overflow-y: auto;
