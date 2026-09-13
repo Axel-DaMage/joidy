@@ -168,12 +168,19 @@ function deactivateZenMode() {
 
 export function startFocusMode(noteId?: string) {
   const cfg = get(config);
+  const isAlreadyRunning = get(running);
+
   workMins.set(cfg.duration);
   breakMins.set(cfg.breakDuration);
-  resetTimer();
-  phase.set('work');
-  secondsLeft.set(cfg.duration * 60);
-  pomodorosDone.set(0);
+
+  if (!isAlreadyRunning) {
+    resetTimer();
+    phase.set('work');
+    secondsLeft.set(cfg.duration * 60);
+    pomodorosDone.set(0);
+    startTimer();
+  }
+
   activateZenMode();
   focusSession.set({
     startTime: Date.now(),
@@ -182,10 +189,9 @@ export function startFocusMode(noteId?: string) {
     xpEarned: 0,
   });
   queuedNotifications.set([]);
-  startTimer();
   isActive.set(true);
   logger.info(
-    `[focusMode] Started focus session (${cfg.duration} min)${noteId ? ` for note ${noteId}` : ''}`
+    `[focusMode] Started focus session (${cfg.duration} min)${noteId ? ` for note ${noteId}` : ''}${isAlreadyRunning ? ' (preserving active timer)' : ''}`
   );
 }
 
