@@ -588,7 +588,11 @@
     "ghCreated": "Created",
     "ghAssigned": "Assigned",
     "ghConnect": "Connect GitHub",
-    "ghNoPending": "✓ No pending"
+    "ghNoPending": "✓ No pending",
+    "tabGithub": "GitHub",
+    "tabRecentNotes": "Recent notes",
+    "recentNotesEmpty": "No recent notes",
+    "viewAllNotes": "View all →"
   },
   "graph": {
     "searchPlaceholder": "Search graph...",
