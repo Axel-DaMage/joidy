@@ -168,12 +168,25 @@ function deactivateZenMode() {
 
 export function startFocusMode(noteId?: string) {
   const cfg = get(config);
-  workMins.set(cfg.duration);
-  breakMins.set(cfg.breakDuration);
-  resetTimer();
-  phase.set('work');
-  secondsLeft.set(cfg.duration * 60);
-  pomodorosDone.set(0);
+  const isTimerRunning = get(running);
+  const isWorkPhase = get(phase) === 'work';
+  const totalSeconds = get(totalSec);
+  const currentSecLeft = get(secondsLeft);
+  const hasProgress = isWorkPhase && currentSecLeft > 0 && currentSecLeft < totalSeconds;
+  const isSessionActive = isTimerRunning || hasProgress || !isWorkPhase;
+
+  if (!isSessionActive) {
+    workMins.set(cfg.duration);
+    breakMins.set(cfg.breakDuration);
+    resetTimer();
+    phase.set('work');
+    secondsLeft.set(cfg.duration * 60);
+    pomodorosDone.set(0);
+    startTimer();
+  } else if (!isTimerRunning) {
+    startTimer();
+  }
+
   activateZenMode();
   focusSession.set({
     startTime: Date.now(),
@@ -182,18 +195,19 @@ export function startFocusMode(noteId?: string) {
     xpEarned: 0,
   });
   queuedNotifications.set([]);
-  startTimer();
   isActive.set(true);
   logger.info(
-    `[focusMode] Started focus session (${cfg.duration} min)${noteId ? ` for note ${noteId}` : ''}`
+    `[focusMode] Started focus session (${cfg.duration} min)${noteId ? ` for note ${noteId}` : ''}${isSessionActive ? ' (preserving timer state)' : ''}`
   );
 }
 
-export function stopFocusMode() {
+export function stopFocusMode(options?: { stopTimer?: boolean }) {
   if (!get(isActive)) return;
   const session = get(focusSession);
   const wasRunning = get(running);
-  stopTimer();
+  if (options?.stopTimer) {
+    stopTimer();
+  }
   let xpEarned = 0;
   if (session.startTime !== null) {
     const elapsedMin = Math.max(1, Math.round((Date.now() - session.startTime) / 60000));
