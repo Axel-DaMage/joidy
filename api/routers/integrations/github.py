@@ -56,19 +56,26 @@ class CreateCommentRequest(BaseModel):
     body: str
 
 
-def _headers() -> dict[str, str]:
-    if not settings.github_token:
-        raise HTTPException(status_code=400, detail="GitHub token not configured")
-    return {
-        "Authorization": f"Bearer {settings.github_token}",
+def _headers(optional: bool = False) -> dict[str, str]:
+    headers = {
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "Joidy-App",
     }
+    if settings.github_token:
+        headers["Authorization"] = f"Bearer {settings.github_token}"
+    elif not optional:
+        raise HTTPException(status_code=400, detail="GitHub token not configured")
+    return headers
 
 
-async def _fetch(url: str, params: dict | None = None) -> Any:
+async def _fetch(url: str, params: dict | None = None, optional_auth: bool = False) -> Any:
     async with httpx.AsyncClient(timeout=30.0) as client:
-        r = await client.get(f"{GITHUB_API}{url}", headers=_headers(), params=params or {})
+        r = await client.get(
+            f"{GITHUB_API}{url}",
+            headers=_headers(optional=optional_auth),
+            params=params or {},
+        )
         r.raise_for_status()
         return r.json()
 
@@ -95,18 +102,53 @@ async def _delete(url: str) -> None:
 
 @router.get("/status")
 async def github_status():
-    if not settings.github_token:
-        return {"connected": False, "username": None}
-    try:
-        user = await _fetch("/user")
-        return {"connected": True, "username": user.get("login")}
-    except Exception:
-        return {"connected": False, "username": None}
+    if settings.github_token:
+        try:
+            user = await _fetch("/user")
+            return {"connected": True, "username": user.get("login")}
+        except Exception:
+            return {"connected": False, "username": None}
+
+    if settings.github_username:
+        try:
+            user = await _fetch(f"/users/{settings.github_username}", optional_auth=True)
+            return {"connected": True, "username": user.get("login") or settings.github_username}
+        except Exception:
+            return {"connected": False, "username": None}
+
+    return {"connected": False, "username": None}
 
 
 @router.get("/user")
 async def get_current_user():
-    return await _fetch("/user")
+    if settings.github_token:
+        return await _fetch("/user")
+    if settings.github_username:
+        return await _fetch(f"/users/{settings.github_username}", optional_auth=True)
+    raise HTTPException(status_code=400, detail="GitHub token or username not configured")
+
+
+# Paletas de colores para repos (tema oscuro = colores claros, tema claro = colores oscuros)
+REPO_PALETTES = [
+    ["#7C3AED", "#A78BFA", "#C4B5FD"],  # Violeta
+    ["#0EA5E9", "#38BDF8", "#7DD3FC"],  # Cyan
+    ["#F59E0B", "#FBBF24", "#FCD34D"],  # Amber
+    ["#10B981", "#34D399", "#6EE7B7"],  # Emerald
+    ["#EF4444", "#F87171", "#FCA5A5"],  # Red
+    ["#EC4899", "#F472B6", "#F9A8D4"],  # Pink
+    ["#8B5CF6", "#A78BFA", "#C4B5FD"],  # Purple
+    ["#06B6D4", "#22D3EE", "#67E8F9"],  # Teal
+    ["#F97316", "#FB923C", "#FDBA74"],  # Orange
+    ["#6366F1", "#818CF8", "#A5B4FC"],  # Indigo
+]
+
+
+def get_repo_color(repo_name: str, is_dark: bool = True) -> str:
+    """Genera un color consistente para un repo basado en su nombre."""
+    hash_val = sum(ord(c) * (idx + 1) for idx, c in enumerate(repo_name))
+    palette_idx = hash_val % len(REPO_PALETTES)
+    color_idx = 0 if is_dark else 2
+    return REPO_PALETTES[palette_idx][color_idx]
 
 
 @router.get("/repos")
@@ -114,10 +156,21 @@ async def list_repos(
     page: int = Query(1, ge=1),
     per_page: int = Query(30, ge=1, le=100),
     sort: str = Query("updated"),
+    is_dark: bool = Query(True, description="Usar colores claros para tema oscuro"),
 ):
-    repos = await _fetch(
-        "/user/repos", {"page": page, "per_page": per_page, "sort": sort}
-    )
+    if settings.github_token:
+        repos = await _fetch(
+            "/user/repos", {"page": page, "per_page": per_page, "sort": sort}
+        )
+    elif settings.github_username:
+        repos = await _fetch(
+            f"/users/{settings.github_username}/repos",
+            {"page": page, "per_page": per_page, "sort": sort},
+            optional_auth=True,
+        )
+    else:
+        repos = []
+
     return {
         "repos": [
             {
@@ -129,6 +182,7 @@ async def list_repos(
                 "url": r["html_url"],
                 "default_branch": r.get("default_branch", "main"),
                 "updated_at": r["updated_at"],
+                "color": get_repo_color(r["full_name"], is_dark),
             }
             for r in repos
         ]
@@ -137,7 +191,7 @@ async def list_repos(
 
 @router.get("/repos/{owner}/{repo}")
 async def get_repo(owner: str, repo: str):
-    return await _fetch(f"/repos/{owner}/{repo}")
+    return await _fetch(f"/repos/{owner}/{repo}", optional_auth=True)
 
 
 @router.post("/repos/db")
@@ -230,10 +284,25 @@ async def get_my_issues(
     filter: str = Query("created", pattern="^(all|created|assigned)$"),
 ):
     try:
-        user = await _fetch("/user")
-        username = user.get("login", "")
-
-        repos = await _fetch("/user/repos", {"per_page": 30, "sort": "updated"})
+        username = ""
+        repos = []
+        if settings.github_token:
+            user = await _fetch("/user")
+            username = user.get("login", "")
+            repos = await _fetch("/user/repos", {"per_page": 30, "sort": "updated"})
+        elif settings.github_username:
+            username = settings.github_username
+            repos = await _fetch(
+                f"/users/{username}/repos",
+                {"per_page": 30, "sort": "updated"},
+                optional_auth=True,
+            )
+        else:
+            return {
+                "issues": [],
+                "stats": {"total": 0, "open": 0, "closed": 0},
+                "filter": filter,
+            }
 
         async def fetch_issues_for_repo(repo: dict) -> list:
             try:
@@ -244,7 +313,11 @@ async def get_my_issues(
                 elif filter == "assigned":
                     params["assignee"] = username
 
-                issues = await _fetch(f"/repos/{repo['full_name']}/issues", params)
+                issues = await _fetch(
+                    f"/repos/{repo['full_name']}/issues",
+                    params,
+                    optional_auth=bool(not settings.github_token),
+                )
                 for i in issues:
                     if "/pull/" in i.get("html_url", ""):
                         continue
@@ -263,7 +336,7 @@ async def get_my_issues(
                 if "/pull/" not in i.get("html_url", ""):
                     all_issues.append(i)
 
-        if filter == "all":
+        if filter == "all" and username:
             filtered_by_user = [i for i in all_issues if i.get("user", {}).get("login") == username]
             if len(filtered_by_user) > 0:
                 all_issues = filtered_by_user
@@ -309,13 +382,28 @@ async def get_my_pulls(
     filter: str = Query("created", pattern="^(all|created|assigned)$"),
 ):
     try:
-        user = await _fetch("/user")
-        username = user.get("login", "")
-
-        repos = await _fetch("/user/repos", {"per_page": 30, "sort": "updated"})
+        username = ""
+        repos = []
+        if settings.github_token:
+            user = await _fetch("/user")
+            username = user.get("login", "")
+            repos = await _fetch("/user/repos", {"per_page": 30, "sort": "updated"})
+        elif settings.github_username:
+            username = settings.github_username
+            repos = await _fetch(
+                f"/users/{username}/repos",
+                {"per_page": 30, "sort": "updated"},
+                optional_auth=True,
+            )
+        else:
+            return {
+                "pulls": [],
+                "stats": {"total": 0, "open": 0, "closed": 0, "draft": 0},
+                "filter": filter,
+            }
 
         async def fetch_pulls_for_repo(repo: dict) -> list:
-            if not repo.get("permissions", {}).get("pull", False):
+            if settings.github_token and not repo.get("permissions", {}).get("pull", True):
                 return []
             try:
                 query_state = "all" if filter in ["created", "assigned"] else state
@@ -325,7 +413,11 @@ async def get_my_pulls(
                 elif filter == "assigned":
                     params["assignee"] = username
 
-                pulls = await _fetch(f"/repos/{repo['full_name']}/pulls", params)
+                pulls = await _fetch(
+                    f"/repos/{repo['full_name']}/pulls",
+                    params,
+                    optional_auth=bool(not settings.github_token),
+                )
                 for p in pulls:
                     p["_repo_full_name"] = repo["full_name"]
                 return pulls
@@ -340,7 +432,7 @@ async def get_my_pulls(
                 continue
             all_pulls.extend(r)
 
-        if filter == "all":
+        if filter == "all" and username:
             filtered_by_user = [p for p in all_pulls if p.get("user", {}).get("login") == username]
             if len(filtered_by_user) > 0:
                 all_pulls = filtered_by_user
@@ -362,13 +454,13 @@ async def get_my_pulls(
                 }
                 for p in all_pulls[:per_page]
             ],
-        "stats": {
-            "total": len(all_pulls),
-            "open": len([p for p in all_pulls if p.get("state") == "open"]),
-            "closed": len([p for p in all_pulls if p.get("state") == "closed"]),
-            "draft": len([p for p in all_pulls if p.get("draft", False)]),
-        },
-        "filter": filter,
+            "stats": {
+                "total": len(all_pulls),
+                "open": len([p for p in all_pulls if p.get("state") == "open"]),
+                "closed": len([p for p in all_pulls if p.get("state") == "closed"]),
+                "draft": len([p for p in all_pulls if p.get("draft", False)]),
+            },
+            "filter": filter,
         }
     except Exception as e:
         print(f"Error in get_my_pulls: {e}")
@@ -776,7 +868,7 @@ GITHUB_OAUTH_SCOPES = [
 @router.get("/oauth/device/start")
 async def start_device_flow():
     """
-    Inicia elDevice Flow de OAuth para GitHub.
+    Inicia el Device Flow de OAuth para GitHub.
     Retorna el device_code y user_code para que el usuario autorice.
     """
     if not settings.github_client_id:
@@ -787,20 +879,37 @@ async def start_device_flow():
 
     device_auth_url = "https://github.com/login/device/code"
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        r = await client.post(
-            device_auth_url,
-            headers={
-                "Accept": "application/json",
-                "Content-Type": "application/json",
-            },
-            json={
-                "client_id": settings.github_client_id,
-                "scope": " ".join(GITHUB_OAUTH_SCOPES),
-            },
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            r = await client.post(
+                device_auth_url,
+                headers={
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "client_id": settings.github_client_id,
+                    "scope": " ".join(GITHUB_OAUTH_SCOPES),
+                },
+            )
+            r.raise_for_status()
+            data = r.json()
+    except httpx.HTTPStatusError as e:
+        error_msg = f"GitHub device auth failed: {e.response.status_code}"
+        try:
+            err_json = e.response.json()
+            error_msg = err_json.get("error_description") or err_json.get("error") or error_msg
+        except Exception:
+            pass
+        raise HTTPException(status_code=400, detail=error_msg)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Failed to communicate with GitHub: {str(e)}")
+
+    if data.get("error"):
+        raise HTTPException(
+            status_code=400,
+            detail=data.get("error_description") or data.get("error"),
         )
-        r.raise_for_status()
-        data = r.json()
 
     return {
         "device_code": data.get("device_code"),
@@ -828,22 +937,33 @@ async def poll_device_code(
 
     token_url = "https://github.com/login/oauth/access_token"
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        r = await client.post(
-            token_url,
-            headers={
-                "Accept": "application/json",
-                "Content-Type": "application/json",
-            },
-            json={
-                "client_id": settings.github_client_id,
-                "client_secret": settings.github_client_secret,
-                "device_code": device_code,
-                "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
-            },
-        )
-        r.raise_for_status()
-        data = r.json()
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            r = await client.post(
+                token_url,
+                headers={
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "client_id": settings.github_client_id,
+                    "client_secret": settings.github_client_secret,
+                    "device_code": device_code,
+                    "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+                },
+            )
+            r.raise_for_status()
+            data = r.json()
+    except httpx.HTTPStatusError as e:
+        error_msg = f"GitHub token polling failed: {e.response.status_code}"
+        try:
+            err_json = e.response.json()
+            error_msg = err_json.get("error_description") or err_json.get("error") or error_msg
+        except Exception:
+            pass
+        raise HTTPException(status_code=400, detail=error_msg)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Failed to communicate with GitHub: {str(e)}")
 
     error = data.get("error")
     if error == "authorization_pending":
@@ -854,6 +974,8 @@ async def poll_device_code(
         return {"status": "expired", "message": "Device code expired. Start new flow"}
     elif error == "access_denied":
         return {"status": "denied", "message": "User denied access"}
+    elif error:
+        return {"status": "error", "message": data.get("error_description") or error}
 
     access_token = data.get("access_token")
     token_type = data.get("token_type", "bearer")
@@ -992,45 +1114,3 @@ async def list_oauth_scopes():
     Lista los scopes disponibles para OAuth.
     """
     return {"scopes": GITHUB_OAUTH_SCOPES}
-
-
-# Paletas de colores para repos (tema oscuro = colores claros, tema claro = colores oscuros)
-REPO_PALETTES = [
-    ["#7C3AED", "#A78BFA", "#C4B5FD"],  # Violeta
-    ["#0EA5E9", "#38BDF8", "#7DD3FC"],  # Cyan
-    ["#F59E0B", "#FBBF24", "#FCD34D"],  # Amber
-    ["#10B981", "#34D399", "#6EE7B7"],  # Emerald
-    ["#EF4444", "#F87171", "#FCA5A5"],  # Red
-    ["#EC4899", "#F472B6", "#F9A8D4"],  # Pink
-    ["#8B5CF6", "#A78BFA", "#C4B5FD"],  # Purple
-    ["#06B6D4", "#22D3EE", "#67E8F9"],  # Teal
-    ["#F97316", "#FB923C", "#FDBA74"],  # Orange
-    ["#6366F1", "#818CF8", "#A5B4FC"], # Indigo
-]
-
-
-def get_repo_color(repo_name: str, is_dark: bool = True) -> str:
-    """Genera un color consistente para un repo basado en su nombre."""
-    hash_val = sum(ord(c) * (idx + 1) for idx, c in enumerate(repo_name))
-    palette_idx = hash_val % len(REPO_PALETTES)
-    color_idx = 0 if is_dark else 2
-    return REPO_PALETTES[palette_idx][color_idx]
-
-
-@router.get("/repos")
-async def list_my_repos(
-    per_page: int = Query(30, le=100),
-    is_dark: bool = Query(True, description="Usar colores claros para tema oscuro"),
-):
-    repos = await _fetch("/user/repos", {"per_page": per_page, "sort": "updated"})
-    return {
-        "repos": [
-            {
-                "id": r["id"],
-                "name": r["name"],
-                "full_name": r["full_name"],
-                "color": get_repo_color(r["full_name"], is_dark),
-            }
-            for r in repos
-        ]
-    }
