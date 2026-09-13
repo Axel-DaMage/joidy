@@ -499,6 +499,10 @@
   }
 
   async function failGoal(id: number) {
+    const target = goals.find((g) => g.id === id);
+    if (target && target.state === 'FAILED') {
+      return updateGoalState(id, 'ACTIVE');
+    }
     try {
       const result = await api.goals.fail(id);
       goals = goals.map((g) => (g.id === id ? result : g));

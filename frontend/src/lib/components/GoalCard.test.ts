@@ -246,3 +246,30 @@ describe('GoalCard — pin button', () => {
     expect(toggle).toHaveBeenCalledWith(7);
   });
 });
+
+describe('GoalCard — fail button toggle', () => {
+  beforeEach(() => cleanup());
+
+  it('renders fail button with unfail title when goal is FAILED', () => {
+    const onFail = vi.fn();
+    _ctx = { ..._ctx, onFail };
+    const { container } = render(GoalCard, {
+      goal: baseGoal({ id: 10, state: 'FAILED' }),
+    });
+    const failBtn = container.querySelector('.fail-btn') as HTMLButtonElement;
+    expect(failBtn).not.toBeNull();
+    expect(failBtn.classList.contains('failed')).toBe(true);
+    expect(failBtn.title).toBe('Reactivar objetivo');
+  });
+
+  it('calls onFail when clicked', () => {
+    const onFail = vi.fn();
+    _ctx = { ..._ctx, onFail };
+    const { container } = render(GoalCard, {
+      goal: baseGoal({ id: 10, state: 'FAILED' }),
+    });
+    const failBtn = container.querySelector('.fail-btn') as HTMLButtonElement;
+    failBtn.click();
+    expect(onFail).toHaveBeenCalledWith(10);
+  });
+});
