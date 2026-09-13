@@ -179,8 +179,12 @@
   $: previewStyle = `--theme-ac: ${color};`;
 
   function previewFreqLabel(): string {
-    if (frequency === 'every_n' && frequencyDays > 1) return `cada ${frequencyDays}d`;
-    return 'diaria';
+    if (frequency === 'weekly') return $t('streakCreateModal.weekly');
+    if (frequency === 'monthly') return $t('streakCreateModal.monthly');
+    if (frequency === 'every_n' && frequencyDays > 1) {
+      return $t('streaks.everyNDays', { values: { n: frequencyDays } });
+    }
+    return $t('streakCreateModal.daily');
   }
 </script>
 
@@ -214,7 +218,7 @@
                 <button class="freq-btn" class:selected={frequency === 'daily'} onclick={() => { frequency = 'daily'; frequencyDays = 1; }}>{$t('streakCreateModal.daily')}</button>
                 <button class="freq-btn" class:selected={frequency === 'weekly'} onclick={() => { frequency = 'weekly'; frequencyDays = 1; }}>{$t('streakCreateModal.weekly')}</button>
                 <button class="freq-btn" class:selected={frequency === 'monthly'} onclick={() => { frequency = 'monthly'; frequencyDays = 1; }}>{$t('streakCreateModal.monthly')}</button>
-                <button class="freq-btn" class:selected={frequency === 'every_n'} onclick={() => { frequency = 'every_n'; }}>cada N</button>
+                <button class="freq-btn" class:selected={frequency === 'every_n'} onclick={() => { frequency = 'every_n'; }}>{$t('streakCreateModal.everyN')}</button>
               </div>
             </div>
 
@@ -222,7 +226,7 @@
               <div class="freq-n-row">
                 <span class="freq-n-label">{$t('streakCreateModal.every')}</span>
                 <input type="number" bind:value={frequencyDays} min="1" max="365" class="freq-n-input" />
-                <span class="freq-n-label">días</span>
+                <span class="freq-n-label">{$t('streakCreateModal.days')}</span>
               </div>
             {/if}
 
@@ -284,7 +288,7 @@
               </div>
               <div class="preview-info">
                 <span class="preview-name">{name || 'Nombre de la racha'}</span>
-                <span class="preview-meta mono">{name ? previewFreqLabel() : 'frecuencia'}</span>
+                <span class="preview-meta mono">{name ? previewFreqLabel() : $t('streakCreateModal.frequencyPlaceholder')}</span>
               </div>
             </div>
 

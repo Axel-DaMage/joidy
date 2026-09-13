@@ -329,10 +329,22 @@
   }
 
   function freqLabel(s: PersonalStreak): string {
-    return (
-      s.description?.trim() ||
-      (s.frequency === 'every_n' && s.frequency_days > 1 ? `cada ${s.frequency_days}d` : 'diaria')
-    );
+    if (s.frequency === 'weekly') {
+      return $t('streaks.frequencyWeekly');
+    }
+    if (s.frequency === 'monthly') {
+      return $t('streaks.frequencyMonthly');
+    }
+    if (s.frequency === 'every_n' && s.frequency_days > 1) {
+      return $t('streaks.everyNDays', { values: { n: s.frequency_days } });
+    }
+    return $t('streaks.frequencyDaily');
+  }
+
+  function streakUnitLabel(s: PersonalStreak): string {
+    if (s.frequency === 'weekly') return $t('streaks.unitWeeks');
+    if (s.frequency === 'monthly') return $t('streaks.unitMonths');
+    return $t('streaks.unitDays');
   }
 
   // Completion detection
@@ -472,7 +484,7 @@
                       <span class="counter-label mono">{$t('streaks.finished')}</span>
                     {:else}
                       <span class="counter-num mono">{selected.current_streak}</span>
-                      <span class="counter-label mono">{$t('streaks.days')}</span>
+                      <span class="counter-label mono">{streakUnitLabel(selected)}</span>
                     {/if}
                   </button>
                 </div>

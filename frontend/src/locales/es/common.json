@@ -355,7 +355,10 @@
     "daily": "Diaria",
     "weekly": "Semanal",
     "monthly": "Mensual",
+    "everyN": "Cada N",
     "every": "Cada",
+    "days": "días",
+    "frequencyPlaceholder": "frecuencia",
     "icon": "Icono",
     "emoji": "Emoji",
     "color": "Color",
@@ -660,7 +663,16 @@
     "deleteWarning": "Esta acción no se puede deshacer.",
     "connectionError": "Error de conexión con el sistema de rachas.",
     "noName": "Sin nombre",
-    "streakDays": "días de racha"
+    "streakDays": "días de racha",
+    "frequencyDaily": "Diaria",
+    "frequencyWeekly": "Semanal",
+    "frequencyMonthly": "Mensual",
+    "frequencyEveryN": "Cada {n}d",
+    "everyNDays": "cada {n}d",
+    "unitDays": "DÍAS",
+    "unitWeeks": "SEMANAS",
+    "unitMonths": "MESES",
+    "completedDays": "Finalizado {progress} días"
   },
   "home": {
     "modules": {
