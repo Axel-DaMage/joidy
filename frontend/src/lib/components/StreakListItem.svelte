@@ -178,12 +178,23 @@
   }
 
   .streak-item.theme-neon {
-    background: color-mix(in srgb, var(--theme-ac) 8%, var(--surface));
+    background: color-mix(in srgb, var(--theme-ac) 10%, var(--surface));
     border: 1px solid var(--theme-ac);
-    box-shadow: 0 0 10px color-mix(in srgb, var(--theme-ac) 25%, transparent);
+    box-shadow: 0 0 12px color-mix(in srgb, var(--theme-ac) 25%, transparent),
+                inset 0 0 8px color-mix(in srgb, var(--theme-ac) 8%, transparent);
   }
-  .streak-item.theme-neon .item-name, .streak-item.theme-neon .item-num {
-    text-shadow: 0 0 10px var(--theme-ac);
+  .streak-item.theme-neon .item-name {
+    color: var(--text-primary);
+    font-weight: 600;
+    text-shadow: 0 0 6px color-mix(in srgb, var(--theme-ac) 60%, transparent);
+  }
+  .streak-item.theme-neon .item-num {
+    font-weight: 700;
+    text-shadow: 0 0 6px color-mix(in srgb, var(--theme-ac) 60%, transparent);
+  }
+  .streak-item.theme-neon .item-meta {
+    color: color-mix(in srgb, var(--theme-ac) 50%, var(--text-muted));
+    font-weight: 500;
   }
 
   .streak-item.theme-glass {

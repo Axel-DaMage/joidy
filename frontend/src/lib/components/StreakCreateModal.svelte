@@ -498,12 +498,19 @@
   }
 
   .preview-card.theme-neon {
-    background: color-mix(in srgb, var(--theme-ac) 8%, var(--surface));
+    background: color-mix(in srgb, var(--theme-ac) 10%, var(--surface));
     border: 1px solid var(--theme-ac);
-    box-shadow: 0 0 10px color-mix(in srgb, var(--theme-ac) 25%, transparent);
+    box-shadow: 0 0 12px color-mix(in srgb, var(--theme-ac) 25%, transparent),
+                inset 0 0 8px color-mix(in srgb, var(--theme-ac) 8%, transparent);
   }
   .preview-card.theme-neon .preview-name {
-    text-shadow: 0 0 10px var(--theme-ac);
+    color: var(--text-primary);
+    font-weight: 600;
+    text-shadow: 0 0 6px color-mix(in srgb, var(--theme-ac) 60%, transparent);
+  }
+  .preview-card.theme-neon .preview-meta {
+    color: color-mix(in srgb, var(--theme-ac) 50%, var(--text-muted));
+    font-weight: 500;
   }
 
   .preview-card.theme-glass {
