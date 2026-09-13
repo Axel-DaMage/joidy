@@ -48,7 +48,7 @@
       <span class="item-name">{streak.name}</span>
       <span class="item-meta mono">
         {#if isStreakCompleted(streak)}
-          Finalizado {getDaysForCompletion(streak)} días
+          {$t('streaks.completedDays', { values: { progress: getDaysForCompletion(streak) } })}
         {:else}
           {freqLabel(streak)}
         {/if}

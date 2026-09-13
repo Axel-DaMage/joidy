@@ -355,7 +355,10 @@
     "daily": "Daily",
     "weekly": "Weekly",
     "monthly": "Monthly",
+    "everyN": "Every N",
     "every": "Every",
+    "days": "days",
+    "frequencyPlaceholder": "frequency",
     "icon": "Icon",
     "emoji": "Emoji",
     "color": "Color",
@@ -660,7 +663,16 @@
     "deleteWarning": "This action cannot be undone.",
     "connectionError": "Connection error with the streak system.",
     "noName": "No name",
-    "streakDays": "days of streak"
+    "streakDays": "days of streak",
+    "frequencyDaily": "Daily",
+    "frequencyWeekly": "Weekly",
+    "frequencyMonthly": "Monthly",
+    "frequencyEveryN": "Every {n}d",
+    "everyNDays": "every {n}d",
+    "unitDays": "DAYS",
+    "unitWeeks": "WEEKS",
+    "unitMonths": "MONTHS",
+    "completedDays": "Completed {progress} days"
   },
   "home": {
     "modules": {
