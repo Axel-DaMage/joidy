@@ -18,6 +18,7 @@
       color: string; theme: string; category: string;
       start_date: string | null; target_date: string | null;
       offset: number; frequency: string; frequency_days: number;
+      snowball_mode: boolean;
       freeze_count: number;
     };
     archive: void;
@@ -36,6 +37,7 @@
   let offset = 0;
   let frequency = 'daily';
   let frequencyDays = 1;
+  let snowballMode = false;
   let freezeCount = 0;
   let useIcon = false;
 
@@ -124,6 +126,7 @@
       offset = editStreak.offset;
       frequency = editStreak.frequency || 'daily';
       frequencyDays = editStreak.frequency_days || 1;
+      snowballMode = !!editStreak.snowball_mode;
       freezeCount = editStreak.freeze_count || 0;
     } else {
       resetForm();
@@ -136,7 +139,7 @@
     description = ''; color = '#c8a96e'; theme = 'solid';
     category = 'general'; startDate = new Date().toISOString().split('T')[0];
     targetDate = ''; offset = 0; frequency = 'daily';
-    frequencyDays = 1; freezeCount = 0;
+    frequencyDays = 1; snowballMode = false; freezeCount = 0;
   }
 
   function close() { dispatch('close'); }
@@ -156,6 +159,7 @@
       offset,
       frequency,
       frequency_days: Math.max(1, frequencyDays),
+      snowball_mode: snowballMode,
       freeze_count: freezeCount,
     });
     // Don't call close() here — let the parent close after it processes save
@@ -250,6 +254,14 @@
               <label><Snowflake size={11} /> Freezes (escudos)</label>
               <input type="number" bind:value={freezeCount} min="0" max="30" />
               <span class="field-hint">{$t('streakCreateModal.freezeHint')}</span>
+            </div>
+
+            <div class="field">
+              <label class="checkbox-label">
+                <input type="checkbox" bind:checked={snowballMode} class="snowball-checkbox" />
+                <span>Modo persistente / Bola de nieve (nunca falla)</span>
+              </label>
+              <span class="field-hint">Si omites algún día, la racha nunca se reinicia ni se rompe; se conserva para seguir acumulando.</span>
             </div>
 
             <div class="field">
@@ -597,6 +609,24 @@
 
   .field-row { display: flex; gap: 12px; align-items: flex-start; }
   .field.half { flex: 1; min-width: 0; }
+
+  .checkbox-label {
+    display: flex !important;
+    align-items: center;
+    justify-content: flex-start !important;
+    gap: 8px;
+    cursor: pointer;
+    text-transform: none !important;
+    font-size: 12px !important;
+    color: var(--text-primary) !important;
+  }
+
+  .snowball-checkbox {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent, var(--xp));
+    cursor: pointer;
+  }
 
   /* Frequency */
   .freq-row { display: flex; gap: 6px; }

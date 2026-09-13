@@ -144,7 +144,12 @@ def _streak_to_dict(streak: PersonalStreak, days_history: int = 365) -> dict:
     today = get_local_today()
     checkin_dates = [c.check_date for c in streak.checkins]
     checkin_map = {c.check_date: c for c in streak.checkins}
-    current, longest = compute_streak(checkin_dates, streak.frequency or "daily", streak.frequency_days or 1)
+    current, longest = compute_streak(
+        checkin_dates,
+        streak.frequency or "daily",
+        streak.frequency_days or 1,
+        snowball_mode=bool(getattr(streak, "snowball_mode", False)),
+    )
 
     # Apply offset
     effective_current = current + streak.offset
@@ -209,6 +214,7 @@ def _streak_to_dict(streak: PersonalStreak, days_history: int = 365) -> dict:
         "offset": streak.offset,
         "frequency": streak.frequency or "daily",
         "frequency_days": streak.frequency_days or 1,
+        "snowball_mode": bool(getattr(streak, "snowball_mode", False)),
         "is_archived": streak.is_archived or False,
         "current_streak": effective_current,
         "longest_streak": effective_longest,
@@ -239,6 +245,7 @@ class StreakCreate(BaseModel):
     offset: int = 0
     frequency: str = "daily"
     frequency_days: int = 1
+    snowball_mode: bool = False
     freeze_count: int = 0
 
 
@@ -255,6 +262,7 @@ class StreakUpdate(BaseModel):
     offset: int | None = None
     frequency: str | None = None
     frequency_days: int | None = None
+    snowball_mode: bool | None = None
     is_archived: bool | None = None
     freeze_count: int | None = None
 
@@ -365,6 +373,7 @@ def create_streak(data: StreakCreate, db: Session = Depends(get_db)):
         offset=data.offset,
         frequency=data.frequency,
         frequency_days=max(1, data.frequency_days),
+        snowball_mode=data.snowball_mode,
         freeze_count=data.freeze_count,
     )
     db.add(streak)
@@ -386,7 +395,7 @@ def update_streak(streak_id: int, data: StreakUpdate, db: Session = Depends(get_
 
     updatable = [
         "name", "emoji", "icon", "description", "color", "theme", "category",
-        "target_date", "frequency", "frequency_days",
+        "target_date", "frequency", "frequency_days", "snowball_mode",
         "is_archived", "freeze_count",
     ]
     for field in updatable:
