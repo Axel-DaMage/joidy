@@ -66,6 +66,12 @@ joidy up
 irm https://raw.githubusercontent.com/Axel-DaMage/joidy/main/scripts/install.ps1 | iex
 ```
 
+> **Nota para Windows**: Requiere [Docker Desktop](https://docs.docker.com/desktop/install/windows-install/) con el backend de WSL 2 habilitado (`wsl --install`). Si PowerShell bloquea scripts locales, habilita la ejecución ejecutando:
+> ```powershell
+> Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+> ```
+> O puedes ejecutar `joidy.cmd` desde cualquier consola (CMD o PowerShell). Luego inicia con `joidy up`.
+
 ### Homebrew
 
 ```bash
