@@ -1,4 +1,4 @@
-# install-autostart.ps1 — Set up Windows Task Scheduler for Joidy auto-start on logon.
+# install-autostart.ps1 - Set up Windows Task Scheduler for Joidy auto-start on logon.
 #
 # Usage:
 #   .\scripts\install-autostart.ps1          # Install auto-start
@@ -17,9 +17,9 @@ if ($Remove) {
   $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
   if ($task) {
     Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false
-    Write-Host "✓ Joidy auto-start task removed."
+    Write-Host "$([char]0x2713) Joidy auto-start task removed."
   } else {
-    Write-Host "⚠ No Joidy auto-start task found."
+    Write-Host "$([char]0x26A0) No Joidy auto-start task found."
   }
   exit 0
 }
@@ -29,7 +29,7 @@ Write-Host "Setting up Joidy auto-start via Windows Task Scheduler..."
 # Check if running on Windows
 $osEnv = $env:OS
 if ($PSVersionTable.Platform -ne "Win32NT" -and (-not $osEnv -or -not $osEnv.Contains("Windows"))) {
-  Write-Host "⚠ This script is for Windows. For Linux, use install-autostart.sh"
+  Write-Host "$([char]0x26A0) This script is for Windows. For Linux, use install-autostart.sh"
   exit 1
 }
 
@@ -49,7 +49,7 @@ if (Test-Path $EnvFile) {
 # Create the scheduled task action
 $Action = New-ScheduledTaskAction `
   -Execute "powershell.exe" `
-  -Argument "-NoProfile -WindowStyle Hidden -Command `"Set-Location '$ProjectDir'; docker compose ${AiProfileArg}up -d`""
+  -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command `"Set-Location '$ProjectDir'; docker compose ${AiProfileArg}up -d`""
 
 # Trigger at user logon
 $Trigger = New-ScheduledTaskTrigger -AtLogOn
@@ -70,7 +70,7 @@ Register-ScheduledTask `
   -Force
 
 Write-Host ""
-Write-Host "✓ Joidy auto-start task installed."
+Write-Host "$([char]0x2713) Joidy auto-start task installed."
 Write-Host ""
 Write-Host "The services will start automatically when you log in."
 Write-Host ""

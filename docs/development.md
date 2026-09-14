@@ -121,20 +121,27 @@ joidy/
 
 ### 3.2 Windows (PowerShell)
 
+Requiere Docker Desktop con backend de WSL 2 (`wsl --install`). Si PowerShell restringe scripts, ejecuta:
 ```powershell
-# Quick start
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+```
+
+```powershell
+# Quick start interactivo
 powershell -ExecutionPolicy Bypass -File start.ps1
 
-# Iniciar
+# O utilizando el CLI joidy (recomendado):
+joidy up             # Iniciar servicios
+joidy status         # Ver estado de los contenedores
+joidy logs           # Ver logs en tiempo real
+joidy logs api       # Logs de un servicio específico
+joidy down           # Detener servicios
+joidy pull           # Descargar últimas imágenes
+
+# O directamente con docker compose:
 docker compose up -d
-
-# Ver logs
 docker compose logs -f
-
-# Detener
 docker compose down
-
-# Reiniciar desde cero
 docker compose down --remove-orphans --volumes
 docker compose up -d --build
 ```
