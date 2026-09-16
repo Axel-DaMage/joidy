@@ -481,8 +481,8 @@
       newTagId = null;
       newNoteId = null;
       newMaxAssignmentDays = null;
-      if (g.note_id) {
-        goto(`/notes?id=${g.note_id}`);
+      if (g.id) {
+        goto(`/goals/${g.id}`);
       }
     } catch (e) {
       addError = 'Error al crear el objetivo.';
