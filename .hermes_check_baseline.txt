@@ -1,0 +1,138 @@
+=== svelte-check baseline (2026-09-20T21:20:09.032Z) ===
+exit_code=0
+
+Loading svelte-check in workspace: /workspace/repos/joidy/frontend
+Getting Svelte diagnostics...
+
+/workspace/repos/joidy/frontend/[32msrc/lib/components/Card.svelte[39m:7:1
+[33mWarn[39m: noninteractive element cannot have nonnegative tabIndex value
+https://svelte.dev/e/a11y_no_noninteractive_tabindex (svelte)
+[36m
+[35m<div
+  class="card padding-{padding}"
+  class:hoverable
+  class:clickable
+  role={clickable ? 'button' : undefined}
+  tabindex={clickable ? 0 : undefined}
+  aria-label={clickable ? 'Card' : undefined}
+  onkeydown={(e) => clickable && (e.key === 'Enter' || e.key === ' ') && e.currentTarget.click()}
+>
+  <slot />
+</div>[36m[39m
+
+/workspace/repos/joidy/frontend/[32msrc/lib/components/ConflictResolutionModal.svelte[39m:123:9
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m      <div class="merge-editor">
+        [35m<label class="label">{$t('conflict.mergedContent')}</label>[36m
+        <textarea[39m
+
+/workspace/repos/joidy/frontend/[32msrc/lib/components/FocusMode.svelte[39m:127:22
+[33mWarn[39m: `a11y-no-static-element-interactions` is no longer valid — please use `a11y_no_static_element_interactions` instead
+https://svelte.dev/e/legacy_code (svelte)
+[36m{#if $isActive}
+  <!-- svelte-ignore [35ma11y-no-static-element-interactions[36m -->
+  <div[39m
+
+/workspace/repos/joidy/frontend/[32msrc/lib/components/GoalList.svelte[39m:49:5
+[33mWarn[39m: This reference only captures the initial value of `tags`. Did you mean to reference it inside a closure instead?
+https://svelte.dev/e/state_referenced_locally (svelte)
+[36m  setGoalContext({
+    [35mtags[36m,
+    notes,[39m
+
+/workspace/repos/joidy/frontend/[32msrc/lib/components/GoalList.svelte[39m:50:5
+[33mWarn[39m: This reference only captures the initial value of `notes`. Did you mean to reference it inside a closure instead?
+https://svelte.dev/e/state_referenced_locally (svelte)
+[36m    tags,
+    [
+...[129160 chars truncated]...
+rkspace/repos/joidy/frontend/[32msrc/routes/notes/+page.svelte[39m:1439:7
+[33mWarn[39m: `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m    <div class="folder-modal-backdrop" onclick={() => (editingFolder = null)}>
+      [35m<div class="folder-modal" onclick={(e) => e.stopPropagation()}>
+        <h3 class="folder-modal-title">{$t('notesPage.customizeFolderTitle')}</h3>
+
+        <!-- Color bar -->
+        <div class="folder-color-row">
+          <span class="folder-label mono">{$t('notesPage.color')}</span>
+          <input type="color" class="folder-color-input" bind:value={folderColor} />
+          <input type="text" class="folder-hex-input mono" maxlength="7" bind:value={folderColor} />
+        </div>
+
+        <!-- Icon picker -->
+        <div class="folder-icon-row">
+          <span class="folder-label mono">{$t('notesPage.icon')}</span>
+          <LazyIconPicker
+            selected={folderIcon}
+            color={folderColor}
+            onSelect={(ic) => (folderIcon = ic)}
+          />
+        </div>
+
+        <div class="folder-modal-btns">
+          <button onclick={() => (editingFolder = null)}>{$t('notesPage.cancel')}</button>
+          <button
+            onclick={async () => {
+              if (editingFolder) {
+                updateFolderMeta(editingFolder, { icon: folderIcon, color: folderColor });
+                if (editingFolderNote) {
+                  let content = editingFolderNote.content;
+                  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+                  if (match) {
+                    let yaml = match[1];
+                    if (yaml.match(/(?:^|\n)icon:\s*([^\n]*)/)) {
+                      yaml = yaml.replace(/((?:^|\n)icon:\s*)([^\n]*)/, `$1${folderIcon}`);
+                    } else {
+                      yaml += `\nicon: ${folderIcon}`;
+                    }
+                    if (yaml.match(/(?:^|\n)iconColor:\s*([^\n]*)/)) {
+                      yaml = yaml.replace(/((?:^|\n)iconColor:\s*)([^\n]*)/, `$1${folderColor}`);
+                    } else {
+                      yaml += `\niconColor: ${folderColor}`;
+                    }
+                    content = content.replace(/^---\r?\n([\s\S]*?)\r?\n---/, `---\n${yaml}\n---`);
+                  } else {
+                    content = `---\nicon: ${folderIcon}\niconColor: ${folderColor}\n---\n\n${content}`;
+                  }
+                  await updateNote(editingFolderNote.id, { content });
+                }
+              }
+              editingFolder = null;
+              editingFolderNote = null;
+            }}>{$t('notesPage.save')}</button
+          >
+        </div>
+      </div>[36m
+    </div>[39m
+
+/workspace/repos/joidy/frontend/[32msrc/routes/notes/+page.svelte[39m:1497:3
+[33mWarn[39m: Non-interactive element `<div>` should not be assigned mouse or keyboard event listeners
+https://svelte.dev/e/a11y_no_noninteractive_element_interactions (svelte)
+[36m  <!-- ── Resize handle ─────────────────────────────────────────────────────── -->
+  [35m<div
+    class="resize-handle"
+    role="separator"
+    aria-orientation="vertical"
+    aria-label="Resize panel"
+    onmousedown={startResize}
+  ></div>[36m[39m
+
+/workspace/repos/joidy/frontend/[32msrc/routes/skills/+page.svelte[39m:109:9
+[33mWarn[39m: `<svelte:component>` is deprecated in runes mode — components are dynamic by default
+https://svelte.dev/e/svelte_component_deprecated (svelte)
+[36m      {:else if SkillTree}
+        [35m<svelte:component this={SkillTree} data={treeData} width={560} height={420} />[36m
+      {:else}[39m
+
+/workspace/repos/joidy/frontend/[32msrc/routes/skills/+page.svelte[39m:284:3
+[33mWarn[39m: Unused CSS selector ".search-icon"
+https://svelte.dev/e/css_unused_selector (svelte)
+[36m
+  [35m.search-icon[36m {
+    position: absolute;[39m
+
+====================================
+[33msvelte-check found 0 errors and 136 warnings in 21 files
+[39m
