@@ -48,7 +48,7 @@
   {/if}
 
   {#each clusters as cluster (cluster.cluster_id)}
-    <button class="cluster-card" onclick={() => toggle(cluster.cluster_id)}>
+    <div class="cluster-card" onclick={() => toggle(cluster.cluster_id)} role="button" tabindex="0" onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && toggle(cluster.cluster_id)}>
       <div class="cluster-header-row">
         <span class="cluster-title">{cluster.representative_title}</span>
         <span class="cluster-count mono">{cluster.note_count}</span>
@@ -65,7 +65,7 @@
           {/if}
         </div>
       {/if}
-    </button>
+    </div>
   {/each}
 </div>
 

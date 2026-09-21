@@ -17,15 +17,15 @@
   // Lazy-load the heavy graph component (d3 + force-graph, 1300+ lines) so it
   // is split into a separate chunk and only downloaded when the user actually
   // opens the graph page in dev mode (#347).
-  let KnowledgeGraphForce: typeof import('$lib/components/KnowledgeGraphForce.svelte').default | null = null;
+  let KnowledgeGraphForce = $state<typeof import('$lib/components/KnowledgeGraphForce.svelte').default | null>(null);
   $effect(() => {
     if ($devMode && !KnowledgeGraphForce) {
       import('$lib/components/KnowledgeGraphForce.svelte').then(m => KnowledgeGraphForce = m.default);
     }
   });
 
-  let containerEl: HTMLDivElement;
-  let w = 800, h = 600;
+  let containerEl = $state<HTMLDivElement>();
+  let w = $state(800), h = $state(600);
 
   // Timeline filter (#373) — filter notes by date range
   let dateFilterEnabled = $state(false);

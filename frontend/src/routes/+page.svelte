@@ -59,16 +59,16 @@
   }
 
   // ── Data ───────────────────────────────────────────────────────────────────
-  let githubConnected = false;
-  let githubLoading = false;
-  let githubIssues: { id: number; number: number; title: string; repo: string; url: string }[] = [];
-  let githubPRs: { id: number; number: number; title: string; repo: string; url: string }[] = [];
-  let repoColors: Record<string, string> = {};
-  let issueStats = { open: 0, total: 0 };
-  let prStats = { open: 0, total: 0 };
-  let ghFilter = 'created';
-  let ghType = 'all';
-  let activityTab: 'github' | 'recent-notes' = 'recent-notes';
+  let githubConnected = $state(false);
+  let githubLoading = $state(false);
+  let githubIssues = $state<{ id: number; number: number; title: string; repo: string; url: string }[]>([]);
+  let githubPRs = $state<{ id: number; number: number; title: string; repo: string; url: string }[]>([]);
+  let repoColors = $state<Record<string, string>>({});
+  let issueStats = $state({ open: 0, total: 0 });
+  let prStats = $state({ open: 0, total: 0 });
+  let ghFilter = $state('created');
+  let ghType = $state('all');
+  let activityTab = $state<'github' | 'recent-notes'>('recent-notes');
   const GH_ITEM_LIMIT = 9;
   const GH_CACHE_KEY = 'joidy_github_cache_v1';
   const GH_CACHE_TTL_MS = 1000 * 60 * 10;
@@ -347,7 +347,7 @@
   }
 
   // Resizable panel synced with notes
-  let panelWidth = 260;
+  let panelWidth = $state(260);
 
   // Responsive module size — smaller on narrow viewports
   let moduleSize = $state(160);
@@ -697,55 +697,6 @@
     overflow-y: auto;
   }
 
-
-
-
-
-  .issue-item:hover {
-    background: var(--elevated);
-  }
-  .issue-num {
-    color: var(--text-muted);
-  }
-  .issue-title {
-    font-size: 13px;
-  }
-  .issue-repo {
-    color: var(--text-muted);
-    font-size: 10px;
-    white-space: nowrap;
-  }
-
-  /* ── Notes Grid ── */
-  .fab {
-    position: fixed;
-    bottom: calc(var(--statusbar-h) + 24px);
-    right: 32px;
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    padding: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: var(--z-sticky);
-    box-shadow: 0 0 0 1px var(--bg);
-    text-decoration: none;
-  }
-
-  .github-widget {
-    border: 1px solid var(--border);
-    border-radius: var(--r);
-    margin: 10px 0;
-    background: var(--surface);
-  }
-
-  .empty-state.success {
-    color: var(--success);
-    text-align: center;
-    padding: 12px;
-  }
-
   /* ── Responsive ── */
 
   /* Tablet — narrow the left panel and reduce gaps */
@@ -799,16 +750,6 @@
       width: 130px;
       height: 130px;
     }
-
-    .fab {
-      right: var(--s3);
-      bottom: calc(var(--statusbar-h) + var(--s3));
-    }
-
-
-    .issue-repo {
-      display: none;
-    }
   }
 
   @media (max-width: 480px) {
@@ -832,11 +773,6 @@
     .module-label {
       min-width: 60px;
       font-size: 9px;
-    }
-
-    .fab {
-      right: var(--s2);
-      bottom: calc(60px + var(--s2));
     }
   }
 </style>

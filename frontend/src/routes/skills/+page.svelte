@@ -118,7 +118,7 @@
 
       <div class="skills-search">
         <div class="search-wrap">
-          <Search size={12} class="search-icon" />
+          <span class="search-icon"><Search size={12} /></span>
           <input
             class="search-input"
             type="text"

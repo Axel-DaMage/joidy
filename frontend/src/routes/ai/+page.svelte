@@ -29,8 +29,9 @@
 
   // Lazy-load DeadLetterQueue — only shown in dev mode, so defer the chunk
   // until the user actually enables it (#347).
-  let DeadLetterQueue: typeof import('$lib/components/DeadLetterQueue.svelte').default | null =
-    null;
+  let DeadLetterQueue = $state<typeof import('$lib/components/DeadLetterQueue.svelte').default | null>(
+    null
+  );
   $effect(() => {
     if ($devMode && !DeadLetterQueue) {
       import('$lib/components/DeadLetterQueue.svelte').then((m) => (DeadLetterQueue = m.default));
