@@ -130,9 +130,15 @@ def get_retryable_embedding_notes(db: Session, limit: int = 20) -> list[Note]:
         .all()
     )
 
+    if not failures:
+        return []
+
+    note_ids = {f.note_id for f in failures}
+    notes_by_id = {n.id: n for n in db.query(Note).filter(Note.id.in_(note_ids)).all()}
+
     notes: list[Note] = []
     for failure in failures:
-        note = db.query(Note).filter(Note.id == failure.note_id).first()
+        note = notes_by_id.get(failure.note_id)
         if note is None:
             db.delete(failure)
             continue
