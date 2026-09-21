@@ -234,10 +234,6 @@
       margin-bottom: var(--s3, 0.75rem);
     }
 
-    .ai-grid {
-      gap: var(--s3, 0.75rem);
-    }
-
     .stat {
       flex-direction: column;
       align-items: flex-start;

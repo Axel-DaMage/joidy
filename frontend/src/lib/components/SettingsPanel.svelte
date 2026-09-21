@@ -654,6 +654,10 @@
           <div
             class="gradient-preview"
             role="slider"
+            tabindex="0"
+            aria-valuenow={$accentColors.length}
+            aria-valuemin={1}
+            aria-valuemax={MAX_COLORS}
             aria-label="Color gradient preview"
             style="background: {gradientPreview}; cursor: grab;"
             onmousedown={onGradientMouseDown}

@@ -2324,6 +2324,8 @@
 
   <!-- ── New Goal Slide-Down Panel ── -->
   {#if showAddForm}
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div
       class="new-goal-backdrop"
       onclick={(e) => {
@@ -2359,17 +2361,17 @@
             <div class="ng-col">
               <span class="ng-col-title">{$t('goalsPage.basics')}</span>
               <div class="form-field">
-                <label class="label">{$t('goalsPage.goalTitle')}</label>
+                <label for="new-goal-title" class="label">{$t('goalsPage.goalTitle')}</label>
                 <input
+                  id="new-goal-title"
                   class="input w-full"
                   bind:value={newTitle}
                   placeholder={$t('goalsPage.goalTitlePlaceholder')}
                   maxlength="38"
-                  autofocus
                 />
               </div>
 
-              <div class="form-field">
+                <span class="label">{$t('goalsPage.repeatFrequency')}</span>
                 <label class="label">{$t('goalsPage.repeatFrequency')}</label>
                 <div class="ng-freq-grid">
                   {#each TEMPORALITIES as temp}
@@ -2391,16 +2393,17 @@
                   {/each}
                 </div>
               </div>
-              <div class="form-field">
-                <label class="label">{$t('goalsPage.measurementType')}</label>
+                <label for="new-goal-measurement" class="label">{$t('goalsPage.measurementType')}</label>
+                <select id="new-goal-measurement" class="input w-full" bind:value={newMeasurement}>
                 <select class="input w-full" bind:value={newMeasurement}>
                   <option value="COUNT">{$t('goalsPage.countNumeric')}</option>
                   <option value="BOOLEAN">{$t('goalsPage.booleanDone')}</option>
                   <option value="PERCENT">{$t('goalsPage.percent')}</option>
                 </select>
               </div>
-              <div class="form-field">
+                <label for="new-goal-target" class="label">{$t('goalsPage.targetGoal')}</label>
                 <label class="label">{$t('goalsPage.targetGoal')}</label>
+                  id="new-goal-target"
                 <input
                   class="input w-full"
                   type="number"
@@ -2417,7 +2420,7 @@
               <div class="form-field">
                 <div
                   style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;"
-                >
+                  <span class="label" style="margin:0;">{$t('goalsPage.failIconEmoji')}</span>
                   <label class="label" style="margin:0;">{$t('goalsPage.failIconEmoji')}</label>
                   <div class="icon-toggle-row">
                     <button
@@ -2455,7 +2458,7 @@
                 {/if}
               </div>
 
-              <div class="form-field">
+                <span class="label">{$t('goalsPage.identityColor')}</span>
                 <label class="label">{$t('goalsPage.identityColor')}</label>
                 <div class="ng-color-grid">
                   {#each COLOR_PRESETS as c}
@@ -2465,7 +2468,7 @@
                       style="background: {c.hex};"
                       onclick={() => (newGoalColor = c.hex)}
                       title={c.name}
-                      aria-label={c.name}
+                    ></button>
                     />
                   {/each}
                 </div>
@@ -2492,11 +2495,12 @@
             <!-- Column 3: Advanced -->
             <div class="ng-col">
               <span class="ng-col-title">{$t('goalsPage.advanced')}</span>
-              <div class="form-field">
+                <label for="new-goal-max-days" class="label"
                 <label class="label"
                   >{$t('goalsPage.limitDays')}
                   <span class="optional">{$t('goalsPage.limitDaysOptional')}</span></label
                 >
+                  id="new-goal-max-days"
                 <input
                   class="input w-full"
                   type="number"
@@ -2506,7 +2510,7 @@
                 />
               </div>
 
-              <div class="form-field">
+                <span class="label">{$t('goalsPage.failPolicy')}</span>
                 <label class="label">{$t('goalsPage.failPolicy')}</label>
                 <div class="ng-fail-options">
                   <button
@@ -2536,8 +2540,8 @@
                 </div>
               </div>
 
-              <div class="form-field">
-                <label class="label">{$t('goalsPage.linkToProject')}</label>
+                <label for="new-goal-note" class="label">{$t('goalsPage.linkToProject')}</label>
+                <select id="new-goal-note" class="input w-full" bind:value={newNoteId}>
                 <select class="input w-full" bind:value={newNoteId}>
                   <option value={null}>{$t('goalsPage.noLinkedNote')}</option>
                   {#each notes as n}
@@ -2545,8 +2549,8 @@
                   {/each}
                 </select>
               </div>
-              <div class="form-field">
-                <label class="label">{$t('goalsPage.tagSync')}</label>
+                <label for="new-goal-tag" class="label">{$t('goalsPage.tagSync')}</label>
+                <select id="new-goal-tag" class="input w-full" bind:value={newTagId}>
                 <select class="input w-full" bind:value={newTagId}>
                   <option value={null}>{$t('goalsPage.manualUpdate')}</option>
                   {#each notes as n}
@@ -4020,10 +4024,6 @@
     border-radius: 2px;
     transition: width 1s ease-out;
   }
-
-  /* Prediction Card Styles */
-  .prediction-card {
-    /* grid-area: pred is set in Advanced Analytics Styles below */
   }
   .prediction-hero {
     display: flex;
