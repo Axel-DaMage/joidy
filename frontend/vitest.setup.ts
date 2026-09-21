@@ -23,7 +23,16 @@ class MemoryStorage implements Storage {
 	}
 }
 
-if (typeof globalThis.localStorage === 'undefined' || !globalThis.localStorage?.getItem) {
+// Node 22+ exposes `localStorage` on globalThis as a lazy getter that prints an
+// ExperimentalWarning when *read*. We must not read the global to detect it —
+// `getOwnPropertyDescriptor` inspects the property without invoking the getter.
+// jsdom defines storage as a data property, Node's stub as a getter.
+const isMissingOrNodeStub = (name: 'localStorage' | 'sessionStorage') => {
+	const desc = Object.getOwnPropertyDescriptor(globalThis, name);
+	return !desc || typeof desc.get === 'function';
+};
+
+if (isMissingOrNodeStub('localStorage')) {
 	Object.defineProperty(globalThis, 'localStorage', {
 		value: new MemoryStorage(),
 		configurable: true,
@@ -31,7 +40,7 @@ if (typeof globalThis.localStorage === 'undefined' || !globalThis.localStorage?.
 	});
 }
 
-if (typeof globalThis.sessionStorage === 'undefined' || !globalThis.sessionStorage?.getItem) {
+if (isMissingOrNodeStub('sessionStorage')) {
 	Object.defineProperty(globalThis, 'sessionStorage', {
 		value: new MemoryStorage(),
 		configurable: true,

@@ -292,7 +292,7 @@
               <span class="label">{$t('goalDetail.identityColor')}</span>
               <div class="color-presets ng-expanded-presets">
                 {#each COLOR_PRESETS as c}
-                  <button class="color-dot" class:selected={editColor === c.hex} style="background: {c.hex}; color: {c.hex};" onclick={() => editColor = c.hex}></button>
+                  <button class="color-dot" class:selected={editColor === c.hex} style="background: {c.hex}; color: {c.hex};" onclick={() => editColor = c.hex} title={c.name} aria-label={c.name}></button>
                 {/each}
                 <div class="color-custom" style="background: {editColor};">
                   <input type="color" bind:value={editColor} class="color-picker" />
