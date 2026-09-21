@@ -105,7 +105,6 @@
             bind:value={tzInput}
             placeholder={$t('widgets.timezonePlaceholder')}
             onkeydown={(e) => e.key === 'Enter' && applyTzInput()}
-            autofocus
           />
           <button class="tz-close-ui" onclick={() => showTzPicker = false} title={$t('widgets.close')} aria-label={$t('widgets.close')}>✕</button>
         </div>

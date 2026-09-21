@@ -11,11 +11,21 @@
   import { getLocale } from '$lib/stores/locale';
   import { t } from 'svelte-i18n';
 
-  export let note: Note;
-  export let active = false;
-  export let showTags = true;
-  export let selected = false;
-  export let bulkMode = false;
+  interface Props {
+    note: Note;
+    active?: boolean;
+    showTags?: boolean;
+    selected?: boolean;
+    bulkMode?: boolean;
+  }
+
+  let {
+    note,
+    active = false,
+    showTags = true,
+    selected = false,
+    bulkMode = false,
+  }: Props = $props();
 
   const dispatch = createEventDispatcher<{ select: Note; delete: number; customize: { path: string; icon: string | null; color: string | null; note?: Note }; toggleSelect: number }>();
 
@@ -55,7 +65,7 @@
     });
   }
 
-  $: meta = getFileMeta();
+  let meta = $derived(getFileMeta());
 </script>
 
 <div

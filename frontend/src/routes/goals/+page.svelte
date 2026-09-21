@@ -1661,8 +1661,7 @@
           </div>
           <div class="history-heatmap-wrap">
             {#if StreakHeatmap}
-              <svelte:component
-                this={StreakHeatmap}
+              <StreakHeatmap
                 history={historyData}
                 color="var(--success)"
                 selectedDate={selectedPlanningDate}
@@ -1804,8 +1803,7 @@
           {:else}
             <div class="history-heatmap-wrap">
               {#if StreakHeatmap}
-                <svelte:component
-                  this={StreakHeatmap}
+                <StreakHeatmap
                   history={historyData}
                   color="var(--success)"
                   selectedDate={selectedHistoryDate}
@@ -2326,6 +2324,8 @@
 
   <!-- ── New Goal Slide-Down Panel ── -->
   {#if showAddForm}
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div
       class="new-goal-backdrop"
       onclick={(e) => {
@@ -2361,18 +2361,18 @@
             <div class="ng-col">
               <span class="ng-col-title">{$t('goalsPage.basics')}</span>
               <div class="form-field">
-                <label class="label">{$t('goalsPage.goalTitle')}</label>
+                <label for="new-goal-title" class="label">{$t('goalsPage.goalTitle')}</label>
                 <input
+                  id="new-goal-title"
                   class="input w-full"
                   bind:value={newTitle}
                   placeholder={$t('goalsPage.goalTitlePlaceholder')}
                   maxlength="38"
-                  autofocus
                 />
               </div>
 
               <div class="form-field">
-                <label class="label">{$t('goalsPage.repeatFrequency')}</label>
+                <span class="label">{$t('goalsPage.repeatFrequency')}</span>
                 <div class="ng-freq-grid">
                   {#each TEMPORALITIES as temp}
                     <button
@@ -2394,16 +2394,17 @@
                 </div>
               </div>
               <div class="form-field">
-                <label class="label">{$t('goalsPage.measurementType')}</label>
-                <select class="input w-full" bind:value={newMeasurement}>
+                <label for="new-goal-measurement" class="label">{$t('goalsPage.measurementType')}</label>
+                <select id="new-goal-measurement" class="input w-full" bind:value={newMeasurement}>
                   <option value="COUNT">{$t('goalsPage.countNumeric')}</option>
                   <option value="BOOLEAN">{$t('goalsPage.booleanDone')}</option>
                   <option value="PERCENT">{$t('goalsPage.percent')}</option>
                 </select>
               </div>
               <div class="form-field">
-                <label class="label">{$t('goalsPage.targetGoal')}</label>
+                <label for="new-goal-target" class="label">{$t('goalsPage.targetGoal')}</label>
                 <input
+                  id="new-goal-target"
                   class="input w-full"
                   type="number"
                   bind:value={newTargetValue}
@@ -2420,7 +2421,7 @@
                 <div
                   style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;"
                 >
-                  <label class="label" style="margin:0;">{$t('goalsPage.failIconEmoji')}</label>
+                  <span class="label" style="margin:0;">{$t('goalsPage.failIconEmoji')}</span>
                   <div class="icon-toggle-row">
                     <button
                       class="icon-type-btn"
@@ -2458,7 +2459,7 @@
               </div>
 
               <div class="form-field">
-                <label class="label">{$t('goalsPage.identityColor')}</label>
+                <span class="label">{$t('goalsPage.identityColor')}</span>
                 <div class="ng-color-grid">
                   {#each COLOR_PRESETS as c}
                     <button
@@ -2468,7 +2469,7 @@
                       onclick={() => (newGoalColor = c.hex)}
                       title={c.name}
                       aria-label={c.name}
-                    />
+                    ></button>
                   {/each}
                 </div>
                 <div class="ng-color-manual-row">
@@ -2495,11 +2496,12 @@
             <div class="ng-col">
               <span class="ng-col-title">{$t('goalsPage.advanced')}</span>
               <div class="form-field">
-                <label class="label"
+                <label for="new-goal-max-days" class="label"
                   >{$t('goalsPage.limitDays')}
                   <span class="optional">{$t('goalsPage.limitDaysOptional')}</span></label
                 >
                 <input
+                  id="new-goal-max-days"
                   class="input w-full"
                   type="number"
                   bind:value={newMaxAssignmentDays}
@@ -2509,7 +2511,7 @@
               </div>
 
               <div class="form-field">
-                <label class="label">{$t('goalsPage.failPolicy')}</label>
+                <span class="label">{$t('goalsPage.failPolicy')}</span>
                 <div class="ng-fail-options">
                   <button
                     class="ng-fail-btn"
@@ -2539,8 +2541,8 @@
               </div>
 
               <div class="form-field">
-                <label class="label">{$t('goalsPage.linkToProject')}</label>
-                <select class="input w-full" bind:value={newNoteId}>
+                <label for="new-goal-note" class="label">{$t('goalsPage.linkToProject')}</label>
+                <select id="new-goal-note" class="input w-full" bind:value={newNoteId}>
                   <option value={null}>{$t('goalsPage.noLinkedNote')}</option>
                   {#each notes as n}
                     <option value={n.id}>{n.title}</option>
@@ -2548,8 +2550,8 @@
                 </select>
               </div>
               <div class="form-field">
-                <label class="label">{$t('goalsPage.tagSync')}</label>
-                <select class="input w-full" bind:value={newTagId}>
+                <label for="new-goal-tag" class="label">{$t('goalsPage.tagSync')}</label>
+                <select id="new-goal-tag" class="input w-full" bind:value={newTagId}>
                   <option value={null}>{$t('goalsPage.manualUpdate')}</option>
                   {#each notes as n}
                     {@const tagId = tags.find((t) => t.name === n.title)?.id}
@@ -4024,9 +4026,6 @@
   }
 
   /* Prediction Card Styles */
-  .prediction-card {
-    /* grid-area: pred is set in Advanced Analytics Styles below */
-  }
   .prediction-hero {
     display: flex;
     flex-direction: column;

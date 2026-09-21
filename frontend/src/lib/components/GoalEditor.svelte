@@ -34,8 +34,12 @@
     ALLOWED_ATTR: ['href', 'target', 'rel', 'src', 'alt', 'class', 'data-title'],
   });
 
-  export let goal: Goal | null = null;
-  export let content: string = '';
+  interface Props {
+    goal?: Goal | null;
+    content?: string;
+  }
+
+  let { goal = null, content = $bindable('') }: Props = $props();
 
   const dispatch = createEventDispatcher<{
     save: { title: string; content: string };
@@ -45,12 +49,12 @@
     edit: void;
   }>();
 
-  let title = goal?.title ?? '';
-  let saving = false;
-  let saved = false;
-  let previewMode = false;
-  let zenMode = false;
-  let deleteConfirm = false;
+  let title = $state('');
+  let saving = $state(false);
+  let saved = $state(false);
+  let previewMode = $state(false);
+  let zenMode = $state(false);
+  let deleteConfirm = $state(false);
 
   function handleDeleteClick() {
     if (!deleteConfirm) {
@@ -62,39 +66,42 @@
   }
 
   // Sync zen mode with body class to hide layout chrome (#270)
-  $: if (typeof document !== 'undefined') {
-    document.body.classList.toggle('zen-mode-active', zenMode);
-  }
+  $effect(() => {
+    if (typeof document !== 'undefined') {
+      document.body.classList.toggle('zen-mode-active', zenMode);
+    }
+  });
+
   onDestroy(() => {
     if (typeof document !== 'undefined') document.body.classList.remove('zen-mode-active');
     if (highlightRaf !== null) cancelAnimationFrame(highlightRaf);
   });
 
-  $: if (goal) {
-    title = goal.title;
-  }
+  $effect(() => {
+    title = goal?.title ?? '';
+  });
 
-  $: visibleContent = content;
-  $: wordCount = visibleContent.trim() ? visibleContent.trim().split(/\s+/).length : 0;
-  $: charCount = visibleContent.length;
-  $: lineCount = Math.max(1, visibleContent.split('\n').length);
-  $: lineNumbers = Array.from({ length: lineCount }, (_, i) => i + 1);
+  let visibleContent = $derived(content);
+  let wordCount = $derived(visibleContent.trim() ? visibleContent.trim().split(/\s+/).length : 0);
+  let charCount = $derived(visibleContent.length);
+  let lineCount = $derived(Math.max(1, visibleContent.split('\n').length));
+  let lineNumbers = $derived(Array.from({ length: lineCount }, (_, i) => i + 1));
 
   // Debounced content for the expensive full markdown render (preview mode:
   // marked + DOMPurify + highlight.js). The editor syntax highlight uses a
   // faster rAF-based update (see editorHighlightedHtml) so typed text is styled
   // immediately instead of lagging 300ms (#936).
-  let debouncedContent = content;
+  let debouncedContent = $state('');
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-  $: {
+  $effect(() => {
     const current = visibleContent;
     if (debounceTimer) clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
       debouncedContent = current;
-      renderedHtml = renderMarkdown(current);
     }, 300);
-  }
-  $: renderedHtml = renderMarkdown(debouncedContent);
+  });
+
+  let renderedHtml = $derived(renderMarkdown(debouncedContent));
 
   function renderMarkdown(md: string): string {
     if (!md.trim()) return `<p style="color:var(--text-muted);font-style:italic;">${$t('goalEditor.previewPlaceholder')}</p>`;
@@ -103,8 +110,6 @@
 
   function updateContent(e: Event) {
     content = (e.currentTarget as HTMLTextAreaElement).value;
-    wordCount = content.trim() ? content.trim().split(/\s+/).length : 0;
-    charCount = content.length;
   }
 
   async function handleSave() {
@@ -136,8 +141,8 @@
     }
   }
 
-  let backdropEl: HTMLElement;
-  let textareaEl: HTMLTextAreaElement;
+  let backdropEl = $state<HTMLElement | undefined>();
+  let textareaEl = $state<HTMLTextAreaElement | undefined>();
 
   function syncScroll() {
     if (backdropEl && textareaEl) {
@@ -176,10 +181,10 @@
   // 300ms debounce. rAF coalesces multiple keystrokes into a single ~16ms
   // render, so typed characters are styled immediately without re-running the
   // regex highlighter more than once per frame (#703, #936).
-  let editorHighlightedHtml = highlightMarkdown(content);
+  let editorHighlightedHtml = $state('');
   let highlightRaf: ReturnType<typeof requestAnimationFrame> | null = null;
 
-  $: {
+  $effect(() => {
     const current = visibleContent;
     if (typeof requestAnimationFrame === 'function') {
       if (highlightRaf !== null) cancelAnimationFrame(highlightRaf);
@@ -190,7 +195,7 @@
     } else {
       editorHighlightedHtml = highlightMarkdown(current);
     }
-  }
+  });
 </script>
 
 <svelte:window onkeydown={onKeydown} />

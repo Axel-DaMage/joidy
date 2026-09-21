@@ -77,7 +77,6 @@
               bind:value={password}
               class="input"
               required
-              autofocus
             />
           </div>
           <div class="field" style="margin-top: 12px;">
