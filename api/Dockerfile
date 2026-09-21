@@ -21,8 +21,15 @@ COPY requirements.txt .
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --prefix=/install -r requirements.txt
 
-# ── runtime: slim final image ────────────────────────────────────────────────
-FROM python:${PYTHON_VERSION}-slim AS runtime
+# ── deps-dev: stage with dev/test packages ───────────────────────────────────
+FROM deps AS deps-dev
+
+COPY requirements-dev.txt .
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --prefix=/install-dev -r requirements-dev.txt
+
+# ── runtime-base: minimal base for runtime and development ───────────────────
+FROM python:${PYTHON_VERSION}-slim AS runtime-base
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
@@ -39,8 +46,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=deps /install /usr/local
-
 # Create non-root user. Defaults to uid/gid 1000 (matches typical host user).
 # In development, docker-compose.dev.yml passes the host UID/GID as build args
 # so bind-mounted files are written as the host user and never need sudo (#886).
@@ -48,11 +53,28 @@ ARG UID=1000
 ARG GID=1000
 RUN addgroup --system --gid ${GID} app && adduser --system --uid ${UID} --ingroup app app
 
-COPY --chown=app:app . .
-
 # Create the file-logging directory with correct ownership so the app user
 # can write /app/data/logs/api.log at runtime (#577).
 RUN mkdir -p /app/data/logs && chown -R app:app /app/data
+
+# ── development: for local dev and running tests in containers ──────────────
+FROM runtime-base AS development
+
+COPY --from=deps-dev /install-dev /usr/local
+COPY --chown=app:app . .
+
+USER app
+
+HEALTHCHECK --interval=10s --timeout=5s --retries=5 --start-period=20s \
+  CMD curl -f http://localhost:8000/health/ready || exit 1
+
+CMD ["/bin/sh", "-c", "rm -rf alembic/versions/__pycache__ && exec uvicorn main:app --host 0.0.0.0 --port 8000 --reload"]
+
+# ── production: lean production image with runtime deps only ────────────────
+FROM runtime-base AS production
+
+COPY --from=deps /install /usr/local
+COPY --chown=app:app . .
 
 USER app
 
