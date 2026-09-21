@@ -68,7 +68,7 @@
 
   <div class="ai-content">
     {#if ChatInterface}
-      <svelte:component this={ChatInterface} />
+      <ChatInterface />
     {:else}
       <div class="caption" style="padding: 24px; text-align: center; color: var(--text-muted);">
         {$t('ai.loadingChat')}
@@ -101,7 +101,7 @@
             <p class="muted">{$t('ai.statusUnavailable')}</p>
           {/if}
         </div>
-        {#if DeadLetterQueue}<svelte:component this={DeadLetterQueue} />{/if}
+        {#if DeadLetterQueue}<DeadLetterQueue />{/if}
       </div>
     </details>
   {/if}

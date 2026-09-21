@@ -106,7 +106,7 @@
           Agrega 3+ notas con un tag para desbloquear una habilidad.
         </div>
       {:else if SkillTree}
-        <svelte:component this={SkillTree} data={treeData} width={560} height={420} />
+        <SkillTree data={treeData} width={560} height={420} />
       {:else}
         <div class="loading-state caption">Cargando árbol...</div>
       {/if}

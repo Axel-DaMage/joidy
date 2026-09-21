@@ -632,12 +632,6 @@
     border-radius: 3px;
   }
 
-  .wilt-notice {
-    padding: var(--s2) var(--s3);
-    border: 1px solid var(--border);
-    border-radius: var(--r);
-    text-align: center;
-  }
 
   .widget-centered {
     display: flex;
@@ -648,10 +642,6 @@
     padding: 10px 0;
   }
 
-  .xp-section {
-    width: 100%;
-    max-width: 240px;
-  }
 
   .stats-row {
     display: flex;
@@ -707,39 +697,10 @@
     overflow-y: auto;
   }
 
-  .recent-notes {
-    flex: 1;
-  }
 
-  .section-divider {
-    border: 0;
-    height: 1px;
-    margin: 0;
-    background: var(--border-light);
-  }
 
-  .empty-state {
-    padding: var(--s6) var(--s5);
-    color: var(--text-muted);
-    text-align: center;
-  }
 
-  .issues-list {
-    display: flex;
-    flex-direction: column;
-  }
 
-  .issue-item {
-    display: grid;
-    grid-template-columns: 40px 1fr auto;
-    gap: var(--s3);
-    align-items: center;
-    padding: var(--s2) var(--s5);
-    border-bottom: 1px solid var(--border-light);
-    text-decoration: none;
-    color: var(--text-primary);
-    transition: background var(--t-normal);
-  }
   .issue-item:hover {
     background: var(--elevated);
   }
@@ -844,11 +805,6 @@
       bottom: calc(var(--statusbar-h) + var(--s3));
     }
 
-    .issue-item {
-      grid-template-columns: 30px 1fr;
-      gap: var(--s2);
-      padding: var(--s2) var(--s3);
-    }
 
     .issue-repo {
       display: none;

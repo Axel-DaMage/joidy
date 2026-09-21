@@ -607,8 +607,6 @@
     min-height: 26px;
   }
 
-  .field-row { display: flex; gap: 12px; align-items: flex-start; }
-  .field.half { flex: 1; min-width: 0; }
 
   .checkbox-label {
     display: flex !important;

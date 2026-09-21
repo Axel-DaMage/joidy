@@ -1661,8 +1661,7 @@
           </div>
           <div class="history-heatmap-wrap">
             {#if StreakHeatmap}
-              <svelte:component
-                this={StreakHeatmap}
+              <StreakHeatmap
                 history={historyData}
                 color="var(--success)"
                 selectedDate={selectedPlanningDate}
@@ -1804,8 +1803,7 @@
           {:else}
             <div class="history-heatmap-wrap">
               {#if StreakHeatmap}
-                <svelte:component
-                  this={StreakHeatmap}
+                <StreakHeatmap
                   history={historyData}
                   color="var(--success)"
                   selectedDate={selectedHistoryDate}

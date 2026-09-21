@@ -12,6 +12,11 @@ export default defineConfig({
 	test: {
 		include: ['src/**/*.{test,spec}.{js,ts}'],
 		environment: 'jsdom',
+		environmentOptions: {
+			jsdom: {
+				url: 'http://localhost'
+			}
+		},
 		setupFiles: ['./vitest.setup.ts'],
 		coverage: {
 			provider: 'v8',

@@ -146,7 +146,7 @@
         {/if}
       </div>
     {:else if KnowledgeGraphForce}
-      <svelte:component this={KnowledgeGraphForce} width={w} height={h} focusId={$selectedTag} />
+      <KnowledgeGraphForce width={w} height={h} focusId={$selectedTag} />
     {:else}
       <div class="loading-state caption">{$t('graph.loading')}</div>
     {/if}
