@@ -11,17 +11,17 @@ the user" logic should use these helpers. See issue #650.
 """
 
 from datetime import date, datetime, timezone
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from zoneinfo import ZoneInfo
 
 from config import settings
 
 # Cache the ZoneInfo object — constructing it on every call is wasteful and the
 # setting rarely changes at runtime.
-_tz_cache: ZoneInfo | None = None
+_tz_cache: ZoneInfo | timezone | None = None
 _tz_cache_key: str | None = None
 
 
-def get_user_tz() -> ZoneInfo:
+def get_user_tz() -> ZoneInfo | timezone:
     """Return the configured user timezone as a ``ZoneInfo`` instance.
 
     Falls back to UTC if the configured zone name is invalid.
@@ -31,8 +31,11 @@ def get_user_tz() -> ZoneInfo:
     if _tz_cache is None or _tz_cache_key != key:
         try:
             _tz_cache = ZoneInfo(key)
-        except ZoneInfoNotFoundError:
-            _tz_cache = ZoneInfo("UTC")
+        except Exception:
+            try:
+                _tz_cache = ZoneInfo("UTC")
+            except Exception:
+                _tz_cache = timezone.utc
         _tz_cache_key = key
     return _tz_cache
 
