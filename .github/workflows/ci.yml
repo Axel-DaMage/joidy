@@ -46,14 +46,14 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('api/requirements.txt') }}
+          key: ${{ runner.os }}-pip-${{ hashFiles('api/requirements-dev.txt', 'api/requirements.txt') }}
           restore-keys: ${{ runner.os }}-pip-
 
       - name: Install dependencies
         working-directory: api
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
 
       - name: Check Python syntax
         run: python -m compileall api ai-service worker
@@ -68,6 +68,36 @@ jobs:
           name: coverage-report
           path: api/coverage.xml
           retention-days: 30
+
+  ai-service-tests:
+    name: AI Service Tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Cache pip
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-ai-${{ hashFiles('ai-service/requirements-dev.txt', 'ai-service/requirements.txt') }}
+          restore-keys: ${{ runner.os }}-pip-ai-
+
+      - name: Install dependencies
+        working-directory: ai-service
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Run tests with pytest
+        working-directory: ai-service
+        run: python -m pytest tests/ -v
 
   frontend-check:
     name: Frontend Typecheck
@@ -146,6 +176,22 @@ jobs:
         with:
           context: ./frontend
           target: development
+
+      - name: Verify production images do not contain pytest
+        run: |
+          if docker run --rm d4mag3/joidy-api python -c "import pytest" 2>/dev/null; then
+            echo "::error::pytest found in production api image"
+            exit 1
+          fi
+          if docker run --rm d4mag3/joidy-ai-service python -c "import pytest" 2>/dev/null; then
+            echo "::error::pytest found in production ai-service image"
+            exit 1
+          fi
+          if docker run --rm d4mag3/joidy-worker python -c "import pytest" 2>/dev/null; then
+            echo "::error::pytest found in production worker image"
+            exit 1
+          fi
+          echo "✓ Verified production images do not contain pytest"
           load: true
           tags: d4mag3/joidy-frontend:latest
           cache-from: type=gha,scope=frontend
