@@ -45,6 +45,7 @@ services:
     build:
       context: ./api
       dockerfile: Dockerfile
+      target: development
       args:
         UID: ${UID:-1000}
         GID: ${GID:-1000}
@@ -73,6 +74,7 @@ services:
     build:
       context: ./ai-service
       dockerfile: Dockerfile
+      target: development
       args:
         UID: ${UID:-1000}
         GID: ${GID:-1000}
@@ -87,6 +89,7 @@ services:
     build:
       context: ./worker
       dockerfile: Dockerfile
+      target: development
       args:
         UID: ${UID:-1000}
         GID: ${GID:-1000}
