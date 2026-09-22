@@ -151,6 +151,34 @@ jobs:
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
 
+      - name: Trivy — Scan API container image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: d4mag3/joidy-api:latest
+          format: table
+          severity: CRITICAL,HIGH
+
+      - name: Trivy — Scan AI service container image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: d4mag3/joidy-ai-service:latest
+          format: table
+          severity: CRITICAL,HIGH
+
+      - name: Trivy — Scan Worker container image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: d4mag3/joidy-worker:latest
+          format: table
+          severity: CRITICAL,HIGH
+
+      - name: Trivy — Scan Frontend container image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: d4mag3/joidy-frontend:latest
+          format: table
+          severity: CRITICAL,HIGH
+
       - name: Prepare environment
         run: |
           cp .env.example .env
@@ -190,6 +218,9 @@ jobs:
   security:
     name: Security Scanning
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - uses: actions/checkout@v7
 
@@ -203,19 +234,15 @@ jobs:
 
       - name: Bandit — Python static analysis
         run: bandit -r api/ ai-service/ worker/ -ll -x api/tests,ai-service/tests,worker/tests
-        continue-on-error: true
 
       - name: pip-audit — API dependencies
         run: pip-audit -r api/requirements.txt
-        continue-on-error: true
 
       - name: pip-audit — AI service dependencies
         run: pip-audit -r ai-service/requirements.txt
-        continue-on-error: true
 
       - name: pip-audit — Worker dependencies
         run: pip-audit -r worker/requirements.txt
-        continue-on-error: true
 
       - name: Set up Node
         uses: actions/setup-node@v7
@@ -227,12 +254,11 @@ jobs:
       - name: npm audit — Frontend dependencies
         working-directory: frontend
         run: npm audit --audit-level=moderate
-        continue-on-error: true
 
-      - name: Trivy — filesystem scan
+      - name: Trivy — filesystem, secret & vulnerability scan
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: fs
           scan-ref: .
+          scanners: vuln,secret,misconfig
           severity: HIGH,CRITICAL
-          exit-code: '0'

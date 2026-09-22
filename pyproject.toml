@@ -40,3 +40,11 @@ pythonpath = [
     "ai-service",
     "worker"
 ]
+
+[tool.bandit]
+exclude_dirs = [
+    "api/tests",
+    "ai-service/tests",
+    "worker/tests",
+]
+skips = []
