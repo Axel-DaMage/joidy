@@ -8,6 +8,7 @@ in a background thread that serves the default Prometheus registry on port
 
 import json
 import logging
+import os
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -39,6 +40,10 @@ vault_events_pending = Counter(
 )
 
 _metrics_server: HTTPServer | None = None
+
+# Bind address for the metrics server.  Defaults to all interfaces so the
+# container is reachable from the Docker network; override with METRICS_BIND.
+_METRICS_BIND: str = os.environ.get("METRICS_BIND", "")  # "" = INADDR_ANY
 
 
 class _MetricsHandler(BaseHTTPRequestHandler):
@@ -85,7 +90,7 @@ def start_metrics_server(port: int = 8001) -> None:
     if _metrics_server is not None:
         return
     try:
-        _metrics_server = HTTPServer(("0.0.0.0", port), _MetricsHandler)
+        _metrics_server = HTTPServer((_METRICS_BIND, port), _MetricsHandler)
         thread = threading.Thread(target=_metrics_server.serve_forever, daemon=True, name="metrics-server")
         thread.start()
         logger.info("[worker] Metrics server listening on :%d/metrics", port)

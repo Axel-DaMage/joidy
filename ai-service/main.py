@@ -536,12 +536,13 @@ async def cluster_notes(eps: float = 0.3, min_samples: int = 3, max_notes: int =
     cluster_results = []
     with engine.connect() as conn:
         for label, ids in clusters.items():
-            params = {f"id_{idx}": i for idx, i in enumerate(ids)}
-            placeholders = ", ".join(f":id_{idx}" for idx in range(len(ids)))
-            title_rows = conn.execute(
-                sql_text(f"SELECT id, title FROM notes WHERE id IN ({placeholders})"),
-                params,
-            ).fetchall()
+            if not ids:
+                continue
+            from sqlalchemy import bindparam
+            stmt = sql_text("SELECT id, title FROM notes WHERE id IN :ids").bindparams(
+                bindparam("ids", expanding=True)
+            )
+            title_rows = conn.execute(stmt, {"ids": ids}).fetchall()
             title_map = {r[0]: r[1] for r in title_rows}
             cluster_results.append({
                 "cluster_id": int(label),

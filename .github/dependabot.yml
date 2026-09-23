@@ -35,9 +35,30 @@ updates:
         patterns:
           - "@tiptap/*"
 
-  # Docker — compose files
+  # Docker — API
   - package-ecosystem: docker
-    directory: /
+    directory: /api
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  # Docker — AI service
+  - package-ecosystem: docker
+    directory: /ai-service
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  # Docker — Worker
+  - package-ecosystem: docker
+    directory: /worker
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  # Docker — Frontend
+  - package-ecosystem: docker
+    directory: /frontend
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
