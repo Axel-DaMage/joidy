@@ -107,6 +107,64 @@ Esto copia `.env.example` a `.env`.
 
 ---
 
+### 1.5 Problemas comunes en Windows
+
+#### A. Error de política de ejecución de scripts en PowerShell (PSSecurityException)
+
+**Síntoma:**
+```text
+joidy : No se puede cargar el archivo ...\joidy.ps1 porque la ejecución de scripts está deshabilitada en este sistema.
+```
+
+**Causa:** En Windows 10 y 11, la directiva de ejecución predeterminada para scripts PowerShell es `Restricted`.
+
+**Solución:**
+- Habilitar la ejecución de scripts locales para tu usuario:
+  ```powershell
+  Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+  ```
+- O utilizar el ejecutable shim `joidy.cmd` desde cualquier terminal (CMD o PowerShell):
+  ```cmd
+  joidy.cmd up
+  ```
+- O ejecutar explícitamente con bypass temporal:
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File start.ps1
+  ```
+
+#### B. Docker Desktop no responde o falta WSL 2
+
+**Síntoma:**
+```text
+failed to connect to the docker API at npipe:////./pipe/docker_engine
+✗ Docker daemon is not responding or Docker Desktop is not running.
+```
+
+**Causa:** Docker Desktop no está iniciado, no se han aceptado los términos de uso en la primera apertura, o el backend de WSL 2 no está instalado.
+
+**Solución:**
+1. Si WSL 2 no está instalado, abre PowerShell como Administrador e instala WSL:
+   ```powershell
+   wsl --install
+   ```
+   Reinicia el equipo si el instalador lo solicita.
+2. Inicia **Docker Desktop** desde el Menú Inicio.
+3. Si aparece una ventana con el acuerdo de suscripción ("Docker Subscription Service Agreement"), haz clic en **Accept**.
+4. Espera a que el motor de Docker esté completamente iniciado (el ícono en la bandeja del sistema se pondrá en verde: *Engine running*).
+
+#### C. Formato de rutas para Obsidian Vault en Windows
+
+**Síntoma:** Errores de sintaxis al montar volúmenes en Docker Compose debido a barras invertidas (`\`).
+
+**Solución:** En el archivo `.env`, utiliza barras inclinadas (`/`) o rutas relativas con `~`:
+```env
+OBSIDIAN_VAULT_PATH=C:/Users/tu_usuario/Documents/Obsidian
+# o:
+OBSIDIAN_VAULT_PATH=~/Documents/Obsidian
+```
+
+---
+
 ---
 
 ## 2. Problemas de la API

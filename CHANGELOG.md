@@ -9,15 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- _Nothing yet_
+- **Windows support & documentation**: Comprehensive troubleshooting guide for Windows (`docs/troubleshooting.md`), detailing PowerShell ExecutionPolicy, WSL 2 requirements for Docker Desktop, and Obsidian Vault path formatting (#981)
+- **`joidy pull` command in `joidy.ps1`**: Added image pulling command to the Windows PowerShell CLI for parity with `joidy.sh` (#981)
 
 ### Changed
 
-- _Nothing yet_
+- **PowerShell CLI character encoding**: Replaced non-ASCII Unicode quotation-interfering characters (`✓`, `—`, `║`) with ASCII-safe escape sequences (`$([char]0x2713)`) in `joidy.ps1`, `install.ps1`, `install-autostart.ps1`, and `start.ps1` to prevent fatal syntax parser errors in Windows PowerShell 5.1 (#981)
+- **`joidy.cmd` batch shim**: Updated shim to invoke PowerShell with `-NoProfile -ExecutionPolicy Bypass -File` to prevent opening Notepad when executed from `cmd.exe` (#981)
+- **`.gitattributes`**: Added repository `.gitattributes` to enforce consistent CRLF for Windows scripts and LF for Unix scripts (#981)
 
 ### Fixed
 
-- _Nothing yet_
+- **Abstract class instantiation in `Generate-Secret`**: Fixed `New-Object Security.Cryptography.RandomNumberGenerator` throwing constructor error and generating all-zero secrets in `joidy.ps1`. Now uses `[System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)` (#981)
+- **Undefined `Write-Ok` in `start.ps1`**: Added alias to `Write-Success` to avoid `CommandNotFoundException` during vault path expansion (#981)
+- **Docker daemon readiness check**: Added pre-flight check for running Docker engine before attempting stack operations on Windows, providing clear error guidance instead of raw pipe socket errors (#981)
 
 ### Removed
 

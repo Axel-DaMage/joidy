@@ -1,7 +1,7 @@
-# joidy — CLI for managing the Joidy Docker stack (Windows PowerShell)
+# joidy - CLI for managing the Joidy Docker stack (Windows PowerShell)
 #
 # Installation:
-#   Copy scripts/joidy.ps1 to a folder in your PATH (e.g., $HOME\bin)
+#   Copy scripts/joidy.ps1 to a folder in your PATH (e.g., $HOME\.local\bin)
 #   Or add the scripts folder to your PATH:
 #     [Environment]::SetEnvironmentVariable("Path", $env:Path + ";$PWD\scripts", "User")
 #
@@ -12,6 +12,7 @@
 #   .\joidy.ps1 wake     Restart heavy services from hibernation
 #   .\joidy.ps1 restart  Restart all services
 #   .\joidy.ps1 status   Show service status
+#   .\joidy.ps1 pull     Pull latest images
 #   .\joidy.ps1 logs     Tail logs (all services)
 #   .\joidy.ps1 logs api Tail logs for a specific service
 #   .\joidy.ps1 help     Show this help message
@@ -25,12 +26,12 @@ param(
 )
 
 function Write-Status($msg) { Write-Host "[$(Get-Date -Format 'HH:mm:ss')] $msg" -ForegroundColor Blue }
-function Write-Ok($msg)     { Write-Host "✓ $msg" -ForegroundColor Green }
-function Write-Warn($msg)   { Write-Host "⚠ $msg" -ForegroundColor Yellow }
-function Write-Err($msg)    { Write-Host "✗ $msg" -ForegroundColor Red }
+function Write-Ok($msg)     { Write-Host "$([char]0x2713) $msg" -ForegroundColor Green }
+function Write-Warn($msg)   { Write-Host "$([char]0x26A0) $msg" -ForegroundColor Yellow }
+function Write-Err($msg)    { Write-Host "$([char]0x2717) $msg" -ForegroundColor Red }
 
 # Resolve project directory.
-# Priority: JOIDY_DIR env var → ~/.config/joidy/path file → script location (../)
+# Priority: JOIDY_DIR env var -> ~/.config/joidy/path file -> script location (../)
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 if ($env:JOIDY_DIR -and (Test-Path $env:JOIDY_DIR)) {
@@ -50,10 +51,10 @@ if (-not (Test-Path "$ProjectDir\docker-compose.yml")) {
 
 Set-Location $ProjectDir
 
-# ─── .env bootstrap ───────────────────────────────────────────────
+# --- .env bootstrap -----------------------------------------------
 # Resolve which .env file to use:
-# 1. $ProjectDir\.env           (git-clone install — writable)
-# 2. $env:USERPROFILE\.config\joidy\.env  (AUR/system install — project dir is read-only)
+# 1. $ProjectDir\.env           (git-clone install - writable)
+# 2. $env:USERPROFILE\.config\joidy\.env  (AUR/system install - project dir is read-only)
 # 3. Auto-create from .env.example with generated secrets
 $ConfigDirJoidy = Join-Path $env:USERPROFILE ".config\joidy"
 $EnvFile = ""
@@ -78,7 +79,7 @@ if (Test-Path "$ProjectDir\.env") {
     $EnvFile = "$ProjectDir\.env"
     Write-Status "Created .env from .env.example"
   } else {
-    # Project dir is read-only — use user config dir
+    # Project dir is read-only - use user config dir
     if (-not (Test-Path $ConfigDirJoidy)) {
       New-Item -ItemType Directory -Path $ConfigDirJoidy -Force | Out-Null
     }
@@ -94,7 +95,8 @@ if (Test-Path "$ProjectDir\.env") {
 # Auto-generate required secrets if empty or placeholder
 function Generate-Secret($Length) {
   $bytes = New-Object byte[] $Length
-  (New-Object Security.Cryptography.RandomNumberGenerator).GetBytes($bytes)
+  $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+  $rng.GetBytes($bytes)
   return -join ($bytes | ForEach-Object { $_.ToString("x2") })
 }
 
@@ -103,7 +105,7 @@ if ($EnvFile -and (Test-Path $EnvFile)) {
   $changed = $false
 
   # POSTGRES_PASSWORD
-  if ($envContent -match '(?m)^POSTGRES_PASSWORD=\s*$') {
+  if ($envContent -match '(?m)^POSTGRES_PASSWORD=(\s*|0+)\s*$') {
     $newPw = Generate-Secret 24
     $envContent = $envContent -replace '(?m)^POSTGRES_PASSWORD=.*', "POSTGRES_PASSWORD=$newPw"
     Write-Ok "Generated POSTGRES_PASSWORD"
@@ -111,7 +113,7 @@ if ($EnvFile -and (Test-Path $EnvFile)) {
   }
 
   # SECRET_KEY
-  if ($envContent -match '(?m)^SECRET_KEY=(\s*|change_this_to_a_random_secret_key)\s*$') {
+  if ($envContent -match '(?m)^SECRET_KEY=(\s*|change_this_to_a_random_secret_key|0+)\s*$') {
     $newSk = Generate-Secret 32
     $envContent = $envContent -replace '(?m)^SECRET_KEY=.*', "SECRET_KEY=$newSk"
     Write-Ok "Generated SECRET_KEY"
@@ -119,7 +121,7 @@ if ($EnvFile -and (Test-Path $EnvFile)) {
   }
 
   # GRAFANA_ADMIN_PASSWORD
-  if ($envContent -match '(?m)^GRAFANA_ADMIN_PASSWORD=\s*$') {
+  if ($envContent -match '(?m)^GRAFANA_ADMIN_PASSWORD=(\s*|0+)\s*$') {
     $newGrafanaPw = Generate-Secret 24
     $envContent = $envContent -replace '(?m)^GRAFANA_ADMIN_PASSWORD=.*', "GRAFANA_ADMIN_PASSWORD=$newGrafanaPw"
     Write-Ok "Generated GRAFANA_ADMIN_PASSWORD"
@@ -132,7 +134,7 @@ if ($EnvFile -and (Test-Path $EnvFile)) {
     Write-Warn "Edit $EnvFile to add: GEMINI_API_KEY, OBSIDIAN_VAULT_PATH, etc."
   }
 
-  # Expand ~ in OBSIDIAN_VAULT_PATH — Docker bind mounts require absolute
+  # Expand ~ in OBSIDIAN_VAULT_PATH - Docker bind mounts require absolute
   # paths and do not expand `~`. The settings UI lets users enter home-relative
   # paths (e.g. ~/Documentos/notas/mi-vault). Export the expanded value for
   # this compose run; .env keeps the raw ~/... form so the UI stays clean.
@@ -144,6 +146,7 @@ if ($EnvFile -and (Test-Path $EnvFile)) {
     } elseif ($vaultRaw -match '^~/(.*)') {
       $vaultExpanded = Join-Path $HOME $Matches[1]
     }
+    $vaultExpanded = $vaultExpanded -replace '\\', '/'
     if ($vaultExpanded -ne $vaultRaw) {
       Write-Ok "Expanded OBSIDIAN_VAULT_PATH: $vaultRaw -> $vaultExpanded"
     }
@@ -153,8 +156,8 @@ if ($EnvFile -and (Test-Path $EnvFile)) {
 
 $HIBERNATE_SERVICES = @("ai-service", "worker")
 
-function Test-Command($Command) {
-  $null = Get-Command $Command -ErrorAction SilentlyContinue
+function Test-Command($Cmd) {
+  $null = Get-Command $Cmd -ErrorAction SilentlyContinue
   return $?
 }
 
@@ -173,8 +176,26 @@ if (Test-Command "docker") {
     $script:containerComposeCmd = "podman compose"
   }
 } else {
-  Write-Host "✗ Neither Docker nor Podman is installed or in PATH" -ForegroundColor Red
+  Write-Err "Neither Docker nor Podman is installed or in PATH"
   exit 1
+}
+
+function Test-ContainerEngineReady {
+  if ($script:containerComposeCmd -like "docker*") {
+    $null = docker info 2>&1
+    if ($LASTEXITCODE -ne 0) {
+      Write-Err "Docker daemon is not responding or Docker Desktop is not running."
+      Write-Host "Please start Docker Desktop and verify that the Docker engine is running." -ForegroundColor Yellow
+      return $false
+    }
+  } elseif ($script:containerComposeCmd -like "podman*") {
+    $null = podman info 2>&1
+    if ($LASTEXITCODE -ne 0) {
+      Write-Err "Podman service is not responding or not running."
+      return $false
+    }
+  }
+  return $true
 }
 
 function Invoke-ComposeCommand {
@@ -218,10 +239,10 @@ function Write-AccessUrl {
   $port = if ($env:FRONTEND_PORT) { $env:FRONTEND_PORT } else { "3000" }
   $ip = Get-LanIp
   Write-Host ""
-  Write-Host "╔══════════════════════════════════════════════╗" -ForegroundColor Green
-  Write-Host "║  Joidy is running at:                        ║" -ForegroundColor Green
-  Write-Host "║  http://${ip}:${port}" -ForegroundColor Green
-  Write-Host "╚══════════════════════════════════════════════╝" -ForegroundColor Green
+  Write-Host "+----------------------------------------------+" -ForegroundColor Green
+  Write-Host "|  Joidy is running at:                        |" -ForegroundColor Green
+  Write-Host "|  http://${ip}:${port}                         |" -ForegroundColor Green
+  Write-Host "+----------------------------------------------+" -ForegroundColor Green
 }
 
 function Get-AiProfileArgs {
@@ -237,6 +258,7 @@ function Get-AiProfileArgs {
 }
 
 function Invoke-Up {
+  if (-not (Test-ContainerEngineReady)) { exit 1 }
   Write-Status "Starting Joidy services..."
   $profile = Get-AiProfileArgs
   if ($profile.Count -gt 0) {
@@ -251,12 +273,14 @@ function Invoke-Up {
 }
 
 function Invoke-Down {
+  if (-not (Test-ContainerEngineReady)) { exit 1 }
   Write-Status "Stopping all Joidy services..."
   Invoke-ComposeCommand @EnvFileArg down
   Write-Ok "All services stopped."
 }
 
 function Invoke-Sleep {
+  if (-not (Test-ContainerEngineReady)) { exit 1 }
   Write-Status "Hibernating heavy services (ai-service, worker)..."
   foreach ($svc in $HIBERNATE_SERVICES) {
     $running = Invoke-ComposeCommand @EnvFileArg ps $svc 2>$null
@@ -273,6 +297,7 @@ function Invoke-Sleep {
 }
 
 function Invoke-Wake {
+  if (-not (Test-ContainerEngineReady)) { exit 1 }
   Write-Status "Waking heavy services from hibernation..."
   $profile = Get-AiProfileArgs
   foreach ($svc in $HIBERNATE_SERVICES) {
@@ -294,6 +319,7 @@ function Invoke-Wake {
 }
 
 function Invoke-Restart {
+  if (-not (Test-ContainerEngineReady)) { exit 1 }
   Write-Status "Restarting all Joidy services..."
   $profile = Get-AiProfileArgs
   if ($profile.Count -gt 0) {
@@ -306,12 +332,26 @@ function Invoke-Restart {
 }
 
 function Invoke-Status {
+  if (-not (Test-ContainerEngineReady)) { exit 1 }
   Write-Status "Joidy service status:"
   Write-Host ""
   Invoke-ComposeCommand @EnvFileArg ps
 }
 
+function Invoke-Pull {
+  if (-not (Test-ContainerEngineReady)) { exit 1 }
+  Write-Status "Pulling latest Joidy images..."
+  $profile = Get-AiProfileArgs
+  if ($profile.Count -gt 0) {
+    Invoke-ComposeCommand @EnvFileArg @profile pull
+  } else {
+    Invoke-ComposeCommand @EnvFileArg pull
+  }
+  Write-Ok "Pull complete."
+}
+
 function Invoke-Logs {
+  if (-not (Test-ContainerEngineReady)) { exit 1 }
   if ($Service) {
     Invoke-ComposeCommand @EnvFileArg logs -f $Service
   } else {
@@ -320,15 +360,16 @@ function Invoke-Logs {
 }
 
 function Show-Help {
-  Write-Host "joidy — Manage the Joidy Docker stack"
+  Write-Host "joidy - Manage the Joidy Docker stack"
   Write-Host ""
   Write-Host "Usage:"
   Write-Host "  joidy up         Start all services (detached)"
   Write-Host "  joidy down       Stop all services"
-  Write-Host "  joidy sleep      Stop heavy services (ai-service, worker) — hibernation"
+  Write-Host "  joidy sleep      Stop heavy services (ai-service, worker) - hibernation"
   Write-Host "  joidy wake       Restart heavy services from hibernation"
   Write-Host "  joidy restart    Restart all services"
   Write-Host "  joidy status     Show service status"
+  Write-Host "  joidy pull       Pull latest images"
   Write-Host "  joidy logs       Tail logs (all services)"
   Write-Host "  joidy logs api   Tail logs for a specific service"
   Write-Host "  joidy help       Show this help message"
@@ -342,13 +383,16 @@ function Show-Help {
 }
 
 switch ($Command) {
-  "up"      { Invoke-Up }
-  "down"    { Invoke-Down }
-  "sleep"   { Invoke-Sleep }
-  "wake"    { Invoke-Wake }
-  "restart" { Invoke-Restart }
-  "status"  { Invoke-Status }
-  "logs"    { Invoke-Logs }
-  "help"    { Show-Help }
-  default   { Write-Err "Unknown command: $Command"; Write-Host ""; Show-Help; exit 1 }
+  "up"            { Invoke-Up }
+  "down"          { Invoke-Down }
+  "sleep"         { Invoke-Sleep }
+  "wake"          { Invoke-Wake }
+  "restart"       { Invoke-Restart }
+  "status"        { Invoke-Status }
+  "pull"          { Invoke-Pull }
+  "logs"          { Invoke-Logs }
+  "help"          { Show-Help }
+  "--help"        { Show-Help }
+  "-h"            { Show-Help }
+  default         { Write-Err "Unknown command: $Command"; Write-Host ""; Show-Help; exit 1 }
 }

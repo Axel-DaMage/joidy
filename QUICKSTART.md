@@ -34,9 +34,17 @@ Variables opcionales: `GITHUB_TOKEN`, `TELEGRAM_BOT_TOKEN`, etc.
 
 ## 2. Levantar los servicios
 
+### Linux / macOS:
 ```bash
 make setup   # crea .env si no existe, directorios de datos y permisos
 make dev     # inicia frontend, api, ai-service y worker con hot reload
+```
+
+### Windows (PowerShell):
+```powershell
+powershell -ExecutionPolicy Bypass -File start.ps1
+# o bien, usando el CLI instalado:
+joidy up
 ```
 
 Tras unos segundos la app estará en:
@@ -49,7 +57,9 @@ Tras unos segundos la app estará en:
 Para parar:
 
 ```bash
-make stop
+make stop      # Linux/Mac
+# o en Windows:
+joidy down
 ```
 
 ## 3. Flujo de trabajo diario
