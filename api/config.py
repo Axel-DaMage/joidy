@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    database_url: str = "postgresql://joidy:joidy@postgres:5432/joidy"
+    database_url: str = "postgresql+psycopg2://joidy:joidy@postgres:5432/joidy"
     ai_service_url: str = "http://ai-service:8002"
     ai_service_enabled: bool = True  # Set to false in production to skip AI calls
     worker_url: str = "http://worker:8001"
