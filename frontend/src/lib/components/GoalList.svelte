@@ -46,18 +46,18 @@
   // Set the shared context once so GoalCard can consume tags, notes, callbacks,
   // and label maps without each intermediate level re-forwarding them as props (#351).
   setGoalContext({
-    tags,
-    notes,
-    getGoalColor,
-    TEMPORALITY_LABELS,
-    STATE_LABELS,
-    formatFailConfig,
-    onTogglePin,
-    onClick,
-    onComplete,
-    onFail,
-    onDelete,
-    onArchive,
+    get tags() { return tags; },
+    get notes() { return notes; },
+    get getGoalColor() { return getGoalColor; },
+    get TEMPORALITY_LABELS() { return TEMPORALITY_LABELS; },
+    get STATE_LABELS() { return STATE_LABELS; },
+    get formatFailConfig() { return formatFailConfig; },
+    get onTogglePin() { return onTogglePin; },
+    get onClick() { return onClick; },
+    get onComplete() { return onComplete; },
+    get onFail() { return onFail; },
+    get onDelete() { return onDelete; },
+    get onArchive() { return onArchive; },
   });
 
   function filteredGoals(goals: Goal[], query: string, filter: string | null, pinned: Set<number>) {

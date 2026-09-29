@@ -654,6 +654,10 @@
           <div
             class="gradient-preview"
             role="slider"
+            tabindex="0"
+            aria-valuenow={$accentColors.length}
+            aria-valuemin={1}
+            aria-valuemax={MAX_COLORS}
             aria-label="Color gradient preview"
             style="background: {gradientPreview}; cursor: grab;"
             onmousedown={onGradientMouseDown}
@@ -1415,16 +1419,6 @@
     margin-bottom: 12px;
   }
 
-  .section-subtitle {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 10px;
-    font-family: var(--font-mono);
-    color: var(--text-muted);
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-  }
 
   .row {
     display: flex;
@@ -1463,9 +1457,6 @@
     color: var(--text-primary);
   }
   .toggle .sep,
-  .toggle .divider {
-    color: var(--border);
-  }
 
   .link-btn {
     background: var(--accent);
@@ -1481,14 +1472,6 @@
     opacity: 0.9;
   }
 
-  .link-btn.disabled {
-    background: var(--border);
-    color: var(--text-muted);
-    cursor: not-allowed;
-  }
-  .link-btn.disabled:hover {
-    opacity: 0.6;
-  }
 
   .disconnect-btn {
     background: transparent;
@@ -1501,9 +1484,6 @@
     color: var(--text-primary);
   }
 
-  .row-label.disabled {
-    color: var(--text-muted);
-  }
 
   .badge {
     font-size: 10px;
@@ -1512,24 +1492,7 @@
     border-radius: 2px;
     letter-spacing: 0.05em;
   }
-  .badge-off {
-    background: var(--elevated);
-    color: var(--text-muted);
-    border: 1px solid var(--border);
-  }
 
-  .path-value {
-    font-size: 11px;
-    font-family: var(--font-mono);
-    color: var(--text-secondary);
-    background: var(--elevated);
-    padding: 2px 6px;
-    border-radius: 2px;
-    max-width: 160px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
 
   .hint {
     font-size: 11px;
@@ -1742,12 +1705,6 @@
     background: var(--success, #22c55e);
   }
 
-  .config-message {
-    font-size: 11px;
-    color: var(--text-secondary);
-    margin-top: 8px;
-    text-align: center;
-  }
 
   /* Theme mode selector */
   .theme-mode-options {

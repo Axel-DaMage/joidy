@@ -30,6 +30,7 @@
 <svelte:window onkeydown={handleKeydown} />
 
 {#if open}
+  <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
   <div
     class="modal-overlay"
     role="dialog"

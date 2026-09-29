@@ -1,9 +1,20 @@
 <script lang="ts">
-  export let padding: 'none' | 'sm' | 'md' | 'lg' = 'md';
-  export let hoverable = false;
-  export let clickable = false;
+  interface Props {
+    padding?: 'none' | 'sm' | 'md' | 'lg';
+    hoverable?: boolean;
+    clickable?: boolean;
+    children?: import('svelte').Snippet;
+  }
+
+  let {
+    padding = 'md',
+    hoverable = false,
+    clickable = false,
+    children,
+  }: Props = $props();
 </script>
 
+<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 <div
   class="card padding-{padding}"
   class:hoverable
@@ -13,7 +24,7 @@
   aria-label={clickable ? 'Card' : undefined}
   onkeydown={(e) => clickable && (e.key === 'Enter' || e.key === ' ') && e.currentTarget.click()}
 >
-  <slot />
+  {@render children?.()}
 </div>
 
 <style>

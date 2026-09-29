@@ -892,6 +892,8 @@
             <ArrowUpDown size={13} />
           </button>
           {#if showSortMenu}
+            <!-- svelte-ignore a11y_click_events_have_key_events -->
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
             <div class="sort-menu" onclick={(e) => e.stopPropagation()}>
               <button
                 class="sort-btn"
@@ -1161,7 +1163,7 @@
                 style="padding-left: {20 + item.depth * 14}px"
                 role="button"
                 tabindex="0"
-                aria-selected={item.note?.id === selectedNote?.id}
+                aria-pressed={item.note?.id === selectedNote?.id}
                 onclick={() => item.note && openNote(item.note)}
                 onkeydown={(e) =>
                   (e.key === 'Enter' || e.key === ' ') &&
@@ -1235,7 +1237,7 @@
                   style="padding-left: {20 + node.depth * 14}px"
                   role="button"
                   tabindex="0"
-                  aria-selected={node.note?.id === selectedNote?.id}
+                  aria-pressed={node.note?.id === selectedNote?.id}
                   onclick={() => node.note && openNote(node.note)}
                   onkeydown={(e) =>
                     (e.key === 'Enter' || e.key === ' ') &&
@@ -1315,7 +1317,11 @@
   <!-- Folder customize modal -->
   <!-- Create folder modal -->
   {#if creatingFolder}
-    <div class="folder-modal-backdrop" onclick={() => (creatingFolder = false)}>
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+    <div class="folder-modal-backdrop" role="dialog" tabindex="-1" onclick={() => (creatingFolder = false)}>
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div class="folder-modal" onclick={(e) => e.stopPropagation()}>
         <h3 class="folder-modal-title">{$t('notesPage.createFolderTitle')}</h3>
 
@@ -1406,7 +1412,11 @@
   {/key}
 
   {#if renamingNode}
-    <div class="folder-modal-backdrop" onclick={() => (renamingNode = null)}>
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+    <div class="folder-modal-backdrop" role="dialog" tabindex="-1" onclick={() => (renamingNode = null)}>
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div class="folder-modal" onclick={(e) => e.stopPropagation()}>
         <h3 class="folder-modal-title">{$t('notesPage.renameTitle')}</h3>
         <input
@@ -1435,7 +1445,11 @@
   {/if}
 
   {#if editingFolder}
-    <div class="folder-modal-backdrop" onclick={() => (editingFolder = null)}>
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+    <div class="folder-modal-backdrop" role="dialog" tabindex="-1" onclick={() => (editingFolder = null)}>
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div class="folder-modal" onclick={(e) => e.stopPropagation()}>
         <h3 class="folder-modal-title">{$t('notesPage.customizeFolderTitle')}</h3>
 
@@ -1494,6 +1508,7 @@
   {/if}
 
   <!-- ── Resize handle ─────────────────────────────────────────────────────── -->
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <div
     class="resize-handle"
     role="separator"
@@ -1507,8 +1522,7 @@
     {#if showEditor}
       {#key editingNew ? (isMomentary ? 'momentary' : 'new') : selectedNote?.id}
         {#if NoteEditor}
-          <svelte:component
-            this={NoteEditor}
+          <NoteEditor
             note={editorNote}
             momentary={isMomentary}
             initialTitle={dailyInitialTitle}

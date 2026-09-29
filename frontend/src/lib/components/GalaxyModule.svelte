@@ -1,7 +1,7 @@
 <script lang="ts">
   import { globalProgress, globalLevel } from '$lib/stores/gamification';
 
-  export let size = 200;
+  let { size = 200 }: { size?: number } = $props();
 
   // Fibonacci / golden-angle spiral — same arrangement as sunflower seeds,
   // produces a natural galaxy-disc distribution without any randomness.
@@ -24,11 +24,11 @@
     'cúmulo estelar', 'galaxia espiral', 'universo conocido',
   ];
 
-  $: visibleCount = Math.max(3, Math.floor(($globalProgress / 100) * N));
-  $: stars        = ALL_STARS.slice(0, visibleCount);
-  $: stageIdx     = Math.min(6, Math.floor(($globalLevel - 1) / (100 / 7)));
-  $: stageLabel   = STAGE_LABELS[stageIdx] ?? STAGE_LABELS[6];
-  $: coreSize     = 2 + stageIdx * 0.6;
+  let visibleCount = $derived(Math.max(3, Math.floor(($globalProgress / 100) * N)));
+  let stars        = $derived(ALL_STARS.slice(0, visibleCount));
+  let stageIdx     = $derived(Math.min(6, Math.floor(($globalLevel - 1) / (100 / 7))));
+  let stageLabel   = $derived(STAGE_LABELS[stageIdx] ?? STAGE_LABELS[6]);
+  let coreSize     = $derived(2 + stageIdx * 0.6);
 </script>
 
 <div class="galaxy-wrap" style="width:{size}px; height:{size}px;">

@@ -78,10 +78,6 @@
 		background: rgba(255, 255, 255, 0.08);
 	}
 
-	.search-icon {
-		opacity: 0.5;
-		flex-shrink: 0;
-	}
 
 	input {
 		flex: 1;

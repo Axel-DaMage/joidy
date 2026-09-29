@@ -120,8 +120,9 @@
 
     {#if resolution === 'merge'}
       <div class="merge-editor">
-        <label class="label">{$t('conflict.mergedContent')}</label>
+        <label class="label" for="conflict-merge-textarea">{$t('conflict.mergedContent')}</label>
         <textarea
+          id="conflict-merge-textarea"
           class="input w-full"
           bind:value={mergedContent}
           rows="10"

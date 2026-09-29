@@ -219,7 +219,7 @@
   // marked + DOMPurify + highlight.js). The editor syntax highlight uses a
   // faster rAF-based update (see editorHighlightedHtml) so typed text is styled
   // immediately instead of lagging 300ms (#703).
-  let debouncedContent = $state(visibleEditorContent);
+  let debouncedContent = $state('');
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   $effect(() => {
@@ -733,7 +733,7 @@
   // 300ms debounce. rAF coalesces multiple keystrokes into a single ~16ms
   // render, so typed characters are styled immediately without re-running the
   // regex highlighter more than once per frame (#703).
-  let editorHighlightedHtml = $state(highlightMarkdown(visibleEditorContent));
+  let editorHighlightedHtml = $state('');
   let highlightRaf: ReturnType<typeof requestAnimationFrame> | null = null;
 
   $effect(() => {

@@ -133,9 +133,6 @@
     background: color-mix(in srgb, currentColor 25%, transparent);
   }
 
-  .spin {
-    animation: spin 1s linear infinite;
-  }
   @keyframes spin {
     from {
       transform: rotate(0deg);

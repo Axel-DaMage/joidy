@@ -2,29 +2,29 @@
   import { globalProgress, globalLevel } from '$lib/stores/gamification';
   import { accentColors } from '$lib/stores/settings';
 
-  export let size = 200;
+  let { size = 200 }: { size?: number } = $props();
 
   // Climber moves from base (12, 102) to summit (50, 18) along the left face OVER THE ENTIRE 1-100 levels!
-  $: t  = Math.min(1, $globalProgress / 100);
-  $: cx = 12 + 38 * t;
-  $: cy = 102 - 84 * t;
+  let t  = $derived(Math.min(1, $globalProgress / 100));
+  let cx = $derived(12 + 38 * t);
+  let cy = $derived(102 - 84 * t);
 
   // Snow cap appears above 60% global progress (Level 60+)
-  $: showSnow = $globalProgress >= 60;
+  let showSnow = $derived($globalProgress >= 60);
   // Flag appears at Level 100
-  $: showFlag = $globalLevel >= 100;
+  let showFlag = $derived($globalLevel >= 100);
 
   const ALTITUDE = [
     'base camp', '300m', '600m', 'zona de muerte', '1200m', 'cumbre cercana', '¡cima!'
   ];
   
-  $: stageIdx = Math.min(6, Math.floor(($globalLevel - 1) / (100 / 7)));
-  $: altLabel = ALTITUDE[stageIdx] ?? ALTITUDE[6];
+  let stageIdx = $derived(Math.min(6, Math.floor(($globalLevel - 1) / (100 / 7))));
+  let altLabel = $derived(ALTITUDE[stageIdx] ?? ALTITUDE[6]);
 
-  $: colors = $accentColors;
-  $: c1 = colors[0] || 'var(--plant)';
-  $: c2 = colors[1] || colors[0] || 'var(--plant-2)';
-  $: c3 = colors[2] || colors[1] || colors[0] || 'var(--plant-3)';
+  let colors = $derived($accentColors);
+  let c1 = $derived(colors[0] || 'var(--plant)');
+  let c2 = $derived(colors[1] || colors[0] || 'var(--plant-2)');
+  let c3 = $derived(colors[2] || colors[1] || colors[0] || 'var(--plant-3)');
 </script>
 
 <div class="mountain-wrap" style="width:{size}px; height:{size}px;">
