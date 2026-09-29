@@ -39,7 +39,7 @@ services:
       # `joidy up` detects the engine and sets DOCKER_SOCK_PATH automatically.
       - ${DOCKER_SOCK_PATH:-/var/run/docker.sock}:/var/run/docker.sock
     environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-joidy}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-joidy}
+      - DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER:-joidy}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-joidy}
       - AI_SERVICE_URL=http://ai-service:8002
       - AI_SERVICE_ENABLED=${AI_SERVICE_ENABLED:-false}
       - WORKER_URL=http://worker:8001
@@ -81,7 +81,7 @@ services:
       - ${JOIDY_DATA_DIR:-./data}/db:/data/db
       - ${JOIDY_ENV_FILE:-./.env}:/app/.env:ro
     environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-joidy}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-joidy}
+      - DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER:-joidy}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-joidy}
       - APP_ENV=${APP_ENV:-production}
     depends_on:
       postgres:
@@ -108,7 +108,7 @@ services:
       - ${JOIDY_ENV_FILE:-./.env}:/app/.env:ro
       - ${OBSIDIAN_VAULT_PATH:-./data/vault}:/vault
     environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-joidy}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-joidy}
+      - DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER:-joidy}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-joidy}
       - API_URL=http://api:8000
       - VAULT_PATH=/vault
       - APP_ENV=${APP_ENV:-production}

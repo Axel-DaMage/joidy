@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     # Database
-    database_url: str = "postgresql://joidy:joidy@postgres:5432/joidy"
+    database_url: str = "postgresql+psycopg2://joidy:joidy@postgres:5432/joidy"
     app_env: str = "development"
 
     # Internal auth: shared secret for API → ai-service communication

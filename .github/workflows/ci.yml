@@ -31,7 +31,7 @@ jobs:
           --health-retries 10
     env:
       APP_ENV: test
-      DATABASE_URL: postgresql://joidy:joidy@localhost:5432/joidy_test
+      DATABASE_URL: postgresql+psycopg2://joidy:joidy@localhost:5432/joidy_test
       LOG_DIR: logs
       SECRET_KEY: ci-secret-not-for-production
     steps:
