@@ -1,8 +1,0 @@
-blank_issues_enabled: false
-contact_links:
-  - name: Joidy Discussions
-    url: https://github.com/Axel-DaMage/joidy/discussions
-    about: Ask questions, share ideas, or discuss features.
-  - name: Devin Support
-    url: https://devin.ai/support
-    about: For support about the Devin CLI/agent used in this project.
