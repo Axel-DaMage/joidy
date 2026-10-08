@@ -1,5 +1,117 @@
 # Changelog
 
+<!-- hermes-release:pending v1.0.0 -->
+## [v1.0.0] — 2026-10-08
+
+### ⚠️ Breaking Changes
+
+* chore(deps): Bump anthropic from 0.125.0 to 1.3.0 in /ai-service by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/906
+
+### 🚀 Features
+
+* feat(github): simplificar integracion con conexion por username y resolver error en Device Flow by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/979
+* feat(streaks): permitir configurar rachas persistentes que nunca fallen en modo bola de nieve (#963) by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/978
+* feat(ui): diferenciar colores de badges de tareas y rachas pendientes con contraste armónico dinámico (#968) by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/977
+* feat(frontend): mostrar notas recientes si GitHub no está conectado y permitir alternar vistas (#970) by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/976
+* feat(frontend): migrate Vite from v6 to v8 by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/944
+* feat(agents): optimize repository structure and docs for agent-first development by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/943
+* feat(goals): add archiving support, top-left action button, and hover-only card action buttons by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/941
+* feat(goals): quick delete X button on goal cards with confirmation modal (#913) by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/940
+* feat(settings): add direct creation links to GitHub PAT and OAuth settings (#937) by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/939
+* feat(goals): record failed goal entry per uncompleted day for snowball goals by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/934
+* feat(goals): prevent automatic failure on rollover goals and add manual fail button by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/929
+* feat(goals): add quick complete and delete buttons to Editor tab goal cards by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/923
+* feat(goals): add quick complete and delete buttons to GoalEditor by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/921
+* feat(goals): default untimed goals to ONEOFF (Indefinido) state by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/919
+* feat(integrations): configure GitHub token/keys from settings UI by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/903
+* feat(goals): replace goal description with linked note by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/900
+* feat(goals): reflect selected goal color on goal cards by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/899
+* feat(goals): support one-off tasks in goals by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/898
+* feat(cli): make 'joidy up' pull latest images automatically by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/897
+* feat(ci): auto-publish AUR package on release by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/883
+* feat(cli): port fallback for joidy up — try 5 subsequent ports before aborting by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/879
+
+### 🐛 Bug Fixes
+
+* fix(goals): redirigir al editor de objetivos tras crearlo (#984) by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/985
+* fix(windows): resolve powershell script encoding, secrets generation and shims by @VECTORG99 in https://github.com/Axel-DaMage/joidy/pull/982
+* fix(streaks): map frequency labels correctly with i18n support (#974) by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/975
+* fix(focus): preservar el temporizador activo al entrar en modo enfoque (#967) by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/973
+* fix(streaks): mejorar legibilidad y resplandor del estilo neon en rachas (#964) by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/972
+* fix(goals): agregar estilos al botón de cerrar en modal de nuevo objetivo (#966) by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/971
+* fix(goals): update syntax highlight immediately via rAF in GoalEditor (#936) by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/938
+* fix(goals): prevent duplicate goals on note sync and compact card vertical space by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/927
+* fix(goals): prevent duplicate goal creation when adding objective by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/918
+* fix(goals): superpose completed state in week history & add editor quick actions by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/914
+* fix(aur): normalize hyphens to underscores in pkgver by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/888
+* fix(infra): run dev containers as host UID/GID so .svelte-kit never needs sudo by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/887
+* fix(ci): use correct AUR_SSH_KEY secret name in aur-publish workflow by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/885
+* fix(release): auto-bump pre-release series instead of spurious stable releases by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/884
+* fix(cli): resolve_ports returns non-zero with set -e when no ports bumped by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/882
+* fix(vault): expand ~ in OBSIDIAN_VAULT_PATH and add UI examples by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/880
+* fix(ci): replace --notes-prepend with gh release edit by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/877
+
+### ⚡ Performance
+
+* perf(docker): optimize dockerfiles for multi-stage caching, security and size by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/942
+* perf(db): propose database performance optimizations by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/902
+
+### 🧹 Chores
+
+* chore(deps): Bump pyjwt from 2.14.0 to 2.15.0 in /api in the pip group across 1 directory by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1032
+* chore(deps-dev): Bump eslint from 10.9.1 to 10.11.0 in /frontend by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1031
+* chore(deps): Bump marked from 18.0.11 to 18.0.14 in /frontend by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1030
+* chore(deps): Bump dompurify from 3.4.14 to 3.4.16 in /frontend by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1029
+* chore(deps-dev): Bump @types/node from 26.4.1 to 26.6.3 in /frontend by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1028
+* chore(deps): Bump the tiptap group in /frontend with 11 updates by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1027
+* chore(deps): Bump cryptography from 50.0.1 to 50.0.2 in /api by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1026
+* chore(deps): Bump cohere from 7.1.1 to 7.2.0 in /ai-service by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1022
+* chore(deps): Bump sqlalchemy from 2.0.54 to 2.1.1 in /worker by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1020
+* chore(deps): Bump uvicorn from 0.52.4 to 0.54.0 in /api by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1018
+* chore(deps): Bump openai from 3.11.0 to 3.22.1 in /ai-service by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1017
+* chore(deps): Bump devalue from 5.9.0 to 5.9.4 in /frontend by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1015
+* chore(deps-dev): Bump undici from 8.9.0 to 8.11.2 in /frontend by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1014
+* chore(deps): Bump pyjwt from 2.13.0 to 2.14.0 in /api in the pip group across 1 directory by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1013
+* chore(deps): Bump watchfiles from 1.2.0 to 1.3.0 in /worker by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1011
+* chore(deps): Bump alembic from 1.19.1 to 1.20.0 in /api by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/989
+* chore(deps): Bump sqlalchemy from 2.0.52 to 2.1.1 in /api by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/988
+* chore(deps): Bump sqlalchemy from 2.0.52 to 2.0.54 in /worker by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/987
+* chore: release v1.1.0-beta.5 by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/986
+* chore: release v1.1.0-beta.4 by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/980
+* chore(deps): Bump numpy from 2.5.2 to 2.5.3 in /ai-service by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/962
+* chore(deps): Bump openai from 3.5.0 to 3.11.0 in /ai-service by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/961
+* chore(deps): Bump psycopg2-binary from 2.9.12 to 2.9.13 in /ai-service by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/960
+* chore(deps): Bump psycopg2-binary from 2.9.12 to 2.9.13 in /api by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/959
+* chore(deps): Bump psycopg2-binary from 2.9.12 to 2.9.13 in /worker by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/958
+* chore(deps-dev): Bump svelte from 5.56.9 to 5.57.0 in /frontend by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/954
+* chore(deps-dev): Bump @types/node from 26.4.0 to 26.4.1 in /frontend by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/953
+* chore(deps-dev): Bump eslint from 10.8.0 to 10.9.1 in /frontend by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/952
+* chore(deps-dev): Bump globals from 17.9.0 to 17.12.0 in /frontend by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/951
+* chore(deps): Bump the tiptap group across 1 directory with 11 updates by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/950
+* chore(deps): Bump pydantic from 2.13.4 to 2.13.5 in /ai-service by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/949
+* chore(deps): Bump cohere from 7.1.0 to 7.1.1 in /ai-service by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/947
+* chore(deps): Bump pywebpush from 2.4.0 to 2.5.0 in /api by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/946
+* chore(deps): Bump pydantic from 2.13.4 to 2.13.5 in /api by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/945
+* style(goals): make GoalCard action buttons permanently visible by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/925
+* chore(deps-dev): Bump @types/node from 26.2.0 to 26.4.0 in /frontend by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/912
+* chore(deps): Bump marked from 18.0.10 to 18.0.11 in /frontend by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/911
+* chore(deps): Bump dompurify from 3.4.13 to 3.4.14 in /frontend by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/910
+* chore(deps): Bump highlight.js from 11.11.1 to 11.12.0 in /frontend by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/909
+* chore(deps): Bump the tiptap group across 1 directory with 11 updates by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/908
+* chore(deps): Bump cohere from 7.0.9 to 7.1.0 in /ai-service by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/907
+* chore(deps): Bump openai from 3.3.1 to 3.5.0 in /ai-service by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/905
+* chore(deps): Bump cryptography from 50.0.0 to 50.0.1 in /api by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/904
+
+### 📦 Other Changes
+
+* [quality] 134 svelte-check warnings across 21 files + vitest localStorage env warnings — fix and enforce a warning budget by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1005
+* Release v1.1.0-beta.3 by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/956
+* release: v1.1.0-beta.2 by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/955
+* ui(goals): limit goal identity color selector to 8 colors by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/901
+* release: merge development into main by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/889
+* release: v1.0.0-beta.3 by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/881
+<!-- /hermes-release:pending -->
+
 All notable changes to Joidy are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
