@@ -99,7 +99,7 @@ def db_session():
         engine = create_engine(
             "sqlite:///:memory:",
             connect_args={"check_same_thread": False},
-            pool=__import__("sqlalchemy.pool", fromlist=["StaticPool"]).StaticPool(),
+            poolclass=__import__("sqlalchemy.pool", fromlist=["StaticPool"]).StaticPool,
         )
         Base.metadata.create_all(engine)
 

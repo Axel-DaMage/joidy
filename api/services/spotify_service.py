@@ -4,6 +4,7 @@ from typing import Any
 
 import httpx
 from config import settings
+from services.http_client import http_client
 
 SPOTIFY_AUTH_URL = "https://accounts.spotify.com/authorize"
 SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
@@ -40,7 +41,7 @@ async def exchange_code(code: str) -> dict[str, Any]:
         "redirect_uri": settings.spotify_redirect_uri,
     }
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with http_client(timeout=30.0) as client:
         r = await client.post(SPOTIFY_TOKEN_URL, data=payload, auth=auth)
         r.raise_for_status()
         return r.json()
@@ -48,7 +49,7 @@ async def exchange_code(code: str) -> dict[str, Any]:
 
 async def _request(token: str, url: str, params: dict | None = None) -> Any:
     headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with http_client(timeout=30.0) as client:
         r = await client.get(url, headers=headers, params=params or {})
         r.raise_for_status()
         return r.json()

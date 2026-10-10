@@ -1,10 +1,9 @@
 
+from config import settings
 from database import get_db
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Response
 from models.note import EmbeddingFailure, Note, NoteTag, Tag
 from pydantic import BaseModel, field_validator
-from services.pagination import add_pagination_headers
-from services.sanitizer import sanitize_title, sanitize_content
 from services.embedding_service import (
     get_dead_letter_entries,
     get_retryable_embedding_notes,
@@ -12,6 +11,7 @@ from services.embedding_service import (
     reset_dead_letter_entry,
     trigger_embedding,
 )
+from services.http_client import http_client
 from services.note_service import (
     accept_ai_tag as accept_ai_tag_service,
 )
@@ -23,12 +23,10 @@ from services.note_service import (
 )
 from services.note_service import (
     get_or_create_tag,
+    note_to_response,
 )
 from services.note_service import (
     list_backlinks as list_backlinks_service,
-)
-from services.note_service import (
-    note_to_response,
 )
 from services.note_service import (
     rebuild_derived_data as rebuild_note_derived_data,
@@ -36,13 +34,12 @@ from services.note_service import (
 from services.note_service import (
     update_note as update_note_service,
 )
+from services.pagination import add_pagination_headers
+from services.sanitizer import sanitize_content, sanitize_title
 from services.skill_tree import sync_skills_for_tags
 from services.tag_graph import sync_tag_cooccurrences_for_tags
 from sqlalchemy import text
 from sqlalchemy.orm import Session, selectinload
-
-import httpx
-from config import settings
 
 router = APIRouter(prefix="/notes", tags=["notes"])
 
@@ -214,7 +211,7 @@ async def semantic_search(
 
     # 1. Embed the query via ai-service
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with http_client(timeout=30.0) as client:
             headers = {}
             if settings.internal_secret:
                 headers["X-Internal-Secret"] = settings.internal_secret
