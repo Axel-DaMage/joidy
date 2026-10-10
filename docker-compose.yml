@@ -1,3 +1,9 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   postgres:
     image: ${POSTGRES_IMAGE:-pgvector/pgvector:pg16}
@@ -17,6 +23,7 @@ services:
         limits:
           cpus: '1.0'
           memory: 1G
+    logging: *default-logging
     restart: unless-stopped
 
   api:
@@ -66,6 +73,7 @@ services:
         limits:
           cpus: '1.5'
           memory: 1G
+    logging: *default-logging
     restart: unless-stopped
 
   ai-service:
@@ -97,6 +105,7 @@ services:
         limits:
           cpus: '1.5'
           memory: 1536M
+    logging: *default-logging
     restart: unless-stopped
 
   worker:
@@ -127,6 +136,7 @@ services:
         limits:
           cpus: '0.5'
           memory: 512M
+    logging: *default-logging
     restart: unless-stopped
 
   frontend:
@@ -149,6 +159,7 @@ services:
         limits:
           cpus: '0.5'
           memory: 512M
+    logging: *default-logging
     restart: unless-stopped
 
 volumes:
