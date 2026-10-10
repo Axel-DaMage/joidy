@@ -5,7 +5,7 @@ from time import perf_counter
 
 from config import settings
 from database import init_db
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from logging_config import setup_logging
@@ -13,12 +13,12 @@ from middleware.metrics import MetricsMiddleware
 from middleware.rate_limit import RateLimitMiddleware
 from middleware.request_id import RequestIdMiddleware
 from routers import (
-    folders,
     ai,
     analytics,
     auth,
     config,
     export,
+    folders,
     gamification,
     goals,
     metrics,
@@ -39,7 +39,7 @@ from routers import (
 )
 from routers.integrations import github, google, spotify, strava
 from services.auth_service import get_current_user
-from fastapi import Depends, HTTPException
+from services.http_client import aclose_http_clients
 from services.response_cache import get_cache_stats
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -96,6 +96,7 @@ async def lifespan(app: FastAPI):
         logger.exception("Failed to auto-restore goals from vault")
 
     yield
+    await aclose_http_clients()
 
 
 class CorsSafetyMiddleware(BaseHTTPMiddleware):

@@ -3,11 +3,11 @@ import logging
 import time
 from datetime import datetime, timedelta, timezone
 
-import httpx
 from config import settings
 from database import SessionLocal
 from models.note import EmbeddingFailure, Note
 from services.embedding_retry import compute_retry_delay_seconds
+from services.http_client import http_client
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -32,7 +32,7 @@ async def _embeddings_available() -> bool:
         return _embedding_health_cache[0]
     available = False
     try:
-        async with httpx.AsyncClient(timeout=3.0) as client:
+        async with http_client(timeout=3.0) as client:
             r = await client.get(f"{settings.ai_service_url}/health")
             if r.status_code == 200:
                 body = r.json()
@@ -51,7 +51,7 @@ async def trigger_embedding(
         return
     async with _embedding_semaphore:
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with http_client(timeout=30.0) as client:
                 headers = {}
                 if settings.internal_secret:
                     headers["X-Internal-Secret"] = settings.internal_secret

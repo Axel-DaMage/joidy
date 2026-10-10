@@ -2,7 +2,6 @@ import logging
 import secrets
 from typing import Any
 
-import httpx
 from config import settings
 from models.github import (
     GitHubEvent,
@@ -11,7 +10,8 @@ from models.github import (
     GitHubItemType,
     GitHubRepo,
 )
-from repositories import GitHubEventRepository, GitHubItemRepository, GitHubRepoRepository, GoalRepository
+from repositories import GitHubItemRepository, GitHubRepoRepository
+from services.http_client import http_client
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -31,28 +31,28 @@ def _headers() -> dict[str, str]:
 
 
 async def fetch_github(url: str, params: dict | None = None) -> list[dict]:
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with http_client(timeout=30.0) as client:
         r = await client.get(f"{GITHUB_API}{url}", headers=_headers(), params=params or {})
         r.raise_for_status()
         return r.json()
 
 
 async def post_github(url: str, data: dict | None = None) -> dict:
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with http_client(timeout=30.0) as client:
         r = await client.post(f"{GITHUB_API}{url}", headers=_headers(), json=data)
         r.raise_for_status()
         return r.json()
 
 
 async def patch_github(url: str, data: dict) -> dict:
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with http_client(timeout=30.0) as client:
         r = await client.patch(f"{GITHUB_API}{url}", headers=_headers(), json=data)
         r.raise_for_status()
         return r.json()
 
 
 async def delete_github(url: str) -> None:
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with http_client(timeout=30.0) as client:
         r = await client.delete(f"{GITHUB_API}{url}", headers=_headers())
         r.raise_for_status()
 
