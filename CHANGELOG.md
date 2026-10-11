@@ -1,7 +1,7 @@
 # Changelog
 
 <!-- hermes-release:pending v1.0.0 -->
-## [v1.0.0] — 2026-10-10
+## [v1.0.0] — 2026-10-11
 
 ### ⚠️ Breaking Changes
 
