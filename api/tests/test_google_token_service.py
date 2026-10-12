@@ -266,7 +266,7 @@ class GetValidAccessTokenTest(GoogleTokenTestBase):
             mock_client.__aexit__ = AsyncMock(return_value=None)
             mock_client.post = AsyncMock(return_value=mock_response)
 
-            with patch("services.google_token_service.httpx.AsyncClient", return_value=mock_client):
+            with patch("services.google_token_service.http_client", return_value=mock_client):
                 result = self._run(get_valid_access_token(db))
 
             self.assertEqual(result, "new-access-token")
@@ -298,7 +298,7 @@ class GetValidAccessTokenTest(GoogleTokenTestBase):
             mock_client.__aexit__ = AsyncMock(return_value=None)
             mock_client.post = AsyncMock(return_value=mock_response)
 
-            with patch("services.google_token_service.httpx.AsyncClient", return_value=mock_client):
+            with patch("services.google_token_service.http_client", return_value=mock_client):
                 result = self._run(get_valid_access_token(db))
 
             self.assertIsNone(result)

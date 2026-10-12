@@ -7,10 +7,12 @@ records a lightweight usage event from the frontend (only while the app is in
 the foreground). ``GET /analytics/usage`` returns the aggregated usage summary.
 """
 
+from datetime import datetime, timedelta, timezone
+
 import httpx
 from config import settings
 from database import get_db
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from middleware.correlation_id import get_correlation_id
 from models.gamification import UserStats, XPEvent
 from models.goal import Goal
@@ -19,6 +21,7 @@ from models.note import Tag as TagModel
 from models.skill import Skill
 from pydantic import BaseModel, field_validator
 from services.auth_service import get_current_user
+from services.http_client import http_client
 from services.mood_service import get_mood_history, get_mood_stats
 from services.usage_service import (
     VALID_EVENT_TYPES,
@@ -27,7 +30,6 @@ from services.usage_service import (
 )
 from sqlalchemy import func
 from sqlalchemy.orm import Session
-from datetime import datetime, timedelta, timezone
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
@@ -116,7 +118,7 @@ async def _ai_usage() -> dict:
     """Fetch monthly AI usage from the ai-service (best-effort)."""
     if not settings.ai_service_enabled:
         return {"ai_enabled": False, "estimated_cost_usd": 0, "status": "disabled"}
-    async with httpx.AsyncClient(timeout=5.0) as client:
+    async with http_client(timeout=5.0) as client:
         try:
             headers = {"X-Request-ID": get_correlation_id()}
             if settings.internal_secret:

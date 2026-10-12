@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 
 def _mock_httpx(response_json: dict) -> tuple[MagicMock, MagicMock]:
-    """Build a mocked ``httpx.AsyncClient`` async-context-manager.
+    """Build a mocked ``http_client`` async-context-manager.
 
     Returns the class-level mock (to be asserted on) and the instance mock so
     callers can inspect which method was called.
@@ -33,7 +33,7 @@ def _mock_httpx(response_json: dict) -> tuple[MagicMock, MagicMock]:
 # --- GET /ai/usage -----------------------------------------------------------
 
 
-@patch("routers.ai.httpx.AsyncClient")
+@patch("routers.ai.http_client")
 def test_ai_usage_returns_data(mock_client_cls, client: TestClient):
     mock_cls, mock_instance = _mock_httpx({"ai_enabled": True, "estimated_cost_usd": 1.23, "tokens": 5000})
     mock_client_cls.side_effect = mock_cls
@@ -47,7 +47,7 @@ def test_ai_usage_returns_data(mock_client_cls, client: TestClient):
     mock_instance.get.assert_awaited_once()
 
 
-@patch("routers.ai.httpx.AsyncClient")
+@patch("routers.ai.http_client")
 def test_ai_usage_unreachable_returns_fallback(mock_client_cls, client: TestClient):
     """When the AI service is down the endpoint returns a safe fallback (#13)."""
     import httpx
@@ -70,7 +70,7 @@ def test_ai_usage_unreachable_returns_fallback(mock_client_cls, client: TestClie
 # --- POST /ai/chat -----------------------------------------------------------
 
 
-@patch("routers.ai.httpx.AsyncClient")
+@patch("routers.ai.http_client")
 def test_ai_chat_with_valid_message(mock_client_cls, client: TestClient):
     mock_cls, mock_instance = _mock_httpx({"response": "Hello! How can I help?", "suggestions": ["Tell me more"]})
     mock_client_cls.side_effect = mock_cls
@@ -99,7 +99,7 @@ def test_ai_chat_with_malformed_message_validation(client: TestClient):
     assert resp.status_code == 422
 
 
-@patch("routers.ai.httpx.AsyncClient")
+@patch("routers.ai.http_client")
 def test_ai_chat_service_unavailable(mock_client_cls, client: TestClient):
     """When the AI service is unreachable, chat returns a graceful fallback."""
     import httpx
@@ -124,7 +124,7 @@ def test_ai_chat_service_unavailable(mock_client_cls, client: TestClient):
 # --- POST /ai/classify -------------------------------------------------------
 
 
-@patch("routers.ai.httpx.AsyncClient")
+@patch("routers.ai.http_client")
 def test_ai_classify_returns_suggestions(mock_client_cls, client: TestClient):
     mock_cls, mock_instance = _mock_httpx({"note_id": 1, "suggestions": ["work", "urgent"]})
     mock_client_cls.side_effect = mock_cls
@@ -141,7 +141,7 @@ def test_ai_classify_returns_suggestions(mock_client_cls, client: TestClient):
     mock_instance.post.assert_awaited_once()
 
 
-@patch("routers.ai.httpx.AsyncClient")
+@patch("routers.ai.http_client")
 def test_ai_classify_service_unavailable(mock_client_cls, client: TestClient):
     """Classify degrades gracefully when the AI service is down."""
     import httpx
@@ -166,7 +166,7 @@ def test_ai_classify_service_unavailable(mock_client_cls, client: TestClient):
 # --- POST /ai/daily-recap ----------------------------------------------------
 
 
-@patch("routers.ai.httpx.AsyncClient")
+@patch("routers.ai.http_client")
 def test_ai_daily_recap_returns_summary(mock_client_cls, client: TestClient):
     mock_cls, mock_instance = _mock_httpx({"recap": "You created 3 notes today.", "suggestions": ["Review your goals"]})
     mock_client_cls.side_effect = mock_cls
@@ -179,7 +179,7 @@ def test_ai_daily_recap_returns_summary(mock_client_cls, client: TestClient):
     mock_instance.post.assert_awaited_once()
 
 
-@patch("routers.ai.httpx.AsyncClient")
+@patch("routers.ai.http_client")
 def test_ai_daily_recap_with_explicit_date(mock_client_cls, client: TestClient):
     mock_cls, mock_instance = _mock_httpx({"recap": "Summary for the day.", "suggestions": []})
     mock_client_cls.side_effect = mock_cls
@@ -198,7 +198,7 @@ def test_ai_daily_recap_invalid_date(client: TestClient):
     assert "Invalid date format" in resp.json()["detail"]
 
 
-@patch("routers.ai.httpx.AsyncClient")
+@patch("routers.ai.http_client")
 def test_ai_daily_recap_service_unavailable(mock_client_cls, client: TestClient):
     """Daily recap degrades gracefully when the AI service is down."""
     import httpx

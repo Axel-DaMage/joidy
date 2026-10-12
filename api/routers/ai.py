@@ -1,17 +1,19 @@
+from datetime import datetime, timedelta
+
 import httpx
 from config import settings
 from database import get_db
 from fastapi import APIRouter, Depends, HTTPException
 from middleware.correlation_id import get_correlation_id
-from models.goal import Goal, GoalState
 from models.gamification import UserStats
+from models.goal import Goal, GoalState
 from models.note import Note, NoteTag, Tag
 from pydantic import BaseModel
 from services.auth_service import get_current_user
+from services.http_client import http_client
 from services.timezone_utils import get_local_today, to_utc_datetime
 from sqlalchemy import func
 from sqlalchemy.orm import Session
-from datetime import datetime, date, timedelta, timezone
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
@@ -34,7 +36,7 @@ class ClassifyRequest(BaseModel):
 async def classify(req: ClassifyRequest):
     if not settings.ai_service_enabled:
         return {**_ai_disabled_response("classify"), "note_id": req.note_id, "suggestions": []}
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with http_client(timeout=30.0) as client:
         try:
             headers = {"X-Request-ID": get_correlation_id()}
             if settings.internal_secret:
@@ -53,7 +55,7 @@ async def classify(req: ClassifyRequest):
 async def usage():
     if not settings.ai_service_enabled:
         return {**_ai_disabled_response("usage"), "estimated_cost_usd": 0}
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with http_client(timeout=10.0) as client:
         try:
             headers = {"X-Request-ID": get_correlation_id()}
             if settings.internal_secret:
@@ -70,7 +72,7 @@ async def cluster_notes(eps: float = 0.3, min_samples: int = 3, max_notes: int =
     """Cluster notes by semantic similarity via the ai-service (#393)."""
     if not settings.ai_service_enabled:
         return {**_ai_disabled_response("cluster"), "clusters": [], "total_notes": 0}
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    async with http_client(timeout=60.0) as client:
         try:
             headers = {"X-Request-ID": get_correlation_id()}
             if settings.internal_secret:
@@ -136,7 +138,7 @@ async def daily_recap(
         "note_titles": note_titles,
     }
 
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    async with http_client(timeout=60.0) as client:
         try:
             headers = {"X-Request-ID": get_correlation_id()}
             if settings.internal_secret:
@@ -244,7 +246,7 @@ async def chat(
         }
     context = _gather_chat_context(db)
 
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    async with http_client(timeout=60.0) as client:
         try:
             headers = {"X-Request-ID": get_correlation_id()}
             if settings.internal_secret:

@@ -11,10 +11,10 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-import httpx
 from config import settings
 from cryptography.fernet import Fernet, InvalidToken
 from models.google_token import GoogleToken
+from services.http_client import http_client
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -121,7 +121,7 @@ async def get_valid_access_token(db: Session) -> str | None:
     }
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with http_client(timeout=30.0) as client:
             r = await client.post(GOOGLE_TOKEN_URL, data=payload)
             r.raise_for_status()
             data: dict[str, Any] = r.json()
