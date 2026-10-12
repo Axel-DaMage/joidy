@@ -64,6 +64,9 @@ export async function authenticate(page: Page): Promise<void> {
     // Enable Dev Mode — pages under development show "En Construcción"
     // unless dev mode is ON (stored in localStorage key 'joidy-dev-mode')
     localStorage.setItem('joidy-dev-mode', 'true');
+    // Skip the onboarding tour — its spotlight overlay intercepts pointer
+    // events and makes every nav click time out on a fresh database.
+    localStorage.setItem('joidy-onboarding-complete', 'true');
     // Set locale to Spanish — the app detects browser language which may
     // be English in headless Chrome. Stored in 'joidy:locale' key.
     localStorage.setItem('joidy:locale', 'es-ES');

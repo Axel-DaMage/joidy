@@ -22,7 +22,7 @@ from services.note_service import (
     note_to_response,
     update_note,
 )
-from services.sync_service import detect_conflict
+from services.sync_service import detect_conflict, to_utc_naive
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -80,7 +80,7 @@ def _update_sync_state(
         db.add(sync)
 
     sync.remote_mtime = remote_mtime
-    sync.last_synced_at = datetime.now(timezone.utc)
+    sync.last_synced_at = to_utc_naive(datetime.now(timezone.utc))
     sync.conflict = detect_conflict(sync.local_mtime, remote_mtime)
     return sync
 
@@ -111,7 +111,7 @@ def process_webhook_event(
         raise ValueError(f"Unsupported event type: {event}")
 
     remote_mtime = (
-        datetime.fromtimestamp(mtime, tz=timezone.utc) if mtime else None
+        to_utc_naive(datetime.fromtimestamp(mtime, tz=timezone.utc)) if mtime else None
     )
 
     if event == "delete":

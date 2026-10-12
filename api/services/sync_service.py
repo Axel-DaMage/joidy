@@ -31,6 +31,22 @@ ConflictResolution = Literal["keep_local", "keep_remote", "merge"]
 CONFLICT_TOLERANCE_SECONDS = 2
 
 
+def to_utc_naive(dt: datetime | None) -> datetime | None:
+    """Normalize a datetime to naive UTC for storage in DateTime columns.
+
+    Aware datetimes are converted to UTC then stripped of tzinfo. Naive
+    datetimes are assumed to already be UTC. Without this, PostgreSQL
+    converts aware values into the session timezone before storing, so
+    reads back interpret them as local and conflict detection misfires
+    whenever the DB timezone is not UTC.
+    """
+    if dt is None:
+        return None
+    if dt.tzinfo is not None:
+        return dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
+
+
 def detect_conflict(
     local_mtime: datetime | None,
     remote_mtime: datetime | None,
@@ -127,8 +143,8 @@ def resolve_conflict(
             rebuild_derived_data=False,
         )
         sync.conflict = False
-        sync.local_mtime = sync.remote_mtime
-        sync.last_synced_at = datetime.now(timezone.utc)
+        sync.local_mtime = to_utc_naive(sync.remote_mtime)
+        sync.last_synced_at = to_utc_naive(datetime.now(timezone.utc))
         db.commit()
         logger.info("[sync] Resolved conflict for note %d: keep_remote", note_id)
 
@@ -144,7 +160,7 @@ def resolve_conflict(
             rebuild_derived_data=False,
         )
         sync.conflict = False
-        now = datetime.now(timezone.utc)
+        now = to_utc_naive(datetime.now(timezone.utc))
         sync.local_mtime = now
         sync.remote_mtime = now
         sync.last_synced_at = now
@@ -166,5 +182,5 @@ def update_local_mtime(db: Session, note_id: int) -> None:
     if not sync:
         sync = SyncState(note_id=note_id)
         db.add(sync)
-    sync.local_mtime = datetime.now(timezone.utc)
+    sync.local_mtime = to_utc_naive(datetime.now(timezone.utc))
     db.flush()

@@ -96,10 +96,14 @@ def db_session():
         import models  # noqa: F401
         Base.metadata.create_all(engine)
     else:
+        # SQLAlchemy 2.1+ requires StaticPool's `creator`; use poolclass so
+        # create_engine injects the dialect creator itself.
+        from sqlalchemy.pool import StaticPool
+
         engine = create_engine(
             "sqlite:///:memory:",
             connect_args={"check_same_thread": False},
-            pool=__import__("sqlalchemy.pool", fromlist=["StaticPool"]).StaticPool(),
+            poolclass=StaticPool,
         )
         Base.metadata.create_all(engine)
 
