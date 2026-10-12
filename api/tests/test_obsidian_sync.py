@@ -42,7 +42,9 @@ def test_obsidian_webhook_unconfigured_accepts_any(client, db_session):
     sync = db_session.query(SyncState).filter_by(note_id=1).first()
     assert sync is not None
     assert sync.remote_mtime is not None
-    assert sync.remote_mtime.timestamp() == 1_700_000_000
+    # DateTime columns store naive UTC; compare against the UTC wall time.
+    expected = datetime.fromtimestamp(1_700_000_000, tz=timezone.utc).replace(tzinfo=None)
+    assert sync.remote_mtime == expected
 
 
 def test_sync_state_model_exists():
@@ -53,7 +55,10 @@ def test_sync_state_model_exists():
 @patch("config.settings.auth_password", "")
 def test_obsidian_webhook_detects_conflict(client, db_session):
     _create_note(db_session, 2)
-    sync = SyncState(note_id=2, local_mtime=datetime.fromtimestamp(1_600_000_000, tz=timezone.utc))
+    sync = SyncState(
+        note_id=2,
+        local_mtime=datetime.fromtimestamp(1_600_000_000, tz=timezone.utc).replace(tzinfo=None),
+    )
     db_session.add(sync)
     db_session.commit()
 
@@ -76,7 +81,7 @@ def test_obsidian_webhook_no_conflict_when_mtimes_match(client, db_session):
     mtime = 1_700_000_000
     sync = SyncState(
         note_id=3,
-        local_mtime=datetime.fromtimestamp(mtime, tz=timezone.utc),
+        local_mtime=datetime.fromtimestamp(mtime, tz=timezone.utc).replace(tzinfo=None),
     )
     db_session.add(sync)
     db_session.commit()
