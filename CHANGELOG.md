@@ -1,7 +1,7 @@
 # Changelog
 
 <!-- hermes-release:pending v1.0.0 -->
-## [v1.0.0] — 2026-10-12
+## [v1.0.0] — 2026-10-13
 
 ### ⚠️ Breaking Changes
 
@@ -45,9 +45,6 @@
 * fix(goals): prevent duplicate goals on note sync and compact card vertical space by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/927
 * fix(goals): prevent duplicate goal creation when adding objective by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/918
 * fix(goals): superpose completed state in week history & add editor quick actions by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/914
-* fix(aur): normalize hyphens to underscores in pkgver by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/888
-* fix(infra): run dev containers as host UID/GID so .svelte-kit never needs sudo by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/887
-* fix(ci): use correct AUR_SSH_KEY secret name in aur-publish workflow by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/885
 
 ### ⚡ Performance
 
@@ -58,6 +55,9 @@
 
 ### 🧹 Chores
 
+* chore(deps-dev): Bump source-map-js from 1.2.1 to 1.2.2 in /frontend by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1052
+* chore(deps-dev): Bump brace-expansion from 5.0.9 to 5.0.12 in /frontend by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1051
+* chore(deps-dev): Bump postcss-selector-parser from 7.1.4 to 7.1.6 in /frontend by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1050
 * chore(deps-dev): Bump @playwright/test from 1.62.1 to 1.64.0 in /frontend by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1047
 * chore(deps): Bump openai from 3.22.1 to 3.26.0 in /ai-service by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1046
 * chore(deps): Bump aiohttp from 3.14.3 to 3.14.4 in /ai-service by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1044
