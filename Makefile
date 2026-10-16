@@ -154,13 +154,13 @@ test-api: ## Run all API unit tests via pytest
 test-frontend: ## Run frontend unit tests (vitest) inside Docker
 	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml run --rm frontend npm run test:run
 
-test-frontend-e2e: ## Run frontend E2E tests (Playwright) — requires running stack
+test-frontend-e2e: ## Run frontend E2E tests (Playwright) — requires the dev stack running (make dev)
 	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml run --rm frontend npx playwright test
 
 test-frontend-check: ## Run frontend typechecking (svelte-check) inside Docker
 	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml run --rm frontend npm run check
 
-test: test-api test-frontend test-frontend-check ## Run all test suites (API + Frontend + typecheck)
+test: test-api test-frontend test-frontend-check ## Run all unit/typecheck suites (API + Frontend). E2E is separate: make test-frontend-e2e (needs make dev running)
 
 lint-api: ## Check syntax of all Python services via Docker (compileall)
 	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml run --rm api python -m compileall -q /app/api /app/ai-service /app/worker || (echo "Syntax errors found"; exit 1)
