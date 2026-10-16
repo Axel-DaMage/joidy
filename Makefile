@@ -148,8 +148,8 @@ migrate: ## Run Alembic migrations up to head in api container
 db-health: ## Verify migration head and required core tables
 	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml run --rm api sh -c "cd /app && alembic -c /app/alembic.ini current && PYTHONPATH=/app python scripts/verify_db_health.py"
 
-test-api: ## Run all API unit tests via pytest
-	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml run --rm api sh -c "cd /app && pytest --cov --cov-report=term-missing"
+test-api: ## Run all API unit tests via pytest (parallel: one joidy_test_gwN DB per worker, #996)
+	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml run --rm api sh -c "cd /app && pytest -n auto --durations=20 --cov --cov-report=term-missing"
 
 test-frontend: ## Run frontend unit tests (vitest) inside Docker
 	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml run --rm frontend npm run test:run

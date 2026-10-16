@@ -19,7 +19,10 @@ ALGORITHM = "HS256"
 TOKEN_EXPIRE_HOURS = 24 * 7  # 1 week
 
 security = HTTPBearer(auto_error=False)
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+_pwd_context_kwargs: dict = {"schemes": ["bcrypt"], "deprecated": "auto"}
+if settings.bcrypt_rounds:
+    _pwd_context_kwargs["bcrypt__rounds"] = settings.bcrypt_rounds
+pwd_context = CryptContext(**_pwd_context_kwargs)
 
 
 def _effective_auth_password() -> str:
