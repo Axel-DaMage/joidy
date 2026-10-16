@@ -5,9 +5,37 @@ Lives in ``services/`` because both ``routers/config.py`` (settings UI) and
 router must never be imported from a service.
 """
 
+import os
 from pathlib import Path
 
-ENV_FILE = Path("/app/.env") if Path("/app").exists() else Path(__file__).parent.parent.parent / ".env"
+
+def _default_env_file() -> Path:
+    """The deployment's ``.env`` when ``JOIDY_ENV_FILE`` is not set.
+
+    ``/app/.env`` inside Docker (the compose bind-mount target), the repo-root
+    ``.env`` otherwise.
+    """
+    if Path("/app").exists():
+        return Path("/app/.env")
+    return Path(__file__).parent.parent.parent / ".env"
+
+
+def get_env_file() -> Path:
+    """Resolve the env file path, honoring the ``JOIDY_ENV_FILE`` override.
+
+    ``JOIDY_ENV_FILE`` already selects the host-side bind-mount source in
+    docker-compose; honoring it in Python as well lets read-only installs and
+    the test suite (#991) redirect persistence without touching the real
+    ``.env``. Resolved on every call (not at import) so tests can point it at a
+    per-test file after app modules are already imported.
+    """
+    return Path(os.getenv("JOIDY_ENV_FILE") or _default_env_file())
+
+
+# Kept as a module-level constant for backwards compatibility (re-exported by
+# ``routers/config.py``). Prefer ``get_env_file()`` — it picks up runtime
+# changes to ``JOIDY_ENV_FILE``.
+ENV_FILE = get_env_file()
 
 
 def read_env() -> dict:
@@ -19,8 +47,9 @@ def read_env() -> dict:
     500 and breaking the whole settings page.
     """
     env_vars: dict[str, str] = {}
-    if ENV_FILE.is_file():
-        with open(ENV_FILE) as f:
+    env_file = get_env_file()
+    if env_file.is_file():
+        with open(env_file) as f:
             for line in f:
                 line = line.strip()
                 if line and not line.startswith("#") and "=" in line:
@@ -37,9 +66,10 @@ def write_env(env_vars: dict) -> None:
     template entry the user (or ``.env.example``) had — including the hints
     needed to configure the app later.
     """
+    env_file = get_env_file()
     lines: list[str] = []
-    if ENV_FILE.is_file():
-        with open(ENV_FILE) as f:
+    if env_file.is_file():
+        with open(env_file) as f:
             lines = f.read().splitlines()
 
     remaining = dict(env_vars)
@@ -58,7 +88,7 @@ def write_env(env_vars: dict) -> None:
             output.append("")
         output.extend(f"{key}={value}" for key, value in remaining.items())
 
-    with open(ENV_FILE, "w") as f:
+    with open(env_file, "w") as f:
         f.write("\n".join(output).rstrip("\n") + "\n")
 
 

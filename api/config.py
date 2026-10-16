@@ -1,8 +1,13 @@
+import os
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    # JOIDY_ENV_FILE mirrors services.env_file.get_env_file() (#991): the test
+    # suite points it at an isolated empty file so a developer's populated .env
+    # cannot leak into Settings at import time.
+    model_config = SettingsConfigDict(env_file=os.getenv("JOIDY_ENV_FILE") or ".env", extra="ignore")
 
     database_url: str = "postgresql+psycopg2://joidy:joidy@postgres:5432/joidy"
     ai_service_url: str = "http://ai-service:8002"
