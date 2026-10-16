@@ -94,16 +94,22 @@ def test_skill_tree_nodes_and_parent_edges(client: TestClient, db_session):
     assert edge in data["edges"]
 
 
-def test_sync_skills_creates_and_updates(client: TestClient, db_session):
-    """Sync derives skill note_count/level from NoteTag rows."""
+def _link_notes(db_session, tag: TagModel, count: int):
+    """Create `count` notes tagged with `tag` (>=3 needed for a non-locked skill)."""
     from models.note import NoteTag
 
-    tag = _tag(db_session)
-    note = Note(title=f"n-skills-{uuid.uuid4().hex[:8]}", content="x")
-    db_session.add(note)
-    db_session.flush()
-    db_session.add(NoteTag(note_id=note.id, tag_id=tag.id))
+    for _ in range(count):
+        note = Note(title=f"n-skills-{uuid.uuid4().hex[:8]}", content="x")
+        db_session.add(note)
+        db_session.flush()
+        db_session.add(NoteTag(note_id=note.id, tag_id=tag.id))
     db_session.commit()
+
+
+def test_sync_skills_creates_and_updates(client: TestClient, db_session):
+    """Sync derives skill note_count/level from NoteTag rows."""
+    tag = _tag(db_session)
+    _link_notes(db_session, tag, 3)  # <3 counts stay "locked" and are filtered
 
     response = client.post("/skills/sync")
     assert response.status_code == 200
@@ -113,8 +119,8 @@ def test_sync_skills_creates_and_updates(client: TestClient, db_session):
 
     skills = client.get("/skills/").json()
     mine = next(s for s in skills if s["tag_id"] == tag.id)
-    assert mine["note_count"] == 1
-    assert mine["level"] != "locked"
+    assert mine["note_count"] == 3
+    assert mine["level"] == "apprentice"
 
 
 def test_sync_invalidates_list_cache(client: TestClient, db_session):
@@ -122,8 +128,10 @@ def test_sync_invalidates_list_cache(client: TestClient, db_session):
     client.get("/skills/")  # warm the cache
 
     tag = _tag(db_session)
+    # Seed the skill AND the notes that keep it non-locked through re-sync.
     db_session.add(Skill(tag_id=tag.id, note_count=3, level="apprentice"))
     db_session.commit()
+    _link_notes(db_session, tag, 3)
 
     # Without invalidation the cached list would hide the new row.
     response = client.post("/skills/sync")
