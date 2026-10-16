@@ -13,3 +13,8 @@ pgvector==0.5.0
 prometheus-client==0.26.0
 numpy==2.5.3
 scikit-learn==1.9.0
+# Test tooling — kept in requirements.txt (same convention as api/) so
+# `pytest tests/` works inside the ai-service container.
+pytest==9.1.1
+pytest-asyncio==1.4.0
+httpx==0.28.1

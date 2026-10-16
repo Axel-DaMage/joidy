@@ -26,8 +26,9 @@ make logs[-api|-ai|-worker]
 make shell-api       # Exec into api container
 make db-health       # Verify DB tables + migrations applied
 make migrate         # Alembic upgrade head (in api container)
-make test            # test-api + test-frontend
+make test            # test-api + test-ai + test-frontend
 make test-api        # PYTHONPATH=/app python -m unittest discover -s tests
+make test-ai         # ai-service pytest suite (tests/)
 make test-frontend   # cd frontend && npx playwright test
 make lint            # python -m compileall on all Python services
 ```
