@@ -128,6 +128,30 @@ make test      # Run tests
 make migrate   # Database migrations
 ```
 
+### Power saving: idle watchdog
+
+On battery- or thermally-constrained machines the stack can put itself to
+sleep when nobody is using it:
+
+```bash
+joidy idle enable     # start the background watcher
+joidy idle status     # watcher state, last activity, countdown to sleep
+joidy idle disable    # stop the watcher (services untouched)
+joidy wake            # restore the services that were running before sleep
+```
+
+The watcher polls established HTTP connections on the published ports
+(frontend/api/ai-service/worker), active PostgreSQL sessions, and file
+changes under the vault. After `JOIDY_IDLE_TIMEOUT` minutes in `.env`
+(default 15) with no activity it runs the existing `joidy sleep` path and
+additionally stops the frontend — the heaviest idle CPU consumer. Postgres
+keeps running for data safety; opt into hibernating it with
+`joidy idle enable --idle-hibernate-db`. New activity while asleep restores
+the recorded services automatically.
+
+An optional systemd user unit keeps the watcher alive across logouts:
+`scripts/joidy-idle-watchdog.service` (install notes inside the file).
+
 ### Obsidian Webhook Sync
 
 Joidy supports bidirectional sync with Obsidian. In addition to the local
