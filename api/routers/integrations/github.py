@@ -15,6 +15,7 @@ from models.github import (
 )
 from pydantic import BaseModel, Field
 from services import github_service as gh_svc
+from services.http_client import http_client
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -70,7 +71,7 @@ def _headers(optional: bool = False) -> dict[str, str]:
 
 
 async def _fetch(url: str, params: dict | None = None, optional_auth: bool = False) -> Any:
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with http_client(timeout=30.0) as client:
         r = await client.get(
             f"{GITHUB_API}{url}",
             headers=_headers(optional=optional_auth),
@@ -81,21 +82,21 @@ async def _fetch(url: str, params: dict | None = None, optional_auth: bool = Fal
 
 
 async def _post(url: str, data: dict | None = None) -> dict:
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with http_client(timeout=30.0) as client:
         r = await client.post(f"{GITHUB_API}{url}", headers=_headers(), json=data)
         r.raise_for_status()
         return r.json()
 
 
 async def _patch(url: str, data: dict) -> dict:
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with http_client(timeout=30.0) as client:
         r = await client.patch(f"{GITHUB_API}{url}", headers=_headers(), json=data)
         r.raise_for_status()
         return r.json()
 
 
 async def _delete(url: str) -> None:
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with http_client(timeout=30.0) as client:
         r = await client.delete(f"{GITHUB_API}{url}", headers=_headers())
         r.raise_for_status()
 
@@ -880,7 +881,7 @@ async def start_device_flow():
     device_auth_url = "https://github.com/login/device/code"
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with http_client(timeout=30.0) as client:
             r = await client.post(
                 device_auth_url,
                 headers={
@@ -938,7 +939,7 @@ async def poll_device_code(
     token_url = "https://github.com/login/oauth/access_token"
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with http_client(timeout=30.0) as client:
             r = await client.post(
                 token_url,
                 headers={
@@ -1042,7 +1043,7 @@ async def oauth_callback(
 
     token_url = "https://github.com/login/oauth/access_token"
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with http_client(timeout=30.0) as client:
         r = await client.post(
             token_url,
             headers={
@@ -1090,7 +1091,7 @@ async def revoke_token(
 
     revoke_url = "https://github.com/login/oauth/revoke"
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with http_client(timeout=30.0) as client:
         r = await client.post(
             revoke_url,
             headers={

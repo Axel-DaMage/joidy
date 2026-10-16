@@ -45,6 +45,10 @@ class AnthropicClient(BaseLLMClient):
         )
         return response.content[0].text
 
+    async def close(self) -> None:
+        """Close the SDK's underlying httpx client (#998)."""
+        await self._client.close()
+
 
 def _is_retryable_error(exc: Exception) -> bool:
     msg = str(exc).lower()
