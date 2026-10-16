@@ -17,9 +17,18 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+COPY requirements.txt requirements-dev.txt ./
+
+# Dev/test tooling is opt-in: production builds (the default) ship runtime
+# deps only, while docker-compose.dev.yml passes INSTALL_DEV=true so dev
+# containers can run pytest/ruff/mypy in-container (#999).
+ARG INSTALL_DEV=false
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --prefix=/install -r requirements.txt
+    if [ "$INSTALL_DEV" = "true" ]; then \
+        pip install --prefix=/install -r requirements-dev.txt; \
+    else \
+        pip install --prefix=/install -r requirements.txt; \
+    fi
 
 # ── runtime: slim final image ────────────────────────────────────────────────
 FROM python:${PYTHON_VERSION}-slim AS runtime

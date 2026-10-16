@@ -48,6 +48,8 @@ services:
       args:
         UID: ${UID:-1000}
         GID: ${GID:-1000}
+        # Dev image ships test/lint tooling so `make test-api` works in-container (#999)
+        INSTALL_DEV: "true"
     user: ${UID:-1000}:${GID:-1000}
     volumes:
       - ./api:/app
@@ -76,6 +78,8 @@ services:
       args:
         UID: ${UID:-1000}
         GID: ${GID:-1000}
+        # Dev image ships test/lint tooling so pytest runs in-container (#999)
+        INSTALL_DEV: "true"
     user: ${UID:-1000}:${GID:-1000}
     volumes:
       - ./ai-service:/app
@@ -90,6 +94,8 @@ services:
       args:
         UID: ${UID:-1000}
         GID: ${GID:-1000}
+        # Dev image ships test/lint tooling so tests run in-container (#999)
+        INSTALL_DEV: "true"
     user: ${UID:-1000}:${GID:-1000}
     ports:
       - "${WORKER_PORT:-8001}:8001"
