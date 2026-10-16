@@ -128,6 +128,30 @@ make test      # Run tests
 make migrate   # Database migrations
 ```
 
+### Database Backups
+
+`joidy up` starts a `backup` sidecar that automatically takes compressed
+`pg_dump -Fc` snapshots — no user action required. Dumps are written to
+`data/backups/` (on the host, outside the `postgres_data` volume) with
+timestamped filenames and retention pruning. Set `BACKUP_ENABLED=false` in
+`.env` to opt out; `make dev` and plain `docker compose up` never start the
+sidecar (manual: `docker compose --profile backup up -d backup`).
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `BACKUP_SCHEDULE` | `0 3 * * *` | Cron expression (or `@daily`, `@hourly`, `@weekly`, `@monthly`); evaluated in `USER_TIMEZONE` |
+| `BACKUP_RETENTION_DAYS` | `14` | Keep every dump for this many days |
+| `BACKUP_RETENTION_WEEKS` | `4` | Additionally keep Sunday dumps (`BACKUP_WEEKLY_DAY`) for this many weeks |
+| `JOIDY_BACKUP_DIR` | `<data>/backups` | Host directory for dumps |
+
+```bash
+joidy backup                                          # manual dump
+joidy restore data/backups/joidy-YYYYMMDD-HHMMSS.dump # restore (refuses on a live DB)
+joidy restore <file> --force                          # overwrite a live DB
+make db-backup / make db-restore FILE=<dump>          # same via make
+make backup-verify   # round-trip test: dump → restore to a throwaway DB → health check
+```
+
 ### Obsidian Webhook Sync
 
 Joidy supports bidirectional sync with Obsidian. In addition to the local

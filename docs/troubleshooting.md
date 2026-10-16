@@ -594,7 +594,7 @@ ERROR: data page checksum verification failed
 
 1. Backup del volumen:
    ```bash
-   docker compose exec postgres pg_dump -U joidy joidy > backup.sql
+   joidy backup   # dump comprimido en data/backups/
    ```
 
 2. Eliminar y recrear:
@@ -605,7 +605,7 @@ ERROR: data page checksum verification failed
 
 3. Restaurar si hay backup:
    ```bash
-   # Restaurar desde backup
+   joidy restore data/backups/joidy-YYYYMMDD-HHMMSS.dump --force
    ```
 
 ---
