@@ -21,6 +21,10 @@
 #   joidy status   Show service status
 #   joidy logs     Tail logs (all services)
 #   joidy logs api Tail logs for a specific service
+#   joidy idle enable [--idle-hibernate-db]
+#                  Start the idle watchdog (auto-sleep when unused)
+#   joidy idle disable  Stop the watchdog (services untouched)
+#   joidy idle status   Watcher state, last activity, time until sleep
 #   joidy help     Show this help message
 #
 # Port fallback: if a service's host port is already bound by a foreign
@@ -235,6 +239,10 @@ mkdir -p "$JOIDY_DATA_DIR/db" "$JOIDY_DATA_DIR/uploads" "$JOIDY_DATA_DIR/vault"
 
 # Services that are stopped during hibernation
 HIBERNATE_SERVICES="ai-service worker"
+
+# Idle-watchdog state directory. Honors the same writable-dir fallback as
+# JOIDY_DATA_DIR (read-only installs land under ~/.local/share/joidy/data).
+IDLE_STATE_DIR="${JOIDY_DATA_DIR}/idle"
 
 # ─── Podman socket setup ──────────────────────────────────────────
 # Podman rootless uses a per-user socket at $XDG_RUNTIME_DIR/podman/podman.sock
@@ -482,6 +490,17 @@ cmd_wake() {
     fi
   done
   echo ""
+  # If the idle watchdog put the stack to sleep, restore the other services
+  # it recorded (frontend, postgres, ...) that the heavy-services loop above
+  # does not cover — `joidy wake` restores the pre-sleep set.
+  if [ -f "$IDLE_STATE_DIR/pre_sleep_services" ]; then
+    idle_restore_state
+    print_ok "Restored services recorded before idle sleep."
+  fi
+  # Reset the idle timer so a running watcher does not re-sleep immediately.
+  if [ -d "$IDLE_STATE_DIR" ]; then
+    idle_now >"$IDLE_STATE_DIR/last_activity" 2>/dev/null || true
+  fi
   print_ok "Wake complete."
 }
 
@@ -513,6 +532,338 @@ cmd_logs() {
   fi
 }
 
+# ─── Idle watchdog (auto-sleep) ─────────────────────────────────
+# `joidy idle enable` detaches a watcher (`joidy idle run`, also the ExecStart
+# of the optional systemd user unit scripts/joidy-idle-watchdog.service) that
+# polls cheap usage signals every JOIDY_IDLE_POLL_SECONDS (default 60):
+#   - established TCP connections on the published frontend / api /
+#     ai-service / worker ports — real HTTP usage; the in-container
+#     healthchecks hit loopback and never appear on the host socket table
+#   - active PostgreSQL sessions (pg_stat_activity state='active' — also
+#     covers worker job runs, which hold active queries)
+#   - file changes under the Obsidian vault
+# After JOIDY_IDLE_TIMEOUT minutes (default 15, from .env) with no signal the
+# watcher snapshots the running services into pre_sleep_services, runs the
+# existing `joidy sleep` path, and additionally stops the frontend (the
+# heaviest idle CPU consumer — #860). postgres stays up for data safety;
+# `joidy idle enable --idle-hibernate-db` opts into stopping it too. New
+# activity while asleep restores the recorded set automatically; `joidy wake`
+# does the same on demand.
+
+idle_now() { date +%s; }
+
+idle_log() {
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
+}
+
+# Format an epoch as a local timestamp (GNU date -d / BSD date -r).
+idle_fmt_epoch() {
+  date -d "@$1" '+%Y-%m-%d %H:%M:%S' 2>/dev/null \
+    || date -r "$1" '+%Y-%m-%d %H:%M:%S' 2>/dev/null \
+    || echo "$1"
+}
+
+idle_last_activity() {
+  if [ -f "$IDLE_STATE_DIR/last_activity" ]; then
+    cat "$IDLE_STATE_DIR/last_activity"
+  else
+    idle_now
+  fi
+}
+
+idle_watcher_alive() {
+  local pid
+  [ -f "$IDLE_STATE_DIR/watcher.pid" ] || return 1
+  pid=$(cat "$IDLE_STATE_DIR/watcher.pid" 2>/dev/null) || return 1
+  [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
+}
+
+# Service names of currently running compose services (one per line).
+idle_running_services() {
+  local profile out
+  profile="$(ai_profile_args)"
+  out=$($DOCKER_CMD $ENV_FILE_ARG $profile ps --services --filter status=running 2>/dev/null || true)
+  if [ -z "$out" ]; then
+    # Fallback for engines without `ps --services`: match known names in `ps`.
+    out=$($DOCKER_CMD $ENV_FILE_ARG $profile ps 2>/dev/null \
+      | grep -oE 'postgres|ai-service|worker|frontend|api' | sort -u || true)
+  fi
+  echo "$out"
+}
+
+idle_is_running() {
+  idle_running_services | grep -qx "$1"
+}
+
+# Signal 1: established TCP connection on any published service port.
+# Only the server side (local address = our port) counts. An open browser tab
+# (keep-alive / HMR websocket) is therefore treated as activity — sleeping
+# while the UI is open in a tab would be wrong anyway.
+idle_tcp_activity() {
+  local port
+  for port in "$@"; do
+    if command -v ss >/dev/null 2>&1; then
+      if ss -tnH state established 2>/dev/null \
+          | awk -v p="$port" '{n=split($4,a,":"); if (a[n]==p) f=1} END{exit !f}'; then
+        return 0
+      fi
+    elif command -v netstat >/dev/null 2>&1; then
+      # BSD netstat prints local addr as host.port (e.g. 127.0.0.1.3000).
+      if netstat -an 2>/dev/null \
+          | awk -v p="$port" '$NF=="ESTABLISHED"{n=split($4,a,/[.:]/); if (a[n]==p) f=1} END{exit !f}'; then
+        return 0
+      fi
+    fi
+  done
+  return 1
+}
+
+# Signal 2: an active client session on postgres (pool idles don't count —
+# only state='active', excluding the probe itself).
+idle_db_activity() {
+  local pg_user pg_db n
+  idle_is_running postgres || return 1
+  pg_user=$(read_port POSTGRES_USER joidy)
+  pg_db=$(read_port POSTGRES_DB joidy)
+  n=$($DOCKER_CMD $ENV_FILE_ARG exec -T postgres psql -U "$pg_user" -d "$pg_db" -tAc \
+      "SELECT count(*) FROM pg_stat_activity WHERE state='active' AND pid<>pg_backend_pid()" \
+      2>/dev/null | tr -d '[:space:]')
+  case "$n" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$n" -gt 0 ]
+}
+
+# Signal 3: a file under the vault changed since the previous poll
+# (`find -newer` + a marker file — portable to BSD find on macOS).
+idle_vault_activity() {
+  local vault="${OBSIDIAN_VAULT_PATH:-$JOIDY_DATA_DIR/vault}"
+  local marker="$IDLE_STATE_DIR/vault.marker"
+  local hit=""
+  if [ -d "$vault" ] && [ -f "$marker" ]; then
+    hit=$(find "$vault" -type f -newer "$marker" -print -quit 2>/dev/null)
+  fi
+  touch "$marker" 2>/dev/null || true
+  [ -n "$hit" ]
+}
+
+idle_any_activity() {
+  local ports
+  ports="$(read_port FRONTEND_PORT 3000) $(read_port API_PORT 8000) \
+$(read_port AI_SERVICE_PORT 8002) $(read_port WORKER_PORT 8001)"
+  idle_tcp_activity $ports && return 0
+  idle_db_activity && return 0
+  idle_vault_activity && return 0
+  return 1
+}
+
+# Snapshot running services, then sleep via the existing `joidy sleep` path
+# plus the frontend (and postgres only when --idle-hibernate-db was given).
+idle_do_sleep() {
+  local hibernate_db="$1"
+  local profile running
+  profile="$(ai_profile_args)"
+  running="$(idle_running_services)"
+  if [ -z "$(echo "$running" | tr -d '[:space:]')" ]; then
+    idle_log "idle timeout reached but no services running — nothing to sleep"
+    idle_now >"$IDLE_STATE_DIR/last_activity"
+    return 0
+  fi
+  # shellcheck disable=SC2086 # intentional word-split of the service list
+  printf '%s\n' $running >"$IDLE_STATE_DIR/pre_sleep_services"
+  idle_log "idle timeout reached — sleeping (was running: $(echo "$running" | tr '\n' ' '), hibernate_db=$hibernate_db)"
+  cmd_sleep || true
+  if echo "$running" | grep -qx frontend; then
+    $DOCKER_CMD $ENV_FILE_ARG $profile stop frontend >/dev/null 2>&1 \
+      && idle_log "stopped frontend" || true
+  fi
+  if [ "$hibernate_db" = "1" ] && echo "$running" | grep -qx postgres; then
+    $DOCKER_CMD $ENV_FILE_ARG $profile stop postgres >/dev/null 2>&1 \
+      && idle_log "stopped postgres (--idle-hibernate-db)" || true
+  fi
+  idle_now >"$IDLE_STATE_DIR/slept"
+  idle_log "sleep complete — wake with 'joidy wake' or any new activity"
+}
+
+# Restart the services recorded before the idle sleep, in dependency order.
+# Shared by `joidy wake` and the watcher's auto-restore on new activity.
+idle_restore_state() {
+  local file="$IDLE_STATE_DIR/pre_sleep_services"
+  local profile running svc
+  profile="$(ai_profile_args)"
+  running="$(idle_running_services)"
+  if [ -f "$file" ]; then
+    for svc in postgres api frontend worker ai-service; do
+      grep -qx "$svc" "$file" 2>/dev/null || continue
+      echo "$running" | grep -qx "$svc" && continue
+      if $DOCKER_CMD $ENV_FILE_ARG $profile start "$svc" >/dev/null 2>&1; then
+        idle_log "restored $svc"
+      else
+        idle_log "WARN: could not start $svc"
+      fi
+    done
+    # Any recorded service outside the known list (future services).
+    while IFS= read -r svc; do
+      case "$svc" in postgres|api|frontend|worker|ai-service|'') continue ;; esac
+      echo "$running" | grep -qx "$svc" && continue
+      $DOCKER_CMD $ENV_FILE_ARG $profile start "$svc" >/dev/null 2>&1 \
+        && idle_log "restored $svc" || true
+    done <"$file"
+    rm -f "$file"
+  fi
+  rm -f "$IDLE_STATE_DIR/slept"
+  idle_now >"$IDLE_STATE_DIR/last_activity"
+}
+
+# Foreground watcher loop. Spawned detached by `joidy idle enable`; also the
+# ExecStart of scripts/joidy-idle-watchdog.service (systemd --user).
+cmd_idle_run() {
+  mkdir -p "$IDLE_STATE_DIR"
+  # Refuse to run a second watcher instance.
+  if [ -f "$IDLE_STATE_DIR/watcher.pid" ]; then
+    local old_pid
+    old_pid=$(cat "$IDLE_STATE_DIR/watcher.pid" 2>/dev/null || true)
+    if [ -n "$old_pid" ] && [ "$old_pid" != "$$" ] && kill -0 "$old_pid" 2>/dev/null; then
+      echo "idle watcher already running (pid $old_pid) — exiting" >&2
+      exit 0
+    fi
+  fi
+  echo "$$" >"$IDLE_STATE_DIR/watcher.pid"
+  trap 'rm -f "$IDLE_STATE_DIR/watcher.pid"; exit 0' TERM INT
+
+  local timeout_min poll_s hibernate_db
+  timeout_min=$(read_port JOIDY_IDLE_TIMEOUT 15)
+  poll_s=$(read_port JOIDY_IDLE_POLL_SECONDS 60)
+  hibernate_db=0
+  if [ -f "$IDLE_STATE_DIR/watcher.conf" ]; then
+    . "$IDLE_STATE_DIR/watcher.conf"
+  fi
+  hibernate_db="${IDLE_HIBERNATE_DB:-$hibernate_db}"
+  # Numeric sanity — fall back to defaults on garbage values.
+  case "$timeout_min" in ''|*[!0-9]*) timeout_min=15 ;; esac
+  case "$poll_s" in ''|*[!0-9]*) poll_s=60 ;; esac
+
+  [ -f "$IDLE_STATE_DIR/last_activity" ] || idle_now >"$IDLE_STATE_DIR/last_activity"
+  idle_log "watcher started (pid $$, timeout=${timeout_min}m, poll=${poll_s}s, hibernate_db=$hibernate_db)"
+
+  while :; do
+    if idle_any_activity; then
+      idle_now >"$IDLE_STATE_DIR/last_activity"
+      if [ -f "$IDLE_STATE_DIR/slept" ]; then
+        idle_log "activity detected while asleep — restoring services"
+        idle_restore_state
+        idle_log "restore complete"
+      fi
+    elif [ ! -f "$IDLE_STATE_DIR/slept" ]; then
+      local now last
+      now=$(idle_now)
+      last=$(idle_last_activity)
+      if [ $((now - last)) -ge $((timeout_min * 60)) ]; then
+        idle_do_sleep "$hibernate_db"
+      fi
+    fi
+    sleep "$poll_s" || true
+  done
+}
+
+cmd_idle_enable() {
+  local hibernate_db=0 arg
+  for arg in "$@"; do
+    case "$arg" in
+      --idle-hibernate-db) hibernate_db=1 ;;
+      *) print_err "Unknown option: $arg"; return 1 ;;
+    esac
+  done
+  mkdir -p "$IDLE_STATE_DIR"
+  if idle_watcher_alive; then
+    print_warn "Idle watcher already running (pid $(cat "$IDLE_STATE_DIR/watcher.pid" 2>/dev/null))"
+    return 0
+  fi
+  printf 'IDLE_HIBERNATE_DB=%s\n' "$hibernate_db" >"$IDLE_STATE_DIR/watcher.conf"
+  [ -f "$IDLE_STATE_DIR/last_activity" ] || idle_now >"$IDLE_STATE_DIR/last_activity"
+  # Re-exec the resolved script path so this works both for repo checkouts
+  # and single-file installs (/usr/local/bin/joidy).
+  local self
+  self="$(readlink -f "$0" 2>/dev/null || true)"
+  [ -f "$self" ] || self="$0"
+  nohup bash "$self" idle run </dev/null >>"$IDLE_STATE_DIR/watcher.log" 2>&1 &
+  local pid=$!
+  disown "$pid" 2>/dev/null || true
+  echo "$pid" >"$IDLE_STATE_DIR/watcher.pid"
+  local extra="frontend"
+  [ "$hibernate_db" = "1" ] && extra="frontend, postgres"
+  print_ok "Idle watcher started (pid $pid)"
+  echo "  Sleeps the stack after $(read_port JOIDY_IDLE_TIMEOUT 15) min without activity"
+  echo "  (via 'joidy sleep' + ${extra}). State: $IDLE_STATE_DIR"
+  echo "  Inspect with 'joidy idle status', stop with 'joidy idle disable'."
+}
+
+cmd_idle_disable() {
+  local pid i
+  if ! idle_watcher_alive; then
+    print_warn "Idle watcher is not running"
+    rm -f "$IDLE_STATE_DIR/watcher.pid"
+    return 0
+  fi
+  pid=$(cat "$IDLE_STATE_DIR/watcher.pid" 2>/dev/null)
+  kill "$pid" 2>/dev/null || true
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 0.5
+  done
+  if kill -0 "$pid" 2>/dev/null; then
+    kill -9 "$pid" 2>/dev/null || true
+  fi
+  rm -f "$IDLE_STATE_DIR/watcher.pid"
+  print_ok "Idle watcher stopped (the stack was left untouched)."
+}
+
+cmd_idle_status() {
+  local timeout_min poll_s last now remaining
+  timeout_min=$(read_port JOIDY_IDLE_TIMEOUT 15)
+  poll_s=$(read_port JOIDY_IDLE_POLL_SECONDS 60)
+  echo ""
+  if idle_watcher_alive; then
+    print_ok "Idle watcher: RUNNING (pid $(cat "$IDLE_STATE_DIR/watcher.pid" 2>/dev/null), poll ${poll_s}s)"
+  else
+    print_warn "Idle watcher: stopped — enable with 'joidy idle enable'"
+  fi
+  echo "  Timeout:       ${timeout_min} min (JOIDY_IDLE_TIMEOUT)"
+  if [ -f "$IDLE_STATE_DIR/watcher.conf" ] && grep -q 'IDLE_HIBERNATE_DB=1' "$IDLE_STATE_DIR/watcher.conf"; then
+    echo "  Hibernate DB:  yes (--idle-hibernate-db)"
+  fi
+  if [ -f "$IDLE_STATE_DIR/last_activity" ]; then
+    last=$(cat "$IDLE_STATE_DIR/last_activity" 2>/dev/null)
+    case "$last" in ''|*[!0-9]*) last=$(idle_now) ;; esac
+    now=$(idle_now)
+    echo "  Last activity: $(idle_fmt_epoch "$last")"
+    if [ -f "$IDLE_STATE_DIR/slept" ]; then
+      echo "  Stack state:   ASLEEP since $(idle_fmt_epoch "$(cat "$IDLE_STATE_DIR/slept" 2>/dev/null)")"
+      echo "                 ('joidy wake' restores the recorded services)"
+    else
+      remaining=$((timeout_min * 60 - (now - last)))
+      [ "$remaining" -lt 0 ] && remaining=0
+      echo "  Sleep in:      ${remaining}s (≈$((remaining / 60))m) if no new activity"
+    fi
+  else
+    echo "  Last activity: (not recorded yet)"
+  fi
+  echo ""
+}
+
+cmd_idle() {
+  local sub="${1:-status}"
+  case "$sub" in
+    enable)  shift; cmd_idle_enable "$@" ;;
+    disable) cmd_idle_disable ;;
+    status)  cmd_idle_status ;;
+    run)     cmd_idle_run ;;  # foreground loop — used by enable/systemd
+    *)
+      print_err "Unknown idle subcommand: $sub"
+      echo "  Usage: joidy idle enable [--idle-hibernate-db] | disable | status" >&2
+      exit 1
+      ;;
+  esac
+}
+
 cmd_help() {
   cat <<'HELP'
 joidy — Manage the Joidy Docker stack
@@ -527,7 +878,22 @@ Usage:
   joidy pull       Pull latest images
   joidy logs       Tail logs (all services)
   joidy logs api   Tail logs for a specific service
+  joidy idle enable [--idle-hibernate-db]
+                   Start the background idle watchdog (auto-sleep)
+  joidy idle disable
+                   Stop the watchdog (running services untouched)
+  joidy idle status
+                   Watcher state, last activity, time until sleep
   joidy help       Show this help message
+
+Idle watchdog: `joidy idle enable` detaches a watcher that polls established
+HTTP connections on the published ports (frontend/api/ai-service/worker),
+active PostgreSQL sessions, and vault file changes. After JOIDY_IDLE_TIMEOUT
+minutes (.env, default 15) with no activity it snapshots the running services
+and sleeps the stack via the existing `joidy sleep` path plus the frontend;
+postgres keeps running unless enabled with --idle-hibernate-db. `joidy wake`
+— or any new activity — restores the recorded services. An optional systemd
+user unit ships in scripts/joidy-idle-watchdog.service.
 
 On first run, .env is auto-created from .env.example with generated
 POSTGRES_PASSWORD, SECRET_KEY, and GRAFANA_ADMIN_PASSWORD.
@@ -554,6 +920,7 @@ case "${1:-help}" in
   status)   cmd_status ;;
   pull)     cmd_pull ;;
   logs)     cmd_logs "${2:-}" ;;
+  idle)     shift; cmd_idle "$@" ;;
   help|--help|-h) cmd_help ;;
   *)
     print_err "Unknown command: $1"
