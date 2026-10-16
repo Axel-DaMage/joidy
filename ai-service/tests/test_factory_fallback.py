@@ -9,9 +9,8 @@ Verifies that:
 6. health_check() returns False if both providers are unreachable
 """
 
-import asyncio
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from clients.base import BaseLLMClient, EmbeddingClient
 from clients.factory import ClientFactory

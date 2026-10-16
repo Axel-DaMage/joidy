@@ -1,4 +1,4 @@
-.PHONY: setup dev dev-d dev-reset prod stop restart logs logs-api logs-ai logs-worker build clean backup restore shell-api shell-worker migrate db-health test-api test-frontend test-frontend-e2e test lint lint-api fix-permissions install-deps doctor start
+.PHONY: setup dev dev-d dev-reset prod stop restart logs logs-api logs-ai logs-worker build clean backup restore shell-api shell-worker migrate db-health test-api test-ai test-frontend test-frontend-e2e test lint lint-api fix-permissions install-deps doctor start
 
 COMPOSE_PROJECT ?= joidy
 DOCKER_COMPOSE := $(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || (command -v docker >/dev/null 2>&1 && echo "docker compose" || (command -v podman-compose >/dev/null 2>&1 && echo "podman-compose" || (command -v podman >/dev/null 2>&1 && echo "podman compose" || echo "docker compose"))))
@@ -151,6 +151,9 @@ db-health: ## Verify migration head and required core tables
 test-api: ## Run all API unit tests via pytest
 	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml run --rm api sh -c "cd /app && pytest --cov --cov-report=term-missing"
 
+test-ai: ## Run all AI service unit tests via pytest
+	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml run --rm ai-service sh -c "cd /app && python -m pytest tests/ -v"
+
 test-frontend: ## Run frontend unit tests (vitest) inside Docker
 	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml run --rm frontend npm run test:run
 
@@ -160,7 +163,7 @@ test-frontend-e2e: ## Run frontend E2E tests (Playwright) — requires running s
 test-frontend-check: ## Run frontend typechecking (svelte-check) inside Docker
 	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml run --rm frontend npm run check
 
-test: test-api test-frontend test-frontend-check ## Run all test suites (API + Frontend + typecheck)
+test: test-api test-ai test-frontend test-frontend-check ## Run all test suites (API + AI service + Frontend + typecheck)
 
 lint-api: ## Check syntax of all Python services via Docker (compileall)
 	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml run --rm api python -m compileall -q /app/api /app/ai-service /app/worker || (echo "Syntax errors found"; exit 1)
