@@ -79,6 +79,16 @@
     "themeLight": "Light",
     "themeDark": "Dark",
     "timeFormat": "Time format",
+    "clockStyle": "Clock style",
+    "clockStyleHint": "Applies to the time widget, focus mode clock and pomodoro timer.",
+    "clockStyles": {
+      "digital": "Digital",
+      "circular": "Circular",
+      "material": "Material",
+      "minimalist": "Minimalist",
+      "flip": "Flip clock",
+      "binary": "Binary"
+    },
     "language": "Language",
     "languageHint": "The interface language",
     "session": {

@@ -1,4 +1,9 @@
+import type { ClockStyleId } from './clock';
+
 export interface UserSettings {
+  appearance?: {
+    clockStyle?: ClockStyleId;
+  };
   dashboard?: {
     moduleId?: string;
     panelWidth?: number;
@@ -79,6 +84,7 @@ export function patchUserSettings(patch: Partial<UserSettings>): void {
   const next: UserSettings = {
     ...current,
     ...patch,
+    appearance: { ...current.appearance, ...patch.appearance },
     dashboard: { ...current.dashboard, ...patch.dashboard },
     pomodoro: { ...current.pomodoro, ...patch.pomodoro },
     notesUi: { ...current.notesUi, ...patch.notesUi },

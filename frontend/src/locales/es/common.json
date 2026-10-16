@@ -79,6 +79,16 @@
     "themeLight": "Claro",
     "themeDark": "Oscuro",
     "timeFormat": "Formato de hora",
+    "clockStyle": "Estilo de reloj",
+    "clockStyleHint": "Se aplica al widget de hora, al reloj del modo enfoque y al temporizador pomodoro.",
+    "clockStyles": {
+      "digital": "Digital",
+      "circular": "Circular",
+      "material": "Material",
+      "minimalist": "Minimalista",
+      "flip": "Flip clock",
+      "binary": "Binario"
+    },
     "language": "Idioma",
     "languageHint": "El idioma de la interfaz",
     "session": {
