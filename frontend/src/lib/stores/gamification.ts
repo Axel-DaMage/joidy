@@ -112,6 +112,8 @@ const xpTimers = new Map<string, ReturnType<typeof setTimeout>>();
 export function showXPGain(amount: number, x?: number, y?: number): void {
   const id = `xp-${Date.now()}-${Math.random()}`;
   xpEvents.update(evts => [...evts, { amount, id, x, y }]);
+  // intentional: auto-dismiss one-shot on a module store; tracked in
+  // xpTimers and bulk-cleared by clearAllXpTimers() (#1003)
   const timer = setTimeout(() => {
     xpEvents.update(evts => evts.filter(e => e.id !== id));
     xpTimers.delete(id);

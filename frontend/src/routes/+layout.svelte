@@ -653,6 +653,8 @@
         aria-label={$t('layout.testNotification')}
         onclick={() => {
           showNotification($t('layout.testNotifInfo'), 'info');
+          // intentional: one-shots target the notification store, not
+          // component state — safe to outlive the layout (#1003)
           setTimeout(() => showNotification($t('layout.testNotifSuccess'), 'success'), 600);
           setTimeout(() => showNotification($t('layout.testNotifLevel'), 'level'), 1200);
         }}>joidy v{__APP_VERSION__}</button

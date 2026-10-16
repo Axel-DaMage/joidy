@@ -28,6 +28,8 @@ let persistTimeout: ReturnType<typeof setTimeout> | null = null;
 
 function debouncedPersist() {
   if (persistTimeout) clearTimeout(persistTimeout);
+  // intentional: module-level store debounce — lives for the app session,
+  // not bound to any component (#1003)
   persistTimeout = setTimeout(() => {
     if (pomodoroPrefsReady) persistPomodoroPrefs();
   }, 500);
@@ -183,6 +185,8 @@ export function startTimer() {
   initAudio();
   requestNotificationPermission();
   running.set(true);
+  // intentional: the pomodoro must keep ticking across page navigations —
+  // cleared by stopTimer()/resetTimer(), not by component teardown (#1003)
   timerInterval = setInterval(tick, 1000);
 }
 

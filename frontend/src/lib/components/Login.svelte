@@ -32,6 +32,7 @@
       }
 
       showNotification('Inicio de sesión exitoso', 'success');
+      // intentional: the reload tears down the whole document anyway (#1003)
       setTimeout(() => {
         window.location.reload();
       }, 500);
