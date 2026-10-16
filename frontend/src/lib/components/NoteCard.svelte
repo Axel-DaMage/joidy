@@ -27,14 +27,19 @@
     bulkMode = false,
   }: Props = $props();
 
-  const dispatch = createEventDispatcher<{ select: Note; delete: number; customize: { path: string; icon: string | null; color: string | null; note?: Note }; toggleSelect: number }>();
+  const dispatch = createEventDispatcher<{
+    select: Note;
+    delete: number;
+    customize: { path: string; icon: string | null; color: string | null; note?: Note };
+    toggleSelect: number;
+  }>();
 
   function formatDate(iso: string): string {
     const d = new Date(iso);
     const now = new Date();
     const diffMs = now.getTime() - d.getTime();
     const diffDays = Math.floor(diffMs / 86400000);
-    if (diffDays <= 0) return 'hoy';   // ≤0 handles timezone-naive UTC strings
+    if (diffDays <= 0) return 'hoy'; // ≤0 handles timezone-naive UTC strings
     if (diffDays === 1) return 'ayer';
     if (diffDays < 7) return `hace ${diffDays} días`;
     return d.toLocaleDateString(getLocale(), { day: 'numeric', month: 'short' });
@@ -61,7 +66,7 @@
       path: getMetaKey(),
       icon: getFileMeta().icon,
       color: getFileMeta().color ?? null,
-      note: note
+      note: note,
     });
   }
 
@@ -76,8 +81,10 @@
   tabindex="0"
   aria-label={note.title}
   aria-pressed={selected}
-  onclick={() => bulkMode ? dispatch('toggleSelect', note.id) : dispatch('select', note)}
-  onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), bulkMode ? dispatch('toggleSelect', note.id) : dispatch('select', note))}
+  onclick={() => (bulkMode ? dispatch('toggleSelect', note.id) : dispatch('select', note))}
+  onkeydown={(e) =>
+    (e.key === 'Enter' || e.key === ' ') &&
+    (e.preventDefault(), bulkMode ? dispatch('toggleSelect', note.id) : dispatch('select', note))}
 >
   <div class="note-header">
     {#if bulkMode}
@@ -89,11 +96,19 @@
         onchange={() => dispatch('toggleSelect', note.id)}
       />
     {/if}
-    <div class="note-icon"><DynamicIcon name={meta.icon} size={12} color={meta.color} pack={meta.pack} /></div>
+    <div class="note-icon">
+      <DynamicIcon name={meta.icon} size={12} color={meta.color} pack={meta.pack} />
+    </div>
     <span class="note-title truncate">{note.title}</span>
     <span class="note-date caption">{formatDate(note.created_at)}</span>
     {#if !bulkMode}
-      <button type="button" class="note-settings-btn" title={$t('noteCard.customize')} aria-label={$t('noteCard.customize')} onclick={onCustomize}>
+      <button
+        type="button"
+        class="note-settings-btn"
+        title={$t('noteCard.customize')}
+        aria-label={$t('noteCard.customize')}
+        onclick={onCustomize}
+      >
         <Settings size={10} />
       </button>
     {/if}
@@ -101,12 +116,15 @@
   {#if showTags && note.tags.length > 0}
     <div class="note-tags">
       {#each note.tags.slice(0, 4) as tag}
-        <TagChip {tag} onclick={(tag) => {
-          const linkedNote = findNoteByTitle(tag);
-          if (linkedNote) {
-            goto(`/notes?id=${linkedNote.id}`);
-          }
-        }} />
+        <TagChip
+          {tag}
+          onclick={(tag) => {
+            const linkedNote = findNoteByTitle(tag);
+            if (linkedNote) {
+              goto(`/notes?id=${linkedNote.id}`);
+            }
+          }}
+        />
       {/each}
       {#if note.tags.length > 4}
         <span class="caption">+{note.tags.length - 4}</span>
@@ -124,9 +142,17 @@
     position: relative;
   }
 
-  .note-card:hover { background: var(--elevated); }
-  .note-card.active { background: var(--elevated); border-left: 2px solid var(--text-secondary); }
-  .note-card.bulk-selected { background: var(--elevated); border-left: 2px solid var(--accent); }
+  .note-card:hover {
+    background: var(--elevated);
+  }
+  .note-card.active {
+    background: var(--elevated);
+    border-left: 2px solid var(--text-secondary);
+  }
+  .note-card.bulk-selected {
+    background: var(--elevated);
+    border-left: 2px solid var(--accent);
+  }
 
   .note-header {
     display: flex;
@@ -178,8 +204,6 @@
     color: var(--accent);
     background: var(--border-light);
   }
-
-
 
   .note-tags {
     display: flex;
