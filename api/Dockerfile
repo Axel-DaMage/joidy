@@ -59,4 +59,9 @@ USER app
 HEALTHCHECK --interval=10s --timeout=5s --retries=5 --start-period=20s \
   CMD curl -f http://localhost:8000/health/ready || exit 1
 
-CMD ["/bin/sh", "-c", "rm -rf alembic/versions/__pycache__ && exec uvicorn main:app --host 0.0.0.0 --port 8000 --workers ${WEB_CONCURRENCY:-2} --timeout-keep-alive ${UVICORN_TIMEOUT_KEEP_ALIVE:-5} --proxy-headers --forwarded-allow-ips='*'"]
+# Single worker by default: rate-limiter windows, the TTL response cache and
+# the WebSocket connection set live in per-process memory, so >1 worker makes
+# behavior depend on which process serves the request (#992). Scaling to
+# multiple workers requires moving that state to a shared store (e.g. Redis);
+# override with WEB_CONCURRENCY only once that exists.
+CMD ["/bin/sh", "-c", "rm -rf alembic/versions/__pycache__ && exec uvicorn main:app --host 0.0.0.0 --port 8000 --workers ${WEB_CONCURRENCY:-1} --timeout-keep-alive ${UVICORN_TIMEOUT_KEEP_ALIVE:-5} --proxy-headers --forwarded-allow-ips='*'"]

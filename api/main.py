@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -80,6 +81,10 @@ async def lifespan(app: FastAPI):
 
     init_db()
     logger.info("Database initialization complete")
+
+    # Capture the running event loop so sync endpoints (threadpool, no loop)
+    # can still schedule WebSocket broadcasts (#992).
+    websocket.set_main_loop(asyncio.get_running_loop())
 
     # Auto-restore goals from vault if DB has none (#504)
     try:
