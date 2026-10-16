@@ -2,7 +2,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from circuit_breaker import llm_circuit_breaker, emb_circuit_breaker, CircuitBreakerError
-from clients import get_embedding_client, get_llm_client
+from clients import aclose_clients, get_embedding_client, get_llm_client
 from clients.prompts import CHAT_SYSTEM_PROMPT, CLASSIFY_PROMPT, RAG_PROMPT
 from config import settings
 from cost_tracker import get_monthly_stats, record_usage
@@ -83,6 +83,9 @@ async def lifespan(app: FastAPI):
 
     yield
     logger.info("[ai-service] Shutting down")
+    # Close shared provider sessions (aiohttp/httpx) pooled by the client
+    # factory — avoids "Unclosed connector" warnings on teardown (#998).
+    await aclose_clients()
 
 
 app = FastAPI(title="Joidy AI Service", version="0.2.0", lifespan=lifespan)
