@@ -48,6 +48,11 @@
   let githubPollInterval = 5;
   let githubExpiresAt = 0;
   let githubPollTimer: ReturnType<typeof setTimeout> | null = null;
+  let googlePollInterval: ReturnType<typeof setInterval> | null = null;
+  let googlePollTimeout: ReturnType<typeof setTimeout> | null = null;
+  // Set in onDestroy so in-flight async poll callbacks stop rescheduling and
+  // stop mutating state after teardown (#1003).
+  let destroyed = false;
   let githubUsernameInput = '';
   let githubConnectingUsername = false;
   let showAdvancedGithub = false;
@@ -122,8 +127,25 @@
   });
 
   onDestroy(() => {
+    destroyed = true;
     if (browser) {
       window.removeEventListener('keydown', handleKeydown);
+    }
+    if (savedTimer) {
+      clearTimeout(savedTimer);
+      savedTimer = null;
+    }
+    if (githubPollTimer) {
+      clearTimeout(githubPollTimer);
+      githubPollTimer = null;
+    }
+    if (googlePollInterval) {
+      clearInterval(googlePollInterval);
+      googlePollInterval = null;
+    }
+    if (googlePollTimeout) {
+      clearTimeout(googlePollTimeout);
+      googlePollTimeout = null;
     }
   });
 
@@ -222,6 +244,7 @@
   function logout() {
     session.logout();
     showNotification($t('settings.session.loggedOut'), 'success');
+    // intentional: the reload tears down the whole document anyway (#1003)
     setTimeout(() => window.location.reload(), 400);
   }
 
@@ -333,6 +356,8 @@
       if (result.status === 'slowdown') {
         githubPollInterval += 5;
       }
+      // Don't reschedule if the panel was destroyed mid-poll (#1003).
+      if (destroyed || !githubDeviceCode) return;
       githubPollTimer = setTimeout(pollGithubDeviceCode, githubPollInterval * 1000);
     } catch (e: any) {
       if (githubPollTimer) {
@@ -390,17 +415,23 @@
       // Listen for the OAuth callback via URL params (popup or redirect)
       // The user will be redirected back with ?code=xxx
       // We poll for connection status
-      const pollInterval = setInterval(async () => {
+      googlePollInterval = setInterval(async () => {
         await checkGoogleStatus();
+        // Stop mutating state once the panel is gone (#1003).
+        if (destroyed || googlePollInterval === null) return;
         if (googleConnected) {
-          clearInterval(pollInterval);
+          clearInterval(googlePollInterval);
+          googlePollInterval = null;
           googleConnecting = false;
           showNotification('Google conectado correctamente', 'success');
         }
       }, 3000);
       // Stop polling after 5 minutes
-      setTimeout(() => {
-        clearInterval(pollInterval);
+      googlePollTimeout = setTimeout(() => {
+        if (googlePollInterval) {
+          clearInterval(googlePollInterval);
+          googlePollInterval = null;
+        }
         googleConnecting = false;
       }, 300000);
     } catch (e: any) {
