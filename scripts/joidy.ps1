@@ -15,6 +15,8 @@
 #   .\joidy.ps1 pull     Pull latest images
 #   .\joidy.ps1 logs     Tail logs (all services)
 #   .\joidy.ps1 logs api Tail logs for a specific service
+#   .\joidy.ps1 backup   Write a compressed pg_dump to the backups dir
+#   .\joidy.ps1 restore <file> [-Force]   Restore a dump into the database
 #   .\joidy.ps1 help     Show this help message
 
 param(
@@ -22,7 +24,9 @@ param(
   [string]$Command = "help",
 
   [Parameter(Position = 1)]
-  [string]$Service = ""
+  [string]$Service = "",
+
+  [switch]$Force
 )
 
 function Write-Status($msg) { Write-Host "[$(Get-Date -Format 'HH:mm:ss')] $msg" -ForegroundColor Blue }
@@ -245,22 +249,38 @@ function Write-AccessUrl {
   Write-Host "+----------------------------------------------+" -ForegroundColor Green
 }
 
-function Get-AiProfileArgs {
+# Read a setting: env var -> .env file -> default.
+function Get-EnvValue($Name, $Default) {
+  $envVal = [Environment]::GetEnvironmentVariable($Name)
+  if ($envVal) { return $envVal }
   if ($EnvFile -and (Test-Path $EnvFile)) {
-    $lines = Get-Content $EnvFile -ErrorAction SilentlyContinue
-    foreach ($line in $lines) {
-      if ($line -match '^\s*AI_SERVICE_ENABLED\s*=\s*true\s*$') {
-        return @("--profile", "ai")
+    $escaped = [regex]::Escape($Name)
+    foreach ($line in (Get-Content $EnvFile -ErrorAction SilentlyContinue)) {
+      if ($line -match "^\s*$escaped\s*=\s*(.*)$") {
+        return $Matches[1].Trim()
       }
     }
   }
-  return @()
+  return $Default
+}
+
+# Compose profiles: `ai` is opt-in (AI_SERVICE_ENABLED=true); `backup` is
+# opt-out — enabled by default, BACKUP_ENABLED=false disables it.
+function Get-ProfileArgs {
+  $profileArgs = @()
+  if ((Get-EnvValue "AI_SERVICE_ENABLED" "") -eq "true") {
+    $profileArgs += @("--profile", "ai")
+  }
+  if ((Get-EnvValue "BACKUP_ENABLED" "true") -ne "false") {
+    $profileArgs += @("--profile", "backup")
+  }
+  return ,$profileArgs
 }
 
 function Invoke-Up {
   if (-not (Test-ContainerEngineReady)) { exit 1 }
   Write-Status "Starting Joidy services..."
-  $profile = Get-AiProfileArgs
+  $profile = Get-ProfileArgs
   if ($profile.Count -gt 0) {
     Invoke-ComposeCommand @EnvFileArg @profile up -d
   } else {
@@ -299,7 +319,7 @@ function Invoke-Sleep {
 function Invoke-Wake {
   if (-not (Test-ContainerEngineReady)) { exit 1 }
   Write-Status "Waking heavy services from hibernation..."
-  $profile = Get-AiProfileArgs
+  $profile = Get-ProfileArgs
   foreach ($svc in $HIBERNATE_SERVICES) {
     $all = Invoke-ComposeCommand @EnvFileArg @profile ps -a $svc 2>$null
     if ($all -match $svc) {
@@ -321,7 +341,7 @@ function Invoke-Wake {
 function Invoke-Restart {
   if (-not (Test-ContainerEngineReady)) { exit 1 }
   Write-Status "Restarting all Joidy services..."
-  $profile = Get-AiProfileArgs
+  $profile = Get-ProfileArgs
   if ($profile.Count -gt 0) {
     Invoke-ComposeCommand @EnvFileArg @profile restart
   } else {
@@ -341,7 +361,7 @@ function Invoke-Status {
 function Invoke-Pull {
   if (-not (Test-ContainerEngineReady)) { exit 1 }
   Write-Status "Pulling latest Joidy images..."
-  $profile = Get-AiProfileArgs
+  $profile = Get-ProfileArgs
   if ($profile.Count -gt 0) {
     Invoke-ComposeCommand @EnvFileArg @profile pull
   } else {
@@ -359,6 +379,83 @@ function Invoke-Logs {
   }
 }
 
+# Host directory for dumps: JOIDY_BACKUP_DIR -> <project>\data\backups
+# (same default docker-compose.yml uses for the backup service bind mount).
+function Get-BackupDir {
+  $dir = Get-EnvValue "JOIDY_BACKUP_DIR" ""
+  if (-not $dir) { $dir = Join-Path $ProjectDir "data\backups" }
+  return $dir
+}
+
+function Test-PostgresReady {
+  $pgUser = Get-EnvValue "POSTGRES_USER" "joidy"
+  $pgDb   = Get-EnvValue "POSTGRES_DB" "joidy"
+  Invoke-ComposeCommand @EnvFileArg exec -T postgres pg_isready -U $pgUser -d $pgDb 2>$null | Out-Null
+  if ($LASTEXITCODE -ne 0) {
+    Write-Err "The 'postgres' service is not running - start it first (joidy up)."
+    exit 1
+  }
+}
+
+function Invoke-Backup {
+  if (-not (Test-ContainerEngineReady)) { exit 1 }
+  Test-PostgresReady
+  $pgUser = Get-EnvValue "POSTGRES_USER" "joidy"
+  $pgDb   = Get-EnvValue "POSTGRES_DB" "joidy"
+  $dir    = Get-BackupDir
+  New-Item -ItemType Directory -Force -Path $dir | Out-Null
+  $name = "joidy-$(Get-Date -Format 'yyyyMMdd-HHmmss').dump"
+  Write-Status "Dumping '$pgDb' -> $(Join-Path $dir $name)"
+  # pg_dump writes inside the container, then `compose cp` pulls the file out -
+  # piping binary data through PowerShell stdout is not reliable.
+  Invoke-ComposeCommand @EnvFileArg exec -T postgres pg_dump -Fc -U $pgUser -d $pgDb -f "/tmp/$name"
+  if ($LASTEXITCODE -ne 0) { Write-Err "pg_dump failed"; exit 1 }
+  Invoke-ComposeCommand @EnvFileArg cp "postgres:/tmp/$name" (Join-Path $dir $name)
+  if ($LASTEXITCODE -ne 0) { Write-Err "could not copy the dump out of the container"; exit 1 }
+  Invoke-ComposeCommand @EnvFileArg exec -T postgres rm -f "/tmp/$name"
+  Write-Ok "Backup written: $(Join-Path $dir $name)"
+}
+
+function Invoke-Restore {
+  param([string]$File, [switch]$Force)
+  if (-not $File) {
+    Write-Err "Usage: joidy restore <file.dump> [-Force]"
+    exit 1
+  }
+  if (-not (Test-Path $File)) {
+    Write-Err "Backup file not found: $File"
+    Write-Host "  Dumps live in: $(Get-BackupDir)" -ForegroundColor Yellow
+    exit 1
+  }
+  $bytes = [System.IO.File]::ReadAllBytes((Resolve-Path $File).Path)
+  if ($bytes.Length -lt 5 -or [System.Text.Encoding]::ASCII.GetString($bytes[0..4]) -ne "PGDMP") {
+    Write-Err "'$File' is not a pg_dump custom-format archive (missing PGDMP header)"
+    exit 1
+  }
+  if (-not (Test-ContainerEngineReady)) { exit 1 }
+  Test-PostgresReady
+  $pgUser = Get-EnvValue "POSTGRES_USER" "joidy"
+  $pgDb   = Get-EnvValue "POSTGRES_DB" "joidy"
+  $n = ((Invoke-ComposeCommand @EnvFileArg exec -T postgres psql -U $pgUser -d $pgDb -tAc `
+        "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'" 2>$null) -join "").Trim()
+  if ($n -match '^\d+$' -and [int]$n -gt 0 -and -not $Force) {
+    Write-Err "Database '$pgDb' is live ($n tables) - refusing to overwrite without -Force."
+    Write-Host "  The restore runs pg_restore --clean, which drops existing objects first."
+    Write-Host "  To proceed:  joidy restore `"$File`" -Force"
+    exit 1
+  }
+  Write-Status "Restoring $File -> '$pgDb'"
+  $tmp = "/tmp/joidy-restore.dump"
+  Invoke-ComposeCommand @EnvFileArg cp (Resolve-Path $File).Path "postgres:$tmp"
+  if ($LASTEXITCODE -ne 0) { Write-Err "could not copy the dump into the container"; exit 1 }
+  Invoke-ComposeCommand @EnvFileArg exec -T postgres pg_restore -U $pgUser -d $pgDb --clean --if-exists --no-owner --no-privileges $tmp
+  $rc = $LASTEXITCODE
+  Invoke-ComposeCommand @EnvFileArg exec -T postgres rm -f $tmp
+  if ($rc -ne 0) { Write-Err "pg_restore failed"; exit 1 }
+  Write-Ok "Restore complete."
+  Write-Warn "Restart the services so they pick up the restored state: joidy restart"
+}
+
 function Show-Help {
   Write-Host "joidy - Manage the Joidy Docker stack"
   Write-Host ""
@@ -372,7 +469,14 @@ function Show-Help {
   Write-Host "  joidy pull       Pull latest images"
   Write-Host "  joidy logs       Tail logs (all services)"
   Write-Host "  joidy logs api   Tail logs for a specific service"
+  Write-Host "  joidy backup     Write a compressed pg_dump to the backups dir"
+  Write-Host "  joidy restore <file> [-Force]  Restore a dump into the database"
+  Write-Host "                   (refuses to overwrite a live DB without -Force)"
   Write-Host "  joidy help       Show this help message"
+  Write-Host ""
+  Write-Host "Scheduled backups: 'joidy up' starts the backup sidecar automatically -"
+  Write-Host "pg_dump -Fc on BACKUP_SCHEDULE (cron, default `"0 3 * * *`"), dumps in"
+  Write-Host "data\backups (or JOIDY_BACKUP_DIR). Set BACKUP_ENABLED=false to opt out."
   Write-Host ""
   Write-Host "On first run, .env is auto-created from .env.example with generated"
   Write-Host "POSTGRES_PASSWORD, SECRET_KEY, and GRAFANA_ADMIN_PASSWORD."
@@ -391,6 +495,8 @@ switch ($Command) {
   "status"        { Invoke-Status }
   "pull"          { Invoke-Pull }
   "logs"          { Invoke-Logs }
+  "backup"        { Invoke-Backup }
+  "restore"       { Invoke-Restore -File $Service -Force:$Force }
   "help"          { Show-Help }
   "--help"        { Show-Help }
   "-h"            { Show-Help }

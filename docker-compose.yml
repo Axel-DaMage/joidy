@@ -139,6 +139,47 @@ services:
     logging: *default-logging
     restart: unless-stopped
 
+  # Optional backup sidecar (opt-in compose profile). Runs `pg_dump -Fc` on a
+  # cron schedule (BACKUP_SCHEDULE, default daily at 03:00) and writes
+  # timestamped dumps to JOIDY_BACKUP_DIR (default: <data dir>/backups) with
+  # retention pruning (BACKUP_RETENTION_DAYS + BACKUP_RETENTION_WEEKS).
+  # `joidy up` enables this profile automatically unless BACKUP_ENABLED=false
+  # is set in .env; plain `docker compose up` and `make dev` never start it.
+  # Manual equivalent: `docker compose --profile backup up -d backup`.
+  backup:
+    image: ${POSTGRES_IMAGE:-pgvector/pgvector:pg16}
+    profiles: ["backup"]
+    # Runs as the host UID/GID when exported by `joidy up` / `make dev` so dumps
+    # land on the host filesystem owned by the user, not root.
+    user: "${UID:-0}:${GID:-0}"
+    volumes:
+      - ${JOIDY_BACKUP_DIR:-${JOIDY_DATA_DIR:-./data}/backups}:/backups
+      - ${JOIDY_SCRIPTS_DIR:-./scripts}:/scripts:ro
+    environment:
+      - PGHOST=postgres
+      - PGPORT=5432
+      - PGUSER=${POSTGRES_USER:-joidy}
+      - PGPASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      - PGDATABASE=${POSTGRES_DB:-joidy}
+      - BACKUP_DIR=/backups
+      - BACKUP_SCHEDULE=${BACKUP_SCHEDULE:-0 3 * * *}
+      - BACKUP_RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-14}
+      - BACKUP_RETENTION_WEEKS=${BACKUP_RETENTION_WEEKS:-4}
+      - BACKUP_WEEKLY_DAY=${BACKUP_WEEKLY_DAY:-0}
+      - BACKUP_ON_START=${BACKUP_ON_START:-false}
+      - TZ=${USER_TIMEZONE:-UTC}
+    command: ["bash", "/scripts/db_backup_loop.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+    logging: *default-logging
+    restart: unless-stopped
+
   frontend:
     image: ${DOCKER_REGISTRY:-d4mag3}/joidy-frontend:${IMAGE_TAG:-latest}
     ports:
