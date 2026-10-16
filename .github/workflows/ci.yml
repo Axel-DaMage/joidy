@@ -60,7 +60,10 @@ jobs:
 
       - name: Run tests with coverage
         working-directory: api
-        run: python -m pytest tests/ -v --cov=api --cov-report=xml --cov-report=term-missing
+        # -n auto: pytest-xdist parallel run; conftest gives each worker its own
+        # joidy_test_gwN database (#996). --durations=20 keeps the slowest-test
+        # report in CI output so fixture-time regressions stay visible.
+        run: python -m pytest tests/ -v -n auto --durations=20 --cov=api --cov-report=xml --cov-report=term-missing
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v7

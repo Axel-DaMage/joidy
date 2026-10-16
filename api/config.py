@@ -41,6 +41,10 @@ class Settings(BaseSettings):
 
     # Authentication
     auth_password: str = ""  # Password for single-user auth (optional)
+    # bcrypt cost factor for password hashing. None = passlib default (12).
+    # Tests set BCRYPT_ROUNDS=4 via conftest — hash strength is irrelevant
+    # there and bcrypt was the slowest single test in the suite (#996).
+    bcrypt_rounds: int | None = None
 
     # Obsidian
     obsidian_webhook_secret: str | None = None  # Optional secret for /webhook/obsidian

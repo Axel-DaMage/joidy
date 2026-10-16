@@ -1,10 +1,11 @@
 import os
 import sys
 import types
+import warnings
 
 import pytest
 from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 
 # sqlite_vec is only needed for the local SQLite fallback. Stub it before
 # importing app modules so pgvector's Vector type doesn't blow up on SQLite.
@@ -15,7 +16,14 @@ if "sqlite_vec" not in sys.modules:
     _stub.load = lambda _conn: None  # type: ignore
     sys.modules["sqlite_vec"] = _stub
 
-# Safety: only allow destructive drop_all on databases whose name contains
+# Test-only bcrypt cost (#996). Hash strength is irrelevant under test and
+# passlib's default (12 rounds) made auth tests the slowest single test in the
+# suite. Must be set before app modules import `config.settings`, which reads
+# BCRYPT_ROUNDS once at Settings construction time. Overridable by exporting
+# BCRYPT_ROUNDS explicitly.
+os.environ.setdefault("BCRYPT_ROUNDS", "4")
+
+# Safety: only allow destructive TRUNCATE on databases whose name contains
 # "test" to prevent accidentally wiping a shared dev/production database (#503).
 from urllib.parse import urlparse, urlunparse
 
@@ -23,45 +31,64 @@ _DATABASE_URL = os.getenv("DATABASE_URL", "")
 _USE_POSTGRES = _DATABASE_URL.startswith("postgresql")
 _DB_NAME = urlparse(_DATABASE_URL).path.lstrip("/") if _USE_POSTGRES else ""
 
+# pytest-xdist sets PYTEST_XDIST_WORKER ("gw0", "gw1", ...) inside each worker
+# process; it is unset for the controller and for non-xdist runs.
+_WORKER_ID = os.getenv("PYTEST_XDIST_WORKER", "")
 
-def _redirect_to_test_database(url: str, db_name: str) -> tuple[str, str]:
-    """Point the suite at a dedicated ``<db_name>_test`` database.
 
-    ``make test-api`` runs inside the api container, which inherits
-    DATABASE_URL for the live development database. The #503 guard below then
-    refuses to drop_all, leaving tests with no isolation: they both fail on
-    accumulated state and write fixtures into real user data (#626).
+def _ensure_database(admin_url: str, db_name: str) -> str:
+    """Create ``db_name`` on the server if missing; return a URL pointing at it.
 
-    Rather than depending on every caller to export the right DATABASE_URL,
-    redirect to a sibling test database (created on demand) so isolation holds
-    for `make test-api`, `docker compose run` and bare `pytest` alike.
+    CREATE DATABASE cannot run inside a transaction, hence AUTOCOMMIT. We
+    connect to the database already present in ``admin_url`` purely as an
+    entry point to the server.
     """
-    parsed = urlparse(url)
-    test_db = f"{db_name}_test"
-    test_url = urlunparse(parsed._replace(path=f"/{test_db}"))
-
-    # CREATE DATABASE cannot run inside a transaction, hence AUTOCOMMIT. We
-    # connect to the original database purely as an entry point to the server.
-    admin_engine = create_engine(url, isolation_level="AUTOCOMMIT")
+    parsed = urlparse(admin_url)
+    new_url = urlunparse(parsed._replace(path=f"/{db_name}"))
+    admin_engine = create_engine(admin_url, isolation_level="AUTOCOMMIT")
     try:
         with admin_engine.connect() as conn:
             exists = conn.execute(
-                text("SELECT 1 FROM pg_database WHERE datname = :name"), {"name": test_db}
+                text("SELECT 1 FROM pg_database WHERE datname = :name"), {"name": db_name}
             ).scalar()
             if not exists:
-                conn.execute(text(f'CREATE DATABASE "{test_db}"'))
+                try:
+                    conn.execute(text(f'CREATE DATABASE "{db_name}"'))
+                except Exception:
+                    # Tolerate a concurrent CREATE DATABASE raced by another
+                    # pytest process; only re-raise if the DB still isn't there.
+                    exists = conn.execute(
+                        text("SELECT 1 FROM pg_database WHERE datname = :name"),
+                        {"name": db_name},
+                    ).scalar()
+                    if not exists:
+                        raise
     finally:
         admin_engine.dispose()
-
-    return test_url, test_db
+    return new_url
 
 
 # Must run before importing app modules: database.py builds its engine from
 # settings.database_url at import time, so redirecting afterwards would leave
 # every SessionLocal() (background tasks, services) pointed at the live DB.
-if _USE_POSTGRES and _DB_NAME and "test" not in _DB_NAME.lower():
-    _DATABASE_URL, _DB_NAME = _redirect_to_test_database(_DATABASE_URL, _DB_NAME)
-    os.environ["DATABASE_URL"] = _DATABASE_URL
+#
+# Two derivations from the incoming DATABASE_URL (#996):
+# 1. If it doesn't name a test database, redirect to a sibling ``<db>_test``
+#    database (created on demand) so isolation holds for `make test-api`,
+#    `docker compose run` and bare `pytest` alike — without this the #503
+#    guard below refuses to wipe, leaving tests both failing on accumulated
+#    state and writing fixtures into real user data (#626).
+# 2. Under pytest-xdist each worker gets its own database
+#    (``joidy_test_gw0``, ``joidy_test_gw1``, ...) so `-n auto` runs in
+#    parallel without workers truncating each other's tables.
+if _USE_POSTGRES and _DB_NAME:
+    _target_db = _DB_NAME if "test" in _DB_NAME.lower() else f"{_DB_NAME}_test"
+    if _WORKER_ID:
+        _target_db = f"{_target_db}_{_WORKER_ID}"
+    if _target_db != _DB_NAME:
+        _DATABASE_URL = _ensure_database(_DATABASE_URL, _target_db)
+        _DB_NAME = _target_db
+        os.environ["DATABASE_URL"] = _DATABASE_URL
 
 _CAN_DROP = "test" in _DB_NAME.lower() if _DB_NAME else False
 
@@ -79,22 +106,80 @@ from services.auth_service import get_current_user
 main_module.init_db = lambda: None
 
 
-@pytest.fixture
-def db_session():
-    """Per-test isolated database session.
+def _wipe_all_tables(engine) -> None:
+    """Delete all rows while keeping the schema (cheap drop_all replacement).
+
+    Guards the same accumulated-state protections the old per-test
+    drop_all provided (#626): catches writes that escape the per-test
+    transaction — ``SessionLocal`` background-task paths, ``real_commit``
+    tests, or residue from an aborted previous run.
+    """
+    if not _CAN_DROP:
+        warnings.warn(
+            f"Skipping table wipe for non-test database '{_DB_NAME}'. "
+            "Use a database with 'test' in the name for test isolation.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        return
+    if _USE_POSTGRES:
+        names = ", ".join(f'"{t.name}"' for t in Base.metadata.sorted_tables)
+        if names:
+            with engine.begin() as conn:
+                conn.execute(
+                    text(f"TRUNCATE TABLE {names} RESTART IDENTITY CASCADE")
+                )
+    else:
+        with engine.begin() as conn:
+            for table in reversed(Base.metadata.sorted_tables):
+                conn.execute(table.delete())
+
+
+def _has_committed_rows(engine) -> bool:
+    """True if any table holds committed (i.e. leaked-out-of-transaction) rows.
+
+    ``EXISTS (...) LIMIT 1`` short-circuits on the first non-empty table, so
+    the probe costs ~1ms when the suite is clean — unlike a blanket TRUNCATE,
+    which takes ~0.5s on all 24 tables and would reintroduce the per-test
+    fixture tax (#996).
+    """
+    clauses = " OR ".join(
+        f'EXISTS (SELECT 1 FROM "{t.name}" LIMIT 1)'
+        for t in Base.metadata.sorted_tables
+    )
+    if not clauses:
+        return False
+    with engine.connect() as conn:
+        return bool(conn.execute(text(f"SELECT {clauses}")).scalar())
+
+
+@pytest.fixture(scope="session")
+def _db_engine():
+    """Session-scoped engine with the schema created exactly once.
+
+    The previous fixture ran ``Base.metadata.drop_all``/``create_all`` per
+    test — ~1.1s of DDL against PostgreSQL for every single test, the
+    dominant cost of the suite (#996). The schema is identical for all tests,
+    so it is built once here; per-test isolation comes from ``db_session``
+    rolling back a SAVEPOINT-scoped transaction instead.
 
     In CI (DATABASE_URL=postgresql://...) this runs against a real PostgreSQL
     instance with pgvector, so tests catch PG-specific bugs (#409) — the
     SQLite fallback previously masked issues like #398/#399/#400. Locally,
     when no DATABASE_URL is set, it falls back to an in-memory SQLite DB.
     """
+    import models  # noqa: F401
+
     if _USE_POSTGRES:
         engine = create_engine(_DATABASE_URL, pool_pre_ping=True)
         with engine.connect() as conn:
             conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
             conn.commit()
-        import models  # noqa: F401
         Base.metadata.create_all(engine)
+        # A crashed earlier run may have left committed rows behind; start
+        # the session from a clean slate (probe is ~1ms on empty tables).
+        if _has_committed_rows(engine):
+            _wipe_all_tables(engine)
     else:
         # SQLAlchemy 2.1+ requires StaticPool's `creator`; use poolclass so
         # create_engine injects the dialect creator itself.
@@ -107,26 +192,48 @@ def db_session():
         )
         Base.metadata.create_all(engine)
 
-    factory = sessionmaker(bind=engine)
-    session = factory()
-    yield session
-    session.close()
-
-    if _USE_POSTGRES:
-        # Drop and recreate per test for isolation on PostgreSQL.
-        # Guard: only drop on test databases to protect dev/prod (#503).
-        if _CAN_DROP:
-            Base.metadata.drop_all(engine)
-        else:
-            import warnings
-
-            warnings.warn(
-                f"Skipping drop_all for non-test database '{_DB_NAME}'. "
-                "Use a database with 'test' in the name for test isolation.",
-                RuntimeWarning,
-                stacklevel=2,
-            )
+    yield engine
     engine.dispose()
+
+
+@pytest.fixture
+def db_session(request, _db_engine):
+    """Per-test isolated session via a SAVEPOINT-wrapped outer transaction.
+
+    The test runs inside a real transaction that is rolled back at teardown;
+    the session joins it with ``join_transaction_mode="create_savepoint"`` so
+    ``commit()``/``rollback()`` calls inside tested code release/roll back a
+    SAVEPOINT instead of touching the outer transaction — app code that
+    commits still works, and nothing persists past the test (#996).
+
+    Tests that genuinely need commits visible to other connections can opt
+    out with ``@pytest.mark.real_commit``: they get a plain engine-bound
+    session and a full table wipe on teardown.
+    """
+    if request.node.get_closest_marker("real_commit"):
+        session = sessionmaker(bind=_db_engine)()
+        try:
+            yield session
+        finally:
+            session.close()
+            _wipe_all_tables(_db_engine)
+        return
+
+    conn = _db_engine.connect()
+    outer_txn = conn.begin()
+    session = Session(bind=conn, join_transaction_mode="create_savepoint")
+    try:
+        yield session
+    finally:
+        session.close()
+        if outer_txn.is_active:
+            outer_txn.rollback()
+        conn.close()
+        # Rollback already reverts everything the fixture session wrote; only
+        # pay for a table wipe when writes escaped the transaction (SessionLocal
+        # background paths) or an earlier run left committed residue.
+        if _CAN_DROP and _has_committed_rows(_db_engine):
+            _wipe_all_tables(_db_engine)
 
 
 @pytest.fixture(autouse=True, scope="session")
