@@ -1,6 +1,8 @@
 import os
 import sys
+import tempfile
 import types
+from pathlib import Path
 
 import pytest
 from sqlalchemy import create_engine, text
@@ -14,6 +16,19 @@ if "sqlite_vec" not in sys.modules:
     _stub = types.ModuleType("sqlite_vec")
     _stub.load = lambda _conn: None  # type: ignore
     sys.modules["sqlite_vec"] = _stub
+
+# Hermeticity against a populated .env (#991): services.env_file re-reads the
+# deployment's .env from disk on every get_persisted()/read_env() call, and
+# auth_service._effective_auth_password()/_effective_secret_key() consult it
+# before env vars — so a developer's real .env (AUTH_PASSWORD, SECRET_KEY,
+# OBSIDIAN_WEBHOOK_SECRET) used to leak into the suite where fixtures could not
+# override it. Point JOIDY_ENV_FILE at an isolated empty file BEFORE importing
+# app modules: config.Settings reads it at import time and env_file resolves it
+# dynamically on every call. Tests that need persisted values opt in via the
+# `persisted_env` fixture below.
+_TEST_ENV_FILE = Path(tempfile.mkdtemp(prefix="joidy-test-env-")) / ".env"
+_TEST_ENV_FILE.write_text("")
+os.environ["JOIDY_ENV_FILE"] = str(_TEST_ENV_FILE)
 
 # Safety: only allow destructive drop_all on databases whose name contains
 # "test" to prevent accidentally wiping a shared dev/production database (#503).
@@ -133,6 +148,32 @@ def db_session():
 def _disable_rate_limits():
     _default_limiter.requests_per_minute = 10_000
     _default_limiter.auth_requests_per_minute = 10_000
+
+
+@pytest.fixture(autouse=True)
+def _isolated_env_file(tmp_path, monkeypatch):
+    """Give every test its own empty persisted .env (#991).
+
+    Complements the session-level JOIDY_ENV_FILE above: even if a test (or an
+    endpoint under test) writes through write_env(), the values land in a
+    per-test tmp file and cannot leak into other tests.
+    """
+    env_path = tmp_path / "joidy.env"
+    env_path.write_text("")
+    monkeypatch.setenv("JOIDY_ENV_FILE", str(env_path))
+    return env_path
+
+
+@pytest.fixture
+def persisted_env(_isolated_env_file):
+    """Opt-in access to the test's persisted .env file.
+
+    Tests that exercise get_persisted()/read_env()/write_env() behaviour seed
+    values by writing ``KEY=value`` lines to the returned Path (or by calling
+    write_env(), which resolves the same file). Nothing reads the deployment's
+    real .env (#991).
+    """
+    return _isolated_env_file
 
 
 @pytest.fixture

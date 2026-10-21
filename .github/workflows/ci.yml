@@ -62,6 +62,23 @@ jobs:
         working-directory: api
         run: python -m pytest tests/ -v --cov=api --cov-report=xml --cov-report=term-missing
 
+      # Hermeticity regression guard (#991): reproduce a real dev environment
+      # where .env is fully populated. env_file resolves <repo>/.env on the
+      # host while Settings reads <cwd>/.env, so populate both. Without the
+      # conftest isolation this step fails ~17 auth/webhook/ws tests.
+      - name: Run full suite against a populated .env
+        working-directory: api
+        run: |
+          cp ../.env.example ../.env
+          {
+            echo "AUTH_PASSWORD=ci-populated-password"
+            echo "SECRET_KEY=ci-populated-secret-key"
+            echo "OBSIDIAN_WEBHOOK_SECRET=ci-populated-webhook-secret"
+            echo "POSTGRES_PASSWORD=joidy"
+          } >> ../.env
+          cp ../.env .env
+          python -m pytest tests/ -q
+
       - name: Upload coverage report
         uses: actions/upload-artifact@v7
         with:
