@@ -29,8 +29,9 @@ make migrate         # Alembic upgrade head (in api container)
 make db-backup       # pg_dump -Fc to data/backups/ (= `joidy backup`)
 make db-restore FILE=<dump> [FORCE=1]  # pg_restore a dump (= `joidy restore`)
 make backup-verify   # Round-trip: dump → restore to throwaway joidy_test_restore → health check
-make test            # test-api + test-frontend
+make test            # test-api + test-ai + test-frontend
 make test-api        # PYTHONPATH=/app python -m unittest discover -s tests
+make test-ai         # ai-service pytest suite (tests/)
 make test-frontend   # cd frontend && npx playwright test
 make lint            # python -m compileall on all Python services
 ```
