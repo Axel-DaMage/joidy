@@ -17,9 +17,18 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+COPY requirements.txt requirements-dev.txt ./
+
+# Dev/test tooling is opt-in: production builds (the default) ship runtime
+# deps only, while docker-compose.dev.yml passes INSTALL_DEV=true so dev
+# containers can run pytest/ruff/mypy in-container (#999).
+ARG INSTALL_DEV=false
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --prefix=/install -r requirements.txt
+    if [ "$INSTALL_DEV" = "true" ]; then \
+        pip install --prefix=/install -r requirements-dev.txt; \
+    else \
+        pip install --prefix=/install -r requirements.txt; \
+    fi
 
 # ── runtime: slim final image ────────────────────────────────────────────────
 FROM python:${PYTHON_VERSION}-slim AS runtime
@@ -59,4 +68,9 @@ USER app
 HEALTHCHECK --interval=10s --timeout=5s --retries=5 --start-period=20s \
   CMD curl -f http://localhost:8000/health/ready || exit 1
 
-CMD ["/bin/sh", "-c", "rm -rf alembic/versions/__pycache__ && exec uvicorn main:app --host 0.0.0.0 --port 8000 --workers ${WEB_CONCURRENCY:-2} --timeout-keep-alive ${UVICORN_TIMEOUT_KEEP_ALIVE:-5} --proxy-headers --forwarded-allow-ips='*'"]
+# Single worker by default: rate-limiter windows, the TTL response cache and
+# the WebSocket connection set live in per-process memory, so >1 worker makes
+# behavior depend on which process serves the request (#992). Scaling to
+# multiple workers requires moving that state to a shared store (e.g. Redis);
+# override with WEB_CONCURRENCY only once that exists.
+CMD ["/bin/sh", "-c", "rm -rf alembic/versions/__pycache__ && exec uvicorn main:app --host 0.0.0.0 --port 8000 --workers ${WEB_CONCURRENCY:-1} --timeout-keep-alive ${UVICORN_TIMEOUT_KEEP_ALIVE:-5} --proxy-headers --forwarded-allow-ips='*'"]

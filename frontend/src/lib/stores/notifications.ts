@@ -28,6 +28,8 @@ export function showNotification(
   activeNotifications.add(message);
   // Allow duplicate alerts only after 3 seconds
   if (dedupTimer) clearTimeout(dedupTimer);
+  // intentional: store-level self-dismissing one-shot; module lifetime,
+  // bulk-cleared by clearAllNotificationTimers() (#1003)
   dedupTimer = setTimeout(() => {
     activeNotifications.delete(message);
     dedupTimer = null;
@@ -35,6 +37,8 @@ export function showNotification(
 
   const id = `notif-${Date.now()}`;
   notifications.update(ns => [...ns, { id, message, type }]);
+  // intentional: auto-dismiss one-shot on a module store; tracked in
+  // dismissTimers and bulk-cleared by clearAllNotificationTimers() (#1003)
   const timer = setTimeout(() => {
     notifications.update(ns => ns.filter(n => n.id !== id));
     dismissTimers.delete(id);

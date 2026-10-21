@@ -55,7 +55,8 @@ joidy/
 │   ├── models/             # ORM
 │   ├── alembic/            # Migraciones
 │   ├── tests/              # Tests unitarios
-│   └── requirements.txt    # Dependencias
+│   ├── requirements.txt    # Dependencias de runtime
+│   └── requirements-dev.txt # Dependencias de dev/test (incluye -r requirements.txt)
 │
 ├── ai-service/             # Servicio de IA
 │   ├── main.py

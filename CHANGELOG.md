@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **PowerShell CLI character encoding**: Replaced non-ASCII Unicode quotation-interfering characters (`✓`, `—`, `║`) with ASCII-safe escape sequences (`$([char]0x2713)`) in `joidy.ps1`, `install.ps1`, `install-autostart.ps1`, and `start.ps1` to prevent fatal syntax parser errors in Windows PowerShell 5.1 (#981)
 - **`joidy.cmd` batch shim**: Updated shim to invoke PowerShell with `-NoProfile -ExecutionPolicy Bypass -File` to prevent opening Notepad when executed from `cmd.exe` (#981)
 - **`.gitattributes`**: Added repository `.gitattributes` to enforce consistent CRLF for Windows scripts and LF for Unix scripts (#981)
+- **Python dependency split**: `requirements.txt` in `api/`, `ai-service/` and `worker/` is now runtime-only; new per-service `requirements-dev.txt` adds pytest, pytest-cov, pytest-asyncio, pytest-xdist, ruff, mypy, bandit and pip-audit. Production images no longer ship pytest/pytest-cov; dev containers opt in via the `INSTALL_DEV=true` build arg (#999)
 
 ### Fixed
 

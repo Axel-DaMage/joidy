@@ -14,7 +14,7 @@ note classification, and retrieval-augmented generation (RAG). Runs on
 ## Prerequisites
 
 - Docker + Docker Compose (recommended)
-- Or Python 3.12 with `requirements.txt` for local dev
+- Or Python 3.12 with `requirements-dev.txt` for local dev (`requirements.txt` is runtime-only; the dev file adds pytest/ruff/mypy for tests and lint)
 - At least one AI provider API key in `.env` (see root [AGENTS.md](../AGENTS.md))
 - The `api` service must be healthy (it calls this service)
 

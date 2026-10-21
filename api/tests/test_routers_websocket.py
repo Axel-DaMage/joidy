@@ -10,6 +10,8 @@ Covers:
 
 import asyncio
 import json
+import logging
+import threading
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -161,3 +163,69 @@ def test_manager_connect_and_disconnect():
         assert ws not in manager.active_connections
 
     asyncio.run(_run())
+
+
+# --- _schedule_broadcast (#992) ----------------------------------------------
+
+
+def test_schedule_broadcast_inside_running_loop():
+    """Called from async context, the coroutine is scheduled directly."""
+    from routers import websocket
+
+    ran = []
+
+    async def _run():
+        async def notify():
+            ran.append(True)
+
+        websocket._schedule_broadcast(notify())
+        await asyncio.sleep(0)
+        assert ran
+
+    asyncio.run(_run())
+
+
+def test_schedule_broadcast_from_thread_reaches_main_loop():
+    """Called from a thread with no loop (sync endpoint), the coroutine still
+    runs on the captured main loop — previously it was silently dropped."""
+
+    from routers import websocket
+
+    ran = []
+
+    async def _main():
+        websocket.set_main_loop(asyncio.get_running_loop())
+
+        async def notify():
+            ran.append(True)
+
+        worker = threading.Thread(target=websocket._schedule_broadcast, args=(notify(),))
+        worker.start()
+        worker.join()
+
+        for _ in range(100):
+            if ran:
+                break
+            await asyncio.sleep(0.01)
+        assert ran
+
+    try:
+        asyncio.run(_main())
+    finally:
+        websocket.set_main_loop(None)
+
+
+def test_schedule_broadcast_without_any_loop_warns(caplog):
+    """No running loop and no captured loop: coroutine closed, warning logged."""
+
+    from routers import websocket
+
+    websocket.set_main_loop(None)
+
+    async def notify():
+        pass
+
+    with caplog.at_level(logging.WARNING, logger="routers.websocket"):
+        websocket._schedule_broadcast(notify())
+
+    assert "Broadcast dropped" in caplog.text

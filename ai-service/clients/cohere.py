@@ -52,6 +52,12 @@ class CohereClient(BaseLLMClient, EmbeddingClient):
         )
         return response.text
 
+    async def close(self) -> None:
+        """Close the SDK's underlying HTTP client if it exposes one (#998)."""
+        close = getattr(self._client, "close", None)
+        if close is not None:
+            await close()
+
 
 def _is_retryable_error(exc: Exception) -> bool:
     msg = str(exc).lower()

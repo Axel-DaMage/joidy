@@ -34,6 +34,8 @@ export async function retryRequest<T>(
     } catch (e) {
       lastError = e as Error;
       if (i < maxRetries - 1) {
+        // intentional: promise-based backoff delay — resolves into the awaiting
+        // caller only, touches no component or store state (#1003)
         await new Promise(r => setTimeout(r, delayMs * (i + 1)));
       }
     }

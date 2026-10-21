@@ -18,5 +18,9 @@ package() {
   install -Dm755 scripts/joidy.sh "${pkgdir}/usr/bin/joidy"
   install -Dm644 docker-compose.yml "${pkgdir}/usr/share/joidy/docker-compose.yml"
   install -Dm644 .env.example "${pkgdir}/usr/share/joidy/.env.example"
+  # Backup sidecar scripts — docker-compose.yml bind-mounts ./scripts read-only
+  # into the `backup` service.
+  install -Dm755 scripts/db_backup.sh "${pkgdir}/usr/share/joidy/scripts/db_backup.sh"
+  install -Dm755 scripts/db_backup_loop.sh "${pkgdir}/usr/share/joidy/scripts/db_backup_loop.sh"
   install -Dm644 /dev/stdin "${pkgdir}/etc/joidy/path" <<<"/usr/share/joidy"
 }
