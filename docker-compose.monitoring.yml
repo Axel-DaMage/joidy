@@ -6,7 +6,7 @@ x-logging: &default-logging
 
 services:
   prometheus:
-    image: prom/prometheus:v3.0.0
+    image: prom/prometheus:v3.15.0
     container_name: joidy-prometheus
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
