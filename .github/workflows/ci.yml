@@ -230,6 +230,158 @@ jobs:
         if: always()
         run: docker compose -f docker-compose.yml -f docker-compose.dev.yml down --remove-orphans
 
+  frontend-e2e:
+    name: Frontend E2E (Playwright)
+    runs-on: ubuntu-latest
+    # Bounded: build + stack boot + suite must finish well under this or the
+    # job is killed and reported red.
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # Same BuildKit GHA cache pattern as docker-build: repeat PRs hit the
+      # cache so builds are fast; the tags match what compose expects.
+      - name: Build api image (BuildKit GHA cache)
+        uses: docker/build-push-action@v7
+        with:
+          context: ./api
+          load: true
+          tags: d4mag3/joidy-api:latest
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+
+      - name: Build ai-service image (BuildKit GHA cache)
+        uses: docker/build-push-action@v7
+        with:
+          context: ./ai-service
+          load: true
+          tags: d4mag3/joidy-ai-service:latest
+          cache-from: type=gha,scope=ai-service
+          cache-to: type=gha,mode=max,scope=ai-service
+
+      - name: Build worker image (BuildKit GHA cache)
+        uses: docker/build-push-action@v7
+        with:
+          context: ./worker
+          load: true
+          tags: d4mag3/joidy-worker:latest
+          cache-from: type=gha,scope=worker
+          cache-to: type=gha,mode=max,scope=worker
+
+      - name: Build frontend image (BuildKit GHA cache)
+        uses: docker/build-push-action@v7
+        with:
+          context: ./frontend
+          target: development
+          load: true
+          tags: d4mag3/joidy-frontend:latest
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
+
+      - name: Prepare environment
+        run: |
+          cp .env.example .env
+          # docker-compose.yml requires a non-empty POSTGRES_PASSWORD (${VAR:?...})
+          # .env.example ships it empty, so set a CI-only value here.
+          sed -i 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=joidy-ci/' .env
+          # Deterministic single-user auth for the e2e login helper
+          # (plaintext supported by verify_password; bcrypt prefix optional).
+          echo "AUTH_PASSWORD=joidy-e2e-ci" >> .env
+          mkdir -p data/db data/uploads data/vault
+
+      - name: Start services
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d api ai-service worker
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --no-deps frontend
+
+      - name: Verify API health
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8000/health; then
+              echo "API is healthy"
+              exit 0
+            fi
+            echo "Attempt $i/30: API not ready yet..."
+            sleep 2
+          done
+          echo "::error::API did not become healthy within 60 seconds"
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml logs --tail=100 api
+          exit 1
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Playwright (chromium only)
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Wait for frontend
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:3000 > /dev/null; then
+              echo "Frontend is up"
+              exit 0
+            fi
+            echo "Attempt $i/30: frontend not ready yet..."
+            sleep 2
+          done
+          echo "::error::Frontend did not come up within 60 seconds"
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml logs --tail=100 frontend
+          exit 1
+
+      # PRs run the smoke spec only (fast gate); pushes to main/development
+      # run the full 13-spec suite. GEMINI_API_KEY stays unset so the specs
+      # exercise the real "AI disabled" path of the CI stack.
+      - name: Run smoke e2e (pull requests)
+        if: github.event_name == 'pull_request'
+        working-directory: frontend
+        env:
+          CI: true
+          PLAYWRIGHT_BASE_URL: http://localhost:3000
+          PLAYWRIGHT_API_URL: http://localhost:8000
+          JOIDY_TEST_PASSWORD: joidy-e2e-ci
+        run: npx playwright test e2e/smoke.spec.ts
+
+      - name: Run full e2e suite (branch pushes)
+        if: github.event_name == 'push'
+        working-directory: frontend
+        env:
+          CI: true
+          PLAYWRIGHT_BASE_URL: http://localhost:3000
+          PLAYWRIGHT_API_URL: http://localhost:8000
+          JOIDY_TEST_PASSWORD: joidy-e2e-ci
+        run: npx playwright test
+
+      - name: Upload Playwright artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          retention-days: 7
+
+      - name: Stop containers
+        if: always()
+        # -v drops the postgres volume so the seeded test DB never leaks
+        # between runs.
+        run: docker compose -f docker-compose.yml -f docker-compose.dev.yml down -v --remove-orphans
+
   security:
     name: Security Scanning
     runs-on: ubuntu-latest
