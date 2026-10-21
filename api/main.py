@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -39,7 +40,7 @@ from routers import (
 )
 from routers.integrations import github, google, spotify, strava
 from services.auth_service import get_current_user
-from services.http_client import aclose_http_clients
+from services.http_client import aclose_http_clients, http_client
 from services.response_cache import get_cache_stats
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -80,6 +81,10 @@ async def lifespan(app: FastAPI):
 
     init_db()
     logger.info("Database initialization complete")
+
+    # Capture the running event loop so sync endpoints (threadpool, no loop)
+    # can still schedule WebSocket broadcasts (#992).
+    websocket.set_main_loop(asyncio.get_running_loop())
 
     # Auto-restore goals from vault if DB has none (#504)
     try:
@@ -310,8 +315,7 @@ async def health_ready():
         checks["ai_service"] = "disabled"
     else:
         try:
-            import httpx
-            async with httpx.AsyncClient(timeout=2.0) as client:
+            async with http_client(timeout=2.0) as client:
                 r = await client.get(f"{settings.ai_service_url}/health")
                 if r.status_code == 200:
                     body = r.json()

@@ -2,13 +2,13 @@ fastapi==0.143.0
 uvicorn[standard]==0.54.0
 sqlalchemy==2.1.4
 alembic==1.20.0
-pydantic==2.13.5
-pydantic-settings==2.15.0
+pydantic==2.14.1
+pydantic-settings==2.16.0
 httpx==0.28.1
 python-multipart==0.0.32
 aiofiles==25.1.0
 psycopg2-binary==2.9.13
-pgvector==0.5.0
+pgvector==0.5.1
 pyjwt==2.15.1
 bleach==6.4.0
 passlib[bcrypt]==1.7.4
@@ -16,7 +16,6 @@ bcrypt==4.0.1
 prometheus-client==0.26.0
 pywebpush==2.5.0
 cryptography==50.0.2
-pytest==9.1.1
-pytest-cov==7.1.0
-pytest-xdist==3.8.0
+# aiodocker is a runtime dependency: routers/system.py lazily imports it for
+# the /system/power endpoints (container management from the web UI).
 aiodocker==0.27.0

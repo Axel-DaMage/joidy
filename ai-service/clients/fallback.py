@@ -85,6 +85,11 @@ class FallbackLLMClient(BaseLLMClient):
                 system_prompt=system_prompt,
             )
 
+    async def close(self) -> None:
+        """Close both wrapped clients (#998)."""
+        await self._primary.close()
+        await self._secondary.close()
+
 
 class FallbackEmbeddingClient(EmbeddingClient):
     """Wraps a primary embedding client and falls back to a secondary on exception."""
@@ -127,3 +132,8 @@ class FallbackEmbeddingClient(EmbeddingClient):
                 f"Primary embedding provider '{self._primary.provider_name}' unhealthy. Using fallback '{self._secondary.provider_name}'."
             )
         return secondary_ok
+
+    async def close(self) -> None:
+        """Close both wrapped clients (#998)."""
+        await self._primary.close()
+        await self._secondary.close()
