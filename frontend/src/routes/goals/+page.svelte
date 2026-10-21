@@ -81,6 +81,8 @@
   let showAddForm = $state(false);
   let goalSearchQuery = $state('');
   let goalFilterState = $state<string | null>(null);
+  // Matches the states rendered by GoalFilters.svelte (null = "Todos")
+  const VALID_EDITOR_FILTERS = ['PINNED', 'ACTIVE', 'COMPLETED', 'CANCELLED', 'FAILED'] as const;
   let pinnedGoals = $state<Set<number>>(new Set());
   let deleteConfirm = $state<number | null>(null);
 
@@ -409,11 +411,22 @@
     if (cachedGoals) goals = deduplicateGoals(cachedGoals);
     if (cachedTags) tags = cachedTags;
 
-    // Restore pinned goals from localStorage
+    // Restore persisted UI state (pins, editor filter and search) from localStorage
     try {
       const saved = loadUserSettings().goalsUi;
       if (saved?.pinnedGoalIds && Array.isArray(saved.pinnedGoalIds)) {
         pinnedGoals = new Set(saved.pinnedGoalIds);
+      }
+      const savedFilter = saved?.editorFilter;
+      if (
+        savedFilter === null ||
+        (typeof savedFilter === 'string' &&
+          (VALID_EDITOR_FILTERS as readonly string[]).includes(savedFilter))
+      ) {
+        goalFilterState = savedFilter;
+      }
+      if (typeof saved?.editorSearch === 'string') {
+        goalSearchQuery = saved.editorSearch;
       }
     } catch {
       // ignore storage errors
@@ -743,6 +756,20 @@
     if (selectedHistoryDate && typeof localStorage !== 'undefined') {
       localStorage.setItem('goals.selectedHistoryDate', selectedHistoryDate);
     }
+  });
+
+  // persist editor filter and search in userSettings (#1096);
+  // the search is debounced to avoid a localStorage write per keystroke
+  $effect(() => {
+    patchUserSettings({ goalsUi: { editorFilter: goalFilterState } });
+  });
+
+  $effect(() => {
+    const query = goalSearchQuery;
+    const timer = setTimeout(() => {
+      patchUserSettings({ goalsUi: { editorSearch: query } });
+    }, 300);
+    return () => clearTimeout(timer);
   });
 
   async function loadAssignmentsForDate(date: string) {
