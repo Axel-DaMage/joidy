@@ -29,6 +29,7 @@
       restartNotice = res.requires_restart ? res.restart_reason || '' : '';
       step = 4;
       // Wait longer when a restart is pending so the notice stays readable.
+      // intentional: the reload tears down the whole document anyway (#1003)
       setTimeout(
         () => {
           window.location.reload();

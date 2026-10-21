@@ -100,6 +100,7 @@
   let historyIndex = $state(0);
   let historyLock = $state(false);
   let saveTimeout: ReturnType<typeof setTimeout>;
+  let savedTimer: ReturnType<typeof setTimeout> | undefined;
 
   let draftKey = $derived(note ? `${DRAFT_PREFIX}${note.id}` : null);
 
@@ -220,14 +221,15 @@
   // faster rAF-based update (see editorHighlightedHtml) so typed text is styled
   // immediately instead of lagging 300ms (#703).
   let debouncedContent = $state('');
-  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
+  // The effect cleanup clears the pending debounce on every re-run AND on
+  // component teardown (#1003).
   $effect(() => {
     const current = visibleEditorContent;
-    if (debounceTimer) clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => {
+    const debounceTimer = setTimeout(() => {
       debouncedContent = current;
     }, 300);
+    return () => clearTimeout(debounceTimer);
   });
 
   // Cheap computations stay on visibleEditorContent (instant feedback)
@@ -427,6 +429,7 @@
     clearTimeout(aiTimeout);
     clearTimeout(autosaveTimer);
     clearTimeout(saveTimeout);
+    clearTimeout(savedTimer);
     if (draftKey && title.trim()) {
       saveDraft();
     }
@@ -440,7 +443,8 @@
     saved = true;
     clearDraft();
     hasUnsavedChanges = false;
-    setTimeout(() => (saved = false), 2000);
+    clearTimeout(savedTimer);
+    savedTimer = setTimeout(() => (saved = false), 2000);
   }
 
   function pickIcon(ic: string) {
