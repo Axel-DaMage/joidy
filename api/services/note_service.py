@@ -3,7 +3,12 @@ import re
 
 from config import settings
 from models.note import Note, NoteLink, NoteTag, Tag
-from services.gamification_engine import process_event, xp_for, get_xp_table
+from services.gamification_engine import (
+    GamificationResult,
+    process_event,
+    xp_for,
+    get_xp_table,
+)
 from services.goal_service import sync_goals_from_note
 from services.response_cache import clear_api_caches
 from services.sanitizer import sanitize_content, sanitize_tag, sanitize_title
@@ -12,6 +17,7 @@ from services.tag_graph import (
     rebuild_tag_cooccurrences,
     sync_tag_cooccurrences_for_tags,
 )
+from services.vault_paths import normalize_source_path
 from sqlalchemy.orm import Session, selectinload
 
 
@@ -120,6 +126,23 @@ def create_note(
     title = sanitize_title(title)
     content = sanitize_content(content)
     tags = [sanitize_tag(t) for t in tags if sanitize_tag(t)]
+    # Re-map client-side vault domains (host path from .env) onto the effective
+    # vault root so writes and watcher dedup (#1099) stay consistent.
+    source_path = normalize_source_path(source_path)
+
+    # Idempotent creation by source_path — pressing the daily-note button
+    # twice must not create duplicate notes pointing at the same file.
+    if source_path:
+        existing = db.query(Note).filter(Note.source_path == source_path).first()
+        if existing is not None:
+            return existing, GamificationResult(
+                xp_awarded=0,
+                total_xp=0,
+                current_streak=0,
+                plant_stage=0,
+                message="La nota ya existe para este archivo del vault.",
+            )
+
     note = Note(title=title, content=content, source=source, source_path=source_path)
     db.add(note)
     db.flush()
@@ -194,7 +217,7 @@ def update_note(
     if title is not None:
         note.title = sanitize_title(title)
     if source_path is not None:
-        note.source_path = source_path
+        note.source_path = normalize_source_path(source_path)
     if source is not None:
         note.source = source
     if content is not None:

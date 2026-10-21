@@ -708,7 +708,14 @@
     </footer>
   </div>
 
-  <SettingsPanel bind:open={settingsOpen} on:close={() => (settingsOpen = false)} />
+  <SettingsPanel
+    bind:open={settingsOpen}
+    on:close={() => {
+      settingsOpen = false;
+      // Broadcast so mounted pages (e.g. notes) can refetch config after edits
+      window.dispatchEvent(new CustomEvent('joidy:settings-closed'));
+    }}
+  />
   <CommandPalette />
   <FocusMode />
   <Toast />
