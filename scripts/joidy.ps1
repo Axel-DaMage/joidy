@@ -15,6 +15,10 @@
 #   .\joidy.ps1 pull     Pull latest images
 #   .\joidy.ps1 logs     Tail logs (all services)
 #   .\joidy.ps1 logs api Tail logs for a specific service
+#   .\joidy.ps1 idle enable [--idle-hibernate-db]
+#                        Start the idle watchdog (auto-sleep when unused)
+#   .\joidy.ps1 idle disable   Stop the watchdog (services untouched)
+#   .\joidy.ps1 idle status    Watcher state, last activity, time until sleep
 #   .\joidy.ps1 backup   Write a compressed pg_dump to the backups dir
 #   .\joidy.ps1 restore <file> [-Force]   Restore a dump into the database
 #   .\joidy.ps1 help     Show this help message
@@ -25,6 +29,9 @@ param(
 
   [Parameter(Position = 1)]
   [string]$Service = "",
+
+  [Parameter(Position = 2, ValueFromRemainingArguments = $true)]
+  [string[]]$Rest = @(),
 
   [switch]$Force
 )
@@ -159,6 +166,16 @@ if ($EnvFile -and (Test-Path $EnvFile)) {
 }
 
 $HIBERNATE_SERVICES = @("ai-service", "worker")
+
+# Idle-watchdog state directory — mirrors the bash CLI: <project>/data/idle,
+# falling back to a per-user dir when the project dir is read-only.
+$DataDir = Join-Path $ProjectDir "data"
+try {
+  New-Item -ItemType Directory -Path $DataDir -Force -ErrorAction Stop | Out-Null
+} catch {
+  $DataDir = Join-Path $env:LOCALAPPDATA "joidy\data"
+}
+$IdleDir = Join-Path $DataDir "idle"
 
 function Test-Command($Cmd) {
   $null = Get-Command $Cmd -ErrorAction SilentlyContinue
@@ -335,7 +352,259 @@ function Invoke-Wake {
     }
   }
   Write-Host ""
+  # If the idle watchdog slept the stack, restore the other recorded
+  # services too (frontend, postgres, ...).
+  $preSleep = Join-Path $IdleDir "pre_sleep_services"
+  if (Test-Path $preSleep) {
+    Restore-IdleState
+    Write-Ok "Restored services recorded before idle sleep."
+  }
+  if (Test-Path $IdleDir) {
+    [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() | Set-Content (Join-Path $IdleDir "last_activity") -ErrorAction SilentlyContinue
+  }
   Write-Ok "Wake complete."
+}
+
+# --- Idle watchdog (auto-sleep) -------------------------------------
+# Mirrors `joidy idle` in scripts/joidy.sh: a background watcher polls
+# established TCP connections on the published ports, active PostgreSQL
+# sessions, and vault file changes. After JOIDY_IDLE_TIMEOUT minutes (.env,
+# default 15) with no activity it snapshots the running services, sleeps the
+# stack via the existing sleep path plus the frontend, and keeps postgres
+# running unless enabled with --idle-hibernate-db.
+
+function Get-IdleEnv($Name, $Default) {
+  if (Get-Item "env:$Name" -ErrorAction SilentlyContinue) {
+    $v = (Get-Item "env:$Name").Value
+    if ($v) { return $v }
+  }
+  if ($EnvFile -and (Test-Path $EnvFile)) {
+    foreach ($line in (Get-Content $EnvFile -ErrorAction SilentlyContinue)) {
+      if ($line -match "^$Name=(.*)$") {
+        $v = $Matches[1].Trim()
+        if ($v) { return $v }
+      }
+    }
+  }
+  return $Default
+}
+
+function Write-IdleLog($msg) {
+  $log = Join-Path $IdleDir "watcher.log"
+  "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] $msg" | Add-Content $log -ErrorAction SilentlyContinue
+}
+
+function Get-IdleRunningServices {
+  $profile = Get-AiProfileArgs
+  $out = Invoke-ComposeCommand @EnvFileArg @profile ps --services --filter status=running 2>$null
+  return @($out | ForEach-Object { "$_".Trim() } | Where-Object { $_ })
+}
+
+function Test-IdleWatcherAlive {
+  $pidFile = Join-Path $IdleDir "watcher.pid"
+  if (-not (Test-Path $pidFile)) { return $false }
+  $watcherPid = (Get-Content $pidFile -Raw -ErrorAction SilentlyContinue)
+  if (-not $watcherPid) { return $false }
+  return [bool](Get-Process -Id ([int]$watcherPid.Trim()) -ErrorAction SilentlyContinue)
+}
+
+# Signal 1: an established TCP connection on a published service port.
+function Test-IdleTcp {
+  $ports = @(
+    [int](Get-IdleEnv 'FRONTEND_PORT' '3000'),
+    [int](Get-IdleEnv 'API_PORT' '8000'),
+    [int](Get-IdleEnv 'AI_SERVICE_PORT' '8002'),
+    [int](Get-IdleEnv 'WORKER_PORT' '8001')
+  )
+  foreach ($p in $ports) {
+    if (Get-NetTCPConnection -LocalPort $p -State Established -ErrorAction SilentlyContinue) { return $true }
+  }
+  return $false
+}
+
+# Signal 2: an active client session on postgres.
+function Test-IdleDb {
+  if (-not ((Get-IdleRunningServices) -contains 'postgres')) { return $false }
+  $u = Get-IdleEnv 'POSTGRES_USER' 'joidy'
+  $d = Get-IdleEnv 'POSTGRES_DB' 'joidy'
+  $n = Invoke-ComposeCommand @EnvFileArg exec -T postgres psql -U $u -d $d -tAc `
+    "SELECT count(*) FROM pg_stat_activity WHERE state='active' AND pid<>pg_backend_pid()" 2>$null
+  $n = ("$n").Trim()
+  return ($n -match '^\d+$' -and [int]$n -gt 0)
+}
+
+# Signal 3: a vault file changed since the previous poll (marker file mtime).
+function Test-IdleVault {
+  $vault = $env:OBSIDIAN_VAULT_PATH
+  if (-not $vault) { $vault = Join-Path $DataDir 'vault' }
+  if (-not (Test-Path $vault)) { return $false }
+  $marker = Join-Path $IdleDir 'vault.marker'
+  $m = Get-Item $marker -ErrorAction SilentlyContinue
+  if (-not $m) { New-Item -ItemType File -Path $marker -Force | Out-Null; return $false }
+  $hit = Get-ChildItem -Path $vault -Recurse -File -ErrorAction SilentlyContinue |
+    Where-Object { $_.LastWriteTimeUtc -gt $m.LastWriteTimeUtc } | Select-Object -First 1
+  (Get-Item $marker).LastWriteTimeUtc = [DateTime]::UtcNow
+  return [bool]$hit
+}
+
+function Test-IdleActivity {
+  if (Test-IdleTcp)   { return $true }
+  if (Test-IdleDb)    { return $true }
+  if (Test-IdleVault) { return $true }
+  return $false
+}
+
+function Invoke-IdleSleep($HibernateDb) {
+  $running = Get-IdleRunningServices
+  if ($running.Count -eq 0) {
+    Write-IdleLog "idle timeout reached but no services running"
+    [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() | Set-Content (Join-Path $IdleDir "last_activity")
+    return
+  }
+  $running | Set-Content (Join-Path $IdleDir "pre_sleep_services")
+  Write-IdleLog "idle timeout — sleeping (was running: $($running -join ' '), hibernate_db=$HibernateDb)"
+  Invoke-Sleep
+  $profile = Get-AiProfileArgs
+  if ($running -contains 'frontend') {
+    Invoke-ComposeCommand @EnvFileArg @profile stop frontend 2>$null | Out-Null
+    Write-IdleLog "stopped frontend"
+  }
+  if ($HibernateDb -and ($running -contains 'postgres')) {
+    Invoke-ComposeCommand @EnvFileArg @profile stop postgres 2>$null | Out-Null
+    Write-IdleLog "stopped postgres (--idle-hibernate-db)"
+  }
+  [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() | Set-Content (Join-Path $IdleDir "slept")
+}
+
+function Restore-IdleState {
+  $file = Join-Path $IdleDir "pre_sleep_services"
+  if (-not (Test-Path $file)) { return }
+  $profile = Get-AiProfileArgs
+  $running = Get-IdleRunningServices
+  $recorded = Get-Content $file | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+  foreach ($svc in @('postgres','api','frontend','worker','ai-service') + ($recorded | Where-Object { $_ -notin @('postgres','api','frontend','worker','ai-service') })) {
+    if (($recorded -contains $svc) -and (-not ($running -contains $svc))) {
+      Invoke-ComposeCommand @EnvFileArg @profile start $svc 2>$null | Out-Null
+      Write-IdleLog "restored $svc"
+    }
+  }
+  Remove-Item $file -Force -ErrorAction SilentlyContinue
+  Remove-Item (Join-Path $IdleDir "slept") -Force -ErrorAction SilentlyContinue
+  [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() | Set-Content (Join-Path $IdleDir "last_activity")
+}
+
+# Foreground watcher loop; spawned hidden by `idle enable`.
+function Invoke-IdleRun {
+  New-Item -ItemType Directory -Path $IdleDir -Force | Out-Null
+  $PID | Set-Content (Join-Path $IdleDir "watcher.pid")
+  $timeoutMin = [int](Get-IdleEnv 'JOIDY_IDLE_TIMEOUT' '15')
+  $pollS = [int](Get-IdleEnv 'JOIDY_IDLE_POLL_SECONDS' '60')
+  $hibernate = $false
+  $conf = Join-Path $IdleDir "watcher.conf"
+  if ((Test-Path $conf) -and (Select-String -Path $conf -Pattern 'IDLE_HIBERNATE_DB=1' -Quiet)) { $hibernate = $true }
+  $lastFile = Join-Path $IdleDir "last_activity"
+  $sleptFile = Join-Path $IdleDir "slept"
+  if (-not (Test-Path $lastFile)) { [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() | Set-Content $lastFile }
+  Write-IdleLog "watcher started (pid $PID, timeout=${timeoutMin}m, poll=${pollS}s, hibernate_db=$hibernate)"
+  while ($true) {
+    try {
+      if (Test-IdleActivity) {
+        [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() | Set-Content $lastFile
+        if (Test-Path $sleptFile) {
+          Write-IdleLog "activity detected while asleep — restoring services"
+          Restore-IdleState
+        }
+      } elseif (-not (Test-Path $sleptFile)) {
+        $elapsed = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() - [int64](Get-Content $lastFile -Raw).Trim()
+        if ($elapsed -ge ($timeoutMin * 60)) { Invoke-IdleSleep $hibernate }
+      }
+    } catch {
+      Write-IdleLog "poll error: $_"
+    }
+    Start-Sleep -Seconds $pollS
+  }
+}
+
+function Invoke-IdleEnable {
+  $hibernate = $Rest -contains '--idle-hibernate-db'
+  New-Item -ItemType Directory -Path $IdleDir -Force | Out-Null
+  if (Test-IdleWatcherAlive) {
+    Write-Warn "Idle watcher already running (pid $((Get-Content (Join-Path $IdleDir 'watcher.pid') -Raw).Trim()))"
+    return
+  }
+  "IDLE_HIBERNATE_DB=$(if ($hibernate) {1} else {0})" | Set-Content (Join-Path $IdleDir "watcher.conf")
+  if (-not (Test-Path (Join-Path $IdleDir 'last_activity'))) {
+    [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() | Set-Content (Join-Path $IdleDir 'last_activity')
+  }
+  $exe = (Get-Process -Id $PID).Path
+  $proc = Start-Process -FilePath $exe -WindowStyle Hidden -PassThru `
+    -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',"`"$PSCommandPath`"",'idle','run')
+  $proc.Id | Set-Content (Join-Path $IdleDir "watcher.pid")
+  Write-Ok "Idle watcher started (pid $($proc.Id))"
+  Write-Host "  Sleeps the stack after $(Get-IdleEnv 'JOIDY_IDLE_TIMEOUT' '15') min without activity"
+  Write-Host "  (joidy sleep + frontend$(if ($hibernate) {', postgres'})). State: $IdleDir"
+}
+
+function Invoke-IdleDisable {
+  $pidFile = Join-Path $IdleDir "watcher.pid"
+  if (-not (Test-IdleWatcherAlive)) {
+    Write-Warn "Idle watcher is not running"
+    Remove-Item $pidFile -Force -ErrorAction SilentlyContinue
+    return
+  }
+  $watcherPid = [int]((Get-Content $pidFile -Raw).Trim())
+  Stop-Process -Id $watcherPid -Force -ErrorAction SilentlyContinue
+  Remove-Item $pidFile -Force -ErrorAction SilentlyContinue
+  Write-Ok "Idle watcher stopped (the stack was left untouched)."
+}
+
+function Invoke-IdleStatus {
+  $timeoutMin = Get-IdleEnv 'JOIDY_IDLE_TIMEOUT' '15'
+  $pollS = Get-IdleEnv 'JOIDY_IDLE_POLL_SECONDS' '60'
+  Write-Host ""
+  if (Test-IdleWatcherAlive) {
+    $watcherPid = (Get-Content (Join-Path $IdleDir 'watcher.pid') -Raw).Trim()
+    Write-Ok "Idle watcher: RUNNING (pid $watcherPid, poll ${pollS}s)"
+  } else {
+    Write-Warn "Idle watcher: stopped - enable with 'joidy idle enable'"
+  }
+  Write-Host "  Timeout:       $timeoutMin min (JOIDY_IDLE_TIMEOUT)"
+  $conf = Join-Path $IdleDir "watcher.conf"
+  if ((Test-Path $conf) -and (Select-String -Path $conf -Pattern 'IDLE_HIBERNATE_DB=1' -Quiet)) {
+    Write-Host "  Hibernate DB:  yes (--idle-hibernate-db)"
+  }
+  $lastFile = Join-Path $IdleDir "last_activity"
+  if (Test-Path $lastFile) {
+    $last = [int64](Get-Content $lastFile -Raw).Trim()
+    $lastDt = [DateTimeOffset]::FromUnixTimeSeconds($last).LocalDateTime
+    Write-Host "  Last activity: $($lastDt.ToString('yyyy-MM-dd HH:mm:ss'))"
+    $sleptFile = Join-Path $IdleDir "slept"
+    if (Test-Path $sleptFile) {
+      $sleptDt = [DateTimeOffset]::FromUnixTimeSeconds([int64](Get-Content $sleptFile -Raw).Trim()).LocalDateTime
+      Write-Host "  Stack state:   ASLEEP since $($sleptDt.ToString('yyyy-MM-dd HH:mm:ss'))"
+      Write-Host "                 ('joidy wake' restores the recorded services)"
+    } else {
+      $remaining = [Math]::Max(0, ($timeoutMin * 60) - ([DateTimeOffset]::UtcNow.ToUnixTimeSeconds() - $last))
+      Write-Host "  Sleep in:      ${remaining}s if no new activity"
+    }
+  } else {
+    Write-Host "  Last activity: (not recorded yet)"
+  }
+  Write-Host ""
+}
+
+function Invoke-Idle {
+  switch ($Service) {
+    'enable'  { Invoke-IdleEnable }
+    'disable' { Invoke-IdleDisable }
+    'status'  { Invoke-IdleStatus }
+    'run'     { Invoke-IdleRun }
+    default   {
+      Write-Err "Unknown idle subcommand: $Service"
+      Write-Host "  Usage: joidy idle enable [--idle-hibernate-db] | disable | status"
+      exit 1
+    }
+  }
 }
 
 function Invoke-Restart {
@@ -469,10 +738,23 @@ function Show-Help {
   Write-Host "  joidy pull       Pull latest images"
   Write-Host "  joidy logs       Tail logs (all services)"
   Write-Host "  joidy logs api   Tail logs for a specific service"
+  Write-Host "  joidy idle enable [--idle-hibernate-db]"
+  Write-Host "                   Start the background idle watchdog (auto-sleep)"
+  Write-Host "  joidy idle disable"
+  Write-Host "                   Stop the watchdog (running services untouched)"
+  Write-Host "  joidy idle status"
+  Write-Host "                   Watcher state, last activity, time until sleep"
   Write-Host "  joidy backup     Write a compressed pg_dump to the backups dir"
   Write-Host "  joidy restore <file> [-Force]  Restore a dump into the database"
   Write-Host "                   (refuses to overwrite a live DB without -Force)"
   Write-Host "  joidy help       Show this help message"
+  Write-Host ""
+  Write-Host "Idle watchdog: 'joidy idle enable' starts a background watcher that polls"
+  Write-Host "established HTTP connections on the published ports, active PostgreSQL"
+  Write-Host "sessions, and vault file changes. After JOIDY_IDLE_TIMEOUT minutes (.env,"
+  Write-Host "default 15) with no activity it sleeps the stack via 'joidy sleep' plus"
+  Write-Host "the frontend; postgres keeps running unless --idle-hibernate-db is given."
+  Write-Host "'joidy wake' - or any new activity - restores the recorded services."
   Write-Host ""
   Write-Host "Scheduled backups: 'joidy up' starts the backup sidecar automatically -"
   Write-Host "pg_dump -Fc on BACKUP_SCHEDULE (cron, default `"0 3 * * *`"), dumps in"
@@ -495,6 +777,7 @@ switch ($Command) {
   "status"        { Invoke-Status }
   "pull"          { Invoke-Pull }
   "logs"          { Invoke-Logs }
+  "idle"          { Invoke-Idle }
   "backup"        { Invoke-Backup }
   "restore"       { Invoke-Restore -File $Service -Force:$Force }
   "help"          { Show-Help }
