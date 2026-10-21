@@ -29,6 +29,8 @@ export interface UserSettings {
   };
   goalsUi?: {
     pinnedGoalIds?: number[];
+    editorFilter?: string | null;
+    editorSearch?: string;
   };
   statusBarUi?: {
     showAssignedIssues?: boolean;
