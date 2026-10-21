@@ -225,6 +225,7 @@ def db_session(request, _db_engine):
     out with ``@pytest.mark.real_commit``: they get a plain engine-bound
     session and a full table wipe on teardown.
     """
+    _clear_app_caches()
     if request.node.get_closest_marker("real_commit"):
         session = sessionmaker(bind=_db_engine)()
         try:
@@ -232,6 +233,7 @@ def db_session(request, _db_engine):
         finally:
             session.close()
             _wipe_all_tables(_db_engine)
+            _clear_app_caches()
         return
 
     conn = _db_engine.connect()
@@ -249,6 +251,25 @@ def db_session(request, _db_engine):
         # background paths) or an earlier run left committed residue.
         if _CAN_DROP and _has_committed_rows(_db_engine):
             _wipe_all_tables(_db_engine)
+        _clear_app_caches()
+
+
+def _clear_app_caches() -> None:
+    """Drop in-process TTL caches between tests (issue #1099 follow-up).
+
+    ``services.response_cache`` caches live for the lifetime of the pytest
+    *process* and are NOT invalidated by the per-test savepoint rollback:
+    e.g. ``GET /tags/`` decorates the list with ``@ttl_cache``, so a note
+    (and tag) created by an earlier test in the same worker surfaced in a
+    later ``test_list_tags_empty`` depending on xdist shard order — a
+    phantom committed row that never left the DB.
+    """
+    try:
+        from services.response_cache import clear_api_caches
+
+        clear_api_caches()
+    except Exception:
+        pass
 
 
 @pytest.fixture(autouse=True, scope="session")

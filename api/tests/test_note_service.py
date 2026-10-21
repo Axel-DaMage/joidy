@@ -175,7 +175,7 @@ class TestCreateNoteDedup(NoteServiceTestBase):
         env = {"OBSIDIAN_VAULT_PATH": "/home/user/ObsidianVault"}
         with self.Session() as db, patch(
             "services.vault_paths.read_env", return_value=env
-        ):
+        ), patch("services.vault_paths.settings.obsidian_vault_path", "/vault"):
             note, _ = create_note(
                 db, title="Daily", content="C", tags=[],
                 source="joidy", source_path="/home/user/ObsidianVault/Daily/x.md",
