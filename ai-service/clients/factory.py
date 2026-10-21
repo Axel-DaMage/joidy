@@ -179,10 +179,35 @@ class ClientFactory:
         return cls._embedding_client
 
     @classmethod
+    async def aclose(cls) -> None:
+        """Close cached clients and release their connections (#998).
+
+        Provider clients hold reusable sessions (aiohttp.ClientSession for
+        Ollama/OpenRouter, httpx clients inside the OpenAI/Anthropic SDKs).
+        Called from the FastAPI lifespan on shutdown so nothing is left
+        unclosed; the cache is reset so a later get_*_client() creates
+        fresh instances.
+        """
+        for client in (cls._llm_client, cls._embedding_client):
+            if client is None:
+                continue
+            try:
+                await client.close()
+            except Exception:
+                logger.exception(
+                    f"Error closing AI client '{client.provider_name}'"
+                )
+        cls.reset()
+
+    @classmethod
     def reset(cls):
         """Reset cached clients (useful for testing)."""
         cls._llm_client = None
         cls._embedding_client = None
+
+
+async def aclose_clients() -> None:
+    await ClientFactory.aclose()
 
 
 def get_llm_client() -> BaseLLMClient:
