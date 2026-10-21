@@ -7,6 +7,11 @@
   import 'highlight.js/styles/github-dark.css';
   import { api, type Goal } from '$lib/api';
   import { t } from 'svelte-i18n';
+  import { createTimerRegistry } from '$lib/utils/timer';
+
+  // Component-scoped timers: cleared on destroy so callbacks can't fire after
+  // unmount (#1003).
+  const timers = createTimerRegistry();
 
   const renderer = new marked.Renderer();
   renderer.code = ({ text, lang }) => {
@@ -59,7 +64,7 @@
   function handleDeleteClick() {
     if (!deleteConfirm) {
       deleteConfirm = true;
-      setTimeout(() => (deleteConfirm = false), 3000);
+      timers.timeout(() => (deleteConfirm = false), 3000);
       return;
     }
     dispatch('delete');
@@ -75,6 +80,7 @@
   onDestroy(() => {
     if (typeof document !== 'undefined') document.body.classList.remove('zen-mode-active');
     if (highlightRaf !== null) cancelAnimationFrame(highlightRaf);
+    timers.clearAll();
   });
 
   $effect(() => {
@@ -92,13 +98,14 @@
   // faster rAF-based update (see editorHighlightedHtml) so typed text is styled
   // immediately instead of lagging 300ms (#936).
   let debouncedContent = $state('');
-  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  // The effect cleanup clears the pending debounce on every re-run AND on
+  // component teardown (#1003).
   $effect(() => {
     const current = visibleContent;
-    if (debounceTimer) clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => {
+    const debounceTimer = setTimeout(() => {
       debouncedContent = current;
     }, 300);
+    return () => clearTimeout(debounceTimer);
   });
 
   let renderedHtml = $derived(renderMarkdown(debouncedContent));
@@ -118,7 +125,7 @@
     dispatch('save', { title: title.trim(), content });
     saving = false;
     saved = true;
-    setTimeout(() => (saved = false), 2000);
+    timers.timeout(() => (saved = false), 2000);
   }
 
   function onKeydown(e: KeyboardEvent) {

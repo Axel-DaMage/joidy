@@ -1098,3 +1098,25 @@ Todas las tablas usan `ON DELETE CASCADE` para relaciones padre-hijo.
   `goals.parent_id`, `goals.note_id`, `goals.tag_id`, `goals.state`,
   `personal_streaks.is_archived`, `personal_streaks.category`. La tabla
   `api_usage` tiene índices en `created_at` y `operation`.
+---
+
+## 11. Backups y Restauración
+
+`joidy up` levanta un sidecar `backup` (perfil de compose `backup`) que ejecuta
+`pg_dump -Fc` automáticamente según `BACKUP_SCHEDULE` (cron, default
+`0 3 * * *` — diario a las 03:00 en `USER_TIMEZONE`). Los dumps se escriben en
+`data/backups/` (`JOIDY_BACKUP_DIR` para cambiarlo), fuera del volumen
+`postgres_data`, con nombres `joidy-YYYYMMDD-HHMMSS.dump`.
+
+Retención: se conservan todos los dumps de los últimos `BACKUP_RETENTION_DAYS`
+días (14 por defecto), más el dump semanal (domingo, `BACKUP_WEEKLY_DAY`) de
+las últimas `BACKUP_RETENTION_WEEKS` semanas (4). `BACKUP_ENABLED=false`
+desactiva el sidecar.
+
+```bash
+joidy backup                                   # dump manual
+joidy restore data/backups/joidy-*.dump        # restaurar (rechaza DB en vivo)
+joidy restore data/backups/joidy-*.dump --force  # sobrescribir DB en vivo
+make backup-verify   # verificación round-trip: dump → restaurar a
+                     # joidy_test_restore (desechable) → health check
+```

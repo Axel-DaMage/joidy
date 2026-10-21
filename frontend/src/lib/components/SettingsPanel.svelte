@@ -14,10 +14,12 @@
     hideTagsLine,
     devMode,
     themeMode,
+    clockStyle,
     type IconPack,
     type ThemeMode,
     MAX_COLORS,
   } from '$lib/stores/settings';
+  import { CLOCK_STYLES } from '$lib/utils/clock';
   import { api } from '$lib/api';
   import { logger } from '$lib/utils/logger';
   import { deferredPrompt, isAppInstalled, showInstallBanner } from '$lib/stores/pwa';
@@ -48,6 +50,11 @@
   let githubPollInterval = 5;
   let githubExpiresAt = 0;
   let githubPollTimer: ReturnType<typeof setTimeout> | null = null;
+  let googlePollInterval: ReturnType<typeof setInterval> | null = null;
+  let googlePollTimeout: ReturnType<typeof setTimeout> | null = null;
+  // Set in onDestroy so in-flight async poll callbacks stop rescheduling and
+  // stop mutating state after teardown (#1003).
+  let destroyed = false;
   let githubUsernameInput = '';
   let githubConnectingUsername = false;
   let showAdvancedGithub = false;
@@ -122,8 +129,25 @@
   });
 
   onDestroy(() => {
+    destroyed = true;
     if (browser) {
       window.removeEventListener('keydown', handleKeydown);
+    }
+    if (savedTimer) {
+      clearTimeout(savedTimer);
+      savedTimer = null;
+    }
+    if (githubPollTimer) {
+      clearTimeout(githubPollTimer);
+      githubPollTimer = null;
+    }
+    if (googlePollInterval) {
+      clearInterval(googlePollInterval);
+      googlePollInterval = null;
+    }
+    if (googlePollTimeout) {
+      clearTimeout(googlePollTimeout);
+      googlePollTimeout = null;
     }
   });
 
@@ -222,6 +246,7 @@
   function logout() {
     session.logout();
     showNotification($t('settings.session.loggedOut'), 'success');
+    // intentional: the reload tears down the whole document anyway (#1003)
     setTimeout(() => window.location.reload(), 400);
   }
 
@@ -333,6 +358,8 @@
       if (result.status === 'slowdown') {
         githubPollInterval += 5;
       }
+      // Don't reschedule if the panel was destroyed mid-poll (#1003).
+      if (destroyed || !githubDeviceCode) return;
       githubPollTimer = setTimeout(pollGithubDeviceCode, githubPollInterval * 1000);
     } catch (e: any) {
       if (githubPollTimer) {
@@ -390,17 +417,23 @@
       // Listen for the OAuth callback via URL params (popup or redirect)
       // The user will be redirected back with ?code=xxx
       // We poll for connection status
-      const pollInterval = setInterval(async () => {
+      googlePollInterval = setInterval(async () => {
         await checkGoogleStatus();
+        // Stop mutating state once the panel is gone (#1003).
+        if (destroyed || googlePollInterval === null) return;
         if (googleConnected) {
-          clearInterval(pollInterval);
+          clearInterval(googlePollInterval);
+          googlePollInterval = null;
           googleConnecting = false;
           showNotification('Google conectado correctamente', 'success');
         }
       }, 3000);
       // Stop polling after 5 minutes
-      setTimeout(() => {
-        clearInterval(pollInterval);
+      googlePollTimeout = setTimeout(() => {
+        if (googlePollInterval) {
+          clearInterval(googlePollInterval);
+          googlePollInterval = null;
+        }
         googleConnecting = false;
       }, 300000);
     } catch (e: any) {
@@ -437,7 +470,10 @@
 
       const result = await api.config.update(configToSave);
       configuredKeys = Object.entries(systemConfig)
-        .filter(([k, v]) => (v || isConfigured(k)) && k !== 'telegram_bot_token' && k !== 'telegram_allowed_user_id')
+        .filter(
+          ([k, v]) =>
+            (v || isConfigured(k)) && k !== 'telegram_bot_token' && k !== 'telegram_allowed_user_id'
+        )
         .map(([k, v]) => k);
       if (result.requires_restart && result.restart_reason) {
         configRestartNotice = result.restart_reason;
@@ -634,6 +670,20 @@
               <span class="sep">/</span>
               <span class:active={!$use24HourClock}>12h</span>
             </button>
+          </div>
+
+          <!-- Clock style selector (#707) -->
+          <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
+            <div class="row-label">
+              <DynamicIcon name="Clock" size={13} />
+              <span>{$t('settings.clockStyle')}</span>
+            </div>
+            <select class="setting-input mono" bind:value={$clockStyle}>
+              {#each CLOCK_STYLES as style}
+                <option value={style}>{$t(`settings.clockStyles.${style}`)}</option>
+              {/each}
+            </select>
+            <p class="hint" style="margin-top: 2px;">{$t('settings.clockStyleHint')}</p>
           </div>
 
           <!-- Language selector (#370) -->
@@ -868,7 +918,8 @@
               </span>
             {:else if githubConnected}
               <div style="display:flex; align-items:center; gap:8px;">
-                <span class="mono" style="font-size:12px; color: var(--xp);">@{githubUsername}</span>
+                <span class="mono" style="font-size:12px; color: var(--xp);">@{githubUsername}</span
+                >
                 <button class="link-btn disconnect-btn" onclick={disconnectGithub}
                   >Desconectar</button
                 >
@@ -889,7 +940,9 @@
                 style="font-size: 12px; padding: 6px 10px; flex: 1;"
                 placeholder="Tu usuario de GitHub (ej: torvalds)"
                 bind:value={githubUsernameInput}
-                onkeydown={(e) => { if (e.key === 'Enter') connectGithubByUsername(); }}
+                onkeydown={(e) => {
+                  if (e.key === 'Enter') connectGithubByUsername();
+                }}
               />
               <button
                 class="link-btn"
@@ -901,7 +954,8 @@
               </button>
             </div>
             <p class="hint" style="margin-top: 4px;">
-              Conecta sólo con tu nombre de usuario para ver repositorios, issues y pulls públicos sin requerir tokens ni OAuth.
+              Conecta sólo con tu nombre de usuario para ver repositorios, issues y pulls públicos
+              sin requerir tokens ni OAuth.
             </p>
           {/if}
 
@@ -918,15 +972,23 @@
               onclick={() => (showAdvancedGithub = !showAdvancedGithub)}
             >
               <DynamicIcon name="SlidersHorizontal" size={11} />
-              <span>{showAdvancedGithub ? 'Ocultar configuración avanzada' : 'Configuración avanzada (Tokens / OAuth App)'}</span>
+              <span
+                >{showAdvancedGithub
+                  ? 'Ocultar configuración avanzada'
+                  : 'Configuración avanzada (Tokens / OAuth App)'}</span
+              >
             </button>
           </div>
 
           {#if showAdvancedGithub}
             <!-- GitHub Manual / Advanced Config -->
-            <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px; border-left: 2px solid var(--border); padding-left: 12px; margin-left: 4px;">
-              <p class="hint" style="margin-top: 0; font-weight: 500;">Credenciales avanzadas de GitHub:</p>
-              
+            <div
+              style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px; border-left: 2px solid var(--border); padding-left: 12px; margin-left: 4px;"
+            >
+              <p class="hint" style="margin-top: 0; font-weight: 500;">
+                Credenciales avanzadas de GitHub:
+              </p>
+
               <div style="display: flex; flex-direction: column; gap: 4px;">
                 <div class="row-label" style="font-size: 11px;">
                   <a
@@ -985,7 +1047,8 @@
                     <span>GitHub OAuth Client Secret</span>
                     <ExternalLink size={10} />
                   </a>
-                  {#if isConfigured('github_client_secret')}<span class="configured-badge">✓</span>{/if}
+                  {#if isConfigured('github_client_secret')}<span class="configured-badge">✓</span
+                    >{/if}
                 </div>
                 <input
                   type="password"
@@ -1419,7 +1482,6 @@
     margin-bottom: 12px;
   }
 
-
   .row {
     display: flex;
     align-items: center;
@@ -1457,7 +1519,6 @@
     color: var(--text-primary);
   }
   .toggle .sep,
-
   .link-btn {
     background: var(--accent);
     color: white;
@@ -1472,7 +1533,6 @@
     opacity: 0.9;
   }
 
-
   .disconnect-btn {
     background: transparent;
     color: var(--text-secondary);
@@ -1484,7 +1544,6 @@
     color: var(--text-primary);
   }
 
-
   .badge {
     font-size: 10px;
     font-family: var(--font-mono);
@@ -1492,7 +1551,6 @@
     border-radius: 2px;
     letter-spacing: 0.05em;
   }
-
 
   .hint {
     font-size: 11px;
@@ -1704,7 +1762,6 @@
   .save-config-btn.saved {
     background: var(--success, #22c55e);
   }
-
 
   /* Theme mode selector */
   .theme-mode-options {

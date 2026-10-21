@@ -182,6 +182,14 @@ test: add gamification engine edge cases
 
 ### Backend
 
+Si trabajas sin Docker, instala `requirements-dev.txt` del servicio correspondiente (`requirements.txt` solo trae dependencias de runtime):
+
+```bash
+cd api && pip install -r requirements-dev.txt && pytest
+```
+
+Con Docker (la imagen dev incluye el tooling de test vía `INSTALL_DEV=true`):
+
 ```bash
 make test-api
 # Un solo test

@@ -21,6 +21,8 @@
 #   joidy status   Show service status
 #   joidy logs     Tail logs (all services)
 #   joidy logs api Tail logs for a specific service
+#   joidy backup   Write a compressed pg_dump to the backups dir
+#   joidy restore <file> [--force]   Restore a dump into the database
 #   joidy help     Show this help message
 #
 # Port fallback: if a service's host port is already bound by a foreign
@@ -231,7 +233,13 @@ if [ -w "$PROJECT_DIR" ]; then
 else
   export JOIDY_DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/joidy/data"
 fi
-mkdir -p "$JOIDY_DATA_DIR/db" "$JOIDY_DATA_DIR/uploads" "$JOIDY_DATA_DIR/vault"
+mkdir -p "$JOIDY_DATA_DIR/db" "$JOIDY_DATA_DIR/uploads" "$JOIDY_DATA_DIR/vault" "$JOIDY_DATA_DIR/backups"
+
+# Compose interpolates ${UID}/${GID} for the `backup` service so its dumps land
+# on the bind mount owned by the host user instead of root. Export them here;
+# unset they default to 0:0 in docker-compose.yml.
+export UID
+export GID="${GID:-$(id -g)}"
 
 # Services that are stopped during hibernation
 HIBERNATE_SERVICES="ai-service worker"
@@ -295,11 +303,24 @@ print_access_url() {
   echo -e "${GREEN}╚══════════════════════════════════════════════╝${NC}"
 }
 
-# Check whether the AI profile should be enabled by reading the .env file.
-ai_profile_args() {
+# Check which compose profiles should be enabled by reading the .env file.
+#   ai      — opt-in: AI_SERVICE_ENABLED=true
+#   backup  — opt-out: enabled by default; BACKUP_ENABLED=false disables it.
+#             The backup sidecar reuses the postgres image, so it costs ~0 MB
+#             of extra pull and only a few MB of RAM while idle.
+profile_args() {
+  local args=""
   if [ -n "$ENV_FILE" ] && grep -q '^AI_SERVICE_ENABLED=true' "$ENV_FILE" 2>/dev/null; then
-    echo "--profile ai"
+    args="--profile ai"
   fi
+  local backup_flag=""
+  if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
+    backup_flag=$(grep -E '^BACKUP_ENABLED=' "$ENV_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
+  fi
+  if [ "$backup_flag" != "false" ]; then
+    args="${args:+$args }--profile backup"
+  fi
+  echo "$args"
 }
 
 # ─── Port fallback helpers ─────────────────────────────────────────
@@ -308,8 +329,8 @@ ai_profile_args() {
 # Ports held by our own compose project's containers are reused (idempotent).
 # If no free port is found, abort without running `compose up`.
 
-# Read a port setting: env var → .env file → default.
-read_port() {
+# Read a setting: env var → .env file → default.
+read_setting() {
   local var="$1" default="$2" val=""
   if [ -n "${!var:-}" ]; then
     val="${!var}"
@@ -318,6 +339,11 @@ read_port() {
   fi
   [ -z "$val" ] && val="$default"
   echo "$val"
+}
+
+# Read a port setting: env var → .env file → default.
+read_port() {
+  read_setting "$@"
 }
 
 # Is anything listening on $1 (TCP, any interface)?
@@ -417,7 +443,7 @@ resolve_ports() {
 cmd_pull() {
   print_status "Pulling latest Joidy images..."
   local profile
-  profile="$(ai_profile_args)"
+  profile="$(profile_args)"
   if [ -n "$profile" ]; then
     $DOCKER_CMD $ENV_FILE_ARG $profile pull || print_warn "Could not pull latest images, using local/cached images."
   else
@@ -430,7 +456,7 @@ cmd_up() {
   print_status "Starting Joidy services..."
   resolve_ports
   local profile
-  profile="$(ai_profile_args)"
+  profile="$(profile_args)"
   if [ -n "$profile" ]; then
     $DOCKER_CMD $ENV_FILE_ARG $profile up -d
   else
@@ -467,7 +493,7 @@ cmd_sleep() {
 cmd_wake() {
   print_status "Waking heavy services from hibernation..."
   local profile
-  profile="$(ai_profile_args)"
+  profile="$(profile_args)"
   for svc in $HIBERNATE_SERVICES; do
     # Check if the service is NOT running (use -a to include stopped containers)
     if $DOCKER_CMD $ENV_FILE_ARG $profile ps -a "$svc" 2>/dev/null | grep -q "$svc"; then
@@ -488,7 +514,7 @@ cmd_wake() {
 cmd_restart() {
   print_status "Restarting all Joidy services..."
   local profile
-  profile="$(ai_profile_args)"
+  profile="$(profile_args)"
   if [ -n "$profile" ]; then
     $DOCKER_CMD $ENV_FILE_ARG $profile restart
   else
@@ -513,6 +539,103 @@ cmd_logs() {
   fi
 }
 
+# Host directory where dumps are written:
+# JOIDY_BACKUP_DIR (env/.env) → $JOIDY_DATA_DIR/backups (same default compose
+# uses for the backup service's bind mount).
+backup_dir() {
+  local d
+  d=$(read_setting JOIDY_BACKUP_DIR "")
+  [ -z "$d" ] && d="$JOIDY_DATA_DIR/backups"
+  echo "$d"
+}
+
+pg_ready_or_fail() {
+  local pg_user pg_db
+  pg_user=$(read_setting POSTGRES_USER joidy)
+  pg_db=$(read_setting POSTGRES_DB joidy)
+  if ! $DOCKER_CMD $ENV_FILE_ARG exec -T postgres pg_isready -U "$pg_user" -d "$pg_db" >/dev/null 2>&1; then
+    print_err "The 'postgres' service is not running — start it first (joidy up or make dev)."
+    exit 1
+  fi
+}
+
+cmd_backup() {
+  pg_ready_or_fail
+  local pg_user pg_db dir file ts
+  pg_user=$(read_setting POSTGRES_USER joidy)
+  pg_db=$(read_setting POSTGRES_DB joidy)
+  dir=$(backup_dir)
+  mkdir -p "$dir"
+  ts=$(date +%Y%m%d-%H%M%S)
+  file="$dir/joidy-${ts}.dump"
+  print_status "Dumping '$pg_db' → $file"
+  # Local socket auth inside the postgres container is trust, so no password is
+  # needed here. Write to a temp name first: a failed dump never leaves a
+  # truncated archive masquerading as a good backup.
+  if $DOCKER_CMD $ENV_FILE_ARG exec -T postgres pg_dump -Fc -U "$pg_user" -d "$pg_db" > "$file.tmp"; then
+    mv "$file.tmp" "$file"
+  else
+    rm -f "$file.tmp"
+    print_err "pg_dump failed"
+    exit 1
+  fi
+  print_ok "Backup written: $file ($(du -h "$file" | cut -f1))"
+  # Apply the same retention policy the scheduled sidecar uses. The script
+  # lives next to joidy in repo clones and in <project>/scripts on system
+  # installs (e.g. AUR /usr/share/joidy/scripts).
+  local prune_script=""
+  for candidate in "$SCRIPT_DIR/db_backup.sh" "$PROJECT_DIR/scripts/db_backup.sh"; do
+    [ -f "$candidate" ] && prune_script="$candidate" && break
+  done
+  if [ -n "$prune_script" ]; then
+    BACKUP_DIR="$dir" \
+    BACKUP_RETENTION_DAYS="$(read_setting BACKUP_RETENTION_DAYS 14)" \
+    BACKUP_RETENTION_WEEKS="$(read_setting BACKUP_RETENTION_WEEKS 4)" \
+    BACKUP_WEEKLY_DAY="$(read_setting BACKUP_WEEKLY_DAY 0)" \
+      bash "$prune_script" prune || print_warn "retention pruning failed"
+  fi
+}
+
+cmd_restore() {
+  local file="" force=0 arg
+  for arg in "$@"; do
+    case "$arg" in
+      --force|-f) force=1 ;;
+      *) [ -z "$file" ] && file="$arg" ;;
+    esac
+  done
+  if [ -z "$file" ]; then
+    print_err "Usage: joidy restore <file.dump> [--force]"
+    exit 1
+  fi
+  if [ ! -f "$file" ]; then
+    print_err "Backup file not found: $file"
+    echo "  Dumps live in: $(backup_dir)" >&2
+    exit 1
+  fi
+  if [ "$(head -c 5 "$file" 2>/dev/null)" != "PGDMP" ]; then
+    print_err "'$file' is not a pg_dump custom-format archive (missing PGDMP header)"
+    exit 1
+  fi
+  pg_ready_or_fail
+  local pg_user pg_db n_tables
+  pg_user=$(read_setting POSTGRES_USER joidy)
+  pg_db=$(read_setting POSTGRES_DB joidy)
+  n_tables=$($DOCKER_CMD $ENV_FILE_ARG exec -T postgres psql -U "$pg_user" -d "$pg_db" -tAc \
+    "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'" 2>/dev/null || echo "")
+  if [ -n "$n_tables" ] && [ "$n_tables" -gt 0 ] && [ "$force" -ne 1 ]; then
+    print_err "Database '$pg_db' is live ($n_tables tables) — refusing to overwrite without --force."
+    echo "  The restore runs pg_restore --clean, which drops existing objects first."
+    echo "  To proceed:  joidy restore $file --force"
+    exit 1
+  fi
+  print_status "Restoring $file → '$pg_db'"
+  cat "$file" | $DOCKER_CMD $ENV_FILE_ARG exec -T postgres \
+    pg_restore -U "$pg_user" -d "$pg_db" --clean --if-exists --no-owner --no-privileges
+  print_ok "Restore complete."
+  print_warn "Restart the services so they pick up the restored state: joidy restart"
+}
+
 cmd_help() {
   cat <<'HELP'
 joidy — Manage the Joidy Docker stack
@@ -527,7 +650,16 @@ Usage:
   joidy pull       Pull latest images
   joidy logs       Tail logs (all services)
   joidy logs api   Tail logs for a specific service
+  joidy backup     Write a compressed pg_dump to the backups dir
+  joidy restore <file> [--force]  Restore a dump into the database
+                   (refuses to overwrite a live DB without --force)
   joidy help       Show this help message
+
+Scheduled backups: `joidy up` starts the `backup` sidecar automatically —
+pg_dump -Fc on BACKUP_SCHEDULE (cron, default "0 3 * * *"), dumps in
+<data>/backups (or JOIDY_BACKUP_DIR), pruned to BACKUP_RETENTION_DAYS daily +
+BACKUP_RETENTION_WEEKS weekly dumps. Set BACKUP_ENABLED=false to opt out.
+Verify backups end-to-end with: make backup-verify
 
 On first run, .env is auto-created from .env.example with generated
 POSTGRES_PASSWORD, SECRET_KEY, and GRAFANA_ADMIN_PASSWORD.
@@ -554,6 +686,8 @@ case "${1:-help}" in
   status)   cmd_status ;;
   pull)     cmd_pull ;;
   logs)     cmd_logs "${2:-}" ;;
+  backup)   cmd_backup ;;
+  restore)  shift; cmd_restore "$@" ;;
   help|--help|-h) cmd_help ;;
   *)
     print_err "Unknown command: $1"

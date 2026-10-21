@@ -23,6 +23,8 @@ const toastTimers = new Map<string, ReturnType<typeof setTimeout>>();
 export function showToast(message: string, type: ToastType = 'info', duration = 4000) {
   const id = `toast-${++toastId}`;
   uiToasts.update(toasts => [...toasts, { id, message, type, duration }]);
+  // intentional: auto-dismiss one-shot on a module store; tracked in
+  // toastTimers and bulk-cleared by clearAllToastTimers() (#1003)
   const timer = setTimeout(() => {
     uiToasts.update(toasts => toasts.filter(t => t.id !== id));
     toastTimers.delete(id);

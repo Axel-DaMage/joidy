@@ -118,9 +118,11 @@ graph LR
 Si prefieres correr sin Docker, necesitas:
 
 - Node 20+ en `frontend/`: `npm install && npm run dev`
-- Python 3.12+ en `api/`: `pip install -r requirements.txt && uvicorn main:app --reload --port 8000`
-- Python 3.12+ en `ai-service/`: `pip install -r requirements.txt && uvicorn main:app --reload --port 8002`
-- Worker: `python main.py` dentro de `worker/`
+- Python 3.12+ en `api/`: `pip install -r requirements-dev.txt && uvicorn main:app --reload --port 8000`
+- Python 3.12+ en `ai-service/`: `pip install -r requirements-dev.txt && uvicorn main:app --reload --port 8002`
+- Worker: `pip install -r requirements-dev.txt` y luego `python main.py` dentro de `worker/`
+
+`requirements.txt` contiene solo dependencias de runtime (lo que instala la imagen de producción); `requirements-dev.txt` añade pytest, ruff, mypy y demás herramientas de test/lint necesarias para desarrollo.
 
 Recuerda que la base de datos PostgreSQL (con la extensión `pgvector`) se comparte entre servicios vía `DATABASE_URL`, así que necesitas una instancia accesible (local o remota).
 
