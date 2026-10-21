@@ -14,10 +14,12 @@
     hideTagsLine,
     devMode,
     themeMode,
+    clockStyle,
     type IconPack,
     type ThemeMode,
     MAX_COLORS,
   } from '$lib/stores/settings';
+  import { CLOCK_STYLES } from '$lib/utils/clock';
   import { api } from '$lib/api';
   import { logger } from '$lib/utils/logger';
   import { deferredPrompt, isAppInstalled, showInstallBanner } from '$lib/stores/pwa';
@@ -468,7 +470,10 @@
 
       const result = await api.config.update(configToSave);
       configuredKeys = Object.entries(systemConfig)
-        .filter(([k, v]) => (v || isConfigured(k)) && k !== 'telegram_bot_token' && k !== 'telegram_allowed_user_id')
+        .filter(
+          ([k, v]) =>
+            (v || isConfigured(k)) && k !== 'telegram_bot_token' && k !== 'telegram_allowed_user_id'
+        )
         .map(([k, v]) => k);
       if (result.requires_restart && result.restart_reason) {
         configRestartNotice = result.restart_reason;
@@ -665,6 +670,20 @@
               <span class="sep">/</span>
               <span class:active={!$use24HourClock}>12h</span>
             </button>
+          </div>
+
+          <!-- Clock style selector (#707) -->
+          <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
+            <div class="row-label">
+              <DynamicIcon name="Clock" size={13} />
+              <span>{$t('settings.clockStyle')}</span>
+            </div>
+            <select class="setting-input mono" bind:value={$clockStyle}>
+              {#each CLOCK_STYLES as style}
+                <option value={style}>{$t(`settings.clockStyles.${style}`)}</option>
+              {/each}
+            </select>
+            <p class="hint" style="margin-top: 2px;">{$t('settings.clockStyleHint')}</p>
           </div>
 
           <!-- Language selector (#370) -->
@@ -899,7 +918,8 @@
               </span>
             {:else if githubConnected}
               <div style="display:flex; align-items:center; gap:8px;">
-                <span class="mono" style="font-size:12px; color: var(--xp);">@{githubUsername}</span>
+                <span class="mono" style="font-size:12px; color: var(--xp);">@{githubUsername}</span
+                >
                 <button class="link-btn disconnect-btn" onclick={disconnectGithub}
                   >Desconectar</button
                 >
@@ -920,7 +940,9 @@
                 style="font-size: 12px; padding: 6px 10px; flex: 1;"
                 placeholder="Tu usuario de GitHub (ej: torvalds)"
                 bind:value={githubUsernameInput}
-                onkeydown={(e) => { if (e.key === 'Enter') connectGithubByUsername(); }}
+                onkeydown={(e) => {
+                  if (e.key === 'Enter') connectGithubByUsername();
+                }}
               />
               <button
                 class="link-btn"
@@ -932,7 +954,8 @@
               </button>
             </div>
             <p class="hint" style="margin-top: 4px;">
-              Conecta sólo con tu nombre de usuario para ver repositorios, issues y pulls públicos sin requerir tokens ni OAuth.
+              Conecta sólo con tu nombre de usuario para ver repositorios, issues y pulls públicos
+              sin requerir tokens ni OAuth.
             </p>
           {/if}
 
@@ -949,15 +972,23 @@
               onclick={() => (showAdvancedGithub = !showAdvancedGithub)}
             >
               <DynamicIcon name="SlidersHorizontal" size={11} />
-              <span>{showAdvancedGithub ? 'Ocultar configuración avanzada' : 'Configuración avanzada (Tokens / OAuth App)'}</span>
+              <span
+                >{showAdvancedGithub
+                  ? 'Ocultar configuración avanzada'
+                  : 'Configuración avanzada (Tokens / OAuth App)'}</span
+              >
             </button>
           </div>
 
           {#if showAdvancedGithub}
             <!-- GitHub Manual / Advanced Config -->
-            <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px; border-left: 2px solid var(--border); padding-left: 12px; margin-left: 4px;">
-              <p class="hint" style="margin-top: 0; font-weight: 500;">Credenciales avanzadas de GitHub:</p>
-              
+            <div
+              style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px; border-left: 2px solid var(--border); padding-left: 12px; margin-left: 4px;"
+            >
+              <p class="hint" style="margin-top: 0; font-weight: 500;">
+                Credenciales avanzadas de GitHub:
+              </p>
+
               <div style="display: flex; flex-direction: column; gap: 4px;">
                 <div class="row-label" style="font-size: 11px;">
                   <a
@@ -1016,7 +1047,8 @@
                     <span>GitHub OAuth Client Secret</span>
                     <ExternalLink size={10} />
                   </a>
-                  {#if isConfigured('github_client_secret')}<span class="configured-badge">✓</span>{/if}
+                  {#if isConfigured('github_client_secret')}<span class="configured-badge">✓</span
+                    >{/if}
                 </div>
                 <input
                   type="password"
@@ -1450,7 +1482,6 @@
     margin-bottom: 12px;
   }
 
-
   .row {
     display: flex;
     align-items: center;
@@ -1488,7 +1519,6 @@
     color: var(--text-primary);
   }
   .toggle .sep,
-
   .link-btn {
     background: var(--accent);
     color: white;
@@ -1503,7 +1533,6 @@
     opacity: 0.9;
   }
 
-
   .disconnect-btn {
     background: transparent;
     color: var(--text-secondary);
@@ -1515,7 +1544,6 @@
     color: var(--text-primary);
   }
 
-
   .badge {
     font-size: 10px;
     font-family: var(--font-mono);
@@ -1523,7 +1551,6 @@
     border-radius: 2px;
     letter-spacing: 0.05em;
   }
-
 
   .hint {
     font-size: 11px;
@@ -1735,7 +1762,6 @@
   .save-config-btn.saved {
     background: var(--success, #22c55e);
   }
-
 
   /* Theme mode selector */
   .theme-mode-options {
