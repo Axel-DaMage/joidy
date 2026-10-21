@@ -159,7 +159,14 @@ export async function createNote(title: string, content: string, tags: string[],
 
   try {
     const result = await api.notes.create({ title, content, tags, source_path: sourcePath ?? undefined });
-    notes.update(ns => [result, ...ns]);
+    // Creation is idempotent by source_path on the backend (#1099): a dedup
+    // response returns an already-listed note, so upsert by id instead of
+    // pushing a duplicate row into the list.
+    notes.update((ns) =>
+      ns.some((n) => n.id === result.id)
+        ? ns.map((n) => (n.id === result.id ? result : n))
+        : [result, ...ns]
+    );
     applyGamificationResult(result.gamification);
     if (browser) putNote(result).catch(() => {});
     return result;

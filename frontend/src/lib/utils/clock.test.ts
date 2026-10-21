@@ -8,6 +8,7 @@ import {
   CLOCK_STYLES,
   DEFAULT_CLOCK_STYLE,
   getClockParts,
+  getTodayKey,
   getTimerParts,
   isClockStyleId,
 } from './clock';
@@ -47,6 +48,21 @@ describe('clock utils — getClockParts', () => {
     expect(p.h).toBe(14);
     expect(p.m).toBe(5);
     expect(p.s).toBe(9);
+  });
+
+  it('getTodayKey uses the timezone-local date, not UTC (#1099)', () => {
+    // 2025-01-01 23:30 UTC is still January 1st in UTC, yet it is already
+    // January 2nd in Europe/Madrid (UTC+1) — and January 1st in
+    // America/Santiago (UTC-3). en-CA formatting gives ISO yyyy-mm-dd.
+    const utc = new Date('2025-01-01T23:30:00Z');
+    expect(getTodayKey('UTC', utc)).toBe('2025-01-01');
+    expect(getTodayKey('Europe/Madrid', utc)).toBe('2025-01-02');
+    expect(getTodayKey('America/Santiago', utc)).toBe('2025-01-01');
+    expect(getTodayKey('Europe/Madrid', utc)).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it('getTodayKey returns a placeholder for an invalid timezone', () => {
+    expect(getTodayKey('Not/AZone')).toBe('1970-01-01');
   });
 
   it('returns 12h parts with a day period', () => {

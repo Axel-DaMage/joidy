@@ -136,6 +136,54 @@ class TestCreateNote(NoteServiceTestBase):
             self.assertNotIn("<script>", note.title)
 
 
+class TestCreateNoteDedup(NoteServiceTestBase):
+    """Idempotent creation by source_path (#1099)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.env_patch = patch("services.vault_paths.read_env", return_value={})
+        self.env_patch.start()
+        # Keep the test hermetic — no touches to a real /vault mount
+        self.write_patch = patch("services.note_service.write_to_vault", return_value=True)
+        self.write_patch.start()
+
+    def tearDown(self) -> None:
+        self.write_patch.stop()
+        self.env_patch.stop()
+        super().tearDown()
+
+    def test_same_source_path_reuses_existing_note(self) -> None:
+        with self.Session() as db:
+            first, gami1 = create_note(
+                db, title="Daily", content="V1", tags=["daily"],
+                source="joidy", source_path="/vault/Daily/2025-01-01.md",
+                rebuild_derived_data=False,
+            )
+            second, gami2 = create_note(
+                db, title="Daily", content="V2", tags=[],
+                source="joidy", source_path="/vault/Daily/2025-01-01.md",
+                rebuild_derived_data=False,
+            )
+            self.assertEqual(first.id, second.id)
+            self.assertEqual(first.content, "V1")  # content untouched on dedup
+            # No XP granted twice for the same source file
+            self.assertEqual(gami2.xp_awarded, 0)
+
+    def test_create_normalizes_client_side_vault_domain(self) -> None:
+        # The frontend builds source_path with the host vault path from .env
+        # (issue #1099): the service must store it on the effective domain.
+        env = {"OBSIDIAN_VAULT_PATH": "/home/user/ObsidianVault"}
+        with self.Session() as db, patch(
+            "services.vault_paths.read_env", return_value=env
+        ), patch("services.vault_paths.settings.obsidian_vault_path", "/vault"):
+            note, _ = create_note(
+                db, title="Daily", content="C", tags=[],
+                source="joidy", source_path="/home/user/ObsidianVault/Daily/x.md",
+                rebuild_derived_data=False,
+            )
+            self.assertEqual(note.source_path, "/vault/Daily/x.md")
+
+
 class TestUpdateNote(NoteServiceTestBase):
     def test_updates_title_and_content(self) -> None:
         with self.Session() as db:

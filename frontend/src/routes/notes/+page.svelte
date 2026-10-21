@@ -70,6 +70,7 @@
     updateFolderMeta,
   } from '$lib/stores/settings';
   import { loadUserSettings, patchUserSettings } from '$lib/utils/userSettings';
+  import { getTodayKey } from '$lib/utils/clock';
   import { captureSnapshot, getSnapshot } from '$lib/stores/pageSnapshots';
   import { api, type Note } from '$lib/api';
   import { logger } from '$lib/utils/logger';
@@ -84,7 +85,7 @@
   let editingNew = false;
   let viewMode: 'tree' | 'list' = 'tree';
   let dailySourcePath: string | null = null;
-  let dailyInitialTitle = '';
+  let initialTitle = '';
   let dailyNotesConfigured = false;
   let deleteModalOpen = false;
   let deleteMode: 'single' | 'bulk' | 'ctx' = 'single';
@@ -370,10 +371,10 @@
 
   $: if (showNew && notesPrefsReady) {
     const urlTitle = $page.url.searchParams.get('title');
-    if (!editingNew || dailyInitialTitle !== (urlTitle ?? '')) {
+    if (!editingNew || initialTitle !== (urlTitle ?? '')) {
       openNew();
       if (urlTitle) {
-        dailyInitialTitle = urlTitle;
+        initialTitle = urlTitle;
       }
     }
   }
@@ -576,17 +577,7 @@
     scrollReady = true;
 
     // Fire async config/stats fetches in parallel (non-blocking).
-    api.config
-      .get()
-      .then((config) => {
-        vaultPath = (config.obsidian_vault_path || '').trim();
-        dailyNotesConfigured = Boolean(
-          config.obsidian_vault_path?.trim() && config.daily_notes_folder?.trim()
-        );
-      })
-      .catch(() => {
-        dailyNotesConfigured = false;
-      });
+    refreshVaultConfig();
 
     api.stats
       .system()
@@ -610,9 +601,29 @@
     });
 
     window.addEventListener('beforeunload', handleBeforeUnload);
+    // Settings may configure daily_notes_folder while this page is mounted —
+    // refetch the daily-note readiness when the panel closes (#1099).
+    window.addEventListener('joidy:settings-closed', refreshVaultConfig);
   });
 
   onDestroy(() => window.removeEventListener('beforeunload', handleBeforeUnload));
+  onDestroy(() => {
+    window.removeEventListener('joidy:settings-closed', refreshVaultConfig);
+  });
+
+  function refreshVaultConfig() {
+    api.config
+      .get()
+      .then((config) => {
+        vaultPath = (config.obsidian_vault_path || '').trim();
+        dailyNotesConfigured = Boolean(
+          config.obsidian_vault_path?.trim() && config.daily_notes_folder?.trim()
+        );
+      })
+      .catch(() => {
+        dailyNotesConfigured = false;
+      });
+  }
 
   function handleBeforeUnload() {
     // Scroll position is persisted via onListScroll/onVirtualScrollChange
@@ -739,7 +750,7 @@
     isMomentary = false;
     dailySourcePath = null;
     newNoteFolderPath = folderPath ?? null;
-    dailyInitialTitle = '';
+    initialTitle = '';
     aiSuggestions.set([]);
     ensureNoteEditor();
   }
@@ -751,7 +762,7 @@
     isMomentary = true;
     dailySourcePath = null;
     newNoteFolderPath = null;
-    dailyInitialTitle = '';
+    initialTitle = '';
     ensureNoteEditor();
   }
 
@@ -782,12 +793,12 @@
 
     if (!vaultPath || !dailyFolder) return;
 
-    const today = new Date().toISOString().split('T')[0];
+    const today = getTodayKey();
     selectedNote = null;
     showEditor = true;
     editingNew = true;
     isMomentary = false; // Usually daily notes are real
-    dailyInitialTitle = today;
+    initialTitle = today;
     dailySourcePath = buildDailySourcePath(vaultPath, dailyFolder, `${today}.md`);
     newNoteFolderPath = null;
     aiSuggestions.set([]);
@@ -800,7 +811,7 @@
     loadingNoteContent = false;
     dailySourcePath = null;
     newNoteFolderPath = null;
-    dailyInitialTitle = '';
+    initialTitle = '';
     goto('/notes');
   }
 
@@ -811,7 +822,10 @@
       return;
     }
     if (editingNew) {
-      if (dailyInitialTitle && !dailySourcePath) return;
+      // The old guard silently swallowed saves when there was a pre-filled
+      // title but no vault path (quick capture via /notes?new=1&title=...) —
+      // saving is now allowed without a vault path; the note lands in the
+      // "✦ joidy" virtual folder instead of being dropped.
       let sp = dailySourcePath;
       if (!sp && newNoteFolderPath && title.trim()) {
         sp = buildDailySourcePath(vaultPath || '/vault', newNoteFolderPath, `${title.trim()}.md`);
@@ -1525,7 +1539,7 @@
           <NoteEditor
             note={editorNote}
             momentary={isMomentary}
-            initialTitle={dailyInitialTitle}
+            initialTitle={initialTitle}
             {hasPrev}
             {hasNext}
             on:save={handleSave}

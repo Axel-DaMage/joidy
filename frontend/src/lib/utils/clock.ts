@@ -23,6 +23,28 @@ export function getTimezone(): string {
 }
 
 /**
+ * Today's date key (YYYY-MM-DD) in the given timezone.
+ *
+ * `toISOString()` returns the *UTC* date, which drifts one day off the
+ * user's local date near midnight — daily notes, streaks and check-ins
+ * (#864, #1099) must use this instead.
+ * Returns '1970-01-01' if the timezone is invalid (same guard style as the
+ * other helpers).
+ */
+export function getTodayKey(tz: string = getTimezone(), date: Date = new Date()): string {
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: tz,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(date);
+  } catch {
+    return '1970-01-01';
+  }
+}
+
+/**
  * Format the current time for a timezone, honoring the 24h/12h preference.
  * Returns `--:--:--` if the timezone is invalid (mirrors TimeWidget's guard).
  */
