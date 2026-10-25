@@ -45,7 +45,7 @@
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.71.2",
     "vite": "^8.3.5",
-    "vitest": "^5.0.3"
+    "vitest": "^5.0.5"
   },
   "dependencies": {
     "@tiptap/core": "^3.32.0",
