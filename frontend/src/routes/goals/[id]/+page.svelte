@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { page } from '$app/stores';
+  import { page } from '$app/state';
   import { goto } from '$app/navigation';
   import { api, type Goal, type Tag as TagType, type Note } from '$lib/api';
   import { logger } from '$lib/utils/logger';
@@ -60,7 +60,7 @@
   let editFailIcon = 'Activity';
   let savingSettings = false;
 
-  $: goalId = parseInt($page.params.id || "0");
+  $: goalId = parseInt(page.params.id || "0");
 
   onMount(async () => {
     ensureGoalEditor();

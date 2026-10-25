@@ -1,10 +1,14 @@
-/// <reference types="@sveltejs/kit" />
-import { build, files, version } from '$service-worker';
+import { version } from '$app/env';
+import { assets, immutable } from '$app/manifest';
+import { resolve } from '$app/paths';
 
 const CACHE_NAME = `joidy-cache-${version}`;
 const OFFLINE_URL = '/offline';
 
-const ASSETS = [...build, ...files];
+// `immutable` covers the hashed Vite output, `assets` everything in `static`.
+// Both are base-path-relative, so resolve them to absolute pathnames that can
+// be matched against `url.pathname` in the fetch handler.
+const ASSETS = [...immutable, ...assets].map((asset) => resolve(asset.path));
 
 self.addEventListener('install', (event) => {
   async function addFilesToCache() {

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
-  import { browser } from '$app/environment';
+  import { browser } from '$app/env';
   import { graphData, selectedTag } from '$lib/stores/graph';
   import type { GraphNode, GraphEdge } from '$lib/api';
   import { forceCollide } from 'd3';

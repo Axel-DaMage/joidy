@@ -1,7 +1,7 @@
 <script lang="ts">
   import '../app.css';
-  import { browser } from '$app/environment';
-  import { page } from '$app/stores';
+  import { browser } from '$app/env';
+  import { page } from '$app/state';
   import { onMount } from 'svelte';
   import { fade } from 'svelte/transition';
   import { isOnline, wasOffline } from '$lib/stores/connection';
@@ -82,7 +82,7 @@
 
   // Track page views on route changes (foreground-only, debounced in the store).
   $: if (mounted && $isAuthenticated) {
-    trackPageView($page.url.pathname);
+    trackPageView(page.url.pathname);
   }
 
   let settingsOpen = false;
@@ -618,7 +618,7 @@
       {#each navItems as { href, label, icon, status }}
         {#if status === 'ready' || $devMode}
           {@const active =
-            $page.url.pathname === href || ($page.url.pathname.startsWith(href) && href !== '/')}
+            page.url.pathname === href || (page.url.pathname.startsWith(href) && href !== '/')}
           <a
             {href}
             class="nav-item"

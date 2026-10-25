@@ -1,5 +1,5 @@
 import { writable } from 'svelte/store';
-import { browser } from '$app/environment';
+import { browser } from '$app/env';
 import { api } from '$lib/api';
 import { showNotification } from './notifications';
 import { logger } from '$lib/utils/logger';

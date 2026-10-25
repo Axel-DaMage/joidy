@@ -20,7 +20,7 @@ vi.mock('$lib/utils/logger', () => ({
   logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), log: vi.fn(), debug: vi.fn() },
 }));
 
-// routeCache uses localStorage via $app/environment; mock it to a no-op cache.
+// routeCache uses localStorage via $app/env; mock it to a no-op cache.
 vi.mock('./routeCache', () => ({
   routeCache: {
     get: vi.fn(() => null),

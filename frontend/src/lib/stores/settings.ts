@@ -1,5 +1,5 @@
 import { writable, derived } from 'svelte/store';
-import { browser } from '$app/environment';
+import { browser } from '$app/env';
 import { DEFAULT_CLOCK_STYLE, isClockStyleId, type ClockStyleId } from '$lib/utils/clock';
 import { loadUserSettings, patchUserSettings } from '$lib/utils/userSettings';
 

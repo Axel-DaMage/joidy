@@ -34,6 +34,14 @@ updates:
       tiptap:
         patterns:
           - "@tiptap/*"
+      # @sveltejs/kit and @sveltejs/adapter-node have strict cross peer deps
+      # (adapter-node 6 requires kit 3). Bumping them individually fails
+      # ERESOLVE in CI, so they must update together.
+      svelte:
+        patterns:
+          - "@sveltejs/kit"
+          - "@sveltejs/adapter-node"
+          - "@sveltejs/vite-plugin-svelte"
 
   # Docker Compose — root docker-compose*.yml files (uses the dedicated
   # docker-compose ecosystem; `docker` only scans Dockerfiles/K8s YAML and

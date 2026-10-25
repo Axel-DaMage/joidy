@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { dev } from '$app/environment';
+  import { dev } from '$app/env';
   import { fly } from 'svelte/transition';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
   import Plant from '$lib/components/Plant.svelte';

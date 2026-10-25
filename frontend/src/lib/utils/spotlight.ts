@@ -7,7 +7,7 @@
  * underneath, while the rest of the screen is dimmed and click-blocked.
  */
 
-import { browser } from '$app/environment';
+import { browser } from '$app/env';
 
 const SPOTLIGHT_ID = 'joidy-spotlight-overlay';
 const SPOTLIGHT_PADDING = 8;

@@ -1,5 +1,5 @@
 import { writable, get, derived } from 'svelte/store';
-import { browser } from '$app/environment';
+import { browser } from '$app/env';
 import { api, type Note, type AISuggestion } from '$lib/api';
 import { applyGamificationResult } from './gamification';
 import { logger } from '$lib/utils/logger';
