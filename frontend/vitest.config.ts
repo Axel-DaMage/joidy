@@ -1,8 +1,9 @@
 import { defineConfig } from 'vitest/config';
 import { sveltekit } from '@sveltejs/kit/vite';
+import { kitOptions } from './kit.options';
 
 export default defineConfig({
-	plugins: [sveltekit()],
+	plugins: [sveltekit(kitOptions)],
 	// Ensure Svelte resolves to the browser (client) build so that
 	// `svelte.mount` is available when rendering components with
 	// @testing-library/svelte in the jsdom environment.

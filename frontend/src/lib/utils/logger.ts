@@ -1,5 +1,5 @@
-import { dev } from '$app/environment';
-import { browser } from '$app/environment';
+import { dev } from '$app/env';
+import { browser } from '$app/env';
 
 const noop = () => {};
 

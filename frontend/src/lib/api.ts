@@ -1,7 +1,7 @@
 // API base URL — browser uses VITE_API_URL (public), SSR uses INTERNAL_API_URL
 // (Docker internal network). This prevents network failures when SvelteKit
 // server-renders pages inside the container where localhost:PORT isn't mapped.
-import { browser } from '$app/environment';
+import { browser } from '$app/env';
 import { showNotification } from './stores/notifications';
 import { session, getToken } from './stores/session';
 

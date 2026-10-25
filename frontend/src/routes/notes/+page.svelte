@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy, tick } from 'svelte';
-  import { page } from '$app/stores';
+  import { page } from '$app/state';
   import { goto } from '$app/navigation';
   import {
     Search,
@@ -360,9 +360,9 @@
   let collapsed = new Set<string>();
   $: collapsedSignature = Array.from(collapsed).sort().join('|');
 
-  $: showNew = $page.url.searchParams.get('new') === '1';
-  $: selectedId = $page.url.searchParams.get('id');
-  $: urlSearch = $page.url.searchParams.get('search');
+  $: showNew = page.url.searchParams.get('new') === '1';
+  $: selectedId = page.url.searchParams.get('id');
+  $: urlSearch = page.url.searchParams.get('search');
 
   // Handle URL changes reactively
   $: if (urlSearch !== null) {
@@ -370,7 +370,7 @@
   }
 
   $: if (showNew && notesPrefsReady) {
-    const urlTitle = $page.url.searchParams.get('title');
+    const urlTitle = page.url.searchParams.get('title');
     if (!editingNew || initialTitle !== (urlTitle ?? '')) {
       openNew();
       if (urlTitle) {
@@ -714,7 +714,7 @@
   // ── Note actions ─────────────────────────────────────────────────────────────
   async function openNote(note: Note) {
     if (selectedId !== String(note.id)) {
-      goto(`/notes?id=${note.id}`, { keepFocus: true, noScroll: true });
+      goto(`/notes?id=${note.id}`, { reset: false });
     }
     selectedNote = note;
     addToHistory(note.id);

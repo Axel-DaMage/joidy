@@ -3,7 +3,7 @@
  * background sync of pending changes.
  */
 import { writable, get } from 'svelte/store';
-import { browser } from '$app/environment';
+import { browser } from '$app/env';
 import { api, type Note } from '$lib/api';
 import {
   openDB,

@@ -1,4 +1,4 @@
-import { browser } from '$app/environment';
+import { browser } from '$app/env';
 import { getLocale } from '$lib/stores/locale';
 
 const TZ_KEY = 'joidy-timezone';

@@ -5,7 +5,7 @@
  * `visibilitychange` and pause tracking when the tab is hidden, resuming when
  * it becomes visible again. Calls are debounced to avoid flooding the backend.
  */
-import { browser } from '$app/environment';
+import { browser } from '$app/env';
 import { api } from '$lib/api';
 import { logger } from '$lib/utils/logger';
 

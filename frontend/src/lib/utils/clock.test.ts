@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { get } from 'svelte/store';
 
-// Mock $app/environment so `browser` is true (jsdom) and we control localStorage.
-vi.mock('$app/environment', () => ({ browser: true, dev: false }));
+// Mock $app/env so `browser` is true (jsdom) and we control localStorage.
+vi.mock('$app/env', () => ({ browser: true, dev: false }));
 
 import {
   CLOCK_STYLES,
