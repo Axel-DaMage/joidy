@@ -5,7 +5,7 @@ pydantic-settings==2.16.1
 google-generativeai==0.8.6
 openai==3.35.1
 anthropic==1.13.0
-cohere==7.2.0
+cohere==7.3.0
 aiohttp==3.14.5
 sqlalchemy==2.1.6
 psycopg2-binary==2.9.13
