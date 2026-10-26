@@ -520,6 +520,9 @@
       goals = [g, ...goals];
       showAddForm = false;
       newTitle = '';
+      // #1092 — reactivar la sugerencia para el próximo objetivo
+      newFailEmojiManual = false;
+      newFailIconManual = false;
       newTargetValue = 1;
       newTagId = null;
       newNoteId = null;
@@ -1264,7 +1267,14 @@
             <h3 class="section-title" style="margin: 0;">{$t('goalsPage.dayGoals')}</h3>
             <button
               class="btn btn-primary new-goal-cta new-goal-cta-inline"
-              onclick={() => (showAddForm = !showAddForm)}
+              onclick={() => {
+                if (!showAddForm) {
+                  // #1092 — reactivar la sugerencia al abrir el formulario
+                  newFailEmojiManual = false;
+                  newFailIconManual = false;
+                }
+                showAddForm = !showAddForm;
+              }}
             >
               <Plus size={16} /> Nuevo Objetivo
             </button>
@@ -2733,7 +2743,14 @@
         <GoalFilters bind:query={goalSearchQuery} bind:filter={goalFilterState} />
         <button
           class="btn btn-primary new-goal-cta-inline"
-          onclick={() => (showAddForm = !showAddForm)}
+          onclick={() => {
+            if (!showAddForm) {
+              // #1092 — reactivar la sugerencia al abrir el formulario
+              newFailEmojiManual = false;
+              newFailIconManual = false;
+            }
+            showAddForm = !showAddForm;
+          }}
         >
           <Plus size={16} />
           {$t('goalsPage.newGoal')}
