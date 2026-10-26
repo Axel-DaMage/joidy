@@ -7,7 +7,28 @@
     "ai": "AI",
     "goals": "Goals",
     "streaks": "Streaks",
+    "emails": "Mail",
     "analytics": "Analytics"
+  },
+  "emails": {
+    "title": "Mail",
+    "subtitle": "Unified inbox (synced via n8n)",
+    "searchPlaceholder": "Search by subject, sender or text...",
+    "importantOnly": "Important",
+    "unreadOnly": "Unread",
+    "allAccounts": "All accounts",
+    "markRead": "Mark read",
+    "markUnread": "Mark unread",
+    "toggleImportant": "Toggle importance",
+    "deleted": "Email removed from the view",
+    "emptyImportant": "No important emails pending",
+    "emptyUnread": "Inbox zero: no unread mail",
+    "emptyAll": "No synced emails yet",
+    "emptyNew": "When n8n pushes its first message it will appear here",
+    "noResults": "No results for that search",
+    "runFailed": "Could not load emails",
+    "unreadBadge": "unread",
+    "syncHint": "Emails arrive automatically with the n8n workflow"
   },
   "common": {
     "save": "Save",

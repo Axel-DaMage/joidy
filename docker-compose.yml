@@ -180,6 +180,39 @@ services:
     logging: *default-logging
     restart: unless-stopped
 
+  # Optional n8n automation hub (opt-in compose profile). Personal automation:
+  # workflows calling the joidy API (http://api:8000), the shared Postgres
+  # (postgres:5432) or ai-service — plus inbound webhooks (Telegram, GitHub,
+  # Strava, ...). UI at http://localhost:${N8N_PORT:-5678}.
+  # Start: docker compose --profile n8n up -d n8n  (or `make n8n`).
+  n8n:
+    image: ${N8N_IMAGE:-docker.n8n.io/n8nio/n8n:latest}
+    profiles: ["n8n"]
+    ports:
+      - "${N8N_PORT:-5678}:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+    environment:
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY:?N8N_ENCRYPTION_KEY is required — set it in .env}
+      - WEBHOOK_URL=${N8N_WEBHOOK_URL:-http://localhost:5678/}
+      - GENERIC_TIMEZONE=${USER_TIMEZONE:-UTC}
+      - N8N_RUNNERS_ENABLED=true
+      - JOIDY_API_URL=${JOIDY_API_URL:-http://api:8000}
+      - JOIDY_AUTH_PASSWORD=${AUTH_PASSWORD:-}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:5678/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+    logging: *default-logging
+    restart: unless-stopped
+
   frontend:
     image: ${DOCKER_REGISTRY:-d4mag3}/joidy-frontend:${IMAGE_TAG:-latest}
     ports:
@@ -205,3 +238,4 @@ services:
 
 volumes:
   postgres_data:
+  n8n_data:

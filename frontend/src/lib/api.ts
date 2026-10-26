@@ -309,6 +309,35 @@ export interface MoodStats {
   notes_correlation: number;
 }
 
+export interface EmailSummary {
+  id: number;
+  account: string;
+  gmail_id: string;
+  thread_id: string | null;
+  subject: string | null;
+  sender: string | null;
+  snippet: string | null;
+  received_at: string | null;
+  unread: boolean;
+  important: boolean;
+  importance_reason: string | null;
+  labels: string[];
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface EmailAccountStats {
+  account: string;
+  total: number;
+  unread: number;
+  important: number;
+}
+
+export interface EmailInbox {
+  items: EmailSummary[];
+  total: number;
+}
+
 export interface UsageSummary {
   days: number;
   total_events: number;
@@ -568,6 +597,23 @@ export const api = {
     today: () => req<MoodEntry | null>('GET', '/mood/today'),
     history: (days = 30) => req<MoodEntry[]>('GET', `/mood/history?days=${days}`),
     stats: () => req<MoodStats>('GET', '/mood/stats'),
+  },
+
+  emails: {
+    list: (filters: { unread?: boolean; important?: boolean; account?: string; q?: string; limit?: number; skip?: number } = {}) => {
+      const params = new URLSearchParams();
+      if (filters.unread !== undefined) params.set('unread', String(filters.unread));
+      if (filters.important !== undefined) params.set('important', String(filters.important));
+      if (filters.account) params.set('account', filters.account);
+      if (filters.q) params.set('q', filters.q);
+      params.set('limit', String(filters.limit ?? 200));
+      params.set('skip', String(filters.skip ?? 0));
+      return req<EmailInbox>('GET', `/emails/?${params.toString()}`);
+    },
+    accounts: () => req<EmailAccountStats[]>('GET', '/emails/accounts'),
+    patch: (id: number, data: { unread?: boolean; important?: boolean }) =>
+      req<EmailSummary>('PATCH', `/emails/${id}`, data),
+    remove: (id: number) => req<void>('DELETE', `/emails/${id}`),
   },
 
   ai: {
