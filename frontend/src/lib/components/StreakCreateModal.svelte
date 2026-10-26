@@ -4,6 +4,7 @@
   import StreakIcon from '$lib/components/StreakIcon.svelte';
   import LazyIconPicker from '$lib/components/LazyIconPicker.svelte';
   import type { PersonalStreak } from '$lib/api';
+  import { suggestEmoji, suggestIcon, suggestIconKey } from '$lib/utils/iconSuggest';
   import { liquidGlass } from '$lib/actions/liquidGlass';
   import { getContrastColor } from '$lib/stores/settings';
   import { t } from 'svelte-i18n';
@@ -40,6 +41,9 @@
   let snowballMode = false;
   let freezeCount = 0;
   let useIcon = false;
+  // #1092 — la elección manual del usuario no se sobreescribe
+  let emojiManual = false;
+  let iconManual = false;
 
   // ── Presets ─────────────────────────────────────────────────────────────────
   const COLOR_PRESETS = [
@@ -128,6 +132,8 @@
       frequencyDays = editStreak.frequency_days || 1;
       snowballMode = !!editStreak.snowball_mode;
       freezeCount = editStreak.freeze_count || 0;
+      emojiManual = true;
+      iconManual = true;
     } else {
       resetForm();
     }
@@ -136,6 +142,7 @@
 
   function resetForm() {
     name = ''; emoji = '🔥'; icon = ''; useIcon = false;
+    emojiManual = false; iconManual = false;
     description = ''; color = '#c8a96e'; theme = 'solid';
     category = 'general'; startDate = new Date().toISOString().split('T')[0];
     targetDate = ''; offset = 0; frequency = 'daily';
@@ -179,6 +186,23 @@
 
   $: isEdit = !!editStreak;
   $: canSave = name.trim().length > 0;
+
+  // #1092 — sugerencia automática de icono/emoji al escribir el nombre
+  $: suggestedEmoji = suggestEmoji(name, '🔥');
+  $: suggestedIcon = suggestIcon(name, 'Flame');
+  $: hasSuggestion = suggestIconKey(name) !== null;
+  $: if (!emojiManual) emoji = suggestedEmoji;
+  $: if (!iconManual) icon = suggestedIcon;
+
+  function useSuggested() {
+    if (useIcon) {
+      icon = suggestedIcon;
+      iconManual = false;
+    } else {
+      emoji = suggestedEmoji;
+      emojiManual = false;
+    }
+  }
 
   $: previewStyle = `--theme-ac: ${color};`;
 
@@ -307,6 +331,9 @@
 
             <div class="field">
               <span class="field-label">{$t('streakCreateModal.icon')}</span>
+              {#if hasSuggestion && (useIcon ? icon !== suggestedIcon : emoji !== suggestedEmoji)}
+                <button type="button" class="icon-suggest-btn" onclick={useSuggested}>usar sugerencia</button>
+              {/if}
               <div class="icon-toggle-row">
                 <button class="icon-type-btn" class:selected={!useIcon} onclick={() => useIcon = false}>{$t('streakCreateModal.emoji')}</button>
                 <button class="icon-type-btn" class:selected={useIcon} onclick={() => { useIcon = true; if (!icon) icon = 'Flame'; }}>{$t('streakCreateModal.icon')}</button>
@@ -317,13 +344,13 @@
               <div class="field icon-picker-field">
                 <div class="emoji-grid">
                   {#each EMOJIS as e}
-                    <button class="emoji-btn" class:selected={emoji === e} onclick={() => emoji = e}>{e}</button>
+                    <button class="emoji-btn" class:selected={emoji === e} onclick={() => { emoji = e; emojiManual = true; }}>{e}</button>
                   {/each}
                 </div>
               </div>
             {:else}
               <div class="field icon-picker-field">
-                <LazyIconPicker selected={icon} color={color} onSelect={(ic) => icon = ic} />
+                <LazyIconPicker selected={icon} color={color} onSelect={(ic) => { icon = ic; iconManual = true; }} />
               </div>
             {/if}
 
@@ -669,6 +696,13 @@
     transition: all 0.15s;
   }
   .icon-type-btn.selected { border-color: var(--text-primary); color: var(--text-primary); }
+  .icon-suggest-btn {
+    align-self: center;
+    padding: 3px 10px; font-size: 10px; font-family: var(--font-mono);
+    background: transparent; border: 1px solid var(--border); border-radius: 4px;
+    color: var(--text-muted); cursor: pointer; transition: all 0.15s;
+  }
+  .icon-suggest-btn:hover { color: var(--text-primary); border-color: var(--text-primary); }
 
   /* Icon picker field — fixed height container so switching between
      emoji and icon modes does not resize the modal. */
