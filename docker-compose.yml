@@ -193,7 +193,9 @@ services:
     volumes:
       - n8n_data:/home/node/.n8n
     environment:
-      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY:?N8N_ENCRYPTION_KEY is required — set it in .env}
+      # Optional but strongly recommended: if empty, n8n auto-generates a key
+      # persisted in n8n_data (volume) — losing the volume = losing creds.
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY:-}
       - WEBHOOK_URL=${N8N_WEBHOOK_URL:-http://localhost:5678/}
       - GENERIC_TIMEZONE=${USER_TIMEZONE:-UTC}
       - N8N_RUNNERS_ENABLED=true
