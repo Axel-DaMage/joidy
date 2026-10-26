@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createEventDispatcher, onDestroy } from 'svelte';
+  import { createEventDispatcher, onDestroy, onMount } from 'svelte';
   import { Eye, EyeOff, Save, Trash2, X, Maximize, ChevronLeft, ChevronRight, Settings, CheckCircle2 } from 'lucide-svelte';
   import { marked } from 'marked';
   import DOMPurify from 'dompurify';
@@ -8,10 +8,12 @@
   import { api, type Goal } from '$lib/api';
   import { t } from 'svelte-i18n';
   import { createTimerRegistry } from '$lib/utils/timer';
+  import { loadDraft, persistDraft, clearDraft } from '$lib/utils/noteDrafts';
+  import NoteRecoveryBanner from './NoteRecoveryBanner.svelte';
 
-  // Component-scoped timers: cleared on destroy so callbacks can't fire after
-  // unmount (#1003).
   const timers = createTimerRegistry();
+
+  const AUTOSAVE_DELAY = 2000;
 
   const renderer = new marked.Renderer();
   renderer.code = ({ text, lang }) => {
@@ -61,6 +63,62 @@
   let zenMode = $state(false);
   let deleteConfirm = $state(false);
 
+  // Autosave (#1129): debounced draft persistence + dispatch of the save event.
+  let autosaveTimer: ReturnType<typeof setTimeout> | undefined;
+  let hasUnsavedChanges = $state(false);
+  let showRecoveryPrompt = $state(false);
+  let recoveredDraft = $state<{ title: string; content: string; tags: string[] } | null>(null);
+
+  let draftKey = $derived(goal ? `joidy-goal-draft-${goal.id}` : null);
+
+  function saveDraft() {
+    if (!draftKey) return;
+    // Persist even with an empty title: content typed before the goal is
+    // titled must survive a reload (recovered via the banner).
+    persistDraft(draftKey, { title: title.trim(), content, tags: [] });
+  }
+
+  function triggerAutosave() {
+    hasUnsavedChanges = true;
+    clearTimeout(autosaveTimer);
+    autosaveTimer = setTimeout(() => {
+      saveDraft();
+      if (title.trim()) handleSave();
+      else hasUnsavedChanges = false;
+    }, AUTOSAVE_DELAY);
+  }
+
+  onMount(() => {
+    const draft = loadDraft(draftKey);
+    if (draft && draft.content !== content) {
+      recoveredDraft = draft;
+      showRecoveryPrompt = true;
+    }
+  });
+
+  function applyDraft() {
+    if (recoveredDraft) {
+      title = recoveredDraft.title;
+      content = recoveredDraft.content;
+      showRecoveryPrompt = false;
+      recoveredDraft = null;
+      triggerAutosave();
+    }
+  }
+
+  function dismissDraft() {
+    showRecoveryPrompt = false;
+    recoveredDraft = null;
+    if (draftKey) clearDraft(draftKey);
+  }
+
+  // Browser-level guard: warn before closing the tab with unsaved work.
+  function handleBeforeUnload(e: BeforeUnloadEvent) {
+    if (!hasUnsavedChanges) return;
+    e.preventDefault();
+    e.returnValue = '';
+  }
+
   function handleDeleteClick() {
     if (!deleteConfirm) {
       deleteConfirm = true;
@@ -81,6 +139,8 @@
     if (typeof document !== 'undefined') document.body.classList.remove('zen-mode-active');
     if (highlightRaf !== null) cancelAnimationFrame(highlightRaf);
     timers.clearAll();
+    clearTimeout(autosaveTimer);
+    saveDraft();
   });
 
   $effect(() => {
@@ -117,6 +177,7 @@
 
   function updateContent(e: Event) {
     content = (e.currentTarget as HTMLTextAreaElement).value;
+    triggerAutosave();
   }
 
   async function handleSave() {
@@ -125,6 +186,8 @@
     dispatch('save', { title: title.trim(), content });
     saving = false;
     saved = true;
+    if (draftKey) clearDraft(draftKey);
+    hasUnsavedChanges = false;
     timers.timeout(() => (saved = false), 2000);
   }
 
@@ -205,9 +268,15 @@
   });
 </script>
 
-<svelte:window onkeydown={onKeydown} />
+<svelte:window onkeydown={onKeydown} onbeforeunload={handleBeforeUnload} />
 
 <div class="editor-shell" class:zen-mode={zenMode}>
+  <NoteRecoveryBanner
+    bind:show={showRecoveryPrompt}
+    onApply={applyDraft}
+    onDismiss={dismissDraft}
+  />
+
   {#if !zenMode}
   <div class="toolbar">
     <div class="toolbar-left">
@@ -285,6 +354,7 @@
       class="title-input"
       bind:value={title}
       placeholder={$t('goalEditor.titlePlaceholder')}
+      oninput={() => triggerAutosave()}
       onkeydown={(e) => e.key === 'Enter' && handleSave()}
     />
   </div>

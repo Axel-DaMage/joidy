@@ -73,7 +73,8 @@
   let recoveredDraft = $state<{ title: string; content: string; tags: string[] } | null>(null);
   let savedTimer: ReturnType<typeof setTimeout> | undefined;
 
-  let draftKey = $derived(note ? `${DRAFT_PREFIX}${note.id}` : null);
+  // New notes (note === null) also get a draft slot so untitled content is never lost (#1129). It is cleared in handleSave once the note is created with a real title.
+  let draftKey = $derived(note ? `${DRAFT_PREFIX}${note.id}` : `${DRAFT_PREFIX}new`);
 
   const history = new UndoHistory();
 
@@ -159,7 +160,9 @@
   }
 
   function saveDraft() {
-    if (!draftKey || !title.trim()) return;
+    if (!draftKey) return;
+    // Persist even with an empty title (#1129): content typed before the note
+    // is titled must survive a reload (recovered via the banner).
     persistDraft(draftKey, { title: title.trim(), content, tags });
   }
 
@@ -167,11 +170,9 @@
     hasUnsavedChanges = true;
     clearTimeout(autosaveTimer);
     autosaveTimer = setTimeout(() => {
-      if (title.trim()) {
-        saveDraft();
-        handleSave();
-      }
-      hasUnsavedChanges = false;
+      saveDraft();
+      if (title.trim()) handleSave();
+      else hasUnsavedChanges = false;
     }, AUTOSAVE_DELAY);
   }
 
@@ -205,10 +206,17 @@
     clearTimeout(autosaveTimer);
     history.clear();
     clearTimeout(savedTimer);
-    if (draftKey && title.trim()) {
+    if (draftKey) {
       saveDraft();
     }
   });
+
+  // Browser-level guard (#1129): warn before closing the tab with unsaved work.
+  function handleBeforeUnload(e: BeforeUnloadEvent) {
+    if (!hasUnsavedChanges) return;
+    e.preventDefault();
+    e.returnValue = '';
+  }
 
   async function handleSave() {
     if (!title.trim()) return;
@@ -290,7 +298,7 @@
   }
 </script>
 
-<svelte:window onkeydown={onKeydown} />
+<svelte:window onkeydown={onKeydown} onbeforeunload={handleBeforeUnload} />
 
 <div class="editor-shell" class:zen-mode={zenMode}>
   <NoteRecoveryBanner
