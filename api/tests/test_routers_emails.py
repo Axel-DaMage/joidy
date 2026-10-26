@@ -43,6 +43,28 @@ def test_upsert_email_created_and_updated(client: TestClient):
     assert len(listing["items"]) == 1
 
 
+def test_manual_read_wins_over_resync(client: TestClient):
+    """Manual unread/read state set from the UI must not be reverted by the
+    next 15-min sync pushing unread=True again (Gmail never learns about
+    actions taken in joidy)."""
+    email_id = client.post("/emails/", json=_payload()).json()["id"]
+
+    client.patch(f"/emails/{email_id}", json={"unread": False})
+    resync = client.post(
+        "/emails/", json=_payload(gmail_id="abc123", unread=True, subject="Factura octubre")
+    )
+    assert resync.status_code == 201
+    assert resync.json()["id"] == email_id
+    assert resync.json()["created"] is False
+    assert resync.json()["unread"] is False
+
+    # Conversely: important=True from the sync IS allowed to upgrade a row,
+    # but a later important=False push must not demote a manually starred one.
+    client.patch(f"/emails/{email_id}", json={"important": True})
+    demote = client.post("/emails/", json=_payload(gmail_id="abc123", important=False))
+    assert demote.json()["important"] is True
+
+
 def test_list_filters(client: TestClient):
     client.post("/emails/", json=_payload("e1", important=True, unread=True))
     client.post("/emails/", json=_payload("e2", important=False, unread=False))

@@ -30,9 +30,11 @@ def upsert_email(
     """Create or update an inbox entry for (user_id, account, gmail_id).
 
     Returns ``(email, created)`` where ``created`` is True on first insert.
-    Keeps the user's manual state when an existing message is re-synced:
-    ``important`` may be upgraded to True but never downgraded, and marking
-    it read here does not revert if the sync pushes unread=True again.
+    Manual local state wins on re-sync — Gmail never learns about actions
+    taken here, so for existing rows the sync result does not overwrite:
+    ``unread`` keeps the value set from the UI (a pushed ``unread=True`` is
+    only honored on creation) and ``important`` may be upgraded to True but
+    never downgraded by the sync.
     """
     email = (
         db.query(EmailMessage)
@@ -54,12 +56,11 @@ def upsert_email(
     email.snippet = (snippet or "")[:MAX_SNIPPET] if snippet else None
     email.body_text = (body_text or "")[:MAX_BODY_TEXT] if body_text else None
     email.received_at = received_at
-    email.unread = unread
     email.important = bool(important) or bool(email.important)
     email.importance_reason = importance_reason
     email.labels = labels if labels is not None else []
     if created:
-        # Sync starts optimistic: a brand-new import follows the Gmail state.
+        # A brand-new import follows the Gmail state (unread by definition).
         email.unread = unread
 
     try:
