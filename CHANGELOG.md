@@ -1,16 +1,23 @@
 # Changelog
 
 <!-- hermes-release:pending v1.0.0 -->
-## [v1.0.0] — 2026-10-14
+## [v1.0.0] — 2026-10-26
 
 ### ⚠️ Breaking Changes
 
+* chore(frontend): migrate to SvelteKit 3 + adapter-node 6 by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1118
+* chore(deps): Bump anthropic from 1.13.0 to 2.1.0 in /ai-service by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1121
+* chore(deps): Bump grafana/grafana from 11.0.0 to 13.2.4 by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1086
 * chore(deps): Bump fastapi from 0.142.2 to 0.143.0 in /ai-service by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1025
 * chore(deps): Bump fastapi from 0.141.1 to 0.143.0 in /api by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1021
 * chore(deps): Bump anthropic from 0.125.0 to 1.3.0 in /ai-service by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/906
 
 ### 🚀 Features
 
+* feat(goals): recordarse del filtro y la búsqueda del editor entre visitas (#1096) by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1098
+* feat(frontend): add multiple timer and clock styles by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1065
+* feat(scripts): auto-sleep docker stack when idle (idle watchdog) by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1064
+* feat: automate PostgreSQL backups and restore path by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1060
 * feat(ops): json-file log rotation on all compose services by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1037
 * feat(github): simplificar integracion con conexion por username y resolver error en Device Flow by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/979
 * feat(streaks): permitir configurar rachas persistentes que nunca fallen en modo bola de nieve (#963) by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/978
@@ -34,6 +41,12 @@
 
 ### 🐛 Bug Fixes
 
+* fix(frontend): autosave y borradores en notas y objetivos (#1129) by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1130
+* fix(notes): la nota diaria llega al vault — dominio de source_path, fecha local y sin descartes silenciosos (#1099) by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1100
+* fix(api): make tests hermetic against a populated .env by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1063
+* fix(frontend): audit timer teardown across components by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1062
+* fix(api): share runtime state across workers — single worker default + cross-thread broadcasts by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1055
+* fix(dependabot): use docker-compose ecosystem for compose files, scan per-service Dockerfiles by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1053
 * fix: StaticPool SQLAlchemy 2.1, sync mtimes en UTC naive, skip de onboarding en E2E by @VECTORG99 in https://github.com/Axel-DaMage/joidy/pull/1049
 * fix(goals): redirigir al editor de objetivos tras crearlo (#984) by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/985
 * fix(windows): resolve powershell script encoding, secrets generation and shims by @VECTORG99 in https://github.com/Axel-DaMage/joidy/pull/982
@@ -48,6 +61,8 @@
 
 ### ⚡ Performance
 
+* perf(api): adopt transactional fixtures + pytest-xdist for the test suite by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1066
+* perf(api): reuse a shared httpx.AsyncClient across hot paths by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1056
 * perf(http): shared httpx.AsyncClient pool — reuse connections on hot paths by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1038
 * perf(embedding): batch-fetch notes in dead-letter retry — fix N+1 by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1036
 * perf(docker): optimize dockerfiles for multi-stage caching, security and size by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/942
@@ -55,6 +70,48 @@
 
 ### 🧹 Chores
 
+* chore(deps-dev): Bump typescript-eslint from 8.71.2 to 8.72.0 in /frontend by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1128
+* chore(deps-dev): Bump eslint from 10.11.0 to 10.13.0 in /frontend by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1127
+* chore(deps-dev): Bump eslint-plugin-svelte from 3.23.0 to 3.23.1 in /frontend by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1126
+* chore(deps): Bump openai from 3.35.1 to 3.36.1 in /ai-service by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1125
+* chore(deps): Bump force-graph from 1.51.4 to 1.52.0 in /frontend by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1124
+* chore(deps): Bump uvicorn from 0.52.4 to 0.54.0 in /ai-service by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1123
+* chore(deps-dev): Bump globals from 17.12.0 to 17.13.0 in /frontend by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1122
+* chore(deps): Bump cohere from 7.2.0 to 7.3.0 in /ai-service by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1120
+* chore(deps): Bump alembic from 1.20.0 to 1.20.1 in /api by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1119
+* chore(deps-dev): Bump undici from 8.11.2 to 8.12.3 in /frontend by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1117
+* chore(deps-dev): Bump @sveltejs/vite-plugin-svelte from 7.3.0 to 7.3.1 in /frontend by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1116
+* chore(deps-dev): Bump vitest from 5.0.4 to 5.0.5 in /frontend by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1115
+* chore(deps): Bump fastapi from 0.146.0 to 0.159.1 in /ai-service by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1113
+* chore(deps): Bump numpy from 2.5.3 to 2.5.4 in /ai-service by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1111
+* chore(deps): Bump sqlalchemy from 2.1.4 to 2.1.6 in /api by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1110
+* chore(deps): Bump sqlalchemy from 2.1.5 to 2.1.6 in /worker by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1109
+* chore(deps): Bump scikit-learn from 1.9.0 to 1.9.1 in /ai-service by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1108
+* chore(deps-dev): Bump svelte-check from 4.7.6 to 4.7.7 in /frontend by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1107
+* chore(deps): Bump pydantic-settings from 2.15.0 to 2.16.1 in /ai-service by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1106
+* chore(deps): Bump pydantic-settings from 2.16.0 to 2.16.1 in /worker by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1105
+* chore(deps): Bump fastapi from 0.146.0 to 0.159.1 in /api by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1104
+* chore(deps): Bump prom/prometheus from v3.15.0 to v3.15.1 by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1103
+* chore(deps): Bump sqlalchemy from 2.0.52 to 2.1.6 in /ai-service by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1102
+* chore(deps): Bump pydantic-settings from 2.16.0 to 2.16.1 in /api by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1101
+* chore(deps): Bump openai from 3.26.0 to 3.35.1 in /ai-service by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1091
+* chore(deps): Bump prom/prometheus from v3.0.0 to v3.15.0 by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1088
+* chore(deps): Bump sqlalchemy from 2.1.4 to 2.1.5 in /worker by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1087
+* chore(deps-dev): Bump vite from 8.2.2 to 8.3.5 in /frontend by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1084
+* chore(deps-dev): Bump phosphor-svelte from 3.1.0 to 3.1.1 in /frontend by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1083
+* chore(deps): Bump dompurify from 3.4.16 to 3.4.17 in /frontend by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1082
+* chore(deps-dev): Bump typescript-eslint from 8.71.1 to 8.71.2 in /frontend by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1081
+* chore(deps-dev): Bump @types/node from 26.6.3 to 26.6.5 in /frontend by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1080
+* chore(deps): Bump the tiptap group in /frontend with 11 updates by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1079
+* chore(deps): Bump pydantic from 2.13.5 to 2.14.1 in /ai-service by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1078
+* chore(deps): Bump aiohttp from 3.14.4 to 3.14.5 in /ai-service by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1076
+* chore(deps): Bump pgvector from 0.5.0 to 0.5.1 in /api by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1074
+* chore(deps): Bump pydantic-settings from 2.15.0 to 2.16.0 in /api by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1073
+* chore(deps): Bump pydantic from 2.13.5 to 2.14.1 in /api by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1072
+* chore(deps): Bump pgvector from 0.5.0 to 0.5.1 in /ai-service by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1070
+* chore(deps): Bump pgvector from 0.5.0 to 0.5.1 in /worker by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1069
+* chore(deps): Bump pydantic-settings from 2.15.0 to 2.16.0 in /worker by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1068
+* chore(frontend): split oversized route and component files by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1067
 * chore(deps-dev): Bump source-map-js from 1.2.1 to 1.2.2 in /frontend by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1052
 * chore(deps-dev): Bump brace-expansion from 5.0.9 to 5.0.12 in /frontend by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1051
 * chore(deps-dev): Bump postcss-selector-parser from 7.1.4 to 7.1.6 in /frontend by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1050
@@ -115,6 +172,11 @@
 
 ### 📦 Other Changes
 
+* test(ai-service): add pytest coverage and CI job by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1061
+* build: split dev/test deps from production requirements by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1059
+* ci(frontend): run Playwright e2e specs in a dedicated job by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1058
+* test(api): cover analytics, skills, and system power routers by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1057
+* ci(security): add CodeQL analysis workflow (python + javascript-typescript) by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1054
 * [quality] 134 svelte-check warnings across 21 files + vitest localStorage env warnings — fix and enforce a warning budget by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1005
 * Release v1.1.0-beta.3 by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/956
 * release: v1.1.0-beta.2 by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/955
