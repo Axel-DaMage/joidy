@@ -4,6 +4,7 @@
   import { goto } from '$app/navigation';
   import { api, type Goal, type Tag as TagType, type Note } from '$lib/api';
   import { logger } from '$lib/utils/logger';
+  import { suggestEmoji, suggestIcon, suggestIconKey } from '$lib/utils/iconSuggest';
   import LazyIconPicker from '$lib/components/LazyIconPicker.svelte';
   import StreakIcon from '$lib/components/StreakIcon.svelte';
   import { GOALS_SPECIFIC_COLOR_PRESETS, DEFAULT_GOAL_COLOR } from '$lib/utils/goalColors';
@@ -58,9 +59,20 @@
   let editUseFailIcon = false;
   let editFailEmoji = '🔴';
   let editFailIcon = 'Activity';
+  // #1092 — la elección manual del usuario no se sobreescribe
+  let editFailEmojiManual = false;
+  let editFailIconManual = false;
   let savingSettings = false;
 
   $: goalId = parseInt(page.params.id || "0");
+
+  // #1092 — sugerencia automática al editar el título; el valor ya guardado
+  // cuenta como manual, así que solo se usa si se pulsa "usar sugerencia"
+  $: editSuggestedEmoji = suggestEmoji(editTitle);
+  $: editSuggestedIcon = suggestIcon(editTitle);
+  $: editHasSuggestion = suggestIconKey(editTitle) !== null;
+  $: if (!editFailEmojiManual) editFailEmoji = suggestEmoji(editTitle);
+  $: if (!editFailIconManual) editFailIcon = suggestIcon(editTitle);
 
   onMount(async () => {
     ensureGoalEditor();
@@ -116,9 +128,21 @@
       editFailIcon = failVal;
       editFailEmoji = '🔴';
     }
+    editFailEmojiManual = true;
+    editFailIconManual = true;
 
     settingsSection = 'basics';
     showSettings = true;
+  }
+
+  function useFailSuggestion() {
+    if (editUseFailIcon) {
+      editFailIcon = editSuggestedIcon;
+      editFailIconManual = false;
+    } else {
+      editFailEmoji = editSuggestedEmoji;
+      editFailEmojiManual = false;
+    }
   }
 
   async function saveSettings() {
@@ -270,20 +294,25 @@
             <div class="form-field appearance-icon">
               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
                 <span class="label" style="margin:0;">{$t('goalDetail.failIconEmoji')}</span>
-                <div class="icon-toggle-row">
-                  <button class="icon-type-btn" class:selected={!editUseFailIcon} onclick={() => editUseFailIcon = false}>{$t('goalDetail.emoji')}</button>
-                  <button class="icon-type-btn" class:selected={editUseFailIcon} onclick={() => editUseFailIcon = true}>{$t('goalDetail.icon')}</button>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  {#if editHasSuggestion && (editUseFailIcon ? editFailIcon !== editSuggestedIcon : editFailEmoji !== editSuggestedEmoji)}
+                    <button type="button" class="icon-suggest-btn" onclick={useFailSuggestion}>usar sugerencia</button>
+                  {/if}
+                  <div class="icon-toggle-row">
+                    <button class="icon-type-btn" class:selected={!editUseFailIcon} onclick={() => editUseFailIcon = false}>{$t('goalDetail.emoji')}</button>
+                    <button class="icon-type-btn" class:selected={editUseFailIcon} onclick={() => editUseFailIcon = true}>{$t('goalDetail.icon')}</button>
+                  </div>
                 </div>
               </div>
               {#if !editUseFailIcon}
                 <div class="emoji-grid ng-large-grid">
                   {#each EMOJIS as e}
-                    <button class="emoji-btn" class:selected={editFailEmoji === e} onclick={() => editFailEmoji = e}>{e}</button>
+                    <button class="emoji-btn" class:selected={editFailEmoji === e} onclick={() => { editFailEmoji = e; editFailEmojiManual = true; }}>{e}</button>
                   {/each}
                 </div>
               {:else}
                 <div class="field ng-large-grid" style="display: flex; flex-direction: column; height: 280px; padding: 8px; border: 1px solid var(--border); border-radius: var(--r); background: var(--surface-hover); overflow: hidden;">
-                  <LazyIconPicker selected={editFailIcon} color={editColor} onSelect={(ic) => editFailIcon = ic} />
+                  <LazyIconPicker selected={editFailIcon} color={editColor} onSelect={(ic) => { editFailIcon = ic; editFailIconManual = true; }} />
                 </div>
               {/if}
             </div>
@@ -667,6 +696,12 @@
     transition: all 0.15s;
   }
   .icon-type-btn.selected { border-color: var(--text-primary); color: var(--text-primary); }
+  .icon-suggest-btn {
+    padding: 4px 10px; font-size: 10px; font-family: var(--font-mono);
+    background: transparent; border: 1px solid var(--border); border-radius: 4px;
+    color: var(--text-muted); cursor: pointer; transition: all 0.15s;
+  }
+  .icon-suggest-btn:hover { color: var(--text-primary); border-color: var(--text-primary); }
 
   .emoji-grid {
     display: grid;

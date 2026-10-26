@@ -53,6 +53,11 @@
     DEFAULT_GOAL_COLOR,
     TEMPORALITY_COLORS,
   } from '$lib/utils/goalColors';
+  import {
+    suggestEmoji,
+    suggestIcon,
+    suggestIconKey,
+  } from '$lib/utils/iconSuggest';
   import StreakIcon from '$lib/components/StreakIcon.svelte';
   import GoalCard from '$lib/components/GoalCard.svelte';
   import LazyIconPicker from '$lib/components/LazyIconPicker.svelte';
@@ -293,9 +298,34 @@
   let newGoalColor = $state(DEFAULT_GOAL_COLOR);
   let newMaxAssignmentDays = $state<number | null>(null);
   let useFailIcon = $state(false);
+  // #1092 — la elección manual del usuario no se sobreescribe
+  let newFailEmojiManual = $state(false);
+  let newFailIconManual = $state(false);
   let newTagId = $state<number | null>(null);
   let newNoteId = $state<number | null>(null);
   let saving = $state(false);
+
+  // #1092 — sugerencia automática de icono/emoji al escribir el título
+  let suggestedFailEmoji = $derived(suggestEmoji(newTitle));
+  let suggestedFailIcon = $derived(suggestIcon(newTitle));
+  let hasFailSuggestion = $derived(suggestIconKey(newTitle) !== null);
+
+  $effect(() => {
+    if (!newFailEmojiManual) newFailEmoji = suggestedFailEmoji;
+  });
+  $effect(() => {
+    if (!newFailIconManual) newFailIcon = suggestedFailIcon;
+  });
+
+  function useFailSuggestion() {
+    if (useFailIcon) {
+      newFailIcon = suggestedFailIcon;
+      newFailIconManual = false;
+    } else {
+      newFailEmoji = suggestedFailEmoji;
+      newFailEmojiManual = false;
+    }
+  }
 
   let _todayStr = $derived.by(() => {
     const d = new Date();
@@ -2449,17 +2479,24 @@
                   style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;"
                 >
                   <span class="label" style="margin:0;">{$t('goalsPage.failIconEmoji')}</span>
-                  <div class="icon-toggle-row">
-                    <button
-                      class="icon-type-btn"
-                      class:selected={!useFailIcon}
-                      onclick={() => (useFailIcon = false)}>{$t('goalsPage.emoji')}</button
-                    >
-                    <button
-                      class="icon-type-btn"
-                      class:selected={useFailIcon}
-                      onclick={() => (useFailIcon = true)}>{$t('goalsPage.icon')}</button
-                    >
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    {#if hasFailSuggestion && (useFailIcon ? newFailIcon !== suggestedFailIcon : newFailEmoji !== suggestedFailEmoji)}
+                      <button type="button" class="icon-suggest-btn" onclick={useFailSuggestion}>
+                        usar sugerencia
+                      </button>
+                    {/if}
+                    <div class="icon-toggle-row">
+                      <button
+                        class="icon-type-btn"
+                        class:selected={!useFailIcon}
+                        onclick={() => (useFailIcon = false)}>{$t('goalsPage.emoji')}</button
+                      >
+                      <button
+                        class="icon-type-btn"
+                        class:selected={useFailIcon}
+                        onclick={() => (useFailIcon = true)}>{$t('goalsPage.icon')}</button
+                      >
+                    </div>
                   </div>
                 </div>
                 {#if !useFailIcon}
@@ -2469,7 +2506,10 @@
                         <button
                           class="emoji-btn"
                           class:selected={newFailEmoji === e}
-                          onclick={() => (newFailEmoji = e)}>{e}</button
+                          onclick={() => {
+                            newFailEmoji = e;
+                            newFailEmojiManual = true;
+                          }}>{e}</button
                         >
                       {/each}
                     </div>
@@ -2479,7 +2519,10 @@
                     <LazyIconPicker
                       selected={newFailIcon}
                       color={newGoalColor}
-                      onSelect={(ic) => (newFailIcon = ic)}
+                      onSelect={(ic) => {
+                        newFailIcon = ic;
+                        newFailIconManual = true;
+                      }}
                     />
                   </div>
                 {/if}
@@ -3494,6 +3537,21 @@
   .icon-type-btn.selected {
     border-color: var(--text-primary);
     color: var(--text-primary);
+  }
+  .icon-suggest-btn {
+    padding: 4px 10px;
+    font-size: 10px;
+    font-family: var(--font-mono);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .icon-suggest-btn:hover {
+    color: var(--text-primary);
+    border-color: var(--text-primary);
   }
 
   .emoji-grid {
