@@ -69,8 +69,9 @@
   let ghFilter = $state('created');
   let ghType = $state('all');
   let activityTab = $state<'github' | 'recent-notes'>('recent-notes');
-  const GH_ITEM_LIMIT = 9;
-  const GH_CACHE_KEY = 'joidy_github_cache_v1';
+  // #1095 — sin tope artificial de 9: el backend devuelve hasta 30 (per_page)
+  const GH_FETCH_LIMIT = 30;
+  const GH_CACHE_KEY = 'joidy_github_cache_v2';
   const GH_CACHE_TTL_MS = 1000 * 60 * 10;
 
   type GithubCache = {
@@ -140,12 +141,12 @@
     githubLoading = true;
     try {
       const [issuesRes, pullsRes] = await Promise.all([
-        api.github.issues(filter),
-        api.github.pulls(filter),
+        api.github.issues(filter, GH_FETCH_LIMIT),
+        api.github.pulls(filter, GH_FETCH_LIMIT),
       ]);
-      githubIssues = (issuesRes.issues || []).slice(0, GH_ITEM_LIMIT);
+      githubIssues = issuesRes.issues || [];
       issueStats = issuesRes.stats || { open: 0, total: 0 };
-      githubPRs = (pullsRes.pulls || []).slice(0, GH_ITEM_LIMIT);
+      githubPRs = pullsRes.pulls || [];
       prStats = pullsRes.stats || { open: 0, total: 0 };
       writeGithubCache({
         connected: githubConnected,
@@ -487,7 +488,6 @@
       {prStats}
       {ghFilter}
       {ghType}
-      itemLimit={GH_ITEM_LIMIT}
       onSetFilter={setGhFilter}
       onSetType={setGhType}
       activeTab={activityTab}
@@ -695,6 +695,21 @@
     display: flex;
     flex-direction: column;
     overflow-y: auto;
+  }
+
+  /* #1095 — el widget de GitHub estira su contenedor para que el cuerpo
+     (.github-body) pueda llenar el espacio disponible y hacer scroll */
+  .activity-section :global(.widget:has(.github-body)) {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  .activity-section :global(.widget:has(.github-body) .widget-content) {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
   }
 
   /* ── Responsive ── */
