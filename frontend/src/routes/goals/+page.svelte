@@ -62,6 +62,7 @@
   import GoalCard from '$lib/components/GoalCard.svelte';
   import LazyIconPicker from '$lib/components/LazyIconPicker.svelte';
   import ModalDialog from '$lib/components/ModalDialog.svelte';
+  import NoteLinkPicker from '$lib/components/NoteLinkPicker.svelte';
   import { t } from 'svelte-i18n';
 
   // Lazy-load the heavy StreakHeatmap (561 lines) so it is split into a
@@ -532,6 +533,22 @@
       addError = 'Error al crear el objetivo.';
     } finally {
       saving = false;
+    }
+  }
+
+  // #1141 — crear una nota nueva desde el picker y enlazarla al objetivo.
+  async function createNoteAndLink(title: string) {
+    try {
+      const n = await api.notes.create({
+        title,
+        content: `# ${title}\n`,
+        tags: [],
+      });
+      notes = [n, ...notes];
+      newNoteId = n.id;
+    } catch (e) {
+      logger.error('[goals] createNoteAndLink failed:', e);
+      addError = 'Error al crear la nota.';
     }
   }
 
@@ -2620,27 +2637,13 @@
 
               <div class="form-field">
                 <label for="new-goal-note" class="label">{$t('goalsPage.linkToProject')}</label>
-                {#if notes.length > 0}
-                  <div class="ng-quick-notes">
-                    <span class="ng-quick-notes-label">{$t('goalsPage.recentNotes')}</span>
-                    {#each notes.slice(0, 5) as n (n.id)}
-                      <button
-                        type="button"
-                        class="ng-quick-note"
-                        class:active={newNoteId === n.id}
-                        onclick={() => (newNoteId = newNoteId === n.id ? null : n.id)}
-                      >
-                        {n.title}
-                      </button>
-                    {/each}
-                  </div>
-                {/if}
-                <select id="new-goal-note" class="input w-full" bind:value={newNoteId}>
-                  <option value={null}>{$t('goalsPage.noLinkedNote')}</option>
-                  {#each notes as n}
-                    <option value={n.id}>{n.title}</option>
-                  {/each}
-                </select>
+                <NoteLinkPicker
+                  {notes}
+                  bind:value={newNoteId}
+                  id="new-goal-note"
+                  placeholder={$t('goalsPage.searchNote')}
+                  onCreateNote={createNoteAndLink}
+                />
               </div>
               <div class="form-field">
                 <label for="new-goal-tag" class="label">{$t('goalsPage.tagSync')}</label>
@@ -3387,40 +3390,6 @@
   .ng-fail-btn.active {
     background: rgba(var(--primary-rgb, 139, 92, 246), 0.1);
     border-color: var(--primary);
-  }
-
-  .ng-quick-notes {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 6px;
-    margin-bottom: 8px;
-  }
-  .ng-quick-notes-label {
-    font-size: 11px;
-    color: var(--text-muted);
-  }
-  .ng-quick-note {
-    padding: 4px 10px;
-    font-size: 12px;
-    background: var(--surface-hover);
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    color: var(--text-secondary);
-    cursor: pointer;
-    transition: all 0.2s;
-    max-width: 180px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .ng-quick-note:hover {
-    border-color: var(--text-muted);
-  }
-  .ng-quick-note.active {
-    background: rgba(var(--primary-rgb, 139, 92, 246), 0.1);
-    border-color: var(--primary);
-    color: var(--primary);
   }
 
   .new-goal-footer {
