@@ -39,7 +39,9 @@ def test_google_callback_error(client):
     resp = client.get("/integrations/google/callback?error=access_denied")
     assert resp.status_code == 200
     assert "ERROR" in resp.text
-    assert "access_denied" in resp.text
+    # Generic message — no raw provider details leak to the browser
+    assert "Error de autorización" in resp.text
+    assert "access_denied" not in resp.text
 
 
 def test_google_callback_exchanges_code(client, monkeypatch):

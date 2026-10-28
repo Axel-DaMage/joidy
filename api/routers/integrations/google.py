@@ -6,6 +6,7 @@ connected across restarts and returns a tiny HTML page that closes
 the popup window (#42 — one-click setup from Settings, GitHub-style).
 """
 
+import html as html_module
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse
@@ -57,17 +58,17 @@ async def google_oauth_callback(code: str = "", error: str = "", db: Session = D
     which then flips to "connected" via the status polling loop.
     """
     if error:
-        return _callback_page(ok=False, message=f"Error de Google: {error}")
+        return _callback_page(ok=False, message="Error de autorización con Google")
     if not code:
         return _callback_page(ok=False, message="Falta el código de autorización")
 
     try:
         tokens = await gs.exchange_code(code)
-    except httpx.HTTPStatusError as exc:
-        detail = f"Intercambio de token falló ({exc.response.status_code})"
-        return _callback_page(ok=False, message=detail)
-    except RuntimeError as exc:
-        return _callback_page(ok=False, message=str(exc))
+    except httpx.HTTPStatusError:
+        # No surface raw provider/HTTP details to the browser (CodeQL py/stack-trace-exposure)
+        return _callback_page(ok=False, message="Intercambio de token con Google falló")
+    except RuntimeError:
+        return _callback_page(ok=False, message="Google OAuth no está configurado")
 
     gts.store_tokens(
         db,
@@ -84,8 +85,9 @@ def _callback_page(ok: bool, message: str) -> HTMLResponse:
     """Minimal self-closing page for the popup opened by the settings panel."""
     icon = "OK" if ok else "ERROR"
     color = "#2e9e4f" if ok else "#c0392b"
-    safe = (message or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-    html = f"""<!DOCTYPE html>
+    # Standard-library escaping (incl. quotes) for the text-node interpolation.
+    safe = html_module.escape(message or "", quote=True)
+    page = f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>Joidy</title></head>
 <body style="font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
 <div style="text-align:center">
@@ -94,7 +96,7 @@ def _callback_page(ok: bool, message: str) -> HTMLResponse:
 </div>
 <script>setTimeout(function(){{ window.close(); }}, 1200);</script>
 </body></html>"""
-    return HTMLResponse(content=html, status_code=200)
+    return HTMLResponse(content=page, status_code=200)
 
 
 @router.post("/connect")
