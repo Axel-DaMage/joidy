@@ -729,6 +729,11 @@ export const api = {
       }),
     status: () => req<{ connected: boolean }>('GET', '/integrations/google/status'),
     disconnect: () => req<{ status: string }>('POST', '/integrations/google/disconnect'),
+    gmail: (maxResults = 10) =>
+      req<{ messages: unknown[] } | unknown[]>(
+        'GET',
+        `/integrations/google/gmail?max_results=${maxResults}`
+      ),
   },
 
   config: {
@@ -753,6 +758,12 @@ export const api = {
         github_token: string | null;
         github_client_id: string | null;
         github_client_secret: string | null;
+        google_client_id: string | null;
+        google_client_secret: string | null;
+        google_redirect_uri: string | null;
+        openai_base_url: string | null;
+        llm_model: string | null;
+        embedding_model: string | null;
         app_env: string | null;
         configured_keys: string[];
       }>('GET', '/config/'),
@@ -764,6 +775,13 @@ export const api = {
       github_username?: string;
       github_client_id?: string;
       github_client_secret?: string;
+      google_client_id?: string;
+      google_client_secret?: string;
+      google_redirect_uri?: string;
+      openai_api_key?: string;
+      openai_base_url?: string;
+      llm_model?: string;
+      embedding_model?: string;
       telegram_bot_token?: string;
       telegram_allowed_user_id?: string;
     }) =>

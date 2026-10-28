@@ -67,9 +67,9 @@ Port overrides: `FRONTEND_PORT`, `API_PORT`, `AI_SERVICE_PORT`, `WORKER_PORT`.
 |-------------|---------|----------|-------|
 | **Gemini AI** | ✅ `ai-service` | ⚠️ Placeholder UI | #41 |
 | **GitHub** | ✅ `auth/github` | ✅ Unified integrations page | #120 |
-| **Google Calendar** | ⚠️ `integrations/google` scaffold | ⚠️ Partial | #2 |
+| **Google Calendar** | ⚠️ `integrations/google` one-click OAuth (Settings→Integraciones, callback persistente) | ✅ Settings card | #2 |
 | **Google Tasks** | ⚠️ `integrations/google` scaffold | ⚠️ Partial | #2 |
-| **Gmail** | ❌ None (Google OAuth scaffold only) | ❌ None | #42 |
+| **Gmail** | ⚠️ Push vía n8n workflow (`make n8n`) + `/emails` API | ✅ `/emails` page | #42 |
 | **Contacts** | ❌ None (Google OAuth scaffold only) | ❌ None | #43 |
 | **Strava** | ⚠️ `integrations/strava` scaffold | ❌ None | #44 |
 | **Spotify** | ⚠️ `integrations/spotify` scaffold | ❌ None | #45 |

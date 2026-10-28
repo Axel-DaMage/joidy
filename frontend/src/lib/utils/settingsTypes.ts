@@ -8,6 +8,13 @@ export interface SystemConfig {
   github_username: string;
   github_client_id: string;
   github_client_secret: string;
+  google_client_id: string;
+  google_client_secret: string;
+  google_redirect_uri: string;
+  openai_api_key: string;
+  openai_base_url: string;
+  llm_model: string;
+  embedding_model: string;
   telegram_bot_token: string;
   telegram_allowed_user_id: string;
 }

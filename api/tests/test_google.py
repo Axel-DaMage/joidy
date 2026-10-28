@@ -27,13 +27,21 @@ def test_google_auth_url_configured(client, monkeypatch):
 
 
 def test_google_callback_missing_code(client):
+    # The callback returns a self-closing HTML page (popup UX) instead of JSON:
+    # a browser redirect hits it without credentials.
     resp = client.get("/integrations/google/callback")
-    assert resp.status_code == 400
+    assert resp.status_code == 200
+    assert "ERROR" in resp.text
+    assert "Código" in resp.text or "código" in resp.text
 
 
 def test_google_callback_error(client):
     resp = client.get("/integrations/google/callback?error=access_denied")
-    assert resp.status_code == 400
+    assert resp.status_code == 200
+    assert "ERROR" in resp.text
+    # Generic message — no raw provider details leak to the browser
+    assert "Error de autorización" in resp.text
+    assert "access_denied" not in resp.text
 
 
 def test_google_callback_exchanges_code(client, monkeypatch):
@@ -61,10 +69,12 @@ def test_google_callback_exchanges_code(client, monkeypatch):
     with patch("httpx.AsyncClient.post", new=AsyncMock(return_value=fake_response)):
         resp = client.get("/integrations/google/callback?code=abc123")
 
+    # Tokens are persisted server-side and the page confirms success
     assert resp.status_code == 200
-    data = resp.json()
-    assert data["access_token"] == "ACCESS"
-    assert data["refresh_token"] == "REFRESH"
+    assert "OK" in resp.text
+
+    resp = client.get("/integrations/google/status")
+    assert resp.json()["connected"] is True
 
 
 def test_google_status_not_connected(client):
