@@ -11,6 +11,8 @@
   let accounts: EmailAccountStats[] = $state([]);
   let loading = $state(true);
 
+  let absoluteTotal = $derived(accounts.reduce((sum, a) => sum + a.total, 0));
+
   let searchQuery = $state('');
   let accountFilter = $state<string | null>(null);
   let onlyUnread = $state(true);
@@ -175,10 +177,19 @@
 
   {#if loading}
     <div class="loading-state caption">...</div>
+  {:else if absoluteTotal === 0}
+    <div class="empty-wrap">
+      <EmptyState
+        title={$t('emails.emptyAll')}
+        message={$t('emails.emptyNew')}
+      >
+        {#snippet icon()}<Inbox size={44} />{/snippet}
+      </EmptyState>
+    </div>
   {:else if total === 0}
     <div class="empty-wrap">
       <EmptyState
-        title={onlyImportant ? $t('emails.emptyImportant') : onlyUnread ? $t('emails.emptyUnread') : $t('emails.emptyAll')}
+        title={onlyImportant ? $t('emails.emptyImportant') : onlyUnread ? $t('emails.emptyUnread') : $t('emails.noResults')}
         message={$t('emails.syncHint')}
       >
         {#snippet icon()}<Inbox size={44} />{/snippet}
@@ -423,6 +434,13 @@
 
   .email-item:hover .email-ops {
     opacity: 1;
+  }
+
+  /* Touch devices have no hover: keep the row actions reachable. */
+  @media (hover: none) {
+    .email-ops {
+      opacity: 1;
+    }
   }
 
   .email-ops button {

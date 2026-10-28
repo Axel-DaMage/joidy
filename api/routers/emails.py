@@ -90,7 +90,7 @@ def list_inbox(
 ):
     """Unified inbox: all accounts merged, newest first."""
     emails = list_emails(db, user_id, unread=unread, important=important, account=account, q=q, limit=limit, skip=skip)
-    total = count_emails(db, user_id, unread=unread, important=important)
+    total = count_emails(db, user_id, unread=unread, important=important, account=account, q=q)
     return {"items": [_serialize_email(e) for e in emails], "total": total}
 
 

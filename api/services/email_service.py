@@ -1,8 +1,10 @@
 """Email inbox service — upsert/list/search for externally imported mail (n8n → Gmail)."""
 
 from datetime import datetime
+from typing import Any
 
 from models.email_message import EmailMessage
+from sqlalchemy import case as sa_case, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -91,7 +93,7 @@ def get_email(db: Session, user_id: int, email_id: int) -> EmailMessage | None:
     )
 
 
-def list_emails(
+def _filtered_query(
     db: Session,
     user_id: int,
     *,
@@ -99,10 +101,7 @@ def list_emails(
     important: bool | None = None,
     account: str | None = None,
     q: str | None = None,
-    limit: int = 100,
-    skip: int = 0,
-) -> list[EmailMessage]:
-    """Unified inbox: merged accounts, newest first."""
+) -> Any:
     query = db.query(EmailMessage).filter(EmailMessage.user_id == user_id)
     if unread is not None:
         query = query.filter(EmailMessage.unread == unread)
@@ -117,6 +116,22 @@ def list_emails(
             | EmailMessage.sender.ilike(like)
             | EmailMessage.snippet.ilike(like)
         )
+    return query
+
+
+def list_emails(
+    db: Session,
+    user_id: int,
+    *,
+    unread: bool | None = None,
+    important: bool | None = None,
+    account: str | None = None,
+    q: str | None = None,
+    limit: int = 100,
+    skip: int = 0,
+) -> list[EmailMessage]:
+    """Unified inbox: merged accounts, newest first."""
+    query = _filtered_query(db, user_id, unread=unread, important=important, account=account, q=q)
     return (
         query.order_by(EmailMessage.received_at.desc().nullslast(), EmailMessage.id.desc())
         .offset(max(skip, 0))
@@ -131,27 +146,32 @@ def count_emails(
     *,
     unread: bool | None = None,
     important: bool | None = None,
+    account: str | None = None,
+    q: str | None = None,
 ) -> int:
-    query = db.query(EmailMessage).filter(EmailMessage.user_id == user_id)
-    if unread is not None:
-        query = query.filter(EmailMessage.unread == unread)
-    if important is not None:
-        query = query.filter(EmailMessage.important == important)
-    return query.count()
+    """Total matching the same filters as ``list_emails`` (so ``total`` stays consistent)."""
+    return _filtered_query(db, user_id, unread=unread, important=important, account=account, q=q).count()
 
 
 def list_accounts(db: Session, user_id: int) -> list[dict]:
-    """Distinct mailboxes with per-account counters for the unified view."""
-    emails = db.query(EmailMessage).filter(EmailMessage.user_id == user_id).all()
-    grouped: dict[str, dict] = {}
-    for e in emails:
-        stats = grouped.setdefault(e.account, {"account": e.account, "total": 0, "unread": 0, "important": 0})
-        stats["total"] += 1
-        if e.unread:
-            stats["unread"] += 1
-        if e.important:
-            stats["important"] += 1
-    return sorted(grouped.values(), key=lambda s: s["account"])
+    """Distinct mailboxes with per-account counters (SQL aggregation)."""
+    case = sa_case((EmailMessage.unread.is_(True), 1))
+    rows = (
+        db.query(
+            EmailMessage.account,
+            func.count(EmailMessage.id).label("total"),
+            func.count(case).label("unread"),
+            func.count(sa_case((EmailMessage.important.is_(True), 1))).label("important"),
+        )
+        .filter(EmailMessage.user_id == user_id)
+        .group_by(EmailMessage.account)
+        .order_by(EmailMessage.account)
+        .all()
+    )
+    return [
+        {"account": row.account, "total": row.total, "unread": row.unread, "important": row.important}
+        for row in rows
+    ]
 
 
 def update_email_state(

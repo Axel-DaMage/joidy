@@ -82,9 +82,11 @@ def test_list_filters(client: TestClient):
 
     by_account = client.get("/emails/", params={"account": "work@gmail.com"})
     assert [m["gmail_id"] for m in by_account.json()["items"]] == ["e3"]
+    assert by_account.json()["total"] == 1
 
     search = client.get("/emails/", params={"q": "Ana"})
     assert {m["gmail_id"] for m in search.json()["items"]} >= {"e1"}
+    assert search.json()["total"] >= 1
 
 
 def test_patch_email_state(client: TestClient):
@@ -92,7 +94,7 @@ def test_patch_email_state(client: TestClient):
 
     marked = client.patch(f"/emails/{email_id}", json={"unread": False, "important": False})
     assert marked.status_code == 200
-    marked.json()["unread"] is False
+    assert marked.json()["unread"] is False
     assert marked.json()["important"] is False
 
     unknown = client.patch("/emails/999999", json={"unread": True})
