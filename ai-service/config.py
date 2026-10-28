@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     # Multi-provider API keys
     gemini_api_key: str = ""
     openai_api_key: str = ""
+    # Optional custom base URL for the OpenAI provider (OpenAI-compatible
+    # routers such as standardcompute, LiteLLM, vLLM, OpenRouter-style proxies).
+    openai_base_url: str = ""
     anthropic_api_key: str = ""
     openrouter_api_key: str = ""
     cohere_api_key: str = ""
@@ -27,6 +30,11 @@ class Settings(BaseSettings):
     # Examples: "gemini:gemini-2.0-flash", "openai:gpt-4", "anthropic:claude-3-opus", "ollama:llama3"
     llm_model: str = "gemini:gemini-2.0-flash"
     embedding_model: str = "gemini:models/text-embedding-004"
+
+    # Floor for max_tokens on LLM calls (0 = keep the endpoint's own value).
+    # Reasoning routers (e.g. "standardcompute") spend max_tokens on hidden
+    # reasoning before emitting content, so small budgets return null content.
+    llm_max_tokens: int = 0
 
     # Rate limiting (free tier: 15 RPM)
     max_requests_per_minute: int = 12
@@ -53,7 +61,10 @@ class Settings(BaseSettings):
         if self.gemini_api_key:
             config["gemini"] = {"api_key": self.gemini_api_key}
         if self.openai_api_key:
-            config["openai"] = {"api_key": self.openai_api_key}
+            client = {"api_key": self.openai_api_key}
+            if self.openai_base_url:
+                client["base_url"] = self.openai_base_url
+            config["openai"] = client
         if self.anthropic_api_key:
             config["anthropic"] = {"api_key": self.anthropic_api_key}
         if self.openrouter_api_key:

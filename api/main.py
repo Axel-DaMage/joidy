@@ -211,7 +211,9 @@ app.include_router(gamification.router, dependencies=[Depends(get_current_user)]
 app.include_router(personal_streaks.router, dependencies=[Depends(get_current_user)])
 app.include_router(push.router, dependencies=[Depends(get_current_user)])
 app.include_router(github.router, dependencies=[Depends(get_current_user)])
-app.include_router(google.router, dependencies=[Depends(get_current_user)])
+# Google: per-route auth (the OAuth /callback must be reachable by the bare
+# browser redirect; token/status/data routes declare their own deps).
+app.include_router(google.router)
 app.include_router(strava.router, dependencies=[Depends(get_current_user)])
 app.include_router(spotify.router, dependencies=[Depends(get_current_user)])
 app.include_router(vault.router, dependencies=[Depends(get_current_user)])

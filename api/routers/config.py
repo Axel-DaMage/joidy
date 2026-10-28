@@ -17,6 +17,13 @@ CONFIG_KEYS = {
     "github_username": "GITHUB_USERNAME",
     "github_client_id": "GITHUB_CLIENT_ID",
     "github_client_secret": "GITHUB_CLIENT_SECRET",
+    "google_client_id": "GOOGLE_CLIENT_ID",
+    "google_client_secret": "GOOGLE_CLIENT_SECRET",
+    "google_redirect_uri": "GOOGLE_REDIRECT_URI",
+    "openai_api_key": "OPENAI_API_KEY",
+    "openai_base_url": "OPENAI_BASE_URL",
+    "llm_model": "LLM_MODEL",
+    "embedding_model": "EMBEDDING_MODEL",
     "telegram_bot_token": "TELEGRAM_BOT_TOKEN",
     "telegram_allowed_user_id": "TELEGRAM_ALLOWED_USER_ID",
     "secret_key": "SECRET_KEY",
@@ -32,6 +39,13 @@ PUBLIC_KEYS = {
     "github_username": True,
     "github_client_id": False,
     "github_client_secret": False,
+    "google_client_id": False,
+    "google_client_secret": False,
+    "google_redirect_uri": True,
+    "openai_api_key": False,
+    "openai_base_url": True,
+    "llm_model": True,
+    "embedding_model": True,
     "telegram_bot_token": False,
     "telegram_allowed_user_id": False,
     "secret_key": False,
@@ -48,6 +62,12 @@ class ConfigResponse(BaseModel):
     github_token: str | None = None
     github_client_id: str | None = None
     github_client_secret: str | None = None
+    google_client_id: str | None = None
+    google_client_secret: str | None = None
+    google_redirect_uri: str | None = None
+    openai_base_url: str | None = None
+    llm_model: str | None = None
+    embedding_model: str | None = None
     app_env: str | None = None
     configured_keys: list[str]
 
@@ -60,6 +80,13 @@ class ConfigUpdate(BaseModel):
     github_username: str | None = None
     github_client_id: str | None = None
     github_client_secret: str | None = None
+    google_client_id: str | None = None
+    google_client_secret: str | None = None
+    google_redirect_uri: str | None = None
+    openai_api_key: str | None = None
+    openai_base_url: str | None = None
+    llm_model: str | None = None
+    embedding_model: str | None = None
     telegram_bot_token: str | None = None
     telegram_allowed_user_id: str | None = None
     secret_key: str | None = None
@@ -105,6 +132,10 @@ def update_config(update: ConfigUpdate):
     for short_key, env_key in CONFIG_KEYS.items():
         if short_key in update_data:
             value = update_data[short_key]
+            # Skip empty overrides for non-secret provider settings: an empty
+            # string would clobber a working config (pydantic reads "" as set).
+            if short_key in ("llm_model", "embedding_model", "openai_base_url", "google_redirect_uri") and not (value or "").strip():
+                continue
             if value is not None:
                 env_vars[env_key] = value
 
@@ -122,6 +153,15 @@ def update_config(update: ConfigUpdate):
             "Vault path changed. Docker bind mounts are immutable — "
             "recreate the stack for the new path to take effect: "
             "docker compose up -d --force-recreate worker api"
+        )
+    # AI provider settings are consumed by the ai-service process (not the API):
+    # flag a restart so the panel can prompt the user (#42 pattern).
+    ai_keys = {"openai_api_key", "openai_base_url", "llm_model", "embedding_model", "gemini_api_key"}
+    if ai_keys & update_data.keys():
+        result["requires_restart"] = True
+        result["restart_reason"] = (
+            "Cambios en la IA: reinicia el servicio de IA para aplicarlos "
+            "(docker compose restart ai-service o el botón de Servicios)."
         )
     return result
 

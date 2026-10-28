@@ -46,7 +46,7 @@ class ClientFactory:
         if provider == "gemini":
             return GeminiClient(api_key=config["api_key"], model=model)
         elif provider == "openai":
-            return OpenAIClient(api_key=config["api_key"], model=model)
+            return OpenAIClient(api_key=config["api_key"], model=model, base_url=config.get("base_url", ""))
         elif provider == "anthropic":
             return AnthropicClient(api_key=config["api_key"], model=model)
         elif provider == "ollama":
@@ -67,7 +67,10 @@ class ClientFactory:
             return GeminiClient(api_key=config["api_key"], model=model)
         elif provider == "openai":
             return OpenAIClient(
-                api_key=config["api_key"], model=model, is_embedding=True
+                api_key=config["api_key"],
+                model=model,
+                is_embedding=True,
+                base_url=config.get("base_url", ""),
             )
         elif provider == "cohere":
             return CohereClient(

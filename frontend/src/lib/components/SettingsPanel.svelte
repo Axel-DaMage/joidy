@@ -35,6 +35,13 @@
     github_username: '',
     github_client_id: '',
     github_client_secret: '',
+    google_client_id: '',
+    google_client_secret: '',
+    google_redirect_uri: '',
+    openai_api_key: '',
+    openai_base_url: '',
+    llm_model: '',
+    embedding_model: '',
     telegram_bot_token: '',
     telegram_allowed_user_id: '',
   };
@@ -86,6 +93,13 @@
         github_username: config.github_username || '',
         github_client_id: config.github_client_id || '',
         github_client_secret: config.github_client_secret || '',
+        google_client_id: config.google_client_id || '',
+        google_client_secret: '',
+        google_redirect_uri: config.google_redirect_uri || '',
+        openai_api_key: '',
+        openai_base_url: config.openai_base_url || '',
+        llm_model: config.llm_model || '',
+        embedding_model: config.embedding_model || '',
         telegram_bot_token: '',
         telegram_allowed_user_id: '',
       };
@@ -111,6 +125,9 @@
       if (!configToSave.github_client_id) delete configToSave.github_client_id;
       if (!configToSave.github_client_secret) delete configToSave.github_client_secret;
       if (!configToSave.github_username) delete configToSave.github_username;
+      if (!configToSave.google_client_id) delete configToSave.google_client_id;
+      if (!configToSave.google_client_secret) delete configToSave.google_client_secret;
+      if (!configToSave.openai_api_key) delete configToSave.openai_api_key;
 
       const result = await api.config.update(configToSave);
       configuredKeys = Object.entries(systemConfig)

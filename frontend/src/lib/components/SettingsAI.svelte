@@ -30,6 +30,55 @@
       />
     </div>
     <p class="hint">Habilita auto-tagging y búsqueda semántica.</p>
+
+    <div
+      class="row"
+      style="flex-direction: column; align-items: stretch; gap: 8px; margin-top: 12px; border-top: 1px solid var(--border-light); padding-top: 10px;"
+    >
+      <div class="row-label">
+        <span>API OpenAI-compatible</span>
+        {#if isConfigured('openai_api_key')}<span class="configured-badge">✓</span>{/if}
+      </div>
+      <input
+        type="password"
+        class="setting-input mono"
+        placeholder="sk_live_..."
+        bind:value={systemConfig.openai_api_key}
+      />
+      <div class="row-label">
+        <span>Base URL</span>
+        {#if isConfigured('openai_base_url')}<span class="configured-badge">✓</span>{/if}
+      </div>
+      <input
+        type="text"
+        class="setting-input mono"
+        placeholder="https://api.stdcmpt.com/v1"
+        bind:value={systemConfig.openai_base_url}
+      />
+      <div class="row-label">
+        <span>Modelo LLM</span>
+      </div>
+      <input
+        type="text"
+        class="setting-input mono"
+        placeholder="openai:standardcompute"
+        bind:value={systemConfig.llm_model}
+      />
+      <div class="row-label">
+        <span>Modelo Embeddings</span>
+      </div>
+      <input
+        type="text"
+        class="setting-input mono"
+        placeholder="ollama:nomic-embed-text"
+        bind:value={systemConfig.embedding_model}
+      />
+      <p class="hint" style="margin-bottom: 0;">
+        Endpoint OpenAI-compatible (StandardCompute, LiteLLM...). Los embeddings solo se
+        sirven vía Ollama u otro proveedor con <span class="mono">/embeddings</span>. Reinicia
+        ai-service después de guardar.
+      </p>
+    </div>
   </section>
 {/if}
 
