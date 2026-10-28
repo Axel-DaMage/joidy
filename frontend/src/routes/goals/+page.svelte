@@ -62,6 +62,7 @@
   import GoalCard from '$lib/components/GoalCard.svelte';
   import LazyIconPicker from '$lib/components/LazyIconPicker.svelte';
   import ModalDialog from '$lib/components/ModalDialog.svelte';
+  import NoteLinkPicker from '$lib/components/NoteLinkPicker.svelte';
   import { t } from 'svelte-i18n';
 
   // Lazy-load the heavy StreakHeatmap (561 lines) so it is split into a
@@ -532,6 +533,22 @@
       addError = 'Error al crear el objetivo.';
     } finally {
       saving = false;
+    }
+  }
+
+  // #1141 — crear una nota nueva desde el picker y enlazarla al objetivo.
+  async function createNoteAndLink(title: string) {
+    try {
+      const n = await api.notes.create({
+        title,
+        content: `# ${title}\n`,
+        tags: [],
+      });
+      notes = [n, ...notes];
+      newNoteId = n.id;
+    } catch (e) {
+      logger.error('[goals] createNoteAndLink failed:', e);
+      addError = 'Error al crear la nota.';
     }
   }
 
@@ -2620,12 +2637,13 @@
 
               <div class="form-field">
                 <label for="new-goal-note" class="label">{$t('goalsPage.linkToProject')}</label>
-                <select id="new-goal-note" class="input w-full" bind:value={newNoteId}>
-                  <option value={null}>{$t('goalsPage.noLinkedNote')}</option>
-                  {#each notes as n}
-                    <option value={n.id}>{n.title}</option>
-                  {/each}
-                </select>
+                <NoteLinkPicker
+                  {notes}
+                  bind:value={newNoteId}
+                  id="new-goal-note"
+                  placeholder={$t('goalsPage.searchNote')}
+                  onCreateNote={createNoteAndLink}
+                />
               </div>
               <div class="form-field">
                 <label for="new-goal-tag" class="label">{$t('goalsPage.tagSync')}</label>

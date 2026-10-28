@@ -29,6 +29,9 @@ from services.joidy_vault_writer import (
     read_goal_file,
     update_goal_file,
 )
+from models.note import Note
+from services.note_service import write_to_vault
+from services.sync_service import update_local_mtime
 from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/goals", tags=["goals"])
@@ -289,6 +292,16 @@ def update_goal(goal_id: int, data: GoalUpdate, db: Session = Depends(get_db)):
         }
         update_goal_file(goal_id, goal.title, content, metadata)
 
+        # #1141 — mirror into the linked real note (same as /content save).
+        if goal.note_id is not None:
+            linked_note = db.query(Note).filter(Note.id == goal.note_id).first()
+            if linked_note is not None:
+                linked_note.content = sanitize_content(content)
+                db.commit()
+                write_to_vault(linked_note)
+                update_local_mtime(db, linked_note.id)
+                db.commit()
+
     return _serialize_goal(goal, db)
 
 
@@ -306,6 +319,28 @@ def get_goal_content(goal_id: int, db: Session = Depends(get_db)):
     goal = db.query(Goal).filter(Goal.id == goal_id).first()
     if not goal:
         raise HTTPException(status_code=404, detail="Goal not found")
+
+    # #1141 — when the goal is linked to a real note, the note is the source
+    # of truth for its content; the editor reads/writes the note, not the
+    # auto-generated goal file.
+    if goal.note_id is not None:
+        linked_note = db.query(Note).filter(Note.id == goal.note_id).first()
+        if linked_note is not None:
+            return {
+                "title": goal.title,
+                "content": linked_note.content or "",
+                "temporality": goal.temporality,
+                "measurement_type": goal.measurement_type,
+                "target_value": goal.target_value,
+                "state": goal.state,
+                "fail_config": goal.fail_config,
+                "fail_emoji": goal.fail_emoji,
+                "color": goal.color,
+                "theme": goal.theme,
+                "note_id": goal.note_id,
+                "tag_id": goal.tag_id,
+                "max_assignment_days": goal.max_assignment_days,
+            }
 
     file_data = read_goal_file(goal_id)
     if file_data:
@@ -350,6 +385,16 @@ def save_goal_content(goal_id: int, data: GoalContent, db: Session = Depends(get
     goal.parent_id = data.parent_id
     goal.max_assignment_days = data.max_assignment_days
 
+    # #1141 — if the goal is linked to a real note, the written content must
+    # land in that note instead of only the goal note file. Update directly
+    # (not via update_note) so sync_goals_from_note does not flag this goal
+    # as pending_removal when the note content lacks goal markers.
+    linked_note = None
+    if goal.note_id is not None:
+        linked_note = db.query(Note).filter(Note.id == goal.note_id).first()
+        if linked_note is not None:
+            linked_note.content = sanitize_content(data.content)
+
     db.commit()
 
     obj_dir = get_objectives_dir()
@@ -372,6 +417,11 @@ def save_goal_content(goal_id: int, data: GoalContent, db: Session = Depends(get
             "completed_at": goal.completed_at.isoformat() if goal.completed_at else None,
         }
         update_goal_file(goal_id, data.title, data.content, metadata)
+
+    if linked_note is not None:
+        write_to_vault(linked_note)
+        update_local_mtime(db, linked_note.id)
+        db.commit()
 
     return _serialize_goal(goal, db)
 

@@ -6,6 +6,7 @@
   import { logger } from '$lib/utils/logger';
   import { suggestEmoji, suggestIcon, suggestIconKey } from '$lib/utils/iconSuggest';
   import LazyIconPicker from '$lib/components/LazyIconPicker.svelte';
+  import NoteLinkPicker from '$lib/components/NoteLinkPicker.svelte';
   import StreakIcon from '$lib/components/StreakIcon.svelte';
   import { GOALS_SPECIFIC_COLOR_PRESETS, DEFAULT_GOAL_COLOR } from '$lib/utils/goalColors';
   import { t } from 'svelte-i18n';
@@ -198,6 +199,22 @@
     goto('/goals');
   }
 
+  // #1141 — crear una nota nueva desde el picker y enlazarla al objetivo.
+  async function createNoteAndLink(title: string) {
+    try {
+      const n = await api.notes.create({
+        title,
+        content: `# ${title}\n`,
+        tags: [],
+      });
+      notes = [n, ...notes];
+      if (goal) goal.note_id = n.id;
+      editNoteId = n.id;
+    } catch (e) {
+      logger.error('Error al crear la nota vinculada:', e);
+    }
+  }
+
   async function handleComplete() {
     if (!goal) return;
     try {
@@ -372,12 +389,13 @@
             <div class="form-row adv-links">
               <div class="form-field" style="flex:1;">
                 <label for="edit-goal-note" class="label">{$t('goalDetail.linkToProject')}</label>
-                <select id="edit-goal-note" class="input w-full" bind:value={editNoteId}>
-                  <option value={null}>{$t('goalDetail.noLinkedNote')}</option>
-                  {#each notes as n}
-                    <option value={n.id}>{n.title}</option>
-                  {/each}
-                </select>
+                <NoteLinkPicker
+                  {notes}
+                  bind:value={editNoteId}
+                  id="edit-goal-note"
+                  placeholder={$t('goalDetail.searchNote')}
+                  onCreateNote={createNoteAndLink}
+                />
               </div>
               <div class="form-field" style="flex:1;">
                 <label for="edit-goal-tag" class="label">{$t('goalDetail.tagSync')}</label>
