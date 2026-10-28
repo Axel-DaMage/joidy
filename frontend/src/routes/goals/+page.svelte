@@ -527,9 +527,7 @@
       newTagId = null;
       newNoteId = null;
       newMaxAssignmentDays = null;
-      if (g.id) {
-        goto(`/goals/${g.id}`);
-      }
+      // #1142 — permanecer en la vista general; el objetivo ya aparece en la lista
     } catch (e) {
       addError = 'Error al crear el objetivo.';
     } finally {
