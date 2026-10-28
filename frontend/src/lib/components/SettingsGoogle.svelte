@@ -63,6 +63,17 @@
     googleConnecting = true;
     googleError = '';
     try {
+      // Persist credentials BEFORE opening the consent popup: the /auth
+      // endpoint reads them from settings, and an unsaved form would 400
+      // with "Google OAuth is not configured" (#1148).
+      const creds: Record<string, string> = {};
+      if (systemConfig.google_client_id?.trim()) creds.google_client_id = systemConfig.google_client_id.trim();
+      if (systemConfig.google_client_secret?.trim()) creds.google_client_secret = systemConfig.google_client_secret.trim();
+      if (systemConfig.google_redirect_uri?.trim()) creds.google_redirect_uri = systemConfig.google_redirect_uri.trim();
+      if (Object.keys(creds).length > 0) {
+        await api.config.update(creds);
+      }
+
       const data = await api.google.authUrl();
       window.open(data.url, '_blank');
       // The callback persists the tokens server-side; poll until status flips.
@@ -153,10 +164,13 @@
     <p class="hint" style="color: var(--danger); margin: 0;">{googleError}</p>
   {/if}
 
-  {#if showAdvancedGoogle}
+    {#if showAdvancedGoogle}
     <div
       style="display: flex; flex-direction: column; gap: 8px; border-left: 2px solid var(--border); padding-left: 12px; margin-left: 4px;"
     >
+      <p class="hint" style="margin: 0; font-weight: 500;">
+        Credenciales avanzadas de Google (se guardan automáticamente al Conectar, o con Ctrl+S):
+      </p>
       <div style="display: flex; flex-direction: column; gap: 4px;">
         <div class="row-label" style="font-size: 11px;">
           <a
@@ -169,13 +183,17 @@
             <span>Google OAuth Client ID</span>
             <ExternalLink size={10} />
           </a>
-          {#if isConfigured('google_client_id')}<span class="configured-badge">✓</span>{/if}
+          {#if isConfigured('google_client_id') || systemConfig.google_client_id}<span
+              class="configured-badge">✓</span
+            >{/if}
         </div>
         <input
           type="text"
           class="setting-input mono"
           style="font-size: 11px; padding: 4px 8px;"
-          placeholder="1234567890-abc.apps.googleusercontent.com"
+          placeholder={isConfigured('google_client_id')
+            ? '•••••••••••••••••••••••• (configurado)'
+            : '1234567890-abc.apps.googleusercontent.com'}
           bind:value={systemConfig.google_client_id}
         />
       </div>
@@ -191,13 +209,17 @@
             <span>Google OAuth Client Secret</span>
             <ExternalLink size={10} />
           </a>
-          {#if isConfigured('google_client_secret')}<span class="configured-badge">✓</span>{/if}
+          {#if isConfigured('google_client_secret') || systemConfig.google_client_secret}<span
+              class="configured-badge">✓</span
+            >{/if}
         </div>
         <input
           type="password"
           class="setting-input mono"
           style="font-size: 11px; padding: 4px 8px;"
-          placeholder="GOCSPX-..."
+          placeholder={isConfigured('google_client_secret') && !systemConfig.google_client_secret
+            ? '•••••••••••••••• (configurado)'
+            : 'GOCSPX-...'}
           bind:value={systemConfig.google_client_secret}
         />
       </div>
