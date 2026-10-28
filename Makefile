@@ -1,4 +1,4 @@
-.PHONY: setup dev dev-d dev-reset prod stop restart logs logs-api logs-ai logs-worker build clean backup restore db-backup db-restore backup-verify shell-api shell-worker migrate db-health test-api test-ai test-frontend test-frontend-e2e test lint lint-api fix-permissions install-deps doctor start
+.PHONY: setup dev dev-d dev-reset prod stop restart logs logs-api logs-ai logs-worker build clean backup restore db-backup db-restore backup-verify shell-api shell-worker migrate db-health test-api test-ai test-frontend test-frontend-e2e test lint lint-api fix-permissions install-deps doctor start n8n n8n-down n8n-logs
 
 COMPOSE_PROJECT ?= joidy
 DOCKER_COMPOSE := $(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || (command -v docker >/dev/null 2>&1 && echo "docker compose" || (command -v podman-compose >/dev/null 2>&1 && echo "podman-compose" || (command -v podman >/dev/null 2>&1 && echo "podman compose" || echo "docker compose"))))
@@ -116,6 +116,15 @@ logs-ai: ## Tail AI service logs
 
 logs-worker: ## Tail worker logs
 	$(DOCKER_COMPOSE) logs -f worker
+
+n8n: ## Start n8n automation hub (UI: http://localhost:5678)
+	$(DOCKER_COMPOSE) --profile n8n up -d n8n
+
+n8n-down: ## Stop the n8n automation hub
+	$(DOCKER_COMPOSE) --profile n8n stop n8n
+
+n8n-logs: ## Tail n8n logs
+	$(DOCKER_COMPOSE) --profile n8n logs -f n8n
 
 build: ## Rebuild all Docker images
 	$(DOCKER_COMPOSE) build --no-cache

@@ -77,6 +77,7 @@
     { href: '/skills', label: $t('nav.skills'), icon: 'Zap', status: 'dev' },
     { href: '/ai', label: $t('nav.ai'), icon: 'Brain', status: 'dev' },
     { href: '/streaks', label: $t('nav.streaks'), icon: 'Flame', status: 'ready' },
+    { href: '/emails', label: $t('nav.emails'), icon: 'Mail', status: 'ready' },
     { href: '/goals', label: $t('nav.goals'), icon: 'Target', status: 'ready' },
   ] as { href: string; label: string; icon: string; status: NavItemStatus }[];
 

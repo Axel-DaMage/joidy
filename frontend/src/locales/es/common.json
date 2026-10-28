@@ -7,7 +7,28 @@
     "ai": "IA",
     "goals": "Objetivos",
     "streaks": "Rachas",
+    "emails": "Correos",
     "analytics": "Analítica"
+  },
+  "emails": {
+    "title": "Correos",
+    "subtitle": "Bandeja unificada (sincronizada vía n8n)",
+    "searchPlaceholder": "Buscar por asunto, remitente o texto...",
+    "importantOnly": "Importantes",
+    "unreadOnly": "No leídos",
+    "allAccounts": "Todas las cuentas",
+    "markRead": "Marcar leído",
+    "markUnread": "Marcar no leído",
+    "toggleImportant": "Cambiar importancia",
+    "deleted": "Correo eliminado de la vista",
+    "emptyImportant": "Sin correos importantes pendientes",
+    "emptyUnread": "Bandeja al día: cero no leídos",
+    "emptyAll": "Aún no hay correos sincronizados",
+    "emptyNew": "Cuando n8n empuje su primer mensaje aparecerá aquí",
+    "noResults": "Sin resultados para esa búsqueda",
+    "runFailed": "No se pudieron cargar los correos",
+    "unreadBadge": "no leídos",
+    "syncHint": "Los correos llegan automáticamente con el workflow de n8n"
   },
   "common": {
     "save": "Guardar",
