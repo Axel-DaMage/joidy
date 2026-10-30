@@ -3,6 +3,7 @@ from database import get_db
 from fastapi import APIRouter, Depends, HTTPException, Response
 from models.note import Note, NoteLink, NoteTag, Tag, TagCooccurrence
 from pydantic import BaseModel
+from services.gamification_engine import process_event
 from services.response_cache import clear_api_caches, register_cache_clearer, ttl_cache
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -58,6 +59,8 @@ def create_tag(data: TagCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(tag)
     clear_api_caches()
+    if data.parent_id is not None:
+        process_event(db, "topic_connected", {"child_id": tag.id, "parent_id": data.parent_id})
     return {"id": tag.id, "name": tag.name, "parent_id": tag.parent_id}
 
 
@@ -85,9 +88,12 @@ def set_parent(tag_id: int, parent_id: int | None, db: Session = Depends(get_db)
             parent_tag = db.query(Tag).filter(Tag.id == current).first()
             current = parent_tag.parent_id if parent_tag else None
 
+    old_parent_id = tag.parent_id
     tag.parent_id = parent_id
     db.commit()
     clear_api_caches()
+    if parent_id is not None and parent_id != old_parent_id:
+        process_event(db, "topic_connected", {"child_id": tag.id, "parent_id": parent_id})
     return {"id": tag.id, "name": tag.name, "parent_id": tag.parent_id}
 
 
