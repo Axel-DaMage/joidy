@@ -61,8 +61,8 @@
   // ── Data ───────────────────────────────────────────────────────────────────
   let githubConnected = $state(false);
   let githubLoading = $state(false);
-  let githubIssues = $state<{ id: number; number: number; title: string; repo: string; url: string }[]>([]);
-  let githubPRs = $state<{ id: number; number: number; title: string; repo: string; url: string }[]>([]);
+  let githubIssues = $state<{ id: number; number: number; title: string; repo: string; url: string; state?: string }[]>([]);
+  let githubPRs = $state<{ id: number; number: number; title: string; repo: string; url: string; state?: string; merged_at?: string | null }[]>([]);
   let repoColors = $state<Record<string, string>>({});
   let issueStats = $state({ open: 0, total: 0 });
   let prStats = $state({ open: 0, total: 0 });
@@ -78,8 +78,8 @@
     connected: boolean;
     filter: string;
     type: string;
-    issues: { id: number; number: number; title: string; repo: string; url: string }[];
-    prs: { id: number; number: number; title: string; repo: string; url: string }[];
+    issues: { id: number; number: number; title: string; repo: string; url: string; state?: string }[];
+    prs: { id: number; number: number; title: string; repo: string; url: string; state?: string; merged_at?: string | null }[];
     issueStats: { open: number; total: number };
     prStats: { open: number; total: number };
     repoColors: Record<string, string>;
@@ -141,8 +141,8 @@
     githubLoading = true;
     try {
       const [issuesRes, pullsRes] = await Promise.all([
-        api.github.issues(filter, GH_FETCH_LIMIT),
-        api.github.pulls(filter, GH_FETCH_LIMIT),
+        api.github.issues(filter, GH_FETCH_LIMIT, 'all'),
+        api.github.pulls(filter, GH_FETCH_LIMIT, 'all'),
       ]);
       githubIssues = issuesRes.issues || [];
       issueStats = issuesRes.stats || { open: 0, total: 0 };
