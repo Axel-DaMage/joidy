@@ -173,6 +173,7 @@
     justify-content: center;
     font-family: var(--font-mono, monospace);
     font-weight: 300;
+    font-variant-numeric: tabular-nums;
     color: var(--text-primary);
     letter-spacing: 0.04em;
     /* Scales with the dial container (150px ring → ~30px, 220px → ~44px). */

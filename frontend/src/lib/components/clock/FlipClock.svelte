@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { ClockStyleProps } from './types';
+  import { clockSegments } from './segments';
 
   let {
     hours,
@@ -8,19 +9,19 @@
     ampm = null,
     h = 0,
     mode = 'clock',
-    size = 'md',
   }: ClockStyleProps = $props();
 
-  let groups = $derived(
-    mode === 'timer' && h === 0 ? [minutes, seconds] : [hours, minutes, seconds]
-  );
+  let layout = $derived(clockSegments({ hours, minutes, seconds, h }, mode));
+  let ghostHours = $derived(layout.ghostLead > 0);
 </script>
 
-<span class="flip-clock s-{size}">
-  {#each groups as group, gi (gi)}
-    {#if gi > 0}<span class="flip-sep">:</span>{/if}
+<span class="flip-clock">
+  {#each layout.groups as group, gi (gi)}
+    {#if gi > 0}
+      <span class="flip-sep" class:seg-ghost={ghostHours && gi === 1}>:</span>
+    {/if}
     {#each group.split('') as digit, di (`${gi}:${di}`)}
-      <span class="flip-cell">
+      <span class="flip-cell" class:seg-ghost={ghostHours && gi === 0}>
         {#key digit}
           <span class="flip-card">{digit}</span>
         {/key}
@@ -34,26 +35,28 @@
   .flip-clock {
     display: inline-flex;
     align-items: center;
-    gap: 0.08em;
+    gap: 0.04em;
     white-space: nowrap;
   }
   .flip-cell {
     display: inline-flex;
     perspective: 8em;
   }
+  .flip-cell.seg-ghost,
+  .flip-sep.seg-ghost {
+    visibility: hidden;
+  }
   .flip-card {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 0.72em;
+    min-width: 1ch;
     padding: 0.12em 0.08em;
     background: var(--elevated);
     border: 1px solid var(--border);
     border-radius: 0.14em;
-    font-family: var(--font-mono, monospace);
     font-weight: 500;
     color: var(--text-primary);
-    line-height: 1;
     box-shadow: 0 0.06em 0 rgba(0, 0, 0, 0.25);
     animation: flip-in 280ms ease-out;
     transform-origin: center 55%;
@@ -61,24 +64,13 @@
   }
   .flip-sep {
     color: var(--text-muted);
-    font-family: var(--font-mono, monospace);
     margin: 0 0.06em;
   }
   .flip-ampm {
     font-size: 0.45em;
     margin-left: 0.4em;
     color: var(--text-muted);
-    font-family: var(--font-mono, monospace);
     letter-spacing: 0.05em;
-  }
-  .s-sm {
-    font-size: 0.85em;
-  }
-  .s-md {
-    font-size: 1em;
-  }
-  .s-lg {
-    font-size: 1.15em;
   }
 
   @keyframes flip-in {
