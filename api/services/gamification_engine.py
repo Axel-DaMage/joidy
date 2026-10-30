@@ -29,6 +29,7 @@ DEFAULT_XP_TABLE = {
     "tag_added": 3,
     "tag_accepted_ai": 4,
     "topic_connected": 8,
+    "pomodoro_completed": 15,
     "goal_completed": 50,
     "daily_activity": 15,
     "streak_milestone_7": 100,

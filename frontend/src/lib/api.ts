@@ -444,6 +444,8 @@ export const api = {
   gamification: {
     stats: () => req<GamificationStats>('GET', '/gamification/stats'),
     ping: () => req<GamificationResult>('POST', '/gamification/ping'),
+    pomodoro: (data: { duration_minutes: number; pomodoro_id?: string }) =>
+      req<GamificationResult>('POST', '/gamification/pomodoro', data, { silent: true }),
     history: (days = 30) =>
       req<{ date: string; xp: number }[]>('GET', `/gamification/streak-history?days=${days}`),
     events: (limit = 20) =>

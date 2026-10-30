@@ -2,6 +2,7 @@
 streak grace period, plant stages, and the max-XP cap. The engine had only e2e
 tests, so XP-farming (#359) and timezone (#361) bugs went undetected."""
 
+import json
 import sys
 import types
 import unittest
@@ -25,7 +26,7 @@ from services.gamification_engine import (
     _compute_streak,
     process_event,
 )
-from models.gamification import UserStats
+from models.gamification import UserStats, XPEvent
 
 
 class GamificationTestBase(unittest.TestCase):
@@ -78,6 +79,39 @@ class XPAwardingTest(GamificationTestBase):
         self._seed_daily_activity(db)
         result = process_event(db, "nonexistent_event")
         self.assertEqual(result.xp_awarded, 0)
+        db.close()
+
+    def test_pomodoro_completed_awards_15_xp_with_metadata(self):
+        db = self.Session()
+        self._seed_daily_activity(db)
+        result = process_event(
+            db,
+            "pomodoro_completed",
+            {"pomodoro_id": "pom-123", "duration_minutes": 25},
+        )
+        db.commit()
+        self.assertEqual(result.xp_awarded, 15)
+        self.assertEqual(result.total_xp, 15)
+
+        event = db.query(XPEvent).filter(XPEvent.event_type == "pomodoro_completed").one()
+        self.assertEqual(event.xp, 15)
+        self.assertEqual(
+            json.loads(event.metadata_json),
+            {"pomodoro_id": "pom-123", "duration_minutes": 25},
+        )
+        db.close()
+
+    def test_multiple_pomodoros_same_day_all_award(self):
+        db = self.Session()
+        self._seed_daily_activity(db)
+        first = process_event(db, "pomodoro_completed")
+        db.commit()
+        second = process_event(db, "pomodoro_completed")
+        db.commit()
+        # Unlike daily_activity, several pomodoros per day are legitimate.
+        self.assertEqual(first.xp_awarded, 15)
+        self.assertEqual(second.xp_awarded, 15)
+        self.assertEqual(second.total_xp, 30)
         db.close()
 
     def test_daily_activity_idempotent_per_day(self):
