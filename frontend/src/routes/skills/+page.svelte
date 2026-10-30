@@ -1,26 +1,18 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { goto } from '$app/navigation';
   import { api, type Skill, type SkillTree as SkillTreeData } from '$lib/api';
   import { logger } from '$lib/utils/logger';
   import { displayTagName } from '$lib/utils/format';
-  import DynamicIcon from '$lib/components/DynamicIcon.svelte';
-  import { devMode } from '$lib/stores/settings';
+  import BetaBanner from '$lib/components/BetaBanner.svelte';
   import { openShare } from '$lib/stores/shareAchievement';
   import { Search, X, Share2 } from 'lucide-svelte';
   import { t } from 'svelte-i18n';
 
-  // Redirect to home when dev mode is off — dev routes should not be
-  // accessible via direct URL in production (#649).
-  $effect(() => {
-    if (!$devMode) goto('/');
-  });
-
   // Lazy-load the heavy SkillTree (236 lines, pulls in d3) so it is split
-  // into a separate chunk and only downloaded when dev mode is on (#347).
+  // into a separate chunk and only downloaded when the page is opened (#347).
   let SkillTree = $state<typeof import('$lib/components/SkillTree.svelte').default | null>(null);
   $effect(() => {
-    if ($devMode && !SkillTree) {
+    if (!SkillTree) {
       import('$lib/components/SkillTree.svelte').then(m => SkillTree = m.default);
     }
   });
@@ -78,8 +70,8 @@
 </script>
 
 
-{#if $devMode}
 <div class="skills-page">
+  <BetaBanner />
   <div class="skills-header">
     <div>
       <h3>{$t('skills.treeTitle')}</h3>
@@ -187,15 +179,6 @@
     {/each}
   </div>
 </div>
-{:else}
-<div class="construction-page">
-  <div class="construction-box">
-    <DynamicIcon name="Zap" size={48} />
-    <h3>{$t('skills.construction')}</h3>
-    <p>{$t('skills.constructionHint')}</p>
-  </div>
-</div>
-{/if}
 
 <style>
   .skills-page {
@@ -457,37 +440,6 @@
   .legend-dot[data-level='expert']     { border-color: var(--accent); }
   .legend-dot[data-level='master']     { background: var(--accent); border-color: var(--accent); }
 
-  .construction-page {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-    width: 100%;
-  }
-
-  .construction-box {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 12px;
-    color: var(--text-muted);
-    text-align: center;
-    padding: 40px;
-  }
-
-  .construction-box h3 {
-    font-size: 18px;
-    font-weight: 600;
-    color: var(--text-secondary);
-    margin: 0;
-  }
-
-  .construction-box p {
-    font-size: 13px;
-    margin: 0;
-    max-width: 320px;
-  }
-
   /* ── Responsive ── */
   @media (max-width: 768px) {
     .skills-header {
@@ -524,14 +476,6 @@
       gap: var(--s3);
       padding: var(--s2) var(--s3);
       flex-wrap: wrap;
-    }
-
-    .construction-box {
-      padding: var(--s4);
-    }
-
-    .construction-box p {
-      max-width: 100%;
     }
   }
 

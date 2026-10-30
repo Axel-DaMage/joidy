@@ -45,7 +45,8 @@
     "saving": "Guardando...",
     "saved": "Guardado",
     "tasks": "tareas",
-    "level": "NVL"
+    "level": "NVL",
+    "betaNotice": "Funcionalidad beta: algunas características están en desarrollo y pueden cambiar."
   },
   "status": {
     "offline": "Sin conexión",
