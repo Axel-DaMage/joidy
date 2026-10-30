@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { ClockStyleProps } from './types';
+  import { clockSegments, segmentText } from './segments';
 
   let {
     hours,
@@ -8,40 +9,30 @@
     ampm = null,
     h = 0,
     mode = 'clock',
-    size = 'md',
   }: ClockStyleProps = $props();
 
-  // Spec: minimalist clock shows HH:MM (no seconds, no decoration).
-  let text = $derived(
-    mode === 'clock'
-      ? `${hours}:${minutes}`
-      : h === 0
-        ? `${minutes}:${seconds}`
-        : `${hours}:${minutes}:${seconds}`
-  );
+  let text = $derived(segmentText(clockSegments({ hours, minutes, seconds, h }, mode)));
 </script>
 
-<span class="minimal-clock s-{size}">
-  {text}{#if ampm}<span class="ampm">{ampm}</span>{/if}
+<span class="minimal-clock">
+  {#if mode === 'clock'}
+    <!-- Spec: minimalist clock shows HH:MM (no seconds, no decoration). -->
+    {hours}:{minutes}
+  {:else}
+    {#if text.ghost}<span class="seg-ghost" aria-hidden="true">{text.ghost}</span>{/if}{text.body}
+  {/if}
+  {#if ampm}<span class="ampm">{ampm}</span>{/if}
 </span>
 
 <style>
   .minimal-clock {
-    font-family: var(--font-sans, sans-serif);
     font-weight: 200;
     color: var(--text-primary);
-    letter-spacing: 0.12em;
-    line-height: 1;
+    letter-spacing: 0.04em;
     white-space: nowrap;
   }
-  .s-sm {
-    font-size: 0.85em;
-  }
-  .s-md {
-    font-size: 1em;
-  }
-  .s-lg {
-    font-size: 1.15em;
+  .seg-ghost {
+    visibility: hidden;
   }
   .ampm {
     font-size: 0.45em;

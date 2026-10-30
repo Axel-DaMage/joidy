@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { ClockStyleProps } from './types';
+  import { clockSegments, segmentText } from './segments';
 
   let {
     hours,
@@ -8,16 +9,15 @@
     ampm = null,
     h = 0,
     mode = 'clock',
-    size = 'md',
   }: ClockStyleProps = $props();
 
-  let text = $derived(
-    mode === 'timer' && h === 0 ? `${minutes}:${seconds}` : `${hours}:${minutes}:${seconds}`
-  );
+  let text = $derived(segmentText(clockSegments({ hours, minutes, seconds, h }, mode)));
 </script>
 
-<span class="material-clock s-{size}">
-  <span class="mc-time">{text}</span>
+<span class="material-clock">
+  <span class="mc-time">
+    {#if text.ghost}<span class="seg-ghost" aria-hidden="true">{text.ghost}</span>{/if}{text.body}
+  </span>
   {#if ampm}<span class="mc-ampm">{ampm}</span>{/if}
 </span>
 
@@ -26,36 +26,28 @@
     display: inline-flex;
     align-items: baseline;
     gap: 0.3em;
-    padding: 0.4em 0.7em;
+    padding: 0.2em 0.4em;
     background: var(--elevated);
     border: 1px solid var(--border);
-    border-radius: var(--r, 8px);
+    border-radius: 0.2em;
     box-shadow:
       0 2px 4px rgba(0, 0, 0, 0.22),
       0 1px 2px rgba(0, 0, 0, 0.18);
     white-space: nowrap;
   }
   .mc-time {
-    font-family: var(--font-sans, sans-serif);
     font-weight: 700;
     color: var(--text-primary);
-    letter-spacing: 0.02em;
-    line-height: 1;
-    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+  .seg-ghost {
+    visibility: hidden;
   }
   .mc-ampm {
     font-size: 0.5em;
     font-weight: 600;
     color: var(--xp);
     letter-spacing: 0.06em;
-  }
-  .s-sm {
-    font-size: 0.85em;
-  }
-  .s-md {
-    font-size: 1em;
-  }
-  .s-lg {
-    font-size: 1.15em;
   }
 </style>
