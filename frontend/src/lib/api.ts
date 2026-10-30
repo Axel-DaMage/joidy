@@ -655,7 +655,7 @@ export const api = {
   github: {
     status: () =>
       req<{ connected: boolean; username: string | null }>('GET', '/integrations/github/status'),
-    issues: (filter: string = 'all', perPage: number = 30) =>
+    issues: (filter: string = 'all', perPage: number = 30, state: string = 'all') =>
       req<{
         issues: {
           id: number;
@@ -669,8 +669,8 @@ export const api = {
         }[];
         stats: { total: number; open: number; closed: number };
         filter: string;
-      }>('GET', `/integrations/github/issues?filter=${filter}&per_page=${perPage}`),
-    pulls: (filter: string = 'all', perPage: number = 30) =>
+      }>('GET', `/integrations/github/issues?filter=${filter}&per_page=${perPage}&state=${state}`),
+    pulls: (filter: string = 'all', perPage: number = 30, state: string = 'all') =>
       req<{
         pulls: {
           id: number;
@@ -680,12 +680,13 @@ export const api = {
           url: string;
           state: string;
           draft: boolean;
+          merged_at?: string | null;
           updated_at: string;
           author?: string;
         }[];
         stats: { total: number; open: number; closed: number; draft: number };
         filter: string;
-      }>('GET', `/integrations/github/pulls?filter=${filter}&per_page=${perPage}`),
+      }>('GET', `/integrations/github/pulls?filter=${filter}&per_page=${perPage}&state=${state}`),
     repos: () =>
       req<{ repos: { id: number; name: string; full_name: string; color: string }[] }>(
         'GET',

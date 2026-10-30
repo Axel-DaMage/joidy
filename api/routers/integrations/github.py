@@ -449,6 +449,7 @@ async def get_my_pulls(
                     "url": p["html_url"],
                     "state": p["state"],
                     "draft": p.get("draft", False),
+                    "merged_at": p.get("merged_at"),
                     "author": p.get("user", {}).get("login", ""),
                     "created_at": p.get("created_at"),
                     "updated_at": p["updated_at"],

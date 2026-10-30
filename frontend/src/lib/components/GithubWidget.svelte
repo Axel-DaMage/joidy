@@ -21,6 +21,26 @@
   export let onSetFilter: (filter: string) => void;
   export let onSetType: (type: string) => void;
 
+  // #1094 — filtros de estado y búsqueda, locales al widget (no se persisten)
+  let ghState = 'all';
+  let ghSearch = '';
+
+  $: visiblePRs = githubPRs.filter((pr) => ghMatchesState(pr, ghState) && ghMatchesSearch(pr, ghSearch));
+  $: visibleIssues = githubIssues.filter((issue) => ghMatchesState(issue, ghState) && ghMatchesSearch(issue, ghSearch));
+
+  function ghMatchesState(item: { state?: string; merged_at?: string | null }, state: string): boolean {
+    if (state === 'open') return item.state === 'open';
+    if (state === 'merged') return !!item.merged_at;
+    if (state === 'closed') return item.state === 'closed' && !item.merged_at;
+    return true;
+  }
+
+  function ghMatchesSearch(item: { title: string; repo: string; number: number }, query: string): boolean {
+    const q = query.trim().toLowerCase().replace(/^#+/, '');
+    if (!q) return true;
+    return item.title.toLowerCase().includes(q) || item.repo.toLowerCase().includes(q) || String(item.number).includes(q);
+  }
+
   export let activeTab: 'github' | 'recent-notes' = 'github';
   export let onTabChange: ((tab: 'github' | 'recent-notes') => void) | undefined = undefined;
   export let recentNotes: Note[] = [];
@@ -75,16 +95,33 @@
   </div>
 
   {#if githubConnected && activeTab === 'github'}
-    <div class="gh-filters">
-      <div class="gh-filter">
-        <button class="filter-btn" class:active={ghType === 'all'} onclick={() => onSetType('all')}>{$t('widgets.ghAll')}</button>
-        <button class="filter-btn" class:active={ghType === 'issues'} onclick={() => onSetType('issues')}>{$t('widgets.ghIssues')}</button>
-        <button class="filter-btn" class:active={ghType === 'prs'} onclick={() => onSetType('prs')}>PRs</button>
+    <div class="gh-filters-stack">
+      <div class="gh-filters">
+        <div class="gh-filter">
+          <button class="filter-btn" class:active={ghType === 'all'} onclick={() => onSetType('all')}>{$t('widgets.ghAll')}</button>
+          <button class="filter-btn" class:active={ghType === 'issues'} onclick={() => onSetType('issues')}>{$t('widgets.ghIssues')}</button>
+          <button class="filter-btn" class:active={ghType === 'prs'} onclick={() => onSetType('prs')}>PRs</button>
+        </div>
+        <span class="gh-filter-divider">|</span>
+        <div class="gh-filter">
+          <button class="filter-btn" class:active={ghFilter === 'created'} onclick={() => onSetFilter('created')}>{$t('widgets.ghCreated')}</button>
+          <button class="filter-btn" class:active={ghFilter === 'assigned'} onclick={() => onSetFilter('assigned')}>{$t('widgets.ghAssigned')}</button>
+        </div>
       </div>
-      <span class="gh-filter-divider">|</span>
-      <div class="gh-filter">
-        <button class="filter-btn" class:active={ghFilter === 'created'} onclick={() => onSetFilter('created')}>{$t('widgets.ghCreated')}</button>
-        <button class="filter-btn" class:active={ghFilter === 'assigned'} onclick={() => onSetFilter('assigned')}>{$t('widgets.ghAssigned')}</button>
+      <div class="gh-filters">
+        <div class="gh-filter">
+          <button class="filter-btn" class:active={ghState === 'all'} onclick={() => (ghState = 'all')}>{$t('widgets.ghStateAll')}</button>
+          <button class="filter-btn" class:active={ghState === 'open'} onclick={() => (ghState = 'open')}>{$t('widgets.ghStateOpen')}</button>
+          <button class="filter-btn" class:active={ghState === 'closed'} onclick={() => (ghState = 'closed')}>{$t('widgets.ghStateClosed')}</button>
+          <button class="filter-btn" class:active={ghState === 'merged'} onclick={() => (ghState = 'merged')}>{$t('widgets.ghStateMerged')}</button>
+        </div>
+        <input
+          class="gh-search"
+          type="search"
+          placeholder={$t('widgets.ghSearch')}
+          aria-label={$t('widgets.ghSearch')}
+          bind:value={ghSearch}
+        />
       </div>
     </div>
   {:else}
@@ -108,7 +145,7 @@
     {:else if githubIssues.length > 0 || githubPRs.length > 0}
       <div class="github-list">
         {#if ghType === 'all' || ghType === 'prs'}
-          {#each githubPRs as pr (pr.id)}
+          {#each visiblePRs as pr (pr.id)}
             {@const prInfo = getPrBadgeInfo(pr)}
             <a href={pr.url} target="_blank" rel="noopener" class="gh-item" style="--repo-color: {repoColors[pr.repo] || accentColor}" title="{pr.repo} #{pr.number} — {pr.title}">
               <span class="gh-identity">
@@ -120,7 +157,7 @@
           {/each}
         {/if}
         {#if ghType === 'all' || ghType === 'issues'}
-          {#each githubIssues as issue (issue.id)}
+          {#each visibleIssues as issue (issue.id)}
             {@const issueInfo = getIssueInfo(issue)}
             <a href={issue.url} target="_blank" rel="noopener" class="gh-item" style="--repo-color: {repoColors[issue.repo] || accentColor}" title="{issue.repo} #{issue.number} — {issue.title}">
               <span class="gh-identity">
@@ -130,6 +167,9 @@
               <span class="gh-badge-icon"><DynamicIcon name={issueInfo.icon} size={14} color={issueInfo.color} /></span>
             </a>
           {/each}
+        {/if}
+        {#if visiblePRs.length === 0 && visibleIssues.length === 0}
+          <div class="empty-state">{$t('widgets.ghNoResults')}</div>
         {/if}
       </div>
     {:else}
@@ -240,12 +280,31 @@
   .gh-filter {
     display: flex; gap: 6px;
   }
+  .gh-filters-stack {
+    display: flex; flex-direction: column; gap: 4px;
+    align-items: flex-end;
+    min-width: 0;
+  }
   .gh-filters {
     display: flex; flex-direction: row; gap: 8px; align-items: center; flex-wrap: nowrap;
   }
   .gh-filter-divider {
     color: var(--border); font-size: 12px;
   }
+  .gh-search {
+    height: 22px;
+    min-width: 0;
+    flex: 1 1 90px;
+    max-width: 150px;
+    font-size: 10px;
+    padding: 2px 8px;
+    border: 1px solid var(--border-light);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-primary);
+  }
+  .gh-search::placeholder { color: var(--text-muted); }
+  .gh-search:focus { outline: none; border-color: var(--accent); }
   .filter-btn {
     font-size: 10px; padding: 2px 8px; border-radius: 4px;
     background: transparent; border: 1px solid var(--border-light);
@@ -353,6 +412,10 @@
       flex-wrap: wrap;
       justify-content: center;
     }
+    .gh-filters-stack {
+      align-items: center;
+      width: 100%;
+    }
     .filter-btn {
       min-width: 48px;
     }
@@ -369,6 +432,15 @@
     .gh-filters {
       flex-direction: column;
       gap: var(--s1);
+      align-items: stretch;
+      width: 100%;
+    }
+    .gh-filters-stack {
+      align-items: stretch;
+    }
+    .gh-search {
+      max-width: none;
+      width: 100%;
     }
     .filter-btn {
       width: 100%;
