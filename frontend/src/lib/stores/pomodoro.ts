@@ -1,4 +1,6 @@
 import { writable, get, derived } from 'svelte/store';
+import { api } from '$lib/api';
+import { logger } from '$lib/utils/logger';
 import { loadUserSettings, patchUserSettings } from '$lib/utils/userSettings';
 import { showNotification } from './gamification';
 
@@ -155,16 +157,34 @@ function tick() {
   if (currentSec > 0) {
     secondsLeft.set(currentSec - 1);
   } else {
-    advance();
+    advance(true);
     playBeep();
   }
 }
 
-export function advance() {
+function newPomodoroId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `pom-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function awardPomodoroXp(durationMinutes: number) {
+  api.gamification
+    .pomodoro({ duration_minutes: durationMinutes, pomodoro_id: newPomodoroId() })
+    .catch((e: unknown) => {
+      logger.warn('[pomodoro] No se pudo registrar el XP de la sesión:', e);
+    });
+}
+
+export function advance(natural = false) {
   stopTimer();
   const currentPhase = get(phase);
 
   if (currentPhase === 'work') {
+    if (natural) {
+      awardPomodoroXp(get(workMins));
+    }
     const done = get(pomodorosDone) + 1;
     pomodorosDone.set(done);
     phase.set(done % 4 === 0 ? 'longBreak' : 'break');
