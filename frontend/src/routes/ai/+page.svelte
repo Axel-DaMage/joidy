@@ -1,16 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { goto } from '$app/navigation';
   import { api } from '$lib/api';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
-  import { devMode } from '$lib/stores/settings';
+  import BetaBanner from '$lib/components/BetaBanner.svelte';
   import { t } from 'svelte-i18n';
-
-  // Redirect to home when dev mode is off — dev routes should not be
-  // accessible via direct URL in production (#649).
-  $effect(() => {
-    if (!$devMode) goto('/');
-  });
 
   let usage = $state<{ ai_enabled: boolean; estimated_cost_usd: number } | null>(null);
   let loadingUsage = $state(true);
@@ -27,13 +20,13 @@
     }
   });
 
-  // Lazy-load DeadLetterQueue — only shown in dev mode, so defer the chunk
-  // until the user actually enables it (#347).
+  // Lazy-load DeadLetterQueue — it lives inside a collapsed <details>, so
+  // defer the chunk until it is actually rendered (#347).
   let DeadLetterQueue = $state<typeof import('$lib/components/DeadLetterQueue.svelte').default | null>(
     null
   );
   $effect(() => {
-    if ($devMode && !DeadLetterQueue) {
+    if (!DeadLetterQueue) {
       import('$lib/components/DeadLetterQueue.svelte').then((m) => (DeadLetterQueue = m.default));
     }
   });
@@ -50,6 +43,7 @@
 </script>
 
 <div class="ai-page">
+  <BetaBanner />
   <div class="ai-header">
     <h2><DynamicIcon name="Brain" /> {$t('ai.title')}</h2>
     <div class="ai-status">
@@ -77,35 +71,33 @@
     {/if}
   </div>
 
-  {#if $devMode}
-    <details class="dev-section">
-      <summary>{$t('ai.devSection')}</summary>
-      <div class="dev-grid">
-        <div class="dev-card">
-          <h3><DynamicIcon name="Activity" /> {$t('ai.serviceStatus')}</h3>
-          {#if usage}
-            <p class="stat">
-              <span class="stat-label">{$t('ai.apiKeyConfigured')}</span>
-              <span
-                class="stat-value"
-                class:enabled={usage.ai_enabled}
-                class:disabled={!usage.ai_enabled}
-              >
-                {usage.ai_enabled ? $t('ai.yes') : $t('ai.no')}
-              </span>
-            </p>
-            <p class="stat">
-              <span class="stat-label">{$t('ai.estimatedCost')}</span>
-              <span class="stat-value">${usage.estimated_cost_usd.toFixed(4)} USD</span>
-            </p>
-          {:else}
-            <p class="muted">{$t('ai.statusUnavailable')}</p>
-          {/if}
-        </div>
-        {#if DeadLetterQueue}<DeadLetterQueue />{/if}
+  <details class="dev-section">
+    <summary>{$t('ai.devSection')}</summary>
+    <div class="dev-grid">
+      <div class="dev-card">
+        <h3><DynamicIcon name="Activity" /> {$t('ai.serviceStatus')}</h3>
+        {#if usage}
+          <p class="stat">
+            <span class="stat-label">{$t('ai.apiKeyConfigured')}</span>
+            <span
+              class="stat-value"
+              class:enabled={usage.ai_enabled}
+              class:disabled={!usage.ai_enabled}
+            >
+              {usage.ai_enabled ? $t('ai.yes') : $t('ai.no')}
+            </span>
+          </p>
+          <p class="stat">
+            <span class="stat-label">{$t('ai.estimatedCost')}</span>
+            <span class="stat-value">${usage.estimated_cost_usd.toFixed(4)} USD</span>
+          </p>
+        {:else}
+          <p class="muted">{$t('ai.statusUnavailable')}</p>
+        {/if}
       </div>
-    </details>
-  {/if}
+      {#if DeadLetterQueue}<DeadLetterQueue />{/if}
+    </div>
+  </details>
 </div>
 
 <style>

@@ -10,6 +10,11 @@ test.describe('Skills — page structure', () => {
     await expect(page.locator('text=/árbol de habilidades/i')).toBeVisible();
   });
 
+  test('beta banner is visible', async ({ page }) => {
+    await authGoto(page, '/skills');
+    await expect(page.locator('.beta-banner')).toBeVisible();
+  });
+
   test('skill count is displayed', async ({ page }) => {
     await authGoto(page, '/skills');
     // "0 habilidades desbloqueadas" — use .first() to avoid strict mode violation

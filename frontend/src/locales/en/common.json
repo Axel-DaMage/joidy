@@ -45,7 +45,8 @@
     "saving": "Saving...",
     "saved": "Saved",
     "tasks": "tasks",
-    "level": "LVL"
+    "level": "LVL",
+    "betaNotice": "Beta feature: some functionality is in development and may change."
   },
   "status": {
     "offline": "Offline",

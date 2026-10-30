@@ -10,6 +10,11 @@ test.describe('AI — page structure', () => {
     await expect(page.locator('text=/inteligencia artificial/i')).toBeVisible();
   });
 
+  test('beta banner is visible', async ({ page }) => {
+    await authGoto(page, '/ai');
+    await expect(page.locator('.beta-banner')).toBeVisible();
+  });
+
   test('IA active status is shown', async ({ page }) => {
     await authGoto(page, '/ai');
     await expect(page.locator('text=/IA activa/i')).toBeVisible({ timeout: 5000 });
