@@ -84,7 +84,10 @@
     return [...result].sort((a, b) => {
       const aPinned = pinned.has(a.id) ? 0 : 1;
       const bPinned = pinned.has(b.id) ? 0 : 1;
-      return aPinned - bPinned;
+      if (aPinned !== bPinned) return aPinned - bPinned;
+      const prio = (b.priority ?? 0) - (a.priority ?? 0);
+      if (prio !== 0) return prio;
+      return (b.created_at ?? '').localeCompare(a.created_at ?? '');
     });
   }
 

@@ -39,8 +39,21 @@ router = APIRouter(prefix="/goals", tags=["goals"])
 
 
 
+GOAL_PRIORITY_MAX = 99
+
+
+def _validate_priority_range(v: int) -> int:
+    if not 0 <= v <= GOAL_PRIORITY_MAX:
+        raise ValueError(f"Priority must be between 0 and {GOAL_PRIORITY_MAX}")
+    return v
+
+
 class GoalCreate(BaseModel):
-    """Schema for creating a new goal."""
+    """Schema for creating a new goal.
+
+    ``priority`` uses a higher-wins scale: 0 = no explicit priority, higher
+    numbers float to the top of every goal listing (sorted DESC, #1097).
+    """
     title: str
     description: str = ""
     temporality: GoalTemporality = GoalTemporality.ONEOFF
@@ -55,6 +68,7 @@ class GoalCreate(BaseModel):
     tag_id: int | None = None
     parent_id: int | None = None
     max_assignment_days: int | None = None
+    priority: int = 0
 
     @field_validator("title")
     @classmethod
@@ -83,6 +97,11 @@ class GoalCreate(BaseModel):
     def validate_description(cls, v: str) -> str:
         return sanitize_content(v)
 
+    @field_validator("priority")
+    @classmethod
+    def validate_priority(cls, v: int) -> int:
+        return _validate_priority_range(v)
+
 
 class GoalUpdate(BaseModel):
     title: str | None = None
@@ -100,6 +119,7 @@ class GoalUpdate(BaseModel):
     tag_id: int | None = None
     max_assignment_days: int | None = None
     content: str | None = None
+    priority: int | None = None
 
     @field_validator("title")
     @classmethod
@@ -145,6 +165,13 @@ class GoalUpdate(BaseModel):
             return v
         return sanitize_content(v)
 
+    @field_validator("priority")
+    @classmethod
+    def validate_priority(cls, v: int | None) -> int | None:
+        if v is None:
+            return v
+        return _validate_priority_range(v)
+
 
 
 class GoalContent(BaseModel):
@@ -187,6 +214,7 @@ def _serialize_goal(goal: Goal, db: Session, precalculated_progress: float | Non
         "tag_id": goal.tag_id,
         "parent_id": goal.parent_id,
         "max_assignment_days": goal.max_assignment_days,
+        "priority": goal.priority,
         "progress_pct": min(100, int(progress / max(goal.target_value, 1) * 100)),
         "pending_removal": goal.pending_removal,
         "is_completed": goal.is_completed,
@@ -205,7 +233,7 @@ def list_goals(
     evaluate_active_goals(db)
     goals = (
         db.query(Goal)
-        .order_by(Goal.is_completed, Goal.created_at.desc())
+        .order_by(Goal.is_completed, Goal.priority.desc(), Goal.created_at.desc())
         .offset(skip)
         .limit(limit)
         .all()
@@ -303,6 +331,39 @@ def update_goal(goal_id: int, data: GoalUpdate, db: Session = Depends(get_db)):
                 db.commit()
 
     return _serialize_goal(goal, db)
+
+
+class GoalSortItem(BaseModel):
+    id: int
+    priority: int
+
+    @field_validator("priority")
+    @classmethod
+    def validate_priority(cls, v: int) -> int:
+        return _validate_priority_range(v)
+
+
+class GoalSortRequest(BaseModel):
+    items: list[GoalSortItem]
+
+
+@router.patch("/sort")
+def sort_goals(data: GoalSortRequest, db: Session = Depends(get_db)):
+    ids = [item.id for item in data.items]
+    if len(ids) != len(set(ids)):
+        raise HTTPException(status_code=422, detail="Duplicate goal ids in sort payload")
+
+    goals = db.query(Goal).filter(Goal.id.in_(ids)).all() if ids else []
+    found_ids = {g.id for g in goals}
+    missing = [gid for gid in ids if gid not in found_ids]
+    if missing:
+        raise HTTPException(status_code=404, detail=f"Goals not found: {missing}")
+
+    priority_by_id = {item.id: item.priority for item in data.items}
+    for goal in goals:
+        goal.priority = priority_by_id[goal.id]
+    db.commit()
+    return {"updated": len(goals)}
 
 
 

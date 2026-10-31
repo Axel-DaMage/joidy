@@ -3,6 +3,7 @@
 import sys
 import types
 import unittest
+import unittest.mock
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import create_engine, text
@@ -255,6 +256,38 @@ class TestGoalCreationNoDuplicates(GoalServiceTestBase):
             goals = db.query(Goal).filter(Goal.title == "Single Goal Test").all()
             self.assertEqual(len(goals), 1)
             self.assertEqual(goals[0].id, result["id"])
+
+
+class TestSnowballPriorityCarryOver(GoalServiceTestBase):
+    def test_snowball_recreate_keeps_priority(self) -> None:
+        from services.goal_service import evaluate_active_goals
+
+        with self.Session() as db:
+            goal = Goal(
+                title="Snowball Goal",
+                temporality=GoalTemporality.DAILY,
+                state=GoalState.ACTIVE,
+                fail_config=GoalFailConfig.SNOWBALL,
+                target_value=5.0,
+                current_value=0.0,
+                priority=4,
+                created_at=datetime.now(timezone.utc) - timedelta(days=1),
+            )
+            db.add(goal)
+            db.commit()
+
+            with unittest.mock.patch(
+                "services.joidy_vault_writer.get_objectives_dir", return_value=None
+            ):
+                evaluate_active_goals(db)
+
+            spawned = (
+                db.query(Goal)
+                .filter(Goal.title == "Snowball Goal", Goal.id != goal.id)
+                .one()
+            )
+            self.assertEqual(spawned.state, GoalState.ACTIVE)
+            self.assertEqual(spawned.priority, 4)
 
 
 if __name__ == "__main__":

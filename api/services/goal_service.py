@@ -303,6 +303,7 @@ def _process_goal_failure(db: Session, goal: Goal, now: datetime, progress: floa
             note_id=goal.note_id,
             tag_id=goal.tag_id,
             parent_id=goal.parent_id or goal.id,
+            priority=goal.priority,
         )
         GoalRepository(db).add(new_goal)
     else:
