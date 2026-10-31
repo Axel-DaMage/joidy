@@ -67,62 +67,7 @@ jobs:
             git push
           }
 
-  aur:
-    name: AUR
-    runs-on: ubuntu-latest
-    if: github.event_name == 'release' || inputs.version != ''
-    steps:
-      - name: Update AUR PKGBUILD
-        run: |
-          VERSION="${{ inputs.version || github.ref_name }}"
-          PKGREL="${{ inputs.pkgrel || '1' }}"
-          VERSION_CLEAN="${VERSION#v}"
-          VERSION_PKGBUILD="$(echo "${VERSION_CLEAN}" | sed 's/-/_/g')"
-          SHA=$(curl -sL "https://github.com/Axel-DaMage/joidy/archive/refs/tags/${VERSION}.tar.gz" | sha256sum | cut -d' ' -f1)
-          mkdir -p ~/.ssh
-          echo "${{ secrets.AUR_SSH_KEY }}" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan aur.archlinux.org >> ~/.ssh/known_hosts
-          git clone ssh://aur@aur.archlinux.org/joidy.git
-          cd joidy
-          git checkout -B master origin/master
-          {
-            echo '# Maintainer: Joidy App <https://github.com/Axel-DaMage/joidy>'
-            echo "pkgname=joidy"
-            echo "pkgver=${VERSION_PKGBUILD}"
-            echo "_tag=${VERSION_CLEAN}"
-            echo "pkgrel=${PKGREL}"
-            echo 'pkgdesc="Personal knowledge management with gamification"'
-            echo "arch=('any')"
-            echo 'url="https://joidy-web.vercel.app"'
-            echo "license=('GPL3')"
-            echo "depends=('docker')"
-            echo 'source=("https://github.com/Axel-DaMage/joidy/archive/v${_tag}.tar.gz")'
-            echo "sha256sums=('${SHA}')"
-            echo ""
-            echo "package() {"
-            echo '  cd "${srcdir}/joidy-${_tag}"'
-            echo '  install -Dm755 scripts/joidy.sh "${pkgdir}/usr/bin/joidy"'
-            echo '  install -Dm644 docker-compose.yml "${pkgdir}/usr/share/joidy/docker-compose.yml"'
-            echo '  install -Dm644 .env.example "${pkgdir}/usr/share/joidy/.env.example"'
-            echo '  install -Dm644 /dev/stdin "${pkgdir}/etc/joidy/path" <<<"/usr/share/joidy"'
-            echo "}"
-          } > PKGBUILD
-          {
-            echo "pkgbase = joidy"
-            echo "pkgdesc = Personal knowledge management with gamification"
-            echo "pkgver = ${VERSION_PKGBUILD}"
-            echo "pkgrel = ${PKGREL}"
-            echo "url = https://joidy-web.vercel.app"
-            echo "arch = any"
-            echo "license = GPL3"
-            echo "depends = docker"
-            echo "source = https://github.com/Axel-DaMage/joidy/archive/${VERSION}.tar.gz"
-            echo "sha256sums = ${SHA}"
-            echo "pkgname = joidy"
-          } > .SRCINFO
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          git add PKGBUILD .SRCINFO
-          git commit -m "update to ${VERSION}"
-          git push origin master
+  # NOTE: AUR publishing lives in aur-publish.yml (release + workflow_dispatch).
+  # It used to be duplicated here and both jobs raced on the same AUR repo —
+  # the loser's push was rejected non-fast-forward and the release showed a
+  # spurious failure (v1.1.0-beta.6). Keep AUR updates in ONE place.
