@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 
 import httpx
 from config import settings
-from logging_config import get_correlation_id, set_correlation_id
+from logging_config import set_correlation_id
 
 logger = logging.getLogger(__name__)
 
@@ -58,9 +58,7 @@ async def write_joidy_files():
             )
 
             # If any response is 401, refresh token and retry once
-            need_retry = any(
-                isinstance(r, httpx.Response) and r.status_code == 401 for r in responses
-            )
+            need_retry = any(isinstance(r, httpx.Response) and r.status_code == 401 for r in responses)
             if need_retry:
                 logger.warning("[writer] Auth token expired, refreshing...")
                 _auth_token = None
