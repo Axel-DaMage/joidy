@@ -15,6 +15,7 @@ from middleware.metrics import MetricsMiddleware
 from middleware.rate_limit import RateLimitMiddleware
 from middleware.request_id import RequestIdMiddleware
 from routers import (
+    achievements,
     ai,
     analytics,
     auth,
@@ -220,6 +221,7 @@ app.include_router(tags.router, dependencies=[Depends(get_current_user)])
 app.include_router(skills.router, dependencies=[Depends(get_current_user)])
 app.include_router(goals.router, dependencies=[Depends(get_current_user)])
 app.include_router(gamification.router, dependencies=[Depends(get_current_user)])
+app.include_router(achievements.router, dependencies=[Depends(get_current_user)])
 app.include_router(personal_streaks.router, dependencies=[Depends(get_current_user)])
 app.include_router(push.router, dependencies=[Depends(get_current_user)])
 app.include_router(github.router, dependencies=[Depends(get_current_user)])
