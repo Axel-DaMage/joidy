@@ -139,4 +139,21 @@ describe('GithubWidget — filtros de estado y búsqueda (#1094)', () => {
     expect(container.querySelectorAll('.gh-item').length).toBe(0);
     expect(container.querySelector('.github-list .empty-state')).not.toBeNull();
   });
+
+  // #1164 — ghState/ghSearch son props bindeables: el dashboard las restaura
+  // de UserSettings y el widget debe respetarlas al montar.
+  it('respeta ghState y ghSearch restaurados por el padre', () => {
+    const { container } = render(GithubWidget, {
+      githubConnected: true,
+      githubIssues: ISSUES,
+      githubPRs: PRS,
+      ghState: 'open',
+      ghSearch: 'login',
+      onSetFilter: vi.fn(),
+      onSetType: vi.fn(),
+    });
+    const items = container.querySelectorAll('.gh-item');
+    expect(items.length).toBe(1);
+    expect(items[0].getAttribute('href')).toContain('/issues/1');
+  });
 });

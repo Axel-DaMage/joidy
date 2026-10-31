@@ -8,6 +8,10 @@ export interface UserSettings {
     moduleId?: string;
     panelWidth?: number;
     activityTab?: 'github' | 'recent-notes';
+    githubFilter?: string;
+    githubType?: string;
+    githubState?: string;
+    githubSearch?: string;
   };
   pomodoro?: {
     workMins?: number;
