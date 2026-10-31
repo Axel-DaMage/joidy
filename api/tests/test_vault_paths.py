@@ -20,9 +20,7 @@ class TestNormalizeSourcePath(unittest.TestCase):
         env = {"OBSIDIAN_VAULT_PATH": "/home/user/ObsidianVault"}
         self.env_patch = patch("services.vault_paths.read_env", return_value=env)
         self.env_patch.start()
-        self.settings_patch = patch(
-            "services.vault_paths.settings.obsidian_vault_path", "/vault"
-        )
+        self.settings_patch = patch("services.vault_paths.settings.obsidian_vault_path", "/vault")
         self.settings_patch.start()
 
     def tearDown(self) -> None:

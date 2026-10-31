@@ -138,7 +138,7 @@ class SupervisorTest(unittest.TestCase):
         # MAX_RESTARTS retries → MAX_RESTARTS sleep calls.
         self.assertEqual(len(delays), MAX_RESTARTS)
         expected = INITIAL_BACKOFF
-        for i, d in enumerate(delays):
+        for d in delays:
             self.assertEqual(d, expected)
             expected = min(expected * 2, MAX_BACKOFF)
 

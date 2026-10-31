@@ -9,9 +9,7 @@ def test_strava_auth_url_unconfigured(client):
 
 
 def test_strava_auth_url_configured(client, monkeypatch):
-    monkeypatch.setattr(
-        "services.strava_service.settings.strava_client_id", "strava-client-id"
-    )
+    monkeypatch.setattr("services.strava_service.settings.strava_client_id", "strava-client-id")
     monkeypatch.setattr(
         "services.strava_service.settings.strava_redirect_uri",
         "http://localhost:8000/integrations/strava/callback",
@@ -35,12 +33,8 @@ def test_strava_callback_error(client):
 
 
 def test_strava_callback_exchanges_code(client, monkeypatch):
-    monkeypatch.setattr(
-        "services.strava_service.settings.strava_client_id", "strava-client-id"
-    )
-    monkeypatch.setattr(
-        "services.strava_service.settings.strava_client_secret", "strava-client-secret"
-    )
+    monkeypatch.setattr("services.strava_service.settings.strava_client_id", "strava-client-id")
+    monkeypatch.setattr("services.strava_service.settings.strava_client_secret", "strava-client-secret")
     monkeypatch.setattr(
         "services.strava_service.settings.strava_redirect_uri",
         "http://localhost:8000/integrations/strava/callback",
@@ -66,9 +60,7 @@ def test_strava_callback_exchanges_code(client, monkeypatch):
 
 
 def test_strava_activities_list(client, monkeypatch):
-    monkeypatch.setattr(
-        "services.strava_service.settings.strava_client_id", "strava-client-id"
-    )
+    monkeypatch.setattr("services.strava_service.settings.strava_client_id", "strava-client-id")
     monkeypatch.setattr(
         "services.strava_service.settings.strava_redirect_uri",
         "http://localhost:8000/integrations/strava/callback",

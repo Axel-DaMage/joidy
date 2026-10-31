@@ -1,5 +1,5 @@
 import json
-import struct
+
 from config import settings
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
@@ -11,12 +11,14 @@ engine = create_engine(
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+
 def get_db():
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
+
 
 def _vector_literal(embedding: list[float]) -> str:
     """Serialize a Python list into the pgvector text format ``[a,b,c]``.
@@ -27,6 +29,7 @@ def _vector_literal(embedding: list[float]) -> str:
     """
     return json.dumps(embedding, separators=(",", ":"))
 
+
 def store_embedding(note_id: int, embedding: list[float]):
     """Store or update embedding for a note."""
     with engine.connect() as conn:
@@ -36,13 +39,11 @@ def store_embedding(note_id: int, embedding: list[float]):
             VALUES (:note_id, :embedding)
             ON CONFLICT (note_id) DO UPDATE SET embedding = EXCLUDED.embedding
             """),
-            {"note_id": note_id, "embedding": _vector_literal(embedding)}
+            {"note_id": note_id, "embedding": _vector_literal(embedding)},
         )
-        conn.execute(
-            text("UPDATE notes SET is_embedded = true WHERE id = :note_id"),
-            {"note_id": note_id}
-        )
+        conn.execute(text("UPDATE notes SET is_embedded = true WHERE id = :note_id"), {"note_id": note_id})
         conn.commit()
+
 
 def find_similar_notes(embedding: list[float], limit: int = 5) -> list[dict]:
     """Find notes with similar embeddings using cosine similarity via pgvector."""
@@ -54,6 +55,6 @@ def find_similar_notes(embedding: list[float], limit: int = 5) -> list[dict]:
             ORDER BY embedding <=> :embedding ASC
             LIMIT :limit
             """),
-            {"embedding": _vector_literal(embedding), "limit": limit}
+            {"embedding": _vector_literal(embedding), "limit": limit},
         ).fetchall()
         return [{"note_id": row[0], "distance": row[1]} for row in rows]

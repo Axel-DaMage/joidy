@@ -11,9 +11,7 @@ def test_google_auth_url_unconfigured(client):
 
 
 def test_google_auth_url_configured(client, monkeypatch):
-    monkeypatch.setattr(
-        "services.google_service.settings.google_client_id", "google-client-id"
-    )
+    monkeypatch.setattr("services.google_service.settings.google_client_id", "google-client-id")
     monkeypatch.setattr(
         "services.google_service.settings.google_redirect_uri",
         "http://localhost:8000/integrations/google/callback",
@@ -45,12 +43,8 @@ def test_google_callback_error(client):
 
 
 def test_google_callback_exchanges_code(client, monkeypatch):
-    monkeypatch.setattr(
-        "services.google_service.settings.google_client_id", "google-client-id"
-    )
-    monkeypatch.setattr(
-        "services.google_service.settings.google_client_secret", "google-client-secret"
-    )
+    monkeypatch.setattr("services.google_service.settings.google_client_id", "google-client-id")
+    monkeypatch.setattr("services.google_service.settings.google_client_secret", "google-client-secret")
     monkeypatch.setattr(
         "services.google_service.settings.google_redirect_uri",
         "http://localhost:8000/integrations/google/callback",
@@ -84,12 +78,8 @@ def test_google_status_not_connected(client):
 
 
 def test_google_connect_persists_tokens(client, db_session, monkeypatch):
-    monkeypatch.setattr(
-        "services.google_service.settings.google_client_id", "google-client-id"
-    )
-    monkeypatch.setattr(
-        "services.google_service.settings.google_client_secret", "google-client-secret"
-    )
+    monkeypatch.setattr("services.google_service.settings.google_client_id", "google-client-id")
+    monkeypatch.setattr("services.google_service.settings.google_client_secret", "google-client-secret")
     monkeypatch.setattr(
         "services.google_service.settings.google_redirect_uri",
         "http://localhost:8000/integrations/google/callback",
@@ -118,12 +108,8 @@ def test_google_connect_persists_tokens(client, db_session, monkeypatch):
 
 def test_google_disconnect_clears_tokens(client, db_session, monkeypatch):
     # First connect
-    monkeypatch.setattr(
-        "services.google_service.settings.google_client_id", "google-client-id"
-    )
-    monkeypatch.setattr(
-        "services.google_service.settings.google_client_secret", "google-client-secret"
-    )
+    monkeypatch.setattr("services.google_service.settings.google_client_id", "google-client-id")
+    monkeypatch.setattr("services.google_service.settings.google_client_secret", "google-client-secret")
     monkeypatch.setattr(
         "services.google_service.settings.google_redirect_uri",
         "http://localhost:8000/integrations/google/callback",
@@ -197,9 +183,7 @@ def test_google_token_service_clear_tokens(db_session):
 
 
 def test_google_calendars_list(client, monkeypatch):
-    monkeypatch.setattr(
-        "services.google_service.settings.google_client_id", "google-client-id"
-    )
+    monkeypatch.setattr("services.google_service.settings.google_client_id", "google-client-id")
     monkeypatch.setattr(
         "services.google_service.settings.google_redirect_uri",
         "http://localhost:8000/integrations/google/callback",
@@ -219,18 +203,14 @@ def test_google_calendars_list(client, monkeypatch):
 
 
 def test_google_gmail_messages_list(client, monkeypatch):
-    monkeypatch.setattr(
-        "services.google_service.settings.google_client_id", "google-client-id"
-    )
+    monkeypatch.setattr("services.google_service.settings.google_client_id", "google-client-id")
     monkeypatch.setattr(
         "services.google_service.settings.google_redirect_uri",
         "http://localhost:8000/integrations/google/callback",
     )
 
     fake_response = MagicMock()
-    fake_response.json.return_value = {
-        "messages": [{"id": "msg1", "threadId": "t1"}]
-    }
+    fake_response.json.return_value = {"messages": [{"id": "msg1", "threadId": "t1"}]}
     fake_response.raise_for_status.return_value = None
 
     with patch("httpx.AsyncClient.get", new=AsyncMock(return_value=fake_response)):
@@ -243,18 +223,14 @@ def test_google_gmail_messages_list(client, monkeypatch):
 
 
 def test_google_contacts_list(client, monkeypatch):
-    monkeypatch.setattr(
-        "services.google_service.settings.google_client_id", "google-client-id"
-    )
+    monkeypatch.setattr("services.google_service.settings.google_client_id", "google-client-id")
     monkeypatch.setattr(
         "services.google_service.settings.google_redirect_uri",
         "http://localhost:8000/integrations/google/callback",
     )
 
     fake_response = MagicMock()
-    fake_response.json.return_value = {
-        "connections": [{"resourceName": "people/1", "names": [{"displayName": "Ada"}]}]
-    }
+    fake_response.json.return_value = {"connections": [{"resourceName": "people/1", "names": [{"displayName": "Ada"}]}]}
     fake_response.raise_for_status.return_value = None
 
     with patch("httpx.AsyncClient.get", new=AsyncMock(return_value=fake_response)):

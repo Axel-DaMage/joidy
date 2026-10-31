@@ -13,16 +13,19 @@ The aiodocker client is faked entirely; no Docker socket is required.
 
 import pytest
 from fastapi.testclient import TestClient
-
 from routers import system
-
 
 # --- Fakes --------------------------------------------------------------------
 
 
-def _container(name: str, service: str, state: str = "running",
-               project: str = "joidy", health: str | None = None,
-               label_prefix: str = "com.docker.compose") -> dict:
+def _container(
+    name: str,
+    service: str,
+    state: str = "running",
+    project: str = "joidy",
+    health: str | None = None,
+    label_prefix: str = "com.docker.compose",
+) -> dict:
     labels = {
         f"{label_prefix}.service": service,
         f"{label_prefix}.project": project,
@@ -78,6 +81,7 @@ class _FakeDocker:
 @pytest.fixture
 def docker_unavailable(monkeypatch):
     """Force the no-Docker path for every endpoint."""
+
     async def _none():
         return None
 

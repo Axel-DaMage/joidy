@@ -10,7 +10,6 @@ from prometheus_client import Counter, Histogram
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 
-
 http_requests_total = Counter(
     "http_requests_total",
     "Total HTTP requests",

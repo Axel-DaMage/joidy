@@ -1,4 +1,3 @@
-import pytest
 from fastapi.testclient import TestClient
 
 
@@ -50,9 +49,7 @@ def test_manual_read_wins_over_resync(client: TestClient):
     email_id = client.post("/emails/", json=_payload()).json()["id"]
 
     client.patch(f"/emails/{email_id}", json={"unread": False})
-    resync = client.post(
-        "/emails/", json=_payload(gmail_id="abc123", unread=True, subject="Factura octubre")
-    )
+    resync = client.post("/emails/", json=_payload(gmail_id="abc123", unread=True, subject="Factura octubre"))
     assert resync.status_code == 201
     assert resync.json()["id"] == email_id
     assert resync.json()["created"] is False

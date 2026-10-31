@@ -13,7 +13,7 @@ router = APIRouter(prefix="/skills", tags=["skills"])
 def _cached_list_skills(db: Session):
     skills = db.query(Skill).filter(Skill.level != "locked").order_by(Skill.note_count.desc()).all()
     tag_rows = db.query(Tag.id, Tag.name).all()
-    tags = {tag_id: tag_name for tag_id, tag_name in tag_rows}
+    tags = dict(tag_rows)
     return [
         {
             "id": s.id,

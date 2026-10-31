@@ -2,10 +2,10 @@
 Request ID middleware for distributed tracing.
 """
 
+from middleware.correlation_id import get_correlation_id, set_correlation_id
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
-from middleware.correlation_id import get_correlation_id, set_correlation_id
 
 
 class RequestIdMiddleware(BaseHTTPMiddleware):

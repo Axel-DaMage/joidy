@@ -23,22 +23,19 @@ class FallbackLLMClient(BaseLLMClient):
 
     @property
     def provider_name(self) -> str:
-        return (
-            self._secondary.provider_name
-            if self._using_fallback
-            else self._primary.provider_name
-        )
+        return self._secondary.provider_name if self._using_fallback else self._primary.provider_name
 
     async def embed_text(self, text: str) -> list[float]:
         if not hasattr(self._primary, "embed_text"):
-            return await self.embed(text)
+            return await self._secondary.embed_text(text)
         try:
             result = await self._primary.embed_text(text)
             self._using_fallback = False
             return result
         except Exception as exc:
             logger.warning(
-                f"Primary LLM provider '{self._primary.provider_name}' embed_text failed: {exc}. Falling back to '{self._secondary.provider_name}'."
+                f"Primary LLM provider '{self._primary.provider_name}' embed_text failed: {exc}. "
+                f"Falling back to '{self._secondary.provider_name}'."
             )
             self._using_fallback = True
             return await self._secondary.embed_text(text)
@@ -53,7 +50,8 @@ class FallbackLLMClient(BaseLLMClient):
         if secondary_ok:
             self._using_fallback = True
             logger.warning(
-                f"Primary LLM provider '{self._primary.provider_name}' unhealthy. Using fallback '{self._secondary.provider_name}'."
+                f"Primary LLM provider '{self._primary.provider_name}' unhealthy. "
+                f"Using fallback '{self._secondary.provider_name}'."
             )
         return secondary_ok
 
@@ -75,7 +73,8 @@ class FallbackLLMClient(BaseLLMClient):
             return result
         except Exception as exc:
             logger.warning(
-                f"Primary LLM provider '{self._primary.provider_name}' generate failed: {exc}. Falling back to '{self._secondary.provider_name}'."
+                f"Primary LLM provider '{self._primary.provider_name}' generate failed: {exc}. "
+                f"Falling back to '{self._secondary.provider_name}'."
             )
             self._using_fallback = True
             return await self._secondary.generate(
@@ -101,11 +100,7 @@ class FallbackEmbeddingClient(EmbeddingClient):
 
     @property
     def provider_name(self) -> str:
-        return (
-            self._secondary.provider_name
-            if self._using_fallback
-            else self._primary.provider_name
-        )
+        return self._secondary.provider_name if self._using_fallback else self._primary.provider_name
 
     async def embed(self, text: str) -> list[float]:
         try:
@@ -114,7 +109,8 @@ class FallbackEmbeddingClient(EmbeddingClient):
             return result
         except Exception as exc:
             logger.warning(
-                f"Primary embedding provider '{self._primary.provider_name}' embed failed: {exc}. Falling back to '{self._secondary.provider_name}'."
+                f"Primary embedding provider '{self._primary.provider_name}' embed failed: {exc}. "
+                f"Falling back to '{self._secondary.provider_name}'."
             )
             self._using_fallback = True
             return await self._secondary.embed(text)
@@ -129,7 +125,8 @@ class FallbackEmbeddingClient(EmbeddingClient):
         if secondary_ok:
             self._using_fallback = True
             logger.warning(
-                f"Primary embedding provider '{self._primary.provider_name}' unhealthy. Using fallback '{self._secondary.provider_name}'."
+                f"Primary embedding provider '{self._primary.provider_name}' unhealthy. "
+                f"Using fallback '{self._secondary.provider_name}'."
             )
         return secondary_ok
 

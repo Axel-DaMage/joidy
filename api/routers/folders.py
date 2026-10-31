@@ -1,9 +1,10 @@
 import os
 import re
 import shutil
+
+from config import settings
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from config import settings
 from services.auth_service import get_current_user
 
 router = APIRouter(prefix="/folders", tags=["folders"])

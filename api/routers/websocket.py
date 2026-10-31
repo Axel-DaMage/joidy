@@ -7,8 +7,8 @@ import json
 import logging
 
 from config import settings
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
-from services.auth_service import verify_token, _effective_auth_password
+from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
+from services.auth_service import _effective_auth_password, verify_token
 
 logger = logging.getLogger(__name__)
 

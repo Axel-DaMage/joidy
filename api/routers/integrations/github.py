@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -160,9 +160,7 @@ async def list_repos(
     is_dark: bool = Query(True, description="Usar colores claros para tema oscuro"),
 ):
     if settings.github_token:
-        repos = await _fetch(
-            "/user/repos", {"page": page, "per_page": per_page, "sort": sort}
-        )
+        repos = await _fetch("/user/repos", {"page": page, "per_page": per_page, "sort": sort})
     elif settings.github_username:
         repos = await _fetch(
             f"/users/{settings.github_username}/repos",
@@ -210,10 +208,7 @@ async def add_repo_to_db(
     except Exception:
         raise HTTPException(status_code=404, detail="Repo not found")
 
-    existing = (
-        db.execute(select(GitHubRepo).where(GitHubRepo.full_name == full_name))
-        .scalar_one_or_none()
-    )
+    existing = db.execute(select(GitHubRepo).where(GitHubRepo.full_name == full_name)).scalar_one_or_none()
     if existing:
         raise HTTPException(status_code=400, detail="Repo already tracked")
 
@@ -238,13 +233,7 @@ async def list_repos_in_db(
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):
-    repos = (
-        db.execute(
-            select(GitHubRepo).offset(offset).limit(limit)
-        )
-        .scalars()
-        .all()
-    )
+    repos = db.execute(select(GitHubRepo).offset(offset).limit(limit)).scalars().all()
     return {
         "repos": [
             {
@@ -265,9 +254,7 @@ async def remove_repo_from_db(repo_id: int, db: Session = Depends(get_db)):
     if not repo:
         raise HTTPException(status_code=404, detail="Repo not found")
 
-    db.execute(
-        select(GitHubItem).where(GitHubItem.repo_id == repo_id)
-    )
+    db.execute(select(GitHubItem).where(GitHubItem.repo_id == repo_id))
     items = db.execute(select(GitHubItem).where(GitHubItem.repo_id == repo_id)).scalars().all()
     for item in items:
         db.delete(item)
@@ -353,7 +340,7 @@ async def get_my_issues(
                     "repo": i.get("_repo_full_name", ""),
                     "url": i["html_url"],
                     "state": i["state"],
-                    "labels": [l["name"] for l in i.get("labels", [])],
+                    "labels": [lbl["name"] for lbl in i.get("labels", [])],
                     "author": i.get("user", {}).get("login", ""),
                     "created_at": i["created_at"],
                     "updated_at": i["updated_at"],
@@ -493,11 +480,9 @@ async def get_repo_issues(
                 "body": i.get("body", ""),
                 "state": i["state"],
                 "url": i["html_url"],
-                "labels": [l["name"] for l in i.get("labels", [])],
+                "labels": [lbl["name"] for lbl in i.get("labels", [])],
                 "author": i.get("user", {}).get("login", ""),
-                "assignee": (
-                    i.get("assignee", {}).get("login") if i.get("assignee") else None
-                ),
+                "assignee": (i.get("assignee", {}).get("login") if i.get("assignee") else None),
                 "created_at": i["created_at"],
                 "updated_at": i["updated_at"],
             }
@@ -516,11 +501,9 @@ async def get_issue(owner: str, repo: str, issue_number: int):
         "body": issue.get("body", ""),
         "state": issue["state"],
         "url": issue["html_url"],
-        "labels": [l["name"] for l in issue.get("labels", [])],
+        "labels": [lbl["name"] for lbl in issue.get("labels", [])],
         "author": issue.get("user", {}).get("login", ""),
-        "assignee": (
-            issue.get("assignee", {}).get("login") if issue.get("assignee") else None
-        ),
+        "assignee": (issue.get("assignee", {}).get("login") if issue.get("assignee") else None),
         "created_at": issue["created_at"],
         "updated_at": issue["updated_at"],
     }
@@ -606,9 +589,7 @@ async def add_comment(
     issue_number: int,
     request: CreateCommentRequest,
 ):
-    comment = await _post(
-        f"/repos/{owner}/{repo}/issues/{issue_number}/comments", {"body": request.body}
-    )
+    comment = await _post(f"/repos/{owner}/{repo}/issues/{issue_number}/comments", {"body": request.body})
     return {"id": comment["id"], "body": comment["body"]}
 
 
@@ -783,9 +764,7 @@ async def receive_webhook(
     except ValueError:
         gh_event_type = GitHubEventType.ISSUES
 
-    event = gh_svc.process_webhook_event(
-        db, repo_full_name, gh_event_type, action, sender, payload or {}
-    )
+    event = gh_svc.process_webhook_event(db, repo_full_name, gh_event_type, action, sender, payload or {})
 
     return {"status": "received", "event_id": event.id if event else None}
 
@@ -809,23 +788,18 @@ async def sync_repo(repo_id: int, db: Session = Depends(get_db)):
     synced_count = 0
     for issue_data in gh_issues:
         external_id = issue_data["id"]
-        existing = (
-            db.execute(
-                select(GitHubItem).where(
-                    GitHubItem.repo_id == repo_id, GitHubItem.external_id == external_id
-                )
-            )
-            .scalar_one_or_none()
-        )
+        existing = db.execute(
+            select(GitHubItem).where(GitHubItem.repo_id == repo_id, GitHubItem.external_id == external_id)
+        ).scalar_one_or_none()
 
-        labels_str = ",".join([l["name"] for l in issue_data.get("labels", [])])
+        labels_str = ",".join([lbl["name"] for lbl in issue_data.get("labels", [])])
 
         if existing:
             existing.title = issue_data.get("title", "")
             existing.body = issue_data.get("body", "")
             existing.state = issue_data.get("state", "open")
             existing.labels = labels_str
-            existing.updated_at = datetime.now(timezone.utc)
+            existing.updated_at = datetime.now(UTC)
         else:
             item = GitHubItem(
                 repo_id=repo_id,
@@ -836,20 +810,16 @@ async def sync_repo(repo_id: int, db: Session = Depends(get_db)):
                 body=issue_data.get("body", ""),
                 state=issue_data.get("state", "open"),
                 author=issue_data.get("user", {}).get("login", ""),
-                assignee=(
-                    issue_data.get("assignee", {}).get("login")
-                    if issue_data.get("assignee")
-                    else None
-                ),
+                assignee=(issue_data.get("assignee", {}).get("login") if issue_data.get("assignee") else None),
                 labels=labels_str,
                 url=issue_data.get("url", ""),
                 html_url=issue_data.get("html_url", ""),
-                synced_at=datetime.now(timezone.utc),
+                synced_at=datetime.now(UTC),
             )
             db.add(item)
         synced_count += 1
 
-    repo.last_synced_at = datetime.now(timezone.utc)
+    repo.last_synced_at = datetime.now(UTC)
     db.commit()
 
     return {
@@ -874,10 +844,7 @@ async def start_device_flow():
     Retorna el device_code y user_code para que el usuario autorice.
     """
     if not settings.github_client_id:
-        raise HTTPException(
-            status_code=400,
-            detail="GitHub OAuth not configured. Set GITHUB_CLIENT_ID in .env"
-        )
+        raise HTTPException(status_code=400, detail="GitHub OAuth not configured. Set GITHUB_CLIENT_ID in .env")
 
     device_auth_url = "https://github.com/login/device/code"
 
@@ -932,10 +899,7 @@ async def poll_device_code(
     Usuario debe autorizar en otro dispositivo first.
     """
     if not settings.github_client_id:
-        raise HTTPException(
-            status_code=400,
-            detail="GitHub OAuth not configured"
-        )
+        raise HTTPException(status_code=400, detail="GitHub OAuth not configured")
 
     token_url = "https://github.com/login/oauth/access_token"
 
@@ -993,6 +957,7 @@ async def poll_device_code(
 
 # ── Web Flow (OAuth callback) ──────────────────────────────────────────────────
 
+
 @router.get("/oauth/web/start")
 async def start_web_flow():
     """
@@ -1001,15 +966,11 @@ async def start_web_flow():
     Tras autorizar, GitHub redirige a la URL configurada (github_oauth_web_url).
     """
     if not settings.github_client_id:
-        raise HTTPException(
-            status_code=400,
-            detail="GitHub OAuth not configured. Set GITHUB_CLIENT_ID in .env"
-        )
+        raise HTTPException(status_code=400, detail="GitHub OAuth not configured. Set GITHUB_CLIENT_ID in .env")
 
     if not settings.github_oauth_web_url:
         raise HTTPException(
-            status_code=400,
-            detail="GitHub OAuth redirect URI not configured. Set GITHUB_OAUTH_WEB_URL in .env"
+            status_code=400, detail="GitHub OAuth redirect URI not configured. Set GITHUB_OAUTH_WEB_URL in .env"
         )
 
     redirect_uri = settings.github_oauth_web_url
@@ -1038,8 +999,7 @@ async def oauth_callback(
 
     if not settings.github_client_id or not settings.github_client_secret:
         raise HTTPException(
-            status_code=400,
-            detail="GitHub OAuth not configured. Set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET in .env"
+            status_code=400, detail="GitHub OAuth not configured. Set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET in .env"
         )
 
     token_url = "https://github.com/login/oauth/access_token"
@@ -1063,8 +1023,7 @@ async def oauth_callback(
 
     if data.get("error"):
         raise HTTPException(
-            status_code=400,
-            detail=f"Token exchange failed: {data.get('error_description', data['error'])}"
+            status_code=400, detail=f"Token exchange failed: {data.get('error_description', data['error'])}"
         )
 
     access_token = data.get("access_token")

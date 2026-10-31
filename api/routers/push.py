@@ -1,11 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
-from sqlalchemy.orm import Session
 from config import settings
 from database import get_db
+from fastapi import APIRouter, Depends, HTTPException
 from models.push_subscription import PushSubscription
+from pydantic import BaseModel
 from services.auth_service import get_current_user
 from services.push_service import send_push_to_user
+from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/push", tags=["push"])
 

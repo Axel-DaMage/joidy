@@ -1,5 +1,4 @@
-import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from database import get_db
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
@@ -10,16 +9,15 @@ from models.goal import (
     GoalState,
     GoalTemporality,
 )
+from models.note import Note
 from pydantic import BaseModel, field_validator
-from services.sanitizer import sanitize_title, sanitize_content, sanitize_color, sanitize_emoji
 from services.gamification_engine import process_event
 from services.goal_service import (
     evaluate_active_goals,
-    get_goal_progress,
     get_bulk_goal_progress,
+    get_goal_progress,
     get_goal_streak,
     resolve_pending_removal,
-    sync_goals_from_note,
     validate_goal_parent,
 )
 from services.joidy_vault_writer import (
@@ -29,14 +27,12 @@ from services.joidy_vault_writer import (
     read_goal_file,
     update_goal_file,
 )
-from models.note import Note
 from services.note_service import write_to_vault
+from services.sanitizer import sanitize_color, sanitize_content, sanitize_emoji, sanitize_title
 from services.sync_service import update_local_mtime
 from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/goals", tags=["goals"])
-
-
 
 
 GOAL_PRIORITY_MAX = 99
@@ -54,6 +50,7 @@ class GoalCreate(BaseModel):
     ``priority`` uses a higher-wins scale: 0 = no explicit priority, higher
     numbers float to the top of every goal listing (sorted DESC, #1097).
     """
+
     title: str
     description: str = ""
     temporality: GoalTemporality = GoalTemporality.ONEOFF
@@ -173,7 +170,6 @@ class GoalUpdate(BaseModel):
         return _validate_priority_range(v)
 
 
-
 class GoalContent(BaseModel):
     title: str
     content: str
@@ -190,8 +186,6 @@ class GoalContent(BaseModel):
     parent_id: int | None = None
     max_assignment_days: int | None = None
     description: str = ""
-
-
 
 
 def _serialize_goal(goal: Goal, db: Session, precalculated_progress: float | None = None) -> dict:
@@ -252,12 +246,15 @@ def create_goal(data: GoalCreate, db: Session = Depends(get_db)):
     # New goal has no id yet, so only parent existence can be violated, but
     # validate anyway for consistency and to reject non-existent parents.
     validate_goal_parent(db, goal_id=None, parent_id=data.parent_id)
-    
+
     note_id = data.note_id
     if note_id is None:
         from services.note_service import create_note as create_note_service
+
         note_title = f"{data.title}"
-        note_content = f"# Objetivo: {data.title}\n\nEscribe aquí tus estrategias, pasos y registros para este objetivo.\n"
+        note_content = (
+            f"# Objetivo: {data.title}\n\nEscribe aquí tus estrategias, pasos y registros para este objetivo.\n"
+        )
         note, _ = create_note_service(
             db,
             title=note_title,
@@ -364,7 +361,6 @@ def sort_goals(data: GoalSortRequest, db: Session = Depends(get_db)):
         goal.priority = priority_by_id[goal.id]
     db.commit()
     return {"updated": len(goals)}
-
 
 
 @router.get("/{goal_id}")
@@ -496,25 +492,21 @@ def complete_goal(
     goal = db.query(Goal).filter(Goal.id == goal_id).first()
     if not goal:
         raise HTTPException(status_code=404, detail="Goal not found")
-    
-    was_failed = (goal.state == GoalState.FAILED)
+
+    was_failed = goal.state == GoalState.FAILED
     old_current = goal.current_value
-    
+
     goal.is_completed = True
     goal.state = GoalState.COMPLETED
-    goal.completed_at = datetime.now(timezone.utc)
+    goal.completed_at = datetime.now(UTC)
     goal.current_value = get_goal_progress(goal, db)
-    
+
     # Adjust descendant goals if this was a late completion of a failed goal
     child = None
     if was_failed:
         child = (
             db.query(Goal)
-            .filter(
-                Goal.title == goal.title,
-                Goal.state == GoalState.ACTIVE,
-                Goal.created_at > goal.created_at
-            )
+            .filter(Goal.title == goal.title, Goal.state == GoalState.ACTIVE, Goal.created_at > goal.created_at)
             .order_by(Goal.created_at.asc())
             .first()
         )

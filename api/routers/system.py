@@ -11,7 +11,6 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-
 from services.auth_service import get_current_user
 
 logger = logging.getLogger(__name__)

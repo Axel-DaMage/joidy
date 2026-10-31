@@ -65,20 +65,18 @@ class SkillTreeServiceTests(unittest.TestCase):
 
         self.assertEqual(rows[0][0], 1)
         self.assertEqual(rows[0][1], 3)
-        self.assertEqual(rows[0][2], 'apprentice')
+        self.assertEqual(rows[0][2], "apprentice")
         self.assertEqual(rows[1][0], 2)
         self.assertEqual(rows[1][1], 0)
-        self.assertEqual(rows[1][2], 'locked')
+        self.assertEqual(rows[1][2], "locked")
         self.assertEqual(len(updates), 2)
 
     def test_sync_skills_for_tags_updates_only_requested_tags(self) -> None:
         with self.SessionLocal() as db:
             updates = sync_skills_for_tags(db, {1})
-            rows = db.execute(
-                text("SELECT tag_id, note_count, level FROM skills ORDER BY tag_id")
-            ).fetchall()
+            rows = db.execute(text("SELECT tag_id, note_count, level FROM skills ORDER BY tag_id")).fetchall()
 
-        self.assertEqual(rows, [(1, 3, 'apprentice'), (2, 4, 'apprentice')])
+        self.assertEqual(rows, [(1, 3, "apprentice"), (2, 4, "apprentice")])
         self.assertEqual(len(updates), 1)
 
 

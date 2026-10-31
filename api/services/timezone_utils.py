@@ -10,7 +10,7 @@ Timestamps stored in the DB should still be UTC; only the "what day is it for
 the user" logic should use these helpers. See issue #650.
 """
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from config import settings
@@ -61,4 +61,4 @@ def to_utc_datetime(local_day: date) -> datetime:
     """
     # Midnight in the user tz, then convert to UTC.
     local_midnight = datetime.combine(local_day, datetime.min.time(), tzinfo=get_user_tz())
-    return local_midnight.astimezone(timezone.utc)
+    return local_midnight.astimezone(UTC)

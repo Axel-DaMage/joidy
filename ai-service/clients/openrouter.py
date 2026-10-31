@@ -1,4 +1,5 @@
 import logging
+from typing import cast
 
 import aiohttp
 from config import settings
@@ -8,9 +9,7 @@ from .base import BaseLLMClient
 logger = logging.getLogger(__name__)
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-_OPENROUTER_TIMEOUT = aiohttp.ClientTimeout(
-    total=settings.llm_timeout, connect=settings.connect_timeout
-)
+_OPENROUTER_TIMEOUT = aiohttp.ClientTimeout(total=settings.llm_timeout, connect=settings.connect_timeout)
 
 
 class OpenRouterClient(BaseLLMClient):
@@ -68,4 +67,4 @@ class OpenRouterClient(BaseLLMClient):
             if resp.status != 200:
                 raise Exception(f"OpenRouter failed: {await resp.text()}")
             data = await resp.json()
-            return data["choices"][0]["message"]["content"]
+            return cast("str", data["choices"][0]["message"]["content"])

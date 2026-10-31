@@ -12,8 +12,8 @@ Usage:
 Register `aclose_http_clients` on app shutdown (main.py lifespan).
 """
 
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
 
 import httpx
 

@@ -20,13 +20,13 @@ Webhook payload format:
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from config import settings
 from database import get_db
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, field_validator
-from services.auth_service import get_current_user_id, _effective_auth_password
+from services.auth_service import _effective_auth_password, get_current_user_id
 from services.sync_service import to_utc_naive
 from services.webhook_sync import process_webhook_event
 from sqlalchemy.orm import Session
@@ -141,12 +141,8 @@ def obsidian_webhook_legacy(
         sync = SyncState(note_id=note_id)
         db.add(sync)
 
-    sync.remote_mtime = (
-        to_utc_naive(datetime.fromtimestamp(remote_mtime, tz=timezone.utc))
-        if remote_mtime
-        else None
-    )
-    sync.last_synced_at = to_utc_naive(datetime.now(timezone.utc))
+    sync.remote_mtime = to_utc_naive(datetime.fromtimestamp(remote_mtime, tz=UTC)) if remote_mtime else None
+    sync.last_synced_at = to_utc_naive(datetime.now(UTC))
 
     local = to_utc_naive(sync.local_mtime)
     remote = to_utc_naive(sync.remote_mtime)

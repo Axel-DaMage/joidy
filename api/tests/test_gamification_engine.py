@@ -16,8 +16,9 @@ if "sqlite_vec" not in sys.modules:
     _stub.load = lambda _conn: None  # type: ignore
     sys.modules["sqlite_vec"] = _stub
 
-from database import Base
 import services.gamification_engine as ge
+from database import Base
+from models.gamification import XPEvent
 from services.gamification_engine import (
     DEFAULT_PLANT_STAGES,
     GRACE_PERIOD_DAYS,
@@ -26,7 +27,6 @@ from services.gamification_engine import (
     _compute_streak,
     process_event,
 )
-from models.gamification import UserStats, XPEvent
 
 
 class GamificationTestBase(unittest.TestCase):
@@ -35,11 +35,13 @@ class GamificationTestBase(unittest.TestCase):
         Base.metadata.create_all(self.engine)
         with self.engine.begin() as conn:
             try:
-                conn.execute(text(
-                    "CREATE TABLE IF NOT EXISTS tag_cooccurrences "
-                    "(tag_a_id INTEGER, tag_b_id INTEGER, weight INTEGER, "
-                    "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)"
-                ))
+                conn.execute(
+                    text(
+                        "CREATE TABLE IF NOT EXISTS tag_cooccurrences "
+                        "(tag_a_id INTEGER, tag_b_id INTEGER, weight INTEGER, "
+                        "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)"
+                    )
+                )
             except Exception:
                 pass
         self.Session = sessionmaker(bind=self.engine)
@@ -59,10 +61,9 @@ class XPAwardingTest(GamificationTestBase):
         stats.last_activity_date = ge._today_utc()
         from models.gamification import StreakRecord
         from repositories import StreakRecordRepository
+
         if not StreakRecordRepository(db).get_today():
-            StreakRecordRepository(db).add(
-                StreakRecord(activity_date=ge._today_utc(), xp_earned=0)
-            )
+            StreakRecordRepository(db).add(StreakRecord(activity_date=ge._today_utc(), xp_earned=0))
         db.commit()
 
     def test_note_created_awards_10_xp(self):

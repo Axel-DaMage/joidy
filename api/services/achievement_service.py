@@ -8,12 +8,7 @@ from sqlalchemy.orm import Session
 
 def get_unlocked_achievements(db: Session, user_id: int) -> list[Achievement]:
     """Get every achievement unlocked by a user, oldest unlock first."""
-    return (
-        db.query(Achievement)
-        .filter(Achievement.user_id == user_id)
-        .order_by(Achievement.unlocked_at.asc())
-        .all()
-    )
+    return db.query(Achievement).filter(Achievement.user_id == user_id).order_by(Achievement.unlocked_at.asc()).all()
 
 
 def unlock_achievement(

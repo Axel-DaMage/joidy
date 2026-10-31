@@ -37,18 +37,23 @@ def test_set_assignments_creates_rows(client: TestClient, db_session):
     g2 = _make_goal(db_session, "G2")
     target_date = "2099-07-20"
 
-    response = client.post("/planning/assignments", json={
-        "date": target_date,
-        "goal_ids": [g1, g2],
-    })
+    response = client.post(
+        "/planning/assignments",
+        json={
+            "date": target_date,
+            "goal_ids": [g1, g2],
+        },
+    )
     assert response.status_code == 200
     data = response.json()
     assert data["date"] == target_date
     assert sorted(data["goal_ids"]) == sorted([g1, g2])
 
-    rows = db_session.query(PlanningAssignment).filter(
-        PlanningAssignment.date == __import__("datetime").date(2099, 7, 20)
-    ).all()
+    rows = (
+        db_session.query(PlanningAssignment)
+        .filter(PlanningAssignment.date == __import__("datetime").date(2099, 7, 20))
+        .all()
+    )
     assert len(rows) == 2
 
 
@@ -61,18 +66,23 @@ def test_set_assignments_replaces_existing(client: TestClient, db_session):
     client.post("/planning/assignments", json={"date": target_date, "goal_ids": [g1, g2]})
     client.post("/planning/assignments", json={"date": target_date, "goal_ids": [g3]})
 
-    rows = db_session.query(PlanningAssignment).filter(
-        PlanningAssignment.date == __import__("datetime").date(2099, 8, 20)
-    ).all()
+    rows = (
+        db_session.query(PlanningAssignment)
+        .filter(PlanningAssignment.date == __import__("datetime").date(2099, 8, 20))
+        .all()
+    )
     assert len(rows) == 1
     assert rows[0].goal_id == g3
 
 
 def test_set_assignments_invalid_date(client: TestClient):
-    response = client.post("/planning/assignments", json={
-        "date": "01/15/2024",
-        "goal_ids": [],
-    })
+    response = client.post(
+        "/planning/assignments",
+        json={
+            "date": "01/15/2024",
+            "goal_ids": [],
+        },
+    )
     assert response.status_code == 400
 
 

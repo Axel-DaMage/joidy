@@ -18,8 +18,6 @@ router = APIRouter(prefix="/gamification", tags=["gamification"])
 MIN_POMODORO_XP_MINUTES = 20
 
 
-
-
 @ttl_cache(ignore_params={"db"})
 def _cached_stats(db: Session):
     stats = db.query(UserStats).filter(UserStats.id == 1).first()
@@ -63,26 +61,13 @@ def get_stats(db: Session = Depends(get_db)):
 
 @router.get("/streak-history")
 def get_streak_history(days: int = 30, db: Session = Depends(get_db)):
-    records = (
-        db.query(StreakRecord)
-        .order_by(StreakRecord.activity_date.desc())
-        .limit(days)
-        .all()
-    )
-    return [
-        {"date": r.activity_date.isoformat(), "xp": r.xp_earned}
-        for r in records
-    ]
+    records = db.query(StreakRecord).order_by(StreakRecord.activity_date.desc()).limit(days).all()
+    return [{"date": r.activity_date.isoformat(), "xp": r.xp_earned} for r in records]
 
 
 @ttl_cache(ignore_params={"db"})
 def _cached_recent_events(limit: int = 20, db: Session = Depends(get_db)):
-    events = (
-        db.query(XPEvent)
-        .order_by(XPEvent.created_at.desc())
-        .limit(limit)
-        .all()
-    )
+    events = db.query(XPEvent).order_by(XPEvent.created_at.desc()).limit(limit).all()
     return [
         {
             "type": e.event_type,
@@ -147,9 +132,7 @@ def _find_pomodoro_event(db: Session, pomodoro_id: str) -> XPEvent | None:
 
 
 def _enriched_stats_response(gami: GamificationResult, stats: UserStats | None) -> dict:
-    next_stage_xp = (
-        PLANT_STAGES[gami.plant_stage + 1][0] if gami.plant_stage + 1 < len(PLANT_STAGES) else None
-    )
+    next_stage_xp = PLANT_STAGES[gami.plant_stage + 1][0] if gami.plant_stage + 1 < len(PLANT_STAGES) else None
     return {
         **vars(gami),
         "longest_streak": stats.longest_streak if stats else 0,

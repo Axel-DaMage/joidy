@@ -12,30 +12,29 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-from prometheus_client import Counter, Histogram, generate_latest
-
 import task_status
+from prometheus_client import Counter, Histogram, generate_latest
 
 logger = logging.getLogger(__name__)
 
 # Worker-specific metrics
 vault_events_processed = Counter(
-    'worker_vault_events_processed_total',
-    'Vault events processed',
-    ['change_type'],
+    "worker_vault_events_processed_total",
+    "Vault events processed",
+    ["change_type"],
 )
 vault_event_errors = Counter(
-    'worker_vault_event_errors_total',
-    'Vault events that failed processing',
-    ['change_type'],
+    "worker_vault_event_errors_total",
+    "Vault events that failed processing",
+    ["change_type"],
 )
 vault_event_latency = Histogram(
-    'worker_vault_event_latency_seconds',
-    'Time to process a vault event',
+    "worker_vault_event_latency_seconds",
+    "Time to process a vault event",
 )
 vault_events_pending = Counter(
-    'worker_vault_events_pending_recovered_total',
-    'Events recovered from the persistent log after a crash',
+    "worker_vault_events_pending_recovered_total",
+    "Events recovered from the persistent log after a crash",
 )
 
 _metrics_server: HTTPServer | None = None
@@ -55,16 +54,12 @@ class _MetricsHandler(BaseHTTPRequestHandler):
             tasks = {
                 name: {
                     "state": entry["state"],
-                    "last_activity": time.strftime(
-                        "%Y-%m-%dT%H:%M:%SZ", time.gmtime(entry["last_activity"])
-                    ),
+                    "last_activity": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(entry["last_activity"])),
                     "error": entry["error"],
                 }
                 for name, entry in task_status.snapshot().items()
             }
-            body = json.dumps(
-                {"status": status, "service": "joidy-worker", "tasks": tasks}
-            ).encode()
+            body = json.dumps({"status": status, "service": "joidy-worker", "tasks": tasks}).encode()
             code = 200 if status == "ok" else 503
             self.send_response(code)
             self.send_header("Content-Type", "application/json")

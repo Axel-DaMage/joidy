@@ -4,7 +4,8 @@ from datetime import datetime
 from typing import Any
 
 from models.email_message import EmailMessage
-from sqlalchemy import case as sa_case, func
+from sqlalchemy import case as sa_case
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -86,11 +87,7 @@ def upsert_email(
 
 
 def get_email(db: Session, user_id: int, email_id: int) -> EmailMessage | None:
-    return (
-        db.query(EmailMessage)
-        .filter(EmailMessage.user_id == user_id, EmailMessage.id == email_id)
-        .first()
-    )
+    return db.query(EmailMessage).filter(EmailMessage.user_id == user_id, EmailMessage.id == email_id).first()
 
 
 def _filtered_query(
@@ -112,9 +109,7 @@ def _filtered_query(
     if q:
         like = f"%{q}%"
         query = query.filter(
-            EmailMessage.subject.ilike(like)
-            | EmailMessage.sender.ilike(like)
-            | EmailMessage.snippet.ilike(like)
+            EmailMessage.subject.ilike(like) | EmailMessage.sender.ilike(like) | EmailMessage.snippet.ilike(like)
         )
     return query
 
@@ -169,8 +164,7 @@ def list_accounts(db: Session, user_id: int) -> list[dict]:
         .all()
     )
     return [
-        {"account": row.account, "total": row.total, "unread": row.unread, "important": row.important}
-        for row in rows
+        {"account": row.account, "total": row.total, "unread": row.unread, "important": row.important} for row in rows
     ]
 
 

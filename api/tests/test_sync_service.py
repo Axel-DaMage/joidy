@@ -3,7 +3,7 @@
 import sys
 import types
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 from sqlalchemy import create_engine, text
@@ -34,11 +34,13 @@ class SyncServiceTestBase(unittest.TestCase):
         Base.metadata.create_all(self.engine)
         with self.engine.begin() as conn:
             try:
-                conn.execute(text(
-                    "CREATE TABLE IF NOT EXISTS tag_cooccurrences "
-                    "(tag_a_id INTEGER, tag_b_id INTEGER, weight INTEGER, "
-                    "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)"
-                ))
+                conn.execute(
+                    text(
+                        "CREATE TABLE IF NOT EXISTS tag_cooccurrences "
+                        "(tag_a_id INTEGER, tag_b_id INTEGER, weight INTEGER, "
+                        "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)"
+                    )
+                )
             except Exception:
                 pass
         self.Session = sessionmaker(bind=self.engine)
@@ -62,32 +64,32 @@ class TestDetectConflict(SyncServiceTestBase):
         self.assertFalse(detect_conflict(None, None))
 
     def test_no_conflict_when_local_none(self) -> None:
-        remote = datetime.now(timezone.utc)
+        remote = datetime.now(UTC)
         self.assertFalse(detect_conflict(None, remote))
 
     def test_no_conflict_when_remote_none(self) -> None:
-        local = datetime.now(timezone.utc)
+        local = datetime.now(UTC)
         self.assertFalse(detect_conflict(local, None))
 
     def test_no_conflict_when_mtimes_close(self) -> None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         local = now
         remote = now + timedelta(seconds=1)
         self.assertFalse(detect_conflict(local, remote))
 
     def test_conflict_when_mtimes_differ(self) -> None:
-        local = datetime(2024, 1, 1, tzinfo=timezone.utc)
-        remote = datetime(2024, 1, 2, tzinfo=timezone.utc)
+        local = datetime(2024, 1, 1, tzinfo=UTC)
+        remote = datetime(2024, 1, 2, tzinfo=UTC)
         self.assertTrue(detect_conflict(local, remote))
 
     def test_conflict_at_tolerance_boundary(self) -> None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         local = now
         remote = now + timedelta(seconds=CONFLICT_TOLERANCE_SECONDS + 1)
         self.assertTrue(detect_conflict(local, remote))
 
     def test_no_conflict_within_tolerance(self) -> None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         local = now
         remote = now + timedelta(seconds=CONFLICT_TOLERANCE_SECONDS)
         self.assertFalse(detect_conflict(local, remote))
@@ -116,8 +118,8 @@ class TestListConflicts(SyncServiceTestBase):
             sync2 = SyncState(
                 note_id=note2.id,
                 conflict=True,
-                local_mtime=datetime(2024, 1, 1, tzinfo=timezone.utc),
-                remote_mtime=datetime(2024, 1, 2, tzinfo=timezone.utc),
+                local_mtime=datetime(2024, 1, 1, tzinfo=UTC),
+                remote_mtime=datetime(2024, 1, 2, tzinfo=UTC),
             )
             db.add_all([sync1, sync2])
             db.commit()
@@ -135,8 +137,8 @@ class TestListConflicts(SyncServiceTestBase):
             sync = SyncState(
                 note_id=note.id,
                 conflict=True,
-                local_mtime=datetime(2024, 1, 1, tzinfo=timezone.utc),
-                remote_mtime=datetime(2024, 1, 2, tzinfo=timezone.utc),
+                local_mtime=datetime(2024, 1, 1, tzinfo=UTC),
+                remote_mtime=datetime(2024, 1, 2, tzinfo=UTC),
             )
             db.add(sync)
             db.commit()
@@ -154,8 +156,8 @@ class TestResolveConflict(SyncServiceTestBase):
             sync = SyncState(
                 note_id=note.id,
                 conflict=True,
-                local_mtime=datetime(2024, 1, 1, tzinfo=timezone.utc),
-                remote_mtime=datetime(2024, 1, 2, tzinfo=timezone.utc),
+                local_mtime=datetime(2024, 1, 1, tzinfo=UTC),
+                remote_mtime=datetime(2024, 1, 2, tzinfo=UTC),
             )
             db.add(sync)
             db.commit()
@@ -167,8 +169,8 @@ class TestResolveConflict(SyncServiceTestBase):
             self.assertFalse(sync.conflict)
 
     def test_keep_remote_reads_vault_file(self) -> None:
-        import tempfile
         import os
+        import tempfile
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, dir="/tmp") as f:
             f.write("remote content from vault")
@@ -187,8 +189,8 @@ class TestResolveConflict(SyncServiceTestBase):
                 sync = SyncState(
                     note_id=note.id,
                     conflict=True,
-                    local_mtime=datetime(2024, 1, 1, tzinfo=timezone.utc),
-                    remote_mtime=datetime(2024, 1, 2, tzinfo=timezone.utc),
+                    local_mtime=datetime(2024, 1, 1, tzinfo=UTC),
+                    remote_mtime=datetime(2024, 1, 2, tzinfo=UTC),
                 )
                 db.add(sync)
                 db.commit()
@@ -212,8 +214,8 @@ class TestResolveConflict(SyncServiceTestBase):
             sync = SyncState(
                 note_id=note.id,
                 conflict=True,
-                local_mtime=datetime(2024, 1, 1, tzinfo=timezone.utc),
-                remote_mtime=datetime(2024, 1, 2, tzinfo=timezone.utc),
+                local_mtime=datetime(2024, 1, 1, tzinfo=UTC),
+                remote_mtime=datetime(2024, 1, 2, tzinfo=UTC),
             )
             db.add(sync)
             db.commit()
@@ -271,7 +273,7 @@ class TestUpdateLocalMtime(SyncServiceTestBase):
         with self.Session() as db:
             note = self._create_note(db)
             db.flush()
-            old_time = datetime(2020, 1, 1, tzinfo=timezone.utc)
+            old_time = datetime(2020, 1, 1, tzinfo=UTC)
             sync = SyncState(note_id=note.id, local_mtime=old_time)
             db.add(sync)
             db.commit()

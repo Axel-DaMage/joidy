@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from typing import cast
 
 import cohere
 from config import settings
@@ -32,7 +33,7 @@ class CohereClient(BaseLLMClient, EmbeddingClient):
             texts=[text],
             model=self._model,
         )
-        return response.embeddings[0]
+        return cast("list[float]", response.embeddings[0])
 
     async def generate(
         self,
@@ -50,7 +51,7 @@ class CohereClient(BaseLLMClient, EmbeddingClient):
             max_tokens=max_tokens,
             model=self._model,
         )
-        return response.text
+        return cast("str", response.text)
 
     async def close(self) -> None:
         """Close the SDK's underlying HTTP client if it exposes one (#998)."""

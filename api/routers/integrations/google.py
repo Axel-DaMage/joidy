@@ -7,7 +7,9 @@ the popup window (#42 — one-click setup from Settings, GitHub-style).
 """
 
 import html as html_module
+
 import httpx
+from database import get_db
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
@@ -15,8 +17,6 @@ from services import google_service as gs
 from services import google_token_service as gts
 from services.auth_service import get_current_user
 from sqlalchemy.orm import Session
-
-from database import get_db
 
 router = APIRouter(prefix="/integrations/google", tags=["integrations"])
 

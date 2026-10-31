@@ -5,7 +5,7 @@ Per-user rate limiting middleware using sliding window.
 import time
 from dataclasses import dataclass
 
-from fastapi import HTTPException, Request
+from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
@@ -118,7 +118,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                         "remaining": remaining,
                         "retry_after": 60,
                     }
-                }
+                },
             )
 
         response = await call_next(request)
