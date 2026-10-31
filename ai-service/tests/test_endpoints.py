@@ -34,16 +34,25 @@ def ai_disabled(monkeypatch):
         monkeypatch.setattr(settings, key, "")
     monkeypatch.setattr(settings, "ollama_base_url", "")
     monkeypatch.setattr(settings, "internal_secret", "")
+    monkeypatch.setattr(settings, "llm_model", "gemini:gemini-2.0-flash")
+    monkeypatch.setattr(settings, "embedding_model", "gemini:models/text-embedding-004")
     return settings
 
 
 @pytest.fixture
 def ai_enabled(monkeypatch):
-    """Enable AI with fully mocked provider clients and limiter."""
+    """Enable AI with fully mocked provider clients and limiter.
+
+    Pins the configured models to the gemini defaults too: a developer .env
+    with LLM_MODEL/EMBEDDING_MODEL pointing at another provider (#1159) must
+    not change which keys make `is_ai_enabled` True inside these tests.
+    """
     for key in PROVIDER_KEYS:
         monkeypatch.setattr(settings, key, "")
     monkeypatch.setattr(settings, "gemini_api_key", "test-key")
     monkeypatch.setattr(settings, "internal_secret", "")
+    monkeypatch.setattr(settings, "llm_model", "gemini:gemini-2.0-flash")
+    monkeypatch.setattr(settings, "embedding_model", "gemini:models/text-embedding-004")
 
     limiter = SimpleNamespace(acquire=AsyncMock())
     monkeypatch.setattr(main, "get_limiter", lambda *a, **k: limiter)
