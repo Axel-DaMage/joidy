@@ -118,6 +118,14 @@ from services.auth_service import get_current_user
 # pull in migration history that isn't relevant to unit/e2e tests.
 main_module.init_db = lambda: None
 
+# The app lifespan auto-restores goals from the Obsidian vault when the DB is
+# empty (#504). Against a developer machine /vault holds REAL user goals, so
+# leaving this active would seed the test DB with production data and break
+# empty-state assertions (#1158). CI passes only because it has no vault.
+import services.joidy_vault_writer as _vault_writer
+
+_vault_writer.restore_goals_from_vault = lambda db: {"restored": 0}
+
 
 def _wipe_all_tables(engine) -> None:
     """Delete all rows while keeping the schema (cheap drop_all replacement).
@@ -183,6 +191,13 @@ def _db_engine():
         with engine.connect() as conn:
             conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
             conn.commit()
+        if _CAN_DROP:
+            # A test DB persisted in a volume keeps tables from an older
+            # model state; create_all never alters existing tables, so any
+            # schema-changing merge would fail the whole suite with
+            # UndefinedColumn errors (#1158). Rebuild once per session — the
+            # per-test SAVEPOINT isolation of #996 is unaffected.
+            Base.metadata.drop_all(engine)
         Base.metadata.create_all(engine)
         # A crashed earlier run may have left committed rows behind; start
         # the session from a clean slate (probe is ~1ms on empty tables).
