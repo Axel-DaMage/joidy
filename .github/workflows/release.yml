@@ -96,8 +96,12 @@ jobs:
           sed -i "s|^pkgver=.*|pkgver=${VERSION_AUR}|" aur/PKGBUILD
           sed -i "s|archive/v[0-9a-z.\-_]*\.tar\.gz|archive/v${VERSION_CLEAN}.tar.gz|" aur/PKGBUILD
 
-          sed -i "s|^pkgver = .*|pkgver = ${VERSION_AUR}|" aur/.SRCINFO
-          sed -i "s|archive/v[0-9a-z.\-_]*\.tar\.gz|archive/v${VERSION_CLEAN}.tar.gz|" aur/.SRCINFO
+          # .SRCINFO fields are TAB-indented (makepkg format), so anchors
+          # without \t never matched and the file shipped a stale pkgver +
+          # source URL to the AUR (it published 1.1.0_beta.0 during the
+          # v1.1.0-beta.6 release while PKGBUILD was correct).
+          sed -i "s|^\tpkgver = .*|\tpkgver = ${VERSION_AUR}|" aur/.SRCINFO
+          sed -i "s|^\tsource = https://github.com/Axel-DaMage/joidy/archive/v[0-9a-z.\-_]*\.tar\.gz|\tsource = https://github.com/Axel-DaMage/joidy/archive/v${VERSION_CLEAN}.tar.gz|" aur/.SRCINFO
 
           # docs metadata (index.md, api.md, architecture.md)
           for f in docs/index.md docs/api.md docs/architecture.md; do
