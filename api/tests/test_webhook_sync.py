@@ -18,7 +18,6 @@ from models.note import Note
 from models.sync_state import SyncState
 from services.webhook_sync import (
     _extract_tags,
-    _find_note_by_path,
     _parse_frontmatter,
     _title_from_path,
     process_webhook_event,
@@ -114,7 +113,7 @@ class TestProcessWebhookCreate(WebhookSyncTestBase):
     def test_create_with_frontmatter_title(self) -> None:
         content = "---\ntitle: Custom Title\ntags: [python]\n---\nBody"
         with self.Session() as db:
-            result = process_webhook_event(
+            process_webhook_event(
                 db,
                 event="create",
                 path="/vault/note.md",
@@ -131,7 +130,7 @@ class TestProcessWebhookCreate(WebhookSyncTestBase):
     def test_create_extracts_tags(self) -> None:
         content = "---\ntags: [python, web]\n---\n#python is great"
         with self.Session() as db:
-            result = process_webhook_event(
+            process_webhook_event(
                 db,
                 event="create",
                 path="/vault/tagged.md",

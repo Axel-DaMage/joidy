@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from database import get_db
 from fastapi import APIRouter, Depends, HTTPException
@@ -16,7 +16,7 @@ router = APIRouter(prefix="/stats", tags=["stats"])
 @router.get("/system")
 def get_system_stats(db: Session = Depends(get_db)):
     """Get system-wide statistics."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     week_ago = now - timedelta(days=7)
 
     notes_count = db.query(Note).count()
@@ -25,9 +25,7 @@ def get_system_stats(db: Session = Depends(get_db)):
     skills_count = db.query(Skill).count()
 
     stats = db.query(UserStats).first()
-    xp_events_week = db.query(XPEvent).filter(
-        XPEvent.created_at >= week_ago
-    ).count()
+    xp_events_week = db.query(XPEvent).filter(XPEvent.created_at >= week_ago).count()
 
     return {
         "notes": notes_count,
@@ -41,17 +39,14 @@ def get_system_stats(db: Session = Depends(get_db)):
 
 
 @router.get("/activity")
-def get_activity_stats(
-    days: int = 30,
-    db: Session = Depends(get_db)
-):
+def get_activity_stats(days: int = 30, db: Session = Depends(get_db)):
     """Get activity statistics for the last N days."""
     if days < 1:
         raise HTTPException(status_code=400, detail="days must be >= 1")
     if days > 366:
         days = 366
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     since = now - timedelta(days=days)
 
     # Single grouped query per table instead of N individual queries.
@@ -81,10 +76,12 @@ def get_activity_stats(
     for i in range(days):
         day = (now - timedelta(days=i)).date()
         day_str = day.isoformat()
-        daily_stats.append({
-            "date": day_str,
-            "notes_created": notes_map.get(day_str, 0),
-            "xp_events": xp_map.get(day_str, 0),
-        })
+        daily_stats.append(
+            {
+                "date": day_str,
+                "notes_created": notes_map.get(day_str, 0),
+                "xp_events": xp_map.get(day_str, 0),
+            }
+        )
 
     return {"days": daily_stats}

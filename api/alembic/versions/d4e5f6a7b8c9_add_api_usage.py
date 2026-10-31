@@ -9,44 +9,44 @@ The ai-service cost_tracker previously wrote to a stale SQLite file
 This migration creates the api_usage table in the shared PostgreSQL database
 so cost/usage tracking actually persists.
 """
-from typing import Sequence, Union
 
-from alembic import op
+from collections.abc import Sequence
+
 import sqlalchemy as sa
-
+from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = 'd4e5f6a7b8c9'
-down_revision: Union[str, None] = 'c3d4e5f6a7b8'
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+revision: str = "d4e5f6a7b8c9"
+down_revision: str | None = "c3d4e5f6a7b8"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
     op.create_table(
-        'api_usage',
-        sa.Column('id', sa.Integer(), nullable=False),
-        sa.Column('operation', sa.String(length=50), nullable=False),
-        sa.Column('input_tokens', sa.Integer(), nullable=False, server_default='0'),
-        sa.Column('output_tokens', sa.Integer(), nullable=False, server_default='0'),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-        sa.PrimaryKeyConstraint('id'),
+        "api_usage",
+        sa.Column("id", sa.Integer(), nullable=False),
+        sa.Column("operation", sa.String(length=50), nullable=False),
+        sa.Column("input_tokens", sa.Integer(), nullable=False, server_default="0"),
+        sa.Column("output_tokens", sa.Integer(), nullable=False, server_default="0"),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(
-        'ix_api_usage_created_at',
-        'api_usage',
-        ['created_at'],
+        "ix_api_usage_created_at",
+        "api_usage",
+        ["created_at"],
         unique=False,
     )
     op.create_index(
-        'ix_api_usage_operation',
-        'api_usage',
-        ['operation'],
+        "ix_api_usage_operation",
+        "api_usage",
+        ["operation"],
         unique=False,
     )
 
 
 def downgrade() -> None:
-    op.drop_index('ix_api_usage_operation', table_name='api_usage')
-    op.drop_index('ix_api_usage_created_at', table_name='api_usage')
-    op.drop_table('api_usage')
+    op.drop_index("ix_api_usage_operation", table_name="api_usage")
+    op.drop_index("ix_api_usage_created_at", table_name="api_usage")
+    op.drop_table("api_usage")

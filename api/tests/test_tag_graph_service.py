@@ -29,12 +29,7 @@ class TagGraphServiceTests(unittest.TestCase):
             )
 
             conn.execute(
-                text(
-                    "INSERT INTO note_tags (note_id, tag_id) VALUES "
-                    "(1, 1), (1, 2), "
-                    "(2, 1), (2, 2), "
-                    "(3, 1), (3, 3)"
-                )
+                text("INSERT INTO note_tags (note_id, tag_id) VALUES (1, 1), (1, 2), (2, 1), (2, 2), (3, 1), (3, 3)")
             )
 
     def tearDown(self) -> None:
@@ -47,10 +42,7 @@ class TagGraphServiceTests(unittest.TestCase):
             rebuild_tag_cooccurrences(db)
             db.commit()
             rows = db.execute(
-                text(
-                    "SELECT tag_a_id, tag_b_id, weight "
-                    "FROM tag_cooccurrences ORDER BY tag_a_id, tag_b_id"
-                )
+                text("SELECT tag_a_id, tag_b_id, weight FROM tag_cooccurrences ORDER BY tag_a_id, tag_b_id")
             ).fetchall()
 
         self.assertEqual(rows, [(1, 2, 2)])
@@ -63,10 +55,7 @@ class TagGraphServiceTests(unittest.TestCase):
             sync_tag_cooccurrences_for_tags(db, {1, 2})
             db.commit()
             rows = db.execute(
-                text(
-                    "SELECT tag_a_id, tag_b_id, weight "
-                    "FROM tag_cooccurrences ORDER BY tag_a_id, tag_b_id"
-                )
+                text("SELECT tag_a_id, tag_b_id, weight FROM tag_cooccurrences ORDER BY tag_a_id, tag_b_id")
             ).fetchall()
 
         self.assertEqual(rows, [(1, 2, 3)])

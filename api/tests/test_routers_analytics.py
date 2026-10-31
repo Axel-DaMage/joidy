@@ -8,7 +8,7 @@ Covers:
 """
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi.testclient import TestClient
 from models.gamification import UserStats, XPEvent
@@ -40,11 +40,13 @@ def test_dashboard_days_out_of_range_rejected(client: TestClient):
 def test_dashboard_aggregation_math(client: TestClient, db_session):
     before = client.get("/analytics/dashboard?days=7").json()
 
-    db_session.add_all([
-        Note(title=f"n-analytics-{uuid.uuid4().hex[:8]}", content="a"),
-        Note(title=f"n-analytics-{uuid.uuid4().hex[:8]}", content="b"),
-        XPEvent(event_type="note_created", xp=10),
-    ])
+    db_session.add_all(
+        [
+            Note(title=f"n-analytics-{uuid.uuid4().hex[:8]}", content="a"),
+            Note(title=f"n-analytics-{uuid.uuid4().hex[:8]}", content="b"),
+            XPEvent(event_type="note_created", xp=10),
+        ]
+    )
     stats = db_session.query(UserStats).filter(UserStats.id == 1).first()
     if stats is None:
         stats = UserStats(id=1)
@@ -56,7 +58,7 @@ def test_dashboard_aggregation_math(client: TestClient, db_session):
     assert data["system"]["notes"] == before["system"]["notes"] + 2
     assert data["system"]["xp_events_week"] == before["system"]["xp_events_week"] + 1
     assert data["system"]["total_xp"] == 42
-    today = datetime.now(timezone.utc).date().isoformat()
+    today = datetime.now(UTC).date().isoformat()
     today_row = next(d for d in data["activity"]["days"] if d["date"] == today)
     assert today_row["notes_created"] >= 2
 
@@ -121,11 +123,13 @@ def test_usage_old_events_excluded(client: TestClient, db_session):
     """Events older than the window are excluded from the aggregation."""
     from models.usage_event import UsageEvent
 
-    db_session.add(UsageEvent(
-        user_id=1,
-        event_type="page_view",
-        created_at=datetime.now(timezone.utc) - timedelta(days=90),
-    ))
+    db_session.add(
+        UsageEvent(
+            user_id=1,
+            event_type="page_view",
+            created_at=datetime.now(UTC) - timedelta(days=90),
+        )
+    )
     db_session.commit()
 
     response = client.get("/analytics/usage?days=7")

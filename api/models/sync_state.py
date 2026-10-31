@@ -1,8 +1,12 @@
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from database import Base
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, func
-from sqlalchemy.orm import Mapped, mapped_column, relationship, backref
+from sqlalchemy.orm import Mapped, backref, mapped_column, relationship
+
+if TYPE_CHECKING:
+    from models.note import Note
 
 
 class SyncState(Base):
@@ -19,8 +23,6 @@ class SyncState(Base):
     remote_mtime: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     conflict: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.now(), onupdate=func.now()
-    )
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
     note: Mapped["Note"] = relationship("Note", backref=backref("sync_state", cascade="all, delete-orphan"))

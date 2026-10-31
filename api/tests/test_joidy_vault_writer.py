@@ -11,9 +11,8 @@ import sys
 import tempfile
 import types
 import unittest
-from datetime import date, datetime, timedelta, timezone
+from datetime import date
 from pathlib import Path
-from unittest.mock import patch
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
@@ -28,9 +27,8 @@ from config import settings
 from database import Base
 from models.gamification import StreakRecord, UserStats
 from models.goal import Goal
-from models.note import Note, NoteTag, Tag
+from models.note import Tag
 from models.skill import Skill
-import services.joidy_vault_writer as vault_writer
 from services.joidy_vault_writer import (
     JOIDY_DIR,
     JOIDY_HEADER,

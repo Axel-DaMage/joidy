@@ -1,11 +1,10 @@
 import secrets
 
+from config import settings
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from services.auth_service import get_current_user, hash_password
 from services.env_file import ENV_FILE, read_env, write_env  # noqa: F401  (ENV_FILE re-exported)
-
-from config import settings
 
 router = APIRouter(prefix="/config", tags=["config"])
 
@@ -110,10 +109,7 @@ def get_config():
         else:
             response_data[short_key] = None
 
-    return ConfigResponse(
-        **response_data,
-        configured_keys=configured
-    )
+    return ConfigResponse(**response_data, configured_keys=configured)
 
 
 @router.post("", dependencies=[Depends(get_current_user)])
@@ -134,7 +130,10 @@ def update_config(update: ConfigUpdate):
             value = update_data[short_key]
             # Skip empty overrides for non-secret provider settings: an empty
             # string would clobber a working config (pydantic reads "" as set).
-            if short_key in ("llm_model", "embedding_model", "openai_base_url", "google_redirect_uri") and not (value or "").strip():
+            if (
+                short_key in ("llm_model", "embedding_model", "openai_base_url", "google_redirect_uri")
+                and not (value or "").strip()
+            ):
                 continue
             if value is not None:
                 env_vars[env_key] = value
@@ -211,14 +210,12 @@ def get_gamification_config():
         STREAK_MILESTONES,
         get_xp_table,
     )
+
     xp_table = get_xp_table()
     return GamificationConfig(
         xp_table=xp_table,
-        plant_stages=[
-            {"stage": i, "name": name, "xp_required": xp}
-            for i, (xp, name) in enumerate(PLANT_STAGES)
-        ],
-        streak_milestones=STREAK_MILESTONES
+        plant_stages=[{"stage": i, "name": name, "xp_required": xp} for i, (xp, name) in enumerate(PLANT_STAGES)],
+        streak_milestones=STREAK_MILESTONES,
     )
 
 
@@ -226,12 +223,14 @@ class SetupRequest(BaseModel):
     auth_password: str
     obsidian_vault_path: str | None = None
 
+
 @router.get("/setup-status")
 def setup_status():
     env_vars = read_env()
     needs_setup = not (env_vars.get("AUTH_PASSWORD") and env_vars.get("SECRET_KEY"))
     # Only reveal whether setup is needed — no sensitive information
     return {"needs_setup": needs_setup}
+
 
 @router.post("/setup")
 def perform_setup(req: SetupRequest):
@@ -253,15 +252,16 @@ def perform_setup(req: SetupRequest):
     env_vars["AUTH_PASSWORD"] = hash_password(req.auth_password)
     if req.obsidian_vault_path:
         env_vars["OBSIDIAN_VAULT_PATH"] = req.obsidian_vault_path
-        
+
     if not env_vars.get("SECRET_KEY"):
         env_vars["SECRET_KEY"] = secrets.token_urlsafe(32)
-        
+
     write_env(env_vars)
-    
+
     # Reload settings in memory (best-effort — the authoritative source is
     # now the .env file, which every worker reads via get_persisted()).
     import os
+
     settings.auth_password = hash_password(req.auth_password)
     settings.secret_key = env_vars["SECRET_KEY"]
     if req.obsidian_vault_path:
@@ -273,4 +273,3 @@ def perform_setup(req: SetupRequest):
         "message": "Setup completed",
         "requires_restart": False,
     }
-

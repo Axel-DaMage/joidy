@@ -5,21 +5,44 @@ Prevents XSS, injection, and data corruption in user-supplied inputs.
 """
 
 import re
+
 import bleach
 
 # Allowed HTML tags for markdown content (if markdown is rendered to HTML on backend, or just to strip HTML).
 # Often markdown contains basic formatting.
 ALLOWED_TAGS = [
-    'a', 'abbr', 'acronym', 'b', 'blockquote', 'code',
-    'em', 'i', 'li', 'ol', 'strong', 'ul', 'p', 'br',
-    'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'span', 'div', 'pre', 'hr', 'img'
+    "a",
+    "abbr",
+    "acronym",
+    "b",
+    "blockquote",
+    "code",
+    "em",
+    "i",
+    "li",
+    "ol",
+    "strong",
+    "ul",
+    "p",
+    "br",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "span",
+    "div",
+    "pre",
+    "hr",
+    "img",
 ]
 ALLOWED_ATTRIBUTES = {
-    'a': ['href', 'title'],
-    'abbr': ['title'],
-    'acronym': ['title'],
-    'img': ['src', 'alt', 'title'],
-    '*': ['class']
+    "a": ["href", "title"],
+    "abbr": ["title"],
+    "acronym": ["title"],
+    "img": ["src", "alt", "title"],
+    "*": ["class"],
 }
 
 # Max lengths per field type

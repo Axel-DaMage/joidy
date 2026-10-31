@@ -20,22 +20,22 @@ class PersonalStreak(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String, nullable=False)
     emoji = Column(String, default="🔥")
-    icon = Column(String, default="")                 # Lucide icon name (alternative to emoji)
+    icon = Column(String, default="")  # Lucide icon name (alternative to emoji)
     description = Column(String, default="")
     color = Column(String, default="")
-    theme = Column(String, default="solid")            # 'solid' | 'gradient' | 'glow' | 'minimal'
-    category = Column(String, default="general")       # general, salud, estudio, fitness, creatividad, habito, trabajo
+    theme = Column(String, default="solid")  # 'solid' | 'gradient' | 'glow' | 'minimal'
+    category = Column(String, default="general")  # general, salud, estudio, fitness, creatividad, habito, trabajo
     start_date = Column(Date, nullable=True)
-    target_date = Column(Date, nullable=True)          # Optional goal date
-    offset = Column(Integer, default=0)                # For migrating streaks from other apps
-    frequency = Column(String, default="daily")        # 'daily' | 'every_n'
-    frequency_days = Column(Integer, default=1)        # Every N days (1 = daily)
-    snowball_mode = Column(Boolean, default=False)     # True = streak never fails/resets on missed days
+    target_date = Column(Date, nullable=True)  # Optional goal date
+    offset = Column(Integer, default=0)  # For migrating streaks from other apps
+    frequency = Column(String, default="daily")  # 'daily' | 'every_n'
+    frequency_days = Column(Integer, default=1)  # Every N days (1 = daily)
+    snowball_mode = Column(Boolean, default=False)  # True = streak never fails/resets on missed days
     is_archived = Column(Boolean, default=False)
-    best_streak = Column(Integer, default=0)           # Historical record
-    total_checkins = Column(Integer, default=0)        # Accumulated check-in count
-    freeze_count = Column(Integer, default=0)          # Available shields
-    freeze_used = Column(Integer, default=0)           # Shields used
+    best_streak = Column(Integer, default=0)  # Historical record
+    total_checkins = Column(Integer, default=0)  # Accumulated check-in count
+    freeze_count = Column(Integer, default=0)  # Available shields
+    freeze_used = Column(Integer, default=0)  # Shields used
     created_at = Column(DateTime, default=func.now())
 
     checkins = relationship(
@@ -49,7 +49,7 @@ class PersonalStreak(Base):
         # list_streaks filters on is_archived and category on every request (#403).
         Index("ix_personal_streaks_is_archived", "is_archived"),
         Index("ix_personal_streaks_category", "category"),
-        Index("ix_personal_streaks_active", "id", postgresql_where=(is_archived == False)),
+        Index("ix_personal_streaks_active", "id", postgresql_where=(is_archived == False)),  # noqa: E712 -- SQLAlchemy partial-index predicate requires ==
     )
 
 

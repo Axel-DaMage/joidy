@@ -36,11 +36,13 @@ class NoteServiceTestBase(unittest.TestCase):
         # Create tag_cooccurrences table (used by tag_graph service)
         with self.engine.begin() as conn:
             try:
-                conn.execute(text(
-                    "CREATE TABLE IF NOT EXISTS tag_cooccurrences "
-                    "(tag_a_id INTEGER, tag_b_id INTEGER, weight INTEGER, "
-                    "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)"
-                ))
+                conn.execute(
+                    text(
+                        "CREATE TABLE IF NOT EXISTS tag_cooccurrences "
+                        "(tag_a_id INTEGER, tag_b_id INTEGER, weight INTEGER, "
+                        "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)"
+                    )
+                )
             except Exception:
                 pass  # Table may already exist via Base.metadata
         self.Session = sessionmaker(bind=self.engine)
@@ -155,13 +157,21 @@ class TestCreateNoteDedup(NoteServiceTestBase):
     def test_same_source_path_reuses_existing_note(self) -> None:
         with self.Session() as db:
             first, gami1 = create_note(
-                db, title="Daily", content="V1", tags=["daily"],
-                source="joidy", source_path="/vault/Daily/2025-01-01.md",
+                db,
+                title="Daily",
+                content="V1",
+                tags=["daily"],
+                source="joidy",
+                source_path="/vault/Daily/2025-01-01.md",
                 rebuild_derived_data=False,
             )
             second, gami2 = create_note(
-                db, title="Daily", content="V2", tags=[],
-                source="joidy", source_path="/vault/Daily/2025-01-01.md",
+                db,
+                title="Daily",
+                content="V2",
+                tags=[],
+                source="joidy",
+                source_path="/vault/Daily/2025-01-01.md",
                 rebuild_derived_data=False,
             )
             self.assertEqual(first.id, second.id)
@@ -173,12 +183,18 @@ class TestCreateNoteDedup(NoteServiceTestBase):
         # The frontend builds source_path with the host vault path from .env
         # (issue #1099): the service must store it on the effective domain.
         env = {"OBSIDIAN_VAULT_PATH": "/home/user/ObsidianVault"}
-        with self.Session() as db, patch(
-            "services.vault_paths.read_env", return_value=env
-        ), patch("services.vault_paths.settings.obsidian_vault_path", "/vault"):
+        with (
+            self.Session() as db,
+            patch("services.vault_paths.read_env", return_value=env),
+            patch("services.vault_paths.settings.obsidian_vault_path", "/vault"),
+        ):
             note, _ = create_note(
-                db, title="Daily", content="C", tags=[],
-                source="joidy", source_path="/home/user/ObsidianVault/Daily/x.md",
+                db,
+                title="Daily",
+                content="C",
+                tags=[],
+                source="joidy",
+                source_path="/home/user/ObsidianVault/Daily/x.md",
                 rebuild_derived_data=False,
             )
             self.assertEqual(note.source_path, "/vault/Daily/x.md")
@@ -188,12 +204,17 @@ class TestUpdateNote(NoteServiceTestBase):
     def test_updates_title_and_content(self) -> None:
         with self.Session() as db:
             note, _ = create_note(
-                db, title="Original", content="Old " * 50,
-                tags=[], source="joidy", source_path=None,
+                db,
+                title="Original",
+                content="Old " * 50,
+                tags=[],
+                source="joidy",
+                source_path=None,
                 rebuild_derived_data=False,
             )
             updated, gami = update_note(
-                db, note.id,
+                db,
+                note.id,
                 title="Updated Title",
                 content="New " * 50,
                 rebuild_derived_data=False,
@@ -210,12 +231,18 @@ class TestUpdateNote(NoteServiceTestBase):
     def test_update_replaces_tags(self) -> None:
         with self.Session() as db:
             note, _ = create_note(
-                db, title="Tags", content="C",
-                tags=["old-tag"], source="joidy", source_path=None,
+                db,
+                title="Tags",
+                content="C",
+                tags=["old-tag"],
+                source="joidy",
+                source_path=None,
                 rebuild_derived_data=False,
             )
             updated, _ = update_note(
-                db, note.id, tags=["new-tag-a", "new-tag-b"],
+                db,
+                note.id,
+                tags=["new-tag-a", "new-tag-b"],
                 rebuild_derived_data=False,
             )
             tag_names = sorted([nt.tag.name for nt in updated.tags])
@@ -226,8 +253,12 @@ class TestDeleteNote(NoteServiceTestBase):
     def test_deletes_existing_note(self) -> None:
         with self.Session() as db:
             note, _ = create_note(
-                db, title="Delete Me", content="X",
-                tags=["removable"], source="joidy", source_path=None,
+                db,
+                title="Delete Me",
+                content="X",
+                tags=["removable"],
+                source="joidy",
+                source_path=None,
                 rebuild_derived_data=False,
             )
             result = delete_note(db, note.id)

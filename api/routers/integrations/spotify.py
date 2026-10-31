@@ -1,7 +1,5 @@
 """Spotify integration router."""
 
-from typing import Any
-
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel

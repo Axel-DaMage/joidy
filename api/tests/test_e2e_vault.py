@@ -42,10 +42,16 @@ def test_create_note_with_obsidian_source(client: TestClient):
 
 
 def test_imported_note_found_by_source_path(client: TestClient):
-    client.post("/notes/", json={
-        "title": "Path Find", "content": "X", "tags": [],
-        "source": "obsidian", "source_path": "/vault/find-me.md",
-    })
+    client.post(
+        "/notes/",
+        json={
+            "title": "Path Find",
+            "content": "X",
+            "tags": [],
+            "source": "obsidian",
+            "source_path": "/vault/find-me.md",
+        },
+    )
     resp = client.get("/notes/")
     assert resp.status_code == 200
     notes = resp.json()
@@ -54,14 +60,23 @@ def test_imported_note_found_by_source_path(client: TestClient):
 
 
 def test_update_imported_note_content(client: TestClient):
-    create = client.post("/notes/", json={
-        "title": "Obs Upd", "content": "Old", "tags": [],
-        "source": "obsidian", "source_path": "/vault/update-test.md",
-    }).json()
-    resp = client.put(f"/notes/{create['id']}", json={
-        "content": "Updated via watcher",
-        "tags": ["updated"],
-    })
+    create = client.post(
+        "/notes/",
+        json={
+            "title": "Obs Upd",
+            "content": "Old",
+            "tags": [],
+            "source": "obsidian",
+            "source_path": "/vault/update-test.md",
+        },
+    ).json()
+    resp = client.put(
+        f"/notes/{create['id']}",
+        json={
+            "content": "Updated via watcher",
+            "tags": ["updated"],
+        },
+    )
     assert resp.status_code == 200
     data = resp.json()
     assert "updated" in data["tags"]
@@ -73,9 +88,15 @@ def test_rebuild_derived_data(client: TestClient):
 
 
 def test_tag_graph_after_import(client: TestClient):
-    client.post("/notes/", json={
-        "title": "Graph Test", "content": "#tag-a and #tag-b", "tags": ["tag-a", "tag-b"],
-        "source": "obsidian", "source_path": "/vault/graph-test.md",
-    })
+    client.post(
+        "/notes/",
+        json={
+            "title": "Graph Test",
+            "content": "#tag-a and #tag-b",
+            "tags": ["tag-a", "tag-b"],
+            "source": "obsidian",
+            "source_path": "/vault/graph-test.md",
+        },
+    )
     resp = client.get("/tags/graph")
     assert resp.status_code == 200

@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from database import Base
-from sqlalchemy import DateTime, Index, Integer, String, Text, func
+from sqlalchemy import DateTime, Index, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import JSON
 
@@ -21,9 +21,7 @@ class UsageEvent(Base):
     user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     event_type: Mapped[str] = mapped_column(String(32), nullable=False)
     event_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.now(), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
 
     __table_args__ = (
         Index("ix_usage_events_user_created", "user_id", "created_at"),

@@ -7,7 +7,7 @@ records a lightweight usage event from the frontend (only while the app is in
 the foreground). ``GET /analytics/usage`` returns the aggregated usage summary.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import httpx
 from config import settings
@@ -44,15 +44,13 @@ class TrackRequest(BaseModel):
     @classmethod
     def valid_type(cls, v: str) -> str:
         if v not in VALID_EVENT_TYPES:
-            raise ValueError(
-                f"event_type must be one of: {', '.join(sorted(VALID_EVENT_TYPES))}"
-            )
+            raise ValueError(f"event_type must be one of: {', '.join(sorted(VALID_EVENT_TYPES))}")
         return v
 
 
 def _system_stats(db: Session) -> dict:
     """Reuse the same queries as /stats/system (kept local to avoid a cross-router import)."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     week_ago = now - timedelta(days=7)
 
     notes_count = db.query(Note).count()
@@ -81,7 +79,7 @@ def _activity(db: Session, days: int) -> dict:
     if days > 366:
         days = 366
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     since = now - timedelta(days=days)
 
     notes_by_day = (

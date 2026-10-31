@@ -1,9 +1,11 @@
 from fastapi.testclient import TestClient
 
+
 def test_list_goals_empty(client: TestClient):
     response = client.get("/goals/")
     assert response.status_code == 200
     assert response.json() == []
+
 
 def test_create_goal(client: TestClient):
     payload = {
@@ -20,6 +22,7 @@ def test_create_goal(client: TestClient):
     get_res = client.get(f"/goals/{goal_id}")
     assert get_res.status_code == 200
     assert get_res.json()["title"] == "Read a book"
+
 
 def test_complete_goal(client: TestClient):
     payload = {
@@ -61,7 +64,6 @@ def test_create_goal_with_note_link(client: TestClient, db_session):
 
 
 def test_goal_content_served_from_linked_note(client: TestClient, db_session):
-    from models.note import Note
 
     note = _make_note(db_session, "Proyecto X", "# Proyecto X\n\nContenido real")
     goal_id = client.post("/goals/", json={"title": "Objetivo X", "note_id": note.id}).json()["id"]

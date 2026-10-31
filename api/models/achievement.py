@@ -16,6 +16,4 @@ class Achievement(Base):
     unlocked_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     metadata_json: Mapped[str | None] = mapped_column(Text, nullable=True, default="{}")
 
-    __table_args__ = (
-        UniqueConstraint("user_id", "achievement_key", name="uq_achievements_user_key"),
-    )
+    __table_args__ = (UniqueConstraint("user_id", "achievement_key", name="uq_achievements_user_key"),)

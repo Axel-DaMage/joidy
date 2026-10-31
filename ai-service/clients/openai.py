@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from typing import cast
 
 import httpx
 from config import settings
@@ -34,7 +35,7 @@ class OpenAIClient(BaseLLMClient, EmbeddingClient):
             model=self._model,
             input=text,
         )
-        return response.data[0].embedding
+        return cast("list[float]", response.data[0].embedding)
 
     async def generate(
         self,

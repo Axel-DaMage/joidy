@@ -9,8 +9,8 @@ class _FakeLLM(BaseLLMClient):
     def __init__(self, response: str = "[]", fail: bool = False):
         self._response = response
         self._fail = fail
-        self.last_prompt = None
-        self.last_kwargs = None
+        self.last_prompt: str | None = None
+        self.last_kwargs: dict[str, float] | None = None
 
     @property
     def provider_name(self) -> str:

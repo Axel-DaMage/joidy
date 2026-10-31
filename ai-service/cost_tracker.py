@@ -11,11 +11,10 @@ created by Alembic migration. Previously this used a stale SQLite file at
 """
 
 import logging
-from datetime import datetime, timezone
-
-from sqlalchemy import text
+from datetime import UTC, datetime
 
 from database import engine
+from sqlalchemy import text
 
 logger = logging.getLogger(__name__)
 
@@ -34,10 +33,7 @@ def record_usage(operation: str, input_tokens: int = 0, output_tokens: int = 0):
     try:
         with engine.connect() as conn:
             conn.execute(
-                text(
-                    "INSERT INTO api_usage (operation, input_tokens, output_tokens) "
-                    "VALUES (:op, :in, :out)"
-                ),
+                text("INSERT INTO api_usage (operation, input_tokens, output_tokens) VALUES (:op, :in, :out)"),
                 {"op": operation, "in": input_tokens, "out": output_tokens},
             )
             conn.commit()
@@ -48,7 +44,7 @@ def record_usage(operation: str, input_tokens: int = 0, output_tokens: int = 0):
 def get_monthly_stats() -> dict:
     """Aggregate token usage and estimated cost for the current month."""
     try:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         with engine.connect() as conn:
             row = conn.execute(
@@ -60,13 +56,19 @@ def get_monthly_stats() -> dict:
                 {"month_start": month_start},
             ).fetchone()
 
+        if row is None:
+            return {
+                "month": now.strftime("%Y-%m"),
+                "total_input_tokens": 0,
+                "total_output_tokens": 0,
+                "total_api_calls": 0,
+                "estimated_cost_usd": 0.0,
+            }
+
         total_input = int(row[0] or 0)
         total_output = int(row[1] or 0)
         total_calls = int(row[2] or 0)
-        estimated_cost = (
-            total_input / 1_000_000 * COST_PER_1M_INPUT
-            + total_output / 1_000_000 * COST_PER_1M_OUTPUT
-        )
+        estimated_cost = total_input / 1_000_000 * COST_PER_1M_INPUT + total_output / 1_000_000 * COST_PER_1M_OUTPUT
 
         return {
             "month": now.strftime("%Y-%m"),
@@ -78,7 +80,7 @@ def get_monthly_stats() -> dict:
     except Exception as exc:
         logger.warning("[cost_tracker] get_monthly_stats failed: %s", exc)
         return {
-            "month": datetime.now(timezone.utc).strftime("%Y-%m"),
+            "month": datetime.now(UTC).strftime("%Y-%m"),
             "total_input_tokens": 0,
             "total_output_tokens": 0,
             "total_api_calls": 0,

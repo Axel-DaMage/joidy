@@ -7,7 +7,6 @@ from services.gamification_engine import (
     GamificationResult,
     process_event,
     xp_for,
-    get_xp_table,
 )
 from services.goal_service import sync_goals_from_note
 from services.response_cache import clear_api_caches
@@ -48,7 +47,7 @@ def write_to_vault(note: Note, from_vault: bool = False) -> bool:
             return False
         if os.path.exists(full_path):
             try:
-                current = open(full_path, "r", encoding="utf-8").read()
+                current = open(full_path, encoding="utf-8").read()
             except Exception:
                 current = None
             if current is not None and current == note.content:
@@ -62,6 +61,7 @@ def write_to_vault(note: Note, from_vault: bool = False) -> bool:
 
 def note_to_response(note: Note) -> dict:
     from sqlalchemy import inspect
+
     insp = inspect(note)
     content = ""
     if "content" not in insp.unloaded:
@@ -94,7 +94,7 @@ def sync_note_links(db: Session, source_note_id: int, content: str) -> None:
     db.query(NoteLink).filter(NoteLink.source_note_id == source_note_id).delete()
 
     links = re.findall(r"\[\[\s*([^\]|]+?)\s*(?:\|[^\]]+)?\]\]", content)
-    unique_titles = list(set(title.strip() for title in links))
+    unique_titles = list({title.strip() for title in links})
     if not unique_titles:
         db.flush()
         return

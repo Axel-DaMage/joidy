@@ -3,7 +3,6 @@ from typing import Any
 
 from database import get_db
 from fastapi import APIRouter, Depends
-from models.achievement import Achievement
 from pydantic import BaseModel, Field
 from services.achievement_service import (
     get_unlocked_achievements,
@@ -39,7 +38,5 @@ def unlock(
     user_id: int = Depends(get_current_user),
 ):
     """Unlock an achievement (idempotent — replaying a key is a no-op)."""
-    record, created = unlock_achievement(
-        db, user_id, data.achievement_key, data.unlocked_at, data.metadata
-    )
+    record, created = unlock_achievement(db, user_id, data.achievement_key, data.unlocked_at, data.metadata)
     return {**serialize_achievement(record), "already_unlocked": not created}

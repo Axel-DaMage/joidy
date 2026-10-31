@@ -1,6 +1,6 @@
 """Router tests for the sync conflict endpoints (#13)."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi.testclient import TestClient
 from models.note import Note
@@ -14,8 +14,8 @@ def _make_conflicted_note(db_session, title="Conflicted Note"):
     sync = SyncState(
         note_id=note.id,
         conflict=True,
-        local_mtime=datetime.now(timezone.utc),
-        remote_mtime=datetime.now(timezone.utc),
+        local_mtime=datetime.now(UTC),
+        remote_mtime=datetime.now(UTC),
     )
     db_session.add(sync)
     db_session.commit()
@@ -60,10 +60,13 @@ def test_resolve_keep_local(client: TestClient, db_session):
 def test_resolve_merge(client: TestClient, db_session):
     note_id = _make_conflicted_note(db_session)
 
-    response = client.post(f"/sync/resolve/{note_id}", json={
-        "resolution": "merge",
-        "merged_content": "merged content here",
-    })
+    response = client.post(
+        f"/sync/resolve/{note_id}",
+        json={
+            "resolution": "merge",
+            "merged_content": "merged content here",
+        },
+    )
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "ok"

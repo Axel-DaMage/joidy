@@ -15,7 +15,8 @@ import uuid
 
 import pytest
 from fastapi.testclient import TestClient
-from models.note import Note, Tag as TagModel
+from models.note import Note
+from models.note import Tag as TagModel
 from models.skill import Skill
 from services.response_cache import clear_api_caches
 
@@ -43,10 +44,12 @@ def test_list_skills_empty(client: TestClient):
 def test_list_skills_shape_and_locked_filtered(client: TestClient, db_session):
     tag = _tag(db_session)
     locked_tag = _tag(db_session)
-    db_session.add_all([
-        Skill(tag_id=tag.id, note_count=5, level="apprentice"),
-        Skill(tag_id=locked_tag.id, note_count=0, level="locked"),
-    ])
+    db_session.add_all(
+        [
+            Skill(tag_id=tag.id, note_count=5, level="apprentice"),
+            Skill(tag_id=locked_tag.id, note_count=0, level="locked"),
+        ]
+    )
     db_session.commit()
 
     response = client.get("/skills/")
@@ -73,10 +76,12 @@ def test_skill_tree_nodes_and_parent_edges(client: TestClient, db_session):
     child = TagModel(name=f"tag-skills-child-{uuid.uuid4().hex[:8]}", parent_id=parent.id)
     db_session.add(child)
     db_session.commit()
-    db_session.add_all([
-        Skill(tag_id=parent.id, note_count=30, level="expert"),
-        Skill(tag_id=child.id, note_count=5, level="apprentice"),
-    ])
+    db_session.add_all(
+        [
+            Skill(tag_id=parent.id, note_count=30, level="expert"),
+            Skill(tag_id=child.id, note_count=5, level="apprentice"),
+        ]
+    )
     db_session.commit()
 
     response = client.get("/skills/tree")
