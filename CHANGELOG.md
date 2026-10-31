@@ -14,6 +14,15 @@
 
 ### 🚀 Features
 
+* feat(goals): campo de prioridad y ordenación en todos los listados (#1097) by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1157
+* feat(gamification): persistir logros en PostgreSQL y sincronizar UI (#1137) by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1155
+* feat(gamification): +15 XP al completar sesión pomodoro (#1133) by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1153
+* feat(github): filtros de tipo y estado en el widget de GitHub del dashboard (#1094) by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1151
+* feat(frontend): duplicar densidad vertical del widget de GitHub (#1095) by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1139
+* feat(goals,streaks): sugerir icono/emoji automáticamente según el título (#1092) by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1138
+* feat(integrations): bandeja unificada de Gmail vía n8n (#1140) by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1140
+* feat(goals): enlazar objetivo con nota real y escribir el contenido en ella (#1146) by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1146
+* feat(integrations): Google OAuth one-click en Settings + provider IA OpenAI-compatible (#1147) by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1147
 * feat(goals): recordarse del filtro y la búsqueda del editor entre visitas (#1096) by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1098
 * feat(frontend): add multiple timer and clock styles by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1065
 * feat(scripts): auto-sleep docker stack when idle (idle watchdog) by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1064
@@ -41,6 +50,11 @@
 
 ### 🐛 Bug Fixes
 
+* fix(frontend): estandarizar caja del temporizador entre estilos de reloj (#1093) by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1154
+* fix(gamification): disparar evento topic_connected al crear relación padre/hijo de tags (#1136) by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1152
+* fix(integrations): persistir credenciales de Google al pulsar Conectar + estado enmascarado visible (#1148) by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1149
+* fix(frontend): mover pestaña de Correos debajo de Objetivos en la navegación (#1144) by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1144
+* fix(frontend): permanecer en la vista general de objetivos al crear uno (#1145) by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1145
 * fix(frontend): autosave y borradores en notas y objetivos (#1129) by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1130
 * fix(notes): la nota diaria llega al vault — dominio de source_path, fecha local y sin descartes silenciosos (#1099) by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1100
 * fix(api): make tests hermetic against a populated .env by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1063
@@ -70,6 +84,8 @@
 
 ### 🧹 Chores
 
+* ci: convertir checks en gates reales (ruff, mypy, coverage floor, security, alembic round-trip) (#994) by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1156
+* chore(frontend): rutas /ai, /graph y /skills disponibles sin Dev Mode + banner beta (#1135) by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1150
 * chore(deps-dev): Bump typescript-eslint from 8.71.2 to 8.72.0 in /frontend by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1128
 * chore(deps-dev): Bump eslint from 10.11.0 to 10.13.0 in /frontend by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1127
 * chore(deps-dev): Bump eslint-plugin-svelte from 3.23.0 to 3.23.1 in /frontend by @app/dependabot in https://github.com/Axel-DaMage/joidy/pull/1126
