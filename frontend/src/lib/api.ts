@@ -309,6 +309,18 @@ export interface MoodStats {
   notes_correlation: number;
 }
 
+export interface AchievementRecord {
+  id: number;
+  user_id: number;
+  achievement_key: string;
+  unlocked_at: string | null;
+  metadata: Record<string, unknown> | null;
+}
+
+export interface AchievementUnlockResult extends AchievementRecord {
+  already_unlocked: boolean;
+}
+
 export interface EmailSummary {
   id: number;
   account: string;
@@ -452,6 +464,17 @@ export const api = {
       req<{ type: string; xp: number; at: string }[]>(
         'GET',
         `/gamification/recent-events?limit=${limit}`
+      ),
+  },
+
+  achievements: {
+    list: () => req<AchievementRecord[]>('GET', '/achievements', undefined, { silent: true }),
+    unlock: (achievement_key: string, unlocked_at?: string) =>
+      req<AchievementUnlockResult>(
+        'POST',
+        '/achievements/unlock',
+        { achievement_key, unlocked_at },
+        { silent: true }
       ),
   },
 
