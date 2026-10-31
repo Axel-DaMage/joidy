@@ -68,11 +68,14 @@ explicit_package_bases = true
 [[tool.mypy.overrides]]
 module = [
     "database",
+    "main",
     "middleware.metrics",
+    "middleware.request_id",
     "repositories",
     "routers.analytics",
     "routers.gamification",
     "routers.integrations.github",
+    "routers.notes",
     "routers.personal_streaks",
     "routers.sync",
     "routers.system",
@@ -89,6 +92,7 @@ module = [
     "services.joidy_vault_writer",
     "services.mood_service",
     "services.note_service",
+    "services.personal_streak_service",
     "services.sanitizer",
     "services.spotify_service",
     "services.strava_service",
@@ -97,6 +101,8 @@ module = [
     "tests.test_google_token_service",
     "tests.test_joidy_vault_writer",
     "tests.test_skill_tree_service",
+    "tests.test_sync_service",
+    "tests.test_webhook_sync",
     "alembic.env",
     "alembic.versions.*",
 ]
