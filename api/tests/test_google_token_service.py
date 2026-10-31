@@ -11,7 +11,7 @@ import asyncio
 import sys
 import types
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from sqlalchemy import create_engine
@@ -147,19 +147,19 @@ class StoreTokensTest(GoogleTokenTestBase):
 
     def test_store_tokens_sets_expiry(self) -> None:
         with self.Session() as db:
-            before = datetime.now(timezone.utc)
+            before = datetime.now(UTC)
             row = store_tokens(
                 db,
                 access_token="access",
                 refresh_token="refresh",
                 expires_in=3600,
             )
-            after = datetime.now(timezone.utc)
+            after = datetime.now(UTC)
             expected_min = before + timedelta(seconds=3600)
             expected_max = after + timedelta(seconds=3600)
             expires_at = row.expires_at
             if expires_at.tzinfo is None:
-                expires_at = expires_at.replace(tzinfo=timezone.utc)
+                expires_at = expires_at.replace(tzinfo=UTC)
             self.assertGreaterEqual(expires_at, expected_min - timedelta(seconds=2))
             self.assertLessEqual(expires_at, expected_max + timedelta(seconds=2))
 
@@ -266,7 +266,7 @@ class GetValidAccessTokenTest(GoogleTokenTestBase):
             mock_client.__aexit__ = AsyncMock(return_value=None)
             mock_client.post = AsyncMock(return_value=mock_response)
 
-            with patch("services.google_token_service.httpx.AsyncClient", return_value=mock_client):
+            with patch("services.google_token_service.http_client", return_value=mock_client):
                 result = self._run(get_valid_access_token(db))
 
             self.assertEqual(result, "new-access-token")
@@ -298,7 +298,7 @@ class GetValidAccessTokenTest(GoogleTokenTestBase):
             mock_client.__aexit__ = AsyncMock(return_value=None)
             mock_client.post = AsyncMock(return_value=mock_response)
 
-            with patch("services.google_token_service.httpx.AsyncClient", return_value=mock_client):
+            with patch("services.google_token_service.http_client", return_value=mock_client):
                 result = self._run(get_valid_access_token(db))
 
             self.assertIsNone(result)

@@ -80,10 +80,7 @@ class _TTLCache:
                 with lock:
                     # Evict stale entries if at capacity
                     if len(values) >= self.max_entries:
-                        stale_keys = [
-                            k for k, (ts, _) in values.items()
-                            if now - ts >= self.ttl_seconds
-                        ]
+                        stale_keys = [k for k, (ts, _) in values.items() if now - ts >= self.ttl_seconds]
                         for k in stale_keys:
                             del values[k]
                             self.stats.record_eviction()

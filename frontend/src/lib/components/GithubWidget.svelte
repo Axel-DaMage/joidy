@@ -15,9 +15,31 @@
   export let prStats: { open: number; total: number } = { open: 0, total: 0 };
   export let ghFilter = 'created';
   export let ghType = 'all';
-  export let itemLimit = 8;
+  // #1095 — el cuerpo ya no se dimensiona con un tope de filas (height fija), es dinámico
+  const recentNotesLimit = 8;
+  const skeletonRows = 10;
   export let onSetFilter: (filter: string) => void;
   export let onSetType: (type: string) => void;
+
+  // #1094 — filtros de estado y búsqueda, locales al widget (no se persisten)
+  let ghState = 'all';
+  let ghSearch = '';
+
+  $: visiblePRs = githubPRs.filter((pr) => ghMatchesState(pr, ghState) && ghMatchesSearch(pr, ghSearch));
+  $: visibleIssues = githubIssues.filter((issue) => ghMatchesState(issue, ghState) && ghMatchesSearch(issue, ghSearch));
+
+  function ghMatchesState(item: { state?: string; merged_at?: string | null }, state: string): boolean {
+    if (state === 'open') return item.state === 'open';
+    if (state === 'merged') return !!item.merged_at;
+    if (state === 'closed') return item.state === 'closed' && !item.merged_at;
+    return true;
+  }
+
+  function ghMatchesSearch(item: { title: string; repo: string; number: number }, query: string): boolean {
+    const q = query.trim().toLowerCase().replace(/^#+/, '');
+    if (!q) return true;
+    return item.title.toLowerCase().includes(q) || item.repo.toLowerCase().includes(q) || String(item.number).includes(q);
+  }
 
   export let activeTab: 'github' | 'recent-notes' = 'github';
   export let onTabChange: ((tab: 'github' | 'recent-notes') => void) | undefined = undefined;
@@ -73,16 +95,33 @@
   </div>
 
   {#if githubConnected && activeTab === 'github'}
-    <div class="gh-filters">
-      <div class="gh-filter">
-        <button class="filter-btn" class:active={ghType === 'all'} onclick={() => onSetType('all')}>{$t('widgets.ghAll')}</button>
-        <button class="filter-btn" class:active={ghType === 'issues'} onclick={() => onSetType('issues')}>{$t('widgets.ghIssues')}</button>
-        <button class="filter-btn" class:active={ghType === 'prs'} onclick={() => onSetType('prs')}>PRs</button>
+    <div class="gh-filters-stack">
+      <div class="gh-filters">
+        <div class="gh-filter">
+          <button class="filter-btn" class:active={ghType === 'all'} onclick={() => onSetType('all')}>{$t('widgets.ghAll')}</button>
+          <button class="filter-btn" class:active={ghType === 'issues'} onclick={() => onSetType('issues')}>{$t('widgets.ghIssues')}</button>
+          <button class="filter-btn" class:active={ghType === 'prs'} onclick={() => onSetType('prs')}>PRs</button>
+        </div>
+        <span class="gh-filter-divider">|</span>
+        <div class="gh-filter">
+          <button class="filter-btn" class:active={ghFilter === 'created'} onclick={() => onSetFilter('created')}>{$t('widgets.ghCreated')}</button>
+          <button class="filter-btn" class:active={ghFilter === 'assigned'} onclick={() => onSetFilter('assigned')}>{$t('widgets.ghAssigned')}</button>
+        </div>
       </div>
-      <span class="gh-filter-divider">|</span>
-      <div class="gh-filter">
-        <button class="filter-btn" class:active={ghFilter === 'created'} onclick={() => onSetFilter('created')}>{$t('widgets.ghCreated')}</button>
-        <button class="filter-btn" class:active={ghFilter === 'assigned'} onclick={() => onSetFilter('assigned')}>{$t('widgets.ghAssigned')}</button>
+      <div class="gh-filters">
+        <div class="gh-filter">
+          <button class="filter-btn" class:active={ghState === 'all'} onclick={() => (ghState = 'all')}>{$t('widgets.ghStateAll')}</button>
+          <button class="filter-btn" class:active={ghState === 'open'} onclick={() => (ghState = 'open')}>{$t('widgets.ghStateOpen')}</button>
+          <button class="filter-btn" class:active={ghState === 'closed'} onclick={() => (ghState = 'closed')}>{$t('widgets.ghStateClosed')}</button>
+          <button class="filter-btn" class:active={ghState === 'merged'} onclick={() => (ghState = 'merged')}>{$t('widgets.ghStateMerged')}</button>
+        </div>
+        <input
+          class="gh-search"
+          type="search"
+          placeholder={$t('widgets.ghSearch')}
+          aria-label={$t('widgets.ghSearch')}
+          bind:value={ghSearch}
+        />
       </div>
     </div>
   {:else}
@@ -92,45 +131,45 @@
   {/if}
 </div>
 
-<div class="github-body" style="--gh-items-max: {itemLimit}">
+<div class="github-body">
   {#if githubConnected && activeTab === 'github'}
     {#if githubLoading && githubIssues.length === 0 && githubPRs.length === 0}
       <div class="github-skeleton">
-        {#each Array(itemLimit) as _, idx}
+        {#each Array(skeletonRows) as _, idx}
           <div class="skeleton-row" style="animation-delay: {idx * 80}ms">
             <span class="skeleton-icon"></span>
-            <div class="skeleton-lines">
-              <span class="skeleton-line long"></span>
-              <span class="skeleton-line short"></span>
-            </div>
+            <span class="skeleton-line long"></span>
           </div>
         {/each}
       </div>
     {:else if githubIssues.length > 0 || githubPRs.length > 0}
       <div class="github-list">
         {#if ghType === 'all' || ghType === 'prs'}
-          {#each githubPRs as pr (pr.id)}
+          {#each visiblePRs as pr (pr.id)}
             {@const prInfo = getPrBadgeInfo(pr)}
-            <a href={pr.url} target="_blank" rel="noopener" class="gh-item" style="--repo-color: {repoColors[pr.repo] || accentColor}">
-              <span class="gh-badge-icon"><DynamicIcon name={prInfo.icon} size={14} color={prInfo.color} /></span>
-              <div class="gh-info">
+            <a href={pr.url} target="_blank" rel="noopener" class="gh-item" style="--repo-color: {repoColors[pr.repo] || accentColor}" title="{pr.repo} #{pr.number} — {pr.title}">
+              <span class="gh-identity">
                 <span class="gh-title truncate">{pr.title}</span>
                 <span class="gh-meta mono">{pr.repo} #{pr.number}</span>
-              </div>
+              </span>
+              <span class="gh-badge-icon"><DynamicIcon name={prInfo.icon} size={14} color={prInfo.color} /></span>
             </a>
           {/each}
         {/if}
         {#if ghType === 'all' || ghType === 'issues'}
-          {#each githubIssues as issue (issue.id)}
+          {#each visibleIssues as issue (issue.id)}
             {@const issueInfo = getIssueInfo(issue)}
-            <a href={issue.url} target="_blank" rel="noopener" class="gh-item" style="--repo-color: {repoColors[issue.repo] || accentColor}">
-              <span class="gh-badge-icon"><DynamicIcon name={issueInfo.icon} size={14} color={issueInfo.color} /></span>
-              <div class="gh-info">
+            <a href={issue.url} target="_blank" rel="noopener" class="gh-item" style="--repo-color: {repoColors[issue.repo] || accentColor}" title="{issue.repo} #{issue.number} — {issue.title}">
+              <span class="gh-identity">
                 <span class="gh-title truncate">{issue.title}</span>
                 <span class="gh-meta mono">{issue.repo} #{issue.number}</span>
-              </div>
+              </span>
+              <span class="gh-badge-icon"><DynamicIcon name={issueInfo.icon} size={14} color={issueInfo.color} /></span>
             </a>
           {/each}
+        {/if}
+        {#if visiblePRs.length === 0 && visibleIssues.length === 0}
+          <div class="empty-state">{$t('widgets.ghNoResults')}</div>
         {/if}
       </div>
     {:else}
@@ -146,7 +185,7 @@
   {:else}
     {#if recentNotes.length > 0}
       <div class="recent-notes-list">
-        {#each recentNotes.slice(0, itemLimit) as note (note.id)}
+        {#each recentNotes.slice(0, recentNotesLimit) as note (note.id)}
           <NoteCard
             {note}
             showTags={true}
@@ -165,7 +204,8 @@
 <style>
   .github-header {
     border-top: 1px solid var(--border-light);
-    min-height: 52px;
+    /* #1095 — header compacto: mismo padding vertical que los controles (~24px) */
+    padding: var(--s2) var(--s5);
     display: flex;
     flex-direction: row;
     justify-content: space-between;
@@ -240,17 +280,36 @@
   .gh-filter {
     display: flex; gap: 6px;
   }
+  .gh-filters-stack {
+    display: flex; flex-direction: column; gap: 4px;
+    align-items: flex-end;
+    min-width: 0;
+  }
   .gh-filters {
     display: flex; flex-direction: row; gap: 8px; align-items: center; flex-wrap: nowrap;
   }
   .gh-filter-divider {
     color: var(--border); font-size: 12px;
   }
+  .gh-search {
+    height: 22px;
+    min-width: 0;
+    flex: 1 1 90px;
+    max-width: 150px;
+    font-size: 10px;
+    padding: 2px 8px;
+    border: 1px solid var(--border-light);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-primary);
+  }
+  .gh-search::placeholder { color: var(--text-muted); }
+  .gh-search:focus { outline: none; border-color: var(--accent); }
   .filter-btn {
-    font-size: 10px; padding: 4px 10px; border-radius: 4px;
+    font-size: 10px; padding: 2px 8px; border-radius: 4px;
     background: transparent; border: 1px solid var(--border-light);
     color: var(--text-muted); cursor: pointer; transition: all var(--t-fast);
-    min-width: 60px; height: 24px; display: flex; align-items: center; justify-content: center;
+    min-width: 52px; height: 22px; display: flex; align-items: center; justify-content: center;
   }
   .filter-btn:hover { border-color: var(--border); color: var(--text-secondary); }
   .filter-btn.active {
@@ -259,25 +318,37 @@
     color: var(--accent-contrast-text, white);
   }
 
-  .github-list { display: flex; flex-direction: column; }
+  .github-list { display: flex; flex-direction: column; width: 100%; }
+  /* #1095 — cuerpo dinámico: llena el espacio disponible del panel
+     (flex column dentro de .activity-section) y hace scroll en lugar de
+     una altura fija de 48px × N; con pocos items no deja caja gigante. */
   .github-body {
-    --gh-item-h: 48px;
-    height: calc(var(--gh-item-h) * var(--gh-items-max));
+    --gh-item-h: 32px;
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
     overflow-y: auto;
   }
-  .github-body:has(.empty-state) {
-    height: auto;
+  .github-body:has(.empty-state),
+  .github-body:has(.github-summary) {
+    flex: 0 0 auto;
   }
   .gh-item {
     display: flex; align-items: center; gap: 8px;
-    padding: 8px 12px; border-bottom: 1px solid var(--border-light);
+    min-height: var(--gh-item-h);
+    padding: 4px 12px; border-bottom: 1px solid var(--border-light);
     text-decoration: none; color: var(--text-primary);
   }
   .gh-item:hover { background: var(--elevated); }
-  .gh-badge-icon { display: flex; align-items: center; justify-content: center; min-width: 24px; }
-  .gh-info { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-  .gh-title { flex: 1; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .gh-meta { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+  /* #1095 — fila de una línea: título + meta inline, meta (repo #num) sin recortar */
+  .gh-identity {
+    flex: 1 1 auto; min-width: 0;
+    display: flex; align-items: baseline; gap: 6px;
+  }
+  .gh-title { flex: 1 1 auto; min-width: 0; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .gh-meta { flex-shrink: 0; font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+  .gh-badge-icon { display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
   .github-summary { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 16px; }
   .stat { display: flex; flex-direction: column; align-items: center; gap: 2px; }
   .stat-value { font-size: 18px; font-weight: 600; }
@@ -288,32 +359,29 @@
 
   .github-skeleton {
     display: flex; flex-direction: column; gap: 10px;
-    padding: 12px; height: 100%;
+    padding: 12px; width: 100%;
   }
 
   .skeleton-row {
-    display: grid; grid-template-columns: 24px 1fr; gap: 10px; align-items: center;
+    display: flex; gap: 10px; align-items: center;
     animation: skeletonFade 1.2s ease-in-out infinite;
   }
 
   .skeleton-icon {
-    width: 18px; height: 18px; border-radius: 6px;
+    width: 18px; height: 18px; border-radius: 6px; flex-shrink: 0;
     background: linear-gradient(90deg, rgba(125, 125, 125, 0.2) 0%, rgba(125, 125, 125, 0.35) 50%, rgba(125, 125, 125, 0.2) 100%);
     background-size: 200% 100%;
     animation: skeletonShimmer 1.4s ease-in-out infinite;
   }
 
-  .skeleton-lines { display: flex; flex-direction: column; gap: 6px; }
-
   .skeleton-line {
-    height: 10px; border-radius: 8px;
+    height: 10px; border-radius: 8px; flex: 1 1 auto;
     background: linear-gradient(90deg, rgba(125, 125, 125, 0.18) 0%, rgba(125, 125, 125, 0.32) 50%, rgba(125, 125, 125, 0.18) 100%);
     background-size: 200% 100%;
     animation: skeletonShimmer 1.4s ease-in-out infinite;
   }
 
-  .skeleton-line.long { width: 80%; }
-  .skeleton-line.short { width: 45%; }
+  .skeleton-line.long { max-width: 75%; }
 
   @keyframes skeletonShimmer {
     0% { background-position: 200% 0; }
@@ -344,11 +412,14 @@
       flex-wrap: wrap;
       justify-content: center;
     }
+    .gh-filters-stack {
+      align-items: center;
+      width: 100%;
+    }
     .filter-btn {
       min-width: 48px;
     }
     .github-body {
-      --gh-item-h: 40px;
       max-height: 280px;
     }
     .github-summary {
@@ -361,6 +432,15 @@
     .gh-filters {
       flex-direction: column;
       gap: var(--s1);
+      align-items: stretch;
+      width: 100%;
+    }
+    .gh-filters-stack {
+      align-items: stretch;
+    }
+    .gh-search {
+      max-width: none;
+      width: 100%;
     }
     .filter-btn {
       width: 100%;

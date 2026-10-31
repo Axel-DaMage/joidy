@@ -1,9 +1,8 @@
 import logging
 
-from sqlalchemy import inspect
-
 from config import settings
 from database import engine
+from sqlalchemy import inspect
 
 REQUIRED_TABLES = {
     "alembic_version",

@@ -35,58 +35,57 @@ Personal knowledge management system with gamification. Manage notes, goals, str
 
 ## Installation
 
-### Docker
+**Prerequisito:** [Docker](https://docs.docker.com/get-started/get-docker/) (incluye Docker Compose).
+
+### Linux / macOS
 
 ```bash
-git clone https://github.com/Axel-DaMage/joidy.git
-cd joidy
-cp .env.example .env
-docker compose up -d
+curl -fsSL https://raw.githubusercontent.com/Axel-DaMage/joidy/development/scripts/install.sh | bash
 ```
 
-### curl
-
-**Linux / macOS:**
+Clona el repo, genera secretos automáticamente e instala el comando `joidy`. Luego:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Axel-DaMage/joidy/main/scripts/install.sh | bash
+joidy up        # Inicia todos los servicios
+# Abre http://localhost:3000
 ```
 
-This clones the repo, copies `.env`, and installs the `joidy` CLI into `~/.local/bin`
-so you can manage the stack from anywhere. After the installer finishes, edit `.env`
-with your credentials and run:
+### Windows
 
-```bash
-joidy up
-```
-
-**Windows (PowerShell):**
+Docker Desktop en Windows requiere WSL2. El camino más simple:
 
 ```powershell
-irm https://raw.githubusercontent.com/Axel-DaMage/joidy/main/scripts/install.ps1 | iex
+# 1. Instala WSL2 con Ubuntu (como Administrador, una sola vez):
+wsl --install
+# 2. Reinicia y abre Ubuntu desde el menú de inicio, luego pega:
+#    curl -fsSL https://raw.githubusercontent.com/Axel-DaMage/joidy/development/scripts/install.sh | bash
 ```
 
-### Homebrew
+> PowerShell nativo (sin WSL2): `irm https://raw.githubusercontent.com/Axel-DaMage/joidy/development/scripts/install.ps1 | iex`
+
+### Otros métodos
 
 ```bash
-brew tap Axel-DaMage/homebrew-tap
-brew install joidy
-joidy up
-```
+# Homebrew
+brew tap Axel-DaMage/homebrew-tap && brew install joidy
 
-### AUR
-
-```bash
+# AUR (Arch Linux)
 yay -S joidy
-# or
-paru -S joidy
+
+# Manual
+git clone https://github.com/Axel-DaMage/joidy.git && cd joidy && cp .env.example .env && docker compose up -d
 ```
+
+→ Guía completa de instalación: [INSTALL.md](INSTALL.md)
 
 ---
 
 ## Requirements
 
-- Docker + Docker Compose
+- [Docker](https://docs.docker.com/get-started/get-docker/) + Docker Compose
+- **Windows:** WSL2 (`wsl --install`) — necesario para Docker Desktop
+
+→ Ver [INSTALL.md](INSTALL.md) para instrucciones detalladas por plataforma.
 
 ---
 
@@ -127,6 +126,54 @@ make stop      # Stop all services
 make logs      # View logs
 make test      # Run tests
 make migrate   # Database migrations
+```
+
+### Power saving: idle watchdog
+
+On battery- or thermally-constrained machines the stack can put itself to
+sleep when nobody is using it:
+
+```bash
+joidy idle enable     # start the background watcher
+joidy idle status     # watcher state, last activity, countdown to sleep
+joidy idle disable    # stop the watcher (services untouched)
+joidy wake            # restore the services that were running before sleep
+```
+
+The watcher polls established HTTP connections on the published ports
+(frontend/api/ai-service/worker), active PostgreSQL sessions, and file
+changes under the vault. After `JOIDY_IDLE_TIMEOUT` minutes in `.env`
+(default 15) with no activity it runs the existing `joidy sleep` path and
+additionally stops the frontend — the heaviest idle CPU consumer. Postgres
+keeps running for data safety; opt into hibernating it with
+`joidy idle enable --idle-hibernate-db`. New activity while asleep restores
+the recorded services automatically.
+
+An optional systemd user unit keeps the watcher alive across logouts:
+`scripts/joidy-idle-watchdog.service` (install notes inside the file).
+
+### Database Backups
+
+`joidy up` starts a `backup` sidecar that automatically takes compressed
+`pg_dump -Fc` snapshots — no user action required. Dumps are written to
+`data/backups/` (on the host, outside the `postgres_data` volume) with
+timestamped filenames and retention pruning. Set `BACKUP_ENABLED=false` in
+`.env` to opt out; `make dev` and plain `docker compose up` never start the
+sidecar (manual: `docker compose --profile backup up -d backup`).
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `BACKUP_SCHEDULE` | `0 3 * * *` | Cron expression (or `@daily`, `@hourly`, `@weekly`, `@monthly`); evaluated in `USER_TIMEZONE` |
+| `BACKUP_RETENTION_DAYS` | `14` | Keep every dump for this many days |
+| `BACKUP_RETENTION_WEEKS` | `4` | Additionally keep Sunday dumps (`BACKUP_WEEKLY_DAY`) for this many weeks |
+| `JOIDY_BACKUP_DIR` | `<data>/backups` | Host directory for dumps |
+
+```bash
+joidy backup                                          # manual dump
+joidy restore data/backups/joidy-YYYYMMDD-HHMMSS.dump # restore (refuses on a live DB)
+joidy restore <file> --force                          # overwrite a live DB
+make db-backup / make db-restore FILE=<dump>          # same via make
+make backup-verify   # round-trip test: dump → restore to a throwaway DB → health check
 ```
 
 ### Obsidian Webhook Sync
@@ -220,10 +267,12 @@ See [QUICKSTART.md](QUICKSTART.md) for a step-by-step dev onboarding guide.
 
 ## Documentation
 
+- [Instalación detallada](./INSTALL.md)
 - [Architecture](./docs/architecture.md)
 - [Architecture Decision Records](./docs/adr/README.md)
 - [Frontend Architecture](./docs/frontend.md)
 - [Database](./docs/database.md)
+- [Troubleshooting](./docs/troubleshooting.md)
 - [Full docs index](./docs/index.md)
 
 ## License

@@ -1,4 +1,4 @@
-.PHONY: setup dev dev-d dev-reset prod stop restart logs logs-api logs-ai logs-worker build clean backup restore shell-api shell-worker migrate db-health test-api test-frontend test-frontend-e2e test lint lint-api fix-permissions install-deps doctor start
+.PHONY: setup dev dev-d dev-reset prod stop restart logs logs-api logs-ai logs-worker build clean backup restore db-backup db-restore backup-verify shell-api shell-worker migrate db-health test-api test-ai test-frontend test-frontend-e2e test lint lint-api fix-permissions install-deps doctor start n8n n8n-down n8n-logs
 
 COMPOSE_PROJECT ?= joidy
 DOCKER_COMPOSE := $(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || (command -v docker >/dev/null 2>&1 && echo "docker compose" || (command -v podman-compose >/dev/null 2>&1 && echo "podman-compose" || (command -v podman >/dev/null 2>&1 && echo "podman compose" || echo "docker compose"))))
@@ -43,7 +43,7 @@ help: ## Show this help
 setup: ## First-time setup: copy .env, create data directories
 	@echo ""
 	@echo "── $(BLUE)Joidy Setup$(NC) ────────────────────────────────"
-	@mkdir -p data/db data/uploads data/vault
+	@mkdir -p data/db data/uploads data/vault data/backups
 	@if [ ! -f .env ]; then \
 		cp .env.example .env; \
 		echo "$(GREEN)✓$(NC) Created .env from .env.example"; \
@@ -69,21 +69,21 @@ setup: ## First-time setup: copy .env, create data directories
 
 dev: ## Start all services in development mode (with hot reload)
 	@if [ ! -f .env ]; then echo "Run 'make setup' first"; exit 1; fi
-	@mkdir -p data/db data/uploads data/vault
+	@mkdir -p data/db data/uploads data/vault data/backups
 	@. .env 2>/dev/null || true; \
 	case "$$OBSIDIAN_VAULT_PATH" in ~/*) export OBSIDIAN_VAULT_PATH="$(HOME)/$${OBSIDIAN_VAULT_PATH#~/}";; ~) export OBSIDIAN_VAULT_PATH="$(HOME)";; esac; \
 	UID=$(HOST_UID) GID=$(HOST_GID) $(DOCKER_COMPOSE) -p $(COMPOSE_PROJECT) -f docker-compose.yml -f docker-compose.dev.yml --profile ai up --build
 
 dev-d: ## Start all services in development mode (detached)
 	@if [ ! -f .env ]; then echo "Run 'make setup' first"; exit 1; fi
-	@mkdir -p data/db data/uploads data/vault
+	@mkdir -p data/db data/uploads data/vault data/backups
 	@. .env 2>/dev/null || true; \
 	case "$$OBSIDIAN_VAULT_PATH" in ~/*) export OBSIDIAN_VAULT_PATH="$(HOME)/$${OBSIDIAN_VAULT_PATH#~/}";; ~) export OBSIDIAN_VAULT_PATH="$(HOME)";; esac; \
 	UID=$(HOST_UID) GID=$(HOST_GID) $(DOCKER_COMPOSE) -p $(COMPOSE_PROJECT) -f docker-compose.yml -f docker-compose.dev.yml --profile ai up --build -d
 
 dev-reset: ## Recreate all services in development mode from scratch (one command)
 	@if [ ! -f .env ]; then echo "Run 'make setup' first"; exit 1; fi
-	@mkdir -p data/db data/uploads data/vault
+	@mkdir -p data/db data/uploads data/vault data/backups
 	@. .env 2>/dev/null || true; \
 	case "$$OBSIDIAN_VAULT_PATH" in ~/*) export OBSIDIAN_VAULT_PATH="$(HOME)/$${OBSIDIAN_VAULT_PATH#~/}";; ~) export OBSIDIAN_VAULT_PATH="$(HOME)";; esac; \
 	UID=$(HOST_UID) GID=$(HOST_GID) $(DOCKER_COMPOSE) -p $(COMPOSE_PROJECT) -f docker-compose.yml -f docker-compose.dev.yml --profile ai down --remove-orphans --volumes
@@ -94,7 +94,7 @@ dev-reset: ## Recreate all services in development mode from scratch (one comman
 
 prod: ## Start all services in production mode
 	@if [ ! -f .env ]; then echo "Run 'make setup' first"; exit 1; fi
-	@mkdir -p data/db data/uploads data/vault
+	@mkdir -p data/db data/uploads data/vault data/backups
 	@. .env 2>/dev/null || true; \
 	case "$$OBSIDIAN_VAULT_PATH" in ~/*) export OBSIDIAN_VAULT_PATH="$(HOME)/$${OBSIDIAN_VAULT_PATH#~/}";; ~) export OBSIDIAN_VAULT_PATH="$(HOME)";; esac; \
 	$(DOCKER_COMPOSE) up --build -d
@@ -117,6 +117,15 @@ logs-ai: ## Tail AI service logs
 logs-worker: ## Tail worker logs
 	$(DOCKER_COMPOSE) logs -f worker
 
+n8n: ## Start n8n automation hub (UI: http://localhost:5678)
+	$(DOCKER_COMPOSE) --profile n8n up -d n8n
+
+n8n-down: ## Stop the n8n automation hub
+	$(DOCKER_COMPOSE) --profile n8n stop n8n
+
+n8n-logs: ## Tail n8n logs
+	$(DOCKER_COMPOSE) --profile n8n logs -f n8n
+
 build: ## Rebuild all Docker images
 	$(DOCKER_COMPOSE) build --no-cache
 
@@ -136,6 +145,16 @@ restore: ## Restore from a backup file: make restore FILE=joidy-backup-xxx.tar.g
 	tar -xzf $(FILE)
 	@echo "✓ Restored from $(FILE)"
 
+db-backup: ## Dump the database (pg_dump -Fc) to the backups dir — same as `joidy backup`
+	bash scripts/joidy.sh backup
+
+db-restore: ## Restore a database dump: make db-restore FILE=data/backups/joidy-*.dump [FORCE=1]
+	@if [ -z "$(FILE)" ]; then echo "Usage: make db-restore FILE=<dump file> [FORCE=1]"; exit 1; fi
+	bash scripts/joidy.sh restore "$(FILE)" $(if $(FORCE),--force,)
+
+backup-verify: ## Round-trip test: dump → restore into throwaway DB → health check (needs a running stack)
+	COMPOSE_PROJECT_NAME=$(COMPOSE_PROJECT) bash scripts/backup_verify.sh
+
 shell-api: ## Open a shell in the api container
 	$(DOCKER_COMPOSE) exec api bash
 
@@ -148,19 +167,22 @@ migrate: ## Run Alembic migrations up to head in api container
 db-health: ## Verify migration head and required core tables
 	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml run --rm api sh -c "cd /app && alembic -c /app/alembic.ini current && PYTHONPATH=/app python scripts/verify_db_health.py"
 
-test-api: ## Run all API unit tests via pytest
-	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml run --rm api sh -c "cd /app && pytest --cov --cov-report=term-missing"
+test-api: ## Run all API unit tests via pytest (parallel: one joidy_test_gwN DB per worker, #996)
+	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml run --rm api sh -c "cd /app && pytest -n auto --durations=20 --cov --cov-report=term-missing"
+
+test-ai: ## Run all AI service unit tests via pytest
+	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml run --rm ai-service sh -c "cd /app && python -m pytest tests/ -v"
 
 test-frontend: ## Run frontend unit tests (vitest) inside Docker
 	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml run --rm frontend npm run test:run
 
-test-frontend-e2e: ## Run frontend E2E tests (Playwright) — requires running stack
+test-frontend-e2e: ## Run frontend E2E tests (Playwright) — requires the dev stack running (make dev)
 	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml run --rm frontend npx playwright test
 
 test-frontend-check: ## Run frontend typechecking (svelte-check) inside Docker
 	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml run --rm frontend npm run check
 
-test: test-api test-frontend test-frontend-check ## Run all test suites (API + Frontend + typecheck)
+test: test-api test-ai test-frontend test-frontend-check ## Run all unit/typecheck suites (API + AI service + Frontend). E2E is separate: make test-frontend-e2e (needs make dev running)
 
 lint-api: ## Check syntax of all Python services via Docker (compileall)
 	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml run --rm api python -m compileall -q /app/api /app/ai-service /app/worker || (echo "Syntax errors found"; exit 1)
@@ -321,7 +343,7 @@ start: ## 🚀 Quick start: setup + start all services
 		exit 1; \
 	fi
 	@echo "Step 1: Setting up environment..."
-	@mkdir -p data/db data/uploads data/vault
+	@mkdir -p data/db data/uploads data/vault data/backups
 	@if [ ! -f .env ]; then \
 		cp .env.example .env; \
 		echo "  ✓ Created .env from .env.example"; \

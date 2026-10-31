@@ -1,10 +1,8 @@
-
+from config import settings
 from database import get_db
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Response
 from models.note import EmbeddingFailure, Note, NoteTag, Tag
 from pydantic import BaseModel, field_validator
-from services.pagination import add_pagination_headers
-from services.sanitizer import sanitize_title, sanitize_content
 from services.embedding_service import (
     get_dead_letter_entries,
     get_retryable_embedding_notes,
@@ -12,6 +10,7 @@ from services.embedding_service import (
     reset_dead_letter_entry,
     trigger_embedding,
 )
+from services.http_client import http_client
 from services.note_service import (
     accept_ai_tag as accept_ai_tag_service,
 )
@@ -23,12 +22,10 @@ from services.note_service import (
 )
 from services.note_service import (
     get_or_create_tag,
+    note_to_response,
 )
 from services.note_service import (
     list_backlinks as list_backlinks_service,
-)
-from services.note_service import (
-    note_to_response,
 )
 from services.note_service import (
     rebuild_derived_data as rebuild_note_derived_data,
@@ -36,13 +33,12 @@ from services.note_service import (
 from services.note_service import (
     update_note as update_note_service,
 )
+from services.pagination import add_pagination_headers
+from services.sanitizer import sanitize_content, sanitize_title
 from services.skill_tree import sync_skills_for_tags
 from services.tag_graph import sync_tag_cooccurrences_for_tags
 from sqlalchemy import text
 from sqlalchemy.orm import Session, selectinload
-
-import httpx
-from config import settings
 
 router = APIRouter(prefix="/notes", tags=["notes"])
 
@@ -52,6 +48,7 @@ ALLOWED_SOURCES = {"joidy", "obsidian", "api", "import"}
 
 class NoteCreate(BaseModel):
     """Schema for creating a new note."""
+
     title: str
     content: str = ""
     tags: list[str] = []
@@ -95,6 +92,7 @@ class NoteCreate(BaseModel):
 
 class NoteUpdate(BaseModel):
     """Schema for updating an existing note."""
+
     title: str | None = None
     content: str | None = None
     tags: list[str] | None = None
@@ -179,6 +177,7 @@ def list_notes(
     response: Response = None,
 ):
     from sqlalchemy.orm import defer
+
     query = db.query(Note).options(defer(Note.content), selectinload(Note.tags).selectinload(NoteTag.tag))
     if tag:
         query = query.join(NoteTag).join(Tag).filter(Tag.name == tag.lower())
@@ -192,6 +191,7 @@ def list_notes(
 
 class SemanticSearchRequest(BaseModel):
     """Schema for semantic search queries (#353)."""
+
     query: str
     limit: int = 10
     threshold: float = 0.3  # max cosine distance to include a result
@@ -214,7 +214,7 @@ async def semantic_search(
 
     # 1. Embed the query via ai-service
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with http_client(timeout=30.0) as client:
             headers = {}
             if settings.internal_secret:
                 headers["X-Internal-Secret"] = settings.internal_secret
@@ -247,6 +247,7 @@ async def semantic_search(
         return {"results": []}
 
     from sqlalchemy.orm import defer
+
     notes = (
         db.query(Note)
         .options(defer(Note.content), selectinload(Note.tags).selectinload(NoteTag.tag))
@@ -258,21 +259,18 @@ async def semantic_search(
     for row in rows:
         note = note_map.get(row[0])
         if note:
-            results.append({
-                "note": note_to_response(note),
-                "score": 1.0 - float(row[1]),  # convert distance to similarity
-            })
+            results.append(
+                {
+                    "note": note_to_response(note),
+                    "score": 1.0 - float(row[1]),  # convert distance to similarity
+                }
+            )
     return {"results": results}
 
 
 @router.get("/{note_id}")
 def get_note(note_id: int, db: Session = Depends(get_db)):
-    note = (
-        db.query(Note)
-        .options(selectinload(Note.tags).selectinload(NoteTag.tag))
-        .filter(Note.id == note_id)
-        .first()
-    )
+    note = db.query(Note).options(selectinload(Note.tags).selectinload(NoteTag.tag)).filter(Note.id == note_id).first()
     if not note:
         raise HTTPException(status_code=404, detail="Note not found")
     return note_to_response(note)
@@ -374,9 +372,7 @@ def bulk_untag(data: BulkTagRequest, db: Session = Depends(get_db)):
             tag = db.query(Tag).filter(Tag.name == tag_name.lower().strip()).first()
             if not tag:
                 continue
-            nt = db.query(NoteTag).filter(
-                NoteTag.note_id == nid, NoteTag.tag_id == tag.id
-            ).first()
+            nt = db.query(NoteTag).filter(NoteTag.note_id == nid, NoteTag.tag_id == tag.id).first()
             if nt:
                 db.delete(nt)
                 touched_tags.add(tag.id)
@@ -452,20 +448,19 @@ def get_similar_notes(
         return []
 
     notes = (
-        db.query(Note)
-        .options(selectinload(Note.tags).selectinload(NoteTag.tag))
-        .filter(Note.id.in_(note_ids))
-        .all()
+        db.query(Note).options(selectinload(Note.tags).selectinload(NoteTag.tag)).filter(Note.id.in_(note_ids)).all()
     )
     note_map = {n.id: n for n in notes}
     results = []
     for row in rows:
         note = note_map.get(row[0])
         if note:
-            results.append({
-                "note": note_to_response(note),
-                "score": 1.0 - float(row[1]),
-            })
+            results.append(
+                {
+                    "note": note_to_response(note),
+                    "score": 1.0 - float(row[1]),
+                }
+            )
     return results
 
 
@@ -489,9 +484,12 @@ def retry_failed_embeddings(
 def list_dead_letters(limit: int = 50, db: Session = Depends(get_db)):
     """List embedding failures that exceeded max retry attempts."""
     from models.note import Note
+
     entries = get_dead_letter_entries(db, limit=limit)
     note_ids = [e["note_id"] for e in entries]
-    notes = {n.id: n.title for n in db.query(Note.id, Note.title).filter(Note.id.in_(note_ids)).all()} if note_ids else {}
+    notes = (
+        {n.id: n.title for n in db.query(Note.id, Note.title).filter(Note.id.in_(note_ids)).all()} if note_ids else {}
+    )
     for e in entries:
         e["note_title"] = notes.get(e["note_id"])
     return entries

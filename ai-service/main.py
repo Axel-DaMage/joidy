@@ -1,8 +1,8 @@
 import logging
 from contextlib import asynccontextmanager
 
-from circuit_breaker import llm_circuit_breaker, emb_circuit_breaker, CircuitBreakerError
-from clients import get_embedding_client, get_llm_client
+from circuit_breaker import CircuitBreakerError, emb_circuit_breaker, llm_circuit_breaker
+from clients import aclose_clients, get_embedding_client, get_llm_client
 from clients.prompts import CHAT_SYSTEM_PROMPT, CLASSIFY_PROMPT, RAG_PROMPT
 from config import settings
 from cost_tracker import get_monthly_stats, record_usage
@@ -15,17 +15,16 @@ from rate_limiter import get_limiter
 from response_cache import cache_key, get_cache
 from sqlalchemy import text
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 # Prometheus metrics — exposed at /metrics for scraping (#406)
-ai_embed_requests = Counter('ai_embed_requests_total', 'Embedding requests', ['provider'])
-ai_embed_errors = Counter('ai_embed_errors_total', 'Embedding errors', ['provider'])
-ai_embed_latency = Histogram('ai_embed_latency_seconds', 'Embedding latency', ['provider'])
-ai_classify_requests = Counter('ai_classify_requests_total', 'Classification requests', ['provider'])
-ai_classify_errors = Counter('ai_classify_errors_total', 'Classification errors', ['provider'])
-ai_rag_requests = Counter('ai_rag_requests_total', 'RAG requests', ['provider'])
-ai_rag_errors = Counter('ai_rag_errors_total', 'RAG errors', ['provider'])
+ai_embed_requests = Counter("ai_embed_requests_total", "Embedding requests", ["provider"])
+ai_embed_errors = Counter("ai_embed_errors_total", "Embedding errors", ["provider"])
+ai_embed_latency = Histogram("ai_embed_latency_seconds", "Embedding latency", ["provider"])
+ai_classify_requests = Counter("ai_classify_requests_total", "Classification requests", ["provider"])
+ai_classify_errors = Counter("ai_classify_errors_total", "Classification errors", ["provider"])
+ai_rag_requests = Counter("ai_rag_requests_total", "RAG requests", ["provider"])
+ai_rag_errors = Counter("ai_rag_errors_total", "RAG errors", ["provider"])
 
 
 @asynccontextmanager
@@ -65,24 +64,32 @@ async def lifespan(app: FastAPI):
             try:
                 llm_client = get_llm_client()
                 llm_healthy = await llm_client.health_check()
-                logger.info(f"[ai-service] LLM provider '{llm_client.provider_name}' health: {'OK' if llm_healthy else 'UNREACHABLE'}")
+                logger.info(
+                    f"[ai-service] LLM provider '{llm_client.provider_name}' health: "
+                    f"{'OK' if llm_healthy else 'UNREACHABLE'}"
+                )
             except Exception as exc:
                 logger.warning(f"[ai-service] LLM health check failed: {exc}")
 
             try:
                 emb_client = get_embedding_client()
                 emb_healthy = await emb_client.health_check()
-                logger.info(f"[ai-service] Embedding provider '{emb_client.provider_name}' health: {'OK' if emb_healthy else 'UNREACHABLE'}")
+                logger.info(
+                    f"[ai-service] Embedding provider '{emb_client.provider_name}' health: "
+                    f"{'OK' if emb_healthy else 'UNREACHABLE'}"
+                )
             except Exception as exc:
                 logger.warning(f"[ai-service] Embedding health check failed: {exc}")
         else:
             logger.warning(
-                "[ai-service] AI features disabled — configured model providers "
-                "are not available. See errors above."
+                "[ai-service] AI features disabled — configured model providers are not available. See errors above."
             )
 
     yield
     logger.info("[ai-service] Shutting down")
+    # Close shared provider sessions (aiohttp/httpx) pooled by the client
+    # factory — avoids "Unclosed connector" warnings on teardown (#998).
+    await aclose_clients()
 
 
 app = FastAPI(title="Joidy AI Service", version="0.2.0", lifespan=lifespan)
@@ -180,8 +187,14 @@ class ChatRequest(BaseModel):
 
 def _get_provider_info():
     available = settings.available_providers
-    llm_provider, llm_model = settings.llm_model.split(":", 1) if ":" in settings.llm_model else ("gemini", settings.llm_model)
-    emb_provider, emb_model = settings.embedding_model.split(":", 1) if ":" in settings.embedding_model else ("gemini", settings.embedding_model)
+    llm_provider, llm_model = (
+        settings.llm_model.split(":", 1) if ":" in settings.llm_model else ("gemini", settings.llm_model)
+    )
+    emb_provider, emb_model = (
+        settings.embedding_model.split(":", 1)
+        if ":" in settings.embedding_model
+        else ("gemini", settings.embedding_model)
+    )
     return {
         "llm": {"provider": llm_provider, "model": llm_model, "available": llm_provider in available},
         "embedding": {"provider": emb_provider, "model": emb_model, "available": emb_provider in available},
@@ -224,10 +237,11 @@ def metrics():
 def providers():
     return {
         "available": settings.available_providers,
-        "configured": {name: True for name in settings.provider_config},
+        "configured": dict.fromkeys(settings.provider_config, True),
         "llm_model": settings.llm_model,
         "embedding_model": settings.embedding_model,
     }
+
 
 def _build_chat_system_prompt(ctx: ChatContext | None) -> str:
     """Build a system prompt that includes the user's personal context."""
@@ -288,6 +302,7 @@ async def embed(req: EmbedRequest):
 
         # Save vector embedding to shared PostgreSQL database
         from database import store_embedding
+
         store_embedding(req.note_id, vector)
 
         record_usage("embed", input_tokens=_estimate_tokens(req.content))
@@ -298,7 +313,7 @@ async def embed(req: EmbedRequest):
             "embedding": vector,
             "provider": provider_name,
         }
-    except CircuitBreakerError as e:
+    except CircuitBreakerError:
         return {"status": "circuit_open", "note_id": req.note_id, "error": "Circuit breaker open"}
     except Exception:
         raise HTTPException(status_code=500, detail="Embedding failed")
@@ -337,7 +352,7 @@ async def classify(req: ClassifyRequest):
             "suggestions": suggestions,
             "provider": provider_name,
         }
-    except CircuitBreakerError as e:
+    except CircuitBreakerError:
         return {"status": "circuit_open", "note_id": req.note_id, "suggestions": [], "error": "Circuit breaker open"}
     except Exception:
         raise HTTPException(status_code=500, detail="Classification failed")
@@ -367,6 +382,7 @@ async def rag(req: RAGRequest):
 
         # 2. Find similar note IDs via pgvector cosine similarity
         from database import engine, find_similar_notes
+
         similar = find_similar_notes(question_vector, limit=req.top_k)
 
         # 3. Retrieve note titles & contents to build LLM context.
@@ -403,8 +419,12 @@ async def rag(req: RAGRequest):
             "answer": answer,
             "provider": client.provider_name,
         }
-    except CircuitBreakerError as e:
-        return {"status": "circuit_open", "answer": "El proveedor de IA se encuentra temporalmente no disponible.", "error": "Circuit breaker open"}
+    except CircuitBreakerError:
+        return {
+            "status": "circuit_open",
+            "answer": "El proveedor de IA se encuentra temporalmente no disponible.",
+            "error": "Circuit breaker open",
+        }
     except Exception:
         raise HTTPException(status_code=500, detail="RAG failed")
 
@@ -430,16 +450,17 @@ async def daily_recap(req: DailyRecapRequest):
     if not settings.is_ai_enabled:
         return {"status": "disabled", "recap": "", "suggestions": []}
 
-    ai_classify_requests.labels(provider=settings.llm_model or 'unknown').inc()
+    ai_classify_requests.labels(provider=settings.llm_model or "unknown").inc()
     try:
         client = get_llm_client()
         titles_str = "\n".join(f"- {t}" for t in req.note_titles[:10]) or "(sin notas)"
-        prompt = f"""Eres un asistente de productividad personal. Genera un resumen diario breve y motivador en español basado en esta actividad del día {req.date}:
+        prompt = f"""Eres un asistente de productividad personal. Genera un resumen diario breve y \
+motivador en español basado en esta actividad del día {req.date}:
 
 - Notas creadas: {req.notes_created}
 - Notas editadas: {req.notes_edited}
 - XP ganada: {req.xp_gained}
-- Racha mantenida: {'sí' if req.streak_maintained else 'no'}
+- Racha mantenida: {"sí" if req.streak_maintained else "no"}
 - Objetivos completados: {req.goals_completed}
 - Tiempo de enfoque: {req.focus_time_minutes} minutos
 
@@ -460,6 +481,7 @@ Responde en formato JSON: {{"recap": "...", "suggestions": ["...", "..."]}}"""
 
         # Try to parse JSON from the response; fall back to raw text
         import json
+
         try:
             parsed = json.loads(response)
             return {
@@ -478,7 +500,7 @@ Responde en formato JSON: {{"recap": "...", "suggestions": ["...", "..."]}}"""
     except CircuitBreakerError:
         return {"status": "circuit_open", "recap": "El proveedor de IA no está disponible.", "suggestions": []}
     except Exception:
-        ai_classify_errors.labels(provider=settings.llm_model or 'unknown').inc()
+        ai_classify_errors.labels(provider=settings.llm_model or "unknown").inc()
         raise HTTPException(status_code=500, detail="Daily recap failed")
 
 
@@ -509,22 +531,25 @@ async def cluster_notes(eps: float = 0.3, min_samples: int = 3, max_notes: int =
 
     # Parse embeddings from pgvector string format
     import numpy as np
+
     note_ids = [r[0] for r in rows]
     embeddings = []
     for r in rows:
         vec_str = r[1] if isinstance(r[1], str) else str(r[1])
-        vec = [float(x) for x in vec_str.strip('[]').split(',')]
+        vec = [float(x) for x in vec_str.strip("[]").split(",")]
         embeddings.append(vec)
 
     X = np.array(embeddings)
 
     # DBSCAN clustering — no need to specify number of clusters
     from sklearn.cluster import DBSCAN
-    clustering = DBSCAN(eps=eps, min_samples=min_samples, metric='cosine').fit(X)
+
+    clustering = DBSCAN(eps=eps, min_samples=min_samples, metric="cosine").fit(X)
     labels = clustering.labels_
 
     # Build cluster results
     from collections import defaultdict
+
     clusters = defaultdict(list)
     for idx, label in enumerate(labels):
         if label != -1:  # -1 = noise
@@ -543,13 +568,15 @@ async def cluster_notes(eps: float = 0.3, min_samples: int = 3, max_notes: int =
                 params,
             ).fetchall()
             title_map = {r[0]: r[1] for r in title_rows}
-            cluster_results.append({
-                "cluster_id": int(label),
-                "note_ids": ids,
-                "note_count": len(ids),
-                "representative_title": title_map.get(ids[0], "Unknown"),
-                "titles": [title_map.get(i, "Unknown") for i in ids[:5]],
-            })
+            cluster_results.append(
+                {
+                    "cluster_id": int(label),
+                    "note_ids": ids,
+                    "note_count": len(ids),
+                    "representative_title": title_map.get(ids[0], "Unknown"),
+                    "titles": [title_map.get(i, "Unknown") for i in ids[:5]],
+                }
+            )
 
     # Sort by cluster size descending
     cluster_results.sort(key=lambda c: c["note_count"], reverse=True)
@@ -557,7 +584,7 @@ async def cluster_notes(eps: float = 0.3, min_samples: int = 3, max_notes: int =
     return {
         "clusters": cluster_results,
         "total_notes": len(rows),
-        "noise_count": int(sum(1 for l in labels if l == -1)),
+        "noise_count": int(sum(1 for lbl in labels if lbl == -1)),
     }
 
 
@@ -576,13 +603,16 @@ async def chat(req: ChatRequest):
     try:
         system_prompt = _build_chat_system_prompt(req.context)
         history = "\n\n".join(
-            f"{'Usuario' if m.role == 'user' else 'Asistente'}: {m.content}"
-            for m in req.messages[:-1]
+            f"{'Usuario' if m.role == 'user' else 'Asistente'}: {m.content}" for m in req.messages[:-1]
         )
         last = req.messages[-1]
         if last.role != "user":
             raise HTTPException(status_code=422, detail="last message must be from user")
-        prompt = f"{history}\n\nUsuario: {last.content}\n\nAsistente:" if history else f"Usuario: {last.content}\n\nAsistente:"
+        prompt = (
+            f"{history}\n\nUsuario: {last.content}\n\nAsistente:"
+            if history
+            else f"Usuario: {last.content}\n\nAsistente:"
+        )
         client = get_llm_client()
         response = await llm_circuit_breaker.call(
             client.generate,
@@ -601,7 +631,9 @@ async def chat(req: ChatRequest):
     except CircuitBreakerError:
         return {
             "status": "circuit_open",
-            "response": "El proveedor de IA se encuentra temporalmente no disponible. Intenta de nuevo en unos minutos.",
+            "response": (
+                "El proveedor de IA se encuentra temporalmente no disponible. Intenta de nuevo en unos minutos."
+            ),
             "suggestions": [],
         }
     except HTTPException:

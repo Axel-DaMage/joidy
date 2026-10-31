@@ -3,13 +3,14 @@ from datetime import datetime
 from database import Base
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, func
-from sqlalchemy.orm import Mapped, mapped_column, relationship, backref
+from sqlalchemy.orm import Mapped, backref, mapped_column, relationship
+
 
 class NoteEmbedding(Base):
     __tablename__ = "note_embeddings"
 
     note_id: Mapped[int] = mapped_column(Integer, ForeignKey("notes.id", ondelete="CASCADE"), primary_key=True)
-    embedding = mapped_column(Vector(768)) # Using Gemini embedding size by default, or adapt if necessary
+    embedding = mapped_column(Vector(768))  # Using Gemini embedding size by default, or adapt if necessary
 
     __table_args__ = (
         Index(
@@ -70,6 +71,7 @@ class NoteTag(Base):
 
 class NoteLink(Base):
     """Stores connections between notes (WikiLinks)."""
+
     __tablename__ = "note_links"
 
     source_note_id: Mapped[int] = mapped_column(Integer, ForeignKey("notes.id", ondelete="CASCADE"), primary_key=True)
@@ -78,8 +80,12 @@ class NoteLink(Base):
     # Optional: context where the link was found
     context_text: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    source_note: Mapped["Note"] = relationship("Note", foreign_keys=[source_note_id], backref=backref("out_links", cascade="all, delete-orphan"))
-    target_note: Mapped["Note"] = relationship("Note", foreign_keys=[target_note_id], backref=backref("in_links", cascade="all, delete-orphan"))
+    source_note: Mapped["Note"] = relationship(
+        "Note", foreign_keys=[source_note_id], backref=backref("out_links", cascade="all, delete-orphan")
+    )
+    target_note: Mapped["Note"] = relationship(
+        "Note", foreign_keys=[target_note_id], backref=backref("in_links", cascade="all, delete-orphan")
+    )
 
     __table_args__ = (
         # The composite PK (source_note_id, target_note_id) covers lookups by

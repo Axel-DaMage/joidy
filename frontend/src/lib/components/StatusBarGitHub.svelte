@@ -28,11 +28,11 @@
     author?: string;
   };
 
-  let connected = false;
-  let issues: Issue[] = [];
-  let prs: PR[] = [];
-  let loading = false;
-  let error = '';
+  let connected = $state(false);
+  let issues = $state<Issue[]>([]);
+  let prs = $state<PR[]>([]);
+  let loading = $state(false);
+  let error = $state('');
 
   const persisted = loadUserSettings();
   let showIssues = $state(persisted.statusBarUi?.showAssignedIssues ?? false);

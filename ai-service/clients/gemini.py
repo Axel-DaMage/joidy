@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import struct
+from typing import cast
 
 import google.generativeai as genai
 from config import settings
@@ -31,7 +32,7 @@ class GeminiClient(BaseLLMClient, EmbeddingClient):
             ),
             timeout=settings.embed_timeout,
         )
-        return result["embedding"]
+        return cast("list[float]", result["embedding"])
 
     async def generate(
         self,
@@ -51,7 +52,7 @@ class GeminiClient(BaseLLMClient, EmbeddingClient):
             ),
             timeout=settings.llm_timeout,
         )
-        return response.text
+        return cast("str", response.text)
 
 
 def _is_retryable_error(exc: Exception) -> bool:
@@ -74,7 +75,7 @@ async def _call_with_retry(func, timeout: float | None = None):
             if timeout is not None:
                 return await asyncio.wait_for(coro, timeout=timeout)
             return await coro
-        except asyncio.TimeoutError:
+        except TimeoutError:
             raise TimeoutError(f"Gemini call timed out after {timeout}s")
         except Exception as exc:
             if not _is_retryable_error(exc) or attempt >= attempts:
@@ -82,7 +83,6 @@ async def _call_with_retry(func, timeout: float | None = None):
             delay = min(cap, base * (2 ** (attempt - 1)))
             logger.warning(f"Gemini call rate-limited. attempt={attempt}/{attempts} delay={delay:.2f}s")
             await asyncio.sleep(delay)
-
 
 
 def embedding_to_bytes(embedding: list[float]) -> bytes:

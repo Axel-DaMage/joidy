@@ -14,7 +14,7 @@ as conflicted. Resolution options:
 
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal
 
 from config import settings
@@ -31,6 +31,22 @@ ConflictResolution = Literal["keep_local", "keep_remote", "merge"]
 CONFLICT_TOLERANCE_SECONDS = 2
 
 
+def to_utc_naive(dt: datetime | None) -> datetime | None:
+    """Normalize a datetime to naive UTC for storage in DateTime columns.
+
+    Aware datetimes are converted to UTC then stripped of tzinfo. Naive
+    datetimes are assumed to already be UTC. Without this, PostgreSQL
+    converts aware values into the session timezone before storing, so
+    reads back interpret them as local and conflict detection misfires
+    whenever the DB timezone is not UTC.
+    """
+    if dt is None:
+        return None
+    if dt.tzinfo is not None:
+        return dt.astimezone(UTC).replace(tzinfo=None)
+    return dt
+
+
 def detect_conflict(
     local_mtime: datetime | None,
     remote_mtime: datetime | None,
@@ -41,8 +57,8 @@ def detect_conflict(
 
     def _to_utc(dt: datetime) -> datetime:
         if dt.tzinfo is None:
-            return dt.replace(tzinfo=timezone.utc)
-        return dt.astimezone(timezone.utc)
+            return dt.replace(tzinfo=UTC)
+        return dt.astimezone(UTC)
 
     diff = abs((_to_utc(local_mtime) - _to_utc(remote_mtime)).total_seconds())
     return diff > CONFLICT_TOLERANCE_SECONDS
@@ -50,12 +66,7 @@ def detect_conflict(
 
 def list_conflicts(db: Session) -> list[dict]:
     """Return all notes with unresolved sync conflicts."""
-    rows = (
-        db.query(SyncState, Note)
-        .join(Note, SyncState.note_id == Note.id)
-        .filter(SyncState.conflict.is_(True))
-        .all()
-    )
+    rows = db.query(SyncState, Note).join(Note, SyncState.note_id == Note.id).filter(SyncState.conflict.is_(True)).all()
     return [
         {
             "note_id": note.id,
@@ -98,7 +109,7 @@ def resolve_conflict(
     if resolution == "keep_local":
         # Keep DB content as-is, just clear the conflict flag
         sync.conflict = False
-        sync.last_synced_at = datetime.now(timezone.utc)
+        sync.last_synced_at = datetime.now(UTC)
         db.commit()
         logger.info("[sync] Resolved conflict for note %d: keep_local", note_id)
 
@@ -114,7 +125,7 @@ def resolve_conflict(
             return {"status": "error", "message": "Source path outside vault"}
 
         try:
-            with open(full_path, "r", encoding="utf-8") as f:
+            with open(full_path, encoding="utf-8") as f:
                 remote_content = f.read()
         except Exception as e:
             return {"status": "error", "message": f"Cannot read vault file: {e}"}
@@ -127,8 +138,8 @@ def resolve_conflict(
             rebuild_derived_data=False,
         )
         sync.conflict = False
-        sync.local_mtime = sync.remote_mtime
-        sync.last_synced_at = datetime.now(timezone.utc)
+        sync.local_mtime = to_utc_naive(sync.remote_mtime)
+        sync.last_synced_at = to_utc_naive(datetime.now(UTC))
         db.commit()
         logger.info("[sync] Resolved conflict for note %d: keep_remote", note_id)
 
@@ -144,7 +155,7 @@ def resolve_conflict(
             rebuild_derived_data=False,
         )
         sync.conflict = False
-        now = datetime.now(timezone.utc)
+        now = to_utc_naive(datetime.now(UTC))
         sync.local_mtime = now
         sync.remote_mtime = now
         sync.last_synced_at = now
@@ -166,5 +177,5 @@ def update_local_mtime(db: Session, note_id: int) -> None:
     if not sync:
         sync = SyncState(note_id=note_id)
         db.add(sync)
-    sync.local_mtime = datetime.now(timezone.utc)
+    sync.local_mtime = to_utc_naive(datetime.now(UTC))
     db.flush()

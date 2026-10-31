@@ -11,7 +11,7 @@ Covers:
 import sys
 import types
 import unittest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
@@ -24,8 +24,8 @@ if "sqlite_vec" not in sys.modules:
     _stub.load = lambda _conn: None  # type: ignore
     sys.modules["sqlite_vec"] = _stub
 
-from database import Base, get_db
 import main as main_module
+from database import Base, get_db
 from main import app
 from middleware.rate_limit import _default_limiter
 from models.note import Note
@@ -224,8 +224,8 @@ class TestSyncStatusEndpoint(VaultSyncBroadcastTestBase):
                 SyncState(
                     note_id=note.id,
                     conflict=True,
-                    local_mtime=datetime(2024, 1, 1, tzinfo=timezone.utc),
-                    remote_mtime=datetime(2024, 1, 2, tzinfo=timezone.utc),
+                    local_mtime=datetime(2024, 1, 1, tzinfo=UTC),
+                    remote_mtime=datetime(2024, 1, 2, tzinfo=UTC),
                 )
             )
             db.commit()
@@ -244,7 +244,7 @@ class TestSyncStatusEndpoint(VaultSyncBroadcastTestBase):
             note = Note(title="Synced", content="c", source="obsidian", source_path="/v/s.md")
             db.add(note)
             db.flush()
-            sync_time = datetime(2024, 6, 15, 12, 0, 0, tzinfo=timezone.utc)
+            sync_time = datetime(2024, 6, 15, 12, 0, 0, tzinfo=UTC)
             db.add(SyncState(note_id=note.id, conflict=False, last_synced_at=sync_time))
             db.commit()
 

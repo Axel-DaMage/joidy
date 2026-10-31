@@ -1,8 +1,6 @@
 """E2E tests for gamification endpoints via HTTP."""
 
 from fastapi.testclient import TestClient
-from models.gamification import XPEvent
-from models.note import Note
 
 
 def test_get_gamification_stats(client: TestClient):

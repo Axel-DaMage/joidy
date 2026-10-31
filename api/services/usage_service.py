@@ -6,7 +6,7 @@ are only recorded while the web app is in the foreground (the frontend pauses
 tracking on ``visibilitychange`` → hidden).
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from models.usage_event import UsageEvent
 from sqlalchemy import func
@@ -68,7 +68,7 @@ def get_usage_summary(db: Session, user_id: int, days: int = 30) -> dict:
     if days > 366:
         days = 366
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     since = now - timedelta(days=days)
 
     base = db.query(UsageEvent).filter(
@@ -97,16 +97,8 @@ def get_usage_summary(db: Session, user_id: int, days: int = 30) -> dict:
     # typically result from missing session_end events (e.g. tab closed
     # without firing pagehide) rather than genuine usage (#563).
     MAX_SESSION_MIN = 480  # 8 hours
-    starts = (
-        base.filter(UsageEvent.event_type == EVENT_SESSION_START)
-        .order_by(UsageEvent.created_at.asc())
-        .all()
-    )
-    ends = (
-        base.filter(UsageEvent.event_type == EVENT_SESSION_END)
-        .order_by(UsageEvent.created_at.asc())
-        .all()
-    )
+    starts = base.filter(UsageEvent.event_type == EVENT_SESSION_START).order_by(UsageEvent.created_at.asc()).all()
+    ends = base.filter(UsageEvent.event_type == EVENT_SESSION_END).order_by(UsageEvent.created_at.asc()).all()
     durations: list[float] = []
     end_idx = 0
     for s in starts:
@@ -184,5 +176,5 @@ def get_feature_usage(db: Session, user_id: int, days: int = 30) -> list[dict]:
         days = 1
     if days > 366:
         days = 366
-    since = datetime.now(timezone.utc) - timedelta(days=days)
+    since = datetime.now(UTC) - timedelta(days=days)
     return _top_event_values(db, user_id, since, EVENT_FEATURE_USE, "feature", 50)

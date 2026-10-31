@@ -2,7 +2,6 @@ import logging
 import secrets
 from typing import Any
 
-import httpx
 from config import settings
 from models.github import (
     GitHubEvent,
@@ -11,7 +10,8 @@ from models.github import (
     GitHubItemType,
     GitHubRepo,
 )
-from repositories import GitHubEventRepository, GitHubItemRepository, GitHubRepoRepository, GoalRepository
+from repositories import GitHubItemRepository, GitHubRepoRepository
+from services.http_client import http_client
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -31,28 +31,28 @@ def _headers() -> dict[str, str]:
 
 
 async def fetch_github(url: str, params: dict | None = None) -> list[dict]:
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with http_client(timeout=30.0) as client:
         r = await client.get(f"{GITHUB_API}{url}", headers=_headers(), params=params or {})
         r.raise_for_status()
         return r.json()
 
 
 async def post_github(url: str, data: dict | None = None) -> dict:
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with http_client(timeout=30.0) as client:
         r = await client.post(f"{GITHUB_API}{url}", headers=_headers(), json=data)
         r.raise_for_status()
         return r.json()
 
 
 async def patch_github(url: str, data: dict) -> dict:
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with http_client(timeout=30.0) as client:
         r = await client.patch(f"{GITHUB_API}{url}", headers=_headers(), json=data)
         r.raise_for_status()
         return r.json()
 
 
 async def delete_github(url: str) -> None:
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with http_client(timeout=30.0) as client:
         r = await client.delete(f"{GITHUB_API}{url}", headers=_headers())
         r.raise_for_status()
 
@@ -70,15 +70,11 @@ async def get_repo(owner: str, repo: str) -> dict:
 
 
 async def get_issues(owner: str, repo: str, state: str = "open") -> list[dict]:
-    return await fetch_github(
-        f"/repos/{owner}/{repo}/issues", {"state": state, "per_page": 100, "sort": "updated"}
-    )
+    return await fetch_github(f"/repos/{owner}/{repo}/issues", {"state": state, "per_page": 100, "sort": "updated"})
 
 
 async def get_pulls(owner: str, repo: str, state: str = "open") -> list[dict]:
-    return await fetch_github(
-        f"/repos/{owner}/{repo}/pulls", {"state": state, "per_page": 100, "sort": "updated"}
-    )
+    return await fetch_github(f"/repos/{owner}/{repo}/pulls", {"state": state, "per_page": 100, "sort": "updated"})
 
 
 async def get_issue(owner: str, repo: str, issue_number: int) -> dict:
@@ -89,9 +85,7 @@ async def get_pull(owner: str, repo: str, pull_number: int) -> dict:
     return await fetch_github(f"/repos/{owner}/{repo}/pulls/{pull_number}")
 
 
-async def create_issue(
-    owner: str, repo: str, title: str, body: str = "", labels: list[str] | None = None
-) -> dict:
+async def create_issue(owner: str, repo: str, title: str, body: str = "", labels: list[str] | None = None) -> dict:
     data: dict[str, Any] = {"title": title}
     if body:
         data["body"] = body
@@ -133,9 +127,7 @@ async def create_comment(owner: str, repo: str, issue_number: int, body: str) ->
     return await post_github(f"/repos/{owner}/{repo}/issues/{issue_number}/comments", {"body": body})
 
 
-async def create_webhook(
-    owner: str, repo: str, callback_url: str, secret: str
-) -> dict:
+async def create_webhook(owner: str, repo: str, callback_url: str, secret: str) -> dict:
     hook_config = {
         "url": callback_url,
         "content_type": "json",
@@ -155,9 +147,7 @@ async def delete_webhook(owner: str, repo: str, hook_id: int) -> None:
 
 
 async def get_commits(owner: str, repo: str, per_page: int = 30) -> list[dict]:
-    return await fetch_github(
-        f"/repos/{owner}/{repo}/commits", {"per_page": per_page, "sha": "HEAD"}
-    )
+    return await fetch_github(f"/repos/{owner}/{repo}/commits", {"per_page": per_page, "sha": "HEAD"})
 
 
 async def get_file_content(owner: str, repo: str, path: str) -> dict:
@@ -232,10 +222,7 @@ def process_webhook_event(
     sender: str,
     payload: dict,
 ) -> GitHubEvent | None:
-    repo = (
-        db.execute(select(GitHubRepo).where(GitHubRepo.full_name == repo_full_name))
-        .scalar_one_or_none()
-    )
+    repo = db.execute(select(GitHubRepo).where(GitHubRepo.full_name == repo_full_name)).scalar_one_or_none()
     if not repo:
         logger.warning(f"Repo not found in DB: {repo_full_name}")
         return None
@@ -286,10 +273,7 @@ async def setup_repo_webhook(
     secret = get_webhook_secret()
     webhook = await create_webhook(owner, name, webhook_callback_url, secret)
 
-    repo = (
-        db.execute(select(GitHubRepo).where(GitHubRepo.full_name == repo_full_name))
-        .scalar_one_or_none()
-    )
+    repo = db.execute(select(GitHubRepo).where(GitHubRepo.full_name == repo_full_name)).scalar_one_or_none()
     if repo:
         repo.webhook_id = webhook["id"]
         repo.webhook_secret = secret
@@ -299,14 +283,8 @@ async def setup_repo_webhook(
 
 
 def get_items_by_goal(db: Session, goal_id: int) -> list[GitHubItem]:
-    return list(
-        db.execute(
-            select(GitHubItem).where(GitHubItem.goal_id == goal_id)
-        ).scalars().all()
-    )
+    return list(db.execute(select(GitHubItem).where(GitHubItem.goal_id == goal_id)).scalars().all())
 
 
 def get_items_by_repo(db: Session, repo_id: int) -> list[GitHubItem]:
-    return list(
-        db.execute(select(GitHubItem).where(GitHubItem.repo_id == repo_id)).scalars().all()
-    )
+    return list(db.execute(select(GitHubItem).where(GitHubItem.repo_id == repo_id)).scalars().all())

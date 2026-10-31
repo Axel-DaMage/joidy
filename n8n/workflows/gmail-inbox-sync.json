@@ -1,0 +1,171 @@
+{
+  "name": "Gmail → Joidy Inbox (multi-cuenta)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "minutes", "minutesInterval": 15 }
+          ]
+        }
+      },
+      "id": "a1b2c3d4-0001-4a01-9001-000000000001",
+      "name": "Cada 15 min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-620, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.JOIDY_API_URL }}/auth/login",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ password: $env.JOIDY_AUTH_PASSWORD, username: 'user' }) }}",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0002-4a01-9001-000000000002",
+      "name": "Joidy Login",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-400, 0]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "getAll",
+        "returnAll": false,
+        "limit": 25,
+        "filters": {
+          "readStatus": "unread",
+          "includeSpamTrash": false,
+          "labelIds": ["INBOX"]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0003-4a01-9001-000000000003",
+      "name": "Gmail cuenta A",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2,
+      "position": [-180, -180],
+      "credentials": {
+        "gmailOAuth2": { "id": "REEMPLAZAR_CRED_A", "name": "Gmail mail-A" }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const ACCOUNT = 'REEMPLAZAR_CORREO_CUENTA_A';\n\n// ── Reglas autónomas (edita libremente) ─────────────────────────\nconst OWN_SENDERS = []; // direcciones o schénula regex: ['ana@ejemplo.com', /@mibanco\\./i]\nconst PROMO_RX = /(unsubscribe|newsletter|oferta|descuento|promo|deal|coupon|black friday|sale|expiración|invitación a suscribirse|marketing)/i;\nconst BOT_SENDERS = /(no-?reply|donotreply|noreply@|mailer-daemon|notificaciones@|avisos@)/i;\nconst IMPORTANT_SUBJECT = /(urgente|urgent|action required|acció|reunión|meeting|invoice|factura|pago|payment|security|seguridad|banco|deadline|important)/i;\nconst IMPORTANT_LABELS = new Set(['IMPORTANT']);\n\nconst j = $input.item.json;\nconst h = j.headers || {};\nconst labels = j.labelIds || [];\nconst from = h.from || j.from || '';\n\nlet important = false;\nconst reasons = [];\n\nif (OWN_SENDERS.some((rx) => (typeof rx === 'string' ? from.toLowerCase().includes(rx.toLowerCase()) : rx.test(from)))) {\n  important = true; reasons.push('sender allowlist');\n}\nif (labels.includes('FLAGGED')) { important = true; reasons.push('FLAGGED'); }\nif (labels.some((l) => IMPORTANT_LABELS.has(l))) { important = true; reasons.push('Gmail IMPORTANT'); }\nif (IMPORTANT_SUBJECT.test(h.subject || '')) { important = true; reasons.push('subject keywords'); }\nif (!important && (PROMO_RX.test(from) || PROMO_RX.test(h.subject || '') || BOT_SENDERS.test(from))) {\n  reasons.push('filtered: promo/bot');\n}\n\nreturn {\n  json: {\n    account: ACCOUNT,\n    gmail_id: j.id,\n    thread_id: j.threadId || null,\n    subject: h.subject || null,\n    sender: from || null,\n    snippet: String(j.snippet ?? '').slice(0, 2000) || null,\n    received_at: h.date ? new Date(h.date).toISOString() : null,\n    unread: labels.includes('UNREAD'),\n    important,\n    importance_reason: reasons.join(', ') || null,\n    labels,\n  },\n};"
+      },
+      "id": "a1b2c3d4-0004-4a01-9001-000000000004",
+      "name": "Puntúa cuenta A",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [40, -180]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "getAll",
+        "returnAll": false,
+        "limit": 25,
+        "filters": {
+          "readStatus": "unread",
+          "includeSpamTrash": false,
+          "labelIds": ["INBOX"]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0005-4a01-9001-000000000005",
+      "name": "Gmail cuenta B",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2,
+      "position": [-180, 180],
+      "credentials": {
+        "gmailOAuth2": { "id": "REEMPLAZAR_CRED_B", "name": "Gmail mail-B" }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const ACCOUNT = 'REEMPLAZAR_CORREO_CUENTA_B';\n\n// ── Reglas autónomas (edita libremente) ─────────────────────────\nconst OWN_SENDERS = []; // direcciones o schénula regex: ['ana@ejemplo.com', /@mibanco\\./i]\nconst PROMO_RX = /(unsubscribe|newsletter|oferta|descuento|promo|deal|coupon|black friday|sale|expiración|invitación a suscribirse|marketing)/i;\nconst BOT_SENDERS = /(no-?reply|donotreply|noreply@|mailer-daemon|notificaciones@|avisos@)/i;\nconst IMPORTANT_SUBJECT = /(urgente|urgent|action required|acció|reunión|meeting|invoice|factura|pago|payment|security|seguridad|banco|deadline|important)/i;\nconst IMPORTANT_LABELS = new Set(['IMPORTANT']);\n\nconst j = $input.item.json;\nconst h = j.headers || {};\nconst labels = j.labelIds || [];\nconst from = h.from || j.from || '';\n\nlet important = false;\nconst reasons = [];\n\nif (OWN_SENDERS.some((rx) => (typeof rx === 'string' ? from.toLowerCase().includes(rx.toLowerCase()) : rx.test(from)))) {\n  important = true; reasons.push('sender allowlist');\n}\nif (labels.includes('FLAGGED')) { important = true; reasons.push('FLAGGED'); }\nif (labels.some((l) => IMPORTANT_LABELS.has(l))) { important = true; reasons.push('Gmail IMPORTANT'); }\nif (IMPORTANT_SUBJECT.test(h.subject || '')) { important = true; reasons.push('subject keywords'); }\nif (!important && (PROMO_RX.test(from) || PROMO_RX.test(h.subject || '') || BOT_SENDERS.test(from))) {\n  reasons.push('filtered: promo/bot');\n}\n\nreturn {\n  json: {\n    account: ACCOUNT,\n    gmail_id: j.id,\n    thread_id: j.threadId || null,\n    subject: h.subject || null,\n    sender: from || null,\n    snippet: String(j.snippet ?? '').slice(0, 2000) || null,\n    received_at: h.date ? new Date(h.date).toISOString() : null,\n    unread: labels.includes('UNREAD'),\n    important,\n    importance_reason: reasons.join(', ') || null,\n    labels,\n  },\n};"
+      },
+      "id": "a1b2c3d4-0006-4a01-9001-000000000006",
+      "name": "Puntúa cuenta B",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [40, 180]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.JOIDY_API_URL }}/emails/",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Joidy Login').first().json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ account: $json.account, gmail_id: $json.gmail_id, thread_id: $json.thread_id, subject: $json.subject, sender: $json.sender, snippet: $json.snippet, received_at: $json.received_at, unread: $json.unread, important: $json.important, importance_reason: $json.importance_reason, labels: $json.labels }) }}",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0007-4a01-9001-000000000007",
+      "name": "POST a Joidy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [260, 0],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "markAsRead",
+        "messageId": "={{ $json.gmail_id }}",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0008-4a01-9001-000000000008",
+      "name": "NO USAR (plantilla marca leído)",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2,
+      "position": [460, 0],
+      "disabled": true,
+      "notes": "Plantilla deshabilitada: marca como leído en Gmail tras insertar en Joidy. Actívala y conecta su credential si quieres consumir la bandeja real."
+    }
+  ],
+  "connections": {
+    "Cada 15 min": {
+      "main": [[{ "node": "Joidy Login", "type": "main", "index": 0 }]]
+    },
+    "Joidy Login": {
+      "main": [
+        [
+          { "node": "Gmail cuenta A", "type": "main", "index": 0 },
+          { "node": "Gmail cuenta B", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Gmail cuenta A": {
+      "main": [[{ "node": "Puntúa cuenta A", "type": "main", "index": 0 }]]
+    },
+    "Puntúa cuenta A": {
+      "main": [[{ "node": "POST a Joidy", "type": "main", "index": 0 }]]
+    },
+    "Gmail cuenta B": {
+      "main": [[{ "node": "Puntúa cuenta B", "type": "main", "index": 0 }]]
+    },
+    "Puntúa cuenta B": {
+      "main": [[{ "node": "POST a Joidy", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

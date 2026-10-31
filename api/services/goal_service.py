@@ -1,5 +1,5 @@
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException
 from models.goal import (
@@ -58,6 +58,7 @@ def _parse_temporality(text: str) -> GoalTemporality:
         return GoalTemporality.ONEOFF
     return GoalTemporality.ONEOFF
 
+
 def _parse_fail_config(text: str) -> GoalFailConfig:
     if not text:
         return GoalFailConfig.STATIC
@@ -67,6 +68,7 @@ def _parse_fail_config(text: str) -> GoalFailConfig:
     if text in ["snowball", "acumulativo"]:
         return GoalFailConfig.SNOWBALL
     return GoalFailConfig.STATIC
+
 
 def parse_goals_from_content(content: str) -> list[dict]:
     """
@@ -92,21 +94,24 @@ def parse_goals_from_content(content: str) -> list[dict]:
         target_value = 1.0
         measurement_type = GoalMeasurement.BOOLEAN
 
-        num_match = re.search(r'\b(\d+(?:\.\d+)?)\b', title)
+        num_match = re.search(r"\b(\d+(?:\.\d+)?)\b", title)
         if num_match:
             target_value = float(num_match.group(1))
             measurement_type = GoalMeasurement.COUNT
 
-        goals.append({
-            "title": title,
-            "temporality": _parse_temporality(period),
-            "has_explicit_temporality": period is not None,
-            "fail_config": _parse_fail_config(fail_mode),
-            "target_value": target_value,
-            "measurement_type": measurement_type,
-            "state": GoalState.ACTIVE
-        })
+        goals.append(
+            {
+                "title": title,
+                "temporality": _parse_temporality(period),
+                "has_explicit_temporality": period is not None,
+                "fail_config": _parse_fail_config(fail_mode),
+                "target_value": target_value,
+                "measurement_type": measurement_type,
+                "state": GoalState.ACTIVE,
+            }
+        )
     return goals
+
 
 def sync_goals_from_note(db: Session, note_id: int, content: str):
     """
@@ -145,7 +150,7 @@ def sync_goals_from_note(db: Session, note_id: int, content: str):
                 target_value=pdata["target_value"],
                 measurement_type=pdata["measurement_type"],
                 state=GoalState.ACTIVE,
-                note_id=note_id
+                note_id=note_id,
             )
             GoalRepository(db).add(new_goal)
 
@@ -197,12 +202,12 @@ def get_bulk_goal_progress(goals: list[Goal], db: Session) -> dict[int, float]:
     """Bulk retrieve goal progress to prevent N+1 queries."""
     result = {}
     count_goals = [g for g in goals if g.tag_id and g.measurement_type == GoalMeasurement.COUNT]
-    
+
     if count_goals:
         goal_ids = [g.id for g in count_goals]
-        from sqlalchemy import func
         from models.note import Note, NoteTag
-        
+        from sqlalchemy import func
+
         stmt = (
             db.query(Goal.id, func.count(Note.id))
             .outerjoin(NoteTag, NoteTag.tag_id == Goal.tag_id)
@@ -212,16 +217,16 @@ def get_bulk_goal_progress(goals: list[Goal], db: Session) -> dict[int, float]:
         )
         for goal_id, count in stmt.all():
             result[goal_id] = float(count)
-            
+
     for g in goals:
         if g.id not in result:
             result[g.id] = g.current_value
-            
+
     return result
 
 
 def evaluate_active_goals(db: Session):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     today = get_local_today()
     active_goals = GoalRepository(db).get_active()
 
@@ -303,6 +308,7 @@ def _process_goal_failure(db: Session, goal: Goal, now: datetime, progress: floa
             note_id=goal.note_id,
             tag_id=goal.tag_id,
             parent_id=goal.parent_id or goal.id,
+            priority=goal.priority,
         )
         GoalRepository(db).add(new_goal)
     else:
@@ -314,6 +320,7 @@ def _process_goal_failure(db: Session, goal: Goal, now: datetime, progress: floa
 
     try:
         from services.joidy_vault_writer import _write_goal_file, get_objectives_dir
+
         obj_dir = get_objectives_dir()
         if obj_dir:
             _write_goal_file(db, goal, obj_dir)
@@ -321,6 +328,7 @@ def _process_goal_failure(db: Session, goal: Goal, now: datetime, progress: floa
                 _write_goal_file(db, new_goal, obj_dir)
     except Exception as e:
         import logging
+
         logging.getLogger(__name__).warning("Failed to write updated goal file: %s", e)
 
 

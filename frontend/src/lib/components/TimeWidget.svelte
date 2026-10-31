@@ -1,45 +1,46 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { use24HourClock } from '$lib/stores/settings';
-  import { getTimezone, formatClock } from '$lib/utils/clock';
+  import { getTimezone, formatClock, getClockParts, type ClockParts } from '$lib/utils/clock';
+  import ClockDisplay from '$lib/components/clock/ClockDisplay.svelte';
   import { t } from 'svelte-i18n';
 
   // ── Timezone ───────────────────────────────────────────────────────────────
   const TZ_MAP: Record<string, string> = {
-    'chile':       'America/Santiago',
-    'españa':      'Europe/Madrid',
-    'mexico':      'America/Mexico_City',
-    'méxico':      'America/Mexico_City',
-    'argentina':   'America/Argentina/Buenos_Aires',
-    'colombia':    'America/Bogota',
-    'peru':        'America/Lima',
-    'perú':        'America/Lima',
-    'venezuela':   'America/Caracas',
-    'ecuador':     'America/Guayaquil',
-    'uruguay':     'America/Montevideo',
-    'brasil':      'America/Sao_Paulo',
-    'brazil':      'America/Sao_Paulo',
-    'usa':         'America/New_York',
-    'eeuu':        'America/New_York',
-    'uk':          'Europe/London',
-    'alemania':    'Europe/Berlin',
-    'francia':     'Europe/Paris',
-    'japon':       'Asia/Tokyo',
-    'japón':       'Asia/Tokyo',
-    'china':       'Asia/Shanghai',
-    'australia':   'Australia/Sydney',
-    'utc':         'UTC',
+    chile: 'America/Santiago',
+    españa: 'Europe/Madrid',
+    mexico: 'America/Mexico_City',
+    méxico: 'America/Mexico_City',
+    argentina: 'America/Argentina/Buenos_Aires',
+    colombia: 'America/Bogota',
+    peru: 'America/Lima',
+    perú: 'America/Lima',
+    venezuela: 'America/Caracas',
+    ecuador: 'America/Guayaquil',
+    uruguay: 'America/Montevideo',
+    brasil: 'America/Sao_Paulo',
+    brazil: 'America/Sao_Paulo',
+    usa: 'America/New_York',
+    eeuu: 'America/New_York',
+    uk: 'Europe/London',
+    alemania: 'Europe/Berlin',
+    francia: 'Europe/Paris',
+    japon: 'Asia/Tokyo',
+    japón: 'Asia/Tokyo',
+    china: 'Asia/Shanghai',
+    australia: 'Australia/Sydney',
+    utc: 'UTC',
   };
 
   const TZ_PRESETS = [
-    ['🇨🇱 Chile',      'America/Santiago'],
-    ['🇪🇸 España',     'Europe/Madrid'],
-    ['🇲🇽 México',     'America/Mexico_City'],
-    ['🇦🇷 Argentina',  'America/Argentina/Buenos_Aires'],
-    ['🇨🇴 Colombia',   'America/Bogota'],
-    ['🇵🇪 Perú',       'America/Lima'],
-    ['🇧🇷 Brasil',     'America/Sao_Paulo'],
-    ['🌐 UTC',         'UTC'],
+    ['🇨🇱 Chile', 'America/Santiago'],
+    ['🇪🇸 España', 'Europe/Madrid'],
+    ['🇲🇽 México', 'America/Mexico_City'],
+    ['🇦🇷 Argentina', 'America/Argentina/Buenos_Aires'],
+    ['🇨🇴 Colombia', 'America/Bogota'],
+    ['🇵🇪 Perú', 'America/Lima'],
+    ['🇧🇷 Brasil', 'America/Sao_Paulo'],
+    ['🌐 UTC', 'UTC'],
   ] as const;
 
   let timezone: string = 'UTC';
@@ -73,9 +74,11 @@
 
   // ── Clock ──────────────────────────────────────────────────────────────────
   let clockStr = '--:--:--';
+  let clockParts: ClockParts = getClockParts('UTC', true);
 
   function updateClock() {
     clockStr = formatClock(timezone, $use24HourClock);
+    clockParts = getClockParts(timezone, $use24HourClock);
   }
 
   let clockInterval: ReturnType<typeof setInterval> | null = null;
@@ -90,7 +93,7 @@
     if (clockInterval) clearInterval(clockInterval);
   });
 
-  $: $use24HourClock, updateClock();
+  $: ($use24HourClock, updateClock());
 </script>
 
 <svelte:window onkeydown={(e) => e.key === 'Escape' && (showTzPicker = false)} />
@@ -105,9 +108,13 @@
             bind:value={tzInput}
             placeholder={$t('widgets.timezonePlaceholder')}
             onkeydown={(e) => e.key === 'Enter' && applyTzInput()}
-            autofocus
           />
-          <button class="tz-close-ui" onclick={() => showTzPicker = false} title={$t('widgets.close')} aria-label={$t('widgets.close')}>✕</button>
+          <button
+            class="tz-close-ui"
+            onclick={() => (showTzPicker = false)}
+            title={$t('widgets.close')}
+            aria-label={$t('widgets.close')}>✕</button
+          >
         </div>
         {#if tzError}<span class="tz-error">{tzError}</span>{/if}
         <div class="tz-presets">
@@ -119,13 +126,13 @@
     {:else}
       <button
         class="clock mono"
-        onclick={() => showTzPicker = true}
+        onclick={() => (showTzPicker = true)}
         title={$t('widgets.changeTimezone')}
-        aria-label={$t('widgets.changeTimezone')}
         aria-haspopup="dialog"
         aria-expanded={showTzPicker}
+        aria-label="{clockStr} — {$t('widgets.changeTimezone')}"
       >
-        {clockStr}
+        <ClockDisplay mode="clock" {...clockParts} />
       </button>
     {/if}
   </div>
@@ -162,7 +169,9 @@
     border: none;
     padding: 0;
   }
-  .clock:hover { color: var(--xp); }
+  .clock:hover {
+    color: var(--xp);
+  }
 
   .tz-picker {
     display: flex;
@@ -191,10 +200,18 @@
     outline: none;
     text-align: center;
   }
-  .tz-input:focus { border-color: var(--xp-2); }
-  .tz-input::placeholder { color: var(--text-muted); }
+  .tz-input:focus {
+    border-color: var(--xp-2);
+  }
+  .tz-input::placeholder {
+    color: var(--text-muted);
+  }
 
-  .tz-error { font-size: 10px; color: var(--error); font-family: var(--font-mono); }
+  .tz-error {
+    font-size: 10px;
+    color: var(--error);
+    font-family: var(--font-mono);
+  }
 
   .tz-presets {
     display: flex;
@@ -213,7 +230,10 @@
     cursor: pointer;
     transition: all var(--t-fast);
   }
-  .tz-preset:hover { background: var(--elevated); color: var(--text-primary); }
+  .tz-preset:hover {
+    background: var(--elevated);
+    color: var(--text-primary);
+  }
   .tz-preset:hover {
     border-color: color-mix(in srgb, var(--xp) 45%, var(--border));
     color: var(--xp);

@@ -1,23 +1,19 @@
 import { defineConfig } from 'vite';
 import { sveltekit } from '@sveltejs/kit/vite';
-import pkg from './package.json';
+import pkg from './package.json' with { type: 'json' };
+import { kitOptions } from './kit.options';
 
 // The browser connects to the host-mapped frontend port, which may differ from
 // the container's internal port (3000) when FRONTEND_PORT is overridden.
 const FRONTEND_PORT = (typeof process !== 'undefined' && Number(process.env.FRONTEND_PORT)) || 3000;
 
 export default defineConfig({
-  plugins: [sveltekit()],
+  plugins: [sveltekit(kitOptions)],
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
   },
   esbuild: {
     target: 'esnext',
-  },
-  optimizeDeps: {
-    esbuildOptions: {
-      target: 'esnext',
-    },
   },
   server: {
     port: 3000,
@@ -40,28 +36,20 @@ export default defineConfig({
     target: 'esnext',
     rollupOptions: {
       output: {
-        // Function form: only group modules resolved from `node_modules`.
-        // SvelteKit externalizes some deps (e.g. d3, force-graph) for the SSR
-        // build pass, where their ids are bare specifiers without a
-        // `node_modules` segment. The object form tried to chunk those bare
-        // specifiers and aborted the build with
-        // "d3 cannot be included in manualChunks because it is resolved as an
-        // external module". Skipping non-node_modules ids avoids that.
-        manualChunks(id) {
-          if (!id.includes('node_modules')) return;
-          // Visualization: d3 + force-graph (used by SkillTree, KnowledgeGraph)
-          if (id.includes('/d3/') || id.includes('/force-graph/')) return 'd3';
-          // Markdown rendering: marked + dompurify + highlight.js (used by
-          // NoteEditor, GoalEditor, ChatInterface, WysiwygEditor)
-          if (
-            id.includes('/marked/') ||
-            id.includes('/dompurify/') ||
-            id.includes('/highlight.js/')
-          ) {
-            return 'markdown';
-          }
-          // Rich text editor: TipTap + extensions (used by WysiwygEditor)
-          if (id.includes('/@tiptap/')) return 'tiptap';
+        // Rolldown's advancedChunks replaces manualChunks (Vite 8). The `test`
+        // regexes only match ids containing `node_modules`, so SSR-externalized
+        // deps resolved as bare specifiers (e.g. `d3`) are never chunked — the
+        // reason the old function form existed.
+        advancedChunks: {
+          groups: [
+            // Visualization: d3 + force-graph (used by SkillTree, KnowledgeGraph)
+            { name: 'd3', test: /node_modules\/(d3|force-graph)\// },
+            // Markdown rendering: marked + dompurify + highlight.js (used by
+            // NoteEditor, GoalEditor, ChatInterface, WysiwygEditor)
+            { name: 'markdown', test: /node_modules\/(marked|dompurify|highlight\.js)\// },
+            // Rich text editor: TipTap + extensions (used by WysiwygEditor)
+            { name: 'tiptap', test: /node_modules\/@tiptap\// },
+          ],
         },
       },
     },

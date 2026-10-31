@@ -22,15 +22,19 @@ function Write-Step($Message) {
 }
 
 function Write-Success($Message) {
-    Write-Host "${Green}✓${Reset} $Message" -ForegroundColor Green
+    Write-Host "${Green}$([char]0x2713)${Reset} $Message" -ForegroundColor Green
+}
+
+function Write-Ok($Message) {
+    Write-Success $Message
 }
 
 function Write-Warn($Message) {
-    Write-Host "${Yellow}⚠${Reset} $Message" -ForegroundColor Yellow
+    Write-Host "${Yellow}$([char]0x26A0)${Reset} $Message" -ForegroundColor Yellow
 }
 
 function Write-Error($Message) {
-    Write-Host "${Red}✗${Reset} $Message" -ForegroundColor Red
+    Write-Host "${Red}$([char]0x2717)${Reset} $Message" -ForegroundColor Red
 }
 
 function Test-Command($Command) {
@@ -42,7 +46,7 @@ $script:step = 0
 $script:projectName = "joidy"
 
 Write-Host ""
-Write-Host "${Blue}═══ Joidy Quick Start (Windows) ═══${Reset}" -ForegroundColor Cyan
+Write-Host "${Blue}=== Joidy Quick Start (Windows) ===${Reset}" -ForegroundColor Cyan
 Write-Host ""
 
 # Step 0: Check Container Engine (Docker or Podman)
@@ -71,6 +75,14 @@ if (Test-Command "docker") {
     if (-not $dockerComposeAvailable) {
         Write-Error "Docker Compose is not available"
         Write-Host "Please ensure Docker Desktop includes Docker Compose."
+        exit 1
+    }
+
+    # Verify Docker daemon is running
+    $null = docker info 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warn "Docker is installed, but Docker Desktop / daemon is not running."
+        Write-Host "Please start Docker Desktop and ensure the engine is running." -ForegroundColor Yellow
         exit 1
     }
 } elseif (Test-Command "podman") {
@@ -191,27 +203,44 @@ if ([string]::IsNullOrEmpty($vaultPath) -or $vaultPath -eq "/path/to/your/obsidi
 
 # Check/Generate SECRET_KEY
 $secretKey = $envVars["SECRET_KEY"]
-if ([string]::IsNullOrEmpty($secretKey) -or $secretKey -eq "change_this_to_a_random_secret_key") {
+if ([string]::IsNullOrEmpty($secretKey) -or $secretKey -eq "change_this_to_a_random_secret_key" -or $secretKey -match '^0+$') {
     # Generate a random secret
-    $newSecret = -join ((65..90) + (97..122) + (48..57) | Get-Random -Count 64 | ForEach-Object {[char]$_})
+    $bytes = New-Object byte[] 32
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    $rng.GetBytes($bytes)
+    $newSecret = -join ($bytes | ForEach-Object { $_.ToString("x2") })
     (Get-Content ".env") -replace 'SECRET_KEY=.*', "SECRET_KEY=$newSecret" | Set-Content ".env"
     Write-Success "Generated new SECRET_KEY"
 }
 
 # Check/Generate POSTGRES_PASSWORD
 $postgresPassword = $envVars["POSTGRES_PASSWORD"]
-if ([string]::IsNullOrEmpty($postgresPassword)) {
+if ([string]::IsNullOrEmpty($postgresPassword) -or $postgresPassword -match '^0+$') {
     # Generate a random password
-    $newPassword = -join ((65..90) + (97..122) + (48..57) | Get-Random -Count 24 | ForEach-Object {[char]$_})
+    $bytes = New-Object byte[] 24
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    $rng.GetBytes($bytes)
+    $newPassword = -join ($bytes | ForEach-Object { $_.ToString("x2") })
     (Get-Content ".env") -replace 'POSTGRES_PASSWORD=.*', "POSTGRES_PASSWORD=$newPassword" | Set-Content ".env"
     Write-Success "Generated new POSTGRES_PASSWORD"
+}
+
+# Check/Generate GRAFANA_ADMIN_PASSWORD
+$grafanaPassword = $envVars["GRAFANA_ADMIN_PASSWORD"]
+if ([string]::IsNullOrEmpty($grafanaPassword) -or $grafanaPassword -match '^0+$') {
+    $bytes = New-Object byte[] 24
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    $rng.GetBytes($bytes)
+    $newGrafanaPassword = -join ($bytes | ForEach-Object { $_.ToString("x2") })
+    (Get-Content ".env") -replace 'GRAFANA_ADMIN_PASSWORD=.*', "GRAFANA_ADMIN_PASSWORD=$newGrafanaPassword" | Set-Content ".env"
+    Write-Success "Generated new GRAFANA_ADMIN_PASSWORD"
 }
 
 # Step 3: Start services
 $script:step++
 Write-Step "Starting services..."
 
-# Expand ~ in OBSIDIAN_VAULT_PATH — Docker bind mounts do not expand `~`.
+# Expand ~ in OBSIDIAN_VAULT_PATH - Docker bind mounts do not expand `~`.
 # Export the expanded value so compose receives an absolute host path.
 if ($env:OBSIDIAN_VAULT_PATH) {
     $vaultRaw = $env:OBSIDIAN_VAULT_PATH
@@ -220,6 +249,7 @@ if ($env:OBSIDIAN_VAULT_PATH) {
     } elseif ($vaultRaw -match '^~/(.*)') {
         $env:OBSIDIAN_VAULT_PATH = Join-Path $HOME $Matches[1]
     }
+    $env:OBSIDIAN_VAULT_PATH = $env:OBSIDIAN_VAULT_PATH -replace '\\', '/'
     if ($env:OBSIDIAN_VAULT_PATH -ne $vaultRaw) {
         Write-Ok "Expanded OBSIDIAN_VAULT_PATH: $vaultRaw -> $env:OBSIDIAN_VAULT_PATH"
     }
@@ -235,6 +265,7 @@ if ($env:OBSIDIAN_VAULT_PATH) {
         } else {
             $env:OBSIDIAN_VAULT_PATH = $vaultRaw
         }
+        $env:OBSIDIAN_VAULT_PATH = $env:OBSIDIAN_VAULT_PATH -replace '\\', '/'
         if ($env:OBSIDIAN_VAULT_PATH -ne $vaultRaw) {
             Write-Ok "Expanded OBSIDIAN_VAULT_PATH: $vaultRaw -> $env:OBSIDIAN_VAULT_PATH"
         }
@@ -287,9 +318,9 @@ if ($LASTEXITCODE -ne 0) {
 
 # Final output
 Write-Host ""
-Write-Host "${Green}═══════════════════════════════════════════${Reset}" -ForegroundColor Green
+Write-Host "${Green}===========================================${Reset}" -ForegroundColor Green
 Write-Host "${Green}  Joidy is running!${Reset}" -ForegroundColor Green
-Write-Host "${Green}═══════════════════════════════════════════${Reset}" -ForegroundColor Green
+Write-Host "${Green}===========================================${Reset}" -ForegroundColor Green
 Write-Host ""
 Write-Host "  ${Green}Web App:${Reset}   http://localhost:3000"
 Write-Host "  ${Green}API Docs:${Reset}  http://localhost:8000/docs"

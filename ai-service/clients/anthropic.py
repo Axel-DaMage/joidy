@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from typing import cast
 
 import anthropic
 import httpx
@@ -43,7 +44,11 @@ class AnthropicClient(BaseLLMClient):
             system=system_prompt,
             messages=[{"role": "user", "content": prompt}],
         )
-        return response.content[0].text
+        return cast("str", response.content[0].text)
+
+    async def close(self) -> None:
+        """Close the SDK's underlying httpx client (#998)."""
+        await self._client.close()
 
 
 def _is_retryable_error(exc: Exception) -> bool:

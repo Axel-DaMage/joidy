@@ -10,6 +10,11 @@ test.describe('Graph — page structure', () => {
     await expect(page).toHaveTitle(/grafo/i);
   });
 
+  test('beta banner is visible', async ({ page }) => {
+    await authGoto(page, '/graph');
+    await expect(page.locator('.beta-banner')).toBeVisible();
+  });
+
   test('graph stats are displayed', async ({ page }) => {
     await authGoto(page, '/graph');
     // Shows note count, tag count, link count

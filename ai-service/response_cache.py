@@ -23,7 +23,7 @@ class TTLCache:
     def __init__(self, max_size: int, ttl_seconds: float):
         self._max_size = max(max_size, 1)
         self._ttl = max(0.0, ttl_seconds)
-        self._data: "OrderedDict[str, tuple[float, Any]]" = OrderedDict()
+        self._data: OrderedDict[str, tuple[float, Any]] = OrderedDict()
         self._lock = Lock()
 
     def _is_expired(self, ts: float) -> bool:

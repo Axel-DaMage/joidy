@@ -3,14 +3,13 @@ JWT Authentication Service.
 """
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import jwt
 from config import settings
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from passlib.context import CryptContext
-
 from services.env_file import get_persisted
 
 logger = logging.getLogger(__name__)
@@ -19,7 +18,10 @@ ALGORITHM = "HS256"
 TOKEN_EXPIRE_HOURS = 24 * 7  # 1 week
 
 security = HTTPBearer(auto_error=False)
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+_pwd_context_kwargs: dict = {"schemes": ["bcrypt"], "deprecated": "auto"}
+if settings.bcrypt_rounds:
+    _pwd_context_kwargs["bcrypt__rounds"] = settings.bcrypt_rounds
+pwd_context = CryptContext(**_pwd_context_kwargs)
 
 
 def _effective_auth_password() -> str:
@@ -69,7 +71,7 @@ def create_access_token(user_id: int, username: str = "user") -> str:
     if not secret:
         raise ValueError("SECRET_KEY not configured")
 
-    expire = datetime.now(timezone.utc) + timedelta(hours=TOKEN_EXPIRE_HOURS)
+    expire = datetime.now(UTC) + timedelta(hours=TOKEN_EXPIRE_HOURS)
     to_encode = {
         "sub": str(user_id),
         "username": username,
@@ -103,6 +105,7 @@ def get_current_user_id(token: str) -> int | None:
         return int(payload.get("sub", 0))
     return None
 
+
 def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> int | None:
     """Dependency to get current user from Bearer token.
 
@@ -119,7 +122,7 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
                 headers={"WWW-Authenticate": "Bearer"},
             )
         return 1
-    
+
     if not credentials:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

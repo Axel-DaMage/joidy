@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createEventDispatcher, onDestroy } from 'svelte';
+  import { createEventDispatcher, onDestroy, onMount } from 'svelte';
   import { Eye, EyeOff, Save, Trash2, X, Maximize, ChevronLeft, ChevronRight, Settings, CheckCircle2 } from 'lucide-svelte';
   import { marked } from 'marked';
   import DOMPurify from 'dompurify';
@@ -7,6 +7,13 @@
   import 'highlight.js/styles/github-dark.css';
   import { api, type Goal } from '$lib/api';
   import { t } from 'svelte-i18n';
+  import { createTimerRegistry } from '$lib/utils/timer';
+  import { loadDraft, persistDraft, clearDraft } from '$lib/utils/noteDrafts';
+  import NoteRecoveryBanner from './NoteRecoveryBanner.svelte';
+
+  const timers = createTimerRegistry();
+
+  const AUTOSAVE_DELAY = 2000;
 
   const renderer = new marked.Renderer();
   renderer.code = ({ text, lang }) => {
@@ -34,8 +41,12 @@
     ALLOWED_ATTR: ['href', 'target', 'rel', 'src', 'alt', 'class', 'data-title'],
   });
 
-  export let goal: Goal | null = null;
-  export let content: string = '';
+  interface Props {
+    goal?: Goal | null;
+    content?: string;
+  }
+
+  let { goal = null, content = $bindable('') }: Props = $props();
 
   const dispatch = createEventDispatcher<{
     save: { title: string; content: string };
@@ -45,56 +56,119 @@
     edit: void;
   }>();
 
-  let title = goal?.title ?? '';
-  let saving = false;
-  let saved = false;
-  let previewMode = false;
-  let zenMode = false;
-  let deleteConfirm = false;
+  let title = $state('');
+  let saving = $state(false);
+  let saved = $state(false);
+  let previewMode = $state(false);
+  let zenMode = $state(false);
+  let deleteConfirm = $state(false);
+
+  // Autosave (#1129): debounced draft persistence + dispatch of the save event.
+  let autosaveTimer: ReturnType<typeof setTimeout> | undefined;
+  let hasUnsavedChanges = $state(false);
+  let showRecoveryPrompt = $state(false);
+  let recoveredDraft = $state<{ title: string; content: string; tags: string[] } | null>(null);
+
+  let draftKey = $derived(goal ? `joidy-goal-draft-${goal.id}` : null);
+
+  function saveDraft() {
+    if (!draftKey) return;
+    // Persist even with an empty title: content typed before the goal is
+    // titled must survive a reload (recovered via the banner).
+    persistDraft(draftKey, { title: title.trim(), content, tags: [] });
+  }
+
+  function triggerAutosave() {
+    hasUnsavedChanges = true;
+    clearTimeout(autosaveTimer);
+    autosaveTimer = setTimeout(() => {
+      saveDraft();
+      if (title.trim()) handleSave();
+      else hasUnsavedChanges = false;
+    }, AUTOSAVE_DELAY);
+  }
+
+  onMount(() => {
+    const draft = loadDraft(draftKey);
+    if (draft && draft.content !== content) {
+      recoveredDraft = draft;
+      showRecoveryPrompt = true;
+    }
+  });
+
+  function applyDraft() {
+    if (recoveredDraft) {
+      title = recoveredDraft.title;
+      content = recoveredDraft.content;
+      showRecoveryPrompt = false;
+      recoveredDraft = null;
+      triggerAutosave();
+    }
+  }
+
+  function dismissDraft() {
+    showRecoveryPrompt = false;
+    recoveredDraft = null;
+    if (draftKey) clearDraft(draftKey);
+  }
+
+  // Browser-level guard: warn before closing the tab with unsaved work.
+  function handleBeforeUnload(e: BeforeUnloadEvent) {
+    if (!hasUnsavedChanges) return;
+    e.preventDefault();
+    e.returnValue = '';
+  }
 
   function handleDeleteClick() {
     if (!deleteConfirm) {
       deleteConfirm = true;
-      setTimeout(() => (deleteConfirm = false), 3000);
+      timers.timeout(() => (deleteConfirm = false), 3000);
       return;
     }
     dispatch('delete');
   }
 
   // Sync zen mode with body class to hide layout chrome (#270)
-  $: if (typeof document !== 'undefined') {
-    document.body.classList.toggle('zen-mode-active', zenMode);
-  }
+  $effect(() => {
+    if (typeof document !== 'undefined') {
+      document.body.classList.toggle('zen-mode-active', zenMode);
+    }
+  });
+
   onDestroy(() => {
     if (typeof document !== 'undefined') document.body.classList.remove('zen-mode-active');
     if (highlightRaf !== null) cancelAnimationFrame(highlightRaf);
+    timers.clearAll();
+    clearTimeout(autosaveTimer);
+    saveDraft();
   });
 
-  $: if (goal) {
-    title = goal.title;
-  }
+  $effect(() => {
+    title = goal?.title ?? '';
+  });
 
-  $: visibleContent = content;
-  $: wordCount = visibleContent.trim() ? visibleContent.trim().split(/\s+/).length : 0;
-  $: charCount = visibleContent.length;
-  $: lineCount = Math.max(1, visibleContent.split('\n').length);
-  $: lineNumbers = Array.from({ length: lineCount }, (_, i) => i + 1);
+  let visibleContent = $derived(content);
+  let wordCount = $derived(visibleContent.trim() ? visibleContent.trim().split(/\s+/).length : 0);
+  let charCount = $derived(visibleContent.length);
+  let lineCount = $derived(Math.max(1, visibleContent.split('\n').length));
+  let lineNumbers = $derived(Array.from({ length: lineCount }, (_, i) => i + 1));
 
   // Debounced content for the expensive full markdown render (preview mode:
   // marked + DOMPurify + highlight.js). The editor syntax highlight uses a
   // faster rAF-based update (see editorHighlightedHtml) so typed text is styled
   // immediately instead of lagging 300ms (#936).
-  let debouncedContent = content;
-  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-  $: {
+  let debouncedContent = $state('');
+  // The effect cleanup clears the pending debounce on every re-run AND on
+  // component teardown (#1003).
+  $effect(() => {
     const current = visibleContent;
-    if (debounceTimer) clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => {
+    const debounceTimer = setTimeout(() => {
       debouncedContent = current;
-      renderedHtml = renderMarkdown(current);
     }, 300);
-  }
-  $: renderedHtml = renderMarkdown(debouncedContent);
+    return () => clearTimeout(debounceTimer);
+  });
+
+  let renderedHtml = $derived(renderMarkdown(debouncedContent));
 
   function renderMarkdown(md: string): string {
     if (!md.trim()) return `<p style="color:var(--text-muted);font-style:italic;">${$t('goalEditor.previewPlaceholder')}</p>`;
@@ -103,8 +177,7 @@
 
   function updateContent(e: Event) {
     content = (e.currentTarget as HTMLTextAreaElement).value;
-    wordCount = content.trim() ? content.trim().split(/\s+/).length : 0;
-    charCount = content.length;
+    triggerAutosave();
   }
 
   async function handleSave() {
@@ -113,7 +186,9 @@
     dispatch('save', { title: title.trim(), content });
     saving = false;
     saved = true;
-    setTimeout(() => (saved = false), 2000);
+    if (draftKey) clearDraft(draftKey);
+    hasUnsavedChanges = false;
+    timers.timeout(() => (saved = false), 2000);
   }
 
   function onKeydown(e: KeyboardEvent) {
@@ -136,8 +211,8 @@
     }
   }
 
-  let backdropEl: HTMLElement;
-  let textareaEl: HTMLTextAreaElement;
+  let backdropEl = $state<HTMLElement | undefined>();
+  let textareaEl = $state<HTMLTextAreaElement | undefined>();
 
   function syncScroll() {
     if (backdropEl && textareaEl) {
@@ -176,10 +251,10 @@
   // 300ms debounce. rAF coalesces multiple keystrokes into a single ~16ms
   // render, so typed characters are styled immediately without re-running the
   // regex highlighter more than once per frame (#703, #936).
-  let editorHighlightedHtml = highlightMarkdown(content);
+  let editorHighlightedHtml = $state('');
   let highlightRaf: ReturnType<typeof requestAnimationFrame> | null = null;
 
-  $: {
+  $effect(() => {
     const current = visibleContent;
     if (typeof requestAnimationFrame === 'function') {
       if (highlightRaf !== null) cancelAnimationFrame(highlightRaf);
@@ -190,12 +265,18 @@
     } else {
       editorHighlightedHtml = highlightMarkdown(current);
     }
-  }
+  });
 </script>
 
-<svelte:window onkeydown={onKeydown} />
+<svelte:window onkeydown={onKeydown} onbeforeunload={handleBeforeUnload} />
 
 <div class="editor-shell" class:zen-mode={zenMode}>
+  <NoteRecoveryBanner
+    bind:show={showRecoveryPrompt}
+    onApply={applyDraft}
+    onDismiss={dismissDraft}
+  />
+
   {#if !zenMode}
   <div class="toolbar">
     <div class="toolbar-left">
@@ -273,6 +354,7 @@
       class="title-input"
       bind:value={title}
       placeholder={$t('goalEditor.titlePlaceholder')}
+      oninput={() => triggerAutosave()}
       onkeydown={(e) => e.key === 'Enter' && handleSave()}
     />
   </div>

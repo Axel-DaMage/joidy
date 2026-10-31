@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { page } from '$app/stores';
+  import { page } from '$app/state';
   import { goto } from '$app/navigation';
   import {
     Plus,
@@ -53,10 +53,16 @@
     DEFAULT_GOAL_COLOR,
     TEMPORALITY_COLORS,
   } from '$lib/utils/goalColors';
+  import {
+    suggestEmoji,
+    suggestIcon,
+    suggestIconKey,
+  } from '$lib/utils/iconSuggest';
   import StreakIcon from '$lib/components/StreakIcon.svelte';
   import GoalCard from '$lib/components/GoalCard.svelte';
   import LazyIconPicker from '$lib/components/LazyIconPicker.svelte';
   import ModalDialog from '$lib/components/ModalDialog.svelte';
+  import NoteLinkPicker from '$lib/components/NoteLinkPicker.svelte';
   import { t } from 'svelte-i18n';
 
   // Lazy-load the heavy StreakHeatmap (561 lines) so it is split into a
@@ -81,6 +87,8 @@
   let showAddForm = $state(false);
   let goalSearchQuery = $state('');
   let goalFilterState = $state<string | null>(null);
+  // Matches the states rendered by GoalFilters.svelte (null = "Todos")
+  const VALID_EDITOR_FILTERS = ['PINNED', 'ACTIVE', 'COMPLETED', 'CANCELLED', 'FAILED'] as const;
   let pinnedGoals = $state<Set<number>>(new Set());
   let deleteConfirm = $state<number | null>(null);
 
@@ -290,10 +298,36 @@
   let newFailIcon = $state('Activity');
   let newGoalColor = $state(DEFAULT_GOAL_COLOR);
   let newMaxAssignmentDays = $state<number | null>(null);
+  let newPriority = $state(0);
   let useFailIcon = $state(false);
+  // #1092 — la elección manual del usuario no se sobreescribe
+  let newFailEmojiManual = $state(false);
+  let newFailIconManual = $state(false);
   let newTagId = $state<number | null>(null);
   let newNoteId = $state<number | null>(null);
   let saving = $state(false);
+
+  // #1092 — sugerencia automática de icono/emoji al escribir el título
+  let suggestedFailEmoji = $derived(suggestEmoji(newTitle));
+  let suggestedFailIcon = $derived(suggestIcon(newTitle));
+  let hasFailSuggestion = $derived(suggestIconKey(newTitle) !== null);
+
+  $effect(() => {
+    if (!newFailEmojiManual) newFailEmoji = suggestedFailEmoji;
+  });
+  $effect(() => {
+    if (!newFailIconManual) newFailIcon = suggestedFailIcon;
+  });
+
+  function useFailSuggestion() {
+    if (useFailIcon) {
+      newFailIcon = suggestedFailIcon;
+      newFailIconManual = false;
+    } else {
+      newFailEmoji = suggestedFailEmoji;
+      newFailEmojiManual = false;
+    }
+  }
 
   let _todayStr = $derived.by(() => {
     const d = new Date();
@@ -409,11 +443,22 @@
     if (cachedGoals) goals = deduplicateGoals(cachedGoals);
     if (cachedTags) tags = cachedTags;
 
-    // Restore pinned goals from localStorage
+    // Restore persisted UI state (pins, editor filter and search) from localStorage
     try {
       const saved = loadUserSettings().goalsUi;
       if (saved?.pinnedGoalIds && Array.isArray(saved.pinnedGoalIds)) {
         pinnedGoals = new Set(saved.pinnedGoalIds);
+      }
+      const savedFilter = saved?.editorFilter;
+      if (
+        savedFilter === null ||
+        (typeof savedFilter === 'string' &&
+          (VALID_EDITOR_FILTERS as readonly string[]).includes(savedFilter))
+      ) {
+        goalFilterState = savedFilter;
+      }
+      if (typeof saved?.editorSearch === 'string') {
+        goalSearchQuery = saved.editorSearch;
       }
     } catch {
       // ignore storage errors
@@ -473,21 +518,40 @@
         tag_id: newTagId,
         note_id: newNoteId,
         max_assignment_days: newMaxAssignmentDays,
+        priority: newPriority,
       });
       goals = [g, ...goals];
       showAddForm = false;
       newTitle = '';
+      // #1092 — reactivar la sugerencia para el próximo objetivo
+      newFailEmojiManual = false;
+      newFailIconManual = false;
       newTargetValue = 1;
       newTagId = null;
       newNoteId = null;
       newMaxAssignmentDays = null;
-      if (g.id) {
-        goto(`/goals/${g.id}`);
-      }
+      newPriority = 0;
+      // #1142 — permanecer en la vista general; el objetivo ya aparece en la lista
     } catch (e) {
       addError = 'Error al crear el objetivo.';
     } finally {
       saving = false;
+    }
+  }
+
+  // #1141 — crear una nota nueva desde el picker y enlazarla al objetivo.
+  async function createNoteAndLink(title: string) {
+    try {
+      const n = await api.notes.create({
+        title,
+        content: `# ${title}\n`,
+        tags: [],
+      });
+      notes = [n, ...notes];
+      newNoteId = n.id;
+    } catch (e) {
+      logger.error('[goals] createNoteAndLink failed:', e);
+      addError = 'Error al crear la nota.';
     }
   }
 
@@ -743,6 +807,20 @@
     if (selectedHistoryDate && typeof localStorage !== 'undefined') {
       localStorage.setItem('goals.selectedHistoryDate', selectedHistoryDate);
     }
+  });
+
+  // persist editor filter and search in userSettings (#1096);
+  // the search is debounced to avoid a localStorage write per keystroke
+  $effect(() => {
+    patchUserSettings({ goalsUi: { editorFilter: goalFilterState } });
+  });
+
+  $effect(() => {
+    const query = goalSearchQuery;
+    const timer = setTimeout(() => {
+      patchUserSettings({ goalsUi: { editorSearch: query } });
+    }, 300);
+    return () => clearTimeout(timer);
   });
 
   async function loadAssignmentsForDate(date: string) {
@@ -1207,7 +1285,14 @@
             <h3 class="section-title" style="margin: 0;">{$t('goalsPage.dayGoals')}</h3>
             <button
               class="btn btn-primary new-goal-cta new-goal-cta-inline"
-              onclick={() => (showAddForm = !showAddForm)}
+              onclick={() => {
+                if (!showAddForm) {
+                  // #1092 — reactivar la sugerencia al abrir el formulario
+                  newFailEmojiManual = false;
+                  newFailIconManual = false;
+                }
+                showAddForm = !showAddForm;
+              }}
             >
               <Plus size={16} /> Nuevo Objetivo
             </button>
@@ -1661,8 +1746,7 @@
           </div>
           <div class="history-heatmap-wrap">
             {#if StreakHeatmap}
-              <svelte:component
-                this={StreakHeatmap}
+              <StreakHeatmap
                 history={historyData}
                 color="var(--success)"
                 selectedDate={selectedPlanningDate}
@@ -1804,8 +1888,7 @@
           {:else}
             <div class="history-heatmap-wrap">
               {#if StreakHeatmap}
-                <svelte:component
-                  this={StreakHeatmap}
+                <StreakHeatmap
                   history={historyData}
                   color="var(--success)"
                   selectedDate={selectedHistoryDate}
@@ -2326,6 +2409,8 @@
 
   <!-- ── New Goal Slide-Down Panel ── -->
   {#if showAddForm}
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div
       class="new-goal-backdrop"
       onclick={(e) => {
@@ -2361,18 +2446,18 @@
             <div class="ng-col">
               <span class="ng-col-title">{$t('goalsPage.basics')}</span>
               <div class="form-field">
-                <label class="label">{$t('goalsPage.goalTitle')}</label>
+                <label for="new-goal-title" class="label">{$t('goalsPage.goalTitle')}</label>
                 <input
+                  id="new-goal-title"
                   class="input w-full"
                   bind:value={newTitle}
                   placeholder={$t('goalsPage.goalTitlePlaceholder')}
                   maxlength="38"
-                  autofocus
                 />
               </div>
 
               <div class="form-field">
-                <label class="label">{$t('goalsPage.repeatFrequency')}</label>
+                <span class="label">{$t('goalsPage.repeatFrequency')}</span>
                 <div class="ng-freq-grid">
                   {#each TEMPORALITIES as temp}
                     <button
@@ -2394,22 +2479,39 @@
                 </div>
               </div>
               <div class="form-field">
-                <label class="label">{$t('goalsPage.measurementType')}</label>
-                <select class="input w-full" bind:value={newMeasurement}>
+                <label for="new-goal-measurement" class="label">{$t('goalsPage.measurementType')}</label>
+                <select id="new-goal-measurement" class="input w-full" bind:value={newMeasurement}>
                   <option value="COUNT">{$t('goalsPage.countNumeric')}</option>
                   <option value="BOOLEAN">{$t('goalsPage.booleanDone')}</option>
                   <option value="PERCENT">{$t('goalsPage.percent')}</option>
                 </select>
               </div>
               <div class="form-field">
-                <label class="label">{$t('goalsPage.targetGoal')}</label>
+                <label for="new-goal-target" class="label">{$t('goalsPage.targetGoal')}</label>
                 <input
+                  id="new-goal-target"
                   class="input w-full"
                   type="number"
                   bind:value={newTargetValue}
                   min="1"
                   disabled={newMeasurement === 'BOOLEAN'}
                 />
+              </div>
+
+              <div class="form-field">
+                <span class="label">{$t('goalsPage.priority')}</span>
+                <div class="ng-priority-row">
+                  {#each [0, 1, 2, 3, 4, 5] as p}
+                    <button
+                      class="ng-priority-btn"
+                      class:active={newPriority === p}
+                      onclick={() => (newPriority = p)}
+                      title={p === 0 ? $t('goalsPage.priorityNone') : $t('goalsPage.priorityLevel', { values: { level: p } })}
+                    >
+                      {p}
+                    </button>
+                  {/each}
+                </div>
               </div>
             </div>
 
@@ -2420,18 +2522,25 @@
                 <div
                   style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;"
                 >
-                  <label class="label" style="margin:0;">{$t('goalsPage.failIconEmoji')}</label>
-                  <div class="icon-toggle-row">
-                    <button
-                      class="icon-type-btn"
-                      class:selected={!useFailIcon}
-                      onclick={() => (useFailIcon = false)}>{$t('goalsPage.emoji')}</button
-                    >
-                    <button
-                      class="icon-type-btn"
-                      class:selected={useFailIcon}
-                      onclick={() => (useFailIcon = true)}>{$t('goalsPage.icon')}</button
-                    >
+                  <span class="label" style="margin:0;">{$t('goalsPage.failIconEmoji')}</span>
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    {#if hasFailSuggestion && (useFailIcon ? newFailIcon !== suggestedFailIcon : newFailEmoji !== suggestedFailEmoji)}
+                      <button type="button" class="icon-suggest-btn" onclick={useFailSuggestion}>
+                        usar sugerencia
+                      </button>
+                    {/if}
+                    <div class="icon-toggle-row">
+                      <button
+                        class="icon-type-btn"
+                        class:selected={!useFailIcon}
+                        onclick={() => (useFailIcon = false)}>{$t('goalsPage.emoji')}</button
+                      >
+                      <button
+                        class="icon-type-btn"
+                        class:selected={useFailIcon}
+                        onclick={() => (useFailIcon = true)}>{$t('goalsPage.icon')}</button
+                      >
+                    </div>
                   </div>
                 </div>
                 {#if !useFailIcon}
@@ -2441,7 +2550,10 @@
                         <button
                           class="emoji-btn"
                           class:selected={newFailEmoji === e}
-                          onclick={() => (newFailEmoji = e)}>{e}</button
+                          onclick={() => {
+                            newFailEmoji = e;
+                            newFailEmojiManual = true;
+                          }}>{e}</button
                         >
                       {/each}
                     </div>
@@ -2451,14 +2563,17 @@
                     <LazyIconPicker
                       selected={newFailIcon}
                       color={newGoalColor}
-                      onSelect={(ic) => (newFailIcon = ic)}
+                      onSelect={(ic) => {
+                        newFailIcon = ic;
+                        newFailIconManual = true;
+                      }}
                     />
                   </div>
                 {/if}
               </div>
 
               <div class="form-field">
-                <label class="label">{$t('goalsPage.identityColor')}</label>
+                <span class="label">{$t('goalsPage.identityColor')}</span>
                 <div class="ng-color-grid">
                   {#each COLOR_PRESETS as c}
                     <button
@@ -2468,7 +2583,7 @@
                       onclick={() => (newGoalColor = c.hex)}
                       title={c.name}
                       aria-label={c.name}
-                    />
+                    ></button>
                   {/each}
                 </div>
                 <div class="ng-color-manual-row">
@@ -2495,11 +2610,12 @@
             <div class="ng-col">
               <span class="ng-col-title">{$t('goalsPage.advanced')}</span>
               <div class="form-field">
-                <label class="label"
+                <label for="new-goal-max-days" class="label"
                   >{$t('goalsPage.limitDays')}
                   <span class="optional">{$t('goalsPage.limitDaysOptional')}</span></label
                 >
                 <input
+                  id="new-goal-max-days"
                   class="input w-full"
                   type="number"
                   bind:value={newMaxAssignmentDays}
@@ -2509,7 +2625,7 @@
               </div>
 
               <div class="form-field">
-                <label class="label">{$t('goalsPage.failPolicy')}</label>
+                <span class="label">{$t('goalsPage.failPolicy')}</span>
                 <div class="ng-fail-options">
                   <button
                     class="ng-fail-btn"
@@ -2539,17 +2655,18 @@
               </div>
 
               <div class="form-field">
-                <label class="label">{$t('goalsPage.linkToProject')}</label>
-                <select class="input w-full" bind:value={newNoteId}>
-                  <option value={null}>{$t('goalsPage.noLinkedNote')}</option>
-                  {#each notes as n}
-                    <option value={n.id}>{n.title}</option>
-                  {/each}
-                </select>
+                <label for="new-goal-note" class="label">{$t('goalsPage.linkToProject')}</label>
+                <NoteLinkPicker
+                  {notes}
+                  bind:value={newNoteId}
+                  id="new-goal-note"
+                  placeholder={$t('goalsPage.searchNote')}
+                  onCreateNote={createNoteAndLink}
+                />
               </div>
               <div class="form-field">
-                <label class="label">{$t('goalsPage.tagSync')}</label>
-                <select class="input w-full" bind:value={newTagId}>
+                <label for="new-goal-tag" class="label">{$t('goalsPage.tagSync')}</label>
+                <select id="new-goal-tag" class="input w-full" bind:value={newTagId}>
                   <option value={null}>{$t('goalsPage.manualUpdate')}</option>
                   {#each notes as n}
                     {@const tagId = tags.find((t) => t.name === n.title)?.id}
@@ -2661,7 +2778,14 @@
         <GoalFilters bind:query={goalSearchQuery} bind:filter={goalFilterState} />
         <button
           class="btn btn-primary new-goal-cta-inline"
-          onclick={() => (showAddForm = !showAddForm)}
+          onclick={() => {
+            if (!showAddForm) {
+              // #1092 — reactivar la sugerencia al abrir el formulario
+              newFailEmojiManual = false;
+              newFailIconManual = false;
+            }
+            showAddForm = !showAddForm;
+          }}
         >
           <Plus size={16} />
           {$t('goalsPage.newGoal')}
@@ -3213,6 +3337,30 @@
     grid-template-columns: repeat(4, 1fr);
     gap: 8px;
   }
+  .ng-priority-row {
+    display: flex;
+    gap: 6px;
+  }
+  .ng-priority-btn {
+    flex: 1;
+    padding: 8px 0;
+    font-size: 12px;
+    font-family: var(--font-mono);
+    background: var(--surface-hover);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .ng-priority-btn:hover {
+    border-color: var(--text-muted);
+  }
+  .ng-priority-btn.active {
+    background: var(--surface-active);
+    color: var(--text-primary);
+    border-color: var(--text-primary);
+  }
   .ng-freq-btn {
     padding: 10px;
     font-size: 12px;
@@ -3465,6 +3613,21 @@
   .icon-type-btn.selected {
     border-color: var(--text-primary);
     color: var(--text-primary);
+  }
+  .icon-suggest-btn {
+    padding: 4px 10px;
+    font-size: 10px;
+    font-family: var(--font-mono);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .icon-suggest-btn:hover {
+    color: var(--text-primary);
+    border-color: var(--text-primary);
   }
 
   .emoji-grid {
@@ -4024,9 +4187,6 @@
   }
 
   /* Prediction Card Styles */
-  .prediction-card {
-    /* grid-area: pred is set in Advanced Analytics Styles below */
-  }
   .prediction-hero {
     display: flex;
     flex-direction: column;

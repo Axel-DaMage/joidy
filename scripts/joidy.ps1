@@ -1,7 +1,7 @@
-# joidy — CLI for managing the Joidy Docker stack (Windows PowerShell)
+# joidy - CLI for managing the Joidy Docker stack (Windows PowerShell)
 #
 # Installation:
-#   Copy scripts/joidy.ps1 to a folder in your PATH (e.g., $HOME\bin)
+#   Copy scripts/joidy.ps1 to a folder in your PATH (e.g., $HOME\.local\bin)
 #   Or add the scripts folder to your PATH:
 #     [Environment]::SetEnvironmentVariable("Path", $env:Path + ";$PWD\scripts", "User")
 #
@@ -12,8 +12,15 @@
 #   .\joidy.ps1 wake     Restart heavy services from hibernation
 #   .\joidy.ps1 restart  Restart all services
 #   .\joidy.ps1 status   Show service status
+#   .\joidy.ps1 pull     Pull latest images
 #   .\joidy.ps1 logs     Tail logs (all services)
 #   .\joidy.ps1 logs api Tail logs for a specific service
+#   .\joidy.ps1 idle enable [--idle-hibernate-db]
+#                        Start the idle watchdog (auto-sleep when unused)
+#   .\joidy.ps1 idle disable   Stop the watchdog (services untouched)
+#   .\joidy.ps1 idle status    Watcher state, last activity, time until sleep
+#   .\joidy.ps1 backup   Write a compressed pg_dump to the backups dir
+#   .\joidy.ps1 restore <file> [-Force]   Restore a dump into the database
 #   .\joidy.ps1 help     Show this help message
 
 param(
@@ -21,16 +28,21 @@ param(
   [string]$Command = "help",
 
   [Parameter(Position = 1)]
-  [string]$Service = ""
+  [string]$Service = "",
+
+  [Parameter(Position = 2, ValueFromRemainingArguments = $true)]
+  [string[]]$Rest = @(),
+
+  [switch]$Force
 )
 
 function Write-Status($msg) { Write-Host "[$(Get-Date -Format 'HH:mm:ss')] $msg" -ForegroundColor Blue }
-function Write-Ok($msg)     { Write-Host "✓ $msg" -ForegroundColor Green }
-function Write-Warn($msg)   { Write-Host "⚠ $msg" -ForegroundColor Yellow }
-function Write-Err($msg)    { Write-Host "✗ $msg" -ForegroundColor Red }
+function Write-Ok($msg)     { Write-Host "$([char]0x2713) $msg" -ForegroundColor Green }
+function Write-Warn($msg)   { Write-Host "$([char]0x26A0) $msg" -ForegroundColor Yellow }
+function Write-Err($msg)    { Write-Host "$([char]0x2717) $msg" -ForegroundColor Red }
 
 # Resolve project directory.
-# Priority: JOIDY_DIR env var → ~/.config/joidy/path file → script location (../)
+# Priority: JOIDY_DIR env var -> ~/.config/joidy/path file -> script location (../)
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 if ($env:JOIDY_DIR -and (Test-Path $env:JOIDY_DIR)) {
@@ -50,10 +62,10 @@ if (-not (Test-Path "$ProjectDir\docker-compose.yml")) {
 
 Set-Location $ProjectDir
 
-# ─── .env bootstrap ───────────────────────────────────────────────
+# --- .env bootstrap -----------------------------------------------
 # Resolve which .env file to use:
-# 1. $ProjectDir\.env           (git-clone install — writable)
-# 2. $env:USERPROFILE\.config\joidy\.env  (AUR/system install — project dir is read-only)
+# 1. $ProjectDir\.env           (git-clone install - writable)
+# 2. $env:USERPROFILE\.config\joidy\.env  (AUR/system install - project dir is read-only)
 # 3. Auto-create from .env.example with generated secrets
 $ConfigDirJoidy = Join-Path $env:USERPROFILE ".config\joidy"
 $EnvFile = ""
@@ -78,7 +90,7 @@ if (Test-Path "$ProjectDir\.env") {
     $EnvFile = "$ProjectDir\.env"
     Write-Status "Created .env from .env.example"
   } else {
-    # Project dir is read-only — use user config dir
+    # Project dir is read-only - use user config dir
     if (-not (Test-Path $ConfigDirJoidy)) {
       New-Item -ItemType Directory -Path $ConfigDirJoidy -Force | Out-Null
     }
@@ -94,7 +106,8 @@ if (Test-Path "$ProjectDir\.env") {
 # Auto-generate required secrets if empty or placeholder
 function Generate-Secret($Length) {
   $bytes = New-Object byte[] $Length
-  (New-Object Security.Cryptography.RandomNumberGenerator).GetBytes($bytes)
+  $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+  $rng.GetBytes($bytes)
   return -join ($bytes | ForEach-Object { $_.ToString("x2") })
 }
 
@@ -103,7 +116,7 @@ if ($EnvFile -and (Test-Path $EnvFile)) {
   $changed = $false
 
   # POSTGRES_PASSWORD
-  if ($envContent -match '(?m)^POSTGRES_PASSWORD=\s*$') {
+  if ($envContent -match '(?m)^POSTGRES_PASSWORD=(\s*|0+)\s*$') {
     $newPw = Generate-Secret 24
     $envContent = $envContent -replace '(?m)^POSTGRES_PASSWORD=.*', "POSTGRES_PASSWORD=$newPw"
     Write-Ok "Generated POSTGRES_PASSWORD"
@@ -111,7 +124,7 @@ if ($EnvFile -and (Test-Path $EnvFile)) {
   }
 
   # SECRET_KEY
-  if ($envContent -match '(?m)^SECRET_KEY=(\s*|change_this_to_a_random_secret_key)\s*$') {
+  if ($envContent -match '(?m)^SECRET_KEY=(\s*|change_this_to_a_random_secret_key|0+)\s*$') {
     $newSk = Generate-Secret 32
     $envContent = $envContent -replace '(?m)^SECRET_KEY=.*', "SECRET_KEY=$newSk"
     Write-Ok "Generated SECRET_KEY"
@@ -119,7 +132,7 @@ if ($EnvFile -and (Test-Path $EnvFile)) {
   }
 
   # GRAFANA_ADMIN_PASSWORD
-  if ($envContent -match '(?m)^GRAFANA_ADMIN_PASSWORD=\s*$') {
+  if ($envContent -match '(?m)^GRAFANA_ADMIN_PASSWORD=(\s*|0+)\s*$') {
     $newGrafanaPw = Generate-Secret 24
     $envContent = $envContent -replace '(?m)^GRAFANA_ADMIN_PASSWORD=.*', "GRAFANA_ADMIN_PASSWORD=$newGrafanaPw"
     Write-Ok "Generated GRAFANA_ADMIN_PASSWORD"
@@ -132,7 +145,7 @@ if ($EnvFile -and (Test-Path $EnvFile)) {
     Write-Warn "Edit $EnvFile to add: GEMINI_API_KEY, OBSIDIAN_VAULT_PATH, etc."
   }
 
-  # Expand ~ in OBSIDIAN_VAULT_PATH — Docker bind mounts require absolute
+  # Expand ~ in OBSIDIAN_VAULT_PATH - Docker bind mounts require absolute
   # paths and do not expand `~`. The settings UI lets users enter home-relative
   # paths (e.g. ~/Documentos/notas/mi-vault). Export the expanded value for
   # this compose run; .env keeps the raw ~/... form so the UI stays clean.
@@ -144,6 +157,7 @@ if ($EnvFile -and (Test-Path $EnvFile)) {
     } elseif ($vaultRaw -match '^~/(.*)') {
       $vaultExpanded = Join-Path $HOME $Matches[1]
     }
+    $vaultExpanded = $vaultExpanded -replace '\\', '/'
     if ($vaultExpanded -ne $vaultRaw) {
       Write-Ok "Expanded OBSIDIAN_VAULT_PATH: $vaultRaw -> $vaultExpanded"
     }
@@ -153,8 +167,18 @@ if ($EnvFile -and (Test-Path $EnvFile)) {
 
 $HIBERNATE_SERVICES = @("ai-service", "worker")
 
-function Test-Command($Command) {
-  $null = Get-Command $Command -ErrorAction SilentlyContinue
+# Idle-watchdog state directory — mirrors the bash CLI: <project>/data/idle,
+# falling back to a per-user dir when the project dir is read-only.
+$DataDir = Join-Path $ProjectDir "data"
+try {
+  New-Item -ItemType Directory -Path $DataDir -Force -ErrorAction Stop | Out-Null
+} catch {
+  $DataDir = Join-Path $env:LOCALAPPDATA "joidy\data"
+}
+$IdleDir = Join-Path $DataDir "idle"
+
+function Test-Command($Cmd) {
+  $null = Get-Command $Cmd -ErrorAction SilentlyContinue
   return $?
 }
 
@@ -173,8 +197,26 @@ if (Test-Command "docker") {
     $script:containerComposeCmd = "podman compose"
   }
 } else {
-  Write-Host "✗ Neither Docker nor Podman is installed or in PATH" -ForegroundColor Red
+  Write-Err "Neither Docker nor Podman is installed or in PATH"
   exit 1
+}
+
+function Test-ContainerEngineReady {
+  if ($script:containerComposeCmd -like "docker*") {
+    $null = docker info 2>&1
+    if ($LASTEXITCODE -ne 0) {
+      Write-Err "Docker daemon is not responding or Docker Desktop is not running."
+      Write-Host "Please start Docker Desktop and verify that the Docker engine is running." -ForegroundColor Yellow
+      return $false
+    }
+  } elseif ($script:containerComposeCmd -like "podman*") {
+    $null = podman info 2>&1
+    if ($LASTEXITCODE -ne 0) {
+      Write-Err "Podman service is not responding or not running."
+      return $false
+    }
+  }
+  return $true
 }
 
 function Invoke-ComposeCommand {
@@ -218,27 +260,44 @@ function Write-AccessUrl {
   $port = if ($env:FRONTEND_PORT) { $env:FRONTEND_PORT } else { "3000" }
   $ip = Get-LanIp
   Write-Host ""
-  Write-Host "╔══════════════════════════════════════════════╗" -ForegroundColor Green
-  Write-Host "║  Joidy is running at:                        ║" -ForegroundColor Green
-  Write-Host "║  http://${ip}:${port}" -ForegroundColor Green
-  Write-Host "╚══════════════════════════════════════════════╝" -ForegroundColor Green
+  Write-Host "+----------------------------------------------+" -ForegroundColor Green
+  Write-Host "|  Joidy is running at:                        |" -ForegroundColor Green
+  Write-Host "|  http://${ip}:${port}                         |" -ForegroundColor Green
+  Write-Host "+----------------------------------------------+" -ForegroundColor Green
 }
 
-function Get-AiProfileArgs {
+# Read a setting: env var -> .env file -> default.
+function Get-EnvValue($Name, $Default) {
+  $envVal = [Environment]::GetEnvironmentVariable($Name)
+  if ($envVal) { return $envVal }
   if ($EnvFile -and (Test-Path $EnvFile)) {
-    $lines = Get-Content $EnvFile -ErrorAction SilentlyContinue
-    foreach ($line in $lines) {
-      if ($line -match '^\s*AI_SERVICE_ENABLED\s*=\s*true\s*$') {
-        return @("--profile", "ai")
+    $escaped = [regex]::Escape($Name)
+    foreach ($line in (Get-Content $EnvFile -ErrorAction SilentlyContinue)) {
+      if ($line -match "^\s*$escaped\s*=\s*(.*)$") {
+        return $Matches[1].Trim()
       }
     }
   }
-  return @()
+  return $Default
+}
+
+# Compose profiles: `ai` is opt-in (AI_SERVICE_ENABLED=true); `backup` is
+# opt-out — enabled by default, BACKUP_ENABLED=false disables it.
+function Get-ProfileArgs {
+  $profileArgs = @()
+  if ((Get-EnvValue "AI_SERVICE_ENABLED" "") -eq "true") {
+    $profileArgs += @("--profile", "ai")
+  }
+  if ((Get-EnvValue "BACKUP_ENABLED" "true") -ne "false") {
+    $profileArgs += @("--profile", "backup")
+  }
+  return ,$profileArgs
 }
 
 function Invoke-Up {
+  if (-not (Test-ContainerEngineReady)) { exit 1 }
   Write-Status "Starting Joidy services..."
-  $profile = Get-AiProfileArgs
+  $profile = Get-ProfileArgs
   if ($profile.Count -gt 0) {
     Invoke-ComposeCommand @EnvFileArg @profile up -d
   } else {
@@ -251,12 +310,14 @@ function Invoke-Up {
 }
 
 function Invoke-Down {
+  if (-not (Test-ContainerEngineReady)) { exit 1 }
   Write-Status "Stopping all Joidy services..."
   Invoke-ComposeCommand @EnvFileArg down
   Write-Ok "All services stopped."
 }
 
 function Invoke-Sleep {
+  if (-not (Test-ContainerEngineReady)) { exit 1 }
   Write-Status "Hibernating heavy services (ai-service, worker)..."
   foreach ($svc in $HIBERNATE_SERVICES) {
     $running = Invoke-ComposeCommand @EnvFileArg ps $svc 2>$null
@@ -273,8 +334,9 @@ function Invoke-Sleep {
 }
 
 function Invoke-Wake {
+  if (-not (Test-ContainerEngineReady)) { exit 1 }
   Write-Status "Waking heavy services from hibernation..."
-  $profile = Get-AiProfileArgs
+  $profile = Get-ProfileArgs
   foreach ($svc in $HIBERNATE_SERVICES) {
     $all = Invoke-ComposeCommand @EnvFileArg @profile ps -a $svc 2>$null
     if ($all -match $svc) {
@@ -290,12 +352,265 @@ function Invoke-Wake {
     }
   }
   Write-Host ""
+  # If the idle watchdog slept the stack, restore the other recorded
+  # services too (frontend, postgres, ...).
+  $preSleep = Join-Path $IdleDir "pre_sleep_services"
+  if (Test-Path $preSleep) {
+    Restore-IdleState
+    Write-Ok "Restored services recorded before idle sleep."
+  }
+  if (Test-Path $IdleDir) {
+    [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() | Set-Content (Join-Path $IdleDir "last_activity") -ErrorAction SilentlyContinue
+  }
   Write-Ok "Wake complete."
 }
 
-function Invoke-Restart {
-  Write-Status "Restarting all Joidy services..."
+# --- Idle watchdog (auto-sleep) -------------------------------------
+# Mirrors `joidy idle` in scripts/joidy.sh: a background watcher polls
+# established TCP connections on the published ports, active PostgreSQL
+# sessions, and vault file changes. After JOIDY_IDLE_TIMEOUT minutes (.env,
+# default 15) with no activity it snapshots the running services, sleeps the
+# stack via the existing sleep path plus the frontend, and keeps postgres
+# running unless enabled with --idle-hibernate-db.
+
+function Get-IdleEnv($Name, $Default) {
+  if (Get-Item "env:$Name" -ErrorAction SilentlyContinue) {
+    $v = (Get-Item "env:$Name").Value
+    if ($v) { return $v }
+  }
+  if ($EnvFile -and (Test-Path $EnvFile)) {
+    foreach ($line in (Get-Content $EnvFile -ErrorAction SilentlyContinue)) {
+      if ($line -match "^$Name=(.*)$") {
+        $v = $Matches[1].Trim()
+        if ($v) { return $v }
+      }
+    }
+  }
+  return $Default
+}
+
+function Write-IdleLog($msg) {
+  $log = Join-Path $IdleDir "watcher.log"
+  "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] $msg" | Add-Content $log -ErrorAction SilentlyContinue
+}
+
+function Get-IdleRunningServices {
   $profile = Get-AiProfileArgs
+  $out = Invoke-ComposeCommand @EnvFileArg @profile ps --services --filter status=running 2>$null
+  return @($out | ForEach-Object { "$_".Trim() } | Where-Object { $_ })
+}
+
+function Test-IdleWatcherAlive {
+  $pidFile = Join-Path $IdleDir "watcher.pid"
+  if (-not (Test-Path $pidFile)) { return $false }
+  $watcherPid = (Get-Content $pidFile -Raw -ErrorAction SilentlyContinue)
+  if (-not $watcherPid) { return $false }
+  return [bool](Get-Process -Id ([int]$watcherPid.Trim()) -ErrorAction SilentlyContinue)
+}
+
+# Signal 1: an established TCP connection on a published service port.
+function Test-IdleTcp {
+  $ports = @(
+    [int](Get-IdleEnv 'FRONTEND_PORT' '3000'),
+    [int](Get-IdleEnv 'API_PORT' '8000'),
+    [int](Get-IdleEnv 'AI_SERVICE_PORT' '8002'),
+    [int](Get-IdleEnv 'WORKER_PORT' '8001')
+  )
+  foreach ($p in $ports) {
+    if (Get-NetTCPConnection -LocalPort $p -State Established -ErrorAction SilentlyContinue) { return $true }
+  }
+  return $false
+}
+
+# Signal 2: an active client session on postgres.
+function Test-IdleDb {
+  if (-not ((Get-IdleRunningServices) -contains 'postgres')) { return $false }
+  $u = Get-IdleEnv 'POSTGRES_USER' 'joidy'
+  $d = Get-IdleEnv 'POSTGRES_DB' 'joidy'
+  $n = Invoke-ComposeCommand @EnvFileArg exec -T postgres psql -U $u -d $d -tAc `
+    "SELECT count(*) FROM pg_stat_activity WHERE state='active' AND pid<>pg_backend_pid()" 2>$null
+  $n = ("$n").Trim()
+  return ($n -match '^\d+$' -and [int]$n -gt 0)
+}
+
+# Signal 3: a vault file changed since the previous poll (marker file mtime).
+function Test-IdleVault {
+  $vault = $env:OBSIDIAN_VAULT_PATH
+  if (-not $vault) { $vault = Join-Path $DataDir 'vault' }
+  if (-not (Test-Path $vault)) { return $false }
+  $marker = Join-Path $IdleDir 'vault.marker'
+  $m = Get-Item $marker -ErrorAction SilentlyContinue
+  if (-not $m) { New-Item -ItemType File -Path $marker -Force | Out-Null; return $false }
+  $hit = Get-ChildItem -Path $vault -Recurse -File -ErrorAction SilentlyContinue |
+    Where-Object { $_.LastWriteTimeUtc -gt $m.LastWriteTimeUtc } | Select-Object -First 1
+  (Get-Item $marker).LastWriteTimeUtc = [DateTime]::UtcNow
+  return [bool]$hit
+}
+
+function Test-IdleActivity {
+  if (Test-IdleTcp)   { return $true }
+  if (Test-IdleDb)    { return $true }
+  if (Test-IdleVault) { return $true }
+  return $false
+}
+
+function Invoke-IdleSleep($HibernateDb) {
+  $running = Get-IdleRunningServices
+  if ($running.Count -eq 0) {
+    Write-IdleLog "idle timeout reached but no services running"
+    [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() | Set-Content (Join-Path $IdleDir "last_activity")
+    return
+  }
+  $running | Set-Content (Join-Path $IdleDir "pre_sleep_services")
+  Write-IdleLog "idle timeout — sleeping (was running: $($running -join ' '), hibernate_db=$HibernateDb)"
+  Invoke-Sleep
+  $profile = Get-AiProfileArgs
+  if ($running -contains 'frontend') {
+    Invoke-ComposeCommand @EnvFileArg @profile stop frontend 2>$null | Out-Null
+    Write-IdleLog "stopped frontend"
+  }
+  if ($HibernateDb -and ($running -contains 'postgres')) {
+    Invoke-ComposeCommand @EnvFileArg @profile stop postgres 2>$null | Out-Null
+    Write-IdleLog "stopped postgres (--idle-hibernate-db)"
+  }
+  [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() | Set-Content (Join-Path $IdleDir "slept")
+}
+
+function Restore-IdleState {
+  $file = Join-Path $IdleDir "pre_sleep_services"
+  if (-not (Test-Path $file)) { return }
+  $profile = Get-AiProfileArgs
+  $running = Get-IdleRunningServices
+  $recorded = Get-Content $file | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+  foreach ($svc in @('postgres','api','frontend','worker','ai-service') + ($recorded | Where-Object { $_ -notin @('postgres','api','frontend','worker','ai-service') })) {
+    if (($recorded -contains $svc) -and (-not ($running -contains $svc))) {
+      Invoke-ComposeCommand @EnvFileArg @profile start $svc 2>$null | Out-Null
+      Write-IdleLog "restored $svc"
+    }
+  }
+  Remove-Item $file -Force -ErrorAction SilentlyContinue
+  Remove-Item (Join-Path $IdleDir "slept") -Force -ErrorAction SilentlyContinue
+  [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() | Set-Content (Join-Path $IdleDir "last_activity")
+}
+
+# Foreground watcher loop; spawned hidden by `idle enable`.
+function Invoke-IdleRun {
+  New-Item -ItemType Directory -Path $IdleDir -Force | Out-Null
+  $PID | Set-Content (Join-Path $IdleDir "watcher.pid")
+  $timeoutMin = [int](Get-IdleEnv 'JOIDY_IDLE_TIMEOUT' '15')
+  $pollS = [int](Get-IdleEnv 'JOIDY_IDLE_POLL_SECONDS' '60')
+  $hibernate = $false
+  $conf = Join-Path $IdleDir "watcher.conf"
+  if ((Test-Path $conf) -and (Select-String -Path $conf -Pattern 'IDLE_HIBERNATE_DB=1' -Quiet)) { $hibernate = $true }
+  $lastFile = Join-Path $IdleDir "last_activity"
+  $sleptFile = Join-Path $IdleDir "slept"
+  if (-not (Test-Path $lastFile)) { [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() | Set-Content $lastFile }
+  Write-IdleLog "watcher started (pid $PID, timeout=${timeoutMin}m, poll=${pollS}s, hibernate_db=$hibernate)"
+  while ($true) {
+    try {
+      if (Test-IdleActivity) {
+        [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() | Set-Content $lastFile
+        if (Test-Path $sleptFile) {
+          Write-IdleLog "activity detected while asleep — restoring services"
+          Restore-IdleState
+        }
+      } elseif (-not (Test-Path $sleptFile)) {
+        $elapsed = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() - [int64](Get-Content $lastFile -Raw).Trim()
+        if ($elapsed -ge ($timeoutMin * 60)) { Invoke-IdleSleep $hibernate }
+      }
+    } catch {
+      Write-IdleLog "poll error: $_"
+    }
+    Start-Sleep -Seconds $pollS
+  }
+}
+
+function Invoke-IdleEnable {
+  $hibernate = $Rest -contains '--idle-hibernate-db'
+  New-Item -ItemType Directory -Path $IdleDir -Force | Out-Null
+  if (Test-IdleWatcherAlive) {
+    Write-Warn "Idle watcher already running (pid $((Get-Content (Join-Path $IdleDir 'watcher.pid') -Raw).Trim()))"
+    return
+  }
+  "IDLE_HIBERNATE_DB=$(if ($hibernate) {1} else {0})" | Set-Content (Join-Path $IdleDir "watcher.conf")
+  if (-not (Test-Path (Join-Path $IdleDir 'last_activity'))) {
+    [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() | Set-Content (Join-Path $IdleDir 'last_activity')
+  }
+  $exe = (Get-Process -Id $PID).Path
+  $proc = Start-Process -FilePath $exe -WindowStyle Hidden -PassThru `
+    -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',"`"$PSCommandPath`"",'idle','run')
+  $proc.Id | Set-Content (Join-Path $IdleDir "watcher.pid")
+  Write-Ok "Idle watcher started (pid $($proc.Id))"
+  Write-Host "  Sleeps the stack after $(Get-IdleEnv 'JOIDY_IDLE_TIMEOUT' '15') min without activity"
+  Write-Host "  (joidy sleep + frontend$(if ($hibernate) {', postgres'})). State: $IdleDir"
+}
+
+function Invoke-IdleDisable {
+  $pidFile = Join-Path $IdleDir "watcher.pid"
+  if (-not (Test-IdleWatcherAlive)) {
+    Write-Warn "Idle watcher is not running"
+    Remove-Item $pidFile -Force -ErrorAction SilentlyContinue
+    return
+  }
+  $watcherPid = [int]((Get-Content $pidFile -Raw).Trim())
+  Stop-Process -Id $watcherPid -Force -ErrorAction SilentlyContinue
+  Remove-Item $pidFile -Force -ErrorAction SilentlyContinue
+  Write-Ok "Idle watcher stopped (the stack was left untouched)."
+}
+
+function Invoke-IdleStatus {
+  $timeoutMin = Get-IdleEnv 'JOIDY_IDLE_TIMEOUT' '15'
+  $pollS = Get-IdleEnv 'JOIDY_IDLE_POLL_SECONDS' '60'
+  Write-Host ""
+  if (Test-IdleWatcherAlive) {
+    $watcherPid = (Get-Content (Join-Path $IdleDir 'watcher.pid') -Raw).Trim()
+    Write-Ok "Idle watcher: RUNNING (pid $watcherPid, poll ${pollS}s)"
+  } else {
+    Write-Warn "Idle watcher: stopped - enable with 'joidy idle enable'"
+  }
+  Write-Host "  Timeout:       $timeoutMin min (JOIDY_IDLE_TIMEOUT)"
+  $conf = Join-Path $IdleDir "watcher.conf"
+  if ((Test-Path $conf) -and (Select-String -Path $conf -Pattern 'IDLE_HIBERNATE_DB=1' -Quiet)) {
+    Write-Host "  Hibernate DB:  yes (--idle-hibernate-db)"
+  }
+  $lastFile = Join-Path $IdleDir "last_activity"
+  if (Test-Path $lastFile) {
+    $last = [int64](Get-Content $lastFile -Raw).Trim()
+    $lastDt = [DateTimeOffset]::FromUnixTimeSeconds($last).LocalDateTime
+    Write-Host "  Last activity: $($lastDt.ToString('yyyy-MM-dd HH:mm:ss'))"
+    $sleptFile = Join-Path $IdleDir "slept"
+    if (Test-Path $sleptFile) {
+      $sleptDt = [DateTimeOffset]::FromUnixTimeSeconds([int64](Get-Content $sleptFile -Raw).Trim()).LocalDateTime
+      Write-Host "  Stack state:   ASLEEP since $($sleptDt.ToString('yyyy-MM-dd HH:mm:ss'))"
+      Write-Host "                 ('joidy wake' restores the recorded services)"
+    } else {
+      $remaining = [Math]::Max(0, ($timeoutMin * 60) - ([DateTimeOffset]::UtcNow.ToUnixTimeSeconds() - $last))
+      Write-Host "  Sleep in:      ${remaining}s if no new activity"
+    }
+  } else {
+    Write-Host "  Last activity: (not recorded yet)"
+  }
+  Write-Host ""
+}
+
+function Invoke-Idle {
+  switch ($Service) {
+    'enable'  { Invoke-IdleEnable }
+    'disable' { Invoke-IdleDisable }
+    'status'  { Invoke-IdleStatus }
+    'run'     { Invoke-IdleRun }
+    default   {
+      Write-Err "Unknown idle subcommand: $Service"
+      Write-Host "  Usage: joidy idle enable [--idle-hibernate-db] | disable | status"
+      exit 1
+    }
+  }
+}
+
+function Invoke-Restart {
+  if (-not (Test-ContainerEngineReady)) { exit 1 }
+  Write-Status "Restarting all Joidy services..."
+  $profile = Get-ProfileArgs
   if ($profile.Count -gt 0) {
     Invoke-ComposeCommand @EnvFileArg @profile restart
   } else {
@@ -306,12 +621,26 @@ function Invoke-Restart {
 }
 
 function Invoke-Status {
+  if (-not (Test-ContainerEngineReady)) { exit 1 }
   Write-Status "Joidy service status:"
   Write-Host ""
   Invoke-ComposeCommand @EnvFileArg ps
 }
 
+function Invoke-Pull {
+  if (-not (Test-ContainerEngineReady)) { exit 1 }
+  Write-Status "Pulling latest Joidy images..."
+  $profile = Get-ProfileArgs
+  if ($profile.Count -gt 0) {
+    Invoke-ComposeCommand @EnvFileArg @profile pull
+  } else {
+    Invoke-ComposeCommand @EnvFileArg pull
+  }
+  Write-Ok "Pull complete."
+}
+
 function Invoke-Logs {
+  if (-not (Test-ContainerEngineReady)) { exit 1 }
   if ($Service) {
     Invoke-ComposeCommand @EnvFileArg logs -f $Service
   } else {
@@ -319,19 +648,117 @@ function Invoke-Logs {
   }
 }
 
+# Host directory for dumps: JOIDY_BACKUP_DIR -> <project>\data\backups
+# (same default docker-compose.yml uses for the backup service bind mount).
+function Get-BackupDir {
+  $dir = Get-EnvValue "JOIDY_BACKUP_DIR" ""
+  if (-not $dir) { $dir = Join-Path $ProjectDir "data\backups" }
+  return $dir
+}
+
+function Test-PostgresReady {
+  $pgUser = Get-EnvValue "POSTGRES_USER" "joidy"
+  $pgDb   = Get-EnvValue "POSTGRES_DB" "joidy"
+  Invoke-ComposeCommand @EnvFileArg exec -T postgres pg_isready -U $pgUser -d $pgDb 2>$null | Out-Null
+  if ($LASTEXITCODE -ne 0) {
+    Write-Err "The 'postgres' service is not running - start it first (joidy up)."
+    exit 1
+  }
+}
+
+function Invoke-Backup {
+  if (-not (Test-ContainerEngineReady)) { exit 1 }
+  Test-PostgresReady
+  $pgUser = Get-EnvValue "POSTGRES_USER" "joidy"
+  $pgDb   = Get-EnvValue "POSTGRES_DB" "joidy"
+  $dir    = Get-BackupDir
+  New-Item -ItemType Directory -Force -Path $dir | Out-Null
+  $name = "joidy-$(Get-Date -Format 'yyyyMMdd-HHmmss').dump"
+  Write-Status "Dumping '$pgDb' -> $(Join-Path $dir $name)"
+  # pg_dump writes inside the container, then `compose cp` pulls the file out -
+  # piping binary data through PowerShell stdout is not reliable.
+  Invoke-ComposeCommand @EnvFileArg exec -T postgres pg_dump -Fc -U $pgUser -d $pgDb -f "/tmp/$name"
+  if ($LASTEXITCODE -ne 0) { Write-Err "pg_dump failed"; exit 1 }
+  Invoke-ComposeCommand @EnvFileArg cp "postgres:/tmp/$name" (Join-Path $dir $name)
+  if ($LASTEXITCODE -ne 0) { Write-Err "could not copy the dump out of the container"; exit 1 }
+  Invoke-ComposeCommand @EnvFileArg exec -T postgres rm -f "/tmp/$name"
+  Write-Ok "Backup written: $(Join-Path $dir $name)"
+}
+
+function Invoke-Restore {
+  param([string]$File, [switch]$Force)
+  if (-not $File) {
+    Write-Err "Usage: joidy restore <file.dump> [-Force]"
+    exit 1
+  }
+  if (-not (Test-Path $File)) {
+    Write-Err "Backup file not found: $File"
+    Write-Host "  Dumps live in: $(Get-BackupDir)" -ForegroundColor Yellow
+    exit 1
+  }
+  $bytes = [System.IO.File]::ReadAllBytes((Resolve-Path $File).Path)
+  if ($bytes.Length -lt 5 -or [System.Text.Encoding]::ASCII.GetString($bytes[0..4]) -ne "PGDMP") {
+    Write-Err "'$File' is not a pg_dump custom-format archive (missing PGDMP header)"
+    exit 1
+  }
+  if (-not (Test-ContainerEngineReady)) { exit 1 }
+  Test-PostgresReady
+  $pgUser = Get-EnvValue "POSTGRES_USER" "joidy"
+  $pgDb   = Get-EnvValue "POSTGRES_DB" "joidy"
+  $n = ((Invoke-ComposeCommand @EnvFileArg exec -T postgres psql -U $pgUser -d $pgDb -tAc `
+        "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'" 2>$null) -join "").Trim()
+  if ($n -match '^\d+$' -and [int]$n -gt 0 -and -not $Force) {
+    Write-Err "Database '$pgDb' is live ($n tables) - refusing to overwrite without -Force."
+    Write-Host "  The restore runs pg_restore --clean, which drops existing objects first."
+    Write-Host "  To proceed:  joidy restore `"$File`" -Force"
+    exit 1
+  }
+  Write-Status "Restoring $File -> '$pgDb'"
+  $tmp = "/tmp/joidy-restore.dump"
+  Invoke-ComposeCommand @EnvFileArg cp (Resolve-Path $File).Path "postgres:$tmp"
+  if ($LASTEXITCODE -ne 0) { Write-Err "could not copy the dump into the container"; exit 1 }
+  Invoke-ComposeCommand @EnvFileArg exec -T postgres pg_restore -U $pgUser -d $pgDb --clean --if-exists --no-owner --no-privileges $tmp
+  $rc = $LASTEXITCODE
+  Invoke-ComposeCommand @EnvFileArg exec -T postgres rm -f $tmp
+  if ($rc -ne 0) { Write-Err "pg_restore failed"; exit 1 }
+  Write-Ok "Restore complete."
+  Write-Warn "Restart the services so they pick up the restored state: joidy restart"
+}
+
 function Show-Help {
-  Write-Host "joidy — Manage the Joidy Docker stack"
+  Write-Host "joidy - Manage the Joidy Docker stack"
   Write-Host ""
   Write-Host "Usage:"
   Write-Host "  joidy up         Start all services (detached)"
   Write-Host "  joidy down       Stop all services"
-  Write-Host "  joidy sleep      Stop heavy services (ai-service, worker) — hibernation"
+  Write-Host "  joidy sleep      Stop heavy services (ai-service, worker) - hibernation"
   Write-Host "  joidy wake       Restart heavy services from hibernation"
   Write-Host "  joidy restart    Restart all services"
   Write-Host "  joidy status     Show service status"
+  Write-Host "  joidy pull       Pull latest images"
   Write-Host "  joidy logs       Tail logs (all services)"
   Write-Host "  joidy logs api   Tail logs for a specific service"
+  Write-Host "  joidy idle enable [--idle-hibernate-db]"
+  Write-Host "                   Start the background idle watchdog (auto-sleep)"
+  Write-Host "  joidy idle disable"
+  Write-Host "                   Stop the watchdog (running services untouched)"
+  Write-Host "  joidy idle status"
+  Write-Host "                   Watcher state, last activity, time until sleep"
+  Write-Host "  joidy backup     Write a compressed pg_dump to the backups dir"
+  Write-Host "  joidy restore <file> [-Force]  Restore a dump into the database"
+  Write-Host "                   (refuses to overwrite a live DB without -Force)"
   Write-Host "  joidy help       Show this help message"
+  Write-Host ""
+  Write-Host "Idle watchdog: 'joidy idle enable' starts a background watcher that polls"
+  Write-Host "established HTTP connections on the published ports, active PostgreSQL"
+  Write-Host "sessions, and vault file changes. After JOIDY_IDLE_TIMEOUT minutes (.env,"
+  Write-Host "default 15) with no activity it sleeps the stack via 'joidy sleep' plus"
+  Write-Host "the frontend; postgres keeps running unless --idle-hibernate-db is given."
+  Write-Host "'joidy wake' - or any new activity - restores the recorded services."
+  Write-Host ""
+  Write-Host "Scheduled backups: 'joidy up' starts the backup sidecar automatically -"
+  Write-Host "pg_dump -Fc on BACKUP_SCHEDULE (cron, default `"0 3 * * *`"), dumps in"
+  Write-Host "data\backups (or JOIDY_BACKUP_DIR). Set BACKUP_ENABLED=false to opt out."
   Write-Host ""
   Write-Host "On first run, .env is auto-created from .env.example with generated"
   Write-Host "POSTGRES_PASSWORD, SECRET_KEY, and GRAFANA_ADMIN_PASSWORD."
@@ -342,13 +769,19 @@ function Show-Help {
 }
 
 switch ($Command) {
-  "up"      { Invoke-Up }
-  "down"    { Invoke-Down }
-  "sleep"   { Invoke-Sleep }
-  "wake"    { Invoke-Wake }
-  "restart" { Invoke-Restart }
-  "status"  { Invoke-Status }
-  "logs"    { Invoke-Logs }
-  "help"    { Show-Help }
-  default   { Write-Err "Unknown command: $Command"; Write-Host ""; Show-Help; exit 1 }
+  "up"            { Invoke-Up }
+  "down"          { Invoke-Down }
+  "sleep"         { Invoke-Sleep }
+  "wake"          { Invoke-Wake }
+  "restart"       { Invoke-Restart }
+  "status"        { Invoke-Status }
+  "pull"          { Invoke-Pull }
+  "logs"          { Invoke-Logs }
+  "idle"          { Invoke-Idle }
+  "backup"        { Invoke-Backup }
+  "restore"       { Invoke-Restore -File $Service -Force:$Force }
+  "help"          { Show-Help }
+  "--help"        { Show-Help }
+  "-h"            { Show-Help }
+  default         { Write-Err "Unknown command: $Command"; Write-Host ""; Show-Help; exit 1 }
 }

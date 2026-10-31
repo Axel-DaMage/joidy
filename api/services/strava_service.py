@@ -4,6 +4,7 @@ from typing import Any
 
 import httpx
 from config import settings
+from services.http_client import http_client
 
 STRAVA_AUTH_URL = "https://www.strava.com/oauth/authorize"
 STRAVA_TOKEN_URL = "https://www.strava.com/oauth/token"
@@ -41,7 +42,7 @@ async def exchange_code(code: str) -> dict[str, Any]:
         "grant_type": "authorization_code",
     }
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with http_client(timeout=30.0) as client:
         r = await client.post(STRAVA_TOKEN_URL, data=payload)
         r.raise_for_status()
         return r.json()
@@ -49,7 +50,7 @@ async def exchange_code(code: str) -> dict[str, Any]:
 
 async def _request(token: str, url: str, params: dict | None = None) -> Any:
     headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with http_client(timeout=30.0) as client:
         r = await client.get(url, headers=headers, params=params or {})
         r.raise_for_status()
         return r.json()

@@ -13,7 +13,7 @@ HTTP server).
 ## Prerequisites
 
 - Docker + Docker Compose (recommended)
-- Or Python 3.12 with `requirements.txt` for local dev
+- Or Python 3.12 with `requirements-dev.txt` for local dev (`requirements.txt` is runtime-only; the dev file adds pytest/ruff/mypy for tests and lint)
 - `OBSIDIAN_VAULT_PATH` pointing to a host vault (mounted at `/vault`)
 - The `api` service must be reachable at `http://api:8000`
 

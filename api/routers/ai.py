@@ -1,17 +1,19 @@
+from datetime import datetime, timedelta
+
 import httpx
 from config import settings
 from database import get_db
 from fastapi import APIRouter, Depends, HTTPException
 from middleware.correlation_id import get_correlation_id
-from models.goal import Goal, GoalState
 from models.gamification import UserStats
+from models.goal import Goal, GoalState
 from models.note import Note, NoteTag, Tag
 from pydantic import BaseModel
 from services.auth_service import get_current_user
+from services.http_client import http_client
 from services.timezone_utils import get_local_today, to_utc_datetime
 from sqlalchemy import func
 from sqlalchemy.orm import Session
-from datetime import datetime, date, timedelta, timezone
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
@@ -30,11 +32,12 @@ class ClassifyRequest(BaseModel):
     content: str
     existing_tags: list[str] = []
 
+
 @router.post("/classify")
 async def classify(req: ClassifyRequest):
     if not settings.ai_service_enabled:
         return {**_ai_disabled_response("classify"), "note_id": req.note_id, "suggestions": []}
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with http_client(timeout=30.0) as client:
         try:
             headers = {"X-Request-ID": get_correlation_id()}
             if settings.internal_secret:
@@ -49,11 +52,12 @@ async def classify(req: ClassifyRequest):
         except httpx.HTTPError:
             return {"status": "unavailable", "note_id": req.note_id, "suggestions": []}
 
+
 @router.get("/usage")
 async def usage():
     if not settings.ai_service_enabled:
         return {**_ai_disabled_response("usage"), "estimated_cost_usd": 0}
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with http_client(timeout=10.0) as client:
         try:
             headers = {"X-Request-ID": get_correlation_id()}
             if settings.internal_secret:
@@ -70,7 +74,7 @@ async def cluster_notes(eps: float = 0.3, min_samples: int = 3, max_notes: int =
     """Cluster notes by semantic similarity via the ai-service (#393)."""
     if not settings.ai_service_enabled:
         return {**_ai_disabled_response("cluster"), "clusters": [], "total_notes": 0}
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    async with http_client(timeout=60.0) as client:
         try:
             headers = {"X-Request-ID": get_correlation_id()}
             if settings.internal_secret:
@@ -121,6 +125,7 @@ async def daily_recap(
 
     # XP and goals — query gamification events and goals
     from models.goal import Goal
+
     goals_completed = db.query(Goal).filter(Goal.completed_at >= start, Goal.completed_at < end).count()
 
     note_titles = [n.title for n in notes_created[:10]]
@@ -136,7 +141,7 @@ async def daily_recap(
         "note_titles": note_titles,
     }
 
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    async with http_client(timeout=60.0) as client:
         try:
             headers = {"X-Request-ID": get_correlation_id()}
             if settings.internal_secret:
@@ -172,13 +177,7 @@ def _gather_chat_context(db: Session) -> dict:
     Kept lightweight: only titles/counts are sent, never full note content,
     to limit PII exposure and token usage.
     """
-    goals = (
-        db.query(Goal)
-        .filter(Goal.state == GoalState.ACTIVE)
-        .order_by(Goal.created_at.desc())
-        .limit(10)
-        .all()
-    )
+    goals = db.query(Goal).filter(Goal.state == GoalState.ACTIVE).order_by(Goal.created_at.desc()).limit(10).all()
     goal_ctx = [
         {
             "title": g.title,
@@ -206,12 +205,7 @@ def _gather_chat_context(db: Session) -> dict:
     )
     top_tag_names = [t[0] for t in top_tags]
 
-    recent_notes = (
-        db.query(Note.title)
-        .order_by(Note.created_at.desc())
-        .limit(10)
-        .all()
-    )
+    recent_notes = db.query(Note.title).order_by(Note.created_at.desc()).limit(10).all()
     recent_note_titles = [n[0] for n in recent_notes if n[0]]
 
     return {
@@ -244,7 +238,7 @@ async def chat(
         }
     context = _gather_chat_context(db)
 
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    async with http_client(timeout=60.0) as client:
         try:
             headers = {"X-Request-ID": get_correlation_id()}
             if settings.internal_secret:
@@ -259,6 +253,9 @@ async def chat(
         except httpx.HTTPError:
             return {
                 "status": "unavailable",
-                "response": "El asistente no está disponible en este momento. Verifica la configuración de IA e inténtalo de nuevo.",
+                "response": (
+                    "El asistente no está disponible en este momento. "
+                    "Verifica la configuración de IA e inténtalo de nuevo."
+                ),
                 "suggestions": [],
             }

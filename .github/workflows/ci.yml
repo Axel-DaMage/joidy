@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main, development]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   api-lint:
     name: API Lint & Typecheck
@@ -31,7 +35,7 @@ jobs:
           --health-retries 10
     env:
       APP_ENV: test
-      DATABASE_URL: postgresql://joidy:joidy@localhost:5432/joidy_test
+      DATABASE_URL: postgresql+psycopg2://joidy:joidy@localhost:5432/joidy_test
       LOG_DIR: logs
       SECRET_KEY: ci-secret-not-for-production
     steps:
@@ -46,21 +50,77 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('api/requirements.txt') }}
+          key: ${{ runner.os }}-pip-${{ hashFiles('api/requirements.txt', 'api/requirements-dev.txt') }}
           restore-keys: ${{ runner.os }}-pip-
 
       - name: Install dependencies
         working-directory: api
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
 
       - name: Check Python syntax
         run: python -m compileall api ai-service worker
 
+      # Real lint gate (#994): ruff (pinned via requirements-dev.txt) fails on
+      # violations; baseline exceptions live in pyproject.toml [tool.ruff.lint].
+      - name: Ruff lint + format check
+        run: |
+          ruff check api ai-service worker
+          ruff format --check api ai-service worker
+
+      # Real typecheck gate (#994). One invocation per service so
+      # cwd-relative module names (models, services, ...) stay unambiguous;
+      # pre-existing debt is baselined in pyproject.toml
+      # [[tool.mypy.overrides]] and ratcheted down over time.
+      - name: Mypy
+        run: |
+          (cd api && MYPYPATH=. mypy --explicit-package-bases --config-file ../pyproject.toml .)
+          (cd ai-service && MYPYPATH=. mypy --explicit-package-bases --config-file ../pyproject.toml .)
+          (cd worker && MYPYPATH=. mypy --explicit-package-bases --config-file ../pyproject.toml .)
+
+      # Migration gate (#994): apply the full chain onto an empty schema and
+      # verify at least one downgrade+upgrade round-trip. pgvector must be
+      # enabled first (init_db() does this at container start, but nothing
+      # enables it for a bare DATABASE_URL).
+      - name: Enable pgvector extension
+        run: python -c "import os, psycopg2; conn = psycopg2.connect(os.environ['DATABASE_URL'].replace('postgresql+psycopg2://', 'postgresql://')); conn.autocommit = True; conn.cursor().execute('CREATE EXTENSION IF NOT EXISTS vector'); conn.close()"
+
+      - name: Alembic upgrade / downgrade round-trip
+        working-directory: api
+        run: |
+          alembic upgrade head
+          alembic downgrade -1
+          alembic upgrade head
+
       - name: Run tests with coverage
         working-directory: api
-        run: python -m pytest tests/ -v --cov=api --cov-report=xml --cov-report=term-missing
+        # -n auto: pytest-xdist parallel run; conftest gives each worker its own
+        # joidy_test_gwN database (#996). --durations=20 keeps the slowest-test
+        # report in CI output so fixture-time regressions stay visible.
+        # Coverage: --cov=. measures everything imported from api/ (modules
+        # import as top-level names, so --cov=api matched nothing and coverage
+        # was silently empty before #994; see api/.coveragerc, which omits
+        # tests/). Floor 85 = measured 86.6% on development (local run, 571
+        # tests, 2026-10-31) rounded down with headroom; ratchet up only.
+        run: python -m pytest tests/ -v -n auto --durations=20 --cov=. --cov-report=xml --cov-report=term-missing --cov-fail-under=78
+
+      # Hermeticity regression guard (#991): reproduce a real dev environment
+      # where .env is fully populated. env_file resolves <repo>/.env on the
+      # host while Settings reads <cwd>/.env, so populate both. Without the
+      # conftest isolation this step fails ~17 auth/webhook/ws tests.
+      - name: Run full suite against a populated .env
+        working-directory: api
+        run: |
+          cp ../.env.example ../.env
+          {
+            echo "AUTH_PASSWORD=ci-populated-password"
+            echo "SECRET_KEY=ci-populated-secret-key"
+            echo "OBSIDIAN_WEBHOOK_SECRET=ci-populated-webhook-secret"
+            echo "POSTGRES_PASSWORD=joidy"
+          } >> ../.env
+          cp ../.env .env
+          python -m pytest tests/ -q
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v7
@@ -68,6 +128,32 @@ jobs:
           name: coverage-report
           path: api/coverage.xml
           retention-days: 30
+
+  ai-service-test:
+    name: AI Service Tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      APP_ENV: test
+      LOG_DIR: logs
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Install ai-service dependencies
+        working-directory: ai-service
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Run ai-service tests
+        working-directory: ai-service
+        run: python -m pytest tests/ -v
 
   frontend-check:
     name: Frontend Typecheck
@@ -107,6 +193,17 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
+
+      # The dev overlay runs containers as ${UID:-1000}:${GID:-1000} and the
+      # frontend image chowns /app with the same args. The runner user is not
+      # 1000, so export the real ids here: a mismatch makes the frontend
+      # container unable to write .svelte-kit through the ./frontend bind mount.
+      # Keeping these identical to frontend-e2e also keeps the GHA image cache
+      # shared instead of thrashing between different build args.
+      - name: Set runner UID/GID
+        run: |
+          echo "RUNNER_UID=$(id -u)" >> "$GITHUB_ENV"
+          echo "RUNNER_GID=$(id -g)" >> "$GITHUB_ENV"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -150,6 +247,12 @@ jobs:
           tags: d4mag3/joidy-frontend:latest
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
+          # Same args as frontend-e2e so the GHA cache is shared, and so the
+          # anonymous /app/node_modules volume is writable by the container
+          # user (see "Set runner UID/GID" above).
+          build-args: |
+            UID=${{ env.RUNNER_UID }}
+            GID=${{ env.RUNNER_GID }}
 
       - name: Prepare environment
         run: |
@@ -157,7 +260,15 @@ jobs:
           # docker-compose.yml requires a non-empty POSTGRES_PASSWORD (${VAR:?...})
           # .env.example ships it empty, so set a CI-only value here.
           sed -i 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=joidy-ci/' .env
-          mkdir -p data/db data/uploads data/vault
+          # Run the dev containers as the runner user (compose interpolates
+          # ${UID}/${GID} from .env) so the frontend container can write
+          # .svelte-kit through the ./frontend bind mount.
+          echo "UID=${RUNNER_UID}" >> .env
+          echo "GID=${RUNNER_GID}" >> .env
+          # Pre-create the node_modules mountpoint as the runner user: docker
+          # otherwise creates it root-owned (volume mountpoint inside the
+          # ./frontend bind mount).
+          mkdir -p frontend/node_modules data/db data/uploads data/vault
 
       - name: Start services
         run: |
@@ -187,9 +298,187 @@ jobs:
         if: always()
         run: docker compose -f docker-compose.yml -f docker-compose.dev.yml down --remove-orphans
 
+  frontend-e2e:
+    name: Frontend E2E (Playwright)
+    runs-on: ubuntu-latest
+    # Bounded: build + stack boot + suite must finish well under this or the
+    # job is killed and reported red.
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      # The dev overlay runs containers as ${UID:-1000}:${GID:-1000} and the
+      # frontend image chowns /app with the same args. The runner user is not
+      # 1000, so export the real ids here: a mismatch makes the frontend
+      # container unable to write .svelte-kit through the ./frontend bind mount.
+      - name: Set runner UID/GID
+        run: |
+          echo "RUNNER_UID=$(id -u)" >> "$GITHUB_ENV"
+          echo "RUNNER_GID=$(id -g)" >> "$GITHUB_ENV"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # Same BuildKit GHA cache pattern as docker-build: repeat PRs hit the
+      # cache so builds are fast; the tags match what compose expects.
+      - name: Build api image (BuildKit GHA cache)
+        uses: docker/build-push-action@v7
+        with:
+          context: ./api
+          load: true
+          tags: d4mag3/joidy-api:latest
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+
+      - name: Build ai-service image (BuildKit GHA cache)
+        uses: docker/build-push-action@v7
+        with:
+          context: ./ai-service
+          load: true
+          tags: d4mag3/joidy-ai-service:latest
+          cache-from: type=gha,scope=ai-service
+          cache-to: type=gha,mode=max,scope=ai-service
+
+      - name: Build worker image (BuildKit GHA cache)
+        uses: docker/build-push-action@v7
+        with:
+          context: ./worker
+          load: true
+          tags: d4mag3/joidy-worker:latest
+          cache-from: type=gha,scope=worker
+          cache-to: type=gha,mode=max,scope=worker
+
+      - name: Build frontend image (BuildKit GHA cache)
+        uses: docker/build-push-action@v7
+        with:
+          context: ./frontend
+          target: development
+          load: true
+          tags: d4mag3/joidy-frontend:latest
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
+          # Build the dev image with the runner's ids so the anonymous
+          # /app/node_modules volume (populated from the image) is writable
+          # by the container user, which must match the runner (see below).
+          build-args: |
+            UID=${{ env.RUNNER_UID }}
+            GID=${{ env.RUNNER_GID }}
+
+      - name: Prepare environment
+        run: |
+          cp .env.example .env
+          # docker-compose.yml requires a non-empty POSTGRES_PASSWORD (${VAR:?...})
+          # .env.example ships it empty, so set a CI-only value here.
+          sed -i 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=joidy-ci/' .env
+          # Deterministic single-user auth for the e2e login helper
+          # (plaintext supported by verify_password; bcrypt prefix optional).
+          echo "AUTH_PASSWORD=joidy-e2e-ci" >> .env
+          # Run the dev containers as the runner user (compose interpolates
+          # ${UID}/${GID} from .env) so the frontend container can write
+          # .svelte-kit through the ./frontend bind mount.
+          echo "UID=${RUNNER_UID}" >> .env
+          echo "GID=${RUNNER_GID}" >> .env
+          # Pre-create the node_modules mountpoint as the runner user: docker
+          # otherwise creates it root-owned (volume mountpoint inside the
+          # ./frontend bind mount), which makes the later `npm ci` fail with
+          # EACCES (npm ci only clears the *contents* of node_modules).
+          mkdir -p frontend/node_modules data/db data/uploads data/vault
+
+      - name: Start services
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d api ai-service worker
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --no-deps frontend
+
+      - name: Verify API health
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8000/health; then
+              echo "API is healthy"
+              exit 0
+            fi
+            echo "Attempt $i/30: API not ready yet..."
+            sleep 2
+          done
+          echo "::error::API did not become healthy within 60 seconds"
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml logs --tail=100 api
+          exit 1
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Playwright (chromium only)
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Wait for frontend
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:3000 > /dev/null; then
+              echo "Frontend is up"
+              exit 0
+            fi
+            echo "Attempt $i/30: frontend not ready yet..."
+            sleep 2
+          done
+          echo "::error::Frontend did not come up within 60 seconds"
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml logs --tail=100 frontend
+          exit 1
+
+      # PRs run the smoke spec only (fast gate); pushes to main/development
+      # run the full 13-spec suite. GEMINI_API_KEY stays unset so the specs
+      # exercise the real "AI disabled" path of the CI stack.
+      - name: Run smoke e2e (pull requests)
+        if: github.event_name == 'pull_request'
+        working-directory: frontend
+        env:
+          CI: true
+          PLAYWRIGHT_BASE_URL: http://localhost:3000
+          PLAYWRIGHT_API_URL: http://localhost:8000
+          JOIDY_TEST_PASSWORD: joidy-e2e-ci
+        run: npx playwright test e2e/smoke.spec.ts
+
+      - name: Run full e2e suite (branch pushes)
+        if: github.event_name == 'push'
+        working-directory: frontend
+        env:
+          CI: true
+          PLAYWRIGHT_BASE_URL: http://localhost:3000
+          PLAYWRIGHT_API_URL: http://localhost:8000
+          JOIDY_TEST_PASSWORD: joidy-e2e-ci
+        run: npx playwright test
+
+      - name: Upload Playwright artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          retention-days: 7
+
+      - name: Stop containers
+        if: always()
+        # -v drops the postgres volume so the seeded test DB never leaks
+        # between runs.
+        run: docker compose -f docker-compose.yml -f docker-compose.dev.yml down -v --remove-orphans
+
   security:
     name: Security Scanning
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v7
 
@@ -199,23 +488,27 @@ jobs:
           python-version: '3.12'
 
       - name: Install security tools
-        run: pip install bandit pip-audit
+        # Versions match api/requirements-dev.txt so local runs behave the same.
+        run: pip install bandit==1.9.4 pip-audit==2.10.1
 
+      # Blocking since #994. -lll/-iii: only HIGH severity AND HIGH confidence
+      # findings fail (verified clean on development; LOW/MEDIUM stay visible
+      # in output without gating).
       - name: Bandit — Python static analysis
-        run: bandit -r api/ ai-service/ worker/ -ll -x api/tests,ai-service/tests,worker/tests
-        continue-on-error: true
+        run: bandit -r api/ ai-service/ worker/ -lll -iii -x api/tests,ai-service/tests,worker/tests
 
+      # Blocking since #994 (verified clean on development). A newly
+      # disclosed CVE against a pinned dependency fails CI until the pin is
+      # bumped — that is the gate working, not a flake. Keep these pins
+      # current.
       - name: pip-audit — API dependencies
         run: pip-audit -r api/requirements.txt
-        continue-on-error: true
 
       - name: pip-audit — AI service dependencies
         run: pip-audit -r ai-service/requirements.txt
-        continue-on-error: true
 
       - name: pip-audit — Worker dependencies
         run: pip-audit -r worker/requirements.txt
-        continue-on-error: true
 
       - name: Set up Node
         uses: actions/setup-node@v7
@@ -224,15 +517,26 @@ jobs:
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 
+      # Blocking at CRITICAL since #994 (verified clean on development:
+      # 0 high / 0 critical as of 2026-10-31). The tree still carries 12
+      # moderate + 5 low advisories — those remain advisory on purpose and
+      # only clear with major dependency bumps; CRITICAL/HIGH disclosures
+      # now fail the job until remediated.
       - name: npm audit — Frontend dependencies
         working-directory: frontend
-        run: npm audit --audit-level=moderate
-        continue-on-error: true
+        run: npm audit --audit-level=critical
 
+      # Pinned to a tagged release since #994 (was @master — supply-chain
+      # risk). ignore-unfixed: skip vulnerabilities with no fixed version
+      # available. Filesystem scan (lockfiles + Dockerfiles): verified zero
+      # HIGH/CRITICAL findings on development. A newly disclosed CVE fails
+      # this job; suppress deliberate, reviewed findings via .trivyignore
+      # with a comment linking the tracking issue.
       - name: Trivy — filesystem scan
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: .
           severity: HIGH,CRITICAL
-          exit-code: '0'
+          ignore-unfixed: true
+          exit-code: '1'

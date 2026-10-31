@@ -1,4 +1,6 @@
 import { writable, get, derived } from 'svelte/store';
+import { api } from '$lib/api';
+import { logger } from '$lib/utils/logger';
 import { loadUserSettings, patchUserSettings } from '$lib/utils/userSettings';
 import { showNotification } from './gamification';
 
@@ -28,6 +30,8 @@ let persistTimeout: ReturnType<typeof setTimeout> | null = null;
 
 function debouncedPersist() {
   if (persistTimeout) clearTimeout(persistTimeout);
+  // intentional: module-level store debounce — lives for the app session,
+  // not bound to any component (#1003)
   persistTimeout = setTimeout(() => {
     if (pomodoroPrefsReady) persistPomodoroPrefs();
   }, 500);
@@ -153,16 +157,34 @@ function tick() {
   if (currentSec > 0) {
     secondsLeft.set(currentSec - 1);
   } else {
-    advance();
+    advance(true);
     playBeep();
   }
 }
 
-export function advance() {
+function newPomodoroId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `pom-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function awardPomodoroXp(durationMinutes: number) {
+  api.gamification
+    .pomodoro({ duration_minutes: durationMinutes, pomodoro_id: newPomodoroId() })
+    .catch((e: unknown) => {
+      logger.warn('[pomodoro] No se pudo registrar el XP de la sesión:', e);
+    });
+}
+
+export function advance(natural = false) {
   stopTimer();
   const currentPhase = get(phase);
 
   if (currentPhase === 'work') {
+    if (natural) {
+      awardPomodoroXp(get(workMins));
+    }
     const done = get(pomodorosDone) + 1;
     pomodorosDone.set(done);
     phase.set(done % 4 === 0 ? 'longBreak' : 'break');
@@ -183,6 +205,8 @@ export function startTimer() {
   initAudio();
   requestNotificationPermission();
   running.set(true);
+  // intentional: the pomodoro must keep ticking across page navigations —
+  // cleared by stopTimer()/resetTimer(), not by component teardown (#1003)
   timerInterval = setInterval(tick, 1000);
 }
 

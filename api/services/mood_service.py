@@ -1,6 +1,6 @@
 """Mood Tracker Service — daily mood recording and analytics."""
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, timedelta
 
 from models.mood_entry import MoodEntry
 from services.timezone_utils import get_local_today

@@ -1,5 +1,7 @@
 import { writable, derived } from 'svelte/store';
-import { browser } from '$app/environment';
+import { browser } from '$app/env';
+import { DEFAULT_CLOCK_STYLE, isClockStyleId, type ClockStyleId } from '$lib/utils/clock';
+import { loadUserSettings, patchUserSettings } from '$lib/utils/userSettings';
 
 const COLORS_KEY = 'joidy-accent-colors';
 const DEFAULT_COLORS = ['#c8a96e'];
@@ -60,7 +62,7 @@ function rgbToHsl(r: number, g: number, b: number): [number, number, number] {
 }
 
 function hslToRgb(h: number, s: number, l: number): [number, number, number] {
-  h = (h % 360 + 360) % 360;
+  h = ((h % 360) + 360) % 360;
   s = Math.max(0, Math.min(100, s)) / 100;
   l = Math.max(0, Math.min(100, l)) / 100;
 
@@ -72,24 +74,32 @@ function hslToRgb(h: number, s: number, l: number): [number, number, number] {
   let b = 0;
 
   if (h < 60) {
-    r = c; g = x; b = 0;
+    r = c;
+    g = x;
+    b = 0;
   } else if (h < 120) {
-    r = x; g = c; b = 0;
+    r = x;
+    g = c;
+    b = 0;
   } else if (h < 180) {
-    r = 0; g = c; b = x;
+    r = 0;
+    g = c;
+    b = x;
   } else if (h < 240) {
-    r = 0; g = x; b = c;
+    r = 0;
+    g = x;
+    b = c;
   } else if (h < 300) {
-    r = x; g = 0; b = c;
+    r = x;
+    g = 0;
+    b = c;
   } else {
-    r = c; g = 0; b = x;
+    r = c;
+    g = 0;
+    b = x;
   }
 
-  return [
-    Math.round((r + m) * 255),
-    Math.round((g + m) * 255),
-    Math.round((b + m) * 255)
-  ];
+  return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
 }
 
 function getComplementaryColor(hex: string): string {
@@ -291,6 +301,45 @@ export const showHiddenFiles = createBooleanStore('joidy-show-hidden', false);
 export const writeInObsidian = createBooleanStore('joidy-write-obsidian', false);
 export const use24HourClock = createBooleanStore('joidy-use-24h-clock', true);
 export const hideTagsLine = createBooleanStore('joidy-hide-tags-line', true);
+
+// ── Clock style (#707) ───────────────────────────────────────────────────────
+// Persisted inside the shared `joidy-user-settings-v1` blob via userSettings
+// (`appearance.clockStyle`), so it survives reloads like the other UI prefs.
+function loadClockStyle(): ClockStyleId {
+  if (!browser) return DEFAULT_CLOCK_STYLE;
+  const saved = loadUserSettings().appearance?.clockStyle;
+  return isClockStyleId(saved) ? saved : DEFAULT_CLOCK_STYLE;
+}
+
+function createClockStyleStore() {
+  const { subscribe, set } = writable<ClockStyleId>(DEFAULT_CLOCK_STYLE);
+  let _initialized = false;
+
+  function ensureInit() {
+    if (_initialized || !browser) return;
+    _initialized = true;
+    set(loadClockStyle());
+  }
+
+  return {
+    subscribe: (run: (v: ClockStyleId) => void, invalidate?: () => void) => {
+      ensureInit();
+      return subscribe(run, invalidate);
+    },
+    set: (val: ClockStyleId) => {
+      _initialized = true;
+      if (!isClockStyleId(val)) return;
+      patchUserSettings({ appearance: { clockStyle: val } });
+      set(val);
+    },
+    init: () => {
+      _initialized = true;
+      set(loadClockStyle());
+    },
+  };
+}
+
+export const clockStyle = createClockStyleStore();
 
 export const darkMode = createBooleanStore('joidy-dark-mode', true);
 

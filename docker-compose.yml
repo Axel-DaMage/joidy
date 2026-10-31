@@ -1,3 +1,9 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   postgres:
     image: ${POSTGRES_IMAGE:-pgvector/pgvector:pg16}
@@ -17,6 +23,7 @@ services:
         limits:
           cpus: '1.0'
           memory: 1G
+    logging: *default-logging
     restart: unless-stopped
 
   api:
@@ -39,7 +46,7 @@ services:
       # `joidy up` detects the engine and sets DOCKER_SOCK_PATH automatically.
       - ${DOCKER_SOCK_PATH:-/var/run/docker.sock}:/var/run/docker.sock
     environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-joidy}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-joidy}
+      - DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER:-joidy}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-joidy}
       - AI_SERVICE_URL=http://ai-service:8002
       - AI_SERVICE_ENABLED=${AI_SERVICE_ENABLED:-false}
       - WORKER_URL=http://worker:8001
@@ -66,6 +73,7 @@ services:
         limits:
           cpus: '1.5'
           memory: 1G
+    logging: *default-logging
     restart: unless-stopped
 
   ai-service:
@@ -81,7 +89,7 @@ services:
       - ${JOIDY_DATA_DIR:-./data}/db:/data/db
       - ${JOIDY_ENV_FILE:-./.env}:/app/.env:ro
     environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-joidy}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-joidy}
+      - DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER:-joidy}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-joidy}
       - APP_ENV=${APP_ENV:-production}
     depends_on:
       postgres:
@@ -97,6 +105,7 @@ services:
         limits:
           cpus: '1.5'
           memory: 1536M
+    logging: *default-logging
     restart: unless-stopped
 
   worker:
@@ -108,7 +117,7 @@ services:
       - ${JOIDY_ENV_FILE:-./.env}:/app/.env:ro
       - ${OBSIDIAN_VAULT_PATH:-./data/vault}:/vault
     environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-joidy}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-joidy}
+      - DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER:-joidy}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-joidy}
       - API_URL=http://api:8000
       - VAULT_PATH=/vault
       - APP_ENV=${APP_ENV:-production}
@@ -127,6 +136,83 @@ services:
         limits:
           cpus: '0.5'
           memory: 512M
+    logging: *default-logging
+    restart: unless-stopped
+
+  # Optional backup sidecar (opt-in compose profile). Runs `pg_dump -Fc` on a
+  # cron schedule (BACKUP_SCHEDULE, default daily at 03:00) and writes
+  # timestamped dumps to JOIDY_BACKUP_DIR (default: <data dir>/backups) with
+  # retention pruning (BACKUP_RETENTION_DAYS + BACKUP_RETENTION_WEEKS).
+  # `joidy up` enables this profile automatically unless BACKUP_ENABLED=false
+  # is set in .env; plain `docker compose up` and `make dev` never start it.
+  # Manual equivalent: `docker compose --profile backup up -d backup`.
+  backup:
+    image: ${POSTGRES_IMAGE:-pgvector/pgvector:pg16}
+    profiles: ["backup"]
+    # Runs as the host UID/GID when exported by `joidy up` / `make dev` so dumps
+    # land on the host filesystem owned by the user, not root.
+    user: "${UID:-0}:${GID:-0}"
+    volumes:
+      - ${JOIDY_BACKUP_DIR:-${JOIDY_DATA_DIR:-./data}/backups}:/backups
+      - ${JOIDY_SCRIPTS_DIR:-./scripts}:/scripts:ro
+    environment:
+      - PGHOST=postgres
+      - PGPORT=5432
+      - PGUSER=${POSTGRES_USER:-joidy}
+      - PGPASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      - PGDATABASE=${POSTGRES_DB:-joidy}
+      - BACKUP_DIR=/backups
+      - BACKUP_SCHEDULE=${BACKUP_SCHEDULE:-0 3 * * *}
+      - BACKUP_RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-14}
+      - BACKUP_RETENTION_WEEKS=${BACKUP_RETENTION_WEEKS:-4}
+      - BACKUP_WEEKLY_DAY=${BACKUP_WEEKLY_DAY:-0}
+      - BACKUP_ON_START=${BACKUP_ON_START:-false}
+      - TZ=${USER_TIMEZONE:-UTC}
+    command: ["bash", "/scripts/db_backup_loop.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+    logging: *default-logging
+    restart: unless-stopped
+
+  # Optional n8n automation hub (opt-in compose profile). Personal automation:
+  # workflows calling the joidy API (http://api:8000), the shared Postgres
+  # (postgres:5432) or ai-service — plus inbound webhooks (Telegram, GitHub,
+  # Strava, ...). UI at http://localhost:${N8N_PORT:-5678}.
+  # Start: docker compose --profile n8n up -d n8n  (or `make n8n`).
+  n8n:
+    image: ${N8N_IMAGE:-docker.n8n.io/n8nio/n8n:latest}
+    profiles: ["n8n"]
+    ports:
+      - "${N8N_PORT:-5678}:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+    environment:
+      # Optional but strongly recommended: if empty, n8n auto-generates a key
+      # persisted in n8n_data (volume) — losing the volume = losing creds.
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY:-}
+      - WEBHOOK_URL=${N8N_WEBHOOK_URL:-http://localhost:5678/}
+      - GENERIC_TIMEZONE=${USER_TIMEZONE:-UTC}
+      - N8N_RUNNERS_ENABLED=true
+      - JOIDY_API_URL=${JOIDY_API_URL:-http://api:8000}
+      - JOIDY_AUTH_PASSWORD=${AUTH_PASSWORD:-}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:5678/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+    logging: *default-logging
     restart: unless-stopped
 
   frontend:
@@ -149,7 +235,9 @@ services:
         limits:
           cpus: '0.5'
           memory: 512M
+    logging: *default-logging
     restart: unless-stopped
 
 volumes:
   postgres_data:
+  n8n_data:

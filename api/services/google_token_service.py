@@ -8,13 +8,13 @@ expired).
 import base64
 import hashlib
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
-import httpx
 from config import settings
 from cryptography.fernet import Fernet, InvalidToken
 from models.google_token import GoogleToken
+from services.http_client import http_client
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -59,7 +59,7 @@ def store_tokens(
     if refresh_token:
         row.refresh_token_encrypted = encrypt_token(refresh_token)
     row.token_type = token_type
-    row.expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+    row.expires_at = datetime.now(UTC) + timedelta(seconds=expires_in)
     row.scope = scope
     db.commit()
     db.refresh(row)
@@ -97,10 +97,10 @@ async def get_valid_access_token(db: Session) -> str | None:
 
     # If access token is still valid (with 60s buffer), use it
     if row.access_token and row.expires_at:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         expires_at = row.expires_at
         if expires_at.tzinfo is None:
-            expires_at = expires_at.replace(tzinfo=timezone.utc)
+            expires_at = expires_at.replace(tzinfo=UTC)
         if now < expires_at - timedelta(seconds=60):
             return row.access_token
 
@@ -121,7 +121,7 @@ async def get_valid_access_token(db: Session) -> str | None:
     }
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with http_client(timeout=30.0) as client:
             r = await client.post(GOOGLE_TOKEN_URL, data=payload)
             r.raise_for_status()
             data: dict[str, Any] = r.json()
@@ -133,7 +133,7 @@ async def get_valid_access_token(db: Session) -> str | None:
     expires_in = data.get("expires_in", 3600)
 
     row.access_token = new_access
-    row.expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+    row.expires_at = datetime.now(UTC) + timedelta(seconds=expires_in)
     db.commit()
 
     return new_access

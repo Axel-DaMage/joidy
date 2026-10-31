@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
-// The logger computes `currentLevel` once at module load from `$app/environment`
+// The logger computes `currentLevel` once at module load from `$app/env`
 // (`browser`, `dev`) and `localStorage`. To test each mode we use `vi.doMock`
 // (not hoisted) + `vi.resetModules()` + dynamic `import()` so the module
 // re-evaluates with the new mock values.
@@ -14,7 +14,7 @@ async function loadLogger(env: { browser: boolean; dev: boolean }, logLevel?: st
   } else {
     localStorage.removeItem('joidy-log-level');
   }
-  vi.doMock('$app/environment', () => env);
+  vi.doMock('$app/env', () => env);
   const mod = await import('./logger');
   return mod.logger;
 }
@@ -31,7 +31,7 @@ describe('logger — log levels', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     localStorage.clear();
-    vi.doUnmock('$app/environment');
+    vi.doUnmock('$app/env');
     vi.resetModules();
   });
 

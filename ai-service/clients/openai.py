@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from typing import cast
 
 import httpx
 from config import settings
@@ -11,10 +12,11 @@ logger = logging.getLogger(__name__)
 
 
 class OpenAIClient(BaseLLMClient, EmbeddingClient):
-    def __init__(self, api_key: str, model: str, is_embedding: bool = False):
+    def __init__(self, api_key: str, model: str, is_embedding: bool = False, base_url: str = ""):
         timeout = settings.embed_timeout if is_embedding else settings.llm_timeout
         self._client = AsyncOpenAI(
             api_key=api_key,
+            base_url=base_url or None,
             timeout=httpx.Timeout(timeout, connect=settings.connect_timeout),
         )
         self._model = model
@@ -33,7 +35,7 @@ class OpenAIClient(BaseLLMClient, EmbeddingClient):
             model=self._model,
             input=text,
         )
-        return response.data[0].embedding
+        return cast("list[float]", response.data[0].embedding)
 
     async def generate(
         self,
@@ -47,6 +49,11 @@ class OpenAIClient(BaseLLMClient, EmbeddingClient):
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
 
+        # Reasoning routers (e.g. "standardcompute") spend max_tokens on hidden
+        # reasoning before emitting visible content — raise the floor if set.
+        if settings.llm_max_tokens and settings.llm_max_tokens > max_tokens:
+            max_tokens = settings.llm_max_tokens
+
         response = await _call_with_retry(
             self._client.chat.completions.create,
             model=self._model,
@@ -54,7 +61,12 @@ class OpenAIClient(BaseLLMClient, EmbeddingClient):
             temperature=temperature,
             max_tokens=max_tokens,
         )
-        return response.choices[0].message.content
+        # finish_reason=length on reasoning models can leave content null.
+        return response.choices[0].message.content or ""
+
+    async def close(self) -> None:
+        """Close the SDK's underlying httpx client (#998)."""
+        await self._client.close()
 
 
 def _is_retryable_error(exc: Exception) -> bool:

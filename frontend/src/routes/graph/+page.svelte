@@ -1,31 +1,23 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { goto } from '$app/navigation';
   import TopicClusters from '$lib/components/TopicClusters.svelte';
   import { graphData, graphLoading, loadGraph, selectedTag } from '$lib/stores/graph';
-  import DynamicIcon from '$lib/components/DynamicIcon.svelte';
-  import { devMode } from '$lib/stores/settings';
+  import BetaBanner from '$lib/components/BetaBanner.svelte';
   import type { GraphNode, GraphEdge } from '$lib/api';
   import { t } from 'svelte-i18n';
 
-  // Redirect to home when dev mode is off — dev routes should not be
-  // accessible via direct URL in production (#649).
-  $effect(() => {
-    if (!$devMode) goto('/');
-  });
-
   // Lazy-load the heavy graph component (d3 + force-graph, 1300+ lines) so it
   // is split into a separate chunk and only downloaded when the user actually
-  // opens the graph page in dev mode (#347).
-  let KnowledgeGraphForce: typeof import('$lib/components/KnowledgeGraphForce.svelte').default | null = null;
+  // opens the graph page (#347).
+  let KnowledgeGraphForce = $state<typeof import('$lib/components/KnowledgeGraphForce.svelte').default | null>(null);
   $effect(() => {
-    if ($devMode && !KnowledgeGraphForce) {
+    if (!KnowledgeGraphForce) {
       import('$lib/components/KnowledgeGraphForce.svelte').then(m => KnowledgeGraphForce = m.default);
     }
   });
 
-  let containerEl: HTMLDivElement;
-  let w = 800, h = 600;
+  let containerEl = $state<HTMLDivElement>();
+  let w = $state(800), h = $state(600);
 
   // Timeline filter (#373) — filter notes by date range
   let dateFilterEnabled = $state(false);
@@ -88,8 +80,8 @@
   <title>{$t('graph.pageTitle')}</title>
 </svelte:head>
 
-{#if $devMode}
 <div class="graph-page">
+  <BetaBanner />
   <div class="graph-header">
     <div>
       <h3>{$t('graph.title')}</h3>
@@ -146,7 +138,7 @@
         {/if}
       </div>
     {:else if KnowledgeGraphForce}
-      <svelte:component this={KnowledgeGraphForce} width={w} height={h} focusId={$selectedTag} />
+      <KnowledgeGraphForce width={w} height={h} focusId={$selectedTag} />
     {:else}
       <div class="loading-state caption">{$t('graph.loading')}</div>
     {/if}
@@ -163,15 +155,6 @@
 
   <TopicClusters />
 </div>
-{:else}
-<div class="construction-page">
-  <div class="construction-box">
-    <DynamicIcon name="Network" size={48} />
-    <h3>{$t('graph.construction')}</h3>
-    <p>{$t('graph.constructionHint')}</p>
-  </div>
-</div>
-{/if}
 
 <style>
   .graph-page {
@@ -326,37 +309,6 @@
     opacity: 0.7;
   }
 
-  .construction-page {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-    width: 100%;
-  }
-
-  .construction-box {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 12px;
-    color: var(--text-muted);
-    text-align: center;
-    padding: 40px;
-  }
-
-  .construction-box h3 {
-    font-size: 18px;
-    font-weight: 600;
-    color: var(--text-secondary);
-    margin: 0;
-  }
-
-  .construction-box p {
-    font-size: 13px;
-    margin: 0;
-    max-width: 320px;
-  }
-
   /* ── Responsive ── */
   @media (max-width: 768px) {
     .graph-header {
@@ -386,14 +338,6 @@
       width: 100%;
       margin-left: 0;
       margin-top: var(--s1);
-    }
-
-    .construction-box {
-      padding: var(--s4);
-    }
-
-    .construction-box p {
-      max-width: 100%;
     }
   }
 

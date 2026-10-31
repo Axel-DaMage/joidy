@@ -68,12 +68,16 @@
   });
 </script>
 
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   class="ctx-menu"
   bind:this={menuEl}
   {style}
+  role="menu"
+  tabindex="-1"
   onclick={(e) => e.stopPropagation()}
   oncontextmenu={(e) => e.stopPropagation()}
+  onkeydown={(e) => e.stopPropagation()}
 >
   {#if node.type === 'file'}
     <button class="ctx-item" onclick={handleItem('rename')}>

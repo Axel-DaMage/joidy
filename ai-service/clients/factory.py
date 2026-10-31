@@ -39,14 +39,12 @@ class ClientFactory:
         return "gemini", model
 
     @classmethod
-    def _create_llm_client(
-        cls, provider: str, model: str, config: dict
-    ) -> BaseLLMClient:
+    def _create_llm_client(cls, provider: str, model: str, config: dict) -> BaseLLMClient:
         """Instantiate a raw LLM client for the given provider."""
         if provider == "gemini":
             return GeminiClient(api_key=config["api_key"], model=model)
         elif provider == "openai":
-            return OpenAIClient(api_key=config["api_key"], model=model)
+            return OpenAIClient(api_key=config["api_key"], model=model, base_url=config.get("base_url", ""))
         elif provider == "anthropic":
             return AnthropicClient(api_key=config["api_key"], model=model)
         elif provider == "ollama":
@@ -59,28 +57,23 @@ class ClientFactory:
             raise ValueError(f"Unknown provider: {provider}")
 
     @classmethod
-    def _create_embedding_client(
-        cls, provider: str, model: str, config: dict
-    ) -> EmbeddingClient:
+    def _create_embedding_client(cls, provider: str, model: str, config: dict) -> EmbeddingClient:
         """Instantiate a raw embedding client for the given provider."""
         if provider == "gemini":
             return GeminiClient(api_key=config["api_key"], model=model)
         elif provider == "openai":
             return OpenAIClient(
-                api_key=config["api_key"], model=model, is_embedding=True
+                api_key=config["api_key"],
+                model=model,
+                is_embedding=True,
+                base_url=config.get("base_url", ""),
             )
         elif provider == "cohere":
-            return CohereClient(
-                api_key=config["api_key"], model=model, is_embedding=True
-            )
+            return CohereClient(api_key=config["api_key"], model=model, is_embedding=True)
         elif provider == "ollama":
-            return OllamaClient(
-                base_url=config["base_url"], model=model, is_embedding=True
-            )
+            return OllamaClient(base_url=config["base_url"], model=model, is_embedding=True)
         elif provider in ("anthropic", "openrouter"):
-            logger.warning(
-                f"Provider {provider} doesn't have dedicated embedding, using Ollama fallback"
-            )
+            logger.warning(f"Provider {provider} doesn't have dedicated embedding, using Ollama fallback")
             if "ollama" in settings.available_providers:
                 return OllamaClient(
                     base_url=settings.provider_config["ollama"]["base_url"],
@@ -104,14 +97,10 @@ class ClientFactory:
         provider = provider.lower()
 
         available = settings.available_providers
-        logger.info(
-            f"Creating LLM client: provider={provider}, model={model}, available={available}"
-        )
+        logger.info(f"Creating LLM client: provider={provider}, model={model}, available={available}")
 
         if provider not in available:
-            raise ValueError(
-                f"Provider '{provider}' not configured. Available: {available}"
-            )
+            raise ValueError(f"Provider '{provider}' not configured. Available: {available}")
 
         config = settings.provider_config[provider]
         primary = cls._create_llm_client(provider, model, config)
@@ -119,13 +108,9 @@ class ClientFactory:
         # Wrap with Ollama fallback if primary is not Ollama and Ollama is available
         if provider != "ollama" and "ollama" in available:
             ollama_config = settings.provider_config["ollama"]
-            secondary = OllamaClient(
-                base_url=ollama_config["base_url"], model=_OLLAMA_LLM_FALLBACK_MODEL
-            )
+            secondary = OllamaClient(base_url=ollama_config["base_url"], model=_OLLAMA_LLM_FALLBACK_MODEL)
             cls._llm_client = FallbackLLMClient(primary=primary, secondary=secondary)
-            logger.info(
-                f"LLM client wrapped with Ollama fallback (primary={provider}, secondary=ollama)"
-            )
+            logger.info(f"LLM client wrapped with Ollama fallback (primary={provider}, secondary=ollama)")
         else:
             cls._llm_client = primary
 
@@ -147,42 +132,55 @@ class ClientFactory:
         available = settings.available_providers
 
         if provider not in available:
-            raise ValueError(
-                f"Provider '{provider}' not configured. Available: {available}"
-            )
+            raise ValueError(f"Provider '{provider}' not configured. Available: {available}")
 
         config = settings.provider_config[provider]
         primary = cls._create_embedding_client(provider, model, config)
 
         # Wrap with Ollama fallback if primary is not Ollama and Ollama is available.
         # Skip if primary is already Ollama (e.g. anthropic/openrouter embedding fallback).
-        if (
-            provider != "ollama"
-            and "ollama" in available
-            and not isinstance(primary, OllamaClient)
-        ):
+        if provider != "ollama" and "ollama" in available and not isinstance(primary, OllamaClient):
             ollama_config = settings.provider_config["ollama"]
             secondary = OllamaClient(
                 base_url=ollama_config["base_url"],
                 model=_OLLAMA_EMB_FALLBACK_MODEL,
                 is_embedding=True,
             )
-            cls._embedding_client = FallbackEmbeddingClient(
-                primary=primary, secondary=secondary
-            )
-            logger.info(
-                f"Embedding client wrapped with Ollama fallback (primary={provider}, secondary=ollama)"
-            )
+            cls._embedding_client = FallbackEmbeddingClient(primary=primary, secondary=secondary)
+            logger.info(f"Embedding client wrapped with Ollama fallback (primary={provider}, secondary=ollama)")
         else:
             cls._embedding_client = primary
 
         return cls._embedding_client
 
     @classmethod
+    async def aclose(cls) -> None:
+        """Close cached clients and release their connections (#998).
+
+        Provider clients hold reusable sessions (aiohttp.ClientSession for
+        Ollama/OpenRouter, httpx clients inside the OpenAI/Anthropic SDKs).
+        Called from the FastAPI lifespan on shutdown so nothing is left
+        unclosed; the cache is reset so a later get_*_client() creates
+        fresh instances.
+        """
+        for client in (cls._llm_client, cls._embedding_client):
+            if client is None:
+                continue
+            try:
+                await client.close()
+            except Exception:
+                logger.exception(f"Error closing AI client '{client.provider_name}'")
+        cls.reset()
+
+    @classmethod
     def reset(cls):
         """Reset cached clients (useful for testing)."""
         cls._llm_client = None
         cls._embedding_client = None
+
+
+async def aclose_clients() -> None:
+    await ClientFactory.aclose()
 
 
 def get_llm_client() -> BaseLLMClient:

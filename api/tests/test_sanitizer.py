@@ -24,7 +24,7 @@ from services.sanitizer import (
 
 class HtmlSanitizerTest(unittest.TestCase):
     def test_strips_script_tags(self):
-        out = sanitize_html('<p>hi</p><script>alert(1)</script>')
+        out = sanitize_html("<p>hi</p><script>alert(1)</script>")
         self.assertNotIn("<script>", out.lower())
         self.assertIn("hi", out)
 
@@ -51,7 +51,7 @@ class TitleSanitizerTest(unittest.TestCase):
             sanitize_title("x" * (MAX_TITLE_LENGTH + 1))
 
     def test_strips_xss_from_title(self):
-        out = sanitize_title('<script>alert(1)</script>Title')
+        out = sanitize_title("<script>alert(1)</script>Title")
         self.assertNotIn("<script>", out.lower())
 
 

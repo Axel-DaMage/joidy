@@ -34,10 +34,42 @@ updates:
       tiptap:
         patterns:
           - "@tiptap/*"
+      # @sveltejs/kit and @sveltejs/adapter-node have strict cross peer deps
+      # (adapter-node 6 requires kit 3). Bumping them individually fails
+      # ERESOLVE in CI, so they must update together.
+      svelte:
+        patterns:
+          - "@sveltejs/kit"
+          - "@sveltejs/adapter-node"
+          - "@sveltejs/vite-plugin-svelte"
 
-  # Docker — compose files
-  - package-ecosystem: docker
+  # Docker Compose — root docker-compose*.yml files (uses the dedicated
+  # docker-compose ecosystem; `docker` only scans Dockerfiles/K8s YAML and
+  # fails with dependency_file_not_found since none live at the root)
+  - package-ecosystem: docker-compose
     directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  # Docker — per-service Dockerfiles
+  - package-ecosystem: docker
+    directory: /api
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+  - package-ecosystem: docker
+    directory: /ai-service
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+  - package-ecosystem: docker
+    directory: /frontend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+  - package-ecosystem: docker
+    directory: /worker
     schedule:
       interval: weekly
     open-pull-requests-limit: 5

@@ -1,5 +1,6 @@
 from datetime import datetime
 from enum import Enum as PyEnum
+from typing import TYPE_CHECKING
 
 from database import Base
 from sqlalchemy import (
@@ -15,6 +16,9 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+if TYPE_CHECKING:
+    from models.note import Note, Tag
 
 
 class GoalTemporality(str, PyEnum):
@@ -72,6 +76,10 @@ class Goal(Base):
 
     pending_removal: Mapped[bool] = mapped_column(Boolean, default=False)
 
+    # Higher number = higher priority (0 = no explicit priority). Sorted DESC
+    # in every goal listing, after is_completed and before created_at (#1097).
+    priority: Mapped[int] = mapped_column(Integer, default=0)
+
     is_completed: Mapped[bool] = mapped_column(Boolean, default=False)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
@@ -91,4 +99,3 @@ class Goal(Base):
         Index("ix_goals_tag_id", "tag_id"),
         Index("ix_goals_state", "state"),
     )
-

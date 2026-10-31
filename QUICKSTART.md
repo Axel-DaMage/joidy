@@ -34,9 +34,17 @@ Variables opcionales: `GITHUB_TOKEN`, `TELEGRAM_BOT_TOKEN`, etc.
 
 ## 2. Levantar los servicios
 
+### Linux / macOS:
 ```bash
 make setup   # crea .env si no existe, directorios de datos y permisos
 make dev     # inicia frontend, api, ai-service y worker con hot reload
+```
+
+### Windows (PowerShell):
+```powershell
+powershell -ExecutionPolicy Bypass -File start.ps1
+# o bien, usando el CLI instalado:
+joidy up
 ```
 
 Tras unos segundos la app estará en:
@@ -49,7 +57,9 @@ Tras unos segundos la app estará en:
 Para parar:
 
 ```bash
-make stop
+make stop      # Linux/Mac
+# o en Windows:
+joidy down
 ```
 
 ## 3. Flujo de trabajo diario
@@ -108,9 +118,11 @@ graph LR
 Si prefieres correr sin Docker, necesitas:
 
 - Node 20+ en `frontend/`: `npm install && npm run dev`
-- Python 3.12+ en `api/`: `pip install -r requirements.txt && uvicorn main:app --reload --port 8000`
-- Python 3.12+ en `ai-service/`: `pip install -r requirements.txt && uvicorn main:app --reload --port 8002`
-- Worker: `python main.py` dentro de `worker/`
+- Python 3.12+ en `api/`: `pip install -r requirements-dev.txt && uvicorn main:app --reload --port 8000`
+- Python 3.12+ en `ai-service/`: `pip install -r requirements-dev.txt && uvicorn main:app --reload --port 8002`
+- Worker: `pip install -r requirements-dev.txt` y luego `python main.py` dentro de `worker/`
+
+`requirements.txt` contiene solo dependencias de runtime (lo que instala la imagen de producción); `requirements-dev.txt` añade pytest, ruff, mypy y demás herramientas de test/lint necesarias para desarrollo.
 
 Recuerda que la base de datos PostgreSQL (con la extensión `pgvector`) se comparte entre servicios vía `DATABASE_URL`, así que necesitas una instancia accesible (local o remota).
 

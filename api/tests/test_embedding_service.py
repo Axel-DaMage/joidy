@@ -3,7 +3,7 @@
 import sys
 import types
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 from sqlalchemy import create_engine
@@ -43,9 +43,10 @@ class TestGetRetryableNotes(EmbeddingServiceTestBase):
             db.flush()
 
             failure = EmbeddingFailure(
-                note_id=note.id, attempts=2,
+                note_id=note.id,
+                attempts=2,
                 last_error="timeout",
-                next_retry_at=datetime.now(timezone.utc) - timedelta(seconds=1),
+                next_retry_at=datetime.now(UTC) - timedelta(seconds=1),
             )
             db.add(failure)
             db.commit()
@@ -61,7 +62,8 @@ class TestGetRetryableNotes(EmbeddingServiceTestBase):
             db.flush()
 
             failure = EmbeddingFailure(
-                note_id=note.id, attempts=10,  # >= max_attempts (8)
+                note_id=note.id,
+                attempts=10,  # >= max_attempts (8)
                 last_error="permanent failure",
                 next_retry_at=None,
             )
@@ -78,9 +80,10 @@ class TestGetRetryableNotes(EmbeddingServiceTestBase):
             db.flush()
 
             failure = EmbeddingFailure(
-                note_id=note.id, attempts=1,
+                note_id=note.id,
+                attempts=1,
                 last_error="temp",
-                next_retry_at=datetime.now(timezone.utc) + timedelta(hours=1),
+                next_retry_at=datetime.now(UTC) + timedelta(hours=1),
             )
             db.add(failure)
             db.commit()
@@ -92,9 +95,10 @@ class TestGetRetryableNotes(EmbeddingServiceTestBase):
         with self.Session() as db:
             # Failure without a matching note
             failure = EmbeddingFailure(
-                note_id=99999, attempts=1,
+                note_id=99999,
+                attempts=1,
                 last_error="orphan",
-                next_retry_at=datetime.now(timezone.utc) - timedelta(seconds=1),
+                next_retry_at=datetime.now(UTC) - timedelta(seconds=1),
             )
             db.add(failure)
             db.commit()
@@ -114,7 +118,8 @@ class TestDeadLetterQueue(EmbeddingServiceTestBase):
             db.flush()
 
             failure = EmbeddingFailure(
-                note_id=note.id, attempts=10,
+                note_id=note.id,
+                attempts=10,
                 last_error="Permanent: API key invalid",
                 next_retry_at=None,
             )
@@ -133,7 +138,8 @@ class TestDeadLetterQueue(EmbeddingServiceTestBase):
             db.flush()
 
             failure = EmbeddingFailure(
-                note_id=note.id, attempts=10,
+                note_id=note.id,
+                attempts=10,
                 last_error="error",
                 next_retry_at=None,
             )

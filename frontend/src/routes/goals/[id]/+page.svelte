@@ -1,10 +1,12 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { page } from '$app/stores';
+  import { page } from '$app/state';
   import { goto } from '$app/navigation';
   import { api, type Goal, type Tag as TagType, type Note } from '$lib/api';
   import { logger } from '$lib/utils/logger';
+  import { suggestEmoji, suggestIcon, suggestIconKey } from '$lib/utils/iconSuggest';
   import LazyIconPicker from '$lib/components/LazyIconPicker.svelte';
+  import NoteLinkPicker from '$lib/components/NoteLinkPicker.svelte';
   import StreakIcon from '$lib/components/StreakIcon.svelte';
   import { GOALS_SPECIFIC_COLOR_PRESETS, DEFAULT_GOAL_COLOR } from '$lib/utils/goalColors';
   import { t } from 'svelte-i18n';
@@ -53,14 +55,26 @@
   let editFailConfig: Goal['fail_config'] = 'STATIC';
   let editColor = DEFAULT_GOAL_COLOR;
   let editMaxAssignmentDays: number | null = null;
+  let editPriority = 0;
   let editNoteId: number | null = null;
   let editTagId: number | null = null;
   let editUseFailIcon = false;
   let editFailEmoji = '🔴';
   let editFailIcon = 'Activity';
+  // #1092 — la elección manual del usuario no se sobreescribe
+  let editFailEmojiManual = false;
+  let editFailIconManual = false;
   let savingSettings = false;
 
-  $: goalId = parseInt($page.params.id || "0");
+  $: goalId = parseInt(page.params.id || "0");
+
+  // #1092 — sugerencia automática al editar el título; el valor ya guardado
+  // cuenta como manual, así que solo se usa si se pulsa "usar sugerencia"
+  $: editSuggestedEmoji = suggestEmoji(editTitle);
+  $: editSuggestedIcon = suggestIcon(editTitle);
+  $: editHasSuggestion = suggestIconKey(editTitle) !== null;
+  $: if (!editFailEmojiManual) editFailEmoji = suggestEmoji(editTitle);
+  $: if (!editFailIconManual) editFailIcon = suggestIcon(editTitle);
 
   onMount(async () => {
     ensureGoalEditor();
@@ -103,6 +117,7 @@
     editFailConfig = goal.fail_config || 'STATIC';
     editColor = goal.color || DEFAULT_GOAL_COLOR;
     editMaxAssignmentDays = goal.max_assignment_days ?? null;
+    editPriority = goal.priority ?? 0;
     editNoteId = goal.note_id ?? null;
     editTagId = goal.tag_id ?? null;
 
@@ -116,9 +131,21 @@
       editFailIcon = failVal;
       editFailEmoji = '🔴';
     }
+    editFailEmojiManual = true;
+    editFailIconManual = true;
 
     settingsSection = 'basics';
     showSettings = true;
+  }
+
+  function useFailSuggestion() {
+    if (editUseFailIcon) {
+      editFailIcon = editSuggestedIcon;
+      editFailIconManual = false;
+    } else {
+      editFailEmoji = editSuggestedEmoji;
+      editFailEmojiManual = false;
+    }
   }
 
   async function saveSettings() {
@@ -136,6 +163,7 @@
         note_id: editNoteId,
         tag_id: editTagId,
         max_assignment_days: editMaxAssignmentDays,
+        priority: editPriority,
       });
       goal = result;
       showSettings = false;
@@ -172,6 +200,22 @@
 
   function handleCancel() {
     goto('/goals');
+  }
+
+  // #1141 — crear una nota nueva desde el picker y enlazarla al objetivo.
+  async function createNoteAndLink(title: string) {
+    try {
+      const n = await api.notes.create({
+        title,
+        content: `# ${title}\n`,
+        tags: [],
+      });
+      notes = [n, ...notes];
+      if (goal) goal.note_id = n.id;
+      editNoteId = n.id;
+    } catch (e) {
+      logger.error('Error al crear la nota vinculada:', e);
+    }
   }
 
   async function handleComplete() {
@@ -226,7 +270,11 @@
 </div>
 
 {#if showSettings}
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <div class="goal-settings-backdrop" onclick={() => showSettings = false} role="dialog" tabindex="-1">
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div class="goal-settings-panel slide-down" onclick={(e) => e.stopPropagation()}>
       <div class="goal-settings-header">
         <div class="goal-settings-title-row">
@@ -246,11 +294,11 @@
           <div class="ng-section-fade settings-basics">
             <div class="ng-section-heading">{$t('goalDetail.basics')}</div>
             <div class="form-field">
-              <label class="label">{$t('goalDetail.goalTitle')}</label>
-              <input class="input w-full" bind:value={editTitle} maxlength="38" />
+              <label for="edit-goal-title" class="label">{$t('goalDetail.goalTitle')}</label>
+              <input id="edit-goal-title" class="input w-full" bind:value={editTitle} maxlength="38" />
             </div>
             <div class="form-field basics-frequency">
-              <label class="label">{$t('goalDetail.frequency')}</label>
+              <span class="label">{$t('goalDetail.frequency')}</span>
               <div class="ng-freq-grid">
                 {#each TEMPORALITIES as temp}
                   <button class="ng-freq-btn" class:active={editTemporality === temp} onclick={() => editTemporality = temp}>
@@ -265,30 +313,35 @@
             <div class="ng-section-heading">{$t('goalDetail.appearance')}</div>
             <div class="form-field appearance-icon">
               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                <label class="label" style="margin:0;">{$t('goalDetail.failIconEmoji')}</label>
-                <div class="icon-toggle-row">
-                  <button class="icon-type-btn" class:selected={!editUseFailIcon} onclick={() => editUseFailIcon = false}>{$t('goalDetail.emoji')}</button>
-                  <button class="icon-type-btn" class:selected={editUseFailIcon} onclick={() => editUseFailIcon = true}>{$t('goalDetail.icon')}</button>
+                <span class="label" style="margin:0;">{$t('goalDetail.failIconEmoji')}</span>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  {#if editHasSuggestion && (editUseFailIcon ? editFailIcon !== editSuggestedIcon : editFailEmoji !== editSuggestedEmoji)}
+                    <button type="button" class="icon-suggest-btn" onclick={useFailSuggestion}>usar sugerencia</button>
+                  {/if}
+                  <div class="icon-toggle-row">
+                    <button class="icon-type-btn" class:selected={!editUseFailIcon} onclick={() => editUseFailIcon = false}>{$t('goalDetail.emoji')}</button>
+                    <button class="icon-type-btn" class:selected={editUseFailIcon} onclick={() => editUseFailIcon = true}>{$t('goalDetail.icon')}</button>
+                  </div>
                 </div>
               </div>
               {#if !editUseFailIcon}
                 <div class="emoji-grid ng-large-grid">
                   {#each EMOJIS as e}
-                    <button class="emoji-btn" class:selected={editFailEmoji === e} onclick={() => editFailEmoji = e}>{e}</button>
+                    <button class="emoji-btn" class:selected={editFailEmoji === e} onclick={() => { editFailEmoji = e; editFailEmojiManual = true; }}>{e}</button>
                   {/each}
                 </div>
               {:else}
                 <div class="field ng-large-grid" style="display: flex; flex-direction: column; height: 280px; padding: 8px; border: 1px solid var(--border); border-radius: var(--r); background: var(--surface-hover); overflow: hidden;">
-                  <LazyIconPicker selected={editFailIcon} color={editColor} onSelect={(ic) => editFailIcon = ic} />
+                  <LazyIconPicker selected={editFailIcon} color={editColor} onSelect={(ic) => { editFailIcon = ic; editFailIconManual = true; }} />
                 </div>
               {/if}
             </div>
 
             <div class="form-field appearance-color">
-              <label class="label">{$t('goalDetail.identityColor')}</label>
+              <span class="label">{$t('goalDetail.identityColor')}</span>
               <div class="color-presets ng-expanded-presets">
                 {#each COLOR_PRESETS as c}
-                  <button class="color-dot" class:selected={editColor === c.hex} style="background: {c.hex}; color: {c.hex};" onclick={() => editColor = c.hex}></button>
+                  <button class="color-dot" class:selected={editColor === c.hex} style="background: {c.hex}; color: {c.hex};" onclick={() => editColor = c.hex} title={c.name} aria-label={c.name}></button>
                 {/each}
                 <div class="color-custom" style="background: {editColor};">
                   <input type="color" bind:value={editColor} class="color-picker" />
@@ -301,25 +354,33 @@
             <div class="ng-section-heading">{$t('goalDetail.advanced')}</div>
             <div class="form-row adv-measure">
               <div class="form-field" style="flex:1;">
-                <label class="label">{$t('goalDetail.measurementType')}</label>
-                <select class="input w-full" bind:value={editMeasurement}>
+                <label for="edit-goal-measurement" class="label">{$t('goalDetail.measurementType')}</label>
+                <select id="edit-goal-measurement" class="input w-full" bind:value={editMeasurement}>
                   <option value="COUNT">{$t('goalDetail.countNumeric')}</option>
                   <option value="BOOLEAN">{$t('goalDetail.booleanDone')}</option>
                   <option value="PERCENT">{$t('goalDetail.percent')}</option>
                 </select>
               </div>
               <div class="form-field" style="width: 140px;">
-                <label class="label">{$t('goalDetail.target')}</label>
-                <input class="input w-full" type="number" bind:value={editTargetValue} min="1" disabled={editMeasurement === 'BOOLEAN'} />
+                <label for="edit-goal-target" class="label">{$t('goalDetail.target')}</label>
+                <input id="edit-goal-target" class="input w-full" type="number" bind:value={editTargetValue} min="1" disabled={editMeasurement === 'BOOLEAN'} />
               </div>
               <div class="form-field" style="width: 140px;">
-                <label class="label">{$t('goalDetail.limitDays')}</label>
-                <input class="input w-full" type="number" bind:value={editMaxAssignmentDays} min="1" placeholder={$t('goalDetail.unlimited')} />
+                <label for="edit-goal-max-days" class="label">{$t('goalDetail.limitDays')}</label>
+                <input id="edit-goal-max-days" class="input w-full" type="number" bind:value={editMaxAssignmentDays} min="1" placeholder={$t('goalDetail.unlimited')} />
+              </div>
+              <div class="form-field" style="width: 140px;">
+                <label for="edit-goal-priority" class="label">{$t('goalDetail.priority')}</label>
+                <select id="edit-goal-priority" class="input w-full" bind:value={editPriority}>
+                  {#each [0, 1, 2, 3, 4, 5] as p}
+                    <option value={p}>{p === 0 ? $t('goalDetail.priorityNone') : $t('goalDetail.priorityLevel', { values: { level: p } })}</option>
+                  {/each}
+                </select>
               </div>
             </div>
 
             <div class="form-field adv-fail">
-              <label class="label">{$t('goalDetail.failPolicy')}</label>
+              <span class="label">{$t('goalDetail.failPolicy')}</span>
               <div class="ng-fail-options">
                 <button class="ng-fail-btn" class:active={editFailConfig === 'STATIC'} onclick={() => editFailConfig = 'STATIC'}>
                   <strong>{$t('goalDetail.static')}</strong>
@@ -338,17 +399,18 @@
 
             <div class="form-row adv-links">
               <div class="form-field" style="flex:1;">
-                <label class="label">{$t('goalDetail.linkToProject')}</label>
-                <select class="input w-full" bind:value={editNoteId}>
-                  <option value={null}>{$t('goalDetail.noLinkedNote')}</option>
-                  {#each notes as n}
-                    <option value={n.id}>{n.title}</option>
-                  {/each}
-                </select>
+                <label for="edit-goal-note" class="label">{$t('goalDetail.linkToProject')}</label>
+                <NoteLinkPicker
+                  {notes}
+                  bind:value={editNoteId}
+                  id="edit-goal-note"
+                  placeholder={$t('goalDetail.searchNote')}
+                  onCreateNote={createNoteAndLink}
+                />
               </div>
               <div class="form-field" style="flex:1;">
-                <label class="label">{$t('goalDetail.tagSync')}</label>
-                <select class="input w-full" bind:value={editTagId}>
+                <label for="edit-goal-tag" class="label">{$t('goalDetail.tagSync')}</label>
+                <select id="edit-goal-tag" class="input w-full" bind:value={editTagId}>
                   <option value={null}>{$t('goalDetail.manualUpdate')}</option>
                   {#each notes as n}
                     {@const tagId = tags.find(t => t.name === n.title)?.id}
@@ -663,6 +725,12 @@
     transition: all 0.15s;
   }
   .icon-type-btn.selected { border-color: var(--text-primary); color: var(--text-primary); }
+  .icon-suggest-btn {
+    padding: 4px 10px; font-size: 10px; font-family: var(--font-mono);
+    background: transparent; border: 1px solid var(--border); border-radius: 4px;
+    color: var(--text-muted); cursor: pointer; transition: all 0.15s;
+  }
+  .icon-suggest-btn:hover { color: var(--text-primary); border-color: var(--text-primary); }
 
   .emoji-grid {
     display: grid;

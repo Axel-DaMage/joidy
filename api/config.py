@@ -1,17 +1,24 @@
+import os
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    # JOIDY_ENV_FILE mirrors services.env_file.get_env_file() (#991): the test
+    # suite points it at an isolated empty file so a developer's populated .env
+    # cannot leak into Settings at import time.
+    model_config = SettingsConfigDict(env_file=os.getenv("JOIDY_ENV_FILE") or ".env", extra="ignore")
 
-    database_url: str = "postgresql://joidy:joidy@postgres:5432/joidy"
+    database_url: str = "postgresql+psycopg2://joidy:joidy@postgres:5432/joidy"
     ai_service_url: str = "http://ai-service:8002"
     ai_service_enabled: bool = True  # Set to false in production to skip AI calls
     worker_url: str = "http://worker:8001"
     secret_key: str = ""
     internal_secret: str = ""  # Shared secret for API → ai-service auth
     app_env: str = "development"
-    cors_allowed_origins: str = ""  # Comma-separated origins for production (e.g. "https://joidy.app,https://www.joidy.app")
+    cors_allowed_origins: str = (
+        ""  # Comma-separated origins for production (e.g. "https://joidy.app,https://www.joidy.app")
+    )
 
     # GitHub Integration (OAuth - Web Flow + Device Flow)
     github_client_id: str = ""
@@ -29,7 +36,7 @@ class Settings(BaseSettings):
     # File uploads
     upload_dir: str = "data/uploads"
     upload_max_image_bytes: int = 10 * 1024 * 1024  # 10 MB
-    upload_max_file_bytes: int = 50 * 1024 * 1024   # 50 MB
+    upload_max_file_bytes: int = 50 * 1024 * 1024  # 50 MB
 
     # Logging
     log_dir: str = "data/logs"
@@ -41,6 +48,10 @@ class Settings(BaseSettings):
 
     # Authentication
     auth_password: str = ""  # Password for single-user auth (optional)
+    # bcrypt cost factor for password hashing. None = passlib default (12).
+    # Tests set BCRYPT_ROUNDS=4 via conftest — hash strength is irrelevant
+    # there and bcrypt was the slowest single test in the suite (#996).
+    bcrypt_rounds: int | None = None
 
     # Obsidian
     obsidian_webhook_secret: str | None = None  # Optional secret for /webhook/obsidian

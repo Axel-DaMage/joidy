@@ -5,16 +5,15 @@ Provides endpoints to list and resolve sync conflicts between
 Joidy and external sources (e.g. Obsidian).
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
+from database import get_db
 from fastapi import APIRouter, Depends, HTTPException
+from models.note import Note
+from models.sync_state import SyncState
 from pydantic import BaseModel, field_validator
 from services.sync_service import list_conflicts, resolve_conflict
 from sqlalchemy.orm import Session
-
-from database import get_db
-from models.note import Note
-from models.sync_state import SyncState
 
 router = APIRouter(prefix="/sync", tags=["sync"])
 
@@ -99,5 +98,5 @@ def get_sync_status(db: Session = Depends(get_db)):
         "last_sync_time": last_sync_time,
         "pending_conflicts": pending_conflicts,
         "total_synced": total_synced,
-        "server_time": datetime.now(timezone.utc).isoformat() + "Z",
+        "server_time": datetime.now(UTC).isoformat() + "Z",
     }

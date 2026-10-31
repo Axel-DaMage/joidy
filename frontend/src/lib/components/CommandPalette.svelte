@@ -9,6 +9,11 @@
   import { isOpen, close } from '$lib/stores/commandPalette';
   import { get } from 'svelte/store';
   import { t } from 'svelte-i18n';
+  import { createTimerRegistry } from '$lib/utils/timer';
+
+  // Component-scoped timers: cleared on destroy so callbacks can't fire after
+  // unmount (#1003).
+  const timers = createTimerRegistry();
 
   interface Command {
     type: string;
@@ -45,6 +50,7 @@
       icon: 'Target',
       action: () => {
         goto('/goals');
+        // intentional: must fire after navigation even if the palette unmounts
         setTimeout(() => window.dispatchEvent(new CustomEvent('joidy:new-goal')), 100);
       },
     },
@@ -54,6 +60,7 @@
       icon: 'Flame',
       action: () => {
         goto('/streaks');
+        // intentional: must fire after navigation even if the palette unmounts
         setTimeout(() => window.dispatchEvent(new CustomEvent('joidy:new-streak')), 100);
       },
     },
@@ -88,6 +95,7 @@
       hint: 'Exportar',
       action: () => {
         goto('/notes?export=1');
+        // intentional: must fire after navigation even if the palette unmounts
         setTimeout(() => window.dispatchEvent(new CustomEvent('joidy:export-notes')), 150);
       },
     },
@@ -194,12 +202,12 @@
     if ($isOpen) {
       query = '';
       selectedIndex = 0;
-      setTimeout(() => searchInput?.focus(), 20);
+      timers.timeout(() => searchInput?.focus(), 20);
     }
   });
 
   function scrollToSelected() {
-    setTimeout(() => {
+    timers.timeout(() => {
       const el = listEl?.querySelector<HTMLElement>('.cp-item.is-selected');
       if (el) el.scrollIntoView({ block: 'nearest' });
     }, 0);
@@ -245,6 +253,7 @@
 
   onDestroy(() => {
     window.removeEventListener('keydown', handleKeydown);
+    timers.clearAll();
   });
 </script>
 

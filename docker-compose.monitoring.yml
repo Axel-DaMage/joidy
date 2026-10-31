@@ -1,17 +1,24 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   prometheus:
-    image: prom/prometheus:v3.0.0
+    image: prom/prometheus:v3.15.1
     container_name: joidy-prometheus
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
     ports:
       - "9090:9090"
+    logging: *default-logging
     networks:
       - joidy
 
   grafana:
-    image: grafana/grafana:11.0.0
+    image: grafana/grafana:13.2.4
     container_name: joidy-grafana
     ports:
       - "3001:3000"
@@ -24,6 +31,7 @@ services:
       - grafana-data:/var/lib/grafana
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    logging: *default-logging
     networks:
       - joidy
 

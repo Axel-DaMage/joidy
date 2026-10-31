@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Pin, PinOff, Target, Clock, Tag, FileText, Settings, CheckCircle2, XCircle, Trash2, X, Archive, ArchiveRestore } from 'lucide-svelte';
+  import { Pin, PinOff, Target, Clock, Tag, FileText, Settings, CheckCircle2, XCircle, Trash2, X, Archive, ArchiveRestore, ChevronsUp } from 'lucide-svelte';
   import StreakIcon from './StreakIcon.svelte';
   import ProgressBar from './ProgressBar.svelte';
   import { getGoalContext } from '$lib/stores/goalContext';
@@ -120,6 +120,12 @@
         <div class="meta-item config">
           <Settings size={12} />
           <span>{formatFailConfig(goal.fail_config)}</span>
+        </div>
+      {/if}
+      {#if goal.priority > 0}
+        <div class="meta-item priority" title="Prioridad {goal.priority}">
+          <ChevronsUp size={12} />
+          <span>{goal.priority}</span>
         </div>
       {/if}
     </div>
@@ -469,6 +475,12 @@
   .meta-item.config {
     background: color-mix(in srgb, var(--link) 10%, transparent);
     color: var(--link);
+  }
+
+  .meta-item.priority {
+    background: color-mix(in srgb, var(--goal-color) 10%, transparent);
+    color: var(--goal-color);
+    font-family: var(--font-mono);
   }
 
   .card-progress {

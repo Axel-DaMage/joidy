@@ -53,7 +53,6 @@ def init_db():
 # Import all models so they are registered with Base.metadata.
 from models import *  # noqa: E402,F401
 
-
 # Stable advisory-lock key used to serialize Alembic migrations across
 # uvicorn workers on cold start (#816). With ``--workers N`` every worker
 # runs the FastAPI lifespan concurrently, and each one used to call

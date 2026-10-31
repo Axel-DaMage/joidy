@@ -11,7 +11,7 @@ existing note_service functions.
 
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from models.note import Note
@@ -19,10 +19,9 @@ from models.sync_state import SyncState
 from services.note_service import (
     create_note,
     delete_note,
-    note_to_response,
     update_note,
 )
-from services.sync_service import detect_conflict
+from services.sync_service import detect_conflict, to_utc_naive
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -36,7 +35,7 @@ def _parse_frontmatter(content: str) -> tuple[dict, str]:
         end = content.find("---", 3)
         if end != -1:
             fm_text = content[3:end].strip()
-            body = content[end + 3:].strip()
+            body = content[end + 3 :].strip()
             for line in fm_text.splitlines():
                 if ":" in line:
                     key, _, value = line.partition(":")
@@ -52,7 +51,7 @@ def _extract_tags(content: str, frontmatter: dict) -> list[str]:
         tags.extend([t.strip() for t in raw.split(",") if t.strip()])
     inline = re.findall(r"#([a-zA-Z][a-zA-Z0-9_-]+)", content)
     tags.extend(inline)
-    return list(set(t.lower() for t in tags if t))
+    return list({t.lower() for t in tags if t})
 
 
 def _title_from_path(path: str) -> str:
@@ -80,7 +79,7 @@ def _update_sync_state(
         db.add(sync)
 
     sync.remote_mtime = remote_mtime
-    sync.last_synced_at = datetime.now(timezone.utc)
+    sync.last_synced_at = to_utc_naive(datetime.now(UTC))
     sync.conflict = detect_conflict(sync.local_mtime, remote_mtime)
     return sync
 
@@ -110,9 +109,7 @@ def process_webhook_event(
     if event not in ("create", "update", "delete"):
         raise ValueError(f"Unsupported event type: {event}")
 
-    remote_mtime = (
-        datetime.fromtimestamp(mtime, tz=timezone.utc) if mtime else None
-    )
+    remote_mtime = to_utc_naive(datetime.fromtimestamp(mtime, tz=UTC)) if mtime else None
 
     if event == "delete":
         note = _find_note_by_path(db, path)

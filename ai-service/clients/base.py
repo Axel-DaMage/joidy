@@ -36,6 +36,9 @@ class BaseLLMClient(ABC):
         except Exception:
             return False
 
+    async def close(self) -> None:  # noqa: B027 -- optional no-op hook, not abstract
+        """Release any held connections/sessions. Default: nothing held (#998)."""
+
     async def classify(
         self,
         content: str,
@@ -94,3 +97,6 @@ class EmbeddingClient(ABC):
             return True
         except Exception:
             return False
+
+    async def close(self) -> None:  # noqa: B027 -- optional no-op hook, not abstract
+        """Release any held connections/sessions. Default: nothing held (#998)."""

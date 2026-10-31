@@ -143,6 +143,8 @@ function deliverQueuedNotifications() {
   if (queued.length === 0) return;
   logger.info(`[focusMode] Delivering ${queued.length} queued notification(s)`);
   for (const n of queued) {
+    // intentional: fires on the notifications store, not component state —
+    // delivery must complete even if the focus overlay unmounted (#1003)
     setTimeout(() => showNotification(n.message, n.type), 100);
   }
   queuedNotifications.set([]);

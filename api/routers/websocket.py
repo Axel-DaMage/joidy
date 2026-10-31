@@ -7,12 +7,42 @@ import json
 import logging
 
 from config import settings
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
-from services.auth_service import verify_token, _effective_auth_password
+from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
+from services.auth_service import _effective_auth_password, verify_token
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["websocket"])
+
+# Main event loop, captured at startup so broadcast_* helpers can schedule
+# coroutines from sync endpoints running in the threadpool (#992).
+_main_loop: asyncio.AbstractEventLoop | None = None
+
+
+def set_main_loop(loop: asyncio.AbstractEventLoop):
+    """Record the app's running event loop for cross-thread broadcasts."""
+    global _main_loop
+    _main_loop = loop
+
+
+def _schedule_broadcast(coro):
+    """Schedule a broadcast coroutine from sync or async contexts.
+
+    Async endpoints get a normal create_task. Sync `def` endpoints run in the
+    anyio threadpool with no running loop, so the coroutine is submitted to the
+    main loop captured at startup via run_coroutine_threadsafe. Previously
+    these calls silently no-op'd on RuntimeError.
+    """
+    try:
+        asyncio.get_running_loop().create_task(coro)
+        return
+    except RuntimeError:
+        pass
+    if _main_loop is not None and _main_loop.is_running():
+        asyncio.run_coroutine_threadsafe(coro, _main_loop)
+    else:
+        coro.close()
+        logger.warning("Broadcast dropped: no running event loop available")
 
 
 class ConnectionManager:
@@ -165,69 +195,34 @@ async def notify_vault_sync_complete(total_synced: int = 0):
 
 def broadcast_note_created(note_id: int, title: str):
     """Synchronous trigger to broadcast note creation."""
-    try:
-        loop = asyncio.get_running_loop()
-        if loop.is_running():
-            loop.create_task(notify_note_created(note_id, title))
-    except RuntimeError:
-        pass
+    _schedule_broadcast(notify_note_created(note_id, title))
 
 
 def broadcast_note_updated(note_id: int, title: str):
     """Synchronous trigger to broadcast note update."""
-    try:
-        loop = asyncio.get_running_loop()
-        if loop.is_running():
-            loop.create_task(notify_note_updated(note_id, title))
-    except RuntimeError:
-        pass
+    _schedule_broadcast(notify_note_updated(note_id, title))
 
 
 def broadcast_xp_gained(xp: int, total_xp: int):
     """Synchronous trigger to broadcast XP gain."""
-    try:
-        loop = asyncio.get_running_loop()
-        if loop.is_running():
-            loop.create_task(notify_xp_gained(xp, total_xp))
-    except RuntimeError:
-        pass
+    _schedule_broadcast(notify_xp_gained(xp, total_xp))
 
 
 def broadcast_streak_updated(streak: int):
     """Synchronous trigger to broadcast streak update."""
-    try:
-        loop = asyncio.get_running_loop()
-        if loop.is_running():
-            loop.create_task(notify_streak_updated(streak))
-    except RuntimeError:
-        pass
+    _schedule_broadcast(notify_streak_updated(streak))
 
 
 def broadcast_vault_synced(note_id: int, title: str, source_path: str | None = None):
     """Synchronous trigger to broadcast a vault-synced note (#73)."""
-    try:
-        loop = asyncio.get_running_loop()
-        if loop.is_running():
-            loop.create_task(notify_vault_synced(note_id, title, source_path))
-    except RuntimeError:
-        pass
+    _schedule_broadcast(notify_vault_synced(note_id, title, source_path))
 
 
 def broadcast_vault_sync_started():
     """Synchronous trigger to broadcast vault sync start (#73)."""
-    try:
-        loop = asyncio.get_running_loop()
-        if loop.is_running():
-            loop.create_task(notify_vault_sync_started())
-    except RuntimeError:
-        pass
+    _schedule_broadcast(notify_vault_sync_started())
 
 
 def broadcast_vault_sync_complete(total_synced: int = 0):
     """Synchronous trigger to broadcast vault sync completion (#73)."""
-    try:
-        loop = asyncio.get_running_loop()
-        if loop.is_running():
-            loop.create_task(notify_vault_sync_complete(total_synced))
-    except RuntimeError:
-        pass
+    _schedule_broadcast(notify_vault_sync_complete(total_synced))

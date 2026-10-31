@@ -26,8 +26,12 @@ make logs[-api|-ai|-worker]
 make shell-api       # Exec into api container
 make db-health       # Verify DB tables + migrations applied
 make migrate         # Alembic upgrade head (in api container)
-make test            # test-api + test-frontend
+make db-backup       # pg_dump -Fc to data/backups/ (= `joidy backup`)
+make db-restore FILE=<dump> [FORCE=1]  # pg_restore a dump (= `joidy restore`)
+make backup-verify   # Round-trip: dump → restore to throwaway joidy_test_restore → health check
+make test            # test-api + test-ai + test-frontend
 make test-api        # PYTHONPATH=/app python -m unittest discover -s tests
+make test-ai         # ai-service pytest suite (tests/)
 make test-frontend   # cd frontend && npx playwright test
 make lint            # python -m compileall on all Python services
 ```
@@ -63,9 +67,9 @@ Port overrides: `FRONTEND_PORT`, `API_PORT`, `AI_SERVICE_PORT`, `WORKER_PORT`.
 |-------------|---------|----------|-------|
 | **Gemini AI** | ✅ `ai-service` | ⚠️ Placeholder UI | #41 |
 | **GitHub** | ✅ `auth/github` | ✅ Unified integrations page | #120 |
-| **Google Calendar** | ⚠️ `integrations/google` scaffold | ⚠️ Partial | #2 |
+| **Google Calendar** | ⚠️ `integrations/google` one-click OAuth (Settings→Integraciones, callback persistente) | ✅ Settings card | #2 |
 | **Google Tasks** | ⚠️ `integrations/google` scaffold | ⚠️ Partial | #2 |
-| **Gmail** | ❌ None (Google OAuth scaffold only) | ❌ None | #42 |
+| **Gmail** | ⚠️ Push vía n8n workflow (`make n8n`) + `/emails` API | ✅ `/emails` page | #42 |
 | **Contacts** | ❌ None (Google OAuth scaffold only) | ❌ None | #43 |
 | **Strava** | ⚠️ `integrations/strava` scaffold | ❌ None | #44 |
 | **Spotify** | ⚠️ `integrations/spotify` scaffold | ❌ None | #45 |
@@ -167,6 +171,22 @@ with `FATAL: password authentication failed for user "joidy"`. Fix without data 
 otherwise the API joins group 0, `/system/power/status` returns
 `docker_available: false`, and Settings → Servicios shows "Docker no está disponible".
 `joidy up` now autodetects it.
+
+### Database Backups
+- `backup` compose **profile** (service `backup` in docker-compose.yml, reuses the
+  `POSTGRES_IMAGE`): runs `scripts/db_backup_loop.sh`, which evaluates
+  `BACKUP_SCHEDULE` (cron, default `0 3 * * *` in `USER_TIMEZONE`) and calls
+  `scripts/db_backup.sh` → `pg_dump -Fc` to `JOIDY_BACKUP_DIR`
+  (default `<JOIDY_DATA_DIR>/backups`) with retention pruning
+  (`BACKUP_RETENTION_DAYS=14` daily + `BACKUP_RETENTION_WEEKS=4` weekly/Sunday).
+- `joidy up` enables the profile by default (`BACKUP_ENABLED=false` opts out);
+  `make dev` / plain `docker compose up` never start it.
+- `joidy backup` / `joidy restore <file> [--force]` do manual dumps/restores via
+  `docker compose exec postgres` (local socket auth is trust — no password
+  needed). Restore refuses a live DB (non-empty `public` schema) without `--force`.
+- `scripts/backup_verify.sh` (make backup-verify) proves the round-trip against
+  a throwaway `joidy_test_restore` DB: alembic_version + required tables +
+  per-table row counts. Needs a running stack.
 
 ## Constraints
 - Never commit `.env` or `data/` (in `.gitignore`)

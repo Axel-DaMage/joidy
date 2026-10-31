@@ -4,6 +4,7 @@
   import StreakIcon from '$lib/components/StreakIcon.svelte';
   import LazyIconPicker from '$lib/components/LazyIconPicker.svelte';
   import type { PersonalStreak } from '$lib/api';
+  import { suggestEmoji, suggestIcon, suggestIconKey } from '$lib/utils/iconSuggest';
   import { liquidGlass } from '$lib/actions/liquidGlass';
   import { getContrastColor } from '$lib/stores/settings';
   import { t } from 'svelte-i18n';
@@ -40,6 +41,9 @@
   let snowballMode = false;
   let freezeCount = 0;
   let useIcon = false;
+  // #1092 — la elección manual del usuario no se sobreescribe
+  let emojiManual = false;
+  let iconManual = false;
 
   // ── Presets ─────────────────────────────────────────────────────────────────
   const COLOR_PRESETS = [
@@ -128,6 +132,8 @@
       frequencyDays = editStreak.frequency_days || 1;
       snowballMode = !!editStreak.snowball_mode;
       freezeCount = editStreak.freeze_count || 0;
+      emojiManual = true;
+      iconManual = true;
     } else {
       resetForm();
     }
@@ -136,6 +142,7 @@
 
   function resetForm() {
     name = ''; emoji = '🔥'; icon = ''; useIcon = false;
+    emojiManual = false; iconManual = false;
     description = ''; color = '#c8a96e'; theme = 'solid';
     category = 'general'; startDate = new Date().toISOString().split('T')[0];
     targetDate = ''; offset = 0; frequency = 'daily';
@@ -180,6 +187,23 @@
   $: isEdit = !!editStreak;
   $: canSave = name.trim().length > 0;
 
+  // #1092 — sugerencia automática de icono/emoji al escribir el nombre
+  $: suggestedEmoji = suggestEmoji(name, '🔥');
+  $: suggestedIcon = suggestIcon(name, 'Flame');
+  $: hasSuggestion = suggestIconKey(name) !== null;
+  $: if (!emojiManual) emoji = suggestedEmoji;
+  $: if (!iconManual) icon = suggestedIcon;
+
+  function useSuggested() {
+    if (useIcon) {
+      icon = suggestedIcon;
+      iconManual = false;
+    } else {
+      emoji = suggestedEmoji;
+      emojiManual = false;
+    }
+  }
+
   $: previewStyle = `--theme-ac: ${color};`;
 
   function previewFreqLabel(): string {
@@ -196,7 +220,8 @@
 
 {#if open}
   <div class="modal-backdrop" role="presentation" onclick={onBackdrop}>
-    <div class="modal-panel" role="dialog" aria-modal="true" aria-label={$t('streakCreateModal.createTitle')} onclick={(e) => e.stopPropagation()}>
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <div class="modal-panel" role="dialog" tabindex="-1" aria-modal="true" aria-label={$t('streakCreateModal.createTitle')} onclick={(e) => e.stopPropagation()}>
       <div class="modal-header">
         <span class="modal-title mono">{isEdit ? 'EDITAR RACHA' : 'NUEVA RACHA'}</span>
         <button class="close-btn" onclick={close} aria-label={$t('streakCreateModal.close')}><X size={14} /></button>
@@ -207,17 +232,17 @@
           <!-- Left column: hard data -->
           <div class="modal-col modal-col-data">
             <div class="field">
-              <label>{$t('streakCreateModal.name')}</label>
-              <input bind:value={name} placeholder={$t('streakCreateModal.namePlaceholder')} autofocus />
+              <label for="streak-modal-name">{$t('streakCreateModal.name')}</label>
+              <input id="streak-modal-name" bind:value={name} placeholder={$t('streakCreateModal.namePlaceholder')} />
             </div>
 
             <div class="field">
-              <label>{$t('streakCreateModal.description')} <span class="optional">{$t('streakCreateModal.optional')}</span></label>
-              <input bind:value={description} placeholder={$t('streakCreateModal.descriptionPlaceholder')} />
+              <label for="streak-modal-desc">{$t('streakCreateModal.description')} <span class="optional">{$t('streakCreateModal.optional')}</span></label>
+              <input id="streak-modal-desc" bind:value={description} placeholder={$t('streakCreateModal.descriptionPlaceholder')} />
             </div>
 
             <div class="field">
-              <label>{$t('streakCreateModal.frequency')}</label>
+              <span class="field-label">{$t('streakCreateModal.frequency')}</span>
               <div class="freq-row">
                 <button class="freq-btn" class:selected={frequency === 'daily'} onclick={() => { frequency = 'daily'; frequencyDays = 1; }}>{$t('streakCreateModal.daily')}</button>
                 <button class="freq-btn" class:selected={frequency === 'weekly'} onclick={() => { frequency = 'weekly'; frequencyDays = 1; }}>{$t('streakCreateModal.weekly')}</button>
@@ -235,24 +260,24 @@
             {/if}
 
             <div class="field">
-              <label><Calendar size={11} /> Fecha de inicio</label>
-              <input type="date" bind:value={startDate} disabled={isEdit} />
+              <label for="streak-modal-start-date"><Calendar size={11} /> Fecha de inicio</label>
+              <input id="streak-modal-start-date" type="date" bind:value={startDate} disabled={isEdit} />
             </div>
 
             <div class="field">
-              <label><Target size={11} /> Fecha objetivo <span class="optional">(op.)</span></label>
-              <input type="date" bind:value={targetDate} />
+              <label for="streak-modal-target-date"><Target size={11} /> Fecha objetivo <span class="optional">(op.)</span></label>
+              <input id="streak-modal-target-date" type="date" bind:value={targetDate} />
             </div>
 
             <div class="field">
-              <label><Clock size={11} /> Días desde inicio</label>
-              <input type="number" bind:value={offset} min="0" disabled={isEdit} placeholder={$t('streakCreateModal.offsetPlaceholder')} />
+              <label for="streak-modal-offset"><Clock size={11} /> Días desde inicio</label>
+              <input id="streak-modal-offset" type="number" bind:value={offset} min="0" disabled={isEdit} placeholder={$t('streakCreateModal.offsetPlaceholder')} />
               <span class="field-hint">{isEdit ? 'Este valor no se puede modificar una vez creada la racha' : 'Se calcula automáticamente desde la fecha de inicio'}</span>
             </div>
 
             <div class="field">
-              <label><Snowflake size={11} /> Freezes (escudos)</label>
-              <input type="number" bind:value={freezeCount} min="0" max="30" />
+              <label for="streak-modal-freezes"><Snowflake size={11} /> Freezes (escudos)</label>
+              <input id="streak-modal-freezes" type="number" bind:value={freezeCount} min="0" max="30" />
               <span class="field-hint">{$t('streakCreateModal.freezeHint')}</span>
             </div>
 
@@ -265,7 +290,7 @@
             </div>
 
             <div class="field">
-              <label>{$t('streakCreateModal.visualTheme')}</label>
+              <span class="field-label">{$t('streakCreateModal.visualTheme')}</span>
               <div class="theme-grid">
                 {#each THEMES as themeOpt}
                   <button class="theme-btn" class:selected={theme === themeOpt.id} onclick={() => theme = themeOpt.id}>
@@ -305,7 +330,10 @@
             </div>
 
             <div class="field">
-              <label>{$t('streakCreateModal.icon')}</label>
+              <span class="field-label">{$t('streakCreateModal.icon')}</span>
+              {#if hasSuggestion && (useIcon ? icon !== suggestedIcon : emoji !== suggestedEmoji)}
+                <button type="button" class="icon-suggest-btn" onclick={useSuggested}>usar sugerencia</button>
+              {/if}
               <div class="icon-toggle-row">
                 <button class="icon-type-btn" class:selected={!useIcon} onclick={() => useIcon = false}>{$t('streakCreateModal.emoji')}</button>
                 <button class="icon-type-btn" class:selected={useIcon} onclick={() => { useIcon = true; if (!icon) icon = 'Flame'; }}>{$t('streakCreateModal.icon')}</button>
@@ -316,18 +344,18 @@
               <div class="field icon-picker-field">
                 <div class="emoji-grid">
                   {#each EMOJIS as e}
-                    <button class="emoji-btn" class:selected={emoji === e} onclick={() => emoji = e}>{e}</button>
+                    <button class="emoji-btn" class:selected={emoji === e} onclick={() => { emoji = e; emojiManual = true; }}>{e}</button>
                   {/each}
                 </div>
               </div>
             {:else}
               <div class="field icon-picker-field">
-                <LazyIconPicker selected={icon} color={color} onSelect={(ic) => icon = ic} />
+                <LazyIconPicker selected={icon} color={color} onSelect={(ic) => { icon = ic; iconManual = true; }} />
               </div>
             {/if}
 
             <div class="field">
-              <label>{$t('streakCreateModal.color')}</label>
+              <span class="field-label">{$t('streakCreateModal.color')}</span>
               <div class="color-grid">
                 {#each COLOR_PRESETS as c}
                   <button
@@ -337,7 +365,7 @@
                     onclick={() => color = c.hex}
                     title={c.name}
                     aria-label={c.name}
-                  />
+                  ></button>
                 {/each}
               </div>
               <div class="color-manual-row">
@@ -576,7 +604,7 @@
 
   /* Fields */
   .field { display: flex; flex-direction: column; gap: 5px; }
-  .field label {
+  .field label, .field .field-label {
     font-size: 11px; color: var(--text-muted); text-transform: uppercase;
     letter-spacing: 0.05em; font-family: var(--font-mono);
     display: flex; align-items: center; justify-content: center; gap: 4px;
@@ -607,8 +635,6 @@
     min-height: 26px;
   }
 
-  .field-row { display: flex; gap: 12px; align-items: flex-start; }
-  .field.half { flex: 1; min-width: 0; }
 
   .checkbox-label {
     display: flex !important;
@@ -670,6 +696,13 @@
     transition: all 0.15s;
   }
   .icon-type-btn.selected { border-color: var(--text-primary); color: var(--text-primary); }
+  .icon-suggest-btn {
+    align-self: center;
+    padding: 3px 10px; font-size: 10px; font-family: var(--font-mono);
+    background: transparent; border: 1px solid var(--border); border-radius: 4px;
+    color: var(--text-muted); cursor: pointer; transition: all 0.15s;
+  }
+  .icon-suggest-btn:hover { color: var(--text-primary); border-color: var(--text-primary); }
 
   /* Icon picker field — fixed height container so switching between
      emoji and icon modes does not resize the modal. */

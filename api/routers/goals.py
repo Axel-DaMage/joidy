@@ -1,5 +1,4 @@
-import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from database import get_db
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
@@ -10,16 +9,15 @@ from models.goal import (
     GoalState,
     GoalTemporality,
 )
+from models.note import Note
 from pydantic import BaseModel, field_validator
-from services.sanitizer import sanitize_title, sanitize_content, sanitize_color, sanitize_emoji
 from services.gamification_engine import process_event
 from services.goal_service import (
     evaluate_active_goals,
-    get_goal_progress,
     get_bulk_goal_progress,
+    get_goal_progress,
     get_goal_streak,
     resolve_pending_removal,
-    sync_goals_from_note,
     validate_goal_parent,
 )
 from services.joidy_vault_writer import (
@@ -29,15 +27,30 @@ from services.joidy_vault_writer import (
     read_goal_file,
     update_goal_file,
 )
+from services.note_service import write_to_vault
+from services.sanitizer import sanitize_color, sanitize_content, sanitize_emoji, sanitize_title
+from services.sync_service import update_local_mtime
 from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/goals", tags=["goals"])
 
 
+GOAL_PRIORITY_MAX = 99
+
+
+def _validate_priority_range(v: int) -> int:
+    if not 0 <= v <= GOAL_PRIORITY_MAX:
+        raise ValueError(f"Priority must be between 0 and {GOAL_PRIORITY_MAX}")
+    return v
 
 
 class GoalCreate(BaseModel):
-    """Schema for creating a new goal."""
+    """Schema for creating a new goal.
+
+    ``priority`` uses a higher-wins scale: 0 = no explicit priority, higher
+    numbers float to the top of every goal listing (sorted DESC, #1097).
+    """
+
     title: str
     description: str = ""
     temporality: GoalTemporality = GoalTemporality.ONEOFF
@@ -52,6 +65,7 @@ class GoalCreate(BaseModel):
     tag_id: int | None = None
     parent_id: int | None = None
     max_assignment_days: int | None = None
+    priority: int = 0
 
     @field_validator("title")
     @classmethod
@@ -80,6 +94,11 @@ class GoalCreate(BaseModel):
     def validate_description(cls, v: str) -> str:
         return sanitize_content(v)
 
+    @field_validator("priority")
+    @classmethod
+    def validate_priority(cls, v: int) -> int:
+        return _validate_priority_range(v)
+
 
 class GoalUpdate(BaseModel):
     title: str | None = None
@@ -97,6 +116,7 @@ class GoalUpdate(BaseModel):
     tag_id: int | None = None
     max_assignment_days: int | None = None
     content: str | None = None
+    priority: int | None = None
 
     @field_validator("title")
     @classmethod
@@ -142,6 +162,12 @@ class GoalUpdate(BaseModel):
             return v
         return sanitize_content(v)
 
+    @field_validator("priority")
+    @classmethod
+    def validate_priority(cls, v: int | None) -> int | None:
+        if v is None:
+            return v
+        return _validate_priority_range(v)
 
 
 class GoalContent(BaseModel):
@@ -160,8 +186,6 @@ class GoalContent(BaseModel):
     parent_id: int | None = None
     max_assignment_days: int | None = None
     description: str = ""
-
-
 
 
 def _serialize_goal(goal: Goal, db: Session, precalculated_progress: float | None = None) -> dict:
@@ -184,6 +208,7 @@ def _serialize_goal(goal: Goal, db: Session, precalculated_progress: float | Non
         "tag_id": goal.tag_id,
         "parent_id": goal.parent_id,
         "max_assignment_days": goal.max_assignment_days,
+        "priority": goal.priority,
         "progress_pct": min(100, int(progress / max(goal.target_value, 1) * 100)),
         "pending_removal": goal.pending_removal,
         "is_completed": goal.is_completed,
@@ -202,7 +227,7 @@ def list_goals(
     evaluate_active_goals(db)
     goals = (
         db.query(Goal)
-        .order_by(Goal.is_completed, Goal.created_at.desc())
+        .order_by(Goal.is_completed, Goal.priority.desc(), Goal.created_at.desc())
         .offset(skip)
         .limit(limit)
         .all()
@@ -221,12 +246,15 @@ def create_goal(data: GoalCreate, db: Session = Depends(get_db)):
     # New goal has no id yet, so only parent existence can be violated, but
     # validate anyway for consistency and to reject non-existent parents.
     validate_goal_parent(db, goal_id=None, parent_id=data.parent_id)
-    
+
     note_id = data.note_id
     if note_id is None:
         from services.note_service import create_note as create_note_service
+
         note_title = f"{data.title}"
-        note_content = f"# Objetivo: {data.title}\n\nEscribe aquí tus estrategias, pasos y registros para este objetivo.\n"
+        note_content = (
+            f"# Objetivo: {data.title}\n\nEscribe aquí tus estrategias, pasos y registros para este objetivo.\n"
+        )
         note, _ = create_note_service(
             db,
             title=note_title,
@@ -289,8 +317,50 @@ def update_goal(goal_id: int, data: GoalUpdate, db: Session = Depends(get_db)):
         }
         update_goal_file(goal_id, goal.title, content, metadata)
 
+        # #1141 — mirror into the linked real note (same as /content save).
+        if goal.note_id is not None:
+            linked_note = db.query(Note).filter(Note.id == goal.note_id).first()
+            if linked_note is not None:
+                linked_note.content = sanitize_content(content)
+                db.commit()
+                write_to_vault(linked_note)
+                update_local_mtime(db, linked_note.id)
+                db.commit()
+
     return _serialize_goal(goal, db)
 
+
+class GoalSortItem(BaseModel):
+    id: int
+    priority: int
+
+    @field_validator("priority")
+    @classmethod
+    def validate_priority(cls, v: int) -> int:
+        return _validate_priority_range(v)
+
+
+class GoalSortRequest(BaseModel):
+    items: list[GoalSortItem]
+
+
+@router.patch("/sort")
+def sort_goals(data: GoalSortRequest, db: Session = Depends(get_db)):
+    ids = [item.id for item in data.items]
+    if len(ids) != len(set(ids)):
+        raise HTTPException(status_code=422, detail="Duplicate goal ids in sort payload")
+
+    goals = db.query(Goal).filter(Goal.id.in_(ids)).all() if ids else []
+    found_ids = {g.id for g in goals}
+    missing = [gid for gid in ids if gid not in found_ids]
+    if missing:
+        raise HTTPException(status_code=404, detail=f"Goals not found: {missing}")
+
+    priority_by_id = {item.id: item.priority for item in data.items}
+    for goal in goals:
+        goal.priority = priority_by_id[goal.id]
+    db.commit()
+    return {"updated": len(goals)}
 
 
 @router.get("/{goal_id}")
@@ -306,6 +376,28 @@ def get_goal_content(goal_id: int, db: Session = Depends(get_db)):
     goal = db.query(Goal).filter(Goal.id == goal_id).first()
     if not goal:
         raise HTTPException(status_code=404, detail="Goal not found")
+
+    # #1141 — when the goal is linked to a real note, the note is the source
+    # of truth for its content; the editor reads/writes the note, not the
+    # auto-generated goal file.
+    if goal.note_id is not None:
+        linked_note = db.query(Note).filter(Note.id == goal.note_id).first()
+        if linked_note is not None:
+            return {
+                "title": goal.title,
+                "content": linked_note.content or "",
+                "temporality": goal.temporality,
+                "measurement_type": goal.measurement_type,
+                "target_value": goal.target_value,
+                "state": goal.state,
+                "fail_config": goal.fail_config,
+                "fail_emoji": goal.fail_emoji,
+                "color": goal.color,
+                "theme": goal.theme,
+                "note_id": goal.note_id,
+                "tag_id": goal.tag_id,
+                "max_assignment_days": goal.max_assignment_days,
+            }
 
     file_data = read_goal_file(goal_id)
     if file_data:
@@ -350,6 +442,16 @@ def save_goal_content(goal_id: int, data: GoalContent, db: Session = Depends(get
     goal.parent_id = data.parent_id
     goal.max_assignment_days = data.max_assignment_days
 
+    # #1141 — if the goal is linked to a real note, the written content must
+    # land in that note instead of only the goal note file. Update directly
+    # (not via update_note) so sync_goals_from_note does not flag this goal
+    # as pending_removal when the note content lacks goal markers.
+    linked_note = None
+    if goal.note_id is not None:
+        linked_note = db.query(Note).filter(Note.id == goal.note_id).first()
+        if linked_note is not None:
+            linked_note.content = sanitize_content(data.content)
+
     db.commit()
 
     obj_dir = get_objectives_dir()
@@ -373,6 +475,11 @@ def save_goal_content(goal_id: int, data: GoalContent, db: Session = Depends(get
         }
         update_goal_file(goal_id, data.title, data.content, metadata)
 
+    if linked_note is not None:
+        write_to_vault(linked_note)
+        update_local_mtime(db, linked_note.id)
+        db.commit()
+
     return _serialize_goal(goal, db)
 
 
@@ -385,25 +492,21 @@ def complete_goal(
     goal = db.query(Goal).filter(Goal.id == goal_id).first()
     if not goal:
         raise HTTPException(status_code=404, detail="Goal not found")
-    
-    was_failed = (goal.state == GoalState.FAILED)
+
+    was_failed = goal.state == GoalState.FAILED
     old_current = goal.current_value
-    
+
     goal.is_completed = True
     goal.state = GoalState.COMPLETED
-    goal.completed_at = datetime.now(timezone.utc)
+    goal.completed_at = datetime.now(UTC)
     goal.current_value = get_goal_progress(goal, db)
-    
+
     # Adjust descendant goals if this was a late completion of a failed goal
     child = None
     if was_failed:
         child = (
             db.query(Goal)
-            .filter(
-                Goal.title == goal.title,
-                Goal.state == GoalState.ACTIVE,
-                Goal.created_at > goal.created_at
-            )
+            .filter(Goal.title == goal.title, Goal.state == GoalState.ACTIVE, Goal.created_at > goal.created_at)
             .order_by(Goal.created_at.asc())
             .first()
         )

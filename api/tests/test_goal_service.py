@@ -3,7 +3,8 @@
 import sys
 import types
 import unittest
-from datetime import datetime, timedelta, timezone
+import unittest.mock
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
@@ -37,11 +38,13 @@ class GoalServiceTestBase(unittest.TestCase):
         Base.metadata.create_all(self.engine)
         with self.engine.begin() as conn:
             try:
-                conn.execute(text(
-                    "CREATE TABLE IF NOT EXISTS tag_cooccurrences "
-                    "(tag_a_id INTEGER, tag_b_id INTEGER, weight INTEGER, "
-                    "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)"
-                ))
+                conn.execute(
+                    text(
+                        "CREATE TABLE IF NOT EXISTS tag_cooccurrences "
+                        "(tag_a_id INTEGER, tag_b_id INTEGER, weight INTEGER, "
+                        "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)"
+                    )
+                )
             except Exception:
                 pass
         self.Session = sessionmaker(bind=self.engine)
@@ -117,8 +120,10 @@ class TestSyncGoalsFromNote(GoalServiceTestBase):
             db.flush()
 
             goal = Goal(
-                title="Old Goal", note_id=note.id,
-                state=GoalState.ACTIVE, temporality=GoalTemporality.DAILY,
+                title="Old Goal",
+                note_id=note.id,
+                state=GoalState.ACTIVE,
+                temporality=GoalTemporality.DAILY,
             )
             db.add(goal)
             db.flush()
@@ -137,8 +142,10 @@ class TestSyncGoalsFromNote(GoalServiceTestBase):
             db.flush()
 
             goal = Goal(
-                title="Leer 5 páginas", note_id=note.id,
-                state=GoalState.ACTIVE, temporality=GoalTemporality.DAILY,
+                title="Leer 5 páginas",
+                note_id=note.id,
+                state=GoalState.ACTIVE,
+                temporality=GoalTemporality.DAILY,
                 target_value=5.0,
             )
             db.add(goal)
@@ -155,8 +162,10 @@ class TestSyncGoalsFromNote(GoalServiceTestBase):
 class TestResolveRemoval(GoalServiceTestBase):
     def _create_pending_goal(self, db):
         goal = Goal(
-            title="Pending", state=GoalState.ACTIVE,
-            temporality=GoalTemporality.DAILY, pending_removal=True,
+            title="Pending",
+            state=GoalState.ACTIVE,
+            temporality=GoalTemporality.DAILY,
+            pending_removal=True,
         )
         db.add(goal)
         db.flush()
@@ -186,9 +195,11 @@ class TestResolveRemoval(GoalServiceTestBase):
             db.flush()
 
             goal = Goal(
-                title="Manual", state=GoalState.ACTIVE,
+                title="Manual",
+                state=GoalState.ACTIVE,
                 temporality=GoalTemporality.DAILY,
-                pending_removal=True, note_id=note.id,
+                pending_removal=True,
+                note_id=note.id,
             )
             db.add(goal)
             db.flush()
@@ -207,10 +218,11 @@ class TestGetGoalStreak(GoalServiceTestBase):
 
     def test_consecutive_days(self) -> None:
         with self.Session() as db:
-            today = datetime.now(timezone.utc)
+            today = datetime.now(UTC)
             for i in range(3):
                 g = Goal(
-                    title=f"G{i}", state=GoalState.COMPLETED,
+                    title=f"G{i}",
+                    state=GoalState.COMPLETED,
                     temporality=GoalTemporality.DAILY,
                     is_completed=True,
                     completed_at=today - timedelta(days=i),
@@ -237,6 +249,7 @@ class TestEvaluateONEOFFGoals(GoalServiceTestBase):
             db.commit()
 
             from services.goal_service import evaluate_active_goals
+
             evaluate_active_goals(db)
             db.refresh(goal)
 
@@ -248,13 +261,40 @@ class TestEvaluateONEOFFGoals(GoalServiceTestBase):
 class TestGoalCreationNoDuplicates(GoalServiceTestBase):
     def test_create_goal_does_not_duplicate_entries(self) -> None:
         with self.Session() as db:
-            from routers.goals import create_goal, GoalCreate
+            from routers.goals import GoalCreate, create_goal
+
             data = GoalCreate(title="Single Goal Test", temporality=GoalTemporality.DAILY)
             result = create_goal(data, db)
-            
+
             goals = db.query(Goal).filter(Goal.title == "Single Goal Test").all()
             self.assertEqual(len(goals), 1)
             self.assertEqual(goals[0].id, result["id"])
+
+
+class TestSnowballPriorityCarryOver(GoalServiceTestBase):
+    def test_snowball_recreate_keeps_priority(self) -> None:
+        from services.goal_service import evaluate_active_goals
+
+        with self.Session() as db:
+            goal = Goal(
+                title="Snowball Goal",
+                temporality=GoalTemporality.DAILY,
+                state=GoalState.ACTIVE,
+                fail_config=GoalFailConfig.SNOWBALL,
+                target_value=5.0,
+                current_value=0.0,
+                priority=4,
+                created_at=datetime.now(UTC) - timedelta(days=1),
+            )
+            db.add(goal)
+            db.commit()
+
+            with unittest.mock.patch("services.joidy_vault_writer.get_objectives_dir", return_value=None):
+                evaluate_active_goals(db)
+
+            spawned = db.query(Goal).filter(Goal.title == "Snowball Goal", Goal.id != goal.id).one()
+            self.assertEqual(spawned.state, GoalState.ACTIVE)
+            self.assertEqual(spawned.priority, 4)
 
 
 if __name__ == "__main__":

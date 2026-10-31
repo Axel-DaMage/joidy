@@ -9,9 +9,8 @@ Verifies that:
 6. health_check() returns False if both providers are unreachable
 """
 
-import asyncio
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from clients.base import BaseLLMClient, EmbeddingClient
 from clients.factory import ClientFactory
@@ -96,7 +95,7 @@ class TestFallbackLLMClient(unittest.IsolatedAsyncioTestCase):
         secondary = FakeLLMClient("ollama", fail=True)
         client = FallbackLLMClient(primary=primary, secondary=secondary)
 
-        with self.assertRaises(Exception):
+        with self.assertRaises(Exception):  # noqa: B017 -- fallback must swallow any provider error type
             await client.generate("test")
 
     async def test_embed_text_primary_succeeds(self):
@@ -169,7 +168,7 @@ class TestFallbackEmbeddingClient(unittest.IsolatedAsyncioTestCase):
         secondary = FakeEmbeddingClient("ollama", fail=True)
         client = FallbackEmbeddingClient(primary=primary, secondary=secondary)
 
-        with self.assertRaises(Exception):
+        with self.assertRaises(Exception):  # noqa: B017 -- fallback must swallow any provider error type
             await client.embed("test")
 
     async def test_health_check_primary_healthy(self):

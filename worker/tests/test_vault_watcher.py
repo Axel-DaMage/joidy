@@ -175,8 +175,9 @@ class TestVaultSync(unittest.IsolatedAsyncioTestCase):
             await queue.put(vault_watcher.VaultEvent(path="/vault/a.md", change_type=vault_watcher.Change.modified))
             return True
 
-        with patch("watchers.vault_watcher.QUEUE_FLUSH_INTERVAL", 0.05), patch(
-            "watchers.vault_watcher.DEBOUNCE_SECONDS", 0.05
+        with (
+            patch("watchers.vault_watcher.QUEUE_FLUSH_INTERVAL", 0.05),
+            patch("watchers.vault_watcher.DEBOUNCE_SECONDS", 0.05),
         ):
             pass
 

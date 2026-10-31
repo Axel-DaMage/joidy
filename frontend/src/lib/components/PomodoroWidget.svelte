@@ -5,85 +5,133 @@
 
   // ── Timer ──────────────────────────────────────────────────────────────────
   import {
-    phase, running, secondsLeft, pomodorosDone, totalSec, workMins, breakMins,
-    toggleTimer, resetTimer, skipTimer
+    phase,
+    running,
+    secondsLeft,
+    pomodorosDone,
+    totalSec,
+    workMins,
+    breakMins,
+    toggleTimer,
+    resetTimer,
+    skipTimer,
   } from '$lib/stores/pomodoro';
+  import { clockStyle } from '$lib/stores/settings';
+  import { getTimerParts } from '$lib/utils/clock';
+  import ClockDisplay from '$lib/components/clock/ClockDisplay.svelte';
 
   // Ring geometry — r=58, circ=2π×58≈364.4
-  const R    = 58;
+  const R = 58;
   const CIRC = 2 * Math.PI * R;
 
-  $: progress    = $secondsLeft / $totalSec;
-  $: dashOffset  = CIRC * (1 - progress);
-  $: mins        = String(Math.floor($secondsLeft / 60)).padStart(2, '0');
-  $: secs        = String($secondsLeft % 60).padStart(2, '0');
+  $: progress = $secondsLeft / $totalSec;
+  $: dashOffset = CIRC * (1 - progress);
+  $: timerParts = getTimerParts($secondsLeft);
 
   const PHASE_LABEL: Record<string, string> = {
-    work: 'TRABAJO', break: 'DESCANSO', longBreak: 'DESCANSO LARGO',
+    work: 'TRABAJO',
+    break: 'DESCANSO',
+    longBreak: 'DESCANSO LARGO',
   };
 </script>
 
 <div class="pomodoro">
-
   <!-- Phase title -->
   <span class="phase-title mono">{PHASE_LABEL[$phase]}</span>
 
-  <!-- Big ring -->
+  <!-- Big ring (the 'circular' clock style owns its own dial — #707) -->
   <div class="ring-wrap">
-    <svg viewBox="0 0 150 150" class="ring-svg">
-      <defs>
-        <linearGradient id="pomodoroRingBlend" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="var(--xp)" />
-          <stop offset="52%" stop-color="var(--xp-2)" />
-          <stop offset="100%" stop-color="var(--xp-3)" />
-        </linearGradient>
-      </defs>
-      <!-- Background track -->
-      <circle cx="75" cy="75" r={R} stroke="var(--border)" stroke-width="4" fill="none"/>
-      <!-- Progress arc -->
-      <circle cx="75" cy="75" r={R}
-        stroke="url(#pomodoroRingBlend)"
-        stroke-width="4"
-        fill="none"
-        stroke-linecap="round"
-        stroke-dasharray={CIRC}
-        stroke-dashoffset={dashOffset}
-        transform="rotate(-90 75 75)"
-        style="transition: stroke-dashoffset 950ms linear;"
-      />
-    </svg>
-
-    <!-- Overlay: timer + dots only -->
-    <div class="ring-overlay">
-      <span class="timer mono">{mins}:{secs}</span>
-      <div class="pomo-dots">
-        {#each Array(4) as _, i}
-          <span class="pdot" class:lit={i < $pomodorosDone % 4}></span>
-        {/each}
+    {#if $clockStyle === 'circular'}
+      <ClockDisplay mode="timer" {progress} {...timerParts} />
+      <div class="ring-overlay dots-overlay">
+        <div class="pomo-dots">
+          {#each Array(4) as _, i}
+            <span class="pdot" class:lit={i < $pomodorosDone % 4}></span>
+          {/each}
+        </div>
       </div>
-    </div>
+    {:else}
+      <svg viewBox="0 0 150 150" class="ring-svg">
+        <defs>
+          <linearGradient id="pomodoroRingBlend" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="var(--xp)" />
+            <stop offset="52%" stop-color="var(--xp-2)" />
+            <stop offset="100%" stop-color="var(--xp-3)" />
+          </linearGradient>
+        </defs>
+        <!-- Background track -->
+        <circle cx="75" cy="75" r={R} stroke="var(--border)" stroke-width="4" fill="none" />
+        <!-- Progress arc -->
+        <circle
+          cx="75"
+          cy="75"
+          r={R}
+          stroke="url(#pomodoroRingBlend)"
+          stroke-width="4"
+          fill="none"
+          stroke-linecap="round"
+          stroke-dasharray={CIRC}
+          stroke-dashoffset={dashOffset}
+          transform="rotate(-90 75 75)"
+          style="transition: stroke-dashoffset 950ms linear;"
+        />
+      </svg>
+
+      <!-- Overlay: styled timer readout + dots only -->
+      <div class="ring-overlay">
+        <span class="timer"><ClockDisplay mode="timer" {progress} {...timerParts} /></span>
+        <div class="pomo-dots">
+          {#each Array(4) as _, i}
+            <span class="pdot" class:lit={i < $pomodorosDone % 4}></span>
+          {/each}
+        </div>
+      </div>
+    {/if}
   </div>
 
   <div class="controls-row">
     <button class="ctrl-main" class:active={$running} onclick={toggleTimer}>
       {$running ? $t('widgets.pause') : $t('widgets.start')}
     </button>
-    <button class="ctrl-icon" onclick={resetTimer} title={$t('widgets.reset')} aria-label={$t('widgets.reset')}><RotateCcw size={11}/></button>
-    <button class="ctrl-icon" onclick={skipTimer}  title={$t('widgets.skip')} aria-label={$t('widgets.skip')}><SkipForward size={11}/></button>
+    <button
+      class="ctrl-icon"
+      onclick={resetTimer}
+      title={$t('widgets.reset')}
+      aria-label={$t('widgets.reset')}><RotateCcw size={11} /></button
+    >
+    <button
+      class="ctrl-icon"
+      onclick={skipTimer}
+      title={$t('widgets.skip')}
+      aria-label={$t('widgets.skip')}><SkipForward size={11} /></button
+    >
   </div>
 
   <div class="duration-row">
     <div class="dur-input-wrap" class:disabled={$running}>
-      <input type="number" min="1" max="180" class="dur-input mono" bind:value={$workMins} disabled={$running}/>
+      <input
+        type="number"
+        min="1"
+        max="180"
+        class="dur-input mono"
+        bind:value={$workMins}
+        disabled={$running}
+      />
       <span class="dur-label">min trabajo</span>
     </div>
     <span class="dur-sep">·</span>
     <div class="dur-input-wrap" class:disabled={$running}>
-      <input type="number" min="1" max="120" class="dur-input mono" bind:value={$breakMins} disabled={$running}/>
+      <input
+        type="number"
+        min="1"
+        max="120"
+        class="dur-input mono"
+        bind:value={$breakMins}
+        disabled={$running}
+      />
       <span class="dur-label">min descanso</span>
     </div>
   </div>
-
 </div>
 
 <style>
@@ -128,6 +176,13 @@
     gap: 3px;
   }
 
+  /* When the circular style owns the dial, the dots hug the ring's lower
+     inner edge instead of covering the centered readout. */
+  .ring-overlay.dots-overlay {
+    justify-content: flex-end;
+    padding-bottom: 26px;
+  }
+
   .timer {
     font-size: 32px;
     font-weight: 300;
@@ -149,7 +204,9 @@
     background: var(--border);
     transition: background var(--t-normal);
   }
-  .pdot.lit { background: var(--xp); }
+  .pdot.lit {
+    background: var(--xp);
+  }
 
   /* ── Controls ── */
   .controls-row {
@@ -170,9 +227,19 @@
     transition: all var(--t-fast);
     min-width: 80px;
   }
-  .ctrl-main:hover  { background: var(--xp-2); border-color: var(--xp-2); }
-  .ctrl-main.active { background: var(--xp-2); border-color: var(--xp-2); color: var(--xp-contrast-text, var(--bg)); }
-  .ctrl-main.active:hover { background: var(--xp-3); border-color: var(--xp-3); }
+  .ctrl-main:hover {
+    background: var(--xp-2);
+    border-color: var(--xp-2);
+  }
+  .ctrl-main.active {
+    background: var(--xp-2);
+    border-color: var(--xp-2);
+    color: var(--xp-contrast-text, var(--bg));
+  }
+  .ctrl-main.active:hover {
+    background: var(--xp-3);
+    border-color: var(--xp-3);
+  }
 
   .ctrl-icon {
     display: flex;
@@ -187,7 +254,10 @@
     cursor: pointer;
     transition: all var(--t-fast);
   }
-  .ctrl-icon:hover { color: var(--text-secondary); background: var(--elevated); }
+  .ctrl-icon:hover {
+    color: var(--text-secondary);
+    background: var(--elevated);
+  }
 
   /* ── Duration hints ── */
   .duration-row {
@@ -204,8 +274,12 @@
     border-radius: 2px;
     transition: background var(--t-fast);
   }
-  .dur-input-wrap:not(.disabled):hover { background: var(--elevated); }
-  .dur-input-wrap.disabled { opacity: 0.4; }
+  .dur-input-wrap:not(.disabled):hover {
+    background: var(--elevated);
+  }
+  .dur-input-wrap.disabled {
+    opacity: 0.4;
+  }
 
   .dur-input {
     width: 24px;
@@ -223,14 +297,18 @@
     -webkit-appearance: none;
     margin: 0;
   }
-  .dur-input:disabled { cursor: not-allowed; }
+  .dur-input:disabled {
+    cursor: not-allowed;
+  }
 
   .dur-label {
     font-size: 9px;
     color: var(--text-muted);
     transition: color var(--t-fast);
   }
-  .dur-input-wrap:not(.disabled):hover .dur-label { color: var(--text-secondary); }
+  .dur-input-wrap:not(.disabled):hover .dur-label {
+    color: var(--text-secondary);
+  }
 
   .dur-sep {
     font-size: 9px;

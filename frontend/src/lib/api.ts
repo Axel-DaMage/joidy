@@ -1,7 +1,7 @@
 // API base URL — browser uses VITE_API_URL (public), SSR uses INTERNAL_API_URL
 // (Docker internal network). This prevents network failures when SvelteKit
 // server-renders pages inside the container where localhost:PORT isn't mapped.
-import { browser } from '$app/environment';
+import { browser } from '$app/env';
 import { showNotification } from './stores/notifications';
 import { session, getToken } from './stores/session';
 
@@ -202,6 +202,7 @@ export interface Goal {
   tag_id: number | null;
   parent_id: number | null;
   max_assignment_days: number | null;
+  priority: number;
   progress_pct: number;
   pending_removal: boolean;
   is_completed: boolean;
@@ -307,6 +308,47 @@ export interface MoodStats {
   streak: number;
   total_entries: number;
   notes_correlation: number;
+}
+
+export interface AchievementRecord {
+  id: number;
+  user_id: number;
+  achievement_key: string;
+  unlocked_at: string | null;
+  metadata: Record<string, unknown> | null;
+}
+
+export interface AchievementUnlockResult extends AchievementRecord {
+  already_unlocked: boolean;
+}
+
+export interface EmailSummary {
+  id: number;
+  account: string;
+  gmail_id: string;
+  thread_id: string | null;
+  subject: string | null;
+  sender: string | null;
+  snippet: string | null;
+  received_at: string | null;
+  unread: boolean;
+  important: boolean;
+  importance_reason: string | null;
+  labels: string[];
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface EmailAccountStats {
+  account: string;
+  total: number;
+  unread: number;
+  important: number;
+}
+
+export interface EmailInbox {
+  items: EmailSummary[];
+  total: number;
 }
 
 export interface UsageSummary {
@@ -415,12 +457,25 @@ export const api = {
   gamification: {
     stats: () => req<GamificationStats>('GET', '/gamification/stats'),
     ping: () => req<GamificationResult>('POST', '/gamification/ping'),
+    pomodoro: (data: { duration_minutes: number; pomodoro_id?: string }) =>
+      req<GamificationResult>('POST', '/gamification/pomodoro', data, { silent: true }),
     history: (days = 30) =>
       req<{ date: string; xp: number }[]>('GET', `/gamification/streak-history?days=${days}`),
     events: (limit = 20) =>
       req<{ type: string; xp: number; at: string }[]>(
         'GET',
         `/gamification/recent-events?limit=${limit}`
+      ),
+  },
+
+  achievements: {
+    list: () => req<AchievementRecord[]>('GET', '/achievements', undefined, { silent: true }),
+    unlock: (achievement_key: string, unlocked_at?: string) =>
+      req<AchievementUnlockResult>(
+        'POST',
+        '/achievements/unlock',
+        { achievement_key, unlocked_at },
+        { silent: true }
       ),
   },
 
@@ -451,8 +506,11 @@ export const api = {
       note_id?: number | null;
       parent_id?: number | null;
       max_assignment_days?: number | null;
+      priority?: number;
     }) => req<Goal>('POST', '/goals/', data),
     update: (id: number, data: Partial<Goal>) => req<Goal>('PUT', `/goals/${id}`, data),
+    sort: (items: { id: number; priority: number }[]) =>
+      req<{ updated: number }>('PATCH', '/goals/sort', { items }),
     complete: (id: number) =>
       req<{ goal: Goal; gamification: GamificationResult }>('POST', `/goals/${id}/complete`),
     fail: (id: number) => req<Goal>('POST', `/goals/${id}/fail`),
@@ -570,6 +628,23 @@ export const api = {
     stats: () => req<MoodStats>('GET', '/mood/stats'),
   },
 
+  emails: {
+    list: (filters: { unread?: boolean; important?: boolean; account?: string; q?: string; limit?: number; skip?: number } = {}) => {
+      const params = new URLSearchParams();
+      if (filters.unread !== undefined) params.set('unread', String(filters.unread));
+      if (filters.important !== undefined) params.set('important', String(filters.important));
+      if (filters.account) params.set('account', filters.account);
+      if (filters.q) params.set('q', filters.q);
+      params.set('limit', String(filters.limit ?? 200));
+      params.set('skip', String(filters.skip ?? 0));
+      return req<EmailInbox>('GET', `/emails/?${params.toString()}`);
+    },
+    accounts: () => req<EmailAccountStats[]>('GET', '/emails/accounts'),
+    patch: (id: number, data: { unread?: boolean; important?: boolean }) =>
+      req<EmailSummary>('PATCH', `/emails/${id}`, data),
+    remove: (id: number) => req<void>('DELETE', `/emails/${id}`),
+  },
+
   ai: {
     classify: (noteId: number, content: string, existingTags: string[]) =>
       req<{ note_id: number; status: string; suggestions: AISuggestion[] }>(
@@ -609,7 +684,7 @@ export const api = {
   github: {
     status: () =>
       req<{ connected: boolean; username: string | null }>('GET', '/integrations/github/status'),
-    issues: (filter: string = 'all') =>
+    issues: (filter: string = 'all', perPage: number = 30, state: string = 'all') =>
       req<{
         issues: {
           id: number;
@@ -623,8 +698,8 @@ export const api = {
         }[];
         stats: { total: number; open: number; closed: number };
         filter: string;
-      }>('GET', `/integrations/github/issues?filter=${filter}`),
-    pulls: (filter: string = 'all') =>
+      }>('GET', `/integrations/github/issues?filter=${filter}&per_page=${perPage}&state=${state}`),
+    pulls: (filter: string = 'all', perPage: number = 30, state: string = 'all') =>
       req<{
         pulls: {
           id: number;
@@ -634,12 +709,13 @@ export const api = {
           url: string;
           state: string;
           draft: boolean;
+          merged_at?: string | null;
           updated_at: string;
           author?: string;
         }[];
         stats: { total: number; open: number; closed: number; draft: number };
         filter: string;
-      }>('GET', `/integrations/github/pulls?filter=${filter}`),
+      }>('GET', `/integrations/github/pulls?filter=${filter}&per_page=${perPage}&state=${state}`),
     repos: () =>
       req<{ repos: { id: number; name: string; full_name: string; color: string }[] }>(
         'GET',
@@ -683,6 +759,11 @@ export const api = {
       }),
     status: () => req<{ connected: boolean }>('GET', '/integrations/google/status'),
     disconnect: () => req<{ status: string }>('POST', '/integrations/google/disconnect'),
+    gmail: (maxResults = 10) =>
+      req<{ messages: unknown[] } | unknown[]>(
+        'GET',
+        `/integrations/google/gmail?max_results=${maxResults}`
+      ),
   },
 
   config: {
@@ -707,6 +788,12 @@ export const api = {
         github_token: string | null;
         github_client_id: string | null;
         github_client_secret: string | null;
+        google_client_id: string | null;
+        google_client_secret: string | null;
+        google_redirect_uri: string | null;
+        openai_base_url: string | null;
+        llm_model: string | null;
+        embedding_model: string | null;
         app_env: string | null;
         configured_keys: string[];
       }>('GET', '/config/'),
@@ -718,6 +805,13 @@ export const api = {
       github_username?: string;
       github_client_id?: string;
       github_client_secret?: string;
+      google_client_id?: string;
+      google_client_secret?: string;
+      google_redirect_uri?: string;
+      openai_api_key?: string;
+      openai_base_url?: string;
+      llm_model?: string;
+      embedding_model?: string;
       telegram_bot_token?: string;
       telegram_allowed_user_id?: string;
     }) =>

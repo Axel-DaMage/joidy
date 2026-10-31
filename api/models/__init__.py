@@ -1,4 +1,6 @@
+from .achievement import *
 from .config import *
+from .email_message import *
 from .gamification import *
 from .github import *
 from .goal import *

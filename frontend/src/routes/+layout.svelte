@@ -1,7 +1,7 @@
 <script lang="ts">
   import '../app.css';
-  import { browser } from '$app/environment';
-  import { page } from '$app/stores';
+  import { browser } from '$app/env';
+  import { page } from '$app/state';
   import { onMount } from 'svelte';
   import { fade } from 'svelte/transition';
   import { isOnline, wasOffline } from '$lib/stores/connection';
@@ -78,11 +78,12 @@
     { href: '/ai', label: $t('nav.ai'), icon: 'Brain', status: 'dev' },
     { href: '/streaks', label: $t('nav.streaks'), icon: 'Flame', status: 'ready' },
     { href: '/goals', label: $t('nav.goals'), icon: 'Target', status: 'ready' },
+    { href: '/emails', label: $t('nav.emails'), icon: 'Mail', status: 'ready' },
   ] as { href: string; label: string; icon: string; status: NavItemStatus }[];
 
   // Track page views on route changes (foreground-only, debounced in the store).
   $: if (mounted && $isAuthenticated) {
-    trackPageView($page.url.pathname);
+    trackPageView(page.url.pathname);
   }
 
   let settingsOpen = false;
@@ -618,7 +619,7 @@
       {#each navItems as { href, label, icon, status }}
         {#if status === 'ready' || $devMode}
           {@const active =
-            $page.url.pathname === href || ($page.url.pathname.startsWith(href) && href !== '/')}
+            page.url.pathname === href || (page.url.pathname.startsWith(href) && href !== '/')}
           <a
             {href}
             class="nav-item"
@@ -653,6 +654,8 @@
         aria-label={$t('layout.testNotification')}
         onclick={() => {
           showNotification($t('layout.testNotifInfo'), 'info');
+          // intentional: one-shots target the notification store, not
+          // component state — safe to outlive the layout (#1003)
           setTimeout(() => showNotification($t('layout.testNotifSuccess'), 'success'), 600);
           setTimeout(() => showNotification($t('layout.testNotifLevel'), 'level'), 1200);
         }}>joidy v{__APP_VERSION__}</button
@@ -706,7 +709,14 @@
     </footer>
   </div>
 
-  <SettingsPanel bind:open={settingsOpen} on:close={() => (settingsOpen = false)} />
+  <SettingsPanel
+    bind:open={settingsOpen}
+    on:close={() => {
+      settingsOpen = false;
+      // Broadcast so mounted pages (e.g. notes) can refetch config after edits
+      window.dispatchEvent(new CustomEvent('joidy:settings-closed'));
+    }}
+  />
   <CommandPalette />
   <FocusMode />
   <Toast />

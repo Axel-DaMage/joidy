@@ -3,7 +3,7 @@ Skill Tree Service — derives the RPG skill tree from note/tag data.
 Skills are auto-generated from tags, no manual configuration needed.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from models.note import NoteTag, Tag
 from models.skill import Skill, compute_skill_level
@@ -23,7 +23,9 @@ def sync_skills_for_tags(db: Session, tag_ids: set[int]) -> list[dict]:
         .group_by(NoteTag.tag_id)
         .all()
     )
-    skills_by_tag = {skill.tag_id: skill for skill in SkillRepository(db)._db.query(Skill).filter(Skill.tag_id.in_(tag_ids)).all()}
+    skills_by_tag = {
+        skill.tag_id: skill for skill in SkillRepository(db)._db.query(Skill).filter(Skill.tag_id.in_(tag_ids)).all()
+    }
 
     updated = []
     for tag_id in tag_ids:
@@ -36,7 +38,7 @@ def sync_skills_for_tags(db: Session, tag_ids: set[int]) -> list[dict]:
                 continue
             skill = Skill(tag_id=tag_id, note_count=count, level=new_level)
             if new_level != "locked":
-                skill.first_unlocked_at = datetime.now(timezone.utc)
+                skill.first_unlocked_at = datetime.now(UTC)
             db.add(skill)
             updated.append({"tag_id": tag_id, "level": new_level, "new": True})
             continue
@@ -50,7 +52,7 @@ def sync_skills_for_tags(db: Session, tag_ids: set[int]) -> list[dict]:
         skill.level = new_level
 
         if prev_level == "locked" and new_level != "locked":
-            skill.first_unlocked_at = datetime.now(timezone.utc)
+            skill.first_unlocked_at = datetime.now(UTC)
             updated.append({"tag_id": tag_id, "level": new_level, "new": False, "unlocked": True})
         else:
             updated.append({"tag_id": tag_id, "level": new_level, "new": False})
@@ -62,9 +64,7 @@ def sync_skills_for_tags(db: Session, tag_ids: set[int]) -> list[dict]:
 def sync_skills(db: Session) -> list[dict]:
     """Recalculate all skills based on current note counts per tag."""
     tag_counts = dict(
-        db.query(NoteTag.tag_id, func.count(NoteTag.note_id).label("count"))
-        .group_by(NoteTag.tag_id)
-        .all()
+        db.query(NoteTag.tag_id, func.count(NoteTag.note_id).label("count")).group_by(NoteTag.tag_id).all()
     )
     skills_by_tag = {skill.tag_id: skill for skill in SkillRepository(db).list()}
 
@@ -82,7 +82,7 @@ def sync_skills(db: Session) -> list[dict]:
         skill.level = new_level
 
         if prev_level == "locked" and new_level != "locked":
-            skill.first_unlocked_at = datetime.now(timezone.utc)
+            skill.first_unlocked_at = datetime.now(UTC)
             updated.append({"tag_id": tag_id, "level": new_level, "new": False, "unlocked": True})
         else:
             updated.append({"tag_id": tag_id, "level": new_level, "new": False})
@@ -93,7 +93,7 @@ def sync_skills(db: Session) -> list[dict]:
         new_level = compute_skill_level(count)
         skill = Skill(tag_id=tag_id, note_count=count, level=new_level)
         if new_level != "locked":
-            skill.first_unlocked_at = datetime.now(timezone.utc)
+            skill.first_unlocked_at = datetime.now(UTC)
         db.add(skill)
         updated.append({"tag_id": tag_id, "level": new_level, "new": True})
 
@@ -126,13 +126,15 @@ def get_skill_tree(db: Session) -> dict:
         tag = tags.get(skill.tag_id)
         if not tag:
             continue
-        nodes.append({
-            "id": skill.tag_id,
-            "name": tag.name,
-            "level": skill.level,
-            "note_count": skill.note_count,
-            "xp": skill.xp,
-        })
+        nodes.append(
+            {
+                "id": skill.tag_id,
+                "name": tag.name,
+                "level": skill.level,
+                "note_count": skill.note_count,
+                "xp": skill.xp,
+            }
+        )
         if tag.parent_id and tag.parent_id in tags:
             edges.append({"source": tag.parent_id, "target": skill.tag_id})
 

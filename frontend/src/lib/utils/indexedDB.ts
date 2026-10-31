@@ -7,7 +7,7 @@
  *   - "outbox": keyPath "id" — pending changes awaiting sync (autoIncrement id)
  *   - "meta":   keyPath "key" — metadata such as lastSyncAt
  */
-import { browser } from '$app/environment';
+import { browser } from '$app/env';
 import type { Note } from '$lib/api';
 
 const DB_NAME = 'joidy';

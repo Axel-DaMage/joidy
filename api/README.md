@@ -14,7 +14,7 @@ skills, gamification, auth, and Obsidian sync. Runs on **port 8000**.
 ## Prerequisites
 
 - Docker + Docker Compose (recommended)
-- Or Python 3.12 with `requirements.txt` for local dev
+- Or Python 3.12 with `requirements-dev.txt` for local dev (`requirements.txt` is runtime-only; the dev file adds pytest/ruff/mypy for tests and lint)
 - A running PostgreSQL instance (the `postgres` container in dev)
 - `.env` configured from `.env.example` (see root [AGENTS.md](../AGENTS.md))
 

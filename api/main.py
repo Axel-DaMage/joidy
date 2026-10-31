@@ -1,11 +1,13 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
+from datetime import UTC
 from pathlib import Path
 from time import perf_counter
 
 from config import settings
 from database import init_db
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from logging_config import setup_logging
@@ -13,12 +15,14 @@ from middleware.metrics import MetricsMiddleware
 from middleware.rate_limit import RateLimitMiddleware
 from middleware.request_id import RequestIdMiddleware
 from routers import (
-    folders,
+    achievements,
     ai,
     analytics,
     auth,
     config,
+    emails,
     export,
+    folders,
     gamification,
     goals,
     metrics,
@@ -39,7 +43,7 @@ from routers import (
 )
 from routers.integrations import github, google, spotify, strava
 from services.auth_service import get_current_user
-from fastapi import Depends, HTTPException
+from services.http_client import aclose_http_clients, http_client
 from services.response_cache import get_cache_stats
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -56,7 +60,12 @@ class RequestTimingMiddleware(BaseHTTPMiddleware):
         duration_ms = (perf_counter() - start) * 1000
         response.headers["X-Process-Time"] = f"{duration_ms:.2f}ms"
         if duration_ms >= 500:
-            logger.warning("[api] slow_request path=%s duration_ms=%.2f status=%s", request.url.path, duration_ms, response.status_code)
+            logger.warning(
+                "[api] slow_request path=%s duration_ms=%.2f status=%s",
+                request.url.path,
+                duration_ms,
+                response.status_code,
+            )
         return response
 
 
@@ -81,21 +90,29 @@ async def lifespan(app: FastAPI):
     init_db()
     logger.info("Database initialization complete")
 
-    # Auto-restore goals from vault if DB has none (#504)
-    try:
-        from database import SessionLocal
-        from models.goal import Goal
-        from services.joidy_vault_writer import restore_goals_from_vault
+    # Capture the running event loop so sync endpoints (threadpool, no loop)
+    # can still schedule WebSocket broadcasts (#992).
+    websocket.set_main_loop(asyncio.get_running_loop())
 
-        with SessionLocal() as db:
-            if db.query(Goal).count() == 0:
-                result = restore_goals_from_vault(db)
-                if result["restored"] > 0:
-                    logger.info("Restored %d goals from vault", result["restored"])
-    except Exception:
-        logger.exception("Failed to auto-restore goals from vault")
+    # Auto-restore goals from vault if DB has none (#504). Skipped under
+    # APP_ENV=test: the vault holds real user data on dev machines and would
+    # seed the test DB (#1158). CI has no vault, which masked this.
+    if settings.app_env != "test":
+        try:
+            from database import SessionLocal
+            from models.goal import Goal
+            from services.joidy_vault_writer import restore_goals_from_vault
+
+            with SessionLocal() as db:
+                if db.query(Goal).count() == 0:
+                    result = restore_goals_from_vault(db)
+                    if result["restored"] > 0:
+                        logger.info("Restored %d goals from vault", result["restored"])
+        except Exception:
+            logger.exception("Failed to auto-restore goals from vault")
 
     yield
+    await aclose_http_clients()
 
 
 class CorsSafetyMiddleware(BaseHTTPMiddleware):
@@ -112,6 +129,7 @@ class CorsSafetyMiddleware(BaseHTTPMiddleware):
         except Exception:
             logger.exception("Unhandled exception in request: %s %s", request.method, request.url.path)
             from starlette.responses import JSONResponse
+
             response = JSONResponse(
                 status_code=500,
                 content={"detail": "Internal server error"},
@@ -125,8 +143,12 @@ class CorsSafetyMiddleware(BaseHTTPMiddleware):
                 request_origin = request.headers.get("origin")
                 if request_origin and request_origin in _cors_origins:
                     response.headers["Access-Control-Allow-Origin"] = request_origin
-                    response.headers.setdefault("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-                    response.headers.setdefault("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Request-Id")
+                    response.headers.setdefault(
+                        "Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+                    )
+                    response.headers.setdefault(
+                        "Access-Control-Allow-Headers", "Authorization, Content-Type, X-Request-Id"
+                    )
         return response
 
 
@@ -163,6 +185,7 @@ app = FastAPI(
         {"name": "ai", "description": "AI classification and RAG endpoints"},
         {"name": "personal_streaks", "description": "Personal streak tracking and analytics"},
         {"name": "mood", "description": "Daily mood tracking and analytics"},
+        {"name": "emails", "description": "Unified mail inbox imported via external sync (n8n → Gmail)"},
     ],
 )
 
@@ -170,6 +193,7 @@ app.add_middleware(GZipMiddleware, minimum_size=1024)
 app.add_middleware(RequestTimingMiddleware)
 app.add_middleware(MetricsMiddleware)
 app.add_middleware(RateLimitMiddleware)
+
 
 def _get_cors_origins() -> list[str]:
     """Return allowed CORS origins based on environment."""
@@ -195,14 +219,18 @@ app.include_router(notes.router, dependencies=[Depends(get_current_user)])
 app.include_router(config.router)
 app.include_router(metrics.router, dependencies=[Depends(get_current_user)])
 app.include_router(mood.router, dependencies=[Depends(get_current_user)])
+app.include_router(emails.router, dependencies=[Depends(get_current_user)])
 app.include_router(tags.router, dependencies=[Depends(get_current_user)])
 app.include_router(skills.router, dependencies=[Depends(get_current_user)])
 app.include_router(goals.router, dependencies=[Depends(get_current_user)])
 app.include_router(gamification.router, dependencies=[Depends(get_current_user)])
+app.include_router(achievements.router, dependencies=[Depends(get_current_user)])
 app.include_router(personal_streaks.router, dependencies=[Depends(get_current_user)])
 app.include_router(push.router, dependencies=[Depends(get_current_user)])
 app.include_router(github.router, dependencies=[Depends(get_current_user)])
-app.include_router(google.router, dependencies=[Depends(get_current_user)])
+# Google: per-route auth (the OAuth /callback must be reachable by the bare
+# browser redirect; token/status/data routes declare their own deps).
+app.include_router(google.router)
 app.include_router(strava.router, dependencies=[Depends(get_current_user)])
 app.include_router(spotify.router, dependencies=[Depends(get_current_user)])
 app.include_router(vault.router, dependencies=[Depends(get_current_user)])
@@ -228,9 +256,7 @@ try:
     Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
 except OSError:
     _uploads_available = False
-    logger.warning(
-        "Uploads disabled — could not create upload_dir '%s'", settings.upload_dir, exc_info=True
-    )
+    logger.warning("Uploads disabled — could not create upload_dir '%s'", settings.upload_dir, exc_info=True)
 
 
 class SafeStaticFiles(StaticFiles):
@@ -296,6 +322,7 @@ async def health_ready():
     # Cache check (in-memory)
     try:
         from services.response_cache import get_cache_stats
+
         stats = get_cache_stats()
         checks["cache"] = "ok" if stats.get("initialized") else "degraded"
     except Exception as e:
@@ -309,8 +336,7 @@ async def health_ready():
         checks["ai_service"] = "disabled"
     else:
         try:
-            import httpx
-            async with httpx.AsyncClient(timeout=2.0) as client:
+            async with http_client(timeout=2.0) as client:
                 r = await client.get(f"{settings.ai_service_url}/health")
                 if r.status_code == 200:
                     body = r.json()
@@ -344,10 +370,10 @@ def debug_info():
     if settings.app_env == "production":
         raise HTTPException(status_code=404, detail="Not Found")
     import sys
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     debug_data = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "python_version": sys.version,
     }
 
@@ -357,14 +383,16 @@ def debug_info():
         from sqlalchemy import text
 
         with engine.connect() as conn:
-            result = conn.execute(text("""
+            result = conn.execute(
+                text("""
                 SELECT
                     (SELECT COUNT(*) FROM notes) as notes_count,
                     (SELECT COUNT(*) FROM tags) as tags_count,
                     (SELECT COUNT(*) FROM skills) as skills_count,
                     (SELECT COUNT(*) FROM goals) as goals_count,
                     (SELECT COUNT(*) FROM embedding_failures) as embeddings_failed
-            """)).fetchone()
+            """)
+            ).fetchone()
 
             debug_data["database"] = {
                 "notes": result[0],
@@ -379,6 +407,7 @@ def debug_info():
     # Cache stats
     try:
         from services.response_cache import get_cache_stats
+
         debug_data["cache"] = get_cache_stats()
     except Exception:
         debug_data["cache"] = {"error": "unavailable"}
@@ -389,15 +418,13 @@ def debug_info():
         from models.embedding_failures import EmbeddingFailure
 
         with SessionLocal() as db:
-            recent_failures = db.query(EmbeddingFailure).order_by(
-                EmbeddingFailure.last_error.desc()
-            ).limit(5).all()
+            recent_failures = db.query(EmbeddingFailure).order_by(EmbeddingFailure.last_error.desc()).limit(5).all()
 
             debug_data["recent_failures"] = [
                 {
                     "note_id": f.note_id,
                     "attempts": f.attempts,
-                    "next_retry": f.next_retry_at.isoformat() if f.next_retry_at else None
+                    "next_retry": f.next_retry_at.isoformat() if f.next_retry_at else None,
                 }
                 for f in recent_failures
             ]
@@ -416,7 +443,7 @@ def debug_info():
                     "total_xp": stats.total_xp,
                     "current_streak": stats.current_streak,
                     "plant_stage": stats.plant_stage,
-                    "last_activity": stats.last_activity_date.isoformat() if stats.last_activity_date else None
+                    "last_activity": stats.last_activity_date.isoformat() if stats.last_activity_date else None,
                 }
     except Exception:
         debug_data["gamification"] = {"error": "unavailable"}

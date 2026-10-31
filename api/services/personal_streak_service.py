@@ -1,8 +1,9 @@
 """Personal Streaks Service — extracted from routers for better separation of concerns."""
-from datetime import date, datetime, timedelta, timezone
+
+from datetime import date, timedelta
 
 from models.personal_streaks import PersonalStreak, StreakCheckIn
-from repositories import PersonalStreakRepository, StreakCheckInRepository
+from repositories import StreakCheckInRepository
 from services.timezone_utils import get_local_today
 from sqlalchemy.orm import Session
 
@@ -30,11 +31,7 @@ def backfill_streak_history(db: Session, streak: PersonalStreak) -> None:
                     should_add = True
 
             if should_add:
-                ci = StreakCheckIn(
-                    streak_id=streak.id,
-                    check_date=current,
-                    note="Auto-generado (Migración)"
-                )
+                ci = StreakCheckIn(streak_id=streak.id, check_date=current, note="Auto-generado (Migración)")
                 StreakCheckInRepository(db).add(ci)
                 added_count += 1
 

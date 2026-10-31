@@ -1,4 +1,3 @@
-from repositories import TagCooccurrenceRepository
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -37,9 +36,7 @@ def sync_tag_cooccurrences_for_tags(db: Session, tag_ids: set[int]) -> None:
     placeholders = ", ".join(f":tag_{idx}" for idx in range(len(params)))
 
     db.execute(
-        text(
-            f"DELETE FROM tag_cooccurrences WHERE tag_a_id IN ({placeholders}) OR tag_b_id IN ({placeholders})"
-        ),
+        text(f"DELETE FROM tag_cooccurrences WHERE tag_a_id IN ({placeholders}) OR tag_b_id IN ({placeholders})"),
         params,
     )
 
