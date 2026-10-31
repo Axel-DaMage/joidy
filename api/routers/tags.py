@@ -1,4 +1,3 @@
-
 from database import get_db
 from fastapi import APIRouter, Depends, HTTPException, Response
 from models.note import Note, NoteLink, NoteTag, Tag, TagCooccurrence
@@ -80,10 +79,7 @@ def set_parent(tag_id: int, parent_id: int | None, db: Session = Depends(get_db)
         current = parent_id
         while current is not None:
             if current in visited:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Setting this parent would create a circular hierarchy"
-                )
+                raise HTTPException(status_code=400, detail="Setting this parent would create a circular hierarchy")
             visited.add(current)
             parent_tag = db.query(Tag).filter(Tag.id == current).first()
             current = parent_tag.parent_id if parent_tag else None
@@ -109,38 +105,44 @@ def _cached_tag_graph(db: Session):
 
     # Tags as nodes (negative IDs to distinguish from notes)
     for tag, note_count in _tags_with_note_counts(db):
-        nodes.append({
-            "id": -tag.id,
-            "type": "tag",
-            "name": tag.name,
-            "note_count": note_count,
-            "parent_id": -tag.parent_id if tag.parent_id else None,
-            "group": "tag",
-        })
+        nodes.append(
+            {
+                "id": -tag.id,
+                "type": "tag",
+                "name": tag.name,
+                "note_count": note_count,
+                "parent_id": -tag.parent_id if tag.parent_id else None,
+                "group": "tag",
+            }
+        )
         if tag.parent_id:
             edges.append({"source": -tag.parent_id, "target": -tag.id, "type": "hierarchy", "weight": 1})
 
     # Notes as nodes (positive IDs)
     from sqlalchemy.orm import defer
+
     notes = db.query(Note).options(defer(Note.content), selectinload(Note.tags).selectinload(NoteTag.tag)).all()
     note_links = db.query(NoteLink).all()
     note_tag_relations = db.query(NoteTag).all()
 
     for note in notes:
-        nodes.append({
-            "id": note.id,
-            "type": "note",
-            "title": note.title,
-            "path": note.source_path,
-            "tags": [nt.tag.name for nt in note.tags if nt.tag],
-            "group": "note",
-        })
+        nodes.append(
+            {
+                "id": note.id,
+                "type": "note",
+                "title": note.title,
+                "path": note.source_path,
+                "tags": [nt.tag.name for nt in note.tags if nt.tag],
+                "group": "note",
+            }
+        )
 
     # Gather all existing note titles (case-insensitive) for unresolved wikilinks detection
     existing_titles = {n.title.lower().strip() for n in notes}
     unresolved_nodes = {}
 
     from sqlalchemy import inspect
+
     for note in notes:
         if "content" in inspect(note).unloaded:
             continue
@@ -160,45 +162,52 @@ def _cached_tag_graph(db: Session):
                         "title": link_title_strip,
                         "group": "unresolved",
                     }
-                edges.append({
-                    "source": note.id,
-                    "target": unresolved_id,
-                    "type": "linked",
-                    "weight": 1,
-                })
+                edges.append(
+                    {
+                        "source": note.id,
+                        "target": unresolved_id,
+                        "type": "linked",
+                        "weight": 1,
+                    }
+                )
 
     nodes.extend(unresolved_nodes.values())
 
     # Note-to-note links (wikilinks)
     for link in note_links:
-        edges.append({
-            "source": link.source_note_id,
-            "target": link.target_note_id,
-            "type": "linked",
-            "weight": 1,
-        })
+        edges.append(
+            {
+                "source": link.source_note_id,
+                "target": link.target_note_id,
+                "type": "linked",
+                "weight": 1,
+            }
+        )
 
     # Note-to-tag relations (tagged)
     for nt in note_tag_relations:
-        edges.append({
-            "source": nt.note_id,
-            "target": -nt.tag_id,
-            "type": "tagged",
-            "weight": 1,
-        })
+        edges.append(
+            {
+                "source": nt.note_id,
+                "target": -nt.tag_id,
+                "type": "tagged",
+                "weight": 1,
+            }
+        )
 
     # Tag cooccurrences
     cooccurrence_edges = db.query(TagCooccurrence).all()
     for edge in cooccurrence_edges:
-        edges.append({
-            "source": -edge.tag_a_id,
-            "target": -edge.tag_b_id,
-            "type": "cooccurrence",
-            "weight": edge.weight,
-        })
+        edges.append(
+            {
+                "source": -edge.tag_a_id,
+                "target": -edge.tag_b_id,
+                "type": "cooccurrence",
+                "weight": edge.weight,
+            }
+        )
 
     return {"nodes": nodes, "edges": edges}
-
 
 
 register_cache_clearer(_cached_tag_graph.cache_clear)  # type: ignore[attr-defined]

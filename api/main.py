@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from datetime import UTC
 from pathlib import Path
 from time import perf_counter
 
@@ -58,7 +59,12 @@ class RequestTimingMiddleware(BaseHTTPMiddleware):
         duration_ms = (perf_counter() - start) * 1000
         response.headers["X-Process-Time"] = f"{duration_ms:.2f}ms"
         if duration_ms >= 500:
-            logger.warning("[api] slow_request path=%s duration_ms=%.2f status=%s", request.url.path, duration_ms, response.status_code)
+            logger.warning(
+                "[api] slow_request path=%s duration_ms=%.2f status=%s",
+                request.url.path,
+                duration_ms,
+                response.status_code,
+            )
         return response
 
 
@@ -119,6 +125,7 @@ class CorsSafetyMiddleware(BaseHTTPMiddleware):
         except Exception:
             logger.exception("Unhandled exception in request: %s %s", request.method, request.url.path)
             from starlette.responses import JSONResponse
+
             response = JSONResponse(
                 status_code=500,
                 content={"detail": "Internal server error"},
@@ -132,8 +139,12 @@ class CorsSafetyMiddleware(BaseHTTPMiddleware):
                 request_origin = request.headers.get("origin")
                 if request_origin and request_origin in _cors_origins:
                     response.headers["Access-Control-Allow-Origin"] = request_origin
-                    response.headers.setdefault("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-                    response.headers.setdefault("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Request-Id")
+                    response.headers.setdefault(
+                        "Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+                    )
+                    response.headers.setdefault(
+                        "Access-Control-Allow-Headers", "Authorization, Content-Type, X-Request-Id"
+                    )
         return response
 
 
@@ -178,6 +189,7 @@ app.add_middleware(GZipMiddleware, minimum_size=1024)
 app.add_middleware(RequestTimingMiddleware)
 app.add_middleware(MetricsMiddleware)
 app.add_middleware(RateLimitMiddleware)
+
 
 def _get_cors_origins() -> list[str]:
     """Return allowed CORS origins based on environment."""
@@ -239,9 +251,7 @@ try:
     Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
 except OSError:
     _uploads_available = False
-    logger.warning(
-        "Uploads disabled — could not create upload_dir '%s'", settings.upload_dir, exc_info=True
-    )
+    logger.warning("Uploads disabled — could not create upload_dir '%s'", settings.upload_dir, exc_info=True)
 
 
 class SafeStaticFiles(StaticFiles):
@@ -307,6 +317,7 @@ async def health_ready():
     # Cache check (in-memory)
     try:
         from services.response_cache import get_cache_stats
+
         stats = get_cache_stats()
         checks["cache"] = "ok" if stats.get("initialized") else "degraded"
     except Exception as e:
@@ -354,10 +365,10 @@ def debug_info():
     if settings.app_env == "production":
         raise HTTPException(status_code=404, detail="Not Found")
     import sys
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     debug_data = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "python_version": sys.version,
     }
 
@@ -367,14 +378,16 @@ def debug_info():
         from sqlalchemy import text
 
         with engine.connect() as conn:
-            result = conn.execute(text("""
+            result = conn.execute(
+                text("""
                 SELECT
                     (SELECT COUNT(*) FROM notes) as notes_count,
                     (SELECT COUNT(*) FROM tags) as tags_count,
                     (SELECT COUNT(*) FROM skills) as skills_count,
                     (SELECT COUNT(*) FROM goals) as goals_count,
                     (SELECT COUNT(*) FROM embedding_failures) as embeddings_failed
-            """)).fetchone()
+            """)
+            ).fetchone()
 
             debug_data["database"] = {
                 "notes": result[0],
@@ -389,6 +402,7 @@ def debug_info():
     # Cache stats
     try:
         from services.response_cache import get_cache_stats
+
         debug_data["cache"] = get_cache_stats()
     except Exception:
         debug_data["cache"] = {"error": "unavailable"}
@@ -399,15 +413,13 @@ def debug_info():
         from models.embedding_failures import EmbeddingFailure
 
         with SessionLocal() as db:
-            recent_failures = db.query(EmbeddingFailure).order_by(
-                EmbeddingFailure.last_error.desc()
-            ).limit(5).all()
+            recent_failures = db.query(EmbeddingFailure).order_by(EmbeddingFailure.last_error.desc()).limit(5).all()
 
             debug_data["recent_failures"] = [
                 {
                     "note_id": f.note_id,
                     "attempts": f.attempts,
-                    "next_retry": f.next_retry_at.isoformat() if f.next_retry_at else None
+                    "next_retry": f.next_retry_at.isoformat() if f.next_retry_at else None,
                 }
                 for f in recent_failures
             ]
@@ -426,7 +438,7 @@ def debug_info():
                     "total_xp": stats.total_xp,
                     "current_streak": stats.current_streak,
                     "plant_stage": stats.plant_stage,
-                    "last_activity": stats.last_activity_date.isoformat() if stats.last_activity_date else None
+                    "last_activity": stats.last_activity_date.isoformat() if stats.last_activity_date else None,
                 }
     except Exception:
         debug_data["gamification"] = {"error": "unavailable"}

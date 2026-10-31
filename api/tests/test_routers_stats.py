@@ -1,12 +1,12 @@
 """Router tests for the stats endpoints (#13)."""
 
 import uuid
-from datetime import datetime, timezone
 
 from fastapi.testclient import TestClient
 from models.gamification import UserStats, XPEvent
 from models.goal import Goal
-from models.note import Note, Tag as TagModel
+from models.note import Note
+from models.note import Tag as TagModel
 from models.skill import Skill
 
 
@@ -25,14 +25,16 @@ def test_system_stats_with_data(client: TestClient, db_session):
     tag = TagModel(name=f"t1-stats-{uuid.uuid4().hex[:8]}")
     db_session.add(tag)
     db_session.flush()
-    db_session.add_all([
-        Note(title="Note A stats", content="a"),
-        Note(title="Note B stats", content="b"),
-        Goal(title="G1 stats", temporality="DAILY", measurement_type="BOOLEAN"),
-        Skill(tag_id=tag.id, note_count=5),
-        XPEvent(event_type="note_created", xp=10),
-        XPEvent(event_type="note_created", xp=10),
-    ])
+    db_session.add_all(
+        [
+            Note(title="Note A stats", content="a"),
+            Note(title="Note B stats", content="b"),
+            Goal(title="G1 stats", temporality="DAILY", measurement_type="BOOLEAN"),
+            Skill(tag_id=tag.id, note_count=5),
+            XPEvent(event_type="note_created", xp=10),
+            XPEvent(event_type="note_created", xp=10),
+        ]
+    )
     # Update or create UserStats (id=1 may already exist on shared dev DB).
     stats = db_session.query(UserStats).filter(UserStats.id == 1).first()
     if stats is None:

@@ -7,16 +7,11 @@ domain-specific query methods. Injected via FastAPI Depends.
 
 from __future__ import annotations
 
-from collections.abc import Generator
-from datetime import date, datetime, timedelta, timezone
-from typing import Generic, TypeVar
-
-from fastapi import Depends
-from sqlalchemy import func, select, text
-from sqlalchemy.orm import Session
+from datetime import UTC, datetime, timedelta
 
 from config import settings
 from database import get_db
+from fastapi import Depends
 from models.config import SystemConfig
 from models.gamification import StreakRecord, UserStats, XPEvent
 from models.github import GitHubEvent, GitHubItem, GitHubRepo
@@ -33,11 +28,10 @@ from models.personal_streaks import PersonalStreak, StreakCheckIn
 from models.planning import PlanningAssignment
 from models.skill import Skill
 from services.timezone_utils import get_local_today
+from sqlalchemy.orm import Session
 
-ModelT = TypeVar("ModelT")
 
-
-class BaseRepository(Generic[ModelT]):
+class BaseRepository[ModelT]:
     """Generic CRUD base for domain repositories."""
 
     def __init__(self, db: Session, model: type[ModelT]) -> None:
@@ -76,48 +70,22 @@ class NoteRepository(BaseRepository[Note]):
         return self._db.query(Note).filter(Note.source_path == path).first()
 
     def find_by_tag(self, tag_id: int) -> list[Note]:
-        return (
-            self._db.query(Note)
-            .join(NoteTag)
-            .filter(NoteTag.tag_id == tag_id)
-            .all()
-        )
+        return self._db.query(Note).join(NoteTag).filter(NoteTag.tag_id == tag_id).all()
 
     def search(self, query: str, limit: int = 20) -> list[Note]:
         q = f"%{query}%"
-        return (
-            self._db.query(Note)
-            .filter(Note.title.ilike(q) | Note.content.ilike(q))
-            .limit(limit)
-            .all()
-        )
+        return self._db.query(Note).filter(Note.title.ilike(q) | Note.content.ilike(q)).limit(limit).all()
 
     def get_orphaned(self) -> list[Note]:
         """Notes not linked to any goal or tag."""
-        return (
-            self._db.query(Note)
-            .outerjoin(NoteTag)
-            .filter(NoteTag.tag_id.is_(None))
-            .all()
-        )
+        return self._db.query(Note).outerjoin(NoteTag).filter(NoteTag.tag_id.is_(None)).all()
 
     def get_recent(self, days: int = 7) -> list[Note]:
-        since = datetime.now(timezone.utc) - timedelta(days=days)
-        return (
-            self._db.query(Note)
-            .filter(Note.created_at >= since)
-            .order_by(Note.created_at.desc())
-            .all()
-        )
+        since = datetime.now(UTC) - timedelta(days=days)
+        return self._db.query(Note).filter(Note.created_at >= since).order_by(Note.created_at.desc()).all()
 
-    def get_created_between(
-        self, start: datetime, end: datetime
-    ) -> list[Note]:
-        return (
-            self._db.query(Note)
-            .filter(Note.created_at >= start, Note.created_at < end)
-            .all()
-        )
+    def get_created_between(self, start: datetime, end: datetime) -> list[Note]:
+        return self._db.query(Note).filter(Note.created_at >= start, Note.created_at < end).all()
 
 
 class TagRepository(BaseRepository[Tag]):
@@ -138,16 +106,11 @@ class NoteLinkRepository(BaseRepository[NoteLink]):
         super().__init__(db, NoteLink)
 
     def find_by_source(self, source_note_id: int) -> list[NoteLink]:
-        return (
-            self._db.query(NoteLink)
-            .filter(NoteLink.source_note_id == source_note_id)
-            .all()
-        )
+        return self._db.query(NoteLink).filter(NoteLink.source_note_id == source_note_id).all()
 
     def delete_for_note(self, note_id: int) -> None:
         self._db.query(NoteLink).filter(
-            (NoteLink.source_note_id == note_id)
-            | (NoteLink.target_note_id == note_id)
+            (NoteLink.source_note_id == note_id) | (NoteLink.target_note_id == note_id)
         ).delete()
 
 
@@ -157,17 +120,11 @@ class TagCooccurrenceRepository(BaseRepository[TagCooccurrence]):
 
     def delete_for_tags(self, tag_ids: set[int]) -> None:
         self._db.query(TagCooccurrence).filter(
-            (TagCooccurrence.tag_a_id.in_(tag_ids))
-            | (TagCooccurrence.tag_b_id.in_(tag_ids))
+            (TagCooccurrence.tag_a_id.in_(tag_ids)) | (TagCooccurrence.tag_b_id.in_(tag_ids))
         ).delete(synchronize_session=False)
 
     def get_graph_data(self, limit: int = 200) -> list[TagCooccurrence]:
-        return (
-            self._db.query(TagCooccurrence)
-            .order_by(TagCooccurrence.weight.desc())
-            .limit(limit)
-            .all()
-        )
+        return self._db.query(TagCooccurrence).order_by(TagCooccurrence.weight.desc()).limit(limit).all()
 
 
 class EmbeddingFailureRepository(BaseRepository[EmbeddingFailure]):
@@ -175,23 +132,16 @@ class EmbeddingFailureRepository(BaseRepository[EmbeddingFailure]):
         super().__init__(db, EmbeddingFailure)
 
     def find_by_note(self, note_id: int) -> EmbeddingFailure | None:
-        return (
-            self._db.query(EmbeddingFailure)
-            .filter(EmbeddingFailure.note_id == note_id)
-            .first()
-        )
+        return self._db.query(EmbeddingFailure).filter(EmbeddingFailure.note_id == note_id).first()
 
     def get_retryable(self, limit: int = 20) -> list[EmbeddingFailure]:
         """Failures still eligible for retry (attempts < max and due now)."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         max_attempts = settings.embedding_retry_max_attempts
         return (
             self._db.query(EmbeddingFailure)
             .filter(EmbeddingFailure.attempts < max_attempts)
-            .filter(
-                EmbeddingFailure.next_retry_at.is_(None)
-                | (EmbeddingFailure.next_retry_at <= now)
-            )
+            .filter(EmbeddingFailure.next_retry_at.is_(None) | (EmbeddingFailure.next_retry_at <= now))
             .order_by(EmbeddingFailure.updated_at.asc())
             .limit(limit)
             .all()
@@ -211,11 +161,7 @@ class EmbeddingFailureRepository(BaseRepository[EmbeddingFailure]):
     def count_dead_letters(self) -> int:
         """Count failures that exceeded max retry attempts."""
         max_attempts = settings.embedding_retry_max_attempts
-        return (
-            self._db.query(EmbeddingFailure)
-            .filter(EmbeddingFailure.attempts >= max_attempts)
-            .count()
-        )
+        return self._db.query(EmbeddingFailure).filter(EmbeddingFailure.attempts >= max_attempts).count()
 
 
 # ─── Goal ────────────────────────────────────────────────────────────────────
@@ -226,23 +172,13 @@ class GoalRepository(BaseRepository[Goal]):
         super().__init__(db, Goal)
 
     def get_active(self) -> list[Goal]:
-        return (
-            self._db.query(Goal)
-            .filter(Goal.state == GoalState.ACTIVE)
-            .all()
-        )
+        return self._db.query(Goal).filter(Goal.state == GoalState.ACTIVE).all()
 
     def get_by_note(self, note_id: int) -> list[Goal]:
-        return (
-            self._db.query(Goal).filter(Goal.note_id == note_id).all()
-        )
+        return self._db.query(Goal).filter(Goal.note_id == note_id).all()
 
     def get_failed(self) -> list[Goal]:
-        return (
-            self._db.query(Goal)
-            .filter(Goal.state == GoalState.FAILED)
-            .all()
-        )
+        return self._db.query(Goal).filter(Goal.state == GoalState.FAILED).all()
 
     def get_completed_since(self, since: datetime) -> list[Goal]:
         return (
@@ -282,19 +218,10 @@ class XPEventRepository(BaseRepository[XPEvent]):
         super().__init__(db, XPEvent)
 
     def get_recent(self, limit: int = 50) -> list[XPEvent]:
-        return (
-            self._db.query(XPEvent)
-            .order_by(XPEvent.created_at.desc())
-            .limit(limit)
-            .all()
-        )
+        return self._db.query(XPEvent).order_by(XPEvent.created_at.desc()).limit(limit).all()
 
     def count_since(self, since: datetime) -> int:
-        return (
-            self._db.query(XPEvent)
-            .filter(XPEvent.created_at >= since)
-            .count()
-        )
+        return self._db.query(XPEvent).filter(XPEvent.created_at >= since).count()
 
 
 class StreakRecordRepository(BaseRepository[StreakRecord]):
@@ -303,11 +230,7 @@ class StreakRecordRepository(BaseRepository[StreakRecord]):
 
     def get_today(self) -> StreakRecord | None:
         today = get_local_today()
-        return (
-            self._db.query(StreakRecord)
-            .filter(StreakRecord.activity_date == today)
-            .first()
-        )
+        return self._db.query(StreakRecord).filter(StreakRecord.activity_date == today).first()
 
 
 # ─── GitHub ──────────────────────────────────────────────────────────────────
@@ -318,11 +241,7 @@ class GitHubRepoRepository(BaseRepository[GitHubRepo]):
         super().__init__(db, GitHubRepo)
 
     def find_by_full_name(self, full_name: str) -> GitHubRepo | None:
-        return (
-            self._db.query(GitHubRepo)
-            .filter(GitHubRepo.full_name == full_name)
-            .first()
-        )
+        return self._db.query(GitHubRepo).filter(GitHubRepo.full_name == full_name).first()
 
 
 class GitHubItemRepository(BaseRepository[GitHubItem]):
@@ -330,27 +249,17 @@ class GitHubItemRepository(BaseRepository[GitHubItem]):
         super().__init__(db, GitHubItem)
 
     def find_by_external_id(self, external_id: int) -> GitHubItem | None:
-        return (
-            self._db.query(GitHubItem)
-            .filter(GitHubItem.external_id == external_id)
-            .first()
-        )
+        return self._db.query(GitHubItem).filter(GitHubItem.external_id == external_id).first()
 
     def list_by_repo(self, repo_id: int) -> list[GitHubItem]:
-        return (
-            self._db.query(GitHubItem)
-            .filter(GitHubItem.repo_id == repo_id)
-            .all()
-        )
+        return self._db.query(GitHubItem).filter(GitHubItem.repo_id == repo_id).all()
 
 
 class GitHubEventRepository(BaseRepository[GitHubEvent]):
     def __init__(self, db: Session) -> None:
         super().__init__(db, GitHubEvent)
 
-    def list_by_repo(
-        self, repo_id: int, limit: int = 50
-    ) -> list[GitHubEvent]:
+    def list_by_repo(self, repo_id: int, limit: int = 50) -> list[GitHubEvent]:
         return (
             self._db.query(GitHubEvent)
             .filter(GitHubEvent.repo_id == repo_id)
@@ -368,21 +277,11 @@ class SkillRepository(BaseRepository[Skill]):
         super().__init__(db, Skill)
 
     def find_by_name(self, name: str) -> Skill | None:
-        return (
-            self._db.query(Skill)
-            .join(Skill.tag)
-            .filter(Tag.name == name)
-            .first()
-        )
+        return self._db.query(Skill).join(Skill.tag).filter(Tag.name == name).first()
 
     def find_roots(self) -> list[Skill]:
         """Skills whose tag has no parent tag."""
-        return (
-            self._db.query(Skill)
-            .join(Skill.tag)
-            .filter(Tag.parent_id.is_(None))
-            .all()
-        )
+        return self._db.query(Skill).join(Skill.tag).filter(Tag.parent_id.is_(None)).all()
 
 
 # ─── Personal Streaks ────────────────────────────────────────────────────────
@@ -393,11 +292,7 @@ class PersonalStreakRepository(BaseRepository[PersonalStreak]):
         super().__init__(db, PersonalStreak)
 
     def get_active(self) -> list[PersonalStreak]:
-        return (
-            self._db.query(PersonalStreak)
-            .filter(PersonalStreak.is_archived.is_(False))
-            .all()
-        )
+        return self._db.query(PersonalStreak).filter(PersonalStreak.is_archived.is_(False)).all()
 
 
 class StreakCheckInRepository(BaseRepository[StreakCheckIn]):

@@ -3,8 +3,7 @@ Joidy Vault Writer — writes Joidy-owned files into _joidy/ inside the Obsidian
 Joidy NEVER modifies files outside of _joidy/.
 """
 
-import os
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 from config import settings
@@ -198,12 +197,18 @@ def restore_goals_from_vault(db: Session) -> dict:
                     fail_emoji=parsed.get("fail_emoji", "🔴"),
                     color=parsed.get("color", "#c8a96e"),
                     theme=parsed.get("theme", "solid"),
-                    max_assignment_days=int(parsed["max_assignment_days"]) if parsed.get("max_assignment_days") and parsed["max_assignment_days"] != "None" else None,
+                    max_assignment_days=int(parsed["max_assignment_days"])
+                    if parsed.get("max_assignment_days") and parsed["max_assignment_days"] != "None"
+                    else None,
                     note_id=int(parsed["note_id"]) if parsed.get("note_id") and parsed["note_id"] != "None" else None,
                     tag_id=int(parsed["tag_id"]) if parsed.get("tag_id") and parsed["tag_id"] != "None" else None,
-                    parent_id=int(parsed["parent_id"]) if parsed.get("parent_id") and parsed["parent_id"] != "None" else None,
+                    parent_id=int(parsed["parent_id"])
+                    if parsed.get("parent_id") and parsed["parent_id"] != "None"
+                    else None,
                     is_completed=str(parsed.get("is_completed", "")).lower() == "true",
-                    completed_at=datetime.fromisoformat(parsed["completed_at"]) if parsed.get("completed_at") and parsed["completed_at"] != "None" else None,
+                    completed_at=datetime.fromisoformat(parsed["completed_at"])
+                    if parsed.get("completed_at") and parsed["completed_at"] != "None"
+                    else None,
                     source_path=str(f.relative_to(f.parents[1])),
                 )
                 db.add(goal)
@@ -316,6 +321,7 @@ def _write_goal_file(db: Session, goal: Goal, obj_dir: Path) -> Path | None:
 
 def slugify(text: str) -> str:
     import re
+
     text = text.lower()
     text = re.sub(r"[^\w\s-]", "", text)
     text = re.sub(r"[\s_]+", "-", text)
@@ -375,19 +381,21 @@ def write_readme(vault_path: Path) -> None:
 
 
 def _get_notes_created_today(db: Session, today: date) -> list:
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from models.note import Note
+
     start = datetime.combine(today, datetime.min.time())
     end = datetime.combine(today, datetime.max.time())
     return db.query(Note).filter(Note.created_at >= start, Note.created_at <= end).all()
 
 
 def _get_top_tags_week(db: Session) -> list:
-    from datetime import timedelta, timezone
+    from datetime import timedelta
 
     from models.note import Note, Tag
-    week_ago = datetime.now(timezone.utc) - timedelta(days=7)
+
+    week_ago = datetime.now(UTC) - timedelta(days=7)
     results = (
         db.query(Tag.name, Tag.id)
         .join(NoteTag, NoteTag.tag_id == Tag.id)
@@ -426,6 +434,7 @@ def _format_goals(goals, db, checked: bool) -> str:
 def _goal_progress(goal: Goal, db: Session) -> str:
     if goal.tag_id:
         from models.note import NoteTag
+
         count = db.query(NoteTag).filter(NoteTag.tag_id == goal.tag_id).count()
         return f" ({count}/{goal.target_notes} notas)"
     return ""

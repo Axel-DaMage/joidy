@@ -16,9 +16,6 @@ Everything in here is best-effort: if a path does not live under any known
 vault root, it is returned unchanged so exotic inputs cannot block creation.
 """
 
-import os
-import re
-
 from config import settings
 from services.env_file import read_env
 
@@ -37,7 +34,7 @@ def _strip_root(path: str, root: str) -> str | None:
     prefix = root + "/"
     if not path.startswith(prefix):
         return None
-    rel = path[len(prefix):]
+    rel = path[len(prefix) :]
     # Reject traversal — the service layer must never tolerate a source path
     # that escapes the vault (write_to_vault would happily follow it).
     if any(part == ".." for part in rel.split("/")):

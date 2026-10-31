@@ -1,17 +1,14 @@
 from fastapi.testclient import TestClient
-from models.note import Note
+
 
 def test_list_notes_empty(client: TestClient):
     response = client.get("/notes/")
     assert response.status_code == 200
     assert response.json() == []
 
+
 def test_create_and_get_note(client: TestClient):
-    payload = {
-        "title": "Test Note",
-        "content": "This is a test note #testing",
-        "tags": ["testing"]
-    }
+    payload = {"title": "Test Note", "content": "This is a test note #testing", "tags": ["testing"]}
     response = client.post("/notes/", json=payload)
     assert response.status_code == 201
     data = response.json()
@@ -24,6 +21,7 @@ def test_create_and_get_note(client: TestClient):
     assert get_response.status_code == 200
     assert get_response.json()["id"] == note_id
 
+
 def test_update_note(client: TestClient):
     payload = {"title": "Original Title", "content": "Original Content", "tags": []}
     response = client.post("/notes/", json=payload)
@@ -33,7 +31,8 @@ def test_update_note(client: TestClient):
     update_res = client.put(f"/notes/{note_id}", json=update_payload)
     assert update_res.status_code == 200
     assert update_res.json()["title"] == "Updated Title"
-    
+
+
 def test_delete_note(client: TestClient):
     payload = {"title": "To Delete", "content": "Delete me", "tags": []}
     response = client.post("/notes/", json=payload)

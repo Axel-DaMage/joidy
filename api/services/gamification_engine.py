@@ -11,10 +11,9 @@ Every mutation in the system calls process_event(), which:
 import json
 import logging
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import date
 
 from config import settings
-from models.config import SystemConfig
 from models.gamification import StreakRecord, UserStats, XPEvent
 from repositories import ConfigRepository, StreakRecordRepository, UserStatsRepository, XPEventRepository
 from services.response_cache import clear_api_caches
@@ -39,10 +38,10 @@ DEFAULT_XP_TABLE = {
 }
 
 DEFAULT_PLANT_STAGES = [
-    (0,     "semilla"),
-    (300,   "brote"),
-    (1200,  "plantón"),
-    (4000,  "joven"),
+    (0, "semilla"),
+    (300, "brote"),
+    (1200, "plantón"),
+    (4000, "joven"),
     (10000, "madura"),
     (25000, "floreciendo"),
     (60000, "árbol"),
@@ -174,7 +173,6 @@ class GamificationResult:
     message: str = ""
 
 
-
 def _get_or_create_stats(db: Session) -> UserStats:
     return UserStatsRepository(db).get_or_create()
 
@@ -182,7 +180,7 @@ def _get_or_create_stats(db: Session) -> UserStats:
 def _compute_plant_stage(total_xp: int, db: Session | None = None) -> tuple[int, str]:
     stages = get_plant_stages(db)
     stage_idx = 0
-    for i, (threshold, name) in enumerate(stages):
+    for i, (threshold, _name) in enumerate(stages):
         if total_xp >= threshold:
             stage_idx = i
     return stage_idx, stages[stage_idx][1]
@@ -315,6 +313,7 @@ def process_event(
     # Centralized WebSocket broadcasts for gamification
     try:
         from routers.websocket import broadcast_streak_updated, broadcast_xp_gained
+
         if xp > 0:
             broadcast_xp_gained(xp, stats.total_xp)
         if streak_changed:
@@ -335,9 +334,7 @@ def process_event(
     )
 
 
-def _build_message(
-    event_type: str, xp: int, stage_name: str, milestone: int | None, stage_changed: bool
-) -> str:
+def _build_message(event_type: str, xp: int, stage_name: str, milestone: int | None, stage_changed: bool) -> str:
     parts = [f"+{xp} XP"]
     if stage_changed:
         parts.append(f"Tu planta creció: {stage_name}!")

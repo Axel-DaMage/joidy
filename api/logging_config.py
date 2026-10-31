@@ -46,10 +46,10 @@ class DevFormatter(logging.Formatter):
     """Human-readable formatter with colors for development."""
 
     COLORS = {
-        "DEBUG": "\033[36m",     # Cyan
-        "INFO": "\033[32m",      # Green
-        "WARNING": "\033[33m",   # Yellow
-        "ERROR": "\033[31m",     # Red
+        "DEBUG": "\033[36m",  # Cyan
+        "INFO": "\033[32m",  # Green
+        "WARNING": "\033[33m",  # Yellow
+        "ERROR": "\033[31m",  # Red
         "CRITICAL": "\033[41m",  # Red background
     }
     RESET = "\033[0m"
@@ -100,10 +100,7 @@ def setup_logging() -> None:
             encoding="utf-8",
         )
     except OSError as exc:
-        stream.stream.write(
-            f"WARNING: file logging disabled — could not init "
-            f"'{log_dir}': {exc}\n"
-        )
+        stream.stream.write(f"WARNING: file logging disabled — could not init '{log_dir}': {exc}\n")
     if file_handler is not None:
         file_handler.setFormatter(JSONFormatter())
         file_handler.addFilter(CorrelationLogFilter())

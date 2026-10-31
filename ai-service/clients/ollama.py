@@ -1,4 +1,5 @@
 import logging
+from typing import cast
 
 import aiohttp
 from config import settings
@@ -42,7 +43,7 @@ class OllamaClient(BaseLLMClient, EmbeddingClient):
             if resp.status != 200:
                 raise Exception(f"Ollama embedding failed: {await resp.text()}")
             data = await resp.json()
-            return data["embedding"]
+            return cast("list[float]", data["embedding"])
 
     async def generate(
         self,
@@ -65,13 +66,13 @@ class OllamaClient(BaseLLMClient, EmbeddingClient):
             if resp.status != 200:
                 raise Exception(f"Ollama generate failed: {await resp.text()}")
             data = await resp.json()
-            return data["response"]
+            return cast("str", data["response"])
 
     async def health_check(self) -> bool:
         """Check if Ollama is reachable via GET /api/tags (lightweight, no model load)."""
         try:
             session = await self._get_session()
             async with session.get(f"{self._base_url}/api/tags") as resp:
-                return resp.status == 200
+                return cast("bool", resp.status == 200)
         except Exception:
             return False

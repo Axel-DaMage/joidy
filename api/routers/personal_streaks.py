@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, timedelta
 
 from database import get_db
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -20,6 +20,7 @@ CATEGORIES = ["general", "salud", "estudio", "fitness", "creatividad", "habito",
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
+
 
 def _backfill_streak_history(db: Session, streak: PersonalStreak):
     """Generates missing check-ins from start_date up to yesterday."""
@@ -45,11 +46,7 @@ def _backfill_streak_history(db: Session, streak: PersonalStreak):
                     should_add = True
 
             if should_add:
-                ci = StreakCheckIn(
-                    streak_id=streak.id,
-                    check_date=current,
-                    note="Auto-generado (Migración)"
-                )
+                ci = StreakCheckIn(streak_id=streak.id, check_date=current, note="Auto-generado (Migración)")
                 db.add(ci)
                 added_count += 1
 
@@ -62,6 +59,7 @@ def _backfill_streak_history(db: Session, streak: PersonalStreak):
 
 
 # ── Streak computation ─────────────────────────────────────────────────────────
+
 
 def _compute_streak(checkin_dates: list[date], frequency: str = "daily", frequency_days: int = 1) -> tuple[int, int]:
     """Returns (current_streak, longest_streak) considering frequency settings.
@@ -153,7 +151,9 @@ def _streak_to_dict(streak: PersonalStreak, days_history: int = 365) -> dict:
 
     # Apply offset
     effective_current = current + streak.offset
-    effective_longest = max(longest + streak.offset, streak.best_streak) if longest > 0 else max(streak.offset, streak.best_streak)
+    effective_longest = (
+        max(longest + streak.offset, streak.best_streak) if longest > 0 else max(streak.offset, streak.best_streak)
+    )
 
     # Timezone-safe "today" reference: if the server's UTC today is not in
     # the check-in set but the most recent check-in is within 1 day, use it
@@ -232,6 +232,7 @@ def _streak_to_dict(streak: PersonalStreak, days_history: int = 365) -> dict:
 
 # ── Schemas ────────────────────────────────────────────────────────────────────
 
+
 class StreakCreate(BaseModel):
     name: str
     emoji: str = "🔥"
@@ -274,6 +275,7 @@ class CheckInData(BaseModel):
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
+
 
 @router.get("/categories")
 def list_categories():
@@ -346,16 +348,13 @@ def list_streaks(
 ):
     q = db.query(PersonalStreak).options(selectinload(PersonalStreak.checkins))
     if not include_archived:
-        q = q.filter(PersonalStreak.is_archived == False)
+        q = q.filter(PersonalStreak.is_archived == False)  # noqa: E712 -- SQLAlchemy column comparison; `not` would produce wrong SQL
     if category and category != "all":
         q = q.filter(PersonalStreak.category == category)
     total = q.count()
     streaks = q.order_by(PersonalStreak.created_at).offset(offset).limit(limit).all()
     add_pagination_headers(response, total=total, limit=limit, offset=offset)
-    return [
-        _streak_to_dict(s, days_history=days_history if include_history else 0)
-        for s in streaks
-    ]
+    return [_streak_to_dict(s, days_history=days_history if include_history else 0) for s in streaks]
 
 
 @router.post("/", status_code=201)
@@ -394,9 +393,19 @@ def update_streak(streak_id: int, data: StreakUpdate, db: Session = Depends(get_
         raise HTTPException(status_code=404, detail="Streak not found")
 
     updatable = [
-        "name", "emoji", "icon", "description", "color", "theme", "category",
-        "target_date", "frequency", "frequency_days", "snowball_mode",
-        "is_archived", "freeze_count",
+        "name",
+        "emoji",
+        "icon",
+        "description",
+        "color",
+        "theme",
+        "category",
+        "target_date",
+        "frequency",
+        "frequency_days",
+        "snowball_mode",
+        "is_archived",
+        "freeze_count",
     ]
     for field in updatable:
         val = getattr(data, field, None)
@@ -436,10 +445,14 @@ def checkin(streak_id: int, data: CheckInData = None, db: Session = Depends(get_
         raise HTTPException(status_code=404, detail="Streak not found")
 
     today = data.check_date or get_local_today()
-    existing = db.query(StreakCheckIn).filter(
-        StreakCheckIn.streak_id == streak_id,
-        StreakCheckIn.check_date == today,
-    ).first()
+    existing = (
+        db.query(StreakCheckIn)
+        .filter(
+            StreakCheckIn.streak_id == streak_id,
+            StreakCheckIn.check_date == today,
+        )
+        .first()
+    )
 
     if existing:
         # Update existing check-in note/mood
@@ -479,10 +492,14 @@ def undo_checkin(streak_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Streak not found")
 
     today = get_local_today()
-    ci = db.query(StreakCheckIn).filter(
-        StreakCheckIn.streak_id == streak_id,
-        StreakCheckIn.check_date == today,
-    ).first()
+    ci = (
+        db.query(StreakCheckIn)
+        .filter(
+            StreakCheckIn.streak_id == streak_id,
+            StreakCheckIn.check_date == today,
+        )
+        .first()
+    )
 
     if ci:
         db.delete(ci)
@@ -506,10 +523,14 @@ def use_freeze(streak_id: int, db: Session = Depends(get_db)):
 
     # Check if already checked in today
     today = get_local_today()
-    already = db.query(StreakCheckIn).filter(
-        StreakCheckIn.streak_id == streak_id,
-        StreakCheckIn.check_date == today,
-    ).first()
+    already = (
+        db.query(StreakCheckIn)
+        .filter(
+            StreakCheckIn.streak_id == streak_id,
+            StreakCheckIn.check_date == today,
+        )
+        .first()
+    )
 
     if already:
         raise HTTPException(status_code=400, detail="Already checked in today")

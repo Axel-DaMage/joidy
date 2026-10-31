@@ -18,7 +18,36 @@ select = [
     "B",   # flake8-bugbear
     "UP",  # pyupgrade
 ]
-ignore = []
+ignore = [
+    # FastAPI dependency injection idiom: Depends()/Query()/Body() calls in
+    # parameter defaults are the framework's documented pattern, not a bug
+    # (#994). ~150 occurrences across api/routers and ai-service.
+    "B008",
+    # raise-without-from-inside-except: pre-existing debt (#994). Fixing ~40
+    # raise sites changes exception chaining semantics; ratchet later.
+    "B904",
+    # replace-str-enum: `(str, PyEnum)` classes back SQLAlchemy Enum columns;
+    # switching to StrEnum alters runtime semantics (`.value` lookups,
+    # SQLAlchemy Enum handling) — needs its own dedicated PR (#994).
+    "UP042",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Intentional star re-exports: models/__init__.py aggregates every ORM model
+# (and their import registers them with Base.metadata); database.py pulls the
+# same registry.
+"api/models/__init__.py" = ["F403"]
+"api/database.py" = ["F403"]
+# Alembic files follow the generated template layout (imports after the
+# module docstring / config block).
+"api/alembic/**" = ["E402"]
+# Test harnesses configure env/paths (DATABASE_URL, sys.path) before importing
+# the app modules under test.
+"api/tests/conftest.py" = ["E402"]
+"api/tests/test_obsidian_sync.py" = ["E402"]
+# Prompt prose must stay verbatim: these lines are LLM system prompts where a
+# reflow would alter the exact bytes sent to the model.
+"ai-service/clients/prompts.py" = ["E501"]
 
 [tool.mypy]
 python_version = "3.12"
@@ -26,6 +55,52 @@ warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false
 ignore_missing_imports = true
+# CI runs one invocation per service so cwd-relative module names stay unique:
+#   cd api         && MYPYPATH=. mypy --explicit-package-bases --config-file ../pyproject.toml .
+#   cd ai-service  && MYPYPATH=. mypy --explicit-package-bases --config-file ../pyproject.toml .
+#   cd worker      && MYPYPATH=. mypy --explicit-package-bases --config-file ../pyproject.toml .
+explicit_package_bases = true
+
+# Baseline (#994): these modules carry pre-existing typing debt (144 errors
+# total, verified against development @ 2197e32). They are temporarily
+# unchecked so CI fails on NEW errors in the ~115 modules that are clean
+# today. Ratchet: delete entries one by one as each module is fixed.
+[[tool.mypy.overrides]]
+module = [
+    "database",
+    "middleware.metrics",
+    "repositories",
+    "routers.analytics",
+    "routers.gamification",
+    "routers.integrations.github",
+    "routers.personal_streaks",
+    "routers.sync",
+    "routers.system",
+    "routers.tags",
+    "services.auth_service",
+    "services.email_service",
+    "services.embedding_retry",
+    "services.embedding_service",
+    "services.env_file",
+    "services.github_service",
+    "services.goal_service",
+    "services.google_service",
+    "services.google_token_service",
+    "services.joidy_vault_writer",
+    "services.mood_service",
+    "services.note_service",
+    "services.sanitizer",
+    "services.spotify_service",
+    "services.strava_service",
+    "services.webhook_sync",
+    "tests.test_goal_service",
+    "tests.test_google_token_service",
+    "tests.test_joidy_vault_writer",
+    "tests.test_skill_tree_service",
+    "alembic.env",
+    "alembic.versions.*",
+]
+ignore_errors = true
 
 [tool.pytest.ini_options]
 minversion = "7.0"

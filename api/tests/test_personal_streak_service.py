@@ -153,6 +153,7 @@ class CalculateStreakStatsTest(PersonalStreakTestBase):
         self.assertEqual(stats["current_streak"], 2)
         self.assertEqual(stats["longest_streak"], 2)
         db.close()
+
     def test_stats_reflect_checkins(self):
         db = self.Session()
         streak = self._create_streak(db)

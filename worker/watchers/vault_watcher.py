@@ -79,17 +79,16 @@ class PersistentEventLog:
 
     def __init__(self, path: str):
         self._path = path
+        self._conn: sqlite3.Connection | None
         try:
             Path(path).parent.mkdir(parents=True, exist_ok=True)
             self._conn = sqlite3.connect(path, check_same_thread=False)
             self._conn.execute(
-                "CREATE TABLE IF NOT EXISTS pending_events "
-                "(path TEXT PRIMARY KEY, change_type TEXT NOT NULL)"
+                "CREATE TABLE IF NOT EXISTS pending_events (path TEXT PRIMARY KEY, change_type TEXT NOT NULL)"
             )
             self._conn.commit()
         except Exception as exc:
-            logger.warning("[vault] Persistent event log unavailable (%s); "
-                           "crash recovery disabled", exc)
+            logger.warning("[vault] Persistent event log unavailable (%s); crash recovery disabled", exc)
             self._conn = None
 
     def add(self, path: str, change_type: Change) -> None:
@@ -117,18 +116,14 @@ class PersistentEventLog:
         if self._conn is None:
             return []
         try:
-            rows = self._conn.execute(
-                "SELECT path, change_type FROM pending_events"
-            ).fetchall()
+            rows = self._conn.execute("SELECT path, change_type FROM pending_events").fetchall()
             result = []
             for path, ct_name in rows:
                 try:
                     result.append((path, Change[ct_name]))
                 except KeyError:
                     # Unknown change type from an older log version — drop it.
-                    self._conn.execute(
-                        "DELETE FROM pending_events WHERE path = ?", (path,)
-                    )
+                    self._conn.execute("DELETE FROM pending_events WHERE path = ?", (path,))
             self._conn.commit()
             return result
         except Exception as exc:
@@ -180,12 +175,13 @@ async def get_auth_token(client: httpx.AsyncClient, *, force: bool = False) -> s
                 logger.error("[vault] Failed to get auth token (attempt %d/%d): %s", attempt + 1, MAX_AUTH_RETRIES, e)
 
             if attempt < MAX_AUTH_RETRIES - 1:
-                wait = min(2 ** attempt, 30.0)
+                wait = min(2**attempt, 30.0)
                 logger.info("[vault] Retrying auth in %.1fs", wait)
                 await asyncio.sleep(wait)
 
         _auth_token = ""
         return ""
+
 
 def _is_joidy_file(path: str) -> bool:
     return JOIDY_DIR in Path(path).parts
@@ -199,7 +195,7 @@ def _parse_frontmatter(content: str) -> tuple[dict, str]:
         end = content.find("---", 3)
         if end != -1:
             fm_text = content[3:end].strip()
-            body = content[end + 3:].strip()
+            body = content[end + 3 :].strip()
             for line in fm_text.splitlines():
                 if ":" in line:
                     key, _, value = line.partition(":")
@@ -217,7 +213,7 @@ def _extract_tags_from_content(content: str, frontmatter: dict) -> list[str]:
     # Inline #tags
     inline = re.findall(r"#([a-zA-Z][a-zA-Z0-9_-]+)", content)
     tags.extend(inline)
-    return list(set(t.lower() for t in tags if t))
+    return list({t.lower() for t in tags if t})
 
 
 async def delete_note_by_path(path: str, client: httpx.AsyncClient, token: str):
@@ -229,7 +225,9 @@ async def delete_note_by_path(path: str, client: httpx.AsyncClient, token: str):
             headers = {"X-Request-ID": cid}
             if current_token:
                 headers["Authorization"] = f"Bearer {current_token}"
-            r = await client.get(f"{settings.api_url}/notes/", params={"source_path": path}, headers=headers, timeout=10.0)
+            r = await client.get(
+                f"{settings.api_url}/notes/", params={"source_path": path}, headers=headers, timeout=10.0
+            )
             if r.status_code == 401:
                 logger.warning("[vault] Auth expired while deleting %s, refreshing token", Path(path).name)
                 await get_auth_token(client, force=True)
@@ -238,13 +236,15 @@ async def delete_note_by_path(path: str, client: httpx.AsyncClient, token: str):
                 notes = r.json()
                 for n in notes:
                     if n.get("source_path") == path:
-                        del_res = await client.delete(f"{settings.api_url}/notes/{n['id']}", headers=headers, timeout=10.0)
+                        del_res = await client.delete(
+                            f"{settings.api_url}/notes/{n['id']}", headers=headers, timeout=10.0
+                        )
                         if del_res.status_code == 401:
                             await get_auth_token(client, force=True)
                             continue
                         logger.info("[vault] Deleted: %s", Path(path).name)
                         return
-            break # Success or not found
+            break  # Success or not found
         except Exception as e:
             if attempt == 2:
                 logger.exception("[vault] Error deleting %s: %s", path, e)
@@ -305,8 +305,13 @@ async def rename_note_path(old_path: str, new_path: Path, client: httpx.AsyncCli
                 headers["Authorization"] = f"Bearer {current_token}"
             res = await client.put(
                 f"{settings.api_url}/notes/{existing['id']}",
-                json={"title": title, "content": content, "tags": tags,
-                      "source": "obsidian", "source_path": str(new_path)},
+                json={
+                    "title": title,
+                    "content": content,
+                    "tags": tags,
+                    "source": "obsidian",
+                    "source_path": str(new_path),
+                },
                 headers=headers,
                 timeout=10.0,
             )
@@ -314,7 +319,7 @@ async def rename_note_path(old_path: str, new_path: Path, client: httpx.AsyncCli
                 await get_auth_token(client, force=True)
                 continue
             if res.status_code in (429, 500, 503):
-                await asyncio.sleep(2 ** attempt)
+                await asyncio.sleep(2**attempt)
                 continue
             res.raise_for_status()
             _fingerprints[str(new_path)] = _fingerprint(content)
@@ -361,7 +366,8 @@ async def import_or_update_note(filepath: Path, client: httpx.AsyncClient, token
                             break
                 break
             except Exception:
-                if attempt == 2: raise
+                if attempt == 2:
+                    raise
                 await asyncio.sleep(1)
 
         payload = {"title": title, "content": content, "tags": tags, "source": "obsidian", "source_path": str(filepath)}
@@ -378,7 +384,13 @@ async def import_or_update_note(filepath: Path, client: httpx.AsyncClient, token
             if existing:
                 res = await client.put(
                     f"{settings.api_url}/notes/{existing['id']}",
-                    json={"title": title, "content": content, "tags": tags, "source": "obsidian", "source_path": str(filepath)},
+                    json={
+                        "title": title,
+                        "content": content,
+                        "tags": tags,
+                        "source": "obsidian",
+                        "source_path": str(filepath),
+                    },
                     headers=headers,
                     timeout=10.0,
                 )
@@ -391,8 +403,15 @@ async def import_or_update_note(filepath: Path, client: httpx.AsyncClient, token
                 continue
 
             if res.status_code in (429, 500, 503):
-                wait = 2 ** attempt
-                logger.warning("[vault] %s syncing %s (attempt %d/%d), retrying in %ss", res.status_code, filepath.name, attempt + 1, 5, wait)
+                wait = 2**attempt
+                logger.warning(
+                    "[vault] %s syncing %s (attempt %d/%d), retrying in %ss",
+                    res.status_code,
+                    filepath.name,
+                    attempt + 1,
+                    5,
+                    wait,
+                )
                 await asyncio.sleep(wait)
                 continue
 
@@ -419,7 +438,7 @@ async def initial_scan(vault_path: Path, client: httpx.AsyncClient, token: str):
 
     await asyncio.gather(*(process_file(filepath) for filepath in md_files), return_exceptions=True)
 
-    for attempt in range(2):
+    for _attempt in range(2):
         current_token = await get_auth_token(client)
         headers = {"X-Request-ID": get_correlation_id()}
         if current_token:

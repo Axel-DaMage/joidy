@@ -23,7 +23,6 @@ from watchers.vault_watcher import (
     VaultEvent,
     _consume_vault_events,
     _fingerprint,
-    import_or_update_note,
 )
 from watchfiles import Change
 
@@ -65,7 +64,7 @@ def _make_client(responses):
         return _next("DELETE")
 
     def _next(method):
-        for i, (m, resp) in enumerate(queue):
+        for i, (m, _resp) in enumerate(queue):
             if m == method:
                 return queue.pop(i)[1]
         # Default: empty list for GET, generic 200 otherwise.
@@ -95,12 +94,12 @@ async def _run_consumer_once(queue, client, *, debounce=0.05, flush=0.02):
     """
     event_log = PersistentEventLog(os.path.join(tempfile.gettempdir(), "test_events.db"))
     try:
-        with patch("watchers.vault_watcher.DEBOUNCE_SECONDS", debounce), patch(
-            "watchers.vault_watcher.QUEUE_FLUSH_INTERVAL", flush
-        ), patch("watchers.vault_watcher.get_auth_token", new=AsyncMock(return_value="token")):
-            consumer_task = asyncio.create_task(
-                _consume_vault_events(queue, client, "token", event_log)
-            )
+        with (
+            patch("watchers.vault_watcher.DEBOUNCE_SECONDS", debounce),
+            patch("watchers.vault_watcher.QUEUE_FLUSH_INTERVAL", flush),
+            patch("watchers.vault_watcher.get_auth_token", new=AsyncMock(return_value="token")),
+        ):
+            consumer_task = asyncio.create_task(_consume_vault_events(queue, client, "token", event_log))
             # Wait until the consumer has processed the batch (queue drained
             # + debounce elapsed) then trigger shutdown.
             await asyncio.sleep(debounce + flush + 0.3)
@@ -150,10 +149,12 @@ class TestVaultWatcherIntegration(unittest.IsolatedAsyncioTestCase):
             queue = asyncio.Queue()
             await queue.put(VaultEvent(path=str(md), change_type=Change.added))
 
-            client = _make_client([
-                ("GET", FakeResponse(200, [])),       # no existing note
-                ("POST", FakeResponse(201)),           # create
-            ])
+            client = _make_client(
+                [
+                    ("GET", FakeResponse(200, [])),  # no existing note
+                    ("POST", FakeResponse(201)),  # create
+                ]
+            )
 
             await _run_consumer_once(queue, client)
 
@@ -173,10 +174,12 @@ class TestVaultWatcherIntegration(unittest.IsolatedAsyncioTestCase):
             queue = asyncio.Queue()
             await queue.put(VaultEvent(path=str(md), change_type=Change.modified))
 
-            client = _make_client([
-                ("GET", FakeResponse(200, [{"id": 42, "source_path": str(md)}])),
-                ("PUT", FakeResponse(200)),
-            ])
+            client = _make_client(
+                [
+                    ("GET", FakeResponse(200, [{"id": 42, "source_path": str(md)}])),
+                    ("PUT", FakeResponse(200)),
+                ]
+            )
 
             await _run_consumer_once(queue, client)
 
@@ -197,10 +200,12 @@ class TestVaultWatcherIntegration(unittest.IsolatedAsyncioTestCase):
             queue = asyncio.Queue()
             await queue.put(VaultEvent(path=str(md), change_type=Change.deleted))
 
-            client = _make_client([
-                ("GET", FakeResponse(200, [{"id": 99, "source_path": str(md)}])),
-                ("DELETE", FakeResponse(204)),
-            ])
+            client = _make_client(
+                [
+                    ("GET", FakeResponse(200, [{"id": 99, "source_path": str(md)}])),
+                    ("DELETE", FakeResponse(204)),
+                ]
+            )
 
             await _run_consumer_once(queue, client)
 
@@ -225,20 +230,19 @@ class TestVaultWatcherIntegration(unittest.IsolatedAsyncioTestCase):
             await queue.put(VaultEvent(path=str(md_a), change_type=Change.added))
             await queue.put(VaultEvent(path=str(md_b), change_type=Change.added))
 
-            client = _make_client([
-                ("GET", FakeResponse(200, [])),
-                ("GET", FakeResponse(200, [])),
-                ("POST", FakeResponse(201)),
-                ("POST", FakeResponse(201)),
-            ])
+            client = _make_client(
+                [
+                    ("GET", FakeResponse(200, [])),
+                    ("GET", FakeResponse(200, [])),
+                    ("POST", FakeResponse(201)),
+                    ("POST", FakeResponse(201)),
+                ]
+            )
 
             await _run_consumer_once(queue, client)
 
             assert client.post.call_count == 2
-            paths = [
-                call.kwargs["json"]["source_path"]
-                for call in client.post.call_args_list
-            ]
+            paths = [call.kwargs["json"]["source_path"] for call in client.post.call_args_list]
             assert str(md_a) in paths
             assert str(md_b) in paths
 
@@ -262,10 +266,12 @@ class TestVaultWatcherIntegration(unittest.IsolatedAsyncioTestCase):
             await queue.put(VaultEvent(path=str(old_path), change_type=Change.deleted))
             await queue.put(VaultEvent(path=str(new_path), change_type=Change.added))
 
-            client = _make_client([
-                ("GET", FakeResponse(200, [{"id": 55, "source_path": str(old_path)}])),
-                ("PUT", FakeResponse(200)),  # rename → update source_path
-            ])
+            client = _make_client(
+                [
+                    ("GET", FakeResponse(200, [{"id": 55, "source_path": str(old_path)}])),
+                    ("PUT", FakeResponse(200)),  # rename → update source_path
+                ]
+            )
 
             await _run_consumer_once(queue, client)
 
@@ -296,10 +302,12 @@ class TestVaultDebounce(unittest.IsolatedAsyncioTestCase):
             queue = asyncio.Queue()
             await queue.put(VaultEvent(path=str(md), change_type=Change.added))
 
-            client = _make_client([
-                ("GET", FakeResponse(200, [])),
-                ("POST", FakeResponse(201)),
-            ])
+            client = _make_client(
+                [
+                    ("GET", FakeResponse(200, [])),
+                    ("POST", FakeResponse(201)),
+                ]
+            )
 
             # Use a longer debounce to verify timing.
             elapsed = await self._timed_consumer(queue, client, debounce=0.3, flush=0.02)
@@ -320,10 +328,12 @@ class TestVaultDebounce(unittest.IsolatedAsyncioTestCase):
             await queue.put(VaultEvent(path=str(md), change_type=Change.modified))
             await queue.put(VaultEvent(path=str(md), change_type=Change.modified))
 
-            client = _make_client([
-                ("GET", FakeResponse(200, [])),
-                ("POST", FakeResponse(201)),
-            ])
+            client = _make_client(
+                [
+                    ("GET", FakeResponse(200, [])),
+                    ("POST", FakeResponse(201)),
+                ]
+            )
 
             await _run_consumer_once(queue, client, debounce=0.05, flush=0.02)
 
@@ -337,12 +347,12 @@ class TestVaultDebounce(unittest.IsolatedAsyncioTestCase):
         event_log = PersistentEventLog(os.path.join(tempfile.gettempdir(), "test_events.db"))
         start = time.monotonic()
         try:
-            with patch("watchers.vault_watcher.DEBOUNCE_SECONDS", debounce), patch(
-                "watchers.vault_watcher.QUEUE_FLUSH_INTERVAL", flush
-            ), patch("watchers.vault_watcher.get_auth_token", new=AsyncMock(return_value="token")):
-                consumer_task = asyncio.create_task(
-                    _consume_vault_events(queue, client, "token", event_log)
-                )
+            with (
+                patch("watchers.vault_watcher.DEBOUNCE_SECONDS", debounce),
+                patch("watchers.vault_watcher.QUEUE_FLUSH_INTERVAL", flush),
+                patch("watchers.vault_watcher.get_auth_token", new=AsyncMock(return_value="token")),
+            ):
+                consumer_task = asyncio.create_task(_consume_vault_events(queue, client, "token", event_log))
                 await asyncio.sleep(debounce + flush + 0.3)
                 vault_watcher.shutdown_event.set()
                 await asyncio.wait_for(consumer_task, timeout=5.0)
@@ -365,9 +375,11 @@ class TestVaultConflictEdgeCases(unittest.IsolatedAsyncioTestCase):
             queue = asyncio.Queue()
             await queue.put(VaultEvent(path=str(md), change_type=Change.deleted))
 
-            client = _make_client([
-                ("GET", FakeResponse(200, [])),  # no notes match
-            ])
+            client = _make_client(
+                [
+                    ("GET", FakeResponse(200, [])),  # no notes match
+                ]
+            )
 
             await _run_consumer_once(queue, client)
 
@@ -393,10 +405,12 @@ class TestVaultConflictEdgeCases(unittest.IsolatedAsyncioTestCase):
             await queue.put(VaultEvent(path=str(md), change_type=Change.modified))
             await queue.put(VaultEvent(path=str(md), change_type=Change.deleted))
 
-            client = _make_client([
-                ("GET", FakeResponse(200, [{"id": 77, "source_path": str(md)}])),
-                ("DELETE", FakeResponse(204)),
-            ])
+            client = _make_client(
+                [
+                    ("GET", FakeResponse(200, [{"id": 77, "source_path": str(md)}])),
+                    ("DELETE", FakeResponse(204)),
+                ]
+            )
 
             await _run_consumer_once(queue, client)
 

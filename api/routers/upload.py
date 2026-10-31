@@ -107,15 +107,9 @@ def _magic_signatures() -> dict[str, list[tuple[bytes, int]]]:
         "application/vnd.ms-excel": [(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1", 0)],
         "application/vnd.ms-powerpoint": [(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1", 0)],
         # OOXML formats are ZIP containers.
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [
-            (b"PK\x03\x04", 0)
-        ],
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [
-            (b"PK\x03\x04", 0)
-        ],
-        "application/vnd.openxmlformats-officedocument.presentationml.presentation": [
-            (b"PK\x03\x04", 0)
-        ],
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [(b"PK\x03\x04", 0)],
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [(b"PK\x03\x04", 0)],
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation": [(b"PK\x03\x04", 0)],
     }
 
 

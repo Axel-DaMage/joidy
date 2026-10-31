@@ -1,9 +1,9 @@
 """Router tests for the personal streaks endpoints (#13)."""
 
-from datetime import date, datetime, timezone
+from datetime import date
 
 from fastapi.testclient import TestClient
-from models.personal_streaks import PersonalStreak, StreakCheckIn
+from models.personal_streaks import StreakCheckIn
 
 
 def test_list_categories(client: TestClient):
@@ -96,11 +96,14 @@ def test_checkin_creates_checkin(client: TestClient):
     streak_id = create.json()["id"]
 
     today = date.today().isoformat()
-    response = client.post(f"/personal-streaks/{streak_id}/checkin", json={
-        "note": "Done!",
-        "mood": 4,
-        "check_date": today,
-    })
+    response = client.post(
+        f"/personal-streaks/{streak_id}/checkin",
+        json={
+            "note": "Done!",
+            "mood": 4,
+            "check_date": today,
+        },
+    )
     assert response.status_code == 200
     data = response.json()
     assert data["today_checked"] is True
@@ -141,8 +144,15 @@ def test_global_stats_shape(client: TestClient):
     response = client.get("/personal-streaks/stats")
     assert response.status_code == 200
     data = response.json()
-    for key in ("total_active", "total_archived", "longest_ever", "longest_name",
-                "total_checkins", "checkin_rate", "days_tracked"):
+    for key in (
+        "total_active",
+        "total_archived",
+        "longest_ever",
+        "longest_name",
+        "total_checkins",
+        "checkin_rate",
+        "days_tracked",
+    ):
         assert key in data
 
 

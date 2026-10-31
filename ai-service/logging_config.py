@@ -116,10 +116,7 @@ def setup_logging() -> None:
             encoding="utf-8",
         )
     except OSError as exc:
-        stream.stream.write(
-            f"WARNING: file logging disabled — could not init "
-            f"'{log_dir}': {exc}\n"
-        )
+        stream.stream.write(f"WARNING: file logging disabled — could not init '{log_dir}': {exc}\n")
     if file_handler is not None:
         file_handler.setFormatter(JSONFormatter())
         file_handler.addFilter(CorrelationLogFilter())

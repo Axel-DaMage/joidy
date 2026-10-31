@@ -32,6 +32,7 @@ class ClassifyRequest(BaseModel):
     content: str
     existing_tags: list[str] = []
 
+
 @router.post("/classify")
 async def classify(req: ClassifyRequest):
     if not settings.ai_service_enabled:
@@ -50,6 +51,7 @@ async def classify(req: ClassifyRequest):
             return r.json()
         except httpx.HTTPError:
             return {"status": "unavailable", "note_id": req.note_id, "suggestions": []}
+
 
 @router.get("/usage")
 async def usage():
@@ -123,6 +125,7 @@ async def daily_recap(
 
     # XP and goals — query gamification events and goals
     from models.goal import Goal
+
     goals_completed = db.query(Goal).filter(Goal.completed_at >= start, Goal.completed_at < end).count()
 
     note_titles = [n.title for n in notes_created[:10]]
@@ -174,13 +177,7 @@ def _gather_chat_context(db: Session) -> dict:
     Kept lightweight: only titles/counts are sent, never full note content,
     to limit PII exposure and token usage.
     """
-    goals = (
-        db.query(Goal)
-        .filter(Goal.state == GoalState.ACTIVE)
-        .order_by(Goal.created_at.desc())
-        .limit(10)
-        .all()
-    )
+    goals = db.query(Goal).filter(Goal.state == GoalState.ACTIVE).order_by(Goal.created_at.desc()).limit(10).all()
     goal_ctx = [
         {
             "title": g.title,
@@ -208,12 +205,7 @@ def _gather_chat_context(db: Session) -> dict:
     )
     top_tag_names = [t[0] for t in top_tags]
 
-    recent_notes = (
-        db.query(Note.title)
-        .order_by(Note.created_at.desc())
-        .limit(10)
-        .all()
-    )
+    recent_notes = db.query(Note.title).order_by(Note.created_at.desc()).limit(10).all()
     recent_note_titles = [n[0] for n in recent_notes if n[0]]
 
     return {
@@ -261,6 +253,9 @@ async def chat(
         except httpx.HTTPError:
             return {
                 "status": "unavailable",
-                "response": "El asistente no está disponible en este momento. Verifica la configuración de IA e inténtalo de nuevo.",
+                "response": (
+                    "El asistente no está disponible en este momento. "
+                    "Verifica la configuración de IA e inténtalo de nuevo."
+                ),
                 "suggestions": [],
             }

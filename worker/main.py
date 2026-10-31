@@ -11,8 +11,8 @@ import signal
 
 from logging_config import setup_logging
 from metrics_server import start_metrics_server
-from tasks.joidy_daily_writer import schedule_daily_writes
 from task_status import mark_crashed, mark_stopped, record_activity, record_start
+from tasks.joidy_daily_writer import schedule_daily_writes
 from watchers.vault_watcher import shutdown_event, watch_vault
 
 logger = logging.getLogger(__name__)

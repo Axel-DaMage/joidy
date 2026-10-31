@@ -17,15 +17,8 @@ from models.gamification import XPEvent
 
 
 def _pomodoro_events(db_session, pomodoro_id: str):
-    events = (
-        db_session.query(XPEvent)
-        .filter(XPEvent.event_type == "pomodoro_completed")
-        .all()
-    )
-    return [
-        e for e in events
-        if json.loads(e.metadata_json or "{}").get("pomodoro_id") == pomodoro_id
-    ]
+    events = db_session.query(XPEvent).filter(XPEvent.event_type == "pomodoro_completed").all()
+    return [e for e in events if json.loads(e.metadata_json or "{}").get("pomodoro_id") == pomodoro_id]
 
 
 def test_completed_pomodoro_awards_15_xp(client: TestClient, db_session):
@@ -110,7 +103,8 @@ def test_pomodoro_id_optional(client: TestClient, db_session):
     assert res.json()["status"] == "awarded"
 
     events = [
-        e for e in db_session.query(XPEvent).filter(XPEvent.event_type == "pomodoro_completed").all()
+        e
+        for e in db_session.query(XPEvent).filter(XPEvent.event_type == "pomodoro_completed").all()
         if json.loads(e.metadata_json or "{}").get("duration_minutes") == duration
         and json.loads(e.metadata_json or "{}").get("pomodoro_id") is None
     ]

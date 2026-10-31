@@ -6,9 +6,8 @@ Regression coverage for #199: POST /config used to raise NameError because
 
 from unittest.mock import patch
 
-from fastapi.testclient import TestClient
-
 import routers.config as config_router
+from fastapi.testclient import TestClient
 
 
 def test_get_config_returns_200(client: TestClient):
@@ -33,8 +32,10 @@ def test_post_config_returns_200_not_500(client: TestClient, monkeypatch):
         config_router.settings.obsidian_vault_path,
     )
 
-    with patch.object(config_router, "read_env", return_value=dict(fake_env)), \
-         patch.object(config_router, "write_env") as mock_write:
+    with (
+        patch.object(config_router, "read_env", return_value=dict(fake_env)),
+        patch.object(config_router, "write_env") as mock_write,
+    ):
         resp = client.post("/config", json={"obsidian_vault_path": "/tmp/new_vault"})
 
     assert resp.status_code == 200

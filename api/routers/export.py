@@ -4,8 +4,8 @@ Export endpoints for notes.
 
 import io
 import zipfile
+from collections.abc import Iterator
 from datetime import datetime
-from typing import Iterator
 
 from database import get_db
 from fastapi import APIRouter, Depends, HTTPException
@@ -41,8 +41,7 @@ def iter_notes_batched(db: Session, limit: int = EXPORT_MAX_NOTES) -> Iterator[N
         )
         if not batch:
             break
-        for note in batch:
-            yield note
+        yield from batch
         # Detach the consumed batch from the session so it can be garbage
         # collected before the next batch is loaded.
         db.expunge_all()
@@ -68,7 +67,14 @@ def note_to_markdown(note: Note) -> str:
 
 def _html_escape(text: str) -> str:
     """Escape HTML special characters to prevent XSS."""
-    return (text or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;").replace("'", "&#x27;")
+    return (
+        (text or "")
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+        .replace("'", "&#x27;")
+    )
 
 
 def note_to_html(note: Note) -> str:
@@ -121,7 +127,7 @@ def export_notes_markdown(db: Session = Depends(get_db), user: dict = Depends(ge
     return StreamingResponse(
         generate(),
         media_type="text/markdown",
-        headers={"Content-Disposition": f"attachment; filename=joidy-export-{datetime.now().date()}.md"}
+        headers={"Content-Disposition": f"attachment; filename=joidy-export-{datetime.now().date()}.md"},
     )
 
 
@@ -149,15 +155,15 @@ def export_notes_html(db: Session = Depends(get_db), user: dict = Depends(get_cu
   <h1>Joidy Notes Export</h1>
   <p>Exported on {export_iso}</p>
   <hr>
-""".encode("utf-8")
+""".encode()
         for note in iter_notes_batched(db):
-            yield f'<div class="note">{note_to_html(note)}</div>'.encode("utf-8")
+            yield f'<div class="note">{note_to_html(note)}</div>'.encode()
         yield b"\n</body>\n</html>"
 
     return StreamingResponse(
         generate(),
         media_type="text/html",
-        headers={"Content-Disposition": f"attachment; filename=joidy-export-{export_date}.html"}
+        headers={"Content-Disposition": f"attachment; filename=joidy-export-{export_date}.html"},
     )
 
 
@@ -184,5 +190,5 @@ def export_notes_zip(db: Session = Depends(get_db), user: dict = Depends(get_cur
     return StreamingResponse(
         buffer,
         media_type="application/zip",
-        headers={"Content-Disposition": f"attachment; filename=joidy-notes-{datetime.now().date()}.zip"}
+        headers={"Content-Disposition": f"attachment; filename=joidy-notes-{datetime.now().date()}.zip"},
     )

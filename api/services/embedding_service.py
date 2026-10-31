@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from config import settings
 from database import SessionLocal
@@ -43,9 +43,7 @@ async def _embeddings_available() -> bool:
     return available
 
 
-async def trigger_embedding(
-    note_id: int, content: str, db: Session | None = None
-) -> None:
+async def trigger_embedding(note_id: int, content: str, db: Session | None = None) -> None:
     if not await _embeddings_available():
         logger.debug("[embedding] skipped note_id=%s (no embedding provider available)", note_id)
         return
@@ -100,14 +98,18 @@ def record_embedding_failure(db: Session, note_id: int, error_message: str) -> N
         failure.next_retry_at = None
         logger.warning(
             "Embedding for note_id=%s moved to dead letter after %d attempts: %s",
-            note_id, failure.attempts, error_message[:200],
+            note_id,
+            failure.attempts,
+            error_message[:200],
         )
     else:
         delay = compute_retry_delay_seconds(failure.attempts, settings.embedding_retry_base_seconds)
-        failure.next_retry_at = datetime.now(timezone.utc) + timedelta(seconds=delay)
+        failure.next_retry_at = datetime.now(UTC) + timedelta(seconds=delay)
         logger.info(
             "Embedding retry scheduled for note_id=%s attempt=%d delay=%ds",
-            note_id, failure.attempts, delay,
+            note_id,
+            failure.attempts,
+            delay,
         )
     db.commit()
 
@@ -119,7 +121,7 @@ def clear_embedding_failure(db: Session, note_id: int) -> None:
 
 def get_retryable_embedding_notes(db: Session, limit: int = 20) -> list[Note]:
     """Get notes whose embeddings failed but are still retryable (not dead-lettered)."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     max_attempts = settings.embedding_retry_max_attempts
     failures = (
         db.query(EmbeddingFailure)
@@ -131,11 +133,7 @@ def get_retryable_embedding_notes(db: Session, limit: int = 20) -> list[Note]:
     )
 
     note_ids = [f.note_id for f in failures]
-    notes_by_id = (
-        {n.id: n for n in db.query(Note).filter(Note.id.in_(note_ids)).all()}
-        if note_ids
-        else {}
-    )
+    notes_by_id = {n.id: n for n in db.query(Note).filter(Note.id.in_(note_ids)).all()} if note_ids else {}
 
     notes: list[Note] = []
     for failure in failures:
@@ -175,7 +173,7 @@ def reset_dead_letter_entry(db: Session, note_id: int) -> bool:
     if not failure:
         return False
     failure.attempts = 0
-    failure.next_retry_at = datetime.now(timezone.utc)
+    failure.next_retry_at = datetime.now(UTC)
     db.commit()
     logger.info("Dead letter entry reset for note_id=%s", note_id)
     return True
@@ -188,4 +186,3 @@ def purge_dead_letters(db: Session) -> int:
     db.commit()
     logger.info("Purged %d dead letter entries", count)
     return count
-

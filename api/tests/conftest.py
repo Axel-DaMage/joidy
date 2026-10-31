@@ -63,9 +63,7 @@ def _ensure_database(admin_url: str, db_name: str) -> str:
     admin_engine = create_engine(admin_url, isolation_level="AUTOCOMMIT")
     try:
         with admin_engine.connect() as conn:
-            exists = conn.execute(
-                text("SELECT 1 FROM pg_database WHERE datname = :name"), {"name": db_name}
-            ).scalar()
+            exists = conn.execute(text("SELECT 1 FROM pg_database WHERE datname = :name"), {"name": db_name}).scalar()
             if not exists:
                 try:
                     conn.execute(text(f'CREATE DATABASE "{db_name}"'))
@@ -107,10 +105,10 @@ if _USE_POSTGRES and _DB_NAME:
 
 _CAN_DROP = "test" in _DB_NAME.lower() if _DB_NAME else False
 
-from database import Base, get_db
 import main as main_module
-from main import app
+from database import Base, get_db
 from fastapi.testclient import TestClient
+from main import app
 from middleware.rate_limit import _default_limiter
 from services.auth_service import get_current_user
 
@@ -141,9 +139,7 @@ def _wipe_all_tables(engine) -> None:
         names = ", ".join(f'"{t.name}"' for t in Base.metadata.sorted_tables)
         if names:
             with engine.begin() as conn:
-                conn.execute(
-                    text(f"TRUNCATE TABLE {names} RESTART IDENTITY CASCADE")
-                )
+                conn.execute(text(f"TRUNCATE TABLE {names} RESTART IDENTITY CASCADE"))
     else:
         with engine.begin() as conn:
             for table in reversed(Base.metadata.sorted_tables):
@@ -158,10 +154,7 @@ def _has_committed_rows(engine) -> bool:
     which takes ~0.5s on all 24 tables and would reintroduce the per-test
     fixture tax (#996).
     """
-    clauses = " OR ".join(
-        f'EXISTS (SELECT 1 FROM "{t.name}" LIMIT 1)'
-        for t in Base.metadata.sorted_tables
-    )
+    clauses = " OR ".join(f'EXISTS (SELECT 1 FROM "{t.name}" LIMIT 1)' for t in Base.metadata.sorted_tables)
     if not clauses:
         return False
     with engine.connect() as conn:
@@ -327,6 +320,7 @@ def client(db_session):
 def client_no_auth():
     def override_get_current_user():
         from fastapi import HTTPException, status
+
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",

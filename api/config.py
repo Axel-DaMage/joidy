@@ -16,7 +16,9 @@ class Settings(BaseSettings):
     secret_key: str = ""
     internal_secret: str = ""  # Shared secret for API → ai-service auth
     app_env: str = "development"
-    cors_allowed_origins: str = ""  # Comma-separated origins for production (e.g. "https://joidy.app,https://www.joidy.app")
+    cors_allowed_origins: str = (
+        ""  # Comma-separated origins for production (e.g. "https://joidy.app,https://www.joidy.app")
+    )
 
     # GitHub Integration (OAuth - Web Flow + Device Flow)
     github_client_id: str = ""
@@ -34,7 +36,7 @@ class Settings(BaseSettings):
     # File uploads
     upload_dir: str = "data/uploads"
     upload_max_image_bytes: int = 10 * 1024 * 1024  # 10 MB
-    upload_max_file_bytes: int = 50 * 1024 * 1024   # 50 MB
+    upload_max_file_bytes: int = 50 * 1024 * 1024  # 50 MB
 
     # Logging
     log_dir: str = "data/logs"

@@ -21,12 +21,14 @@ def test_subscribe_creates_subscription(client: TestClient, db_session):
 
 
 def test_subscribe_replaces_existing(client: TestClient, db_session):
-    db_session.add(PushSubscription(
-        user_id=1,
-        endpoint="https://old.example.com/send",
-        p256dh="old-p256dh",
-        auth="old-auth",
-    ))
+    db_session.add(
+        PushSubscription(
+            user_id=1,
+            endpoint="https://old.example.com/send",
+            p256dh="old-p256dh",
+            auth="old-auth",
+        )
+    )
     db_session.commit()
 
     payload = {
@@ -51,12 +53,14 @@ def test_subscribe_missing_keys_rejected(client: TestClient):
 
 
 def test_unsubscribe_removes_subscription(client: TestClient, db_session):
-    db_session.add(PushSubscription(
-        user_id=1,
-        endpoint="https://example.com/send",
-        p256dh="p",
-        auth="a",
-    ))
+    db_session.add(
+        PushSubscription(
+            user_id=1,
+            endpoint="https://example.com/send",
+            p256dh="p",
+            auth="a",
+        )
+    )
     db_session.commit()
 
     response = client.post("/push/unsubscribe")

@@ -4,7 +4,7 @@ and the auth-bypass behavior that previously let #322/#323 slip through."""
 import sys
 import types
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 # Stub sqlite_vec before importing app modules (matches conftest pattern).
 if "sqlite_vec" not in sys.modules:
@@ -63,7 +63,7 @@ class TokenTest(unittest.TestCase):
         payload = {
             "sub": "5",
             "username": "bob",
-            "exp": datetime.now(timezone.utc) - timedelta(hours=1),
+            "exp": datetime.now(UTC) - timedelta(hours=1),
         }
         token = jwt.encode(payload, settings.secret_key, algorithm=ALGORITHM)
         self.assertIsNone(verify_token(token))

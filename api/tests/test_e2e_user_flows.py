@@ -11,11 +11,14 @@ def test_full_note_goal_and_streak_flow(client):
     """Create a note, a goal, a tag and verify a streak check-in."""
 
     # 1. Create a note
-    resp = client.post("/notes/", json={
-        "title": "E2E note",
-        "content": "Test content",
-        "tags": ["e2e"],
-    })
+    resp = client.post(
+        "/notes/",
+        json={
+            "title": "E2E note",
+            "content": "Test content",
+            "tags": ["e2e"],
+        },
+    )
     _check(resp, 201, "create note")
     note = resp.json()
     note_id = note["id"]
@@ -28,14 +31,17 @@ def test_full_note_goal_and_streak_flow(client):
     assert any(n["id"] == note_id for n in notes)
 
     # 3. Create a goal
-    resp = client.post("/goals/", json={
-        "title": "E2E goal",
-        "description": "Complete the e2e flow",
-        "temporality": "WEEKLY",
-        "measurement_type": "COUNT",
-        "target_value": 1,
-        "state": "ACTIVE",
-    })
+    resp = client.post(
+        "/goals/",
+        json={
+            "title": "E2E goal",
+            "description": "Complete the e2e flow",
+            "temporality": "WEEKLY",
+            "measurement_type": "COUNT",
+            "target_value": 1,
+            "state": "ACTIVE",
+        },
+    )
     _check(resp, 201, "create goal")
     goal = resp.json()
     goal_id = goal["id"]
@@ -55,19 +61,25 @@ def test_full_note_goal_and_streak_flow(client):
     assert any(n.get("type") == "note" for n in graph["nodes"])
 
     # 6. Create a personal streak and check in
-    resp = client.post("/personal-streaks/", json={
-        "name": "E2E streak",
-        "description": "Daily test streak",
-        "frequency_days": 1,
-    })
+    resp = client.post(
+        "/personal-streaks/",
+        json={
+            "name": "E2E streak",
+            "description": "Daily test streak",
+            "frequency_days": 1,
+        },
+    )
     _check(resp, 201, "create streak")
     streak = resp.json()
     streak_id = streak["id"]
 
-    resp = client.post(f"/personal-streaks/{streak_id}/checkin", json={
-        "note": "first check-in",
-        "mood": 5,
-    })
+    resp = client.post(
+        f"/personal-streaks/{streak_id}/checkin",
+        json={
+            "note": "first check-in",
+            "mood": 5,
+        },
+    )
     _check(resp, 200, "checkin streak")
     checkin = resp.json()
     assert checkin["id"] == streak_id
