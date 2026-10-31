@@ -94,19 +94,22 @@ async def lifespan(app: FastAPI):
     # can still schedule WebSocket broadcasts (#992).
     websocket.set_main_loop(asyncio.get_running_loop())
 
-    # Auto-restore goals from vault if DB has none (#504)
-    try:
-        from database import SessionLocal
-        from models.goal import Goal
-        from services.joidy_vault_writer import restore_goals_from_vault
+    # Auto-restore goals from vault if DB has none (#504). Skipped under
+    # APP_ENV=test: the vault holds real user data on dev machines and would
+    # seed the test DB (#1158). CI has no vault, which masked this.
+    if settings.app_env != "test":
+        try:
+            from database import SessionLocal
+            from models.goal import Goal
+            from services.joidy_vault_writer import restore_goals_from_vault
 
-        with SessionLocal() as db:
-            if db.query(Goal).count() == 0:
-                result = restore_goals_from_vault(db)
-                if result["restored"] > 0:
-                    logger.info("Restored %d goals from vault", result["restored"])
-    except Exception:
-        logger.exception("Failed to auto-restore goals from vault")
+            with SessionLocal() as db:
+                if db.query(Goal).count() == 0:
+                    result = restore_goals_from_vault(db)
+                    if result["restored"] > 0:
+                        logger.info("Restored %d goals from vault", result["restored"])
+        except Exception:
+            logger.exception("Failed to auto-restore goals from vault")
 
     yield
     await aclose_http_clients()
