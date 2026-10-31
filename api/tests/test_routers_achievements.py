@@ -64,7 +64,7 @@ def test_unlock_preserves_client_timestamp_and_metadata(client: TestClient, db_s
 
 def test_unlock_replay_does_not_overwrite_original_data(client: TestClient, db_session):
     key = _unique_key()
-    first = client.post(
+    client.post(
         "/achievements/unlock",
         json={"achievement_key": key, "unlocked_at": "2026-01-01T00:00:00Z"},
     )
@@ -99,14 +99,9 @@ def test_get_returns_only_current_user_achievements(client: TestClient, db_sessi
 def test_unlock_validates_payload(client: TestClient):
     assert client.post("/achievements/unlock", json={}).status_code == 422
     assert client.post("/achievements/unlock", json={"achievement_key": ""}).status_code == 422
+    assert client.post("/achievements/unlock", json={"achievement_key": "x" * 101}).status_code == 422
     assert (
-        client.post("/achievements/unlock", json={"achievement_key": "x" * 101}).status_code
-        == 422
-    )
-    assert (
-        client.post(
-            "/achievements/unlock", json={"achievement_key": "ok", "unlocked_at": "not-a-date"}
-        ).status_code
+        client.post("/achievements/unlock", json={"achievement_key": "ok", "unlocked_at": "not-a-date"}).status_code
         == 422
     )
 
