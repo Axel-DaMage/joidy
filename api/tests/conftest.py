@@ -31,6 +31,17 @@ _TEST_ENV_FILE = Path(tempfile.mkdtemp(prefix="joidy-test-env-")) / ".env"
 _TEST_ENV_FILE.write_text("")
 os.environ["JOIDY_ENV_FILE"] = str(_TEST_ENV_FILE)
 
+# Mark every test process as APP_ENV=test BEFORE any app module (config,
+# main, ...) is imported. Forced (not setdefault) and placed above every
+# other import on purpose: the dev compose overlay exports APP_ENV=development
+# and `docker compose run` passes service env down, which used to win over
+# setdefault — Settings() was then constructed with app_env="development" and
+# the lifespan's vault auto-restore (#1158) seeded REAL goals from the
+# mounted /vault into the test DB, failing test_list_goals_empty and
+# test_get_system_stats locally while CI (which exports APP_ENV=test)
+# stayed green.
+os.environ["APP_ENV"] = "test"
+
 # Test-only bcrypt cost (#996). Hash strength is irrelevant under test and
 # passlib's default (12 rounds) made auth tests the slowest single test in the
 # suite. Must be set before app modules import `config.settings`, which reads
@@ -117,14 +128,6 @@ from services.auth_service import get_current_user
 # running migrations on the same DB would conflict (table-already-exists) and
 # pull in migration history that isn't relevant to unit/e2e tests.
 main_module.init_db = lambda: None
-
-# Mark every test process as APP_ENV=test BEFORE main/config are imported so
-# the lifespan skips vault auto-restore (#1158): on a dev machine /vault holds
-# REAL user goals that would otherwise seed the test DB. main.py gates the
-# restore on settings.app_env; CI sets this var in the workflow, local runs
-# (docker compose run / bare pytest) rely on this line. Must stay above the
-# `import main` below because Settings() is built at import time.
-os.environ.setdefault("APP_ENV", "test")
 
 
 def _wipe_all_tables(engine) -> None:
