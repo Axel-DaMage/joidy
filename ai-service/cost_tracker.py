@@ -56,6 +56,15 @@ def get_monthly_stats() -> dict:
                 {"month_start": month_start},
             ).fetchone()
 
+        if row is None:
+            return {
+                "month": now.strftime("%Y-%m"),
+                "total_input_tokens": 0,
+                "total_output_tokens": 0,
+                "total_api_calls": 0,
+                "estimated_cost_usd": 0.0,
+            }
+
         total_input = int(row[0] or 0)
         total_output = int(row[1] or 0)
         total_calls = int(row[2] or 0)
