@@ -118,13 +118,13 @@ from services.auth_service import get_current_user
 # pull in migration history that isn't relevant to unit/e2e tests.
 main_module.init_db = lambda: None
 
-# The app lifespan auto-restores goals from the Obsidian vault when the DB is
-# empty (#504). Against a developer machine /vault holds REAL user goals, so
-# leaving this active would seed the test DB with production data and break
-# empty-state assertions (#1158). CI passes only because it has no vault.
-import services.joidy_vault_writer as _vault_writer
-
-_vault_writer.restore_goals_from_vault = lambda db: {"restored": 0}
+# Mark every test process as APP_ENV=test BEFORE main/config are imported so
+# the lifespan skips vault auto-restore (#1158): on a dev machine /vault holds
+# REAL user goals that would otherwise seed the test DB. main.py gates the
+# restore on settings.app_env; CI sets this var in the workflow, local runs
+# (docker compose run / bare pytest) rely on this line. Must stay above the
+# `import main` below because Settings() is built at import time.
+os.environ.setdefault("APP_ENV", "test")
 
 
 def _wipe_all_tables(engine) -> None:
