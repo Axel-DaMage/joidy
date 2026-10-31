@@ -129,3 +129,103 @@ def test_save_content_without_link_still_uses_goal_note(client: TestClient, db_s
     auto_note = db_session.query(Note).filter(Note.id == auto_note_id).first()
     assert auto_note is not None
     assert "texto solo en la nota del objetivo" in auto_note.content
+
+
+def _goal_ids(client: TestClient) -> list[int]:
+    return [g["id"] for g in client.get("/goals/").json()]
+
+
+def test_create_goal_defaults_priority_to_zero(client: TestClient):
+    data = client.post("/goals/", json={"title": "Sin prioridad"}).json()
+    assert data["priority"] == 0
+
+
+def test_create_goal_rejects_out_of_range_priority(client: TestClient):
+    res = client.post("/goals/", json={"title": "X", "priority": 100})
+    assert res.status_code == 422
+
+
+def test_list_goals_orders_by_priority_desc(client: TestClient):
+    low = client.post("/goals/", json={"title": "Baja", "priority": 1}).json()
+    neutral = client.post("/goals/", json={"title": "Neutra"}).json()
+    high = client.post("/goals/", json={"title": "Alta", "priority": 5}).json()
+
+    ids = _goal_ids(client)
+    assert ids.index(high["id"]) < ids.index(low["id"]) < ids.index(neutral["id"])
+
+
+def test_completed_goals_stay_last_regardless_of_priority(client: TestClient):
+    done = client.post("/goals/", json={"title": "Hecho", "priority": 5}).json()
+    client.post(f"/goals/{done['id']}/complete")
+    active = client.post("/goals/", json={"title": "Activo"}).json()
+
+    ids = _goal_ids(client)
+    assert ids.index(active["id"]) < ids.index(done["id"])
+
+
+def test_update_goal_priority(client: TestClient):
+    goal = client.post("/goals/", json={"title": "Editable"}).json()
+
+    res = client.put(f"/goals/{goal['id']}", json={"priority": 3})
+    assert res.status_code == 200
+    assert res.json()["priority"] == 3
+
+    res = client.put(f"/goals/{goal['id']}", json={"priority": -1})
+    assert res.status_code == 422
+
+
+def test_save_content_preserves_priority(client: TestClient):
+    goal = client.post("/goals/", json={"title": "Con prioridad", "priority": 4}).json()
+
+    res = client.post(
+        f"/goals/{goal['id']}/content",
+        json={"title": goal["title"], "content": "contenido nuevo"},
+    )
+    assert res.status_code == 200
+    assert res.json()["priority"] == 4
+
+
+def test_sort_goals_updates_priorities_in_bulk(client: TestClient):
+    a = client.post("/goals/", json={"title": "A"}).json()
+    b = client.post("/goals/", json={"title": "B"}).json()
+
+    res = client.patch(
+        "/goals/sort",
+        json={"items": [{"id": a["id"], "priority": 5}, {"id": b["id"], "priority": 2}]},
+    )
+    assert res.status_code == 200
+    assert res.json()["updated"] == 2
+
+    priorities = {g["id"]: g["priority"] for g in client.get("/goals/").json()}
+    assert priorities[a["id"]] == 5
+    assert priorities[b["id"]] == 2
+
+
+def test_sort_goals_missing_id_returns_404(client: TestClient):
+    goal = client.post("/goals/", json={"title": "Existente"}).json()
+
+    res = client.patch(
+        "/goals/sort",
+        json={"items": [{"id": goal["id"], "priority": 1}, {"id": 999999, "priority": 2}]},
+    )
+    assert res.status_code == 404
+
+    priorities = {g["id"]: g["priority"] for g in client.get("/goals/").json()}
+    assert priorities[goal["id"]] == 0
+
+
+def test_sort_goals_rejects_out_of_range_priority(client: TestClient):
+    goal = client.post("/goals/", json={"title": "X"}).json()
+
+    res = client.patch("/goals/sort", json={"items": [{"id": goal["id"], "priority": 100}]})
+    assert res.status_code == 422
+
+
+def test_sort_goals_rejects_duplicate_ids(client: TestClient):
+    goal = client.post("/goals/", json={"title": "X"}).json()
+
+    res = client.patch(
+        "/goals/sort",
+        json={"items": [{"id": goal["id"], "priority": 1}, {"id": goal["id"], "priority": 2}]},
+    )
+    assert res.status_code == 422

@@ -55,6 +55,7 @@
   let editFailConfig: Goal['fail_config'] = 'STATIC';
   let editColor = DEFAULT_GOAL_COLOR;
   let editMaxAssignmentDays: number | null = null;
+  let editPriority = 0;
   let editNoteId: number | null = null;
   let editTagId: number | null = null;
   let editUseFailIcon = false;
@@ -116,6 +117,7 @@
     editFailConfig = goal.fail_config || 'STATIC';
     editColor = goal.color || DEFAULT_GOAL_COLOR;
     editMaxAssignmentDays = goal.max_assignment_days ?? null;
+    editPriority = goal.priority ?? 0;
     editNoteId = goal.note_id ?? null;
     editTagId = goal.tag_id ?? null;
 
@@ -161,6 +163,7 @@
         note_id: editNoteId,
         tag_id: editTagId,
         max_assignment_days: editMaxAssignmentDays,
+        priority: editPriority,
       });
       goal = result;
       showSettings = false;
@@ -365,6 +368,14 @@
               <div class="form-field" style="width: 140px;">
                 <label for="edit-goal-max-days" class="label">{$t('goalDetail.limitDays')}</label>
                 <input id="edit-goal-max-days" class="input w-full" type="number" bind:value={editMaxAssignmentDays} min="1" placeholder={$t('goalDetail.unlimited')} />
+              </div>
+              <div class="form-field" style="width: 140px;">
+                <label for="edit-goal-priority" class="label">{$t('goalDetail.priority')}</label>
+                <select id="edit-goal-priority" class="input w-full" bind:value={editPriority}>
+                  {#each [0, 1, 2, 3, 4, 5] as p}
+                    <option value={p}>{p === 0 ? $t('goalDetail.priorityNone') : $t('goalDetail.priorityLevel', { values: { level: p } })}</option>
+                  {/each}
+                </select>
               </div>
             </div>
 

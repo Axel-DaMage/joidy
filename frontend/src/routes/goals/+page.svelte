@@ -298,6 +298,7 @@
   let newFailIcon = $state('Activity');
   let newGoalColor = $state(DEFAULT_GOAL_COLOR);
   let newMaxAssignmentDays = $state<number | null>(null);
+  let newPriority = $state(0);
   let useFailIcon = $state(false);
   // #1092 — la elección manual del usuario no se sobreescribe
   let newFailEmojiManual = $state(false);
@@ -517,6 +518,7 @@
         tag_id: newTagId,
         note_id: newNoteId,
         max_assignment_days: newMaxAssignmentDays,
+        priority: newPriority,
       });
       goals = [g, ...goals];
       showAddForm = false;
@@ -528,6 +530,7 @@
       newTagId = null;
       newNoteId = null;
       newMaxAssignmentDays = null;
+      newPriority = 0;
       // #1142 — permanecer en la vista general; el objetivo ya aparece en la lista
     } catch (e) {
       addError = 'Error al crear el objetivo.';
@@ -2494,6 +2497,22 @@
                   disabled={newMeasurement === 'BOOLEAN'}
                 />
               </div>
+
+              <div class="form-field">
+                <span class="label">{$t('goalsPage.priority')}</span>
+                <div class="ng-priority-row">
+                  {#each [0, 1, 2, 3, 4, 5] as p}
+                    <button
+                      class="ng-priority-btn"
+                      class:active={newPriority === p}
+                      onclick={() => (newPriority = p)}
+                      title={p === 0 ? $t('goalsPage.priorityNone') : $t('goalsPage.priorityLevel', { values: { level: p } })}
+                    >
+                      {p}
+                    </button>
+                  {/each}
+                </div>
+              </div>
             </div>
 
             <!-- Column 2: Appearance -->
@@ -3317,6 +3336,30 @@
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 8px;
+  }
+  .ng-priority-row {
+    display: flex;
+    gap: 6px;
+  }
+  .ng-priority-btn {
+    flex: 1;
+    padding: 8px 0;
+    font-size: 12px;
+    font-family: var(--font-mono);
+    background: var(--surface-hover);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .ng-priority-btn:hover {
+    border-color: var(--text-muted);
+  }
+  .ng-priority-btn.active {
+    background: var(--surface-active);
+    color: var(--text-primary);
+    border-color: var(--text-primary);
   }
   .ng-freq-btn {
     padding: 10px;

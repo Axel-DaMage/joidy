@@ -202,6 +202,7 @@ export interface Goal {
   tag_id: number | null;
   parent_id: number | null;
   max_assignment_days: number | null;
+  priority: number;
   progress_pct: number;
   pending_removal: boolean;
   is_completed: boolean;
@@ -505,8 +506,11 @@ export const api = {
       note_id?: number | null;
       parent_id?: number | null;
       max_assignment_days?: number | null;
+      priority?: number;
     }) => req<Goal>('POST', '/goals/', data),
     update: (id: number, data: Partial<Goal>) => req<Goal>('PUT', `/goals/${id}`, data),
+    sort: (items: { id: number; priority: number }[]) =>
+      req<{ updated: number }>('PATCH', '/goals/sort', { items }),
     complete: (id: number) =>
       req<{ goal: Goal; gamification: GamificationResult }>('POST', `/goals/${id}/complete`),
     fail: (id: number) => req<Goal>('POST', `/goals/${id}/fail`),
