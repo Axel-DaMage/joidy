@@ -118,6 +118,14 @@ from services.auth_service import get_current_user
 # pull in migration history that isn't relevant to unit/e2e tests.
 main_module.init_db = lambda: None
 
+# Mark every test process as APP_ENV=test BEFORE main/config are imported so
+# the lifespan skips vault auto-restore (#1158): on a dev machine /vault holds
+# REAL user goals that would otherwise seed the test DB. main.py gates the
+# restore on settings.app_env; CI sets this var in the workflow, local runs
+# (docker compose run / bare pytest) rely on this line. Must stay above the
+# `import main` below because Settings() is built at import time.
+os.environ.setdefault("APP_ENV", "test")
+
 
 def _wipe_all_tables(engine) -> None:
     """Delete all rows while keeping the schema (cheap drop_all replacement).
@@ -183,6 +191,13 @@ def _db_engine():
         with engine.connect() as conn:
             conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
             conn.commit()
+        if _CAN_DROP:
+            # A test DB persisted in a volume keeps tables from an older
+            # model state; create_all never alters existing tables, so any
+            # schema-changing merge would fail the whole suite with
+            # UndefinedColumn errors (#1158). Rebuild once per session — the
+            # per-test SAVEPOINT isolation of #996 is unaffected.
+            Base.metadata.drop_all(engine)
         Base.metadata.create_all(engine)
         # A crashed earlier run may have left committed rows behind; start
         # the session from a clean slate (probe is ~1ms on empty tables).
