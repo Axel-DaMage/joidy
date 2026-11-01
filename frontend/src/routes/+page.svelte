@@ -68,6 +68,10 @@
   let prStats = $state({ open: 0, total: 0 });
   let ghFilter = $state('created');
   let ghType = $state('all');
+  // #1164 — ghState/ghSearch viven aquí (no en el widget) para persistirlos
+  // en UserSettings junto a ghFilter/ghType y que sobrevivan a salir/entrar.
+  let ghState = $state('all');
+  let ghSearch = $state('');
   let activityTab = $state<'github' | 'recent-notes'>('recent-notes');
   // #1095 — sin tope artificial de 9: el backend devuelve hasta 30 (per_page)
   const GH_FETCH_LIMIT = 30;
@@ -178,6 +182,20 @@
     loadGitHubData(ghFilter);
   }
 
+  // #1164 — persistir los filtros de GitHub (sin TTL, a diferencia del
+  // cache de datos). ghSearch escribe por tecla: misma técnica que
+  // notesUi.search.
+  $effect(() => {
+    patchUserSettings({
+      dashboard: {
+        githubFilter: ghFilter,
+        githubType: ghType,
+        githubState: ghState,
+        githubSearch: ghSearch,
+      },
+    });
+  });
+
   function setActivityTab(tab: 'github' | 'recent-notes') {
     activityTab = tab;
     patchUserSettings({ dashboard: { activityTab: tab } });
@@ -247,6 +265,13 @@
     if (savedActivityTab) {
       activityTab = savedActivityTab;
     }
+    // #1164 — restaurar filtros de GitHub guardados (después del cache de
+    // datos: las prefs del usuario tienen prioridad sobre el cache TTL).
+    const savedDash = savedUserSettings.dashboard;
+    if (savedDash?.githubFilter) ghFilter = savedDash.githubFilter;
+    if (savedDash?.githubType) ghType = savedDash.githubType;
+    if (savedDash?.githubState) ghState = savedDash.githubState;
+    if (savedDash?.githubSearch !== undefined) ghSearch = savedDash.githubSearch;
     modulePrefsReady = true;
 
     if (!$notesLoadedOnce) {
@@ -488,6 +513,8 @@
       {prStats}
       {ghFilter}
       {ghType}
+      bind:ghState
+      bind:ghSearch
       onSetFilter={setGhFilter}
       onSetType={setGhType}
       activeTab={activityTab}

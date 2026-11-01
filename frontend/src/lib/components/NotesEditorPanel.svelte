@@ -364,4 +364,56 @@
     color: var(--text-disabled);
     font-family: var(--font-mono);
   }
+
+  /* ── Responsive ──
+     Restaurado: el bloque completo se perdió en el split #1067. */
+  @media (max-width: 768px) {
+    .editor-panel {
+      height: auto;
+      overflow: visible;
+    }
+
+    .empty-dashboard {
+      padding: var(--s4) var(--s3);
+      gap: var(--s4);
+    }
+
+    .dash-widgets {
+      grid-template-columns: 1fr;
+      gap: var(--s3);
+    }
+
+    .dash-widget {
+      padding: var(--s3);
+    }
+
+    .dash-search-container {
+      max-width: 100%;
+    }
+
+    .dash-search {
+      padding: var(--s2) var(--s3);
+    }
+  }
+
+  @media (max-width: 480px) {
+    .empty-dashboard {
+      padding: var(--s3) var(--s2);
+      gap: var(--s3);
+    }
+
+    .dash-widget {
+      padding: var(--s2);
+    }
+  }
+
+  @media (max-width: 360px) {
+    .empty-dashboard {
+      padding: var(--s3) var(--s2);
+    }
+
+    .dash-widget {
+      padding: var(--s2);
+    }
+  }
 </style>

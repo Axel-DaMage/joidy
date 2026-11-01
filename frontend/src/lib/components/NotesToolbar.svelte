@@ -502,4 +502,32 @@
   .sep {
     color: var(--border);
   }
+
+  /* ── Responsive ──
+     Restaurado: el bloque completo se perdió en el split #1067. */
+  @media (max-width: 768px) {
+    .sort-menu {
+      width: 180px;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .list-toolbar {
+      padding: var(--s1) var(--s2);
+    }
+
+    .tree-actions-bar {
+      padding: var(--s1) var(--s2);
+    }
+
+    .list-meta {
+      padding: var(--s1) var(--s2);
+    }
+  }
+
+  @media (max-width: 360px) {
+    .sort-menu {
+      width: 130px;
+    }
+  }
 </style>

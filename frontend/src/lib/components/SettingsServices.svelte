@@ -104,9 +104,9 @@
   </div>
 
   {#if powerLoading}
-    <p class=":global(hint) code">Cargando estado de servicios…</p>
+    <p class="hint">Cargando estado de servicios…</p>
   {:else if !powerStatus || !powerStatus.docker_available}
-    <p class=":global(hint) code">
+    <p class="hint">
       Docker no está disponible. Usa la CLI (<span class="mono">joidy down</span>) para detener
       servicios.
     </p>
@@ -136,10 +136,10 @@
     </div>
 
     {#if powerError}
-      <p class=":global(hint) code" style="color: var(--error);">{powerError}</p>
+      <p class="hint" style="color: var(--error);">{powerError}</p>
     {/if}
     {#if powerMessage}
-      <p class=":global(hint) code" style="color: var(--success);">{powerMessage}</p>
+      <p class="hint" style="color: var(--success);">{powerMessage}</p>
     {/if}
 
     <!-- Action buttons -->
@@ -202,7 +202,7 @@
       {/if}
     </div>
 
-    <p class=":global(hint) code">
+    <p class="hint">
       <strong>Hibernar</strong> detiene AI Service y Worker (la API y la base de datos siguen
       disponibles). <strong>Apagar</strong> detiene todo excepto la API y la base de datos — usa
       <span class="mono">joidy up</span> para reiniciar.
@@ -211,6 +211,15 @@
 </section>
 
 <style>
+  /* Restaurada: se perdió en el split #1067; el markup usaba la clase
+     inválida ":global(hint)" que nunca matcheaba. */
+  .hint {
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.6;
+    margin-top: 8px;
+  }
+
   .section {
     padding: 16px 20px;
     border-bottom: 1px solid var(--border-light);

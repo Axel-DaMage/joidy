@@ -29,10 +29,19 @@
       {$t('settings.session.logout')}
     </button>
   </div>
-  <p class=":global(hint) code">{$t('settings.session:global(hint) code')}</p>
+  <p class="hint">{$t('settings.session:global(hint) code')}</p>
 </section>
 
 <style>
+  /* Restaurada: se perdió en el split #1067; el markup usaba la clase
+     inválida ":global(hint)" que nunca matcheaba. */
+  .hint {
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.6;
+    margin-top: 8px;
+  }
+
   .section {
     padding: 16px 20px;
     border-bottom: 1px solid var(--border-light);

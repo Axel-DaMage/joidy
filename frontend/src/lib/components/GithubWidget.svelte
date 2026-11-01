@@ -15,15 +15,15 @@
   export let prStats: { open: number; total: number } = { open: 0, total: 0 };
   export let ghFilter = 'created';
   export let ghType = 'all';
+  // #1164 — estado y búsqueda son props bindeables para que el dashboard
+  // los persista en UserSettings y sobrevivan a salir/entrar del dashboard.
+  export let ghState = 'all';
+  export let ghSearch = '';
   // #1095 — el cuerpo ya no se dimensiona con un tope de filas (height fija), es dinámico
   const recentNotesLimit = 8;
   const skeletonRows = 10;
   export let onSetFilter: (filter: string) => void;
   export let onSetType: (type: string) => void;
-
-  // #1094 — filtros de estado y búsqueda, locales al widget (no se persisten)
-  let ghState = 'all';
-  let ghSearch = '';
 
   $: visiblePRs = githubPRs.filter((pr) => ghMatchesState(pr, ghState) && ghMatchesSearch(pr, ghSearch));
   $: visibleIssues = githubIssues.filter((issue) => ghMatchesState(issue, ghState) && ghMatchesSearch(issue, ghSearch));

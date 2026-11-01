@@ -240,6 +240,19 @@
 {/if}
 
 <style>
+  /* Restaurada: el split #1067 borró esta regla por accidente y el panel
+     quedaba position:static al final del documento (invisible, a ~2000px de
+     profundidad) — "no se puede entrar a Ajustes". */
+  .backdrop {
+    position: fixed;
+    inset: 0;
+    background: color-mix(in srgb, var(--bg) 60%, transparent);
+    z-index: var(--z-dropdown);
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-end;
+  }
+
   .panel {
     width: 480px;
     max-width: 100%;

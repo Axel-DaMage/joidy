@@ -191,6 +191,17 @@
     letter-spacing: 0.04em;
   }
 
+  /* El esqueleto HH:MM:SS (#1093) right-alinea los dígitos para contextos de
+     ancho fijo (barra de estado); dentro del anillo la lectura debe quedar
+     VISUALMENTE centrada: anulamos la caja reservada y el ghost de horas,
+     así MM:SS queda centrado y solo re-centra al cruzar 1h. */
+  .ring-overlay :global(.clock-frame.mode-timer) {
+    min-width: 0;
+  }
+  .ring-overlay :global(.seg-ghost) {
+    display: none;
+  }
+
   .pomo-dots {
     display: flex;
     gap: 5px;
