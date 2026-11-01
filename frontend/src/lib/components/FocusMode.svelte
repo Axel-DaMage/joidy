@@ -327,6 +327,15 @@
     line-height: 1;
     letter-spacing: 0.04em;
   }
+  /* El esqueleto HH:MM:SS (#1093) right-alinea los dígitos para contextos de
+     ancho fijo; dentro del anillo la lectura debe quedar VISUALMENTE centrada
+     (mismo fix que PomodoroWidget): anulamos la caja reservada y el ghost. */
+  .ring-overlay :global(.clock-frame.mode-timer) {
+    min-width: 0;
+  }
+  .ring-overlay :global(.seg-ghost) {
+    display: none;
+  }
   .phase-label {
     font-size: 11px;
     font-weight: 500;
