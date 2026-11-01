@@ -99,4 +99,42 @@
     color: var(--accent, var(--xp));
     text-decoration: underline;
   }
+
+  /* Restauradas: se perdieron en el split #1067 (vivían en SettingsPanel). */
+  .configured-badge {
+    font-size: 10px;
+    color: var(--success);
+    margin-left: 4px;
+  }
+
+  .hint {
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.6;
+    margin-top: 8px;
+  }
+
+  .row-label {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  .setting-input {
+    background: var(--elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: 6px 10px;
+    font-size: 11px;
+    color: var(--text-primary);
+    outline: none;
+    transition: border-color var(--t-fast);
+    width: 100%;
+  }
+
+  .setting-input:focus {
+    outline: none;
+  }
 </style>

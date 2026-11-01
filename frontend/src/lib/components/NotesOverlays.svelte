@@ -407,4 +407,12 @@
   .folder-modal-btns button:last-child:hover {
     opacity: 0.85;
   }
+
+  /* Restaurado: se perdió en el split #1067. */
+  @media (max-width: 768px) {
+    .folder-modal-backdrop {
+      top: 0;
+      bottom: 0;
+    }
+  }
 </style>

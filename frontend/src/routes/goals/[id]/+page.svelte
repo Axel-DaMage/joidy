@@ -1,6 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { page } from '$app/state';
+  // Kit 3 eliminó $app/stores y $app/state es runes-only: en este componente
+  // legacy ($:) la lectura de page.params.id no reaccionaba y goalId quedaba
+  // congelado al navegar entre objetivos (el componente se reutiliza, no se
+  // remonta). afterNavigate es la vía reactiva soportada en legacy. Ver
+  // notes/+page.svelte.
+  import { afterNavigate } from '$app/navigation';
   import { goto } from '$app/navigation';
   import { api, type Goal, type Tag as TagType, type Note } from '$lib/api';
   import { logger } from '$lib/utils/logger';
@@ -66,7 +71,12 @@
   let editFailIconManual = false;
   let savingSettings = false;
 
-  $: goalId = parseInt(page.params.id || "0");
+  let goalId = 0;
+  afterNavigate((nav) => {
+    if (!('params' in nav)) return;
+    const { params } = nav as { params: Record<string, string> };
+    goalId = parseInt(params.id || '0');
+  });
 
   // #1092 — sugerencia automática al editar el título; el valor ya guardado
   // cuenta como manual, así que solo se usa si se pulsa "usar sugerencia"
@@ -76,10 +86,19 @@
   $: if (!editFailEmojiManual) editFailEmoji = suggestEmoji(editTitle);
   $: if (!editFailIconManual) editFailIcon = suggestIcon(editTitle);
 
-  onMount(async () => {
+  onMount(() => {
     ensureGoalEditor();
-    await Promise.all([loadGoal(), loadMeta()]);
   });
+
+  // Kit 3: goalId se establece en afterNavigate (ver arriba), que puede correr
+  // después del mount — la carga se dispara reactivamente al tener id, y de
+  // nuevo si se navega a otro objetivo sin desmontar el componente.
+  let loadedForId = 0;
+  $: if (goalId > 0 && goalId !== loadedForId) {
+    loadedForId = goalId;
+    loadGoal();
+    loadMeta();
+  }
 
   async function loadGoal() {
     loading = true;
