@@ -303,6 +303,27 @@
     margin-left: 4px;
   }
 
+  /* Restaurado: se perdió en el split #1067 (vivía en SettingsPanel). */
+  .toggle {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: 3px 8px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+    transition: border-color var(--t-fast);
+  }
+
+  .toggle:hover {
+    border-color: var(--text-muted);
+  }
+
   .link-btn {
     background: var(--accent);
     color: white;

@@ -1,7 +1,12 @@
 <script lang="ts">
   import { onMount, onDestroy, tick } from 'svelte';
-  import { page } from '$app/state';
-  import { goto } from '$app/navigation';
+  import { get } from 'svelte/store';
+  // Kit 3 eliminó $app/stores y $app/state es runes-only: en este componente
+  // legacy ($:) las lecturas de page.url dentro de $: NO reaccionan (quedan
+  // congeladas al primer valor) — abrir una nota con click (?id=) nunca
+  // montaba el editor; solo funcionaba la carga directa con ?id en la URL.
+  // afterNavigate es la vía reactiva soportada en componentes legacy.
+  import { afterNavigate } from '$app/navigation';
   import { notes, loadNotes } from '$lib/stores/notes';
   import { api } from '$lib/api';
   import { loadUserSettings } from '$lib/utils/userSettings';
@@ -47,9 +52,46 @@
   const MAX_W = 520;
   let dragging = false;
 
-  $: showNew = page.url.searchParams.get('new') === '1';
-  $: selectedId = page.url.searchParams.get('id');
-  $: urlSearch = page.url.searchParams.get('search');
+  let showNew = false;
+  let selectedId: string | null = null;
+  let urlSearch: string | null = null;
+  let urlTitle: string | null = null;
+
+  // Kit 3: sincroniza los params de la URL con variables reactivas del
+  // componente (afterNavigate corre también en la navegación inicial).
+  //
+  // afterNavigate es además el ÚNICO driver de abrir/cerrar el editor: es
+  // imperativo y ordenado. Antes, un `$:` con guard `!selectedId` corría entre
+  // el click (showEditor=true vía openNote) y la sincronización del id, y
+  // cerraba el editor de inmediato; el re-open posterior se saltaba porque
+  // $selectedNote ya coincidía — el editor quedaba cerrado para siempre.
+  function openFromUrl(id: string) {
+    const n = get(notes).find((x) => String(x.id) === id);
+    if (n && ($selectedNote?.id !== n.id || !$showEditor)) {
+      openNote(n);
+    }
+  }
+
+  function closeEditorIfUrlHasNoId() {
+    if (!selectedId && $showEditor && !$editingNew) {
+      $showEditor = false;
+      $selectedNote = null;
+    }
+  }
+
+  afterNavigate((nav) => {
+    if (!('url' in nav)) return;
+    const { url } = nav as { url: URL };
+    selectedId = url.searchParams.get('id');
+    showNew = url.searchParams.get('new') === '1';
+    urlSearch = url.searchParams.get('search');
+    urlTitle = url.searchParams.get('title');
+    if (selectedId) {
+      openFromUrl(selectedId);
+    } else {
+      closeEditorIfUrlHasNoId();
+    }
+  });
 
   // Handle URL changes reactively
   $: if (urlSearch !== null) {
@@ -57,7 +99,6 @@
   }
 
   $: if (showNew && $notesPrefsReady) {
-    const urlTitle = page.url.searchParams.get('title');
     if (!$editingNew || $dailyInitialTitle !== (urlTitle ?? '')) {
       openNew();
       if (urlTitle) {
@@ -66,15 +107,11 @@
     }
   }
 
+  // Las notas pueden llegar (de la API/cache) DESPUÉS de la navegación —
+  // reintenta la apertura cuando existan. Solo abre; el cierre lo decide
+  // afterNavigate (fuente única de verdad de la URL).
   $: if (selectedId && $notes.length > 0) {
-    const n = $notes.find((n) => String(n.id) === selectedId);
-    if (n && $selectedNote?.id !== n.id) {
-      openNote(n);
-    }
-  } else if (!selectedId && $showEditor && !$editingNew) {
-    // If we were viewing a note and ID cleared, close editor
-    $showEditor = false;
-    $selectedNote = null;
+    openFromUrl(selectedId);
   }
 
   onMount(async () => {
@@ -246,4 +283,42 @@
 
   /* ── Resize handle ── */
   /* Moved to app.css for global consistency */
+
+  /* ── Responsive ──
+     Restaurado: el bloque completo se perdió en el split #1067 (las reglas de
+     clases que migraron a otros componentes viven allí ahora). */
+  @media (max-width: 1024px) {
+    .notes-page {
+      grid-template-columns: minmax(200px, 240px) 5px 1fr;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .notes-page {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto;
+    }
+
+    .notes-list {
+      max-height: none;
+      border-bottom: 1px solid var(--border);
+      overflow: visible;
+    }
+
+    .resize-handle {
+      display: none;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .notes-list {
+      max-height: none;
+    }
+  }
+
+  @media (max-width: 360px) {
+    .notes-list {
+      max-height: 35vh;
+    }
+  }
 </style>

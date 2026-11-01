@@ -10,7 +10,7 @@
       <DynamicIcon name="CloudDownload" size={12} /> Aplicación
     </div>
     <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
-      <p class=":global(hint) code" style="margin-top: 0;">
+      <p class="hint" style="margin-top: 0;">
         Instala Joidy en tu dispositivo para acceso rápido y sin conexión.
       </p>
       <button
@@ -32,6 +32,15 @@
 {/if}
 
 <style>
+  /* Restaurada: se perdió en el split #1067; el markup usaba la clase
+     inválida ":global(hint)" que nunca matcheaba. */
+  .hint {
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.6;
+    margin-top: 8px;
+  }
+
   .section {
     padding: 16px 20px;
     border-bottom: 1px solid var(--border-light);
