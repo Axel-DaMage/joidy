@@ -1,4 +1,4 @@
-import { test, expect, authGoto } from './helpers/auth';
+import { test, expect, authGoto, getAuthToken } from './helpers/auth';
 
 /**
  * Notes feature — comprehensive E2E tests.
@@ -116,5 +116,24 @@ test.describe('Notes — note selection', () => {
       // At minimum, the page should still be functional
       await expect(page.locator('main.app-main')).toBeVisible();
     }
+  });
+
+  // Regresión Kit 3: afterNavigate no se dispara en la carga inicial y el
+  // objeto de navegación ya no trae url en el nivel superior — un deep-link
+  // directo /notes?id=... no abría el editor (el sync URL→editor estaba
+  // muerto; solo funcionaba abrir por click).
+  test('opens editor on direct deep-link load (?id=)', async ({ page }) => {
+    // Regresión Kit 3: afterNavigate no se dispara en la carga inicial y el
+    // objeto de navegación ya no trae url en el nivel superior — un deep-link
+    // directo /notes?id=... no abría el editor (el sync URL→editor estaba
+    // muerto; solo funcionaba abrir por click).
+    const res = await page.request.get(`${process.env.PLAYWRIGHT_API_URL ?? 'http://localhost:8000'}/notes/?limit=1`, {
+      headers: { Authorization: `Bearer ${await getAuthToken()}` },
+    });
+    const notes = await res.json();
+    test.skip(!Array.isArray(notes) || notes.length === 0, 'no notes in DB');
+    await authGoto(page, `/notes?id=${notes[0].id}`);
+    await page.waitForTimeout(2500);
+    await expect(page.locator('main.app-main textarea, main.app-main [contenteditable="true"], .note-editor').first()).toBeVisible({ timeout: 5000 });
   });
 });

@@ -1,12 +1,15 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  // Kit 3 eliminó $app/stores y $app/state es runes-only: en este componente
-  // legacy ($:) la lectura de page.params.id no reaccionaba y goalId quedaba
-  // congelado al navegar entre objetivos (el componente se reutiliza, no se
-  // remonta). afterNavigate es la vía reactiva soportada en legacy. Ver
-  // notes/+page.svelte.
+  // Kit 3: afterNavigate ya NO entrega params/url en el nivel superior del
+  // objeto de navegación (viven en nav.to/nav.from) y, además, el dispatch de
+  // la navegación inicial (type 'enter') corre antes de que los callbacks
+  // registrados vía onMount existan, así que en una carga directa (F5 o link
+  // externo) afterNavigate NO se dispara. Por eso el id inicial se lee de
+  // page ($app/state, lectura puntual no reactiva) y las navegaciones
+  // cliente (goal → goal sin desmontar) llegan por nav.to.params.
   import { afterNavigate } from '$app/navigation';
   import { goto } from '$app/navigation';
+  import { page } from '$app/state';
   import { api, type Goal, type Tag as TagType, type Note } from '$lib/api';
   import { logger } from '$lib/utils/logger';
   import { suggestEmoji, suggestIcon, suggestIconKey } from '$lib/utils/iconSuggest';
@@ -72,10 +75,16 @@
   let savingSettings = false;
 
   let goalId = 0;
+  function syncGoalId(rawId: string | undefined) {
+    const parsed = parseInt(rawId || '0');
+    if (parsed > 0) goalId = parsed;
+  }
+  onMount(() => {
+    ensureGoalEditor();
+    syncGoalId(page.params?.id);
+  });
   afterNavigate((nav) => {
-    if (!('params' in nav)) return;
-    const { params } = nav as { params: Record<string, string> };
-    goalId = parseInt(params.id || '0');
+    syncGoalId(nav.to?.params?.id);
   });
 
   // #1092 — sugerencia automática al editar el título; el valor ya guardado
@@ -86,13 +95,10 @@
   $: if (!editFailEmojiManual) editFailEmoji = suggestEmoji(editTitle);
   $: if (!editFailIconManual) editFailIcon = suggestIcon(editTitle);
 
-  onMount(() => {
-    ensureGoalEditor();
-  });
-
-  // Kit 3: goalId se establece en afterNavigate (ver arriba), que puede correr
-  // después del mount — la carga se dispara reactivamente al tener id, y de
-  // nuevo si se navega a otro objetivo sin desmontar el componente.
+  // Kit 3: goalId llega vía onMount (carga directa) o afterNavigate
+  // (navegación cliente, puede correr después del mount); la carga se dispara
+  // reactivamente al tener id, y de nuevo si se navega a otro objetivo sin
+  // desmontar el componente.
   let loadedForId = 0;
   $: if (goalId > 0 && goalId !== loadedForId) {
     loadedForId = goalId;
