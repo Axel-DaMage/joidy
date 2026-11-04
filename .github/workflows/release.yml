@@ -88,8 +88,12 @@ jobs:
           VERSION_CLEAN="${{ steps.version.outputs.version_clean }}"
           TODAY=$(date +%Y-%m-%d)
 
-          # README badge
-          sed -i "s|badge/JOIDY-v[0-9a-z.\-]*-[0-9A-Fa-f]*|badge/JOIDY-v${VERSION_CLEAN}|" README.md
+          # README badge. Consume everything up to the closing quote and
+          # re-append the color: the old pattern ([0-9a-z.\-]*-[0-9A-Fa-f]*)
+          # matched only "-b" of "-blue" ('l' is not a hex char), leaving
+          # "lue" behind and accumulating junk like "v1.1.0-beta.7ta.6..."
+          # on every release.
+          sed -i "s|badge/JOIDY-v[^?\"]*|badge/JOIDY-v${VERSION_CLEAN}-blue|" README.md
 
           # AUR PKGBUILD & .SRCINFO (Arch package version forbids hyphens)
           VERSION_AUR="${VERSION_CLEAN//-/_}"
@@ -111,6 +115,9 @@ jobs:
           # docs/troubleshooting.md
           sed -i "s|^last_updated: .*|last_updated: ${TODAY}|" docs/troubleshooting.md
           sed -i "s|^version: [0-9a-z.\-]*|version: ${VERSION_CLEAN}|" docs/troubleshooting.md
+
+          # frontend/package.json (previously never bumped by releases)
+          sed -i "s|\"version\": \"[0-9a-z.\-]*\"|\"version\": \"${VERSION_CLEAN}\"|" frontend/package.json
 
           # CHANGELOG.md: move [Unreleased] body to new version section
           # This is handled manually for major releases; for auto-bump
