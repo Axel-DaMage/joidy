@@ -5,8 +5,15 @@
   // legacy ($:) las lecturas de page.url dentro de $: NO reaccionan (quedan
   // congeladas al primer valor) — abrir una nota con click (?id=) nunca
   // montaba el editor; solo funcionaba la carga directa con ?id en la URL.
-  // afterNavigate es la vía reactiva soportada en componentes legacy.
+  // afterNavigate es la vía reactiva soportada en componentes legacy, con dos
+  // salvedades de Kit 3: el objeto de navegación ya no trae url/params en el
+  // nivel superior (viven en nav.to), y el dispatch de la navegación inicial
+  // (type 'enter') corre antes de que onMount registre el callback, así que
+  // en una carga directa (F5 o link externo) afterNavigate NO se dispara —
+  // el estado inicial se sincroniza también en onMount desde page ($app/state,
+  // lectura puntual no reactiva).
   import { afterNavigate } from '$app/navigation';
+  import { page } from '$app/state';
   import { notes, loadNotes } from '$lib/stores/notes';
   import { api } from '$lib/api';
   import { loadUserSettings } from '$lib/utils/userSettings';
@@ -79,9 +86,7 @@
     }
   }
 
-  afterNavigate((nav) => {
-    if (!('url' in nav)) return;
-    const { url } = nav as { url: URL };
+  function syncFromUrl(url: { searchParams: { get(name: string): string | null } }) {
     selectedId = url.searchParams.get('id');
     showNew = url.searchParams.get('new') === '1';
     urlSearch = url.searchParams.get('search');
@@ -91,6 +96,12 @@
     } else {
       closeEditorIfUrlHasNoId();
     }
+  }
+
+  afterNavigate((nav) => {
+    const url = nav.to?.url;
+    if (!url) return;
+    syncFromUrl(url);
   });
 
   // Handle URL changes reactively
@@ -115,6 +126,10 @@
   }
 
   onMount(async () => {
+    // Kit 3: la navegación inicial ('enter') no pasa por afterNavigate (ver
+    // arriba) — sincroniza el estado URL (?id, ?new, ?search, ?title) aquí.
+    syncFromUrl(page.url);
+
     // Load prefs from localStorage FIRST (synchronous) — before any async
     // operation so we know the target scroll position ASAP.
     const saved = loadUserSettings().notesUi;

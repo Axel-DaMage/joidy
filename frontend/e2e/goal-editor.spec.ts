@@ -32,6 +32,24 @@ test.describe('Goal Editor — open detail page', () => {
     // Should return to /goals
     await expect(page).toHaveURL(/\/goals$/);
   });
+
+  // Regresión Kit 3: afterNavigate no se dispara en la carga inicial (el
+  // dispatch 'enter' corre antes de que onMount registre el callback) y el
+  // objeto de navegación ya no trae params en el nivel superior. Una carga
+  // directa de /goals/{id} quedaba clavada en "Cargando..." para siempre.
+  test('opens goal detail on direct URL load', async ({ page }) => {
+    await authGoto(page, '/goals');
+    await page.waitForTimeout(1500);
+    await page.locator('.goal-card-main').first().click();
+    await expect(page.locator('.editor-shell')).toBeVisible({ timeout: 5000 });
+    const detailUrl = page.url();
+    expect(detailUrl).toMatch(/\/goals\/\d+/);
+    // Carga directa (SSR + hydration): el editor debe montar con el objetivo.
+    await page.goto(detailUrl);
+    await expect(page.locator('.editor-shell')).toBeVisible({ timeout: 8000 });
+    // Y no debe quedarse en el estado de carga.
+    await expect(page.locator('.goal-detail-page .loading')).not.toBeVisible({ timeout: 3000 });
+  });
 });
 
 test.describe('Goal Editor — structure', () => {
