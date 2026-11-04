@@ -6,6 +6,6 @@ pytest-cov==7.1.0
 pytest-asyncio==1.4.0
 pytest-xdist==3.8.0
 ruff==0.17.1
-mypy==2.4.0
+mypy==2.4.1
 bandit==1.9.4
 pip-audit==2.10.1
