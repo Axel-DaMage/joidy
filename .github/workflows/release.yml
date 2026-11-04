@@ -116,8 +116,13 @@ jobs:
           sed -i "s|^last_updated: .*|last_updated: ${TODAY}|" docs/troubleshooting.md
           sed -i "s|^version: [0-9a-z.\-]*|version: ${VERSION_CLEAN}|" docs/troubleshooting.md
 
-          # frontend/package.json (previously never bumped by releases)
+          # frontend/package.json + package-lock.json (previously never
+          # bumped by releases)
           sed -i "s|\"version\": \"[0-9a-z.\-]*\"|\"version\": \"${VERSION_CLEAN}\"|" frontend/package.json
+          # bump the "version" line that follows each "name": "joidy-frontend" occurrence
+          # (braces are required: an unaddressed s/// would rewrite every
+          # dependency version in the lockfile)
+          sed -i '/"name": "joidy-frontend",/{N;s/"version": "[0-9a-z.\-]*"/"version": "${VERSION_CLEAN}"/;}' frontend/package-lock.json
 
           # CHANGELOG.md: move [Unreleased] body to new version section
           # This is handled manually for major releases; for auto-bump
