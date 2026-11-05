@@ -29,8 +29,9 @@ from sqlalchemy.orm import sessionmaker
 
 
 def _mk_http_status_error(status_code: int) -> httpx_module.HTTPStatusError:
-    resp = httpx_module.Response(status_code=status_code)
-    return httpx_module.HTTPStatusError(f"HTTP {status_code}", request=None, response=resp)
+    request = httpx_module.Request("GET", "https://googleapis.example/calendar/v3")
+    resp = httpx_module.Response(status_code=status_code, request=request)
+    return httpx_module.HTTPStatusError(f"HTTP {status_code}", request=request, response=resp)
 
 
 class CalendarTestBase(unittest.TestCase):
@@ -47,6 +48,7 @@ class ParseDatetimeTest(CalendarTestBase):
     def test_parses_rfc3339_datetime(self) -> None:
         dt, all_day = gcs._parse_gcal_datetime({"dateTime": "2026-11-05T10:00:00Z"})
         self.assertFalse(all_day)
+        assert dt is not None
         self.assertEqual(dt.year, 2026)
         self.assertEqual(dt.hour, 10)
         self.assertIsNotNone(dt.tzinfo)
@@ -54,11 +56,13 @@ class ParseDatetimeTest(CalendarTestBase):
     def test_parses_datetime_without_tz_as_utc(self) -> None:
         dt, all_day = gcs._parse_gcal_datetime({"dateTime": "2026-11-05T10:00:00"})
         self.assertFalse(all_day)
+        assert dt is not None
         self.assertEqual(dt.tzinfo, UTC)
 
     def test_parses_all_day_date(self) -> None:
         dt, all_day = gcs._parse_gcal_datetime({"date": "2026-11-05"})
         self.assertTrue(all_day)
+        assert dt is not None
         self.assertEqual(dt.date().isoformat(), "2026-11-05")
 
     def test_none_and_invalid(self) -> None:
