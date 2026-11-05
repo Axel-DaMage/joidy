@@ -105,7 +105,9 @@ def _upsert_event(db: Session, calendar_id: str, item: dict[str, Any]) -> bool:
     return True
 
 
-async def _list_all_pages(token: str, calendar_id: str, params: dict[str, Any]) -> tuple[list[dict[str, Any]], str | None]:
+async def _list_all_pages(
+    token: str, calendar_id: str, params: dict[str, Any]
+) -> tuple[list[dict[str, Any]], str | None]:
     """Fetch all pages of events.list; return (items, nextSyncToken|None)."""
     items: list[dict[str, Any]] = []
     sync_token: str | None = None

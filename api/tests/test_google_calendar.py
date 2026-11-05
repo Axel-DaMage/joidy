@@ -200,9 +200,7 @@ class SyncAllTest(CalendarTestBase):
             # Stale calendar no longer present in the account list.
             db.add(GoogleCalendarSyncState(user_id=1, calendar_id="old-cal"))
             db.add(
-                GoogleCalendarEvent(
-                    user_id=1, calendar_id="old-cal", google_id="ev-old", start_at=datetime.now(UTC)
-                )
+                GoogleCalendarEvent(user_id=1, calendar_id="old-cal", google_id="ev-old", start_at=datetime.now(UTC))
             )
             db.commit()
 
@@ -260,9 +258,7 @@ class SyncAllTest(CalendarTestBase):
 class CachedEventsTest(CalendarTestBase):
     def _add(self, db, google_id, start, calendar_id="primary", status="confirmed"):
         db.add(
-            GoogleCalendarEvent(
-                user_id=1, calendar_id=calendar_id, google_id=google_id, status=status, start_at=start
-            )
+            GoogleCalendarEvent(user_id=1, calendar_id=calendar_id, google_id=google_id, status=status, start_at=start)
         )
 
     def test_range_and_filters(self) -> None:

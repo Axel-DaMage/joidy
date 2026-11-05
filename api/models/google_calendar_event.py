@@ -37,7 +37,9 @@ class GoogleCalendarEvent(Base):
     end_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     html_link: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
     __table_args__ = (
         UniqueConstraint("user_id", "calendar_id", "google_id", name="uq_gcal_event_user_cal_gid"),

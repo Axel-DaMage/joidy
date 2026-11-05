@@ -21,9 +21,7 @@ def test_calendar_status_empty(client):
 
 
 def test_calendar_sync_not_connected_returns_401(client):
-    with patch(
-        "services.google_calendar_service.get_valid_access_token", new=AsyncMock(return_value=None)
-    ):
+    with patch("services.google_calendar_service.get_valid_access_token", new=AsyncMock(return_value=None)):
         resp = client.post("/integrations/google/calendar/sync")
     assert resp.status_code == 401
 
@@ -34,11 +32,11 @@ def test_calendar_sync_returns_summary(client):
         "calendars": [{"calendar_id": "primary", "synced": 3, "deleted": 1, "incremental": False}],
     }
     with (
-            patch("services.google_calendar_service.get_valid_access_token", new=AsyncMock(return_value="tok")),
-            patch(
-                "services.google_calendar_service.gs.list_calendars",
-                new=AsyncMock(return_value=[{"id": "primary", "primary": True}]),
-            ),
+        patch("services.google_calendar_service.get_valid_access_token", new=AsyncMock(return_value="tok")),
+        patch(
+            "services.google_calendar_service.gs.list_calendars",
+            new=AsyncMock(return_value=[{"id": "primary", "primary": True}]),
+        ),
         patch("services.google_calendar_service.sync_calendar", new=AsyncMock(return_value=summary["calendars"][0])),
     ):
         resp = client.post("/integrations/google/calendar/sync")

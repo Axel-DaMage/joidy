@@ -14,6 +14,7 @@ import uuid
 import httpx
 from config import settings
 from logging_config import set_correlation_id
+
 from tasks import joidy_daily_writer
 
 logger = logging.getLogger(__name__)
