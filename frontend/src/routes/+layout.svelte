@@ -712,7 +712,7 @@
 
   <SettingsPanel
     bind:open={settingsOpen}
-    on:close={() => {
+    onClose={() => {
       settingsOpen = false;
       // Broadcast so mounted pages (e.g. notes) can refetch config after edits
       window.dispatchEvent(new CustomEvent('joidy:settings-closed'));

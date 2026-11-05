@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createEventDispatcher, onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { browser } from '$app/env';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
   import SettingsAppearance from './SettingsAppearance.svelte';
@@ -16,18 +16,21 @@
   import { t } from 'svelte-i18n';
   import type { SystemConfig } from '$lib/utils/settingsTypes';
 
-  export let open = false;
+  interface Props {
+    open?: boolean;
+    onClose?: () => void;
+  }
 
-  const dispatch = createEventDispatcher<{ close: void }>();
+  let { open = $bindable(false), onClose }: Props = $props();
 
-  let configLoaded = false;
-  let configSaving = false;
-  let configSaved = false;
-  let configMessage = '';
-  let configRestartNotice = '';
+  let configLoaded = $state(false);
+  let configSaving = $state(false);
+  let configSaved = $state(false);
+  let configMessage = $state('');
+  let configRestartNotice = $state('');
   let savedTimer: ReturnType<typeof setTimeout> | null = null;
 
-  let systemConfig: SystemConfig = {
+  let systemConfig: SystemConfig = $state({
     gemini_api_key: '',
     obsidian_vault_path: '',
     daily_notes_folder: '',
@@ -44,9 +47,14 @@
     embedding_model: '',
     telegram_bot_token: '',
     telegram_allowed_user_id: '',
-  };
+  });
 
-  let configuredKeys: string[] = [];
+  // $state es OBLIGATORIO aquí: los hijos (SettingsGoogle, SettingsAI, ...)
+  // son componentes runes y llaman a isConfigured() dentro de sus propios
+  // $derived. Una variable plana no crea señal, así que cuando loadConfig()
+  // la rellenaba el hijo nunca se re-renderizaba y el botón «Conectar con
+  // Google» no aparecía aunque el backend ya reportara las creds (#1134).
+  let configuredKeys: string[] = $state([]);
 
   onMount(async () => {
     if (open) {
@@ -54,9 +62,11 @@
     }
   });
 
-  $: if (open && !configLoaded) {
-    loadConfig();
-  }
+  $effect(() => {
+    if (open && !configLoaded) {
+      loadConfig();
+    }
+  });
 
   function handleKeydown(e: KeyboardEvent) {
     if ((e.ctrlKey || e.metaKey) && e.key === 's') {
@@ -156,7 +166,7 @@
   }
 
   function close() {
-    dispatch('close');
+    onClose?.();
   }
 
   function onBackdropClick(e: MouseEvent) {
