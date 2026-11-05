@@ -346,6 +346,19 @@ export interface EmailAccountStats {
   important: number;
 }
 
+export interface CalendarEvent {
+  google_id: string;
+  calendar_id: string;
+  summary: string | null;
+  description: string | null;
+  location: string | null;
+  status: string;
+  all_day: boolean;
+  start_at: string;
+  end_at: string | null;
+  html_link: string | null;
+}
+
 export interface EmailInbox {
   items: EmailSummary[];
   total: number;
@@ -764,6 +777,29 @@ export const api = {
         'GET',
         `/integrations/google/gmail?max_results=${maxResults}`
       ),
+    calendarStatus: () =>
+      req<{
+        connected: boolean;
+        calendars: number;
+        cached_events: number;
+        last_synced_at: string | null;
+      }>('GET', '/integrations/google/calendar/status'),
+    calendarSync: () =>
+      req<{ synced_at: string; calendars: { calendar_id: string; error?: string }[] }>(
+        'POST',
+        '/integrations/google/calendar/sync'
+      ),
+    calendarEvents: (params?: { start?: string; end?: string; calendar_id?: string }) => {
+      const qs = new URLSearchParams();
+      if (params?.start) qs.set('start', params.start);
+      if (params?.end) qs.set('end', params.end);
+      if (params?.calendar_id) qs.set('calendar_id', params.calendar_id);
+      const suffix = qs.toString() ? `?${qs.toString()}` : '';
+      return req<CalendarEvent[]>(
+        'GET',
+        `/integrations/google/calendar/events${suffix}`
+      );
+    },
   },
 
   config: {
