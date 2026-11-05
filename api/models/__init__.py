@@ -4,6 +4,8 @@ from .email_message import *
 from .gamification import *
 from .github import *
 from .goal import *
+from .google_calendar_event import *
+from .google_calendar_sync import *
 from .google_token import *
 from .mood_entry import *
 from .note import *

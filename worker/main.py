@@ -2,6 +2,7 @@
 Joidy Worker — runs background tasks concurrently:
 1. Obsidian vault watcher (file sync)
 2. Daily _joidy/ writer
+3. Google Calendar sync trigger (#1134)
 """
 
 import asyncio
@@ -12,6 +13,7 @@ import signal
 from logging_config import setup_logging
 from metrics_server import start_metrics_server
 from task_status import mark_crashed, mark_stopped, record_activity, record_start
+from tasks.calendar_sync import calendar_sync_loop
 from tasks.joidy_daily_writer import schedule_daily_writes
 from watchers.vault_watcher import shutdown_event, watch_vault
 
@@ -117,6 +119,7 @@ async def main():
     tasks = [
         asyncio.create_task(_supervise("vault_watcher", watch_vault), name="vault_watcher"),
         asyncio.create_task(_supervise("daily_writer", schedule_daily_writes), name="daily_writer"),
+        asyncio.create_task(_supervise("calendar_sync", calendar_sync_loop), name="calendar_sync"),
     ]
 
     def shutdown(sig):

@@ -7,12 +7,15 @@ the popup window (#42 — one-click setup from Settings, GitHub-style).
 """
 
 import html as html_module
+from datetime import datetime
 
 import httpx
 from database import get_db
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse
+from models.google_calendar_event import GoogleCalendarEvent
 from pydantic import BaseModel
+from services import google_calendar_service as gcs
 from services import google_service as gs
 from services import google_token_service as gts
 from services.auth_service import get_current_user
@@ -211,6 +214,81 @@ async def get_google_contacts(
         return await gs.list_contacts(await _access_token(token, db), page_size)
     except httpx.HTTPStatusError as exc:
         raise HTTPException(status_code=exc.response.status_code, detail="Google API error")
+
+
+# ---------------------------------------------------------------------------
+# Calendar sync (#1134) — local cache of Google Calendar events
+# ---------------------------------------------------------------------------
+
+
+class GoogleCalendarEventOut(BaseModel):
+    google_id: str
+    calendar_id: str
+    summary: str | None = None
+    description: str | None = None
+    location: str | None = None
+    status: str
+    all_day: bool
+    start_at: datetime
+    end_at: datetime | None = None
+    html_link: str | None = None
+
+
+class GoogleCalendarSyncResult(BaseModel):
+    synced_at: str
+    calendars: list[dict]
+
+
+@router.get("/calendar/status")
+async def google_calendar_status(
+    db: Session = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
+    """Sync status: last run, cached calendars and event count."""
+    status = gcs.get_sync_status(db)
+    status["connected"] = gts.is_connected(db)
+    return status
+
+
+@router.post("/calendar/sync", response_model=GoogleCalendarSyncResult)
+async def google_calendar_sync(
+    db: Session = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
+    """Sync all selected Google Calendars into the local cache."""
+    try:
+        return await gcs.sync_all(db)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=401, detail=str(exc))
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=exc.response.status_code, detail="Google API error")
+
+
+@router.get("/calendar/events", response_model=list[GoogleCalendarEventOut])
+async def google_calendar_events(
+    start: datetime | None = Query(default=None, description="ISO lower bound (inclusive)"),
+    end: datetime | None = Query(default=None, description="ISO upper bound (inclusive)"),
+    calendar_id: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
+    """Read cached calendar events. Served locally — no Google API call."""
+    events: list[GoogleCalendarEvent] = gcs.get_cached_events(db, start, end, calendar_id)
+    return [
+        GoogleCalendarEventOut(
+            google_id=e.google_id,
+            calendar_id=e.calendar_id,
+            summary=e.summary,
+            description=e.description,
+            location=e.location,
+            status=e.status,
+            all_day=e.all_day,
+            start_at=e.start_at,
+            end_at=e.end_at,
+            html_link=e.html_link,
+        )
+        for e in events
+    ]
 
 
 async def _access_token(token: str | None, db: Session) -> str:
