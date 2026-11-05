@@ -31,6 +31,8 @@
     { type: 'Navegación', title: 'Ir a Skills', icon: 'Zap', action: () => goto('/skills') },
     { type: 'Navegación', title: 'Ir a Rachas', icon: 'Flame', action: () => goto('/streaks') },
     { type: 'Navegación', title: 'Ir a IA', icon: 'Brain', action: () => goto('/ai') },
+    { type: 'Navegación', title: 'Ir a Correos', icon: 'Mail', action: () => goto('/emails') },
+    { type: 'Navegación', title: 'Ir a Calendario', icon: 'Calendar', action: () => goto('/calendar') },
     { type: 'Navegación', title: 'Ir a Offline', icon: 'CloudOff', action: () => goto('/offline') },
     { type: 'Navegación', title: 'Ajustes', icon: 'Settings', action: () => window.dispatchEvent(new CustomEvent('joidy:open-settings')) },
   ];
