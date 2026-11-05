@@ -81,6 +81,11 @@ async def list_events(token: str, calendar_id: str = "primary") -> list[dict[str
     return data.get("items", [])
 
 
+async def list_events_raw(token: str, calendar_id: str, params: dict[str, Any]) -> dict[str, Any]:
+    """Raw events.list call with custom params (pagination, syncToken, ...)."""
+    return await _request(token, f"{GOOGLE_CALENDAR_API}/calendars/{calendar_id}/events", params)
+
+
 async def list_task_lists(token: str) -> list[dict[str, Any]]:
     """List the user's Google Tasks lists."""
     data = await _request(token, f"{GOOGLE_TASKS_API}/users/@me/lists")
