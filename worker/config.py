@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     # identical content, treating the pair as a rename instead of delete+create
     # (#364).
     rename_match_window: float = 1.0
+    # Interval (seconds) between Google Calendar sync triggers (#1134).
+    calendar_sync_interval: int = 900
 
 
 settings = Settings()

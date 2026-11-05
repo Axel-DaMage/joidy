@@ -65,10 +65,10 @@ Port overrides: `FRONTEND_PORT`, `API_PORT`, `AI_SERVICE_PORT`, `WORKER_PORT`.
 
 | Integration | Backend | Frontend | Issue |
 |-------------|---------|----------|-------|
-| **Gemini AI** | ✅ `ai-service` | ⚠️ Placeholder UI | #41 |
-| **GitHub** | ✅ `auth/github` | ✅ Unified integrations page | #120 |
-| **Google Calendar** | ⚠️ `integrations/google` one-click OAuth (Settings→Integraciones, callback persistente) | ✅ Settings card | #2 |
-| **Google Tasks** | ⚠️ `integrations/google` scaffold | ⚠️ Partial | #2 |
+| **Gemini AI** | ✅ `ai-service` | ✅ `/ai` chat real (ChatInterface lazy-loaded); RAG contextual pendiente | #1131 |
+| **GitHub** | ✅ `auth/github` | ✅ Unified integrations page | ~~#120~~ (cerrado) |
+| **Google Calendar** | ✅ `integrations/google/calendar/*`: sync incremental (`syncToken`, 410→full re-sync), caché local en DB, worker periódico (`CALENDAR_SYNC_INTERVAL`) | ✅ `/calendar` (vista mensual + sync) | ~~#1134~~ (sync completo) |
+| **Google Tasks** | ⚠️ `integrations/google` scaffold | ⚠️ Partial | ~~#2~~ (cerrado) |
 | **Gmail** | ⚠️ Push vía n8n workflow (`make n8n`) + `/emails` API | ✅ `/emails` page | #42 |
 | **Contacts** | ❌ None (Google OAuth scaffold only) | ❌ None | #43 |
 | **Strava** | ⚠️ `integrations/strava` scaffold | ❌ None | #44 |

@@ -8,7 +8,34 @@
     "goals": "Objetivos",
     "streaks": "Rachas",
     "emails": "Correos",
+    "calendar": "Calendario",
     "analytics": "Analítica"
+  },
+  "calendar": {
+    "title": "Calendario",
+    "subtitle": "Eventos de Google Calendar (sincronizados localmente)",
+    "pageTitle": "Calendario — Joidy",
+    "loading": "Cargando eventos...",
+    "empty": "Sin eventos en este mes",
+    "emptyHint": "Sincroniza para traer tus eventos de Google Calendar",
+    "sync": "Sincronizar",
+    "syncing": "Sincronizando...",
+    "syncOk": "Calendario sincronizado",
+    "today": "Hoy",
+    "prevMonth": "Mes anterior",
+    "nextMonth": "Mes siguiente",
+    "notConnected": "Google no está conectado",
+    "notConnectedHint": "Conecta tu cuenta de Google en Ajustes → Integraciones",
+    "goToSettings": "Ir a Ajustes",
+    "allDay": "Todo el día",
+    "noEventsDay": "Sin eventos este día",
+    "weekDays": ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"],
+    "months": [
+      "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+      "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+    ],
+    "lastSync": "Última sincronización: {{when}}",
+    "neverSynced": "Nunca sincronizado"
   },
   "emails": {
     "title": "Correos",
