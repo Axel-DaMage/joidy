@@ -7,7 +7,7 @@ openai==3.36.1
 anthropic==2.1.0
 cohere==7.3.0
 aiohttp==3.14.5
-sqlalchemy==2.1.6
+sqlalchemy==2.1.8
 psycopg2-binary==2.9.13
 pgvector==0.5.1
 prometheus-client==0.26.0
