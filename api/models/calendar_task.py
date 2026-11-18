@@ -51,9 +51,7 @@ class CalendarTask(Base):
     )
     done: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     done_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    goal_id: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("goals.id", ondelete="SET NULL"), nullable=True
-    )
+    goal_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("goals.id", ondelete="SET NULL"), nullable=True)
     source: Mapped[CalendarTaskSource] = mapped_column(
         Enum(CalendarTaskSource, name="calendar_task_source"),
         nullable=False,
