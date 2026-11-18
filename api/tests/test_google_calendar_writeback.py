@@ -111,9 +111,7 @@ class UpdateEventTest(WriteBackTestBase):
             "end": {"dateTime": "2026-11-20T12:00:00Z"},
         }
         with patch.object(gcs.gs, "patch_event", new=AsyncMock(return_value=updated)):
-            result = asyncio_run(
-                gcs.update_google_event(self.db, "tok", "primary", "evt-1", {"summary": "Renamed"})
-            )
+            result = asyncio_run(gcs.update_google_event(self.db, "tok", "primary", "evt-1", {"summary": "Renamed"}))
         self.assertEqual(result["summary"], "Renamed")
         row = self.db.query(GoogleCalendarEvent).filter_by(google_id="evt-1").one()
         self.assertEqual(row.summary, "Renamed")
