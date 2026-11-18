@@ -46,6 +46,7 @@
   let quickAddTitle = $state('');
   let quickAddTime = $state('');
   let quickAddPriority = $state<CalendarTaskPriority>('MEDIUM');
+  let publishToGoogle = $state(false);
   let addingTask = $state(false);
 
   // Inline edit state
@@ -222,7 +223,32 @@
         start_time: quickAddTime ? `${quickAddTime}:00` : null,
         priority: quickAddPriority,
       });
-      tasks = [...tasks, task];
+      if (publishToGoogle && status?.connected) {
+        try {
+          const start = quickAddTime
+            ? `${selectedDay}T${quickAddTime}:00`
+            : selectedDay;
+          const end = quickAddTime
+            ? `${selectedDay}T${addHour(quickAddTime)}:00`
+            : selectedDay;
+          const created = await api.google.calendarCreateEvent({
+            summary: title,
+            start: quickAddTime ? { dateTime: start } : { date: start },
+            end: quickAddTime ? { dateTime: end } : { date: end },
+          });
+          const mirrored = await api.calendarTasks.update(task.id, {
+            google_event_id: created.google_id,
+          });
+          tasks = [...tasks, mirrored];
+          await refresh();
+        } catch (e) {
+          logger.warn('Google publish failed', e);
+          showNotification($t('calendar.googlePublishError'), 'error');
+          tasks = [...tasks, task];
+        }
+      } else {
+        tasks = [...tasks, task];
+      }
       quickAddTitle = '';
       quickAddTime = '';
       quickAddPriority = 'MEDIUM';
@@ -232,6 +258,12 @@
     } finally {
       addingTask = false;
     }
+  }
+
+  function addHour(hhmm: string): string {
+    const [h, m] = hhmm.split(':').map(Number);
+    const nh = (h + 1) % 24;
+    return `${String(nh).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
   }
 
   function cyclePriority(task: CalendarTask): void {
@@ -262,6 +294,14 @@
 
   async function removeTask(task: CalendarTask): Promise<void> {
     try {
+      if (task.google_event_id && status?.connected) {
+        try {
+          await api.google.calendarDeleteEvent(task.google_event_id);
+        } catch (e) {
+          logger.warn('Google delete failed', e);
+          showNotification($t('calendar.googlePublishError'), 'error');
+        }
+      }
       await api.calendarTasks.remove(task.id);
       tasks = tasks.filter((t) => t.id !== task.id);
     } catch (e) {
@@ -285,6 +325,26 @@
       start_time: editTime ? `${editTime}:00` : null,
       end_time: editEndTime ? `${editEndTime}:00` : null,
     });
+    if (task.google_event_id && status?.connected) {
+      try {
+        const day = task.date;
+        const start = editTime ? `${day}T${editTime}:00` : day;
+        const end = editEndTime
+          ? `${day}T${editEndTime}:00`
+          : editTime
+            ? `${day}T${addHour(editTime)}:00`
+            : day;
+        await api.google.calendarUpdateEvent(task.google_event_id, {
+          summary: title,
+          start: editTime ? { dateTime: start } : { date: start },
+          end: editTime ? { dateTime: end } : { date: end },
+        });
+        await refresh();
+      } catch (e) {
+        logger.warn('Google update failed', e);
+        showNotification($t('calendar.googlePublishError'), 'error');
+      }
+    }
     editingTaskId = null;
   }
 
@@ -471,6 +531,12 @@
                 <option value={p}>{p}</option>
               {/each}
             </select>
+            {#if status?.connected}
+              <label class="publish-toggle" title={$t('calendar.publishToGoogleHint')}>
+                <input type="checkbox" bind:checked={publishToGoogle} disabled={addingTask} />
+                <span class="publish-label"><Lock size={10} />{$t('calendar.publishToGoogle')}</span>
+              </label>
+            {/if}
             <button type="submit" class="btn btn-ghost icon-btn" disabled={addingTask || !quickAddTitle.trim()} aria-label={$t('calendar.addTask')}>
               <Plus size={14} />
             </button>
@@ -797,6 +863,37 @@
 
   .quick-prio {
     max-width: 80px;
+  }
+
+  .publish-toggle {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    flex-shrink: 0;
+    font-size: 10px;
+    color: var(--text-muted);
+    user-select: none;
+  }
+
+  .publish-toggle input {
+    display: none;
+  }
+
+  .publish-label {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 6px;
+    border: 1px solid var(--border);
+    border-radius: 99px;
+    transition: all 0.15s;
+  }
+
+  .publish-toggle input:checked + .publish-label {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
   }
 
   .edit-form {

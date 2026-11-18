@@ -66,7 +66,10 @@
     "cancel": "Cancelar",
     "taskAddError": "No se pudo crear la tarea",
     "taskUpdateError": "No se pudo actualizar la tarea",
-    "taskDeleteError": "No se pudo eliminar la tarea"
+    "taskDeleteError": "No se pudo eliminar la tarea",
+    "publishToGoogle": "Google",
+    "publishToGoogleHint": "Publicar también en Google Calendar",
+    "googlePublishError": "No se pudo sincronizar con Google Calendar"
   },
   "emails": {
     "title": "Correos",

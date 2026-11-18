@@ -397,6 +397,7 @@ export interface CalendarTaskUpdateInput {
   done?: boolean;
   goal_id?: number | null;
   color?: string | null;
+  google_event_id?: string | null;
 }
 
 export interface EmailInbox {
@@ -838,6 +839,42 @@ export const api = {
       return req<CalendarEvent[]>(
         'GET',
         `/integrations/google/calendar/events${suffix}`
+      );
+    },
+    calendarCreateEvent: (input: {
+      summary: string;
+      start: { dateTime?: string; date?: string };
+      end: { dateTime?: string; date?: string };
+      description?: string;
+      calendar_id?: string;
+    }) =>
+      req<{ google_id: string; calendar_id: string; summary: string | null }>(
+        'POST',
+        '/integrations/google/calendar/events',
+        input
+      ),
+    calendarUpdateEvent: (
+      googleEventId: string,
+      patch: {
+        summary?: string;
+        start?: { dateTime?: string; date?: string };
+        end?: { dateTime?: string; date?: string };
+        description?: string;
+      },
+      calendarId?: string
+    ) => {
+      const qs = calendarId ? `?calendar_id=${encodeURIComponent(calendarId)}` : '';
+      return req<{ google_id: string; summary: string | null }>(
+        'PATCH',
+        `/integrations/google/calendar/events/${encodeURIComponent(googleEventId)}${qs}`,
+        patch
+      );
+    },
+    calendarDeleteEvent: (googleEventId: string, calendarId?: string) => {
+      const qs = calendarId ? `?calendar_id=${encodeURIComponent(calendarId)}` : '';
+      return req<{ status: string }>(
+        'DELETE',
+        `/integrations/google/calendar/events/${encodeURIComponent(googleEventId)}${qs}`
       );
     },
   },
