@@ -269,7 +269,8 @@ def get_cached_events(
         query = query.filter(GoogleCalendarEvent.start_at >= start)
     if end is not None:
         query = query.filter(GoogleCalendarEvent.start_at <= end)
-    return query.order_by(GoogleCalendarEvent.start_at).all()
+    events: list[GoogleCalendarEvent] = query.order_by(GoogleCalendarEvent.start_at).all()
+    return events
 
 
 def get_sync_status(db: Session) -> dict[str, Any]:

@@ -2,6 +2,7 @@
 
 from datetime import UTC, datetime, time
 from datetime import date as date_type
+from typing import cast
 
 from database import get_db
 from fastapi import APIRouter, Depends, HTTPException
@@ -64,12 +65,14 @@ def _validate_times(start_time: time | None, end_time: time | None) -> None:
 
 
 def _task_out(task: CalendarTask) -> CalendarTaskOut:
+    # SQLAlchemy `Time` columns are typed as datetime|None by the ORM stubs;
+    # at runtime they always hold datetime.time.
     return CalendarTaskOut(
         id=task.id,
         title=task.title,
         date=task.date,
-        start_time=task.start_time,
-        end_time=task.end_time,
+        start_time=cast("time | None", task.start_time),
+        end_time=cast("time | None", task.end_time),
         priority=task.priority,
         done=task.done,
         done_at=task.done_at,
@@ -86,7 +89,7 @@ def _get_or_404(db: Session, task_id: int) -> CalendarTask:
     task = db.query(CalendarTask).filter(CalendarTask.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Calendar task not found")
-    return task
+    return cast(CalendarTask, task)
 
 
 @router.get("/tasks", response_model=list[CalendarTaskOut])
@@ -142,7 +145,7 @@ def update_task(task_id: int, body: CalendarTaskUpdate, db: Session = Depends(ge
     for field in ("title", "date", "start_time", "end_time", "priority", "color"):
         if field in data:
             setattr(task, field, data[field])
-    _validate_times(task.start_time, task.end_time)
+    _validate_times(cast("time | None", task.start_time), cast("time | None", task.end_time))
     db.commit()
     db.refresh(task)
     return _task_out(task)
