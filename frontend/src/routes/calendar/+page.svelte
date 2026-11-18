@@ -137,29 +137,29 @@
   <title>{$t('calendar.pageTitle')}</title>
 </svelte:head>
 
-<div class="calendar-page">
-  <div class="calendar-header">
-    <div>
-      <h3>{$t('calendar.title')}</h3>
-      <span class="caption">
-        {#if status?.last_synced_at}
-          {$t('calendar.lastSync', {
-            values: { when: new Date(status.last_synced_at).toLocaleString() },
-          })}
-        {:else if status?.connected}
-          {$t('calendar.neverSynced')}
-        {:else}
-          {$t('calendar.subtitle')}
-        {/if}
-      </span>
+  <div class="calendar-page">
+    <div class="calendar-header">
+      <div>
+        <h3>{$t('calendar.title')}</h3>
+        <span class="caption">
+          {#if status?.last_synced_at}
+            {$t('calendar.lastSync', {
+              values: { when: new Date(status.last_synced_at).toLocaleString() },
+            })}
+          {:else if status?.connected}
+            {$t('calendar.neverSynced')}
+          {:else}
+            {$t('calendar.subtitle')}
+          {/if}
+        </span>
+      </div>
+      <div class="calendar-actions">
+        <button class="btn btn-ghost" onclick={sync} disabled={syncing || !status?.connected}>
+          <span class={syncing ? 'spin' : ''}><RefreshCw size={13} /></span>
+          {syncing ? $t('calendar.syncing') : $t('calendar.sync')}
+        </button>
+      </div>
     </div>
-    <div class="calendar-actions">
-      <button class="btn btn-ghost" onclick={sync} disabled={syncing || !status?.connected}>
-        <span class={syncing ? 'spin' : ''}><RefreshCw size={13} /></span>
-        {syncing ? $t('calendar.syncing') : $t('calendar.sync')}
-      </button>
-    </div>
-  </div>
 
   {#if loading}
     <div class="loading-state caption">{$t('calendar.loading')}</div>
@@ -170,77 +170,76 @@
       </EmptyState>
     </div>
   {:else}
-    <div class="calendar-card">
-      <div class="calendar-toolbar">
-        <button class="btn btn-ghost nav-btn" onclick={prevMonth} aria-label={$t('calendar.prevMonth')}>
-          <ChevronLeft size={16} />
-        </button>
-        <span class="month-label">
-          {$t(`calendar.months.${viewMonth}`)} {viewYear}
-        </span>
-        <button class="btn btn-ghost nav-btn" onclick={goToday}>{$t('calendar.today')}</button>
-        <button class="btn btn-ghost nav-btn" onclick={nextMonth} aria-label={$t('calendar.nextMonth')}>
-          <ChevronRight size={16} />
-        </button>
-      </div>
-
-      <div class="weekday-row">
-        {#each Array(7) as _, i}
-          <span class="weekday caption">{$t(`calendar.weekDays.${i}`)}</span>
-        {/each}
-      </div>
-
-      <div class="day-grid">
-        {#each gridCells as cell (cell.key)}
-          <button
-            class="day-cell"
-            class:out={!cell.inMonth}
-            class:today={cell.key === todayKey}
-            class:selected={selectedDay === cell.key}
-            class:has-events={(monthEvents.get(cell.key) ?? []).length > 0}
-            onclick={() => (selectedDay = selectedDay === cell.key ? null : cell.key)}
-          >
-            <span class="day-num">{cell.day}</span>
-            {#if (monthEvents.get(cell.key) ?? []).length > 0}
-              <span class="event-dot"></span>
-            {/if}
+    <div class="calendar-body">
+      <div class="calendar-card">
+        <div class="calendar-toolbar">
+          <button class="btn btn-ghost nav-btn" onclick={prevMonth} aria-label={$t('calendar.prevMonth')}>
+            <ChevronLeft size={16} />
           </button>
-        {/each}
-      </div>
-    </div>
+          <span class="month-label">
+            {$t(`calendar.months.${viewMonth}`)} {viewYear}
+          </span>
+          <button class="btn btn-ghost nav-btn" onclick={goToday}>{$t('calendar.today')}</button>
+          <button class="btn btn-ghost nav-btn" onclick={nextMonth} aria-label={$t('calendar.nextMonth')}>
+            <ChevronRight size={16} />
+          </button>
+        </div>
 
-    {#if selectedDay}
+        <div class="weekday-row">
+          {#each Array(7) as _, i}
+            <span class="weekday caption">{$t(`calendar.weekDays.${i}`)}</span>
+          {/each}
+        </div>
+
+        <div class="day-grid">
+          {#each gridCells as cell (cell.key)}
+            <button
+              class="day-cell"
+              class:out={!cell.inMonth}
+              class:today={cell.key === todayKey}
+              class:selected={selectedDay === cell.key}
+              class:has-events={(monthEvents.get(cell.key) ?? []).length > 0}
+              onclick={() => (selectedDay = selectedDay === cell.key ? null : cell.key)}
+            >
+              <span class="day-num">{cell.day}</span>
+              {#if (monthEvents.get(cell.key) ?? []).length > 0}
+                <span class="event-dot"></span>
+              {/if}
+            </button>
+          {/each}
+        </div>
+      </div>
+
       <div class="day-detail">
-        <h4>
-          {new Date(`${selectedDay}T12:00:00`).toLocaleDateString(undefined, {
-            weekday: 'long',
-            day: 'numeric',
-            month: 'long',
-          })}
-        </h4>
-        {#if selectedDayEvents.length === 0}
-          <span class="caption">{$t('calendar.noEventsDay')}</span>
+        {#if selectedDay}
+          <h4>
+            {new Date(`${selectedDay}T12:00:00`).toLocaleDateString(undefined, {
+              weekday: 'long',
+              day: 'numeric',
+              month: 'long',
+            })}
+          </h4>
+          {#if selectedDayEvents.length === 0}
+            <span class="caption">{$t('calendar.noEventsDay')}</span>
+          {:else}
+            <div class="event-list">
+              {#each selectedDayEvents as ev (ev.google_id)}
+                <div class="event-item">
+                  <span class="event-time caption">{eventTime(ev)}</span>
+                  <span class="event-summary">{ev.summary || '—'}</span>
+                  {#if ev.location}
+                    <span class="event-location caption">{ev.location}</span>
+                  {/if}
+                </div>
+              {/each}
+            </div>
+          {/if}
         {:else}
-          <div class="event-list">
-            {#each selectedDayEvents as ev (ev.google_id)}
-              <div class="event-item">
-                <span class="event-time caption">{eventTime(ev)}</span>
-                <span class="event-summary">{ev.summary || '—'}</span>
-                {#if ev.location}
-                  <span class="event-location caption">{ev.location}</span>
-                {/if}
-              </div>
-            {/each}
-          </div>
+          <h4>{$t('calendar.pickDay')}</h4>
+          <span class="caption">{$t('calendar.pickDayHint')}</span>
         {/if}
       </div>
-    {:else if events.length === 0}
-      <div class="empty-wrap">
-        <EmptyState title={$t('calendar.empty')} message={$t('calendar.emptyHint')}>
-          {#snippet icon()}<CalendarDays size={44} />{/snippet}
-        </EmptyState>
-      </div>
-    {/if}
+    </div>
   {/if}
 </div>
 
@@ -249,10 +248,14 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
-    max-width: 860px;
+    max-width: 1200px;
     margin: 0 auto;
     padding: var(--s4) var(--s3);
     width: 100%;
+    flex: 1;
+    min-height: 0;
+    box-sizing: border-box;
+    overflow: hidden;
   }
 
   .calendar-header {
@@ -260,6 +263,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
+    flex-shrink: 0;
   }
 
   .calendar-header h3 {
@@ -271,11 +275,23 @@
     gap: 8px;
   }
 
+  .calendar-body {
+    display: grid;
+    grid-template-columns: 1fr minmax(280px, 340px);
+    grid-template-rows: 1fr;
+    gap: 12px;
+    flex: 1;
+    min-height: 0;
+  }
+
   .calendar-card {
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--r);
     padding: var(--s3);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
   }
 
   .calendar-toolbar {
@@ -283,6 +299,7 @@
     align-items: center;
     gap: 8px;
     margin-bottom: var(--s2);
+    flex-shrink: 0;
   }
 
   .month-label {
@@ -300,6 +317,7 @@
     grid-template-columns: repeat(7, 1fr);
     gap: 4px;
     margin-bottom: 4px;
+    flex-shrink: 0;
   }
 
   .weekday {
@@ -310,12 +328,15 @@
   .day-grid {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
+    grid-template-rows: repeat(6, 1fr);
     gap: 4px;
+    flex: 1;
+    min-height: 0;
   }
 
   .day-cell {
     position: relative;
-    aspect-ratio: 1 / 0.85;
+    aspect-ratio: initial;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -327,6 +348,8 @@
     cursor: pointer;
     color: var(--text-primary);
     font-size: 12px;
+    min-height: 0;
+    overflow: hidden;
   }
 
   .day-cell:hover {
@@ -363,6 +386,8 @@
     border: 1px solid var(--border);
     border-radius: var(--r);
     padding: var(--s3);
+    overflow-y: auto;
+    min-height: 0;
   }
 
   .day-detail h4 {
@@ -416,6 +441,11 @@
   }
 
   @media (max-width: 640px) {
+    .calendar-body {
+      grid-template-columns: 1fr;
+      grid-template-rows: minmax(0, 3fr) minmax(0, 2fr);
+    }
+
     .event-location {
       display: none;
     }
