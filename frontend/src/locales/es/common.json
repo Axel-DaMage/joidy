@@ -29,13 +29,33 @@
     "goToSettings": "Ir a Ajustes",
     "allDay": "Todo el día",
     "noEventsDay": "Sin eventos este día",
-    "weekDays": ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"],
+    "weekDays": [
+      "Lun",
+      "Mar",
+      "Mié",
+      "Jue",
+      "Vie",
+      "Sáb",
+      "Dom"
+    ],
     "months": [
-      "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-      "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+      "Enero",
+      "Febrero",
+      "Marzo",
+      "Abril",
+      "Mayo",
+      "Junio",
+      "Julio",
+      "Agosto",
+      "Septiembre",
+      "Octubre",
+      "Noviembre",
+      "Diciembre"
     ],
     "lastSync": "Última sincronización: {{when}}",
-    "neverSynced": "Nunca sincronizado"
+    "neverSynced": "Nunca sincronizado",
+    "pickDay": "Selecciona un día",
+    "pickDayHint": "Haz clic en un día del mes para ver sus eventos"
   },
   "emails": {
     "title": "Correos",
