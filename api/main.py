@@ -19,6 +19,7 @@ from routers import (
     ai,
     analytics,
     auth,
+    calendar_tasks,
     config,
     emails,
     export,
@@ -237,6 +238,7 @@ app.include_router(vault.router, dependencies=[Depends(get_current_user)])
 app.include_router(folders.router, dependencies=[Depends(get_current_user)])
 app.include_router(ai.router, dependencies=[Depends(get_current_user)])
 app.include_router(planning.router, dependencies=[Depends(get_current_user)])
+app.include_router(calendar_tasks.router, dependencies=[Depends(get_current_user)])
 app.include_router(websocket.router)
 app.include_router(obsidian.router)
 app.include_router(auth.router)
