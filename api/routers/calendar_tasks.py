@@ -33,6 +33,9 @@ class CalendarTaskUpdate(BaseModel):
     done: bool | None = None
     goal_id: int | None = None
     color: str | None = Field(default=None, max_length=20)
+    # Write-back mirror (#1233): set by the frontend after creating the
+    # Google event, so later edits/deletes can propagate to Google.
+    google_event_id: str | None = Field(default=None, max_length=255)
 
 
 class CalendarTaskOut(BaseModel):
@@ -142,7 +145,7 @@ def update_task(task_id: int, body: CalendarTaskUpdate, db: Session = Depends(ge
         if goal_id is not None and not db.get(Goal, goal_id):
             raise HTTPException(status_code=404, detail="Goal not found")
         task.goal_id = goal_id
-    for field in ("title", "date", "start_time", "end_time", "priority", "color"):
+    for field in ("title", "date", "start_time", "end_time", "priority", "color", "google_event_id"):
         if field in data:
             setattr(task, field, data[field])
     _validate_times(cast("time | None", task.start_time), cast("time | None", task.end_time))

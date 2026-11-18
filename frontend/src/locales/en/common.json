@@ -66,7 +66,10 @@
     "cancel": "Cancel",
     "taskAddError": "Could not create the task",
     "taskUpdateError": "Could not update the task",
-    "taskDeleteError": "Could not delete the task"
+    "taskDeleteError": "Could not delete the task",
+    "publishToGoogle": "Google",
+    "publishToGoogleHint": "Also publish to Google Calendar",
+    "googlePublishError": "Could not sync with Google Calendar"
   },
   "emails": {
     "title": "Mail",

@@ -283,3 +283,99 @@ def get_sync_status(db: Session) -> dict[str, Any]:
         "last_synced_at": last_synced.isoformat() if last_synced else None,
         "cached_events": events,
     }
+
+
+# ── Write-back (#1233) ─────────────────────────────────────────────────────────
+#
+# Creating, editing, or deleting Google Calendar events from joidy. Every write
+# is mirrored into the local cache immediately (via _upsert_event) so the UI
+# reflects the change without waiting for the next incremental sync.
+#
+# The OAuth flow now requests the `calendar.events` scope. Tokens granted
+# before that change only have `calendar.readonly`, so Google answers 403
+# INSUFFICIENT_PERMISSIONS — surfaced as GoogleReconsentRequired so the UI can
+# guide the user to reconnect.
+
+
+class GoogleReconsentRequired(RuntimeError):
+    """The stored token lacks the calendar.events scope (re-connect needed)."""
+
+
+def _reconsent_if_needed(exc: httpx.HTTPStatusError) -> None:
+    """Raise GoogleReconsentRequired when the token lacks write scope."""
+    response = exc.response
+    if response.status_code == 403:
+        try:
+            body = response.json()
+        except Exception:
+            body = {}
+        errors = body.get("error", {})
+        if isinstance(errors, dict) and errors.get("errors"):
+            reasons = {e.get("reason") for e in errors["errors"]}
+            if "insufficientPermissions" in reasons:
+                raise GoogleReconsentRequired(
+                    "El token de Google no tiene permiso de escritura. Reconecta tu cuenta en Ajustes."
+                ) from exc
+    raise exc
+
+
+async def create_google_event(
+    db: Session,
+    token: str,
+    calendar_id: str,
+    summary: str,
+    start: dict[str, Any],
+    end: dict[str, Any],
+    description: str | None = None,
+) -> dict[str, Any]:
+    """Create an event in Google and upsert it into the local cache."""
+    event: dict[str, Any] = {"summary": summary, "start": start, "end": end}
+    if description:
+        event["description"] = description
+    try:
+        created = await gs.create_event(token, calendar_id, event)
+    except httpx.HTTPStatusError as exc:
+        _reconsent_if_needed(exc)
+    _upsert_event(db, calendar_id, created)
+    db.commit()
+    return created
+
+
+async def update_google_event(
+    db: Session,
+    token: str,
+    calendar_id: str,
+    google_event_id: str,
+    patch: dict[str, Any],
+) -> dict[str, Any]:
+    """Patch an event in Google and upsert the result into the local cache."""
+    try:
+        updated = await gs.patch_event(token, calendar_id, google_event_id, patch)
+    except httpx.HTTPStatusError as exc:
+        _reconsent_if_needed(exc)
+    _upsert_event(db, calendar_id, updated)
+    db.commit()
+    return updated
+
+
+async def delete_google_event(
+    db: Session,
+    token: str,
+    calendar_id: str,
+    google_event_id: str,
+) -> None:
+    """Delete an event in Google and drop it from the local cache."""
+    try:
+        await gs.delete_event(token, calendar_id, google_event_id)
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 404:
+            # Already gone remotely — just drop the local cache row.
+            pass
+        else:
+            _reconsent_if_needed(exc)
+    db.query(GoogleCalendarEvent).filter(
+        GoogleCalendarEvent.user_id == 1,
+        GoogleCalendarEvent.calendar_id == calendar_id,
+        GoogleCalendarEvent.google_id == google_event_id,
+    ).delete()
+    db.commit()
