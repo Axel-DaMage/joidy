@@ -55,7 +55,18 @@
     "lastSync": "Última sincronización: {{when}}",
     "neverSynced": "Nunca sincronizado",
     "pickDay": "Selecciona un día",
-    "pickDayHint": "Haz clic en un día del mes para ver sus eventos"
+    "pickDayHint": "Haz clic en un día del mes para ver sus eventos",
+    "quickAddPlaceholder": "Nueva tarea… (título + Enter)",
+    "addTask": "Añadir tarea",
+    "toggleDone": "Completar tarea",
+    "priority": "Prioridad",
+    "edit": "Editar",
+    "delete": "Eliminar",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "taskAddError": "No se pudo crear la tarea",
+    "taskUpdateError": "No se pudo actualizar la tarea",
+    "taskDeleteError": "No se pudo eliminar la tarea"
   },
   "emails": {
     "title": "Correos",

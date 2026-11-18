@@ -55,7 +55,18 @@
     "lastSync": "Last sync: {{when}}",
     "neverSynced": "Never synced",
     "pickDay": "Pick a day",
-    "pickDayHint": "Click a day in the month to see its events"
+    "pickDayHint": "Click a day in the month to see its events",
+    "quickAddPlaceholder": "New task… (title + Enter)",
+    "addTask": "Add task",
+    "toggleDone": "Toggle done",
+    "priority": "Priority",
+    "edit": "Edit",
+    "delete": "Delete",
+    "save": "Save",
+    "cancel": "Cancel",
+    "taskAddError": "Could not create the task",
+    "taskUpdateError": "Could not update the task",
+    "taskDeleteError": "Could not delete the task"
   },
   "emails": {
     "title": "Mail",
