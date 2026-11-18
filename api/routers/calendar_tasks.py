@@ -1,6 +1,7 @@
 """CRUD for internal joidy calendar tasks (#1230)."""
 
-from datetime import UTC, date as date_type, datetime, time
+from datetime import UTC, datetime, time
+from datetime import date as date_type
 
 from database import get_db
 from fastapi import APIRouter, Depends, HTTPException
