@@ -473,10 +473,10 @@
                   <div class="event-item task-item" class:done={item.task.done}>
                     {#if editingTaskId === item.task.id}
                       <div class="edit-form">
-                        <input class="edit-input" type="text" bind:value={editTitle} maxlength="500" />
+                        <input class="input edit-input" type="text" bind:value={editTitle} maxlength="500" />
                         <div class="edit-times">
-                          <input class="edit-input" type="time" bind:value={editTime} />
-                          <input class="edit-input" type="time" bind:value={editEndTime} />
+                          <input class="input edit-input" type="time" bind:value={editTime} />
+                          <input class="input edit-input" type="time" bind:value={editEndTime} />
                         </div>
                         <div class="edit-actions">
                           <button class="btn btn-ghost icon-btn" onclick={() => saveEdit(item.task)} aria-label={$t('calendar.save')}>
@@ -518,15 +518,15 @@
 
           <form class="quick-add" onsubmit={(e) => { e.preventDefault(); addTask(); }}>
             <input
-              class="quick-input"
+              class="input quick-input"
               type="text"
               bind:value={quickAddTitle}
               placeholder={$t('calendar.quickAddPlaceholder')}
               maxlength="500"
               disabled={addingTask}
             />
-            <input class="quick-time" type="time" bind:value={quickAddTime} disabled={addingTask} />
-            <select class="quick-prio" bind:value={quickAddPriority} disabled={addingTask} aria-label={$t('calendar.priority')}>
+            <input class="input quick-time" type="time" bind:value={quickAddTime} disabled={addingTask} />
+            <select class="input quick-prio" bind:value={quickAddPriority} disabled={addingTask} aria-label={$t('calendar.priority')}>
               {#each PRIORITIES as p}
                 <option value={p}>{p}</option>
               {/each}
@@ -537,7 +537,7 @@
                 <span class="publish-label"><Lock size={10} />{$t('calendar.publishToGoogle')}</span>
               </label>
             {/if}
-            <button type="submit" class="btn btn-ghost icon-btn" disabled={addingTask || !quickAddTitle.trim()} aria-label={$t('calendar.addTask')}>
+            <button type="submit" class="btn btn-icon quick-submit" disabled={addingTask || !quickAddTitle.trim()} aria-label={$t('calendar.addTask')}>
               <Plus size={14} />
             </button>
           </form>
@@ -853,16 +853,42 @@
   .quick-input {
     flex: 1;
     min-width: 0;
+    padding: var(--s2) var(--s3);
+    font-size: 12px;
   }
 
   .quick-time,
   .quick-prio {
     width: auto;
     flex-shrink: 0;
+    padding: var(--s2) var(--s2);
+    font-size: 12px;
   }
 
   .quick-prio {
-    max-width: 80px;
+    max-width: 90px;
+  }
+
+  .quick-submit {
+    flex-shrink: 0;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+  }
+
+  .quick-submit:not(:disabled):hover {
+    color: var(--text-primary);
+    border-color: var(--border);
+    background: var(--elevated);
+  }
+
+  .quick-submit:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
   }
 
   .publish-toggle {
