@@ -38,6 +38,19 @@
   let loading = $state(true);
   let syncing = $state(false);
 
+  type CalendarView = 'month' | 'week' | 'agenda';
+  let currentView = $state<CalendarView>(
+    (typeof localStorage !== 'undefined' && (localStorage.getItem('joidy-calendar-view') as CalendarView)) || 'month'
+  );
+  let weekOffset = $state(0);
+
+  function setView(view: CalendarView): void {
+    currentView = view;
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('joidy-calendar-view', view);
+    }
+  }
+
   let viewYear = $state(new Date().getFullYear());
   let viewMonth = $state(new Date().getMonth()); // 0-based
   let selectedDay = $state<string | null>(null);
@@ -153,27 +166,78 @@
 
   let selectedDayItems = $derived(selectedDay ? (monthItems.get(selectedDay) ?? []) : []);
 
-  function prevMonth(): void {
-    if (viewMonth === 0) {
-      viewYear -= 1;
-      viewMonth = 11;
+  // Week view: 7 days based on current weekOffset
+  let weekDays = $derived.by(() => {
+    const today = new Date();
+    const dayOfWeek = (today.getDay() + 6) % 7; // Monday = 0
+    const monday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - dayOfWeek + weekOffset * 7);
+    const days: { day: number; key: string; weekdayIndex: number; monthName: string }[] = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      days.push({
+        day: d.getDate(),
+        key,
+        weekdayIndex: i,
+        monthName: $t(`calendar.months.${d.getMonth()}`),
+      });
+    }
+    return days;
+  });
+
+  let weekLabel = $derived.by(() => {
+    if (weekDays.length === 0) return '';
+    const first = weekDays[0];
+    const last = weekDays[6];
+    if (first.monthName === last.monthName) {
+      return `${first.day} - ${last.day} ${first.monthName} ${viewYear}`;
+    }
+    return `${first.day} ${first.monthName} - ${last.day} ${last.monthName} ${viewYear}`;
+  });
+
+  // Agenda view: Next 14 days starting from today (or selectedDay if set)
+  let agendaDays = $derived.by(() => {
+    const start = new Date();
+    const days: { date: Date; key: string; items: DayItem[] }[] = [];
+    for (let i = 0; i < 14; i++) {
+      const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const items = monthItems.get(key) ?? [];
+      days.push({ date: d, key, items });
+    }
+    return days;
+  });
+
+  function prevRange(): void {
+    if (currentView === 'week') {
+      weekOffset -= 1;
     } else {
-      viewMonth -= 1;
+      if (viewMonth === 0) {
+        viewYear -= 1;
+        viewMonth = 11;
+      } else {
+        viewMonth -= 1;
+      }
     }
   }
 
-  function nextMonth(): void {
-    if (viewMonth === 11) {
-      viewYear += 1;
-      viewMonth = 0;
+  function nextRange(): void {
+    if (currentView === 'week') {
+      weekOffset += 1;
     } else {
-      viewMonth += 1;
+      if (viewMonth === 11) {
+        viewYear += 1;
+        viewMonth = 0;
+      } else {
+        viewMonth += 1;
+      }
     }
   }
 
   function goToday(): void {
     viewYear = new Date().getFullYear();
     viewMonth = new Date().getMonth();
+    weekOffset = 0;
     selectedDay = todayKey;
   }
 
@@ -476,64 +540,193 @@
     <div class="calendar-body">
       <div class="calendar-card">
         <div class="calendar-toolbar">
-          <button class="btn btn-ghost nav-btn" onclick={prevMonth} aria-label={$t('calendar.prevMonth')}>
-            <ChevronLeft size={16} />
-          </button>
-          <span class="month-label">
-            {$t(`calendar.months.${viewMonth}`)} {viewYear}
-          </span>
-          <button class="btn btn-ghost nav-btn" onclick={goToday}>{$t('calendar.today')}</button>
-          <button class="btn btn-ghost nav-btn" onclick={nextMonth} aria-label={$t('calendar.nextMonth')}>
-            <ChevronRight size={16} />
-          </button>
-        </div>
-
-        <div class="weekday-row">
-          {#each Array(7) as _, i}
-            <span class="weekday caption">{$t(`calendar.weekDays.${i}`)}</span>
-          {/each}
-        </div>
-
-        <div class="day-grid">
-          {#each gridCells as cell (cell.key)}
-            {@const items = monthItems.get(cell.key) ?? []}
+          <div class="view-switcher">
             <button
-              class="day-cell"
-              class:out={!cell.inMonth}
-              class:today={cell.key === todayKey}
-              class:selected={selectedDay === cell.key}
-              class:drop-target={dropTargetKey === cell.key}
-              draggable={items.some((i) => i.kind === 'task')}
-              ondragover={(e) => onCellDragOver(e, cell.key)}
-              ondragleave={() => onCellDragLeave(cell.key)}
-              ondrop={(e) => onCellDrop(e, cell.key)}
-              onclick={() => (selectedDay = selectedDay === cell.key ? null : cell.key)}
-            >
-              <span class="day-num">{cell.day}</span>
-              <span class="cell-items">
-                {#each items.slice(0, 2) as item}
-                  {#if item.kind === 'google'}
-                    <span class="chip chip-google"><Lock size={8} />{item.label}</span>
-                  {:else}
-                    <span
-                      class="chip {priorityClass(item.task.priority)}"
-                      class:done={item.task.done}
-                      class:dragging={draggedTask?.id === item.task.id}
-                      role="button"
-                      tabindex="-1"
-                      draggable="true"
-                      ondragstart={(e) => onChipDragStart(e, item.task)}
-                      ondragend={onChipDragEnd}
-                    >{item.label}</span>
-                  {/if}
-                {/each}
-                {#if items.length > 2}
-                  <span class="chip chip-more">+{items.length - 2}</span>
-                {/if}
-              </span>
+              class="btn btn-ghost view-btn"
+              class:active={currentView === 'month'}
+              onclick={() => setView('month')}
+            >{$t('calendar.views.month')}</button>
+            <button
+              class="btn btn-ghost view-btn"
+              class:active={currentView === 'week'}
+              onclick={() => setView('week')}
+            >{$t('calendar.views.week')}</button>
+            <button
+              class="btn btn-ghost view-btn"
+              class:active={currentView === 'agenda'}
+              onclick={() => setView('agenda')}
+            >{$t('calendar.views.agenda')}</button>
+          </div>
+
+          {#if currentView !== 'agenda'}
+            <button class="btn btn-ghost nav-btn" onclick={prevRange} aria-label={currentView === 'week' ? $t('calendar.prevWeek') : $t('calendar.prevMonth')}>
+              <ChevronLeft size={16} />
             </button>
-          {/each}
+          {/if}
+
+          <span class="month-label">
+            {#if currentView === 'month'}
+              {$t(`calendar.months.${viewMonth}`)} {viewYear}
+            {:else if currentView === 'week'}
+              {weekLabel}
+            {:else}
+              {$t('calendar.views.agenda')} (14 {$t('calendar.today').toLowerCase() == 'hoy' ? 'días' : 'days'})
+            {/if}
+          </span>
+
+          <button class="btn btn-ghost nav-btn" onclick={goToday}>{$t('calendar.today')}</button>
+
+          {#if currentView !== 'agenda'}
+            <button class="btn btn-ghost nav-btn" onclick={nextRange} aria-label={currentView === 'week' ? $t('calendar.nextWeek') : $t('calendar.nextMonth')}>
+              <ChevronRight size={16} />
+            </button>
+          {/if}
         </div>
+
+        {#if currentView === 'month'}
+          <div class="weekday-row">
+            {#each Array(7) as _, i}
+              <span class="weekday caption">{$t(`calendar.weekDays.${i}`)}</span>
+            {/each}
+          </div>
+
+          <div class="day-grid">
+            {#each gridCells as cell (cell.key)}
+              {@const items = monthItems.get(cell.key) ?? []}
+              <button
+                class="day-cell"
+                class:out={!cell.inMonth}
+                class:today={cell.key === todayKey}
+                class:selected={selectedDay === cell.key}
+                class:drop-target={dropTargetKey === cell.key}
+                draggable={items.some((i) => i.kind === 'task')}
+                ondragover={(e) => onCellDragOver(e, cell.key)}
+                ondragleave={() => onCellDragLeave(cell.key)}
+                ondrop={(e) => onCellDrop(e, cell.key)}
+                onclick={() => (selectedDay = selectedDay === cell.key ? null : cell.key)}
+              >
+                <span class="day-num">{cell.day}</span>
+                <span class="cell-items">
+                  {#each items.slice(0, 2) as item}
+                    {#if item.kind === 'google'}
+                      <span class="chip chip-google"><Lock size={8} />{item.label}</span>
+                    {:else}
+                      <span
+                        class="chip {priorityClass(item.task.priority)}"
+                        class:done={item.task.done}
+                        class:dragging={draggedTask?.id === item.task.id}
+                        role="button"
+                        tabindex="-1"
+                        draggable="true"
+                        ondragstart={(e) => onChipDragStart(e, item.task)}
+                        ondragend={onChipDragEnd}
+                      >{item.label}</span>
+                    {/if}
+                  {/each}
+                  {#if items.length > 2}
+                    <span class="chip chip-more">+{items.length - 2}</span>
+                  {/if}
+                </span>
+              </button>
+            {/each}
+          </div>
+        {:else if currentView === 'week'}
+          <div class="weekday-row">
+            {#each weekDays as day}
+              <span class="weekday caption" class:bold={day.key === todayKey}>
+                {$t(`calendar.weekDays.${day.weekdayIndex}`)} {day.day}
+              </span>
+            {/each}
+          </div>
+
+          <div class="week-grid">
+            {#each weekDays as day (day.key)}
+              {@const items = monthItems.get(day.key) ?? []}
+              <div
+                class="week-col"
+                class:today={day.key === todayKey}
+                class:selected={selectedDay === day.key}
+                class:drop-target={dropTargetKey === day.key}
+                role="region"
+                aria-label="{day.key}"
+                ondragover={(e) => onCellDragOver(e, day.key)}
+                ondragleave={() => onCellDragLeave(day.key)}
+                ondrop={(e) => onCellDrop(e, day.key)}
+              >
+                <button
+                  class="week-col-header"
+                  onclick={() => (selectedDay = selectedDay === day.key ? null : day.key)}
+                >
+                  <span class="day-num">{day.day}</span>
+                  <span class="caption">{items.length}</span>
+                </button>
+                <div class="week-col-items">
+                  {#each items as item}
+                    {#if item.kind === 'google'}
+                      <div class="chip chip-google">
+                        <Lock size={8} />
+                        <span class="chip-time">{item.time || ''}</span>
+                        <span class="chip-label">{item.label}</span>
+                      </div>
+                    {:else}
+                      <div
+                        class="chip {priorityClass(item.task.priority)}"
+                        class:done={item.task.done}
+                        class:dragging={draggedTask?.id === item.task.id}
+                        role="button"
+                        tabindex="-1"
+                        draggable="true"
+                        ondragstart={(e) => onChipDragStart(e, item.task)}
+                        ondragend={onChipDragEnd}
+                      >
+                        {#if item.time}<span class="chip-time">{item.time}</span>{/if}
+                        <span class="chip-label">{item.label}</span>
+                      </div>
+                    {/if}
+                  {/each}
+                </div>
+              </div>
+            {/each}
+          </div>
+        {:else if currentView === 'agenda'}
+          <div class="agenda-view">
+            {#each agendaDays as day (day.key)}
+              <div
+                class="agenda-day-row"
+                class:today={day.key === todayKey}
+                class:selected={selectedDay === day.key}
+                role="button"
+                tabindex="0"
+                onclick={() => (selectedDay = selectedDay === day.key ? null : day.key)}
+                onkeydown={(e) => e.key === 'Enter' && (selectedDay = selectedDay === day.key ? null : day.key)}
+              >
+                <div class="agenda-date-badge">
+                  <span class="day-num">{day.date.getDate()}</span>
+                  <span class="caption">{day.date.toLocaleDateString(undefined, { weekday: 'short', month: 'short' })}</span>
+                </div>
+                <div class="agenda-day-items">
+                  {#if day.items.length === 0}
+                    <span class="caption empty-agenda-day">{$t('calendar.noEventsDay')}</span>
+                  {:else}
+                    {#each day.items as item}
+                      <div class="agenda-item-pill" class:done={item.kind === 'task' && item.task.done}>
+                        {#if item.kind === 'google'}
+                          <Lock size={9} class="lock-icon" />
+                          <span class="chip-time caption">{item.allDay ? $t('calendar.allDay') : item.time}</span>
+                          <span class="pill-title">{item.label}</span>
+                        {:else}
+                          <span class="priority-dot {priorityClass(item.task.priority)}"></span>
+                          {#if item.time}<span class="chip-time caption">{item.time}</span>{/if}
+                          <span class="pill-title">{item.label}</span>
+                        {/if}
+                      </div>
+                    {/each}
+                  {/if}
+                </div>
+              </div>
+            {/each}
+          </div>
+        {/if}
       </div>
 
       <div class="day-detail">
@@ -688,6 +881,246 @@
     display: flex;
     flex-direction: column;
     min-height: 0;
+  }
+
+  .view-switcher {
+    display: inline-flex;
+    align-items: center;
+    background: var(--surface-2, rgba(255, 255, 255, 0.04));
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: 2px;
+    gap: 2px;
+  }
+
+  .view-btn {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: calc(var(--r) * 0.7);
+    color: var(--text-muted);
+    border: none;
+    transition: all 0.15s ease;
+  }
+
+  .view-btn:hover {
+    color: var(--text-primary);
+  }
+
+  .view-btn.active {
+    background: var(--surface);
+    color: var(--xp);
+    font-weight: 600;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  }
+
+  .weekday.bold {
+    font-weight: 700;
+    color: var(--xp);
+  }
+
+  /* Week Grid */
+  .week-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    grid-template-rows: 1fr;
+    gap: 6px;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .week-col {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border);
+    border-radius: calc(var(--r) * 0.7);
+    background: var(--surface-2, rgba(255, 255, 255, 0.02));
+    min-height: 0;
+    overflow: hidden;
+    transition: border-color 0.15s ease;
+  }
+
+  .week-col.today {
+    border-color: var(--xp);
+    background: color-mix(in srgb, var(--xp) 8%, transparent);
+  }
+
+  .week-col.selected {
+    border-color: var(--xp);
+    box-shadow: 0 0 0 1px var(--xp);
+  }
+
+  .week-col.drop-target {
+    border-color: var(--xp);
+    background: color-mix(in srgb, var(--xp) 18%, transparent);
+  }
+
+  .week-col-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 6px;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    background: transparent;
+    cursor: pointer;
+    color: inherit;
+    width: 100%;
+  }
+
+  .week-col-header:hover {
+    background: var(--hover);
+  }
+
+  .week-col-items {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 6px;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .week-col-items .chip {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    width: 100%;
+    box-sizing: border-box;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .chip-time {
+    font-size: 9px;
+    opacity: 0.75;
+    flex-shrink: 0;
+  }
+
+  .chip-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+  }
+
+  /* Agenda View */
+  .agenda-view {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+
+  .agenda-day-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    background: var(--surface-2, rgba(255, 255, 255, 0.02));
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .agenda-day-row:hover {
+    background: var(--hover);
+  }
+
+  .agenda-day-row.today {
+    border-color: var(--xp);
+    background: color-mix(in srgb, var(--xp) 10%, transparent);
+  }
+
+  .agenda-day-row.selected {
+    border-color: var(--xp);
+    box-shadow: 0 0 0 1px var(--xp);
+  }
+
+  .agenda-date-badge {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 48px;
+    padding: 4px;
+    border-radius: calc(var(--r) * 0.6);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .agenda-date-badge .day-num {
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .agenda-date-badge .caption {
+    font-size: 10px;
+    text-transform: capitalize;
+  }
+
+  .agenda-day-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    flex: 1;
+    min-height: 28px;
+  }
+
+  .empty-agenda-day {
+    font-style: italic;
+    opacity: 0.5;
+  }
+
+  .agenda-item-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    font-size: 11px;
+    max-width: 260px;
+  }
+
+  .agenda-item-pill.done {
+    opacity: 0.55;
+    text-decoration: line-through;
+  }
+
+  .pill-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .priority-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .priority-dot.prio-high {
+    background: var(--danger, #ef4444);
+  }
+
+  .priority-dot.prio-medium {
+    background: var(--xp, #c8a96e);
+  }
+
+  .priority-dot.prio-low {
+    background: var(--text-muted);
   }
 
   .calendar-toolbar {
