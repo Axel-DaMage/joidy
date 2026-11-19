@@ -4,6 +4,7 @@ from database import get_db
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from models.goal import (
     Goal,
+    GoalContext,
     GoalFailConfig,
     GoalMeasurement,
     GoalState,
@@ -30,6 +31,7 @@ from services.joidy_vault_writer import (
 from services.note_service import write_to_vault
 from services.sanitizer import sanitize_color, sanitize_content, sanitize_emoji, sanitize_title
 from services.sync_service import update_local_mtime
+from services.timezone_utils import get_local_now
 from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/goals", tags=["goals"])
@@ -54,6 +56,7 @@ class GoalCreate(BaseModel):
     title: str
     description: str = ""
     temporality: GoalTemporality = GoalTemporality.ONEOFF
+    context: GoalContext = GoalContext.ANY
     measurement_type: GoalMeasurement = GoalMeasurement.COUNT
     target_value: float = 1.0
     state: GoalState = GoalState.ACTIVE
@@ -104,6 +107,7 @@ class GoalUpdate(BaseModel):
     title: str | None = None
     description: str | None = None
     temporality: GoalTemporality | None = None
+    context: GoalContext | None = None
     measurement_type: GoalMeasurement | None = None
     target_value: float | None = None
     current_value: float | None = None
@@ -174,6 +178,7 @@ class GoalContent(BaseModel):
     title: str
     content: str
     temporality: GoalTemporality = GoalTemporality.ONEOFF
+    context: GoalContext = GoalContext.ANY
     measurement_type: GoalMeasurement = GoalMeasurement.COUNT
     target_value: float = 1.0
     state: GoalState = GoalState.ACTIVE
@@ -196,6 +201,7 @@ def _serialize_goal(goal: Goal, db: Session, precalculated_progress: float | Non
         "description": goal.description,
         "source_path": goal.source_path,
         "temporality": goal.temporality,
+        "context": goal.context,
         "measurement_type": goal.measurement_type,
         "target_value": goal.target_value,
         "current_value": progress,
@@ -222,15 +228,18 @@ def _serialize_goal(goal: Goal, db: Session, precalculated_progress: float | Non
 def list_goals(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
+    state: GoalState | None = Query(None),
+    context: GoalContext | None = Query(None),
     db: Session = Depends(get_db),
 ):
     evaluate_active_goals(db)
+    query = db.query(Goal)
+    if state is not None:
+        query = query.filter(Goal.state == state)
+    if context is not None:
+        query = query.filter(Goal.context == context)
     goals = (
-        db.query(Goal)
-        .order_by(Goal.is_completed, Goal.priority.desc(), Goal.created_at.desc())
-        .offset(skip)
-        .limit(limit)
-        .all()
+        query.order_by(Goal.is_completed, Goal.priority.desc(), Goal.created_at.desc()).offset(skip).limit(limit).all()
     )
     progress_map = get_bulk_goal_progress(goals, db)
     return [_serialize_goal(g, db, precalculated_progress=progress_map.get(g.id)) for g in goals]
@@ -300,6 +309,7 @@ def update_goal(goal_id: int, data: GoalUpdate, db: Session = Depends(get_db)):
     if content is not None:
         metadata = {
             "temporality": goal.temporality,
+            "context": goal.context,
             "measurement_type": goal.measurement_type,
             "target_value": goal.target_value,
             "current_value": goal.current_value,
@@ -361,6 +371,55 @@ def sort_goals(data: GoalSortRequest, db: Session = Depends(get_db)):
         goal.priority = priority_by_id[goal.id]
     db.commit()
     return {"updated": len(goals)}
+
+
+# Execution queue time-of-day threshold: hour < 15 is MORNING, else NIGHT.
+# Morning slots target low-friction tasks; night slots focus on deep work (#1198).
+EXECUTION_QUEUE_MORNING_CUTOFF_HOUR = 15
+
+
+@router.get("/execution-queue")
+def get_execution_queue(
+    context: str = Query("auto", pattern="^(auto|morning|night)$"),
+    db: Session = Depends(get_db),
+):
+    """Execution mode queue (#1198).
+
+    Resolves active, uncompleted goals ordered by priority DESC, created_at DESC.
+    Includes tasks matching the resolved context plus ANY tasks.
+    """
+    evaluate_active_goals(db)
+    now_local = get_local_now()
+
+    if context == "auto":
+        resolved_context = (
+            GoalContext.MORNING if now_local.hour < EXECUTION_QUEUE_MORNING_CUTOFF_HOUR else GoalContext.NIGHT
+        )
+    elif context == "morning":
+        resolved_context = GoalContext.MORNING
+    else:
+        resolved_context = GoalContext.NIGHT
+
+    goals = (
+        db.query(Goal)
+        .filter(
+            Goal.state == GoalState.ACTIVE,
+            Goal.is_completed.is_(False),
+            Goal.context.in_([resolved_context, GoalContext.ANY]),
+        )
+        .order_by(Goal.priority.desc(), Goal.created_at.desc())
+        .limit(50)
+        .all()
+    )
+
+    progress_map = get_bulk_goal_progress(goals, db)
+    items = [_serialize_goal(g, db, precalculated_progress=progress_map.get(g.id)) for g in goals]
+
+    return {
+        "context": resolved_context.value,
+        "generated_at": datetime.now(UTC).isoformat(),
+        "items": items,
+    }
 
 
 @router.get("/{goal_id}")
@@ -458,6 +517,7 @@ def save_goal_content(goal_id: int, data: GoalContent, db: Session = Depends(get
     if obj_dir:
         metadata = {
             "temporality": goal.temporality,
+            "context": goal.context,
             "measurement_type": goal.measurement_type,
             "target_value": goal.target_value,
             "current_value": goal.current_value,
