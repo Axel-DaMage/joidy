@@ -40,9 +40,7 @@ class CalendarTaskXPTestBase(unittest.TestCase):
         self.db.commit()
 
     def _xp_events(self, event_type: str) -> list[XPEvent]:
-        events: list[XPEvent] = (
-            self.db.query(XPEvent).filter(XPEvent.event_type == event_type).all()
-        )
+        events: list[XPEvent] = self.db.query(XPEvent).filter(XPEvent.event_type == event_type).all()
         return events
 
 
