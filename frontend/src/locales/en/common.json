@@ -70,7 +70,8 @@
     "publishToGoogle": "Google",
     "publishToGoogleHint": "Also publish to Google Calendar",
     "googlePublishError": "Could not sync with Google Calendar",
-    "syncError": "Could not sync with Google Calendar"
+    "syncError": "Could not sync with Google Calendar",
+    "taskRescheduled": "Task rescheduled"
   },
   "emails": {
     "title": "Mail",
