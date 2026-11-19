@@ -9,9 +9,33 @@ from fastapi import APIRouter, Depends, HTTPException
 from models.calendar_task import CalendarTask, CalendarTaskPriority, CalendarTaskSource
 from models.goal import Goal
 from pydantic import BaseModel, Field
+from services.gamification_engine import process_event
 from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/calendar", tags=["calendar"])
+
+
+def _award_task_xp(db: Session, task: CalendarTask) -> None:
+    """Award XP for completing a planned task (#1235).
+
+    Anti-double-count: a task linked to a goal only awards XP through one
+    channel. Since completing the goal already fires `goal_completed` (+50),
+    a linked task awards nothing — the greater XP wins.
+    `day_fully_planned` fires when the last open task of the day is completed.
+    """
+    if task.goal_id is not None:
+        return
+    event = "calendar_task_completed" if task.start_time else "calendar_task_completed_no_time"
+    process_event(db, event, {"task_id": task.id, "title": task.title, "date": str(task.date)})
+
+    # Day fully planned bonus: no open tasks left for that date.
+    open_left = (
+        db.query(CalendarTask)
+        .filter(CalendarTask.date == task.date, CalendarTask.done.is_(False), CalendarTask.id != task.id)
+        .count()
+    )
+    if open_left == 0:
+        process_event(db, "day_fully_planned", {"date": str(task.date)})
 
 
 class CalendarTaskCreate(BaseModel):
@@ -137,6 +161,7 @@ def create_task(body: CalendarTaskCreate, db: Session = Depends(get_db)):
 def update_task(task_id: int, body: CalendarTaskUpdate, db: Session = Depends(get_db)):
     task = _get_or_404(db, task_id)
     data = body.model_dump(exclude_unset=True)
+    was_done = task.done
     if "done" in data:
         task.done = data.pop("done")
         task.done_at = datetime.now(UTC) if task.done else None
@@ -151,6 +176,9 @@ def update_task(task_id: int, body: CalendarTaskUpdate, db: Session = Depends(ge
     _validate_times(cast("time | None", task.start_time), cast("time | None", task.end_time))
     db.commit()
     db.refresh(task)
+    if not was_done and task.done:
+        _award_task_xp(db, task)
+        db.commit()
     return _task_out(task)
 
 
@@ -164,8 +192,12 @@ def delete_task(task_id: int, db: Session = Depends(get_db)):
 @router.post("/tasks/{task_id}/done", response_model=CalendarTaskOut)
 def toggle_done(task_id: int, db: Session = Depends(get_db)):
     task = _get_or_404(db, task_id)
+    was_done = task.done
     task.done = not task.done
     task.done_at = datetime.now(UTC) if task.done else None
     db.commit()
     db.refresh(task)
+    if not was_done and task.done:
+        _award_task_xp(db, task)
+        db.commit()
     return _task_out(task)
