@@ -684,15 +684,32 @@
   }
 
   .day-cell.today {
-    border-color: var(--accent);
+    border-color: var(--xp);
+    background: color-mix(in srgb, var(--xp) 12%, transparent);
+  }
+
+  .day-cell.today .day-num {
+    color: var(--xp);
+    font-weight: 700;
   }
 
   .day-cell.selected {
-    background: var(--accent);
+    background: var(--xp);
+    color: var(--bg);
+  }
+
+  .day-cell.selected .day-num {
+    color: var(--bg);
+    font-weight: 700;
   }
 
   .day-cell.selected .chip {
-    background: rgba(255, 255, 255, 0.2);
+    background: rgba(0, 0, 0, 0.15);
+    color: var(--bg);
+  }
+
+  .day-cell.selected:hover {
+    background: var(--xp-2);
   }
 
   .day-num {
