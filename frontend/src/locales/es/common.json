@@ -52,7 +52,7 @@
       "Noviembre",
       "Diciembre"
     ],
-    "lastSync": "Última sincronización: {{when}}",
+    "lastSync": "Última sincronización: {when}",
     "neverSynced": "Nunca sincronizado",
     "pickDay": "Selecciona un día",
     "pickDayHint": "Haz clic en un día del mes para ver sus eventos",

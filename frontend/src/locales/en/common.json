@@ -52,7 +52,7 @@
       "November",
       "December"
     ],
-    "lastSync": "Last sync: {{when}}",
+    "lastSync": "Last sync: {when}",
     "neverSynced": "Never synced",
     "pickDay": "Pick a day",
     "pickDayHint": "Click a day in the month to see its events",
