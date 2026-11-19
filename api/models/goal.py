@@ -36,11 +36,23 @@ class GoalMeasurement(str, PyEnum):
 
 
 class GoalState(str, PyEnum):
+    INBOX = "INBOX"
     ACTIVE = "ACTIVE"
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
     PAUSED = "PAUSED"
     CANCELLED = "CANCELLED"
+
+
+class GoalContext(str, PyEnum):
+    """Energy/context slot for execution-mode queues (#1197).
+
+    ANY tasks appear in every queue; MORNING/NIGHT tasks only in their slot.
+    """
+
+    ANY = "ANY"
+    MORNING = "MORNING"
+    NIGHT = "NIGHT"
 
 
 class GoalFailConfig(str, PyEnum):
@@ -57,6 +69,9 @@ class Goal(Base):
     description: Mapped[str] = mapped_column(Text, default="")
 
     temporality: Mapped[GoalTemporality] = mapped_column(Enum(GoalTemporality), default=GoalTemporality.DAILY)
+    context: Mapped[GoalContext] = mapped_column(
+        Enum(GoalContext), default=GoalContext.ANY, server_default=GoalContext.ANY.value, index=True
+    )
     measurement_type: Mapped[GoalMeasurement] = mapped_column(Enum(GoalMeasurement), default=GoalMeasurement.COUNT)
 
     target_value: Mapped[float] = mapped_column(Float, default=1.0)
