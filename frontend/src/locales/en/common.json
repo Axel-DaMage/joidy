@@ -69,7 +69,8 @@
     "taskDeleteError": "Could not delete the task",
     "publishToGoogle": "Google",
     "publishToGoogleHint": "Also publish to Google Calendar",
-    "googlePublishError": "Could not sync with Google Calendar"
+    "googlePublishError": "Could not sync with Google Calendar",
+    "syncError": "Could not sync with Google Calendar"
   },
   "emails": {
     "title": "Mail",

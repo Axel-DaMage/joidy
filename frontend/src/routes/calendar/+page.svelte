@@ -199,16 +199,29 @@
     }
   }
 
-  async function sync(): Promise<void> {
+  // Auto-sync staleness threshold: sync on page entry if the last sync is
+  // older than this (or never happened).
+  const AUTO_SYNC_STALE_MS = 15 * 60 * 1000;
+
+  async function sync(silent = false): Promise<void> {
     syncing = true;
     try {
       await api.google.calendarSync();
-      showNotification($t('calendar.syncOk'), 'success');
+      if (!silent) showNotification($t('calendar.syncOk'), 'success');
       await refresh();
     } catch (e) {
       logger.error(e);
+      if (!silent) showNotification($t('calendar.syncError'), 'error');
     } finally {
       syncing = false;
+    }
+  }
+
+  async function maybeAutoSync(): Promise<void> {
+    if (!status?.connected) return;
+    const last = status.last_synced_at ? new Date(status.last_synced_at).getTime() : 0;
+    if (Date.now() - last > AUTO_SYNC_STALE_MS) {
+      await sync(true);
     }
   }
 
@@ -358,6 +371,7 @@
 
   onMount(async () => {
     await refresh();
+    await maybeAutoSync();
   });
 </script>
 
@@ -382,7 +396,7 @@
       </span>
     </div>
     <div class="calendar-actions">
-      <button class="btn btn-ghost" onclick={sync} disabled={syncing || !status?.connected}>
+      <button class="btn btn-ghost" onclick={() => sync()} disabled={syncing || !status?.connected}>
         <span class={syncing ? 'spin' : ''}><RefreshCw size={13} /></span>
         {syncing ? $t('calendar.syncing') : $t('calendar.sync')}
       </button>
