@@ -361,6 +361,67 @@
     editingTaskId = null;
   }
 
+  // ── Drag & drop between days (#1236) ──────────────────────────────────────
+  let draggedTask = $state<CalendarTask | null>(null);
+  let dropTargetKey = $state<string | null>(null);
+
+  function onChipDragStart(event: DragEvent, task: CalendarTask): void {
+    draggedTask = task;
+    event.dataTransfer?.setData('text/plain', String(task.id));
+    if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+  }
+
+  function onChipDragEnd(): void {
+    draggedTask = null;
+    dropTargetKey = null;
+  }
+
+  function onCellDragOver(event: DragEvent, cellKey: string): void {
+    if (!draggedTask) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+    dropTargetKey = cellKey;
+  }
+
+  function onCellDragLeave(cellKey: string): void {
+    if (dropTargetKey === cellKey) dropTargetKey = null;
+  }
+
+  function onCellDrop(event: DragEvent, cellKey: string): void {
+    event.preventDefault();
+    dropTargetKey = null;
+    const task = draggedTask;
+    draggedTask = null;
+    if (!task || task.date === cellKey) return;
+    rescheduleTask(task, cellKey);
+  }
+
+  async function rescheduleTask(task: CalendarTask, newDate: string): Promise<void> {
+    const previousDate = task.date;
+    // Optimistic update
+    tasks = tasks.map((t) => (t.id === task.id ? { ...t, date: newDate } : t));
+    try {
+      const updated = await api.calendarTasks.update(task.id, { date: newDate });
+      tasks = tasks.map((t) => (t.id === updated.id ? updated : t));
+      showNotification($t('calendar.taskRescheduled'), 'success');
+    } catch (e) {
+      logger.error(e);
+      // Rollback
+      tasks = tasks.map((t) => (t.id === task.id ? { ...t, date: previousDate } : t));
+      showNotification($t('calendar.taskUpdateError'), 'error');
+    }
+  }
+
+  async function undoReschedule(task: CalendarTask, previousDate: string): Promise<void> {
+    try {
+      const updated = await api.calendarTasks.update(task.id, { date: previousDate });
+      tasks = tasks.map((t) => (t.id === updated.id ? updated : t));
+    } catch (e) {
+      logger.error(e);
+      showNotification($t('calendar.taskUpdateError'), 'error');
+    }
+  }
+
   function priorityClass(priority: CalendarTaskPriority): string {
     return `prio prio-${priority.toLowerCase()}`;
   }
@@ -441,6 +502,11 @@
               class:out={!cell.inMonth}
               class:today={cell.key === todayKey}
               class:selected={selectedDay === cell.key}
+              class:drop-target={dropTargetKey === cell.key}
+              draggable={items.some((i) => i.kind === 'task')}
+              ondragover={(e) => onCellDragOver(e, cell.key)}
+              ondragleave={() => onCellDragLeave(cell.key)}
+              ondrop={(e) => onCellDrop(e, cell.key)}
               onclick={() => (selectedDay = selectedDay === cell.key ? null : cell.key)}
             >
               <span class="day-num">{cell.day}</span>
@@ -449,7 +515,16 @@
                   {#if item.kind === 'google'}
                     <span class="chip chip-google"><Lock size={8} />{item.label}</span>
                   {:else}
-                    <span class="chip {priorityClass(item.task.priority)}" class:done={item.task.done}>{item.label}</span>
+                    <span
+                      class="chip {priorityClass(item.task.priority)}"
+                      class:done={item.task.done}
+                      class:dragging={draggedTask?.id === item.task.id}
+                      role="button"
+                      tabindex="-1"
+                      draggable="true"
+                      ondragstart={(e) => onChipDragStart(e, item.task)}
+                      ondragend={onChipDragEnd}
+                    >{item.label}</span>
                   {/if}
                 {/each}
                 {#if items.length > 2}
@@ -748,6 +823,15 @@
   .chip.done {
     text-decoration: line-through;
     opacity: 0.55;
+  }
+
+  .chip.dragging {
+    opacity: 0.35;
+  }
+
+  .day-cell.drop-target {
+    border-color: var(--xp);
+    background: color-mix(in srgb, var(--xp) 18%, transparent);
   }
 
   .chip-more {

@@ -70,7 +70,8 @@
     "publishToGoogle": "Google",
     "publishToGoogleHint": "Publicar también en Google Calendar",
     "googlePublishError": "No se pudo sincronizar con Google Calendar",
-    "syncError": "No se pudo sincronizar con Google Calendar"
+    "syncError": "No se pudo sincronizar con Google Calendar",
+    "taskRescheduled": "Tarea reprogramada"
   },
   "emails": {
     "title": "Correos",
