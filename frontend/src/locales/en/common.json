@@ -71,7 +71,15 @@
     "publishToGoogleHint": "Also publish to Google Calendar",
     "googlePublishError": "Could not sync with Google Calendar",
     "syncError": "Could not sync with Google Calendar",
-    "taskRescheduled": "Task rescheduled"
+    "taskRescheduled": "Task rescheduled",
+    "views": {
+      "month": "Month",
+      "week": "Week",
+      "agenda": "Agenda"
+    },
+    "prevWeek": "Previous week",
+    "nextWeek": "Next week",
+    "noEventsRange": "No events or tasks in this range"
   },
   "emails": {
     "title": "Mail",

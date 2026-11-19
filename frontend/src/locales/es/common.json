@@ -71,7 +71,15 @@
     "publishToGoogleHint": "Publicar también en Google Calendar",
     "googlePublishError": "No se pudo sincronizar con Google Calendar",
     "syncError": "No se pudo sincronizar con Google Calendar",
-    "taskRescheduled": "Tarea reprogramada"
+    "taskRescheduled": "Tarea reprogramada",
+    "views": {
+      "month": "Mes",
+      "week": "Semana",
+      "agenda": "Agenda"
+    },
+    "prevWeek": "Semana anterior",
+    "nextWeek": "Semana siguiente",
+    "noEventsRange": "Sin eventos o tareas en este rango"
   },
   "emails": {
     "title": "Correos",
