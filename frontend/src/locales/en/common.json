@@ -10,7 +10,8 @@
     "emails": "Mail",
     "calendar": "Calendar",
     "analytics": "Analytics",
-    "timers": "Clock"
+    "timers": "Clock",
+    "strava": "Strava"
   },
   "calendar": {
     "title": "Calendar",
@@ -1120,5 +1121,135 @@
     "dayActive": "active day",
     "dayInactive": "no activity",
     "pomodoroTime": "{phase}: {time} left"
+  },
+  "strava": {
+    "title": "Strava",
+    "subtitle": "Activities, routes and stats from your Strava account",
+    "loading": "Loading Strava…",
+    "connectedBadge": "Connected",
+    "untitledActivity": "Untitled activity",
+    "activityFallback": "Activity",
+    "athlete": {
+      "fallback": "Strava athlete"
+    },
+    "notConfigured": {
+      "title": "Strava is not configured",
+      "hint": "Set STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET and STRAVA_REDIRECT_URI in the .env file and restart the stack."
+    },
+    "connect": {
+      "title": "Connect your Strava account",
+      "hint": "Authorize Joidy to read your activities and stats (read-only).",
+      "waiting": "Complete the authorization in the Strava window…",
+      "button": "Connect with Strava",
+      "timeout": "Timed out waiting (5 min). Try again.",
+      "connectedToast": "Strava connected successfully",
+      "disconnectedToast": "Strava disconnected",
+      "disconnect": "Disconnect"
+    },
+    "tabs": {
+      "activities": "Activities",
+      "routes": "Routes"
+    },
+    "filters": {
+      "all": "All"
+    },
+    "sports": {
+      "run": "Run",
+      "ride": "Ride",
+      "swim": "Swim",
+      "hike": "Hike",
+      "winter": "Snow",
+      "water": "Water",
+      "strength": "Strength",
+      "other": "Other"
+    },
+    "metrics": {
+      "distance": "Distance",
+      "time": "Time",
+      "movingTime": "Moving time",
+      "elapsedTime": "Elapsed time",
+      "pace": "Pace",
+      "avgSpeed": "Avg speed",
+      "elevation": "Elevation",
+      "calories": "Calories",
+      "avgHr": "Avg HR",
+      "maxHr": "Max HR",
+      "avgPower": "Avg power"
+    },
+    "activities": {
+      "loading": "Loading activities…",
+      "loadFailed": "Could not load activities",
+      "empty": "No activities yet",
+      "emptyFilter": "No activities in this category",
+      "syncHint": "Activities appear here after syncing with Strava.",
+      "showMore": "Show {count} more",
+      "fetchedNote": "recent activities"
+    },
+    "stats": {
+      "title": "Summary",
+      "loading": "Loading stats…",
+      "empty": "No activity data yet.",
+      "week": "This week",
+      "month": "This month",
+      "ytd": "This year",
+      "all": "All time",
+      "activities": "activities",
+      "byWeek": "Distance per week"
+    },
+    "routes": {
+      "title": "Routes",
+      "loading": "Loading routes…",
+      "loadFailed": "Could not load routes",
+      "empty": "No saved routes",
+      "emptyHint": "Routes you save in Strava will appear here.",
+      "unnamed": "Unnamed route",
+      "routeAria": "Route path"
+    },
+    "sync": {
+      "button": "Sync",
+      "syncing": "Syncing…",
+      "result": "+{xp} XP · {count} new activities",
+      "upToDate": "Up to date · {count} activities checked"
+    },
+    "detail": {
+      "title": "Activity detail",
+      "loading": "Loading detail…",
+      "loadFailed": "Could not load the detail",
+      "route": "Route",
+      "routeAria": "Route map",
+      "noRoute": "No GPS data to draw the route.",
+      "elevation": "Elevation",
+      "elevationAria": "Elevation profile",
+      "noElevation": "No altitude data.",
+      "heartRate": "Heart rate",
+      "heartRateAria": "Heart rate over time",
+      "power": "Power",
+      "powerAria": "Power over time",
+      "splits": "Splits",
+      "splitDistance": "Distance",
+      "laps": "Laps",
+      "lap": "Lap",
+      "elevDelta": "Δ altitude"
+    },
+    "settings": {
+      "configuredBadge": "configured",
+      "checking": "Checking…",
+      "connecting": "Connecting… authorize in the Strava window",
+      "connected": "Connected",
+      "connectTimeout": "Timed out waiting (5 min). Try again.",
+      "connectedToast": "Strava connected successfully",
+      "disconnectedToast": "Strava disconnected",
+      "openPage": "Open Strava",
+      "disconnect": "Disconnect",
+      "disconnecting": "Disconnecting…",
+      "notConfigured": "Set STRAVA_CLIENT_* in .env"
+    },
+    "errors": {
+      "auth": "Strava is not connected or the session expired — reconnect the integration",
+      "rateLimit": "Strava rate limit exceeded — retry in a few minutes",
+      "notFound": "Strava resource not found",
+      "upstream": "Strava is not responding — retry later",
+      "generic": "Error talking to Strava"
+    }
   }
 }

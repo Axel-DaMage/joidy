@@ -10,7 +10,8 @@
     "emails": "Correos",
     "calendar": "Calendario",
     "analytics": "Analítica",
-    "timers": "Reloj"
+    "timers": "Reloj",
+    "strava": "Strava"
   },
   "calendar": {
     "title": "Calendario",
@@ -1120,5 +1121,135 @@
     "dayActive": "día activo",
     "dayInactive": "sin actividad",
     "pomodoroTime": "{phase}: quedan {time}"
+  },
+  "strava": {
+    "title": "Strava",
+    "subtitle": "Actividades, rutas y estadísticas de tu cuenta de Strava",
+    "loading": "Cargando Strava…",
+    "connectedBadge": "Conectado",
+    "untitledActivity": "Actividad sin nombre",
+    "activityFallback": "Actividad",
+    "athlete": {
+      "fallback": "Atleta Strava"
+    },
+    "notConfigured": {
+      "title": "Strava no está configurado",
+      "hint": "Define STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET y STRAVA_REDIRECT_URI en el archivo .env y reinicia el stack."
+    },
+    "connect": {
+      "title": "Conecta tu cuenta de Strava",
+      "hint": "Autoriza Joidy para leer tus actividades y estadísticas (solo lectura).",
+      "waiting": "Completa la autorización en la ventana de Strava…",
+      "button": "Conectar con Strava",
+      "timeout": "Se agotó el tiempo de espera (5 min). Intenta de nuevo.",
+      "connectedToast": "Strava conectado correctamente",
+      "disconnectedToast": "Strava desconectado",
+      "disconnect": "Desconectar"
+    },
+    "tabs": {
+      "activities": "Actividad",
+      "routes": "Rutas"
+    },
+    "filters": {
+      "all": "Todas"
+    },
+    "sports": {
+      "run": "Carrera",
+      "ride": "Ciclismo",
+      "swim": "Natación",
+      "hike": "Senderismo",
+      "winter": "Nieve",
+      "water": "Acuático",
+      "strength": "Fuerza",
+      "other": "Otro"
+    },
+    "metrics": {
+      "distance": "Distancia",
+      "time": "Tiempo",
+      "movingTime": "Tiempo en movimiento",
+      "elapsedTime": "Tiempo total",
+      "pace": "Ritmo",
+      "avgSpeed": "Velocidad media",
+      "elevation": "Desnivel",
+      "calories": "Calorías",
+      "avgHr": "FC media",
+      "maxHr": "FC máx",
+      "avgPower": "Potencia media"
+    },
+    "activities": {
+      "loading": "Cargando actividades…",
+      "loadFailed": "No se pudieron cargar las actividades",
+      "empty": "Sin actividades todavía",
+      "emptyFilter": "Sin actividades en esta categoría",
+      "syncHint": "Las actividades aparecen aquí tras sincronizar con Strava.",
+      "showMore": "Mostrar {count} más",
+      "fetchedNote": "actividades recientes"
+    },
+    "stats": {
+      "title": "Resumen",
+      "loading": "Cargando estadísticas…",
+      "empty": "Aún no hay datos de actividad.",
+      "week": "Esta semana",
+      "month": "Este mes",
+      "ytd": "Este año",
+      "all": "Total",
+      "activities": "actividades",
+      "byWeek": "Distancia por semana"
+    },
+    "routes": {
+      "title": "Rutas",
+      "loading": "Cargando rutas…",
+      "loadFailed": "No se pudieron cargar las rutas",
+      "empty": "Sin rutas guardadas",
+      "emptyHint": "Las rutas que guardes en Strava aparecerán aquí.",
+      "unnamed": "Ruta sin nombre",
+      "routeAria": "Recorrido de la ruta"
+    },
+    "sync": {
+      "button": "Sincronizar",
+      "syncing": "Sincronizando…",
+      "result": "+{xp} XP · {count} actividades nuevas",
+      "upToDate": "Al día · {count} actividades revisadas"
+    },
+    "detail": {
+      "title": "Detalle de actividad",
+      "loading": "Cargando detalle…",
+      "loadFailed": "No se pudo cargar el detalle",
+      "route": "Recorrido",
+      "routeAria": "Mapa del recorrido",
+      "noRoute": "Sin datos GPS para dibujar el recorrido.",
+      "elevation": "Elevación",
+      "elevationAria": "Perfil de elevación",
+      "noElevation": "Sin datos de altitud.",
+      "heartRate": "Frecuencia cardíaca",
+      "heartRateAria": "Frecuencia cardíaca a lo largo del tiempo",
+      "power": "Potencia",
+      "powerAria": "Potencia a lo largo del tiempo",
+      "splits": "Parciales",
+      "splitDistance": "Distancia",
+      "laps": "Vueltas",
+      "lap": "Vuelta",
+      "elevDelta": "Δ altitud"
+    },
+    "settings": {
+      "configuredBadge": "configurado",
+      "checking": "Comprobando…",
+      "connecting": "Conectando… autoriza en la ventana de Strava",
+      "connected": "Conectado",
+      "connectTimeout": "Se agotó el tiempo de espera (5 min). Intenta de nuevo.",
+      "connectedToast": "Strava conectado correctamente",
+      "disconnectedToast": "Strava desconectado",
+      "openPage": "Ver Strava",
+      "disconnect": "Desconectar",
+      "disconnecting": "Desconectando…",
+      "notConfigured": "Configura STRAVA_CLIENT_* en .env"
+    },
+    "errors": {
+      "auth": "Strava no está conectado o la sesión expiró — vuelve a conectar la integración",
+      "rateLimit": "Límite de Strava excedido — reintenta en unos minutos",
+      "notFound": "Recurso de Strava no encontrado",
+      "upstream": "Strava no responde — reintenta más tarde",
+      "generic": "Error al hablar con Strava"
+    }
   }
 }

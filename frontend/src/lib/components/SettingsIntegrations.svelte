@@ -2,6 +2,7 @@
   import DynamicIcon from './DynamicIcon.svelte';
   import SettingsGithub from './SettingsGithub.svelte';
   import SettingsGoogle from './SettingsGoogle.svelte';
+  import SettingsStrava from './SettingsStrava.svelte';
   import { devMode } from '$lib/stores/settings';
   import type { SystemConfig } from '$lib/utils/settingsTypes';
 
@@ -15,9 +16,6 @@
   async function openGoogleContactsLink() {
     window.open('https://contacts.google.com', '_blank', 'noopener,noreferrer');
   }
-  async function openStravaLink() {
-    window.open('https://strava.com', '_blank', 'noopener,noreferrer');
-  }
   async function openSpotifyLink() {
     window.open('https://spotify.com', '_blank');
   }
@@ -30,18 +28,14 @@
   </div>
   <SettingsGithub bind:systemConfig {isConfigured} />
   <SettingsGoogle bind:systemConfig {isConfigured} />
+  <!-- Strava (#44): estado real de conexión — OAuth popup + poll, igual que Google. -->
+  <SettingsStrava />
   {#if $devMode}
     <div class="row">
       <div class="row-label">
         <span>Google Contacts</span>
       </div>
       <button class="link-btn" onclick={openGoogleContactsLink}>Enlazar</button>
-    </div>
-    <div class="row">
-      <div class="row-label">
-        <span>Strava</span>
-      </div>
-      <button class="link-btn" onclick={openStravaLink}>Enlazar</button>
     </div>
     <div class="row">
       <div class="row-label">

@@ -4,6 +4,16 @@
 import { browser } from '$app/env';
 import { showNotification } from './stores/notifications';
 import { session, getToken, getRefreshToken } from './stores/session';
+import type {
+  StravaActivity,
+  StravaAthleteSummary,
+  StravaAuthUrl,
+  StravaRoute,
+  StravaStats,
+  StravaStatus,
+  StravaStreams,
+  StravaSyncResult,
+} from './strava/types';
 
 export const BASE = browser
   ? (import.meta.env.VITE_API_URL as string) ||
@@ -28,6 +38,14 @@ const inflight = new Map<string, Promise<unknown>>();
 export interface RequestOptions {
   silent?: boolean;
   signal?: AbortSignal;
+  /**
+   * Integration/provider endpoints (e.g. Strava) answer 401 when the
+   * *provider* token is missing/expired — that is not a dead user session.
+   * With `providerAuth: true` a 401 skips the JWT refresh + global logout
+   * flow and is thrown to the caller, which maps it to a "reconnect"
+   * state (#44).
+   */
+  providerAuth?: boolean;
 }
 
 // Silent access-token renewal (#1285): a 401 triggers one refresh attempt.
@@ -95,6 +113,12 @@ async function req<T>(
       };
 
       let res = await doFetch();
+
+      // Provider-scoped 401 (Strava token missing/expired): surface it to the
+      // caller instead of burning a JWT refresh and logging the user out (#44).
+      if (res.status === 401 && opts?.providerAuth) {
+        throw new Error(`API ${method} ${path} → 401 Unauthorized`);
+      }
 
       // Expired access token → try one silent refresh and retry the request
       // with the renewed credential before treating it as a dead session
@@ -1384,5 +1408,80 @@ export const api = {
         'POST',
         '/system/power/shutdown'
       ),
+  },
+
+  // ── Strava integration (#44) ────────────────────────────────────────────────
+  // Backend: api/routers/integrations/strava.py. Tokens stay server-side —
+  // the OAuth callback renders a self-closing popup page, so callers poll
+  // `status()` until `connected` flips (same pattern as api.google).
+  strava: {
+    // `auth`/`status`/`disconnect` only need the user JWT — a 401 there IS a
+    // session problem, so they keep the default logout flow.
+    authUrl: () => req<StravaAuthUrl>('GET', '/integrations/strava/auth'),
+    status: () =>
+      req<StravaStatus>('GET', '/integrations/strava/status', undefined, { silent: true }),
+    disconnect: () =>
+      req<{ status: string }>('POST', '/integrations/strava/disconnect'),
+    // Data endpoints can 401 on a missing/expired *Strava* token — providerAuth
+    // keeps that from triggering the global logout; silent lets the page map
+    // it to a reconnect state instead of a generic toast.
+    activities: (params: {
+      page?: number;
+      per_page?: number;
+      before?: number;
+      after?: number;
+      sport_type?: string;
+    } = {}) => {
+      const qs = new URLSearchParams();
+      if (params.page) qs.set('page', String(params.page));
+      if (params.per_page) qs.set('per_page', String(params.per_page));
+      if (params.before) qs.set('before', String(params.before));
+      if (params.after) qs.set('after', String(params.after));
+      if (params.sport_type) qs.set('sport_type', params.sport_type);
+      const suffix = qs.toString() ? `?${qs.toString()}` : '';
+      return req<StravaActivity[]>('GET', `/integrations/strava/activities${suffix}`, undefined, {
+        silent: true,
+        providerAuth: true,
+      });
+    },
+    activity: (id: number) =>
+      req<StravaActivity>('GET', `/integrations/strava/activities/${id}`, undefined, {
+        silent: true,
+        providerAuth: true,
+      }),
+    activityStreams: (id: number, keys?: string) => {
+      const qs = keys ? `?keys=${encodeURIComponent(keys)}` : '';
+      return req<StravaStreams>(
+        'GET',
+        `/integrations/strava/activities/${id}/streams${qs}`,
+        undefined,
+        { silent: true, providerAuth: true }
+      );
+    },
+    athlete: () =>
+      req<StravaAthleteSummary>('GET', '/integrations/strava/athlete', undefined, {
+        silent: true,
+        providerAuth: true,
+      }),
+    stats: () =>
+      req<StravaStats>('GET', '/integrations/strava/stats', undefined, {
+        silent: true,
+        providerAuth: true,
+      }),
+    routes: (params: { page?: number; per_page?: number } = {}) => {
+      const qs = new URLSearchParams();
+      if (params.page) qs.set('page', String(params.page));
+      if (params.per_page) qs.set('per_page', String(params.per_page));
+      const suffix = qs.toString() ? `?${qs.toString()}` : '';
+      return req<StravaRoute[]>('GET', `/integrations/strava/routes${suffix}`, undefined, {
+        silent: true,
+        providerAuth: true,
+      });
+    },
+    sync: () =>
+      req<StravaSyncResult>('POST', '/integrations/strava/sync', undefined, {
+        silent: true,
+        providerAuth: true,
+      }),
   },
 };

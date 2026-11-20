@@ -133,6 +133,16 @@ import Wrench from 'lucide-svelte/icons/wrench';
 import X from 'lucide-svelte/icons/x';
 import XCircle from 'lucide-svelte/icons/x-circle';
 import Zap from 'lucide-svelte/icons/zap';
+// Strava sport icons (#44) — appended as a delimited block to keep merges clean.
+import Mountain from 'lucide-svelte/icons/mountain';
+import Route from 'lucide-svelte/icons/route';
+import Gauge from 'lucide-svelte/icons/gauge';
+import Sailboat from 'lucide-svelte/icons/sailboat';
+import Snowflake from 'lucide-svelte/icons/snowflake';
+import CalendarDays from 'lucide-svelte/icons/calendar-days';
+// Aliased: a bare `Map` import would shadow the global Map constructor used below.
+import MapIcon from 'lucide-svelte/icons/map';
+import Unlink from 'lucide-svelte/icons/unlink';
 
 // kebab-case file name → PascalCase (e.g. "a-arrow-down" → "AArrowDown",
 // "file-audio-2" → "FileAudio2"). Matches the PascalCase keys that the
@@ -266,6 +276,15 @@ const CURATED_ICONS: Record<string, any> = {
   X,
   XCircle,
   Zap,
+  // ── Strava sport icons (#44) ──
+  Mountain,
+  Route,
+  Gauge,
+  Sailboat,
+  Snowflake,
+  CalendarDays,
+  Map: MapIcon,
+  Unlink,
 };
 
 const _icons = new Map<string, any>(Object.entries(CURATED_ICONS));
