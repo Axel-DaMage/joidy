@@ -10,7 +10,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   # Only cancel in-flight runs for pull_request events. Push events on
   # main/development queue instead of cancelling, so merge storms keep the
-  # post-merge signal for every commit (#1261).
+  # post-merge signal for every commit (#1261). Note GitHub keeps at most
+  # ONE pending run per group: while a push run is in progress, newer
+  # pushes replace the queued one (they show as "cancelled" — expected),
+  # so the latest push is always verified even if intermediate commits
+  # are skipped. In-progress push runs are never superseded (#1464).
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -133,7 +137,7 @@ jobs:
             echo "POSTGRES_PASSWORD=joidy"
           } >> ../.env
           cp ../.env .env
-          python -m pytest tests/ -q
+          python -m pytest tests/ -q -n auto
 
       - name: Upload coverage report
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -186,7 +190,7 @@ jobs:
       # 2026-11-20) rounded down with headroom; ratchet up only.
       - name: Run ai-service tests
         working-directory: ai-service
-        run: python -m pytest tests/ -v --cov=. --cov-report=xml --cov-report=term-missing --cov-fail-under=80
+        run: python -m pytest tests/ -v -n auto --cov=. --cov-report=xml --cov-report=term-missing --cov-fail-under=80
 
       - name: Upload coverage report
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -278,22 +282,151 @@ jobs:
         if: always()
         run: docker compose -f docker-compose.yml -f docker-compose.dev.yml down --remove-orphans
 
+  # E2E plan (#1464): sizes the frontend-e2e matrix BEFORE any runner boots
+  # a stack, so each event pays only for the verification it needs.
+  #   - push to main/development: the full suite split across SHARD_COUNT
+  #     parallel shards — post-merge verification stays complete, just
+  #     parallel (the serial single-worker run hit the 30-min job timeout
+  #     and every push run was dying as "cancelled").
+  #   - pull_request: smoke + route-scoped specs on a single shard, unless
+  #     shared frontend code changed (then the full suite, sharded). Same
+  #     src/routes/<dir>/ → e2e/<dir>.spec.ts mapping as before (#1255).
+  #   - any event whose diff is docs/metadata-only: e2e is skipped — those
+  #     files cannot affect the app (markdown is only ever linked, never
+  #     bundled into the frontend).
+  e2e-plan:
+    name: E2E plan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      run: ${{ steps.plan.outputs.run }}
+      specs: ${{ steps.plan.outputs.specs }}
+      shards: ${{ steps.plan.outputs.shards }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Compute e2e scope and shard matrix
+        id: plan
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          BEFORE: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+          # Full-suite parallelism: N runners, each booting its own
+          # docker stack + DB and running ~1/N of the suite serially
+          # (workers:1 stays — see playwright.config.ts). Serial runtime
+          # exceeded the 30-min timeout on 2026-11-20 (~230 tests, 15
+          # specs); 6 shards target ~5-8 min of tests per leg plus ~2.5 min
+          # of image/stack/browser setup. If the suite outgrows ~10
+          # min/shard, raise this — do NOT raise workers instead: tests
+          # share the shard's API/DB and are only serially safe.
+          SHARD_COUNT: '6'
+        run: |
+          set -euo pipefail
+
+          # Files changed by this event. Empty/failed diff = "unknown" →
+          # the safe default below runs the full suite.
+          CHANGED=""
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            git fetch --no-tags --depth=1 origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+            CHANGED="$(git diff --name-only "origin/${BASE_REF}...HEAD" || true)"
+          elif [ "${BEFORE//0/}" != "" ] && git fetch --no-tags --depth=1 origin "$BEFORE" 2>/dev/null; then
+            # push: BEFORE is the previous branch tip (all-zero on a brand
+            # new branch, possibly unreachable after a force-push).
+            CHANGED="$(git diff --name-only "${BEFORE}..${HEAD_SHA}" || true)"
+          fi
+          echo "Changed files:"
+          echo "${CHANGED:-<unknown>}"
+
+          # Docs/metadata-only changes cannot affect the app — skip e2e.
+          # Deliberately conservative: anything under api/, ai-service/,
+          # worker/, frontend/, cli/, .github/, compose files, scripts/ or
+          # any unlisted path keeps full verification.
+          if [ -n "$CHANGED" ] && ! printf '%s\n' "$CHANGED" | grep -qvE \
+              '^(docs/|\.reuse/|aur/|LICENSE|NOTICE|CHANGELOG|CODEOWNERS|\.gitignore|\.gitattributes|\.mailmap|\.editorconfig|\.trivyignore|\.pre-commit-config\.yaml|REUSE\.toml)|\.(md|markdown)$'; then
+            echo "Docs/metadata-only change — skipping e2e."
+            {
+              echo "run=false"
+              echo "specs="
+              # Valid non-empty matrix value; the job-level `if` on `run`
+              # skips every leg anyway (avoids empty-matrix edge cases).
+              echo "shards=[1]"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          SPECS=""
+          RUN_ALL="true"
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            # Same route-scoping policy the job used to compute inline
+            # (#1255): smoke + the specs for touched routes; the full suite
+            # when shared frontend code changed.
+            SPECS="e2e/smoke.spec.ts"
+            RUN_ALL="false"
+
+            if printf '%s\n' "$CHANGED" | grep -qE '^frontend/(src/lib/|src/routes/\+layout|src/hooks|e2e/|playwright\.config\.ts|package(-lock)?\.json)'; then
+              RUN_ALL="true"
+            fi
+
+            ROUTE_DIRS="$(printf '%s\n' "$CHANGED" | grep -oE '^frontend/src/routes/[^/.+]+' | sed 's|^frontend/src/routes/||' | sort -u || true)"
+            for dir in $ROUTE_DIRS; do
+              case "$dir" in
+                notes)   SPECS="$SPECS e2e/notes.spec.ts e2e/note-editor.spec.ts" ;;
+                goals)   SPECS="$SPECS e2e/goals.spec.ts e2e/goal-editor.spec.ts e2e/analytics.spec.ts" ;;
+                streaks) SPECS="$SPECS e2e/streaks.spec.ts e2e/streak-interactions.spec.ts" ;;
+                *)       [ -f "frontend/e2e/${dir}.spec.ts" ] && SPECS="$SPECS e2e/${dir}.spec.ts" ;;
+              esac
+            done
+
+            # The root page (/) is covered by home + settings specs.
+            if printf '%s\n' "$CHANGED" | grep -q '^frontend/src/routes/+page.svelte'; then
+              SPECS="$SPECS e2e/home.spec.ts e2e/settings.spec.ts"
+            fi
+          fi
+
+          if [ "$RUN_ALL" = "true" ]; then
+            SHARDS="$(seq -s, 1 "$SHARD_COUNT")"
+            echo "Full suite across $SHARD_COUNT shards."
+            {
+              echo "run=true"
+              echo "specs="
+              echo "shards=[$SHARDS]"
+            } >> "$GITHUB_OUTPUT"
+          else
+            echo "Route-scoped specs on one shard: $SPECS"
+            {
+              echo "run=true"
+              echo "specs=$SPECS"
+              echo "shards=[1]"
+            } >> "$GITHUB_OUTPUT"
+          fi
+
   frontend-e2e:
     name: Frontend E2E (Playwright)
+    needs: e2e-plan
+    if: needs.e2e-plan.outputs.run == 'true'
     runs-on: ubuntu-latest
-    # Bounded: build + stack boot + suite must finish well under this or the
-    # job is killed and reported red.
+    # Bounded per shard: image build + stack boot + the shard's share of
+    # the suite must finish well under this or the leg is killed and
+    # reported red.
     timeout-minutes: 30
+    strategy:
+      # fail-fast off: a red shard must not hide the other shards' results
+      # — partial signal is what makes shard flakes diagnosable.
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.e2e-plan.outputs.shards) }}
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Shared definitions (#1254): identical image build + stack boot as
-      # docker-build via .github/actions — the second job's builds are
-      # BuildKit cache hits, so this costs little and the definitions can
-      # never drift. extra-env adds the deterministic AUTH_PASSWORD the
-      # e2e login helper needs.
+      # docker-build via .github/actions — every shard's build is a
+      # BuildKit GHA cache hit (~1 min for all 4 images), so this costs
+      # little and the definitions can never drift. extra-env adds the
+      # deterministic AUTH_PASSWORD the e2e login helper needs.
       - name: Build images (BuildKit GHA cache)
         uses: ./.github/actions/build-joidy-images
 
@@ -314,6 +447,16 @@ jobs:
         working-directory: frontend
         run: npm ci
 
+      # Browsers are version-pinned by package-lock — caching the browser
+      # binaries skips the download on every shard; install --with-deps
+      # still runs to guarantee system libraries (cheap when up to date).
+      - name: Cache Playwright browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('frontend/package-lock.json') }}
+          restore-keys: ${{ runner.os }}-playwright-
+
       - name: Install Playwright (chromium only)
         working-directory: frontend
         run: npx playwright install --with-deps chromium
@@ -332,78 +475,28 @@ jobs:
           docker compose -f docker-compose.yml -f docker-compose.dev.yml logs --tail=100 frontend
           exit 1
 
-      # PRs run the smoke spec plus the specs covering the routes the PR
-      # touches — src/routes/<dir>/ maps to e2e/<dir>.spec.ts (#1255).
-      # Changes to shared frontend code (src/lib, root layout, e2e helpers,
-      # playwright config) can affect every route, so they run the full
-      # suite. Pushes to main/development always run everything.
-      # GEMINI_API_KEY stays unset so the specs exercise the real
-      # "AI disabled" path of the CI stack.
-      - name: Select e2e specs for changed routes (pull requests)
-        if: github.event_name == 'pull_request'
-        id: e2e-specs
-        working-directory: frontend
-        run: |
-          git fetch --no-tags --depth=1 origin "+refs/heads/${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}"
-          CHANGED="$(git diff --name-only "origin/${{ github.base_ref }}...HEAD" -- frontend/ || true)"
-          echo "Changed frontend files:"
-          echo "${CHANGED:-<none>}"
-
-          SPECS="e2e/smoke.spec.ts"
-          RUN_ALL="false"
-
-          # Shared code affects every route — run the full suite.
-          if printf '%s\n' "$CHANGED" | grep -qE '^frontend/(src/lib/|src/routes/\+layout|src/hooks|e2e/|playwright\.config\.ts|package(-lock)?\.json)'; then
-            RUN_ALL="true"
-          fi
-
-          # Map each changed route directory to its spec(s).
-          ROUTE_DIRS="$(printf '%s\n' "$CHANGED" | grep -oE '^frontend/src/routes/[^/.+]+' | sed 's|^frontend/src/routes/||' | sort -u || true)"
-          for dir in $ROUTE_DIRS; do
-            case "$dir" in
-              notes)   SPECS="$SPECS e2e/notes.spec.ts e2e/note-editor.spec.ts" ;;
-              goals)   SPECS="$SPECS e2e/goals.spec.ts e2e/goal-editor.spec.ts e2e/analytics.spec.ts" ;;
-              streaks) SPECS="$SPECS e2e/streaks.spec.ts e2e/streak-interactions.spec.ts" ;;
-              *)       [ -f "e2e/${dir}.spec.ts" ] && SPECS="$SPECS e2e/${dir}.spec.ts" ;;
-            esac
-          done
-
-          # The root page (/) is covered by home + settings specs.
-          if printf '%s\n' "$CHANGED" | grep -q '^frontend/src/routes/+page.svelte'; then
-            SPECS="$SPECS e2e/home.spec.ts e2e/settings.spec.ts"
-          fi
-
-          {
-            echo "run_all=$RUN_ALL"
-            echo "specs=$SPECS"
-          } >> "$GITHUB_OUTPUT"
-          echo "Selected specs: ${SPECS:-<all>}"
-
-      - name: Run route-scoped e2e (pull requests)
-        if: github.event_name == 'pull_request' && steps.e2e-specs.outputs.run_all != 'true'
+      # --shard=n/M makes Playwright run only this leg's share of the
+      # suite — each shard owns an isolated stack + DB, so tests stay
+      # serially safe (workers:1) while the suite runs M× faster.
+      # e2e-plan emits specs only for route-scoped PR runs (shard=1/1 then,
+      # so --shard is a no-op); empty specs = whole suite. GEMINI_API_KEY
+      # stays unset so specs exercise the real "AI disabled" path.
+      - name: Run e2e suite (shard ${{ matrix.shard }} of ${{ strategy.job-total }})
         working-directory: frontend
         env:
           CI: true
           PLAYWRIGHT_BASE_URL: http://localhost:3000
           PLAYWRIGHT_API_URL: http://localhost:8000
           JOIDY_TEST_PASSWORD: joidy-e2e-ci
-        run: npx playwright test ${{ steps.e2e-specs.outputs.specs }}
-
-      - name: Run full e2e suite (branch pushes + shared-code PRs)
-        if: github.event_name == 'push' || steps.e2e-specs.outputs.run_all == 'true'
-        working-directory: frontend
-        env:
-          CI: true
-          PLAYWRIGHT_BASE_URL: http://localhost:3000
-          PLAYWRIGHT_API_URL: http://localhost:8000
-          JOIDY_TEST_PASSWORD: joidy-e2e-ci
-        run: npx playwright test
+        run: npx playwright test --shard=${{ matrix.shard }}/${{ strategy.job-total }} ${{ needs.e2e-plan.outputs.specs }}
 
       - name: Upload Playwright artifacts on failure
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: playwright-report
+          # Per-shard name: upload-artifact v4+ rejects duplicate artifact
+          # names across parallel matrix legs.
+          name: playwright-report-${{ matrix.shard }}
           path: |
             frontend/playwright-report/
             frontend/test-results/
@@ -412,7 +505,7 @@ jobs:
       - name: Stop containers
         if: always()
         # -v drops the postgres volume so the seeded test DB never leaks
-        # between runs.
+        # between runs (each shard gets a pristine stack anyway).
         run: docker compose -f docker-compose.yml -f docker-compose.dev.yml down -v --remove-orphans
 
   security:

@@ -54,12 +54,13 @@ Joidy es un sistema personal de gestión del conocimiento que integra:
 | 17 | [SBOM y Licencias](sbom.md) | SBOM SPDX/CycloneDX, THIRD-PARTY-NOTICES, política de licencias |
 | 18 | [Política de Privacidad](../PRIVACY.md) | Datos accedidos por integración, almacenamiento, retención y procesadores externos |
 | 19 | [Transparencia de IA](ai-transparency.md) | Qué datos se envían a cada proveedor de IA, procesamiento en segundo plano y opt-out (EU AI Act art. 50) |
+| 20 | [Pipeline de CI](ci-pipeline.md) | Estructura del pipeline, sharding de Playwright, política de concurrencia y release gate |
 
 ### Architecture Decision Records
 
 | # | Documento | Descripción |
 |---|-----------|-------------|
-| 20 | [ADRs](adr/README.md) | Índice de Architecture Decision Records (0001–0006) |
+| 21 | [ADRs](adr/README.md) | Índice de Architecture Decision Records (0001–0006) |
 
 ---
 
