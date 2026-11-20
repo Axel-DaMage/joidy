@@ -29,16 +29,29 @@
   let stageIdx     = $derived(Math.min(6, Math.floor(($globalLevel - 1) / (100 / 7))));
   let stageLabel   = $derived(STAGE_LABELS[stageIdx] ?? STAGE_LABELS[6]);
   let coreSize     = $derived(2 + stageIdx * 0.6);
+
+  // Unique gradient id per mount — a hardcoded id collides when several
+  // instances of this component coexist on the same page (#1309).
+  const uid = Math.random().toString(36).slice(2, 10);
+  const glowId = `core-glow-${uid}`;
 </script>
 
 <div class="galaxy-wrap" style="width:{size}px; height:{size}px;">
-  <svg viewBox="0 0 100 120" fill="none" xmlns="http://www.w3.org/2000/svg" class="galaxy-svg">
+  <!-- Decorative SVG; .stage-tag below provides the text alternative (#1309) -->
+  <svg
+    viewBox="0 0 100 120"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    class="galaxy-svg"
+    aria-hidden="true"
+    focusable="false"
+  >
     <!-- Ambient glow behind core -->
-    <radialGradient id="core-glow" cx="50%" cy="50%" r="50%">
+    <radialGradient id={glowId} cx="50%" cy="50%" r="50%">
       <stop offset="0%"   stop-color="var(--plant-glow)" stop-opacity="0.35" />
       <stop offset="100%" stop-color="var(--plant-glow)" stop-opacity="0" />
     </radialGradient>
-    <ellipse cx="50" cy="60" rx="{12 + stageIdx * 3}" ry="{7 + stageIdx * 1.8}" fill="url(#core-glow)" />
+    <ellipse cx="50" cy="60" rx="{12 + stageIdx * 3}" ry="{7 + stageIdx * 1.8}" fill="url(#{glowId})" />
 
     <!-- Stars -->
     {#each stars as s, i}
@@ -73,6 +86,13 @@
   .core-pulse {
     animation: pulse 3s ease-in-out infinite;
     transform-origin: 50px 60px;
+  }
+
+  /* Continuous pulse disabled under prefers-reduced-motion (#1309) */
+  @media (prefers-reduced-motion: reduce) {
+    .core-pulse {
+      animation: none;
+    }
   }
 
   .stage-tag {

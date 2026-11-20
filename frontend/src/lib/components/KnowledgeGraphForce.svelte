@@ -67,6 +67,39 @@
   // otherwise fall back to the global graph store.
   $: effectiveData = data || $graphData;
 
+  // ── Accessibility (#1309) ──────────────────────────────────────────────
+  // Non-visual equivalent: a labelled summary plus a keyboard-navigable
+  // node list built from the SAME filtered data the canvas renders
+  // (WCAG 1.1.1 / 2.1.1).
+  let announcement = '';
+
+  $: a11yData = filterGraphData(effectiveData, {
+    showNotes,
+    showTags,
+    showUnresolved,
+    showAttachments,
+    showOrphans,
+    showCooccurrences,
+  });
+
+  $: graphSummary = $t('a11y.graphSummary', {
+    values: {
+      notes: a11yData.nodes.filter((n) => n.type === 'note').length,
+      tags: a11yData.nodes.filter((n) => n.type !== 'note').length,
+      links: a11yData.edges.length,
+    },
+  });
+
+  function nodeLabel(node: GraphNode): string {
+    return node.type === 'note' ? (node.title || '') : (node.name || node.title || '');
+  }
+
+  function selectNodeFromList(node: GraphNode) {
+    selectedTag.set(node.id);
+    announcement = nodeLabel(node);
+    focusOnNode(node.id);
+  }
+
   // Helper function to build neighbor map for smart highlighting
   let neighbors = new Map<number | string, Set<number | string>>();
   $: {
@@ -309,7 +342,31 @@
     <div class="graph-loading">{$t('knowledgeGraphForce.loading')}</div>
   {/if}
 
-  <div bind:this={containerEl} class="graph-canvas"></div>
+  <!-- force-graph injects a <canvas> here; role=img makes the whole surface
+       presentational and exposes the summary as its name (#1309). -->
+  <div
+    bind:this={containerEl}
+    class="graph-canvas"
+    role="img"
+    aria-label={graphSummary}
+  ></div>
+
+  <!-- Keyboard-operable equivalent of the pointer-only canvas: visually
+       collapsed until it receives keyboard focus (#1309). -->
+  <nav class="node-list-nav" aria-label={$t('a11y.graphNodesList')}>
+    <ul class="node-list">
+      {#each a11yData.nodes as node (node.id)}
+        <li>
+          <button type="button" class="node-list-btn" onclick={() => selectNodeFromList(node)}>
+            {nodeLabel(node)}
+          </button>
+        </li>
+      {/each}
+    </ul>
+  </nav>
+
+  <!-- Announces node selections made through the list -->
+  <div class="visually-hidden" aria-live="polite">{announcement}</div>
 
   {#if loaded}
     <GraphSettingsPanel
@@ -370,5 +427,59 @@
     color: var(--text-muted);
     font-size: 13px;
     z-index: var(--z-sticky);
+  }
+
+  /* Keyboard node list — invisible until it receives focus (#1309) */
+  .node-list-nav {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    z-index: calc(var(--z-modal) + 1);
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  /* opacity (not visibility/display) keeps the buttons in the tab order;
+     :focus-within reveals the panel as soon as Tab lands inside */
+  .node-list-nav:focus-within {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .node-list {
+    list-style: none;
+    margin: 0;
+    padding: 8px;
+    max-height: 50vh;
+    overflow-y: auto;
+    background: var(--elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    box-shadow: 0 10px 20px rgba(0,0,0,0.25);
+  }
+
+  .node-list-btn {
+    display: block;
+    width: 100%;
+    padding: 4px 8px;
+    background: none;
+    border: none;
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-align: left;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 240px;
+  }
+
+  .node-list-btn:hover,
+  .node-list-btn:focus-visible {
+    background: var(--accent);
+    color: var(--bg);
+    outline: none;
   }
 </style>

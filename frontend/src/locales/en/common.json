@@ -632,7 +632,8 @@
     "noFailures": "No failed embeddings."
   },
   "skillTree": {
-    "requiresMore": "Requires {count} more notes to unlock"
+    "requiresMore": "Requires {count} more notes to unlock",
+    "summary": "Skill tree: {total} skills, {unlocked} unlocked"
   },
   "plant": {
     "stageLabel": "Stage: {stage} (Level {level})"
@@ -718,7 +719,9 @@
     "welcomeTitle": "Chat with your assistant",
     "thinking": "Thinking…",
     "inputPlaceholder": "Type a message… (Enter to send, Shift+Enter for newline)",
-    "send": "Send"
+    "send": "Send",
+    "conversation": "Conversation with the assistant",
+    "you": "You"
   },
   "conflict": {
     "title": "Sync Conflict",
@@ -825,7 +828,14 @@
     "year": "Year",
     "currentWeek": "Current week",
     "prevYear": "Previous year",
-    "nextYear": "Next year"
+    "nextYear": "Next year",
+    "viewTabs": "History view",
+    "dayChecked": "completed",
+    "dayFailed": "failed",
+    "dayToday": "today",
+    "dayTarget": "target",
+    "daySelected": "selected",
+    "dayNoRecord": "no record"
   },
   "shareAchievement": {
     "title": "Share achievement",
@@ -862,7 +872,10 @@
     "tabGithub": "GitHub",
     "tabRecentNotes": "Recent notes",
     "recentNotesEmpty": "No recent notes",
-    "viewAllNotes": "View all →"
+    "viewAllNotes": "View all →",
+    "workMinutes": "Work minutes",
+    "breakMinutes": "Break minutes",
+    "pomodorosDone": "{done} of {total} pomodoros completed"
   },
   "graph": {
     "searchPlaceholder": "Search graph...",
@@ -1000,5 +1013,13 @@
     "avgSessionMin": "Avg session (min)",
     "totalEvents": "Total events",
     "topPages": "Top pages"
+  },
+  "a11y": {
+    "graphSummary": "Knowledge graph: {notes} notes, {tags} tags, {links} connections",
+    "graphNodesList": "Graph node list",
+    "xpProgress": "Experience progress",
+    "dayActive": "active day",
+    "dayInactive": "no activity",
+    "pomodoroTime": "{phase}: {time} left"
   }
 }
