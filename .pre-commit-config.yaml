@@ -24,6 +24,12 @@ repos:
     hooks:
       - id: detect-secrets
         args: [ --baseline, .secrets.baseline ]
+  - repo: https://github.com/fsfe/reuse-tool
+    rev: v6.3.0
+    hooks:
+      # Copyright + license info for every file, via in-file SPDX headers or
+      # REUSE.toml (#1384). Same version as the CI gate (reuse.yml).
+      - id: reuse
   - repo: local
     hooks:
       - id: svelte-check

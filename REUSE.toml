@@ -1,0 +1,45 @@
+# SPDX-FileCopyrightText: 2025 D4MAG3_WIZ4RD and contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# REUSE licensing metadata for Joidy — https://reuse.software/spec-3.3/
+#
+# Phase 1 of #1384: every file is covered here in bulk so the repository is
+# `reuse lint` clean without touching existing sources. New files should still
+# carry their own SPDX header (see CONTRIBUTING.md); `precedence = "closest"`
+# makes an in-file header (or an adjacent `.license` file) win over the
+# blanket annotation below, so headers can be rolled out incrementally.
+#
+# When several [[annotations]] tables match a file, the LAST one wins — keep
+# the blanket table first and the third-party exceptions after it.
+
+version = 1
+
+# Project-owned files (code, configuration, docs, project artwork). The
+# copyright holder and license mirror the NOTICE file.
+[[annotations]]
+path = "**"
+precedence = "closest"
+SPDX-FileCopyrightText = "2025 D4MAG3_WIZ4RD and contributors"
+SPDX-License-Identifier = "GPL-3.0-or-later"
+
+# --- Third-party content: NOT project copyright ---------------------------
+
+# Geist / Geist Mono variable fonts, self-hosted since #859. Holder and
+# license are taken verbatim from the fonts' own `name` table (IDs 0 and 13).
+[[annotations]]
+path = "frontend/static/fonts/Geist*.woff2"
+precedence = "override"
+SPDX-FileCopyrightText = "2024 The Geist Project Authors (https://github.com/vercel/geist-font)"
+SPDX-License-Identifier = "OFL-1.1"
+
+# Spanish adaptation of the Contributor Covenant 2.1 (CC-BY-4.0, see the
+# "Atribución" section of the file). The upstream text stays CC-BY-4.0; the
+# project's own adaptation follows the project license.
+[[annotations]]
+path = "CODE_OF_CONDUCT.md"
+precedence = "closest"
+SPDX-FileCopyrightText = [
+    "Contributor Covenant contributors (https://www.contributor-covenant.org)",
+    "2025 D4MAG3_WIZ4RD and contributors",
+]
+SPDX-License-Identifier = "CC-BY-4.0 AND GPL-3.0-or-later"
