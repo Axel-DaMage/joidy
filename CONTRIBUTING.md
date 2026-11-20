@@ -13,6 +13,7 @@
 - [Commits](#commits)
 - [Testing](#testing)
 - [Pull Requests](#pull-requests)
+- [Contribuciones con Asistencia de IA](#contribuciones-con-asistencia-de-ia)
 - [Reportar Bugs](#reportar-bugs)
 - [Solicitar Funcionalidades](#solicitar-funcionalidades)
 - [Etiquetas y Triage de Issues](#etiquetas-y-triage-de-issues)
@@ -257,6 +258,17 @@ make test
 - Explica el "por qué" detrás del cambio
 - Responde a los comentarios de revisión
 - Mantén el PR actualizado con `development`
+
+## Contribuciones con Asistencia de IA
+
+El uso de herramientas de IA (agentes de código como Hermes o Devin, asistentes de autocompletado, etc.) está permitido, pero **la persona que envía la contribución es responsable de todo su contenido**. Reglas:
+
+- **Revisión humana obligatoria:** lee y verifica todo el código generado por IA antes de enviarlo — comprueba que es correcto, seguro y que realmente resuelve el problema. Nunca pegues salida de una herramienta sin revisarla.
+- **Firma DCO humana:** los commits llevan el trailer `Signed-off-by:` de la persona responsable (`git commit -s`), que certifica el DCO sobre todo el contenido del commit, incluido lo generado por IA. La firma la pone siempre la persona humana tras revisar; un agente nunca firma de forma autónoma.
+- **Divulgación:** conserva los trailers de divulgación de IA en los commits (`Generated with ...`, `Co-Authored-By: ...`) y declara en la descripción del PR que la contribución usó asistencia de IA.
+- **Sin código generado oculto:** no envíes código generado por IA sin divulgarlo; la autoría y la compatibilidad de licencia del resultado son responsabilidad del remitente.
+- **Misma barra de calidad:** el código asistido por IA pasa exactamente la misma revisión, CI y tests que cualquier otra contribución — la asistencia no reduce los requisitos.
+- **Licencias:** no pegues código proveniente de fuentes con licencias incompatibles con `GPL-3.0-or-later` (las herramientas de IA pueden reproducir código con copyright o licencia de terceros); eres responsable de verificar la compatibilidad de licencias de todo lo que envías.
 
 ## Reportar Bugs
 
