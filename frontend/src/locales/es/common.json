@@ -198,7 +198,10 @@
   "pwa": {
     "installPrompt": "Instala Joidy para acceso rápido",
     "closeInstallNotice": "Cerrar aviso de instalación",
-    "installed": "¡Joidy instalado! Ahora puedes acceder desde tu escritorio."
+    "installed": "¡Joidy instalado! Ahora puedes acceder desde tu escritorio.",
+    "updateAvailable": "Hay una nueva versión de Joidy disponible",
+    "update": "Actualizar",
+    "closeUpdateNotice": "Cerrar aviso de actualización"
   },
   "onboarding": {
     "skipTour": "Saltar tour de bienvenida",
