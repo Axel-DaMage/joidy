@@ -385,6 +385,47 @@ Errores: `401` token ausente/inválido o Google rechazó el token,
 | GET | `/integrations/strava/webhook` | Public (verify token) | Strava subscription handshake — echoes `hub.challenge` when `hub.verify_token` matches `STRAVA_WEBHOOK_VERIFY_TOKEN` | — | `{hub.challenge}` |
 | POST | `/integrations/strava/webhook` | Public (verify token) | Strava activity events → idempotent XP award; disabled (404) unless `STRAVA_WEBHOOK_VERIFY_TOKEN` is set | event JSON | `{status, ...}` |
 
+### 2.27 Integrations — Gmail (`integrations/gmail.py`)
+
+Superficie dedicada sobre Gmail API (`gmail.googleapis.com/gmail/v1`) que
+reutiliza el token OAuth de Google almacenado (`/integrations/google/*`).
+Todas las rutas exigen JWT y devuelven datos normalizados en `snake_case`.
+Es independiente del buzón `/emails` (sincronización n8n → `EmailMessage`),
+que permanece sin cambios.
+
+Lectura requiere `gmail.readonly` (o `gmail.modify`/`gmail.compose`/ámbito
+completo); las mutaciones de etiquetas requieren `gmail.modify`; el envío
+requiere `gmail.send`/`gmail.modify`/`gmail.compose`. Un token concedido
+antes de la ampliación de scopes puede leer pero recibirá `403` en
+escritura/envío hasta reconectar la cuenta desde Ajustes.
+
+| Method | Path | Auth | Description | Request Body | Response |
+|--------|------|------|-------------|--------------|----------|
+| GET | `/integrations/gmail/status` | Yes | Estado: conexión, capabilities por scope (`gmail_read`, `gmail_modify`, `gmail_send`) y registro watch | — | status object |
+| GET | `/integrations/gmail/messages` | Yes | Listar mensajes (`q` sintaxis Gmail, `since` epoch/ISO → `after:`, `label_ids` CSV, `max_results`, `page_token`, `token`) | — | `{messages[], next_page_token, result_size_estimate}` |
+| GET | `/integrations/gmail/messages/{id}` | Yes | Mensaje completo: `headers{}`, `body_text`, `body_html`, `attachments[]` | — | message object |
+| GET | `/integrations/gmail/messages/{id}/attachments/{attachment_id}` | Yes | Descargar adjunto como base64 estándar (`data_base64`, `size`) | — | attachment object |
+| POST | `/integrations/gmail/messages/send` | Yes | Enviar correo (RFC822 server-side; `to`/`cc`/`bcc`/`subject`/`body`/`body_html`/`attachments[]` con `data_base64`) | send object | `{id, thread_id, label_ids}` |
+| POST | `/integrations/gmail/messages/{id}/archive` | Yes | Archivar (quita `INBOX`) | — | message summary |
+| POST | `/integrations/gmail/messages/{id}/trash` | Yes | Papelera (`TRASH` + sin `INBOX`) | — | message summary |
+| POST | `/integrations/gmail/messages/{id}/untrash` | Yes | Restaurar (`INBOX` + sin `TRASH`) | — | message summary |
+| POST | `/integrations/gmail/messages/{id}/read` | Yes | Marcar leído (quita `UNREAD`) | — | message summary |
+| POST | `/integrations/gmail/messages/{id}/unread` | Yes | Marcar no leído (añade `UNREAD`) | — | message summary |
+| POST | `/integrations/gmail/watch` | Yes | Registrar `users.watch` en el topic Pub/Sub configurado (`label_ids` CSV opcional) | — | `{topic_name, history_id, expiration, registered_at}` |
+| GET | `/integrations/gmail/watch` | Yes | Estado de push: `configured` + último registro persistido | — | status object |
+| DELETE | `/integrations/gmail/watch` | Yes | `users.stop` + limpiar estado | — | `{status}` |
+| GET | `/integrations/gmail/history` | Yes | Cambios incrementales desde `start_history_id` (polling; alternativa a push) | — | `{history_id, next_page_token, records[]}` |
+
+`POST /watch` responde `503` si `GOOGLE_GMAIL_PUBSUB_TOPIC` está vacío — el
+push real requiere un topic Pub/Sub con permisos de publicación para
+`gmail-api-push@system.gserviceaccount.com`; la detección de correo nuevo
+sigue disponible vía `GET /messages?since=` o `GET /history`.
+
+Errores: `401` token ausente/inválido o Google rechazó el token,
+`403` scope insuficiente (reconectar), `404` mensaje/adjunto inexistente,
+`413` adjunto sobre el límite de tamaño, `429` rate limit de Google,
+`502` fallo upstream de Gmail.
+
 ---
 
 ## 3. Data Models

@@ -18,6 +18,12 @@ GOOGLE_SCOPES = " ".join(
         "https://www.googleapis.com/auth/calendar.readonly",
         "https://www.googleapis.com/auth/tasks.readonly",
         "https://www.googleapis.com/auth/gmail.readonly",
+        # Gmail send/modify (#42): archive/trash/unread act on labels
+        # (gmail.modify); messages.send needs gmail.send. Tokens granted
+        # before this change keep read access; write endpoints answer 403
+        # until the user reconnects — same re-consent pattern as contacts.
+        "https://www.googleapis.com/auth/gmail.send",
+        "https://www.googleapis.com/auth/gmail.modify",
         # `contacts` (read+write) supersedes `contacts.readonly` — the
         # dedicated /integrations/contacts CRUD endpoints need write (#43).
         # Tokens granted before this change keep working for reads; write
@@ -264,3 +270,76 @@ async def get_contact_group(token: str, resource_name: str, max_members: int = 1
         f"{GOOGLE_PEOPLE_API}/{resource_name}",
         params={"maxMembers": max_members},
     )
+
+
+# ---------------------------------------------------------------------------
+# Gmail API — raw dict passthroughs for the dedicated /integrations/gmail
+# surface (#42). Business logic (normalization, scope checks, RFC822 building,
+# watch state) lives in services/gmail_service.py. All paths hang off
+# users/me — message ids are validated upstream before reaching here.
+# ---------------------------------------------------------------------------
+
+
+async def list_gmail_messages_raw(token: str, params: dict[str, Any]) -> dict[str, Any]:
+    """users.messages.list — one page of message stubs (id/threadId/snippet)."""
+    return await _request(token, f"{GOOGLE_GMAIL_API}/users/me/messages", params)
+
+
+async def get_gmail_message_raw(token: str, message_id: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    """users.messages.get — full message resource (format=full by default)."""
+    return await _request(
+        token,
+        f"{GOOGLE_GMAIL_API}/users/me/messages/{message_id}",
+        params or {"format": "full"},
+    )
+
+
+async def modify_gmail_message_labels(
+    token: str,
+    message_id: str,
+    add_label_ids: list[str],
+    remove_label_ids: list[str],
+) -> dict[str, Any]:
+    """users.messages.modify — add/remove label ids (archive, trash, unread…)."""
+    return await _mutating_request(
+        token,
+        "POST",
+        f"{GOOGLE_GMAIL_API}/users/me/messages/{message_id}/modify",
+        json={"addLabelIds": add_label_ids, "removeLabelIds": remove_label_ids},
+    )
+
+
+async def send_gmail_message(token: str, raw_rfc822: str) -> dict[str, Any]:
+    """users.messages.send — ``raw`` is base64url-encoded RFC822 (no padding)."""
+    return await _mutating_request(
+        token,
+        "POST",
+        f"{GOOGLE_GMAIL_API}/users/me/messages/send",
+        json={"raw": raw_rfc822},
+    )
+
+
+async def get_gmail_attachment(token: str, message_id: str, attachment_id: str) -> dict[str, Any]:
+    """users.messages.attachments.get — returns ``{size, data}`` (base64url)."""
+    return await _request(
+        token,
+        f"{GOOGLE_GMAIL_API}/users/me/messages/{message_id}/attachments/{attachment_id}",
+    )
+
+
+async def list_gmail_history(token: str, params: dict[str, Any]) -> dict[str, Any]:
+    """users.history.list — incremental mailbox changes since ``startHistoryId``."""
+    return await _request(token, f"{GOOGLE_GMAIL_API}/users/me/history", params)
+
+
+async def watch_gmail_mailbox(token: str, topic_name: str, label_ids: list[str] | None = None) -> dict[str, Any]:
+    """users.watch — register a Pub/Sub topic for push notifications."""
+    body: dict[str, Any] = {"topicName": topic_name}
+    if label_ids:
+        body["labelIds"] = label_ids
+    return await _mutating_request(token, "POST", f"{GOOGLE_GMAIL_API}/users/me/watch", json=body)
+
+
+async def stop_gmail_watch(token: str) -> dict[str, Any]:
+    """users.stop — stop push notifications for the mailbox."""
+    return await _mutating_request(token, "POST", f"{GOOGLE_GMAIL_API}/users/me/stop")
