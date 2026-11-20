@@ -1,12 +1,12 @@
-"""Tests for AI provider fallback behavior (#568).
+"""Tests for AI provider fallback behavior (#568, #1460).
 
 Verifies that:
-1. FallbackLLMClient tries primary, falls back to secondary on exception
+1. FallbackLLMClient tries primary, then each fallback in order on exception
 2. FallbackEmbeddingClient tries primary, falls back to secondary on exception
-3. ClientFactory wraps primary with Ollama fallback when Ollama is available
-4. ClientFactory does NOT wrap when primary is already Ollama
-5. health_check() returns True if either primary or secondary is healthy
-6. health_check() returns False if both providers are unreachable
+3. ClientFactory builds the full configured-provider chain (Ollama last)
+4. ClientFactory does NOT wrap when only the primary is configured
+5. health_check() returns True if any chain member is healthy
+6. health_check() returns False if every provider is unreachable
 """
 
 import unittest
@@ -75,7 +75,7 @@ class TestFallbackLLMClient(unittest.IsolatedAsyncioTestCase):
     async def test_primary_succeeds_no_fallback(self):
         primary = FakeLLMClient("gemini", fail=False)
         secondary = FakeLLMClient("ollama", fail=False)
-        client = FallbackLLMClient(primary=primary, secondary=secondary)
+        client = FallbackLLMClient(primary=primary, fallbacks=[secondary])
 
         result = await client.generate("test")
         self.assertEqual(result, "gemini:response")
@@ -84,7 +84,7 @@ class TestFallbackLLMClient(unittest.IsolatedAsyncioTestCase):
     async def test_primary_fails_fallback_to_secondary(self):
         primary = FakeLLMClient("gemini", fail=True)
         secondary = FakeLLMClient("ollama", fail=False)
-        client = FallbackLLMClient(primary=primary, secondary=secondary)
+        client = FallbackLLMClient(primary=primary, fallbacks=[secondary])
 
         result = await client.generate("test")
         self.assertEqual(result, "ollama:response")
@@ -93,7 +93,7 @@ class TestFallbackLLMClient(unittest.IsolatedAsyncioTestCase):
     async def test_both_fail_raises_exception(self):
         primary = FakeLLMClient("gemini", fail=True)
         secondary = FakeLLMClient("ollama", fail=True)
-        client = FallbackLLMClient(primary=primary, secondary=secondary)
+        client = FallbackLLMClient(primary=primary, fallbacks=[secondary])
 
         with self.assertRaises(Exception):  # noqa: B017 -- fallback must swallow any provider error type
             await client.generate("test")
@@ -101,7 +101,7 @@ class TestFallbackLLMClient(unittest.IsolatedAsyncioTestCase):
     async def test_embed_text_primary_succeeds(self):
         primary = FakeLLMClient("gemini", fail=False)
         secondary = FakeLLMClient("ollama", fail=False)
-        client = FallbackLLMClient(primary=primary, secondary=secondary)
+        client = FallbackLLMClient(primary=primary, fallbacks=[secondary])
 
         result = await client.embed_text("test")
         self.assertEqual(result, [0.1, 0.2, 0.3])
@@ -109,7 +109,7 @@ class TestFallbackLLMClient(unittest.IsolatedAsyncioTestCase):
     async def test_embed_text_falls_back(self):
         primary = FakeLLMClient("gemini", fail=False, embed_fail=True)
         secondary = FakeLLMClient("ollama", fail=False)
-        client = FallbackLLMClient(primary=primary, secondary=secondary)
+        client = FallbackLLMClient(primary=primary, fallbacks=[secondary])
 
         result = await client.embed_text("test")
         self.assertEqual(result, [0.1, 0.2, 0.3])
@@ -118,7 +118,7 @@ class TestFallbackLLMClient(unittest.IsolatedAsyncioTestCase):
     async def test_health_check_primary_healthy(self):
         primary = FakeLLMClient("gemini", fail=False)
         secondary = FakeLLMClient("ollama", fail=False)
-        client = FallbackLLMClient(primary=primary, secondary=secondary)
+        client = FallbackLLMClient(primary=primary, fallbacks=[secondary])
 
         result = await client.health_check()
         self.assertTrue(result)
@@ -127,7 +127,7 @@ class TestFallbackLLMClient(unittest.IsolatedAsyncioTestCase):
     async def test_health_check_primary_down_secondary_healthy(self):
         primary = FakeLLMClient("gemini", fail=True)
         secondary = FakeLLMClient("ollama", fail=False)
-        client = FallbackLLMClient(primary=primary, secondary=secondary)
+        client = FallbackLLMClient(primary=primary, fallbacks=[secondary])
 
         result = await client.health_check()
         self.assertTrue(result)
@@ -136,10 +136,72 @@ class TestFallbackLLMClient(unittest.IsolatedAsyncioTestCase):
     async def test_health_check_both_down(self):
         primary = FakeLLMClient("gemini", fail=True)
         secondary = FakeLLMClient("ollama", fail=True)
-        client = FallbackLLMClient(primary=primary, secondary=secondary)
+        client = FallbackLLMClient(primary=primary, fallbacks=[secondary])
 
         result = await client.health_check()
         self.assertFalse(result)
+
+    # ── Multi-provider chain (#1460) ────────────────────────────────────
+
+    async def test_chain_property_lists_all_providers_in_order(self):
+        primary = FakeLLMClient("openai")
+        fb1 = FakeLLMClient("gemini")
+        fb2 = FakeLLMClient("ollama")
+        client = FallbackLLMClient(primary=primary, fallbacks=[fb1, fb2])
+
+        self.assertEqual([c.provider_name for c in client.chain], ["openai", "gemini", "ollama"])
+
+    async def test_falls_through_multiple_providers(self):
+        """primary → gemini → ollama: two failures land on the third."""
+        client = FallbackLLMClient(
+            primary=FakeLLMClient("openai", fail=True),
+            fallbacks=[FakeLLMClient("gemini", fail=True), FakeLLMClient("ollama")],
+        )
+
+        result = await client.generate("test")
+        self.assertEqual(result, "ollama:response")
+        self.assertEqual(client.provider_name, "ollama")
+
+    async def test_middle_fallback_wins_over_later_ones(self):
+        client = FallbackLLMClient(
+            primary=FakeLLMClient("openai", fail=True),
+            fallbacks=[FakeLLMClient("gemini"), FakeLLMClient("ollama")],
+        )
+
+        result = await client.generate("test")
+        self.assertEqual(result, "gemini:response")
+        self.assertEqual(client.provider_name, "gemini")
+
+    async def test_all_providers_down_raises_last_error(self):
+        client = FallbackLLMClient(
+            primary=FakeLLMClient("openai", fail=True),
+            fallbacks=[FakeLLMClient("gemini", fail=True), FakeLLMClient("ollama", fail=True)],
+        )
+
+        with self.assertRaises(Exception) as ctx:  # noqa: B017 -- fallback must swallow any provider error type
+            await client.generate("test")
+        # The LAST provider's error surfaces — first in the chain is not
+        # hidden behind a generic "primary failed" (#1460).
+        self.assertIn("ollama generate failed", str(ctx.exception))
+
+    async def test_health_check_reports_first_healthy_provider(self):
+        client = FallbackLLMClient(
+            primary=FakeLLMClient("openai", fail=True),
+            fallbacks=[FakeLLMClient("gemini"), FakeLLMClient("ollama")],
+        )
+
+        self.assertTrue(await client.health_check())
+        self.assertEqual(client.provider_name, "gemini")
+
+    async def test_embed_text_falls_through_chain(self):
+        client = FallbackLLMClient(
+            primary=FakeLLMClient("openai", embed_fail=True),
+            fallbacks=[FakeLLMClient("gemini", embed_fail=True), FakeLLMClient("ollama")],
+        )
+
+        result = await client.embed_text("test")
+        self.assertEqual(result, [0.1, 0.2, 0.3])
+        self.assertEqual(client.provider_name, "ollama")
 
 
 class TestFallbackEmbeddingClient(unittest.IsolatedAsyncioTestCase):
@@ -260,6 +322,65 @@ class TestClientFactoryFallback(unittest.IsolatedAsyncioTestCase):
 
         client = ClientFactory.get_embedding_client()
         self.assertNotIsInstance(client, FallbackEmbeddingClient)
+
+    # ── Multi-provider chain order (#1460) ────────────────────────────────
+
+    @patch("clients.factory.settings")
+    def test_factory_llm_chain_uses_all_configured_providers(self, mock_settings):
+        """Chain: LLM_MODEL provider first, then other configured providers in
+        canonical order, Ollama last."""
+        mock_settings.llm_model = "openai:standardcompute"
+        mock_settings.available_providers = ["openai", "gemini", "ollama"]
+        mock_settings.provider_config = {
+            "openai": {"api_key": "fake-openai", "base_url": "https://router.example.com/v1"},
+            "gemini": {"api_key": "fake-gemini"},
+            "ollama": {"base_url": "http://localhost:11434"},
+        }
+
+        client = ClientFactory.get_llm_client()
+        self.assertIsInstance(client, FallbackLLMClient)
+        self.assertEqual([c.provider_name for c in client.chain], ["openai", "gemini", "ollama"])
+
+    @patch("clients.factory.settings")
+    def test_factory_llm_chain_prefers_configured_provider_over_ollama(self, mock_settings):
+        """A configured Gemini key must be tried before Ollama — the old
+        primary→ollama chain ignored it entirely (#1460)."""
+        mock_settings.llm_model = "anthropic:claude-3-haiku"
+        mock_settings.available_providers = ["anthropic", "gemini", "ollama"]
+        mock_settings.provider_config = {
+            "anthropic": {"api_key": "fake-anthropic"},
+            "gemini": {"api_key": "fake-gemini"},
+            "ollama": {"base_url": "http://localhost:11434"},
+        }
+
+        client = ClientFactory.get_llm_client()
+        names = [c.provider_name for c in client.chain]
+        self.assertEqual(names, ["anthropic", "gemini", "ollama"])
+
+    @patch("clients.factory.settings")
+    def test_factory_llm_chain_ollama_primary_not_duplicated(self, mock_settings):
+        """Ollama as primary must not appear twice in its own chain."""
+        mock_settings.llm_model = "ollama:llama3"
+        mock_settings.available_providers = ["gemini", "ollama"]
+        mock_settings.provider_config = {
+            "gemini": {"api_key": "fake-gemini"},
+            "ollama": {"base_url": "http://localhost:11434"},
+        }
+
+        client = ClientFactory.get_llm_client()
+        names = [c.provider_name for c in client.chain]
+        self.assertEqual(names, ["ollama", "gemini"])
+        self.assertEqual(names.count("ollama"), 1)
+
+    @patch("clients.factory.settings")
+    def test_factory_llm_no_chain_when_only_primary_configured(self, mock_settings):
+        mock_settings.llm_model = "openai:gpt-4o-mini"
+        mock_settings.available_providers = ["openai"]
+        mock_settings.provider_config = {"openai": {"api_key": "fake"}}
+
+        client = ClientFactory.get_llm_client()
+        self.assertNotIsInstance(client, FallbackLLMClient)
+        self.assertEqual(client.provider_name, "openai")
 
 
 if __name__ == "__main__":

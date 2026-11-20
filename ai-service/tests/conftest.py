@@ -29,6 +29,20 @@ from clients.factory import ClientFactory
 from response_cache import get_cache
 
 
+def _reset_health_probe() -> None:
+    """Clear the /health provider-reachability probe cache (#1460).
+
+    Cached in ``main`` with a TTL — importing lazily so non-endpoint test
+    files don't pay for the FastAPI import.
+    """
+    try:
+        import main
+
+        main.reset_health_probe_cache()
+    except Exception:
+        pass
+
+
 @pytest.fixture(autouse=True)
 def _reset_shared_state():
     """Reset module-level singletons so tests never leak state.
@@ -39,6 +53,7 @@ def _reset_shared_state():
     asyncio.Lock could be bound to another test's event loop).
     """
     ClientFactory.reset()
+    _reset_health_probe()
     for breaker in (llm_circuit_breaker, emb_circuit_breaker):
         breaker.state = CircuitState.CLOSED
         breaker.failures = 0
@@ -47,6 +62,7 @@ def _reset_shared_state():
     rate_limiter._limiters.clear()
     yield
     ClientFactory.reset()
+    _reset_health_probe()
     for breaker in (llm_circuit_breaker, emb_circuit_breaker):
         breaker.state = CircuitState.CLOSED
         breaker.failures = 0

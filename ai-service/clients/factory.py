@@ -17,14 +17,32 @@ logger = logging.getLogger(__name__)
 _OLLAMA_LLM_FALLBACK_MODEL = "llama3"
 _OLLAMA_EMB_FALLBACK_MODEL = "nomic-embed-text"
 
+# Canonical LLM fallback order (#1460): the configured ``LLM_MODEL`` provider
+# is always primary; the remaining *configured* providers are tried in this
+# order. Ollama is intentionally last — it is the only fully-local provider
+# (no API key, no external service) and therefore the final safety net.
+_LLM_FALLBACK_ORDER = ["gemini", "openai", "anthropic", "openrouter", "cohere", "ollama"]
+
+# Default chat model used when a provider only serves as a fallback (the
+# primary always uses the model named in ``LLM_MODEL``).
+_LLM_FALLBACK_MODELS = {
+    "gemini": "gemini-2.0-flash",
+    "openai": "gpt-4o-mini",
+    "anthropic": "claude-3-haiku-20240307",
+    "openrouter": "openai/gpt-4o-mini",
+    "cohere": "command-r",
+    "ollama": _OLLAMA_LLM_FALLBACK_MODEL,
+}
+
 
 class ClientFactory:
     """Factory for creating LLM and embedding clients based on model configuration.
 
-    When the primary provider is not Ollama but Ollama is available, the
-    factory wraps the primary client in a FallbackLLMClient / FallbackEmbeddingClient
-    so that requests transparently fall back to Ollama if the primary fails
-    (e.g. invalid API key, quota exhausted, network unreachable). See #568.
+    The LLM client is a failover chain (#568, #1460): ``LLM_MODEL``'s provider
+    first, then every other configured provider in ``_LLM_FALLBACK_ORDER``
+    order, with Ollama last. Embedding clients keep a two-provider chain
+    (primary → Ollama) because cross-provider vectors have incompatible
+    dimensions — a wider chain would corrupt ``note_embeddings``.
     """
 
     _llm_client: BaseLLMClient | None = None
@@ -87,8 +105,8 @@ class ClientFactory:
     def get_llm_client(cls) -> BaseLLMClient:
         """Get the configured LLM client based on settings.llm_model.
 
-        If the primary provider is not Ollama but Ollama is available,
-        wraps the client in a FallbackLLMClient for automatic failover (#568).
+        When more than one provider is configured, wraps the chain in a
+        FallbackLLMClient for automatic failover (#568, #1460).
         """
         if cls._llm_client is not None:
             return cls._llm_client
@@ -103,16 +121,34 @@ class ClientFactory:
             raise ValueError(f"Provider '{provider}' not configured. Available: {available}")
 
         config = settings.provider_config[provider]
-        primary = cls._create_llm_client(provider, model, config)
+        chain = [cls._create_llm_client(provider, model, config)]
 
-        # Wrap with Ollama fallback if primary is not Ollama and Ollama is available
-        if provider != "ollama" and "ollama" in available:
-            ollama_config = settings.provider_config["ollama"]
-            secondary = OllamaClient(base_url=ollama_config["base_url"], model=_OLLAMA_LLM_FALLBACK_MODEL)
-            cls._llm_client = FallbackLLMClient(primary=primary, secondary=secondary)
-            logger.info(f"LLM client wrapped with Ollama fallback (primary={provider}, secondary=ollama)")
+        # Build the fallback chain (#1460): every other configured provider in
+        # _LLM_FALLBACK_ORDER order, Ollama always last. A provider whose client
+        # fails to construct (bad config) is skipped so it cannot break the
+        # whole chain.
+        for fallback_provider in _LLM_FALLBACK_ORDER:
+            if fallback_provider == provider or fallback_provider not in available:
+                continue
+            try:
+                chain.append(
+                    cls._create_llm_client(
+                        fallback_provider,
+                        _LLM_FALLBACK_MODELS[fallback_provider],
+                        settings.provider_config[fallback_provider],
+                    )
+                )
+            except Exception:
+                logger.warning(
+                    f"Skipping '{fallback_provider}' in the LLM fallback chain — client construction failed",
+                    exc_info=True,
+                )
+
+        if len(chain) > 1:
+            cls._llm_client = FallbackLLMClient(primary=chain[0], fallbacks=chain[1:])
+            logger.info(f"LLM fallback chain: {' -> '.join(c.provider_name for c in chain)}")
         else:
-            cls._llm_client = primary
+            cls._llm_client = chain[0]
 
         return cls._llm_client
 
