@@ -201,7 +201,9 @@
       }
       const wsUrl = `${wsProto}//${wsHost}/ws${getToken() ? `?token=${encodeURIComponent(getToken()!)}` : ''}`;
 
-      logger.info('[layout] Connecting to WebSocket:', wsUrl);
+      // Log the URL without the query string — wsUrl carries the JWT in
+      // ?token= and tokens must never reach console output (#1317).
+      logger.info('[layout] Connecting to WebSocket:', wsUrl.split('?')[0]);
       ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {
