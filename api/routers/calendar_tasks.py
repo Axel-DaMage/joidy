@@ -1,5 +1,6 @@
 """CRUD for internal joidy calendar tasks (#1230)."""
 
+import json
 from datetime import UTC, datetime, time
 from datetime import date as date_type
 from typing import cast
@@ -7,6 +8,7 @@ from typing import cast
 from database import get_db
 from fastapi import APIRouter, Depends, HTTPException
 from models.calendar_task import CalendarTask, CalendarTaskPriority, CalendarTaskSource
+from models.gamification import XPEvent
 from models.goal import Goal, GoalMeasurement
 from pydantic import BaseModel, Field
 from services.gamification_engine import process_event
@@ -28,6 +30,31 @@ _PRIORITY_RANK = case(
 )
 
 
+def _xp_event_recorded(db: Session, event_type: str, key: str, value: object) -> bool:
+    """True when an ``xp_events`` row of ``event_type`` already stores ``key: value``.
+
+    Idempotency guard for the XP awards below: ``metadata_json`` is a
+    serialized JSON blob, so a LIKE pre-filter (the ``json.dumps`` rendering
+    is deterministic — these rows are only ever written by ``process_event``)
+    narrows candidates and a real parse confirms the key, which the LIKE
+    alone cannot (``"task_id": 5`` is a substring of ``"task_id": 55``).
+    """
+    needle = f'"{key}": {json.dumps(value)}'
+    rows = (
+        db.query(XPEvent)
+        .filter(XPEvent.event_type == event_type, XPEvent.metadata_json.like(f"%{needle}%"))
+        .all()
+    )
+    for row in rows:
+        try:
+            meta = json.loads(row.metadata_json or "{}")
+        except (TypeError, ValueError):
+            continue
+        if isinstance(meta, dict) and meta.get(key) == value:
+            return True
+    return False
+
+
 def _award_task_xp(db: Session, task: CalendarTask) -> None:
     """Award XP for completing a planned task (#1235).
 
@@ -36,11 +63,21 @@ def _award_task_xp(db: Session, task: CalendarTask) -> None:
     a linked task awards nothing — the greater XP wins. Goal progress is
     handled separately by `_adjust_goal_progress` (#1234).
     `day_fully_planned` fires when the last open task of the day is completed.
+
+    Anti-farming (audit): each award is idempotent. Re-toggling a task
+    done → undone → done must not mint XP every cycle, so a task earns its
+    completion XP once (checked across both completion event types, so
+    adding/removing ``start_time`` between toggles cannot mint the other
+    variant either) and a day earns `day_fully_planned` once.
     """
     if task.goal_id is not None:
         return
     event = "calendar_task_completed" if task.start_time else "calendar_task_completed_no_time"
-    process_event(db, event, {"task_id": task.id, "title": task.title, "date": str(task.date)})
+    already_completed = _xp_event_recorded(db, "calendar_task_completed", "task_id", task.id) or _xp_event_recorded(
+        db, "calendar_task_completed_no_time", "task_id", task.id
+    )
+    if not already_completed:
+        process_event(db, event, {"task_id": task.id, "title": task.title, "date": str(task.date)})
 
     if task.date is None:
         return
@@ -50,7 +87,7 @@ def _award_task_xp(db: Session, task: CalendarTask) -> None:
         .filter(CalendarTask.date == task.date, CalendarTask.done.is_(False), CalendarTask.id != task.id)
         .count()
     )
-    if open_left == 0:
+    if open_left == 0 and not _xp_event_recorded(db, "day_fully_planned", "date", str(task.date)):
         process_event(db, "day_fully_planned", {"date": str(task.date)})
 
 

@@ -122,6 +122,88 @@ class TaskXPEventTest(CalendarTaskXPTestBase):
 
         self.assertEqual(self._xp_events("day_fully_planned"), [])
 
+    # ── Anti-farming idempotency (audit): done → undone → done must not
+    #    re-award. `_award_task_xp` is only called on a completion edge, so
+    #    calling it twice models the re-toggle. ──────────────────────────
+
+    def test_second_completion_edge_does_not_reaward(self) -> None:
+        self._seed_daily_activity()
+        task = CalendarTask(title="Farm", date=dt.date(2099, 7, 20), start_time=dt.time(10, 0))
+        self.db.add(task)
+        self.db.commit()
+
+        from routers.calendar_tasks import _award_task_xp
+
+        _award_task_xp(self.db, task)
+        self.db.commit()
+        _award_task_xp(self.db, task)
+        self.db.commit()
+
+        self.assertEqual(len(self._xp_events("calendar_task_completed")), 1)
+        self.assertEqual(len(self._xp_events("day_fully_planned")), 1)
+
+    def test_retoggle_without_time_does_not_reaward(self) -> None:
+        self._seed_daily_activity()
+        task = CalendarTask(title="Farm sin hora", date=dt.date(2099, 7, 20))
+        self.db.add(task)
+        self.db.commit()
+
+        from routers.calendar_tasks import _award_task_xp
+
+        _award_task_xp(self.db, task)
+        self.db.commit()
+        _award_task_xp(self.db, task)
+        self.db.commit()
+
+        self.assertEqual(len(self._xp_events("calendar_task_completed_no_time")), 1)
+        self.assertEqual(len(self._xp_events("day_fully_planned")), 1)
+
+    def test_adding_time_between_toggles_mints_no_second_award(self) -> None:
+        """Completing once timeless then once timed must not award both."""
+        self._seed_daily_activity()
+        task = CalendarTask(title="Farm", date=dt.date(2099, 7, 20))
+        self.db.add(task)
+        self.db.commit()
+
+        from routers.calendar_tasks import _award_task_xp
+
+        _award_task_xp(self.db, task)
+        task.start_time = dt.time(10, 0)
+        self.db.commit()
+        _award_task_xp(self.db, task)
+        self.db.commit()
+
+        self.assertEqual(len(self._xp_events("calendar_task_completed_no_time")), 1)
+        self.assertEqual(self._xp_events("calendar_task_completed"), [])
+
+    def test_fully_planned_bonus_once_per_date(self) -> None:
+        """A re-completed task re-triggers the open_left == 0 check — the
+        day's bonus must still have been recorded only once."""
+        self._seed_daily_activity()
+        day = dt.date(2099, 7, 20)
+        a = CalendarTask(title="A", date=day)
+        b = CalendarTask(title="B", date=day)
+        self.db.add_all([a, b])
+        self.db.commit()
+
+        from routers.calendar_tasks import _award_task_xp
+
+        # Both complete in turn; the second completion awards the bonus.
+        a.done = True
+        _award_task_xp(self.db, a)
+        b.done = True
+        _award_task_xp(self.db, b)
+        self.db.commit()
+        self.assertEqual(len(self._xp_events("day_fully_planned")), 1)
+
+        # b is re-opened and re-completed: its own XP is idempotent and the
+        # day bonus for `day` was already recorded.
+        _award_task_xp(self.db, b)
+        self.db.commit()
+
+        self.assertEqual(len(self._xp_events("calendar_task_completed_no_time")), 2)
+        self.assertEqual(len(self._xp_events("day_fully_planned")), 1)
+
 
 class XPTableTest(CalendarTaskXPTestBase):
     def test_new_events_in_default_table(self) -> None:

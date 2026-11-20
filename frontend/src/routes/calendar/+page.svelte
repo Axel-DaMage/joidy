@@ -29,7 +29,14 @@
   }
 
   type DayItem =
-    | { kind: 'google'; time: string | null; label: string; location?: string | null; allDay: boolean }
+    | {
+        kind: 'google';
+        id: string;
+        time: string | null;
+        label: string;
+        location?: string | null;
+        allDay: boolean;
+      }
     | { kind: 'task'; time: string | null; label: string; task: CalendarTask };
 
   const PRIORITIES: CalendarTaskPriority[] = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
@@ -42,7 +49,9 @@
 
   type CalendarView = 'month' | 'week' | 'agenda';
   let currentView = $state<CalendarView>(
-    (typeof localStorage !== 'undefined' && (localStorage.getItem('joidy-calendar-view') as CalendarView)) || 'month'
+    (typeof localStorage !== 'undefined' &&
+      (localStorage.getItem('joidy-calendar-view') as CalendarView)) ||
+      'month'
   );
   let weekOffset = $state(0);
 
@@ -75,16 +84,33 @@
     minute: '2-digit',
   });
 
+  const pad2 = (n: number): string => String(n).padStart(2, '0');
+
+  function localDayKey(d: Date): string {
+    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  }
+
+  function currentDayKey(): string {
+    return localDayKey(new Date());
+  }
+
+  // The browser's IANA zone, sent with `dateTime` payloads so Google anchors
+  // naive local times to the right zone (Google EventDateTime.timeZone).
+  const localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
   function eventDay(event: CalendarEvent): string {
-    const d = new Date(event.start_at);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    // All-day events are cached as UTC midnight (`YYYY-MM-DDT00:00:00Z`);
+    // passing that through Date shifts them onto the previous day in
+    // negative-offset zones. Bucket them by the raw date prefix instead.
+    if (event.all_day) return event.start_at.slice(0, 10);
+    return localDayKey(new Date(event.start_at));
   }
 
   function taskDay(task: CalendarTask): string | null {
     return task.date;
   }
 
-  const todayKey = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`;
+  let todayKey = $state(currentDayKey());
 
   // Grid cells (Monday-first): 6 weeks × 7 days, with in-month flags.
   let gridCells = $derived.by(() => {
@@ -138,11 +164,20 @@
 
   let monthItems = $derived.by(() => {
     const byDay = new Map<string, DayItem[]>();
+    // A task mirrored to Google (google_event_id) renders as the editable
+    // task chip only — skip its cached read-only Google copy so it doesn't
+    // appear twice on the same day.
+    const mirroredGoogleIds = new Set(
+      tasks.map((t) => t.google_event_id).filter((id): id is string => id !== null)
+    );
     for (const [key, evts] of monthEvents) {
+      const visible = evts.filter((ev) => !mirroredGoogleIds.has(ev.google_id));
+      if (visible.length === 0) continue;
       byDay.set(
         key,
-        evts.map((ev) => ({
+        visible.map((ev) => ({
           kind: 'google' as const,
+          id: ev.google_id,
           time: ev.all_day ? null : dtFormatter.format(new Date(ev.start_at)),
           label: ev.summary || '—',
           location: ev.location,
@@ -175,7 +210,8 @@
     tasks.filter((t) => t.date === null).sort((a, b) => a.created_at.localeCompare(b.created_at))
   );
   let trayCollapsed = $state(
-    typeof localStorage !== 'undefined' && localStorage.getItem('joidy-calendar-tray-collapsed') === '1'
+    typeof localStorage !== 'undefined' &&
+      localStorage.getItem('joidy-calendar-tray-collapsed') === '1'
   );
   let trayAddTitle = $state('');
   let trayAdding = $state(false);
@@ -191,7 +227,11 @@
   let weekDays = $derived.by(() => {
     const today = new Date();
     const dayOfWeek = (today.getDay() + 6) % 7; // Monday = 0
-    const monday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - dayOfWeek + weekOffset * 7);
+    const monday = new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      today.getDate() - dayOfWeek + weekOffset * 7
+    );
     const days: { day: number; key: string; weekdayIndex: number; monthName: string }[] = [];
     for (let i = 0; i < 7; i++) {
       const d = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
@@ -210,10 +250,18 @@
     if (weekDays.length === 0) return '';
     const first = weekDays[0];
     const last = weekDays[6];
+    // Year comes from the week itself: `viewYear` tracks month navigation,
+    // which week navigation (weekOffset) never touches.
+    const firstYear = first.key.slice(0, 4);
+    const lastYear = last.key.slice(0, 4);
     if (first.monthName === last.monthName) {
-      return `${first.day} - ${last.day} ${first.monthName} ${viewYear}`;
+      return `${first.day} - ${last.day} ${first.monthName} ${firstYear}`;
     }
-    return `${first.day} ${first.monthName} - ${last.day} ${last.monthName} ${viewYear}`;
+    const firstPart =
+      firstYear !== lastYear
+        ? `${first.day} ${first.monthName} ${firstYear}`
+        : `${first.day} ${first.monthName}`;
+    return `${firstPart} - ${last.day} ${last.monthName} ${lastYear}`;
   });
 
   // Agenda view: Next 14 days starting from today (or selectedDay if set)
@@ -229,6 +277,24 @@
     return days;
   });
 
+  // Union of every view's visible day range — bounds the cached-events and
+  // task fetches so we never pull the whole table. Keys are YYYY-MM-DD
+  // strings, so lexicographic compare orders them.
+  let fetchRange = $derived.by(() => {
+    const firsts = [gridCells[0]?.key, weekDays[0]?.key, agendaDays[0]?.key].filter(
+      (k): k is string => k !== undefined
+    );
+    const lasts = [
+      gridCells[gridCells.length - 1]?.key,
+      weekDays[weekDays.length - 1]?.key,
+      agendaDays[agendaDays.length - 1]?.key,
+    ].filter((k): k is string => k !== undefined);
+    return {
+      start: firsts.reduce((a, b) => (b < a ? b : a)),
+      end: lasts.reduce((a, b) => (b > a ? b : a)),
+    };
+  });
+
   function prevRange(): void {
     if (currentView === 'week') {
       weekOffset -= 1;
@@ -240,6 +306,7 @@
         viewMonth -= 1;
       }
     }
+    void refresh();
   }
 
   function nextRange(): void {
@@ -253,13 +320,16 @@
         viewMonth += 1;
       }
     }
+    void refresh();
   }
 
   function goToday(): void {
     viewYear = new Date().getFullYear();
     viewMonth = new Date().getMonth();
     weekOffset = 0;
+    todayKey = currentDayKey();
     selectedDay = todayKey;
+    void refresh();
   }
 
   function eventTime(ev: CalendarEvent): string {
@@ -269,14 +339,21 @@
 
   async function refresh(): Promise<void> {
     try {
-      const [evts, st, tks] = await Promise.all([
-        api.google.calendarEvents(),
+      todayKey = currentDayKey();
+      // The cache stores all-day events at UTC midnight, which in
+      // negative-offset zones is an instant on the previous local day —
+      // pad the lower bound by one day so those rows are still returned.
+      const eventsStart = new Date(`${addDays(fetchRange.start, -1)}T00:00:00`).toISOString();
+      const eventsEnd = new Date(`${fetchRange.end}T23:59:59.999`).toISOString();
+      const [evts, st, scheduled, unscheduled] = await Promise.all([
+        api.google.calendarEvents({ start: eventsStart, end: eventsEnd }),
         api.google.calendarStatus(),
-        api.calendarTasks.list(),
+        api.calendarTasks.list({ start: fetchRange.start, end: fetchRange.end }),
+        api.calendarTasks.list({ unscheduled: true }),
       ]);
       events = evts;
       status = st;
-      tasks = tks;
+      tasks = [...scheduled, ...unscheduled];
     } catch (e) {
       logger.error(e);
     } finally {
@@ -323,16 +400,9 @@
       });
       if (publishToGoogle && status?.connected) {
         try {
-          const start = quickAddTime
-            ? `${selectedDay}T${quickAddTime}:00`
-            : selectedDay;
-          const end = quickAddTime
-            ? `${selectedDay}T${addHour(quickAddTime)}:00`
-            : selectedDay;
           const created = await api.google.calendarCreateEvent({
             summary: title,
-            start: quickAddTime ? { dateTime: start } : { date: start },
-            end: quickAddTime ? { dateTime: end } : { date: end },
+            ...googleWindow(selectedDay, quickAddTime || null, null),
           });
           const mirrored = await api.calendarTasks.update(task.id, {
             google_event_id: created.google_id,
@@ -374,10 +444,46 @@
     }
   }
 
-  function addHour(hhmm: string): string {
-    const [h, m] = hhmm.split(':').map(Number);
-    const nh = (h + 1) % 24;
-    return `${String(nh).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  function addDays(dayKey: string, days: number): string {
+    // Anchor at local noon so adding days across a DST transition stays
+    // stable.
+    const d = new Date(`${dayKey}T12:00:00`);
+    d.setDate(d.getDate() + days);
+    return localDayKey(d);
+  }
+
+  // `hhmm` on `day` plus one real hour, returned as `YYYY-MM-DDTHH:mm:ss`.
+  // Date-based so 23:30 rolls into the next day — the old string math
+  // wrapped to 00:30 on the same day, producing end < start which Google
+  // rejects.
+  function addHour(day: string, hhmm: string): string {
+    const start = new Date(`${day}T${hhmm.slice(0, 5)}:00`);
+    const end = new Date(start.getTime() + 3600e3);
+    return `${localDayKey(end)}T${pad2(end.getHours())}:${pad2(end.getMinutes())}:00`;
+  }
+
+  // Build the Google EventDateTime pair for a task's window. All-day tasks
+  // publish `{date}`; Google's end.date is EXCLUSIVE, so it must be the day
+  // after — same-day start+end is a zero-length event Google rejects.
+  // Timed tasks publish `dateTime` + `timeZone` so naive local times are
+  // anchored to the browser zone.
+  function googleWindow(
+    day: string,
+    startTime: string | null,
+    endTime: string | null
+  ): {
+    start: { dateTime?: string; date?: string; timeZone?: string };
+    end: { dateTime?: string; date?: string; timeZone?: string };
+  } {
+    if (!startTime) {
+      return { start: { date: day }, end: { date: addDays(day, 1) } };
+    }
+    const hhmm = startTime.slice(0, 5);
+    const end = endTime ? `${day}T${endTime.slice(0, 5)}:00` : addHour(day, hhmm);
+    return {
+      start: { dateTime: `${day}T${hhmm}:00`, timeZone: localTimeZone },
+      end: { dateTime: end, timeZone: localTimeZone },
+    };
   }
 
   function cyclePriority(task: CalendarTask): void {
@@ -445,16 +551,11 @@
         // The edit form only lives in the day panel — unscheduled tasks
         // (date === null) never reach this path.
         if (!day) return;
-        const start = editTime ? `${day}T${editTime}:00` : day;
-        const end = editEndTime
-          ? `${day}T${editEndTime}:00`
-          : editTime
-            ? `${day}T${addHour(editTime)}:00`
-            : day;
+        const { start, end } = googleWindow(day, editTime || null, editEndTime || null);
         await api.google.calendarUpdateEvent(task.google_event_id, {
           summary: title,
-          start: editTime ? { dateTime: start } : { date: start },
-          end: editTime ? { dateTime: end } : { date: end },
+          start,
+          end,
         });
         await refresh();
       } catch (e) {
@@ -513,16 +614,19 @@
       // Rollback
       tasks = tasks.map((t) => (t.id === task.id ? { ...t, date: previousDate } : t));
       showNotification($t('calendar.taskUpdateError'), 'error');
+      return;
     }
-  }
-
-  async function undoReschedule(task: CalendarTask, previousDate: string): Promise<void> {
-    try {
-      const updated = await api.calendarTasks.update(task.id, { date: previousDate });
-      tasks = tasks.map((t) => (t.id === updated.id ? updated : t));
-    } catch (e) {
-      logger.error(e);
-      showNotification($t('calendar.taskUpdateError'), 'error');
+    // Write-back parity: drag&drop moves the mirrored Google event too.
+    // A Google failure is non-blocking — the local reschedule stands.
+    if (task.google_event_id && status?.connected) {
+      try {
+        const { start, end } = googleWindow(newDate, task.start_time, task.end_time);
+        await api.google.calendarUpdateEvent(task.google_event_id, { start, end });
+        await refresh();
+      } catch (e) {
+        logger.warn('Google reschedule failed', e);
+        showNotification($t('calendar.googlePublishError'), 'error');
+      }
     }
   }
 
@@ -612,7 +716,12 @@
     <div class="loading-state caption">{$t('calendar.loading')}</div>
   {:else if status && !status.connected}
     <div class="empty-wrap">
-      <EmptyState title={$t('calendar.notConnected')} message={$t('calendar.notConnectedHint')} actionLabel={$t('calendar.goToSettings')} onAction={openSettings}>
+      <EmptyState
+        title={$t('calendar.notConnected')}
+        message={$t('calendar.notConnectedHint')}
+        actionLabel={$t('calendar.goToSettings')}
+        onAction={openSettings}
+      >
         {#snippet icon()}<Settings size={44} />{/snippet}
       </EmptyState>
     </div>
@@ -624,22 +733,28 @@
             <button
               class="btn btn-ghost view-btn"
               class:active={currentView === 'month'}
-              onclick={() => setView('month')}
-            >{$t('calendar.views.month')}</button>
+              onclick={() => setView('month')}>{$t('calendar.views.month')}</button
+            >
             <button
               class="btn btn-ghost view-btn"
               class:active={currentView === 'week'}
-              onclick={() => setView('week')}
-            >{$t('calendar.views.week')}</button>
+              onclick={() => setView('week')}>{$t('calendar.views.week')}</button
+            >
             <button
               class="btn btn-ghost view-btn"
               class:active={currentView === 'agenda'}
-              onclick={() => setView('agenda')}
-            >{$t('calendar.views.agenda')}</button>
+              onclick={() => setView('agenda')}>{$t('calendar.views.agenda')}</button
+            >
           </div>
 
           {#if currentView !== 'agenda'}
-            <button class="btn btn-ghost nav-btn" onclick={prevRange} aria-label={currentView === 'week' ? $t('calendar.prevWeek') : $t('calendar.prevMonth')}>
+            <button
+              class="btn btn-ghost nav-btn"
+              onclick={prevRange}
+              aria-label={currentView === 'week'
+                ? $t('calendar.prevWeek')
+                : $t('calendar.prevMonth')}
+            >
               <ChevronLeft size={16} />
             </button>
           {/if}
@@ -650,14 +765,20 @@
             {:else if currentView === 'week'}
               {weekLabel}
             {:else}
-              {$t('calendar.views.agenda')} (14 {$t('calendar.today').toLowerCase() == 'hoy' ? 'días' : 'days'})
+              {$t('calendar.views.agenda')} (14 {$t('calendar.agendaDays')})
             {/if}
           </span>
 
           <button class="btn btn-ghost nav-btn" onclick={goToday}>{$t('calendar.today')}</button>
 
           {#if currentView !== 'agenda'}
-            <button class="btn btn-ghost nav-btn" onclick={nextRange} aria-label={currentView === 'week' ? $t('calendar.nextWeek') : $t('calendar.nextMonth')}>
+            <button
+              class="btn btn-ghost nav-btn"
+              onclick={nextRange}
+              aria-label={currentView === 'week'
+                ? $t('calendar.nextWeek')
+                : $t('calendar.nextMonth')}
+            >
               <ChevronRight size={16} />
             </button>
           {/if}
@@ -699,8 +820,8 @@
                         tabindex="-1"
                         draggable="true"
                         ondragstart={(e) => onChipDragStart(e, item.task)}
-                        ondragend={onChipDragEnd}
-                      >{item.label}</span>
+                        ondragend={onChipDragEnd}>{item.label}</span
+                      >
                     {/if}
                   {/each}
                   {#if items.length > 2}
@@ -714,7 +835,8 @@
           <div class="weekday-row">
             {#each weekDays as day}
               <span class="weekday caption" class:bold={day.key === todayKey}>
-                {$t(`calendar.weekDays.${day.weekdayIndex}`)} {day.day}
+                {$t(`calendar.weekDays.${day.weekdayIndex}`)}
+                {day.day}
               </span>
             {/each}
           </div>
@@ -728,7 +850,7 @@
                 class:selected={selectedDay === day.key}
                 class:drop-target={dropTargetKey === day.key}
                 role="region"
-                aria-label="{day.key}"
+                aria-label={day.key}
                 ondragover={(e) => onCellDragOver(e, day.key)}
                 ondragleave={() => onCellDragLeave(day.key)}
                 ondrop={(e) => onCellDrop(e, day.key)}
@@ -778,21 +900,32 @@
                 role="button"
                 tabindex="0"
                 onclick={() => (selectedDay = selectedDay === day.key ? null : day.key)}
-                onkeydown={(e) => e.key === 'Enter' && (selectedDay = selectedDay === day.key ? null : day.key)}
+                onkeydown={(e) =>
+                  e.key === 'Enter' && (selectedDay = selectedDay === day.key ? null : day.key)}
               >
                 <div class="agenda-date-badge">
                   <span class="day-num">{day.date.getDate()}</span>
-                  <span class="caption">{day.date.toLocaleDateString(undefined, { weekday: 'short', month: 'short' })}</span>
+                  <span class="caption"
+                    >{day.date.toLocaleDateString(undefined, {
+                      weekday: 'short',
+                      month: 'short',
+                    })}</span
+                  >
                 </div>
                 <div class="agenda-day-items">
                   {#if day.items.length === 0}
                     <span class="caption empty-agenda-day">{$t('calendar.noEventsDay')}</span>
                   {:else}
                     {#each day.items as item}
-                      <div class="agenda-item-pill" class:done={item.kind === 'task' && item.task.done}>
+                      <div
+                        class="agenda-item-pill"
+                        class:done={item.kind === 'task' && item.task.done}
+                      >
                         {#if item.kind === 'google'}
                           <Lock size={9} class="lock-icon" />
-                          <span class="chip-time caption">{item.allDay ? $t('calendar.allDay') : item.time}</span>
+                          <span class="chip-time caption"
+                            >{item.allDay ? $t('calendar.allDay') : item.time}</span
+                          >
                           <span class="pill-title">{item.label}</span>
                         {:else}
                           <span class="priority-dot {priorityClass(item.task.priority)}"></span>
@@ -822,11 +955,15 @@
             <span class="caption">{$t('calendar.noEventsDay')}</span>
           {:else}
             <div class="event-list">
-              {#each selectedDayItems as item (item.kind === 'google' ? `g-${item.label}-${item.time}` : `t-${item.task.id}`)}
+              {#each selectedDayItems as item (item.kind === 'google' ? `g-${item.id}` : `t-${item.task.id}`)}
                 {#if item.kind === 'google'}
                   <div class="event-item">
-                    <span class="event-time caption">{item.allDay ? $t('calendar.allDay') : item.time}</span>
-                    <span class="event-summary"><Lock size={10} class="lock-icon" /> {item.label}</span>
+                    <span class="event-time caption"
+                      >{item.allDay ? $t('calendar.allDay') : item.time}</span
+                    >
+                    <span class="event-summary"
+                      ><Lock size={10} class="lock-icon" /> {item.label}</span
+                    >
                     {#if item.location}
                       <span class="event-location caption">{item.location}</span>
                     {/if}
@@ -835,16 +972,29 @@
                   <div class="event-item task-item" class:done={item.task.done}>
                     {#if editingTaskId === item.task.id}
                       <div class="edit-form">
-                        <input class="input edit-input" type="text" bind:value={editTitle} maxlength="500" />
+                        <input
+                          class="input edit-input"
+                          type="text"
+                          bind:value={editTitle}
+                          maxlength="500"
+                        />
                         <div class="edit-times">
                           <input class="input edit-input" type="time" bind:value={editTime} />
                           <input class="input edit-input" type="time" bind:value={editEndTime} />
                         </div>
                         <div class="edit-actions">
-                          <button class="btn btn-ghost icon-btn" onclick={() => saveEdit(item.task)} aria-label={$t('calendar.save')}>
+                          <button
+                            class="btn btn-ghost icon-btn"
+                            onclick={() => saveEdit(item.task)}
+                            aria-label={$t('calendar.save')}
+                          >
                             <Check size={13} />
                           </button>
-                          <button class="btn btn-ghost icon-btn" onclick={() => (editingTaskId = null)} aria-label={$t('calendar.cancel')}>
+                          <button
+                            class="btn btn-ghost icon-btn"
+                            onclick={() => (editingTaskId = null)}
+                            aria-label={$t('calendar.cancel')}
+                          >
                             <X size={13} />
                           </button>
                         </div>
@@ -859,15 +1009,28 @@
                         <Check size={12} />
                       </button>
                       <span class="event-time caption">{item.time ?? '·'}</span>
-                      <button class="prio-btn {priorityClass(item.task.priority)}" onclick={() => cyclePriority(item.task)} title={$t('calendar.priority')} aria-label={$t('calendar.priority')}>
+                      <button
+                        class="prio-btn {priorityClass(item.task.priority)}"
+                        onclick={() => cyclePriority(item.task)}
+                        title={$t('calendar.priority')}
+                        aria-label={$t('calendar.priority')}
+                      >
                         {item.task.priority.slice(0, 1)}
                       </button>
                       <span class="event-summary">{item.task.title}</span>
                       <span class="task-actions">
-                        <button class="btn btn-ghost icon-btn" onclick={() => startEdit(item.task)} aria-label={$t('calendar.edit')}>
+                        <button
+                          class="btn btn-ghost icon-btn"
+                          onclick={() => startEdit(item.task)}
+                          aria-label={$t('calendar.edit')}
+                        >
                           <Pencil size={12} />
                         </button>
-                        <button class="btn btn-ghost icon-btn" onclick={() => removeTask(item.task)} aria-label={$t('calendar.delete')}>
+                        <button
+                          class="btn btn-ghost icon-btn"
+                          onclick={() => removeTask(item.task)}
+                          aria-label={$t('calendar.delete')}
+                        >
                           <Trash2 size={12} />
                         </button>
                       </span>
@@ -878,7 +1041,13 @@
             </div>
           {/if}
 
-          <form class="quick-add" onsubmit={(e) => { e.preventDefault(); addTask(); }}>
+          <form
+            class="quick-add"
+            onsubmit={(e) => {
+              e.preventDefault();
+              addTask();
+            }}
+          >
             <input
               class="input quick-input"
               type="text"
@@ -887,8 +1056,18 @@
               maxlength="500"
               disabled={addingTask}
             />
-            <input class="input quick-time" type="time" bind:value={quickAddTime} disabled={addingTask} />
-            <select class="input quick-prio" bind:value={quickAddPriority} disabled={addingTask} aria-label={$t('calendar.priority')}>
+            <input
+              class="input quick-time"
+              type="time"
+              bind:value={quickAddTime}
+              disabled={addingTask}
+            />
+            <select
+              class="input quick-prio"
+              bind:value={quickAddPriority}
+              disabled={addingTask}
+              aria-label={$t('calendar.priority')}
+            >
               {#each PRIORITIES as p}
                 <option value={p}>{p}</option>
               {/each}
@@ -896,10 +1075,16 @@
             {#if status?.connected}
               <label class="publish-toggle" title={$t('calendar.publishToGoogleHint')}>
                 <input type="checkbox" bind:checked={publishToGoogle} disabled={addingTask} />
-                <span class="publish-label"><Lock size={10} />{$t('calendar.publishToGoogle')}</span>
+                <span class="publish-label"><Lock size={10} />{$t('calendar.publishToGoogle')}</span
+                >
               </label>
             {/if}
-            <button type="submit" class="btn btn-icon quick-submit" disabled={addingTask || !quickAddTitle.trim()} aria-label={$t('calendar.addTask')}>
+            <button
+              type="submit"
+              class="btn btn-icon quick-submit"
+              disabled={addingTask || !quickAddTitle.trim()}
+              aria-label={$t('calendar.addTask')}
+            >
               <Plus size={14} />
             </button>
           </form>
@@ -933,7 +1118,13 @@
           <span class="tray-count caption">{unscheduledTasks.length}</span>
         </button>
         {#if !trayCollapsed}
-          <form class="tray-add" onsubmit={(e) => { e.preventDefault(); addUnscheduledTask(); }}>
+          <form
+            class="tray-add"
+            onsubmit={(e) => {
+              e.preventDefault();
+              addUnscheduledTask();
+            }}
+          >
             <input
               class="input tray-add-input"
               type="text"
@@ -942,7 +1133,12 @@
               maxlength="500"
               disabled={trayAdding}
             />
-            <button type="submit" class="btn btn-icon quick-submit" disabled={trayAdding || !trayAddTitle.trim()} aria-label={$t('calendar.addTask')}>
+            <button
+              type="submit"
+              class="btn btn-icon quick-submit"
+              disabled={trayAdding || !trayAddTitle.trim()}
+              aria-label={$t('calendar.addTask')}
+            >
               <Plus size={14} />
             </button>
           </form>
@@ -974,7 +1170,11 @@
                 </button>
                 <span class="priority-dot {priorityClass(task.priority)}"></span>
                 <span class="tray-task-title">{task.title}</span>
-                <button class="btn btn-ghost icon-btn" onclick={() => removeTask(task)} aria-label={$t('calendar.delete')}>
+                <button
+                  class="btn btn-ghost icon-btn"
+                  onclick={() => removeTask(task)}
+                  aria-label={$t('calendar.delete')}
+                >
                   <Trash2 size={12} />
                 </button>
               </div>
@@ -1426,10 +1626,18 @@
     background: transparent;
   }
 
-  .prio-low { color: var(--text-muted); }
-  .prio-medium { color: var(--accent); }
-  .prio-high { color: #e08c3a; }
-  .prio-urgent { color: #d9534f; }
+  .prio-low {
+    color: var(--text-muted);
+  }
+  .prio-medium {
+    color: var(--accent);
+  }
+  .prio-high {
+    color: #e08c3a;
+  }
+  .prio-urgent {
+    color: #d9534f;
+  }
 
   .day-detail {
     background: var(--surface);
