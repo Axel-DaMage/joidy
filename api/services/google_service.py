@@ -7,7 +7,7 @@ from config import settings
 from services.http_client import http_client
 
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
-GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"  # noqa: S105 — OAuth endpoint URL, not a password
 GOOGLE_CALENDAR_API = "https://www.googleapis.com/calendar/v3"
 GOOGLE_TASKS_API = "https://tasks.googleapis.com/tasks/v1"
 GOOGLE_GMAIL_API = "https://gmail.googleapis.com/gmail/v1"

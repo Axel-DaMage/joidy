@@ -78,7 +78,12 @@ export default tseslint.config(
 			'@typescript-eslint/no-require-imports': 'warn',
 			'@typescript-eslint/no-empty-interface': 'off',
 			'@typescript-eslint/ban-ts-comment': 'warn',
-			'@typescript-eslint/no-wrapper-object-types': 'warn'
+			'@typescript-eslint/no-wrapper-object-types': 'warn',
+			// Baselined for the CI eslint gate (#1257): fires on goto() calls
+			// in plain .ts helpers (e.g. lib/utils/notesPage.ts), not only
+			// inside .svelte files. Pre-existing debt stays a warning so CI
+			// fails only on NEW error-severity findings — fix and tighten.
+			'svelte/no-navigation-without-resolve': 'warn'
 		}
 	},
 
@@ -96,7 +101,12 @@ export default tseslint.config(
 			'svelte/prefer-svelte-reactivity': 'warn',
 			'svelte/infinite-reactive-loop': 'warn',
 			'svelte/no-reactive-reassign': 'warn',
-			'svelte/no-immutable-reactive-statements': 'warn'
+			'svelte/no-immutable-reactive-statements': 'warn',
+			// Baselined for the CI eslint gate (#1257): existing violations in
+			// GoalEditor.svelte and ShareAchievementModal.svelte stay warnings
+			// so the gate fails only on NEW error-severity findings.
+			'svelte/prefer-writable-derived': 'warn',
+			'svelte/no-useless-children-snippet': 'warn'
 		}
 	}
 );

@@ -335,9 +335,8 @@
   }
 
   /* ── Tree rows ──
-     .tree-row wraps each row + its settings button so the button is not
-     nested inside the role="button" row (invalid interactive-in-interactive)
-     and stays in the tab order (#1268). */
+     Each .tree-row wraps its own content + settings button; the button stays
+     in the tab order and is revealed on row hover / focus-within (#1268). */
   .tree-row {
     display: flex;
     align-items: center;
