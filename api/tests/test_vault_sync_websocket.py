@@ -49,13 +49,13 @@ def _build_client(db_session):
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_current_user] = override_get_current_user
     client = TestClient(app, client=("127.0.0.1", 50000))
-    client._original_overrides = original_overrides  # type: ignore[attr-defined]
+    client._original_overrides = original_overrides
     return client
 
 
 def _teardown_client(client):
     app.dependency_overrides.clear()
-    app.dependency_overrides.update(client._original_overrides)  # type: ignore[attr-defined]
+    app.dependency_overrides.update(client._original_overrides)
 
 
 class VaultSyncBroadcastTestBase(unittest.TestCase):

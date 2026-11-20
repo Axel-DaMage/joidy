@@ -44,7 +44,8 @@ async def exchange_code(code: str) -> dict[str, Any]:
     async with http_client(timeout=30.0) as client:
         r = await client.post(SPOTIFY_TOKEN_URL, data=payload, auth=auth)
         r.raise_for_status()
-        return r.json()
+        tokens: dict[str, Any] = r.json()
+        return tokens
 
 
 async def _request(token: str, url: str, params: dict | None = None) -> Any:
@@ -62,7 +63,8 @@ async def get_recently_played(token: str, limit: int = 20) -> list[dict[str, Any
         f"{SPOTIFY_API}/me/player/recently-played",
         params={"limit": limit},
     )
-    return data.get("items", [])
+    items: list[dict[str, Any]] = data.get("items", [])
+    return items
 
 
 async def get_top_tracks(token: str, limit: int = 20) -> list[dict[str, Any]]:
@@ -72,7 +74,8 @@ async def get_top_tracks(token: str, limit: int = 20) -> list[dict[str, Any]]:
         f"{SPOTIFY_API}/me/top/tracks",
         params={"limit": limit},
     )
-    return data.get("items", [])
+    items: list[dict[str, Any]] = data.get("items", [])
+    return items
 
 
 async def get_playlists(token: str, limit: int = 20) -> list[dict[str, Any]]:
@@ -82,4 +85,5 @@ async def get_playlists(token: str, limit: int = 20) -> list[dict[str, Any]]:
         f"{SPOTIFY_API}/me/playlists",
         params={"limit": limit},
     )
-    return data.get("items", [])
+    items: list[dict[str, Any]] = data.get("items", [])
+    return items

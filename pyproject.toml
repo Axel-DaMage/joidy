@@ -24,12 +24,15 @@ ignore = [
     # parameter defaults are the framework's documented pattern, not a bug
     # (#994). ~150 occurrences across api/routers and ai-service.
     "B008",
-    # raise-without-from-inside-except: pre-existing debt (#994). Fixing ~40
-    # raise sites changes exception chaining semantics; ratchet later.
+    # raise-without-from-inside-except: pre-existing debt (#994). Fixing the
+    # raise sites changes exception chaining semantics, so the site count is
+    # pinned by scripts/ruff_budgets.txt and CI-enforced to only shrink
+    # (#1264) — fix sites, then lower the budget.
     "B904",
     # replace-str-enum: `(str, PyEnum)` classes back SQLAlchemy Enum columns;
     # switching to StrEnum alters runtime semantics (`.value` lookups,
-    # SQLAlchemy Enum handling) — needs its own dedicated PR (#994).
+    # SQLAlchemy Enum handling) — needs its own dedicated PR (#994). Site
+    # count pinned in scripts/ruff_budgets.txt like B904 (#1264).
     "UP042",
 ]
 
@@ -60,6 +63,9 @@ ignore = [
 python_version = "3.12"
 warn_return_any = true
 warn_unused_configs = true
+# Flag stale ``# type: ignore`` comments so the 40+ scattered ignores burn
+# down together with the module-level baseline (#1264).
+warn_unused_ignores = true
 disallow_untyped_defs = false
 ignore_missing_imports = true
 # CI runs one invocation per service so cwd-relative module names stay unique:
@@ -68,50 +74,31 @@ ignore_missing_imports = true
 #   cd worker      && MYPYPATH=. mypy --explicit-package-bases --config-file ../pyproject.toml .
 explicit_package_bases = true
 
-# Baseline (#994): these modules carry pre-existing typing debt (144 errors
-# total, verified against development @ 2197e32). They are temporarily
-# unchecked so CI fails on NEW errors in the ~115 modules that are clean
-# today. Ratchet: delete entries one by one as each module is fixed.
+# Baseline (#994, ratcheted in #1264): these modules still carry pre-existing
+# typing debt (107 errors total, verified against development @ ae30ffc).
+# They are temporarily unchecked so CI fails on NEW errors everywhere else.
+#
+# RATCHET — this list can only shrink:
+#   * scripts/mypy_baseline.txt pins this exact module list; CI fails if the
+#     list drifts from it in either direction (grow = new debt sneaked in,
+#     shrink = baseline file needs regenerating).
+#   * After fixing a module, delete its entry here and regenerate the
+#     baseline with `python scripts/check_quality_baselines.py --update`.
+# Remaining debt: routers.personal_streaks and the integration services need
+# SQLAlchemy Column-vs-value rework (legacy Column() declarations type
+# attribute access as Column[T], not T) — tracked per module in #1264.
 [[tool.mypy.overrides]]
 module = [
-    "database",
-    "main",
-    "middleware.metrics",
-    "middleware.request_id",
     "repositories",
-    "routers.analytics",
-    "routers.gamification",
     "routers.integrations.github",
-    "routers.notes",
     "routers.personal_streaks",
-    "routers.sync",
     "routers.system",
-    "routers.tags",
-    "services.auth_service",
     "services.email_service",
-    "services.embedding_retry",
-    "services.embedding_service",
-    "services.env_file",
     "services.github_service",
-    "services.goal_service",
     "services.google_service",
-    "services.google_token_service",
-    "services.joidy_vault_writer",
-    "services.mood_service",
-    "services.note_service",
-    "services.personal_streak_service",
-    "services.sanitizer",
-    "services.spotify_service",
-    "services.strava_service",
-    "services.webhook_sync",
-    "tests.test_goal_service",
     "tests.test_google_token_service",
     "tests.test_joidy_vault_writer",
-    "tests.test_skill_tree_service",
-    "tests.test_sync_service",
     "tests.test_webhook_sync",
-    "alembic.env",
-    "alembic.versions.*",
 ]
 ignore_errors = true
 

@@ -82,6 +82,14 @@ jobs:
           (cd ai-service && MYPYPATH=. mypy --explicit-package-bases --config-file ../pyproject.toml .)
           (cd worker && MYPYPATH=. mypy --explicit-package-bases --config-file ../pyproject.toml .)
 
+      # Ratchet (#1264): scripts/mypy_baseline.txt pins the exact mypy
+      # ignore_errors module list (grow = fail, stale = fail) and
+      # scripts/ruff_budgets.txt pins site budgets for the globally-ignored
+      # ruff rules (B904, UP042). Regenerate after burning debt down:
+      #   python scripts/check_quality_baselines.py --update
+      - name: Quality baseline ratchet
+        run: python scripts/check_quality_baselines.py
+
       # Migration gate (#994): apply the full chain onto an empty schema and
       # verify at least one downgrade+upgrade round-trip. pgvector must be
       # enabled first (init_db() does this at container start, but nothing

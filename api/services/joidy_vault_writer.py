@@ -438,7 +438,7 @@ def _goal_progress(goal: Goal, db: Session) -> str:
         from models.note import NoteTag
 
         count = db.query(NoteTag).filter(NoteTag.tag_id == goal.tag_id).count()
-        return f" ({count}/{goal.target_notes} notas)"
+        return f" ({count}/{int(goal.target_value)} notas)"
     return ""
 
 
