@@ -1018,14 +1018,39 @@ cmd_backup() {
   dir=$(backup_dir)
   mkdir -p -- "$dir"
   ts=$(date +%Y%m%d-%H%M%S)
-  file="$dir/joidy-${ts}.dump"
+  local enc_key encrypt=0
+  # env var → .env file (read_setting handles both)
+  enc_key=$(read_setting BACKUP_ENCRYPTION_KEY "")
+  if [ -n "$enc_key" ]; then
+    if command -v openssl >/dev/null 2>&1; then
+      encrypt=1
+      file="$dir/joidy-${ts}.dump.enc"
+    else
+      print_warn "BACKUP_ENCRYPTION_KEY is set but openssl is not installed — writing an UNENCRYPTED dump"
+      file="$dir/joidy-${ts}.dump"
+    fi
+  else
+    file="$dir/joidy-${ts}.dump"
+  fi
   print_status "Dumping '$pg_db' → $file"
   # Local socket auth inside the postgres container is trust, so no password is
   # needed here. Write to a temp name first: a failed dump never leaves a
   # truncated archive masquerading as a good backup. umask 077 in the subshell
   # makes the archive owner-only from creation — dumps contain the full DB
-  # contents, including secrets (#1281).
-  if (umask 077; dc exec -T postgres pg_dump -Fc -U "$pg_user" -d "$pg_db" > "$file.tmp"); then
+  # contents, including secrets (#1281). With BACKUP_ENCRYPTION_KEY set the
+  # dump stream is piped through openssl AES-256-CBC so plaintext never
+  # touches disk (#1286).
+  if [ "$encrypt" -eq 1 ]; then
+    if (umask 077; dc exec -T postgres pg_dump -Fc -U "$pg_user" -d "$pg_db" \
+      | BACKUP_ENCRYPTION_KEY="$enc_key" openssl enc -aes-256-cbc -pbkdf2 -salt \
+        -pass env:BACKUP_ENCRYPTION_KEY > "$file.tmp"); then
+      mv -- "$file.tmp" "$file"
+    else
+      rm -f -- "$file.tmp"
+      print_err "pg_dump/encryption failed"
+      exit 1
+    fi
+  elif (umask 077; dc exec -T postgres pg_dump -Fc -U "$pg_user" -d "$pg_db" > "$file.tmp"); then
     mv -- "$file.tmp" "$file"
   else
     rm -f -- "$file.tmp"
@@ -1066,6 +1091,31 @@ cmd_restore() {
     echo "  Dumps live in: $(backup_dir)" >&2
     exit 1
   fi
+  # Encrypted dumps (*.dump.enc, #1286) are decrypted to a temp file first;
+  # the rest of the flow then sees a normal pg_dump custom archive.
+  # display_name keeps the original path for user-facing messages after
+  # `file` is repointed at the temp copy.
+  local display_name="$file"
+  if [ "${file%.enc}" != "$file" ]; then
+    local enc_key dec_tmp
+    enc_key=$(read_setting BACKUP_ENCRYPTION_KEY "")
+    if [ -z "$enc_key" ]; then
+      print_err "'$file' is encrypted — set BACKUP_ENCRYPTION_KEY (env or .env) to decrypt it."
+      exit 1
+    fi
+    if ! command -v openssl >/dev/null 2>&1; then
+      print_err "openssl is required to decrypt '$file' but is not installed."
+      exit 1
+    fi
+    dec_tmp="$(mktemp "${TMPDIR:-/tmp}/joidy-restore-XXXXXX.dump")"
+    trap 'rm -f "$dec_tmp"' EXIT
+    if ! BACKUP_ENCRYPTION_KEY="$enc_key" openssl enc -d -aes-256-cbc -pbkdf2 \
+      -pass env:BACKUP_ENCRYPTION_KEY -in "$file" -out "$dec_tmp"; then
+      print_err "Decryption failed — wrong BACKUP_ENCRYPTION_KEY?"
+      exit 1
+    fi
+    file="$dec_tmp"
+  fi
   if [ "$(head -c 5 -- "$file" 2>/dev/null)" != "PGDMP" ]; then
     print_err "'$file' is not a pg_dump custom-format archive (missing PGDMP header)"
     exit 1
@@ -1079,10 +1129,10 @@ cmd_restore() {
   if [ -n "$n_tables" ] && [ "$n_tables" -gt 0 ] && [ "$force" -ne 1 ]; then
     print_err "Database '$pg_db' is live ($n_tables tables) — refusing to overwrite without --force."
     echo "  The restore runs pg_restore --clean, which drops existing objects first."
-    echo "  To proceed:  joidy restore $file --force"
+    echo "  To proceed:  joidy restore $display_name --force"
     exit 1
   fi
-  print_status "Restoring $file → '$pg_db'"
+  print_status "Restoring $display_name → '$pg_db'"
   cat -- "$file" | dc exec -T postgres \
     pg_restore -U "$pg_user" -d "$pg_db" --clean --if-exists --no-owner --no-privileges
   print_ok "Restore complete."
@@ -1127,6 +1177,9 @@ Scheduled backups: `joidy up` starts the `backup` sidecar automatically —
 pg_dump -Fc on BACKUP_SCHEDULE (cron, default "0 3 * * *"), dumps in
 <data>/backups (or JOIDY_BACKUP_DIR), pruned to BACKUP_RETENTION_DAYS daily +
 BACKUP_RETENTION_WEEKS weekly dumps. Set BACKUP_ENABLED=false to opt out.
+Set BACKUP_ENCRYPTION_KEY to encrypt dumps with AES-256-CBC (openssl) —
+files are written as *.dump.enc and `joidy restore` decrypts them with the
+same key (#1286). Dumps are plaintext otherwise — see SECURITY.md.
 Verify backups end-to-end with: make backup-verify
 
 Power management (Settings → Servicios): DISABLED by default (#1278).

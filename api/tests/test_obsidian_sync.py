@@ -1,5 +1,6 @@
 """Tests for Obsidian sync state and webhook endpoint."""
 
+import logging
 from datetime import UTC, datetime
 from unittest.mock import patch
 
@@ -306,6 +307,72 @@ def test_webhook_new_endpoint_with_valid_secret(client, db_session):
     )
     assert resp.status_code == 200
     assert resp.json()["action"] == "created"
+
+
+@patch("config.settings.obsidian_webhook_secret", "test-secret")
+def test_webhook_accepts_x_webhook_secret_header(client, db_session):
+    """#1288: the preferred transport for the webhook secret is the
+    X-Webhook-Secret header."""
+    resp = client.post(
+        "/webhook/obsidian",
+        json={
+            "event": "create",
+            "path": "/vault/header-secret.md",
+            "content": "test content",
+        },
+        headers={"X-Webhook-Secret": "test-secret"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["action"] == "created"
+
+
+@patch("config.settings.obsidian_webhook_secret", "test-secret")
+def test_webhook_rejects_wrong_secret_of_any_length(client, db_session):
+    """#1288: hmac.compare_digest rejects mismatched secrets of any length —
+    short, prefix-matching and longer guesses all get 401."""
+    for bad_secret in ("x", "test-secre", "test-secret-extra"):
+        resp = client.post(
+            "/webhook/obsidian",
+            json={"event": "create", "path": "/vault/bad-secret.md", "content": "x"},
+            headers={"X-Webhook-Secret": bad_secret},
+        )
+        assert resp.status_code == 401, bad_secret
+
+
+@patch("config.settings.obsidian_webhook_secret", "test-secret")
+def test_webhook_query_secret_still_works_but_warns(client, db_session, caplog):
+    """#1288: ?secret= is deprecated — kept working for backward compat but
+    logs a deprecation warning."""
+    with caplog.at_level(logging.WARNING, logger="routers.obsidian"):
+        resp = client.post(
+            "/webhook/obsidian?secret=test-secret",
+            json={"event": "create", "path": "/vault/deprecated.md", "content": "x"},
+        )
+    assert resp.status_code == 200
+    assert "deprecated" in caplog.text
+
+
+@patch("config.settings.obsidian_webhook_secret", "test-secret")
+def test_webhook_header_secret_no_deprecation_warning(client, db_session, caplog):
+    with caplog.at_level(logging.WARNING, logger="routers.obsidian"):
+        resp = client.post(
+            "/webhook/obsidian",
+            json={"event": "create", "path": "/vault/header-ok.md", "content": "x"},
+            headers={"X-Webhook-Secret": "test-secret"},
+        )
+    assert resp.status_code == 200
+    assert "deprecated" not in caplog.text
+
+
+@patch("config.settings.obsidian_webhook_secret", "test-secret")
+def test_webhook_header_takes_precedence_over_query(client, db_session):
+    """When both transports carry a secret, the header wins."""
+    resp = client.post(
+        "/webhook/obsidian?secret=wrong",
+        json={"event": "create", "path": "/vault/precedence.md", "content": "x"},
+        headers={"X-Webhook-Secret": "test-secret"},
+    )
+    assert resp.status_code == 200
 
 
 @patch("config.settings.obsidian_webhook_secret", "")

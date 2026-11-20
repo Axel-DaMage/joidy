@@ -18,10 +18,16 @@
 #       weeks. Default: 4
 #   BACKUP_WEEKLY_DAY
 #       Day of week kept as the weekly dump (0=Sunday … 6=Saturday). Default: 0
+#   BACKUP_ENCRYPTION_KEY
+#       Optional passphrase (#1286). When set and `openssl` is available, the
+#       pg_dump stream is piped through AES-256-CBC (PBKDF2) and written as
+#       joidy-*.dump.enc — plaintext never touches disk. Keep this key safe:
+#       without it the dumps are unrecoverable. When unset, dumps are written
+#       as plaintext .dump files (documented risk — see SECURITY.md).
 #
-# Dumps are named joidy-YYYYMMDD-HHMMSS.dump (pg_dump custom format, -Fc) and
-# are written atomically (temp file + rename) so a failed dump never leaves a
-# truncated archive in place.
+# Dumps are named joidy-YYYYMMDD-HHMMSS.dump (pg_dump custom format, -Fc;
+# .dump.enc when encrypted) and are written atomically (temp file + rename)
+# so a failed dump never leaves a truncated archive in place.
 
 set -euo pipefail
 
@@ -63,10 +69,11 @@ prune_backups() {
   daily_sec=$((BACKUP_RETENTION_DAYS * 86400))
   weekly_sec=$((BACKUP_RETENTION_WEEKS * 7 * 86400))
 
-  for f in "$BACKUP_DIR"/joidy-*.dump; do
+  for f in "$BACKUP_DIR"/joidy-*.dump "$BACKUP_DIR"/joidy-*.dump.enc; do
     [ -e "$f" ] || continue
     name="${f##*/}"
     stamp="${name#joidy-}"
+    stamp="${stamp%.enc}"
     stamp="${stamp%.dump}"
     # Skip files that don't match the expected timestamp shape.
     case "$stamp" in
@@ -98,13 +105,30 @@ run_backup() {
   # Dumps contain the full DB contents — owner-only from creation (#1281).
   umask 077
   mkdir -p -- "$BACKUP_DIR"
-  local ts name tmp
+  local ts name tmp encrypt=0
   ts=$(date +%Y%m%d-%H%M%S)
-  name="joidy-${ts}.dump"
+  if [ -n "${BACKUP_ENCRYPTION_KEY:-}" ]; then
+    if command -v openssl >/dev/null 2>&1; then
+      encrypt=1
+      name="joidy-${ts}.dump.enc"
+    else
+      err "BACKUP_ENCRYPTION_KEY is set but openssl is not available — writing an UNENCRYPTED dump"
+      name="joidy-${ts}.dump"
+    fi
+  else
+    name="joidy-${ts}.dump"
+  fi
   tmp="$BACKUP_DIR/.${name}.tmp"
   trap 'rm -f -- "$tmp"' EXIT
-  log "dumping ${PGDATABASE}@${PGHOST}:${PGPORT} → $BACKUP_DIR/$name"
-  pg_dump -Fc -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -f "$tmp"
+  if [ "$encrypt" -eq 1 ]; then
+    log "dumping ${PGDATABASE}@${PGHOST}:${PGPORT} → $BACKUP_DIR/$name (AES-256-CBC, openssl)"
+    # Stream pg_dump straight into openssl: no plaintext ever touches disk.
+    pg_dump -Fc -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" \
+      | openssl enc -aes-256-cbc -pbkdf2 -salt -pass env:BACKUP_ENCRYPTION_KEY -out "$tmp"
+  else
+    log "dumping ${PGDATABASE}@${PGHOST}:${PGPORT} → $BACKUP_DIR/$name"
+    pg_dump -Fc -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -f "$tmp"
+  fi
   mv -- "$tmp" "$BACKUP_DIR/$name"
   chmod 600 -- "$BACKUP_DIR/$name"
   trap - EXIT

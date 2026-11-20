@@ -110,10 +110,52 @@ class TestHealthAndMetadata:
         assert resp.status_code == 200
         assert "text/plain" in resp.headers["content-type"]
 
-    def test_providers_endpoint(self, ai_enabled):
-        resp = _client().get("/providers")
+    def test_providers_endpoint(self, ai_enabled, monkeypatch):
+        monkeypatch.setattr(settings, "internal_secret", "s3cr3t")
+        resp = _client().get("/providers", headers={"X-Internal-Secret": "s3cr3t"})
         assert resp.status_code == 200
         assert "gemini" in resp.json()["available"]
+
+    def test_providers_forbidden_without_secret(self, ai_enabled):
+        """#1291: /providers fails closed — 403 even when INTERNAL_SECRET is
+        not configured, so the config map is never publicly readable."""
+        resp = _client().get("/providers")
+        assert resp.status_code == 403
+
+    def test_providers_forbidden_with_wrong_secret(self, ai_enabled, monkeypatch):
+        """#1288/#1291: wrong secrets of any length are rejected."""
+        monkeypatch.setattr(settings, "internal_secret", "s3cr3t")
+        for bad in ("x", "s3cr3", "s3cr3t-plus-extra"):
+            resp = _client().get("/providers", headers={"X-Internal-Secret": bad})
+            assert resp.status_code == 403, bad
+
+    def test_health_hides_provider_inventory_unauthenticated(self, ai_enabled, monkeypatch):
+        """#1291: public /health returns no provider/model inventory."""
+        monkeypatch.setattr(settings, "internal_secret", "s3cr3t")
+        resp = _client().get("/health")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["status"] == "ok"
+        assert body["embedding_available"] is True
+        assert "provider" not in body
+        assert "fallback_enabled" not in body
+        assert "gemini" not in str(body)
+
+    def test_health_provider_details_with_internal_secret(self, ai_enabled, monkeypatch):
+        """Internal callers with a valid secret still get the inventory."""
+        monkeypatch.setattr(settings, "internal_secret", "s3cr3t")
+        resp = _client().get("/health", headers={"X-Internal-Secret": "s3cr3t"})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["provider"]["llm"]["provider"] == "gemini"
+        assert "fallback_enabled" in body
+
+    def test_health_provider_details_hidden_when_secret_unset(self, ai_enabled):
+        """With no INTERNAL_SECRET configured, nobody gets the inventory."""
+        body = _client().get("/health").json()
+        assert "provider" not in body
+        assert "fallback_enabled" not in body
+        assert body["embedding_available"] is True
 
 
 # ── /embed ─────────────────────────────────────────────────────────────
@@ -385,6 +427,18 @@ class TestInternalAuth:
     def test_health_public_even_with_secret(self, ai_enabled, monkeypatch):
         monkeypatch.setattr(settings, "internal_secret", "s3cr3t")
         assert _client().get("/health").status_code == 200
+
+    def test_secret_rejected_regardless_of_length(self, ai_enabled, monkeypatch):
+        """#1288: hmac.compare_digest rejects any non-matching secret —
+        including prefix matches and length mismatches."""
+        monkeypatch.setattr(settings, "internal_secret", "s3cr3t")
+        for bad in ("x", "s3cr3", "s3cr3t0", "s3cr3t-s3cr3t"):
+            resp = _client().post(
+                "/embed",
+                json={"note_id": 1, "content": "x"},
+                headers={"X-Internal-Secret": bad},
+            )
+            assert resp.status_code == 403, bad
 
     def test_fail_closed_in_production_without_secret(self, ai_enabled, monkeypatch):
         # #1277: a production deployment missing INTERNAL_SECRET must refuse
