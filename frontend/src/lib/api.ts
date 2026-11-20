@@ -5,7 +5,7 @@ import { browser } from '$app/env';
 import { showNotification } from './stores/notifications';
 import { session, getToken } from './stores/session';
 
-const BASE = browser
+export const BASE = browser
   ? (import.meta.env.VITE_API_URL as string) ||
     `${window.location.protocol}//${window.location.hostname}:8000`
   : (import.meta.env.VITE_INTERNAL_API_URL as string) || 'http://api:8000';
@@ -251,6 +251,65 @@ export interface AISuggestion {
   tag: string;
   confidence: number;
   is_new: boolean;
+}
+
+// ── AI chat (#1131) ──────────────────────────────────────────────────────────
+
+export interface ChatWireMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface ChatHistoryMessage extends ChatWireMessage {
+  ts?: number;
+}
+
+export interface ChatStreamMeta {
+  status?: string;
+  provider?: string;
+  sources?: string[];
+}
+
+export interface ChatStreamHandlers {
+  onSession?: (sessionId: number) => void;
+  onMeta?: (meta: ChatStreamMeta) => void;
+  onToken?: (text: string) => void;
+  onDone?: (data: { suggestions?: string[] }) => void;
+}
+
+/** Result of a non-SSE response from the chat endpoint (AI disabled/unavailable). */
+export interface ChatJsonResult {
+  status: string;
+  response?: string;
+  suggestions?: string[];
+  sources?: string[];
+  session_id?: number | null;
+}
+
+/** Parse one SSE event block and dispatch it to the matching handler. */
+function _dispatchChatSse(event: string, data: string, handlers: ChatStreamHandlers): void {
+  let parsed: Record<string, unknown> = {};
+  try {
+    parsed = JSON.parse(data);
+  } catch {
+    /* malformed frame — ignore */
+  }
+  switch (event) {
+    case 'session':
+      handlers.onSession?.(parsed.session_id as number);
+      break;
+    case 'meta':
+      handlers.onMeta?.(parsed as ChatStreamMeta);
+      break;
+    case 'token':
+      handlers.onToken?.((parsed.text as string) ?? '');
+      break;
+    case 'done':
+      handlers.onDone?.(parsed as { suggestions?: string[] });
+      break;
+    case 'error':
+      throw new Error((parsed.message as string) || 'AI stream error');
+  }
 }
 
 export interface StreakDay {
@@ -801,13 +860,81 @@ export const api = {
         noise_count: number;
         error?: string;
       }>('POST', `/ai/cluster?eps=${eps}&min_samples=${minSamples}&max_notes=${maxNotes}`),
-    chat: (messages: { role: 'user' | 'assistant'; content: string }[]) =>
-      req<{ status: string; response: string; suggestions?: string[]; provider?: string }>(
-        'POST',
-        '/ai/chat',
-        { messages },
+    chat: (messages: ChatWireMessage[], sessionId?: number | null) =>
+      req<ChatJsonResult>('POST', '/ai/chat', { messages, session_id: sessionId ?? null }, { silent: true }),
+    chatHistory: () =>
+      req<{ session_id: number | null; messages: ChatHistoryMessage[] }>(
+        'GET',
+        '/ai/chat/history',
+        undefined,
         { silent: true }
       ),
+    clearChatHistory: () => req<{ status: string }>('DELETE', '/ai/chat/history', undefined, { silent: true }),
+    /**
+     * Streaming chat (#1131): POSTs to /ai/chat/stream and dispatches SSE
+     * frames (session/meta/token/done/error) to ``handlers``. Returns a JSON
+     * result instead when the API responds with a non-SSE body (AI disabled
+     * or unavailable).
+     */
+    chatStream: async (
+      messages: ChatWireMessage[],
+      sessionId: number | null,
+      handlers: ChatStreamHandlers,
+      signal?: AbortSignal
+    ): Promise<ChatJsonResult> => {
+      const token = getToken();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const res = await fetch(`${BASE}/ai/chat/stream`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ messages, session_id: sessionId }),
+        signal,
+      });
+
+      if (res.status === 401) {
+        if (!isHandlingLogout) {
+          isHandlingLogout = true;
+          session.logout();
+          showNotification('Sesión expirada. Por favor, vuelve a iniciar sesión.', 'error');
+        }
+        throw new Error('API POST /ai/chat/stream → 401 Unauthorized');
+      }
+      if (!res.ok) {
+        const raw = await res.text().catch(() => res.statusText);
+        throw new Error(`API POST /ai/chat/stream → ${res.status}: ${raw}`);
+      }
+
+      const contentType = res.headers.get('content-type') ?? '';
+      if (!contentType.includes('text/event-stream')) {
+        // Non-streaming JSON fallback (AI disabled / degraded response).
+        return (await res.json()) as ChatJsonResult;
+      }
+      if (!res.body) throw new Error('Empty stream body');
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let idx: number;
+        while ((idx = buffer.indexOf('\n\n')) >= 0) {
+          const rawEvent = buffer.slice(0, idx);
+          buffer = buffer.slice(idx + 2);
+          let eventName = '';
+          let data = '';
+          for (const line of rawEvent.split('\n')) {
+            if (line.startsWith('event:')) eventName = line.slice(6).trim();
+            else if (line.startsWith('data:')) data += line.slice(5).trim();
+          }
+          if (eventName) _dispatchChatSse(eventName, data, handlers);
+        }
+      }
+      return { status: 'streamed' };
+    },
     planSuggest: (input: {
       week_start: string;
       week_end: string;

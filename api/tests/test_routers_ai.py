@@ -5,8 +5,10 @@ are mocked. These tests cover the chat, classify, usage, and daily-recap
 endpoints, including graceful degradation when the AI service is unreachable.
 """
 
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from fastapi.testclient import TestClient
 
 
@@ -351,3 +353,212 @@ def test_plan_suggest_range_too_large(client: TestClient):
         json={"week_start": "2026-01-01", "week_end": "2026-12-31"},
     )
     assert resp.status_code == 400
+
+
+# --- Chat persistence, history & streaming (#1131) ---------------------------
+
+
+@pytest.fixture
+def clean_chat(db_session):
+    """Purge chat_sessions rows that leaked between tests.
+
+    The chat router commits through its own request-scoped session; on the
+    SQLite test engine that commit escapes the savepoint fixture, so rows can
+    survive into later tests. Deleting + committing here keeps the chat tests
+    order-independent. On PostgreSQL the outer test transaction still rolls
+    back normally.
+    """
+    from models.chat_session import ChatSession
+
+    db_session.query(ChatSession).delete()
+    db_session.commit()
+    yield
+
+
+@patch("routers.ai.http_client")
+def test_ai_chat_persists_session_and_usage_event(mock_client_cls, client: TestClient, db_session, clean_chat):
+    """A successful exchange is stored in chat_sessions and tracked in
+    usage_events (#1131 AC1+AC4)."""
+    from models.chat_session import ChatSession
+    from models.usage_event import UsageEvent
+
+    mock_cls, mock_instance = _mock_httpx({"status": "success", "response": "Hi!", "suggestions": ["s"]})
+    mock_client_cls.side_effect = mock_cls
+
+    resp = client.post("/ai/chat", json={"messages": [{"role": "user", "content": "hola"}]})
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["session_id"]
+
+    session = db_session.get(ChatSession, data["session_id"])
+    assert session is not None
+    assert session.user_id == 1
+    assert [m["role"] for m in session.messages] == ["user", "assistant"]
+    assert session.messages[0]["content"] == "hola"
+    assert session.messages[1]["content"] == "Hi!"
+    assert session.title == "hola"
+
+    events = db_session.query(UsageEvent).filter(UsageEvent.event_type == "feature_use").all()
+    assert any(e.event_data and e.event_data.get("feature") == "ai_chat" for e in events)
+
+
+@patch("routers.ai.http_client")
+def test_ai_chat_retry_does_not_duplicate_user_message(mock_client_cls, client: TestClient, db_session, clean_chat):
+    """A frontend retry after an upstream failure must not write the user
+    turn twice: the first attempt already committed it (#1131)."""
+    import httpx
+    from models.chat_session import ChatSession
+
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = {"status": "success", "response": "ok", "suggestions": []}
+    mock_resp.raise_for_status = MagicMock()
+
+    mock_instance = MagicMock()
+    mock_instance.post = AsyncMock(side_effect=[httpx.ConnectError("down"), mock_resp])
+    mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+    mock_instance.__aexit__ = AsyncMock(return_value=None)
+    mock_client_cls.side_effect = MagicMock(return_value=mock_instance)
+
+    r1 = client.post("/ai/chat", json={"messages": [{"role": "user", "content": "same q"}]})
+    assert r1.json()["status"] == "unavailable"
+    sid = r1.json()["session_id"]
+
+    # Retry: the persisted tail equals the incoming tail — dedup must kick in.
+    r2 = client.post(
+        "/ai/chat",
+        json={"session_id": sid, "messages": [{"role": "user", "content": "same q"}]},
+    )
+    assert r2.json()["status"] == "success"
+
+    session = db_session.get(ChatSession, sid)
+    assert [m["role"] for m in session.messages] == ["user", "assistant"]
+
+
+@patch("routers.ai.http_client")
+def test_ai_chat_history_roundtrip(mock_client_cls, client: TestClient, db_session, clean_chat):
+    """GET /ai/chat/history restores the conversation; DELETE clears it (#1131 AC2)."""
+    mock_cls, mock_instance = _mock_httpx({"status": "success", "response": "answer", "suggestions": []})
+    mock_client_cls.side_effect = mock_cls
+
+    r = client.post("/ai/chat", json={"messages": [{"role": "user", "content": "pregunta"}]})
+    sid = r.json()["session_id"]
+
+    hist = client.get("/ai/chat/history")
+    assert hist.status_code == 200
+    assert hist.json()["session_id"] == sid
+    assert [m["role"] for m in hist.json()["messages"]] == ["user", "assistant"]
+
+    d = client.delete("/ai/chat/history")
+    assert d.status_code == 200
+    assert d.json()["status"] == "cleared"
+
+    empty = client.get("/ai/chat/history")
+    assert empty.json() == {"session_id": None, "messages": []}
+
+
+def test_ai_chat_history_empty_by_default(client: TestClient, clean_chat):
+    resp = client.get("/ai/chat/history")
+    assert resp.status_code == 200
+    assert resp.json() == {"session_id": None, "messages": []}
+
+
+def test_ai_chat_rejects_non_user_tail(client: TestClient):
+    """A conversation whose last turn is from the assistant is rejected."""
+    resp = client.post(
+        "/ai/chat",
+        json={"messages": [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "yo"}]},
+    )
+    assert resp.status_code == 422
+
+
+# --- POST /ai/chat/stream (SSE proxy) ----------------------------------------
+
+
+def _sse_lines(*blocks: tuple) -> list:
+    lines = []
+    for event, data in blocks:
+        lines.append(f"event: {event}")
+        lines.append(f"data: {json.dumps(data)}")
+        lines.append("")
+    return lines
+
+
+class _FakeStreamResponse:
+    def __init__(self, lines: list, status_code: int = 200):
+        self.status_code = status_code
+        self._lines = lines
+
+    async def aiter_lines(self):
+        for line in self._lines:
+            yield line
+
+
+class _FakeStreamCM:
+    """Async context manager mimicking ``httpx.AsyncClient.stream()``."""
+
+    def __init__(self, resp):
+        self._resp = resp
+
+    async def __aenter__(self):
+        return self._resp
+
+    async def __aexit__(self, *exc):
+        return None
+
+
+def _mock_streaming_httpx(lines: list, status_code: int = 200) -> MagicMock:
+    mock_instance = MagicMock()
+    mock_instance.stream = MagicMock(return_value=_FakeStreamCM(_FakeStreamResponse(lines, status_code)))
+    mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+    mock_instance.__aexit__ = AsyncMock(return_value=None)
+    return MagicMock(return_value=mock_instance)
+
+
+@patch("routers.ai.http_client")
+def test_ai_chat_stream_proxies_sse_and_persists(mock_client_cls, client: TestClient, db_session, clean_chat):
+    """The stream endpoint forwards upstream SSE, announces the session id,
+    and persists the accumulated assistant reply on the request-scoped
+    session (#1131)."""
+    from models.chat_session import ChatSession
+    from models.usage_event import UsageEvent
+
+    lines = _sse_lines(
+        ("meta", {"status": "success", "provider": "fake", "sources": ["Nota A"]}),
+        ("token", {"text": "Hola"}),
+        ("token", {"text": " mundo"}),
+        ("done", {"suggestions": ["otra pregunta"]}),
+    )
+    mock_client_cls.side_effect = _mock_streaming_httpx(lines)
+
+    resp = client.post("/ai/chat/stream", json={"messages": [{"role": "user", "content": "pregunta"}]})
+
+    assert resp.status_code == 200
+    assert "text/event-stream" in resp.headers["content-type"]
+    body = resp.text
+    assert "event: session" in body
+    assert "event: token" in body
+    assert '"Hola"' in body
+    assert "event: done" in body
+
+    db_session.expire_all()
+    session = db_session.query(ChatSession).first()
+    assert session is not None
+    assert [m["role"] for m in session.messages] == ["user", "assistant"]
+    assert session.messages[-1]["content"] == "Hola mundo"
+
+    db_session.expire_all()
+    events = db_session.query(UsageEvent).filter(UsageEvent.event_type == "feature_use").all()
+    assert any(e.event_data and e.event_data.get("feature") == "ai_chat" for e in events)
+
+
+@patch("routers.ai.http_client")
+def test_ai_chat_stream_upstream_error_frame(mock_client_cls, client: TestClient):
+    """A non-200 upstream response surfaces as an SSE error frame, not a 5xx."""
+    mock_client_cls.side_effect = _mock_streaming_httpx([], status_code=503)
+
+    resp = client.post("/ai/chat/stream", json={"messages": [{"role": "user", "content": "q"}]})
+
+    assert resp.status_code == 200
+    assert "event: session" in resp.text
+    assert "event: error" in resp.text

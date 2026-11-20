@@ -298,7 +298,7 @@ def test_disabled_stub_status_only():
     """The disabled stub answers /status cleanly and exposes nothing else."""
     stub_app = FastAPI()
     stub_app.include_router(system.disabled_router)
-    stub = TestClient(stub_app)
+    stub = TestClient(stub_app, client=("127.0.0.1", 50000))
 
     response = stub.get("/system/power/status")
     assert response.status_code == 200
@@ -313,7 +313,7 @@ def test_disabled_stub_has_no_mutation_routes():
     engine socket when the feature is off (#1278)."""
     stub_app = FastAPI()
     stub_app.include_router(system.disabled_router)
-    stub = TestClient(stub_app)
+    stub = TestClient(stub_app, client=("127.0.0.1", 50000))
 
     for path in ("sleep", "wake", "shutdown"):
         assert stub.post(f"/system/power/{path}").status_code == 404

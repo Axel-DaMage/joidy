@@ -1,5 +1,10 @@
-import { describe, it, expect } from 'vitest';
-import { renderMarkdown } from './markdown';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+// Mock $app/env so `browser` is true (jsdom): getToken() reads localStorage
+// and api.ts resolves BASE to http://localhost:8000.
+vi.mock('$app/env', () => ({ browser: true, dev: false }));
+
+import { authorizeUploadUrls, renderMarkdown, stripUploadAuth } from './markdown';
 
 describe('renderMarkdown — basic markdown', () => {
   it('returns placeholder for empty input', () => {
@@ -208,5 +213,72 @@ describe('renderMarkdown — hideTagsLine option', () => {
     const md = '# Tags: [[tag1]]\n\nContent';
     const result = renderMarkdown(md, { hideTagsLine: true, hasTags: false });
     expect(result).toContain('Tags:');
+  });
+});
+
+describe('authorizeUploadUrls — /uploads JWT injection (#1279)', () => {
+  const API = 'http://localhost:8000';
+
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('appends the session token to API-origin upload img src', () => {
+    localStorage.setItem('joidy_session', JSON.stringify({ token: 'jwt-abc' }));
+    const html = `<img src="${API}/uploads/pic.png" alt="pic">`;
+    expect(authorizeUploadUrls(html)).toBe(
+      `<img src="${API}/uploads/pic.png?token=jwt-abc" alt="pic">`
+    );
+  });
+
+  it('appends the token to root-relative upload href', () => {
+    localStorage.setItem('joidy_session', JSON.stringify({ token: 'jwt-abc' }));
+    const html = '<a href="/uploads/doc.pdf">doc</a>';
+    expect(authorizeUploadUrls(html)).toBe('<a href="/uploads/doc.pdf?token=jwt-abc">doc</a>');
+  });
+
+  it('does not leak the token to foreign /uploads/ hosts', () => {
+    localStorage.setItem('joidy_session', JSON.stringify({ token: 'jwt-abc' }));
+    const html = '<img src="https://evil.example/uploads/x.png">';
+    expect(authorizeUploadUrls(html)).toBe(html);
+  });
+
+  it('does not double-append when a token is already present', () => {
+    localStorage.setItem('joidy_session', JSON.stringify({ token: 'jwt-new' }));
+    const html = '<img src="/uploads/x.png?token=jwt-old">';
+    expect(authorizeUploadUrls(html)).toBe(html);
+  });
+
+  it('no-ops without a session token', () => {
+    const html = '<img src="/uploads/x.png">';
+    expect(authorizeUploadUrls(html)).toBe(html);
+  });
+
+  it('renderMarkdown injects the token into stored upload embeds', () => {
+    localStorage.setItem('joidy_session', JSON.stringify({ token: 'jwt-abc' }));
+    const out = renderMarkdown(`![pic](${API}/uploads/pic.png)`);
+    expect(out).toContain('?token=jwt-abc');
+  });
+});
+
+describe('stripUploadAuth — keeps JWT out of saved markdown (#1279)', () => {
+  it('removes ?token= from upload URLs', () => {
+    expect(stripUploadAuth('<img src="http://h:8000/uploads/x.png?token=T">')).toBe(
+      '<img src="http://h:8000/uploads/x.png">'
+    );
+  });
+
+  it('removes &token= and &amp;token= mid-query', () => {
+    expect(stripUploadAuth('<a href="/uploads/x?a=1&token=T">f</a>')).toBe(
+      '<a href="/uploads/x?a=1">f</a>'
+    );
+    expect(stripUploadAuth('<img src="/uploads/x?a=1&amp;token=T">')).toBe(
+      '<img src="/uploads/x?a=1">'
+    );
+  });
+
+  it('leaves non-upload token params untouched', () => {
+    const html = '<a href="https://x.test/page?token=keep">l</a>';
+    expect(stripUploadAuth(html)).toBe(html);
   });
 });

@@ -32,20 +32,7 @@
       onboarding.skipTour();
       return;
     }
-    // Arrow navigation must not hijack keys while the user is typing in a
-    // spotlighted input/textarea/select/contenteditable (#1307).
     if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;
-    // `target` is already bound to event.target above — redeclaring it here
-    // was a block-scoped duplicate that broke parsing.
-    if (
-      target instanceof HTMLElement &&
-      (target.tagName === 'INPUT' ||
-        target.tagName === 'TEXTAREA' ||
-        target.tagName === 'SELECT' ||
-        target.isContentEditable)
-    ) {
-      return;
-    }
     event.preventDefault();
     if (event.key === 'ArrowRight') {
       handleNext();
