@@ -99,7 +99,9 @@
     "planPending": "Sugerencias de IA ({count})",
     "planAcceptAll": "Aceptar todo",
     "planDismiss": "Descartar",
-    "planAcceptHint": "Clic para aceptar este horario"
+    "planAcceptHint": "Clic para aceptar este horario",
+    "loadError": "No se pudo cargar el calendario",
+    "loadErrorHint": "Comprueba tu conexión e inténtalo de nuevo."
   },
   "emails": {
     "title": "Correos",
@@ -187,7 +189,8 @@
     "saved": "Guardado",
     "tasks": "tareas",
     "level": "NVL",
-    "betaNotice": "Funcionalidad beta: algunas características están en desarrollo y pueden cambiar."
+    "betaNotice": "Funcionalidad beta: algunas características están en desarrollo y pueden cambiar.",
+    "retry": "Reintentar"
   },
   "status": {
     "offline": "Sin conexión",
@@ -843,7 +846,8 @@
     "unlockedCount": "{count} habilidades desbloqueadas",
     "topSkill": "mejor habilidad",
     "construction": "En Construcción",
-    "constructionHint": "Activa el Modo Desarrollo en Ajustes para acceder al Árbol de Habilidades."
+    "constructionHint": "Activa el Modo Desarrollo en Ajustes para acceder al Árbol de Habilidades.",
+    "loadError": "No se pudieron cargar las habilidades."
   },
   "layout": {
     "testNotification": "Click para notificación de prueba",

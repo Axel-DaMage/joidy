@@ -2,6 +2,7 @@
   import '../app.css';
   import { browser } from '$app/env';
   import { page } from '$app/state';
+  import { afterNavigate } from '$app/navigation';
   import { onMount } from 'svelte';
   import { fade } from 'svelte/transition';
   import { isOnline, wasOffline } from '$lib/stores/connection';
@@ -90,10 +91,14 @@
     { href: '/calendar', label: $t('nav.calendar'), icon: 'Calendar', status: 'ready' },
   ] as { href: string; label: string; icon: string; status: NavItemStatus }[];
 
-  // Track page views on route changes (foreground-only, debounced in the store).
-  $: if (mounted && $isAuthenticated) {
-    trackPageView(page.url.pathname);
-  }
+  // Track page views on route changes (foreground-only, debounced in the
+  // store). This runs in afterNavigate — a legacy `$:` statement never
+  // re-runs on $app/state changes, so SPA navigations were invisible (#1305).
+  afterNavigate((nav) => {
+    if ($isAuthenticated && nav.to?.url.pathname) {
+      trackPageView(nav.to.url.pathname);
+    }
+  });
 
   let settingsOpen = false;
   let now = new Date();
@@ -369,10 +374,9 @@
     };
     requestAnimationFrame(() => init());
 
-    // Start sync conflict polling when authenticated
-    if ($isAuthenticated) {
-      syncStore.startPolling();
-    }
+    // Sync conflict polling is driven by the session lifecycle inside the
+    // sync store itself (session.subscribe) so it also starts on in-session
+    // logins, not just on mount (#1305).
 
     // Global error handlers
     const handleOnerror = (

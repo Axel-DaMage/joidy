@@ -13,6 +13,7 @@ import {
   isNoteInFolder,
   type SortMode,
 } from '$lib/utils/fileTree';
+import { showNotification } from '$lib/stores/notifications';
 import { updateFolderMeta } from '$lib/stores/settings';
 import { patchUserSettings, loadUserSettings } from '$lib/utils/userSettings';
 import { captureSnapshot } from '$lib/stores/pageSnapshots';
@@ -53,7 +54,7 @@ export function normalizeVaultFolder(path: string): string {
 export function buildDailySourcePath(vaultPath: string, folder: string, fileName: string): string {
   const cleanVault = vaultPath.replace(/[\\/]+$/, '');
   const cleanFolder = normalizeVaultFolder(folder);
-  return `${cleanVault}/${cleanFolder}/${fileName}`;
+  return cleanFolder ? `${cleanVault}/${cleanFolder}/${fileName}` : `${cleanVault}/${fileName}`;
 }
 
 export function openSettingsForDaily() {
@@ -216,6 +217,10 @@ export async function handleSave(
     if (n) {
       ui.selectedNote.set(n);
       ui.editingNew.set(false);
+    } else {
+      // createNote swallows the API error and returns null — surface it so
+      // the user knows the save failed (editor stays open for retry, #1305).
+      showNotification('No se pudo guardar la nota. Inténtalo de nuevo.', 'error');
     }
   } else {
     const sel = get(ui.selectedNote);
@@ -319,9 +324,18 @@ export async function confirmMove(targetPath: string) {
   }
   const note = node.note;
   ui.movingNode.set(null);
-  const newPath = targetPath ? `${targetPath}/${node.name}` : node.name;
-  await api.notes.update(note.id, { source_path: newPath });
-  await loadNotes();
+  // Route through the notes store so the in-memory list reflects the move;
+  // the previous direct api.notes.update + loadNotes() no-op'd on the
+  // notesLoaded early-return and left the stale source_path behind (#1305).
+  // Paths use the same vault-rooted shape as buildDailySourcePath (the
+  // backend normalizes them onto the container /vault domain).
+  const newPath = buildDailySourcePath(get(ui.vaultPath) || '/vault', targetPath, node.name);
+  try {
+    await updateNote(note.id, { source_path: newPath });
+    await loadNotes(undefined, true);
+  } catch (e) {
+    logger.error('[notes] Failed to move note:', e);
+  }
 }
 
 export function handleDeleteNote() {

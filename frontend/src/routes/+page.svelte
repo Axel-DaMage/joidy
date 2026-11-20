@@ -183,17 +183,21 @@
   }
 
   // #1164 — persistir los filtros de GitHub (sin TTL, a diferencia del
-  // cache de datos). ghSearch escribe por tecla: misma técnica que
-  // notesUi.search.
+  // cache de datos). Guardado tras modulePrefsReady: el efecto corre antes
+  // del onMount que restaura los valores guardados y los pisaba con los
+  // defaults (#1305). Debounce de 300 ms para no escribir por tecla en
+  // ghSearch (misma técnica que la página de goals).
+  let ghPrefsTimer: ReturnType<typeof setTimeout> | null = null;
   $effect(() => {
-    patchUserSettings({
-      dashboard: {
-        githubFilter: ghFilter,
-        githubType: ghType,
-        githubState: ghState,
-        githubSearch: ghSearch,
-      },
-    });
+    if (!modulePrefsReady) return;
+    const dashboard = {
+      githubFilter: ghFilter,
+      githubType: ghType,
+      githubState: ghState,
+      githubSearch: ghSearch,
+    };
+    if (ghPrefsTimer) clearTimeout(ghPrefsTimer);
+    ghPrefsTimer = setTimeout(() => patchUserSettings({ dashboard }), 300);
   });
 
   function setActivityTab(tab: 'github' | 'recent-notes') {
@@ -238,8 +242,10 @@
     return (Date.now() - last.getTime()) / 86400000 > 2;
   });
 
-  let githubStatusChecked = false;
-  let ttiMeasured = false;
+  // $state — the dashboard-tti $effect reads these, and plain lets are
+  // non-reactive so the metric could never fire (#1305).
+  let githubStatusChecked = $state(false);
+  let ttiMeasured = $state(false);
 
   onMount(() => {
     if (typeof performance !== 'undefined') {

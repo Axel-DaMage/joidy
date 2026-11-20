@@ -141,6 +141,10 @@ def _cached_tag_graph(db: Session):
                 "type": "note",
                 "title": note.title,
                 "path": note.source_path,
+                # Exposed so the frontend timeline filter can compare against
+                # a real date field — the old path-prefix compare was a
+                # lexicographic no-op (#1305).
+                "updated_at": note.updated_at.isoformat() if note.updated_at else None,
                 "tags": [nt.tag.name for nt in note.tags if nt.tag],
                 "group": "note",
             }

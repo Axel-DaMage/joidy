@@ -1,7 +1,9 @@
 import { writable, derived, get } from 'svelte/store';
+import { browser } from '$app/env';
 import { api, type GamificationStats, type GamificationResult as GamificationResultType } from '$lib/api';
 import { logger } from '$lib/utils/logger';
 import { routeCache } from './routeCache';
+import { SESSION_RESET_EVENT } from './session';
 
 const GAMIFICATION_CACHE_KEY = '/dashboard/gamification';
 
@@ -15,6 +17,22 @@ export const xpToNextStage  = writable<number | null>(100);
 export const lastActivity   = writable<string | null>(null);
 
 export const xpEvents = writable<{ amount: number; id: string; x?: number; y?: number }[]>([]);
+
+// Drop gamification state on session reset (logout / 401) so the next user
+// on the same browser profile never sees the previous user's XP (#1305).
+if (browser) {
+  window.addEventListener(SESSION_RESET_EVENT, () => {
+    totalXP.set(0);
+    currentStreak.set(0);
+    longestStreak.set(0);
+    plantStage.set(0);
+    plantStageName.set('semilla');
+    nextStageXP.set(100);
+    xpToNextStage.set(100);
+    lastActivity.set(null);
+    xpEvents.set([]);
+  });
+}
 
 // Must match PLANT_STAGES thresholds in api/services/gamification_engine.py
 const STAGE_THRESHOLDS = [0, 300, 1200, 4000, 10000, 25000, 60000];

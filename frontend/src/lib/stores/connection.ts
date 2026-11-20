@@ -5,9 +5,12 @@ export const wasOffline = writable(false);
 
 function updateOnlineStatus() {
   const online = navigator.onLine;
-  const prevOffline = !online;
   isOnline.set(online);
-  wasOffline.set(prevOffline);
+  // wasOffline latches true on disconnect and is only cleared by the
+  // consumer (the "back online" pill in +layout.svelte). Setting it from
+  // the same tick as isOnline left it already false when the pill's guard
+  // evaluated, so it never displayed (#1305).
+  if (!online) wasOffline.set(true);
 }
 
 export function initConnectionStore() {
