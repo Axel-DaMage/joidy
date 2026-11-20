@@ -6,7 +6,13 @@ from config import settings
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from services.auth_service import get_current_user, hash_password
-from services.env_file import ENV_FILE, read_env, validate_env_value, write_env  # noqa: F401  (ENV_FILE re-exported)
+from services.env_file import (  # noqa: F401  (ENV_FILE re-exported)
+    ENV_FILE,
+    is_placeholder_env_value,
+    read_env,
+    validate_env_value,
+    write_env,
+)
 
 router = APIRouter(prefix="/config", tags=["config"])
 
@@ -65,17 +71,15 @@ PUBLIC_KEYS = {
 }
 
 
-# Values shipped in .env.example (or used as placeholders) that must count as
-# "not configured" — otherwise a manual ``cp .env.example .env`` would trip
-# the setup-completed guard forever.
-_PLACEHOLDER_VALUES = frozenset({"", "your_gemini_api_key_here", "change_this_to_a_random_secret_key"})
-
-
 def _configured(value: str | None) -> bool:
-    """True when a value is present and not a shipped placeholder."""
-    if not value:
-        return False
-    return value.strip() not in _PLACEHOLDER_VALUES
+    """True when a value is present and not a shipped placeholder.
+
+    Placeholder values count as "not configured" — otherwise a manual
+    ``cp .env.example .env`` would trip the setup-completed guard forever.
+    The shared denylist lives in ``services.env_file`` (#1393) and is the same
+    one the auth layer enforces at use time.
+    """
+    return not is_placeholder_env_value(value)
 
 
 class ConfigResponse(BaseModel):

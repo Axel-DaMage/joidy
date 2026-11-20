@@ -15,6 +15,7 @@ import logging
 
 from config import settings
 from cryptography.fernet import Fernet, InvalidToken
+from services.env_file import get_effective_secret
 from sqlalchemy import Text
 from sqlalchemy.types import TypeDecorator
 
@@ -28,7 +29,10 @@ def get_fernet() -> Fernet:
     takes effect immediately — matching the original
     ``google_token_service._get_fernet()`` semantics.
     """
-    key = hashlib.sha256(settings.secret_key.encode()).digest()
+    secret = get_effective_secret("SECRET_KEY", settings.secret_key)
+    if not secret:
+        raise RuntimeError("SECRET_KEY not configured — refusing to derive the token encryption key")
+    key = hashlib.sha256(secret.encode()).digest()
     return Fernet(base64.urlsafe_b64encode(key))
 
 
@@ -44,6 +48,9 @@ def decrypt_str(encrypted: str) -> str | None:
     except InvalidToken:
         logger.warning("Failed to decrypt value (invalid Fernet token)")
         return None
+    except RuntimeError:
+        # Key unconfigured/placeholder — fail closed like an invalid token.
+        return None
 
 
 def decrypt_str_or_plaintext(value: str) -> str:
@@ -56,7 +63,7 @@ def decrypt_str_or_plaintext(value: str) -> str:
     """
     try:
         return get_fernet().decrypt(value.encode()).decode()
-    except InvalidToken:
+    except (InvalidToken, RuntimeError):
         return value
 
 
