@@ -938,6 +938,12 @@
     "no": "No",
     "statusUnavailable": "Could not fetch status."
   },
+  "aiDisclosure": {
+    "notice": "AI-generated — may be inaccurate. Data is sent to the configured AI provider.",
+    "provider": "Provider: {provider}",
+    "learnMore": "AI transparency",
+    "tagTooltip": "AI-generated suggestions. The note content is sent to the configured AI provider; they may be inaccurate."
+  },
   "streaks": {
     "backToMenu": "Back to menu",
     "streakCompleted": "Streak completed",

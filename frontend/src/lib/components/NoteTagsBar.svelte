@@ -107,7 +107,9 @@
     aria-label={$t('noteEditor.tagsLabel')}
   />
   {#if $aiSuggestions.length > 0}
-    <span class="ai-label">ia:</span>
+    <span class="ai-label" title={$t('aiDisclosure.tagTooltip')}
+      >ia:<span class="visually-hidden"> {$t('aiDisclosure.tagTooltip')}</span></span
+    >
     {#each $aiSuggestions as s}
       <button class="suggestion-chip" onclick={() => acceptSuggestion(s.tag)}>
         {s.tag} <span class="conf">{Math.round(s.confidence * 100)}%</span>

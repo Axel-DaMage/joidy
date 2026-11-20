@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { api } from '$lib/api';
   import DynamicIcon from './DynamicIcon.svelte';
+  import AiDisclosure from './AiDisclosure.svelte';
   import { t } from 'svelte-i18n';
 
   let recap = $state<{ status: string; recap: string; suggestions: string[] } | null>(null);
@@ -61,6 +62,9 @@
         {/each}
       </div>
     {/if}
+    <div class="recap-disclosure">
+      <AiDisclosure compact />
+    </div>
   </div>
 {/if}
 
@@ -123,5 +127,9 @@
   .suggestion-bullet {
     color: var(--xp);
     flex-shrink: 0;
+  }
+
+  .recap-disclosure {
+    margin-top: 10px;
   }
 </style>
