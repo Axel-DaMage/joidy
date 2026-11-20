@@ -2,6 +2,7 @@
   import { activeIconPack } from '$lib/stores/settings';
   import Circle from 'lucide-svelte/icons/circle';
   import { getLucideIcon, loadLucideIcon } from '$lib/utils/lucideIcons';
+  import { logger } from '$lib/utils/logger';
 
   export let name: string;
   export let size: number = 18;
@@ -80,9 +81,13 @@
     }
     if (!isEmoji && (!comp || comp === Circle)) {
       const requested = name;
-      loadLucideIcon(requested).then((loaded) => {
-        if (loaded && name === requested) comp = loaded;
-      });
+      loadLucideIcon(requested)
+        .then((loaded) => {
+          if (loaded && name === requested) comp = loaded;
+        })
+        // Failed lazy chunk: keep the Circle fallback — no unhandled
+        // rejection and no broken icon slot (#1459).
+        .catch((err) => logger.warn('[DynamicIcon] lazy icon load failed:', err));
     }
   }
 </script>

@@ -1,6 +1,7 @@
 <script lang="ts">
   import Circle from 'lucide-svelte/icons/circle';
   import { getLucideIcon, loadLucideIcon } from '$lib/utils/lucideIcons';
+  import { logger } from '$lib/utils/logger';
 
   export let name: string = '';
   export let size: number = 18;
@@ -21,9 +22,12 @@
       lucideComp = getLucideIcon(name) ?? Circle;
       if (!isEmoji && lucideComp === Circle) {
         const requested = name;
-        loadLucideIcon(requested).then((loaded) => {
-          if (loaded && name === requested) lucideComp = loaded;
-        });
+        loadLucideIcon(requested)
+          .then((loaded) => {
+            if (loaded && name === requested) lucideComp = loaded;
+          })
+          // Failed lazy chunk: keep the Circle fallback (#1459).
+          .catch((err) => logger.warn('[StreakIcon] lazy icon load failed:', err));
       }
     }
   }

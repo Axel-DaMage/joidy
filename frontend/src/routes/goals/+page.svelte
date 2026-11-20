@@ -71,13 +71,32 @@
 
   // Lazy-load the heavy StreakHeatmap (561 lines) so it is split into a
   // separate chunk and only downloaded when the planning or history tab is
-  // active — the only tabs that render it (#347).
+  // active — the only tabs that render it (#347). A failed chunk surfaces an
+  // error + retry instead of leaving the slot empty forever (#1459).
   let StreakHeatmap = $state<typeof import('$lib/components/StreakHeatmap.svelte').default | null>(
     null
   );
+  let heatmapChunkError = $state(false);
+  let heatmapChunkLoading = $state(false);
+  function loadStreakHeatmap() {
+    if (StreakHeatmap || heatmapChunkLoading) return;
+    heatmapChunkLoading = true;
+    heatmapChunkError = false;
+    import('$lib/components/StreakHeatmap.svelte')
+      .then((m) => (StreakHeatmap = m.default))
+      .catch((err) => {
+        logger.error('[goals] StreakHeatmap chunk failed:', err);
+        heatmapChunkError = true;
+      })
+      .finally(() => (heatmapChunkLoading = false));
+  }
   $effect(() => {
-    if ((currentTab === 'planning' || currentTab === 'history') && !StreakHeatmap) {
-      import('$lib/components/StreakHeatmap.svelte').then((m) => (StreakHeatmap = m.default));
+    if (
+      (currentTab === 'planning' || currentTab === 'history') &&
+      !StreakHeatmap &&
+      !heatmapChunkError
+    ) {
+      loadStreakHeatmap();
     }
   });
 
@@ -1865,6 +1884,13 @@
                 onselect={(date) => (selectedPlanningDate = date)}
                 maxFutureMonths={1200}
               />
+            {:else if heatmapChunkError}
+              <div class="heatmap-chunk-error caption">
+                <span>{$t('common.loadFailed')}</span>
+                <button class="btn btn-ghost" onclick={loadStreakHeatmap}
+                  >{$t('common.retry')}</button
+                >
+              </div>
             {/if}
           </div>
         </div>
@@ -2008,6 +2034,13 @@
                   selectedDate={selectedHistoryDate}
                   onselect={(date) => (selectedHistoryDate = date)}
                 />
+              {:else if heatmapChunkError}
+                <div class="heatmap-chunk-error caption">
+                  <span>{$t('common.loadFailed')}</span>
+                  <button class="btn btn-ghost" onclick={loadStreakHeatmap}
+                    >{$t('common.retry')}</button
+                  >
+                </div>
               {/if}
             </div>
           {/if}
@@ -3145,6 +3178,14 @@
     width: 100%;
     display: flex;
     justify-content: center;
+  }
+  .heatmap-chunk-error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 24px;
+    color: var(--text-muted);
   }
   .goals-body.full-width {
     max-width: none;

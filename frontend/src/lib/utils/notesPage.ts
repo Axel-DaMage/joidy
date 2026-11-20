@@ -32,10 +32,22 @@ import {
 } from '$lib/stores/notes';
 import * as ui from '$lib/stores/notesUi';
 
+let noteEditorLoading = false;
 export function ensureNoteEditor() {
-  if (!get(ui.NoteEditorComp)) {
-    import('$lib/components/NoteEditor.svelte').then((m) => ui.NoteEditorComp.set(m.default));
-  }
+  if (get(ui.NoteEditorComp) || noteEditorLoading) return;
+  noteEditorLoading = true;
+  ui.NoteEditorError.set(false);
+  import('$lib/components/NoteEditor.svelte')
+    .then((m) => ui.NoteEditorComp.set(m.default))
+    // Failed chunk: flag it so the editor panel shows a retry — not an
+    // infinite loader or an unhandled rejection (#1459).
+    .catch((err) => {
+      logger.error('[notes] NoteEditor chunk failed:', err);
+      ui.NoteEditorError.set(true);
+    })
+    .finally(() => {
+      noteEditorLoading = false;
+    });
 }
 
 export function getNoteVisual(note: Note) {

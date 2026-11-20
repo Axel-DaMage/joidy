@@ -22,12 +22,26 @@
 
   // Lazy-load the heavy GoalEditor (461 lines, pulls in marked, dompurify,
   // highlight.js) so it is split into a separate chunk and only downloaded
-  // when the goal detail/edit page is opened (#347).
+  // when the goal detail/edit page is opened (#347). A failed chunk surfaces
+  // an error + retry instead of an infinite "Cargando editor…" (#1459).
   let GoalEditor: typeof import('$lib/components/GoalEditor.svelte').default | null = null;
+  let editorChunkError = false;
+  let editorChunkLoading = false;
   function ensureGoalEditor() {
-    if (!GoalEditor) {
-      import('$lib/components/GoalEditor.svelte').then(m => GoalEditor = m.default);
+    if (!GoalEditor && !editorChunkError && !editorChunkLoading) {
+      editorChunkLoading = true;
+      import('$lib/components/GoalEditor.svelte')
+        .then((m) => (GoalEditor = m.default))
+        .catch((err) => {
+          logger.error('[goalDetail] GoalEditor chunk failed:', err);
+          editorChunkError = true;
+        })
+        .finally(() => (editorChunkLoading = false));
     }
+  }
+  function retryGoalEditor() {
+    editorChunkError = false;
+    ensureGoalEditor();
   }
 
   let goal: Goal | null = null;
@@ -315,6 +329,11 @@
         on:contextChange={handleContextChange}
         on:goalUpdate={handleGoalUpdate}
       />
+    {:else if editorChunkError}
+      <div class="error">
+        <span>{$t('common.loadFailed')}</span>
+        <button class="btn btn-ghost" onclick={retryGoalEditor}>{$t('common.retry')}</button>
+      </div>
     {:else}
       <div class="loading">{$t('goalDetail.editorLoading')}</div>
     {/if}

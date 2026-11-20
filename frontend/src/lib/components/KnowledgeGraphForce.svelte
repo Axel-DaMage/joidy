@@ -11,6 +11,7 @@
   import { getNodeType, COLOR_PRESETS, type ColorGroup } from '$lib/utils/graphUtils';
   import { applyGraphStyling } from '$lib/utils/graphStyling';
   import { filterGraphData } from '$lib/utils/graphFilters';
+  import { logger } from '$lib/utils/logger';
   import { t } from 'svelte-i18n';
 
   // ForceGraph constructor is dynamically imported; typed loosely since
@@ -62,6 +63,10 @@
   // Interaction State
   let hoveredNode: GraphNode | null = null;
   let loaded = false;
+  // #1459 — a failed `import('force-graph')` used to leave the component on
+  // "Cargando grafo…" forever. `loadError` drives the retry affordance.
+  let loadError = false;
+  let visibilityListenerAttached = false;
 
   // Use the `data` prop if provided (for timeline/search filtering, #373),
   // otherwise fall back to the global graph store.
@@ -246,53 +251,68 @@
     }
   }
 
-  onMount(async () => {
-    if (!browser) return;
+  // Retryable init (#1459): a failed `import('force-graph')` lands in
+  // `loadError` so the template can offer a retry instead of loading forever.
+  async function initGraph() {
+    if (!browser || graph) return;
+    loadError = false;
+    try {
+      // Load saved color query groups
+      const saved = localStorage.getItem('joidy-graph-color-groups');
+      if (saved) {
+        try {
+          colorGroups = JSON.parse(saved);
+        } catch (e) {}
+      } else {
+        // Default presets
+        colorGroups = [
+          { query: 'tag:importante', color: '#f59e0b' },
+          { query: 'tag:idea', color: '#10b981' },
+        ];
+      }
 
-    // Load saved color query groups
-    const saved = localStorage.getItem('joidy-graph-color-groups');
-    if (saved) {
-      try {
-        colorGroups = JSON.parse(saved);
-      } catch (e) {}
-    } else {
-      // Default presets
-      colorGroups = [
-        { query: 'tag:importante', color: '#f59e0b' },
-        { query: 'tag:idea', color: '#10b981' },
-      ];
+      const module = await import('force-graph');
+      if (!containerEl) return; // Prevent crash if unmounted during import
+
+      // force-graph uses a Kapsule factory pattern: ForceGraph() returns a
+      // constructor, then calling it with the element creates a chainable instance.
+      ForceGraph = module.default;
+      graph = ForceGraph()(containerEl)
+        .width(width)
+        .height(height)
+        .backgroundColor('transparent')
+        .enableNodeDrag(true)
+        .onNodeClick(handleNodeClick)
+        .onNodeHover((node: ForceGraphNode | null) => {
+          hoveredNode = node as GraphNode | null;
+        });
+
+      // The force-graph render loop runs a rAF + pointer hit-test every frame
+      // even when the simulation is idle — pause it while the tab is hidden
+      // and tear it down entirely on destroy (#1311). Guarded so a retry
+      // after a mid-init failure can't register it twice.
+      if (!visibilityListenerAttached) {
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        visibilityListenerAttached = true;
+      }
+
+      // NOTE: a `.minimap('#graph-minimap', ...)` chain used to be appended here,
+      // but `force-graph` (>=1.48) does not expose a `minimap()` method, so the
+      // call threw `TypeError: ...minimap is not a function` and left the graph
+      // stuck on "Cargando grafo de conocimiento..." (#201). The minimap can be
+      // re-implemented as a separate <canvas> overlay in a follow-up.
+
+      applyStyling();
+      rebuildGraph();
+      loaded = true;
+    } catch (err) {
+      logger.error('[KnowledgeGraphForce] init failed:', err);
+      loadError = true;
     }
+  }
 
-    const module = await import('force-graph');
-    if (!containerEl) return; // Prevent crash if unmounted during import
-
-    // force-graph uses a Kapsule factory pattern: ForceGraph() returns a
-    // constructor, then calling it with the element creates a chainable instance.
-    ForceGraph = module.default;
-    graph = ForceGraph()(containerEl)
-      .width(width)
-      .height(height)
-      .backgroundColor('transparent')
-      .enableNodeDrag(true)
-      .onNodeClick(handleNodeClick)
-      .onNodeHover((node: ForceGraphNode | null) => {
-        hoveredNode = node as GraphNode | null;
-      });
-
-    // The force-graph render loop runs a rAF + pointer hit-test every frame
-    // even when the simulation is idle — pause it while the tab is hidden
-    // and tear it down entirely on destroy (#1311).
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    // NOTE: a `.minimap('#graph-minimap', ...)` chain used to be appended here,
-    // but `force-graph` (>=1.48) does not expose a `minimap()` method, so the
-    // call threw `TypeError: ...minimap is not a function` and left the graph
-    // stuck on "Cargando grafo de conocimiento..." (#201). The minimap can be
-    // re-implemented as a separate <canvas> overlay in a follow-up.
-
-    applyStyling();
-    rebuildGraph();
-    loaded = true;
+  onMount(() => {
+    void initGraph();
   });
 
   $: if (graph) {
@@ -393,7 +413,12 @@
 </script>
 
 <div class="graph-wrapper" style="width:100%; height:100%; position:relative; min-height: 450px;">
-  {#if !loaded}
+  {#if loadError}
+    <div class="graph-loading chunk-error">
+      <span>{$t('common.loadFailed')}</span>
+      <button class="btn btn-ghost" onclick={() => void initGraph()}>{$t('common.retry')}</button>
+    </div>
+  {:else if !loaded}
     <div class="graph-loading">{$t('knowledgeGraphForce.loading')}</div>
   {/if}
 
@@ -482,6 +507,13 @@
     color: var(--text-muted);
     font-size: 13px;
     z-index: var(--z-sticky);
+  }
+
+  .graph-loading.chunk-error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
   }
 
   /* Keyboard node list — invisible until it receives focus (#1309) */

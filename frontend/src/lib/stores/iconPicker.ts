@@ -1,5 +1,6 @@
 import { writable, derived } from 'svelte/store';
 import { loadAllLucideIconNames } from '$lib/utils/lucideIcons';
+import { logger } from '$lib/utils/logger';
 
 // The full ~1,900-name list is fetched lazily the first time a picker opens —
 // it pulls the lucide namespace as an async chunk and must stay out of the
@@ -9,7 +10,14 @@ let loadStarted = false;
 function ensureIconNames() {
   if (loadStarted) return;
   loadStarted = true;
-  loadAllLucideIconNames().then((names) => allIcons.set(names));
+  loadAllLucideIconNames()
+    .then((names) => allIcons.set(names))
+    // A failed chunk left `loadStarted` stuck true with an empty list —
+    // reset so the next picker open retries (#1459).
+    .catch((err) => {
+      loadStarted = false;
+      logger.warn('[iconPicker] lucide namespace load failed:', err);
+    });
 }
 
 export function createIconPickerStore() {

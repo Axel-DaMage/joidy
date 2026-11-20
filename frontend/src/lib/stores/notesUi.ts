@@ -43,6 +43,9 @@ export const notesPrefsReady = writable(false);
 export const NoteEditorComp = writable<
   typeof import('$lib/components/NoteEditor.svelte').default | null
 >(null);
+// True when the NoteEditor chunk failed to load — drives the retry affordance
+// in NotesEditorPanel instead of an infinite "Cargando editor…" (#1459).
+export const NoteEditorError = writable(false);
 
 export const editorNote = derived(
   [editingNew, isMomentary, momentaryDraft, selectedNote],

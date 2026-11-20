@@ -195,7 +195,9 @@
     "tasks": "tareas",
     "level": "NVL",
     "betaNotice": "Funcionalidad beta: algunas características están en desarrollo y pueden cambiar.",
-    "retry": "Reintentar"
+    "retry": "Reintentar",
+    "reload": "Recargar",
+    "loadFailed": "No se pudo cargar este módulo."
   },
   "status": {
     "offline": "Sin conexión",
@@ -922,14 +924,19 @@
     "testNotifLevel": "Notificación de prueba - Level up!",
     "currentStatus": "Estado actual",
     "globalTimer": "Temporizador global",
-    "skipToContent": "Saltar al contenido principal"
+    "skipToContent": "Saltar al contenido principal",
+    "loading": "Cargando Joidy…",
+    "setupCheckFailed": "No se pudo conectar con el servidor. Comprueba tu conexión e inténtalo de nuevo."
   },
   "ai": {
     "title": "Inteligencia Artificial",
     "checking": "Verificando…",
     "active": "IA activa",
     "inactive": "IA inactiva",
+    "degraded": "IA degradada",
+    "unavailable": "IA no disponible",
     "loadingChat": "Cargando chat...",
+    "chatLoadError": "No se pudo cargar el chat.",
     "devSection": "Modo dev — Estado del servicio & cola de errores",
     "serviceStatus": "Estado del servicio",
     "apiKeyConfigured": "API Key configurada:",

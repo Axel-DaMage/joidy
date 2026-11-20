@@ -18,6 +18,7 @@
     goToPrev,
     goToNext,
     getNoteVisual,
+    ensureNoteEditor,
   } from '$lib/utils/notesPage';
   import {
     search,
@@ -31,6 +32,7 @@
     hasPrev,
     hasNext,
     NoteEditorComp,
+    NoteEditorError,
   } from '$lib/stores/notesUi';
   import { t } from 'svelte-i18n';
 </script>
@@ -53,6 +55,13 @@
           on:prev={goToPrev}
           on:next={goToNext}
         />
+      {:else if $NoteEditorError}
+        <div class="editor-loading caption editor-load-error">
+          <span>{$t('common.loadFailed')}</span>
+          <button class="btn btn-ghost" onclick={() => ensureNoteEditor()}
+            >{$t('common.retry')}</button
+          >
+        </div>
       {:else}
         <div class="editor-loading caption">{$t('notesPage.editorLoading')}</div>
       {/if}
@@ -134,6 +143,18 @@
 </div>
 
 <style>
+  .editor-loading {
+    padding: 24px;
+    text-align: center;
+    color: var(--text-muted);
+  }
+  .editor-load-error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+
   .editor-panel {
     display: flex;
     flex-direction: column;

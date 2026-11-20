@@ -12,11 +12,25 @@
 
   // Lazy-load the heavy SkillTree (236 lines, pulls in d3) so it is split
   // into a separate chunk and only downloaded when the page is opened (#347).
+  // A failed chunk surfaces an error + retry — never an infinite loader
+  // (#1459).
   let SkillTree = $state<typeof import('$lib/components/SkillTree.svelte').default | null>(null);
+  let treeChunkError = $state(false);
+  let treeChunkLoading = $state(false);
+  function loadSkillTree() {
+    if (SkillTree || treeChunkLoading) return;
+    treeChunkLoading = true;
+    treeChunkError = false;
+    import('$lib/components/SkillTree.svelte')
+      .then((m) => (SkillTree = m.default))
+      .catch((err) => {
+        logger.error('[skills] SkillTree chunk failed:', err);
+        treeChunkError = true;
+      })
+      .finally(() => (treeChunkLoading = false));
+  }
   $effect(() => {
-    if (!SkillTree) {
-      import('$lib/components/SkillTree.svelte').then(m => SkillTree = m.default);
-    }
+    if (!SkillTree && !treeChunkError) loadSkillTree();
   });
 
   let skills: Skill[] = $state([]);
@@ -107,6 +121,11 @@
         </div>
       {:else if SkillTree}
         <SkillTree data={treeData} width={560} height={420} />
+      {:else if treeChunkError}
+        <div class="loading-state caption chunk-error">
+          <span>{$t('common.loadFailed')}</span>
+          <button class="btn btn-ghost" onclick={loadSkillTree}>{$t('common.retry')}</button>
+        </div>
       {:else}
         <div class="loading-state caption">Cargando árbol...</div>
       {/if}
@@ -246,6 +265,13 @@
     left: 50%;
     transform: translate(-50%, -50%);
     color: var(--text-muted);
+  }
+
+  .chunk-error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
   }
 
   .skills-list {

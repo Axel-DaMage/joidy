@@ -319,7 +319,14 @@ export function getLucideIcon(name: string): any | null {
 // resolution reuses the same module instance.
 let _fullSetPromise: Promise<Record<string, any>> | null = null;
 function loadFullSet(): Promise<Record<string, any>> {
-  return (_fullSetPromise ??= import('lucide-svelte') as Promise<Record<string, any>>);
+  // Reset the cached promise on failure — otherwise one failed chunk fetch
+  // rejects every later lookup forever (#1459).
+  return (_fullSetPromise ??= (import('lucide-svelte') as Promise<Record<string, any>>).catch(
+    (err) => {
+      _fullSetPromise = null;
+      throw err;
+    }
+  ));
 }
 
 /**

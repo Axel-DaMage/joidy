@@ -73,6 +73,11 @@
     trackSessionStart,
     trackSessionEnd,
   } from '$lib/stores/usage';
+  import {
+    chunkUpdateAvailable,
+    initChunkErrorRecovery,
+    isChunkLoadError,
+  } from '$lib/utils/chunkError';
 
   type NavItemStatus = 'ready' | 'dev' | 'placeholder';
 
@@ -131,21 +136,46 @@
   let mounted = false;
   let needsSetup = false;
   let checkingSetup = true;
+  let setupCheckFailed = false;
+
+  // A hung/failed setup-status request used to leave the app on an empty
+  // viewport forever (no spinner, no error — #1459). The check now has a
+  // hard timeout and a failure state with a retry action.
+  const SETUP_CHECK_TIMEOUT_MS = 10_000;
+
+  function checkSetupStatus() {
+    checkingSetup = true;
+    setupCheckFailed = false;
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      checkingSetup = false;
+      setupCheckFailed = true;
+      logger.error('[layout] setup-status check timed out');
+    }, SETUP_CHECK_TIMEOUT_MS);
+
+    api.config
+      .setupStatus()
+      .then((res) => {
+        if (timedOut) return;
+        clearTimeout(timer);
+        needsSetup = res.needs_setup;
+        checkingSetup = false;
+      })
+      .catch((err) => {
+        if (timedOut) return;
+        clearTimeout(timer);
+        logger.error('Failed to check setup status:', err);
+        checkingSetup = false;
+        setupCheckFailed = true;
+      });
+  }
 
   onMount(() => {
     mounted = true;
 
     // Check setup status
-    api.config
-      .setupStatus()
-      .then((res) => {
-        needsSetup = res.needs_setup;
-        checkingSetup = false;
-      })
-      .catch((err) => {
-        logger.error('Failed to check setup status:', err);
-        checkingSetup = false;
-      });
+    checkSetupStatus();
 
     accentColors.init();
     activeIconPack.init();
@@ -160,6 +190,9 @@
     devMode.init();
     const cleanupConnection = initConnectionStore();
     const cleanupOfflineSync = initOfflineSync();
+    // Stale-chunk recovery (#1459): a deploy replaces hashed bundles while
+    // open tabs still request the old ones — auto-reload once, then prompt.
+    const cleanupChunkRecovery = initChunkErrorRecovery();
 
     // Internal usage tracking (#250) — only records while the app is in the
     // foreground. Starts a session on mount and ends it on cleanup.
@@ -415,6 +448,9 @@
 
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
       const reason = event.reason;
+      // Failed dynamic imports are owned by the chunk-error recovery — a
+      // "new version" reload, not a generic error toast (#1459).
+      if (isChunkLoadError(reason)) return;
       const msg = reason?.message || String(reason) || 'Promesa rechazada';
       console.error('[Unhandled rejection]', reason);
       showNotification(`Error inesperado: ${msg}`, 'error');
@@ -522,6 +558,7 @@
       if (cleanupKeyboard) cleanupKeyboard();
       if (cleanupConnection) cleanupConnection();
       if (cleanupOfflineSync) cleanupOfflineSync();
+      cleanupChunkRecovery();
       if (cleanupUsage) cleanupUsage();
       if ($isAuthenticated) {
         trackSessionEnd();
@@ -548,8 +585,18 @@
 </script>
 
 {#if !mounted || checkingSetup}
-  <!-- Render blank or loading during SSR or setup check -->
-  <div style="min-height: 100vh; background: var(--bg);"></div>
+  <!-- Real loading indicator during SSR or the setup check — the old empty
+       div left a blank viewport on hung requests (#1459). -->
+  <div class="boot-screen" role="status" aria-live="polite">
+    <div class="boot-spinner" aria-hidden="true"></div>
+    <span class="boot-text">{$t('layout.loading')}</span>
+  </div>
+{:else if setupCheckFailed}
+  <div class="boot-screen">
+    <DynamicIcon name="TriangleAlert" size={28} color="var(--warning, #f59e0b)" />
+    <span class="boot-text">{$t('layout.setupCheckFailed')}</span>
+    <button class="btn btn-primary" onclick={checkSetupStatus}>{$t('common.retry')}</button>
+  </div>
 {:else if needsSetup}
   <SetupWizard />
   <Toast />
@@ -806,7 +853,104 @@
   <ShareAchievementModal />
 {/if}
 
+<!-- Stale-chunk prompt (#1459): shown when a lazy import failed after the
+     guarded auto-reload was already spent. Top-level so it overlays every
+     branch — boot screen, setup wizard, login and the app shell. -->
+{#if $chunkUpdateAvailable}
+  <div class="chunk-update-banner" role="alert" transition:fade={{ duration: 150 }}>
+    <DynamicIcon name="RefreshCw" size={13} />
+    <span>{$t('pwa.updateAvailable')}</span>
+    <button class="btn btn-primary chunk-reload-btn" onclick={() => window.location.reload()}>
+      {$t('common.reload')}
+    </button>
+    <button
+      class="chunk-dismiss"
+      aria-label={$t('common.close')}
+      onclick={() => chunkUpdateAvailable.set(false)}
+    >
+      <DynamicIcon name="X" size={12} />
+    </button>
+  </div>
+{/if}
+
 <style>
+  /* Boot screen (#1459) — real spinner + failure state instead of the old
+     empty min-height div that rendered a permanently blank viewport. */
+  .boot-screen {
+    min-height: 100vh;
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding: 24px;
+    text-align: center;
+  }
+  .boot-text {
+    color: var(--text-muted);
+    font-size: 13px;
+    max-width: 32ch;
+  }
+  .boot-spinner {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    border-top-color: var(--xp);
+    animation: boot-spin 0.9s linear infinite;
+  }
+  @keyframes boot-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .boot-spinner {
+      animation: none;
+      border-top-color: var(--border);
+    }
+  }
+
+  /* Stale-chunk "new version" prompt (#1459) */
+  .chunk-update-banner {
+    position: fixed;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: var(--z-tooltip, 1000);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--elevated);
+    border: 1px solid var(--accent);
+    border-radius: 999px;
+    padding: 6px 8px 6px 14px;
+    font-size: 12px;
+    color: var(--text-primary);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+    white-space: nowrap;
+  }
+  .chunk-reload-btn {
+    padding: 4px 12px;
+    font-size: 12px;
+  }
+  .chunk-dismiss {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+  }
+  .chunk-dismiss:hover {
+    color: var(--text-primary);
+    background: var(--surface-hover);
+  }
+
   .statusbar-version-btn {
     color: var(--text-muted);
     cursor: pointer;

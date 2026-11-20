@@ -27,23 +27,48 @@
   import { t } from 'svelte-i18n';
 
   // Lazy-load heavy components so they are split into separate chunks and
-  // only downloaded when actually needed (#347).
+  // only downloaded when actually needed (#347). Failed chunks surface an
+  // error + retry instead of an invisible/infinite loader (#1459).
   // StreakCreateModal (558 lines) — loaded when the user opens the create/edit modal.
   let StreakCreateModal: typeof import('$lib/components/StreakCreateModal.svelte').default | null =
     null;
+  let modalChunkError = false;
+  let modalChunkLoading = false;
   function ensureStreakCreateModal() {
-    if (!StreakCreateModal) {
-      import('$lib/components/StreakCreateModal.svelte').then(
-        (m) => (StreakCreateModal = m.default)
-      );
+    if (!StreakCreateModal && !modalChunkError && !modalChunkLoading) {
+      modalChunkLoading = true;
+      import('$lib/components/StreakCreateModal.svelte')
+        .then((m) => (StreakCreateModal = m.default))
+        .catch((err) => {
+          logger.error('[streaks] StreakCreateModal chunk failed:', err);
+          modalChunkError = true;
+        })
+        .finally(() => (modalChunkLoading = false));
     }
+  }
+  function retryStreakCreateModal() {
+    modalChunkError = false;
+    ensureStreakCreateModal();
   }
   // StreakHeatmap (561 lines) — loaded when a streak is selected for detail view.
   let StreakHeatmap: typeof import('$lib/components/StreakHeatmap.svelte').default | null = null;
+  let heatmapChunkError = false;
+  let heatmapChunkLoading = false;
   function ensureStreakHeatmap() {
-    if (!StreakHeatmap) {
-      import('$lib/components/StreakHeatmap.svelte').then((m) => (StreakHeatmap = m.default));
+    if (!StreakHeatmap && !heatmapChunkError && !heatmapChunkLoading) {
+      heatmapChunkLoading = true;
+      import('$lib/components/StreakHeatmap.svelte')
+        .then((m) => (StreakHeatmap = m.default))
+        .catch((err) => {
+          logger.error('[streaks] StreakHeatmap chunk failed:', err);
+          heatmapChunkError = true;
+        })
+        .finally(() => (heatmapChunkLoading = false));
     }
+  }
+  function retryStreakHeatmap() {
+    heatmapChunkError = false;
+    ensureStreakHeatmap();
   }
 
   let streaks: PersonalStreak[] = [];
@@ -525,6 +550,16 @@
                   startDate={selected.start_date}
                   targetDate={selected.target_date}
                 />
+              {:else if heatmapChunkError}
+                <div
+                  class="caption"
+                  style="padding: 24px; text-align: center; color: var(--text-muted); display: flex; flex-direction: column; align-items: center; gap: 10px;"
+                >
+                  <span>{$t('common.loadFailed')}</span>
+                  <button class="btn btn-ghost" onclick={retryStreakHeatmap}
+                    >{$t('common.retry')}</button
+                  >
+                </div>
               {:else}
                 <div
                   class="caption"
@@ -665,9 +700,41 @@
     on:archive={() =>
       editTarget?.id != null && archiveStreak(editTarget.id, !editTarget.is_archived)}
   />
+{:else if showModal && modalChunkError}
+  <!-- Chunk failed while opening the modal — surface it instead of silently
+       swallowing the click (#1459). -->
+  <div class="modal-chunk-error" role="alert">
+    <span>{$t('common.loadFailed')}</span>
+    <button class="btn btn-ghost" onclick={retryStreakCreateModal}>{$t('common.retry')}</button>
+    <button
+      class="btn btn-ghost"
+      onclick={() => {
+        showModal = false;
+        modalChunkError = false;
+      }}>{$t('common.cancel')}</button
+    >
+  </div>
 {/if}
 
 <style>
+  .modal-chunk-error {
+    position: fixed;
+    bottom: 48px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: var(--z-tooltip, 1000);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--elevated);
+    border: 1px solid var(--error);
+    border-radius: var(--r);
+    padding: 10px 14px;
+    font-size: 12px;
+    color: var(--text-primary);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  }
+
   .streaks-page {
     height: 100%;
     width: 100%;
