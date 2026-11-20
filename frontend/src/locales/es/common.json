@@ -938,6 +938,12 @@
     "no": "No",
     "statusUnavailable": "No se pudo obtener el estado."
   },
+  "aiDisclosure": {
+    "notice": "Generado por IA — puede ser inexacto. Los datos se envían al proveedor de IA configurado.",
+    "provider": "Proveedor: {provider}",
+    "learnMore": "Transparencia de IA",
+    "tagTooltip": "Sugerencias generadas por IA. El contenido de la nota se envía al proveedor de IA configurado; pueden ser inexactas."
+  },
   "streaks": {
     "backToMenu": "Volver al menú",
     "streakCompleted": "Racha completada",
