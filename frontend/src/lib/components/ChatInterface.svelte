@@ -1,12 +1,14 @@
 <script lang="ts">
   import { tick } from 'svelte';
   import { Send, Sparkles, Trash2, LoaderCircle } from 'lucide-svelte';
-  import { marked } from 'marked';
+  import { Marked } from 'marked';
   import DOMPurify from 'dompurify';
   import { messages, isLoading, suggestions, sendMessage, clearChat } from '$lib/stores/chat';
   import { t } from 'svelte-i18n';
 
-  marked.use({ gfm: true, breaks: true });
+  // Instance-scoped parser — `marked.use()` on the global singleton would
+  // leak this config into every other marked caller (#1317).
+  const mdParser = new Marked({ gfm: true, breaks: true });
 
   let input = $state('');
   let scrollContainer: HTMLDivElement | null = $state(null);
@@ -36,7 +38,7 @@
 
   function renderMarkdown(md: string): string {
     if (!md.trim()) return '';
-    return DOMPurify.sanitize(String(marked.parse(md)));
+    return DOMPurify.sanitize(String(mdParser.parse(md)));
   }
 
   async function handleSend() {

@@ -41,12 +41,21 @@
   let noteIconPack = $derived(iconMeta.pack || undefined);
 
   function pickIcon(ic: string) {
-    updateFrontmatter('icon', ic);
-    updateFrontmatter('iconPack', $activeIconPack);
+    updateFrontmatterMany([
+      ['icon', ic],
+      ['iconPack', $activeIconPack],
+    ]);
   }
 
   function updateFrontmatter(key: string, value: string) {
-    content = updateFrontmatterInContent(content, key, value);
+    updateFrontmatterMany([[key, value]]);
+  }
+
+  function updateFrontmatterMany(entries: [string, string][]) {
+    content = entries.reduce(
+      (c, [key, value]) => updateFrontmatterInContent(c, key, value),
+      content
+    );
     onContentChange();
     handleSave();
   }
@@ -77,6 +86,7 @@
   bind:open={showIconSettings}
   bind:customColor
   {updateFrontmatter}
+  {updateFrontmatterMany}
   {pickIcon}
 />
 

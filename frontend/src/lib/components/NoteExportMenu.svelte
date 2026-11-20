@@ -3,6 +3,7 @@
   import type { Note } from '$lib/api';
   import { downloadMarkdown, downloadHTML, copyNoteAsMarkdown } from '$lib/utils/export';
   import { showNotification } from '$lib/stores/gamification';
+  import { menuNav } from '$lib/actions/menuNav';
 
   let { note }: { note: Note } = $props();
 
@@ -20,6 +21,9 @@
     style="position: relative; z-index: var(--z-overlay);"
     onclick={() => (showExportMenu = !showExportMenu)}
     title="Exportar nota"
+    aria-haspopup="menu"
+    aria-expanded={showExportMenu}
+    aria-controls="note-export-menu"
   >
     <Download size={14} />
     <span>Exportar</span>
@@ -35,9 +39,18 @@
       tabindex="-1"
     ></div>
 
-    <div class="export-dropdown-menu">
+    <div
+      id="note-export-menu"
+      class="export-dropdown-menu"
+      role="menu"
+      aria-label="Exportar nota"
+      tabindex="-1"
+      use:menuNav={{ onClose: () => (showExportMenu = false) }}
+    >
       <button
         class="dropdown-item"
+        role="menuitem"
+        tabindex="-1"
         onclick={() => {
           downloadMarkdown(note);
           showExportMenu = false;
@@ -48,6 +61,8 @@
       </button>
       <button
         class="dropdown-item"
+        role="menuitem"
+        tabindex="-1"
         onclick={() => {
           downloadHTML(note);
           showExportMenu = false;
@@ -58,6 +73,8 @@
       </button>
       <button
         class="dropdown-item"
+        role="menuitem"
+        tabindex="-1"
         onclick={async () => {
           if (note) {
             const ok = await copyNoteAsMarkdown(note);

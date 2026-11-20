@@ -99,6 +99,33 @@ describe('renderMarkdown — wikilinks (Obsidian)', () => {
     expect(result).toContain('data-title="a"');
     expect(result).toContain('data-title="b"');
   });
+
+  it('escapes HTML injected via the alias (#1317)', () => {
+    const result = renderMarkdown('See [[x|<img src="https://evil/t">]]');
+    // The alias must become an escaped literal — `<img>` is on the DOMPurify
+    // allowlist, so unescaped interpolation would survive sanitization.
+    expect(result).toContain('&lt;img');
+    expect(result).toContain('class="wikilink"');
+    const doc = new DOMParser().parseFromString(result, 'text/html');
+    expect(doc.querySelector('img')).toBeNull();
+    // The alias must stay literal text — marked must not autolink the escaped
+    // URL into an injected anchor either.
+    expect(doc.querySelector('a')).toBeNull();
+    expect(doc.querySelector('.wikilink')?.textContent).toBe('<img src="https://evil/t">');
+  });
+
+  it('escapes quotes that would break out of data-title (#1317)', () => {
+    const result = renderMarkdown('[[a"><img src=x>]]');
+    const doc = new DOMParser().parseFromString(result, 'text/html');
+    expect(doc.querySelector('img')).toBeNull();
+    expect(doc.querySelector('.wikilink')?.getAttribute('data-title')).toBe('a"><img src=x>');
+  });
+
+  it('does not render wikilink spans as markup before sanitization', () => {
+    const result = renderMarkdown('[[x|<script>alert(1)</script>]]');
+    expect(result).not.toContain('<script>');
+    expect(result).toContain('&lt;script&gt;');
+  });
 });
 
 describe('renderMarkdown — sanitization (DOMPurify)', () => {

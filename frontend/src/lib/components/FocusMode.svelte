@@ -26,6 +26,7 @@
     type ClockParts,
   } from '$lib/utils/clock';
   import ClockDisplay from '$lib/components/clock/ClockDisplay.svelte';
+  import { focusTrap } from '$lib/actions/focusTrap';
   import { t } from 'svelte-i18n';
 
   // ── Wall clock (#706) ──────────────────────────────────────────────────────
@@ -146,6 +147,8 @@
     role="dialog"
     aria-modal="true"
     aria-label={$t('focus.modeLabel')}
+    tabindex="-1"
+    use:focusTrap
     in:fade={reducedMotion ? { duration: 0 } : { duration: 220 }}
     out:fade={reducedMotion ? { duration: 0 } : { duration: 180 }}
   >

@@ -3,6 +3,7 @@
   import type { FlatNode } from '$lib/utils/fileTree';
   import { FolderRoot } from 'lucide-svelte';
   import DynamicIcon from './DynamicIcon.svelte';
+  import { focusTrap } from '$lib/actions/focusTrap';
   import { t } from 'svelte-i18n';
 
   export let flatNodes: FlatNode[] = [];
@@ -18,9 +19,21 @@
   $: folders = flatNodes.filter(n => n.type === 'folder' && (!search || n.path.toLowerCase().includes(search.toLowerCase())));
 </script>
 
-<div class="folder-picker-backdrop" onclick={() => dispatch('close')} role="button" tabindex="-1" onkeydown={(e) => e.key === 'Enter' && dispatch('close')}>
-  <div class="folder-picker" onclick={(e) => e.stopPropagation()} role="button" tabindex="-1" onkeydown={(e) => e.stopPropagation()}>
-    <h3 class="folder-modal-title">{$t('folderPicker.title')}</h3>
+<!-- svelte-ignore a11y_click_events_have_key_events -->
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div class="folder-picker-backdrop" onclick={() => dispatch('close')} role="presentation">
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+  <div
+    class="folder-picker"
+    onclick={(e) => e.stopPropagation()}
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="folder-picker-title"
+    tabindex="-1"
+    use:focusTrap={{ onEscape: () => dispatch('close') }}
+  >
+    <h3 id="folder-picker-title" class="folder-modal-title">{$t('folderPicker.title')}</h3>
 
     <input type="text" class="input mono" bind:value={search} placeholder={$t('folderPicker.searchPlaceholder')} aria-label={$t('folderPicker.searchPlaceholder')} style="width:100%; box-sizing:border-box; margin-bottom:8px;" />
 

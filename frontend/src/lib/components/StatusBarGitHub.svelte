@@ -74,29 +74,62 @@
 
   let openIssues = $derived(issues.filter((i) => i.state === 'open'));
   let openPRs = $derived(prs.filter((p) => p.state === 'open'));
+
+  let issuesBtn = $state<HTMLButtonElement | null>(null);
+  let prsBtn = $state<HTMLButtonElement | null>(null);
+
+  // Non-modal popovers: Escape closes the open one and returns focus to its
+  // pill toggle (#1307).
+  function handleKeydown(e: KeyboardEvent) {
+    if (e.key !== 'Escape') return;
+    if (showIssues) {
+      e.preventDefault();
+      showIssues = false;
+      issuesBtn?.focus();
+    } else if (showPRs) {
+      e.preventDefault();
+      showPRs = false;
+      prsBtn?.focus();
+    }
+  }
 </script>
 
 {#if !connected && !loading}
   <!-- GitHub not connected: render nothing to keep the status bar clean -->
 {:else}
-  <div class="sb-gh">
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="sb-gh" onkeydown={handleKeydown}>
     <!-- Assigned Issues -->
     <button
       class="sb-gh-pill"
       class:active={showIssues}
+      bind:this={issuesBtn}
       onclick={() => (showIssues = !showIssues)}
       title={$t('widgets.ghAssigned') + ' — ' + $t('widgets.ghIssues')}
       aria-label={$t('widgets.ghAssigned') + ' — ' + $t('widgets.ghIssues')}
+      aria-haspopup="dialog"
+      aria-expanded={showIssues}
+      aria-controls="sb-gh-issues-popover"
     >
       <DynamicIcon name="CircleDot" size={12} color="var(--accent)" />
       <span class="sb-gh-count">{openIssues.length}</span>
       <span class="sb-gh-label">{$t('widgets.ghIssues')}</span>
     </button>
     {#if showIssues}
-      <div class="sb-gh-popover" transition:slide={{ duration: 150 }}>
+      <div
+        id="sb-gh-issues-popover"
+        class="sb-gh-popover"
+        role="dialog"
+        aria-label="{$t('widgets.ghAssigned')} — {$t('widgets.ghIssues')}"
+        transition:slide={{ duration: 150 }}
+      >
         <div class="sb-gh-popover-header">
           <span>{$t('widgets.ghAssigned')} — {$t('widgets.ghIssues')}</span>
-          <button class="sb-gh-close" onclick={() => (showIssues = false)} aria-label={$t('common.close')}>×</button>
+          <button
+            class="sb-gh-close"
+            onclick={() => (showIssues = false)}
+            aria-label={$t('common.close')}>×</button
+          >
         </div>
         {#if loading}
           <div class="sb-gh-empty">{$t('widgets.ghUpdating')}</div>
@@ -123,19 +156,33 @@
     <button
       class="sb-gh-pill"
       class:active={showPRs}
+      bind:this={prsBtn}
       onclick={() => (showPRs = !showPRs)}
       title={$t('widgets.ghAssigned') + ' — PRs'}
       aria-label={$t('widgets.ghAssigned') + ' — PRs'}
+      aria-haspopup="dialog"
+      aria-expanded={showPRs}
+      aria-controls="sb-gh-prs-popover"
     >
       <DynamicIcon name="GitPullRequest" size={12} color="var(--success)" />
       <span class="sb-gh-count">{openPRs.length}</span>
       <span class="sb-gh-label">PRs</span>
     </button>
     {#if showPRs}
-      <div class="sb-gh-popover" transition:slide={{ duration: 150 }}>
+      <div
+        id="sb-gh-prs-popover"
+        class="sb-gh-popover"
+        role="dialog"
+        aria-label="{$t('widgets.ghAssigned')} — PRs"
+        transition:slide={{ duration: 150 }}
+      >
         <div class="sb-gh-popover-header">
           <span>{$t('widgets.ghAssigned')} — PRs</span>
-          <button class="sb-gh-close" onclick={() => (showPRs = false)} aria-label={$t('common.close')}>×</button>
+          <button
+            class="sb-gh-close"
+            onclick={() => (showPRs = false)}
+            aria-label={$t('common.close')}>×</button
+          >
         </div>
         {#if loading}
           <div class="sb-gh-empty">{$t('widgets.ghUpdating')}</div>
@@ -149,7 +196,10 @@
               <li>
                 <a href={pr.url} target="_blank" rel="noopener noreferrer" class="sb-gh-item">
                   <span class="sb-gh-item-repo mono">{pr.repo}</span>
-                  <span class="sb-gh-item-title">#{pr.number} — {pr.title}{#if pr.draft} (draft){/if}</span>
+                  <span class="sb-gh-item-title"
+                    >#{pr.number} — {pr.title}{#if pr.draft}
+                      (draft){/if}</span
+                  >
                 </a>
               </li>
             {/each}

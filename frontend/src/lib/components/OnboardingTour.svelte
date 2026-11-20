@@ -30,13 +30,42 @@
     if (event.key === 'Escape') {
       event.preventDefault();
       onboarding.skipTour();
-    } else if (event.key === 'ArrowRight') {
-      event.preventDefault();
+      return;
+    }
+    // Arrow navigation must not hijack keys while the user is typing in a
+    // spotlighted input/textarea/select/contenteditable (#1307).
+    if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;
+    const target = event.target;
+    if (
+      target instanceof HTMLElement &&
+      (target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.tagName === 'SELECT' ||
+        target.isContentEditable)
+    ) {
+      return;
+    }
+    event.preventDefault();
+    if (event.key === 'ArrowRight') {
       handleNext();
-    } else if (event.key === 'ArrowLeft') {
-      event.preventDefault();
+    } else {
       onboarding.prevStep();
     }
+  }
+
+  // Non-modal tour card: move focus into it on open and return it to the
+  // previously focused element when the card unmounts. Focus is NOT trapped —
+  // the spotlighted page element must stay reachable by keyboard.
+  function focusOnMount(node: HTMLElement) {
+    const previous = document.activeElement;
+    node.focus();
+    return {
+      destroy() {
+        if (previous instanceof HTMLElement && previous.isConnected) {
+          previous.focus();
+        }
+      },
+    };
   }
 
   function handleNext() {
@@ -72,8 +101,9 @@
       class:centered={!step.target}
       transition:fly={{ y: 20, duration: 300 }}
       role="dialog"
-      aria-modal="true"
       aria-labelledby="onboarding-title"
+      tabindex="-1"
+      use:focusOnMount
     >
       <div class="progress-bar" aria-hidden="true">
         <div class="progress-fill" style="width: {progress}%"></div>
