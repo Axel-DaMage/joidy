@@ -258,7 +258,7 @@ async def add_repo_to_db(
     try:
         gh_repo = await _fetch(f"/repos/{owner}/{name}")
     except Exception:
-        raise HTTPException(status_code=404, detail="Repo not found")
+        raise HTTPException(status_code=404, detail="Repo not found") from None
 
     existing = db.execute(select(GitHubRepo).where(GitHubRepo.full_name == full_name)).scalar_one_or_none()
     if existing:
@@ -831,7 +831,7 @@ async def receive_webhook(
     try:
         payload = json.loads(body) if body else {}
     except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+        raise HTTPException(status_code=400, detail="Invalid JSON payload") from None
     if not isinstance(payload, dict):
         raise HTTPException(status_code=400, detail="Invalid webhook payload")
 
@@ -878,7 +878,7 @@ async def sync_repo(repo_id: int, db: Session = Depends(get_db)):
     try:
         gh_issues = await _fetch(f"/repos/{owner}/{name}/issues", {"state": "all", "per_page": 100})
     except Exception:
-        raise HTTPException(status_code=502, detail="GitHub API error")
+        raise HTTPException(status_code=502, detail="GitHub API error") from None
 
     synced_count = 0
     for issue_data in gh_issues:
@@ -973,9 +973,9 @@ async def start_device_flow():
             error_msg = err_json.get("error_description") or err_json.get("error") or error_msg
         except Exception:  # noqa: S110 — non-JSON error body; keep status-code fallback message
             pass
-        raise HTTPException(status_code=400, detail=error_msg)
+        raise HTTPException(status_code=400, detail=error_msg) from None
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Failed to communicate with GitHub: {str(e)}")
+        raise HTTPException(status_code=502, detail=f"Failed to communicate with GitHub: {str(e)}") from e
 
     if data.get("error"):
         raise HTTPException(
@@ -994,7 +994,7 @@ async def start_device_flow():
     try:
         poll_token = oauth_state.seal_value("github-device", device_code)
     except RuntimeError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return {
         "poll_token": poll_token,
@@ -1049,9 +1049,9 @@ async def poll_device_code(payload: DevicePollRequest):
             error_msg = err_json.get("error_description") or err_json.get("error") or error_msg
         except Exception:  # noqa: S110 — non-JSON error body; keep status-code fallback message
             pass
-        raise HTTPException(status_code=400, detail=error_msg)
+        raise HTTPException(status_code=400, detail=error_msg) from None
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Failed to communicate with GitHub: {str(e)}")
+        raise HTTPException(status_code=502, detail=f"Failed to communicate with GitHub: {str(e)}") from e
 
     error = data.get("error")
     if error == "authorization_pending":
@@ -1098,7 +1098,7 @@ async def start_web_flow():
     try:
         state = oauth_state.generate_state("github")
     except RuntimeError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     redirect_uri = settings.github_oauth_web_url
     authorize_url = (
