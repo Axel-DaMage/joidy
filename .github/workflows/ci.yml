@@ -310,9 +310,13 @@ jobs:
         id: plan
         env:
           EVENT_NAME: ${{ github.event_name }}
-          BASE_REF: ${{ github.base_ref }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           BEFORE: ${{ github.event.before }}
           HEAD_SHA: ${{ github.sha }}
+          # GITHUB_TOKEN (auto-provisioned, read-only on forks) is enough
+          # for the compare API — no user secrets anywhere in this file.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Full-suite parallelism: N runners, each booting its own
           # docker stack + DB and running ~1/N of the suite serially
           # (workers:1 stays — see playwright.config.ts). Serial runtime
@@ -325,16 +329,26 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Files changed by this event. Empty/failed diff = "unknown" →
-          # the safe default below runs the full suite.
-          CHANGED=""
+          # Files changed by this event, via the compare API — no git
+          # history needed (a depth-1 checkout + depth-1 base fetch has no
+          # merge base, so `git diff A...B` fails silently — the old inline
+          # version of this logic fell back to smoke on every PR). Empty or
+          # failed diff = "unknown" → the safe defaults below run the full
+          # suite. Diffs capped at 300 files by the API also count as
+          # unknown rather than trusting a truncated list.
+          RANGE=""
           if [ "$EVENT_NAME" = "pull_request" ]; then
-            git fetch --no-tags --depth=1 origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
-            CHANGED="$(git diff --name-only "origin/${BASE_REF}...HEAD" || true)"
-          elif [ "${BEFORE//0/}" != "" ] && git fetch --no-tags --depth=1 origin "$BEFORE" 2>/dev/null; then
+            RANGE="${PR_BASE_SHA}...${PR_HEAD_SHA}"
+          elif [ "${BEFORE//0/}" != "" ]; then
             # push: BEFORE is the previous branch tip (all-zero on a brand
             # new branch, possibly unreachable after a force-push).
-            CHANGED="$(git diff --name-only "${BEFORE}..${HEAD_SHA}" || true)"
+            RANGE="${BEFORE}...${HEAD_SHA}"
+          fi
+          CHANGED=""
+          if [ -n "$RANGE" ]; then
+            CHANGED="$(gh api "repos/${GITHUB_REPOSITORY}/compare/${RANGE}" \
+              --jq 'if ((.files | length) >= 300) then "" else (.files | map(.filename) | join("\n")) end' \
+              2>/dev/null || true)"
           fi
           echo "Changed files:"
           echo "${CHANGED:-<unknown>}"
@@ -358,10 +372,11 @@ jobs:
 
           SPECS=""
           RUN_ALL="true"
-          if [ "$EVENT_NAME" = "pull_request" ]; then
+          if [ "$EVENT_NAME" = "pull_request" ] && [ -n "$CHANGED" ]; then
             # Same route-scoping policy the job used to compute inline
             # (#1255): smoke + the specs for touched routes; the full suite
-            # when shared frontend code changed.
+            # when shared frontend code changed. A PR whose diff is
+            # unknown stays on the full suite — unknown is never scoped.
             SPECS="e2e/smoke.spec.ts"
             RUN_ALL="false"
 

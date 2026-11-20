@@ -67,7 +67,14 @@ Two separate problems were conflated as "every run gets cancelled":
   anything else (backend code, compose files, workflows, scripts) keeps
   full verification.
 - **Failed/empty diff** (e.g. unreachable `before` SHA after a
-  force-push): the safe default is the **full suite**.
+  force-push, or >300 changed files which the compare API truncates):
+  the safe default is the **full suite** — an unknown diff is never
+  scoped or skipped.
+- The diff comes from the **compare API** (`/compare/{base}...{head}`),
+  not `git diff`: a depth-1 checkout plus a depth-1 base fetch has no
+  merge base, so the old inline `git diff origin/base...HEAD` failed
+  silently and every PR quietly ran smoke-only (#1255's route scoping
+  never actually engaged). GITHUB_TOKEN is enough — no user secrets.
 
 ### Tuning
 
