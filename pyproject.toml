@@ -2,6 +2,7 @@
 name = "joidy"
 version = "0.2.0"
 description = "Joidy backend services"
+license = { text = "GPL-3.0-or-later" }
 requires-python = ">=3.12"
 
 [tool.ruff]
