@@ -105,7 +105,13 @@
   {#each $accentColors as color, i}
     <div class="color-entry">
       <span class="color-idx mono">{i + 1}</span>
-      <input type="color" class="color-swatch" value={color} oninput={(e) => onColorPicker(i, e)} />
+      <input
+        type="color"
+        class="color-swatch"
+        value={color}
+        aria-label="Color {i + 1}"
+        oninput={(e) => onColorPicker(i, e)}
+      />
       <input
         type="text"
         class="hex-input mono"
@@ -113,6 +119,7 @@
         value={color}
         oninput={(e) => onHex(i, e)}
         placeholder="#c8a96e"
+        aria-label="Color {i + 1} hex"
       />
       {#if $accentColors.length > 1}
         <button
@@ -168,7 +175,7 @@
   .color-limit-note {
     margin: -4px 0 10px;
     font-size: 10px;
-    color: var(--text-disabled);
+    color: var(--text-muted);
     letter-spacing: 0.04em;
   }
 
@@ -186,7 +193,7 @@
 
   .color-idx {
     font-size: 9px;
-    color: var(--text-disabled);
+    color: var(--text-muted);
     width: 10px;
     text-align: right;
   }
@@ -215,6 +222,10 @@
   }
   .hex-input:focus {
     border-color: var(--text-muted);
+  }
+  .hex-input:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
   }
 
   .color-rm {
@@ -261,8 +272,8 @@
     border-color: var(--text-muted);
   }
   .add-color-btn:focus-visible {
-    outline: none;
-    border-color: var(--xp);
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
     color: var(--xp);
   }
 </style>

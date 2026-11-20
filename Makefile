@@ -90,6 +90,7 @@ setup: ## First-time setup: copy .env, create data directories
 		fi; \
 		echo "$(GREEN)✓$(NC) Generated INTERNAL_API_TOKEN"; \
 	fi
+	@chmod 600 .env 2>/dev/null || true
 	@echo ""
 	@echo "Or use 'make start' for a guided setup + start!"
 	@echo "────────────────────────────────────────────────────"
@@ -440,6 +441,7 @@ start: ## 🚀 Quick start: setup + start all services
 		fi; \
 		echo "  ✓ Generated new INTERNAL_API_TOKEN"; \
 	fi
+	@chmod 600 .env 2>/dev/null || true
 	@echo ""
 	@echo "Step 2: Starting services..."
 	@OBSIDIAN_VAULT_PATH=$(call env_key,OBSIDIAN_VAULT_PATH); \

@@ -52,11 +52,7 @@ def test_internal_token_authenticates_vault_routes(persisted_env, db_session):
     try:
         with TestClient(app) as client, patch("routers.vault.write_daily", return_value=True):
             assert client.post("/vault/write-daily").status_code == 401
-            assert (
-                client.post("/vault/write-daily", headers={"Authorization": "Bearer service-tok"}).status_code == 200
-            )
-            assert (
-                client.post("/vault/write-daily", headers={"Authorization": f"Bearer {stored}"}).status_code == 401
-            )
+            assert client.post("/vault/write-daily", headers={"Authorization": "Bearer service-tok"}).status_code == 200
+            assert client.post("/vault/write-daily", headers={"Authorization": f"Bearer {stored}"}).status_code == 401
     finally:
         app.dependency_overrides.pop(get_db, None)

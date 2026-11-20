@@ -8,6 +8,30 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="description" content="Joidy — Tu sistema de aprendizaje personal" />
     <meta name="theme-color" content="#c8a96e" />
+    <script>
+      // Apply the persisted theme before first paint so light-theme users
+      // don't get a dark flash + transition on every load (#1270). Kept in
+      // sync with the themeMode store in $lib/stores/settings.ts: reads
+      // `joidy-theme-mode` and migrates the legacy `joidy-dark-mode` key.
+      (function () {
+        try {
+          var mode = localStorage.getItem('joidy-theme-mode');
+          if (mode !== 'light' && mode !== 'dark') {
+            var legacy = localStorage.getItem('joidy-dark-mode');
+            if (legacy !== null) {
+              mode = legacy === 'false' ? 'light' : 'dark';
+              localStorage.setItem('joidy-theme-mode', mode);
+              localStorage.removeItem('joidy-dark-mode');
+            } else {
+              mode = 'dark';
+            }
+          }
+          document.documentElement.setAttribute('data-theme', mode);
+        } catch {
+          // localStorage unavailable — keep the static data-theme default.
+        }
+      })();
+    </script>
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Joidy" />

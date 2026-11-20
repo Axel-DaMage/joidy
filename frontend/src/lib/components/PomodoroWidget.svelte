@@ -333,6 +333,10 @@
     appearance: textfield;
     -moz-appearance: textfield;
   }
+  .dur-input:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
+  }
   .dur-input::-webkit-outer-spin-button,
   .dur-input::-webkit-inner-spin-button {
     -webkit-appearance: none;
@@ -353,7 +357,7 @@
 
   .dur-sep {
     font-size: 9px;
-    color: var(--text-disabled, var(--border));
+    color: var(--text-muted);
   }
 
   @media (max-width: 768px) {

@@ -135,6 +135,10 @@
     line-height: 1.4;
   }
 
+  textarea:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
+  }
   textarea:focus {
     outline: none;
     border-color: var(--accent, #4f9cf9);

@@ -29,7 +29,15 @@
     "goToSettings": "Ir a Ajustes",
     "allDay": "Todo el día",
     "noEventsDay": "Sin eventos este día",
-    "weekDays": ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"],
+    "weekDays": [
+      "Lun",
+      "Mar",
+      "Mié",
+      "Jue",
+      "Vie",
+      "Sáb",
+      "Dom"
+    ],
     "months": [
       "Enero",
       "Febrero",
@@ -99,7 +107,12 @@
     "planPending": "Sugerencias de IA ({count})",
     "planAcceptAll": "Aceptar todo",
     "planDismiss": "Descartar",
-    "planAcceptHint": "Clic para aceptar este horario"
+    "planAcceptHint": "Clic para aceptar este horario",
+    "editTitle": "Título de la tarea",
+    "startTime": "Hora de inicio",
+    "endTime": "Hora de fin",
+    "loadError": "No se pudo cargar el calendario",
+    "loadErrorHint": "Comprueba tu conexión e inténtalo de nuevo."
   },
   "emails": {
     "title": "Correos",
@@ -187,7 +200,8 @@
     "saved": "Guardado",
     "tasks": "tareas",
     "level": "NVL",
-    "betaNotice": "Funcionalidad beta: algunas características están en desarrollo y pueden cambiar."
+    "betaNotice": "Funcionalidad beta: algunas características están en desarrollo y pueden cambiar.",
+    "retry": "Reintentar"
   },
   "status": {
     "offline": "Sin conexión",
@@ -390,6 +404,7 @@
     "snowballDesc": "La deuda se acumula exponencialmente",
     "linkToProject": "Vincular a Proyecto (Nota)",
     "noLinkedNote": "Sin nota vinculada",
+    "unlinkNote": "Quitar nota vinculada",
     "recentNotes": "Notas recientes",
     "tagSync": "Sincronización de Tag",
     "manualUpdate": "Actualización manual",
@@ -429,7 +444,10 @@
     "contextNightHint": "Tareas de baja fricción para la tarde/noche",
     "toQueue": "A la cola",
     "discard": "Descartar",
-    "discardConfirm": "¿Confirmar?"
+    "discardConfirm": "¿Confirmar?",
+    "sortBy": "Ordenar objetivos",
+    "goalColor": "Color del objetivo",
+    "goalColorHex": "Color del objetivo (hex)"
   },
   "notesPage": {
     "createNote": "Crear nota",
@@ -463,7 +481,15 @@
     "editorLoading": "Cargando editor...",
     "searchNotePlaceholder": "Buscar nota en tu baúl...",
     "configureDailyNote": "Configurar ruta de nota diaria",
-    "loadMore": "Cargar más"
+    "loadMore": "Cargar más",
+    "addTagsTitle": "Añadir etiquetas",
+    "removeTagsTitle": "Quitar etiquetas",
+    "tagsPlaceholder": "etiqueta1, etiqueta2, ...",
+    "deleteFolderTitle": "Eliminar carpeta",
+    "deleteFolderMessage": "¿Eliminar carpeta \"{name}\" y todas sus notas?",
+    "deleteFolder": "Eliminar",
+    "resizePanel": "Redimensionar panel",
+    "treeLabel": "Árbol de notas"
   },
   "goalDetail": {
     "loading": "Cargando...",
@@ -501,6 +527,7 @@
     "snowballDesc": "La deuda se acumula exponencialmente",
     "linkToProject": "Vincular a proyecto (nota)",
     "noLinkedNote": "Sin nota vinculada",
+    "unlinkNote": "Quitar nota vinculada",
     "searchNote": "Buscar o crear una nota...",
     "tagSync": "Sincronización de tag",
     "manualUpdate": "Actualización manual",
@@ -576,7 +603,10 @@
     "freezeHint": "Protegen tu racha si fallas un día.",
     "cancel": "Cancelar",
     "update": "Actualizar",
-    "create": "Crear Racha"
+    "create": "Crear Racha",
+    "everyNDays": "Cada N días",
+    "streakColor": "Color de la racha",
+    "streakColorHex": "Color de la racha (hex)"
   },
   "tagChip": {
     "aiSuggestion": "Sugerencia de IA",
@@ -608,12 +638,15 @@
     "stageLabel": "Etapa: {stage} (Nivel {level})"
   },
   "noteCard": {
-    "customize": "Personalizar"
+    "customize": "Personalizar",
+    "select": "Seleccionar nota {title}"
   },
   "modalDialog": {
-    "close": "Cerrar"
+    "close": "Cerrar",
+    "dialog": "Diálogo"
   },
   "iconPicker": {
+    "title": "Iconos",
     "searchPlaceholder": "Buscar iconos..."
   },
   "offlinePage": {
@@ -649,7 +682,13 @@
     "wysiwyg": "Editor visual (WYSIWYG) — escribe con formato (Ctrl+Shift+V)",
     "wysiwygShort": "Editor visual",
     "preview": "Vista previa renderizada — solo lectura (Ctrl+P)",
-    "previewShort": "Vista previa"
+    "previewShort": "Vista previa",
+    "contentLabel": "Contenido de la nota (markdown)",
+    "titleLabel": "Título de la nota",
+    "tagsLabel": "Etiquetas",
+    "linkUrlPrompt": "URL del enlace",
+    "linkUrlTitle": "Insertar enlace",
+    "linkUrlInsert": "Insertar"
   },
   "goalEditor": {
     "previewPlaceholder": "Escribe algo para ver el preview...",
@@ -711,6 +750,8 @@
     "vaultDesc": "Si usas Obsidian, introduce la ruta a tu bóveda (ej: ~/Documentos/notas/mi-vault). Si no, déjalo en blanco y Joidy usará su almacenamiento interno.",
     "vaultPath": "Ruta del Vault (ej: ~/Documentos/notas/mi-vault)",
     "doneDesc": "Tu entorno ha sido asegurado y configurado con éxito. Redirigiendo al sistema...",
+    "errorMismatch": "Las contraseñas no coinciden",
+    "errorTooShort": "La contraseña debe tener al menos 4 caracteres",
     "passwordHint": "Mínimo {min} caracteres — una frase de paso es más fuerte que una palabra compleja.",
     "passwordTooShort": "La contraseña debe tener al menos {min} caracteres",
     "passwordMismatch": "Las contraseñas no coinciden",
@@ -741,7 +782,8 @@
     "password": "Contraseña",
     "passwordPlaceholder": "Tu contraseña maestra",
     "entering": "Entrando...",
-    "enter": "Entrar"
+    "enter": "Entrar",
+    "error": "No se pudo iniciar sesión. Revisa tus credenciales e inténtalo de nuevo."
   },
   "focus": {
     "modeLabel": "Modo enfoque",
@@ -754,7 +796,9 @@
     "label": "Paleta de comandos",
     "searchPlaceholder": "Buscar comandos, notas, #etiquetas...",
     "searchLabel": "Buscar comandos",
-    "noResults": "No se encontraron resultados"
+    "noResults": "No se encontraron resultados",
+    "resultsLabel": "Resultados",
+    "resultCount": "{count} resultados"
   },
   "topicClusters": {
     "analyzing": "Analizando...",
@@ -801,6 +845,8 @@
   "widgets": {
     "reset": "Reiniciar",
     "skip": "Saltar",
+    "workMinutes": "Minutos de trabajo",
+    "breakMinutes": "Minutos de descanso",
     "pause": "Pausar",
     "start": "Iniciar",
     "refresh": "Actualizar",
@@ -832,6 +878,7 @@
   },
   "graph": {
     "searchPlaceholder": "Buscar en grafo...",
+    "timelineDays": "Rango de la línea de tiempo en días",
     "loading": "Cargando grafo...",
     "noData": "Sin datos aún. Crea notas y agrega tags para ver el grafo.",
     "noResults": "Sin resultados para el filtro actual.",
@@ -851,7 +898,8 @@
     "unlockedCount": "{count} habilidades desbloqueadas",
     "topSkill": "mejor habilidad",
     "construction": "En Construcción",
-    "constructionHint": "Activa el Modo Desarrollo en Ajustes para acceder al Árbol de Habilidades."
+    "constructionHint": "Activa el Modo Desarrollo en Ajustes para acceder al Árbol de Habilidades.",
+    "loadError": "No se pudieron cargar las habilidades."
   },
   "layout": {
     "testNotification": "Click para notificación de prueba",
@@ -859,7 +907,8 @@
     "testNotifSuccess": "Notificación de prueba - Success",
     "testNotifLevel": "Notificación de prueba - Level up!",
     "currentStatus": "Estado actual",
-    "globalTimer": "Temporizador global"
+    "globalTimer": "Temporizador global",
+    "skipToContent": "Saltar al contenido principal"
   },
   "ai": {
     "title": "Inteligencia Artificial",

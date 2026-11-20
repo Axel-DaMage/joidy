@@ -9,9 +9,11 @@
   let password = '';
   let username = $session?.username || 'user';
   let loading = false;
+  let loginError = '';
 
   async function handleLogin() {
     loading = true;
+    loginError = '';
     try {
       const res = await api.auth.login(password, username);
       saveToken(res.access_token);
@@ -37,7 +39,9 @@
         window.location.reload();
       }, 500);
     } catch (e) {
-      // API handler already shows error notification
+      // API handler already shows error notification; mirror it inline so
+      // the failure is announced at the field level (aria-invalid + role=alert).
+      loginError = $t('login.error');
     } finally {
       loading = false;
     }
@@ -52,12 +56,33 @@
     <form onsubmit={(e) => { e.preventDefault(); handleLogin(); }}>
       <div class="field">
         <label for="username">{$t('login.username')}</label>
-        <input id="username" type="text" bind:value={username} class="input" />
+        <input
+          id="username"
+          type="text"
+          bind:value={username}
+          class="input"
+          autocomplete="username"
+          required
+        />
       </div>
       <div class="field">
         <label for="password">{$t('login.password')}</label>
-        <input id="password" type="password" bind:value={password} class="input" placeholder={$t('login.passwordPlaceholder')} />
+        <input
+          id="password"
+          type="password"
+          bind:value={password}
+          class="input"
+          placeholder={$t('login.passwordPlaceholder')}
+          autocomplete="current-password"
+          required
+          aria-invalid={loginError ? 'true' : undefined}
+          aria-describedby={loginError ? 'login-error' : undefined}
+        />
       </div>
+
+      {#if loginError}
+        <p id="login-error" class="field-error" role="alert">{loginError}</p>
+      {/if}
 
       <button type="submit" class="btn btn-primary" disabled={loading}>
         {loading ? $t('login.entering') : $t('login.enter')}
@@ -135,6 +160,21 @@
   
   .input:focus {
     border-color: var(--xp);
+  }
+
+  .input:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
+  }
+
+  .input[aria-invalid='true'] {
+    border-color: var(--error);
+  }
+
+  .field-error {
+    margin: 0;
+    font-size: 12px;
+    color: var(--error);
   }
   
   .btn-primary {

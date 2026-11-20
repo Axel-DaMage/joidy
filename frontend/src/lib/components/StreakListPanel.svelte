@@ -80,6 +80,7 @@
         class="search-input"
         bind:value={searchQuery}
         placeholder={$t('streakList.searchPlaceholder')}
+        aria-label={$t('streakList.searchPlaceholder')}
       />
     </div>
   </div>
@@ -168,6 +169,10 @@
   }
   .search-row:focus-within { border-color: var(--text-muted); }
 
+  .search-input:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
+  }
   .search-input {
     flex: 1; background: none; border: none; outline: none;
     color: var(--text-primary); font-size: 12px;

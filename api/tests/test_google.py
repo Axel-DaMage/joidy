@@ -1,8 +1,26 @@
 """Tests for Google integration router and service."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
+from urllib.parse import parse_qs, urlparse
 
 from services import google_token_service as gts
+from services import oauth_state
+
+
+def _configure_google(monkeypatch):
+    monkeypatch.setattr("services.google_service.settings.google_client_id", "google-client-id")
+    monkeypatch.setattr("services.google_service.settings.google_client_secret", "google-client-secret")
+    monkeypatch.setattr(
+        "services.google_service.settings.google_redirect_uri",
+        "http://localhost:8000/integrations/google/callback",
+    )
+    monkeypatch.setattr("config.settings.secret_key", "test-secret")
+
+
+def _auth_url_state(client) -> str:
+    """Round-trip helper: fetch /auth and extract the signed state param."""
+    url = client.get("/integrations/google/auth").json()["url"]
+    return str(parse_qs(urlparse(url).query)["state"][0])
 
 
 def test_google_auth_url_unconfigured(client):
@@ -11,17 +29,16 @@ def test_google_auth_url_unconfigured(client):
 
 
 def test_google_auth_url_configured(client, monkeypatch):
-    monkeypatch.setattr("services.google_service.settings.google_client_id", "google-client-id")
-    monkeypatch.setattr(
-        "services.google_service.settings.google_redirect_uri",
-        "http://localhost:8000/integrations/google/callback",
-    )
+    _configure_google(monkeypatch)
 
     resp = client.get("/integrations/google/auth")
     assert resp.status_code == 200
     data = resp.json()
     assert "accounts.google.com" in data["url"]
     assert "google-client-id" in data["url"]
+    # CSRF nonce must be embedded so Google echoes it back to /callback (#1280).
+    state = parse_qs(urlparse(data["url"]).query)["state"][0]
+    assert oauth_state.verify_state(state, "google") is True
 
 
 def test_google_callback_missing_code(client):
@@ -42,13 +59,45 @@ def test_google_callback_error(client):
     assert "access_denied" not in resp.text
 
 
+def test_google_callback_rejects_missing_state(client, monkeypatch):
+    _configure_google(monkeypatch)
+
+    exchange = AsyncMock()
+    with patch("services.google_service.exchange_code", new=exchange):
+        resp = client.get("/integrations/google/callback?code=abc123")
+
+    assert resp.status_code == 403
+    assert "ERROR" in resp.text
+    exchange.assert_not_awaited()
+
+
+def test_google_callback_rejects_wrong_state(client, monkeypatch):
+    _configure_google(monkeypatch)
+
+    exchange = AsyncMock()
+    with patch("services.google_service.exchange_code", new=exchange):
+        resp = client.get("/integrations/google/callback?code=abc123&state=forged")
+
+    assert resp.status_code == 403
+    assert "ERROR" in resp.text
+    exchange.assert_not_awaited()
+
+
+def test_google_callback_rejects_state_from_other_provider(client, monkeypatch):
+    # A state legitimately signed for GitHub must not pass at Google's callback.
+    _configure_google(monkeypatch)
+    state = oauth_state.generate_state("github")
+
+    exchange = AsyncMock()
+    with patch("services.google_service.exchange_code", new=exchange):
+        resp = client.get(f"/integrations/google/callback?code=abc123&state={state}")
+
+    assert resp.status_code == 403
+    exchange.assert_not_awaited()
+
+
 def test_google_callback_exchanges_code(client, monkeypatch):
-    monkeypatch.setattr("services.google_service.settings.google_client_id", "google-client-id")
-    monkeypatch.setattr("services.google_service.settings.google_client_secret", "google-client-secret")
-    monkeypatch.setattr(
-        "services.google_service.settings.google_redirect_uri",
-        "http://localhost:8000/integrations/google/callback",
-    )
+    _configure_google(monkeypatch)
 
     fake_response = MagicMock()
     fake_response.json.return_value = {
@@ -60,8 +109,10 @@ def test_google_callback_exchanges_code(client, monkeypatch):
     }
     fake_response.raise_for_status.return_value = None
 
+    # Full round-trip: state issued by /auth must be echoed back by Google.
+    state = _auth_url_state(client)
     with patch("httpx.AsyncClient.post", new=AsyncMock(return_value=fake_response)):
-        resp = client.get("/integrations/google/callback?code=abc123")
+        resp = client.get(f"/integrations/google/callback?code=abc123&state={state}")
 
     # Tokens are persisted server-side and the page confirms success
     assert resp.status_code == 200
