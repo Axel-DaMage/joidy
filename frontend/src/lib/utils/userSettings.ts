@@ -41,6 +41,10 @@ export interface UserSettings {
     showAssignedIssues?: boolean;
     showAssignedPRs?: boolean;
   };
+  executionUi?: {
+    /** Sacred-calendar picker selection (#1201); null = all calendars. */
+    calendarId?: string | null;
+  };
 }
 
 const KEY = 'joidy-user-settings-v1';
@@ -98,6 +102,7 @@ export function patchUserSettings(patch: Partial<UserSettings>): void {
     streaksUi: { ...current.streaksUi, ...patch.streaksUi },
     goalsUi: { ...current.goalsUi, ...patch.goalsUi },
     statusBarUi: { ...current.statusBarUi, ...patch.statusBarUi },
+    executionUi: { ...current.executionUi, ...patch.executionUi },
   };
   localStorage.setItem(KEY, JSON.stringify(next));
 }

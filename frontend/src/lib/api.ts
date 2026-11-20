@@ -363,6 +363,16 @@ export interface CalendarEvent {
   html_link: string | null;
 }
 
+/** Item of `GET /integrations/google/calendars` (live Google calendarList). */
+export interface GoogleCalendarListItem {
+  id: string;
+  summary?: string | null;
+  primary?: boolean;
+  selected?: boolean;
+  accessRole?: string;
+  backgroundColor?: string;
+}
+
 export type CalendarTaskPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
 
 export interface CalendarTask {
@@ -847,6 +857,8 @@ export const api = {
         'POST',
         '/integrations/google/calendar/sync'
       ),
+    calendars: () =>
+      req<GoogleCalendarListItem[]>('GET', '/integrations/google/calendars'),
     calendarEvents: (params?: { start?: string; end?: string; calendar_id?: string }) => {
       const qs = new URLSearchParams();
       if (params?.start) qs.set('start', params.start);

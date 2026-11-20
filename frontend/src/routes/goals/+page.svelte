@@ -35,6 +35,7 @@
     FileText,
     Pin,
     PinOff,
+    Zap,
   } from 'lucide-svelte';
   import { api, type Goal, type GoalContext, type Tag as TagType, type Note } from '$lib/api';
   import GoalFilters from '$lib/components/GoalFilters.svelte';
@@ -1270,6 +1271,9 @@
 
   <div class="goals-header">
     <div class="tabs">
+      <a class="tab exec-link" href="/goals/ejecucion">
+        <Zap size={14} /> {$t('executionPage.tabLabel')}
+      </a>
       <button
         class="tab"
         class:active={currentTab === 'editor'}
@@ -2956,6 +2960,13 @@
     background: var(--surface-active);
     color: var(--text-primary);
     font-weight: 500;
+  }
+  .exec-link {
+    text-decoration: none;
+    color: var(--xp);
+  }
+  .exec-link:hover {
+    color: var(--xp-2);
   }
   .tab-badge {
     min-width: 18px;
