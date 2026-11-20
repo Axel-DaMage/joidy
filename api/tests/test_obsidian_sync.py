@@ -32,6 +32,18 @@ def _create_note(db_session, note_id):
     return note
 
 
+def _create_auto_note(db_session):
+    """Create a note with an auto-assigned id — collision-proof against rows
+    leaked by earlier tests in the same SQLite session."""
+    from models.note import Note
+
+    note = Note(title="Fail-closed note", content="", source="obsidian")
+    db_session.add(note)
+    db_session.flush()
+    db_session.commit()
+    return note
+
+
 @patch("config.settings.obsidian_webhook_secret", "")
 @patch("config.settings.auth_password", "")
 def test_obsidian_webhook_unconfigured_accepts_any(client, db_session):
@@ -58,8 +70,7 @@ def test_sync_state_model_exists():
     assert SyncState.__tablename__ == "sync_state"
 
 
-@patch("config.settings.obsidian_webhook_secret", "")
-@patch("config.settings.auth_password", "")
+@patch("config.settings.obsidian_webhook_secret", "test-secret")
 def test_obsidian_webhook_detects_conflict(client, db_session):
     _create_note(db_session, 2)
     sync = SyncState(
@@ -70,7 +81,7 @@ def test_obsidian_webhook_detects_conflict(client, db_session):
     db_session.commit()
 
     resp = client.post(
-        "/webhook/obsidian/legacy",
+        "/webhook/obsidian/legacy?secret=test-secret",
         json={
             "note_id": 2,
             "path": "/vault/note.md",
@@ -86,6 +97,36 @@ def test_obsidian_webhook_detects_conflict(client, db_session):
 
 @patch("config.settings.obsidian_webhook_secret", "")
 @patch("config.settings.auth_password", "")
+def test_obsidian_webhook_conflict_flag_fail_closed(client, db_session):
+    """#1314 — without OBSIDIAN_WEBHOOK_SECRET configured, the legacy endpoint
+    still records mtimes but must never write the conflict flag (it would arm
+    a keep_remote vault read)."""
+    note = _create_auto_note(db_session)
+    sync = SyncState(
+        note_id=note.id,
+        local_mtime=datetime.fromtimestamp(1_600_000_000, tz=UTC).replace(tzinfo=None),
+    )
+    db_session.add(sync)
+    db_session.commit()
+
+    resp = client.post(
+        "/webhook/obsidian/legacy",
+        json={
+            "note_id": note.id,
+            "path": "/vault/note.md",
+            "remote_mtime": 1_700_000_000,
+        },
+    )
+    assert resp.status_code == 200
+    assert resp.json()["conflict"] is False
+
+    updated = db_session.query(SyncState).filter_by(note_id=note.id).first()
+    assert updated.conflict is False
+    # Bookkeeping is still honored — only the flag write is gated.
+    assert updated.remote_mtime == datetime.fromtimestamp(1_700_000_000, tz=UTC).replace(tzinfo=None)
+
+
+@patch("config.settings.obsidian_webhook_secret", "test-secret")
 def test_obsidian_webhook_no_conflict_when_mtimes_match(client, db_session):
     _create_note(db_session, 3)
     mtime = 1_700_000_000
@@ -97,7 +138,7 @@ def test_obsidian_webhook_no_conflict_when_mtimes_match(client, db_session):
     db_session.commit()
 
     resp = client.post(
-        "/webhook/obsidian/legacy",
+        "/webhook/obsidian/legacy?secret=test-secret",
         json={
             "note_id": 3,
             "path": "/vault/note.md",
