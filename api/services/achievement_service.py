@@ -52,10 +52,9 @@ ACHIEVEMENT_CATALOG: dict[str, Callable[[Session], bool]] = {
     "ten_notes": lambda db: _note_count_at_least(db, 10),
     "fifty_notes": lambda db: _note_count_at_least(db, 50),
     "first_goal": lambda db: db.query(Goal).count() >= 1,
-    "goal_completed": lambda db: db.query(Goal)
-    .filter(Goal.is_completed.is_(True) | (Goal.state == GoalState.COMPLETED))
-    .first()
-    is not None,
+    "goal_completed": lambda db: (
+        db.query(Goal).filter(Goal.is_completed.is_(True) | (Goal.state == GoalState.COMPLETED)).first() is not None
+    ),
     "week_streak": lambda db: _streak_at_least(db, 7),
     "month_streak": lambda db: _streak_at_least(db, 30),
     "first_tag": lambda db: db.query(Tag).count() >= 1,
