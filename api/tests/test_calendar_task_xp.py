@@ -168,7 +168,8 @@ class TaskXPEventTest(CalendarTaskXPTestBase):
         from routers.calendar_tasks import _award_task_xp
 
         _award_task_xp(self.db, task)
-        task.start_time = dt.time(10, 0)
+        # ORM stubs type Time columns as datetime|None; runtime holds time.
+        task.start_time = dt.time(10, 0)  # type: ignore[assignment]
         self.db.commit()
         _award_task_xp(self.db, task)
         self.db.commit()
