@@ -334,15 +334,9 @@
     font-family: var(--font-mono);
   }
 
-  /* ── Tree rows ── */
-  .tree-row:hover,
-  .tree-row:focus-within {
-    background: var(--hover);
-  }
-  .file-row.active {
-    background: var(--elevated);
-  }
-
+  /* ── Tree rows ──
+     Each .tree-row wraps its own content + settings button; the button stays
+     in the tab order and is revealed on row hover / focus-within (#1268). */
   .tree-row {
     display: flex;
     align-items: center;
@@ -353,6 +347,16 @@
     user-select: none;
     flex: 1;
     min-width: 0;
+    margin: 0 4px;
+    border-radius: 3px;
+    transition: background var(--t-fast);
+  }
+  .tree-row:hover,
+  .tree-row:focus-within {
+    background: var(--hover);
+  }
+  .file-row.active {
+    background: var(--elevated);
   }
 
   .chevron {

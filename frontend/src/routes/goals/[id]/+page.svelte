@@ -237,7 +237,9 @@
   }
 
   // #1141 — crear una nota nueva desde el picker y enlazarla al objetivo.
-  async function createNoteAndLink(title: string) {
+  // Returns the created note so the GoalEditor properties panel (#935) can
+  // persist the link via api.goals.update as well.
+  async function createNoteAndLink(title: string): Promise<Note | void> {
     try {
       const n = await api.notes.create({
         title,
@@ -247,6 +249,7 @@
       notes = [n, ...notes];
       if (goal) goal.note_id = n.id;
       editNoteId = n.id;
+      return n;
     } catch (e) {
       logger.error('Error al crear la nota vinculada:', e);
     }
@@ -282,6 +285,12 @@
   function handleContextChange(e: CustomEvent<{ context: GoalContext; goal: Goal }>) {
     if (goal) goal = { ...goal, ...e.detail.goal, context: e.detail.context };
   }
+
+  // Properties panel edits (#935) also persist immediately — merge the
+  // server-updated goal into local state for the same reason.
+  function handleGoalUpdate(e: CustomEvent<{ goal: Goal }>) {
+    if (goal) goal = { ...goal, ...e.detail.goal };
+  }
 </script>
 
 <div class="goal-detail-page">
@@ -295,12 +304,16 @@
         this={GoalEditor}
         {goal}
         content={goalContent}
+        {notes}
+        {tags}
+        onCreateNote={createNoteAndLink}
         on:save={handleSave}
         on:edit={openSettings}
         on:cancel={handleCancel}
         on:complete={handleComplete}
         on:delete={handleDelete}
         on:contextChange={handleContextChange}
+        on:goalUpdate={handleGoalUpdate}
       />
     {:else}
       <div class="loading">{$t('goalDetail.editorLoading')}</div>
