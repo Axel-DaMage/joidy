@@ -3,6 +3,7 @@
   import { api } from '$lib/api';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
   import BetaBanner from '$lib/components/BetaBanner.svelte';
+  import AiDisclosure from '$lib/components/AiDisclosure.svelte';
   import { t } from 'svelte-i18n';
 
   let usage = $state<{ ai_enabled: boolean; estimated_cost_usd: number } | null>(null);
@@ -60,6 +61,8 @@
       {/if}
     </div>
   </div>
+
+  <AiDisclosure />
 
   <div class="ai-content">
     {#if ChatInterface}
