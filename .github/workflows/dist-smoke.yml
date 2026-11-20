@@ -317,30 +317,37 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # Extract the real 'Bump version strings' step from release.yml and
-      # execute it with a fake version — catches broken seds (the #876 /
-      # #1163 class) in the same code the release job runs.
+      # Extract the real release.yml bump + verify steps and execute them
+      # with a fake version — catches broken bumps (the #876 / #1163 class)
+      # in the same code the release job runs. Since #1258 the bump delegates
+      # to scripts/release_bump.sh, so this exercises the script end-to-end
+      # (including makepkg-generated .SRCINFO) plus its --check mode.
       - name: Dry-run the version-bump block
         run: |
           python3 -c "import yaml" 2>/dev/null || pip3 install --quiet pyyaml
           python3 - <<'PY'
           import re, yaml
           wf = yaml.safe_load(open('.github/workflows/release.yml'))
-          step = next(s for s in wf['jobs']['release']['steps']
-                      if s.get('name') == 'Bump version strings')
+          steps = {s.get('name'): s for s in wf['jobs']['release']['steps']}
           # Substitute the step's outputs with a fake version. The regex is
           # written escaped so this script contains no literal expression
           # marker, which GitHub would expand before the script runs.
           vals = {'version': 'v9.9.9-cismoke.1', 'version_clean': '9.9.9-cismoke.1'}
           pat = re.compile(r'\$\{\{\s*steps\.version\.outputs\.(\w+)\s*\}\}')
-          body = pat.sub(lambda m: vals.get(m.group(1), ''), step['run'])
-          open('/tmp/bump-version.sh', 'w').write(body)
+          for name, out in (('Bump version strings', '/tmp/bump-version.sh'),
+                            ('Verify version consistency', '/tmp/verify-version.sh')):
+              step = steps[name]
+              # Substitute the step's outputs with a fake version.
+              body = pat.sub(lambda m: vals.get(m.group(1), ''), step['run'])
+              open(out, 'w').write(body)
           PY
           bash -n /tmp/bump-version.sh
+          bash -n /tmp/verify-version.sh
           # Steps may receive the outputs via `env:` (e.g. VERSION/VERSION_CLEAN)
           # instead of inline expressions — export both so the extracted body
           # works in either style.
           VERSION=v9.9.9-cismoke.1 VERSION_CLEAN=9.9.9-cismoke.1 PRERELEASE=true bash /tmp/bump-version.sh
+          VERSION=v9.9.9-cismoke.1 bash /tmp/verify-version.sh
 
       - name: Verify the bump applied cleanly
         run: |
