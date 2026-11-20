@@ -151,7 +151,10 @@ def test_post_config_rejects_per_key_violations(client: TestClient, persisted_en
     assert persisted_env.read_text() == ""
 
 
-def test_post_config_still_accepts_valid_values(client: TestClient, persisted_env):
+def test_post_config_still_accepts_valid_values(client: TestClient, persisted_env, monkeypatch):
+    # The /config handler mutates settings.obsidian_vault_path in place —
+    # restore it so vault confinement keeps the suite root for later tests.
+    monkeypatch.setattr(config_router.settings, "obsidian_vault_path", config_router.settings.obsidian_vault_path)
     resp = client.post("/config", json={"obsidian_vault_path": "/tmp/new_vault"})
     assert resp.status_code == 200
     assert read_env()["OBSIDIAN_VAULT_PATH"] == "/tmp/new_vault"
@@ -183,7 +186,7 @@ def test_setup_happy_path_persists_safe_values(client: TestClient, persisted_env
 
     resp = client.post(
         "/config/setup",
-        json={"auth_password": "pw1234", "obsidian_vault_path": "/tmp/vault"},
+        json={"auth_password": "Test-pass-1234", "obsidian_vault_path": "/tmp/vault"},
     )
     assert resp.status_code == 200
     env = read_env()
