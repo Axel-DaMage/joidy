@@ -78,7 +78,10 @@ export const kitOptions: Config = {
       // Kit injects nonce-<v>/sha256-<v> for its inline bootstrap script.
       // No 'unsafe-eval': the calculator's `new Function` sink was removed
       // in favor of a safe parser (src/lib/utils/mathEval.ts, audit F-10).
-      'script-src': ['self'],
+      // The sha256 pins the anti-FOUC theme bootstrap in app.html — it must
+      // be regenerated (sha256 of the exact <script> body) whenever that
+      // inline script changes.
+      'script-src': ['self', src('sha256-SwCUq3cit6aT8FrR7jN/j+zlKIVx9C9o+J5wWtnAzh0=')],
       // Svelte component styles, TipTap marks and rendered markdown all
       // rely on style attributes; dev adds 'unsafe-inline' anyway.
       'style-src': ['self', 'unsafe-inline'],
