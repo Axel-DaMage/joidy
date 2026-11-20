@@ -1,16 +1,20 @@
 # Joidy installer for Windows (PowerShell)
 # Mirrors scripts/install.sh - see that file for behavior notes (#983).
 #
-# Usage (interactive PowerShell):
-#   irm https://raw.githubusercontent.com/Axel-DaMage/joidy/main/scripts/install.ps1 | iex
+# Usage (interactive PowerShell) - the URL is pinned to a release tag so the
+# script itself is an immutable artifact (#1394). Check the releases page for
+# the latest tag; SHA256SUMS.txt is attached to every release for verifying
+# the script before running it:
+#   irm https://raw.githubusercontent.com/Axel-DaMage/joidy/v1.1.0-beta.8/scripts/install.ps1 | iex
 #
 # What it does:
 #   1. Checks git and Docker Desktop. If Docker is missing or not running it
 #      prints the official download link, waits for one user confirmation and
 #      retries once. Docker is never installed automatically.
-#   2. Clones Axel-DaMage/joidy (branch: $env:JOIDY_BRANCH, default main) into
-#      $env:JOIDY_DIR (default %USERPROFILE%\joidy). An existing checkout is
-#      offered a `git pull` update; a non-repo directory is never overwritten.
+#   2. Resolves the latest published GitHub release tag via the releases API
+#      and clones Axel-DaMage/joidy at that tag (immutable snapshot, #1394)
+#      into $env:JOIDY_DIR (default %USERPROFILE%\joidy). An existing checkout
+#      is offered an update path; a non-repo directory is never overwritten.
 #   3. Bootstraps .env and auto-generates SECRET_KEY + POSTGRES_PASSWORD.
 #   4. Asks for GEMINI_API_KEY and the Obsidian vault path (native folder
 #      picker when available, text prompt otherwise) and writes them to .env.
@@ -20,7 +24,9 @@
 #
 # Environment overrides:
 #   JOIDY_DIR            - install location (default: $HOME\joidy)
-#   JOIDY_BRANCH         - git branch to clone  (default: main)
+#   JOIDY_BRANCH         - dev-only override: git ref to clone instead of the
+#                          latest release tag (e.g. development). Do NOT use
+#                          for normal installs - branches are mutable (#1394).
 #   JOIDY_NONINTERACTIVE - set to 1 to disable all prompts (CI/scripted use)
 #   JOIDY_SKIP_START     - set to 1 to skip `joidy up` at the end
 $ErrorActionPreference = "Stop"
@@ -31,7 +37,10 @@ if ($PSVersionTable.PSVersion.Major -ge 7) {
 }
 
 $Repo = "https://github.com/Axel-DaMage/joidy.git"
-$Branch = if ($env:JOIDY_BRANCH) { $env:JOIDY_BRANCH } else { "main" }
+$RepoApi = "https://api.github.com/repos/Axel-DaMage/joidy"
+# Empty = resolve the latest release tag below (#1394). JOIDY_BRANCH is a
+# dev-only override for installing unreleased code.
+$Branch = $env:JOIDY_BRANCH
 $Dir = if ($env:JOIDY_DIR) { $env:JOIDY_DIR } else { Join-Path $HOME "joidy" }
 $NonInteractive = $env:JOIDY_NONINTERACTIVE -eq "1"
 $SkipStart = $env:JOIDY_SKIP_START -eq "1"
@@ -52,6 +61,22 @@ function Write-Step($msg) { Write-Host "-> $msg" -ForegroundColor Blue }
 function Read-UserInput($Prompt) {
   if (-not $Interactive) { return $null }
   try { return Read-Host $Prompt } catch { return $null }
+}
+
+# Get-LatestReleaseTag - tag_name of the newest published GitHub release
+# (pre-releases included - Joidy ships betas; drafts are never returned by
+# the unauthenticated API). $null on network/API failure so callers can
+# fall back.
+function Get-LatestReleaseTag {
+  try {
+    $rel = Invoke-RestMethod -Uri "$RepoApi/releases?per_page=1" `
+      -Headers @{ "User-Agent" = "joidy-installer" } -TimeoutSec 15
+    # @() guards the single-element case: PowerShell unwraps one-item JSON
+    # arrays into the bare object, which has no [0] indexer.
+    $tag = @($rel)[0].tag_name
+    if ($tag) { return $tag }
+  } catch { }
+  return $null
 }
 
 # --- Prerequisites ------------------------------------------------------------
@@ -88,6 +113,19 @@ if ($EngineReady) {
   }
 }
 
+# --- Release channel (#1394) ---------------------------------------------------
+# The default install target is the newest published release tag - an
+# immutable snapshot - never a mutable branch. JOIDY_BRANCH overrides this
+# for development/testing only.
+if (-not $Branch) {
+  $Branch = Get-LatestReleaseTag
+  if (-not $Branch) {
+    $Branch = "main"
+    Write-Warn "Could not resolve the latest release tag (offline or rate-limited) - falling back to branch 'main'."
+    Write-Warn "Set `$env:JOIDY_BRANCH=<tag> to pin a specific release."
+  }
+}
+
 # --- Repository ---------------------------------------------------------------
 Write-Step "Setting up repository at $Dir..."
 
@@ -95,15 +133,37 @@ if (Test-Path (Join-Path $Dir ".git")) {
   Write-Warn "Existing Joidy checkout found at $Dir"
   $ans = Read-UserInput "Update it now? [Y/n]"
   if ($null -eq $ans) {
-    Write-Host "  To update later: cd $Dir ; git pull"
+    Write-Host "  To update later: re-run this installer or fetch the latest release tag."
   } elseif ($ans -match '^[nN]') {
     Write-Ok "Keeping existing checkout."
   } else {
-    git -C $Dir pull --ff-only
+    # On a real branch (e.g. a JOIDY_BRANCH dev install) fast-forward; on a
+    # detached HEAD (release-tag install) `git pull` cannot move the checkout
+    # - fetch the newest release tag and move HEAD instead.
+    git -C $Dir symbolic-ref -q HEAD 2>$null | Out-Null
     if ($LASTEXITCODE -eq 0) {
-      Write-Ok "Updated to latest $Branch."
+      git -C $Dir pull --ff-only 2>$null
+      if ($LASTEXITCODE -eq 0) {
+        Write-Ok "Updated to latest $Branch."
+      } else {
+        Write-Warn "git pull failed - keeping current checkout."
+      }
     } else {
-      Write-Warn "git pull failed - keeping current checkout."
+      $latest = Get-LatestReleaseTag
+      $updated = $false
+      if ($latest) {
+        git -C $Dir fetch --depth 1 origin "tag" $latest 2>$null
+        if ($LASTEXITCODE -eq 0) {
+          git -C $Dir checkout -q $latest 2>$null
+          $updated = ($LASTEXITCODE -eq 0)
+        }
+      }
+      if ($updated) {
+        Write-Ok "Updated to $latest."
+      } else {
+        Write-Warn "Update failed - keeping current checkout."
+        Write-Warn "To update manually: cd $Dir ; git fetch --tags ; git checkout <tag>"
+      }
     }
   }
 } elseif ((Test-Path $Dir) -and (Get-ChildItem $Dir -Force -ErrorAction SilentlyContinue)) {
@@ -118,7 +178,7 @@ if (Test-Path (Join-Path $Dir ".git")) {
     Write-Err "git clone failed."
     exit 1
   }
-  Write-Ok "Cloned branch '$Branch' into $Dir"
+  Write-Ok "Cloned '$Branch' into $Dir"
 }
 
 # --- .env bootstrap -------------------------------------------------------------
@@ -331,5 +391,5 @@ Write-Host ""
 Write-Host "Help:    joidy help" -ForegroundColor Blue
 Write-Host "Logs:    joidy logs" -ForegroundColor Blue
 Write-Host "Stop:    joidy down" -ForegroundColor Blue
-Write-Host "Update:  cd $Dir ; git pull" -ForegroundColor Blue
+Write-Host "Update:  re-run this installer (it moves the checkout to the newest release tag)" -ForegroundColor Blue
 Write-Host ""

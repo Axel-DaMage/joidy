@@ -195,6 +195,19 @@ on. With the flag off, `/system/power` mutation routes are not registered and
 `/status` returns `docker_available: false` → Settings → Servicios shows
 "Docker no está disponible".
 
+### Install-channel integrity (#1296, #1394)
+
+- `install.sh`/`install.ps1` resolve the **latest GitHub release tag** via the
+  releases API and clone that immutable ref; `JOIDY_BRANCH` is a dev-only
+  override. Doc URLs point at a tag and are re-pinned by `release.yml` each
+  release. Each release attaches `SHA256SUMS.txt` + `docker-compose.release.yml`.
+- AUR `sha256sums` are real: `release.yml` injects them post-tag (a tag cannot
+  hash its own tarball) and `aur-publish.yml` re-injects from the live tarball
+  before pushing. SSH to `aur.archlinux.org` uses `StrictHostKeyChecking yes`
+  with a keyscanned `known_hosts` — never disable it.
+- `docker-compose.release.yml` pins `d4mag3/joidy-*` to the release tag; the
+  bump sed in `release.yml` keeps it in lockstep.
+
 ### Database Backups
 - `backup` compose **profile** (service `backup` in docker-compose.yml, reuses the
   `POSTGRES_IMAGE`): runs `scripts/db_backup_loop.sh`, which evaluates
