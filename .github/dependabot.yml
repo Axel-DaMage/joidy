@@ -1,32 +1,73 @@
 version: 2
+# Dependabot config — tuned to reduce PR noise (#1256):
+# - Each pip/npm ecosystem groups all minor+patch bumps into ONE PR
+#   (major bumps stay individual so breaking changes are reviewed alone).
+#   A shared dep (e.g. sqlalchemy) now produces at most one grouped PR
+#   per directory instead of one ungrouped PR per directory per release.
+# - Weekly ecosystems run on staggered days to avoid the Monday CI storm.
+# - docker/docker-compose run monthly — base image tags change rarely.
+# - Every ecosystem applies the `dependencies` label for filtering.
 updates:
   # Python — API
   - package-ecosystem: pip
     directory: /api
     schedule:
       interval: weekly
+      day: monday
     open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    groups:
+      python-deps:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   # Python — AI service
   - package-ecosystem: pip
     directory: /ai-service
     schedule:
       interval: weekly
+      day: tuesday
     open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    groups:
+      python-deps:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   # Python — Worker
   - package-ecosystem: pip
     directory: /worker
     schedule:
       interval: weekly
+      day: wednesday
     open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    groups:
+      python-deps:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   # npm — Frontend
   - package-ecosystem: npm
     directory: /frontend
     schedule:
       interval: weekly
+      day: thursday
     open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
     groups:
       # TipTap packages share strict peer deps (e.g. @tiptap/pm must match
       # @tiptap/core exactly). Bumping them individually causes ERESOLVE
@@ -42,41 +83,110 @@ updates:
           - "@sveltejs/kit"
           - "@sveltejs/adapter-node"
           - "@sveltejs/vite-plugin-svelte"
+      # Everything else: one minor/patch group so routine bumps arrive as a
+      # single weekly PR. Majors stay individual for careful review.
+      npm-deps:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   # Docker Compose — root docker-compose*.yml files (uses the dedicated
   # docker-compose ecosystem; `docker` only scans Dockerfiles/K8s YAML and
-  # fails with dependency_file_not_found since none live at the root)
+  # fails with dependency_file_not_found since none live at the root).
+  # Monthly: base image tags change rarely.
   - package-ecosystem: docker-compose
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
+      day: 1
     open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    groups:
+      docker-images:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
-  # Docker — per-service Dockerfiles
+  # Docker — per-service Dockerfiles (monthly; tags change rarely)
   - package-ecosystem: docker
     directory: /api
     schedule:
-      interval: weekly
+      interval: monthly
+      day: 1
     open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    groups:
+      docker-images:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
   - package-ecosystem: docker
     directory: /ai-service
     schedule:
-      interval: weekly
+      interval: monthly
+      day: 2
     open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    groups:
+      docker-images:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
   - package-ecosystem: docker
     directory: /frontend
     schedule:
-      interval: weekly
+      interval: monthly
+      day: 3
     open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    groups:
+      docker-images:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
   - package-ecosystem: docker
     directory: /worker
     schedule:
-      interval: weekly
+      interval: monthly
+      day: 4
     open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    groups:
+      docker-images:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   # GitHub Actions
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+      day: friday
     open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    groups:
+      actions-deps:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
