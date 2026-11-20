@@ -111,69 +111,67 @@
         let:index
       >
         {#if item.type === 'folder'}
-          <div
-            class="tree-row folder-row"
-            style="padding-left: {8 + item.depth * 14}px"
-            role="button"
-            tabindex="0"
-            aria-expanded={!$collapsed.has(item.path)}
-            onclick={() => toggleFolder(item.path)}
-            onkeydown={(e) =>
-              (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), toggleFolder(item.path))}
-            oncontextmenu={(e) => handleContextMenu(e, item)}
-          >
-            <span class="chevron" class:open={!$collapsed.has(item.path)}>
-              <ChevronRight size={11} />
-            </span>
-            <div class="t-icon">
-              <DynamicIcon name={item.icon} size={13} color={item.color} pack={item.pack} />
+          <div class="tree-item" style="padding-left: {8 + item.depth * 14}px">
+            <div
+              class="tree-row folder-row"
+              role="button"
+              tabindex="0"
+              aria-expanded={!$collapsed.has(item.path)}
+              onclick={() => toggleFolder(item.path)}
+              onkeydown={(e) =>
+                (e.key === 'Enter' || e.key === ' ') &&
+                (e.preventDefault(), toggleFolder(item.path))}
+              oncontextmenu={(e) => handleContextMenu(e, item)}
+            >
+              <span class="chevron" class:open={!$collapsed.has(item.path)}>
+                <ChevronRight size={11} />
+              </span>
+              <div class="t-icon">
+                <DynamicIcon name={item.icon} size={13} color={item.color} pack={item.pack} />
+              </div>
+              <span class="t-name folder-name">{item.name}</span>
+              <span class="t-count">{item.childCount}</span>
             </div>
-            <span class="t-name folder-name">{item.name}</span>
             <button
               class="folder-settings-btn"
               title={$t('notesPage.customizeFolder')}
               aria-label={$t('notesPage.customizeFolder')}
-              onclick={(e) => {
-                e.stopPropagation();
-                openFolderCustomizer(item);
-              }}
+              onclick={() => openFolderCustomizer(item)}
             >
               <Settings size={10} />
             </button>
-            <span class="t-count">{item.childCount}</span>
           </div>
         {:else}
-          <div
-            class="tree-row file-row"
-            class:active={item.note?.id === $selectedNote?.id}
-            style="padding-left: {20 + item.depth * 14}px"
-            role="button"
-            tabindex="0"
-            aria-pressed={item.note?.id === $selectedNote?.id}
-            onclick={() => item.note && openNote(item.note)}
-            onkeydown={(e) =>
-              (e.key === 'Enter' || e.key === ' ') &&
-              item.note &&
-              (e.preventDefault(), openNote(item.note))}
-            oncontextmenu={(e) => handleContextMenu(e, item)}
-          >
-            <div class="t-icon file-icon">
-              <DynamicIcon name={item.icon} size={11} color={item.color} pack={item.pack} />
+          <div class="tree-item" style="padding-left: {20 + item.depth * 14}px">
+            <div
+              class="tree-row file-row"
+              class:active={item.note?.id === $selectedNote?.id}
+              role="button"
+              tabindex="0"
+              aria-pressed={item.note?.id === $selectedNote?.id}
+              onclick={() => item.note && openNote(item.note)}
+              onkeydown={(e) =>
+                (e.key === 'Enter' || e.key === ' ') &&
+                item.note &&
+                (e.preventDefault(), openNote(item.note))}
+              oncontextmenu={(e) => handleContextMenu(e, item)}
+            >
+              <div class="t-icon file-icon">
+                <DynamicIcon name={item.icon} size={11} color={item.color} pack={item.pack} />
+              </div>
+              <span class="t-name file-name">{item.name}</span>
             </div>
-            <span class="t-name file-name">{item.name}</span>
             <button
               class="folder-settings-btn"
               title={$t('notesPage.customizeNote')}
               aria-label={$t('notesPage.customizeNote')}
-              onclick={(e) => {
-                e.stopPropagation();
+              onclick={() =>
                 openFolderCustomizer({
                   path: item.note?.source_path || item.path,
                   icon: item.icon,
                   color: item.color,
                   note: item.note,
-                });
-              }}
+                })}
             >
               <Settings size={10} />
             </button>
@@ -184,70 +182,67 @@
       <div class="tree-wrap">
         {#each $flatNodes as node (node.path)}
           {#if node.type === 'folder'}
-            <div
-              class="tree-row folder-row"
-              style="padding-left: {8 + node.depth * 14}px"
-              role="button"
-              tabindex="0"
-              aria-expanded={!$collapsed.has(node.path)}
-              onclick={() => toggleFolder(node.path)}
-              onkeydown={(e) =>
-                (e.key === 'Enter' || e.key === ' ') &&
-                (e.preventDefault(), toggleFolder(node.path))}
-              oncontextmenu={(e) => handleContextMenu(e, node)}
-            >
-              <span class="chevron" class:open={!$collapsed.has(node.path)}>
-                <ChevronRight size={11} />
-              </span>
-              <div class="t-icon">
-                <DynamicIcon name={node.icon} size={13} color={node.color} pack={node.pack} />
+            <div class="tree-item" style="padding-left: {8 + node.depth * 14}px">
+              <div
+                class="tree-row folder-row"
+                role="button"
+                tabindex="0"
+                aria-expanded={!$collapsed.has(node.path)}
+                onclick={() => toggleFolder(node.path)}
+                onkeydown={(e) =>
+                  (e.key === 'Enter' || e.key === ' ') &&
+                  (e.preventDefault(), toggleFolder(node.path))}
+                oncontextmenu={(e) => handleContextMenu(e, node)}
+              >
+                <span class="chevron" class:open={!$collapsed.has(node.path)}>
+                  <ChevronRight size={11} />
+                </span>
+                <div class="t-icon">
+                  <DynamicIcon name={node.icon} size={13} color={node.color} pack={node.pack} />
+                </div>
+                <span class="t-name folder-name">{node.name}</span>
+                <span class="t-count">{node.childCount}</span>
               </div>
-              <span class="t-name folder-name">{node.name}</span>
               <button
                 class="folder-settings-btn"
                 title={$t('notesPage.customizeFolder')}
                 aria-label={$t('notesPage.customizeFolder')}
-                onclick={(e) => {
-                  e.stopPropagation();
-                  openFolderCustomizer(node);
-                }}
+                onclick={() => openFolderCustomizer(node)}
               >
                 <Settings size={10} />
               </button>
-              <span class="t-count">{node.childCount}</span>
             </div>
           {:else}
-            <div
-              class="tree-row file-row"
-              class:active={node.note?.id === $selectedNote?.id}
-              style="padding-left: {20 + node.depth * 14}px"
-              role="button"
-              tabindex="0"
-              aria-pressed={node.note?.id === $selectedNote?.id}
-              onclick={() => node.note && openNote(node.note)}
-              onkeydown={(e) =>
-                (e.key === 'Enter' || e.key === ' ') &&
-                node.note &&
-                (e.preventDefault(), openNote(node.note))}
-              oncontextmenu={(e) => handleContextMenu(e, node)}
-            >
-              <div class="t-icon file-icon">
-                <DynamicIcon name={node.icon} size={11} color={node.color} pack={node.pack} />
+            <div class="tree-item" style="padding-left: {20 + node.depth * 14}px">
+              <div
+                class="tree-row file-row"
+                class:active={node.note?.id === $selectedNote?.id}
+                role="button"
+                tabindex="0"
+                aria-pressed={node.note?.id === $selectedNote?.id}
+                onclick={() => node.note && openNote(node.note)}
+                onkeydown={(e) =>
+                  (e.key === 'Enter' || e.key === ' ') &&
+                  node.note &&
+                  (e.preventDefault(), openNote(node.note))}
+                oncontextmenu={(e) => handleContextMenu(e, node)}
+              >
+                <div class="t-icon file-icon">
+                  <DynamicIcon name={node.icon} size={11} color={node.color} pack={node.pack} />
+                </div>
+                <span class="t-name file-name">{node.name}</span>
               </div>
-              <span class="t-name file-name">{node.name}</span>
               <button
                 class="folder-settings-btn"
                 title={$t('notesPage.customizeNote')}
                 aria-label={$t('notesPage.customizeNote')}
-                onclick={(e) => {
-                  e.stopPropagation();
+                onclick={() =>
                   openFolderCustomizer({
                     path: node.note?.source_path || node.path,
                     icon: node.icon,
                     color: node.color,
                     note: node.note,
-                  });
-                }}
+                  })}
               >
                 <Settings size={10} />
               </button>
@@ -328,7 +323,26 @@
     font-family: var(--font-mono);
   }
 
-  /* ── Tree rows ── */
+  /* ── Tree rows ──
+     .tree-item wraps each row + its settings button so the button is not
+     nested inside the role="button" row (invalid interactive-in-interactive)
+     and stays in the tab order (#1268). */
+  .tree-item {
+    display: flex;
+    align-items: center;
+    margin: 0 4px;
+    border-radius: 3px;
+    transition: background var(--t-fast);
+    min-width: 0;
+  }
+  .tree-item:hover,
+  .tree-item:focus-within {
+    background: var(--hover);
+  }
+  .tree-item:has(> .file-row.active) {
+    background: var(--elevated);
+  }
+
   .tree-row {
     display: flex;
     align-items: center;
@@ -337,16 +351,8 @@
     height: 26px;
     cursor: pointer;
     user-select: none;
-    border-radius: 3px;
-    margin: 0 4px;
-    transition: background var(--t-fast);
+    flex: 1;
     min-width: 0;
-  }
-  .tree-row:hover {
-    background: var(--hover);
-  }
-  .file-row.active {
-    background: var(--elevated);
   }
 
   .chevron {
@@ -393,20 +399,29 @@
     flex-shrink: 0;
   }
 
-  /* Folder settings button */
+  /* Folder/note settings button — hidden visually but kept in the tab order
+     (opacity, not display:none) and revealed on row hover, row focus-within
+     or its own focus (#1268). */
   .folder-settings-btn {
-    display: none;
+    display: flex;
+    align-items: center;
+    opacity: 0;
+    pointer-events: none;
     padding: 2px;
     background: transparent;
     border: none;
     color: var(--text-muted);
     cursor: pointer;
     border-radius: 3px;
-    margin-left: 4px;
+    margin: 0 8px 0 4px;
+    flex-shrink: 0;
+    transition: opacity var(--t-fast);
   }
-  .folder-row:hover .folder-settings-btn,
-  .file-row:hover .folder-settings-btn {
-    display: flex;
+  .tree-item:hover .folder-settings-btn,
+  .tree-item:focus-within .folder-settings-btn,
+  .folder-settings-btn:focus-visible {
+    opacity: 1;
+    pointer-events: auto;
   }
   .folder-settings-btn:hover {
     color: var(--accent);

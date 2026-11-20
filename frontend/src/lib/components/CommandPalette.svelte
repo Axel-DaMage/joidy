@@ -10,6 +10,7 @@
   import { get } from 'svelte/store';
   import { t } from 'svelte-i18n';
   import { createTimerRegistry } from '$lib/utils/timer';
+  import { focusTrap } from '$lib/actions/focusTrap';
 
   // Component-scoped timers: cleared on destroy so callbacks can't fire after
   // unmount (#1003).
@@ -273,6 +274,7 @@
     <div
       class="cp-modal"
       transition:fly={{ y: -20, duration: 150 }}
+      use:focusTrap
     >
       <div class="cp-header">
         <Search size={16} />

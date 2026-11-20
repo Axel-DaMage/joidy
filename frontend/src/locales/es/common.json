@@ -838,7 +838,8 @@
     "testNotifSuccess": "Notificación de prueba - Success",
     "testNotifLevel": "Notificación de prueba - Level up!",
     "currentStatus": "Estado actual",
-    "globalTimer": "Temporizador global"
+    "globalTimer": "Temporizador global",
+    "skipToContent": "Saltar al contenido principal"
   },
   "ai": {
     "title": "Inteligencia Artificial",

@@ -318,7 +318,8 @@
     .item-actions {
       opacity: 0; pointer-events: none;
     }
-    .streak-item:hover .item-actions {
+    .streak-item:hover .item-actions,
+    .streak-item:focus-within .item-actions {
       opacity: 1;
       pointer-events: auto;
     }

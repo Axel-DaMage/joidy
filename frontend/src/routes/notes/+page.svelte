@@ -244,6 +244,21 @@
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
   }
+
+  // Keyboard resize (APG window-splitter pattern): Left/Down shrink,
+  // Right/Up grow, Home/End jump to min/max. Shift = large step (#1268).
+  function handleSeparatorKeydown(e: KeyboardEvent) {
+    const step = e.shiftKey ? 50 : 10;
+    let next: number | null = null;
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') next = $panelWidth - step;
+    else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') next = $panelWidth + step;
+    else if (e.key === 'Home') next = MIN_W;
+    else if (e.key === 'End') next = MAX_W;
+    if (next === null) return;
+    e.preventDefault();
+    $panelWidth = Math.max(MIN_W, Math.min(MAX_W, next));
+    if ($notesPrefsReady) persist();
+  }
 </script>
 
 <svelte:window onkeydown={(e) => e.key === 'Escape' && deleteModalOpen.set(false)} />
@@ -258,13 +273,18 @@
   <NotesOverlays />
 
   <!-- ── Resize handle ─────────────────────────────────────────────────────── -->
-  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions a11y_no_noninteractive_tabindex -->
   <div
     class="resize-handle"
     role="separator"
     aria-orientation="vertical"
     aria-label="Resize panel"
+    aria-valuenow={Math.round($panelWidth)}
+    aria-valuemin={MIN_W}
+    aria-valuemax={MAX_W}
+    tabindex="0"
     onmousedown={startResize}
+    onkeydown={handleSeparatorKeydown}
   ></div>
 
   <!-- ── Editor panel ──────────────────────────────────────────────────────── -->

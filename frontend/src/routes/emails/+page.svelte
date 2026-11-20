@@ -432,7 +432,8 @@
     transition: opacity 0.15s ease;
   }
 
-  .email-item:hover .email-ops {
+  .email-item:hover .email-ops,
+  .email-item:focus-within .email-ops {
     opacity: 1;
   }
 

@@ -2097,10 +2097,23 @@
     font-size: 10px;
     color: var(--text-muted);
     user-select: none;
+    position: relative;
   }
 
+  /* Visually hidden but focusable: display:none would remove the checkbox
+     from the tab order entirely (#1268). */
   .publish-toggle input {
-    display: none;
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+    pointer-events: none;
+  }
+
+  .publish-toggle input:focus-visible + .publish-label {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
   }
 
   .publish-label {

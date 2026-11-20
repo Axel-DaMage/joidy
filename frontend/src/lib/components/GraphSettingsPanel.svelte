@@ -411,7 +411,8 @@
     opacity: 0.4;
   }
 
-  :global(.graph-wrapper):hover .settings-toggle-btn {
+  :global(.graph-wrapper):hover .settings-toggle-btn,
+  .settings-toggle-btn:focus-visible {
     opacity: 1;
   }
 

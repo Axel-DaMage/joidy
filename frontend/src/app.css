@@ -330,7 +330,8 @@ body.zen-mode-active .app-shell {
   font-family: var(--font-mono);
 }
 
-.nav-item:hover .tooltip {
+.nav-item:hover .tooltip,
+.nav-item:focus-visible .tooltip {
   opacity: 1;
   transform: translateX(0);
 }
@@ -846,11 +847,13 @@ textarea.input {
     height var(--t-fast);
 }
 .resize-handle:hover,
+.resize-handle:focus-visible,
 .dragging .resize-handle {
   border-left-color: color-mix(in srgb, var(--accent) 40%, var(--border));
   background: color-mix(in srgb, var(--accent) 6%, transparent);
 }
 .resize-handle:hover::before,
+.resize-handle:focus-visible::before,
 .dragging .resize-handle::before {
   background: var(--accent);
   height: 32px;
