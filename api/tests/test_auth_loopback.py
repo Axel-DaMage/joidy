@@ -134,7 +134,7 @@ class TestWebSocketLoopbackOnly:
     def test_ws_non_loopback_dev_accepts_valid_token(self, dev_no_password):
         token = create_access_token(1)
         ws_client = TestClient(app, client=PUBLIC_PEER)
-        with ws_client.websocket_connect(f"/ws?token={token}") as websocket:
+        with ws_client.websocket_connect("/ws", subprotocols=["bearer", token]) as websocket:
             websocket.send_text(json.dumps({"type": "ping"}))
             assert websocket.receive_json() == {"type": "pong"}
 

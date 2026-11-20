@@ -172,7 +172,7 @@ def test_ws_non_loopback_dev_accepts_valid_token(monkeypatch):
 
     token = create_access_token(user_id=1)
     remote = TestClient(app, client=("203.0.113.9", 4321))
-    with remote.websocket_connect(f"/ws?token={token}") as websocket:
+    with remote.websocket_connect("/ws", subprotocols=["bearer", token]) as websocket:
         websocket.send_text(json.dumps({"type": "ping"}))
         assert websocket.receive_json() == {"type": "pong"}
 
