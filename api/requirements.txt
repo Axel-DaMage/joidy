@@ -1,11 +1,11 @@
-fastapi==0.162.0
+fastapi==0.163.2
 uvicorn[standard]==0.54.0
-sqlalchemy==2.1.8
+sqlalchemy==2.1.9
 alembic==1.20.1
-pydantic==2.14.2
-pydantic-settings==2.16.2
+pydantic==2.14.3
+pydantic-settings==2.16.3
 httpx==0.28.1
-python-multipart==0.0.33
+python-multipart==0.0.34
 aiofiles==25.1.0
 psycopg2-binary==2.9.13
 pgvector==0.5.1
