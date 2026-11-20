@@ -189,7 +189,10 @@ def get_current_user(
     return user_id
 
 
-def get_current_user_or_internal(credentials: HTTPAuthorizationCredentials = Depends(security)) -> int | None:
+def get_current_user_or_internal(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+) -> int | None:
     """Dedicated dependency for routes also reachable by internal services.
 
     Accepts ``Authorization: Bearer <INTERNAL_API_TOKEN>`` (worker, n8n) in
@@ -199,4 +202,4 @@ def get_current_user_or_internal(credentials: HTTPAuthorizationCredentials = Dep
     """
     if credentials and verify_internal_token(credentials.credentials):
         return 1
-    return get_current_user(credentials)
+    return get_current_user(request, credentials)
