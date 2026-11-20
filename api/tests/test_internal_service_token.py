@@ -14,9 +14,9 @@ from database import get_db
 from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 from fastapi.testclient import TestClient
-from starlette.requests import Request
 from main import app
 from services.auth_service import get_current_user_or_internal, hash_password
+from starlette.requests import Request
 
 
 def test_login_rejects_stored_hash(persisted_env):
