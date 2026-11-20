@@ -274,6 +274,11 @@ interactive OpenAPI docs at `/docs` for full schemas.
 
 ### 2.23 Integrations — Google (`integrations/google.py`)
 
+> **Note:** taking the Google OAuth consent screen out of "Testing" mode
+> requires Google's verification process, which mandates a public privacy
+> policy URL — see [`PRIVACY.md`](../PRIVACY.md) and
+> [Configuration → Google](configuration.md#24-google-calendar-tasks-gmail-contacts).
+
 | Method | Path | Auth | Description | Request Body | Response |
 |--------|------|------|-------------|--------------|----------|
 | GET | `/integrations/google/auth` | Yes | Google OAuth consent URL | — | `{url}` |

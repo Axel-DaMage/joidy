@@ -112,7 +112,9 @@ services:
     volumes:
       - ./worker:/app
       - ./data/db:/data/db
-      - ./.env:/app/.env
+      # Read-only like production and ai-service — the worker never writes
+      # to .env (#1332); env writes go through the API's write_env().
+      - ./.env:/app/.env:ro
       # Read-only like production — the worker never writes to the vault
       # (#1300); vault writes go through the API's joidy_vault_writer.
       - ${OBSIDIAN_VAULT_PATH:-./data/vault}:/vault:ro

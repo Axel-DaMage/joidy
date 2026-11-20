@@ -188,18 +188,20 @@ if [ -d "$DIR/.git" ]; then
   else
     echo "  To update later: cd $DIR && git pull"
   fi
-elif [ -d "$DIR" ] && [ -n "$(ls -A "$DIR" 2>/dev/null)" ]; then
+elif [ -d "$DIR" ] && [ -n "$(ls -A -- "$DIR" 2>/dev/null)" ]; then
   # Never overwrite a directory the installer did not create (#983).
   err "$DIR exists but is not a Joidy git checkout — refusing to overwrite."
   echo "  Move it aside, or install elsewhere:"
   echo "    JOIDY_DIR=/path/to/joidy bash install.sh"
   exit 1
 else
-  git clone --depth 1 --branch "$BRANCH" "$REPO" "$DIR"
+  # `--` ends option parsing so a JOIDY_DIR starting with '-' cannot be read
+  # as a git flag (#1326).
+  git clone --depth 1 --branch "$BRANCH" -- "$REPO" "$DIR"
   ok "Cloned branch '$BRANCH' into $DIR"
 fi
 
-cd "$DIR"
+cd -- "$DIR"
 
 # ── .env bootstrap ────────────────────────────────────────────────────────────
 step "Configuring environment..."
@@ -275,15 +277,15 @@ LOCAL_BIN="$HOME/.local/bin"
 CONFIG_DIR="$HOME/.config/joidy"
 JOIDY_SCRIPT="$DIR/scripts/joidy.sh"
 
-mkdir -p "$LOCAL_BIN" "$CONFIG_DIR"
+mkdir -p -- "$LOCAL_BIN" "$CONFIG_DIR"
 
 # Persist the project path so the CLI works from any directory
 echo "$DIR" > "$CONFIG_DIR/path"
 ok "Project path saved to $CONFIG_DIR/path"
 
 # (Re)create symlink — -f replaces any stale previous install
-ln -sf "$JOIDY_SCRIPT" "$LOCAL_BIN/joidy"
-chmod +x "$JOIDY_SCRIPT"
+ln -sf -- "$JOIDY_SCRIPT" "$LOCAL_BIN/joidy"
+chmod +x -- "$JOIDY_SCRIPT"
 ok "Installed 'joidy' CLI → $LOCAL_BIN/joidy"
 
 # ── PATH setup ────────────────────────────────────────────────────────────────

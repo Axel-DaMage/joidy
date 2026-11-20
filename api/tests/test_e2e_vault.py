@@ -25,7 +25,7 @@ def test_vault_write_skills_returns_ok(client: TestClient):
 # ─── Obsidian import flow ────────────────────────────────────────────────────
 
 
-def test_create_note_with_obsidian_source(client: TestClient):
+def test_create_note_with_obsidian_source(client: TestClient, worker_headers):
     """Simulate vault watcher importing a note."""
     payload = {
         "title": "Obsidian Note",
@@ -34,14 +34,29 @@ def test_create_note_with_obsidian_source(client: TestClient):
         "source": "obsidian",
         "source_path": "/vault/test-obsidian-note.md",
     }
-    resp = client.post("/notes/", json=payload)
+    resp = client.post("/notes/", json=payload, headers=worker_headers)
     assert resp.status_code == 201
     data = resp.json()
     assert data["source"] == "obsidian"
     assert data["source_path"] == "/vault/test-obsidian-note.md"
 
 
-def test_imported_note_found_by_source_path(client: TestClient):
+def test_create_note_obsidian_source_clamped_without_internal_token(client: TestClient):
+    """#1332: a regular client may not claim vault provenance — source is
+    clamped to "joidy" so it cannot fake watcher traffic (XP, broadcasts)."""
+    payload = {
+        "title": "Spoofed",
+        "content": "x",
+        "tags": [],
+        "source": "obsidian",
+        "source_path": "/vault/spoofed.md",
+    }
+    resp = client.post("/notes/", json=payload)
+    assert resp.status_code == 201
+    assert resp.json()["source"] == "joidy"
+
+
+def test_imported_note_found_by_source_path(client: TestClient, worker_headers):
     client.post(
         "/notes/",
         json={
@@ -51,6 +66,7 @@ def test_imported_note_found_by_source_path(client: TestClient):
             "source": "obsidian",
             "source_path": "/vault/find-me.md",
         },
+        headers=worker_headers,
     )
     resp = client.get("/notes/")
     assert resp.status_code == 200
@@ -59,7 +75,7 @@ def test_imported_note_found_by_source_path(client: TestClient):
     assert len(match) == 1
 
 
-def test_update_imported_note_content(client: TestClient):
+def test_update_imported_note_content(client: TestClient, worker_headers):
     create = client.post(
         "/notes/",
         json={
@@ -69,6 +85,7 @@ def test_update_imported_note_content(client: TestClient):
             "source": "obsidian",
             "source_path": "/vault/update-test.md",
         },
+        headers=worker_headers,
     ).json()
     resp = client.put(
         f"/notes/{create['id']}",
@@ -87,7 +104,7 @@ def test_rebuild_derived_data(client: TestClient):
     assert resp.status_code == 202
 
 
-def test_tag_graph_after_import(client: TestClient):
+def test_tag_graph_after_import(client: TestClient, worker_headers):
     client.post(
         "/notes/",
         json={
@@ -97,6 +114,7 @@ def test_tag_graph_after_import(client: TestClient):
             "source": "obsidian",
             "source_path": "/vault/graph-test.md",
         },
+        headers=worker_headers,
     )
     resp = client.get("/tags/graph")
     assert resp.status_code == 200

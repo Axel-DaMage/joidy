@@ -49,7 +49,7 @@ To secure the REST API against brute-force, scraping, or loops, Joidy enforces s
 - **Bounded State:** Rate-limit windows live in an LRU map hard-capped at ~10k entries with a periodic sweep of dead windows; per-key timing samples use fixed-size ring buffers, and metric labels collapse unknown paths/methods into a single `other` series — a request spray cannot exhaust memory or Prometheus cardinality.
 - **Dynamic Tier Limits:**
   - **Anonymous / IP traffic:** Enforces a safe limit of `60 requests per minute`.
-  - **Authenticated Keys / Bearer tokens:** Awards a higher limit of `120 requests per minute`.
+  - **Authenticated Keys / Bearer tokens:** Awards a higher limit of `5000 requests per minute`.
 - **Client Feedback Headers:** Successful responses append `X-RateLimit-Limit` and `X-RateLimit-Remaining` to keep clients informed about current quotas, returning a detailed JSON error body with a `429 Too Many Requests` code on limit exhaustion.
 
 ---

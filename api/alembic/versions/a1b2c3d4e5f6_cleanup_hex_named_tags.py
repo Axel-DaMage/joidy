@@ -22,6 +22,11 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    # WARNING — irreversible data loss (#1332): this data migration DELETEs
+    # tags, skills, note_tags and tag_cooccurrences rows outright, and
+    # downgrade() cannot restore them (the deleted names are unrecoverable).
+    # Review the matched rows before applying to a populated database:
+    #   SELECT * FROM tags WHERE name ~ '^[0-9a-f]{6}$';
     # Tags whose name is a 6-character hex string (e.g. "ef4444", "c8a96e").
     # These are color values misused as tag names (#268).
     hex_pattern = r"^[0-9a-f]{6}$"
@@ -70,5 +75,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Data migration — not reversible.
+    # IRREVERSIBLE (#1332): the rows deleted in upgrade() cannot be restored —
+    # the tag names are gone. A downgrade therefore restores the schema state
+    # only, not the data.
     pass
