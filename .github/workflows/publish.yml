@@ -27,14 +27,14 @@ jobs:
       matrix:
         service: [api, frontend, ai-service, worker]
     steps:
-      - uses: actions/checkout@v7
-      - uses: docker/login-action@v4.8.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - uses: docker/setup-buildx-action@v4
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - id: meta
-        uses: docker/metadata-action@v6
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ${{ secrets.DOCKERHUB_USERNAME }}/joidy-${{ matrix.service }}
           tags: |
@@ -50,7 +50,7 @@ jobs:
             org.opencontainers.image.source=https://github.com/Axel-DaMage/joidy
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.vendor=Axel-DaMage
-      - uses: docker/build-push-action@v7
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: ./${{ matrix.service }}
           push: true
@@ -58,6 +58,14 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          # Supply-chain attestations (#1297): BuildKit attaches SLSA
+          # provenance + SBOM manifests as OCI referrers on every pushed
+          # tag — consumers verify with `docker buildx imagetools inspect`
+          # or `cosign verify-attestation`. Only meaningful on push:true;
+          # the CI smoke builds in .github/actions/build-joidy-images use
+          # load:true and correctly omit these.
+          provenance: true
+          sbom: true
 
   homebrew:
     name: Homebrew
@@ -71,7 +79,7 @@ jobs:
       # break quoting and inject arbitrary commands (#1295).
       VERSION: ${{ inputs.version || github.ref_name }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Validate version
         # Repo tags are always 'vMAJOR.MINOR.PATCH' with optional
         # '-prerelease.N' suffix (e.g. v1.1.0-beta.8).
@@ -83,10 +91,18 @@ jobs:
           echo "Version '$VERSION' is valid"
       - name: Update homebrew-tap formula
         env:
+          # GH_PAT is also consumed by release.yml (`gh release create`).
+          # It should be a fine-grained PAT scoped to BOTH
+          # Axel-DaMage/joidy and Axel-DaMage/homebrew-tap with
+          # "Contents: Read and write" — not a classic PAT (#1297).
           GH_PAT: ${{ secrets.GH_PAT }}
         run: |
           SHA=$(curl -sL "https://github.com/Axel-DaMage/joidy/archive/refs/tags/${VERSION}.tar.gz" | sha256sum | cut -d' ' -f1)
-          git clone "https://x-access-token:${GH_PAT}@github.com/Axel-DaMage/homebrew-tap.git"
+          # homebrew-tap is public, so the clone needs no credentials.
+          # Never embed the token in the clone URL: it would persist in
+          # .git/config `remote.origin.url` and leak to any later git
+          # command or log (#1297).
+          git clone "https://github.com/Axel-DaMage/homebrew-tap.git"
           cd homebrew-tap
           sed -i "s|url \".*\"|url \"https://github.com/Axel-DaMage/joidy/archive/refs/tags/${VERSION}.tar.gz\"|" Formula/joidy.rb
           sed -i "s|sha256 \".*\"|sha256 \"${SHA}\"|" Formula/joidy.rb
@@ -95,7 +111,13 @@ jobs:
           git add Formula/joidy.rb
           git diff --quiet HEAD || {
             git commit -m "joidy ${VERSION}"
-            git push
+            # Authenticate the push with a per-command http.extraheader —
+            # the `-c` flag applies to this invocation only, so the token
+            # is never written to .git/config, the remote URL, or the
+            # credential store. Scoped to github.com so it cannot leak to
+            # another host if the remote ever changes.
+            AUTH_B64=$(printf 'x-access-token:%s' "$GH_PAT" | base64 -w0)
+            git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${AUTH_B64}" push
           }
 
   # NOTE: AUR publishing lives in aur-publish.yml (release + workflow_dispatch).
@@ -122,13 +144,16 @@ jobs:
     needs: docker
     permissions:
       contents: write # gh release upload
+      # Attest the SBOM/notice assets to GitHub's attestation store (#1297).
+      attestations: write
+      id-token: write # OIDC token that signs the attestations
     env:
       # Input mapped to env — see the homebrew job for the #1295 rationale.
       VERSION: ${{ inputs.version || github.ref_name }}
       DOCKERHUB_USER: ${{ secrets.DOCKERHUB_USERNAME }}
       SYFT_VERSION: '1.57.2' # consumed by scripts/generate_sbom.sh
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Resolve image tag
         id: tag
@@ -141,14 +166,14 @@ jobs:
             echo "tag=latest" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: docker/login-action@v4.8.0
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       # oras reads the docker config written by docker/login-action above,
       # so no separate registry login is needed for `oras attach`.
-      - uses: oras-project/setup-oras@v2
+      - uses: oras-project/setup-oras@ac735097e22fe643015b0d19645f7c9a69942128 # v2.0.4
         with:
           version: '1.3.6'
 
@@ -194,3 +219,87 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ inputs.version || github.ref_name }}
         run: gh release upload "$RELEASE_TAG" sbom/joidy-*.json THIRD-PARTY-NOTICES.txt --clobber
+
+      # Artifact attestation (#1297): bind the SBOMs + license notices to
+      # this workflow run in GitHub's attestation store. Consumers verify
+      # with `gh attestation verify <file> --repo Axel-DaMage/joidy`.
+      # Runs LAST so an attestation-API outage cannot block the release
+      # asset upload above; a failure here still fails the job loudly.
+      - name: Attest SBOM + notices provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            sbom/joidy-*.json
+            THIRD-PARTY-NOTICES.txt
+
+  # Keyless cosign signatures on the pushed images (#1297). Isolated in its
+  # own job so a Sigstore (Fulcio/Rekor) outage fails ONLY this job — the
+  # homebrew/sbom jobs depend on `docker`, not on `sign`, so release assets
+  # and channel updates still ship. No secrets required: Fulcio issues the
+  # signing certificate from the job's OIDC token (id-token: write), and
+  # the signature is pushed to Docker Hub with the same registry login.
+  sign:
+    name: Cosign keyless image signing
+    runs-on: ubuntu-latest
+    needs: docker
+    # No `if` gate: whatever the docker job pushed gets signed — release
+    # tags on `release`, :latest on a bare dispatch. The digest logic
+    # below resolves which tag to inspect.
+    permissions:
+      # OIDC token exchanged with Fulcio for the ephemeral signing cert.
+      # This is the ONLY scope the job needs — no checkout, no GITHUB_TOKEN
+      # writes; the registry push reuses the Docker Hub login below.
+      id-token: write
+    strategy:
+      matrix:
+        service: [api, frontend, ai-service, worker]
+    env:
+      VERSION: ${{ inputs.version || github.ref_name }}
+      DOCKERHUB_USER: ${{ secrets.DOCKERHUB_USERNAME }}
+    steps:
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+        with:
+          # Pin the cosign binary too — the installer otherwise floats to
+          # whatever "latest" is on release night.
+          cosign-release: 'v3.1.4'
+
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Sign image digest (keyless)
+        run: |
+          set -euo pipefail
+          # Mirror the sbom job's tag resolution: real releases push the
+          # bare semver (v-stripped) plus :latest; a bare dispatch only has
+          # :latest. The signature binds the digest, so every tag pointing
+          # at it (X.Y.Z, X.Y, latest) is covered by one signature.
+          if [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            TAG="${VERSION#v}"
+          else
+            TAG="latest"
+          fi
+          IMG="${DOCKERHUB_USER}/joidy-${{ matrix.service }}"
+          # Same digest derivation as the sbom job's OCI-referrer attach:
+          # sha256 of the manifest/index bytes the tag resolves to.
+          DIGEST="sha256:$(docker buildx imagetools inspect "${IMG}:${TAG}" --raw | sha256sum | cut -d' ' -f1)"
+          echo "Signing ${IMG}@${DIGEST} (tag ${TAG})"
+          cosign sign --yes "${IMG}@${DIGEST}"
+
+      - name: Verify signature locally
+        run: |
+          set -euo pipefail
+          if [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            TAG="${VERSION#v}"
+          else
+            TAG="latest"
+          fi
+          IMG="${DOCKERHUB_USER}/joidy-${{ matrix.service }}"
+          DIGEST="sha256:$(docker buildx imagetools inspect "${IMG}:${TAG}" --raw | sha256sum | cut -d' ' -f1)"
+          # Fulcio certs bind the workflow identity; consumers verify with
+          # the same issuer + a repo-scoped identity regexp.
+          cosign verify \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            --certificate-identity-regexp "https://github.com/Axel-DaMage/joidy/.*" \
+            "${IMG}@${DIGEST}"

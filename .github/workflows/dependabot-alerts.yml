@@ -15,6 +15,10 @@ on:
     - cron: '0 6 * * *'
   workflow_dispatch:
 
+# Fail closed: the single job declares its own permissions explicitly
+# (security-events: read for the alerts API). Nothing else is granted.
+permissions: {}
+
 jobs:
   open-alerts:
     name: Open HIGH/CRITICAL dependabot alerts

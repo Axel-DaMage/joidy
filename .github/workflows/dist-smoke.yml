@@ -47,7 +47,7 @@ jobs:
     name: Bash script checks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Syntax-check all shell scripts
         run: |
@@ -92,7 +92,7 @@ jobs:
           pacman -Syu --noconfirm
           pacman -S --noconfirm --needed git openssl
 
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # install.sh normally `git clone`s the development branch from GitHub,
       # which would test the *published* code, not this revision. Stub `git`
@@ -170,7 +170,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Parse-check every .ps1 — catches the #981 class of encoding/syntax
       # failures before merge (a syntax error aborts the whole script).
@@ -262,7 +262,7 @@ jobs:
           pacman -Syu --noconfirm
           pacman -S --noconfirm --needed git
 
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # `makepkg --printsrcinfo` parses the PKGBUILD and emits canonical
       # .SRCINFO metadata — the same output AUR consumes. Comparing it to the
@@ -315,7 +315,7 @@ jobs:
     name: release.yml bump dry run
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Extract the real release.yml bump + verify steps and execute them
       # with a fake version — catches broken bumps (the #876 / #1163 class)

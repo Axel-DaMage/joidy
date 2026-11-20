@@ -27,7 +27,7 @@ jobs:
       contents: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -214,6 +214,9 @@ jobs:
 
       - name: Create release
         env:
+          # GH_PAT should be a fine-grained PAT scoped to Axel-DaMage/joidy
+          # (and Axel-DaMage/homebrew-tap, also consumed by publish.yml)
+          # with "Contents: Read and write" — not a classic PAT (#1297).
           GITHUB_TOKEN: ${{ secrets.GH_PAT }}
           VERSION: ${{ steps.version.outputs.version }}
           PRERELEASE: ${{ steps.version.outputs.prerelease }}
