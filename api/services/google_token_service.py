@@ -1,43 +1,33 @@
 """Google OAuth token storage and refresh service.
 
-Stores the refresh token encrypted with Fernet (using the app SECRET_KEY),
-and provides helpers to get a valid access token (auto-refreshing when
-expired).
+Both OAuth tokens are encrypted at rest with Fernet (app SECRET_KEY) via the
+shared ``encryption`` module: the refresh token through explicit
+``encrypt_token`` calls, and the access token transparently through the
+``EncryptedText`` column on ``GoogleToken`` (#1286). Provides helpers to get
+a valid access token (auto-refreshing when expired).
 """
 
-import base64
-import hashlib
 import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from config import settings
-from cryptography.fernet import Fernet, InvalidToken
+from encryption import decrypt_str, encrypt_str
 from models.google_token import GoogleToken
 from services.http_client import http_client
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
-GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
-
-
-def _get_fernet() -> Fernet:
-    """Derive a Fernet key from the app's SECRET_KEY."""
-    key = hashlib.sha256(settings.secret_key.encode()).digest()
-    return Fernet(base64.urlsafe_b64encode(key))
+GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"  # noqa: S105 — OAuth endpoint URL, not a password
 
 
 def encrypt_token(token: str) -> str:
-    return _get_fernet().encrypt(token.encode()).decode()
+    return encrypt_str(token)
 
 
 def decrypt_token(encrypted: str) -> str | None:
-    try:
-        return _get_fernet().decrypt(encrypted.encode()).decode()
-    except (InvalidToken, Exception):
-        logger.error("[google] Failed to decrypt token")
-        return None
+    return decrypt_str(encrypted)
 
 
 def store_tokens(
@@ -46,7 +36,7 @@ def store_tokens(
     access_token: str,
     refresh_token: str | None,
     expires_in: int,
-    token_type: str = "Bearer",
+    token_type: str = "Bearer",  # noqa: S107 — OAuth2 token-type label default, not a password
     scope: str | None = None,
 ) -> GoogleToken:
     """Store or update Google OAuth tokens in the database."""

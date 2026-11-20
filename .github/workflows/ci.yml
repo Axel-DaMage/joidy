@@ -63,14 +63,14 @@ jobs:
           pip install -r requirements-dev.txt
 
       - name: Check Python syntax
-        run: python -m compileall api ai-service worker
+        run: python -m compileall api ai-service worker cli
 
       # Real lint gate (#994): ruff (pinned via requirements-dev.txt) fails on
       # violations; baseline exceptions live in pyproject.toml [tool.ruff.lint].
       - name: Ruff lint + format check
         run: |
-          ruff check api ai-service worker
-          ruff format --check api ai-service worker
+          ruff check api ai-service worker cli
+          ruff format --check api ai-service worker cli
 
       # Real typecheck gate (#994). One invocation per service so
       # cwd-relative module names (models, services, ...) stay unambiguous;
@@ -104,9 +104,12 @@ jobs:
         # Coverage: --cov=. measures everything imported from api/ (modules
         # import as top-level names, so --cov=api matched nothing and coverage
         # was silently empty before #994; see api/.coveragerc, which omits
-        # tests/). Floor 85 = measured 86.6% on development (local run, 571
-        # tests, 2026-10-31) rounded down with headroom; ratchet up only.
-        run: python -m pytest tests/ -v -n auto --durations=20 --cov=. --cov-report=xml --cov-report=term-missing --cov-fail-under=78
+        # tests/). Floor 80 = measured ~83% on development (CI run
+        # 44790581392 and local run, 2026-11-20) rounded down with headroom;
+        # ratchet up only. The previous comment claimed floor 85 from a
+        # 86.6% measurement (2026-10-31) while the flag was 78 — coverage
+        # genuinely regressed below 85; restoring it is tracked in #1401.
+        run: python -m pytest tests/ -v -n auto --durations=20 --cov=. --cov-report=xml --cov-report=term-missing --cov-fail-under=80
 
       # Hermeticity regression guard (#991): reproduce a real dev environment
       # where .env is fully populated. env_file resolves <repo>/.env on the
@@ -154,9 +157,20 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
 
+      # Coverage floor (#1259): --cov=. matches the api convention (modules
+      # import as top-level names; see ai-service/.coveragerc, which omits
+      # tests/). Floor 80 = measured ~83% on development (local run,
+      # 2026-11-20) rounded down with headroom; ratchet up only.
       - name: Run ai-service tests
         working-directory: ai-service
-        run: python -m pytest tests/ -v
+        run: python -m pytest tests/ -v --cov=. --cov-report=xml --cov-report=term-missing --cov-fail-under=80
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-report-ai-service
+          path: ai-service/coverage.xml
+          retention-days: 30
 
   frontend-check:
     name: Frontend Typecheck
@@ -181,6 +195,16 @@ jobs:
         working-directory: frontend
         run: npm run check
 
+      # ESLint gate (#1257): eslint.config.js used to be dead config — nothing
+      # ran it. Pre-existing findings are baselined to warnings in the config
+      # (same ratchet pattern as the pyproject.toml mypy overrides), so this
+      # step fails only on NEW error-severity violations. Prettier was
+      # deliberately removed instead of gated: the tree was never
+      # prettier-clean and nothing executed it — dead config.
+      - name: Lint (eslint)
+        working-directory: frontend
+        run: npm run lint
+
       - name: Production build
         working-directory: frontend
         run: npm run build
@@ -188,6 +212,27 @@ jobs:
       - name: Unit tests
         working-directory: frontend
         run: npm run test:run
+
+  cli-tests:
+    name: CLI Tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Install CLI + test deps
+        run: pip install -e './cli[test]'
+
+      - name: Run CLI unit tests
+        # Mocked transport — no stack needed. The live smoke test
+        # (cli/tests/test_smoke.py) stays opt-in via JOIDY_SMOKE_API_URL.
+        run: python -m pytest cli/tests -v
 
   docker-build:
     name: Docker Build & Smoke Test

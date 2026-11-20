@@ -1,5 +1,8 @@
 import asyncio
+import hmac
+import json
 import logging
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Annotated
 
@@ -18,7 +21,7 @@ from rate_limiter import get_limiter
 from response_cache import cache_key, get_cache
 from sqlalchemy import text
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, StreamingResponse
 
 # Prometheus metrics — exposed at /metrics for scraping (#406)
 ai_embed_requests = Counter("ai_embed_requests_total", "Embedding requests", ["provider"])
@@ -156,6 +159,9 @@ class InternalAuthMiddleware(BaseHTTPMiddleware):
       secret can never leave the service unauthenticated on a network.
     - secret unset + non-production     → permissive (dev convenience);
       a warning is logged at startup.
+
+    The comparison uses ``hmac.compare_digest`` to avoid leaking the
+    secret's length/prefix through response timing (#1288).
     """
 
     async def dispatch(self, request: Request, call_next):
@@ -171,12 +177,25 @@ class InternalAuthMiddleware(BaseHTTPMiddleware):
                 )
             return await call_next(request)
         provided = request.headers.get("X-Internal-Secret", "")
-        if provided != settings.internal_secret:
+        if not hmac.compare_digest(provided, settings.internal_secret):
             return JSONResponse(
                 status_code=403,
                 content={"detail": "Forbidden: invalid internal secret"},
             )
         return await call_next(request)
+
+
+def _internal_secret_valid(request: Request) -> bool:
+    """True when INTERNAL_SECRET is configured and the request carries a
+    matching ``X-Internal-Secret`` header (constant-time comparison, #1288).
+
+    Returns False when no secret is configured — privileged disclosures
+    fail closed rather than becoming unauthenticated by default (#1291).
+    """
+    if not settings.internal_secret:
+        return False
+    provided = request.headers.get("X-Internal-Secret", "")
+    return hmac.compare_digest(provided, settings.internal_secret)
 
 
 app.add_middleware(InternalAuthMiddleware)
@@ -227,6 +246,7 @@ class ChatContext(BaseModel):
 class ChatRequest(BaseModel):
     messages: list[ChatMessage] = Field(min_length=1, max_length=settings.max_chat_messages)
     context: ChatContext | None = None
+    stream: bool = False
 
 
 def _get_provider_info():
@@ -255,20 +275,27 @@ def _has_fallback() -> bool:
 
 
 @app.get("/health")
-async def health():
+async def health(request: Request):
     provider_info = _get_provider_info()
     # The service is "degraded" if the configured LLM/embedding provider is
     # not actually available (e.g. GEMINI_API_KEY not set but model is gemini:*).
     llm_ok = provider_info["llm"]["available"]
     emb_ok = provider_info["embedding"]["available"]
     status = "ok" if (llm_ok and emb_ok) else "degraded"
-    return {
+    body = {
         "status": status,
         "service": "joidy-ai",
         "ai_enabled": settings.is_ai_enabled,
-        "provider": provider_info,
-        "fallback_enabled": _has_fallback(),
+        # Minimal boolean the API needs for its embedding-availability probe —
+        # no provider or model names (#1291).
+        "embedding_available": emb_ok,
     }
+    # The provider/model inventory is privileged: only internal callers
+    # presenting a valid X-Internal-Secret receive it (#1291).
+    if _internal_secret_valid(request):
+        body["provider"] = provider_info
+        body["fallback_enabled"] = _has_fallback()
+    return body
 
 
 @app.get("/metrics")
@@ -278,7 +305,15 @@ def metrics():
 
 
 @app.get("/providers")
-def providers():
+def providers(request: Request):
+    """Provider/model inventory — internal callers only (#1291).
+
+    Requires a configured INTERNAL_SECRET presented via X-Internal-Secret.
+    With no secret configured the endpoint fails closed (403) instead of
+    exposing the full provider config map unauthenticated.
+    """
+    if not _internal_secret_valid(request):
+        raise HTTPException(status_code=403, detail="Forbidden: internal secret required")
     return {
         "available": settings.available_providers,
         "configured": dict.fromkeys(settings.provider_config, True),
@@ -287,10 +322,25 @@ def providers():
     }
 
 
-def _build_chat_system_prompt(ctx: ChatContext | None) -> str:
-    """Build a system prompt that includes the user's personal context."""
+def _build_chat_system_prompt(ctx: ChatContext | None, retrieved_notes: list[dict] | None = None) -> str:
+    """Build a system prompt that includes the user's personal context and,
+    when RAG retrieval found relevant notes, their excerpts (#1131)."""
     if ctx is None:
-        return CHAT_SYSTEM_PROMPT.format(personal_context="Sin contexto adicional disponible.")
+        personal_context = "Sin contexto adicional disponible."
+    else:
+        personal_context = _personal_context_text(ctx)
+    prompt = CHAT_SYSTEM_PROMPT.format(personal_context=personal_context)
+    if retrieved_notes:
+        notes_block = "\n\n---\n\n".join(f"Nota: {n['title']}\nContenido: {n['snippet']}" for n in retrieved_notes)
+        prompt += (
+            "\n\nRETRIEVED NOTES — ground your answer in these when relevant. "
+            "If the answer is not in them, say so:\n"
+            f"<retrieved_notes>\n{notes_block}\n</retrieved_notes>"
+        )
+    return prompt
+
+
+def _personal_context_text(ctx: ChatContext) -> str:
     lines: list[str] = []
     if ctx.goals:
         goal_lines = []
@@ -318,8 +368,44 @@ def _build_chat_system_prompt(ctx: ChatContext | None) -> str:
         lines.append("Tags principales (intereses): " + ", ".join(ctx.top_tags[:5]))
     if ctx.recent_notes:
         lines.append("Notas recientes (títulos):\n- " + "\n- ".join(ctx.recent_notes[:10]))
-    personal_context = "\n\n".join(lines) if lines else "Sin contexto adicional disponible."
-    return CHAT_SYSTEM_PROMPT.format(personal_context=personal_context)
+    return "\n\n".join(lines) if lines else "Sin contexto adicional disponible."
+
+
+# RAG context limits — cap note excerpts to bound PII exposure and token use.
+MAX_CONTEXT_NOTES = 5
+MAX_NOTE_CHARS = 2000
+
+
+async def _retrieve_note_context(question: str, top_k: int = 5) -> list[dict]:
+    """Embed ``question`` and pull the most similar notes from pgvector (#1131).
+
+    Returns ``[{"note_id", "title", "snippet"}]`` ordered by similarity.
+    Raises on provider/DB failure — callers that can degrade gracefully (e.g.
+    /chat) catch the error and continue without note context.
+    """
+    emb_client = get_embedding_client()
+    question_vector = await emb_circuit_breaker.call(emb_client.embed, question)
+
+    from database import engine, find_similar_notes
+
+    similar = find_similar_notes(question_vector, limit=top_k)
+
+    chunks: list[dict] = []
+    with engine.connect() as conn:
+        for item in similar[:MAX_CONTEXT_NOTES]:
+            row = conn.execute(
+                text("SELECT title, content FROM notes WHERE id = :nid"),
+                {"nid": item["note_id"]},
+            ).fetchone()
+            if row:
+                chunks.append(
+                    {
+                        "note_id": item["note_id"],
+                        "title": row[0],
+                        "snippet": (row[1] or "")[:MAX_NOTE_CHARS],
+                    }
+                )
+    return chunks
 
 
 @app.post("/embed")
@@ -421,33 +507,13 @@ async def rag(req: RAGRequest):
     await get_limiter(settings.max_requests_per_minute, name="rag").acquire()
 
     try:
-        # 1. Get embedding for the question
-        emb_client = get_embedding_client()
-        question_vector = await emb_circuit_breaker.call(emb_client.embed, req.question)
+        # 1. Embed the question and find similar notes via pgvector cosine
+        #    similarity (uses named parameters — PostgreSQL does not accept
+        #    the SQLite "?" placeholder style, previously broken #398).
+        chunks = await _retrieve_note_context(req.question, req.top_k)
+        context_chunks = [f"Nota: {c['title']}\nContenido: {c['snippet']}" for c in chunks]
 
-        # 2. Find similar note IDs via pgvector cosine similarity
-        from database import engine, find_similar_notes
-
-        similar = find_similar_notes(question_vector, limit=req.top_k)
-
-        # 3. Retrieve note titles & contents to build LLM context.
-        # Use SQLAlchemy text() with named parameters — PostgreSQL does not
-        # accept the SQLite "?" placeholder style (previously broken, #398).
-        # Limit context size to reduce PII exposure and token usage.
-        MAX_CONTEXT_NOTES = 5
-        MAX_NOTE_CHARS = 2000
-        context_chunks = []
-        with engine.connect() as conn:
-            for item in similar[:MAX_CONTEXT_NOTES]:
-                nid = item["note_id"]
-                row = conn.execute(
-                    text("SELECT title, content FROM notes WHERE id = :nid"),
-                    {"nid": nid},
-                ).fetchone()
-                if row:
-                    note_content = (row[1] or "")[:MAX_NOTE_CHARS]
-                    context_chunks.append(f"Nota: {row[0]}\nContenido: {note_content}")
-
+        # 2. Generate an answer grounded in the retrieved notes.
         client = get_llm_client()
         answer = await llm_circuit_breaker.call(
             client.generate,
@@ -724,7 +790,8 @@ async def cluster_notes(
             params = {f"id_{idx}": i for idx, i in enumerate(ids)}
             placeholders = ", ".join(f":id_{idx}" for idx in range(len(ids)))
             title_rows = conn.execute(
-                sql_text(f"SELECT id, title FROM notes WHERE id IN ({placeholders})"),
+                # Only generated :id_N placeholders are interpolated; values bind via params.
+                sql_text(f"SELECT id, title FROM notes WHERE id IN ({placeholders})"),  # noqa: S608
                 params,
             ).fetchall()
             title_map = {r[0]: r[1] for r in title_rows}
@@ -748,6 +815,75 @@ async def cluster_notes(
     }
 
 
+def _sse_frame(event: str, data: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+async def _anext_or_none(agen: AsyncIterator[str]) -> str | None:
+    """Pull the first stream chunk; ``None`` when the generator is empty."""
+    try:
+        return await agen.__anext__()
+    except StopAsyncIteration:
+        return None
+
+
+async def _llm_token_stream(client, prompt: str, system_prompt: str) -> AsyncIterator[str]:
+    """Yield LLM response chunks. Falls back to a single-chunk ``generate()``
+    for test doubles that don't implement ``generate_stream`` (#1131)."""
+    stream_fn = getattr(client, "generate_stream", None)
+    if stream_fn is None:
+        yield await client.generate(
+            prompt=prompt,
+            temperature=0.7,
+            max_tokens=1024,
+            system_prompt=system_prompt,
+        )
+        return
+    async for token in stream_fn(
+        prompt=prompt,
+        temperature=0.7,
+        max_tokens=1024,
+        system_prompt=system_prompt,
+    ):
+        yield token
+
+
+async def _chat_event_stream(client, prompt: str, system_prompt: str, suggestions: list[str], sources: list[str]):
+    """SSE generator for ``POST /chat`` with ``stream=true`` (#1131).
+
+    Frame sequence: ``meta`` (provider + retrieved-note sources) → ``token``
+    chunks → ``done`` (follow-up suggestions). Failures emit an ``error``
+    frame instead of an HTTP error so the client can offer a retry.
+    """
+    yield _sse_frame(
+        "meta",
+        {"status": "success", "provider": client.provider_name, "sources": sources},
+    )
+    try:
+        agen = _llm_token_stream(client, prompt, system_prompt)
+        # Guard stream *initiation* with the circuit breaker (first chunk is
+        # where provider failures surface); mid-stream errors fall through to
+        # the generic handler below.
+        first = await llm_circuit_breaker.call(_anext_or_none, agen)
+        if first is not None:
+            yield _sse_frame("token", {"text": first})
+        async for token in agen:
+            yield _sse_frame("token", {"text": token})
+        record_usage("chat", input_tokens=_estimate_tokens(prompt))
+        yield _sse_frame("done", {"suggestions": suggestions})
+    except CircuitBreakerError:
+        yield _sse_frame(
+            "error",
+            {
+                "status": "circuit_open",
+                "message": "El proveedor de IA se encuentra temporalmente no disponible.",
+            },
+        )
+    except Exception:
+        logger.warning("Chat stream failed", exc_info=True)
+        yield _sse_frame("error", {"status": "error", "message": "Chat failed"})
+
+
 @app.post("/chat")
 async def chat(req: ChatRequest):
     if not settings.is_ai_enabled:
@@ -761,19 +897,39 @@ async def chat(req: ChatRequest):
     limiter = get_limiter(settings.max_requests_per_minute, name="chat")
     await limiter.acquire()
     try:
-        system_prompt = _build_chat_system_prompt(req.context)
+        last = req.messages[-1]
+        if last.role != "user":
+            raise HTTPException(status_code=422, detail="last message must be from user")
+
+        # RAG: ground the answer in the user's notes (#1131). Retrieval is
+        # best-effort — a missing embeddings table or a failing provider must
+        # degrade to plain personal-context chat, not a 500.
+        retrieved: list[dict] = []
+        try:
+            retrieved = await _retrieve_note_context(last.content)
+        except Exception:
+            logger.warning("Chat RAG retrieval failed; answering without note context", exc_info=True)
+        sources = [n["title"] for n in retrieved]
+
+        system_prompt = _build_chat_system_prompt(req.context, retrieved)
         # Wrap each message in delimiters so the model treats chat content as
         # untrusted data, not instructions (prompt-injection surface, #1330).
         history = "\n\n".join(
             f'<chat_message role="{"user" if m.role == "user" else "assistant"}">\n{m.content}\n</chat_message>'
             for m in req.messages[:-1]
         )
-        last = req.messages[-1]
-        if last.role != "user":
-            raise HTTPException(status_code=422, detail="last message must be from user")
         last_turn = f'<chat_message role="user">\n{last.content}\n</chat_message>'
         prompt = f"{history}\n\n{last_turn}\n\nAsistente:" if history else f"{last_turn}\n\nAsistente:"
+        suggestions = _build_suggestions(last.content, req.context)
         client = get_llm_client()
+
+        if req.stream:
+            return StreamingResponse(
+                _chat_event_stream(client, prompt, system_prompt, suggestions, sources),
+                media_type="text/event-stream",
+                headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+            )
+
         response = await llm_circuit_breaker.call(
             client.generate,
             prompt=prompt,
@@ -781,11 +937,12 @@ async def chat(req: ChatRequest):
             max_tokens=1024,
             system_prompt=system_prompt,
         )
-        suggestions = _build_suggestions(last.content, req.context)
+        record_usage("chat", input_tokens=_estimate_tokens(prompt))
         return {
             "status": "success",
             "response": response.strip(),
             "suggestions": suggestions,
+            "sources": sources,
             "provider": client.provider_name,
         }
     except CircuitBreakerError:
