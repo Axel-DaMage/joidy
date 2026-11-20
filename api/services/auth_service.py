@@ -16,7 +16,10 @@ from services.env_file import get_persisted
 logger = logging.getLogger(__name__)
 
 ALGORITHM = "HS256"
-TOKEN_EXPIRE_HOURS = 24 * 7  # 1 week
+ISSUER = "joidy-api"
+AUDIENCE = "joidy-app"
+TOKEN_TYPE_ACCESS = "access"
+TOKEN_TYPE_REFRESH = "refresh"
 
 security = HTTPBearer(auto_error=False)
 _pwd_context_kwargs: dict = {"schemes": ["bcrypt"], "deprecated": "auto"}
@@ -85,37 +88,90 @@ def hash_password(plain: str) -> str:
     return pwd_context.hash(plain)
 
 
-def create_access_token(user_id: int, username: str = "user") -> str:
-    """Create a JWT access token."""
+def _create_token(user_id: int, username: str, token_type: str, lifetime: timedelta) -> str:
+    """Sign a JWT with the registered claims enforced at verify time (#1285).
+
+    ``iat``/``iss``/``aud`` make every token attributable to this deployment
+    (an ``iss``/``aud`` mismatch is rejected on decode); ``typ`` keeps refresh
+    tokens from being replayed as access tokens; ``jti`` uniquely identifies
+    each refresh token so rotated credentials are never identical.
+    """
     secret = _effective_secret_key()
     if not secret:
         raise ValueError("SECRET_KEY not configured")
 
-    expire = datetime.now(UTC) + timedelta(hours=TOKEN_EXPIRE_HOURS)
-    to_encode = {
+    now = datetime.now(UTC)
+    claims: dict = {
         "sub": str(user_id),
-        "username": username,
-        "exp": expire,
+        "exp": now + lifetime,
+        "iat": now,
+        "iss": ISSUER,
+        "aud": AUDIENCE,
+        "typ": token_type,
     }
-    return jwt.encode(to_encode, secret, algorithm=ALGORITHM)
+    if username:
+        claims["username"] = username
+    if token_type == TOKEN_TYPE_REFRESH:
+        claims["jti"] = secrets.token_urlsafe(16)
+    return jwt.encode(claims, secret, algorithm=ALGORITHM)
 
 
-def verify_token(token: str) -> dict | None:
-    """Verify and decode a JWT token."""
+def create_access_token(user_id: int, username: str = "user") -> str:
+    """Create a short-lived JWT access token (#1285)."""
+    return _create_token(
+        user_id,
+        username,
+        TOKEN_TYPE_ACCESS,
+        timedelta(minutes=settings.access_token_expire_minutes),
+    )
+
+
+def create_refresh_token(user_id: int, username: str = "user") -> str:
+    """Create a long-lived JWT refresh token for ``POST /auth/refresh`` (#1285).
+
+    The token is only accepted by the refresh endpoint (``typ=refresh``);
+    each call returns a new ``jti`` so refreshes rotate the credential.
+    """
+    return _create_token(
+        user_id,
+        username,
+        TOKEN_TYPE_REFRESH,
+        timedelta(days=settings.refresh_token_expire_days),
+    )
+
+
+def verify_token(token: str, expected_type: str = TOKEN_TYPE_ACCESS) -> dict | None:
+    """Verify and decode a JWT token.
+
+    Enforces the registered claims: signature, ``exp``, ``iss``, ``aud``,
+    numeric ``iat``, plus the ``typ`` discriminant — a refresh token is
+    rejected wherever an access token is expected and vice versa (#1285).
+    """
     secret = _effective_secret_key()
     if not secret:
         logger.warning("SECRET_KEY not configured, token verification skipped")
         return None
 
     try:
-        payload = jwt.decode(token, secret, algorithms=[ALGORITHM])
-        return payload
+        payload = jwt.decode(
+            token,
+            secret,
+            algorithms=[ALGORITHM],
+            issuer=ISSUER,
+            audience=AUDIENCE,
+        )
     except jwt.ExpiredSignatureError:
         logger.warning("Token expired")
         return None
     except jwt.InvalidTokenError as e:
         logger.warning(f"Invalid token: {e}")
         return None
+
+    token_type = payload.get("typ")
+    if token_type != expected_type:
+        logger.warning(f"Unexpected token type {token_type!r} (expected {expected_type!r})")
+        return None
+    return payload
 
 
 def get_current_user_id(token: str) -> int | None:

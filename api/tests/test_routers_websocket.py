@@ -72,26 +72,73 @@ def test_ws_rejected_without_token(client: TestClient, monkeypatch):
 
 
 def test_ws_rejected_with_invalid_token(client: TestClient, monkeypatch):
-    """An invalid token is rejected with 4001."""
+    """An invalid token offered via Sec-WebSocket-Protocol is rejected (4001)."""
     monkeypatch.setattr(settings, "auth_password", "test-secret")
     monkeypatch.setattr(settings, "secret_key", "test-secret-key")
     monkeypatch.setattr(settings, "app_env", "development")
 
     with pytest.raises(WebSocketDisconnect) as exc_info:
-        with client.websocket_connect("/ws?token=invalid-token"):
+        with client.websocket_connect("/ws", subprotocols=["bearer", "invalid-token"]):
             pass
 
     assert exc_info.value.code == 4001
 
 
 def test_ws_connect_with_valid_token(client: TestClient, monkeypatch):
-    """A valid JWT token allows the connection and ping/pong works."""
+    """A valid JWT offered via Sec-WebSocket-Protocol connects; ping/pong works."""
     monkeypatch.setattr(settings, "auth_password", "test-secret")
     monkeypatch.setattr(settings, "secret_key", "test-secret-key-32bytes-long-aaaa")
     monkeypatch.setattr(settings, "app_env", "development")
 
     token = create_access_token(user_id=1)
-    with client.websocket_connect(f"/ws?token={token}") as websocket:
+    with client.websocket_connect("/ws", subprotocols=["bearer", token]) as websocket:
+        websocket.send_text(json.dumps({"type": "ping"}))
+        assert websocket.receive_json() == {"type": "pong"}
+
+
+def test_ws_query_param_token_no_longer_authenticates(client: TestClient, monkeypatch):
+    """A *valid* JWT in ?token= must NOT authenticate (#1285).
+
+    Query-string credentials leak into proxy access logs and browser history;
+    the only accepted transport is the Sec-WebSocket-Protocol handshake header.
+    """
+    monkeypatch.setattr(settings, "auth_password", "test-secret")
+    monkeypatch.setattr(settings, "secret_key", "test-secret-key-32bytes-long-aaaa")
+    monkeypatch.setattr(settings, "app_env", "development")
+
+    token = create_access_token(user_id=1)
+    with pytest.raises(WebSocketDisconnect) as exc_info:
+        with client.websocket_connect(f"/ws?token={token}"):
+            pass
+
+    assert exc_info.value.code == 4001
+
+
+def test_ws_rejects_refresh_token(client: TestClient, monkeypatch):
+    """A refresh token (typ=refresh) cannot open a WS connection (#1285)."""
+    from services.auth_service import create_refresh_token
+
+    monkeypatch.setattr(settings, "auth_password", "test-secret")
+    monkeypatch.setattr(settings, "secret_key", "test-secret-key-32bytes-long-aaaa")
+    monkeypatch.setattr(settings, "app_env", "development")
+
+    refresh = create_refresh_token(user_id=1)
+    with pytest.raises(WebSocketDisconnect) as exc_info:
+        with client.websocket_connect("/ws", subprotocols=["bearer", refresh]):
+            pass
+
+    assert exc_info.value.code == 4001
+
+
+def test_ws_token_only_subprotocol_authenticates(client: TestClient, monkeypatch):
+    """Offering the JWT alone (without the 'bearer' marker) still works —
+    the server simply answers with no negotiated subprotocol."""
+    monkeypatch.setattr(settings, "auth_password", "test-secret")
+    monkeypatch.setattr(settings, "secret_key", "test-secret-key-32bytes-long-aaaa")
+    monkeypatch.setattr(settings, "app_env", "development")
+
+    token = create_access_token(user_id=1)
+    with client.websocket_connect("/ws", subprotocols=[token]) as websocket:
         websocket.send_text(json.dumps({"type": "ping"}))
         assert websocket.receive_json() == {"type": "pong"}
 

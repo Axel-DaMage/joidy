@@ -24,8 +24,16 @@ always required.
 
 Additional public endpoints (no JWT): `GET /`, `GET /health/ready`,
 `GET /health/cache`, `GET /auth/status`, `POST /config/setup`. The WebSocket
-endpoint (`/ws`) authenticates via a `token` query parameter. The Obsidian
+endpoint (`/ws`) authenticates via the `Sec-WebSocket-Protocol` handshake
+header — clients offer `["bearer", "<jwt>"]` as subprotocols; query-string
+tokens are not accepted (#1285). The Obsidian
 webhook (`/webhook/obsidian`) authenticates via a shared secret or JWT fallback.
+
+Access tokens carry `sub`, `username`, `iat`, `iss`, `aud`, `typ` claims and
+expire after `ACCESS_TOKEN_EXPIRE_MINUTES` (default 720 = 12h). `POST
+/auth/refresh` exchanges a valid `typ=refresh` token for a rotated token
+pair (`REFRESH_TOKEN_EXPIRE_DAYS`, default 7) — sessions renew silently
+while in use and expire after a week of inactivity.
 
 **Service-to-service auth**: internal services (worker, n8n) authenticate with
 `Authorization: Bearer <INTERNAL_API_TOKEN>` instead of a user JWT. The token
@@ -56,7 +64,8 @@ interactive OpenAPI docs at `/docs` for full schemas.
 
 | Method | Path | Auth | Description | Request Body | Response |
 |--------|------|------|-------------|--------------|----------|
-| POST | `/auth/login` | No | Single-user login; returns JWT | `{password, username}` (JSON body) | `{access_token, token_type}` |
+| POST | `/auth/login` | No | Single-user login; returns JWT pair | `{password, username}` (JSON body) | `{access_token, refresh_token, token_type}` |
+| POST | `/auth/refresh` | No | Rotate refresh token → new JWT pair (#1285) | `{refresh_token}` (JSON body) | `{access_token, refresh_token, token_type}` |
 | GET | `/auth/status` | No | Whether auth is configured | — | `{enabled}` |
 
 ### 2.3 Notes (`notes.py`)
@@ -192,7 +201,7 @@ interactive OpenAPI docs at `/docs` for full schemas.
 
 | Method | Path | Auth | Description | Request Body | Response |
 |--------|------|------|-------------|--------------|----------|
-| WS | `/ws` | Token (query) | Real-time updates (note created/updated, XP, streak) | ping/pong JSON | broadcast JSON messages |
+| WS | `/ws` | JWT via `Sec-WebSocket-Protocol` (`["bearer", "<jwt>"]`) | Real-time updates (note created/updated, XP, streak) | ping/pong JSON | broadcast JSON messages |
 
 ### 2.17 Vault (`vault.py`)
 
