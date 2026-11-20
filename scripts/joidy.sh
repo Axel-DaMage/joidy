@@ -161,6 +161,20 @@ if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
     print_ok "Generated SECRET_KEY"
     CHANGED=1
   fi
+  # INTERNAL_SECRET — shared secret for API → ai-service auth (#1277).
+  # .env files predating #1277 have no INTERNAL_SECRET line at all, so append
+  # it when missing instead of relying on sed substitution alone.
+  IS=$(grep -E '^INTERNAL_SECRET=' "$ENV_FILE" | cut -d'=' -f2-)
+  if [ -z "$IS" ]; then
+    NEW_IS=$(generate_secret 32)
+    if grep -qE '^#?INTERNAL_SECRET=' "$ENV_FILE"; then
+      sed -i "s|^#\?INTERNAL_SECRET=.*|INTERNAL_SECRET=${NEW_IS}|" "$ENV_FILE"
+    else
+      printf '\nINTERNAL_SECRET=%s\n' "$NEW_IS" >>"$ENV_FILE"
+    fi
+    print_ok "Generated INTERNAL_SECRET"
+    CHANGED=1
+  fi
   # GRAFANA_ADMIN_PASSWORD
   GRAFANA_PW=$(grep -E '^GRAFANA_ADMIN_PASSWORD=' "$ENV_FILE" | cut -d'=' -f2-)
   if [ -z "$GRAFANA_PW" ]; then
@@ -302,8 +316,15 @@ get_lan_ip() {
 
 print_access_url() {
   local port="${FRONTEND_PORT:-3000}"
-  local ip
-  ip=$(get_lan_ip)
+  local ip bind
+  # Ports bind to loopback by default (#1277): only advertise a LAN URL when
+  # BIND_ADDR actually exposes the services.
+  bind=$(read_setting BIND_ADDR "127.0.0.1")
+  if [ "$bind" = "0.0.0.0" ] || [ "$bind" = "::" ]; then
+    ip=$(get_lan_ip)
+  else
+    ip="localhost"
+  fi
   echo ""
   echo -e "${GREEN}╔══════════════════════════════════════════════╗${NC}"
   echo -e "${GREEN}║  Joidy is running at:                        ║${NC}"
@@ -332,10 +353,12 @@ profile_args() {
 }
 
 # ─── Port fallback helpers ─────────────────────────────────────────
-# Before `joidy up`, resolve a free host port for each service. If the
-# configured port is busy by a foreign process, try up to 5 subsequent ports.
-# Ports held by our own compose project's containers are reused (idempotent).
-# If no free port is found, abort without running `compose up`.
+# Before `joidy up`, resolve a free host port for each service that publishes
+# to the host (api, frontend — ai-service and worker have no published port
+# since #1277 and stay on the internal compose network). If the configured
+# port is busy by a foreign process, try up to 5 subsequent ports. Ports held
+# by our own compose project's containers are reused (idempotent). If no free
+# port is found, abort without running `compose up`.
 
 # Read a setting: env var → .env file → default.
 read_setting() {
@@ -404,32 +427,21 @@ find_free_port() {
   return 1
 }
 
-# Resolve free host ports for all 4 services and export them. Aborts (exit 1)
-# without invoking compose if any service cannot get a free port.
+# Resolve free host ports for the services that publish to the host (api,
+# frontend) and export them. Aborts (exit 1) without invoking compose if any
+# service cannot get a free port.
 resolve_ports() {
-  local api_def ai_def worker_def frontend_def
+  local api_def frontend_def
   api_def=$(read_port API_PORT 8000)
-  ai_def=$(read_port AI_SERVICE_PORT 8002)
-  worker_def=$(read_port WORKER_PORT 8001)
   frontend_def=$(read_port FRONTEND_PORT 3000)
 
   RESOLVED_PORTS=()
-  local api ai worker frontend
+  local api frontend
   api=$(find_free_port "$api_def") || {
     print_err "No free port for api (tried ${api_def}..$((api_def + 5))) — aborting."
     exit 1
   }
   RESOLVED_PORTS+=("$api")
-  ai=$(find_free_port "$ai_def") || {
-    print_err "No free port for ai-service (tried ${ai_def}..$((ai_def + 5))) — aborting."
-    exit 1
-  }
-  RESOLVED_PORTS+=("$ai")
-  worker=$(find_free_port "$worker_def") || {
-    print_err "No free port for worker (tried ${worker_def}..$((worker_def + 5))) — aborting."
-    exit 1
-  }
-  RESOLVED_PORTS+=("$worker")
   frontend=$(find_free_port "$frontend_def") || {
     print_err "No free port for frontend (tried ${frontend_def}..$((frontend_def + 5))) — aborting."
     exit 1
@@ -437,13 +449,9 @@ resolve_ports() {
   RESOLVED_PORTS+=("$frontend")
 
   export API_PORT="$api"
-  export AI_SERVICE_PORT="$ai"
-  export WORKER_PORT="$worker"
   export FRONTEND_PORT="$frontend"
 
   [ "$api" != "$api_def" ] && print_warn "API_PORT bumped ${api_def}→${api}"
-  [ "$ai" != "$ai_def" ] && print_warn "AI_SERVICE_PORT bumped ${ai_def}→${ai}"
-  [ "$worker" != "$worker_def" ] && print_warn "WORKER_PORT bumped ${worker_def}→${worker}"
   [ "$frontend" != "$frontend_def" ] && print_warn "FRONTEND_PORT bumped ${frontend_def}→${frontend}"
   return 0
 }
@@ -673,8 +681,9 @@ idle_vault_activity() {
 
 idle_any_activity() {
   local ports
-  ports="$(read_port FRONTEND_PORT 3000) $(read_port API_PORT 8000) \
-$(read_port AI_SERVICE_PORT 8002) $(read_port WORKER_PORT 8001)"
+  # Only host-published ports can carry observable client traffic; ai-service
+  # and worker are internal-only since #1277.
+  ports="$(read_port FRONTEND_PORT 3000) $(read_port API_PORT 8000)"
   idle_tcp_activity $ports && return 0
   idle_db_activity && return 0
   idle_vault_activity && return 0
@@ -1028,17 +1037,20 @@ BACKUP_RETENTION_WEEKS weekly dumps. Set BACKUP_ENABLED=false to opt out.
 Verify backups end-to-end with: make backup-verify
 
 On first run, .env is auto-created from .env.example with generated
-POSTGRES_PASSWORD, SECRET_KEY, and GRAFANA_ADMIN_PASSWORD.
+POSTGRES_PASSWORD, SECRET_KEY, INTERNAL_SECRET, and GRAFANA_ADMIN_PASSWORD.
 For AUR installs (read-only /usr/share/joidy), .env is stored in
 ~/.config/joidy/.env. Edit it to add GEMINI_API_KEY, OBSIDIAN_VAULT_PATH, etc.
 
 The project directory is auto-detected from the script location.
 
-Port fallback: `joidy up` checks the host ports for api (8000), ai-service
-(8002), worker (8001) and frontend (3000). If a port is already bound by a
-foreign process, it tries up to 5 subsequent ports; if none are free, it
-aborts without starting any service (no half-started stack). Ports held by
-joidy's own containers are reused, so re-running `joidy up` is idempotent.
+Port fallback: `joidy up` checks the host ports for api (8000) and frontend
+(3000) — the only services published to the host, bound to BIND_ADDR
+(default 127.0.0.1; set BIND_ADDR=0.0.0.0 in .env for LAN access).
+ai-service (8002) and worker (8001) stay on the internal compose network.
+If a port is already bound by a foreign process, it tries up to 5
+subsequent ports; if none are free, it aborts without starting any service
+(no half-started stack). Ports held by joidy's own containers are reused,
+so re-running `joidy up` is idempotent.
 HELP
 }
 

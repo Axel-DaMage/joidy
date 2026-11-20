@@ -41,6 +41,22 @@ async def lifespan(app: FastAPI):
     llm_provider = settings.llm_provider
     emb_provider = settings.embedding_provider
 
+    # Internal auth posture (#1277): without INTERNAL_SECRET the service must
+    # never sit unauthenticated on a network. In production the middleware
+    # fails closed (refuses every non-/health request); other environments
+    # stay permissive for local development.
+    if not settings.internal_secret:
+        if settings.app_env == "production":
+            logger.error(
+                "[ai-service] INTERNAL_SECRET is not set — refusing all "
+                "non-/health requests (fail-closed). Generate one with "
+                "`openssl rand -hex 32` and set INTERNAL_SECRET in .env."
+            )
+        else:
+            logger.warning(
+                "[ai-service] INTERNAL_SECRET is not set — internal auth disabled (permissive non-production mode)"
+            )
+
     if not available:
         logger.info("[ai-service] No AI providers configured — AI features disabled")
     else:
@@ -126,20 +142,33 @@ app.add_middleware(
 class InternalAuthMiddleware(BaseHTTPMiddleware):
     """Validate internal secret for non-health endpoints.
 
-    If INTERNAL_SECRET is configured, all endpoints except /health
-    require an X-Internal-Secret header matching the configured value.
+    All endpoints except /health and /metrics require an X-Internal-Secret
+    header matching INTERNAL_SECRET (#1277):
+    - secret configured   → header must match, otherwise 403.
+    - secret unset + APP_ENV=production → fail closed (503) so a missing
+      secret can never leave the service unauthenticated on a network.
+    - secret unset + non-production     → permissive (dev convenience);
+      a warning is logged at startup.
     """
 
     async def dispatch(self, request: Request, call_next):
         # /health and /metrics are always public so Prometheus can scrape
         # without needing the internal secret (#406).
-        if settings.internal_secret and request.url.path not in ("/health", "/metrics"):
-            provided = request.headers.get("X-Internal-Secret", "")
-            if provided != settings.internal_secret:
+        if request.url.path in ("/health", "/metrics"):
+            return await call_next(request)
+        if not settings.internal_secret:
+            if settings.app_env == "production":
                 return JSONResponse(
-                    status_code=403,
-                    content={"detail": "Forbidden: invalid internal secret"},
+                    status_code=503,
+                    content={"detail": "Service misconfigured: INTERNAL_SECRET is not set"},
                 )
+            return await call_next(request)
+        provided = request.headers.get("X-Internal-Secret", "")
+        if provided != settings.internal_secret:
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "Forbidden: invalid internal secret"},
+            )
         return await call_next(request)
 
 
