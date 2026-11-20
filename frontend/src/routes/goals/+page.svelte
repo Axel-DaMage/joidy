@@ -44,6 +44,7 @@
   import { inboxCount } from '$lib/utils/goalTriage';
   import { use24HourClock } from '$lib/stores/settings';
   import { getLocale } from '$lib/stores/locale';
+  import { localDayKey } from '$lib/utils/date';
   import { applyGamificationResult, showXPGain } from '$lib/stores/gamification';
   import {
     getCachedData,
@@ -338,15 +339,11 @@
     }
   }
 
-  let _todayStr = $derived.by(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  });
   // Untriaged inbox captures (#1200) live in their own tab — they must not
   // leak into dashboards, planning lists or statistics.
   const isListGoal = (g: Goal) => g.state !== 'INBOX' && g.state !== 'CANCELLED';
   let dailyGoals = $derived(
-    goals.filter((g) => isListGoal(g) && isAssigned(g.id, _todayStr))
+    goals.filter((g) => isListGoal(g) && isAssigned(g.id, todayIso))
   );
   let planningGoals = $derived(goals.filter(isListGoal));
   let pendingGoals = $derived(goals.filter((g) => g.pending_removal));
@@ -381,10 +378,7 @@
   });
 
   // ── History tab state ──
-  const _now = new Date();
-  let selectedHistoryDate = $state<string | null>(
-    `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}-${String(_now.getDate()).padStart(2, '0')}`
-  );
+  let selectedHistoryDate = $state<string | null>(localDayKey(new Date()));
 
   let goalsForDate = $derived.by(() => {
     if (!selectedHistoryDate) return { completed: [], failed: [] };
@@ -433,7 +427,16 @@
     });
   }
 
-  onMount(async () => {
+  onMount(() => {
+    // Re-derive "today" on a poll + tab focus so highlights, daily lists and
+    // planning buckets roll over at midnight without a reload (#1306).
+    const todayTimer = setInterval(syncToday, 30_000);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') syncToday();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
+    void (async () => {
     // restore UI state immediately to prevent flash
     try {
       const savedTab = localStorage.getItem('goals.currentTab');
@@ -505,6 +508,12 @@
     if (currentTab === 'analytics') {
       loadAnalyticsData();
     }
+    })();
+
+    return () => {
+      clearInterval(todayTimer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   });
 
   let analyticsLoaded = false;
@@ -681,7 +690,9 @@
     for (let i = 0; i < 7; i++) {
       const d = new Date(monday);
       d.setDate(monday.getDate() + i);
-      const dateStr = d.toISOString().split('T')[0];
+      // localDayKey, not toISOString — the UTC key shifts a day off in
+      // non-UTC zones (#1306).
+      const dateStr = localDayKey(d);
       const isToday = dateStr === todayIso;
       const hData = historyData.find((h) => h.date === dateStr);
       dates.push({
@@ -744,9 +755,22 @@
     return goalList.filter((g) => g.parent_id === parentId);
   }
 
-  // Planning assignment state (frontend-only mapping date -> goal ids)
-  const todayIso = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}-${String(_now.getDate()).padStart(2, '0')}`;
-  let selectedPlanningDate = $state(todayIso);
+  // Planning assignment state (frontend-only mapping date -> goal ids).
+  // `todayIso` is $state — `syncToday()` bumps it across midnight so every
+  // derived "today" highlight/list refreshes without a reload (#1306).
+  let todayIso = $state(localDayKey(new Date()));
+
+  function syncToday(): void {
+    const next = localDayKey(new Date());
+    if (next === todayIso) return;
+    const prev = todayIso;
+    todayIso = next;
+    // Selections pinned to "today" follow the rollover; explicit picks stay.
+    if (selectedHistoryDate === prev) selectedHistoryDate = next;
+    if (selectedPlanningDate === prev) selectedPlanningDate = next;
+  }
+
+  let selectedPlanningDate = $state(localDayKey(new Date()));
   let assignments = $state<Record<string, number[]>>({});
 
   function getNormalizedDate(date: string, temporality: Goal['temporality']): string {
@@ -757,7 +781,7 @@
       const day = d.getDay();
       const diff = d.getDate() - day + (day === 0 ? -6 : 1);
       const monday = new Date(d.setDate(diff));
-      return monday.toISOString().split('T')[0];
+      return localDayKey(monday);
     }
     if (temporality === 'MONTHLY') return date.substring(0, 7) + '-01';
     if (temporality === 'ANNUAL') return date.substring(0, 4) + '-01-01';
@@ -824,7 +848,7 @@
     for (let i = 0; i < 7; i++) {
       const d = new Date(today);
       d.setDate(today.getDate() + i);
-      loadAssignmentsForDate(d.toISOString().split('T')[0]);
+      loadAssignmentsForDate(localDayKey(d));
     }
   });
 

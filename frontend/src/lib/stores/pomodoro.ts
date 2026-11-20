@@ -152,14 +152,27 @@ export async function requestNotificationPermission() {
   }
 }
 
+// Wall-clock end of the current phase (ms epoch). `secondsLeft` is derived
+// from `endsAt - Date.now()` on every tick instead of decrementing per tick,
+// so timer-throttled hidden tabs can't stall the countdown — the remaining
+// time always reflects real elapsed time (#1306).
+let endsAt = 0;
+
 function tick() {
-  const currentSec = get(secondsLeft);
-  if (currentSec > 0) {
-    secondsLeft.set(currentSec - 1);
-  } else {
+  const remaining = Math.max(0, Math.ceil((endsAt - Date.now()) / 1000));
+  if (remaining <= 0) {
     advance(true);
     playBeep();
+    return;
   }
+  secondsLeft.set(remaining);
+}
+
+function handleVisibilityResync() {
+  // Browsers throttle background `setInterval` to ~1/min; re-derive the
+  // remaining time (and advance overdue phases) as soon as the tab is
+  // visible again.
+  if (document.visibilityState === 'visible') tick();
 }
 
 function newPomodoroId(): string {
@@ -205,9 +218,13 @@ export function startTimer() {
   initAudio();
   requestNotificationPermission();
   running.set(true);
+  endsAt = Date.now() + get(secondsLeft) * 1000;
   // intentional: the pomodoro must keep ticking across page navigations —
   // cleared by stopTimer()/resetTimer(), not by component teardown (#1003)
   timerInterval = setInterval(tick, 1000);
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', handleVisibilityResync);
+  }
 }
 
 export function stopTimer() {
@@ -215,6 +232,15 @@ export function stopTimer() {
     clearInterval(timerInterval);
     timerInterval = null;
   }
+  if (typeof document !== 'undefined') {
+    document.removeEventListener('visibilitychange', handleVisibilityResync);
+  }
+  // Freeze the remaining time at the exact pause instant — the last tick
+  // may be up to a second stale.
+  if (endsAt > 0 && get(running)) {
+    secondsLeft.set(Math.max(0, Math.ceil((endsAt - Date.now()) / 1000)));
+  }
+  endsAt = 0;
   running.set(false);
 }
 

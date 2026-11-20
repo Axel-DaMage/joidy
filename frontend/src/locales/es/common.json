@@ -58,6 +58,7 @@
     "cancel": "Cancelar",
     "taskAddError": "No se pudo crear la tarea",
     "taskUpdateError": "No se pudo actualizar la tarea",
+    "endBeforeStart": "La hora de fin debe ser posterior a la de inicio",
     "taskDeleteError": "No se pudo eliminar la tarea",
     "publishToGoogle": "Google",
     "publishToGoogleHint": "Publicar también en Google Calendar",

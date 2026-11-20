@@ -16,6 +16,7 @@
   import { captureSnapshot, getSnapshot } from '$lib/stores/pageSnapshots';
   import { locale as localeStore } from '$lib/stores/locale';
   import { openShare } from '$lib/stores/shareAchievement';
+  import { localDayKey, parseLocalDate } from '$lib/utils/date';
   import { logger } from '$lib/utils/logger';
   import { Share2 } from 'lucide-svelte';
   import { t } from 'svelte-i18n';
@@ -347,18 +348,18 @@
     return $t('streaks.unitDays');
   }
 
-  // Completion detection
+  // Completion detection — `target_date` is a date-only `YYYY-MM-DD` string;
+  // comparing local day keys avoids the UTC-midnight parse that shifted the
+  // target one day early in UTC−N zones (#1306).
   function isStreakCompleted(s: PersonalStreak): boolean {
     if (!s.target_date) return false;
-    const today = new Date();
-    const targetDate = new Date(s.target_date);
-    return today >= targetDate;
+    return localDayKey(new Date()) >= s.target_date.slice(0, 10);
   }
 
   function getDaysForCompletion(s: PersonalStreak): string {
     if (!s.target_date || !s.start_date) return '';
-    const start = new Date(s.start_date);
-    const target = new Date(s.target_date);
+    const start = parseLocalDate(s.start_date);
+    const target = parseLocalDate(s.target_date);
     const diffTime = Math.abs(target.getTime() - start.getTime());
     const totalDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
     return `${s.current_streak}/${totalDays}`;
@@ -533,7 +534,7 @@
                   <div class="date-item">
                     <span class="date-label">{$t('streaks.startDate')}</span>
                     <span class="date-val mono"
-                      >{new Date(selected.start_date).toLocaleDateString($localeStore, {
+                      >{parseLocalDate(selected.start_date).toLocaleDateString($localeStore, {
                         day: 'numeric',
                         month: 'short',
                         year: 'numeric',
@@ -545,7 +546,7 @@
                   <div class="date-item">
                     <span class="date-label">{$t('streaks.targetDate')}</span>
                     <span class="date-val mono"
-                      >{new Date(selected.target_date).toLocaleDateString($localeStore, {
+                      >{parseLocalDate(selected.target_date).toLocaleDateString($localeStore, {
                         day: 'numeric',
                         month: 'short',
                         year: 'numeric',
