@@ -28,7 +28,15 @@
 </script>
 
 <div class="mountain-wrap" style="width:{size}px; height:{size}px;">
-  <svg viewBox="0 0 100 120" fill="none" xmlns="http://www.w3.org/2000/svg" class="mountain-svg">
+  <!-- Decorative SVG; .alt-tag below provides the text alternative (#1309) -->
+  <svg
+    viewBox="0 0 100 120"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    class="mountain-svg"
+    aria-hidden="true"
+    focusable="false"
+  >
     <!-- Ground -->
     <line x1="5" y1="104" x2="95" y2="104" stroke={c1} stroke-width="0.6" opacity="0.4"/>
 
@@ -88,6 +96,13 @@
     height: 100%;
     animation: breathe 5s ease-in-out infinite;
     transform-origin: center bottom;
+  }
+
+  /* Continuous animation disabled under prefers-reduced-motion (#1309) */
+  @media (prefers-reduced-motion: reduce) {
+    .mountain-svg {
+      animation: none;
+    }
   }
 
   .climber {
