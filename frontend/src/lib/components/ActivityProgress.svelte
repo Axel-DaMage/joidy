@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { api } from '$lib/api';
   import { getLocale } from '$lib/stores/locale';
+  import { t } from 'svelte-i18n';
 
   let weeklyData: { date: string; notes_created: number; xp_events: number }[] = [];
   let xpEventsWeek = 0;
@@ -73,13 +74,21 @@
   {#if loading}
     <div class="loading-pulse"></div>
   {:else}
-    <div class="week-strip">
+    <div class="week-strip" role="list">
       {#each weekDays as day}
+        {@const dateStr = day.date.toLocaleDateString(getLocale(), { weekday: 'long', day: 'numeric', month: 'short' })}
+        {@const stateStr = day.active ? $t('a11y.dayActive') : $t('a11y.dayInactive')}
         <div
           class="day-cell"
           class:active={day.active}
-          title={day.date.toLocaleDateString(getLocale(), { weekday: 'long', day: 'numeric', month: 'short' })}
+          role="listitem"
+          aria-label="{dateStr}: {stateStr}"
+          title="{dateStr}: {stateStr}"
         >
+          {#if day.active}
+            <!-- Non-color cue for the active state (#1309, WCAG 1.4.1) -->
+            <span class="day-mark" aria-hidden="true">✓</span>
+          {/if}
           <span class="day-label">{day.label}</span>
         </div>
       {/each}
@@ -136,6 +145,17 @@
     align-items: flex-end;
     justify-content: center;
     transition: background var(--t-fast);
+    position: relative;
+  }
+
+  .day-mark {
+    position: absolute;
+    top: 2px;
+    font-size: 9px;
+    font-weight: 700;
+    font-family: var(--font-mono);
+    color: var(--bg);
+    line-height: 1;
   }
 
   .day-cell.active {
