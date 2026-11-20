@@ -1,7 +1,8 @@
-ARG PYTHON_VERSION=3.12
+# Base image pinned by multi-arch index digest (#1391). Dependabot (docker
+# ecosystem) bumps tag + digest together; both stages must use the same reference.
 
 # ── deps: build stage with compilers, kept out of the final image ────────────
-FROM python:${PYTHON_VERSION}-slim AS deps
+FROM python:3.12-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b AS deps
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
@@ -31,7 +32,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     fi
 
 # ── runtime: slim final image ────────────────────────────────────────────────
-FROM python:${PYTHON_VERSION}-slim AS runtime
+FROM python:3.12-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
