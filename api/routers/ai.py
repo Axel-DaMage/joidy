@@ -295,6 +295,7 @@ def _task_duration_minutes(task: CalendarTask, day: date) -> int | None:
 async def plan_suggest(
     req: PlanSuggestRequest,
     db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user),
 ):
     """AI planning suggestions (#1237): slot open tasks around busy blocks.
 
@@ -349,7 +350,7 @@ async def plan_suggest(
     events = (
         db.query(GoogleCalendarEvent)
         .filter(
-            GoogleCalendarEvent.user_id == 1,
+            GoogleCalendarEvent.user_id == user_id,
             GoogleCalendarEvent.status != "cancelled",
             GoogleCalendarEvent.start_at <= range_end,
             or_(GoogleCalendarEvent.end_at.is_(None), GoogleCalendarEvent.end_at > range_start),
