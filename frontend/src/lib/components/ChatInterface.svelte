@@ -1,10 +1,25 @@
 <script lang="ts">
-  import { tick } from 'svelte';
-  import { Send, Sparkles, Trash2, LoaderCircle } from 'lucide-svelte';
+  import { onMount, tick } from 'svelte';
+  import { Send, Sparkles, Trash2, LoaderCircle, RotateCcw } from 'lucide-svelte';
   import { marked } from 'marked';
   import DOMPurify from 'dompurify';
-  import { messages, isLoading, suggestions, sendMessage, clearChat } from '$lib/stores/chat';
+  import {
+    messages,
+    isLoading,
+    isStreaming,
+    suggestions,
+    chatError,
+    sendMessage,
+    retryLast,
+    clearChat,
+    loadHistory,
+  } from '$lib/stores/chat';
   import { t } from 'svelte-i18n';
+
+  // Restore the persisted conversation from the backend (#1131).
+  onMount(() => {
+    loadHistory();
+  });
 
   marked.use({ gfm: true, breaks: true });
 
@@ -99,6 +114,11 @@
           <div class="bubble">
             {#if msg.role === 'assistant'}
               <div class="markdown">{@html renderMarkdown(msg.content)}</div>
+              {#if msg.sources?.length}
+                <div class="sources">
+                  {$t('chat.sourcesLabel')}: {msg.sources.join(', ')}
+                </div>
+              {/if}
             {:else}
               <p>{msg.content}</p>
             {/if}
@@ -106,7 +126,19 @@
         </div>
       {/each}
 
-      {#if $isLoading}
+      {#if $chatError}
+        <div class="msg assistant">
+          <div class="bubble error-bubble">
+            <span>{$t('chat.errorSend')}</span>
+            <button class="retry-btn" onclick={retryLast} disabled={$isLoading}>
+              <RotateCcw size={13} />
+              {$t('chat.retry')}
+            </button>
+          </div>
+        </div>
+      {/if}
+
+      {#if $isLoading && !$isStreaming}
         <div class="msg assistant">
           <div class="bubble loading-bubble">
             <LoaderCircle size={16} class="spin" />
@@ -296,6 +328,37 @@
     gap: var(--s2, 8px);
     color: var(--text-muted, #888);
     font-style: italic;
+  }
+  .error-bubble {
+    display: flex;
+    align-items: center;
+    gap: var(--s3, 12px);
+    color: var(--text-muted, #888);
+    border-color: var(--error, #ef4444) !important;
+  }
+  .retry-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--s1, 4px);
+    background: var(--xp, #c8a96e);
+    color: #1a1a1a;
+    border: none;
+    border-radius: var(--r, 4px);
+    padding: var(--s1, 4px) var(--s2, 8px);
+    font-size: 0.78rem;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .retry-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  .sources {
+    margin-top: var(--s2, 8px);
+    padding-top: var(--s2, 8px);
+    border-top: 1px solid var(--border, #1a1a1a);
+    font-size: 0.72rem;
+    color: var(--text-muted, #888);
   }
   .spin {
     animation: spin 1s linear infinite;

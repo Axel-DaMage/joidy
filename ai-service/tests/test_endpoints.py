@@ -401,5 +401,100 @@ class TestInternalAuth:
         assert resp.status_code == 200
 
 
+# ── /chat RAG grounding + streaming (#1131) ────────────────────────────────
+
+
+def _mock_rag_db(monkeypatch, rows: list[tuple[str, str]]):
+    """Point the shared retrieval helper at a fake DB returning ``rows`` of
+    ``(title, content)`` — one per matched embedding."""
+    monkeypatch.setattr(
+        database,
+        "find_similar_notes",
+        lambda vec, limit=5: [{"note_id": i + 1, "distance": 0.1} for i in range(len(rows))],
+    )
+    engine = MagicMock()
+    conn = engine.connect.return_value.__enter__.return_value
+    conn.execute.return_value.fetchone.side_effect = list(rows)
+    monkeypatch.setattr(database, "engine", engine)
+
+
+class TestChatRag:
+    def test_chat_grounds_answer_in_retrieved_notes(self, ai_enabled, monkeypatch):
+        """Retrieved note excerpts land in the system prompt and titles are
+        exposed as ``sources`` (#1131 AC1)."""
+        _mock_rag_db(monkeypatch, [("My Note", "the thing I learned")])
+
+        resp = _client().post("/chat", json={"messages": [{"role": "user", "content": "qué aprendí?"}]})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["status"] == "success"
+        assert body["sources"] == ["My Note"]
+        kwargs = ai_enabled.llm.generate.call_args.kwargs
+        assert "<retrieved_notes>" in kwargs["system_prompt"]
+        assert "the thing I learned" in kwargs["system_prompt"]
+
+    def test_chat_retrieval_failure_degrades_gracefully(self, ai_enabled):
+        """When the embeddings store is unreachable the chat still answers
+        with personal-context only — never a 500 (#1131)."""
+        # No DB mocks: find_similar_notes hits the SQLite fallback engine and
+        # fails on the pgvector operator → retrieval degrades to no context.
+        resp = _client().post("/chat", json={"messages": [{"role": "user", "content": "hi"}]})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["status"] == "success"
+        assert body["sources"] == []
+
+
+class TestChatStream:
+    def test_stream_emits_sse_frames(self, ai_enabled):
+        """stream=true returns SSE meta/token/done frames (#1131)."""
+
+        async def fake_stream(**kwargs):
+            yield "Hello"
+            yield " world"
+
+        ai_enabled.llm.generate_stream = fake_stream
+
+        resp = _client().post(
+            "/chat",
+            json={"messages": [{"role": "user", "content": "hi"}], "stream": True},
+        )
+        assert resp.status_code == 200
+        assert "text/event-stream" in resp.headers["content-type"]
+        body = resp.text
+        assert "event: meta" in body
+        assert '"sources"' in body
+        assert 'event: token\ndata: {"text": "Hello"}' in body
+        assert 'event: token\ndata: {"text": " world"}' in body
+        assert "event: done" in body
+
+    def test_stream_falls_back_to_generate_when_no_stream_support(self, ai_enabled):
+        """Clients without generate_stream still yield their full reply as a
+        single token frame (#1131)."""
+        resp = _client().post(
+            "/chat",
+            json={"messages": [{"role": "user", "content": "hi"}], "stream": True},
+        )
+        assert resp.status_code == 200
+        assert 'event: token\ndata: {"text": "llm answer"}' in resp.text
+
+    def test_stream_circuit_open_emits_error_frame(self, ai_enabled):
+        main.llm_circuit_breaker.state = CircuitState.OPEN
+        main.llm_circuit_breaker.last_failure_time = time.time()
+        resp = _client().post(
+            "/chat",
+            json={"messages": [{"role": "user", "content": "hi"}], "stream": True},
+        )
+        assert resp.status_code == 200
+        assert "event: error" in resp.text
+        assert "circuit_open" in resp.text
+
+    def test_non_stream_unaffected_by_stream_flag_default(self, ai_enabled):
+        """Default stream=false keeps the JSON response contract."""
+        resp = _client().post("/chat", json={"messages": [{"role": "user", "content": "hi"}]})
+        assert resp.headers["content-type"].startswith("application/json")
+        assert resp.json()["response"] == "llm answer"
+
+
 if __name__ == "__main__":
     unittest.main()

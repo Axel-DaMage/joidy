@@ -678,7 +678,10 @@
     "welcomeTitle": "Chat with your assistant",
     "thinking": "Thinking…",
     "inputPlaceholder": "Type a message… (Enter to send, Shift+Enter for newline)",
-    "send": "Send"
+    "send": "Send",
+    "retry": "Retry",
+    "errorSend": "The message could not be sent.",
+    "sourcesLabel": "Based on your notes"
   },
   "conflict": {
     "title": "Sync Conflict",

@@ -678,7 +678,10 @@
     "welcomeTitle": "Conversa con tu asistente",
     "thinking": "Pensando…",
     "inputPlaceholder": "Escribe un mensaje… (Enter para enviar, Shift+Enter para salto de línea)",
-    "send": "Enviar"
+    "send": "Enviar",
+    "retry": "Reintentar",
+    "errorSend": "No se pudo enviar el mensaje.",
+    "sourcesLabel": "Basado en tus notas"
   },
   "conflict": {
     "title": "Conflicto de Sincronización",

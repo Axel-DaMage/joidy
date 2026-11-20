@@ -1,13 +1,17 @@
+import json
+import logging
 from datetime import date, datetime, time, timedelta
 from typing import cast
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx
 from config import settings
-from database import get_db
+from database import SessionLocal, get_db
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from middleware.correlation_id import get_correlation_id
 from models.calendar_task import CalendarTask
+from models.chat_session import ChatSession
 from models.gamification import UserStats
 from models.goal import Goal, GoalState
 from models.google_calendar_event import GoogleCalendarEvent
@@ -16,8 +20,11 @@ from pydantic import BaseModel
 from services.auth_service import get_current_user
 from services.http_client import http_client
 from services.timezone_utils import get_local_today, get_user_tz, to_utc_datetime
+from services.usage_service import EVENT_FEATURE_USE, track_event
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
@@ -172,6 +179,80 @@ class ChatMessage(BaseModel):
 
 class ChatRequest(BaseModel):
     messages: list[ChatMessage]
+    session_id: int | None = None
+
+
+# ── Chat session persistence (#1131) ────────────────────────────────────────
+
+
+def _latest_session(db: Session, user_id: int) -> ChatSession | None:
+    return (
+        db.query(ChatSession)
+        .filter(ChatSession.user_id == user_id)
+        .order_by(ChatSession.updated_at.desc(), ChatSession.id.desc())
+        .first()
+    )
+
+
+def _get_or_create_session(db: Session, user_id: int, session_id: int | None) -> ChatSession:
+    """Return the session to append to: the requested one if it belongs to the
+    user, otherwise the most recent one, creating a fresh row when none exists.
+    """
+    session: ChatSession | None = None
+    if session_id is not None:
+        session = db.query(ChatSession).filter(ChatSession.id == session_id, ChatSession.user_id == user_id).first()
+    if session is None:
+        session = _latest_session(db, user_id)
+    if session is None:
+        session = ChatSession(user_id=user_id, messages=[])
+        db.add(session)
+        db.flush()
+    return session
+
+
+def _append_message(db: Session, session: ChatSession, role: str, content: str) -> None:
+    """Append a turn to the session, skipping exact duplicates of the last
+    stored turn so client retries cannot write the same message twice.
+    Assigns a fresh list so SQLAlchemy detects the JSON mutation.
+    """
+    msgs: list[dict] = list(session.messages or [])
+    if msgs and msgs[-1].get("role") == role and msgs[-1].get("content") == content:
+        return
+    msgs.append({"role": role, "content": content, "ts": int(datetime.now().timestamp() * 1000)})
+    if session.title is None and role == "user":
+        session.title = content[:80]
+    session.messages = msgs
+    db.flush()
+
+
+def _record_chat_usage(db: Session, user_id: int, session_id: int) -> None:
+    """Track one ``feature_use`` usage event per answered chat turn (#1131 AC4)."""
+    try:
+        track_event(db, user_id, EVENT_FEATURE_USE, {"feature": "ai_chat", "session_id": session_id})
+    except Exception:
+        logger.warning("Failed to record ai_chat usage event", exc_info=True)
+
+
+def _persist_assistant_reply(db: Session, session_id: int, user_id: int, answer: str) -> bool:
+    """Append the assistant reply to the session and record usage (#1131).
+
+    Returns False on any failure so callers can retry on a fresh connection.
+    """
+    try:
+        sess = db.get(ChatSession, session_id)
+        if sess is None:
+            return False
+        _append_message(db, sess, "assistant", answer)
+        db.commit()
+        _record_chat_usage(db, user_id, session_id)
+        return True
+    except Exception:
+        logger.debug("Assistant reply persist failed on this session", exc_info=True)
+        return False
+
+
+def _sse(event: str, data: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
 def _gather_chat_context(db: Session) -> dict:
@@ -221,18 +302,33 @@ def _gather_chat_context(db: Session) -> dict:
     }
 
 
+def _validate_chat_messages(req: ChatRequest) -> None:
+    if not req.messages:
+        raise HTTPException(status_code=422, detail="messages must not be empty")
+    if req.messages[-1].role != "user":
+        raise HTTPException(status_code=422, detail="last message must be from user")
+
+
+def _internal_headers() -> dict[str, str]:
+    headers = {"X-Request-ID": get_correlation_id()}
+    if settings.internal_secret:
+        headers["X-Internal-Secret"] = settings.internal_secret
+    return headers
+
+
 @router.post("/chat")
 async def chat(
     req: ChatRequest,
     user_id: int = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Conversational AI assistant endpoint.
+    """Conversational AI assistant endpoint (#1131).
 
     Fetches the user's personal context (goals, streaks, XP, top tags, recent
     note titles) and forwards the conversation + context to the ai-service
-    /chat endpoint. The response is returned without persisting chat history
-    on the backend (history lives in the frontend sessionStorage).
+    /chat endpoint, which grounds the answer in the user's notes via RAG.
+    The exchange is persisted in ``chat_sessions`` and tracked in
+    ``usage_events``.
     """
     if not settings.ai_service_enabled:
         return {
@@ -240,20 +336,26 @@ async def chat(
             "response": "El asistente de IA está deshabilitado en este modo.",
             "suggestions": [],
         }
+    _validate_chat_messages(req)
+
+    session = _get_or_create_session(db, user_id, req.session_id)
+    _append_message(db, session, "user", req.messages[-1].content)
+    db.commit()
+
     context = _gather_chat_context(db)
 
     async with http_client(timeout=60.0) as client:
         try:
-            headers = {"X-Request-ID": get_correlation_id()}
-            if settings.internal_secret:
-                headers["X-Internal-Secret"] = settings.internal_secret
             r = await client.post(
                 f"{settings.ai_service_url}/chat",
-                json={"messages": [m.model_dump() for m in req.messages], "context": context},
-                headers=headers,
+                json={
+                    "messages": [m.model_dump() for m in req.messages],
+                    "context": context,
+                },
+                headers=_internal_headers(),
             )
             r.raise_for_status()
-            return r.json()
+            data = r.json()
         except httpx.HTTPError:
             return {
                 "status": "unavailable",
@@ -262,7 +364,142 @@ async def chat(
                     "Verifica la configuración de IA e inténtalo de nuevo."
                 ),
                 "suggestions": [],
+                "session_id": session.id,
             }
+
+    answer = data.get("response") or ""
+    if data.get("status") == "success" and answer:
+        _append_message(db, session, "assistant", answer)
+        db.commit()
+        _record_chat_usage(db, user_id, session.id)
+    return {**data, "session_id": session.id}
+
+
+@router.post("/chat/stream")
+async def chat_stream(
+    req: ChatRequest,
+    user_id: int = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Streaming variant of /chat (#1131): proxies the ai-service SSE stream.
+
+    Emits an ``event: session`` frame first so the client learns the
+    ``session_id``, then forwards upstream ``meta``/``token``/``done``/``error``
+    frames verbatim. The accumulated assistant reply is persisted in
+    ``chat_sessions`` once the stream completes.
+    """
+    if not settings.ai_service_enabled:
+        return {
+            **_ai_disabled_response("chat"),
+            "response": "El asistente de IA está deshabilitado en este modo.",
+            "suggestions": [],
+        }
+    _validate_chat_messages(req)
+
+    session = _get_or_create_session(db, user_id, req.session_id)
+    _append_message(db, session, "user", req.messages[-1].content)
+    db.commit()
+    session_id = session.id
+
+    context = _gather_chat_context(db)
+    payload = {
+        "messages": [m.model_dump() for m in req.messages],
+        "context": context,
+        "stream": True,
+    }
+    headers = _internal_headers()
+
+    async def event_stream():
+        yield _sse("session", {"session_id": session_id})
+        tokens: list[str] = []
+        last_event = ""
+        try:
+            async with http_client(timeout=120.0) as client:
+                async with client.stream(
+                    "POST",
+                    f"{settings.ai_service_url}/chat",
+                    json=payload,
+                    headers=headers,
+                ) as r:
+                    if r.status_code != 200:
+                        yield _sse(
+                            "error",
+                            {
+                                "message": "El servicio de IA no está disponible.",
+                                "status": "unavailable",
+                            },
+                        )
+                        return
+                    async for line in r.aiter_lines():
+                        # Forward upstream SSE verbatim; track token frames to
+                        # reconstruct the full assistant reply for persistence.
+                        if line.startswith("event:"):
+                            last_event = line[6:].strip()
+                        elif line.startswith("data:") and last_event == "token":
+                            try:
+                                tokens.append(json.loads(line[5:].strip()).get("text", ""))
+                            except (json.JSONDecodeError, AttributeError):
+                                pass
+                        elif line == "":
+                            # Blank line = end of the current SSE event block.
+                            last_event = ""
+                        yield line + "\n"
+        except httpx.HTTPError:
+            yield _sse(
+                "error",
+                {
+                    "message": "El asistente no está disponible en este momento.",
+                    "status": "unavailable",
+                },
+            )
+            return
+
+        answer = "".join(tokens).strip()
+        if not answer:
+            return
+        # Try the request-scoped ``db`` first — yield-dependencies stay open
+        # until the StreamingResponse finishes on supported FastAPI versions —
+        # then fall back to a fresh connection when it is already closed.
+        if not _persist_assistant_reply(db, session_id, user_id, answer):
+            try:
+                with SessionLocal() as persist_db:
+                    _persist_assistant_reply(persist_db, session_id, user_id, answer)
+            except Exception:
+                logger.warning("Failed to persist streamed chat reply", exc_info=True)
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "X-Session-Id": str(session_id),
+        },
+    )
+
+
+@router.get("/chat/history")
+def chat_history(
+    user_id: int = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return the user's most recent chat session so the UI can restore the
+    conversation across reloads (#1131 AC2)."""
+    session = _latest_session(db, user_id)
+    if session is None:
+        return {"session_id": None, "messages": []}
+    return {"session_id": session.id, "messages": session.messages or []}
+
+
+@router.delete("/chat/history")
+def clear_chat_history(
+    user_id: int = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Delete all of the user's chat sessions (the UI "clear conversation" action)."""
+    db.query(ChatSession).filter(ChatSession.user_id == user_id).delete()
+    db.commit()
+    return {"status": "cleared"}
 
 
 # ── Plan suggestions (#1237) ────────────────────────────────────────────────
