@@ -80,6 +80,10 @@ class Settings(BaseSettings):
     google_client_id: str = ""
     google_client_secret: str = ""
     google_redirect_uri: str = ""
+    # Gmail push notifications (#42): Pub/Sub topic users.watch publishes to
+    # (projects/<project>/topics/<topic>). Empty = POST /integrations/gmail/watch
+    # reports 503; polling via GET /messages?since= and GET /history still works.
+    google_gmail_pubsub_topic: str = ""
 
     # Strava OAuth (Activities, Athlete data)
     strava_client_id: str = ""
