@@ -17,7 +17,6 @@ scope bump provably lacking a capability are rejected up front with
 import base64
 import binascii
 import json
-import logging
 import re
 from collections.abc import Iterator
 from datetime import UTC, datetime
@@ -32,8 +31,6 @@ from repositories import ConfigRepository
 from services import google_service as gs
 from services.google_token_service import get_stored_token
 from sqlalchemy.orm import Session
-
-logger = logging.getLogger(__name__)
 
 GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
 GMAIL_MODIFY_SCOPE = "https://www.googleapis.com/auth/gmail.modify"
@@ -56,6 +53,7 @@ _GMAIL_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 _LABEL_ID_RE = re.compile(r"^[A-Za-z0-9_]{1,128}$")
 _HISTORY_ID_RE = re.compile(r"^\d{1,20}$")
 _ADDR_SPEC_RE = re.compile(r"^[^\s@<>,;]+@[^\s@<>,;]+$")
+_MIME_TOKEN_RE = re.compile(r"^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$")
 
 # Gmail system labels used by the label actions.
 LABEL_INBOX = "INBOX"
@@ -607,9 +605,9 @@ def _prepare_attachments(attachments: list[dict[str, Any]] | None) -> list[tuple
         filename = _clean_header(str(item.get("filename") or "")) or "attachment"
         # Flatten path separators — a filename is a MIME parameter, not a path.
         filename = filename.replace("/", "_").replace("\\", "_")[:255]
-        content_type = str(item.get("content_type") or "application/octet-stream").strip()
+        content_type = _clean_header(str(item.get("content_type") or "application/octet-stream"))
         maintype, _, subtype = content_type.partition("/")
-        if not maintype or not subtype:
+        if not (_MIME_TOKEN_RE.fullmatch(maintype) and _MIME_TOKEN_RE.fullmatch(subtype)):
             maintype, subtype = "application", "octet-stream"
         data = _decode_out_attachment(str(item.get("data_base64") or ""), filename)
         total += len(data)
@@ -652,7 +650,10 @@ def build_rfc822(
 
     for filename, content_type, data in _prepare_attachments(attachments):
         maintype, _, subtype = content_type.partition("/")
-        msg.add_attachment(data, maintype=maintype, subtype=subtype, filename=filename)
+        try:
+            msg.add_attachment(data, maintype=maintype, subtype=subtype, filename=filename)
+        except ValueError as exc:
+            raise GmailValidationError(f"{filename}: tipo de contenido inválido") from exc
 
     return base64.urlsafe_b64encode(msg.as_bytes()).rstrip(b"=").decode("ascii")
 
