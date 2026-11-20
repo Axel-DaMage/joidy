@@ -18,6 +18,16 @@ export default tseslint.config(
 	// Svelte plugin
 	...svelte.configs['flat/recommended'],
 
+	// eslint-plugin-svelte's base config claims *.svelte.ts/*.svelte.js rune
+	// files with svelte-eslint-parser, which cannot parse TS — restore the
+	// TypeScript parser for them.
+	{
+		files: ['**/*.svelte.ts', '**/*.svelte.js'],
+		languageOptions: {
+			parser: tseslint.parser
+		}
+	},
+
 	// Configure Svelte parser to use TypeScript parser for <script lang="ts">
 	// Also disable/relax TS rules that crash or error on Svelte's AST
 	{
