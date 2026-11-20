@@ -18,6 +18,7 @@ from models.gamification import StreakRecord, UserStats, XPEvent
 from repositories import ConfigRepository, StreakRecordRepository, UserStatsRepository, XPEventRepository
 from services.response_cache import clear_api_caches
 from services.timezone_utils import get_local_today
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -180,6 +181,26 @@ def _get_or_create_stats(db: Session) -> UserStats:
     return UserStatsRepository(db).get_or_create()
 
 
+def _result_from_stats(stats: UserStats | None, message: str, db: Session | None = None) -> GamificationResult:
+    """Zero-award result populated from persisted stats (deduped/guarded events)."""
+    if stats is None:
+        return GamificationResult(message=message)
+    stage_idx, stage_name = _compute_plant_stage(stats.total_xp, db)
+    return GamificationResult(
+        xp_awarded=0,
+        total_xp=stats.total_xp,
+        current_streak=stats.current_streak,
+        plant_stage=stage_idx,
+        plant_stage_name=stage_name,
+        message=message,
+    )
+
+
+def no_award_result(db: Session, message: str = "") -> GamificationResult:
+    """Zero-XP result for events that are replayed or not eligible (#1320)."""
+    return _result_from_stats(db.query(UserStats).first(), message, db)
+
+
 def _compute_plant_stage(total_xp: int, db: Session | None = None) -> tuple[int, str]:
     stages = get_plant_stages(db)
     stage_idx = 0
@@ -217,6 +238,7 @@ def process_event(
     db: Session,
     event_type: str,
     metadata: dict | None = None,
+    dedup_key: str | None = None,
 ) -> GamificationResult:
     xp = xp_for(event_type, db, 0)
     if metadata is None:
@@ -224,6 +246,13 @@ def process_event(
 
     stats = _get_or_create_stats(db)
     today = _today_utc()
+
+    # Idempotent awards (#1320): when the caller supplies a dedup key, an
+    # already-recorded (event_type, dedup_key) row means the XP was granted
+    # before — replaying the mutation must be a no-op, not another award.
+    xp_events = XPEventRepository(db)
+    if dedup_key is not None and xp_events.find_by_dedup_key(event_type, dedup_key) is not None:
+        return _result_from_stats(stats, "Evento ya registrado", db)
 
     # Check if already at max XP
     stages = get_plant_stages(db)
@@ -262,9 +291,15 @@ def process_event(
             message="",
         )
 
-    # Record XP event
-    event = XPEvent(event_type=event_type, xp=xp, metadata_json=json.dumps(metadata))
-    XPEventRepository(db).add(event)
+    # Record XP event. The partial unique index on (event_type, dedup_key) is
+    # the hard backstop for the pre-check above: a racing insert flips the
+    # flush into IntegrityError, which we translate into the same no-op.
+    event = XPEvent(event_type=event_type, xp=xp, metadata_json=json.dumps(metadata), dedup_key=dedup_key)
+    try:
+        xp_events.add(event)
+    except IntegrityError:
+        db.rollback()
+        return no_award_result(db, "Evento ya registrado")
 
     old_plant_stage = stats.plant_stage
 
@@ -287,7 +322,7 @@ def process_event(
                 daily_xp = xp_for("daily_activity", db, 15)
                 stats.total_xp += daily_xp
                 xp += daily_xp
-                XPEventRepository(db).add(XPEvent(event_type="daily_activity", xp=daily_xp))
+                xp_events.add(XPEvent(event_type="daily_activity", xp=daily_xp))
         if new_streak > stats.longest_streak:
             stats.longest_streak = new_streak
     else:
@@ -301,7 +336,7 @@ def process_event(
         milestone_xp = xp_for(f"streak_milestone_{new_streak}", db, 100)
         stats.total_xp += milestone_xp
         xp += milestone_xp
-        XPEventRepository(db).add(XPEvent(event_type=f"streak_milestone_{new_streak}", xp=milestone_xp))
+        xp_events.add(XPEvent(event_type=f"streak_milestone_{new_streak}", xp=milestone_xp))
         milestone_reached = new_streak
 
     # Update plant stage

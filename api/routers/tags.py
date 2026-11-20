@@ -68,7 +68,13 @@ def create_tag(data: TagCreate, db: Session = Depends(get_db)):
     db.refresh(tag)
     clear_api_caches()
     if data.parent_id is not None:
-        process_event(db, "topic_connected", {"child_id": tag.id, "parent_id": data.parent_id})
+        # #1320 — topic_connected is awarded once per (child, parent) pair.
+        process_event(
+            db,
+            "topic_connected",
+            {"child_id": tag.id, "parent_id": data.parent_id},
+            dedup_key=f"tag_parent:{tag.id}:{data.parent_id}",
+        )
     return {"id": tag.id, "name": tag.name, "parent_id": tag.parent_id}
 
 
@@ -98,7 +104,14 @@ def set_parent(tag_id: int, parent_id: int | None, db: Session = Depends(get_db)
     db.commit()
     clear_api_caches()
     if parent_id is not None and parent_id != old_parent_id:
-        process_event(db, "topic_connected", {"child_id": tag.id, "parent_id": parent_id})
+        # #1320 — re-parent toggling must not farm XP: each distinct
+        # (child, parent) connection awards once, ever.
+        process_event(
+            db,
+            "topic_connected",
+            {"child_id": tag.id, "parent_id": parent_id},
+            dedup_key=f"tag_parent:{tag.id}:{parent_id}",
+        )
     return {"id": tag.id, "name": tag.name, "parent_id": tag.parent_id}
 
 

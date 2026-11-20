@@ -1,12 +1,12 @@
-import json
-
 from database import get_db
 from fastapi import APIRouter, BackgroundTasks, Depends
 from models.gamification import StreakRecord, UserStats, XPEvent
 from pydantic import BaseModel, Field
+from repositories import XPEventRepository
 from services.gamification_engine import (
     PLANT_STAGES,
     GamificationResult,
+    no_award_result,
     process_event,
 )
 from services.response_cache import clear_api_caches, register_cache_clearer, ttl_cache
@@ -117,18 +117,13 @@ def ping_activity(
 
 class PomodoroCompleteRequest(BaseModel):
     duration_minutes: int = Field(gt=0, le=600)
-    pomodoro_id: str | None = Field(default=None, max_length=100)
+    # Required since #1320: the client-generated id is the idempotency key —
+    # without it every call minted fresh XP.
+    pomodoro_id: str = Field(min_length=1, max_length=100)
 
 
-def _find_pomodoro_event(db: Session, pomodoro_id: str) -> XPEvent | None:
-    events = db.query(XPEvent).filter(XPEvent.event_type == "pomodoro_completed").all()
-    for event in events:
-        try:
-            if json.loads(event.metadata_json or "{}").get("pomodoro_id") == pomodoro_id:
-                return event
-        except json.JSONDecodeError:
-            continue
-    return None
+def _pomodoro_dedup_key(pomodoro_id: str) -> str:
+    return f"pomodoro:{pomodoro_id}"
 
 
 def _enriched_stats_response(gami: GamificationResult, stats: UserStats | None) -> dict:
@@ -142,42 +137,31 @@ def _enriched_stats_response(gami: GamificationResult, stats: UserStats | None) 
     }
 
 
-def _no_award_result(db: Session, message: str) -> GamificationResult:
-    stats = db.query(UserStats).filter_by(id=1).first()
-    if not stats:
-        return GamificationResult(message=message)
-    stage_idx = stats.plant_stage
-    stage_name = PLANT_STAGES[stage_idx][1] if stage_idx < len(PLANT_STAGES) else PLANT_STAGES[-1][1]
-    return GamificationResult(
-        total_xp=stats.total_xp,
-        current_streak=stats.current_streak,
-        plant_stage=stage_idx,
-        plant_stage_name=stage_name,
-        message=message,
-    )
-
-
 @router.post("/pomodoro")
 def complete_pomodoro(data: PomodoroCompleteRequest, db: Session = Depends(get_db)):
     """Awards XP for a COMPLETED focus session.
 
     Anti-farm: only sessions of at least MIN_POMODORO_XP_MINUTES earn XP, and
-    replaying the same pomodoro_id never awards twice. Multiple pomodoros per
-    day are legitimate, so there is no daily cap (unlike daily_activity).
+    replaying the same pomodoro_id never awards twice — the (event_type,
+    dedup_key) unique index on xp_events is the hard guarantee (#1320).
+    Multiple pomodoros per day are legitimate, so there is no daily cap
+    (unlike daily_activity).
     """
-    if data.pomodoro_id and _find_pomodoro_event(db, data.pomodoro_id):
-        gami = _no_award_result(db, "Sesión ya registrada")
+    dedup_key = _pomodoro_dedup_key(data.pomodoro_id)
+    if XPEventRepository(db).find_by_dedup_key("pomodoro_completed", dedup_key):
+        gami = no_award_result(db, "Sesión ya registrada")
         status = "duplicate"
     elif data.duration_minutes < MIN_POMODORO_XP_MINUTES:
-        gami = _no_award_result(db, "Sesión demasiado corta para XP")
+        gami = no_award_result(db, "Sesión demasiado corta para XP")
         status = "too_short"
     else:
         gami = process_event(
             db,
             "pomodoro_completed",
             {"pomodoro_id": data.pomodoro_id, "duration_minutes": data.duration_minutes},
+            dedup_key=dedup_key,
         )
-        status = "awarded"
+        status = "awarded" if gami.xp_awarded > 0 else "duplicate"
     clear_api_caches()
 
     stats = db.query(UserStats).filter_by(id=1).first()
