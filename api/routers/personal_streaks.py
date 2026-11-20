@@ -3,7 +3,7 @@ from datetime import date, timedelta
 from database import get_db
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from models.personal_streaks import PersonalStreak, StreakCheckIn
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from services.pagination import add_pagination_headers
 from services.personal_streak_service import (
     backfill_streak_history,
@@ -18,44 +18,58 @@ router = APIRouter(prefix="/personal-streaks", tags=["personal-streaks"])
 
 CATEGORIES = ["general", "salud", "estudio", "fitness", "creatividad", "habito", "trabajo"]
 
+# ── Input validation bounds (#1321) ─────────────────────────────────────────────
+#
+# Streak dates are clamped to a sane window. An absurdly old start_date such as
+# 0001-01-01 used to drive the backfill loop through ~740k day-iterations (one
+# StreakCheckIn insert per day) inside a single request — a DoS plus DB bloat.
+# - start_date: up to ~5 years back (streak history) and up to ~1 year ahead
+#   (the UI deliberately allows scheduling a future start; no backfill runs).
+# - check_date: same past window; +1 day future tolerance because the frontend
+#   sends the browser-local date, which can legitimately sit one day ahead of
+#   the server-side configured timezone (see #864).
+# The service layer additionally caps each backfill at MAX_BACKFILL_DAYS.
 
-# ── Helpers ────────────────────────────────────────────────────────────────────
+MAX_STREAK_HISTORY_DAYS = 5 * 366  # ~5 years (leap-safe upper bound)
+MAX_START_DATE_FUTURE_DAYS = 366
+MAX_CHECKIN_FUTURE_DAYS = 1
+MAX_OFFSET_DAYS = 36500  # ~100y — keeps migrations from other trackers possible
+MAX_FREEZE_COUNT = 30  # matches the create/edit modal's own max
+MAX_FREQUENCY_DAYS = 365  # matches the modal's every-N-days input bounds
+VALID_FREQUENCIES = {"daily", "weekly", "monthly", "every_n"}
 
 
-def _backfill_streak_history(db: Session, streak: PersonalStreak):
-    """Generates missing check-ins from start_date up to yesterday."""
-    if not streak.start_date:
-        return
-
+def _validate_date_window(v: date | None, *, max_future_days: int, field: str) -> date | None:
+    """Reject dates outside [today - MAX_STREAK_HISTORY_DAYS, today + max_future_days]."""
+    if v is None:
+        return v
     today = get_local_today()
-    end_date = streak.created_at.date() if streak.created_at else today
-    current = streak.start_date
+    if v < today - timedelta(days=MAX_STREAK_HISTORY_DAYS):
+        raise ValueError(f"{field} cannot be more than ~5 years in the past")
+    if v > today + timedelta(days=max_future_days):
+        if max_future_days <= 1:
+            raise ValueError(f"{field} cannot be in the future")
+        raise ValueError(f"{field} cannot be more than ~1 year in the future")
+    return v
 
-    # Get existing check-in dates to avoid duplicates
-    existing_dates = {c.check_date for c in streak.checkins}
 
-    added_count = 0
-    while current < end_date:
-        if current not in existing_dates:
-            should_add = False
-            if streak.frequency == "daily" or not streak.frequency:
-                should_add = True
-            elif streak.frequency == "every_n":
-                days_since_start = (current - streak.start_date).days
-                if days_since_start % (streak.frequency_days or 1) == 0:
-                    should_add = True
+def _normalize_frequency(v: str | None) -> str | None:
+    """Canonicalize frequency (case/space-tolerant) and enforce the allowed set."""
+    if v is None:
+        return v
+    v = v.strip().lower()
+    if v not in VALID_FREQUENCIES:
+        raise ValueError(f"frequency must be one of: {', '.join(sorted(VALID_FREQUENCIES))}")
+    return v
 
-            if should_add:
-                ci = StreakCheckIn(streak_id=streak.id, check_date=current, note="Auto-generado (Migración)")
-                db.add(ci)
-                added_count += 1
 
-        current += timedelta(days=1)
-
-    if added_count > 0:
-        streak.total_checkins = (streak.total_checkins or 0) + added_count
-        db.commit()
-        db.refresh(streak)
+def _require_nonblank_name(v: str | None) -> str | None:
+    if v is None:
+        return v
+    v = v.strip()
+    if not v:
+        raise ValueError("name cannot be empty")
+    return v
 
 
 # ── Streak computation ─────────────────────────────────────────────────────────
@@ -234,44 +248,87 @@ def _streak_to_dict(streak: PersonalStreak, days_history: int = 365) -> dict:
 
 
 class StreakCreate(BaseModel):
-    name: str
-    emoji: str = "🔥"
-    icon: str = ""
-    description: str = ""
-    color: str = ""
-    theme: str = "solid"
-    category: str = "general"
+    # extra="forbid" turns mass-assignment attempts (e.g. best_streak,
+    # total_checkins, freeze_used — server-computed fields) into a loud 422
+    # instead of a silent no-op (#1321).
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=200)
+    emoji: str = Field(default="🔥", max_length=32)
+    icon: str = Field(default="", max_length=100)
+    description: str = Field(default="", max_length=2000)
+    color: str = Field(default="", max_length=50)
+    theme: str = Field(default="solid", max_length=50)
+    category: str = Field(default="general", max_length=50)
     start_date: date | None = None
     target_date: date | None = None
-    offset: int = 0
+    offset: int = Field(default=0, ge=0, le=MAX_OFFSET_DAYS)
     frequency: str = "daily"
-    frequency_days: int = 1
+    frequency_days: int = Field(default=1, ge=1, le=MAX_FREQUENCY_DAYS)
     snowball_mode: bool = False
-    freeze_count: int = 0
+    freeze_count: int = Field(default=0, ge=0, le=MAX_FREEZE_COUNT)
+
+    @field_validator("name")
+    @classmethod
+    def name_not_blank(cls, v: str) -> str:
+        return _require_nonblank_name(v)
+
+    @field_validator("frequency")
+    @classmethod
+    def frequency_allowed(cls, v: str) -> str:
+        return _normalize_frequency(v)
+
+    @field_validator("start_date")
+    @classmethod
+    def start_date_in_window(cls, v: date | None) -> date | None:
+        return _validate_date_window(v, max_future_days=MAX_START_DATE_FUTURE_DAYS, field="start_date")
 
 
 class StreakUpdate(BaseModel):
-    name: str | None = None
-    emoji: str | None = None
-    icon: str | None = None
-    description: str | None = None
-    color: str | None = None
-    theme: str | None = None
-    category: str | None = None
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    emoji: str | None = Field(default=None, max_length=32)
+    icon: str | None = Field(default=None, max_length=100)
+    description: str | None = Field(default=None, max_length=2000)
+    color: str | None = Field(default=None, max_length=50)
+    theme: str | None = Field(default=None, max_length=50)
+    category: str | None = Field(default=None, max_length=50)
+    # start_date and offset are accepted (the edit form always re-sends them)
+    # but intentionally NOT applied — they are create-only fields. They are
+    # left unvalidated so editing a legacy streak whose stored start_date
+    # predates the validation window doesn't 422.
     start_date: date | None = None
-    target_date: date | None = None
     offset: int | None = None
+    target_date: date | None = None
     frequency: str | None = None
-    frequency_days: int | None = None
+    frequency_days: int | None = Field(default=None, ge=1, le=MAX_FREQUENCY_DAYS)
     snowball_mode: bool | None = None
     is_archived: bool | None = None
-    freeze_count: int | None = None
+    freeze_count: int | None = Field(default=None, ge=0, le=MAX_FREEZE_COUNT)
+
+    @field_validator("name")
+    @classmethod
+    def name_not_blank(cls, v: str | None) -> str | None:
+        return _require_nonblank_name(v)
+
+    @field_validator("frequency")
+    @classmethod
+    def frequency_allowed(cls, v: str | None) -> str | None:
+        return _normalize_frequency(v)
 
 
 class CheckInData(BaseModel):
-    note: str = ""
-    mood: int | None = None
+    model_config = ConfigDict(extra="forbid")
+
+    note: str = Field(default="", max_length=500)
+    mood: int | None = Field(default=None, ge=1, le=5)
     check_date: date | None = None
+
+    @field_validator("check_date")
+    @classmethod
+    def check_date_in_window(cls, v: date | None) -> date | None:
+        return _validate_date_window(v, max_future_days=MAX_CHECKIN_FUTURE_DAYS, field="check_date")
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -419,7 +476,9 @@ def update_streak(streak_id: int, data: StreakUpdate, db: Session = Depends(get_
     db.commit()
     db.refresh(streak)
 
-    # If start_date was moved back, backfill again
+    # Backfill legacy streaks whose stored start_date is already in the past
+    # (start_date itself is create-only and cannot be moved on update). The
+    # service caps each backfill at MAX_BACKFILL_DAYS (#1321).
     if streak.start_date and streak.start_date < get_local_today():
         backfill_streak_history(db, streak)
 

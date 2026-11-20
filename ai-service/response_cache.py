@@ -57,8 +57,13 @@ _cache = TTLCache(max_size=settings.cache_max_size, ttl_seconds=settings.cache_t
 
 
 def cache_key(*parts: str) -> str:
-    """Build a stable SHA-256 cache key from the given string parts."""
-    raw = "\x1f".join(parts)
+    """Build a stable SHA-256 cache key from the given string parts.
+
+    Each part is length-prefixed before hashing so distinct part lists can
+    never collide — e.g. ``("a,b", "c")`` and ``("a", "b,c")`` hash
+    differently even though a plain join would merge them (#1330).
+    """
+    raw = "".join(f"{len(part.encode('utf-8'))}:{part}" for part in parts)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 

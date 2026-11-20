@@ -32,9 +32,8 @@ async def trigger_calendar_sync() -> bool:
         resp = await client.post(f"{settings.api_url}/integrations/google/calendar/sync", headers=headers)
 
         if resp.status_code == 401:
-            # Cached API token expired — re-authenticate and retry once.
-            logger.warning("[calendar] Auth token expired, refreshing...")
-            joidy_daily_writer._auth_token = None
+            # Service token rejected — re-fetch and retry once.
+            logger.warning("[calendar] Auth token rejected, retrying...")
             token = await joidy_daily_writer._get_auth_token(client)
             if token:
                 headers["Authorization"] = f"Bearer {token}"

@@ -1,7 +1,13 @@
 """Router tests for the push notification endpoints (#13)."""
 
+import ipaddress
+from unittest.mock import patch
+
 from fastapi.testclient import TestClient
 from models.push_subscription import PushSubscription
+
+# Endpoint hosts must resolve to public IPs (#1316); stub DNS for hermeticity.
+_PUBLIC_IPS = {ipaddress.ip_address("93.184.216.34")}
 
 
 def test_subscribe_creates_subscription(client: TestClient, db_session):
@@ -9,7 +15,8 @@ def test_subscribe_creates_subscription(client: TestClient, db_session):
         "endpoint": "https://fcm.googleapis.com/fcm/send/abc",
         "keys": {"p256dh": "p256dh-value", "auth": "auth-value"},
     }
-    response = client.post("/push/subscribe", json=payload)
+    with patch("services.url_security._resolve_ips", return_value=_PUBLIC_IPS):
+        response = client.post("/push/subscribe", json=payload)
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
 
@@ -35,7 +42,8 @@ def test_subscribe_replaces_existing(client: TestClient, db_session):
         "endpoint": "https://new.example.com/send",
         "keys": {"p256dh": "new-p256dh", "auth": "new-auth"},
     }
-    response = client.post("/push/subscribe", json=payload)
+    with patch("services.url_security._resolve_ips", return_value=_PUBLIC_IPS):
+        response = client.post("/push/subscribe", json=payload)
     assert response.status_code == 200
 
     subs = db_session.query(PushSubscription).all()

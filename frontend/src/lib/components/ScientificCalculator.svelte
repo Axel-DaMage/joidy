@@ -1,5 +1,6 @@
 <script lang="ts">
   import DynamicIcon from './DynamicIcon.svelte';
+  import { evaluateExpression } from '$lib/utils/mathEval';
 
   let calcInput = $state('');
   let calcResult = $state('0');
@@ -12,7 +13,7 @@
         return;
       }
 
-      let expr = calcInput
+      const expr = calcInput
         .replace(/sin\(/g, 'Math.sin(')
         .replace(/cos\(/g, 'Math.cos(')
         .replace(/tan\(/g, 'Math.tan(')
@@ -22,17 +23,16 @@
         .replace(/π/g, 'Math.PI')
         .replace(/e/g, 'Math.E')
         .replace(/\^/g, '**')
-        .replace(/(\d+)!/g, (_match: string, n: string) => {
-          let f = 1;
-          for (let i = 1; i <= +n; i++) f *= i;
-          return f + '';
-        })
         .replace(/Ans/g, lastResult || '0')
         .replace(/÷/g, '/')
         .replace(/×/g, '*');
 
-      const sanitize = expr.replace(/[^0-9+\-*/(). Math[a-z0-9]!]/g, '');
-      const res = new Function('return ' + sanitize)();
+      // A-Z must survive for Math.PI / Math.E — the evaluator whitelists the
+      // Math.* namespace anyway, so unknown identifiers still throw.
+      const sanitize = expr.replace(/[^0-9+\-*/(). Math[a-zA-Z0-9]!]/g, '');
+      // Safe parser — no eval/new Function, so the CSP needs no 'unsafe-eval'
+      // (audit F-10, #1283). Throws on malformed input → catch shows '...'.
+      const res = evaluateExpression(sanitize);
       if (typeof res === 'number') {
         calcResult = Number(res.toFixed(8)).toString();
       } else {

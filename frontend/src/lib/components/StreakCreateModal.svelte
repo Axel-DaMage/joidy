@@ -616,7 +616,7 @@
     display: flex; align-items: center; justify-content: center; gap: 4px;
     text-align: center;
   }
-  .optional { font-size: 9px; color: var(--text-disabled); text-transform: lowercase; }
+  .optional { font-size: 9px; color: var(--text-muted); text-transform: lowercase; }
 
   .field input {
     background: var(--surface); border: 1px solid var(--border);
@@ -637,7 +637,7 @@
   }
 
   .field-hint {
-    font-size: 10px; color: var(--text-disabled); line-height: 1.3;
+    font-size: 10px; color: var(--text-muted); line-height: 1.3;
     min-height: 26px;
   }
 

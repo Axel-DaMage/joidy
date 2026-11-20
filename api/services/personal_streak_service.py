@@ -7,6 +7,14 @@ from repositories import StreakCheckInRepository
 from services.timezone_utils import get_local_today
 from sqlalchemy.orm import Session
 
+# Per-request cap on the auto-backfill window (#1321). Without it, a streak
+# whose start_date is absurdly old (e.g. 0001-01-01 — previously accepted, or
+# already stored in pre-validation databases) iterated day-by-day and inserted
+# ~740k StreakCheckIn rows inside a single create/update request — a DoS plus
+# DB bloat. Only the most recent MAX_BACKFILL_DAYS days are auto-generated;
+# older history is simply left empty rather than rejecting the request.
+MAX_BACKFILL_DAYS = 400
+
 
 def backfill_streak_history(db: Session, streak: PersonalStreak) -> None:
     """Generates missing check-ins from start_date up to yesterday."""
@@ -15,7 +23,10 @@ def backfill_streak_history(db: Session, streak: PersonalStreak) -> None:
 
     today = get_local_today()
     end_date = streak.created_at.date() if streak.created_at else today
-    current = streak.start_date
+    # Clamp the fill start so a single call never iterates more than
+    # MAX_BACKFILL_DAYS days; the every_n anchor below still uses the real
+    # start_date so day-0 alignment is preserved.
+    current = max(streak.start_date, end_date - timedelta(days=MAX_BACKFILL_DAYS))
 
     existing_dates = {c.check_date for c in streak.checkins}
 

@@ -10,7 +10,7 @@
     size = 'md',
     onClose,
     children,
-    footer
+    footer,
   }: {
     open?: boolean;
     title?: string;
@@ -84,9 +84,15 @@
     box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
   }
 
-  .modal-sm { max-width: 400px; }
-  .modal-md { max-width: 560px; }
-  .modal-lg { max-width: 800px; }
+  .modal-sm {
+    max-width: 400px;
+  }
+  .modal-md {
+    max-width: 560px;
+  }
+  .modal-lg {
+    max-width: 800px;
+  }
 
   .modal-header {
     display: flex;

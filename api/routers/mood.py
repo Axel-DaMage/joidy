@@ -1,7 +1,7 @@
 from database import get_db
 from fastapi import APIRouter, Depends, Query
 from models.mood_entry import MoodEntry
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 from services.auth_service import get_current_user
 from services.mood_service import (
     create_or_update_mood,
@@ -18,7 +18,7 @@ class MoodCreate(BaseModel):
     """Schema for creating/updating today's mood."""
 
     score: int
-    note: str | None = None
+    note: str | None = Field(default=None, max_length=500)  # bound note size (#1321)
 
     @field_validator("score")
     @classmethod

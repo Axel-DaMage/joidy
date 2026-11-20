@@ -1,8 +1,10 @@
+import os
+
 from config import settings
 from database import get_db
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Response
 from models.note import EmbeddingFailure, Note, NoteTag, Tag
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 from services.embedding_service import (
     get_dead_letter_entries,
     get_retryable_embedding_notes,
@@ -34,9 +36,10 @@ from services.note_service import (
     update_note as update_note_service,
 )
 from services.pagination import add_pagination_headers
-from services.sanitizer import sanitize_content, sanitize_title
+from services.sanitizer import MAX_TAG_LENGTH, sanitize_content, sanitize_tag, sanitize_title
 from services.skill_tree import sync_skills_for_tags
 from services.tag_graph import sync_tag_cooccurrences_for_tags
+from services.vault_paths import normalize_source_path, resolve_confined_source_path
 from sqlalchemy import text
 from sqlalchemy.orm import Session, selectinload
 
@@ -44,6 +47,22 @@ router = APIRouter(prefix="/notes", tags=["notes"])
 
 
 ALLOWED_SOURCES = {"joidy", "obsidian", "api", "import"}
+
+
+def _clean_tag_list(tags: list[str]) -> list[str]:
+    """Normalize raw tag names through ``sanitize_tag``, drop empties and
+    deduplicate (order-preserving). Single entry point so every tag-name
+    input — note create/update, bulk ops — gets identical handling (#1322)."""
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for t in tags:
+        if not isinstance(t, str):
+            continue
+        cleaned = sanitize_tag(t)
+        if cleaned and cleaned not in seen:
+            seen.add(cleaned)
+            deduped.append(cleaned)
+    return deduped
 
 
 class NoteCreate(BaseModel):
@@ -70,16 +89,7 @@ class NoteCreate(BaseModel):
     def validate_tags(cls, v: list[str]) -> list[str]:
         if len(v) > 50:
             raise ValueError("Maximum 50 tags per note")
-        seen = set()
-        deduped = []
-        for t in v:
-            if not isinstance(t, str):
-                continue
-            cleaned = t.strip().lower()
-            if cleaned and len(cleaned) <= 100 and cleaned not in seen:
-                seen.add(cleaned)
-                deduped.append(cleaned)
-        return deduped
+        return _clean_tag_list(v)
 
     @field_validator("source")
     @classmethod
@@ -120,16 +130,7 @@ class NoteUpdate(BaseModel):
             return v
         if len(v) > 50:
             raise ValueError("Maximum 50 tags per note")
-        seen = set()
-        deduped = []
-        for t in v:
-            if not isinstance(t, str):
-                continue
-            cleaned = t.strip().lower()
-            if cleaned and len(cleaned) <= 100 and cleaned not in seen:
-                seen.add(cleaned)
-                deduped.append(cleaned)
-        return deduped
+        return _clean_tag_list(v)
 
     @field_validator("source")
     @classmethod
@@ -155,16 +156,72 @@ class NoteResponse(BaseModel):
 
 
 class BulkIds(BaseModel):
-    ids: list[int]
+    # Bounded so a bulk request can't fan out into an unbounded DB query storm (#1322).
+    ids: list[int] = Field(max_length=500)
 
 
 class BulkTagRequest(BaseModel):
-    ids: list[int]
-    tags: list[str]
+    ids: list[int] = Field(max_length=500)
+    tags: list[str] = Field(max_length=50)
+
+    @field_validator("tags")
+    @classmethod
+    def validate_tags(cls, v: list[str]) -> list[str]:
+        return _clean_tag_list(v)
 
 
 def _is_truthy_header(value: str | None) -> bool:
     return value is not None and value.lower() in {"1", "true", "yes", "on"}
+
+
+def _note_id_owning_resolved(db: Session, resolved: str) -> int | None:
+    """Id of the note whose stored ``source_path`` resolves to ``resolved``.
+
+    Compares realpaths, not strings, so symlink aliases of the same file can
+    never belong to two different notes.
+    """
+    for note_id, stored in db.query(Note.id, Note.source_path).filter(Note.source_path.isnot(None)):
+        if stored and resolve_confined_source_path(stored) == resolved:
+            return note_id
+    return None
+
+
+def _validated_source_path(
+    db: Session,
+    source_path: str | None,
+    *,
+    note_id: int | None,
+    writes_file: bool,
+) -> None:
+    """Reject an unsafe client-supplied ``source_path`` with a generic 400.
+
+    The path must normalize onto the canonical vault domain and resolve,
+    after ``realpath``, strictly inside the effective vault root as a ``.md``
+    file outside hidden dirs (``.obsidian`` …) and ``_joidy/`` — so prefix
+    confusion, traversal, symlink escapes, and Joidy/Obsidian internals are
+    all refused (#1287, #1314).
+
+    When the request could write the file (``writes_file`` — i.e. it did not
+    come from the vault watcher), an already-existing target must be the
+    note's own file: creations fall through to ``create_note``'s
+    source_path dedup, and updates may only keep their own file — a client
+    can never aim a write at a vault file no note owns.
+
+    One generic detail for every rejection: distinguishing "outside vault"
+    from "already exists" would leak a file-existence oracle (#1314).
+    """
+    if source_path is None:
+        return
+    normalized = normalize_source_path(source_path)
+    if normalized is None:
+        return
+    resolved = resolve_confined_source_path(normalized)
+    if resolved is None:
+        raise HTTPException(status_code=400, detail="Invalid source_path")
+    if writes_file and os.path.exists(resolved):
+        owner_id = _note_id_owning_resolved(db, resolved)
+        if owner_id is None or (note_id is not None and owner_id != note_id):
+            raise HTTPException(status_code=400, detail="Invalid source_path")
 
 
 @router.get("/")
@@ -284,6 +341,12 @@ def create_note(
     x_from_vault: str | None = Header(default=None, alias="X-From-Vault"),
     db: Session = Depends(get_db),
 ):
+    _validated_source_path(
+        db,
+        data.source_path,
+        note_id=None,
+        writes_file=not _is_truthy_header(x_from_vault),
+    )
     note, gami = create_note_service(
         db,
         title=data.title,
@@ -308,6 +371,12 @@ def update_note(
     x_from_vault: str | None = Header(default=None, alias="X-From-Vault"),
     db: Session = Depends(get_db),
 ):
+    _validated_source_path(
+        db,
+        data.source_path,
+        note_id=note_id,
+        writes_file=not _is_truthy_header(x_from_vault),
+    )
     note, gami = update_note_service(
         db,
         note_id,
@@ -369,7 +438,8 @@ def bulk_untag(data: BulkTagRequest, db: Session = Depends(get_db)):
     touched_tags: set[int] = set()
     for nid in data.ids:
         for tag_name in data.tags:
-            tag = db.query(Tag).filter(Tag.name == tag_name.lower().strip()).first()
+            # data.tags is already sanitized/normalized by BulkTagRequest.validate_tags
+            tag = db.query(Tag).filter(Tag.name == tag_name).first()
             if not tag:
                 continue
             nt = db.query(NoteTag).filter(NoteTag.note_id == nid, NoteTag.tag_id == tag.id).first()
@@ -394,14 +464,17 @@ def delete_note(note_id: int, db: Session = Depends(get_db)):
 @router.post("/{note_id}/accept-tag")
 def accept_ai_tag(
     note_id: int,
-    tag_name: str,
     background_tasks: BackgroundTasks,
+    tag_name: str = Query(max_length=MAX_TAG_LENGTH),
     db: Session = Depends(get_db),
 ):
-    tag, gami = accept_ai_tag_service(db, note_id, tag_name)
+    clean_tag = sanitize_tag(tag_name)
+    if not clean_tag:
+        raise HTTPException(status_code=422, detail="Tag name is empty after sanitization")
+    tag, gami = accept_ai_tag_service(db, note_id, clean_tag)
     if tag is None or gami is None:
         raise HTTPException(status_code=404, detail="Note not found")
-    return {"tag": tag_name, "gamification": vars(gami)}
+    return {"tag": clean_tag, "gamification": vars(gami)}
 
 
 @router.get("/{note_id}/backlinks")

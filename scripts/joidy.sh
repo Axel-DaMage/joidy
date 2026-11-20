@@ -89,21 +89,30 @@ cd "$PROJECT_DIR"
 # Detect the engine early so the env bootstrap can make engine-specific
 # decisions (e.g. skip DOCKER_GID for Podman rootless, set socket path).
 # Priority: docker-compose → docker compose → podman compose → podman-compose.
+# Only commands that drive the compose stack require an engine — `joidy
+# help` and usage errors must work on a bare machine: install.sh explicitly
+# lets users install Docker *after* the CLI is on PATH, and help is the
+# first thing they reach for.
 CONTAINER_ENGINE="docker"
-if command -v docker-compose &>/dev/null; then
-  DOCKER_CMD="docker-compose"
-elif command -v docker &>/dev/null; then
-  DOCKER_CMD="docker compose"
-elif command -v podman &>/dev/null && podman compose version &>/dev/null 2>&1; then
-  DOCKER_CMD="podman compose"
-  CONTAINER_ENGINE="podman"
-elif command -v podman-compose &>/dev/null; then
-  DOCKER_CMD="podman-compose"
-  CONTAINER_ENGINE="podman"
-else
-  echo -e "${RED}✗ Error: Neither docker nor podman was found in PATH.${NC}" >&2
-  exit 1
-fi
+DOCKER_CMD="docker compose"
+case "${1:-help}" in
+  up|down|sleep|wake|restart|status|pull|logs|idle|backup|restore)
+    if command -v docker-compose &>/dev/null; then
+      DOCKER_CMD="docker-compose"
+    elif command -v docker &>/dev/null; then
+      DOCKER_CMD="docker compose"
+    elif command -v podman &>/dev/null && podman compose version &>/dev/null 2>&1; then
+      DOCKER_CMD="podman compose"
+      CONTAINER_ENGINE="podman"
+    elif command -v podman-compose &>/dev/null; then
+      DOCKER_CMD="podman-compose"
+      CONTAINER_ENGINE="podman"
+    else
+      echo -e "${RED}✗ Error: Neither docker nor podman was found in PATH.${NC}" >&2
+      exit 1
+    fi
+    ;;
+esac
 
 # ─── .env bootstrap ───────────────────────────────────────────────
 # Resolve which .env file to use:
@@ -193,6 +202,18 @@ if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
     NEW_GRAFANA_PW=$(generate_secret 24)
     sed -i "s|^GRAFANA_ADMIN_PASSWORD=.*|GRAFANA_ADMIN_PASSWORD=${NEW_GRAFANA_PW}|" "$ENV_FILE"
     print_ok "Generated GRAFANA_ADMIN_PASSWORD"
+    CHANGED=1
+  fi
+  # INTERNAL_API_TOKEN — dedicated service credential for worker/n8n (#1275)
+  IAT=$(grep -E '^INTERNAL_API_TOKEN=' "$ENV_FILE" | cut -d'=' -f2-)
+  if [ -z "$IAT" ]; then
+    NEW_IAT=$(generate_secret 32)
+    if grep -qE '^INTERNAL_API_TOKEN=' "$ENV_FILE"; then
+      sed -i "s|^INTERNAL_API_TOKEN=.*|INTERNAL_API_TOKEN=${NEW_IAT}|" "$ENV_FILE"
+    else
+      printf '\nINTERNAL_API_TOKEN=%s\n' "$NEW_IAT" >>"$ENV_FILE"
+    fi
+    print_ok "Generated INTERNAL_API_TOKEN"
     CHANGED=1
   fi
   if [ "$CHANGED" = "1" ]; then
@@ -317,6 +338,23 @@ if [ "$CONTAINER_ENGINE" = "podman" ]; then
   else
     print_warn "Podman socket not found at $PODMAN_SOCK"
     print_warn "Enable it with: systemctl --user enable --now podman.socket"
+  fi
+fi
+
+# ─── .env permissions (#1281) ─────────────────────────────────
+# .env holds every deployment secret (SECRET_KEY, POSTGRES_PASSWORD, OAuth
+# client secrets, AUTH_PASSWORD hash, INTERNAL_API_TOKEN). Enforce owner-only
+# read/write on every invocation — this covers files created above via `cp`,
+# written by sed -i/appends, created by hand, or left loose by an older
+# release (0644 under a default umask).
+if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
+  ENV_PERMS=$(stat -c '%a' "$ENV_FILE" 2>/dev/null || stat -f '%Lp' "$ENV_FILE" 2>/dev/null || true)
+  if [ -n "$ENV_PERMS" ] && [ "$ENV_PERMS" != "600" ]; then
+    if chmod 600 "$ENV_FILE"; then
+      print_warn "Tightened .env permissions (${ENV_PERMS} → 600): $ENV_FILE"
+    else
+      print_err "Could not chmod 600 $ENV_FILE — it may be readable by other users"
+    fi
   fi
 fi
 
@@ -656,7 +694,7 @@ idle_watcher_alive() {
 # Service names of currently running compose services (one per line).
 idle_running_services() {
   local profile out
-  profile="$(ai_profile_args)"
+  profile="$(profile_args)"
   out=$($DOCKER_CMD $ENV_FILE_ARG $profile ps --services --filter status=running 2>/dev/null || true)
   if [ -z "$out" ]; then
     # Fallback for engines without `ps --services`: match known names in `ps`.
@@ -736,7 +774,7 @@ idle_any_activity() {
 idle_do_sleep() {
   local hibernate_db="$1"
   local profile running
-  profile="$(ai_profile_args)"
+  profile="$(profile_args)"
   running="$(idle_running_services)"
   if [ -z "$(echo "$running" | tr -d '[:space:]')" ]; then
     idle_log "idle timeout reached but no services running — nothing to sleep"
@@ -764,7 +802,7 @@ idle_do_sleep() {
 idle_restore_state() {
   local file="$IDLE_STATE_DIR/pre_sleep_services"
   local profile running svc
-  profile="$(ai_profile_args)"
+  profile="$(profile_args)"
   running="$(idle_running_services)"
   if [ -f "$file" ]; then
     for svc in postgres api frontend worker ai-service; do
@@ -972,8 +1010,10 @@ cmd_backup() {
   print_status "Dumping '$pg_db' → $file"
   # Local socket auth inside the postgres container is trust, so no password is
   # needed here. Write to a temp name first: a failed dump never leaves a
-  # truncated archive masquerading as a good backup.
-  if $DOCKER_CMD $ENV_FILE_ARG exec -T postgres pg_dump -Fc -U "$pg_user" -d "$pg_db" > "$file.tmp"; then
+  # truncated archive masquerading as a good backup. umask 077 in the subshell
+  # makes the archive owner-only from creation — dumps contain the full DB
+  # contents, including secrets (#1281).
+  if (umask 077; $DOCKER_CMD $ENV_FILE_ARG exec -T postgres pg_dump -Fc -U "$pg_user" -d "$pg_db" > "$file.tmp"); then
     mv "$file.tmp" "$file"
   else
     rm -f "$file.tmp"
@@ -1084,7 +1124,8 @@ on Docker). The socket grants full container-engine control — read the
 residual-risk section in SECURITY.md before enabling.
 
 On first run, .env is auto-created from .env.example with generated
-POSTGRES_PASSWORD, SECRET_KEY, INTERNAL_SECRET, and GRAFANA_ADMIN_PASSWORD.
+POSTGRES_PASSWORD, SECRET_KEY, INTERNAL_SECRET, INTERNAL_API_TOKEN, and
+GRAFANA_ADMIN_PASSWORD.
 For AUR installs (read-only /usr/share/joidy), .env is stored in
 ~/.config/joidy/.env. Edit it to add GEMINI_API_KEY, OBSIDIAN_VAULT_PATH, etc.
 

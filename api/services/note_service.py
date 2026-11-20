@@ -16,7 +16,7 @@ from services.tag_graph import (
     rebuild_tag_cooccurrences,
     sync_tag_cooccurrences_for_tags,
 )
-from services.vault_paths import normalize_source_path
+from services.vault_paths import normalize_source_path, resolve_confined_source_path
 from sqlalchemy.orm import Session, selectinload
 
 
@@ -32,18 +32,27 @@ def write_to_vault(note: Note, from_vault: bool = False) -> bool:
     Avoids writing when the update came from the vault watcher (which would
     trigger a feedback loop) and skips no-op writes where the file already
     has the same content.
+
+    Confinement (#1287, #1314): the target is resolved with
+    ``resolve_confined_source_path`` — realpath + commonpath against the
+    effective vault root, ``.md`` only, and no hidden dirs (``.obsidian`` …)
+    or ``_joidy/`` — so prefix confusion (``/vault_evil``) and planted
+    symlinks can never redirect the write outside the vault.
     """
     if from_vault:
         return False
     if not note.source_path:
         return False
-    vault_path = settings.obsidian_vault_path
-    if not vault_path:
+    if not settings.obsidian_vault_path:
         return False
     try:
-        vault = os.path.abspath(vault_path)
-        full_path = os.path.abspath(note.source_path)
-        if not full_path.startswith(vault):
+        # The vault root itself must already be a real directory — without
+        # this guard a misconfigured path would let makedirs() fabricate a
+        # vault subtree anywhere on the filesystem.
+        if not os.path.isdir(os.path.realpath(settings.obsidian_vault_path)):
+            return False
+        full_path = resolve_confined_source_path(note.source_path)
+        if full_path is None:
             return False
         if os.path.exists(full_path):
             try:
@@ -52,6 +61,9 @@ def write_to_vault(note: Note, from_vault: bool = False) -> bool:
                 current = None
             if current is not None and current == note.content:
                 return True
+        parent = os.path.dirname(full_path)
+        if parent and not os.path.isdir(parent):
+            os.makedirs(parent, exist_ok=True)
         with open(full_path, "w", encoding="utf-8") as f:
             f.write(note.content)
         return True
@@ -80,7 +92,9 @@ def note_to_response(note: Note) -> dict:
 
 
 def get_or_create_tag(db: Session, name: str) -> Tag:
-    normalized = name.lower().strip()
+    # Sanitize at the chokepoint so every tag-creation path (note tags, bulk
+    # ops, AI tag acceptance) applies the same normalization (#1322).
+    normalized = sanitize_tag(name)
     tag = db.query(Tag).filter(Tag.name == normalized).first()
     if not tag:
         tag = Tag(name=normalized)

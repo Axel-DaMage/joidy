@@ -25,16 +25,55 @@ renderer.code = ({ text, lang }) => {
 };
 marked.use({ gfm: true, breaks: true, renderer });
 
-// Configure DOMPurify for safe markdown rendering
+// Configure DOMPurify for safe markdown rendering.
+// NOTE: `rel` is intentionally NOT in ALLOWED_ATTR — a rendered note could
+// otherwise carry `target="_blank" rel="opener"` (reverse tabnabbing). Instead
+// the hook below forces a safe `rel` on every anchor that sets `target`.
 DOMPurify.setConfig({
   ALLOWED_TAGS: [
-    'p', 'br', 'strong', 'em', 'a', 'ul', 'ol', 'li',
-    'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-    'pre', 'code', 'blockquote',
-    'table', 'thead', 'tbody', 'tr', 'th', 'td',
-    'span', 'div', 'hr', 'img', 'del', 'ins', 'sup', 'sub',
+    'p',
+    'br',
+    'strong',
+    'em',
+    'a',
+    'ul',
+    'ol',
+    'li',
+    'h1',
+    'h2',
+    'h3',
+    'h4',
+    'h5',
+    'h6',
+    'pre',
+    'code',
+    'blockquote',
+    'table',
+    'thead',
+    'tbody',
+    'tr',
+    'th',
+    'td',
+    'span',
+    'div',
+    'hr',
+    'img',
+    'del',
+    'ins',
+    'sup',
+    'sub',
   ],
-  ALLOWED_ATTR: ['href', 'target', 'rel', 'src', 'alt', 'class', 'data-title'],
+  ALLOWED_ATTR: ['href', 'target', 'src', 'alt', 'class', 'data-title'],
+});
+
+// After attribute sanitization, force `rel="noopener noreferrer"` on any
+// anchor that opens/navigates a browsing context via `target`, so a crafted
+// `rel="opener"` can never retain `window.opener` (reverse tabnabbing).
+// `localName` matches both HTML (`<A>`) and SVG (`<a>`) anchors.
+DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+  if (node.localName === 'a' && node.hasAttribute('target')) {
+    node.setAttribute('rel', 'noopener noreferrer');
+  }
 });
 
 /**
@@ -58,7 +97,7 @@ function preprocessWikilinks(md: string): string {
  */
 export function renderMarkdown(
   md: string,
-  options: { hideTagsLine?: boolean; hasTags?: boolean } = {},
+  options: { hideTagsLine?: boolean; hasTags?: boolean } = {}
 ): string {
   if (!md.trim()) {
     return '<p style="color:var(--text-muted);font-style:italic;">Escribe algo para ver el preview...</p>';

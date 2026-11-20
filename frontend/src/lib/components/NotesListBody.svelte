@@ -107,6 +107,8 @@
         getKey={(n, i) => n.path ?? i}
         bind:scrollTop={$virtualScrollTop}
         onScrollChange={onVirtualScrollChange}
+        role="tree"
+        ariaLabel={$t('notesPage.treeLabel')}
         let:item
         let:index
       >
@@ -114,9 +116,13 @@
           <div
             class="tree-row folder-row"
             style="padding-left: {8 + item.depth * 14}px"
-            role="button"
+            role="treeitem"
             tabindex="0"
             aria-expanded={!$collapsed.has(item.path)}
+            aria-selected="false"
+            aria-level={item.depth + 1}
+            aria-setsize={$flatNodes.length}
+            aria-posinset={index + 1}
             onclick={() => toggleFolder(item.path)}
             onkeydown={(e) =>
               (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), toggleFolder(item.path))}
@@ -147,9 +153,12 @@
             class="tree-row file-row"
             class:active={item.note?.id === $selectedNote?.id}
             style="padding-left: {20 + item.depth * 14}px"
-            role="button"
+            role="treeitem"
             tabindex="0"
-            aria-pressed={item.note?.id === $selectedNote?.id}
+            aria-selected={item.note?.id === $selectedNote?.id}
+            aria-level={item.depth + 1}
+            aria-setsize={$flatNodes.length}
+            aria-posinset={index + 1}
             onclick={() => item.note && openNote(item.note)}
             onkeydown={(e) =>
               (e.key === 'Enter' || e.key === ' ') &&
@@ -181,15 +190,19 @@
         {/if}
       </VirtualList>
     {:else}
-      <div class="tree-wrap">
-        {#each $flatNodes as node (node.path)}
+      <div class="tree-wrap" role="tree" aria-label={$t('notesPage.treeLabel')}>
+        {#each $flatNodes as node, i (node.path)}
           {#if node.type === 'folder'}
             <div
               class="tree-row folder-row"
               style="padding-left: {8 + node.depth * 14}px"
-              role="button"
+              role="treeitem"
               tabindex="0"
               aria-expanded={!$collapsed.has(node.path)}
+              aria-selected="false"
+              aria-level={node.depth + 1}
+              aria-setsize={$flatNodes.length}
+              aria-posinset={i + 1}
               onclick={() => toggleFolder(node.path)}
               onkeydown={(e) =>
                 (e.key === 'Enter' || e.key === ' ') &&
@@ -221,9 +234,12 @@
               class="tree-row file-row"
               class:active={node.note?.id === $selectedNote?.id}
               style="padding-left: {20 + node.depth * 14}px"
-              role="button"
+              role="treeitem"
               tabindex="0"
-              aria-pressed={node.note?.id === $selectedNote?.id}
+              aria-selected={node.note?.id === $selectedNote?.id}
+              aria-level={node.depth + 1}
+              aria-setsize={$flatNodes.length}
+              aria-posinset={i + 1}
               onclick={() => node.note && openNote(node.note)}
               onkeydown={(e) =>
                 (e.key === 'Enter' || e.key === ' ') &&
