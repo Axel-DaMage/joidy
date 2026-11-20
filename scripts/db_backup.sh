@@ -87,7 +87,7 @@ prune_backups() {
     if [ "$dow" = "$BACKUP_WEEKLY_DAY" ] && [ "$age" -le "$weekly_sec" ]; then
       continue
     fi
-    rm -f "$f"
+    rm -f -- "$f"
     log "pruned $name (age $((age / 86400))d)"
     pruned=$((pruned + 1))
   done
@@ -104,7 +104,7 @@ run_backup() {
   export PGPASSWORD
   # Dumps contain the full DB contents — owner-only from creation (#1281).
   umask 077
-  mkdir -p "$BACKUP_DIR"
+  mkdir -p -- "$BACKUP_DIR"
   local ts name tmp encrypt=0
   ts=$(date +%Y%m%d-%H%M%S)
   if [ -n "${BACKUP_ENCRYPTION_KEY:-}" ]; then
@@ -119,7 +119,7 @@ run_backup() {
     name="joidy-${ts}.dump"
   fi
   tmp="$BACKUP_DIR/.${name}.tmp"
-  trap 'rm -f "$tmp"' EXIT
+  trap 'rm -f -- "$tmp"' EXIT
   if [ "$encrypt" -eq 1 ]; then
     log "dumping ${PGDATABASE}@${PGHOST}:${PGPORT} → $BACKUP_DIR/$name (AES-256-CBC, openssl)"
     # Stream pg_dump straight into openssl: no plaintext ever touches disk.
@@ -129,8 +129,8 @@ run_backup() {
     log "dumping ${PGDATABASE}@${PGHOST}:${PGPORT} → $BACKUP_DIR/$name"
     pg_dump -Fc -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -f "$tmp"
   fi
-  mv "$tmp" "$BACKUP_DIR/$name"
-  chmod 600 "$BACKUP_DIR/$name"
+  mv -- "$tmp" "$BACKUP_DIR/$name"
+  chmod 600 -- "$BACKUP_DIR/$name"
   trap - EXIT
   log "backup complete: $name ($(du -h "$BACKUP_DIR/$name" | cut -f1))"
 }
