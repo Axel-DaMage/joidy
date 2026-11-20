@@ -304,6 +304,20 @@ def _disable_rate_limits():
 
 
 @pytest.fixture(autouse=True)
+def _restore_mutable_settings(monkeypatch):
+    """Restore process-global ``config.settings`` mutated by endpoints under test.
+
+    /config and /config/setup write values into ``settings`` in place; without
+    a per-test restore a posted ``obsidian_vault_path`` poisons vault
+    confinement for every later test in the same xdist worker.
+    """
+    import config as _config
+
+    for attr in ("obsidian_vault_path", "auth_password", "secret_key"):
+        monkeypatch.setattr(_config.settings, attr, getattr(_config.settings, attr))
+
+
+@pytest.fixture(autouse=True)
 def _isolated_env_file(tmp_path, monkeypatch):
     """Give every test its own empty persisted .env (#991).
 
