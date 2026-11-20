@@ -1,0 +1,27 @@
+# Release-pinned image overlay (#1394).
+#
+# docker-compose.yml resolves joidy images to the mutable `:latest` tag. This
+# overlay pins every joidy image to the release it shipped with, so installs
+# are reproducible and immune to silent tag rewrites on Docker Hub. The
+# release workflow (.github/workflows/release.yml) bumps these tags on every
+# release, so the file inside tag vX.Y.Z always points at the vX.Y.Z images.
+# It is also attached to each GitHub release and installed by the AUR package.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.release.yml up -d
+# Users of the `joidy` CLI can achieve the same pin by setting
+# `IMAGE_TAG=<release>` in .env — see .env.example.
+#
+# Stronger guarantee — pin by digest instead of tag:
+#   docker buildx imagetools inspect d4mag3/joidy-api:<tag>
+# then replace the tag below with `d4mag3/joidy-api@sha256:<digest>`.
+
+services:
+  api:
+    image: d4mag3/joidy-api:1.1.0-beta.8
+  ai-service:
+    image: d4mag3/joidy-ai-service:1.1.0-beta.8
+  worker:
+    image: d4mag3/joidy-worker:1.1.0-beta.8
+  frontend:
+    image: d4mag3/joidy-frontend:1.1.0-beta.8

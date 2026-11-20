@@ -41,6 +41,15 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest
+          # Supply-chain metadata on published images (#1394). source and
+          # revision are also emitted by metadata-action defaults; they are
+          # pinned explicitly so the label set does not depend on the action's
+          # implicit behavior.
+          labels: |
+            org.opencontainers.image.licenses=GPL-3.0-or-later
+            org.opencontainers.image.source=https://github.com/Axel-DaMage/joidy
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.vendor=Axel-DaMage
       - uses: docker/build-push-action@v7
         with:
           context: ./${{ matrix.service }}

@@ -1,20 +1,24 @@
 #!/usr/bin/env bash
 # Joidy — universal one-shot installer for Linux / macOS / WSL2
 #
-# Usage (Linux / macOS / WSL2):
-#   curl -fsSL https://raw.githubusercontent.com/Axel-DaMage/joidy/main/scripts/install.sh | bash
+# Usage (Linux / macOS / WSL2) — the URL is pinned to a release tag so the
+# script itself is an immutable artifact (#1394). Check the README or the
+# releases page for the latest tag; SHA256SUMS.txt is attached to every
+# release if you want to verify the script before piping it to bash:
+#   curl -fsSL https://raw.githubusercontent.com/Axel-DaMage/joidy/v1.1.0-beta.8/scripts/install.sh | bash
 #
 # Windows (PowerShell) — separate installer:
-#   irm https://raw.githubusercontent.com/Axel-DaMage/joidy/main/scripts/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/Axel-DaMage/joidy/v1.1.0-beta.8/scripts/install.ps1 | iex
 #
 # What it does:
 #   1. Checks git and a container engine (Docker/Podman). If the engine is
 #      missing or not running it prints the official install link and waits
 #      for one user confirmation, then retries once. It never installs Docker
 #      itself (#983).
-#   2. Clones Axel-DaMage/joidy (branch: $JOIDY_BRANCH, default main) into
-#      $JOIDY_DIR (default ~/joidy). An existing checkout is offered a
-#      `git pull` update path; a non-repo directory is never overwritten.
+#   2. Resolves the latest published GitHub release tag via the releases API
+#      and clones Axel-DaMage/joidy at that tag (immutable snapshot, #1394)
+#      into $JOIDY_DIR (default ~/joidy). An existing checkout is offered an
+#      update path; a non-repo directory is never overwritten.
 #   3. Bootstraps .env from .env.example and auto-generates SECRET_KEY and
 #      POSTGRES_PASSWORD.
 #   4. Interactively asks for GEMINI_API_KEY and the Obsidian vault path —
@@ -25,13 +29,18 @@
 #
 # Environment overrides:
 #   JOIDY_DIR            — install location (default: $HOME/joidy)
-#   JOIDY_BRANCH         — git branch to clone  (default: main)
+#   JOIDY_BRANCH         — dev-only override: git ref to clone instead of the
+#                          latest release tag (e.g. development). Do NOT use
+#                          for normal installs — branches are mutable (#1394).
 #   JOIDY_NONINTERACTIVE — set to 1 to disable all prompts (CI/scripted use)
 #   JOIDY_SKIP_START     — set to 1 to skip `joidy up` at the end
 set -euo pipefail
 
 REPO="https://github.com/Axel-DaMage/joidy.git"
-BRANCH="${JOIDY_BRANCH:-main}"
+REPO_API="https://api.github.com/repos/Axel-DaMage/joidy"
+# Empty = resolve the latest release tag below (#1394). JOIDY_BRANCH is a
+# dev-only override for installing unreleased code.
+BRANCH="${JOIDY_BRANCH:-}"
 DIR="${JOIDY_DIR:-$HOME/joidy}"
 NONINTERACTIVE="${JOIDY_NONINTERACTIVE:-0}"
 SKIP_START="${JOIDY_SKIP_START:-0}"
@@ -72,6 +81,21 @@ read_tty() {
   fi
 }
 
+# resolve_latest_release_tag — prints the tag_name of the newest published
+# GitHub release (pre-releases included — Joidy ships betas; drafts are never
+# returned by the unauthenticated API). Empty output (exit 0) on network/API
+# failure so callers can fall back — the trailing `|| true` keeps `set -e`
+# from aborting when grep finds no match.
+resolve_latest_release_tag() {
+  local json=""
+  if command -v curl &>/dev/null; then
+    json=$(curl -fsSL --max-time 15 "${REPO_API}/releases?per_page=1" 2>/dev/null) || true
+  elif command -v wget &>/dev/null; then
+    json=$(wget -qO- --timeout=15 "${REPO_API}/releases?per_page=1" 2>/dev/null) || true
+  fi
+  printf '%s' "$json" | grep -m1 '"tag_name"' | sed 's/.*"tag_name"[^"]*"\([^"]*\)".*/\1/' || true
+}
+
 # ── OS detection ──────────────────────────────────────────────────────────────
 detect_os() {
   case "$(uname -s)" in
@@ -93,13 +117,26 @@ OS=$(detect_os)
 if [ "$OS" = "unknown" ]; then
   err "Unsupported OS. On Windows, use the PowerShell installer:"
   echo ""
-  echo "  irm https://raw.githubusercontent.com/Axel-DaMage/joidy/main/scripts/install.ps1 | iex"
+  echo "  irm https://raw.githubusercontent.com/Axel-DaMage/joidy/v1.1.0-beta.8/scripts/install.ps1 | iex"
   echo ""
   exit 1
 fi
 
+# ── Release channel (#1394) ─────────────────────────────────────────────────
+# The default install target is the newest published release tag — an
+# immutable snapshot — never a mutable branch. JOIDY_BRANCH overrides this
+# for development/testing only.
+if [ -z "$BRANCH" ]; then
+  BRANCH="$(resolve_latest_release_tag)"
+  if [ -z "$BRANCH" ]; then
+    BRANCH="main"
+    warn "Could not resolve the latest release tag (offline or rate-limited) — falling back to branch 'main'."
+    warn "Set JOIDY_BRANCH=<tag> to pin a specific release."
+  fi
+fi
+
 banner "=== Joidy Installer ==="
-echo "  OS: $OS | Target: $DIR | Branch: $BRANCH"
+echo "  OS: $OS | Target: $DIR | Ref: $BRANCH"
 echo ""
 
 # ── Prerequisites ─────────────────────────────────────────────────────────────
@@ -179,14 +216,29 @@ if [ -d "$DIR/.git" ]; then
       [nN]*)
         ok "Keeping existing checkout." ;;
       *)
-        if git -C "$DIR" pull --ff-only; then
-          ok "Updated to latest."
+        if git -C "$DIR" symbolic-ref -q HEAD >/dev/null 2>&1; then
+          # On a real branch (e.g. a JOIDY_BRANCH dev install) — fast-forward.
+          if git -C "$DIR" pull --ff-only 2>/dev/null; then
+            ok "Updated to latest."
+          else
+            warn "git pull failed — keeping current checkout."
+          fi
         else
-          warn "git pull failed — keeping current checkout."
+          # Detached HEAD (release-tag install): `git pull` cannot move a
+          # detached checkout — fetch the newest release tag and move HEAD.
+          LATEST_TAG="$(resolve_latest_release_tag)"
+          if [ -n "$LATEST_TAG" ] && \
+             git -C "$DIR" fetch --depth 1 origin "tag" "$LATEST_TAG" 2>/dev/null && \
+             git -C "$DIR" checkout -q "$LATEST_TAG" 2>/dev/null; then
+            ok "Updated to ${LATEST_TAG}."
+          else
+            warn "Update failed — keeping current checkout."
+            warn "To update manually: cd $DIR && git fetch --tags && git checkout <tag>"
+          fi
         fi ;;
     esac
   else
-    echo "  To update later: cd $DIR && git pull"
+    echo "  To update later: re-run this installer or fetch the latest release tag."
   fi
 elif [ -d "$DIR" ] && [ -n "$(ls -A "$DIR" 2>/dev/null)" ]; then
   # Never overwrite a directory the installer did not create (#983).
@@ -196,7 +248,7 @@ elif [ -d "$DIR" ] && [ -n "$(ls -A "$DIR" 2>/dev/null)" ]; then
   exit 1
 else
   git clone --depth 1 --branch "$BRANCH" "$REPO" "$DIR"
-  ok "Cloned branch '$BRANCH' into $DIR"
+  ok "Cloned '$BRANCH' into $DIR"
 fi
 
 cd "$DIR"
@@ -405,7 +457,7 @@ echo ""
 echo -e "${BLUE}Help:${NC}    joidy help"
 echo -e "${BLUE}Logs:${NC}    joidy logs"
 echo -e "${BLUE}Stop:${NC}    joidy down"
-echo -e "${BLUE}Update:${NC}  cd $DIR && git pull"
+echo -e "${BLUE}Update:${NC}  re-run this installer (it moves the checkout to the newest release tag)"
 echo ""
 if [ "$OS" = "wsl" ]; then
   echo -e "${YELLOW}WSL2 note:${NC} Make sure Docker Desktop → Settings → Resources → WSL Integration"

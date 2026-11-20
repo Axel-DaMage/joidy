@@ -68,3 +68,21 @@ joidy up                          # añade docker-compose.power.yml automáticam
 Mitigación preferida a futuro: un sidecar mínimo que exponga una API estrecha
 (start/stop de una lista blanca de servicios) en lugar de montar el socket
 completo dentro de la API.
+
+## Integridad de los canales de instalación (#1296, #1394)
+
+- **Instaladores (`install.sh` / `install.ps1`):** las URL documentadas
+  apuntan a un **tag de release** (inmutable), no a una rama. El instalador
+  clona el último tag publicado resolviéndolo vía la API de releases de
+  GitHub; `JOIDY_BRANCH` es un override solo para desarrollo.
+- **Checksums:** cada release adjunta `SHA256SUMS.txt` (tarball fuente,
+  instaladores y `docker-compose.release.yml`). Instrucciones de
+  verificación en [INSTALL.md](INSTALL.md#verificación-de-integridad).
+- **AUR:** el `PKGBUILD`/`.SRCINFO` publicados llevan el `sha256sums` real
+  del tarball de la release — `makepkg` lo verifica automáticamente. Las
+  sumas se calculan en el pipeline sobre el artefacto publicado, no desde el
+  checkout.
+- **Imágenes Docker:** `docker-compose.yml` usa `:latest` (mutable). Para
+  despliegues reproducibles usa `docker-compose.release.yml` (adjunto a cada
+  release e instalado por el paquete AUR), `IMAGE_TAG=<release>` en `.env`, o
+  fija por digest `imagen@sha256:<digest>`.
