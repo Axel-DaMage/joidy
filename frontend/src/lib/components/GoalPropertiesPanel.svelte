@@ -9,7 +9,6 @@
   import { logger } from '$lib/utils/logger';
   import { goalEditor } from '$lib/stores/goalEditor.svelte';
   import NoteLinkPicker from './NoteLinkPicker.svelte';
-  import StreakIcon from './StreakIcon.svelte';
 
   interface Props {
     notes?: Note[];
