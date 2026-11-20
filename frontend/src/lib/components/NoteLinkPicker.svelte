@@ -19,7 +19,7 @@
     value?: number | null;
     id?: string;
     placeholder?: string;
-    onCreateNote?: (title: string) => void | Promise<void>;
+    onCreateNote?: (title: string) => void | Note | Promise<void | Note>;
   } = $props();
 
   let query = $state('');
@@ -45,15 +45,11 @@
   // Ordered: exact title matches first, then the rest (recent notes first as
   // the API returns them newest-first).
   const results = $derived.by(() => {
-    const pool = q
-      ? notes.filter((n) => n.title.toLowerCase().includes(q))
-      : notes;
+    const pool = q ? notes.filter((n) => n.title.toLowerCase().includes(q)) : notes;
     return pool.slice(0, 8);
   });
 
-  const hasExactMatch = $derived(
-    !!q && notes.some((n) => n.title.trim().toLowerCase() === q)
-  );
+  const hasExactMatch = $derived(!!q && notes.some((n) => n.title.trim().toLowerCase() === q));
   const canCreate = $derived(!!q && !hasExactMatch && !!onCreateNote);
 
   function pick(note: Note) {
@@ -112,12 +108,7 @@
 {#if selected}
   <div class="nlp-selected">
     <span class="nlp-selected-title">{selected.title}</span>
-    <button
-      type="button"
-      class="nlp-clear"
-      onclick={clear}
-      aria-label={$_('goalsPage.unlinkNote')}
-    >
+    <button type="button" class="nlp-clear" onclick={clear} aria-label={$_('goalsPage.unlinkNote')}>
       <X size={14} />
     </button>
   </div>
