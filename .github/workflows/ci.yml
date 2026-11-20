@@ -369,6 +369,12 @@ jobs:
               RUN_ALL="true"
             fi
 
+            # CI/action changes can alter how e2e itself runs — self-test
+            # with the full suite (#1464).
+            if printf '%s\n' "$CHANGED" | grep -qE '^\.github/(workflows/|actions/)'; then
+              RUN_ALL="true"
+            fi
+
             ROUTE_DIRS="$(printf '%s\n' "$CHANGED" | grep -oE '^frontend/src/routes/[^/.+]+' | sed 's|^frontend/src/routes/||' | sort -u || true)"
             for dir in $ROUTE_DIRS; do
               case "$dir" in

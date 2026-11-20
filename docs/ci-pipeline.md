@@ -56,7 +56,9 @@ Two separate problems were conflated as "every run gets cancelled":
 - **Pull requests**: smoke + route-scoped specs on a **single** leg
   (`src/routes/<dir>/` → `e2e/<dir>.spec.ts`, same mapping as #1255),
   unless shared frontend code changed (`src/lib`, root layout, `e2e/`,
-  playwright config, package files) — then the full sharded suite.
+  playwright config, package files) **or** the workflows/actions
+  themselves changed (`.github/workflows/`, `.github/actions/` — CI
+  self-tests the full suite) — then the full sharded suite.
 - **Docs/metadata-only diffs** (under `docs/`, `*.md`, `LICENSE*`,
   `CHANGELOG*`, `CODEOWNERS`, dotfiles, `.reuse/`, `REUSE.toml`,
   `.trivyignore`, `.pre-commit-config.yaml`, `aur/`): e2e is **skipped**.
