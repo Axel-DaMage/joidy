@@ -16,6 +16,7 @@
   import LazyIconPicker from '$lib/components/LazyIconPicker.svelte';
   import NoteLinkPicker from '$lib/components/NoteLinkPicker.svelte';
   import StreakIcon from '$lib/components/StreakIcon.svelte';
+  import { focusTrap } from '$lib/actions/focusTrap';
   import { GOALS_SPECIFIC_COLOR_PRESETS, DEFAULT_GOAL_COLOR } from '$lib/utils/goalColors';
   import { t } from 'svelte-i18n';
 
@@ -311,18 +312,26 @@
 
 {#if showSettings}
   <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-  <div class="goal-settings-backdrop" onclick={() => showSettings = false} role="dialog" tabindex="-1">
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="goal-settings-backdrop" onclick={() => showSettings = false} role="presentation">
     <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="goal-settings-panel slide-down" onclick={(e) => e.stopPropagation()}>
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+    <div
+      class="goal-settings-panel slide-down"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="goal-settings-heading"
+      tabindex="-1"
+      use:focusTrap={{ initialFocus: '#edit-goal-title', onEscape: () => (showSettings = false) }}
+      onclick={(e) => e.stopPropagation()}
+    >
       <div class="goal-settings-header">
         <div class="goal-settings-title-row">
           <div class="goal-settings-icon-wrap">
             <StreakIcon name={editUseFailIcon ? editFailIcon : editFailEmoji} size={16} color={editColor} />
           </div>
           <div>
-            <h3 class="goal-settings-heading">{$t('goalDetail.editGoal')}</h3>
+            <h3 id="goal-settings-heading" class="goal-settings-heading">{$t('goalDetail.editGoal')}</h3>
             <span class="goal-settings-sub">{$t('goalDetail.editGoalSub')}</span>
           </div>
         </div>

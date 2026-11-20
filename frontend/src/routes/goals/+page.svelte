@@ -67,6 +67,7 @@
   import LazyIconPicker from '$lib/components/LazyIconPicker.svelte';
   import ModalDialog from '$lib/components/ModalDialog.svelte';
   import NoteLinkPicker from '$lib/components/NoteLinkPicker.svelte';
+  import { focusTrap } from '$lib/actions/focusTrap';
   import { t } from 'svelte-i18n';
 
   // Lazy-load the heavy StreakHeatmap (561 lines) so it is split into a
@@ -1259,14 +1260,12 @@
   }
 </script>
 
+<!-- Escape for showAddForm is handled by the focusTrap on its panel so a
+     stacked dialog above it closes first. -->
 <svelte:window
   onkeydown={(e) => {
-    if (e.key === 'Escape') {
-      if (deleteConfirm !== null) {
-        deleteConfirm = null;
-        return;
-      }
-      showAddForm = false;
+    if (e.key === 'Escape' && deleteConfirm !== null) {
+      deleteConfirm = null;
     }
   }}
 />
@@ -2499,17 +2498,24 @@
       onclick={(e) => {
         if (e.target === e.currentTarget) showAddForm = false;
       }}
-      role="dialog"
-      tabindex="-1"
+      role="presentation"
     >
-      <div class="new-goal-panel slide-down">
+      <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+      <div
+        class="new-goal-panel slide-down"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="new-goal-heading"
+        tabindex="-1"
+        use:focusTrap={{ initialFocus: '#new-goal-title', onEscape: () => (showAddForm = false) }}
+      >
         <div class="new-goal-header">
           <div class="new-goal-title-row">
             <div class="new-goal-icon-wrap">
               <Plus size={16} />
             </div>
             <div>
-              <h3 class="new-goal-heading">{$t('goalsPage.newGoal')}</h3>
+              <h3 id="new-goal-heading" class="new-goal-heading">{$t('goalsPage.newGoal')}</h3>
               <span class="new-goal-sub">{$t('goalsPage.newGoalSub')}</span>
             </div>
           </div>

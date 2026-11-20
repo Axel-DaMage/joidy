@@ -6,6 +6,7 @@
   import type { PersonalStreak } from '$lib/api';
   import { suggestEmoji, suggestIcon, suggestIconKey } from '$lib/utils/iconSuggest';
   import { liquidGlass } from '$lib/actions/liquidGlass';
+  import { focusTrap } from '$lib/actions/focusTrap';
   import { getContrastColor } from '$lib/stores/settings';
   import { t } from 'svelte-i18n';
 
@@ -180,10 +181,6 @@
     if (e.target === e.currentTarget) close();
   }
 
-  function onKey(e: KeyboardEvent) {
-    if (e.key === 'Escape') close();
-  }
-
   $: isEdit = !!editStreak;
   $: canSave = name.trim().length > 0;
 
@@ -216,14 +213,23 @@
   }
 </script>
 
-<svelte:window onkeydown={onKey} />
-
 {#if open}
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="modal-backdrop" role="presentation" onclick={onBackdrop}>
     <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <div class="modal-panel" role="dialog" tabindex="-1" aria-modal="true" aria-label={$t('streakCreateModal.createTitle')} onclick={(e) => e.stopPropagation()}>
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+    <div
+      class="modal-panel"
+      role="dialog"
+      tabindex="-1"
+      aria-modal="true"
+      aria-labelledby="streak-modal-title"
+      use:focusTrap={{ initialFocus: '#streak-modal-name', onEscape: close }}
+      onclick={(e) => e.stopPropagation()}
+    >
       <div class="modal-header">
-        <span class="modal-title mono">{isEdit ? 'EDITAR RACHA' : 'NUEVA RACHA'}</span>
+        <span id="streak-modal-title" class="modal-title mono">{isEdit ? 'EDITAR RACHA' : 'NUEVA RACHA'}</span>
         <button class="close-btn" onclick={close} aria-label={$t('streakCreateModal.close')}><X size={14} /></button>
       </div>
 

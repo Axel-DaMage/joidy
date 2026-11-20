@@ -16,6 +16,7 @@
   import { captureSnapshot, getSnapshot } from '$lib/stores/pageSnapshots';
   import { locale as localeStore } from '$lib/stores/locale';
   import { openShare } from '$lib/stores/shareAchievement';
+  import { focusTrap } from '$lib/actions/focusTrap';
   import { showNotification } from '$lib/stores/notifications';
   import { logger } from '$lib/utils/logger';
   import { Share2 } from 'lucide-svelte';
@@ -608,11 +609,15 @@
 </div>
 
 <!-- Delete confirmation modal -->
-<svelte:window onkeydown={(e) => e.key === 'Escape' && (deleteConfirm = null)} />
 {#if deleteConfirm !== null}
-  <div class="modal-backdrop">
+  <div class="modal-backdrop" role="presentation">
     <div
       class="delete-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="streak-delete-title"
+      tabindex="-1"
+      use:focusTrap={{ onEscape: () => (deleteConfirm = null) }}
       class:theme-sketch={deleteConfirmTheme === 'sketch'}
       class:theme-glow={deleteConfirmTheme === 'glow'}
       class:theme-gradient={deleteConfirmTheme === 'gradient'}
@@ -624,7 +629,7 @@
         <div class="delete-modal-icon">
           <X size={32} />
         </div>
-        <h2 class="delete-modal-title">{$t('streaks.deleteStreak')}</h2>
+        <h2 id="streak-delete-title" class="delete-modal-title">{$t('streaks.deleteStreak')}</h2>
         <p class="delete-modal-text">
           {$t('streaks.deleteConfirmPrefix')} <strong>{deleteConfirmName}</strong>{$t(
             'streaks.deleteConfirmSuffix'

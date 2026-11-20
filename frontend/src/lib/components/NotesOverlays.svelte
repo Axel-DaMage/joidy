@@ -1,5 +1,6 @@
 <script lang="ts">
   import { api } from '$lib/api';
+  import { focusTrap } from '$lib/actions/focusTrap';
   import LazyIconPicker from './LazyIconPicker.svelte';
   import TreeContextMenu from './TreeContextMenu.svelte';
   import FolderPicker from './FolderPicker.svelte';
@@ -38,17 +39,22 @@
 <!-- Create folder modal -->
 {#if $creatingFolder}
   <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-  <div
-    class="folder-modal-backdrop"
-    role="dialog"
-    tabindex="-1"
-    onclick={() => ($creatingFolder = false)}
-  >
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="folder-modal-backdrop" role="presentation" onclick={() => ($creatingFolder = false)}>
     <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="folder-modal" onclick={(e) => e.stopPropagation()}>
-      <h3 class="folder-modal-title">{$t('notesPage.createFolderTitle')}</h3>
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+    <div
+      class="folder-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="folder-create-title"
+      tabindex="-1"
+      use:focusTrap={{ onEscape: () => ($creatingFolder = false) }}
+      onclick={(e) => e.stopPropagation()}
+    >
+      <h3 id="folder-create-title" class="folder-modal-title">
+        {$t('notesPage.createFolderTitle')}
+      </h3>
 
       <div style="display:flex; flex-direction:column; gap:4px; margin-bottom:12px;">
         <span class="folder-label mono">{$t('notesPage.name')}</span>
@@ -138,17 +144,20 @@
 
 {#if $renamingNode}
   <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-  <div
-    class="folder-modal-backdrop"
-    role="dialog"
-    tabindex="-1"
-    onclick={() => ($renamingNode = null)}
-  >
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="folder-modal-backdrop" role="presentation" onclick={() => ($renamingNode = null)}>
     <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="folder-modal" onclick={(e) => e.stopPropagation()}>
-      <h3 class="folder-modal-title">{$t('notesPage.renameTitle')}</h3>
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+    <div
+      class="folder-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="folder-rename-title"
+      tabindex="-1"
+      use:focusTrap={{ onEscape: () => ($renamingNode = null) }}
+      onclick={(e) => e.stopPropagation()}
+    >
+      <h3 id="folder-rename-title" class="folder-modal-title">{$t('notesPage.renameTitle')}</h3>
       <input
         type="text"
         class="input mono"
@@ -176,17 +185,22 @@
 
 {#if $editingFolder}
   <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-  <div
-    class="folder-modal-backdrop"
-    role="dialog"
-    tabindex="-1"
-    onclick={() => ($editingFolder = null)}
-  >
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="folder-modal-backdrop" role="presentation" onclick={() => ($editingFolder = null)}>
     <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="folder-modal" onclick={(e) => e.stopPropagation()}>
-      <h3 class="folder-modal-title">{$t('notesPage.customizeFolderTitle')}</h3>
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+    <div
+      class="folder-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="folder-customize-title"
+      tabindex="-1"
+      use:focusTrap={{ onEscape: () => ($editingFolder = null) }}
+      onclick={(e) => e.stopPropagation()}
+    >
+      <h3 id="folder-customize-title" class="folder-modal-title">
+        {$t('notesPage.customizeFolderTitle')}
+      </h3>
 
       <!-- Color bar -->
       <div class="folder-color-row">
