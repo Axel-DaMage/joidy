@@ -21,6 +21,8 @@
   class="plant-container"
   class:wilted
   style="width:{size}px; height:{size}px;"
+  role="img"
+  aria-label={$t('plant.stageLabel', { values: { stage: stageName, level: $globalLevel } })}
   title={$t('plant.stageLabel', { values: { stage: stageName, level: $globalLevel } })}
 >
   <svg
@@ -28,6 +30,8 @@
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
     class="plant-svg"
+    aria-hidden="true"
+    focusable="false"
   >
     <!-- Stage 0: Seed -->
     {#if stage === 0}
@@ -167,6 +171,14 @@
   .wilted .plant-svg {
     animation: wilt 6s ease-in-out infinite;
     opacity: 0.6;
+  }
+
+  /* Continuous animations disabled under prefers-reduced-motion (#1309) */
+  @media (prefers-reduced-motion: reduce) {
+    .plant-svg,
+    .wilted .plant-svg {
+      animation: none;
+    }
   }
 
   @keyframes breathe {

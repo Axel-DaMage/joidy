@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
   import { browser } from '$app/env';
+  import { goto } from '$app/navigation';
   import { graphData, selectedTag } from '$lib/stores/graph';
   import type { GraphNode, GraphEdge } from '$lib/api';
   import { forceCollide } from 'd3';
@@ -65,6 +66,39 @@
   // Use the `data` prop if provided (for timeline/search filtering, #373),
   // otherwise fall back to the global graph store.
   $: effectiveData = data || $graphData;
+
+  // ── Accessibility (#1309) ──────────────────────────────────────────────
+  // Non-visual equivalent: a labelled summary plus a keyboard-navigable
+  // node list built from the SAME filtered data the canvas renders
+  // (WCAG 1.1.1 / 2.1.1).
+  let announcement = '';
+
+  $: a11yData = filterGraphData(effectiveData, {
+    showNotes,
+    showTags,
+    showUnresolved,
+    showAttachments,
+    showOrphans,
+    showCooccurrences,
+  });
+
+  $: graphSummary = $t('a11y.graphSummary', {
+    values: {
+      notes: a11yData.nodes.filter((n) => n.type === 'note').length,
+      tags: a11yData.nodes.filter((n) => n.type !== 'note').length,
+      links: a11yData.edges.length,
+    },
+  });
+
+  function nodeLabel(node: GraphNode): string {
+    return node.type === 'note' ? (node.title || '') : (node.name || node.title || '');
+  }
+
+  function selectNodeFromList(node: GraphNode) {
+    selectedTag.set(node.id);
+    announcement = nodeLabel(node);
+    focusOnNode(node.id);
+  }
 
   // Helper function to build neighbor map for smart highlighting
   let neighbors = new Map<number | string, Set<number | string>>();
@@ -184,24 +218,29 @@
     rebuildGraph();
   }
 
+  // Manual double-click emulation: the 300 ms window only counts when both
+  // clicks land on the SAME node — two quick clicks on different nodes are
+  // two selections, not an open action (#1306).
   let lastClickTime = 0;
+  let lastClickedNodeId: number | string | null = null;
   function handleNodeClick(node: GraphNode) {
     const currentTime = Date.now();
-    const delay = currentTime - lastClickTime;
+    const isDoubleClick = currentTime - lastClickTime < 300 && lastClickedNodeId === node.id;
+    lastClickTime = currentTime;
+    lastClickedNodeId = node.id;
 
     selectedTag.set(node.id);
+    if (!isDoubleClick) return;
 
-    if (delay < 300) {
-      const nodeType = getNodeType(node);
-      if (nodeType === 'note') {
-        window.location.href = `/notes?id=${node.id}`;
-      } else if (nodeType === 'tag') {
-        window.location.href = `/notes?search=${encodeURIComponent('tag:' + node.name)}`;
-      } else if (nodeType === 'unresolved') {
-        window.location.href = `/notes?new=1&title=${encodeURIComponent(node.title || '')}`;
-      }
+    const nodeType = getNodeType(node);
+    // goto() (client-side) instead of window.location.href (full reload).
+    if (nodeType === 'note') {
+      goto(`/notes?id=${node.id}`);
+    } else if (nodeType === 'tag') {
+      goto(`/notes?search=${encodeURIComponent('tag:' + node.name)}`);
+    } else if (nodeType === 'unresolved') {
+      goto(`/notes?new=1&title=${encodeURIComponent(node.title || '')}`);
     }
-    lastClickTime = currentTime;
   }
 
   onMount(async () => {
@@ -303,7 +342,31 @@
     <div class="graph-loading">{$t('knowledgeGraphForce.loading')}</div>
   {/if}
 
-  <div bind:this={containerEl} class="graph-canvas"></div>
+  <!-- force-graph injects a <canvas> here; role=img makes the whole surface
+       presentational and exposes the summary as its name (#1309). -->
+  <div
+    bind:this={containerEl}
+    class="graph-canvas"
+    role="img"
+    aria-label={graphSummary}
+  ></div>
+
+  <!-- Keyboard-operable equivalent of the pointer-only canvas: visually
+       collapsed until it receives keyboard focus (#1309). -->
+  <nav class="node-list-nav" aria-label={$t('a11y.graphNodesList')}>
+    <ul class="node-list">
+      {#each a11yData.nodes as node (node.id)}
+        <li>
+          <button type="button" class="node-list-btn" onclick={() => selectNodeFromList(node)}>
+            {nodeLabel(node)}
+          </button>
+        </li>
+      {/each}
+    </ul>
+  </nav>
+
+  <!-- Announces node selections made through the list -->
+  <div class="visually-hidden" aria-live="polite">{announcement}</div>
 
   {#if loaded}
     <GraphSettingsPanel
@@ -364,5 +427,59 @@
     color: var(--text-muted);
     font-size: 13px;
     z-index: var(--z-sticky);
+  }
+
+  /* Keyboard node list — invisible until it receives focus (#1309) */
+  .node-list-nav {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    z-index: calc(var(--z-modal) + 1);
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  /* opacity (not visibility/display) keeps the buttons in the tab order;
+     :focus-within reveals the panel as soon as Tab lands inside */
+  .node-list-nav:focus-within {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .node-list {
+    list-style: none;
+    margin: 0;
+    padding: 8px;
+    max-height: 50vh;
+    overflow-y: auto;
+    background: var(--elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    box-shadow: 0 10px 20px rgba(0,0,0,0.25);
+  }
+
+  .node-list-btn {
+    display: block;
+    width: 100%;
+    padding: 4px 8px;
+    background: none;
+    border: none;
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-align: left;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 240px;
+  }
+
+  .node-list-btn:hover,
+  .node-list-btn:focus-visible {
+    background: var(--accent);
+    color: var(--bg);
+    outline: none;
   }
 </style>
