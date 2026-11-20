@@ -9,7 +9,8 @@
     "streaks": "Rachas",
     "emails": "Correos",
     "calendar": "Calendario",
-    "analytics": "Analítica"
+    "analytics": "Analítica",
+    "timers": "Reloj"
   },
   "calendar": {
     "title": "Calendario",
@@ -29,15 +30,7 @@
     "goToSettings": "Ir a Ajustes",
     "allDay": "Todo el día",
     "noEventsDay": "Sin eventos este día",
-    "weekDays": [
-      "Lun",
-      "Mar",
-      "Mié",
-      "Jue",
-      "Vie",
-      "Sáb",
-      "Dom"
-    ],
+    "weekDays": ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"],
     "months": [
       "Enero",
       "Febrero",
@@ -999,5 +992,85 @@
     "avgSessionMin": "Sesión media (min)",
     "totalEvents": "Eventos totales",
     "topPages": "Páginas más visitadas"
+  },
+  "timers": {
+    "title": "Reloj",
+    "pageTitle": "Reloj — Joidy",
+    "tabs": {
+      "alarms": "Alarmas",
+      "timers": "Temporizadores",
+      "stopwatch": "Cronómetro"
+    },
+    "dow": {
+      "sun": "Dom",
+      "mon": "Lun",
+      "tue": "Mar",
+      "wed": "Mié",
+      "thu": "Jue",
+      "fri": "Vie",
+      "sat": "Sáb"
+    },
+    "repeat": {
+      "once": "Una vez",
+      "daily": "Diario",
+      "weekdays": "Laborables",
+      "weekends": "Fin de semana"
+    },
+    "sounds": {
+      "beep": "Bip",
+      "chime": "Campana",
+      "pulse": "Pulso"
+    },
+    "alarm": {
+      "new": "Nueva alarma",
+      "edit": "Editar alarma",
+      "editorTitle": "Editor de alarma",
+      "empty": "Sin alarmas todavía. Agrega una para empezar.",
+      "label": "Etiqueta",
+      "labelPlaceholder": "Ej.: Revisión diaria",
+      "repeat": "Repetir",
+      "snooze": "Posponer",
+      "snoozeMins": "{minutes} min",
+      "sound": "Sonido",
+      "toggle": "Activar o desactivar alarma",
+      "hour": "Hora",
+      "minute": "Minuto"
+    },
+    "timer": {
+      "empty": "Sin temporizadores activos. Inicia uno arriba.",
+      "start": "Iniciar",
+      "pause": "Pausar",
+      "resume": "Reanudar",
+      "reset": "Restablecer",
+      "plusOne": "+1 min",
+      "done": "Listo",
+      "labelPlaceholder": "Etiqueta (opcional)",
+      "presetMins": "{minutes} min",
+      "hours": "Horas",
+      "minutes": "Minutos",
+      "seconds": "Segundos",
+      "hoursShort": "h",
+      "minutesShort": "m",
+      "secondsShort": "s"
+    },
+    "stopwatch": {
+      "start": "Iniciar",
+      "pause": "Pausar",
+      "lap": "Vuelta",
+      "reset": "Reiniciar",
+      "lapCol": "Vuelta",
+      "lapTime": "Tiempo vuelta",
+      "total": "Total",
+      "fastest": "Más rápida",
+      "slowest": "Más lenta"
+    },
+    "alert": {
+      "alarmTitle": "Alarma",
+      "timerTitle": "Temporizador finalizado",
+      "timerDone": "Tiempo cumplido",
+      "snooze": "Posponer",
+      "dismiss": "Descartar",
+      "snoozed": "Pospuesto {minutes} min"
+    }
   }
 }

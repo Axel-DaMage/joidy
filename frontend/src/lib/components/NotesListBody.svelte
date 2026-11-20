@@ -335,35 +335,29 @@
   }
 
   /* ── Tree rows ──
-     .tree-item wraps each row + its settings button so the button is not
+     .tree-row wraps each row + its settings button so the button is not
      nested inside the role="button" row (invalid interactive-in-interactive)
      and stays in the tab order (#1268). */
-  .tree-item {
-    display: flex;
-    align-items: center;
-    margin: 0 4px;
-    border-radius: 3px;
-    transition: background var(--t-fast);
-    min-width: 0;
-  }
-  .tree-item:hover,
-  .tree-item:focus-within {
-    background: var(--hover);
-  }
-  .tree-item:has(> .file-row.active) {
-    background: var(--elevated);
-  }
-
   .tree-row {
     display: flex;
     align-items: center;
     gap: 5px;
     padding-right: 8px;
     height: 26px;
+    margin: 0 4px;
+    border-radius: 3px;
     cursor: pointer;
     user-select: none;
     flex: 1;
     min-width: 0;
+    transition: background var(--t-fast);
+  }
+  .tree-row:hover,
+  .tree-row:focus-within {
+    background: var(--hover);
+  }
+  .file-row.active {
+    background: var(--elevated);
   }
 
   .chevron {
@@ -428,8 +422,8 @@
     flex-shrink: 0;
     transition: opacity var(--t-fast);
   }
-  .tree-item:hover .folder-settings-btn,
-  .tree-item:focus-within .folder-settings-btn,
+  .tree-row:hover .folder-settings-btn,
+  .tree-row:focus-within .folder-settings-btn,
   .folder-settings-btn:focus-visible {
     opacity: 1;
     pointer-events: auto;
