@@ -19,7 +19,7 @@
   let githubAuthError = $state('');
   let githubUserCode = $state('');
   let githubVerificationUri = $state('');
-  let githubDeviceCode = '';
+  let githubPollToken = '';
   let githubPollInterval = 5;
   let githubExpiresAt = 0;
   let githubPollTimer: ReturnType<typeof setTimeout> | null = null;
@@ -86,7 +86,7 @@
     githubAuthError = '';
     githubUserCode = '';
     githubVerificationUri = '';
-    githubDeviceCode = '';
+    githubPollToken = '';
     githubPollInterval = 5;
     githubExpiresAt = 0;
     if (githubPollTimer) {
@@ -100,7 +100,7 @@
     githubAuthError = '';
     try {
       const data = await api.github.startDeviceAuth();
-      githubDeviceCode = data.device_code;
+      githubPollToken = data.poll_token;
       githubUserCode = data.user_code;
       githubVerificationUri = data.verification_uri;
       githubPollInterval = data.interval || 5;
@@ -116,7 +116,7 @@
   }
 
   async function pollGithubDeviceCode() {
-    if (!githubDeviceCode) {
+    if (!githubPollToken) {
       clearGithubAuth();
       return;
     }
@@ -126,7 +126,7 @@
       return;
     }
     try {
-      const result = await api.github.pollDeviceCode(githubDeviceCode);
+      const result = await api.github.pollDeviceCode(githubPollToken);
       if (result.status === 'authorized') {
         await api.config.update({ github_token: result.access_token, github_username: '' });
         await checkGithubStatus();
@@ -151,7 +151,7 @@
         githubPollInterval += 5;
       }
       // Don't reschedule if the panel was destroyed mid-poll (#1003).
-      if (destroyed || !githubDeviceCode) return;
+      if (destroyed || !githubPollToken) return;
       githubPollTimer = setTimeout(pollGithubDeviceCode, githubPollInterval * 1000);
     } catch (e: any) {
       if (githubPollTimer) {

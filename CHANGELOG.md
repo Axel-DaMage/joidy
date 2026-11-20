@@ -1,6 +1,5 @@
 # Changelog
 
-<!-- hermes-release:pending v1.0.0 -->
 ## [v1.0.0] — 2026-10-26
 
 ### ⚠️ Breaking Changes
@@ -198,7 +197,6 @@
 * release: v1.1.0-beta.2 by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/955
 * ui(goals): limit goal identity color selector to 8 colors by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/901
 * release: merge development into main by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/889
-<!-- /hermes-release:pending -->
 
 All notable changes to Joidy are documented in this file.
 

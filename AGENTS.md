@@ -36,6 +36,7 @@ make test-frontend   # cd frontend && npx playwright test
 make lint            # CI-parity lint on host (no Docker): compileall + ruff + ruff format --check
                      # + mypy per service + bandit + frontend svelte-check — scripts/lint.sh
 make lint-api        # Docker fallback: compileall syntax check only
+make sbom            # SPDX + CycloneDX SBOMs + THIRD-PARTY-NOTICES into ./sbom/ (scripts/generate_sbom.sh)
 ```
 
 `make lint` mirrors the cheap CI gates locally (`.github/workflows/ci.yml`:
@@ -280,7 +281,7 @@ GitHub Actions CI runs automatically for **all** pull requests, including forks 
 
 ### Workflow audit (safe for fork PRs)
 
-The workflows that trigger on `pull_request` (`ci.yml`, `worker-tests.yml`, `ai-service-tests.yml`, `dist-smoke.yml`) run in the **fork's context** — they have no access to repository secrets. This is the safe trigger for untrusted code.
+The workflows that trigger on `pull_request` (`ci.yml`, `worker-tests.yml`, `dist-smoke.yml`) run in the **fork's context** — they have no access to repository secrets. This is the safe trigger for untrusted code. (The standalone `ai-service-tests.yml` was removed in #1254 — the ai-service suite runs once inside `ci.yml`.)
 
 `dist-smoke.yml` (#1253) smoke-tests the distribution channels on PRs that touch `scripts/` or `aur/`: `bash -n` + shellcheck on the shell scripts, `install.sh` in clean ubuntu/archlinux containers with a mocked `git clone` (asserts the `joidy` shim lands on PATH and `joidy --help` exits 0), pwsh parse + PSScriptAnalyzer + a real `install.ps1` run on `windows-latest`, `makepkg --printsrcinfo` diff against `aur/.SRCINFO`, and a dry-run of `release.yml`'s version-bump block.
 
