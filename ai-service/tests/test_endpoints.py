@@ -34,6 +34,10 @@ def ai_disabled(monkeypatch):
         monkeypatch.setattr(settings, key, "")
     monkeypatch.setattr(settings, "ollama_base_url", "")
     monkeypatch.setattr(settings, "internal_secret", "")
+    # Pin to non-production: with no internal_secret a developer .env set to
+    # APP_ENV=production would make the fail-closed middleware (#1277) return
+    # 503 for every endpoint test below.
+    monkeypatch.setattr(settings, "app_env", "development")
     monkeypatch.setattr(settings, "llm_model", "gemini:gemini-2.0-flash")
     monkeypatch.setattr(settings, "embedding_model", "gemini:models/text-embedding-004")
     return settings
@@ -51,6 +55,9 @@ def ai_enabled(monkeypatch):
         monkeypatch.setattr(settings, key, "")
     monkeypatch.setattr(settings, "gemini_api_key", "test-key")
     monkeypatch.setattr(settings, "internal_secret", "")
+    # Pin to non-production so the fail-closed middleware (#1277) does not
+    # reject requests when INTERNAL_SECRET is empty.
+    monkeypatch.setattr(settings, "app_env", "development")
     monkeypatch.setattr(settings, "llm_model", "gemini:gemini-2.0-flash")
     monkeypatch.setattr(settings, "embedding_model", "gemini:models/text-embedding-004")
 
@@ -330,6 +337,26 @@ class TestInternalAuth:
                 headers={"X-Internal-Secret": bad},
             )
             assert resp.status_code == 403, bad
+
+    def test_fail_closed_in_production_without_secret(self, ai_enabled, monkeypatch):
+        # #1277: a production deployment missing INTERNAL_SECRET must refuse
+        # data endpoints instead of serving them unauthenticated.
+        monkeypatch.setattr(settings, "app_env", "production")
+        monkeypatch.setattr(settings, "internal_secret", "")
+        resp = _client().post("/embed", json={"note_id": 1, "content": "x"})
+        assert resp.status_code == 503
+
+    def test_health_and_metrics_public_in_production_without_secret(self, ai_enabled, monkeypatch):
+        monkeypatch.setattr(settings, "app_env", "production")
+        monkeypatch.setattr(settings, "internal_secret", "")
+        client = _client()
+        assert client.get("/health").status_code == 200
+        assert client.get("/metrics").status_code == 200
+
+    def test_permissive_in_dev_without_secret(self, ai_enabled):
+        # Non-production stays permissive when INTERNAL_SECRET is unset.
+        resp = _client().post("/embed", json={"note_id": 1, "content": "x"})
+        assert resp.status_code == 200
 
 
 if __name__ == "__main__":

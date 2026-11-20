@@ -145,6 +145,22 @@ export async function getOutbox(): Promise<OutboxChange[]> {
   }
 }
 
+/** Persists a mutated pending change back to the outbox (same entry id). */
+export async function updateOutboxChange(change: OutboxChange): Promise<void> {
+  if (!browser || change.id === undefined) return;
+  try {
+    const db = await openDB();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(OUTBOX_STORE, 'readwrite');
+      tx.objectStore(OUTBOX_STORE).put(change);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch {
+    /* ignore */
+  }
+}
+
 /** Removes a processed change from the outbox. */
 export async function removeFromOutbox(id: number): Promise<void> {
   if (!browser) return;

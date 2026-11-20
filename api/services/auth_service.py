@@ -4,6 +4,7 @@ JWT Authentication Service.
 
 import ipaddress
 import logging
+import secrets
 from datetime import UTC, datetime, timedelta
 
 import jwt
@@ -46,19 +47,28 @@ def _effective_secret_key() -> str:
     return get_persisted("SECRET_KEY") or settings.secret_key or ""
 
 
-def verify_password(plain: str, hashed_or_plain: str) -> bool:
+def _effective_internal_api_token() -> str:
+    """Return the current INTERNAL_API_TOKEN, reading from disk on every call.
+
+    Same cross-worker rationale as ``_effective_auth_password``.
+    """
+    return get_persisted("INTERNAL_API_TOKEN") or settings.internal_api_token or ""
+
+
+def verify_internal_token(token: str) -> bool:
+    """Return True when ``token`` matches the configured INTERNAL_API_TOKEN."""
+    expected = _effective_internal_api_token()
+    return bool(expected) and secrets.compare_digest(token, expected)
+
+
+def verify_password(plain: str, stored: str) -> bool:
     """Verify a password against a stored hash or plaintext.
 
     Supports bcrypt hashes (starting with $2b$) and plaintext for backward compat.
-
-    Service-to-service shortcut: if the caller sends the hash itself (e.g. the
-    worker reading AUTH_PASSWORD from .env), accept it without re-hashing.
     """
-    if hashed_or_plain.startswith("$2b$"):
-        if plain == hashed_or_plain:
-            return True
-        return pwd_context.verify(plain, hashed_or_plain)
-    return plain == hashed_or_plain
+    if stored.startswith("$2b$"):
+        return pwd_context.verify(plain, stored)
+    return secrets.compare_digest(plain, stored)
 
 
 def hash_password(plain: str) -> str:
@@ -177,3 +187,16 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     return user_id
+
+
+def get_current_user_or_internal(credentials: HTTPAuthorizationCredentials = Depends(security)) -> int | None:
+    """Dedicated dependency for routes also reachable by internal services.
+
+    Accepts ``Authorization: Bearer <INTERNAL_API_TOKEN>`` (worker, n8n) in
+    addition to a user JWT. The service token is validated here and never
+    goes through ``/auth/login`` or ``verify_password`` — it is unrelated to
+    ``AUTH_PASSWORD`` (#1275).
+    """
+    if credentials and verify_internal_token(credentials.credentials):
+        return 1
+    return get_current_user(credentials)

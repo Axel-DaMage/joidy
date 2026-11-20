@@ -15,10 +15,21 @@ class Settings(BaseSettings):
     worker_url: str = "http://worker:8001"
     secret_key: str = ""
     internal_secret: str = ""  # Shared secret for API → ai-service auth
+    internal_api_token: str = ""  # Dedicated service token for worker/n8n → API auth (#1275)
     app_env: str = "development"
     cors_allowed_origins: str = (
         ""  # Comma-separated origins for production (e.g. "https://joidy.app,https://www.joidy.app")
     )
+    # Comma-separated IPs/CIDRs of trusted reverse proxies. X-Forwarded-For is
+    # only honored (for rate-limit bucketing) when the direct peer matches one
+    # of these (#1276). Empty = always use the direct peer IP.
+    trusted_proxies: str = ""
+    # Power management (Settings → Servicios) — opt-in (#1278). When false the
+    # /system/power mutation routes are not registered at all and
+    # /system/power/status reports docker_available=false. The engine socket
+    # is only mounted via the docker-compose.power.yml overlay, never by the
+    # base docker-compose.yml.
+    power_management_enabled: bool = False
 
     # GitHub Integration (OAuth - Web Flow + Device Flow)
     github_client_id: str = ""

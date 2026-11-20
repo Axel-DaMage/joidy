@@ -17,6 +17,14 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/system/power", tags=["system-power"])
 
+# Registered INSTEAD of `router` when POWER_MANAGEMENT_ENABLED=false (#1278):
+# exposes only GET /status so the Settings → Servicios panel can distinguish
+# "feature disabled" from a socket failure — it returns docker_available=false,
+# which the frontend renders as "Docker no está disponible". The mutation
+# endpoints (sleep/wake/shutdown) are not registered at all in that mode, so
+# no code path can reach the engine socket.
+disabled_router = APIRouter(prefix="/system/power", tags=["system-power"])
+
 # Docker Compose service names (from the `com.docker.compose.service` label).
 # These are independent of the project name / directory name.
 HIBERNATE_SERVICES = {"ai-service", "worker"}
@@ -353,4 +361,19 @@ async def shutdown_services(_=Depends(get_current_user)):
         status="ok",
         message="Shutdown complete. Run 'joidy up' in your terminal to restart all services.",
         affected=affected,
+    )
+
+
+@disabled_router.get("/status", response_model=PowerStatusResponse)
+async def get_power_status_disabled():
+    """Status stub served when power management is disabled (#1278).
+
+    The engine socket is not mounted in this mode, so there is nothing to
+    query — report a clean `docker_available=false` and let the Settings UI
+    degrade to its CLI hint instead of surfacing an error.
+    """
+    return PowerStatusResponse(
+        docker_available=False,
+        services=[],
+        hibernating=False,
     )

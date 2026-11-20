@@ -137,3 +137,71 @@ def test_delete_folder_not_found(client, monkeypatch, tmp_path):
     resp = client.delete("/folders/nonexistent-folder")
     assert resp.status_code == 404
     assert resp.json()["detail"] == "Folder not found"
+
+
+def test_delete_folder_vault_root_rejected(client, monkeypatch, tmp_path):
+    """Paths resolving to the vault root must not rmtree the vault (#1313).
+
+    "." and ".."-style segments (literal or %2e%2e-decoded by the router) all
+    resolve to the vault itself; the delete must be rejected and the vault
+    left untouched.
+    """
+    vault = str(tmp_path / "vault")
+    os.makedirs(os.path.join(vault, "keep"), exist_ok=True)
+    monkeypatch.setattr(settings, "obsidian_vault_path", vault)
+
+    for url in ("/folders/.", "/folders/x/..", "/folders/x/y/../..", "/folders/a/%2e%2e"):
+        resp = client.delete(url)
+        assert resp.status_code == 400, f"expected 400 for {url!r}"
+
+    assert os.listdir(vault) == ["keep"]
+
+
+def test_delete_folder_hidden_or_internal_rejected(client, monkeypatch, tmp_path):
+    """Dirs pruned from listing must be undeletable through the API (#1313).
+
+    _list_vault_folders hides dot-dirs and "_joidy" at any depth; allowing
+    DELETE on them would let the API destroy Obsidian config, git history or
+    internal state it never exposes.
+    """
+    protected = (".obsidian", ".git", ".trash", "_joidy", "parent/.hidden", "sub/_joidy")
+    vault = str(tmp_path / "vault")
+    for rel in protected:
+        os.makedirs(os.path.join(vault, rel), exist_ok=True)
+    monkeypatch.setattr(settings, "obsidian_vault_path", vault)
+
+    for rel in protected:
+        resp = client.delete(f"/folders/{rel}")
+        assert resp.status_code == 400, f"expected 400 for {rel!r}"
+        assert os.path.isdir(os.path.join(vault, rel))
+
+
+def test_delete_folder_symlink_to_vault_root_rejected(client, monkeypatch, tmp_path):
+    """A symlinked dir whose realpath is the vault root is depth-0 (#1313).
+
+    Name validation cannot catch this: "link" is a valid folder name — only
+    the realpath-equals-vault guard rejects it.
+    """
+    vault = str(tmp_path / "vault")
+    os.makedirs(os.path.join(vault, "keep"), exist_ok=True)
+    link = os.path.join(vault, "link")
+    os.symlink(vault, link)
+    monkeypatch.setattr(settings, "obsidian_vault_path", vault)
+
+    resp = client.delete("/folders/link")
+    assert resp.status_code == 400
+    assert resp.json()["detail"] == "Cannot target the vault root"
+    assert os.path.isdir(os.path.join(vault, "keep"))
+    assert os.path.islink(link)
+
+
+def test_create_folder_hidden_or_internal_rejected(client, monkeypatch, tmp_path):
+    """Create shares the denylist: hidden/internal dirs stay untouchable (#1313)."""
+    vault = str(tmp_path / "vault")
+    os.makedirs(vault, exist_ok=True)
+    monkeypatch.setattr(settings, "obsidian_vault_path", vault)
+
+    for bad in (".obsidian", "_joidy", "parent/.hidden"):
+        resp = client.post("/folders/", json={"path": bad})
+        assert resp.status_code == 400, f"expected 400 for {bad!r}"
+        assert not os.path.exists(os.path.join(vault, bad))

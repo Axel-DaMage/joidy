@@ -20,6 +20,7 @@ from services.auth_service import (
     create_access_token,
     get_current_user_id,
     hash_password,
+    verify_internal_token,
     verify_password,
     verify_token,
 )
@@ -36,6 +37,12 @@ class PasswordTest(unittest.TestCase):
         # Stored plaintext (legacy) still verifies with exact match.
         self.assertTrue(verify_password("plain", "plain"))
         self.assertFalse(verify_password("plain", "other"))
+
+    def test_stored_hash_is_not_a_password(self):
+        # Regression for #1275 (pass-the-hash): the stored bcrypt hash must
+        # not authenticate as its own plaintext.
+        h = hash_password("s3cret")
+        self.assertFalse(verify_password(h, h))
 
 
 class TokenTest(unittest.TestCase):
@@ -78,6 +85,23 @@ class TokenTest(unittest.TestCase):
         token = create_access_token(7)
         # Verify against a different secret.
         self.assertIsNone(verify_token(token + "x"))
+
+
+class InternalTokenTest(unittest.TestCase):
+    def setUp(self):
+        self._orig_token = settings.internal_api_token
+        settings.internal_api_token = "service-token-abc"
+
+    def tearDown(self):
+        settings.internal_api_token = self._orig_token
+
+    def test_verify_internal_token(self):
+        self.assertTrue(verify_internal_token("service-token-abc"))
+        self.assertFalse(verify_internal_token("wrong"))
+
+    def test_verify_internal_token_rejects_when_unset(self):
+        settings.internal_api_token = ""
+        self.assertFalse(verify_internal_token("service-token-abc"))
 
 
 class NoSecretKeyTest(unittest.TestCase):

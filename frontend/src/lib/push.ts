@@ -7,6 +7,18 @@ export async function initPushNotifications(): Promise<void> {
     return;
   }
 
+  // Do not call pushManager.subscribe() on page load without a user gesture:
+  // browsers quiet/deny the permission prompt in that case (#1310). We only
+  // re-sync an existing subscription or subscribe when permission was
+  // already granted; a fresh opt-in must come from an explicit user action.
+  if ('Notification' in window && Notification.permission === 'default') {
+    logger.info('[push] Notification permission not granted yet; skipping auto-subscribe');
+    return;
+  }
+  if ('Notification' in window && Notification.permission === 'denied') {
+    return;
+  }
+
   try {
     const registration = await navigator.serviceWorker.ready;
     const existing = await registration.pushManager.getSubscription();
