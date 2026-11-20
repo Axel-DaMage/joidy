@@ -2,6 +2,7 @@ import { writable, derived } from 'svelte/store';
 import { browser } from '$app/env';
 import { DEFAULT_CLOCK_STYLE, isClockStyleId, type ClockStyleId } from '$lib/utils/clock';
 import { loadUserSettings, patchUserSettings } from '$lib/utils/userSettings';
+import { SESSION_RESET_EVENT } from './session';
 
 const COLORS_KEY = 'joidy-accent-colors';
 const DEFAULT_COLORS = ['#c8a96e'];
@@ -453,6 +454,13 @@ export function updateFolderMeta(path: string, meta: FolderMeta) {
     persistFolderMeta(next);
     return next;
   });
+}
+
+// The `joidy-folder-meta` key is wiped on session reset (logout / 401) since
+// it maps the user's vault folder paths (#1325) — mirror that in memory so a
+// later updateFolderMeta() cannot re-persist the previous user's paths.
+if (browser) {
+  window.addEventListener(SESSION_RESET_EVENT, () => folderMetaStore.set({}));
 }
 
 // ── Developer Mode ───────────────────────────────────────────────────────────

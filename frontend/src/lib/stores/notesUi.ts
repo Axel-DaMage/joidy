@@ -2,11 +2,13 @@
 // (#210) so the sidebar, overlays and editor panel components can share it
 // without prop drilling.
 import { writable, derived } from 'svelte/store';
+import { browser } from '$app/env';
 import type { Note } from '$lib/api';
 import type { SortMode } from '$lib/utils/fileTree';
 import { buildTree, flattenTree, type FlatNode } from '$lib/utils/fileTree';
 import { notes } from '$lib/stores/notes';
 import { showTrash, showHiddenFiles, folderMetaStore } from '$lib/stores/settings';
+import { SESSION_RESET_EVENT } from '$lib/stores/session';
 
 export const search = writable('');
 export const selectedNote = writable<Note | null>(null);
@@ -122,3 +124,40 @@ export const historyIndex = writable(-1);
 export const isNavigatingHistory = writable(false);
 export const hasPrev = derived(historyIndex, (i) => i > 0);
 export const hasNext = derived([historyIndex, historyStack], ([i, stack]) => i < stack.length - 1);
+
+// Drop notes-page state on session reset (logout / 401) — selectedNote and
+// momentaryDraft hold full note content, vaultFolders/vaultPath expose the
+// vault layout; none of it may leak to the next user (#1325).
+if (browser) {
+  window.addEventListener(SESSION_RESET_EVENT, () => {
+    search.set('');
+    selectedNote.set(null);
+    loadingNoteContent.set(false);
+    showEditor.set(false);
+    editingNew.set(false);
+    isMomentary.set(false);
+    momentaryDraft.set({ title: 'Borrador Efímero', content: '', tags: [] });
+    dailySourcePath.set(null);
+    dailyInitialTitle.set('');
+    dailyNotesConfigured.set(false);
+    newNoteFolderPath.set(null);
+    deleteModalOpen.set(false);
+    deleteCtxNoteId.set(null);
+    vaultFolders.set([]);
+    vaultPath.set('');
+    totalNotes.set(0);
+    ctxMenu.set(null);
+    renamingNode.set(null);
+    renameValue.set('');
+    movingNode.set(null);
+    editingFolder.set(null);
+    editingFolderNote.set(null);
+    creatingFolder.set(false);
+    newFolderName.set('');
+    newFolderParent.set('');
+    deletingFolder.set(null);
+    historyStack.set([]);
+    historyIndex.set(-1);
+    isNavigatingHistory.set(false);
+  });
+}
