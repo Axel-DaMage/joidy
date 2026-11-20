@@ -213,7 +213,7 @@ services:
       - GENERIC_TIMEZONE=${USER_TIMEZONE:-UTC}
       - N8N_RUNNERS_ENABLED=true
       - JOIDY_API_URL=${JOIDY_API_URL:-http://api:8000}
-      - JOIDY_AUTH_PASSWORD=${AUTH_PASSWORD:-}
+      - JOIDY_INTERNAL_API_TOKEN=${INTERNAL_API_TOKEN:-}
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://localhost:5678/healthz || exit 1"]
       interval: 15s

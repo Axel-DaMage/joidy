@@ -288,6 +288,9 @@ def perform_setup(req: SetupRequest):
     if not env_vars.get("SECRET_KEY"):
         env_vars["SECRET_KEY"] = secrets.token_urlsafe(32)
 
+    if not env_vars.get("INTERNAL_API_TOKEN"):
+        env_vars["INTERNAL_API_TOKEN"] = secrets.token_urlsafe(32)
+
     try:
         write_env(env_vars)
     except ValueError as exc:
@@ -299,6 +302,7 @@ def perform_setup(req: SetupRequest):
 
     settings.auth_password = hash_password(req.auth_password)
     settings.secret_key = env_vars["SECRET_KEY"]
+    settings.internal_api_token = env_vars["INTERNAL_API_TOKEN"]
     if vault_path:
         os.environ["OBSIDIAN_VAULT_PATH"] = vault_path
         settings.obsidian_vault_path = vault_path

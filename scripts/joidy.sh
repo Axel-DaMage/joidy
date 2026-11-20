@@ -195,6 +195,18 @@ if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
     print_ok "Generated GRAFANA_ADMIN_PASSWORD"
     CHANGED=1
   fi
+  # INTERNAL_API_TOKEN — dedicated service credential for worker/n8n (#1275)
+  IAT=$(grep -E '^INTERNAL_API_TOKEN=' "$ENV_FILE" | cut -d'=' -f2-)
+  if [ -z "$IAT" ]; then
+    NEW_IAT=$(generate_secret 32)
+    if grep -qE '^INTERNAL_API_TOKEN=' "$ENV_FILE"; then
+      sed -i "s|^INTERNAL_API_TOKEN=.*|INTERNAL_API_TOKEN=${NEW_IAT}|" "$ENV_FILE"
+    else
+      printf '\nINTERNAL_API_TOKEN=%s\n' "$NEW_IAT" >>"$ENV_FILE"
+    fi
+    print_ok "Generated INTERNAL_API_TOKEN"
+    CHANGED=1
+  fi
   if [ "$CHANGED" = "1" ]; then
     print_warn "Auto-generated required secrets in $ENV_FILE"
     print_warn "Edit $ENV_FILE to add: GEMINI_API_KEY, OBSIDIAN_VAULT_PATH, etc."
@@ -1084,7 +1096,8 @@ on Docker). The socket grants full container-engine control — read the
 residual-risk section in SECURITY.md before enabling.
 
 On first run, .env is auto-created from .env.example with generated
-POSTGRES_PASSWORD, SECRET_KEY, INTERNAL_SECRET, and GRAFANA_ADMIN_PASSWORD.
+POSTGRES_PASSWORD, SECRET_KEY, INTERNAL_SECRET, INTERNAL_API_TOKEN, and
+GRAFANA_ADMIN_PASSWORD.
 For AUR installs (read-only /usr/share/joidy), .env is stored in
 ~/.config/joidy/.env. Edit it to add GEMINI_API_KEY, OBSIDIAN_VAULT_PATH, etc.
 

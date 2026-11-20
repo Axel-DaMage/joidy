@@ -70,7 +70,7 @@ setup: ## First-time setup: copy .env, create data directories
 		$(SED_INPLACE) "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$$NEW_PW|" .env; \
 		echo "$(GREEN)✓$(NC) Generated POSTGRES_PASSWORD"; \
 	fi
-	@. .env 2>/dev/null || true; \
+	@INTERNAL_SECRET=$(call env_key,INTERNAL_SECRET); \
 	if [ -z "$$INTERNAL_SECRET" ]; then \
 		NEW_IS=$$(openssl rand -hex 32 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null || echo "dev_internal_$$(date +%s)"); \
 		if grep -qE '^\#?INTERNAL_SECRET=' .env; then \
@@ -79,6 +79,16 @@ setup: ## First-time setup: copy .env, create data directories
 			printf '\nINTERNAL_SECRET=%s\n' "$$NEW_IS" >> .env; \
 		fi; \
 		echo "$(GREEN)✓$(NC) Generated INTERNAL_SECRET"; \
+	fi
+	@INTERNAL_API_TOKEN=$(call env_key,INTERNAL_API_TOKEN); \
+	if [ -z "$$INTERNAL_API_TOKEN" ]; then \
+		NEW_TOKEN=$$(openssl rand -hex 32 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null || echo "dev_tok_$$(date +%s)"); \
+		if grep -qE '^INTERNAL_API_TOKEN=' .env; then \
+			$(SED_INPLACE) "s|^INTERNAL_API_TOKEN=.*|INTERNAL_API_TOKEN=$$NEW_TOKEN|" .env; \
+		else \
+			echo "INTERNAL_API_TOKEN=$$NEW_TOKEN" >> .env; \
+		fi; \
+		echo "$(GREEN)✓$(NC) Generated INTERNAL_API_TOKEN"; \
 	fi
 	@echo ""
 	@echo "Or use 'make start' for a guided setup + start!"
@@ -410,7 +420,7 @@ start: ## 🚀 Quick start: setup + start all services
 		$(SED_INPLACE) "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$$NEW_PW|" .env; \
 		echo "  ✓ Generated new POSTGRES_PASSWORD"; \
 	fi
-	@. .env 2>/dev/null || true; \
+	@INTERNAL_SECRET=$(call env_key,INTERNAL_SECRET); \
 	if [ -z "$$INTERNAL_SECRET" ]; then \
 		NEW_IS=$$(openssl rand -hex 32 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null || echo "dev_internal_$$(date +%s)"); \
 		if grep -qE '^\#?INTERNAL_SECRET=' .env; then \
@@ -419,6 +429,16 @@ start: ## 🚀 Quick start: setup + start all services
 			printf '\nINTERNAL_SECRET=%s\n' "$$NEW_IS" >> .env; \
 		fi; \
 		echo "  ✓ Generated new INTERNAL_SECRET"; \
+	fi
+	@INTERNAL_API_TOKEN=$(call env_key,INTERNAL_API_TOKEN); \
+	if [ -z "$$INTERNAL_API_TOKEN" ]; then \
+		NEW_TOKEN=$$(openssl rand -hex 32 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null || echo "dev_tok_$$(date +%s)"); \
+		if grep -qE '^INTERNAL_API_TOKEN=' .env; then \
+			$(SED_INPLACE) "s|^INTERNAL_API_TOKEN=.*|INTERNAL_API_TOKEN=$$NEW_TOKEN|" .env; \
+		else \
+			echo "INTERNAL_API_TOKEN=$$NEW_TOKEN" >> .env; \
+		fi; \
+		echo "  ✓ Generated new INTERNAL_API_TOKEN"; \
 	fi
 	@echo ""
 	@echo "Step 2: Starting services..."

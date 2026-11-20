@@ -27,7 +27,6 @@ logger = logging.getLogger(__name__)
 JOIDY_DIR = "_joidy"
 DEBOUNCE_SECONDS = 2.0
 QUEUE_FLUSH_INTERVAL = 0.5
-MAX_AUTH_RETRIES = 5
 SHUTDOWN_TIMEOUT = 15.0  # seconds to let in-flight writes finish on shutdown
 
 
@@ -36,9 +35,6 @@ class VaultEvent:
     path: str
     change_type: Change
 
-
-_auth_token: str = ""
-_auth_lock = asyncio.Lock()
 
 # Per-file locks so rapid successive edits to the same file cannot start
 # concurrent imports for that file (#364).
@@ -140,47 +136,13 @@ class PersistentEventLog:
 
 
 async def get_auth_token(client: httpx.AsyncClient, *, force: bool = False) -> str:
-    """Get or refresh the API auth token with retries.
+    """Return the INTERNAL_API_TOKEN service credential (#1275).
 
-    Caches the token locally. Use `force=True` to bypass the cache and fetch a
-    new token, e.g. after a 401 response.
+    The worker authenticates to the API with a dedicated service token
+    instead of logging in with AUTH_PASSWORD. ``client`` and ``force`` are
+    kept so callers and 401-retry paths stay unchanged.
     """
-    global _auth_token
-
-    if not settings.auth_password:
-        return ""
-
-    async with _auth_lock:
-        if not force and _auth_token:
-            return _auth_token
-
-        for attempt in range(MAX_AUTH_RETRIES):
-            try:
-                cid = get_correlation_id()
-                r = await client.post(
-                    f"{settings.api_url}/auth/login",
-                    json={"password": settings.auth_password},
-                    headers={"X-Request-ID": cid},
-                    timeout=10.0,
-                )
-                if r.status_code == 200:
-                    _auth_token = r.json().get("access_token", "")
-                    if _auth_token:
-                        logger.info("[vault] Auth token refreshed")
-                        return _auth_token
-                    logger.warning("[vault] Auth response missing access_token")
-                else:
-                    logger.warning("[vault] Auth login returned %s", r.status_code)
-            except Exception as e:
-                logger.error("[vault] Failed to get auth token (attempt %d/%d): %s", attempt + 1, MAX_AUTH_RETRIES, e)
-
-            if attempt < MAX_AUTH_RETRIES - 1:
-                wait = min(2**attempt, 30.0)
-                logger.info("[vault] Retrying auth in %.1fs", wait)
-                await asyncio.sleep(wait)
-
-        _auth_token = ""
-        return ""
+    return settings.internal_api_token or ""
 
 
 def _is_joidy_file(path: str) -> bool:
@@ -629,8 +591,8 @@ async def watch_vault():
         consumer = None
         try:
             token = await get_auth_token(client)
-            if settings.auth_password and not token:
-                logger.error("[vault] Could not get auth token; aborting vault sync")
+            if not token and settings.app_env == "production":
+                logger.error("[vault] INTERNAL_API_TOKEN is not configured; aborting vault sync")
                 return
             await initial_scan(vault_path, client, token)
 
