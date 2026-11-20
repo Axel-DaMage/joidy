@@ -1216,7 +1216,7 @@
     const active = goals.filter((g) => g.state === 'ACTIVE').length;
     const cancelled = goals.filter((g) => g.state === 'CANCELLED' || g.state === 'PAUSED').length;
     return [
-      { label: 'Iniciados', value: total, color: 'var(--text-disabled)' },
+      { label: 'Iniciados', value: total, color: 'var(--text-muted)' },
       { label: 'Activos', value: active, color: 'var(--xp)' },
       { label: 'Completados', value: completed, color: 'var(--success)' },
       { label: 'Abandonados', value: cancelled + failed, color: 'var(--error)' },
@@ -2258,7 +2258,7 @@
                 <div class="day-col">
                   <span
                     class="day-val"
-                    style="color: {day.value > 0 ? 'var(--text-primary)' : 'var(--text-disabled)'}"
+                    style="color: {day.value > 0 ? 'var(--text-primary)' : 'var(--text-muted)'}"
                     >{day.value}</span
                   >
                   <div class="day-bar-wrap">
@@ -3419,7 +3419,7 @@
   .ng-preview-label {
     font-size: 10px;
     font-family: var(--font-mono);
-    color: var(--text-disabled);
+    color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     text-align: center;
@@ -3572,7 +3572,7 @@
   }
   .optional {
     font-size: 10px;
-    color: var(--text-disabled);
+    color: var(--text-muted);
     font-style: italic;
   }
 
@@ -4387,7 +4387,7 @@
     align-items: center;
     justify-content: center;
     gap: 6px;
-    color: var(--text-disabled);
+    color: var(--text-muted);
     font-size: 11px;
     height: 100%;
     text-align: center;
@@ -4400,7 +4400,7 @@
     border: 1px solid var(--border);
     border-radius: 4px;
     font-family: var(--font-mono);
-    color: var(--text-disabled);
+    color: var(--text-muted);
     text-transform: none;
     font-weight: 400;
     letter-spacing: 0;
@@ -4752,7 +4752,7 @@
 
   .history-hint {
     font-size: 11px;
-    color: var(--text-disabled);
+    color: var(--text-muted);
     font-family: var(--font-mono);
     letter-spacing: 0.03em;
   }
@@ -4790,7 +4790,7 @@
   }
 
   .history-detail-icon {
-    color: var(--text-disabled);
+    color: var(--text-muted);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -4799,7 +4799,7 @@
 
   .history-detail-msg {
     font-size: 12px;
-    color: var(--text-disabled);
+    color: var(--text-muted);
     line-height: 1.6;
     max-width: 220px;
   }
@@ -4822,7 +4822,7 @@
 
   .history-no-activity {
     font-size: 12px;
-    color: var(--text-disabled);
+    color: var(--text-muted);
     padding: var(--s3);
     text-align: center;
     flex: 1;

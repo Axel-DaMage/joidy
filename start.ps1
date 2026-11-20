@@ -253,6 +253,22 @@ if ([string]::IsNullOrEmpty($grafanaPassword) -or $grafanaPassword -match '^0+$'
     Write-Success "Generated new GRAFANA_ADMIN_PASSWORD"
 }
 
+# Check/Generate INTERNAL_API_TOKEN — dedicated service credential for
+# worker/n8n → API auth, never AUTH_PASSWORD (#1275)
+$internalApiToken = $envVars["INTERNAL_API_TOKEN"]
+if ([string]::IsNullOrEmpty($internalApiToken)) {
+    $bytes = New-Object byte[] 32
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    $rng.GetBytes($bytes)
+    $newToken = -join ($bytes | ForEach-Object { $_.ToString("x2") })
+    if ((Get-Content ".env") -match '^INTERNAL_API_TOKEN=') {
+        (Get-Content ".env") -replace 'INTERNAL_API_TOKEN=.*', "INTERNAL_API_TOKEN=$newToken" | Set-Content ".env"
+    } else {
+        Add-Content ".env" "`nINTERNAL_API_TOKEN=$newToken"
+    }
+    Write-Success "Generated new INTERNAL_API_TOKEN"
+}
+
 # Step 3: Start services
 $script:step++
 Write-Step "Starting services..."

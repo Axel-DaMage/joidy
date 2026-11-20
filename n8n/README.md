@@ -17,7 +17,9 @@ make n8n-logs     # logs
 - Datos en el volumen `n8n_data` (SQLite propio de n8n).
 - `N8N_ENCRYPTION_KEY` en `.env` — si se pierde, no se pueden descifrar credenciales.
 - Variables pasadas al workflow (via env de n8n): `JOIDY_API_URL` (default
-  `http://api:8000`), `JOIDY_AUTH_PASSWORD` (= `AUTH_PASSWORD` del `.env`).
+  `http://api:8000`), `JOIDY_INTERNAL_API_TOKEN` (= `INTERNAL_API_TOKEN` del
+  `.env`). Los workflows llaman a la API con `Authorization: Bearer
+  {{ $env.JOIDY_INTERNAL_API_TOKEN }}` — sin pasar por `/auth/login`.
 
 ## Gmail → Bandeja unificada de joidy
 

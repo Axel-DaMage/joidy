@@ -3,7 +3,7 @@
   import WysiwygEditor from './WysiwygEditor.svelte';
   import NoteEditorPreview from './NoteEditorPreview.svelte';
   import { showFrontmatter, hideTagsLine } from '$lib/stores/settings';
-  import { extractTagsFromContent } from '$lib/utils/noteContent';
+  import { extractTagsFromContent, recomposeHiddenSlices } from '$lib/utils/noteContent';
   import { highlightMarkdown } from '$lib/utils/markdownHighlight';
   import { t } from 'svelte-i18n';
   import type { Note } from '$lib/api';
@@ -64,19 +64,10 @@
   function updateVisibleContent(e: Event) {
     const val = (e.currentTarget as HTMLTextAreaElement).value;
     scheduleSnapshot();
-    let nextContent = val;
-
-    if ($hideTagsLine && tags.length > 0 && currentTagsLine) {
-      if (!nextContent.includes(currentTagsLine)) {
-        nextContent = nextContent.trim() + '\n\n' + currentTagsLine;
-      }
-    }
-
-    if (!$showFrontmatter && rawFrontmatter) {
-      nextContent = rawFrontmatter + '\n\n' + nextContent.trim();
-    }
-
-    content = nextContent;
+    content = recomposeHiddenSlices(val, {
+      tagsLine: $hideTagsLine && tags.length > 0 ? currentTagsLine : '',
+      frontmatter: !$showFrontmatter ? rawFrontmatter : '',
+    });
 
     const currentContentTags = extractTagsFromContent(content);
     const added = currentContentTags.filter((t) => !previousContentTags.includes(t));
@@ -105,22 +96,21 @@
     onContentChange();
   }
 
+  // The WYSIWYG editor never receives the frontmatter block: marked parses
+  // `---` as setext/`<hr>` and turndown can't emit YAML back, so a round-trip
+  // would corrupt it. It's re-attached on every change instead — regardless
+  // of the showFrontmatter preference (#1304).
+  let wysiwygContent = $derived(
+    visibleEditorContent.replace(/^---\r?\n[\s\S]*?\r?\n---[\r\n]*/, '')
+  );
+
   function handleWysiwygChange(e: CustomEvent<string>) {
     const md = e.detail;
     scheduleSnapshot();
-    let nextContent = md;
-
-    if ($hideTagsLine && tags.length > 0 && currentTagsLine) {
-      if (!nextContent.includes(currentTagsLine)) {
-        nextContent = nextContent.trim() + '\n\n' + currentTagsLine;
-      }
-    }
-
-    if (!$showFrontmatter && rawFrontmatter) {
-      nextContent = rawFrontmatter + '\n\n' + nextContent.trim();
-    }
-
-    content = nextContent;
+    content = recomposeHiddenSlices(md, {
+      tagsLine: $hideTagsLine && tags.length > 0 ? currentTagsLine : '',
+      frontmatter: rawFrontmatter,
+    });
     onContentChange();
   }
 
@@ -156,7 +146,7 @@
   {:else if wysiwygMode}
     <WysiwygEditor
       bind:this={wysiwygRef}
-      content={visibleEditorContent}
+      content={wysiwygContent}
       placeholder="Escribe algo... (Ctrl+S para guardar)"
       oncontentchange={handleWysiwygChange}
       onsave={handleSave}

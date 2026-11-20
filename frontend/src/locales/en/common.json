@@ -484,7 +484,9 @@
     "tagsPlaceholder": "tag1, tag2, ...",
     "deleteFolderTitle": "Delete folder",
     "deleteFolderMessage": "Delete folder \"{name}\" and all its notes?",
-    "deleteFolder": "Delete"
+    "deleteFolder": "Delete",
+    "resizePanel": "Resize panel",
+    "treeLabel": "Notes tree"
   },
   "goalDetail": {
     "loading": "Loading...",
@@ -636,7 +638,8 @@
     "select": "Select note {title}"
   },
   "modalDialog": {
-    "close": "Close"
+    "close": "Close",
+    "dialog": "Dialog"
   },
   "iconPicker": {
     "title": "Icons",
@@ -742,7 +745,15 @@
     "vaultPath": "Vault Path (e.g. ~/Documents/notes/my-vault)",
     "doneDesc": "Your environment has been secured and configured successfully. Redirecting to the system...",
     "errorMismatch": "Passwords do not match",
-    "errorTooShort": "Password must be at least 4 characters"
+    "errorTooShort": "Password must be at least 4 characters",
+    "passwordHint": "Minimum {min} characters — a passphrase is stronger than a complex word.",
+    "passwordTooShort": "Password must be at least {min} characters long",
+    "passwordMismatch": "Passwords do not match",
+    "strengthLabel": "Strength",
+    "strengthWeak": "Weak",
+    "strengthFair": "Fair",
+    "strengthGood": "Good",
+    "strengthStrong": "Strong"
   },
   "folderPicker": {
     "title": "Move note to folder",
@@ -779,7 +790,9 @@
     "label": "Command palette",
     "searchPlaceholder": "Search commands, notes, #tags...",
     "searchLabel": "Search commands",
-    "noResults": "No results found"
+    "noResults": "No results found",
+    "resultsLabel": "Results",
+    "resultCount": "{count} results"
   },
   "topicClusters": {
     "analyzing": "Analyzing...",

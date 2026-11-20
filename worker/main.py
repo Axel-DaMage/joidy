@@ -79,14 +79,18 @@ async def _supervise(name: str, coro_factory) -> None:
                     mark_crashed(name, exc)
                     return
                 restarts += 1
+                # Exception type only: str(exc)/tracebacks can embed request
+                # URLs and paths (#1299). The give-up path below still logs a
+                # full traceback — a permanently broken task needs it, and
+                # supervise-level exceptions cannot carry vault filenames
+                # (no source_path params in rebuild/sync endpoint URLs).
                 logger.warning(
                     "[worker] Task %s crashed (%d/%d): %s — restarting in %.1fs",
                     name,
                     restarts,
                     MAX_RESTARTS,
-                    exc,
+                    type(exc).__name__,
                     backoff,
-                    exc_info=True,
                 )
                 # Do NOT mark crashed during retry — only mark it after
                 # MAX_RESTARTS consecutive failures (above). Marking crashed

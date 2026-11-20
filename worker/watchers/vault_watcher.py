@@ -27,7 +27,6 @@ logger = logging.getLogger(__name__)
 JOIDY_DIR = "_joidy"
 DEBOUNCE_SECONDS = 2.0
 QUEUE_FLUSH_INTERVAL = 0.5
-MAX_AUTH_RETRIES = 5
 SHUTDOWN_TIMEOUT = 15.0  # seconds to let in-flight writes finish on shutdown
 
 
@@ -36,9 +35,6 @@ class VaultEvent:
     path: str
     change_type: Change
 
-
-_auth_token: str = ""
-_auth_lock = asyncio.Lock()
 
 # Per-file locks so rapid successive edits to the same file cannot start
 # concurrent imports for that file (#364).
@@ -88,7 +84,8 @@ class PersistentEventLog:
             )
             self._conn.commit()
         except Exception as exc:
-            logger.warning("[vault] Persistent event log unavailable (%s); crash recovery disabled", exc)
+            # Exception type only — str(exc) can embed filesystem paths (#1299).
+            logger.warning("[vault] Persistent event log unavailable (%s); crash recovery disabled", type(exc).__name__)
             self._conn = None
 
     def add(self, path: str, change_type: Change) -> None:
@@ -101,7 +98,7 @@ class PersistentEventLog:
             )
             self._conn.commit()
         except Exception as exc:
-            logger.warning("[vault] Failed to persist event %s: %s", path, exc)
+            logger.warning("[vault] Failed to persist event %s: %s", _log_name(path), type(exc).__name__)
 
     def remove(self, path: str) -> None:
         if self._conn is None:
@@ -110,7 +107,7 @@ class PersistentEventLog:
             self._conn.execute("DELETE FROM pending_events WHERE path = ?", (path,))
             self._conn.commit()
         except Exception as exc:
-            logger.warning("[vault] Failed to remove event %s: %s", path, exc)
+            logger.warning("[vault] Failed to remove event %s: %s", _log_name(path), type(exc).__name__)
 
     def pending(self) -> list[tuple[str, Change]]:
         if self._conn is None:
@@ -127,7 +124,7 @@ class PersistentEventLog:
             self._conn.commit()
             return result
         except Exception as exc:
-            logger.warning("[vault] Failed to read pending events: %s", exc)
+            logger.warning("[vault] Failed to read pending events: %s", type(exc).__name__)
             return []
 
     def close(self) -> None:
@@ -140,51 +137,97 @@ class PersistentEventLog:
 
 
 async def get_auth_token(client: httpx.AsyncClient, *, force: bool = False) -> str:
-    """Get or refresh the API auth token with retries.
+    """Return the INTERNAL_API_TOKEN service credential (#1275).
 
-    Caches the token locally. Use `force=True` to bypass the cache and fetch a
-    new token, e.g. after a 401 response.
+    The worker authenticates to the API with a dedicated service token
+    instead of logging in with AUTH_PASSWORD. ``client`` and ``force`` are
+    kept so callers and 401-retry paths stay unchanged.
     """
-    global _auth_token
-
-    if not settings.auth_password:
-        return ""
-
-    async with _auth_lock:
-        if not force and _auth_token:
-            return _auth_token
-
-        for attempt in range(MAX_AUTH_RETRIES):
-            try:
-                cid = get_correlation_id()
-                r = await client.post(
-                    f"{settings.api_url}/auth/login",
-                    json={"password": settings.auth_password},
-                    headers={"X-Request-ID": cid},
-                    timeout=10.0,
-                )
-                if r.status_code == 200:
-                    _auth_token = r.json().get("access_token", "")
-                    if _auth_token:
-                        logger.info("[vault] Auth token refreshed")
-                        return _auth_token
-                    logger.warning("[vault] Auth response missing access_token")
-                else:
-                    logger.warning("[vault] Auth login returned %s", r.status_code)
-            except Exception as e:
-                logger.error("[vault] Failed to get auth token (attempt %d/%d): %s", attempt + 1, MAX_AUTH_RETRIES, e)
-
-            if attempt < MAX_AUTH_RETRIES - 1:
-                wait = min(2**attempt, 30.0)
-                logger.info("[vault] Retrying auth in %.1fs", wait)
-                await asyncio.sleep(wait)
-
-        _auth_token = ""
-        return ""
+    return settings.internal_api_token or ""
 
 
 def _is_joidy_file(path: str) -> bool:
     return JOIDY_DIR in Path(path).parts
+
+
+def _log_name(path: str | Path) -> str:
+    """Log-safe display name for a vault path.
+
+    Vault filenames may contain newlines or ANSI escape sequences that would
+    forge log lines or inject terminal control sequences into ``docker logs``
+    (#1301). ``repr()`` escapes every control character so a crafted name can
+    never break out of a single line, and only the basename is shown so vault
+    directory layout stays out of the logs (#1299).
+    """
+    return repr(Path(path).name)
+
+
+# Paths already warned about for exceeding the size cap — one warning per
+# path keeps a frequently-edited oversized file from spamming the log (#1298).
+_oversized_warned: set[str] = set()
+
+
+def _read_vault_file(path: Path) -> str | None:
+    """Read a vault markdown file behind a ``stat().st_size`` gate (#1298).
+
+    ``read_text()`` slurps the whole file, so a multi-GB ``.md`` would OOM the
+    512M-limited worker and produce a giant JSON payload against the API.
+    Files over ``settings.max_note_file_size`` are refused with a single
+    warning; ``None`` (oversized or unreadable) tells callers to skip it.
+    """
+    if not _is_safe_vault_file(path):
+        return None
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return None
+    if size > settings.max_note_file_size:
+        key = str(path)
+        if key not in _oversized_warned:
+            _oversized_warned.add(key)
+            logger.warning(
+                "[vault] Skipping oversized file %s (%d bytes > %d byte limit)",
+                _log_name(path),
+                size,
+                settings.max_note_file_size,
+            )
+        return None
+    return path.read_text(encoding="utf-8", errors="replace")
+
+
+def _is_valid_vault_path(path: str, change_type: Change, vault_root: Path) -> bool:
+    """Validate a vault event path before trusting it (#1294).
+
+    Applied to live ``awatch`` events and to rows replayed from the
+    persistent event log — that log sits on a host-mounted volume with no
+    integrity check, so an injected row like ``("/app/.env", "added")``
+    would otherwise be read and exfiltrated into a note on next startup.
+
+    Checks: ``.md`` suffix, ``_joidy/`` exclusion, containment under
+    ``vault_root`` after symlink resolution, and — for events that will read
+    the file — non-symlink regular file. ``deleted`` events skip the
+    existence checks: the file is already gone by definition.
+    """
+    if not path.endswith(".md"):
+        return False
+    if _is_joidy_file(path):
+        return False
+    try:
+        root = vault_root.resolve()
+        candidate = Path(path)
+        if not candidate.is_absolute():
+            candidate = root / candidate
+        resolved = candidate.resolve()
+        if not resolved.is_relative_to(root):
+            return False
+    except OSError:
+        return False
+    if change_type == Change.deleted:
+        return True
+    try:
+        return not candidate.is_symlink() and candidate.is_file()
+    except OSError:
+        return False
 
 
 def _vault_root() -> Path:
@@ -207,17 +250,21 @@ def _is_safe_vault_file(path: Path) -> bool:
         # is_symlink() uses lstat and must run BEFORE is_file(), which
         # follows links and would pass a symlink to a real file as "regular".
         if path.is_symlink():
-            logger.warning("[vault] Skipping symlink: %s", path)
+            logger.warning("[vault] Skipping symlink: %s", _log_name(path))
             return False
         if not path.is_file():
-            logger.warning("[vault] Skipping non-regular file: %s", path)
+            logger.warning("[vault] Skipping non-regular file: %s", _log_name(path))
             return False
         resolved = path.resolve()
         if not resolved.is_relative_to(_vault_root()):
-            logger.warning("[vault] Skipping path outside vault: %s -> %s", path, resolved)
+            logger.warning(
+                "[vault] Skipping path outside vault: %s -> %s",
+                _log_name(path),
+                _log_name(resolved),
+            )
             return False
     except Exception as exc:
-        logger.warning("[vault] Skipping inaccessible path %s: %s", path, exc)
+        logger.warning("[vault] Skipping inaccessible path %s: %s", _log_name(path), exc)
         return False
     return True
 
@@ -264,7 +311,7 @@ async def delete_note_by_path(path: str, client: httpx.AsyncClient, token: str):
                 f"{settings.api_url}/notes/", params={"source_path": path}, headers=headers, timeout=10.0
             )
             if r.status_code == 401:
-                logger.warning("[vault] Auth expired while deleting %s, refreshing token", Path(path).name)
+                logger.warning("[vault] Auth expired while deleting %s, refreshing token", _log_name(path))
                 await get_auth_token(client, force=True)
                 continue
             if r.status_code == 200:
@@ -277,12 +324,14 @@ async def delete_note_by_path(path: str, client: httpx.AsyncClient, token: str):
                         if del_res.status_code == 401:
                             await get_auth_token(client, force=True)
                             continue
-                        logger.info("[vault] Deleted: %s", Path(path).name)
+                        logger.info("[vault] Deleted: %s", _log_name(path))
                         return
             break  # Success or not found
         except Exception as e:
             if attempt == 2:
-                logger.exception("[vault] Error deleting %s: %s", path, e)
+                # Exception type only — str(e) can embed request URLs carrying
+                # source_path params; tracebacks leak the same (#1299, #1301).
+                logger.error("[vault] Error deleting %s: %s", _log_name(path), type(e).__name__)
             await asyncio.sleep(1 * (attempt + 1))
 
 
@@ -293,9 +342,9 @@ async def rename_note_path(old_path: str, new_path: Path, client: httpx.AsyncCli
     try:
         if not new_path.exists():
             return
-        if not _is_safe_vault_file(new_path):
+        content = _read_vault_file(new_path)
+        if content is None:
             return
-        content = new_path.read_text(encoding="utf-8", errors="replace")
         frontmatter, body = _parse_frontmatter(content)
         title = frontmatter.get("title") or new_path.stem.replace("-", " ").replace("_", " ").title()
         tags = _extract_tags_from_content(content, frontmatter)
@@ -361,19 +410,26 @@ async def rename_note_path(old_path: str, new_path: Path, client: httpx.AsyncCli
             res.raise_for_status()
             _fingerprints[str(new_path)] = _fingerprint(content)
             _fingerprints.pop(old_path, None)
-            logger.info("[vault] Renamed: %s -> %s", Path(old_path).name, new_path.name)
+            logger.info("[vault] Renamed: %s -> %s", _log_name(old_path), _log_name(new_path))
             return
     except Exception as e:
-        logger.exception("[vault] Error renaming %s -> %s: %s", old_path, new_path, e)
+        # Exception type only — str(e) can embed request URLs carrying
+        # source_path params; tracebacks leak the same (#1299, #1301).
+        logger.error(
+            "[vault] Error renaming %s -> %s: %s",
+            _log_name(old_path),
+            _log_name(new_path),
+            type(e).__name__,
+        )
 
 
 async def import_or_update_note(filepath: Path, client: httpx.AsyncClient, token: str, *, bulk_import: bool = False):
     try:
         if not filepath.exists():
             return
-        if not _is_safe_vault_file(filepath):
+        content = _read_vault_file(filepath)
+        if content is None:
             return
-        content = filepath.read_text(encoding="utf-8", errors="replace")
         frontmatter, body = _parse_frontmatter(content)
         title = frontmatter.get("title") or filepath.stem.replace("-", " ").replace("_", " ").title()
         tags = _extract_tags_from_content(content, frontmatter)
@@ -394,7 +450,7 @@ async def import_or_update_note(filepath: Path, client: httpx.AsyncClient, token
                     timeout=10.0,
                 )
                 if r.status_code == 401:
-                    logger.warning("[vault] Auth expired while checking %s, refreshing token", filepath.name)
+                    logger.warning("[vault] Auth expired while checking %s, refreshing token", _log_name(filepath))
                     await get_auth_token(client, force=True)
                     continue
                 if r.status_code == 200:
@@ -437,7 +493,7 @@ async def import_or_update_note(filepath: Path, client: httpx.AsyncClient, token
                 res = await client.post(f"{settings.api_url}/notes/", json=payload, headers=headers, timeout=10.0)
 
             if res.status_code == 401:
-                logger.warning("[vault] Auth expired while syncing %s, refreshing token", filepath.name)
+                logger.warning("[vault] Auth expired while syncing %s, refreshing token", _log_name(filepath))
                 await get_auth_token(client, force=True)
                 continue
 
@@ -446,7 +502,7 @@ async def import_or_update_note(filepath: Path, client: httpx.AsyncClient, token
                 logger.warning(
                     "[vault] %s syncing %s (attempt %d/%d), retrying in %ss",
                     res.status_code,
-                    filepath.name,
+                    _log_name(filepath),
                     attempt + 1,
                     5,
                     wait,
@@ -458,15 +514,20 @@ async def import_or_update_note(filepath: Path, client: httpx.AsyncClient, token
             break
 
         _fingerprints[str(filepath)] = _fingerprint(content)
-        logger.info("[vault] Synced: %s", filepath.name)
+        logger.info("[vault] Synced: %s", _log_name(filepath))
 
     except Exception as e:
-        logger.exception("[vault] Error syncing %s: %s", filepath, e)
+        # Exception type only — str(e) can embed request URLs carrying
+        # source_path params; tracebacks leak the same (#1299, #1301).
+        logger.error("[vault] Error syncing %s: %s", _log_name(filepath), type(e).__name__)
 
 
 async def initial_scan(vault_path: Path, client: httpx.AsyncClient, token: str):
     """On startup, import all .md files not in _joidy/."""
-    md_files = [p for p in vault_path.rglob("*.md") if not _is_joidy_file(str(p)) and _is_safe_vault_file(p)]
+    # Same validation as live events: skips dirs named *.md and symlinks
+    # (Obsidian does not index them either) and anything resolving outside
+    # the vault root (#1294).
+    md_files = [p for p in vault_path.rglob("*.md") if _is_valid_vault_path(str(p), Change.modified, vault_path)]
     logger.info("[vault] Initial scan: %s markdown files found", len(md_files))
 
     semaphore = asyncio.Semaphore(4)
@@ -541,10 +602,9 @@ async def _consume_vault_events(
                     if new_path in consumed_adds:
                         continue
                     try:
-                        new_file = Path(new_path)
-                        if new_file.exists() and _is_safe_vault_file(new_file):
-                            content = new_file.read_text(encoding="utf-8", errors="replace")
-                            if _fingerprint(content) == old_fp:
+                        if Path(new_path).exists():
+                            content = _read_vault_file(Path(new_path))
+                            if content is not None and _fingerprint(content) == old_fp:
                                 renames.append((old_path, new_path))
                                 consumed_adds.add(new_path)
                                 break
@@ -576,8 +636,15 @@ async def _consume_vault_events(
                         # Propagate cancellation but keep the event logged so
                         # it is retried on the next startup.
                         raise
-                    except Exception:
-                        logger.exception("[vault] Failed to process %s (%s)", path, change_type)
+                    except Exception as exc:
+                        # Exception type only — tracebacks/str(exc) can embed
+                        # vault paths and request URLs (#1299, #1301).
+                        logger.error(
+                            "[vault] Failed to process %s (%s): %s",
+                            _log_name(path),
+                            change_type.name,
+                            type(exc).__name__,
+                        )
 
             async def process_rename(old_path: str, new_path: str):
                 lock = await _get_file_lock(old_path)
@@ -588,8 +655,13 @@ async def _consume_vault_events(
                         event_log.remove(new_path)
                     except asyncio.CancelledError:
                         raise
-                    except Exception:
-                        logger.exception("[vault] Failed to rename %s -> %s", old_path, new_path)
+                    except Exception as exc:
+                        logger.error(
+                            "[vault] Failed to rename %s -> %s: %s",
+                            _log_name(old_path),
+                            _log_name(new_path),
+                            type(exc).__name__,
+                        )
 
             batch_tasks: list[asyncio.Task] = []
             for old_path, new_path in renames:
@@ -615,6 +687,33 @@ async def _consume_vault_events(
             await asyncio.sleep(1)  # Prevent tight error loop
 
 
+async def _replay_pending_events(
+    event_log: PersistentEventLog,
+    queue: asyncio.Queue[VaultEvent],
+    vault_root: Path,
+) -> int:
+    """Re-enqueue events persisted before a crash, after re-validation (#1294).
+
+    The event log lives on a host-mounted volume with no integrity check, so
+    replayed rows get the same validation as live ``awatch`` events. Rows that
+    fail are refused, logged once, and dropped from the log so they are not
+    re-validated on every startup. Returns the number of accepted events.
+    """
+    accepted = 0
+    for path, change_type in event_log.pending():
+        if not _is_valid_vault_path(path, change_type, vault_root):
+            logger.warning(
+                "[vault] Refusing invalid persisted event %s (%s) — dropping",
+                _log_name(path),
+                change_type.name,
+            )
+            event_log.remove(path)
+            continue
+        await queue.put(VaultEvent(path=path, change_type=change_type))
+        accepted += 1
+    return accepted
+
+
 async def watch_vault():
     set_correlation_id(f"worker-{uuid.uuid4().hex[:12]}")
     vault_path = Path(settings.vault_path)
@@ -629,20 +728,20 @@ async def watch_vault():
         consumer = None
         try:
             token = await get_auth_token(client)
-            if settings.auth_password and not token:
-                logger.error("[vault] Could not get auth token; aborting vault sync")
+            if not token and settings.app_env == "production":
+                logger.error("[vault] INTERNAL_API_TOKEN is not configured; aborting vault sync")
                 return
             await initial_scan(vault_path, client, token)
 
             queue: asyncio.Queue[VaultEvent] = asyncio.Queue(maxsize=1000)
 
             # Replay events that were persisted but not processed before a
-            # previous crash (#371).
-            pending = event_log.pending()
-            if pending:
-                logger.info("[vault] Recovering %d pending event(s) from previous run", len(pending))
-                for path, change_type in pending:
-                    await queue.put(VaultEvent(path=path, change_type=change_type))
+            # previous crash (#371). Replayed rows get the same validation as
+            # live events — the log is host-writable with no integrity check,
+            # so injected paths would otherwise be synced on startup (#1294).
+            recovered = await _replay_pending_events(event_log, queue, vault_path)
+            if recovered:
+                logger.info("[vault] Recovering %d pending event(s) from previous run", recovered)
 
             consumer = asyncio.create_task(
                 _consume_vault_events(queue, client, token, event_log),
@@ -658,9 +757,7 @@ async def watch_vault():
                             break
                         retry_delay = 1.0
                         for change_type, path in changes:
-                            if not path.endswith(".md"):
-                                continue
-                            if _is_joidy_file(path):
+                            if not _is_valid_vault_path(path, change_type, vault_path):
                                 continue
                             event_log.add(path, change_type)
                             await queue.put(VaultEvent(path=path, change_type=change_type))
@@ -668,7 +765,9 @@ async def watch_vault():
                 except Exception as e:
                     if shutdown_event.is_set():
                         break
-                    logger.error("[vault] Watcher error (attempt %d/%d): %s", attempt + 1, max_retries, e)
+                    logger.error(
+                        "[vault] Watcher error (attempt %d/%d): %s", attempt + 1, max_retries, type(e).__name__
+                    )
                     if attempt == max_retries - 1:
                         raise
                     await asyncio.sleep(retry_delay)

@@ -484,7 +484,9 @@
     "tagsPlaceholder": "etiqueta1, etiqueta2, ...",
     "deleteFolderTitle": "Eliminar carpeta",
     "deleteFolderMessage": "¿Eliminar carpeta \"{name}\" y todas sus notas?",
-    "deleteFolder": "Eliminar"
+    "deleteFolder": "Eliminar",
+    "resizePanel": "Redimensionar panel",
+    "treeLabel": "Árbol de notas"
   },
   "goalDetail": {
     "loading": "Cargando...",
@@ -636,7 +638,8 @@
     "select": "Seleccionar nota {title}"
   },
   "modalDialog": {
-    "close": "Cerrar"
+    "close": "Cerrar",
+    "dialog": "Diálogo"
   },
   "iconPicker": {
     "title": "Iconos",
@@ -742,7 +745,15 @@
     "vaultPath": "Ruta del Vault (ej: ~/Documentos/notas/mi-vault)",
     "doneDesc": "Tu entorno ha sido asegurado y configurado con éxito. Redirigiendo al sistema...",
     "errorMismatch": "Las contraseñas no coinciden",
-    "errorTooShort": "La contraseña debe tener al menos 4 caracteres"
+    "errorTooShort": "La contraseña debe tener al menos 4 caracteres",
+    "passwordHint": "Mínimo {min} caracteres — una frase de paso es más fuerte que una palabra compleja.",
+    "passwordTooShort": "La contraseña debe tener al menos {min} caracteres",
+    "passwordMismatch": "Las contraseñas no coinciden",
+    "strengthLabel": "Seguridad",
+    "strengthWeak": "Débil",
+    "strengthFair": "Aceptable",
+    "strengthGood": "Buena",
+    "strengthStrong": "Fuerte"
   },
   "folderPicker": {
     "title": "Mover nota a carpeta",
@@ -779,7 +790,9 @@
     "label": "Paleta de comandos",
     "searchPlaceholder": "Buscar comandos, notas, #etiquetas...",
     "searchLabel": "Buscar comandos",
-    "noResults": "No se encontraron resultados"
+    "noResults": "No se encontraron resultados",
+    "resultsLabel": "Resultados",
+    "resultCount": "{count} resultados"
   },
   "topicClusters": {
     "analyzing": "Analizando...",

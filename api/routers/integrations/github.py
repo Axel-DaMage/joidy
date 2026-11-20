@@ -15,6 +15,7 @@ from models.github import (
 )
 from pydantic import BaseModel, Field
 from services import github_service as gh_svc
+from services import oauth_state
 from services.http_client import http_client
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -973,14 +974,20 @@ async def start_web_flow():
             status_code=400, detail="GitHub OAuth redirect URI not configured. Set GITHUB_OAUTH_WEB_URL in .env"
         )
 
+    try:
+        state = oauth_state.generate_state("github")
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
     redirect_uri = settings.github_oauth_web_url
     authorize_url = (
         f"https://github.com/login/oauth/authorize"
         f"?client_id={settings.github_client_id}"
         f"&redirect_uri={redirect_uri}"
         f"&scope={'%20'.join(GITHUB_OAUTH_SCOPES)}"
+        f"&state={state}"
     )
-    return {"authorize_url": authorize_url, "redirect_uri": redirect_uri}
+    return {"authorize_url": authorize_url, "redirect_uri": redirect_uri, "state": state}
 
 
 @router.get("/oauth/callback")
@@ -996,6 +1003,12 @@ async def oauth_callback(
     """
     if error:
         raise HTTPException(status_code=400, detail=f"OAuth error: {error}")
+
+    # CSRF gate (#1280): the state must be one this instance signed in
+    # /oauth/web/start. Verified before any token exchange so a forged
+    # callback cannot bind an attacker's GitHub account here.
+    if not state or not oauth_state.verify_state(state, "github"):
+        raise HTTPException(status_code=403, detail="Invalid or expired OAuth state")
 
     if not settings.github_client_id or not settings.github_client_secret:
         raise HTTPException(

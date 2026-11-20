@@ -405,7 +405,7 @@
     font-family: var(--font-mono);
     background: none;
     border: none;
-    color: var(--text-disabled);
+    color: var(--text-muted);
     cursor: pointer;
     border-radius: 3px;
     transition: all 0.15s;
@@ -474,7 +474,7 @@
     background: var(--surface);
     font-size: 11px;
     font-family: var(--font-mono);
-    color: var(--text-disabled);
+    color: var(--text-muted);
     letter-spacing: 0.05em;
   }
 

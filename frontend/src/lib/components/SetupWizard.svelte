@@ -13,17 +13,46 @@
   let passwordError = '';
 
   function validatePassword(): boolean {
-    if (password.length < 4) {
-      passwordError = $t('setupWizard.errorTooShort');
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      passwordError = $t('setupWizard.passwordTooShort', { values: { min: MIN_PASSWORD_LENGTH } });
       return false;
     }
     if (password !== confirmPassword) {
-      passwordError = $t('setupWizard.errorMismatch');
+      passwordError = $t('setupWizard.passwordMismatch');
       return false;
     }
     passwordError = '';
     return true;
   }
+
+  // Password policy mirrors POST /config/setup (#1284): minimum 12 chars,
+  // common-password denylist enforced server-side.
+  const MIN_PASSWORD_LENGTH = 12;
+
+  // Lightweight strength score (0-4): rewards length and character variety.
+  // Indicator only — the server remains the authority.
+  function scorePassword(pw: string): number {
+    if (!pw) return 0;
+    let score = 0;
+    if (pw.length >= MIN_PASSWORD_LENGTH) score++;
+    if (pw.length >= 16) score++;
+    if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) score++;
+    if (/\d/.test(pw) && /[^a-zA-Z0-9]/.test(pw)) score++;
+    return score;
+  }
+
+  $: passwordScore = scorePassword(password);
+  $: passwordTooShort = password.length > 0 && password.length < MIN_PASSWORD_LENGTH;
+  $: passwordsMatch = !confirmPassword || password === confirmPassword;
+  $: canProceed = password.length >= MIN_PASSWORD_LENGTH && password === confirmPassword;
+  $: strengthLabel =
+    passwordScore <= 1
+      ? $t('setupWizard.strengthWeak')
+      : passwordScore === 2
+        ? $t('setupWizard.strengthFair')
+        : passwordScore === 3
+          ? $t('setupWizard.strengthGood')
+          : $t('setupWizard.strengthStrong');
 
   async function handleSetup() {
     if (!validatePassword()) {
@@ -87,10 +116,39 @@
               bind:value={password}
               class="input"
               autocomplete="new-password"
+              minlength={MIN_PASSWORD_LENGTH}
               required
               aria-invalid={passwordError ? 'true' : undefined}
               aria-describedby={passwordError ? 'pwd-error' : undefined}
             />
+            <span class="field-hint"
+              >{$t('setupWizard.passwordHint', { values: { min: MIN_PASSWORD_LENGTH } })}</span
+            >
+            {#if password}
+              <div class="strength" aria-live="polite">
+                <div class="strength-bar">
+                  {#each [0, 1, 2, 3] as i (i)}
+                    <span
+                      class="segment"
+                      class:filled={i < passwordScore}
+                      class:weak={passwordScore <= 1}
+                      class:fair={passwordScore === 2}
+                      class:strong={passwordScore >= 3}
+                    ></span>
+                  {/each}
+                </div>
+                <span class="strength-label"
+                  >{$t('setupWizard.strengthLabel')}: {strengthLabel}</span
+                >
+              </div>
+            {/if}
+            {#if passwordTooShort}
+              <span class="field-error"
+                >{$t('setupWizard.passwordTooShort', {
+                  values: { min: MIN_PASSWORD_LENGTH },
+                })}</span
+              >
+            {/if}
           </div>
           <div class="field" style="margin-top: 12px;">
             <label for="pwd2">{$t('setupWizard.confirmPassword')}</label>
@@ -100,10 +158,14 @@
               bind:value={confirmPassword}
               class="input"
               autocomplete="new-password"
+              minlength={MIN_PASSWORD_LENGTH}
               required
               aria-invalid={passwordError ? 'true' : undefined}
               aria-describedby={passwordError ? 'pwd-error' : undefined}
             />
+            {#if !passwordsMatch}
+              <span class="field-error">{$t('setupWizard.passwordMismatch')}</span>
+            {/if}
           </div>
 
           {#if passwordError}
@@ -114,7 +176,7 @@
             <button type="button" class="btn btn-ghost" onclick={() => (step = 1)}
               >{$t('setupWizard.back')}</button
             >
-            <button type="submit" class="btn btn-primary" disabled={!password || !confirmPassword}
+            <button type="submit" class="btn btn-primary" disabled={!canProceed}
               >{$t('setupWizard.next')}</button
             >
           </div>
@@ -273,6 +335,51 @@
     font-size: 11px;
     color: var(--text-muted);
     line-height: 1.5;
+  }
+
+  .field-error {
+    font-size: 11px;
+    color: var(--error, #e5534b);
+    line-height: 1.5;
+  }
+
+  .strength {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 2px;
+  }
+
+  .strength-bar {
+    display: flex;
+    gap: 4px;
+    flex: 1;
+  }
+
+  .segment {
+    height: 4px;
+    flex: 1;
+    border-radius: 2px;
+    background: var(--border);
+    transition: background 0.2s;
+  }
+
+  .segment.filled.weak {
+    background: var(--error, #e5534b);
+  }
+
+  .segment.filled.fair {
+    background: var(--xp);
+  }
+
+  .segment.filled.strong {
+    background: var(--success, #3fb950);
+  }
+
+  .strength-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    white-space: nowrap;
   }
 
   .field-hint code {

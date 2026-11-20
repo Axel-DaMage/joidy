@@ -329,7 +329,7 @@
 
   .dur-sep {
     font-size: 9px;
-    color: var(--text-disabled, var(--border));
+    color: var(--text-muted);
   }
 
   @media (max-width: 768px) {

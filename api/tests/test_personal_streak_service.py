@@ -20,6 +20,7 @@ from database import Base
 from models.personal_streaks import PersonalStreak, StreakCheckIn
 from repositories import PersonalStreakRepository, StreakCheckInRepository
 from services.personal_streak_service import (
+    MAX_BACKFILL_DAYS,
     backfill_streak_history,
     calculate_streak_stats,
     compute_streak,
@@ -215,6 +216,37 @@ class BackfillStreakHistoryTest(PersonalStreakTestBase):
         checkin_dates = {c.check_date for c in streak.checkins}
         expected = {start + timedelta(days=i) for i in range(0, 6, 2) if start + timedelta(days=i) < self._today()}
         self.assertEqual(checkin_dates, expected)
+        db.close()
+
+    def test_backfill_capped_at_max_backfill_days(self):
+        """An absurdly old start_date must not iterate day-by-day unbounded:
+        the fill window is clamped to the most recent MAX_BACKFILL_DAYS (#1321)."""
+        db = self.Session()
+        start = self._today() - timedelta(days=2000)
+        streak = self._create_streak(db, start_date=start)
+        streak.created_at = datetime.now(UTC)
+        db.commit()
+        db.refresh(streak)
+
+        backfill_streak_history(db, streak)
+        db.refresh(streak)
+        # Exactly MAX_BACKFILL_DAYS rows, covering only the most recent window.
+        self.assertEqual(len(streak.checkins), MAX_BACKFILL_DAYS)
+        self.assertEqual(min(c.check_date for c in streak.checkins), self._today() - timedelta(days=MAX_BACKFILL_DAYS))
+        db.close()
+
+    def test_backfill_short_history_unchanged(self):
+        """start_date within the cap behaves exactly as before."""
+        db = self.Session()
+        start = self._today() - timedelta(days=3)
+        streak = self._create_streak(db, start_date=start)
+        streak.created_at = datetime.now(UTC)
+        db.commit()
+        db.refresh(streak)
+
+        backfill_streak_history(db, streak)
+        db.refresh(streak)
+        self.assertEqual(len(streak.checkins), 3)
         db.close()
 
 

@@ -95,11 +95,37 @@ def sanitize_tag(tag_name: str) -> str:
 def sanitize_color(color: str) -> str:
     """Validate CSS hex color."""
     color = color.strip()
-    if not re.match(r"^#[0-9a-fA-F]{3,8}$", color):
+    # fullmatch (not match + $) so a trailing newline cannot sneak a
+    # line break into vault frontmatter (#1319).
+    if not re.fullmatch(r"#[0-9a-fA-F]{3,8}", color):
         return "#888888"  # Safe default
     return color
 
 
 def sanitize_emoji(emoji: str) -> str:
-    """Limit emoji field length."""
-    return emoji[:20] if emoji else "🔴"
+    """Limit emoji field length; reject newlines — the value is written
+    verbatim into vault frontmatter (#1319)."""
+    if not emoji:
+        return "🔴"
+    if "\n" in emoji or "\r" in emoji:
+        raise ValueError("Emoji must not contain newlines")
+    return emoji[:20]
+
+
+MAX_THEME_LENGTH = 20  # matches goals.theme String(20)
+
+
+def sanitize_theme(theme: str) -> str:
+    """Validate a goal display theme — a short single-line token.
+
+    Written verbatim into vault frontmatter (``theme: <v>``), so any
+    newline would inject extra frontmatter keys (#1319).
+    """
+    theme = theme.strip()
+    if not theme:
+        return "solid"
+    if "\n" in theme or "\r" in theme:
+        raise ValueError("Theme must not contain newlines")
+    if len(theme) > MAX_THEME_LENGTH:
+        raise ValueError(f"Theme cannot exceed {MAX_THEME_LENGTH} characters")
+    return theme

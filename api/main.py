@@ -14,6 +14,7 @@ from logging_config import setup_logging
 from middleware.metrics import MetricsMiddleware
 from middleware.rate_limit import RateLimitMiddleware
 from middleware.request_id import RequestIdMiddleware
+from middleware.security_headers import SecurityHeadersMiddleware
 from routers import (
     achievements,
     ai,
@@ -38,12 +39,14 @@ from routers import (
     sync,
     system,
     tags,
+    telegram,
     upload,
     vault,
     websocket,
 )
 from routers.integrations import github, google, spotify, strava
-from services.auth_service import get_current_user
+from services.auth_service import get_current_user, get_current_user_or_internal
+from services.env_file import env_file_permissions, get_env_file
 from services.http_client import aclose_http_clients, http_client
 from services.response_cache import get_cache_stats
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -86,6 +89,19 @@ async def lifespan(app: FastAPI):
         raise RuntimeError(
             "AUTH_PASSWORD must be set when APP_ENV=production. "
             "Authentication is disabled without it — refusing to start."
+        )
+
+    # Startup warning (#1281): the .env file holds every deployment secret.
+    # Flag permissions looser than owner-only so files created by hand or
+    # under a permissive umask get noticed — the CLI (`joidy` bootstrap) and
+    # write_env() both enforce 0o600, but neither may have run yet.
+    env_perms = env_file_permissions()
+    if env_perms is not None and env_perms & 0o077:
+        logger.warning(
+            "%s has mode %04o — readable by other users on this host. It contains secrets; run 'chmod 600 %s'.",
+            get_env_file(),
+            env_perms,
+            get_env_file(),
         )
 
     init_db()
@@ -215,12 +231,15 @@ app.add_middleware(
 )
 app.add_middleware(CorsSafetyMiddleware)
 app.add_middleware(RequestIdMiddleware)
+# Outermost: security headers must reach every response, including CORS
+# preflights, rate-limit 429s and exception-path 500s (#1283).
+app.add_middleware(SecurityHeadersMiddleware)
 
-app.include_router(notes.router, dependencies=[Depends(get_current_user)])
+app.include_router(notes.router, dependencies=[Depends(get_current_user_or_internal)])
 app.include_router(config.router)
 app.include_router(metrics.router, dependencies=[Depends(get_current_user)])
 app.include_router(mood.router, dependencies=[Depends(get_current_user)])
-app.include_router(emails.router, dependencies=[Depends(get_current_user)])
+app.include_router(emails.router, dependencies=[Depends(get_current_user_or_internal)])
 app.include_router(tags.router, dependencies=[Depends(get_current_user)])
 app.include_router(skills.router, dependencies=[Depends(get_current_user)])
 app.include_router(goals.router, dependencies=[Depends(get_current_user)])
@@ -234,13 +253,17 @@ app.include_router(github.router, dependencies=[Depends(get_current_user)])
 app.include_router(google.router)
 app.include_router(strava.router, dependencies=[Depends(get_current_user)])
 app.include_router(spotify.router, dependencies=[Depends(get_current_user)])
-app.include_router(vault.router, dependencies=[Depends(get_current_user)])
+app.include_router(vault.router, dependencies=[Depends(get_current_user_or_internal)])
 app.include_router(folders.router, dependencies=[Depends(get_current_user)])
 app.include_router(ai.router, dependencies=[Depends(get_current_user)])
 app.include_router(planning.router, dependencies=[Depends(get_current_user)])
 app.include_router(calendar_tasks.router, dependencies=[Depends(get_current_user)])
 app.include_router(websocket.router)
 app.include_router(obsidian.router)
+# Telegram's servers call /telegram/webhook without a JWT; the webhook
+# verifies the secret header itself and management routes require auth
+# at the endpoint level (#1132).
+app.include_router(telegram.router)
 app.include_router(auth.router)
 app.include_router(export.router, dependencies=[Depends(get_current_user)])
 app.include_router(stats.router, dependencies=[Depends(get_current_user)])
@@ -270,13 +293,25 @@ except OSError:
 
 
 class SafeStaticFiles(StaticFiles):
-    """StaticFiles that forces Content-Disposition: attachment for SVG files."""
+    """StaticFiles that forces Content-Disposition: attachment for file types
+    a browser would otherwise render inline and execute (#1283, audit F-07).
+
+    The upload router validates declared MIME types, but the stored filename
+    extension decides the served Content-Type — a file uploaded as
+    ``text/plain`` but named ``evil.html`` would be served as ``text/html``.
+    Forcing attachment for active-content extensions removes the inline-HTML
+    XSS path regardless of how the file got there.
+    """
+
+    _FORCE_ATTACHMENT_EXTENSIONS = (".svg", ".html", ".htm", ".xhtml", ".xml")
 
     async def get_response(self, path: str, scope):
         response = await super().get_response(path, scope)
-        if path.lower().endswith(".svg"):
+        lower = path.lower()
+        if lower.endswith(self._FORCE_ATTACHMENT_EXTENSIONS):
             response.headers["Content-Disposition"] = "attachment"
-            response.headers["Content-Type"] = "image/svg+xml"
+            if lower.endswith(".svg"):
+                response.headers["Content-Type"] = "image/svg+xml"
         return response
 
 

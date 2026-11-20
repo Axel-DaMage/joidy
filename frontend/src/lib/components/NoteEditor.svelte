@@ -10,7 +10,7 @@
   import { fetchAISuggestions } from '$lib/stores/notes';
   import { showFrontmatter, hideTagsLine } from '$lib/stores/settings';
   import { api, type Note } from '$lib/api';
-  import { extractTagsFromContent } from '$lib/utils/noteContent';
+  import { extractTagsFromContent, recomposeHiddenSlices } from '$lib/utils/noteContent';
   import { computeFormatEdit, applyWysiwygFormat, insertTextAt } from '$lib/utils/markdownFormat';
   import { UndoHistory } from '$lib/utils/undoHistory';
   import { loadDraft, persistDraft, clearDraft } from '$lib/utils/noteDrafts';
@@ -268,6 +268,17 @@
   let linkDialogOpen = $state(false);
   let linkDialogUrl = $state('');
 
+  // The textarea edits `visibleEditorContent` (frontmatter/tags line may be
+  // stripped), so selection indices are visible-space. Format/insert must run
+  // on the visible string and then reattach the hidden slices — applying them
+  // to `content` shifted every edit by the hidden prefix length (#1304).
+  function recomposeVisible(visible: string): string {
+    return recomposeHiddenSlices(visible, {
+      tagsLine: $hideTagsLine && tags.length > 0 ? currentTagsLine : '',
+      frontmatter: !$showFrontmatter ? rawFrontmatter : '',
+    });
+  }
+
   function formatMarkdown(type: string) {
     if (wysiwygMode && wysiwygRef) {
       if (type === 'link') {
@@ -280,13 +291,13 @@
     }
     if (!textareaEl) return;
     const res = computeFormatEdit(
-      content,
+      visibleEditorContent,
       textareaEl.selectionStart,
       textareaEl.selectionEnd,
       type
     );
     if (!res) return;
-    content = res.content;
+    content = recomposeVisible(res.content);
 
     tick().then(() => {
       textareaEl?.focus();
@@ -300,8 +311,13 @@
       return;
     }
     if (!textareaEl) return;
-    const res = insertTextAt(content, textareaEl.selectionStart, textareaEl.selectionEnd, text);
-    content = res.content;
+    const res = insertTextAt(
+      visibleEditorContent,
+      textareaEl.selectionStart,
+      textareaEl.selectionEnd,
+      text
+    );
+    content = recomposeVisible(res.content);
     tick().then(() => {
       textareaEl?.focus();
       textareaEl?.setSelectionRange(res.caret, res.caret);

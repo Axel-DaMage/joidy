@@ -21,6 +21,28 @@ export const FORMATTERS: Record<string, FormatSpec> = {
   code: { prefix: '```\n', suffix: '\n```', block: '```\n' },
 };
 
+/**
+ * Link URL scheme allowlist (#1331). Accepts http(s), mailto, and relative
+ * URLs (`page.md`, `./a`, `/abs`, `#anchor`); rejects everything else —
+ * `javascript:`, `data:`, `vbscript:`, `file:`, `ftp:`, etc.
+ *
+ * Uses the WHATWG URL parser against a dummy https base so obfuscation like
+ * `java\tscript:` is normalized before the scheme is checked, and relative
+ * references resolve to the base's https scheme.
+ */
+export function isAllowedLinkUrl(url: string): boolean {
+  const trimmed = url.trim();
+  if (!trimmed) return false;
+  try {
+    const parsed = new URL(trimmed, 'https://joidy.invalid/');
+    return (
+      parsed.protocol === 'http:' || parsed.protocol === 'https:' || parsed.protocol === 'mailto:'
+    );
+  } catch {
+    return false;
+  }
+}
+
 // Applies a format action to a WysiwygEditor instance. `wysiwygRef` is the
 // component instance (typed loosely — exposes toggle* helpers). `linkUrl` is
 // the URL collected by the caller's dialog (window.prompt() was removed for
@@ -52,7 +74,9 @@ export function applyWysiwygFormat(wysiwygRef: any, type: string, linkUrl?: stri
       wysiwygRef.toggleOrderedList();
       break;
     case 'link':
-      if (linkUrl) wysiwygRef.setLink(linkUrl);
+      // Scheme allowlist (#1331): reject javascript:/data:/etc. URLs before
+      // they reach the editor DOM. WysiwygEditor.setLink re-validates too.
+      if (linkUrl && isAllowedLinkUrl(linkUrl)) wysiwygRef.setLink(linkUrl);
       break;
     case 'quote':
       wysiwygRef.toggleBlockquote();

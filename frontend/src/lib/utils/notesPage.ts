@@ -7,7 +7,12 @@ import { api, type Note } from '$lib/api';
 import { logger } from '$lib/utils/logger';
 import { DEFAULT_GOAL_COLOR } from '$lib/utils/goalColors';
 import { getTodayKey } from '$lib/utils/clock';
-import { extractFrontmatter, getFileIcon, type SortMode } from '$lib/utils/fileTree';
+import {
+  extractFrontmatter,
+  getFileIcon,
+  isNoteInFolder,
+  type SortMode,
+} from '$lib/utils/fileTree';
 import { updateFolderMeta } from '$lib/stores/settings';
 import { patchUserSettings, loadUserSettings } from '$lib/utils/userSettings';
 import { captureSnapshot } from '$lib/stores/pageSnapshots';
@@ -357,7 +362,7 @@ export function confirmDeleteFolder() {
   ui.deletingFolder.set(null);
   // Delete notes in this folder
   const ids = get(notes)
-    .filter((n) => n.source_path && n.source_path.includes(path))
+    .filter((n) => n.source_path && isNoteInFolder(n.source_path, path))
     .map((n) => n.id);
   Promise.all(ids.map((id) => deleteNote(id)))
     .then(async () => {
