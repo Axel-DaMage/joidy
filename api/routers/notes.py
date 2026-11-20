@@ -1,4 +1,5 @@
 import os
+from datetime import UTC, datetime
 
 from config import settings
 from database import get_db
@@ -452,6 +453,56 @@ def bulk_untag(data: BulkTagRequest, db: Session = Depends(get_db)):
         sync_skills_for_tags(db, touched_tags)
     db.commit()
     return {"removed": removed, "notes": len(data.ids), "tags": data.tags}
+
+
+@router.delete("/by-path", status_code=200)
+def delete_note_by_source_path(
+    source_path: str = Query(..., max_length=1000),
+    expected_updated_at: str | None = Query(default=None, max_length=64),
+    db: Session = Depends(get_db),
+):
+    """Atomically delete the note whose ``source_path`` matches (#1302).
+
+    The vault watcher used to list notes, capture an id, then delete it —
+    a note re-created or updated between the list and the delete was
+    removed anyway (TOCTOU). Here the match and the delete run inside one
+    ``SELECT ... FOR UPDATE``-locked transaction, and
+    ``expected_updated_at`` acts as an optimistic etag: when supplied and
+    the row's ``updated_at`` differs (note changed or was recreated after
+    the lookup), the delete is refused with 409 instead of silently
+    removing the wrong note.
+
+    Declared before ``DELETE /{note_id}``: without an int path converter,
+    "by-path" would otherwise be swallowed by the ``{note_id}`` route and
+    rejected as a 422.
+    """
+    normalized = normalize_source_path(source_path)
+    if normalized is None or resolve_confined_source_path(normalized) is None:
+        # Generic detail — distinguishing "outside vault" from "missing"
+        # would leak a file-existence oracle (#1314).
+        raise HTTPException(status_code=400, detail="Invalid source_path")
+
+    note = db.query(Note).filter(Note.source_path == normalized).with_for_update().first()
+    if note is None:
+        raise HTTPException(status_code=404, detail="Note not found")
+
+    if expected_updated_at:
+        try:
+            expected = datetime.fromisoformat(expected_updated_at.replace("Z", "+00:00"))
+        except ValueError:
+            expected = None
+        if expected is not None and expected.tzinfo is not None:
+            # note.updated_at is a naive UTC datetime; the API serializes
+            # it as isoformat + "Z", so an aware etag is compared in UTC.
+            expected = expected.astimezone(UTC).replace(tzinfo=None)
+        if expected is None or expected != note.updated_at:
+            raise HTTPException(status_code=409, detail="Note changed since lookup")
+
+    note_id = note.id
+    deleted = delete_note_service(db, note_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Note not found")
+    return {"deleted": note_id, "source_path": normalized}
 
 
 @router.delete("/{note_id}", status_code=204)
