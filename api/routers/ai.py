@@ -1,4 +1,4 @@
-from datetime import date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import cast
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -291,6 +291,15 @@ def _task_duration_minutes(task: CalendarTask, day: date) -> int | None:
     return minutes if minutes > 0 else None
 
 
+def _aware_utc(dt: datetime) -> datetime:
+    """Return ``dt`` tz-aware in UTC.
+
+    ``DateTime(timezone=True)`` columns come back naive on SQLite (the test
+    engine); values are stored as UTC instants, so reattaching UTC is safe.
+    """
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
+
+
 @router.post("/plan-suggest")
 async def plan_suggest(
     req: PlanSuggestRequest,
@@ -371,7 +380,9 @@ async def plan_suggest(
                 end_day = start_day + timedelta(days=1)
             busy_blocks.append({"start": f"{start_day.isoformat()}T00:00:00", "end": f"{end_day.isoformat()}T00:00:00"})
         else:
-            busy_blocks.append({"start": e.start_at.isoformat(), "end": (e.end_at or e.start_at).isoformat()})
+            busy_blocks.append(
+                {"start": _aware_utc(e.start_at).isoformat(), "end": _aware_utc(e.end_at or e.start_at).isoformat()}
+            )
 
     payload = {
         "tasks": tasks_payload,
