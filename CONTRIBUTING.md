@@ -15,6 +15,7 @@
 - [Pull Requests](#pull-requests)
 - [Reportar Bugs](#reportar-bugs)
 - [Solicitar Funcionalidades](#solicitar-funcionalidades)
+- [Etiquetas y Triage de Issues](#etiquetas-y-triage-de-issues)
 - [Ayuda](#ayuda)
 
 ---
@@ -256,6 +257,17 @@ Incluye siempre:
 ## Solicitar Funcionalidades
 
 Usa la plantilla de feature request en GitHub (`.github/ISSUE_TEMPLATE/feature_request.yml`) o abre una discusión para ideas más abiertas.
+
+## Etiquetas y Triage de Issues
+
+Los issues usan etiquetas canónicas en inglés:
+
+- **Prioridad:** `priority:P0` (crítico), `priority:P1` (alto), `priority:P2` (medio), `priority:P3` (backlog)
+- **Urgencia:** `urgency:critical`, `urgency:high`, `urgency:medium`, `urgency:low`, `urgency:backlog`
+
+Las plantillas de issue piden prioridad y urgencia al reportar. Los formularios de GitHub no pueden aplicar etiquetas desde un campo, así que los mantenedores aplican las etiquetas `priority:*`/`urgency:*` durante el triage.
+
+**Convención:** un issue abierto sin etiqueta `priority:*` se considera *pendiente de triage*, no un error — los mantenedores lo etiquetan al revisarlo.
 
 ## Reglas Importantes
 

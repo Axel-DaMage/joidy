@@ -6,6 +6,12 @@ labels: enhancement
 assignees: ''
 ---
 
+**Prioridad / Urgencia**
+Indica una de las etiquetas canónicas (el equipo aplicará `priority:P*` y `urgency:*` en el triage):
+
+- Prioridad: `P0` (crítico) · `P1` (alto) · `P2` (medio) · `P3` (backlog)
+- Urgencia: `critical` · `high` · `medium` · `low` · `backlog`
+
 **¿Tu solicitud está relacionada con un problema? Descríbelo.**
 Una descripción clara de cuál es el problema. Ej: Siempre me frustra cuando [...]
 
