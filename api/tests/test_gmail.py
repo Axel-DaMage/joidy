@@ -520,6 +520,46 @@ def test_send_message_bad_attachment_b64_400(client, db_session, monkeypatch):
     assert resp.status_code == 400
 
 
+def test_send_message_attachment_crlf_content_type_sanitized(client, db_session, monkeypatch):
+    """CRLF/garbage in attachment content_type collapses to octet-stream — no 500, no malformed MIME."""
+    _connect(db_session, monkeypatch)
+    with patch("httpx.AsyncClient.request", new=AsyncMock(return_value=_fake_response({"id": "s1"}))) as mock_req:
+        resp = client.post(
+            "/integrations/gmail/messages/send",
+            json={
+                "to": "a@b.com",
+                "body": "x",
+                "attachments": [
+                    {
+                        "filename": "x.txt",
+                        "content_type": "text/plain\r\nBcc: attacker@evil.com",
+                        "data_base64": "aGk=",
+                    }
+                ],
+            },
+        )
+    assert resp.status_code == 200
+    mime = message_from_bytes(_decode_sent_raw(mock_req.call_args_list[0]), policy=email_policy.default)
+    assert any(part.get_content_type() == "application/octet-stream" for part in mime.walk())
+
+
+def test_send_message_attachment_odd_content_type_falls_back(client, db_session, monkeypatch):
+    """A content_type without '/' degrades to octet-stream instead of failing."""
+    _connect(db_session, monkeypatch)
+    with patch("httpx.AsyncClient.request", new=AsyncMock(return_value=_fake_response({"id": "s1"}))) as mock_req:
+        resp = client.post(
+            "/integrations/gmail/messages/send",
+            json={
+                "to": "a@b.com",
+                "body": "x",
+                "attachments": [{"filename": "x.bin", "content_type": "weirdtype", "data_base64": "aGk="}],
+            },
+        )
+    assert resp.status_code == 200
+    mime = message_from_bytes(_decode_sent_raw(mock_req.call_args_list[0]), policy=email_policy.default)
+    assert any(part.get_content_type() == "application/octet-stream" for part in mime.walk())
+
+
 def test_send_message_readonly_scope_rejected(client, db_session, monkeypatch):
     _connect(db_session, monkeypatch, GMAIL_READONLY_SCOPE)
     with patch("httpx.AsyncClient.request", new=AsyncMock()) as mock_req:
