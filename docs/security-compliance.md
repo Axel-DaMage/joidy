@@ -143,12 +143,10 @@ de notificación ya vigente (Art. 14), para contextualizar la tabla de §4:
 
 ## 3. Política de gestión de vulnerabilidades
 
-La política operativa del proyecto vive en [SECURITY.md](../SECURITY.md). El
-estado descrito aquí incorpora los cambios del PR
-[#1428](https://github.com/Axel-DaMage/joidy/pull/1428) (issue
-[#1389](https://github.com/Axel-DaMage/joidy/issues/1389)), en revisión al
-momento de escribir este documento; si difiere del SECURITY.md fusionado,
-manda SECURITY.md.
+La política operativa del proyecto vive en [SECURITY.md](../SECURITY.md),
+endurecida en el PR [#1428](https://github.com/Axel-DaMage/joidy/pull/1428)
+(ya fusionado; cierra el issue
+[#1389](https://github.com/Axel-DaMage/joidy/issues/1389)).
 
 ### 3.1 Recepción de reportes (Anexo I, Parte II, punto 6)
 
@@ -194,7 +192,7 @@ garantías contractuales:
 
 - Solo la **última release publicada** recibe correcciones de seguridad; no
   hay backports a versiones anteriores ni a forks/builds modificados
-  (tabla de versiones soportadas en SECURITY.md, PR #1428).
+  (tabla de versiones soportadas en SECURITY.md).
 - Todas las releases actuales son pre-releases de la serie `1.1.0-beta`; no
   existe aún una release estable.
 - **Nota CRA:** el Art. 13.10 permite cumplir solo con la última versión
@@ -240,21 +238,22 @@ Estados: ✅ implementado · ⚠️ parcial/pendiente de merge · ❌ ausente.
 
 | Área (Anexo I CRA) | Estado | Evidencia | Siguiente paso |
 |---|---|---|---|
-| **SBOM** de artefactos distribuidos (Parte II.1) | ⚠️ Parcial | PR [#1420](https://github.com/Axel-DaMage/joidy/pull/1420) abierto: `scripts/generate_sbom.sh` (SPDX + CycloneDX vía syft), `scripts/check_licenses.py`, `docs/sbom.md`, job `sbom` en `publish.yml` (SBOMs adjuntos como referrers OCI y assets de release). Issue [#1386](https://github.com/Axel-DaMage/joidy/issues/1386) | Mergear #1420; verificar SBOMs en la próxima release |
-| **Divulgación coordinada** (Parte II.5) | ✅ Hecho* | [SECURITY.md](../SECURITY.md) + PR [#1428](https://github.com/Axel-DaMage/joidy/pull/1428): PVR + correo, plazos, embargo 90 días, GHSA. PVR habilitado (verificado vía API de GitHub) | Mergear #1428 (cierra [#1389](https://github.com/Axel-DaMage/joidy/issues/1389)) |
+| **SBOM** de artefactos distribuidos (Parte II.1) | ⚠️ Parcial | Pipeline fusionado en PR [#1420](https://github.com/Axel-DaMage/joidy/pull/1420) (issue [#1386](https://github.com/Axel-DaMage/joidy/issues/1386) cerrada): `scripts/generate_sbom.sh` (SPDX + CycloneDX vía syft), `scripts/check_licenses.py`, `scripts/generate_notices.py`, `docs/sbom.md`, job `sbom` en `publish.yml` (SBOMs como referrers OCI + assets de release) y preview source-mode en `ci.yml` | Verificar que la próxima release publique los SBOMs adjuntos a imágenes y release |
+| **Divulgación coordinada** (Parte II.5) | ✅ Hecho | [SECURITY.md](../SECURITY.md) endurecido en PR [#1428](https://github.com/Axel-DaMage/joidy/pull/1428) (fusionado; [#1389](https://github.com/Axel-DaMage/joidy/issues/1389) cerrada): PVR + correo, plazos, embargo 90 días, GHSA. PVR habilitado (verificado vía API de GitHub) | — |
 | **Configuración segura por defecto** (Parte I.2.b) | ✅ Hecho | `BIND_ADDR` por defecto `127.0.0.1` ([docker-compose.yml](../docker-compose.yml)); `POWER_MANAGEMENT_ENABLED=false` por defecto (socket Docker no montado, rutas de mutación no registradas — SECURITY.md); contenedores como usuario no-root (`USER app`/`node` en los Dockerfiles); cabeceras de seguridad (`api/middleware/security_headers.py`); JWT obligatorio en endpoints de datos; rate limiting (`api/middleware/rate_limit.py`) | — |
 | **Releases firmados / verificables y procedencia** | ⚠️ Parcial | `SHA256SUMS.txt` por release, instaladores fijados a tags inmutables, sha256 en AUR/Homebrew, etiquetas OCI (`licenses`, `source`, `revision`, `vendor`) en `publish.yml`, `gh release create --verify-tag`. **Sin firma criptográfica ni attestations** — issue [#1297](https://github.com/Axel-DaMage/joidy/issues/1297) (cosign/provenance/SHA-pinning) sigue abierto | Implementar provenance/attestations en #1297 |
-| **Integridad de canales de instalación** | ✅ Hecho | PR [#1419](https://github.com/Axel-DaMage/joidy/pull/1419) fusionado: instaladores fijados a releases, checksums, AUR con sha256 real, compose pineado, etiquetas OCI; workflow `dist-smoke.yml` cubre los caminos de distribución en CI. Pinning de imágenes base por digest: PR [#1427](https://github.com/Axel-DaMage/joidy/pull/1427) abierto (issue [#1391](https://github.com/Axel-DaMage/joidy/issues/1391)) | Mergear #1427 |
+| **Integridad de canales de instalación** | ✅ Hecho | PR [#1419](https://github.com/Axel-DaMage/joidy/pull/1419) fusionado: instaladores fijados a releases, checksums, AUR con sha256 real, compose pineado, etiquetas OCI; workflow `dist-smoke.yml` cubre los caminos de distribución en CI; imágenes base pineadas por digest multiarquitectura (PR [#1427](https://github.com/Axel-DaMage/joidy/pull/1427) fusionado, [#1391](https://github.com/Axel-DaMage/joidy/issues/1391) cerrada) | — |
 | **Monitorización de dependencias y vulnerabilidades** | ✅ Hecho | [`.github/workflows/codeql.yml`](../.github/workflows/codeql.yml) (SAST Python + JS/TS, semanal + PR); [`.github/dependabot.yml`](../.github/dependabot.yml) (actualizaciones agrupadas pip/npm/actions semanales, docker mensual); [`.github/workflows/dependabot-alerts.yml`](../.github/workflows/dependabot-alerts.yml) (gate diario de alertas HIGH/CRITICAL >7 días); job `security` de `ci.yml`: bandit, pip-audit ×3, `npm audit --audit-level=high`, **trivy** filesystem scan (HIGH/CRITICAL bloqueante, `.trivyignore` para excepciones revisadas) | Mantener; vigilar falsos positivos de trivy |
-| **Identificación de licencias** | ✅ Hecho | [LICENSE](../LICENSE) con el texto completo GPL-3.0 ([#1383](https://github.com/Axel-DaMage/joidy/issues/1383) cerrada vía #1413); `NOTICE` con identificador SPDX `GPL-3.0-or-later`; GitHub detecta `GPL-3.0` (verificado vía API); etiqueta OCI `licenses`. Pendientes: metadatos SPDX en manifiestos ([#1388](https://github.com/Axel-DaMage/joidy/issues/1388)), cabeceras REUSE ([#1384](https://github.com/Axel-DaMage/joidy/issues/1384), PR [#1429](https://github.com/Axel-DaMage/joidy/pull/1429)), decisión AGPL ([#1396](https://github.com/Axel-DaMage/joidy/issues/1396)) | Avanzar #1388/#1384 según prioridad |
+| **Identificación de licencias** | ✅ Hecho | [LICENSE](../LICENSE) con el texto completo GPL-3.0 ([#1383](https://github.com/Axel-DaMage/joidy/issues/1383) cerrada vía #1413); `NOTICE` con identificador SPDX `GPL-3.0-or-later`; GitHub detecta `GPL-3.0` (verificado vía API); etiqueta OCI `licenses`; campo `license` SPDX en manifiestos (`pyproject.toml`, `frontend/package.json`, `aur/PKGBUILD` — [#1388](https://github.com/Axel-DaMage/joidy/issues/1388) cerrada vía #1429); anotación REUSE masiva en `REUSE.toml` + gate `reuse lint` en CI (`.github/workflows/reuse.yml`, PR [#1429](https://github.com/Axel-DaMage/joidy/pull/1429) fusionado). Pendientes: cabeceras SPDX por archivo — fase 2 de [#1384](https://github.com/Axel-DaMage/joidy/issues/1384); decisión AGPL ([#1396](https://github.com/Axel-DaMage/joidy/issues/1396)) | Fase 2 de #1384 cuando se toque cada archivo |
 | **Cifrado de datos en reposo** (Parte I.2.e) | ✅ Hecho | Sección «Cifrado de datos en reposo» de [SECURITY.md](../SECURITY.md) (#1286, #1329): Fernet (AES-128-CBC + HMAC) vía `EncryptedText` (`api/encryption.py`), migración `f8a9b0c1d2e3`, excepciones documentadas; `BACKUP_ENCRYPTION_KEY` cifra volcados (`*.dump.enc`, AES-256-CBC/PBKDF2) | — |
 | **Registro y monitorización** (Parte I.2.l) | ⚠️ Parcial | `/metrics` Prometheus en la API ([docs/MONITORING.md](MONITORING.md), `docker-compose.monitoring.yml` con Prometheus + Grafana); `/metrics` y `/health` en worker; rate limiting con logging. **No existe un log de auditoría de seguridad dedicado** (accesos, eventos de autenticación) | Evaluar si un audit log dedicado aporta; documentar retención |
 | **Mecanismo de actualización** (Parte I.2.c, Parte II.7–8) | ⚠️ Parcial | `joidy pull`/`joidy up` ([scripts/joidy.sh](../scripts/joidy.sh)); releases en todos los canales; `docker-compose.release.yml` pineado; sin auto-actualización (modelo pull del operador). Las actualizaciones son gratuitas y sin demora | Documentar como decisión de diseño; reevaluar si se añade auto-update |
 | **Periodo de soporte ≥5 años** (Art. 13.8, solo si aplica) | ❌ No implementado | Política actual: solo la última release recibe fixes, sin backports (SECURITY.md). Compatible con Art. 13.10 pero no con un periodo de soporte formal de 5 años | Decisión consciente del proyecto; si el CRA aplicara, valorar publicar EOL/source-available handoff (considerando 61) |
 
-\* Los estados reflejan el repositorio a fecha 2026-11-20; los PRs citados
-como abiertos pueden fusionarse después, momento en el que este documento
-debe actualizarse (§6).
+\* Los estados reflejan el repositorio a fecha 2026-11-20. Los PRs de
+cumplimiento citados (#1419, #1420, #1427, #1428, #1429) ya están fusionados;
+los issues que cerraron (#1386, #1388, #1389, #1391) figuran como cerrados.
+Este documento debe actualizarse cuando cambien los estados restantes (§6).
 
 ---
 
@@ -274,12 +273,13 @@ ago. 2025, la mayoría del resto desde 2026–2027). Aplicabilidad para Joidy
   del deployer son ligeras.
 - **Art. 50 (transparencia):** los usuarios que interactúan con un sistema de
   IA deben saberlo. El chat `/ai` lo implica; las operaciones silenciosas en
-  segundo plano (embeddings, clasificación de notas) motivan el documento
-  [docs/ai-transparency.md](ai-transparency.md) (en publicación paralela):
-  qué datos se envían a qué proveedor, modelos por defecto y comportamiento
-  opt-out — con `GEMINI_API_KEY` vacío las funciones de IA se desactivan
-  limpiamente — y una divulgación ligera en la UI (checkbox pendiente en
-  #1395).
+  segundo plano (embeddings, clasificación de notas) se documentan en
+  [docs/ai-transparency.md](ai-transparency.md) (PR
+  [#1441](https://github.com/Axel-DaMage/joidy/pull/1441)): qué datos se
+  envían a qué proveedor, modelos por defecto y comportamiento opt-out — con
+  `GEMINI_API_KEY` vacío las funciones de IA se desactivan limpiamente. La
+  divulgación en la UI se implementó con el componente `AiDisclosure`
+  (issue [#1395](https://github.com/Axel-DaMage/joidy/issues/1395), cerrada).
 - **Reevaluar** si futuras funciones derivan hacia territorio del Anexo III.
 
 ---
@@ -296,18 +296,23 @@ Este documento debe re-evaluarse:
    (decisión #1396 sobre AGPL) o nuevos canales de distribución.
 3. **Tras cada release mayor** o cuando cambie la política de versiones
    soportadas (impacto en el requisito de periodo de soporte del Art. 13.8).
-4. **Cuando se fusionen** los PRs citados (#1420, #1427, #1428, #1429 y el
-   de `ai-transparency.md`), para actualizar estados y enlaces.
+4. **Cuando se fusionen** los trabajos aún abiertos citados aquí (la fase 2
+   de #1384, la decisión #1396 y el issue #1297 de procedencia de releases),
+   para actualizar estados y enlaces.
 
-Los issues que alimentan esta revisión: [#1392](https://github.com/Axel-DaMage/joidy/issues/1392)
-(CRA, paraguas), [#1395](https://github.com/Axel-DaMage/joidy/issues/1395)
-(EU AI Act), [#1396](https://github.com/Axel-DaMage/joidy/issues/1396)
-(licencia AGPL), [#1386](https://github.com/Axel-DaMage/joidy/issues/1386)
-(SBOM), [#1388](https://github.com/Axel-DaMage/joidy/issues/1388) y
-[#1384](https://github.com/Axel-DaMage/joidy/issues/1384) (metadatos y
-cabeceras de licencia), [#1389](https://github.com/Axel-DaMage/joidy/issues/1389)
-(SECURITY.md), [#1297](https://github.com/Axel-DaMage/joidy/issues/1297)
-(procedencia/firma de releases).
+Issues que alimentan esta revisión: [#1392](https://github.com/Axel-DaMage/joidy/issues/1392)
+(CRA, paraguas — sigue abierto), [#1396](https://github.com/Axel-DaMage/joidy/issues/1396)
+(licencia AGPL — decisión pendiente), [#1384](https://github.com/Axel-DaMage/joidy/issues/1384)
+(cabeceras SPDX por archivo, fase 2) y
+[#1297](https://github.com/Axel-DaMage/joidy/issues/1297)
+(procedencia/firma de releases). Ya cerrados merced a este esfuerzo:
+[#1386](https://github.com/Axel-DaMage/joidy/issues/1386) (SBOM),
+[#1388](https://github.com/Axel-DaMage/joidy/issues/1388) (metadatos de
+licencia), [#1389](https://github.com/Axel-DaMage/joidy/issues/1389)
+(SECURITY.md), [#1391](https://github.com/Axel-DaMage/joidy/issues/1391)
+(digest pinning de imágenes base) y
+[#1395](https://github.com/Axel-DaMage/joidy/issues/1395) (EU AI Act —
+transparencia y divulgaciones UI en #1441).
 
 ---
 
