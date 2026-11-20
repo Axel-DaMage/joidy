@@ -22,7 +22,12 @@
   }
 </script>
 
-<span class="binary-clock" title="{hours}:{minutes}:{seconds}">
+<span
+  class="binary-clock"
+  role="img"
+  aria-label="{hours}:{minutes}:{seconds}{ampm ? ` ${ampm}` : ''}"
+  title="{hours}:{minutes}:{seconds}"
+>
   {#each layout.groups as group, gi (gi)}
     {#if gi > 0}
       <span class="b-sep" class:seg-ghost={ghostHours && gi === 1} aria-hidden="true"></span>

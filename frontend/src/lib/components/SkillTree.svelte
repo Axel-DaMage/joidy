@@ -17,6 +17,13 @@
   let simulation: d3.Simulation<SimNode, undefined>;
   let tooltip = { visible: false, x: 0, y: 0, node: null as SkillNode | null };
 
+  // Non-visual summary for the SVG (WCAG 1.1.1, #1309) — the adjacent
+  // skill list/sidebar provides the full text equivalent.
+  $: unlockedCount = data.nodes.filter((n) => n.level !== 'locked').length;
+  $: treeSummary = $t('skillTree.summary', {
+    values: { total: data.nodes.length, unlocked: unlockedCount },
+  });
+
   const COLORS = {
     locked: '#333333',
     apprentice: '#4ade80', // Emerald
@@ -87,7 +94,8 @@
     node
       .style('cursor', 'pointer')
       .on('mouseover', (e: MouseEvent, d: SimNode) => {
-        tooltip = { visible: true, x: e.pageX, y: e.pageY, node: d };
+        // position:fixed needs viewport coords — pageX/Y drift on scroll
+        tooltip = { visible: true, x: e.clientX, y: e.clientY, node: d };
       })
       .on('mouseout', () => tooltip.visible = false)
       .call((d3.drag<SVGGElement, SimNode>()
@@ -173,7 +181,7 @@
 </script>
 
 <div class="skill-tree-container">
-  <svg bind:this={svgEl} />
+  <svg bind:this={svgEl} role="img" aria-label={treeSummary} />
 
   {#if tooltip.visible && tooltip.node}
     <div class="skill-tooltip" style="left: {tooltip.x + 15}px; top: {tooltip.y - 15}px;">

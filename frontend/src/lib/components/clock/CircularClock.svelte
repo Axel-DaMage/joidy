@@ -33,7 +33,7 @@
 </script>
 
 {#if mode === 'timer'}
-  <span class="circular-timer" {title}>
+  <span class="circular-timer" {title} role="timer" aria-label={timerText}>
     <svg viewBox="0 0 100 100" class="ct-svg" aria-hidden="true">
       <circle cx="50" cy="50" r={R} stroke="var(--border)" stroke-width="4" fill="none" />
       <circle
@@ -53,7 +53,7 @@
     <span class="ct-text mono">{timerText}</span>
   </span>
 {:else}
-  <span class="analog-clock" style="--dial:{px}px" {title}>
+  <span class="analog-clock" style="--dial:{px}px" {title} role="img" aria-label={title}>
     <svg viewBox="0 0 100 100" class="ac-svg" aria-hidden="true">
       <circle cx="50" cy="50" r="47" class="dial" />
       {#each Array.from({ length: 12 }, (_, i) => i) as i (i)}
@@ -93,7 +93,7 @@
       />
       <circle cx="50" cy="50" r="2.2" class="hub" />
     </svg>
-    {#if ampm}<span class="ac-ampm mono">{ampm}</span>{/if}
+    {#if ampm}<span class="ac-ampm mono" aria-hidden="true">{ampm}</span>{/if}
   </span>
 {/if}
 

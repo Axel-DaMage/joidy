@@ -28,6 +28,27 @@
   let neighborMap = new Map<number | string, Set<number | string>>();
   let labelIndex = new Map<number | string, string>();
 
+  // ── Accessibility (#1309) ──────────────────────────────────────────────
+  // Mirror of the *filtered* node set so assistive tech can navigate the
+  // same data the canvas draws (WCAG 1.1.1 / 2.1.1).
+  let accessibleNodes: GraphNode[] = [];
+  let accessibleEdgeCount = 0;
+  let announcement = '';
+
+  $: graphSummary = $t('a11y.graphSummary', {
+    values: {
+      notes: accessibleNodes.filter((n) => getNodeType(n) === 'note').length,
+      tags: accessibleNodes.filter((n) => getNodeType(n) === 'tag').length,
+      links: accessibleEdgeCount,
+    },
+  });
+
+  function selectNodeFromList(node: GraphNode) {
+    selectedTag.set(node.id);
+    announcement = getNodeLabel(node);
+    focusOnNode(node.id);
+  }
+
   const COLORS = {
     tag: '#7d6b91',
     note: '#4a90a4',
@@ -88,7 +109,12 @@
     d3.select(svgEl).selectAll('*').remove();
 
     let filteredNodes = filterNodes(nodes);
-    if (filteredNodes.length === 0) return;
+    if (filteredNodes.length === 0) {
+      // Keep the accessible mirror in sync with what is actually drawn
+      accessibleNodes = [];
+      accessibleEdgeCount = 0;
+      return;
+    }
 
     let nodeIds = new Set<number | string>(filteredNodes.map(n => n.id));
     let filteredEdges = edges.filter(e =>
@@ -107,6 +133,10 @@
         nodeIds.has(e.source) && nodeIds.has(e.target)
       );
     }
+
+    // Publish the exact filtered set for the non-visual node list (#1309)
+    accessibleNodes = filteredNodes;
+    accessibleEdgeCount = filteredEdges.length;
 
     const svg = d3.select(svgEl);
     const g = svg.append('g');
@@ -201,8 +231,8 @@
         const nodeType = getNodeType(d);
         tooltip = {
           visible: true,
-          x: event.pageX,
-          y: event.pageY,
+          x: event.clientX,
+          y: event.clientY,
           text: `${nodeType === 'note' ? d.title : d.name}`,
           node: d,
         };
@@ -213,8 +243,8 @@
         const count = nodeType === 'tag' ? `${d.note_count || 0} notas` : '';
         tooltip = {
           visible: true,
-          x: event.pageX + 10,
-          y: event.pageY - 10,
+          x: event.clientX + 10,
+          y: event.clientY - 10,
           text: `${nodeType === 'note' ? d.title : d.name} ${count}`.trim(),
           node: d,
         };
@@ -460,8 +490,34 @@
 </script>
 
 <div class="graph-wrapper" style="width:100%; height:100%; position:relative; min-height: 400px;">
-  <canvas bind:this={canvasEl} width={width} height={height} style="position:absolute; top:0; left:0; z-index:1;"></canvas>
-  <svg bind:this={svgEl} width={width} height={height} style="position:absolute; top:0; left:0; z-index:2; background:transparent;"></svg>
+  <!-- Canvas is a raster drawing surface — hidden from AT; the svg carries
+       the summary label and the nav below provides the node list (#1309). -->
+  <canvas bind:this={canvasEl} width={width} height={height} style="position:absolute; top:0; left:0; z-index:1;" aria-hidden="true"></canvas>
+  <svg
+    bind:this={svgEl}
+    width={width}
+    height={height}
+    style="position:absolute; top:0; left:0; z-index:2; background:transparent;"
+    role="img"
+    aria-label={graphSummary}
+  ></svg>
+
+  <!-- Keyboard-operable equivalent of the pointer-only node canvas:
+       visually collapsed until it receives keyboard focus (#1309). -->
+  <nav class="node-list-nav" aria-label={$t('a11y.graphNodesList')}>
+    <ul class="node-list">
+      {#each accessibleNodes as node (node.id)}
+        <li>
+          <button type="button" class="node-list-btn" onclick={() => selectNodeFromList(node)}>
+            {getNodeLabel(node)}
+          </button>
+        </li>
+      {/each}
+    </ul>
+  </nav>
+
+  <!-- Announces node selections made through the list or the canvas -->
+  <div class="visually-hidden" aria-live="polite">{announcement}</div>
 
   {#if tooltip.visible}
     <div class="tooltip" style="position:fixed; left:{tooltip.x}px; top:{tooltip.y}px; z-index:100;">
@@ -517,6 +573,60 @@
 </div>
 
 <style>
+  /* Keyboard node list — invisible until it receives focus (#1309) */
+  .node-list-nav {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    z-index: calc(var(--z-modal) + 1);
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  /* opacity (not visibility/display) keeps the buttons in the tab order;
+     :focus-within reveals the panel as soon as Tab lands inside */
+  .node-list-nav:focus-within {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .node-list {
+    list-style: none;
+    margin: 0;
+    padding: 8px;
+    max-height: 50vh;
+    overflow-y: auto;
+    background: var(--elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    box-shadow: 0 10px 20px rgba(0,0,0,0.25);
+  }
+
+  .node-list-btn {
+    display: block;
+    width: 100%;
+    padding: 4px 8px;
+    background: none;
+    border: none;
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-align: left;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 240px;
+  }
+
+  .node-list-btn:hover,
+  .node-list-btn:focus-visible {
+    background: var(--accent);
+    color: var(--bg);
+    outline: none;
+  }
+
   .tooltip {
     background: var(--elevated);
     border: 1px solid var(--border);

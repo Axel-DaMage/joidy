@@ -1,5 +1,4 @@
 import logging
-import mimetypes
 import re
 import uuid
 from pathlib import Path
@@ -43,6 +42,30 @@ _TEXT_TYPES = {
     "text/x-markdown",
     "application/json",
     "application/rtf",
+}
+
+# Stored-extension allowlist keyed by *validated* MIME type. The on-disk
+# extension is derived from the verified content_type — never from the
+# user-supplied filename — so a text/plain payload can no longer be saved as
+# .html and later served inline as text/html (stored XSS, #1279).
+_MIME_EXTENSIONS = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/gif": ".gif",
+    "image/webp": ".webp",
+    "image/avif": ".avif",
+    "application/pdf": ".pdf",
+    "text/plain": ".txt",
+    "text/markdown": ".md",
+    "text/x-markdown": ".md",
+    "application/json": ".json",
+    "application/rtf": ".rtf",
+    "application/msword": ".doc",
+    "application/vnd.ms-excel": ".xls",
+    "application/vnd.ms-powerpoint": ".ppt",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation": ".pptx",
 }
 
 
@@ -134,11 +157,12 @@ async def _save_upload(file: UploadFile, max_bytes: int, allowed: set[str]) -> d
         )
 
     safe_name = _secure_filename(file.filename)
-    ext = Path(file.filename or "").suffix
-    if not ext:
-        ext = mimetypes.guess_extension(content_type) or ".bin"
-    if not safe_name.endswith(ext):
-        safe_name = f"{safe_name}{ext}"
+    # Extension comes from the validated MIME type, never the filename (#1279):
+    # "evil.html" declared as text/plain is stored as "evil.txt". We keep only
+    # the sanitized stem so a hostile suffix can't survive into the URL.
+    ext = _MIME_EXTENSIONS.get(content_type, ".bin")
+    stem = Path(safe_name).stem or "file"
+    safe_name = f"{stem}{ext}"
 
     unique_name = f"{uuid.uuid4().hex[:8]}_{safe_name}"
     dest = upload_path / unique_name

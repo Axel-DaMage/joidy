@@ -43,7 +43,15 @@
 </script>
 
 <div class="city-wrap" style="width:{size}px; height:{size}px;">
-  <svg viewBox="0 0 100 120" fill="none" xmlns="http://www.w3.org/2000/svg" class="city-svg">
+  <!-- Decorative SVG; .city-tag below provides the text alternative (#1309) -->
+  <svg
+    viewBox="0 0 100 120"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    class="city-svg"
+    aria-hidden="true"
+    focusable="false"
+  >
     <!-- Moon / night atmosphere -->
     <circle cx="82" cy="22" r="6" stroke="var(--plant-secondary)" stroke-width="0.6" fill="none" opacity="0.4"/>
     <circle cx="80" cy="21" r="5" fill="var(--bg)" />

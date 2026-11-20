@@ -110,7 +110,7 @@
     gap: 6px;
   }
   .muted {
-    color: var(--color-muted, #888);
+    color: var(--text-muted, #888);
     font-size: 0.85rem;
     text-align: center;
     padding: 24px 0;
@@ -127,7 +127,7 @@
     gap: 8px;
     padding: 8px;
     border-radius: 6px;
-    background: var(--color-surface, #f5f5f5);
+    background: var(--elevated, transparent);
   }
   .dlq-info {
     display: flex;
@@ -141,11 +141,11 @@
   }
   .dlq-meta {
     font-size: 0.75rem;
-    color: var(--color-muted, #888);
+    color: var(--text-muted, #888);
   }
   .dlq-error {
     font-size: 0.75rem;
-    color: var(--color-error, #e53e3e);
+    color: var(--error, #e53e3e);
     font-family: monospace;
     word-break: break-word;
     max-height: 40px;
@@ -154,9 +154,10 @@
   .btn-sm {
     padding: 4px 10px;
     font-size: 0.8rem;
-    border: 1px solid var(--color-border, #ddd);
+    border: 1px solid var(--border, #ddd);
     border-radius: 4px;
-    background: var(--color-bg, #fff);
+    background: var(--surface, transparent);
+    color: var(--text-primary, inherit);
     cursor: pointer;
     white-space: nowrap;
   }
@@ -165,7 +166,7 @@
     cursor: not-allowed;
   }
   .btn-danger {
-    color: var(--color-error, #e53e3e);
-    border-color: var(--color-error, #e53e3e);
+    color: var(--error, #e53e3e);
+    border-color: var(--error, #e53e3e);
   }
 </style>
