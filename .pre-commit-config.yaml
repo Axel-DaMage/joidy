@@ -38,9 +38,6 @@ repos:
         language: system
         files: ^frontend/.*\.(svelte|ts|js)$
         pass_filenames: false
-      - id: prettier
-        name: prettier (check)
-        entry: bash -c 'cd frontend && npm run format:check'
-        language: system
-        files: ^frontend/.*\.(svelte|ts|js|css|json)$
-        pass_filenames: false
+      # NOTE: prettier was removed from the frontend toolchain (#1257) — the
+      # tree was never prettier-clean and nothing ran it, so the config was
+      # dead weight. eslint + svelte-check remain the frontend gates.

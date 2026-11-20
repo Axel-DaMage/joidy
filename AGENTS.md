@@ -33,8 +33,16 @@ make test            # test-api + test-ai + test-frontend
 make test-api        # PYTHONPATH=/app python -m unittest discover -s tests
 make test-ai         # ai-service pytest suite (tests/)
 make test-frontend   # cd frontend && npx playwright test
-make lint            # python -m compileall on all Python services
+make lint            # CI-parity lint on host (no Docker): compileall + ruff + ruff format --check
+                     # + mypy per service + bandit + frontend svelte-check — scripts/lint.sh
+make lint-api        # Docker fallback: compileall syntax check only
 ```
+
+`make lint` mirrors the cheap CI gates locally (`.github/workflows/ci.yml`:
+`api-lint`, `security`, `frontend-check`). Tool versions are pinned in
+`api/requirements-dev.txt` — install with `pip install -r api/requirements-dev.txt`
+for exact parity. Missing tools are skipped with a warning; `STRICT=1 make lint`
+turns a missing tool into a failure.
 
 Single test:
 ```bash
@@ -139,7 +147,8 @@ When working as an autonomous coding agent on this codebase:
 ## Testing Quirks
 - Uses `pytest` for API tests (`pytest` discover under `api/tests/`), with `unittest` style fixtures in `conftest.py`
 - Single test: `docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm api pytest tests/test_file.py`
-- Ruff config exists in `pyproject.toml` + `.pre-commit-config.yaml`. CI checks `compileall`, `pytest`, `npm run check`, `npm run build`, and Docker build.
+- Ruff config exists in `pyproject.toml` + `.pre-commit-config.yaml`. CI checks `compileall`, `ruff check` + `ruff format --check`, `mypy` (per service), `bandit`, `pytest`, `npm run check`, `npm run lint` (eslint), `npm run build`, and Docker build — `make lint` reproduces the cheap ones on the host.
+- Frontend lint gate is **eslint only** (`npm run lint` runs in the `frontend-check` CI job). Prettier was removed (#1257): the tree was never prettier-clean and the config/deps were never executed — do not re-add it without a full-tree format plan.
 
 ## Known Issues (from code audit)
 1. ~~CORS allows `*` in non-production~~ — **Fixed**: `_get_cors_origins()` in `api/main.py` respects `cors_allowed_origins` setting; dev fallback only. Same in `ai-service/main.py`.
