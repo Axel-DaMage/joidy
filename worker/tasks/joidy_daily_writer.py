@@ -8,6 +8,7 @@ import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 
+import auth as shared_auth
 import httpx
 from config import settings
 from logging_config import set_correlation_id
@@ -18,14 +19,16 @@ logger = logging.getLogger(__name__)
 async def _get_auth_token(client: httpx.AsyncClient) -> str | None:
     """Return the INTERNAL_API_TOKEN service credential (#1275).
 
-    The worker authenticates to the API with a dedicated service token
-    instead of logging in with AUTH_PASSWORD. Kept async with the ``client``
-    parameter so callers are unchanged.
+    Delegates to the lock-guarded single-flight refresher shared by every
+    worker task (#1302): the vault watcher, this writer and the calendar
+    sync all funnel through one ``asyncio.Lock``, so a wave of concurrent
+    401s triggers exactly one fetch instead of a token-refresh stampede.
     """
-    if not settings.internal_api_token:
+    token = await shared_auth.get_auth_token(client)
+    if not token:
         logger.warning("[writer] No INTERNAL_API_TOKEN configured — vault writes will fail")
         return None
-    return settings.internal_api_token
+    return token
 
 
 async def write_joidy_files():
