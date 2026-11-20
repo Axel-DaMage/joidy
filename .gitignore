@@ -62,3 +62,7 @@ aur/*.pkg.tar.*
 aur/src/
 aur/pkg/
 aur/*.tar.gz
+
+# Generated SBOM / license-notice artifacts (#1386)
+/sbom/
+/THIRD-PARTY-NOTICES.txt

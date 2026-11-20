@@ -582,3 +582,33 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: '1'
+
+  # Source-mode SBOM preview (#1386): exercises the same scripts publish.yml
+  # uses on every PR so a broken generator or a denied license is caught
+  # before release night. Manifest files carry sparse license metadata, so
+  # the policy check runs --quiet (denied licenses still fail; unknown ones
+  # are only counted). The authoritative image-based check runs in the
+  # publish workflow.
+  sbom:
+    name: SBOM & License Policy (source preview)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Generate source SBOMs (SPDX-JSON + CycloneDX-JSON)
+        run: ./scripts/generate_sbom.sh --mode source --out-dir sbom
+
+      - name: Enforce license policy
+        run: python3 scripts/check_licenses.py --quiet sbom/*.cdx.json
+
+      - name: Generate THIRD-PARTY-NOTICES (preview)
+        run: python3 scripts/generate_notices.py --output sbom/THIRD-PARTY-NOTICES.txt sbom/*.cdx.json
+
+      - name: Upload SBOM artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: sbom-source-preview
+          path: sbom/
+          retention-days: 30

@@ -183,6 +183,10 @@ db-restore: ## Restore a database dump: make db-restore FILE=data/backups/joidy-
 backup-verify: ## Round-trip test: dump → restore into throwaway DB → health check (needs a running stack)
 	COMPOSE_PROJECT_NAME=$(COMPOSE_PROJECT) bash scripts/backup_verify.sh
 
+sbom: ## Generate SPDX + CycloneDX SBOMs and THIRD-PARTY-NOTICES for all services into ./sbom/
+	bash scripts/generate_sbom.sh --mode source --out-dir sbom
+	python3 scripts/generate_notices.py --output sbom/THIRD-PARTY-NOTICES.txt sbom/*.cdx.json
+
 shell-api: ## Open a shell in the api container
 	$(DOCKER_COMPOSE) exec api bash
 
