@@ -163,8 +163,12 @@ def test_post_config_still_accepts_valid_values(client: TestClient, persisted_en
 # ── POST /config/setup (unauthenticated pre-setup) ──────────────────────────
 
 
-def test_setup_rejects_malicious_vault_path(client: TestClient, persisted_env):
+def test_setup_rejects_malicious_vault_path(client: TestClient, persisted_env, monkeypatch):
     """Pre-setup, an unauthenticated caller must not poison .env either."""
+    # _setup_is_complete consults process-global settings too — blank them so
+    # CI's exported SECRET_KEY cannot make setup look already-completed.
+    monkeypatch.setattr(config_router.settings, "auth_password", "")
+    monkeypatch.setattr(config_router.settings, "secret_key", "")
     resp = client.post(
         "/config/setup",
         json={"auth_password": "pw1234", "obsidian_vault_path": "x\nAUTH_PASSWORD=attacker"},
@@ -182,6 +186,8 @@ def test_setup_happy_path_persists_safe_values(client: TestClient, persisted_env
     # (_effective_auth_password falls back to settings.auth_password).
     for attr in ("auth_password", "secret_key", "obsidian_vault_path"):
         monkeypatch.setattr(config_router.settings, attr, getattr(config_router.settings, attr))
+    monkeypatch.setattr(config_router.settings, "auth_password", "")
+    monkeypatch.setattr(config_router.settings, "secret_key", "")
     monkeypatch.delenv("OBSIDIAN_VAULT_PATH", raising=False)
 
     resp = client.post(
