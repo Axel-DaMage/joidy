@@ -99,6 +99,7 @@ en `.env` para exponer en LAN); ai-service y worker son internos (#1277).
 | Web App | http://localhost:3000 |
 | API Docs | http://localhost:8000/docs |
 | GitHub | https://github.com/Axel-DaMage/joidy |
+| Cumplimiento de seguridad | [security-compliance.md](security-compliance.md) |
 
 ---
 
