@@ -312,9 +312,9 @@ class SafeStaticFiles(StaticFiles):
       inline in the API origin.
     """
 
-    # Active-content extensions a browser would render inline and execute —
-    # forced to attachment regardless of the declared upload MIME (#1283).
-    _FORCE_ATTACHMENT_EXTENSIONS = (".svg", ".html", ".htm", ".xhtml", ".xml")
+    # Extensions allowed to display inline. Matches the stored-extension
+    # allowlist in routers/upload.py for validated image/* uploads only.
+    _INLINE_EXTENSIONS = frozenset({".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"})
 
     @staticmethod
     def _unauthorized(scope) -> Response | None:
@@ -351,11 +351,8 @@ class SafeStaticFiles(StaticFiles):
             return denied
         response = await super().get_response(path, scope)
         response.headers["X-Content-Type-Options"] = "nosniff"
-        lower = path.lower()
-        if lower.endswith(self._FORCE_ATTACHMENT_EXTENSIONS):
+        if Path(path).suffix.lower() not in self._INLINE_EXTENSIONS:
             response.headers["Content-Disposition"] = "attachment"
-            if lower.endswith(".svg"):
-                response.headers["Content-Type"] = "image/svg+xml"
         return response
 
 
