@@ -192,6 +192,21 @@ def test_toggle_done(client: TestClient, db_session):
     assert r2.json()["done"] is False
 
 
+def test_retoggle_done_does_not_refarm_xp(client: TestClient, db_session):
+    """done → undone → done must not re-mint completion XP (audit)."""
+    from models.gamification import XPEvent
+
+    task = _make_task(db_session, title="No farming")
+
+    for _ in range(3):
+        client.post(f"/calendar/tasks/{task.id}/done")
+
+    completed = db_session.query(XPEvent).filter(XPEvent.event_type == "calendar_task_completed_no_time").all()
+    assert len(completed) == 1
+    planned = db_session.query(XPEvent).filter(XPEvent.event_type == "day_fully_planned").all()
+    assert len(planned) == 1
+
+
 def test_delete_task(client: TestClient, db_session):
     task = _make_task(db_session, title="Delete me")
 

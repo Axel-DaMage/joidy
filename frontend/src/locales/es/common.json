@@ -29,15 +29,7 @@
     "goToSettings": "Ir a Ajustes",
     "allDay": "Todo el día",
     "noEventsDay": "Sin eventos este día",
-    "weekDays": [
-      "Lun",
-      "Mar",
-      "Mié",
-      "Jue",
-      "Vie",
-      "Sáb",
-      "Dom"
-    ],
+    "weekDays": ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"],
     "months": [
       "Enero",
       "Febrero",
@@ -79,6 +71,7 @@
     },
     "prevWeek": "Semana anterior",
     "nextWeek": "Semana siguiente",
+    "agendaDays": "días",
     "noEventsRange": "Sin eventos o tareas en este rango",
     "unscheduled": "Sin planificar",
     "unscheduledEmpty": "Sin tareas sin planificar — arrastra una tarea aquí para aparcarla",

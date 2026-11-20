@@ -710,7 +710,16 @@ export const api = {
   },
 
   emails: {
-    list: (filters: { unread?: boolean; important?: boolean; account?: string; q?: string; limit?: number; skip?: number } = {}) => {
+    list: (
+      filters: {
+        unread?: boolean;
+        important?: boolean;
+        account?: string;
+        q?: string;
+        limit?: number;
+        skip?: number;
+      } = {}
+    ) => {
       const params = new URLSearchParams();
       if (filters.unread !== undefined) params.set('unread', String(filters.unread));
       if (filters.important !== undefined) params.set('important', String(filters.important));
@@ -865,15 +874,12 @@ export const api = {
       if (params?.end) qs.set('end', params.end);
       if (params?.calendar_id) qs.set('calendar_id', params.calendar_id);
       const suffix = qs.toString() ? `?${qs.toString()}` : '';
-      return req<CalendarEvent[]>(
-        'GET',
-        `/integrations/google/calendar/events${suffix}`
-      );
+      return req<CalendarEvent[]>('GET', `/integrations/google/calendar/events${suffix}`);
     },
     calendarCreateEvent: (input: {
       summary: string;
-      start: { dateTime?: string; date?: string };
-      end: { dateTime?: string; date?: string };
+      start: { dateTime?: string; date?: string; timeZone?: string };
+      end: { dateTime?: string; date?: string; timeZone?: string };
       description?: string;
       calendar_id?: string;
     }) =>
@@ -886,8 +892,8 @@ export const api = {
       googleEventId: string,
       patch: {
         summary?: string;
-        start?: { dateTime?: string; date?: string };
-        end?: { dateTime?: string; date?: string };
+        start?: { dateTime?: string; date?: string; timeZone?: string };
+        end?: { dateTime?: string; date?: string; timeZone?: string };
         description?: string;
       },
       calendarId?: string
@@ -922,13 +928,11 @@ export const api = {
       const suffix = date ? `?date=${encodeURIComponent(date)}` : '';
       return req<CalendarTask[]>('GET', `/calendar/tasks/execution-queue${suffix}`);
     },
-    create: (input: CalendarTaskCreateInput) =>
-      req<CalendarTask>('POST', '/calendar/tasks', input),
+    create: (input: CalendarTaskCreateInput) => req<CalendarTask>('POST', '/calendar/tasks', input),
     update: (id: number, input: CalendarTaskUpdateInput) =>
       req<CalendarTask>('PATCH', `/calendar/tasks/${id}`, input),
     remove: (id: number) => req<void>('DELETE', `/calendar/tasks/${id}`),
-    toggleDone: (id: number) =>
-      req<CalendarTask>('POST', `/calendar/tasks/${id}/done`),
+    toggleDone: (id: number) => req<CalendarTask>('POST', `/calendar/tasks/${id}/done`),
   },
 
   config: {
