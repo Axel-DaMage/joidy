@@ -72,7 +72,7 @@
         <button
           type="button"
           class="header-tab-btn"
-          class:active={activeTab === 'github'}
+          class:active={activeTab === 'github'} aria-pressed={activeTab === 'github'}
           onclick={() => handleTabClick('github')}
         >
           <span style={activeTab === 'github' ? `color: ${accentColor}` : ''}>{$t('widgets.tabGithub')}</span>
@@ -83,7 +83,7 @@
         <button
           type="button"
           class="header-tab-btn"
-          class:active={activeTab === 'recent-notes'}
+          class:active={activeTab === 'recent-notes'} aria-pressed={activeTab === 'recent-notes'}
           onclick={() => handleTabClick('recent-notes')}
         >
           <span style={activeTab === 'recent-notes' ? `color: ${accentColor}` : ''}>{$t('widgets.tabRecentNotes')}</span>
@@ -98,22 +98,22 @@
     <div class="gh-filters-stack">
       <div class="gh-filters">
         <div class="gh-filter">
-          <button class="filter-btn" class:active={ghType === 'all'} onclick={() => onSetType('all')}>{$t('widgets.ghAll')}</button>
-          <button class="filter-btn" class:active={ghType === 'issues'} onclick={() => onSetType('issues')}>{$t('widgets.ghIssues')}</button>
-          <button class="filter-btn" class:active={ghType === 'prs'} onclick={() => onSetType('prs')}>PRs</button>
+          <button class="filter-btn" class:active={ghType === 'all'} aria-pressed={ghType === 'all'} onclick={() => onSetType('all')}>{$t('widgets.ghAll')}</button>
+          <button class="filter-btn" class:active={ghType === 'issues'} aria-pressed={ghType === 'issues'} onclick={() => onSetType('issues')}>{$t('widgets.ghIssues')}</button>
+          <button class="filter-btn" class:active={ghType === 'prs'} aria-pressed={ghType === 'prs'} onclick={() => onSetType('prs')}>PRs</button>
         </div>
         <span class="gh-filter-divider">|</span>
         <div class="gh-filter">
-          <button class="filter-btn" class:active={ghFilter === 'created'} onclick={() => onSetFilter('created')}>{$t('widgets.ghCreated')}</button>
-          <button class="filter-btn" class:active={ghFilter === 'assigned'} onclick={() => onSetFilter('assigned')}>{$t('widgets.ghAssigned')}</button>
+          <button class="filter-btn" class:active={ghFilter === 'created'} aria-pressed={ghFilter === 'created'} onclick={() => onSetFilter('created')}>{$t('widgets.ghCreated')}</button>
+          <button class="filter-btn" class:active={ghFilter === 'assigned'} aria-pressed={ghFilter === 'assigned'} onclick={() => onSetFilter('assigned')}>{$t('widgets.ghAssigned')}</button>
         </div>
       </div>
       <div class="gh-filters">
         <div class="gh-filter">
-          <button class="filter-btn" class:active={ghState === 'all'} onclick={() => (ghState = 'all')}>{$t('widgets.ghStateAll')}</button>
-          <button class="filter-btn" class:active={ghState === 'open'} onclick={() => (ghState = 'open')}>{$t('widgets.ghStateOpen')}</button>
-          <button class="filter-btn" class:active={ghState === 'closed'} onclick={() => (ghState = 'closed')}>{$t('widgets.ghStateClosed')}</button>
-          <button class="filter-btn" class:active={ghState === 'merged'} onclick={() => (ghState = 'merged')}>{$t('widgets.ghStateMerged')}</button>
+          <button class="filter-btn" class:active={ghState === 'all'} aria-pressed={ghState === 'all'} onclick={() => (ghState = 'all')}>{$t('widgets.ghStateAll')}</button>
+          <button class="filter-btn" class:active={ghState === 'open'} aria-pressed={ghState === 'open'} onclick={() => (ghState = 'open')}>{$t('widgets.ghStateOpen')}</button>
+          <button class="filter-btn" class:active={ghState === 'closed'} aria-pressed={ghState === 'closed'} onclick={() => (ghState = 'closed')}>{$t('widgets.ghStateClosed')}</button>
+          <button class="filter-btn" class:active={ghState === 'merged'} aria-pressed={ghState === 'merged'} onclick={() => (ghState = 'merged')}>{$t('widgets.ghStateMerged')}</button>
         </div>
         <input
           class="gh-search"
@@ -305,6 +305,10 @@
   }
   .gh-search::placeholder { color: var(--text-muted); }
   .gh-search:focus { outline: none; border-color: var(--accent); }
+  .gh-search:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
+  }
   .filter-btn {
     font-size: 10px; padding: 2px 8px; border-radius: 4px;
     background: transparent; border: 1px solid var(--border-light);

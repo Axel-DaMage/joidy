@@ -1,11 +1,12 @@
 import type { Note } from '$lib/api';
 import { copyToClipboard } from './clipboard';
+import { escapeHtml, renderMarkdown } from './markdown';
 
 export function exportToMarkdown(note: Note): string {
   let md = `# ${note.title}\n\n`;
 
   if (note.tags.length > 0) {
-    md += `**Tags:** ${note.tags.map(t => `[[${t}]]`).join(', ')}\n\n`;
+    md += `**Tags:** ${note.tags.map((t) => `[[${t}]]`).join(', ')}\n\n`;
   }
 
   md += note.content;
@@ -34,12 +35,23 @@ export async function copyNoteAsMarkdown(note: Note): Promise<boolean> {
 }
 
 export function exportToHTML(note: Note): string {
+  // Every interpolated field is escaped (or run through the DOMPurify-sanitized
+  // markdown pipeline) so a note can never inject markup into the exported
+  // document — relevant when exported files are shared (#1317).
+  const title = escapeHtml(note.title);
+  const meta = [
+    note.tags.length > 0 ? `Tags: ${note.tags.map(escapeHtml).join(', ')}` : '',
+    note.source_path ? `<br>Fuente: ${escapeHtml(note.source_path)}` : '',
+  ].join('\n    ');
+  // renderMarkdown returns sanitized HTML; empty content stays empty (the
+  // "write something" placeholder belongs to the editor preview, not exports).
+  const content = note.content.trim() ? renderMarkdown(note.content) : '';
   const html = `
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
-  <title>${note.title}</title>
+  <title>${title}</title>
   <style>
     body { font-family: -apple-system, system-ui, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; line-height: 1.6; }
     h1 { border-bottom: 1px solid #eee; padding-bottom: 10px; }
@@ -49,12 +61,11 @@ export function exportToHTML(note: Note): string {
   </style>
 </head>
 <body>
-  <h1>${note.title}</h1>
+  <h1>${title}</h1>
   <div class="meta">
-    ${note.tags.length > 0 ? `Tags: ${note.tags.join(', ')}` : ''}
-    ${note.source_path ? `<br>Fuente: ${note.source_path}` : ''}
+    ${meta}
   </div>
-  <div class="content">${note.content}</div>
+  <div class="content">${content}</div>
 </body>
 </html>
   `.trim();

@@ -20,6 +20,7 @@
   let skills: Skill[] = $state([]);
   let treeData: SkillTreeData = $state({ nodes: [], edges: [] });
   let loading = $state(true);
+  let loadError = $state(false);
   let searchQuery = $state('');
   let levelFilter = $state<string | null>(null);
 
@@ -63,6 +64,9 @@
       [skills, treeData] = await Promise.all([api.skills.list(), api.skills.tree()]);
     } catch (e) {
       logger.error(e);
+      // Surface the failure — the old log-only path rendered the empty
+      // state, indistinguishable from "no skills yet" (#1305).
+      loadError = true;
     } finally {
       loading = false;
     }
@@ -93,6 +97,8 @@
     <div class="tree-panel">
       {#if loading}
         <div class="loading-state caption">Cargando árbol...</div>
+      {:else if loadError}
+        <div class="loading-state caption">{$t('skills.loadError')}</div>
       {:else if treeData.nodes.length === 0}
         <div class="loading-state caption">
           Agrega 3+ notas con un tag para desbloquear una habilidad.
@@ -115,6 +121,7 @@
             class="search-input"
             type="text"
             placeholder={$t('skills.searchPlaceholder')}
+            aria-label={$t('skills.searchPlaceholder')}
             bind:value={searchQuery}
           />
           {#if searchQuery}
@@ -285,6 +292,10 @@
 
   .search-input:focus {
     border-color: var(--accent);
+  }
+  .search-input:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
   }
 
   .search-clear {

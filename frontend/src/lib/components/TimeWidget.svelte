@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy, tick } from 'svelte';
   import { use24HourClock } from '$lib/stores/settings';
   import { getTimezone, formatClock, getClockParts, type ClockParts } from '$lib/utils/clock';
   import ClockDisplay from '$lib/components/clock/ClockDisplay.svelte';
@@ -47,6 +47,19 @@
   let showTzPicker = false;
   let tzInput = '';
   let tzError = '';
+  let tzInputEl: HTMLInputElement | undefined;
+  let clockBtnEl: HTMLButtonElement | undefined;
+  let tzPickerWasOpen = false;
+
+  // Focus moves into the picker when it opens and returns to the clock
+  // button when it closes (#1307).
+  $: if (showTzPicker) {
+    tzPickerWasOpen = true;
+    tick().then(() => tzInputEl?.focus());
+  } else if (tzPickerWasOpen) {
+    tzPickerWasOpen = false;
+    tick().then(() => clockBtnEl?.focus());
+  }
 
   function initTimezone() {
     timezone = getTimezone();
@@ -101,12 +114,14 @@
 <div class="time-widget">
   <div class="clock-row">
     {#if showTzPicker}
-      <div class="tz-picker">
+      <div class="tz-picker" role="dialog" aria-label={$t('widgets.changeTimezone')}>
         <div class="tz-input-row">
           <input
             class="tz-input mono"
+            bind:this={tzInputEl}
             bind:value={tzInput}
             placeholder={$t('widgets.timezonePlaceholder')}
+            aria-label={$t('widgets.timezonePlaceholder')}
             onkeydown={(e) => e.key === 'Enter' && applyTzInput()}
           />
           <button
@@ -126,6 +141,7 @@
     {:else}
       <button
         class="clock mono"
+        bind:this={clockBtnEl}
         onclick={() => (showTzPicker = true)}
         title={$t('widgets.changeTimezone')}
         aria-haspopup="dialog"
@@ -202,6 +218,10 @@
   }
   .tz-input:focus {
     border-color: var(--xp-2);
+  }
+  .tz-input:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
   }
   .tz-input::placeholder {
     color: var(--text-muted);
