@@ -100,24 +100,24 @@ dev: ## Start all services in development mode (with hot reload)
 	@mkdir -p data/db data/uploads data/vault data/backups
 	@OBSIDIAN_VAULT_PATH=$(call env_key,OBSIDIAN_VAULT_PATH); \
 	case "$$OBSIDIAN_VAULT_PATH" in ~/*) export OBSIDIAN_VAULT_PATH="$(HOME)/$${OBSIDIAN_VAULT_PATH#~/}";; ~) export OBSIDIAN_VAULT_PATH="$(HOME)";; esac; \
-	UID=$(HOST_UID) GID=$(HOST_GID) $(DOCKER_COMPOSE) -p $(COMPOSE_PROJECT) -f docker-compose.yml -f docker-compose.dev.yml --profile ai up --build
+	env UID=$(HOST_UID) GID=$(HOST_GID) $(DOCKER_COMPOSE) -p $(COMPOSE_PROJECT) -f docker-compose.yml -f docker-compose.dev.yml --profile ai up --build
 
 dev-d: ## Start all services in development mode (detached)
 	@if [ ! -f .env ]; then echo "Run 'make setup' first"; exit 1; fi
 	@mkdir -p data/db data/uploads data/vault data/backups
 	@OBSIDIAN_VAULT_PATH=$(call env_key,OBSIDIAN_VAULT_PATH); \
 	case "$$OBSIDIAN_VAULT_PATH" in ~/*) export OBSIDIAN_VAULT_PATH="$(HOME)/$${OBSIDIAN_VAULT_PATH#~/}";; ~) export OBSIDIAN_VAULT_PATH="$(HOME)";; esac; \
-	UID=$(HOST_UID) GID=$(HOST_GID) $(DOCKER_COMPOSE) -p $(COMPOSE_PROJECT) -f docker-compose.yml -f docker-compose.dev.yml --profile ai up --build -d
+	env UID=$(HOST_UID) GID=$(HOST_GID) $(DOCKER_COMPOSE) -p $(COMPOSE_PROJECT) -f docker-compose.yml -f docker-compose.dev.yml --profile ai up --build -d
 
 dev-reset: ## Recreate all services in development mode from scratch (one command)
 	@if [ ! -f .env ]; then echo "Run 'make setup' first"; exit 1; fi
 	@mkdir -p data/db data/uploads data/vault data/backups
 	@OBSIDIAN_VAULT_PATH=$(call env_key,OBSIDIAN_VAULT_PATH); \
 	case "$$OBSIDIAN_VAULT_PATH" in ~/*) export OBSIDIAN_VAULT_PATH="$(HOME)/$${OBSIDIAN_VAULT_PATH#~/}";; ~) export OBSIDIAN_VAULT_PATH="$(HOME)";; esac; \
-	UID=$(HOST_UID) GID=$(HOST_GID) $(DOCKER_COMPOSE) -p $(COMPOSE_PROJECT) -f docker-compose.yml -f docker-compose.dev.yml --profile ai down --remove-orphans --volumes
+	env UID=$(HOST_UID) GID=$(HOST_GID) $(DOCKER_COMPOSE) -p $(COMPOSE_PROJECT) -f docker-compose.yml -f docker-compose.dev.yml --profile ai down --remove-orphans --volumes
 	@OBSIDIAN_VAULT_PATH=$(call env_key,OBSIDIAN_VAULT_PATH); \
 	case "$$OBSIDIAN_VAULT_PATH" in ~/*) export OBSIDIAN_VAULT_PATH="$(HOME)/$${OBSIDIAN_VAULT_PATH#~/}";; ~) export OBSIDIAN_VAULT_PATH="$(HOME)";; esac; \
-	UID=$(HOST_UID) GID=$(HOST_GID) $(DOCKER_COMPOSE) -p $(COMPOSE_PROJECT) -f docker-compose.yml -f docker-compose.dev.yml --profile ai up --build -d --force-recreate --remove-orphans --wait
+	env UID=$(HOST_UID) GID=$(HOST_GID) $(DOCKER_COMPOSE) -p $(COMPOSE_PROJECT) -f docker-compose.yml -f docker-compose.dev.yml --profile ai up --build -d --force-recreate --remove-orphans --wait
 	@echo "✓ Services recreated. Use 'make logs' to follow output."
 
 prod: ## Start all services in production mode
