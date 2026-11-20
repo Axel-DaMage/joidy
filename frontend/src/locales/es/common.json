@@ -76,7 +76,19 @@
     "unscheduled": "Sin planificar",
     "unscheduledEmpty": "Sin tareas sin planificar — arrastra una tarea aquí para aparcarla",
     "unscheduledAddPlaceholder": "Nueva tarea sin día…",
-    "taskUnscheduled": "Tarea movida a sin planificar"
+    "taskUnscheduled": "Tarea movida a sin planificar",
+    "recurrence": "Repetir",
+    "recurrenceNone": "No se repite",
+    "recurrenceDaily": "A diario",
+    "recurrenceWeekly": "Semanal",
+    "recurrenceMonthly": "Mensual",
+    "reminder": "Recordatorio",
+    "reminderNone": "Sin recordatorio",
+    "reminderMin5": "5 min",
+    "reminderMin15": "15 min",
+    "reminderMin30": "30 min",
+    "reminderMin60": "1 h",
+    "taskReminder": "Recordatorio: {title}"
   },
   "emails": {
     "title": "Correos",

@@ -76,7 +76,19 @@
     "unscheduled": "Unscheduled",
     "unscheduledEmpty": "No unscheduled tasks — drop a task here to park it",
     "unscheduledAddPlaceholder": "New task without a day…",
-    "taskUnscheduled": "Task moved to unscheduled"
+    "taskUnscheduled": "Task moved to unscheduled",
+    "recurrence": "Repeat",
+    "recurrenceNone": "Does not repeat",
+    "recurrenceDaily": "Daily",
+    "recurrenceWeekly": "Weekly",
+    "recurrenceMonthly": "Monthly",
+    "reminder": "Reminder",
+    "reminderNone": "No reminder",
+    "reminderMin5": "5 min",
+    "reminderMin15": "15 min",
+    "reminderMin30": "30 min",
+    "reminderMin60": "1 h",
+    "taskReminder": "Reminder: {title}"
   },
   "emails": {
     "title": "Mail",

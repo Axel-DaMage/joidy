@@ -51,6 +51,8 @@ function makeTask(overrides: Partial<CalendarTask> = {}): CalendarTask {
     source: 'JOIDY',
     google_event_id: null,
     color: null,
+    recurrence: 'NONE',
+    reminder_minutes: null,
     created_at: '2024-03-15T08:00:00',
     updated_at: '2024-03-15T08:00:00',
     ...overrides,

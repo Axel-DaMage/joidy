@@ -1,8 +1,19 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { api, type CalendarEvent, type CalendarTask, type CalendarTaskPriority } from '$lib/api';
+  import {
+    api,
+    type CalendarEvent,
+    type CalendarTask,
+    type CalendarTaskPriority,
+    type CalendarTaskRecurrence,
+  } from '$lib/api';
   import { logger } from '$lib/utils/logger';
   import { showNotification } from '$lib/stores/notifications';
+  import {
+    dueTaskReminders,
+    fireTaskNotification,
+    requestNotificationPermission,
+  } from '$lib/utils/taskReminders';
   import {
     ChevronLeft,
     ChevronRight,
@@ -17,6 +28,7 @@
     Pencil,
     X,
     Check,
+    Repeat,
   } from 'lucide-svelte';
   import EmptyState from '$lib/components/EmptyState.svelte';
   import { t } from 'svelte-i18n';
@@ -40,6 +52,21 @@
     | { kind: 'task'; time: string | null; label: string; task: CalendarTask };
 
   const PRIORITIES: CalendarTaskPriority[] = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
+
+  // Recurrence + reminder pickers (#1238). `null` minutes = no reminder.
+  const RECURRENCE_OPTIONS: { value: CalendarTaskRecurrence; labelKey: string }[] = [
+    { value: 'NONE', labelKey: 'recurrenceNone' },
+    { value: 'DAILY', labelKey: 'recurrenceDaily' },
+    { value: 'WEEKLY', labelKey: 'recurrenceWeekly' },
+    { value: 'MONTHLY', labelKey: 'recurrenceMonthly' },
+  ];
+  const REMINDER_OPTIONS: { minutes: number | null; labelKey: string }[] = [
+    { minutes: null, labelKey: 'reminderNone' },
+    { minutes: 5, labelKey: 'reminderMin5' },
+    { minutes: 15, labelKey: 'reminderMin15' },
+    { minutes: 30, labelKey: 'reminderMin30' },
+    { minutes: 60, labelKey: 'reminderMin60' },
+  ];
 
   let events: CalendarEvent[] = $state([]);
   let tasks: CalendarTask[] = $state([]);
@@ -70,6 +97,8 @@
   let quickAddTitle = $state('');
   let quickAddTime = $state('');
   let quickAddPriority = $state<CalendarTaskPriority>('MEDIUM');
+  let quickAddRecurrence = $state<CalendarTaskRecurrence>('NONE');
+  let quickAddReminder = $state<number | null>(null);
   let publishToGoogle = $state(false);
   let addingTask = $state(false);
 
@@ -78,6 +107,12 @@
   let editTitle = $state('');
   let editTime = $state('');
   let editEndTime = $state('');
+  let editRecurrence = $state<CalendarTaskRecurrence>('NONE');
+  let editReminder = $state<number | null>(null);
+
+  // Tasks already reminded this page session (#1238) — plain Set is fine,
+  // it only feeds the polling interval, not the template.
+  const notifiedTaskIds = new Set<number>();
 
   const dtFormatter = new Intl.DateTimeFormat(undefined, {
     hour: '2-digit',
@@ -397,7 +432,10 @@
         date: selectedDay,
         start_time: quickAddTime ? `${quickAddTime}:00` : null,
         priority: quickAddPriority,
+        recurrence: quickAddRecurrence,
+        reminder_minutes: quickAddReminder,
       });
+      if (quickAddReminder !== null) void requestNotificationPermission();
       if (publishToGoogle && status?.connected) {
         try {
           const created = await api.google.calendarCreateEvent({
@@ -420,6 +458,8 @@
       quickAddTitle = '';
       quickAddTime = '';
       quickAddPriority = 'MEDIUM';
+      quickAddRecurrence = 'NONE';
+      quickAddReminder = null;
     } catch (e) {
       logger.error(e);
       showNotification($t('calendar.taskAddError'), 'error');
@@ -535,15 +575,20 @@
     editTitle = task.title;
     editTime = task.start_time ? task.start_time.slice(0, 5) : '';
     editEndTime = task.end_time ? task.end_time.slice(0, 5) : '';
+    editRecurrence = task.recurrence;
+    editReminder = task.reminder_minutes;
   }
 
   async function saveEdit(task: CalendarTask): Promise<void> {
     const title = editTitle.trim();
     if (!title) return;
+    if (editReminder !== null) void requestNotificationPermission();
     await updateTask(task, {
       title,
       start_time: editTime ? `${editTime}:00` : null,
       end_time: editEndTime ? `${editEndTime}:00` : null,
+      recurrence: editRecurrence,
+      reminder_minutes: editReminder,
     });
     if (task.google_event_id && status?.connected) {
       try {
@@ -678,9 +723,27 @@
     window.dispatchEvent(new CustomEvent('joidy:open-settings'));
   }
 
-  onMount(async () => {
-    await refresh();
-    await maybeAutoSync();
+  // Reminder polling (#1238): every 30s, surface today's tasks whose
+  // reminder window opened. In-page MVP — the toast always fires, the
+  // system Notification only when the user granted permission (requested
+  // lazily on save, never on load).
+  function checkTaskReminders(): void {
+    for (const task of dueTaskReminders(tasks, new Date(), notifiedTaskIds)) {
+      notifiedTaskIds.add(task.id);
+      const when = task.start_time ? task.start_time.slice(0, 5) : '';
+      const message = $t('calendar.taskReminder', { values: { title: task.title } });
+      showNotification(message, 'info');
+      fireTaskNotification(message, when);
+    }
+  }
+
+  onMount(() => {
+    void (async () => {
+      await refresh();
+      await maybeAutoSync();
+    })();
+    const timer = setInterval(checkTaskReminders, 30_000);
+    return () => clearInterval(timer);
   });
 </script>
 
@@ -820,7 +883,11 @@
                         tabindex="-1"
                         draggable="true"
                         ondragstart={(e) => onChipDragStart(e, item.task)}
-                        ondragend={onChipDragEnd}>{item.label}</span
+                        ondragend={onChipDragEnd}
+                        >{#if item.task.recurrence !== 'NONE'}<Repeat
+                            size={8}
+                            class="recur-icon"
+                          />{/if}{item.label}</span
                       >
                     {/if}
                   {/each}
@@ -882,6 +949,10 @@
                         ondragend={onChipDragEnd}
                       >
                         {#if item.time}<span class="chip-time">{item.time}</span>{/if}
+                        {#if item.task.recurrence !== 'NONE'}<Repeat
+                            size={8}
+                            class="recur-icon"
+                          />{/if}
                         <span class="chip-label">{item.label}</span>
                       </div>
                     {/if}
@@ -930,6 +1001,10 @@
                         {:else}
                           <span class="priority-dot {priorityClass(item.task.priority)}"></span>
                           {#if item.time}<span class="chip-time caption">{item.time}</span>{/if}
+                          {#if item.task.recurrence !== 'NONE'}<Repeat
+                              size={9}
+                              class="recur-icon"
+                            />{/if}
                           <span class="pill-title">{item.label}</span>
                         {/if}
                       </div>
@@ -982,6 +1057,26 @@
                           <input class="input edit-input" type="time" bind:value={editTime} />
                           <input class="input edit-input" type="time" bind:value={editEndTime} />
                         </div>
+                        <div class="edit-times">
+                          <select
+                            class="input edit-input"
+                            bind:value={editRecurrence}
+                            aria-label={$t('calendar.recurrence')}
+                          >
+                            {#each RECURRENCE_OPTIONS as opt (opt.labelKey)}
+                              <option value={opt.value}>{$t(`calendar.${opt.labelKey}`)}</option>
+                            {/each}
+                          </select>
+                          <select
+                            class="input edit-input"
+                            bind:value={editReminder}
+                            aria-label={$t('calendar.reminder')}
+                          >
+                            {#each REMINDER_OPTIONS as opt (opt.labelKey)}
+                              <option value={opt.minutes}>{$t(`calendar.${opt.labelKey}`)}</option>
+                            {/each}
+                          </select>
+                        </div>
                         <div class="edit-actions">
                           <button
                             class="btn btn-ghost icon-btn"
@@ -1017,7 +1112,12 @@
                       >
                         {item.task.priority.slice(0, 1)}
                       </button>
-                      <span class="event-summary">{item.task.title}</span>
+                      <span class="event-summary"
+                        >{#if item.task.recurrence !== 'NONE'}<Repeat
+                            size={10}
+                            class="recur-icon"
+                          />{/if}{item.task.title}</span
+                      >
                       <span class="task-actions">
                         <button
                           class="btn btn-ghost icon-btn"
@@ -1070,6 +1170,28 @@
             >
               {#each PRIORITIES as p}
                 <option value={p}>{p}</option>
+              {/each}
+            </select>
+            <select
+              class="input quick-prio"
+              bind:value={quickAddRecurrence}
+              disabled={addingTask}
+              aria-label={$t('calendar.recurrence')}
+              title={$t('calendar.recurrence')}
+            >
+              {#each RECURRENCE_OPTIONS as opt (opt.labelKey)}
+                <option value={opt.value}>{$t(`calendar.${opt.labelKey}`)}</option>
+              {/each}
+            </select>
+            <select
+              class="input quick-prio"
+              bind:value={quickAddReminder}
+              disabled={addingTask}
+              aria-label={$t('calendar.reminder')}
+              title={$t('calendar.reminder')}
+            >
+              {#each REMINDER_OPTIONS as opt (opt.labelKey)}
+                <option value={opt.minutes}>{$t(`calendar.${opt.labelKey}`)}</option>
               {/each}
             </select>
             {#if status?.connected}
@@ -1169,6 +1291,7 @@
                   <Check size={12} />
                 </button>
                 <span class="priority-dot {priorityClass(task.priority)}"></span>
+                {#if task.recurrence !== 'NONE'}<Repeat size={10} class="recur-icon" />{/if}
                 <span class="tray-task-title">{task.title}</span>
                 <button
                   class="btn btn-ghost icon-btn"
@@ -1696,6 +1819,11 @@
   }
 
   .lock-icon {
+    flex-shrink: 0;
+    opacity: 0.6;
+  }
+
+  .recur-icon {
     flex-shrink: 0;
     opacity: 0.6;
   }

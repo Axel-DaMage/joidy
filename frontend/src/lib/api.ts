@@ -374,6 +374,7 @@ export interface GoogleCalendarListItem {
 }
 
 export type CalendarTaskPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+export type CalendarTaskRecurrence = 'NONE' | 'DAILY' | 'WEEKLY' | 'MONTHLY';
 
 export interface CalendarTask {
   id: number;
@@ -388,6 +389,9 @@ export interface CalendarTask {
   source: 'JOIDY' | 'GOOGLE';
   google_event_id: string | null;
   color: string | null;
+  recurrence: CalendarTaskRecurrence;
+  /** Minutes before start_time to remind at; null = no reminder. */
+  reminder_minutes: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -400,6 +404,8 @@ export interface CalendarTaskCreateInput {
   priority?: CalendarTaskPriority;
   goal_id?: number | null;
   color?: string | null;
+  recurrence?: CalendarTaskRecurrence;
+  reminder_minutes?: number | null;
 }
 
 export interface CalendarTaskUpdateInput {
@@ -412,6 +418,8 @@ export interface CalendarTaskUpdateInput {
   goal_id?: number | null;
   color?: string | null;
   google_event_id?: string | null;
+  recurrence?: CalendarTaskRecurrence;
+  reminder_minutes?: number | null;
 }
 
 export interface EmailInbox {
@@ -554,7 +562,11 @@ export const api = {
   },
 
   goals: {
-    list: (skip?: number, limit?: number, filters?: { state?: GoalState; context?: GoalContext }) => {
+    list: (
+      skip?: number,
+      limit?: number,
+      filters?: { state?: GoalState; context?: GoalContext }
+    ) => {
       const params = new URLSearchParams();
       if (skip !== undefined) params.set('skip', String(skip));
       if (limit !== undefined) params.set('limit', String(limit));
