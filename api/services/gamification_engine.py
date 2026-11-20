@@ -39,6 +39,10 @@ DEFAULT_XP_TABLE = {
     "calendar_task_completed": 5,
     "calendar_task_completed_no_time": 3,
     "day_fully_planned": 15,
+    # Strava integration (#44): +5 XP per synced activity, +25 once per ISO
+    # week. Both are dedup-keyed so re-syncs/replays never double-award.
+    "strava_activity": 5,
+    "strava_weekly_bonus": 25,
 }
 
 DEFAULT_PLANT_STAGES = [
