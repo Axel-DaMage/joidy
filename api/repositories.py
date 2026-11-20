@@ -223,6 +223,10 @@ class XPEventRepository(BaseRepository[XPEvent]):
     def count_since(self, since: datetime) -> int:
         return self._db.query(XPEvent).filter(XPEvent.created_at >= since).count()
 
+    def find_by_dedup_key(self, event_type: str, dedup_key: str) -> XPEvent | None:
+        """Indexed lookup used by XP idempotency guards (#1320)."""
+        return self._db.query(XPEvent).filter(XPEvent.event_type == event_type, XPEvent.dedup_key == dedup_key).first()
+
 
 class StreakRecordRepository(BaseRepository[StreakRecord]):
     def __init__(self, db: Session) -> None:

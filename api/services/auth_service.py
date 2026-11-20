@@ -47,6 +47,16 @@ def _effective_secret_key() -> str:
     return get_persisted("SECRET_KEY") or settings.secret_key or ""
 
 
+def signing_secret() -> str:
+    """Current JWT signing secret.
+
+    Public accessor so the rate-limit middleware can validate Bearer tokens
+    (``jwt.decode`` directly, without the per-request warning logs of
+    ``verify_token``) while still picking up secret rotation across workers.
+    """
+    return _effective_secret_key()
+
+
 def _effective_internal_api_token() -> str:
     """Return the current INTERNAL_API_TOKEN, reading from disk on every call.
 
