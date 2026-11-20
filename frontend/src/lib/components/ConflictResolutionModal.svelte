@@ -1,7 +1,11 @@
 <script lang="ts">
   import { syncStore, type SyncConflict, type ConflictResolution } from '$lib/stores/sync';
   import ModalDialog from './ModalDialog.svelte';
-  import { TriangleAlert, FileText, Upload, Download, GitMerge } from 'lucide-svelte';
+  import TriangleAlert from 'lucide-svelte/icons/triangle-alert';
+  import FileText from 'lucide-svelte/icons/file-text';
+  import Upload from 'lucide-svelte/icons/upload';
+  import Download from 'lucide-svelte/icons/download';
+  import GitMerge from 'lucide-svelte/icons/git-merge';
   import { t } from 'svelte-i18n';
 
   let selectedConflict: SyncConflict | null = null;

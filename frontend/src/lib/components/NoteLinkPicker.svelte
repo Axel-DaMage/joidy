@@ -5,7 +5,9 @@
 
 <script lang="ts">
   import type { Note } from '$lib/api';
-  import { FilePlus2, Search, X } from 'lucide-svelte';
+  import FilePlus2 from 'lucide-svelte/icons/file-plus-2';
+  import Search from 'lucide-svelte/icons/search';
+  import X from 'lucide-svelte/icons/x';
   import { _ } from 'svelte-i18n';
 
   let {

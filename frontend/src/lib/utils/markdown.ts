@@ -7,7 +7,62 @@
  */
 import { Marked, Renderer } from 'marked';
 import DOMPurify from 'dompurify';
-import hljs from 'highlight.js';
+// highlight.js/lib/core + an allowlist: the default `highlight.js` entry
+// bundles all ~190 language grammars (~900 kB) into the markdown chunk (#1311).
+import hljs from 'highlight.js/lib/core';
+import hlBash from 'highlight.js/lib/languages/bash';
+import hlC from 'highlight.js/lib/languages/c';
+import hlCpp from 'highlight.js/lib/languages/cpp';
+import hlCsharp from 'highlight.js/lib/languages/csharp';
+import hlCss from 'highlight.js/lib/languages/css';
+import hlDiff from 'highlight.js/lib/languages/diff';
+import hlDockerfile from 'highlight.js/lib/languages/dockerfile';
+import hlGo from 'highlight.js/lib/languages/go';
+import hlGraphql from 'highlight.js/lib/languages/graphql';
+import hlIni from 'highlight.js/lib/languages/ini';
+import hlJava from 'highlight.js/lib/languages/java';
+import hlJavascript from 'highlight.js/lib/languages/javascript';
+import hlJson from 'highlight.js/lib/languages/json';
+import hlKotlin from 'highlight.js/lib/languages/kotlin';
+import hlMarkdown from 'highlight.js/lib/languages/markdown';
+import hlPhp from 'highlight.js/lib/languages/php';
+import hlPlaintext from 'highlight.js/lib/languages/plaintext';
+import hlPython from 'highlight.js/lib/languages/python';
+import hlRuby from 'highlight.js/lib/languages/ruby';
+import hlRust from 'highlight.js/lib/languages/rust';
+import hlShell from 'highlight.js/lib/languages/shell';
+import hlSql from 'highlight.js/lib/languages/sql';
+import hlSwift from 'highlight.js/lib/languages/swift';
+import hlTypescript from 'highlight.js/lib/languages/typescript';
+import hlXml from 'highlight.js/lib/languages/xml';
+import hlYaml from 'highlight.js/lib/languages/yaml';
+
+hljs.registerLanguage('bash', hlBash);
+hljs.registerLanguage('c', hlC);
+hljs.registerLanguage('cpp', hlCpp);
+hljs.registerLanguage('csharp', hlCsharp);
+hljs.registerLanguage('css', hlCss);
+hljs.registerLanguage('diff', hlDiff);
+hljs.registerLanguage('dockerfile', hlDockerfile);
+hljs.registerLanguage('go', hlGo);
+hljs.registerLanguage('graphql', hlGraphql);
+hljs.registerLanguage('ini', hlIni);
+hljs.registerLanguage('java', hlJava);
+hljs.registerLanguage('javascript', hlJavascript);
+hljs.registerLanguage('json', hlJson);
+hljs.registerLanguage('kotlin', hlKotlin);
+hljs.registerLanguage('markdown', hlMarkdown);
+hljs.registerLanguage('php', hlPhp);
+hljs.registerLanguage('plaintext', hlPlaintext);
+hljs.registerLanguage('python', hlPython);
+hljs.registerLanguage('ruby', hlRuby);
+hljs.registerLanguage('rust', hlRust);
+hljs.registerLanguage('shell', hlShell);
+hljs.registerLanguage('sql', hlSql);
+hljs.registerLanguage('swift', hlSwift);
+hljs.registerLanguage('typescript', hlTypescript);
+hljs.registerLanguage('xml', hlXml);
+hljs.registerLanguage('yaml', hlYaml);
 import { BASE } from '$lib/api';
 import { getToken } from '$lib/stores/session';
 

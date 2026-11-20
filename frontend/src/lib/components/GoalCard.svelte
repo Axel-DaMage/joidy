@@ -1,5 +1,18 @@
 <script lang="ts">
-  import { Pin, PinOff, Target, Clock, Tag, FileText, Settings, CheckCircle2, XCircle, Trash2, X, Archive, ArchiveRestore, ChevronsUp } from 'lucide-svelte';
+  import Pin from 'lucide-svelte/icons/pin';
+  import PinOff from 'lucide-svelte/icons/pin-off';
+  import Target from 'lucide-svelte/icons/target';
+  import Clock from 'lucide-svelte/icons/clock';
+  import Tag from 'lucide-svelte/icons/tag';
+  import FileText from 'lucide-svelte/icons/file-text';
+  import Settings from 'lucide-svelte/icons/settings';
+  import CheckCircle2 from 'lucide-svelte/icons/check-circle-2';
+  import XCircle from 'lucide-svelte/icons/x-circle';
+  import Trash2 from 'lucide-svelte/icons/trash-2';
+  import X from 'lucide-svelte/icons/x';
+  import Archive from 'lucide-svelte/icons/archive';
+  import ArchiveRestore from 'lucide-svelte/icons/archive-restore';
+  import ChevronsUp from 'lucide-svelte/icons/chevrons-up';
   import StreakIcon from './StreakIcon.svelte';
   import ProgressBar from './ProgressBar.svelte';
   import { getGoalContext } from '$lib/stores/goalContext';

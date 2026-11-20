@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Download } from 'lucide-svelte';
+  import Download from 'lucide-svelte/icons/download';
   import type { Note } from '$lib/api';
   import { downloadMarkdown, downloadHTML, copyNoteAsMarkdown } from '$lib/utils/export';
   import { showNotification } from '$lib/stores/gamification';

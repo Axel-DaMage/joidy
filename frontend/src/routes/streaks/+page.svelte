@@ -1,8 +1,11 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { scale } from 'svelte/transition';
-  import { X, Snowflake, ChevronRight } from 'lucide-svelte';
-  import { Shuffle, CheckCheck } from 'lucide-svelte';
+  import X from 'lucide-svelte/icons/x';
+  import Snowflake from 'lucide-svelte/icons/snowflake';
+  import ChevronRight from 'lucide-svelte/icons/chevron-right';
+  import Shuffle from 'lucide-svelte/icons/shuffle';
+  import CheckCheck from 'lucide-svelte/icons/check-check';
   import StreakListItem from '$lib/components/StreakListItem.svelte';
   import StreakStatsPanel from '$lib/components/StreakStatsPanel.svelte';
   import StreakListPanel from '$lib/components/StreakListPanel.svelte';
@@ -20,7 +23,7 @@
   import { focusTrap } from '$lib/actions/focusTrap';
   import { showNotification } from '$lib/stores/notifications';
   import { logger } from '$lib/utils/logger';
-  import { Share2 } from 'lucide-svelte';
+  import Share2 from 'lucide-svelte/icons/share-2';
   import { t } from 'svelte-i18n';
 
   // Lazy-load heavy components so they are split into separate chunks and

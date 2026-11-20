@@ -23,6 +23,16 @@
   let dateFilterEnabled = $state(false);
   let dateRange = $state(365); // days back from today
   let graphSearch = $state('');
+  // Debounced mirror — filtering the full node/edge set on every keystroke
+  // restarts the force simulation per character (#1311).
+  let graphSearchDebounced = $state('');
+  $effect(() => {
+    const q = graphSearch;
+    const timer = setTimeout(() => {
+      graphSearchDebounced = q;
+    }, 300);
+    return () => clearTimeout(timer);
+  });
 
   let noteCount = $derived($graphData.nodes.filter((n: GraphNode) => n.type === 'note').length);
   let tagCount = $derived($graphData.nodes.filter((n: GraphNode) => n.type === 'tag').length);
@@ -31,12 +41,12 @@
 
   // Filtered graph data based on timeline and search (#373)
   let filteredGraphData = $derived.by(() => {
-    if (!dateFilterEnabled && !graphSearch) return $graphData;
+    if (!dateFilterEnabled && !graphSearchDebounced) return $graphData;
 
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - dateRange);
     const cutoffStr = cutoff.toISOString().slice(0, 10);
-    const searchLower = graphSearch.toLowerCase();
+    const searchLower = graphSearchDebounced.toLowerCase();
 
     let nodes = $graphData.nodes.filter((n: GraphNode) => {
       if (n.type !== 'note') return true; // always keep tags/unresolved stubs
@@ -44,7 +54,7 @@
       // check compared a vault path to an ISO date lexicographically, so the
       // timeline slider never actually filtered anything (#1305).
       if (dateFilterEnabled && (!n.updated_at || n.updated_at < cutoffStr)) return false;
-      if (graphSearch) {
+      if (graphSearchDebounced) {
         const name = (n.title || n.name || '').toLowerCase();
         if (!name.includes(searchLower)) return false;
       }

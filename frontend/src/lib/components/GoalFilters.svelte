@@ -1,5 +1,8 @@
 <script lang="ts">
-  import { Search, Sun, Moon, Zap } from 'lucide-svelte';
+  import Search from 'lucide-svelte/icons/search';
+  import Sun from 'lucide-svelte/icons/sun';
+  import Moon from 'lucide-svelte/icons/moon';
+  import Zap from 'lucide-svelte/icons/zap';
   import { t } from 'svelte-i18n';
   import type { GoalContext } from '$lib/api';
 

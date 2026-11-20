@@ -30,7 +30,9 @@ export default defineConfig({
     },
   },
   ssr: {
-    noExternal: ['phosphor-svelte', 'svelte-hero-icons', 'svelte-bootstrap-icons', 'svelte-radix'],
+    // phosphor-svelte ships untranspiled Svelte — the other three entries were
+    // for packages that are not installed anymore (#1311).
+    noExternal: ['phosphor-svelte'],
   },
   build: {
     target: 'esnext',

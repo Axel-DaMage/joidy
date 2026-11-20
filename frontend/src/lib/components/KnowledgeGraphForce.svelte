@@ -162,20 +162,23 @@
     graph.d3ReheatSimulation();
   }
 
-  function applyStyling() {
+  // The variadic `_deps` parameter is unused — callers pass the
+  // styling-relevant state so the reactive statement below re-runs (and
+  // re-signals `needsRedraw`) whenever any of it changes (#1311).
+  function applyStyling(..._deps: unknown[]) {
     if (!graph) return;
     applyGraphStyling(graph, {
-      hoveredNode,
-      selectedTag: $selectedTag,
-      searchQuery,
-      focusId,
+      getHoveredNode: () => hoveredNode,
+      getSelectedTag: () => $selectedTag,
+      getSearchQuery: () => searchQuery,
+      getFocusId: () => focusId,
       neighbors,
-      nodeSizeScale,
-      linkThicknessScale,
-      showLabels,
-      textScale,
-      labelThreshold,
-      colorGroups,
+      getNodeSizeScale: () => nodeSizeScale,
+      getLinkThicknessScale: () => linkThicknessScale,
+      getShowLabels: () => showLabels,
+      getTextScale: () => textScale,
+      getLabelThreshold: () => labelThreshold,
+      getColorGroups: () => colorGroups,
     });
   }
 
@@ -276,6 +279,11 @@
         hoveredNode = node as GraphNode | null;
       });
 
+    // The force-graph render loop runs a rAF + pointer hit-test every frame
+    // even when the simulation is idle — pause it while the tab is hidden
+    // and tear it down entirely on destroy (#1311).
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     // NOTE: a `.minimap('#graph-minimap', ...)` chain used to be appended here,
     // but `force-graph` (>=1.48) does not expose a `minimap()` method, so the
     // call threw `TypeError: ...minimap is not a function` and left the graph
@@ -291,12 +299,42 @@
     graph.width(width).height(height);
   }
 
+  // Re-apply styling whenever styling-relevant state changes: re-registering
+  // the paint callbacks signals force-graph's internal `needsRedraw`, and the
+  // callbacks read live state via getters — before the getters, hover and
+  // selection highlights captured stale values and never repainted (#1311).
   $: if (graph) {
-    applyStyling();
+    applyStyling(
+      hoveredNode,
+      $selectedTag,
+      searchQuery,
+      focusId,
+      nodeSizeScale,
+      linkThicknessScale,
+      showLabels,
+      textScale,
+      labelThreshold,
+      colorGroups
+    );
+  }
+
+  // `data`/`$graphData` updates (page-level search + timeline filter produce
+  // a fresh object per keystroke) restart the force simulation. Debounce so
+  // a whole typed query costs ONE layout reheat instead of one per character
+  // (#1311). Discrete toggles still call rebuildGraph() directly for instant
+  // feedback.
+  let rebuildTimer: ReturnType<typeof setTimeout> | null = null;
+  function scheduleRebuild() {
+    if (rebuildTimer) clearTimeout(rebuildTimer);
+    rebuildTimer = setTimeout(() => {
+      rebuildTimer = null;
+      rebuildGraph();
+    }, 300);
   }
 
   $: if (graph && loaded) {
-    rebuildGraph();
+    void effectiveData;
+    scheduleRebuild();
   }
 
   // Reactive simulation force properties
@@ -332,7 +370,24 @@
     focusOnNode(focusId);
   }
 
+  function handleVisibilityChange() {
+    if (!graph) return;
+    if (document.hidden) {
+      graph.pauseAnimation();
+    } else {
+      graph.resumeAnimation();
+    }
+  }
+
   onDestroy(() => {
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
+    if (rebuildTimer) {
+      clearTimeout(rebuildTimer);
+      rebuildTimer = null;
+    }
+    // Kapsule destructor: stops the rAF loop and drops the graph data — the
+    // old `graph = null` leaked the simulation/animation cycle forever.
+    graph?._destructor?.();
     graph = null;
   });
 </script>

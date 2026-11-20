@@ -6,7 +6,8 @@
   import { use24HourClock } from '$lib/stores/settings';
   import { locale as localeStore } from '$lib/stores/locale';
   import EmptyState from '$lib/components/EmptyState.svelte';
-  import { CalendarDays, Settings } from 'lucide-svelte';
+  import CalendarDays from 'lucide-svelte/icons/calendar-days';
+  import Settings from 'lucide-svelte/icons/settings';
   import { t } from 'svelte-i18n';
 
   /**

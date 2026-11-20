@@ -24,7 +24,7 @@
     globalLevel,
   } from '$lib/stores/gamification';
   import { openShare } from '$lib/stores/shareAchievement';
-  import { Share2 } from 'lucide-svelte';
+  import Share2 from 'lucide-svelte/icons/share-2';
   import { notes, loadNotes, notesLoadedOnce } from '$lib/stores/notes';
   import { dashboardLayout } from '$lib/stores/layout';
   import { accentColors } from '$lib/stores/settings';
@@ -183,17 +183,25 @@
   }
 
   // #1164 — persistir los filtros de GitHub (sin TTL, a diferencia del
-  // cache de datos). ghSearch escribe por tecla: misma técnica que
-  // notesUi.search.
+  // cache de datos).
   $effect(() => {
     patchUserSettings({
       dashboard: {
         githubFilter: ghFilter,
         githubType: ghType,
         githubState: ghState,
-        githubSearch: ghSearch,
       },
     });
+  });
+
+  // ghSearch escribe por tecla — debounce como goals.editorSearch para no
+  // serializar el blob completo de user-settings por keystroke (#1311).
+  $effect(() => {
+    const query = ghSearch;
+    const timer = setTimeout(() => {
+      patchUserSettings({ dashboard: { githubSearch: query } });
+    }, 300);
+    return () => clearTimeout(timer);
   });
 
   function setActivityTab(tab: 'github' | 'recent-notes') {

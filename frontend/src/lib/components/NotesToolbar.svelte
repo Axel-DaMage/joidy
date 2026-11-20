@@ -1,17 +1,15 @@
 <script lang="ts">
-  import {
-    Search,
-    Plus,
-    X,
-    List,
-    FolderTree,
-    FolderPlus,
-    ChevronsUpDown,
-    ArrowUpDown,
-    Settings,
-    SquareCheckBig,
-    FilePen,
-  } from 'lucide-svelte';
+  import Search from 'lucide-svelte/icons/search';
+  import Plus from 'lucide-svelte/icons/plus';
+  import X from 'lucide-svelte/icons/x';
+  import List from 'lucide-svelte/icons/list';
+  import FolderTree from 'lucide-svelte/icons/folder-tree';
+  import FolderPlus from 'lucide-svelte/icons/folder-plus';
+  import ChevronsUpDown from 'lucide-svelte/icons/chevrons-up-down';
+  import ArrowUpDown from 'lucide-svelte/icons/arrow-up-down';
+  import Settings from 'lucide-svelte/icons/settings';
+  import SquareCheckBig from 'lucide-svelte/icons/square-check-big';
+  import FilePen from 'lucide-svelte/icons/file-pen';
   import DynamicIcon from './DynamicIcon.svelte';
   import {
     notes,

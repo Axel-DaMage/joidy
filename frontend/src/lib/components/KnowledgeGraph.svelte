@@ -1,6 +1,27 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import * as d3 from 'd3';
+  // Named imports — `import * as d3` pulled every subpackage into the chunk.
+  import {
+    drag,
+    forceCenter,
+    forceCollide,
+    forceLink,
+    forceManyBody,
+    forceSimulation,
+    select,
+    zoom,
+    zoomIdentity,
+  } from 'd3';
+  // Side-effect: `.transition()` on selections lives in d3-transition.
+  import 'd3-transition';
+  import type {
+    D3DragEvent,
+    D3ZoomEvent,
+    Simulation,
+    SimulationLinkDatum,
+    SimulationNodeDatum,
+    ZoomBehavior,
+  } from 'd3';
   import { graphData, selectedTag } from '$lib/stores/graph';
   import type { GraphNode, GraphEdge } from '$lib/api';
   import { t } from 'svelte-i18n';
@@ -21,10 +42,15 @@
   let lastFocusId: number | string | null = null;
 
   let ctx: CanvasRenderingContext2D | null = null;
-  let animationFrame: number;
-  let sim: d3.Simulation<SimNode, undefined> | undefined;
-  let zoom: d3.ZoomBehavior<SVGSVGElement, unknown>;
-  let currentTransform = d3.zoomIdentity;
+  let rafId: number | null = null;
+  let drawFn: (() => void) | null = null;
+  let sim: Simulation<SimNode, undefined> | undefined;
+  let zoomBehavior: ZoomBehavior<SVGSVGElement, unknown>;
+  let currentTransform = zoomIdentity;
+
+  // Radial node gradients depend only on (type, radius) — cache them instead
+  // of allocating one per node per frame (#1311).
+  const gradientCache = new Map<string, CanvasGradient>();
   let neighborMap = new Map<number | string, Set<number | string>>();
   let labelIndex = new Map<number | string, string>();
 
@@ -64,10 +90,10 @@
     return COLORS[type as keyof typeof COLORS] || COLORS.default;
   }
 
-  interface SimNode extends GraphNode, d3.SimulationNodeDatum {
+  interface SimNode extends GraphNode, SimulationNodeDatum {
   }
 
-  interface SimLink extends d3.SimulationLinkDatum<SimNode> {
+  interface SimLink extends SimulationLinkDatum<SimNode> {
     type: GraphEdge['type'];
     weight: number;
     particles?: Particle[];
@@ -105,8 +131,8 @@
     if (!ctx) return;
 
     if (sim) sim.stop();
-    cancelAnimationFrame(animationFrame);
-    d3.select(svgEl).selectAll('*').remove();
+    cancelPendingFrame();
+    select(svgEl).selectAll('*').remove();
 
     let filteredNodes = filterNodes(nodes);
     if (filteredNodes.length === 0) {
@@ -138,18 +164,19 @@
     accessibleNodes = filteredNodes;
     accessibleEdgeCount = filteredEdges.length;
 
-    const svg = d3.select(svgEl);
+    const svg = select(svgEl);
     const g = svg.append('g');
 
-    currentTransform = d3.zoomIdentity;
+    currentTransform = zoomIdentity;
 
-    zoom = d3.zoom<SVGSVGElement, unknown>()
+    zoomBehavior = zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.05, 4])
-      .on('zoom', (event: d3.D3ZoomEvent<SVGSVGElement, unknown>) => {
+      .on('zoom', (event: D3ZoomEvent<SVGSVGElement, unknown>) => {
         currentTransform = event.transform;
         g.attr('transform', event.transform.toString());
+        scheduleDraw();
       });
-    svg.call(zoom);
+    svg.call(zoomBehavior);
     
     // Give nodes random initial positions spread across the canvas
     const simNodes: SimNode[] = filteredNodes.map((n) => ({
@@ -184,21 +211,23 @@
 
     const nodeRadiusBase = (n: SimNode) => getNodeType(n) === 'note' ? 4 : 6;
 
-    const simulation = d3.forceSimulation(simNodes)
-      .force('link', d3.forceLink<SimNode, SimLink>(simLinks)
+    const simulation = forceSimulation(simNodes)
+      .force('link', forceLink<SimNode, SimLink>(simLinks)
         .id((d: SimNode) => d.id)
         .distance(60)
         .strength(0.3))
-      .force('charge', d3.forceManyBody().strength(-150).theta(0.8))
-      .force('center', d3.forceCenter(width / 2, height / 2).strength(0.05))
-      .force('collision', d3.forceCollide<SimNode>().radius((d: SimNode) => nodeRadiusBase(d) + 6))
+      .force('charge', forceManyBody().strength(-150).theta(0.8))
+      .force('center', forceCenter(width / 2, height / 2).strength(0.05))
+      .force('collision', forceCollide<SimNode>().radius((d: SimNode) => nodeRadiusBase(d) + 6))
       .alphaDecay(0.03)
       .velocityDecay(0.3)
       .alphaMin(0.001);
 
-    simulation.on('tick', () => {
-      draw();
-    });
+    // Demand-driven rendering (#1311): each simulation tick schedules ONE
+    // paint on the next animation frame. The loop stops on its own when the
+    // layout cools (alpha < alphaMin stops d3's internal timer), while the
+    // tab is hidden, or on destroy — the old code re-scheduled rAF forever.
+    simulation.on('tick', scheduleDraw);
 
     svg.on('click', () => {
       selectedTag.set(null);
@@ -248,22 +277,24 @@
           text: `${nodeType === 'note' ? d.title : d.name} ${count}`.trim(),
           node: d,
         };
+        scheduleDraw();
       })
       .on('mouseout', () => {
         hoveredId = null;
         tooltip = { ...tooltip, visible: false };
+        scheduleDraw();
       })
-      .call(d3.drag<SVGGElement, SimNode>()
-        .on('start', (event: d3.D3DragEvent<SVGGElement, SimNode, SimNode>, d: SimNode) => {
+      .call(drag<SVGGElement, SimNode>()
+        .on('start', (event: D3DragEvent<SVGGElement, SimNode, SimNode>, d: SimNode) => {
           if (!event.active) simulation?.alphaTarget(0.3).restart();
           d.fx = d.x;
           d.fy = d.y;
         })
-        .on('drag', (event: d3.D3DragEvent<SVGGElement, SimNode, SimNode>, d: SimNode) => {
+        .on('drag', (event: D3DragEvent<SVGGElement, SimNode, SimNode>, d: SimNode) => {
           d.fx = event.x;
           d.fy = event.y;
         })
-        .on('end', (event: d3.D3DragEvent<SVGGElement, SimNode, SimNode>, d: SimNode) => {
+        .on('end', (event: D3DragEvent<SVGGElement, SimNode, SimNode>, d: SimNode) => {
           if (!event.active) simulation?.alphaTarget(0);
         }) as any);
 
@@ -366,14 +397,22 @@
           ? (isFocus ? 1 : 0.15)
           : (hasQuery ? (matches ? 1 : 0.15) : 1);
 
-        ctx!.beginPath();
-        const gradient = ctx!.createRadialGradient(node.x - r * 0.3, node.y - r * 0.3, 0, node.x, node.y, r);
-        gradient.addColorStop(0, nodeType === 'tag' ? '#9d8bb0' : '#5ba3b8');
-        gradient.addColorStop(1, nodeType === 'tag' ? COLORS.tag : COLORS.note);
-        ctx!.fillStyle = gradient;
+        const gradientKey = `${nodeType}:${r}`;
+        let gradient = gradientCache.get(gradientKey);
+        if (!gradient) {
+          gradient = ctx!.createRadialGradient(-r * 0.3, -r * 0.3, 0, 0, 0, r);
+          gradient.addColorStop(0, nodeType === 'tag' ? '#9d8bb0' : '#5ba3b8');
+          gradient.addColorStop(1, nodeType === 'tag' ? COLORS.tag : COLORS.note);
+          gradientCache.set(gradientKey, gradient);
+        }
         ctx!.globalAlpha = nodeAlpha;
-        ctx!.arc(node.x, node.y, r, 0, Math.PI * 2);
+        ctx!.save();
+        ctx!.translate(node.x, node.y);
+        ctx!.beginPath();
+        ctx!.fillStyle = gradient;
+        ctx!.arc(0, 0, r, 0, Math.PI * 2);
         ctx!.fill();
+        ctx!.restore();
 
         if (node.id === hoveredId) {
           ctx!.beginPath();
@@ -403,10 +442,44 @@
       });
 
       ctx.restore();
-      animationFrame = requestAnimationFrame(draw);
     }
 
+    // Paints are requested via scheduleDraw() — no self-rescheduling rAF.
+    drawFn = draw;
+
     return simulation;
+  }
+
+  function scheduleDraw() {
+    if (rafId === null && typeof document !== 'undefined' && !document.hidden) {
+      rafId = requestAnimationFrame(drawFrame);
+    }
+  }
+
+  function drawFrame() {
+    rafId = null;
+    drawFn?.();
+    // Link particles are continuous animation — keep the loop alive only
+    // while they are enabled and the tab is visible (#1311).
+    if (showParticles && typeof document !== 'undefined' && !document.hidden) {
+      scheduleDraw();
+    }
+  }
+
+  function cancelPendingFrame() {
+    if (rafId !== null) {
+      cancelAnimationFrame(rafId);
+      rafId = null;
+    }
+  }
+
+  function handleVisibilityChange() {
+    if (typeof document === 'undefined') return;
+    if (document.hidden) {
+      cancelPendingFrame();
+    } else {
+      scheduleDraw();
+    }
   }
 
   function zoomToFit() {
@@ -431,23 +504,23 @@
     const centerX = (minX + maxX) / 2;
     const centerY = (minY + maxY) / 2;
 
-    d3.select(svgEl).transition().duration(500).call(
-      zoom.transform as never,
-      d3.zoomIdentity.translate(width / 2, height / 2).scale(scale).translate(-centerX, -centerY)
+    select(svgEl).transition().duration(500).call(
+      zoomBehavior.transform as never,
+      zoomIdentity.translate(width / 2, height / 2).scale(scale).translate(-centerX, -centerY)
     );
   }
 
   function resetView() {
     if (!svgEl) return;
-    d3.select(svgEl).transition().duration(300).call(
-      zoom.transform as never,
-      d3.zoomIdentity
+    select(svgEl).transition().duration(300).call(
+      zoomBehavior.transform as never,
+      zoomIdentity
     );
   }
 
   function rerender() {
     if (sim) sim.stop();
-    cancelAnimationFrame(animationFrame);
+    cancelPendingFrame();
     sim = render($graphData.nodes, $graphData.edges) as typeof sim;
   }
 
@@ -460,9 +533,9 @@
     const node = sim.nodes().find(n => n.id === id);
     if (!node || node.x === undefined || node.y === undefined) return;
     const scale = Math.min(Math.max(currentTransform.k, 0.7), 2.4);
-    d3.select(svgEl).transition().duration(450).call(
-      zoom.transform as never,
-      d3.zoomIdentity.translate(width / 2, height / 2).scale(scale).translate(-node.x, -node.y)
+    select(svgEl).transition().duration(450).call(
+      zoomBehavior.transform as never,
+      zoomIdentity.translate(width / 2, height / 2).scale(scale).translate(-node.x, -node.y)
     );
   }
 
@@ -482,10 +555,20 @@
     focusOnNode(focusId);
   }
 
+  // Repaint on selection changes — the canvas only highlights what it is told
+  // to redraw (#1311).
+  $: if ($selectedTag !== undefined) scheduleDraw();
+
+
+  onMount(() => {
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+  });
 
   onDestroy(() => {
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
     if (sim) sim.stop();
-    cancelAnimationFrame(animationFrame);
+    cancelPendingFrame();
+    drawFn = null;
   });
 </script>
 
@@ -541,7 +624,7 @@
         placeholder={$t('knowledgeGraph.searchPlaceholder')}
         aria-label={$t('knowledgeGraph.searchPlaceholder')}
         bind:value={searchQuery}
-        oninput={rerender}
+        oninput={scheduleDraw}
       />
       {#if searchQuery.trim().length > 0}
         <button class="search-clear" onclick={clearHighlights} aria-label={$t('knowledgeGraph.clearSearch')}>×</button>
@@ -550,7 +633,7 @@
     <button class="btn btn-ghost btn-icon" title={$t('knowledgeGraph.toggleLabels')} aria-label={$t('knowledgeGraph.toggleLabels')} aria-pressed={showLabels} class:active={showLabels} onclick={() => { showLabels = !showLabels; rerender(); }}>
       <span style="font-size:10px; font-family: var(--font-mono);">Aa</span>
     </button>
-    <button class="btn btn-ghost btn-icon" title={$t('knowledgeGraph.particles')} aria-label={$t('knowledgeGraph.particles')} aria-pressed={showParticles} class:active={showParticles} onclick={() => { showParticles = !showParticles; }}>
+    <button class="btn btn-ghost btn-icon" title={$t('knowledgeGraph.particles')} aria-label={$t('knowledgeGraph.particles')} aria-pressed={showParticles} class:active={showParticles} onclick={() => { showParticles = !showParticles; scheduleDraw(); }}>
       <span style="font-size:12px;">✨</span>
     </button>
     <button class="btn btn-ghost btn-icon" title={$t('knowledgeGraph.fit')} aria-label={$t('knowledgeGraph.fit')} onclick={recenter}>

@@ -1,6 +1,8 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import { Check, Settings, X } from 'lucide-svelte';
+  import Check from 'lucide-svelte/icons/check';
+  import Settings from 'lucide-svelte/icons/settings';
+  import X from 'lucide-svelte/icons/x';
   import StreakIcon from './StreakIcon.svelte';
   import { liquidGlass } from '$lib/actions/liquidGlass';
   import { t } from 'svelte-i18n';

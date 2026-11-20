@@ -1,6 +1,8 @@
 <script lang="ts">
   import { tick } from 'svelte';
-  import { ChevronRight, FilePen, Settings } from 'lucide-svelte';
+  import ChevronRight from 'lucide-svelte/icons/chevron-right';
+  import FilePen from 'lucide-svelte/icons/file-pen';
+  import Settings from 'lucide-svelte/icons/settings';
   import DynamicIcon from './DynamicIcon.svelte';
   import NoteCard from './NoteCard.svelte';
   import VirtualList from './VirtualList.svelte';

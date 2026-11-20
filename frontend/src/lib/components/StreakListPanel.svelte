@@ -1,5 +1,8 @@
 <script lang="ts">
-  import { Plus, Archive, Search, Flame } from 'lucide-svelte';
+  import Plus from 'lucide-svelte/icons/plus';
+  import Archive from 'lucide-svelte/icons/archive';
+  import Search from 'lucide-svelte/icons/search';
+  import Flame from 'lucide-svelte/icons/flame';
   import StreakListItem from './StreakListItem.svelte';
   import EmptyState from './EmptyState.svelte';
   import type { PersonalStreak } from '$lib/api';

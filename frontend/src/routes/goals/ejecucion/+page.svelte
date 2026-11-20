@@ -17,7 +17,15 @@
   import { isActive as focusActive, startFocusMode, stopFocusMode } from '$lib/stores/focusMode';
   import EmptyState from '$lib/components/EmptyState.svelte';
   import SacredCalendar from '$lib/components/SacredCalendar.svelte';
-  import { Check, Crosshair, Inbox, Moon, Pause, Sunrise, Target, Timer, Zap } from 'lucide-svelte';
+  import Check from 'lucide-svelte/icons/check';
+  import Crosshair from 'lucide-svelte/icons/crosshair';
+  import Inbox from 'lucide-svelte/icons/inbox';
+  import Moon from 'lucide-svelte/icons/moon';
+  import Pause from 'lucide-svelte/icons/pause';
+  import Sunrise from 'lucide-svelte/icons/sunrise';
+  import Target from 'lucide-svelte/icons/target';
+  import Timer from 'lucide-svelte/icons/timer';
+  import Zap from 'lucide-svelte/icons/zap';
   import { t } from 'svelte-i18n';
 
   /**

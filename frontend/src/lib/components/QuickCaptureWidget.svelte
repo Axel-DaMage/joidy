@@ -5,7 +5,8 @@
   import { showNotification } from '$lib/stores/notifications';
   import { showXPGain } from '$lib/stores/gamification';
   import { logger } from '$lib/utils/logger';
-  import { Send, Inbox } from 'lucide-svelte';
+  import Send from 'lucide-svelte/icons/send';
+  import Inbox from 'lucide-svelte/icons/inbox';
 
   let text = $state('');
   let submitting = $state(false);

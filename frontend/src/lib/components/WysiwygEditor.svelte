@@ -3,11 +3,7 @@
   import { Editor } from '@tiptap/core';
   import StarterKit from '@tiptap/starter-kit';
   import Link from '@tiptap/extension-link';
-  import Image from '@tiptap/extension-image';
   import Placeholder from '@tiptap/extension-placeholder';
-  import TaskList from '@tiptap/extension-task-list';
-  import TaskItem from '@tiptap/extension-task-item';
-  import Underline from '@tiptap/extension-underline';
   import { marked } from 'marked';
   import TurndownService from 'turndown';
   import DOMPurify from 'dompurify';
@@ -61,7 +57,6 @@
         StarterKit.configure({
           codeBlock: false,
         }),
-        Underline,
         Link.configure({
           openOnClick: false,
           HTMLAttributes: { class: 'tiptap-link' },
@@ -70,16 +65,14 @@
           // the editor DOM, while http(s)/mailto/relative links still work.
           isAllowedUri: (url, ctx) => ctx.defaultValidate(url) && isAllowedLinkUrl(url),
         }),
-        Image.configure({
-          inline: false,
-          HTMLAttributes: { class: 'tiptap-image' },
-        }),
         Placeholder.configure({ placeholder }),
-        TaskList,
-        TaskItem.configure({ nested: true }),
       ],
       content: markdownToHtml(content),
       onUpdate: ({ editor }) => {
+        // Mark the next `content` prop change as self-inflicted so the sync
+        // effect below skips the redundant HTML→markdown compare (#1311 —
+        // it used to run a second full conversion per keystroke).
+        syncFromEditor = true;
         const md = htmlToMarkdown(editor.getHTML());
         dispatch('contentchange', md);
       },
@@ -100,9 +93,16 @@
     });
   });
 
-  // Sync external content changes (e.g. note switch)
+  // Sync external content changes (e.g. note switch). The compare runs a full
+  // HTML→markdown conversion, so skip it entirely for updates this component
+  // dispatched itself — one conversion per keystroke instead of two (#1311).
+  let syncFromEditor = false;
   $effect(() => {
     if (editor && content !== undefined) {
+      if (syncFromEditor) {
+        syncFromEditor = false;
+        return;
+      }
       const currentMd = htmlToMarkdown(editor.getHTML());
       if (currentMd !== content) {
         editor.commands.setContent(markdownToHtml(content), { emitUpdate: false });
@@ -122,9 +122,6 @@
   export function toggleItalic() {
     editor?.chain().focus().toggleItalic().run();
   }
-  export function toggleUnderline() {
-    editor?.chain().focus().toggleUnderline().run();
-  }
   export function toggleStrike() {
     editor?.chain().focus().toggleStrike().run();
   }
@@ -143,9 +140,6 @@
   export function toggleOrderedList() {
     editor?.chain().focus().toggleOrderedList().run();
   }
-  export function toggleTaskList() {
-    editor?.chain().focus().toggleTaskList().run();
-  }
   export function toggleBlockquote() {
     editor?.chain().focus().toggleBlockquote().run();
   }
@@ -159,9 +153,6 @@
       // Rejected URLs (javascript:, data:, etc.) are dropped silently (#1331).
       editor?.chain().focus().setLink({ href: url.trim() }).run();
     }
-  }
-  export function insertImage(src: string, alt: string = '') {
-    editor?.chain().focus().setImage({ src, alt }).run();
   }
   export function insertContent(text: string) {
     const html = markdownToHtml(text);

@@ -484,6 +484,31 @@ export function persist() {
   persistNotesPrefs(currentItemCount(), currentScroll());
 }
 
+// Scroll events fire per frame — serializing the whole user-settings blob on
+// each one is write amplification (#1311). Trail to a single write 300 ms
+// after the last scroll; discrete actions (sort, collapse, folder toggles)
+// still persist immediately via persist().
+let persistTimer: ReturnType<typeof setTimeout> | null = null;
+export function persistSoon() {
+  if (persistTimer) clearTimeout(persistTimer);
+  persistTimer = setTimeout(() => {
+    persistTimer = null;
+    persist();
+  }, 300);
+}
+
+// Do not lose the trailing write when the page is closed or navigated away
+// inside the debounce window.
+if (typeof window !== 'undefined') {
+  window.addEventListener('pagehide', () => {
+    if (persistTimer) {
+      clearTimeout(persistTimer);
+      persistTimer = null;
+      persist();
+    }
+  });
+}
+
 export function setSortMode(mode: SortMode) {
   ui.sortMode.set(mode);
   if (get(ui.notesPrefsReady)) persist();
@@ -519,7 +544,7 @@ export function onListScroll() {
   if (currentItemCount() > 50) return;
   if (get(ui.viewMode) === 'tree') ui.__treeScrollTop.set(el.scrollTop);
   else ui.__listScrollTop.set(el.scrollTop);
-  persist();
+  persistSoon();
   // Infinite scroll for non-virtualized list mode.
   maybeLoadMore();
 }
@@ -549,5 +574,5 @@ export function onVirtualScrollChange(scrollVal: number) {
   ui.virtualScrollTop.set(scrollVal);
   if (get(ui.viewMode) === 'tree') ui.__treeScrollTop.set(scrollVal);
   else ui.__listScrollTop.set(scrollVal);
-  persist();
+  persistSoon();
 }

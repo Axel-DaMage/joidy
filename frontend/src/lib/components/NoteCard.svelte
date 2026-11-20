@@ -4,7 +4,7 @@
   import TagChip from './TagChip.svelte';
   import { findNoteByTitle } from '$lib/stores/notes';
   import { folderMetaStore, updateFolderMeta } from '$lib/stores/settings';
-  import { Settings } from 'lucide-svelte';
+  import Settings from 'lucide-svelte/icons/settings';
   import type { Note } from '$lib/api';
   import DynamicIcon from './DynamicIcon.svelte';
   import { extractFrontmatter, getFileIcon } from '$lib/utils/fileTree';

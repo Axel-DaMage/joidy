@@ -7,21 +7,19 @@
   // Panes (GoalEditorContent / GoalEditorPreview / GoalPropertiesPanel) read
   // and write the store directly — no prop drilling past one level.
   import { createEventDispatcher, onDestroy, onMount } from 'svelte';
-  import {
-    Eye,
-    EyeOff,
-    Save,
-    Trash2,
-    X,
-    Maximize,
-    Settings,
-    CheckCircle2,
-    Sun,
-    Moon,
-    Zap,
-    Pencil,
-    SlidersHorizontal,
-  } from 'lucide-svelte';
+  import Eye from 'lucide-svelte/icons/eye';
+  import EyeOff from 'lucide-svelte/icons/eye-off';
+  import Save from 'lucide-svelte/icons/save';
+  import Trash2 from 'lucide-svelte/icons/trash-2';
+  import X from 'lucide-svelte/icons/x';
+  import Maximize from 'lucide-svelte/icons/maximize';
+  import Settings from 'lucide-svelte/icons/settings';
+  import CheckCircle2 from 'lucide-svelte/icons/check-circle-2';
+  import Sun from 'lucide-svelte/icons/sun';
+  import Moon from 'lucide-svelte/icons/moon';
+  import Zap from 'lucide-svelte/icons/zap';
+  import Pencil from 'lucide-svelte/icons/pencil';
+  import SlidersHorizontal from 'lucide-svelte/icons/sliders-horizontal';
   import 'highlight.js/styles/github-dark.css';
   import { api, type Goal, type GoalContext, type Note, type Tag as TagType } from '$lib/api';
   import { t } from 'svelte-i18n';

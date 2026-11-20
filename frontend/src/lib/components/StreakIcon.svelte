@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { Circle } from 'lucide-svelte';
-  import { getLucideIcon } from '$lib/utils/lucideIcons';
+  import Circle from 'lucide-svelte/icons/circle';
+  import { getLucideIcon, loadLucideIcon } from '$lib/utils/lucideIcons';
 
   export let name: string = '';
   export let size: number = 18;
@@ -10,15 +10,21 @@
 
   $: isEmoji = emojiRegex.test(name);
 
-  // Lucide icons are resolved synchronously from the bundled namespace
-  // import — no async placeholder flicker (#693). Falls back to `Circle`
-  // for unknown names.
+  // Lucide icons resolve synchronously from the curated map (#1311). Names
+  // outside it load the full set as a single lazy chunk — `Circle` shows
+  // until it lands.
   let lucideComp: any = Circle;
   $: {
     if (!name) {
       lucideComp = Circle;
     } else {
       lucideComp = getLucideIcon(name) ?? Circle;
+      if (!isEmoji && lucideComp === Circle) {
+        const requested = name;
+        loadLucideIcon(requested).then((loaded) => {
+          if (loaded && name === requested) lucideComp = loaded;
+        });
+      }
     }
   }
 </script>

@@ -1,6 +1,11 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import { X, Calendar, Snowflake, Target, Clock, Archive } from 'lucide-svelte';
+  import X from 'lucide-svelte/icons/x';
+  import Calendar from 'lucide-svelte/icons/calendar';
+  import Snowflake from 'lucide-svelte/icons/snowflake';
+  import Target from 'lucide-svelte/icons/target';
+  import Clock from 'lucide-svelte/icons/clock';
+  import Archive from 'lucide-svelte/icons/archive';
   import StreakIcon from '$lib/components/StreakIcon.svelte';
   import LazyIconPicker from '$lib/components/LazyIconPicker.svelte';
   import type { PersonalStreak } from '$lib/api';

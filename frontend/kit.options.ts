@@ -49,7 +49,9 @@ if (process.env.NODE_ENV !== 'production') {
 
 export const kitOptions: Config = {
   preprocess: vitePreprocess(),
-  adapter: adapter(),
+  // Emit .gz/.br alongside the static output so the production node server
+  // can serve precompressed assets (#1311).
+  adapter: adapter({ precompress: true }),
   // Kit 3 no longer generates the $lib alias implicitly; declare it here
   // so existing `$lib/...` imports keep working without a codebase-wide
   // rename to `#lib`.

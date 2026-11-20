@@ -2,41 +2,39 @@
   import { onMount } from 'svelte';
   import { page } from '$app/state';
   import { goto, replaceState } from '$app/navigation';
-  import {
-    Plus,
-    Check,
-    ChevronDown,
-    Calendar,
-    ChartColumn,
-    Clock,
-    LayoutDashboard,
-    Pause,
-    Play,
-    Ban,
-    Pencil,
-    X,
-    Flame,
-    ChevronRight,
-    ChevronLeft,
-    TrendingUp,
-    TrendingDown,
-    ChartPie,
-    Activity,
-    Target,
-    Trophy,
-    Settings,
-    Palette,
-    Hexagon,
-    Inbox,
-    ListFilter,
-    TriangleAlert,
-    FilePen,
-    Tag,
-    FileText,
-    Pin,
-    PinOff,
-    Zap,
-  } from 'lucide-svelte';
+  import Plus from 'lucide-svelte/icons/plus';
+  import Check from 'lucide-svelte/icons/check';
+  import ChevronDown from 'lucide-svelte/icons/chevron-down';
+  import Calendar from 'lucide-svelte/icons/calendar';
+  import ChartColumn from 'lucide-svelte/icons/chart-column';
+  import Clock from 'lucide-svelte/icons/clock';
+  import LayoutDashboard from 'lucide-svelte/icons/layout-dashboard';
+  import Pause from 'lucide-svelte/icons/pause';
+  import Play from 'lucide-svelte/icons/play';
+  import Ban from 'lucide-svelte/icons/ban';
+  import Pencil from 'lucide-svelte/icons/pencil';
+  import X from 'lucide-svelte/icons/x';
+  import Flame from 'lucide-svelte/icons/flame';
+  import ChevronRight from 'lucide-svelte/icons/chevron-right';
+  import ChevronLeft from 'lucide-svelte/icons/chevron-left';
+  import TrendingUp from 'lucide-svelte/icons/trending-up';
+  import TrendingDown from 'lucide-svelte/icons/trending-down';
+  import ChartPie from 'lucide-svelte/icons/chart-pie';
+  import Activity from 'lucide-svelte/icons/activity';
+  import Target from 'lucide-svelte/icons/target';
+  import Trophy from 'lucide-svelte/icons/trophy';
+  import Settings from 'lucide-svelte/icons/settings';
+  import Palette from 'lucide-svelte/icons/palette';
+  import Hexagon from 'lucide-svelte/icons/hexagon';
+  import Inbox from 'lucide-svelte/icons/inbox';
+  import ListFilter from 'lucide-svelte/icons/list-filter';
+  import TriangleAlert from 'lucide-svelte/icons/triangle-alert';
+  import FilePen from 'lucide-svelte/icons/file-pen';
+  import Tag from 'lucide-svelte/icons/tag';
+  import FileText from 'lucide-svelte/icons/file-text';
+  import Pin from 'lucide-svelte/icons/pin';
+  import PinOff from 'lucide-svelte/icons/pin-off';
+  import Zap from 'lucide-svelte/icons/zap';
   import { api, type Goal, type GoalContext, type Tag as TagType, type Note } from '$lib/api';
   import GoalFilters from '$lib/components/GoalFilters.svelte';
   import GoalInbox from '$lib/components/GoalInbox.svelte';

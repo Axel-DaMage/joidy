@@ -2,7 +2,10 @@
   import { browser } from '$app/env';
   import { onMount } from 'svelte';
   import { fade } from 'svelte/transition';
-  import { RefreshCw, CloudOff, CircleCheckBig, Loader } from 'lucide-svelte';
+  import RefreshCw from 'lucide-svelte/icons/refresh-cw';
+  import CloudOff from 'lucide-svelte/icons/cloud-off';
+  import CircleCheckBig from 'lucide-svelte/icons/circle-check-big';
+  import Loader from 'lucide-svelte/icons/loader';
   import { t } from 'svelte-i18n';
   import { isOnline, pendingChanges, syncStatus, forceSync } from '$lib/stores/offlineSync';
 

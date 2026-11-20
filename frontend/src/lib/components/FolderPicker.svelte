@@ -1,7 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import type { FlatNode } from '$lib/utils/fileTree';
-  import { FolderRoot } from 'lucide-svelte';
+  import FolderRoot from 'lucide-svelte/icons/folder-root';
   import DynamicIcon from './DynamicIcon.svelte';
   import { focusTrap } from '$lib/actions/focusTrap';
   import { t } from 'svelte-i18n';

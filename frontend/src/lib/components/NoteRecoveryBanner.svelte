@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { RotateCcw } from 'lucide-svelte';
+  import RotateCcw from 'lucide-svelte/icons/rotate-ccw';
   import { t } from 'svelte-i18n';
 
   interface Props {

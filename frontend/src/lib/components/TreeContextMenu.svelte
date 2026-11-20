@@ -1,7 +1,11 @@
 <script lang="ts">
   import { createEventDispatcher, onMount } from 'svelte';
   import type { FlatNode } from '$lib/utils/fileTree';
-  import { SquarePen, MoveRight, Trash2, FilePlus, FolderX } from 'lucide-svelte';
+  import SquarePen from 'lucide-svelte/icons/square-pen';
+  import MoveRight from 'lucide-svelte/icons/move-right';
+  import Trash2 from 'lucide-svelte/icons/trash-2';
+  import FilePlus from 'lucide-svelte/icons/file-plus';
+  import FolderX from 'lucide-svelte/icons/folder-x';
   import { menuNav } from '$lib/actions/menuNav';
 
   export let x: number;
