@@ -15,6 +15,7 @@
   <a href="https://github.com/Axel-DaMage/joidy/discussions">
     <img src="https://img.shields.io/badge/Discussions-join-5865F2?style=for-the-badge&logo=github" alt="Discussions">
   </a>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/Axel-DaMage/joidy"><img src="https://api.scorecard.dev/projects/github.com/Axel-DaMage/joidy/badge?style=for-the-badge" alt="OpenSSF Scorecard"></a>
 </p>
 
 <p align="center">
