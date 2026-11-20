@@ -158,6 +158,58 @@ class TestHealthAndMetadata:
         assert body["embedding_available"] is True
 
 
+class TestHealthReachability:
+    """/health reports REAL provider reachability, not just config (#1460)."""
+
+    def test_health_unavailable_when_no_llm_provider_reachable(self, ai_enabled):
+        ai_enabled.llm.health_check = AsyncMock(return_value=False)
+        body = _client().get("/health").json()
+        assert body["status"] == "unavailable"
+        assert body["llm_available"] is False
+        # Embeddings up but chat can't be served → still unavailable.
+        assert body["embedding_available"] is True
+
+    def test_health_degraded_when_llm_primary_down_but_fallback_up(self, ai_enabled, monkeypatch):
+        chain_client = SimpleNamespace(
+            provider_name="primary",
+            chain=[
+                SimpleNamespace(provider_name="primary", health_check=AsyncMock(return_value=False)),
+                SimpleNamespace(provider_name="fallback", health_check=AsyncMock(return_value=True)),
+            ],
+        )
+        monkeypatch.setattr(main, "get_llm_client", lambda: chain_client)
+        body = _client().get("/health").json()
+        assert body["status"] == "degraded"
+        assert body["llm_available"] is True
+
+    def test_health_degraded_when_embedding_unreachable(self, ai_enabled):
+        ai_enabled.emb.health_check = AsyncMock(return_value=False)
+        body = _client().get("/health").json()
+        assert body["status"] == "degraded"
+        assert body["embedding_available"] is False
+        assert body["llm_available"] is True
+
+    def test_health_probe_result_cached_within_ttl(self, ai_enabled):
+        client = _client()
+        assert client.get("/health").status_code == 200
+        assert client.get("/health").status_code == 200
+        # Second request served from the probe cache — no extra provider pings.
+        ai_enabled.llm.health_check.assert_awaited_once()
+        ai_enabled.emb.health_check.assert_awaited_once()
+
+    def test_health_reachability_detail_requires_secret(self, ai_enabled, monkeypatch):
+        monkeypatch.setattr(settings, "internal_secret", "s3cr3t")
+
+        public_body = _client().get("/health").json()
+        assert "reachability" not in public_body
+
+        body = _client().get("/health", headers={"X-Internal-Secret": "s3cr3t"}).json()
+        reach = body["reachability"]
+        assert reach["llm"]["providers"] == {"fake-llm": True}
+        assert reach["llm"]["active"] == "fake-llm"
+        assert reach["llm"]["primary_ok"] is True
+
+
 # ── /embed ─────────────────────────────────────────────────────────────
 
 
@@ -302,6 +354,28 @@ class TestChatEndpoint:
     def test_empty_messages_returns_422(self, ai_enabled):
         resp = _client().post("/chat", json={"messages": []})
         assert resp.status_code == 422
+
+    def test_provider_failure_500_includes_error_class(self, ai_enabled):
+        """#1460: a dead provider must not collapse into a bare 'Chat failed'
+        — the 500 detail carries provider + exception class for diagnosis."""
+        ai_enabled.llm.generate = AsyncMock(side_effect=RuntimeError("quota exceeded"))
+        resp = _client().post("/chat", json={"messages": [{"role": "user", "content": "hi"}]})
+        assert resp.status_code == 500
+        detail = resp.json()["detail"]
+        assert "RuntimeError" in detail
+        assert "fake-llm" in detail
+
+    def test_stream_provider_failure_emits_structured_error(self, ai_enabled):
+        """#1460: stream errors carry provider + error_class in the SSE frame."""
+        ai_enabled.llm.generate = AsyncMock(side_effect=RuntimeError("boom"))
+        resp = _client().post(
+            "/chat",
+            json={"messages": [{"role": "user", "content": "hi"}], "stream": True},
+        )
+        assert resp.status_code == 200
+        assert "event: error" in resp.text
+        assert '"error_class": "RuntimeError"' in resp.text
+        assert '"provider": "fake-llm"' in resp.text
 
 
 # ── /classify cache-key ambiguity (#1330) ──────────────────────────────

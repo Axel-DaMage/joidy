@@ -70,37 +70,85 @@ class _FakeSession:
 
 
 class TestGeminiClient(unittest.IsolatedAsyncioTestCase):
-    async def test_embed_success(self):
+    """Gemini tests against the ``google-genai`` SDK surface (#1462).
+
+    ``genai.Client`` is patched at construction so nothing touches the
+    network; the per-test ``client._client.aio.models.*`` members are then
+    replaced with AsyncMocks/fake async iterators.
+    """
+
+    def _make_client(self, model: str = "gemini-2.0-flash"):
         from clients.gemini import GeminiClient
 
-        with patch("clients.gemini.genai") as mock_genai:
-            mock_genai.embed_content.return_value = {"embedding": [0.1, 0.2, 0.3]}
-            client = GeminiClient(api_key="fake", model="models/text-embedding-004")
-            result = await client.embed("hello")
+        with patch("clients.gemini.genai.Client"):
+            return GeminiClient(api_key="fake", model=model)
+
+    async def test_embed_success(self):
+        client = self._make_client(model="models/text-embedding-004")
+        resp = MagicMock()
+        resp.embeddings = [MagicMock(values=[0.1, 0.2, 0.3])]
+        client._client.aio.models.embed_content = AsyncMock(return_value=resp)
+
+        result = await client.embed("hello")
 
         self.assertEqual(result, [0.1, 0.2, 0.3])
-        mock_genai.embed_content.assert_called_once()
-        self.assertEqual(mock_genai.embed_content.call_args.kwargs["content"], "hello")
+        client._client.aio.models.embed_content.assert_awaited_once()
+        kwargs = client._client.aio.models.embed_content.call_args.kwargs
+        self.assertEqual(kwargs["contents"], "hello")
+        self.assertEqual(kwargs["config"].task_type, "RETRIEVAL_DOCUMENT")
 
     async def test_generate_success(self):
-        from clients.gemini import GeminiClient
+        client = self._make_client()
+        client._client.aio.models.generate_content = AsyncMock(return_value=MagicMock(text="generated text"))
 
-        with patch("clients.gemini.genai") as mock_genai:
-            model = mock_genai.GenerativeModel.return_value
-            model.generate_content.return_value = MagicMock(text="generated text")
-            client = GeminiClient(api_key="fake", model="gemini-2.0-flash")
-            result = await client.generate("prompt", temperature=0.5, max_tokens=64)
+        result = await client.generate("prompt", temperature=0.5, max_tokens=64)
 
         self.assertEqual(result, "generated text")
-        model.generate_content.assert_called_once()
-        self.assertEqual(model.generate_content.call_args[0][0], "prompt")
+        client._client.aio.models.generate_content.assert_awaited_once()
+        kwargs = client._client.aio.models.generate_content.call_args.kwargs
+        self.assertEqual(kwargs["contents"], "prompt")
+        self.assertEqual(kwargs["config"].temperature, 0.5)
+        self.assertEqual(kwargs["config"].max_output_tokens, 64)
+
+    async def test_generate_passes_system_instruction_in_config(self):
+        client = self._make_client()
+        client._client.aio.models.generate_content = AsyncMock(return_value=MagicMock(text="ok"))
+
+        await client.generate("prompt", system_prompt="be brief")
+
+        kwargs = client._client.aio.models.generate_content.call_args.kwargs
+        self.assertEqual(kwargs["config"].system_instruction, "be brief")
+
+    async def test_generate_stream_yields_chunks(self):
+        client = self._make_client()
+
+        async def fake_stream():
+            yield MagicMock(text="Hello")
+            yield MagicMock(text=" world")
+
+        client._client.aio.models.generate_content_stream = AsyncMock(side_effect=lambda **kw: fake_stream())
+
+        chunks = [c async for c in client.generate_stream("hi")]
+        self.assertEqual(chunks, ["Hello", " world"])
+
+    async def test_generate_stream_skips_empty_chunks(self):
+        client = self._make_client()
+
+        async def fake_stream():
+            yield MagicMock(text="")
+            yield MagicMock(text="real")
+
+        client._client.aio.models.generate_content_stream = AsyncMock(side_effect=lambda **kw: fake_stream())
+
+        chunks = [c async for c in client.generate_stream("hi")]
+        self.assertEqual(chunks, ["real"])
 
     async def test_retry_on_rate_limit_then_success(self):
         from clients.gemini import _call_with_retry
 
         calls = []
 
-        def flaky():
+        async def flaky():
             calls.append(1)
             if len(calls) == 1:
                 raise Exception("429 Resource exhausted")
@@ -116,7 +164,7 @@ class TestGeminiClient(unittest.IsolatedAsyncioTestCase):
 
         calls = []
 
-        def bad_key():
+        async def bad_key():
             calls.append(1)
             raise RuntimeError("API key not valid")
 
@@ -127,7 +175,7 @@ class TestGeminiClient(unittest.IsolatedAsyncioTestCase):
     async def test_retry_exhaustion_raises_last_error(self):
         from clients.gemini import _call_with_retry
 
-        def always_limited():
+        async def always_limited():
             raise Exception("429 rate limit")
 
         with _fast_retry(), self.assertRaises(Exception) as ctx:
@@ -139,16 +187,12 @@ class TestGeminiClient(unittest.IsolatedAsyncioTestCase):
 
         from clients.gemini import _call_with_retry
 
-        def slow():
-            import time
-
-            time.sleep(0.5)
+        async def slow():
+            await asyncio.sleep(0.5)
             return "late"
 
         with self.assertRaises(TimeoutError):
             await _call_with_retry(slow, timeout=0.05)
-        # Suppress un-retrieved executor future noise.
-        await asyncio.sleep(0)
 
     def test_is_retryable_error_matching(self):
         from clients.gemini import _is_retryable_error

@@ -2,6 +2,7 @@ import asyncio
 import hmac
 import json
 import logging
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Annotated
@@ -267,34 +268,134 @@ def _get_provider_info():
 
 
 def _has_fallback() -> bool:
-    """Check if Ollama fallback is available for the configured primary provider."""
+    """True when the LLM failover chain has a configured provider beyond the
+    primary one (#1460)."""
     available = settings.available_providers
     llm_provider = settings.llm_model.split(":", 1)[0] if ":" in settings.llm_model else "gemini"
-    emb_provider = settings.embedding_model.split(":", 1)[0] if ":" in settings.embedding_model else "gemini"
-    return "ollama" in available and (llm_provider != "ollama" or emb_provider != "ollama")
+    return any(p != llm_provider for p in available)
+
+
+# ── Provider reachability probe (#1460) ─────────────────────────────────────
+#
+# /health used to report configured-ness as availability — it returned
+# ``{"ai_enabled": true, "embedding_available": true}`` while every provider
+# was unreachable. The probe below health-checks every member of the LLM and
+# embedding fallback chains, cached for a short TTL so the endpoint doesn't
+# hammer providers on every scrape.
+
+_HEALTH_PROBE_TTL_SECONDS = 45.0
+_HEALTH_PROBE_TIMEOUT = 8.0
+
+_health_probe_cache: dict | None = None
+_health_probe_at: float = 0.0
+_health_probe_lock = asyncio.Lock()
+
+
+def reset_health_probe_cache() -> None:
+    """Drop the cached /health probe — testing hook (#1460)."""
+    global _health_probe_cache, _health_probe_at
+    _health_probe_cache = None
+    _health_probe_at = 0.0
+
+
+async def _probe_one(client, timeout: float = _HEALTH_PROBE_TIMEOUT) -> bool:
+    try:
+        return bool(await asyncio.wait_for(client.health_check(), timeout=timeout))
+    except Exception:
+        return False
+
+
+async def _probe_client_chain(kind: str) -> dict:
+    """Probe every provider in a client chain (``kind``: "llm"|"embedding").
+
+    Returns ``{"configured", "available", "primary_ok", "active", "providers"}``
+    — ``available`` is True when ANY chain member answers; ``active`` is the
+    first reachable provider (the one actually serving traffic); ``providers``
+    maps provider name → reachability for privileged diagnostics.
+    """
+    empty = {"configured": False, "available": False, "primary_ok": False, "active": None, "providers": {}}
+    get_client = get_llm_client if kind == "llm" else get_embedding_client
+    try:
+        client = get_client()
+    except Exception:
+        return empty
+    # Fallback wrappers expose ``chain`` (primary first); plain clients are
+    # their own single-member chain.
+    members = list(getattr(client, "chain", None) or [client])
+    if not members:
+        return empty
+    results = await asyncio.gather(*(_probe_one(c) for c in members))
+    return {
+        "configured": True,
+        "available": any(results),
+        "primary_ok": bool(results[0]),
+        "active": next((c.provider_name for c, ok in zip(members, results, strict=True) if ok), None),
+        "providers": {c.provider_name: bool(ok) for c, ok in zip(members, results, strict=True)},
+    }
+
+
+async def _cached_health_probe() -> dict:
+    """Run the provider probe, served from cache within the TTL window.
+
+    Double-checked locking: concurrent /health requests share one probe run
+    instead of stampeding the providers.
+    """
+    global _health_probe_cache, _health_probe_at
+    if _health_probe_cache is not None and (time.monotonic() - _health_probe_at) < _HEALTH_PROBE_TTL_SECONDS:
+        return _health_probe_cache
+    async with _health_probe_lock:
+        if _health_probe_cache is not None and (time.monotonic() - _health_probe_at) < _HEALTH_PROBE_TTL_SECONDS:
+            return _health_probe_cache
+        llm, emb = await asyncio.gather(
+            _probe_client_chain("llm"),
+            _probe_client_chain("embedding"),
+        )
+        _health_probe_cache = {"llm": llm, "embedding": emb}
+        _health_probe_at = time.monotonic()
+        return _health_probe_cache
 
 
 @app.get("/health")
 async def health(request: Request):
     provider_info = _get_provider_info()
-    # The service is "degraded" if the configured LLM/embedding provider is
-    # not actually available (e.g. GEMINI_API_KEY not set but model is gemini:*).
-    llm_ok = provider_info["llm"]["available"]
-    emb_ok = provider_info["embedding"]["available"]
-    status = "ok" if (llm_ok and emb_ok) else "degraded"
+
+    probe = await _cached_health_probe()
+    llm_probe = probe["llm"]
+    emb_probe = probe["embedding"]
+
+    # Status semantics (#1460):
+    # - "ok"          — configured LLM primary reachable; embeddings served
+    #   (by the primary or its fallback).
+    # - "degraded"    — AI usable but impaired: primary LLM down and a
+    #   fallback is serving, embeddings unreachable (RAG degraded), or the
+    #   configured providers are not set up at all.
+    # - "unavailable" — no LLM provider reachable: chat cannot be served.
+    if not settings.is_ai_enabled:
+        status = "degraded"
+    elif not llm_probe["available"]:
+        status = "unavailable"
+    elif not llm_probe["primary_ok"] or not emb_probe["available"] or not emb_probe["primary_ok"]:
+        status = "degraded"
+    else:
+        status = "ok"
+
     body = {
         "status": status,
         "service": "joidy-ai",
         "ai_enabled": settings.is_ai_enabled,
-        # Minimal boolean the API needs for its embedding-availability probe —
-        # no provider or model names (#1291).
-        "embedding_available": emb_ok,
+        # Minimal booleans the API needs for its availability probes — no
+        # provider or model names (#1291). These now reflect REAL
+        # reachability, not just configuration (#1460).
+        "embedding_available": emb_probe["available"],
+        "llm_available": llm_probe["available"],
     }
-    # The provider/model inventory is privileged: only internal callers
-    # presenting a valid X-Internal-Secret receive it (#1291).
+    # The provider/model inventory and per-provider reachability are
+    # privileged: only internal callers presenting a valid X-Internal-Secret
+    # receive them (#1291).
     if _internal_secret_valid(request):
         body["provider"] = provider_info
         body["fallback_enabled"] = _has_fallback()
+        body["reachability"] = probe
     return body
 
 
@@ -446,6 +547,7 @@ async def embed(req: EmbedRequest):
     except CircuitBreakerError:
         return {"status": "circuit_open", "note_id": req.note_id, "error": "Circuit breaker open"}
     except Exception:
+        logger.exception("Embedding request failed")
         raise HTTPException(status_code=500, detail="Embedding failed")
 
 
@@ -486,6 +588,7 @@ async def classify(req: ClassifyRequest):
     except CircuitBreakerError:
         return {"status": "circuit_open", "note_id": req.note_id, "suggestions": [], "error": "Circuit breaker open"}
     except Exception:
+        logger.exception("Classification request failed")
         raise HTTPException(status_code=500, detail="Classification failed")
 
 
@@ -537,6 +640,7 @@ async def rag(req: RAGRequest):
             "error": "Circuit breaker open",
         }
     except Exception:
+        logger.exception("RAG request failed")
         raise HTTPException(status_code=500, detail="RAG failed")
 
 
@@ -614,6 +718,7 @@ Responde en formato JSON: {{"recap": "...", "suggestions": ["...", "..."]}}"""
         return {"status": "circuit_open", "recap": "El proveedor de IA no está disponible.", "suggestions": []}
     except Exception:
         ai_classify_errors.labels(provider=settings.llm_model or "unknown").inc()
+        logger.exception("Daily recap request failed")
         raise HTTPException(status_code=500, detail="Daily recap failed")
 
 
@@ -877,11 +982,22 @@ async def _chat_event_stream(client, prompt: str, system_prompt: str, suggestion
             {
                 "status": "circuit_open",
                 "message": "El proveedor de IA se encuentra temporalmente no disponible.",
+                "provider": client.provider_name,
             },
         )
-    except Exception:
+    except Exception as exc:
+        # Structured error event (#1460): provider + error class so the UI and
+        # logs can tell a dead provider from a malformed request.
         logger.warning("Chat stream failed", exc_info=True)
-        yield _sse_frame("error", {"status": "error", "message": "Chat failed"})
+        yield _sse_frame(
+            "error",
+            {
+                "status": "error",
+                "message": "Chat failed",
+                "provider": client.provider_name,
+                "error_class": type(exc).__name__,
+            },
+        )
 
 
 @app.post("/chat")
@@ -896,6 +1012,7 @@ async def chat(req: ChatRequest):
         raise HTTPException(status_code=422, detail="messages must not be empty")
     limiter = get_limiter(settings.max_requests_per_minute, name="chat")
     await limiter.acquire()
+    client = None
     try:
         last = req.messages[-1]
         if last.role != "user":
@@ -955,8 +1072,16 @@ async def chat(req: ChatRequest):
         }
     except HTTPException:
         raise
-    except Exception:
-        raise HTTPException(status_code=500, detail="Chat failed")
+    except Exception as exc:
+        # #1460: a bare "Chat failed" left production undiagnosable — log the
+        # full traceback and surface the provider + error class to the caller
+        # (this endpoint is internal-secret-gated anyway).
+        logger.exception("Chat generation failed")
+        provider = getattr(client, "provider_name", None)
+        detail = (
+            f"Chat failed ({provider}: {type(exc).__name__})" if provider else f"Chat failed ({type(exc).__name__})"
+        )
+        raise HTTPException(status_code=500, detail=detail)
 
 
 def _build_suggestions(user_message: str, ctx: ChatContext | None) -> list[str]:

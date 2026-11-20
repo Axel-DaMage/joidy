@@ -64,20 +64,77 @@ async def classify(req: ClassifyRequest):
             return {"status": "unavailable", "note_id": req.note_id, "suggestions": []}
 
 
+def _derive_ai_status(health: dict) -> tuple[str, str | None]:
+    """Map the ai-service /health body to the /ai/usage ``ai_status`` contract (#1460).
+
+    - ``disabled``    — AI not configured (no provider keys at ai-service).
+    - ``unavailable`` — no LLM provider reachable.
+    - ``degraded``    — usable but impaired: primary LLM down and a fallback
+      is serving, or the embedding provider is unreachable (RAG degraded).
+    - ``ok``          — configured providers healthy.
+    """
+    if not health.get("ai_enabled"):
+        return "disabled", "No AI provider configured"
+    status = health.get("status")
+    if status == "ok":
+        return "ok", None
+
+    # Compose a human-readable detail from the privileged reachability probe
+    # when present (requires INTERNAL_SECRET; otherwise fall back to a
+    # generic explanation).
+    reach = health.get("reachability") or {}
+    llm = reach.get("llm") or {}
+    emb = reach.get("embedding") or {}
+    parts: list[str] = []
+    if llm.get("configured") and not llm.get("primary_ok") and llm.get("active"):
+        parts.append(f"primary LLM provider unreachable — '{llm['active']}' fallback active")
+    if emb.get("configured") and not emb.get("available"):
+        parts.append("embedding provider unreachable (RAG degraded)")
+    elif emb.get("configured") and not emb.get("primary_ok"):
+        parts.append("embedding fallback active")
+
+    if status == "degraded":
+        return "degraded", "; ".join(parts) or "One or more configured providers are unreachable"
+    # "unavailable" or anything unexpected → cannot serve chat at all.
+    return "unavailable", "; ".join(parts) or "No reachable LLM provider"
+
+
 @router.get("/usage")
 async def usage():
     if not settings.ai_service_enabled:
-        return {**_ai_disabled_response("usage"), "estimated_cost_usd": 0}
+        return {
+            **_ai_disabled_response("usage"),
+            "estimated_cost_usd": 0,
+            "ai_status": "disabled",
+            "ai_status_detail": "AI service disabled (AI_SERVICE_ENABLED=false)",
+        }
     async with http_client(timeout=10.0) as client:
+        headers = {"X-Request-ID": get_correlation_id()}
+        if settings.internal_secret:
+            headers["X-Internal-Secret"] = settings.internal_secret
         try:
-            headers = {"X-Request-ID": get_correlation_id()}
-            if settings.internal_secret:
-                headers["X-Internal-Secret"] = settings.internal_secret
             r = await client.get(f"{settings.ai_service_url}/usage", headers=headers)
             r.raise_for_status()
-            return r.json()
-        except httpx.HTTPError:
-            return {"ai_enabled": False, "estimated_cost_usd": 0, "error": "AI service unreachable"}
+            data = r.json()
+        except httpx.HTTPError as exc:
+            return {
+                "ai_enabled": False,
+                "estimated_cost_usd": 0,
+                "error": "AI service unreachable",
+                "ai_status": "unavailable",
+                "ai_status_detail": f"ai-service unreachable ({type(exc).__name__})",
+            }
+        # Probe /health (real provider reachability, #1460) to derive the
+        # ai_status contract consumed by the frontend.
+        try:
+            hr = await client.get(f"{settings.ai_service_url}/health", headers=headers)
+            hr.raise_for_status()
+            ai_status, ai_status_detail = _derive_ai_status(hr.json())
+        except httpx.HTTPError as exc:
+            ai_status, ai_status_detail = "unavailable", f"ai-service /health unreachable ({type(exc).__name__})"
+        data["ai_status"] = ai_status
+        data["ai_status_detail"] = ai_status_detail
+        return data
 
 
 @router.post("/cluster")
@@ -214,15 +271,34 @@ def _get_or_create_session(db: Session, user_id: int, session_id: int | None) ->
     return session
 
 
-def _append_message(db: Session, session: ChatSession, role: str, content: str) -> None:
+# Content + JSON marker for the synthetic assistant reply persisted when the
+# AI exchange fails upstream (#1460): the user turn no longer dangles in the
+# session, and the UI can render the ``error`` flag as a failed reply instead
+# of a normal assistant bubble.
+_CHAT_ERROR_MESSAGE = "El asistente no está disponible en este momento. Inténtalo de nuevo en unos minutos."
+
+
+def _append_message(
+    db: Session,
+    session: ChatSession,
+    role: str,
+    content: str,
+    extra: dict | None = None,
+) -> None:
     """Append a turn to the session, skipping exact duplicates of the last
     stored turn so client retries cannot write the same message twice.
     Assigns a fresh list so SQLAlchemy detects the JSON mutation.
+
+    ``extra`` keys are merged into the stored message dict — used for the
+    ``error`` marker on failed exchanges (#1460) without a schema change.
     """
     msgs: list[dict] = list(session.messages or [])
     if msgs and msgs[-1].get("role") == role and msgs[-1].get("content") == content:
         return
-    msgs.append({"role": role, "content": content, "ts": int(datetime.now().timestamp() * 1000)})
+    msg: dict = {"role": role, "content": content, "ts": int(datetime.now().timestamp() * 1000)}
+    if extra:
+        msg.update(extra)
+    msgs.append(msg)
     if session.title is None and role == "user":
         session.title = content[:80]
     session.messages = msgs
@@ -237,7 +313,13 @@ def _record_chat_usage(db: Session, user_id: int, session_id: int) -> None:
         logger.warning("Failed to record ai_chat usage event", exc_info=True)
 
 
-def _persist_assistant_reply(db: Session, session_id: int, user_id: int, answer: str) -> bool:
+def _persist_assistant_reply(
+    db: Session,
+    session_id: int,
+    user_id: int,
+    answer: str,
+    extra: dict | None = None,
+) -> bool:
     """Append the assistant reply to the session and record usage (#1131).
 
     Returns False on any failure so callers can retry on a fresh connection.
@@ -246,13 +328,35 @@ def _persist_assistant_reply(db: Session, session_id: int, user_id: int, answer:
         sess = db.get(ChatSession, session_id)
         if sess is None:
             return False
-        _append_message(db, sess, "assistant", answer)
+        _append_message(db, sess, "assistant", answer, extra=extra)
         db.commit()
         _record_chat_usage(db, user_id, session_id)
         return True
     except Exception:
         logger.debug("Assistant reply persist failed on this session", exc_info=True)
         return False
+
+
+def _persist_stream_reply(
+    db: Session,
+    session_id: int,
+    user_id: int,
+    content: str,
+    extra: dict | None = None,
+) -> None:
+    """Persist a streamed reply, falling back to a fresh connection.
+
+    Try the request-scoped ``db`` first — yield-dependencies stay open until
+    the StreamingResponse finishes on supported FastAPI versions — then a
+    fresh ``SessionLocal`` when it is already closed.
+    """
+    if _persist_assistant_reply(db, session_id, user_id, content, extra=extra):
+        return
+    try:
+        with SessionLocal() as persist_db:
+            _persist_assistant_reply(persist_db, session_id, user_id, content, extra=extra)
+    except Exception:
+        logger.warning("Failed to persist streamed chat reply", exc_info=True)
 
 
 def _sse(event: str, data: dict) -> str:
@@ -320,6 +424,37 @@ def _internal_headers() -> dict[str, str]:
     return headers
 
 
+def _upstream_error_detail(exc: BaseException) -> str | None:
+    """Extract the ``detail`` field from an upstream JSON error body (#1460).
+
+    ``httpx.HTTPStatusError`` carries the response — ai-service 500s now
+    include provider + error class in ``detail``, so forwarding it makes the
+    failure diagnosable end-to-end.
+    """
+    resp = getattr(exc, "response", None)
+    if resp is None:
+        return None
+    try:
+        detail = resp.json().get("detail")
+        return str(detail) if detail else None
+    except Exception:
+        return None
+
+
+async def _read_upstream_detail(r) -> str | None:
+    """Best-effort read of a non-200 streaming response body for the SSE
+    error frame (#1460)."""
+    try:
+        raw = await r.aread()
+    except Exception:
+        return None
+    try:
+        detail = json.loads(raw).get("detail")
+        return str(detail) if detail else None
+    except Exception:
+        return None
+
+
 @router.post("/chat")
 async def chat(
     req: ChatRequest,
@@ -360,13 +495,26 @@ async def chat(
             )
             r.raise_for_status()
             data = r.json()
-        except httpx.HTTPError:
+        except httpx.HTTPError as exc:
+            # #1460: persist an error-marked assistant reply so the user turn
+            # doesn't dangle — history visibly shows the exchange failed.
+            upstream_detail = _upstream_error_detail(exc)
+            logger.warning("ai-service /chat request failed: %s (upstream detail: %s)", exc, upstream_detail)
+            _append_message(
+                db,
+                session,
+                "assistant",
+                _CHAT_ERROR_MESSAGE,
+                extra={"error": True, "status": "unavailable"},
+            )
+            db.commit()
             return {
                 "status": "unavailable",
                 "response": (
                     "El asistente no está disponible en este momento. "
                     "Verifica la configuración de IA e inténtalo de nuevo."
                 ),
+                "error": upstream_detail or type(exc).__name__,
                 "suggestions": [],
                 "session_id": session.id,
             }
@@ -376,6 +524,18 @@ async def chat(
         _append_message(db, session, "assistant", answer)
         db.commit()
         _record_chat_usage(db, user_id, session.id)
+    else:
+        # Non-success upstream statuses (disabled / circuit_open / provider
+        # error surfaced as 200-with-status) get an error-marked assistant
+        # turn too — same no-dangling-user-message rule (#1460).
+        _append_message(
+            db,
+            session,
+            "assistant",
+            answer or _CHAT_ERROR_MESSAGE,
+            extra={"error": True, "status": data.get("status") or "error"},
+        )
+        db.commit()
     return {**data, "session_id": session.id}
 
 
@@ -417,6 +577,7 @@ async def chat_stream(
         yield _sse("session", {"session_id": session_id})
         tokens: list[str] = []
         last_event = ""
+        failed = False
         try:
             async with http_client(timeout=120.0) as client:
                 async with client.stream(
@@ -426,50 +587,64 @@ async def chat_stream(
                     headers=headers,
                 ) as r:
                     if r.status_code != 200:
+                        failed = True
+                        # Structured error frame (#1460): forward the upstream
+                        # error detail (provider/error class) when present so
+                        # the UI and logs can diagnose the failure.
                         yield _sse(
                             "error",
                             {
                                 "message": "El servicio de IA no está disponible.",
                                 "status": "unavailable",
+                                "error_class": f"HTTP {r.status_code}",
+                                "detail": await _read_upstream_detail(r),
                             },
                         )
-                        return
-                    async for line in r.aiter_lines():
-                        # Forward upstream SSE verbatim; track token frames to
-                        # reconstruct the full assistant reply for persistence.
-                        if line.startswith("event:"):
-                            last_event = line[6:].strip()
-                        elif line.startswith("data:") and last_event == "token":
-                            try:
-                                tokens.append(json.loads(line[5:].strip()).get("text", ""))
-                            except (json.JSONDecodeError, AttributeError):
-                                pass
-                        elif line == "":
-                            # Blank line = end of the current SSE event block.
-                            last_event = ""
-                        yield line + "\n"
-        except httpx.HTTPError:
+                    else:
+                        async for line in r.aiter_lines():
+                            # Forward upstream SSE verbatim; track token frames
+                            # to reconstruct the full assistant reply for
+                            # persistence, and error frames so a failed exchange
+                            # still gets an error-marked assistant turn (#1460).
+                            if line.startswith("event:"):
+                                last_event = line[6:].strip()
+                            elif line.startswith("data:") and last_event == "token":
+                                try:
+                                    tokens.append(json.loads(line[5:].strip()).get("text", ""))
+                                except (json.JSONDecodeError, AttributeError):
+                                    pass
+                            elif line.startswith("data:") and last_event == "error":
+                                failed = True
+                            elif line == "":
+                                # Blank line = end of the current SSE event block.
+                                last_event = ""
+                            yield line + "\n"
+        except httpx.HTTPError as exc:
+            failed = True
+            logger.warning("ai-service /chat stream request failed: %s", exc)
             yield _sse(
                 "error",
                 {
                     "message": "El asistente no está disponible en este momento.",
                     "status": "unavailable",
+                    "error_class": type(exc).__name__,
+                    "detail": _upstream_error_detail(exc),
                 },
             )
-            return
 
         answer = "".join(tokens).strip()
-        if not answer:
-            return
-        # Try the request-scoped ``db`` first — yield-dependencies stay open
-        # until the StreamingResponse finishes on supported FastAPI versions —
-        # then fall back to a fresh connection when it is already closed.
-        if not _persist_assistant_reply(db, session_id, user_id, answer):
-            try:
-                with SessionLocal() as persist_db:
-                    _persist_assistant_reply(persist_db, session_id, user_id, answer)
-            except Exception:
-                logger.warning("Failed to persist streamed chat reply", exc_info=True)
+        if answer:
+            _persist_stream_reply(db, session_id, user_id, answer)
+        elif failed:
+            # No assistant tokens were produced — persist an error-marked
+            # reply so the user turn doesn't dangle (#1460).
+            _persist_stream_reply(
+                db,
+                session_id,
+                user_id,
+                _CHAT_ERROR_MESSAGE,
+                extra={"error": True, "status": "unavailable"},
+            )
 
     return StreamingResponse(
         event_stream(),

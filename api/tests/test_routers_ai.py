@@ -35,9 +35,34 @@ def _mock_httpx(response_json: dict) -> tuple[MagicMock, MagicMock]:
 # --- GET /ai/usage -----------------------------------------------------------
 
 
+def _mock_httpx_get_map(responses_by_path: dict) -> tuple[MagicMock, MagicMock]:
+    """Mock ``http_client`` whose ``get`` returns a different JSON body per
+    upstream path — /ai/usage now queries both /usage and /health (#1460).
+
+    Returns (class-level mock, instance mock) like ``_mock_httpx``.
+    """
+
+    def _resp(payload):
+        r = MagicMock()
+        r.json.return_value = payload
+        r.raise_for_status = MagicMock()
+        return r
+
+    mock_instance = MagicMock()
+    mock_instance.get = AsyncMock(side_effect=lambda url, **kw: _resp(responses_by_path[url.rsplit("/", 1)[-1]]))
+    mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+    mock_instance.__aexit__ = AsyncMock(return_value=None)
+    return MagicMock(return_value=mock_instance), mock_instance
+
+
 @patch("routers.ai.http_client")
 def test_ai_usage_returns_data(mock_client_cls, client: TestClient):
-    mock_cls, mock_instance = _mock_httpx({"ai_enabled": True, "estimated_cost_usd": 1.23, "tokens": 5000})
+    mock_cls, mock_instance = _mock_httpx_get_map(
+        {
+            "usage": {"ai_enabled": True, "estimated_cost_usd": 1.23, "tokens": 5000},
+            "health": {"ai_enabled": True, "status": "ok"},
+        }
+    )
     mock_client_cls.side_effect = mock_cls
 
     resp = client.get("/ai/usage")
@@ -46,7 +71,10 @@ def test_ai_usage_returns_data(mock_client_cls, client: TestClient):
     data = resp.json()
     assert data["ai_enabled"] is True
     assert data["estimated_cost_usd"] == 1.23
-    mock_instance.get.assert_awaited_once()
+    # #1460: health probe fields merge into the usage payload.
+    assert data["ai_status"] == "ok"
+    assert data["ai_status_detail"] is None
+    assert mock_instance.get.await_count == 2
 
 
 @patch("routers.ai.http_client")
@@ -67,6 +95,88 @@ def test_ai_usage_unreachable_returns_fallback(mock_client_cls, client: TestClie
     assert data["ai_enabled"] is False
     assert data["estimated_cost_usd"] == 0
     assert "error" in data
+    assert data["ai_status"] == "unavailable"
+    assert data["ai_status_detail"]
+
+
+@patch("routers.ai.http_client")
+def test_ai_usage_ai_status_degraded_with_fallback_detail(mock_client_cls, client: TestClient):
+    """#1460: primary down + fallback serving → 'degraded' with detail."""
+    mock_cls, _ = _mock_httpx_get_map(
+        {
+            "usage": {"ai_enabled": True},
+            "health": {
+                "ai_enabled": True,
+                "status": "degraded",
+                "reachability": {
+                    "llm": {"configured": True, "available": True, "primary_ok": False, "active": "gemini"},
+                    "embedding": {"configured": True, "available": True, "primary_ok": True, "active": "ollama"},
+                },
+            },
+        }
+    )
+    mock_client_cls.side_effect = mock_cls
+
+    resp = client.get("/ai/usage")
+    data = resp.json()
+    assert data["ai_status"] == "degraded"
+    assert "fallback" in data["ai_status_detail"]
+
+
+@patch("routers.ai.http_client")
+def test_ai_usage_ai_status_unavailable_when_no_llm_reachable(mock_client_cls, client: TestClient):
+    mock_cls, _ = _mock_httpx_get_map(
+        {
+            "usage": {"ai_enabled": True},
+            "health": {"ai_enabled": True, "status": "unavailable"},
+        }
+    )
+    mock_client_cls.side_effect = mock_cls
+
+    resp = client.get("/ai/usage")
+    data = resp.json()
+    assert data["ai_status"] == "unavailable"
+    assert data["ai_status_detail"]
+
+
+@patch("routers.ai.http_client")
+def test_ai_usage_ai_status_disabled_when_not_configured(mock_client_cls, client: TestClient):
+    mock_cls, _ = _mock_httpx_get_map(
+        {
+            "usage": {"ai_enabled": False},
+            "health": {"ai_enabled": False, "status": "degraded"},
+        }
+    )
+    mock_client_cls.side_effect = mock_cls
+
+    resp = client.get("/ai/usage")
+    data = resp.json()
+    assert data["ai_status"] == "disabled"
+    assert data["ai_status_detail"]
+
+
+@patch("routers.ai.http_client")
+def test_ai_usage_ai_status_unavailable_when_health_probe_fails(mock_client_cls, client: TestClient):
+    """Usage stats succeed but /health is down → 'unavailable', never 'ok'."""
+    import httpx
+
+    def _get(url, **kw):
+        if url.endswith("/health"):
+            raise httpx.ConnectError("refused")
+        r = MagicMock()
+        r.json.return_value = {"ai_enabled": True}
+        r.raise_for_status = MagicMock()
+        return r
+
+    mock_instance = MagicMock()
+    mock_instance.get = AsyncMock(side_effect=_get)
+    mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+    mock_instance.__aexit__ = AsyncMock(return_value=None)
+    mock_client_cls.side_effect = MagicMock(return_value=mock_instance)
+
+    resp = client.get("/ai/usage")
+    data = resp.json()
+    assert data["ai_status"] == "unavailable"
 
 
 # --- POST /ai/chat -----------------------------------------------------------
@@ -432,7 +542,56 @@ def test_ai_chat_retry_does_not_duplicate_user_message(mock_client_cls, client: 
     assert r2.json()["status"] == "success"
 
     session = db_session.get(ChatSession, sid)
+    # #1460: the failed attempt left an error-marked assistant turn behind,
+    # so the retry's user turn is NOT a duplicate of the last stored turn.
+    assert [m["role"] for m in session.messages] == ["user", "assistant", "user", "assistant"]
+    assert session.messages[1].get("error") is True
+
+
+@patch("routers.ai.http_client")
+def test_ai_chat_failure_persists_error_marked_reply(mock_client_cls, client: TestClient, db_session, clean_chat):
+    """#1460: an unreachable ai-service must not leave a dangling user message —
+    the session gets an error-marked assistant turn instead."""
+    import httpx
+    from models.chat_session import ChatSession
+
+    mock_instance = MagicMock()
+    mock_instance.post = AsyncMock(side_effect=httpx.ConnectError("refused"))
+    mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+    mock_instance.__aexit__ = AsyncMock(return_value=None)
+    mock_client_cls.return_value = mock_instance
+
+    resp = client.post("/ai/chat", json={"messages": [{"role": "user", "content": "hola"}]})
+    assert resp.json()["status"] == "unavailable"
+    sid = resp.json()["session_id"]
+
+    session = db_session.get(ChatSession, sid)
     assert [m["role"] for m in session.messages] == ["user", "assistant"]
+    failed = session.messages[1]
+    assert failed.get("error") is True
+    assert failed.get("status") == "unavailable"
+
+
+@patch("routers.ai.http_client")
+def test_ai_chat_non_success_status_persists_error_marked_reply(
+    mock_client_cls, client: TestClient, db_session, clean_chat
+):
+    """#1460: a 200-with-degraded-status upstream reply (circuit_open etc.) is
+    persisted with the error marker so history shows the exchange failed."""
+    from models.chat_session import ChatSession
+
+    mock_cls, mock_instance = _mock_httpx(
+        {"status": "circuit_open", "response": "El proveedor de IA se encuentra temporalmente no disponible."}
+    )
+    mock_client_cls.side_effect = mock_cls
+
+    resp = client.post("/ai/chat", json={"messages": [{"role": "user", "content": "hola"}]})
+    sid = resp.json()["session_id"]
+
+    session = db_session.get(ChatSession, sid)
+    assert [m["role"] for m in session.messages] == ["user", "assistant"]
+    assert session.messages[1].get("error") is True
+    assert session.messages[1].get("status") == "circuit_open"
 
 
 @patch("routers.ai.http_client")
@@ -562,3 +721,49 @@ def test_ai_chat_stream_upstream_error_frame(mock_client_cls, client: TestClient
     assert resp.status_code == 200
     assert "event: session" in resp.text
     assert "event: error" in resp.text
+    # #1460: the error frame is structured — error_class lets the UI/logs
+    # distinguish a dead provider from a malformed request.
+    assert "error_class" in resp.text
+
+
+@patch("routers.ai.http_client")
+def test_ai_chat_stream_failure_persists_error_marked_reply(
+    mock_client_cls, client: TestClient, db_session, clean_chat
+):
+    """#1460: a failed stream still leaves a visible exchange in history —
+    error-marked assistant turn, no dangling user message."""
+    from models.chat_session import ChatSession
+
+    mock_client_cls.side_effect = _mock_streaming_httpx([], status_code=503)
+
+    resp = client.post("/ai/chat/stream", json={"messages": [{"role": "user", "content": "hola"}]})
+    assert resp.status_code == 200
+
+    db_session.expire_all()
+    session = db_session.query(ChatSession).first()
+    assert session is not None
+    assert [m["role"] for m in session.messages] == ["user", "assistant"]
+    assert session.messages[1].get("error") is True
+
+
+@patch("routers.ai.http_client")
+def test_ai_chat_stream_upstream_error_event_marks_session(mock_client_cls, client: TestClient, db_session, clean_chat):
+    """#1460: an upstream ``event: error`` frame (provider failure mid-stream)
+    is forwarded verbatim AND persisted as an error-marked assistant turn."""
+    from models.chat_session import ChatSession
+
+    lines = _sse_lines(
+        ("meta", {"status": "success", "provider": "fake", "sources": []}),
+        ("error", {"status": "error", "message": "Chat failed", "provider": "fake", "error_class": "RuntimeError"}),
+    )
+    mock_client_cls.side_effect = _mock_streaming_httpx(lines)
+
+    resp = client.post("/ai/chat/stream", json={"messages": [{"role": "user", "content": "hola"}]})
+    assert resp.status_code == 200
+    assert '"error_class": "RuntimeError"' in resp.text
+
+    db_session.expire_all()
+    session = db_session.query(ChatSession).first()
+    assert session is not None
+    assert [m["role"] for m in session.messages] == ["user", "assistant"]
+    assert session.messages[1].get("error") is True
