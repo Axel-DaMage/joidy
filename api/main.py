@@ -313,7 +313,10 @@ app.include_router(contacts.router, dependencies=[Depends(get_current_user)])
 # /webhook (Strava servers) must be reachable without a user JWT; every
 # other route declares get_current_user itself (#44).
 app.include_router(strava.router)
-app.include_router(spotify.router, dependencies=[Depends(get_current_user)])
+# Spotify: per-route auth like Strava/Google — /callback (bare browser
+# redirect from accounts.spotify.com) must be reachable without a user JWT;
+# every other route declares get_current_user itself (#45).
+app.include_router(spotify.router)
 app.include_router(vault.router, dependencies=[Depends(get_current_user_or_internal)])
 app.include_router(folders.router, dependencies=[Depends(get_current_user)])
 app.include_router(ai.router, dependencies=[Depends(get_current_user)])
