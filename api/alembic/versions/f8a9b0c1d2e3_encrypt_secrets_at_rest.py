@@ -83,7 +83,12 @@ def _crypt_existing_rows(*, encrypt: bool) -> None:
     conn = op.get_bind()
     for table, columns in _ENCRYPTED_COLUMNS.items():
         for col in columns:
-            rows = conn.execute(sa.text(f"SELECT id, {col} AS v FROM {table} WHERE {col} IS NOT NULL")).mappings().all()
+            # table/col are hardcoded in _ENCRYPTED_COLUMNS (not user input).
+            rows = conn.execute(
+                sa.text(
+                    f"SELECT id, {col} AS v FROM {table} WHERE {col} IS NOT NULL"  # noqa: S608
+                )
+            ).mappings().all()
             for row in rows:
                 value = row["v"]
                 try:
@@ -100,7 +105,9 @@ def _crypt_existing_rows(*, encrypt: bool) -> None:
                         continue
                     new_value = fernet.decrypt(value.encode()).decode()
                 conn.execute(
-                    sa.text(f"UPDATE {table} SET {col} = :v WHERE id = :row_id"),
+                    sa.text(
+                        f"UPDATE {table} SET {col} = :v WHERE id = :row_id"  # noqa: S608
+                    ),
                     {"v": new_value, "row_id": row["id"]},
                 )
 
