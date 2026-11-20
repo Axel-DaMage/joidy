@@ -74,7 +74,11 @@ def verify_internal_token(token: str) -> bool:
 def verify_password(plain: str, stored: str) -> bool:
     """Verify a password against a stored hash or plaintext.
 
-    Supports bcrypt hashes (starting with $2b$) and plaintext for backward compat.
+    Supports bcrypt hashes (starting with $2b$) and plaintext for backward
+    compat. The plaintext path is DEPRECATED (#1265) and only exists so .env
+    files written before hashing was introduced keep working — the lifespan
+    logs a loud warning via ``warn_if_plaintext_auth_password`` whenever it
+    is in effect.
     """
     if stored.startswith("$2b$"):
         try:
@@ -84,6 +88,34 @@ def verify_password(plain: str, stored: str) -> bool:
             # matching the behaviour passlib's CryptContext.verify provided.
             return False
     return secrets.compare_digest(plain, stored)
+
+
+def is_plaintext_stored_password(stored: str) -> bool:
+    """True when ``stored`` would authenticate via the plaintext fallback.
+
+    Mirrors ``verify_password``: only ``$2b$`` values are treated as bcrypt,
+    so anything else — including hand-edited .env entries predating hashing —
+    takes the constant-time plaintext compare.
+    """
+    return bool(stored) and not stored.startswith("$2b$")
+
+
+def warn_if_plaintext_auth_password() -> None:
+    """Log a loud warning when the effective AUTH_PASSWORD is plaintext.
+
+    Backward compat only (#1265): the setup flow always writes a bcrypt hash,
+    so a plaintext value means a hand-edited .env predating hashing — prod
+    auth is then running on a raw secret with no indication it is weak. The
+    plaintext path in ``verify_password`` is deprecated and scheduled for
+    removal; this warning is the migration nudge.
+    """
+    if is_plaintext_stored_password(_effective_auth_password()):
+        logger.warning(
+            "AUTH_PASSWORD is stored in PLAINTEXT (not a bcrypt hash). This deprecated "
+            "fallback will be removed in a future release — remove AUTH_PASSWORD from "
+            ".env and complete the setup wizard again (POST /config/setup) to store a "
+            "bcrypt hash instead."
+        )
 
 
 def hash_password(plain: str) -> str:

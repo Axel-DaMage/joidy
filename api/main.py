@@ -51,6 +51,7 @@ from services.auth_service import (
     get_current_user,
     get_current_user_or_internal,
     verify_token,
+    warn_if_plaintext_auth_password,
 )
 from services.env_file import env_file_permissions, get_env_file, get_persisted
 from services.http_client import aclose_http_clients, http_client
@@ -145,6 +146,11 @@ async def lifespan(app: FastAPI):
             env_perms,
             get_env_file(),
         )
+
+    # Startup warning (#1265): a plaintext AUTH_PASSWORD silently works via
+    # the backward-compat path in verify_password — flag it so prod auth is
+    # never running on a raw .env string unnoticed.
+    warn_if_plaintext_auth_password()
 
     init_db()
     logger.info("Database initialization complete")
