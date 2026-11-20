@@ -5,6 +5,7 @@ import sys
 import types
 import unittest
 from datetime import UTC, datetime, timedelta
+from unittest import mock
 
 # Stub sqlite_vec before importing app modules (matches conftest pattern).
 if "sqlite_vec" not in sys.modules:
@@ -19,9 +20,11 @@ from services.auth_service import (
     create_access_token,
     get_current_user_id,
     hash_password,
+    is_plaintext_stored_password,
     verify_internal_token,
     verify_password,
     verify_token,
+    warn_if_plaintext_auth_password,
 )
 
 
@@ -42,6 +45,55 @@ class PasswordTest(unittest.TestCase):
         # not authenticate as its own plaintext.
         h = hash_password("s3cret")
         self.assertFalse(verify_password(h, h))
+
+
+class PlaintextPasswordWarningTest(unittest.TestCase):
+    """#1265: a plaintext AUTH_PASSWORD must produce a loud startup warning.
+
+    The lifespan calls ``warn_if_plaintext_auth_password`` at boot; these
+    tests cover the helper directly so the warning contract is pinned
+    without booting the app.
+    """
+
+    def test_plaintext_stored_value_warns(self):
+        with (
+            mock.patch(
+                "services.auth_service._effective_auth_password",
+                return_value="hunter2",
+            ),
+            self.assertLogs("services.auth_service", level="WARNING") as logs,
+        ):
+            warn_if_plaintext_auth_password()
+        self.assertTrue(
+            any("PLAINTEXT" in line for line in logs.output),
+            f"expected a plaintext warning, got: {logs.output}",
+        )
+
+    def test_bcrypt_stored_value_does_not_warn(self):
+        stored = hash_password("s3cret")
+        with (
+            mock.patch(
+                "services.auth_service._effective_auth_password",
+                return_value=stored,
+            ),
+            self.assertNoLogs("services.auth_service", level="WARNING"),
+        ):
+            warn_if_plaintext_auth_password()
+
+    def test_unset_password_does_not_warn(self):
+        with (
+            mock.patch(
+                "services.auth_service._effective_auth_password",
+                return_value="",
+            ),
+            self.assertNoLogs("services.auth_service", level="WARNING"),
+        ):
+            warn_if_plaintext_auth_password()
+
+    def test_is_plaintext_stored_password(self):
+        self.assertTrue(is_plaintext_stored_password("hunter2"))
+        self.assertFalse(is_plaintext_stored_password(""))
+        self.assertFalse(is_plaintext_stored_password(hash_password("s3cret")))
 
 
 class TokenTest(unittest.TestCase):
