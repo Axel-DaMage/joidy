@@ -44,8 +44,10 @@ export function isAllowedLinkUrl(url: string): boolean {
 }
 
 // Applies a format action to a WysiwygEditor instance. `wysiwygRef` is the
-// component instance (typed loosely — exposes toggle* helpers).
-export function applyWysiwygFormat(wysiwygRef: any, type: string) {
+// component instance (typed loosely — exposes toggle* helpers). `linkUrl` is
+// the URL collected by the caller's dialog (window.prompt() was removed for
+// a11y, #1308); the 'link' action is a no-op without it.
+export function applyWysiwygFormat(wysiwygRef: any, type: string, linkUrl?: string) {
   switch (type) {
     case 'bold':
       wysiwygRef.toggleBold();
@@ -72,10 +74,9 @@ export function applyWysiwygFormat(wysiwygRef: any, type: string) {
       wysiwygRef.toggleOrderedList();
       break;
     case 'link':
-      const url = prompt('URL del enlace:');
       // Scheme allowlist (#1331): reject javascript:/data:/etc. URLs before
       // they reach the editor DOM. WysiwygEditor.setLink re-validates too.
-      if (url && isAllowedLinkUrl(url)) wysiwygRef.setLink(url);
+      if (linkUrl && isAllowedLinkUrl(linkUrl)) wysiwygRef.setLink(linkUrl);
       break;
     case 'quote':
       wysiwygRef.toggleBlockquote();

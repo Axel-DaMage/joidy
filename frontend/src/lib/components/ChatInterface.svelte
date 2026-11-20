@@ -134,6 +134,7 @@
       bind:value={input}
       onkeydown={handleKeydown}
       placeholder={$t('chat.inputPlaceholder')}
+      aria-label={$t('chat.inputPlaceholder')}
       rows="1"
       disabled={$isLoading}></textarea>
     <button
@@ -382,6 +383,10 @@
   }
   .chat-input textarea:focus {
     border-color: var(--xp, #c8a96e);
+  }
+  .chat-input textarea:focus-visible {
+    outline: 2px solid var(--xp, #c8a96e);
+    outline-offset: 2px;
   }
   .chat-input textarea::placeholder {
     color: var(--text-muted, #888);

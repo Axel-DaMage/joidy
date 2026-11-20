@@ -483,6 +483,7 @@
         class="graph-search"
         type="search"
         placeholder={$t('knowledgeGraph.searchPlaceholder')}
+        aria-label={$t('knowledgeGraph.searchPlaceholder')}
         bind:value={searchQuery}
         oninput={rerender}
       />
@@ -490,10 +491,10 @@
         <button class="search-clear" onclick={clearHighlights} aria-label={$t('knowledgeGraph.clearSearch')}>×</button>
       {/if}
     </div>
-    <button class="btn btn-ghost btn-icon" title={$t('knowledgeGraph.toggleLabels')} aria-label={$t('knowledgeGraph.toggleLabels')} onclick={() => { showLabels = !showLabels; rerender(); }}>
+    <button class="btn btn-ghost btn-icon" title={$t('knowledgeGraph.toggleLabels')} aria-label={$t('knowledgeGraph.toggleLabels')} aria-pressed={showLabels} class:active={showLabels} onclick={() => { showLabels = !showLabels; rerender(); }}>
       <span style="font-size:10px; font-family: var(--font-mono);">Aa</span>
     </button>
-    <button class="btn btn-ghost btn-icon" title={$t('knowledgeGraph.particles')} aria-label={$t('knowledgeGraph.particles')} class:active={showParticles} onclick={() => { showParticles = !showParticles; }}>
+    <button class="btn btn-ghost btn-icon" title={$t('knowledgeGraph.particles')} aria-label={$t('knowledgeGraph.particles')} aria-pressed={showParticles} class:active={showParticles} onclick={() => { showParticles = !showParticles; }}>
       <span style="font-size:12px;">✨</span>
     </button>
     <button class="btn btn-ghost btn-icon" title={$t('knowledgeGraph.fit')} aria-label={$t('knowledgeGraph.fit')} onclick={recenter}>
@@ -502,11 +503,11 @@
     <button class="btn btn-ghost btn-icon" title={$t('knowledgeGraph.resetView')} aria-label={$t('knowledgeGraph.resetView')} onclick={resetView}>
       <span style="font-size:11px;">⊙</span>
     </button>
-    <button class="btn btn-ghost btn-icon" title={$t('knowledgeGraph.hideOrphans')} aria-label={$t('knowledgeGraph.hideOrphans')} class:active={!showOrphans} onclick={() => { showOrphans = !showOrphans; rerender(); }}>
+    <button class="btn btn-ghost btn-icon" title={$t('knowledgeGraph.hideOrphans')} aria-label={$t('knowledgeGraph.hideOrphans')} aria-pressed={!showOrphans} class:active={!showOrphans} onclick={() => { showOrphans = !showOrphans; rerender(); }}>
       <span style="font-size:11px;">◌</span>
     </button>
     <div class="filter-group">
-      <select bind:value={filterType} onchange={rerender}>
+      <select bind:value={filterType} onchange={rerender} aria-label={$t('knowledgeGraph.all')}>
         <option value="all">{$t('knowledgeGraph.all')}</option>
         <option value="notes">{$t('knowledgeGraph.notes')}</option>
         <option value="tags">{$t('knowledgeGraph.tags')}</option>
@@ -589,6 +590,10 @@
     outline: none;
     border-color: var(--accent);
   }
+  .filter-group select:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
+  }
 
   .search-wrap {
     position: relative;
@@ -609,6 +614,10 @@
     outline: none;
     border-color: var(--accent);
     box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
+  }
+  .graph-search:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
   }
 
   .search-clear {

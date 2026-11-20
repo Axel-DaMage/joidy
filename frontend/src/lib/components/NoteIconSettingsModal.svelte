@@ -53,11 +53,12 @@
 
       <!-- Color bar -->
       <div class="folder-color-row">
-        <span class="folder-label mono">Color</span>
+        <span class="folder-label mono" id="nism-color-label">Color</span>
         <input
           type="color"
           class="folder-color-input"
           bind:value={customColor}
+          aria-labelledby="nism-color-label"
           onchange={(e) => updateFrontmatter('iconColor', e.currentTarget.value)}
         />
         <input
@@ -65,6 +66,7 @@
           class="folder-hex-input mono"
           maxlength="7"
           bind:value={customColor}
+          aria-label="Color hex"
           onchange={(e) => updateFrontmatter('iconColor', e.currentTarget.value)}
         />
       </div>

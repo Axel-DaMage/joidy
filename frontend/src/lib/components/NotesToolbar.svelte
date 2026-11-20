@@ -43,10 +43,29 @@
     handleDelete,
   } from '$lib/utils/notesPage';
   import type { SortMode } from '$lib/utils/fileTree';
+  import PromptDialog from './PromptDialog.svelte';
   import { menuNav } from '$lib/actions/menuNav';
   import { t } from 'svelte-i18n';
 
-  let showSortMenu = false;
+  let showSortMenu = $state(false);
+  // Bulk-tag dialog state (replaces window.prompt(), #1308).
+  let tagDialogMode: 'add' | 'remove' | null = $state(null);
+  let tagDialogValue = $state('');
+
+  function openTagDialog(mode: 'add' | 'remove') {
+    tagDialogValue = '';
+    tagDialogMode = mode;
+  }
+
+  function submitTagDialog(value: string) {
+    const tags = value
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (!tags.length) return;
+    if (tagDialogMode === 'add') tagSelectedNotes(tags);
+    else if (tagDialogMode === 'remove') untagSelectedNotes(tags);
+  }
 
   function onSetSort(mode: SortMode) {
     setSortMode(mode);
@@ -178,6 +197,7 @@
       class:active={$viewMode === 'tree'}
       title="Vista de carpetas"
       aria-label="Vista de carpetas"
+      aria-pressed={$viewMode === 'tree'}
       onclick={() => {
         $viewMode = 'tree';
         if ($notesPrefsReady) persist();
@@ -190,6 +210,7 @@
       class:active={$viewMode === 'list'}
       title="Vista de lista"
       aria-label="Vista de lista"
+      aria-pressed={$viewMode === 'list'}
       onclick={() => {
         $viewMode = 'list';
         if ($notesPrefsReady) persist();
@@ -203,7 +224,12 @@
 <div class="list-toolbar">
   <div class="search-wrap">
     <Search size={11} style="color: var(--text-muted); flex-shrink:0;" />
-    <input class="search-input" bind:value={$search} placeholder={$t('notesPage.search')} />
+    <input
+      class="search-input"
+      bind:value={$search}
+      placeholder={$t('notesPage.search')}
+      aria-label={$t('notesPage.search')}
+    />
     {#if $search}
       <button
         class="icon-btn"
@@ -219,6 +245,7 @@
     class="toolbar-btn bulk-toggle"
     class:active={$bulkMode}
     aria-label={$t('notesPage.bulkMode')}
+    aria-pressed={$bulkMode}
     onclick={() => {
       bulkMode.set(!$bulkMode);
       clearNoteSelection();
@@ -270,19 +297,7 @@
       >
       Eliminar
     </button>
-    <button
-      class="bulk-btn"
-      onclick={() => {
-        const t = prompt('Tags a añadir (separadas por coma):');
-        if (t)
-          tagSelectedNotes(
-            t
-              .split(',')
-              .map((s) => s.trim())
-              .filter(Boolean)
-          );
-      }}
-    >
+    <button class="bulk-btn" onclick={() => openTagDialog('add')}>
       <svg
         width="12"
         height="12"
@@ -296,19 +311,7 @@
       >
       Etiquetar
     </button>
-    <button
-      class="bulk-btn"
-      onclick={() => {
-        const t = prompt('Tags a quitar (separadas por coma):');
-        if (t)
-          untagSelectedNotes(
-            t
-              .split(',')
-              .map((s) => s.trim())
-              .filter(Boolean)
-          );
-      }}
-    >
+    <button class="bulk-btn" onclick={() => openTagDialog('remove')}>
       <svg
         width="12"
         height="12"
@@ -325,6 +328,17 @@
     <button class="bulk-btn" onclick={() => clearNoteSelection()}> Cancelar </button>
   </div>
 {/if}
+
+<PromptDialog
+  open={tagDialogMode !== null}
+  title={tagDialogMode === 'add' ? $t('notesPage.addTagsTitle') : $t('notesPage.removeTagsTitle')}
+  label={tagDialogMode === 'add' ? $t('notesPage.addTagsTitle') : $t('notesPage.removeTagsTitle')}
+  bind:value={tagDialogValue}
+  placeholder={$t('notesPage.tagsPlaceholder')}
+  confirmLabel={$t('common.save')}
+  onSubmit={submitTagDialog}
+  onClose={() => (tagDialogMode = null)}
+/>
 
 <style>
   .tree-actions-bar {
@@ -414,6 +428,9 @@
     border-radius: var(--r);
     padding: 4px 7px;
   }
+  .search-wrap:focus-within {
+    border-color: var(--xp);
+  }
 
   .search-input {
     background: transparent;
@@ -424,6 +441,10 @@
     color: var(--text-primary);
     flex: 1;
     min-width: 0;
+  }
+  input:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
   }
   .search-input::placeholder {
     color: var(--text-muted);

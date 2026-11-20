@@ -186,6 +186,7 @@
         class="search-input"
         type="text"
         placeholder={$t('emails.searchPlaceholder')}
+        aria-label={$t('emails.searchPlaceholder')}
         bind:value={searchQuery}
         oninput={onSearchInput}
       />
@@ -351,6 +352,11 @@
     outline: none;
     color: var(--text-primary);
     font-size: 13px;
+  }
+  .search-input:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
+    border-radius: var(--r-sm);
   }
 
   .emails-list {

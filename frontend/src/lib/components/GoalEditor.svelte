@@ -323,6 +323,7 @@
       <button
         class="toolbar-btn icon-only"
         class:active={zenMode}
+        aria-pressed={zenMode}
         onclick={() => zenMode = !zenMode}
         title={$t('goalEditor.zenMode')}
         aria-label={$t('goalEditor.zenModeShort')}
@@ -333,6 +334,7 @@
       <button
         class="toolbar-btn"
         class:active={previewMode}
+        aria-pressed={previewMode}
         onclick={() => previewMode = !previewMode}
         title={$t('goalEditor.togglePreview')}
       >
@@ -388,6 +390,7 @@
       class="title-input"
       bind:value={title}
       placeholder={$t('goalEditor.titlePlaceholder')}
+      aria-label={$t('goalEditor.titlePlaceholder')}
       oninput={() => triggerAutosave()}
       onkeydown={(e) => e.key === 'Enter' && handleSave()}
     />
@@ -415,6 +418,7 @@
           oninput={updateContent}
           onscroll={syncScroll}
           placeholder={$t('goalEditor.contentPlaceholder')}
+          aria-label={$t('goalEditor.contentPlaceholder')}
           spellcheck="false"
         ></textarea>
       </div>
@@ -534,6 +538,11 @@
     text-align: center;
   }
 
+  .title-input:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
+    border-radius: var(--r-sm);
+  }
   .title-input {
     flex: 1;
     background: transparent;
@@ -615,6 +624,10 @@
     tab-size: 2;
   }
 
+  .content-textarea:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: -2px;
+  }
   .content-textarea {
     position: absolute;
     top: 0;

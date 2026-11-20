@@ -69,6 +69,7 @@
       <button
         class="mood-btn"
         class:selected={selectedScore === m.score}
+        aria-pressed={selectedScore === m.score}
         onclick={() => handleSelect(m.score)}
         aria-label={$t('mood.scoreLabel', { values: { score: m.score } })}
         title={$t('mood.scoreLabel', { values: { score: m.score } })}
@@ -203,6 +204,10 @@
     color: var(--text-primary);
     outline: none;
     transition: border-color var(--t-fast);
+  }
+  .mood-note-input:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
   }
 
   .mood-note-input::placeholder {

@@ -4,6 +4,7 @@
   import { activeIconPack } from '$lib/stores/settings';
   import { extractFrontmatter, getFileIcon } from '$lib/utils/fileTree';
   import { updateFrontmatterInContent } from '$lib/utils/noteContent';
+  import { t } from 'svelte-i18n';
   import type { Note } from '$lib/api';
 
   interface Props {
@@ -75,6 +76,7 @@
     class="title-input"
     bind:value={title}
     placeholder="Título de la nota..."
+    aria-label={$t('noteEditor.titleLabel')}
     onkeydown={(e) => e.key === 'Enter' && handleSave()}
     oninput={triggerAutosave}
   />
@@ -121,6 +123,11 @@
   }
   .title-input::placeholder {
     color: var(--text-muted);
+  }
+  .title-input:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
+    border-radius: 4px;
   }
 
   .title-row {

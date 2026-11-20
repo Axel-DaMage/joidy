@@ -1,3 +1,8 @@
+<script module lang="ts">
+  // Unique suffixes so multiple pickers never collide on listbox/option ids.
+  let nlpInstanceCount = 0;
+</script>
+
 <script lang="ts">
   import type { Note } from '$lib/api';
   import { FilePlus2, Search, X } from 'lucide-svelte';
@@ -21,6 +26,18 @@
   let open = $state(false);
   let highlight = $state(0);
   let container: HTMLDivElement | undefined = $state();
+
+  // Stable per-instance ids for the listbox/options (aria-controls /
+  // aria-activedescendant). Falls back to a counter when `id` is not provided
+  // so `aria-controls` never renders "nlp-list-undefined" (#1308).
+  const uid = `nlp-${nlpInstanceCount++}`;
+  const listId = $derived(`${id ?? uid}-list`);
+  const activeOptionId = $derived.by(() => {
+    if (!open) return undefined;
+    if (canCreate && highlight >= results.length) return `${uid}-create`;
+    if (results[highlight]) return `${uid}-opt-${highlight}`;
+    return undefined;
+  });
 
   const selected = $derived(notes.find((n) => n.id === value) ?? null);
   const q = $derived(query.trim().toLowerCase());
@@ -99,24 +116,24 @@
       type="button"
       class="nlp-clear"
       onclick={clear}
-      aria-label={$_('goalsPage.noLinkedNote')}
+      aria-label={$_('goalsPage.unlinkNote')}
     >
       <X size={14} />
     </button>
   </div>
 {:else}
-  <div
-    class="nlp-picker"
-    bind:this={container}
-    role="combobox"
-    aria-controls="nlp-list-{id}"
-    aria-expanded={open}
-  >
+  <div class="nlp-picker" bind:this={container}>
     <div class="nlp-input-row">
       <Search size={14} />
       <input
         {id}
         type="text"
+        role="combobox"
+        aria-expanded={open}
+        aria-controls={listId}
+        aria-activedescendant={activeOptionId}
+        aria-autocomplete="list"
+        aria-label={$_('goalsPage.searchNote')}
         bind:value={query}
         {placeholder}
         onfocus={() => (open = true)}
@@ -129,15 +146,17 @@
       />
     </div>
     {#if open}
-      <div class="nlp-list" role="listbox" id="nlp-list-{id}">
+      <div class="nlp-list" role="listbox" id={listId}>
         {#each results as note, i (note.id)}
           <button
             type="button"
+            id="{uid}-opt-{i}"
             role="option"
             aria-selected={value === note.id}
             class="nlp-option"
             class:active={i === highlight}
             onpointerdown={() => pick(note)}
+            onclick={() => pick(note)}
             onkeydown={(e) => {
               // pointerdown covers the mouse; Enter/Space activate the option
               // for keyboard users whose focus lands here via Tab (#1268).
@@ -156,9 +175,13 @@
         {#if canCreate}
           <button
             type="button"
+            id="{uid}-create"
+            role="option"
+            aria-selected="false"
             class="nlp-option nlp-create"
             class:active={highlight >= results.length}
             onpointerdown={create}
+            onclick={create}
             onkeydown={(e) => {
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
@@ -190,6 +213,9 @@
     border-radius: 8px;
     color: var(--text-muted);
   }
+  .nlp-input-row:focus-within {
+    border-color: var(--xp);
+  }
   .nlp-input-row input {
     flex: 1;
     min-width: 0;
@@ -198,6 +224,10 @@
     color: var(--text);
     font-size: 14px;
     outline: none;
+  }
+  .nlp-input-row input:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
   }
   .nlp-list {
     position: absolute;

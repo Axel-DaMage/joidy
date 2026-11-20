@@ -35,7 +35,7 @@
   >
     <h3 id="folder-picker-title" class="folder-modal-title">{$t('folderPicker.title')}</h3>
 
-    <input type="text" class="input mono" bind:value={search} placeholder={$t('folderPicker.searchPlaceholder')} style="width:100%; box-sizing:border-box; margin-bottom:8px;" />
+    <input type="text" class="input mono" bind:value={search} placeholder={$t('folderPicker.searchPlaceholder')} aria-label={$t('folderPicker.searchPlaceholder')} style="width:100%; box-sizing:border-box; margin-bottom:8px;" />
 
     <div class="folder-list">
       <button
@@ -135,6 +135,10 @@
     color: var(--text-primary, #222);
     font-size: 0.85rem;
     outline: none;
+  }
+  .input:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
   }
   .mono { font-family: var(--font-mono, monospace); }
   .primary {

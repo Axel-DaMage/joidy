@@ -1276,27 +1276,33 @@
   {/if}
 
   <div class="goals-header">
-    <div class="tabs">
+    <div class="tabs" role="tablist">
       <a class="tab exec-link" href="/goals/ejecucion">
         <Zap size={14} /> {$t('executionPage.tabLabel')}
       </a>
       <button
         class="tab"
+        role="tab"
         class:active={currentTab === 'editor'}
+        aria-selected={currentTab === 'editor'}
         onclick={() => (currentTab = 'editor')}
       >
         <Pencil size={14} /> Editor
       </button>
       <button
         class="tab"
+        role="tab"
         class:active={currentTab === 'today'}
+        aria-selected={currentTab === 'today'}
         onclick={() => (currentTab = 'today')}
       >
         <LayoutDashboard size={14} /> Inicio
       </button>
       <button
         class="tab"
+        role="tab"
         class:active={currentTab === 'inbox'}
+        aria-selected={currentTab === 'inbox'}
         onclick={() => (currentTab = 'inbox')}
       >
         <Inbox size={14} /> {$t('goalsPage.inboxTab')}
@@ -1306,21 +1312,27 @@
       </button>
       <button
         class="tab"
+        role="tab"
         class:active={currentTab === 'planning'}
+        aria-selected={currentTab === 'planning'}
         onclick={() => (currentTab = 'planning')}
       >
         <Clock size={14} /> Planificación
       </button>
       <button
         class="tab"
+        role="tab"
         class:active={currentTab === 'history'}
+        aria-selected={currentTab === 'history'}
         onclick={() => (currentTab = 'history')}
       >
         <Calendar size={14} /> Historial
       </button>
       <button
         class="tab"
+        role="tab"
         class:active={currentTab === 'analytics'}
+        aria-selected={currentTab === 'analytics'}
         onclick={() => (currentTab = 'analytics')}
       >
         <ChartColumn size={14} /> Análisis
@@ -1746,7 +1758,7 @@
             </div>
           </div>
           <div class="sort-control-centered">
-            <select class="input sort-select-square" bind:value={listSortBy}>
+            <select class="input sort-select-square" bind:value={listSortBy} aria-label={$t('goalsPage.sortBy')}>
               <option value="recent">{$t('goalsPage.sortRecent')}</option>
               <option value="alpha">{$t('goalsPage.sortAlpha')}</option>
               <option value="state">{$t('goalsPage.sortState')}</option>
@@ -2552,6 +2564,7 @@
                     <button
                       class="ng-freq-btn"
                       class:active={newTemporality === temp}
+                      aria-pressed={newTemporality === temp}
                       onclick={() => (newTemporality = temp)}
                     >
                       {temp === 'DAILY'
@@ -2594,6 +2607,7 @@
                     <button
                       class="ng-priority-btn"
                       class:active={newPriority === p}
+                      aria-pressed={newPriority === p}
                       onclick={() => (newPriority = p)}
                       title={p === 0 ? $t('goalsPage.priorityNone') : $t('goalsPage.priorityLevel', { values: { level: p } })}
                     >
@@ -2668,6 +2682,7 @@
                     <button
                       class="ng-color-btn"
                       class:selected={newGoalColor === c.hex}
+                      aria-pressed={newGoalColor === c.hex}
                       style="background: {c.hex};"
                       onclick={() => (newGoalColor = c.hex)}
                       title={c.name}
@@ -2682,6 +2697,7 @@
                       class="ng-color-swatch"
                       value={newGoalColor}
                       oninput={(e) => (newGoalColor = e.currentTarget.value)}
+                      aria-label={$t('goalsPage.goalColor')}
                     />
                   </div>
                   <input
@@ -2690,6 +2706,7 @@
                     maxlength="7"
                     bind:value={newGoalColor}
                     placeholder="#c8a96e"
+                    aria-label={$t('goalsPage.goalColorHex')}
                   />
                 </div>
               </div>
@@ -2719,6 +2736,7 @@
                   <button
                     class="ng-fail-btn"
                     class:active={newFailConfig === 'STATIC'}
+                    aria-pressed={newFailConfig === 'STATIC'}
                     onclick={() => (newFailConfig = 'STATIC')}
                   >
                     <strong>{$t('goalsPage.static')}</strong>
@@ -2727,6 +2745,7 @@
                   <button
                     class="ng-fail-btn"
                     class:active={newFailConfig === 'ROLLOVER'}
+                    aria-pressed={newFailConfig === 'ROLLOVER'}
                     onclick={() => (newFailConfig = 'ROLLOVER')}
                   >
                     <strong>{$t('goalsPage.rollover')}</strong>
@@ -2735,6 +2754,7 @@
                   <button
                     class="ng-fail-btn"
                     class:active={newFailConfig === 'SNOWBALL'}
+                    aria-pressed={newFailConfig === 'SNOWBALL'}
                     onclick={() => (newFailConfig = 'SNOWBALL')}
                   >
                     <strong>{$t('goalsPage.snowball')}</strong>
@@ -3659,6 +3679,10 @@
   }
   .ng-hex-input:focus {
     border-color: var(--text-muted);
+  }
+  .ng-hex-input:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
   }
 
   /* Responsive — stack columns on narrow viewports (#726) */
