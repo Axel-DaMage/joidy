@@ -131,7 +131,7 @@ class PersistentEventLog:
         if self._conn is not None:
             try:
                 self._conn.close()
-            except Exception:
+            except Exception:  # noqa: S110 — close must never raise; the log handle is being discarded anyway
                 pass
             self._conn = None
 
@@ -615,7 +615,7 @@ async def _consume_vault_events(
                                 renames.append((old_path, new_path))
                                 consumed_adds.add(new_path)
                                 break
-                    except Exception:
+                    except Exception:  # noqa: S112 — unreadable candidate file; try the next one
                         continue
 
             for old_path, new_path in renames:
@@ -803,7 +803,7 @@ async def watch_vault():
                     consumer.cancel()
                     try:
                         await consumer
-                    except (asyncio.CancelledError, Exception):
+                    except (asyncio.CancelledError, Exception):  # noqa: S110 — shutdown path: swallow the expected cancellation
                         pass
         finally:
             event_log.close()

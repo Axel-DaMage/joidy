@@ -8,7 +8,7 @@ import logging
 
 from config import settings
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from services.auth_service import _effective_auth_password, verify_token
+from services.auth_service import _connection_host, _effective_auth_password, _is_loopback, verify_token
 
 logger = logging.getLogger(__name__)
 
@@ -110,17 +110,22 @@ async def websocket_endpoint(websocket: WebSocket):
 
     Validates the JWT via the ``Sec-WebSocket-Protocol`` handshake header —
     ``?token=`` query credentials are not accepted (#1285).
-    In development without AUTH_PASSWORD, auth is bypassed.
+    In development without AUTH_PASSWORD, auth is bypassed for loopback
+    clients only (#1282).
     """
     # Authenticate: verify the token offered via Sec-WebSocket-Protocol when
-    # auth is configured.
-    if _effective_auth_password():
+    # auth is configured. The dev-mode bypass (no AUTH_PASSWORD) applies to
+    # loopback clients only (#1282): a peer on a non-loopback interface means
+    # the dev server is exposed to the LAN and must present a valid token.
+    auth_configured = bool(_effective_auth_password())
+    if not auth_configured and settings.app_env == "production":
+        await websocket.close(code=4001, reason="Authentication not configured")
+        return
+
+    if auth_configured or not _is_loopback(_connection_host(websocket)):
         if not _ws_token_from_subprotocols(websocket):
             await websocket.close(code=4001, reason="Missing or invalid authentication token")
             return
-    elif settings.app_env == "production":
-        await websocket.close(code=4001, reason="Authentication not configured")
-        return
 
     # Answer with the ``bearer`` marker when the client offered it, so the
     # browser's subprotocol negotiation completes cleanly.

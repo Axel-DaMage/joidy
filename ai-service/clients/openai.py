@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from collections.abc import AsyncIterator
 from typing import cast
 
 import httpx2  # the openai SDK vendors this httpx fork; its transport requires it
@@ -77,6 +78,37 @@ class OpenAIClient(BaseLLMClient, EmbeddingClient):
         )
         # finish_reason=length on reasoning models can leave content null.
         return response.choices[0].message.content or ""
+
+    async def generate_stream(
+        self,
+        prompt: str,
+        temperature: float = 0.2,
+        max_tokens: int = 256,
+        system_prompt: str | None = None,
+    ) -> AsyncIterator[str]:
+        """True streaming via ``chat.completions.create(stream=True)`` (#1131)."""
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+
+        if settings.llm_max_tokens and settings.llm_max_tokens > max_tokens:
+            max_tokens = settings.llm_max_tokens
+
+        stream = await _call_with_retry(
+            self._client.chat.completions.create,
+            model=self._model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            stream=True,
+        )
+        async for chunk in stream:
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta.content
+            if delta:
+                yield delta
 
     async def close(self) -> None:
         """Close the SDK's underlying httpx client (#998)."""

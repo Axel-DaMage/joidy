@@ -20,6 +20,7 @@ from services.auth_service import (
     ISSUER,
     TOKEN_TYPE_ACCESS,
     TOKEN_TYPE_REFRESH,
+    _is_loopback,
     create_access_token,
     create_refresh_token,
     get_current_user_id,
@@ -219,6 +220,30 @@ class NoSecretKeyTest(unittest.TestCase):
         # Without a secret key, verification must fail closed (return None),
         # never accept a forged token.
         self.assertIsNone(verify_token("anything"))
+
+
+class LoopbackCheckTest(unittest.TestCase):
+    """#1282: the dev bypass is loopback-only; the check must fail closed on
+    anything that is not a literal loopback IP."""
+
+    def test_loopback_ips_accepted(self):
+        for host in ("127.0.0.1", "127.0.0.2", "127.255.255.254", "::1", "::ffff:127.0.0.1"):
+            self.assertTrue(_is_loopback(host), host)
+
+    def test_non_loopback_ips_rejected(self):
+        for host in ("192.168.1.10", "10.0.0.8", "172.16.0.5", "203.0.113.7", "fe80::1"):
+            self.assertFalse(_is_loopback(host), host)
+
+    def test_ipv4_mapped_non_loopback_rejected(self):
+        # ::ffff:10.0.0.5 unwraps to 10.0.0.5 — must not smuggle in as IPv6.
+        self.assertFalse(_is_loopback("::ffff:10.0.0.5"))
+        self.assertTrue(_is_loopback("::ffff:127.0.0.1"))
+
+    def test_non_ip_values_fail_closed(self):
+        # The TestClient default peer, hostnames and empty values are not
+        # loopback IPs — deny rather than guess.
+        for host in ("testclient", "localhost", "", None):
+            self.assertFalse(_is_loopback(host), host)
 
 
 if __name__ == "__main__":

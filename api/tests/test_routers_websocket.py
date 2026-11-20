@@ -17,11 +17,15 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from config import settings
 from fastapi.testclient import TestClient
+from main import app
 from routers.websocket import ConnectionManager
 from services.auth_service import create_access_token
 from starlette.websockets import WebSocketDisconnect
 
 # --- Connection (dev mode, auth bypassed) ------------------------------------
+#
+# The shared ``client`` fixture presents a loopback peer (127.0.0.1) — the
+# #1282 dev bypass is loopback-only, so these tests still exercise it.
 
 
 def test_ws_connect_dev_mode(client: TestClient, monkeypatch):
@@ -139,6 +143,36 @@ def test_ws_token_only_subprotocol_authenticates(client: TestClient, monkeypatch
 
     token = create_access_token(user_id=1)
     with client.websocket_connect("/ws", subprotocols=[token]) as websocket:
+        websocket.send_text(json.dumps({"type": "ping"}))
+        assert websocket.receive_json() == {"type": "pong"}
+
+
+# --- Non-loopback dev bypass restrictions (#1282) -----------------------------
+
+
+def test_ws_rejected_non_loopback_dev_mode(monkeypatch):
+    """#1282: dev bypass is loopback-only — a LAN peer without token → 4001."""
+    monkeypatch.setattr(settings, "auth_password", "")
+    monkeypatch.setattr(settings, "app_env", "development")
+
+    remote = TestClient(app, client=("203.0.113.9", 4321))
+    with pytest.raises(WebSocketDisconnect) as exc_info:
+        with remote.websocket_connect("/ws"):
+            pass
+
+    assert exc_info.value.code == 4001
+
+
+def test_ws_non_loopback_dev_accepts_valid_token(monkeypatch):
+    """A non-loopback peer is treated like an authenticated deployment:
+    a valid Bearer token still connects (#1282)."""
+    monkeypatch.setattr(settings, "auth_password", "")
+    monkeypatch.setattr(settings, "secret_key", "test-secret-key-32bytes-long-aaaa")
+    monkeypatch.setattr(settings, "app_env", "development")
+
+    token = create_access_token(user_id=1)
+    remote = TestClient(app, client=("203.0.113.9", 4321))
+    with remote.websocket_connect(f"/ws?token={token}") as websocket:
         websocket.send_text(json.dumps({"type": "ping"}))
         assert websocket.receive_json() == {"type": "pong"}
 
