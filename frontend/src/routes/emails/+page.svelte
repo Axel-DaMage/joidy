@@ -28,6 +28,10 @@
     hour: '2-digit',
     minute: '2-digit',
   });
+  const timeFormatter = new Intl.DateTimeFormat(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 
   function senderName(email: EmailSummary): string {
     if (!email.sender) return '(sin remitente)';
@@ -45,9 +49,11 @@
     const date = new Date(email.received_at);
     if (Number.isNaN(date.getTime())) return '';
     const today = new Date();
+    // Today's mail shows the time only; older mail uses dtFormatter, which
+    // already includes day+month — re-appending it duplicated the date.
     return date.toDateString() === today.toDateString()
-      ? dtFormatter.format(date)
-      : `${dtFormatter.format(date)} · ${date.toLocaleDateString(undefined, { day: '2-digit', month: 'short' })}`;
+      ? timeFormatter.format(date)
+      : dtFormatter.format(date);
   }
 
   async function refresh(): Promise<void> {

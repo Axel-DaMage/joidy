@@ -87,6 +87,7 @@ class EngineDedupTest(unittest.TestCase):
         result = ge.process_event(self.db, "goal_completed", {"goal_id": 1}, dedup_key=key)
         self.assertEqual(result.xp_awarded, 0)
         stats = self.db.query(UserStats).first()
+        assert stats is not None
         self.assertEqual(stats.total_xp, 0)
 
         self.db.add(XPEvent(event_type="goal_completed", xp=50, dedup_key=key))
