@@ -82,8 +82,11 @@ powershell -ExecutionPolicy Bypass -File start.ps1
 |----------|--------|-----------|-------------|
 | Frontend | 3000 | SvelteKit | Interfaz de usuario |
 | API | 8000 | FastAPI | Backend REST |
-| AI Service | 8002 | FastAPI | Embeddings y clasificación |
-| Worker | 8001 | Python asyncio | Tareas background |
+| AI Service | 8002 (interno) | FastAPI | Embeddings y clasificación |
+| Worker | 8001 (interno) | Python asyncio | Tareas background |
+
+Solo frontend y API publican puerto al host (loopback por defecto, `BIND_ADDR`
+en `.env` para exponer en LAN); ai-service y worker son internos (#1277).
 
 ---
 

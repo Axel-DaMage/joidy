@@ -6,6 +6,7 @@
     type CalendarTask,
     type CalendarTaskPriority,
     type CalendarTaskRecurrence,
+    type PlanSuggestion,
   } from '$lib/api';
   import { logger } from '$lib/utils/logger';
   import { showNotification } from '$lib/stores/notifications';
@@ -29,6 +30,7 @@
     X,
     Check,
     Repeat,
+    Sparkles,
   } from 'lucide-svelte';
   import EmptyState from '$lib/components/EmptyState.svelte';
   import { t } from 'svelte-i18n';
@@ -737,6 +739,86 @@
     }
   }
 
+  // ── AI plan suggestions (#1237) ─────────────────────────────────────────
+  // Ghost slots proposed by the ai-service: rendered as dashed chips on the
+  // affected day cells until the user accepts (PATCH task) or dismisses them.
+  let planSuggestions = $state<PlanSuggestion[]>([]);
+  let planLoading = $state(false);
+  let planApplying = $state(false);
+
+  let planByDay = $derived.by(() => {
+    const map = new Map<string, PlanSuggestion[]>();
+    for (const s of planSuggestions) {
+      const list = map.get(s.date) ?? [];
+      list.push(s);
+      map.set(s.date, list);
+    }
+    return map;
+  });
+
+  function planTaskTitle(taskId: number): string {
+    return tasks.find((t) => t.id === taskId)?.title ?? `#${taskId}`;
+  }
+
+  async function suggestPlan(): Promise<void> {
+    if (planLoading) return;
+    planLoading = true;
+    planSuggestions = [];
+    try {
+      // The api rebuilds tasks + busy blocks from the DB for the range, so
+      // only the window and zone are sent.
+      const res = await api.ai.planSuggest({
+        week_start: fetchRange.start,
+        week_end: fetchRange.end,
+        timezone: localTimeZone,
+      });
+      if (!res.available) {
+        showNotification($t('calendar.planUnavailable'), 'info');
+        return;
+      }
+      if (res.suggestions.length === 0) {
+        showNotification($t('calendar.planEmpty'), 'info');
+        return;
+      }
+      planSuggestions = res.suggestions;
+    } catch (e) {
+      logger.error(e);
+      showNotification($t('calendar.planError'), 'error');
+    } finally {
+      planLoading = false;
+    }
+  }
+
+  async function acceptSuggestion(sugg: PlanSuggestion): Promise<void> {
+    try {
+      const updated = await api.calendarTasks.update(sugg.task_id, {
+        date: sugg.date,
+        start_time: `${sugg.start_time.slice(0, 5)}:00`,
+        end_time: sugg.end_time ? `${sugg.end_time.slice(0, 5)}:00` : null,
+      });
+      tasks = tasks.map((t) => (t.id === updated.id ? updated : t));
+      planSuggestions = planSuggestions.filter((s) => s !== sugg);
+    } catch (e) {
+      logger.error(e);
+      showNotification($t('calendar.taskUpdateError'), 'error');
+    }
+  }
+
+  async function acceptAllSuggestions(): Promise<void> {
+    if (planApplying) return;
+    planApplying = true;
+    try {
+      for (const sugg of [...planSuggestions]) {
+        await acceptSuggestion(sugg);
+      }
+      if (planSuggestions.length === 0) {
+        showNotification($t('calendar.planApplied'), 'success');
+      }
+    } finally {
+      planApplying = false;
+    }
+  }
+
   onMount(() => {
     void (async () => {
       await refresh();
@@ -845,6 +927,19 @@
               <ChevronRight size={16} />
             </button>
           {/if}
+
+          <button
+            class="btn btn-ghost nav-btn plan-btn"
+            onclick={suggestPlan}
+            disabled={planLoading}
+            title={$t('calendar.planSuggestHint')}
+            aria-label={$t('calendar.planSuggest')}
+          >
+            <Sparkles size={14} class={planLoading ? 'spin' : ''} />
+            <span class="plan-btn-label"
+              >{planLoading ? $t('calendar.planWorking') : $t('calendar.planSuggest')}</span
+            >
+          </button>
         </div>
 
         {#if currentView === 'month'}
@@ -894,6 +989,24 @@
                   {#if items.length > 2}
                     <span class="chip chip-more">+{items.length - 2}</span>
                   {/if}
+                  {#each planByDay.get(cell.key) ?? [] as sugg (sugg.task_id)}
+                    <span
+                      class="chip chip-ghost"
+                      role="button"
+                      tabindex="-1"
+                      title={sugg.rationale || $t('calendar.planAcceptHint')}
+                      onclick={(e) => {
+                        e.stopPropagation();
+                        acceptSuggestion(sugg);
+                      }}
+                      onkeydown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.stopPropagation();
+                          acceptSuggestion(sugg);
+                        }
+                      }}><Sparkles size={7} />{sugg.start_time} {planTaskTitle(sugg.task_id)}</span
+                    >
+                  {/each}
                 </span>
               </button>
             {/each}
@@ -957,6 +1070,17 @@
                       </div>
                     {/if}
                   {/each}
+                  {#each planByDay.get(day.key) ?? [] as sugg (sugg.task_id)}
+                    <button
+                      class="chip chip-ghost"
+                      title={sugg.rationale || $t('calendar.planAcceptHint')}
+                      onclick={() => acceptSuggestion(sugg)}
+                    >
+                      <Sparkles size={7} />
+                      <span class="chip-time">{sugg.start_time}</span>
+                      <span class="chip-label">{planTaskTitle(sugg.task_id)}</span>
+                    </button>
+                  {/each}
                 </div>
               </div>
             {/each}
@@ -1010,6 +1134,20 @@
                       </div>
                     {/each}
                   {/if}
+                  {#each planByDay.get(day.key) ?? [] as sugg (sugg.task_id)}
+                    <button
+                      class="agenda-item-pill chip-ghost"
+                      title={sugg.rationale || $t('calendar.planAcceptHint')}
+                      onclick={(e) => {
+                        e.stopPropagation();
+                        acceptSuggestion(sugg);
+                      }}
+                    >
+                      <Sparkles size={9} class="lock-icon" />
+                      <span class="chip-time caption">{sugg.start_time}</span>
+                      <span class="pill-title">{planTaskTitle(sugg.task_id)}</span>
+                    </button>
+                  {/each}
                 </div>
               </div>
             {/each}
@@ -1018,6 +1156,27 @@
       </div>
 
       <div class="day-detail">
+        {#if planSuggestions.length > 0}
+          <div class="plan-bar">
+            <span class="plan-bar-title caption">
+              <Sparkles size={11} />{$t('calendar.planPending', {
+                values: { count: planSuggestions.length },
+              })}
+            </span>
+            <div class="plan-bar-actions">
+              <button
+                class="btn btn-ghost plan-bar-btn"
+                onclick={acceptAllSuggestions}
+                disabled={planApplying}>{$t('calendar.planAcceptAll')}</button
+              >
+              <button
+                class="btn btn-ghost plan-bar-btn"
+                onclick={() => (planSuggestions = [])}
+                disabled={planApplying}>{$t('calendar.planDismiss')}</button
+              >
+            </div>
+          </div>
+        {/if}
         {#if selectedDay}
           <h4>
             {new Date(`${selectedDay}T12:00:00`).toLocaleDateString(undefined, {
@@ -2102,6 +2261,61 @@
 
   .spin {
     animation: spin 1s linear infinite;
+  }
+
+  /* AI plan suggestions (#1237) — ghost preview chips + action bar */
+  .plan-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+  }
+
+  .plan-btn-label {
+    font-size: 11px;
+  }
+
+  .chip-ghost {
+    border: 1px dashed var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    color: var(--accent);
+    opacity: 0.8;
+    cursor: pointer;
+  }
+
+  .chip-ghost:hover {
+    opacity: 1;
+    background: color-mix(in srgb, var(--accent) 22%, transparent);
+  }
+
+  .plan-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 8px;
+    border: 1px dashed var(--accent);
+    border-radius: calc(var(--r) * 0.6);
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+    flex-shrink: 0;
+  }
+
+  .plan-bar-title {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-weight: 600;
+    color: var(--accent);
+  }
+
+  .plan-bar-actions {
+    display: flex;
+    gap: 4px;
+  }
+
+  .plan-bar-btn {
+    font-size: 11px;
+    padding: 3px 8px;
   }
 
   @keyframes spin {

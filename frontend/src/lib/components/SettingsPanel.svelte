@@ -69,6 +69,11 @@
   });
 
   function handleKeydown(e: KeyboardEvent) {
+    // The panel is always mounted (+layout) so the window listener is live even
+    // while closed: without this guard, pressing Ctrl+S anywhere (e.g. saving a
+    // note) fires saveConfig() and posts systemConfig — whose secret fields are
+    // always '' because GET /config never returns them — wiping .env (#1304).
+    if (!open || !configLoaded) return;
     if ((e.ctrlKey || e.metaKey) && e.key === 's') {
       e.preventDefault();
       saveConfig();
@@ -130,7 +135,10 @@
     }
     try {
       const configToSave: Record<string, any> = { ...systemConfig };
-      // Omit empty secrets so we don't overwrite existing configured values with empty strings
+      // Omit empty secrets so we don't overwrite existing configured values
+      // with empty strings. GET /config never returns secret values, so these
+      // fields are always '' here even when configured on the server (#1304).
+      if (!configToSave.gemini_api_key) delete configToSave.gemini_api_key;
       if (!configToSave.github_token) delete configToSave.github_token;
       if (!configToSave.github_client_id) delete configToSave.github_client_id;
       if (!configToSave.github_client_secret) delete configToSave.github_client_secret;
@@ -138,6 +146,8 @@
       if (!configToSave.google_client_id) delete configToSave.google_client_id;
       if (!configToSave.google_client_secret) delete configToSave.google_client_secret;
       if (!configToSave.openai_api_key) delete configToSave.openai_api_key;
+      if (!configToSave.telegram_bot_token) delete configToSave.telegram_bot_token;
+      if (!configToSave.telegram_allowed_user_id) delete configToSave.telegram_allowed_user_id;
 
       const result = await api.config.update(configToSave);
       configuredKeys = Object.entries(systemConfig)

@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     rename_match_window: float = 1.0
     # Interval (seconds) between Google Calendar sync triggers (#1134).
     calendar_sync_interval: int = 900
+    # Bind address for the /metrics + /health HTTP server (#1277). Loopback
+    # by default; docker-compose.yml sets WORKER_BIND_ADDR=0.0.0.0 because
+    # the port is not published to the host but must stay reachable on the
+    # internal compose network (Prometheus scrape, container healthchecks).
+    worker_bind_addr: str = "127.0.0.1"
 
 
 settings = Settings()

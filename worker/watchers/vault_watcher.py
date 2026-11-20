@@ -149,6 +149,41 @@ def _is_joidy_file(path: str) -> bool:
     return JOIDY_DIR in Path(path).parts
 
 
+def _vault_root() -> Path:
+    """Resolved vault root used to confine file reads inside the vault."""
+    return Path(settings.vault_path).resolve()
+
+
+def _is_safe_vault_file(path: Path) -> bool:
+    """Return True only for regular files contained inside the vault (#1293).
+
+    Rejects:
+    - symlinks — a ``vault/leak.md -> /app/.env`` link would exfiltrate
+      secrets (SECRET_KEY, POSTGRES_PASSWORD, GEMINI_API_KEY) into a note
+      readable via the API;
+    - paths whose resolved location escapes the vault root (e.g. a file
+      reached through a symlinked parent directory);
+    - non-regular files (FIFOs, sockets, devices).
+    """
+    try:
+        # is_symlink() uses lstat and must run BEFORE is_file(), which
+        # follows links and would pass a symlink to a real file as "regular".
+        if path.is_symlink():
+            logger.warning("[vault] Skipping symlink: %s", path)
+            return False
+        if not path.is_file():
+            logger.warning("[vault] Skipping non-regular file: %s", path)
+            return False
+        resolved = path.resolve()
+        if not resolved.is_relative_to(_vault_root()):
+            logger.warning("[vault] Skipping path outside vault: %s -> %s", path, resolved)
+            return False
+    except Exception as exc:
+        logger.warning("[vault] Skipping inaccessible path %s: %s", path, exc)
+        return False
+    return True
+
+
 def _parse_frontmatter(content: str) -> tuple[dict, str]:
     """Extract YAML frontmatter and body from markdown."""
     frontmatter = {}
@@ -219,6 +254,8 @@ async def rename_note_path(old_path: str, new_path: Path, client: httpx.AsyncCli
     (#364)."""
     try:
         if not new_path.exists():
+            return
+        if not _is_safe_vault_file(new_path):
             return
         content = new_path.read_text(encoding="utf-8", errors="replace")
         frontmatter, body = _parse_frontmatter(content)
@@ -295,6 +332,8 @@ async def rename_note_path(old_path: str, new_path: Path, client: httpx.AsyncCli
 async def import_or_update_note(filepath: Path, client: httpx.AsyncClient, token: str, *, bulk_import: bool = False):
     try:
         if not filepath.exists():
+            return
+        if not _is_safe_vault_file(filepath):
             return
         content = filepath.read_text(encoding="utf-8", errors="replace")
         frontmatter, body = _parse_frontmatter(content)
@@ -389,7 +428,7 @@ async def import_or_update_note(filepath: Path, client: httpx.AsyncClient, token
 
 async def initial_scan(vault_path: Path, client: httpx.AsyncClient, token: str):
     """On startup, import all .md files not in _joidy/."""
-    md_files = [p for p in vault_path.rglob("*.md") if not _is_joidy_file(str(p))]
+    md_files = [p for p in vault_path.rglob("*.md") if not _is_joidy_file(str(p)) and _is_safe_vault_file(p)]
     logger.info("[vault] Initial scan: %s markdown files found", len(md_files))
 
     semaphore = asyncio.Semaphore(4)
@@ -464,8 +503,9 @@ async def _consume_vault_events(
                     if new_path in consumed_adds:
                         continue
                     try:
-                        if Path(new_path).exists():
-                            content = Path(new_path).read_text(encoding="utf-8", errors="replace")
+                        new_file = Path(new_path)
+                        if new_file.exists() and _is_safe_vault_file(new_file):
+                            content = new_file.read_text(encoding="utf-8", errors="replace")
                             if _fingerprint(content) == old_fp:
                                 renames.append((old_path, new_path))
                                 consumed_adds.add(new_path)
