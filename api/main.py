@@ -120,6 +120,18 @@ async def lifespan(app: FastAPI):
             raise RuntimeError(_msg)
         logger.warning("%s Fix it before exposing this instance.", _msg)
 
+    # Loud warning when the dev auth bypass is active (#1282). The bypass is
+    # restricted to loopback clients, but an operator publishing ports on
+    # 0.0.0.0 must still know the API is running unauthenticated for local
+    # callers.
+    if not _effective_auth_password():
+        logger.warning(
+            "AUTH_PASSWORD is not set — dev auth bypass is ACTIVE. "
+            "Unauthenticated requests are accepted from loopback clients "
+            "(127.0.0.0/8, ::1) only; every other client must present a valid "
+            "Bearer token. Set AUTH_PASSWORD to require authentication."
+        )
+
     # Startup warning (#1281): the .env file holds every deployment secret.
     # Flag permissions looser than owner-only so files created by hand or
     # under a permissive umask get noticed — the CLI (`joidy` bootstrap) and
@@ -405,8 +417,11 @@ def health():
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         checks["database"] = "ok"
-    except Exception as e:
-        checks["database"] = f"error: {str(e)[:50]}"
+    except Exception:
+        # Fixed reason string — raw exception text must not leak to
+        # unauthenticated callers (#1291). Full detail stays in the logs.
+        logger.warning("[health] database check failed", exc_info=True)
+        checks["database"] = "db_unreachable"
 
     all_ok = all(v == "ok" for v in checks.values())
     return {
@@ -429,8 +444,11 @@ async def health_ready():
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         checks["database"] = "ok"
-    except Exception as e:
-        checks["database"] = f"error: {str(e)[:50]}"
+    except Exception:
+        # Fixed reason strings only — no raw exception text is returned to
+        # unauthenticated callers (#1291). Full detail stays in the logs.
+        logger.warning("[health/ready] database check failed", exc_info=True)
+        checks["database"] = "db_unreachable"
 
     # Cache check (in-memory)
     try:
@@ -438,8 +456,9 @@ async def health_ready():
 
         stats = get_cache_stats()
         checks["cache"] = "ok" if stats.get("initialized") else "degraded"
-    except Exception as e:
-        checks["cache"] = f"error: {str(e)[:50]}"
+    except Exception:
+        logger.warning("[health/ready] cache check failed", exc_info=True)
+        checks["cache"] = "cache_unreachable"
 
     # AI service check — skipped entirely when AI_SERVICE_ENABLED=false
     # (production without AI). Previously this reported "degraded" when the
@@ -455,9 +474,10 @@ async def health_ready():
                     body = r.json()
                     checks["ai_service"] = body.get("status", "ok")
                 else:
-                    checks["ai_service"] = f"error: HTTP {r.status_code}"
-        except Exception as e:
-            checks["ai_service"] = f"unavailable: {str(e)[:40]}"
+                    checks["ai_service"] = "ai_unhealthy"
+        except Exception:
+            logger.warning("[health/ready] ai-service check failed", exc_info=True)
+            checks["ai_service"] = "ai_unreachable"
 
     # "disabled" is a valid state — only "ok" and "disabled" count as healthy
     all_ok = all(v in ("ok", "disabled") for v in checks.values())

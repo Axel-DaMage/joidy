@@ -193,7 +193,7 @@ def create_note(
         from routers.websocket import broadcast_note_created
 
         broadcast_note_created(note.id, note.title)
-    except Exception:
+    except Exception:  # noqa: S110 — best-effort realtime broadcast; websocket must not fail the write
         pass
 
     # Broadcast a vault_synced event when the note came from Obsidian so the
@@ -203,7 +203,7 @@ def create_note(
             from routers.websocket import broadcast_vault_synced
 
             broadcast_vault_synced(note.id, note.title, note.source_path)
-        except Exception:
+        except Exception:  # noqa: S110 — best-effort realtime broadcast; websocket must not fail the write
             pass
 
     return note, gami
@@ -278,7 +278,7 @@ def update_note(
         from routers.websocket import broadcast_note_updated
 
         broadcast_note_updated(note.id, note.title)
-    except Exception:
+    except Exception:  # noqa: S110 — best-effort realtime broadcast; websocket must not fail the write
         pass
 
     # Broadcast a vault_synced event when the update came from Obsidian so the
@@ -288,7 +288,7 @@ def update_note(
             from routers.websocket import broadcast_vault_synced
 
             broadcast_vault_synced(note.id, note.title, note.source_path)
-        except Exception:
+        except Exception:  # noqa: S110 — best-effort realtime broadcast; websocket must not fail the write
             pass
 
     return note, gami

@@ -1,14 +1,38 @@
 <script lang="ts">
+  // Goal Editor — container component (#935). Owns the shared `goalEditor`
+  // store and orchestrates the responsive three-pane layout:
+  //   ≥1200px    editor | live preview | properties
+  //   768–1199px editor (or preview) stacked over the properties panel
+  //   <768px     single column with a tab bar to switch panes
+  // Panes (GoalEditorContent / GoalEditorPreview / GoalPropertiesPanel) read
+  // and write the store directly — no prop drilling past one level.
   import { createEventDispatcher, onDestroy, onMount } from 'svelte';
-  import { Eye, EyeOff, Save, Trash2, X, Maximize, ChevronLeft, ChevronRight, Settings, CheckCircle2, Sun, Moon, Zap } from 'lucide-svelte';
+  import {
+    Eye,
+    EyeOff,
+    Save,
+    Trash2,
+    X,
+    Maximize,
+    Settings,
+    CheckCircle2,
+    Sun,
+    Moon,
+    Zap,
+    Pencil,
+    SlidersHorizontal,
+  } from 'lucide-svelte';
   import 'highlight.js/styles/github-dark.css';
-  import { renderMarkdown as renderMarkdownShared } from '$lib/utils/markdown';
-  import { api, type Goal, type GoalContext } from '$lib/api';
+  import { api, type Goal, type GoalContext, type Note, type Tag as TagType } from '$lib/api';
   import { t } from 'svelte-i18n';
   import { logger } from '$lib/utils/logger';
   import { createTimerRegistry } from '$lib/utils/timer';
   import { loadDraft, persistDraft, clearDraft } from '$lib/utils/noteDrafts';
+  import { goalEditor, type GoalEditorPane } from '$lib/stores/goalEditor.svelte';
   import NoteRecoveryBanner from './NoteRecoveryBanner.svelte';
+  import GoalEditorContent from './GoalEditorContent.svelte';
+  import GoalEditorPreview from './GoalEditorPreview.svelte';
+  import GoalPropertiesPanel from './GoalPropertiesPanel.svelte';
 
   const timers = createTimerRegistry();
 
@@ -16,10 +40,14 @@
 
   interface Props {
     goal?: Goal | null;
+    /** Initial body content (markdown). After mount the store owns it. */
     content?: string;
+    notes?: Note[];
+    tags?: TagType[];
+    onCreateNote?: (title: string) => void | Note | Promise<void | Note>;
   }
 
-  let { goal = null, content = $bindable('') }: Props = $props();
+  let { goal = null, content = '', notes = [], tags = [], onCreateNote }: Props = $props();
 
   const dispatch = createEventDispatcher<{
     save: { title: string; content: string };
@@ -28,19 +56,50 @@
     complete: void;
     edit: void;
     contextChange: { context: GoalContext; goal: Goal };
+    /** Fired when the properties panel persists a field change (#935). */
+    goalUpdate: { goal: Goal };
   }>();
 
-  let title = $state('');
-  let saving = $state(false);
-  let saved = $state(false);
-  let previewMode = $state(false);
-  let zenMode = $state(false);
-  let deleteConfirm = $state(false);
+  // ── Store sync ─────────────────────────────────────────────────────────────
+  // The store is the single source of truth for panes; props flow in one way.
+  $effect(() => {
+    goalEditor.goal = goal ?? null;
+  });
+  // Only overwrite the title when the incoming goal actually carries a
+  // different one (reload, goal→goal navigation). Property-panel saves swap
+  // the goal object with the same title — mirroring unconditionally would
+  // clobber in-progress title edits (#935).
+  let lastSyncedGoal: { id: number | null; title: string } | null = null;
+  $effect(() => {
+    const id = goal?.id ?? null;
+    const incoming = goal?.title ?? '';
+    if (!lastSyncedGoal || lastSyncedGoal.id !== id || lastSyncedGoal.title !== incoming) {
+      goalEditor.title = incoming;
+    }
+    lastSyncedGoal = { id, title: incoming };
+  });
+  $effect(() => {
+    goalEditor.content = content ?? '';
+  });
 
-  // Energy context (#1200): ANY is the default so classification stays
-  // optional. Persisted immediately via the goal update endpoint.
+  // Reset transient pane state when navigating goal → goal without remounting
+  // (the [id] page reuses this component for client-side navigation).
+  let lastGoalId: number | null = null;
+  $effect(() => {
+    const id = goal?.id ?? null;
+    if (id !== lastGoalId) {
+      lastGoalId = id;
+      goalEditor.previewMode = false;
+      goalEditor.mobilePane = 'editor';
+      goalEditor.deleteConfirm = false;
+      goalEditor.saved = false;
+    }
+  });
+
+  // ── Energy context (#1200) ────────────────────────────────────────────────
+  // ANY is the default so classification stays optional. Persisted immediately
+  // via the goal update endpoint.
   let goalContext = $state<GoalContext>('ANY');
-  let contextSaving = $state(false);
 
   $effect(() => {
     goalContext = goal?.context ?? 'ANY';
@@ -59,24 +118,24 @@
   };
 
   async function selectContext(ctx: GoalContext) {
-    if (!goal || ctx === goalContext || contextSaving) return;
+    if (!goal || ctx === goalContext || goalEditor.contextSaving) return;
     const prev = goalContext;
     goalContext = ctx;
-    contextSaving = true;
+    goalEditor.contextSaving = true;
     try {
       const updated = await api.goals.update(goal.id, { context: ctx });
+      goalEditor.goal = updated;
       dispatch('contextChange', { context: ctx, goal: updated });
     } catch (e) {
       goalContext = prev;
       logger.error('[GoalEditor] context update failed:', e);
     } finally {
-      contextSaving = false;
+      goalEditor.contextSaving = false;
     }
   }
 
-  // Autosave (#1129): debounced draft persistence + dispatch of the save event.
+  // ── Autosave & drafts (#1129) ──────────────────────────────────────────────
   let autosaveTimer: ReturnType<typeof setTimeout> | undefined;
-  let hasUnsavedChanges = $state(false);
   let showRecoveryPrompt = $state(false);
   let recoveredDraft = $state<{ title: string; content: string; tags: string[] } | null>(null);
 
@@ -86,22 +145,26 @@
     if (!draftKey) return;
     // Persist even with an empty title: content typed before the goal is
     // titled must survive a reload (recovered via the banner).
-    persistDraft(draftKey, { title: title.trim(), content, tags: [] });
+    persistDraft(draftKey, {
+      title: goalEditor.title.trim(),
+      content: goalEditor.content,
+      tags: [],
+    });
   }
 
   function triggerAutosave() {
-    hasUnsavedChanges = true;
+    goalEditor.hasUnsavedChanges = true;
     clearTimeout(autosaveTimer);
     autosaveTimer = setTimeout(() => {
       saveDraft();
-      if (title.trim()) handleSave();
-      else hasUnsavedChanges = false;
+      if (goalEditor.title.trim()) handleSave();
+      else goalEditor.hasUnsavedChanges = false;
     }, AUTOSAVE_DELAY);
   }
 
   onMount(() => {
     const draft = loadDraft(draftKey);
-    if (draft && draft.content !== content) {
+    if (draft && draft.content !== goalEditor.content) {
       recoveredDraft = draft;
       showRecoveryPrompt = true;
     }
@@ -109,8 +172,8 @@
 
   function applyDraft() {
     if (recoveredDraft) {
-      title = recoveredDraft.title;
-      content = recoveredDraft.content;
+      goalEditor.title = recoveredDraft.title;
+      goalEditor.content = recoveredDraft.content;
       showRecoveryPrompt = false;
       recoveredDraft = null;
       triggerAutosave();
@@ -125,81 +188,77 @@
 
   // Browser-level guard: warn before closing the tab with unsaved work.
   function handleBeforeUnload(e: BeforeUnloadEvent) {
-    if (!hasUnsavedChanges) return;
+    if (!goalEditor.hasUnsavedChanges) return;
     e.preventDefault();
     e.returnValue = '';
   }
 
   function handleDeleteClick() {
-    if (!deleteConfirm) {
-      deleteConfirm = true;
-      timers.timeout(() => (deleteConfirm = false), 3000);
+    if (!goalEditor.deleteConfirm) {
+      goalEditor.deleteConfirm = true;
+      timers.timeout(() => (goalEditor.deleteConfirm = false), 3000);
       return;
     }
     dispatch('delete');
   }
 
-  // Sync zen mode with body class to hide layout chrome (#270)
+  // ── Zen mode (#270): sync with body class to hide layout chrome ────────────
   $effect(() => {
     if (typeof document !== 'undefined') {
-      document.body.classList.toggle('zen-mode-active', zenMode);
+      document.body.classList.toggle('zen-mode-active', goalEditor.zenMode);
     }
   });
 
   onDestroy(() => {
     if (typeof document !== 'undefined') document.body.classList.remove('zen-mode-active');
-    if (highlightRaf !== null) cancelAnimationFrame(highlightRaf);
     timers.clearAll();
     clearTimeout(autosaveTimer);
     saveDraft();
   });
 
-  $effect(() => {
-    title = goal?.title ?? '';
-  });
-
-  let visibleContent = $derived(content);
-  let wordCount = $derived(visibleContent.trim() ? visibleContent.trim().split(/\s+/).length : 0);
-  let charCount = $derived(visibleContent.length);
-  let lineCount = $derived(Math.max(1, visibleContent.split('\n').length));
-  let lineNumbers = $derived(Array.from({ length: lineCount }, (_, i) => i + 1));
-
-  // Debounced content for the expensive full markdown render (preview mode:
-  // marked + DOMPurify + highlight.js). The editor syntax highlight uses a
-  // faster rAF-based update (see editorHighlightedHtml) so typed text is styled
-  // immediately instead of lagging 300ms (#936).
-  let debouncedContent = $state('');
-  // The effect cleanup clears the pending debounce on every re-run AND on
-  // component teardown (#1003).
-  $effect(() => {
-    const current = visibleContent;
-    const debounceTimer = setTimeout(() => {
-      debouncedContent = current;
-    }, 300);
-    return () => clearTimeout(debounceTimer);
-  });
-
-  let renderedHtml = $derived(renderMarkdown(debouncedContent));
-
-  function renderMarkdown(md: string): string {
-    if (!md.trim()) return `<p style="color:var(--text-muted);font-style:italic;">${$t('goalEditor.previewPlaceholder')}</p>`;
-    return renderMarkdownShared(md);
-  }
-
-  function updateContent(e: Event) {
-    content = (e.currentTarget as HTMLTextAreaElement).value;
-    triggerAutosave();
-  }
+  let wordCount = $derived(
+    goalEditor.content.trim() ? goalEditor.content.trim().split(/\s+/).length : 0
+  );
+  let charCount = $derived(goalEditor.content.length);
 
   async function handleSave() {
-    if (!title.trim()) return;
-    saving = true;
-    dispatch('save', { title: title.trim(), content });
-    saving = false;
-    saved = true;
+    if (!goalEditor.title.trim()) return;
+    goalEditor.saving = true;
+    dispatch('save', { title: goalEditor.title.trim(), content: goalEditor.content });
+    goalEditor.saving = false;
+    goalEditor.saved = true;
     if (draftKey) clearDraft(draftKey);
-    hasUnsavedChanges = false;
-    timers.timeout(() => (saved = false), 2000);
+    goalEditor.hasUnsavedChanges = false;
+    timers.timeout(() => (goalEditor.saved = false), 2000);
+  }
+
+  // ── Pane switching ─────────────────────────────────────────────────────────
+  function togglePreview() {
+    goalEditor.previewMode = !goalEditor.previewMode;
+    // Keep the mobile tab in sync so Ctrl+P is useful below 768px too.
+    goalEditor.mobilePane = goalEditor.mobilePane === 'preview' ? 'editor' : 'preview';
+  }
+
+  function showEditorPane() {
+    goalEditor.previewMode = false;
+    goalEditor.mobilePane = 'editor';
+  }
+
+  function handleGoalUpdate(updated: Goal) {
+    dispatch('goalUpdate', { goal: updated });
+  }
+
+  const PANE_ORDER: GoalEditorPane[] = ['editor', 'preview', 'properties'];
+
+  function onTablistKeydown(e: KeyboardEvent) {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    e.preventDefault();
+    const idx = PANE_ORDER.indexOf(goalEditor.mobilePane);
+    const next =
+      e.key === 'ArrowRight'
+        ? (idx + 1) % PANE_ORDER.length
+        : (idx + PANE_ORDER.length - 1) % PANE_ORDER.length;
+    goalEditor.mobilePane = PANE_ORDER[next];
   }
 
   function onKeydown(e: KeyboardEvent) {
@@ -209,186 +268,143 @@
     }
     if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
       e.preventDefault();
-      previewMode = !previewMode;
+      togglePreview();
     }
     if (e.key === 'Escape') {
       e.preventDefault();
       e.stopPropagation();
-      if (zenMode) {
-        zenMode = false;
+      if (goalEditor.zenMode) {
+        goalEditor.zenMode = false;
       } else {
         dispatch('cancel');
       }
     }
   }
-
-  let backdropEl = $state<HTMLElement | undefined>();
-  let textareaEl = $state<HTMLTextAreaElement | undefined>();
-
-  function syncScroll() {
-    if (backdropEl && textareaEl) {
-      backdropEl.scrollTop = textareaEl.scrollTop;
-      backdropEl.scrollLeft = textareaEl.scrollLeft;
-    }
-  }
-
-  function highlightMarkdown(text: string): string {
-    if (!text) return '';
-    let html = text
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
-
-    html = html.replace(/^(#{1,6})(\s+.+)$/gm, (match, hashes, rest) => {
-      const level = hashes.length;
-      return `<span style="color: var(--md-h${level}); font-weight: 500;">${hashes}${rest}</span>`;
-    });
-
-    html = html.replace(/^(\s*)([-*+]|\d+\.)(\s+)/gm, '$1<span style="color: var(--md-h1, var(--xp)); font-weight: bold;">$2</span>$3');
-
-    html = html.replace(/(\*\*|__)([^\s](?:.*?[^\s])?)\1/g, '<span style="font-weight: bold; color: var(--text-primary);">$1$2$1</span>');
-    html = html.replace(/(?<!\*)\*([^\s\*](?:.*?[^\s\*])?)\*(?!\*)/g, '<span style="font-style: italic; color: var(--text-secondary);">*$1*</span>');
-    html = html.replace(/(`)(.*?)\1/g, '<span style="background: var(--elevated); color: var(--md-h1, var(--xp)); border-radius: 3px; padding: 0 2px;">$1$2$1</span>');
-    html = html.replace(/(~~)([^\s](?:.*?[^\s])?)\1/g, '<span style="text-decoration: line-through; opacity: 0.6;">$1$2$1</span>');
-
-    if (html.endsWith('\n')) {
-      html += '<br/>';
-    }
-
-    return html;
-  }
-
-  // Editor syntax highlight: update on the next animation frame instead of the
-  // 300ms debounce. rAF coalesces multiple keystrokes into a single ~16ms
-  // render, so typed characters are styled immediately without re-running the
-  // regex highlighter more than once per frame (#703, #936).
-  let editorHighlightedHtml = $state('');
-  let highlightRaf: ReturnType<typeof requestAnimationFrame> | null = null;
-
-  $effect(() => {
-    const current = visibleContent;
-    if (typeof requestAnimationFrame === 'function') {
-      if (highlightRaf !== null) cancelAnimationFrame(highlightRaf);
-      highlightRaf = requestAnimationFrame(() => {
-        editorHighlightedHtml = highlightMarkdown(current);
-        highlightRaf = null;
-      });
-    } else {
-      editorHighlightedHtml = highlightMarkdown(current);
-    }
-  });
 </script>
 
 <svelte:window onkeydown={onKeydown} onbeforeunload={handleBeforeUnload} />
 
-<div class="editor-shell" class:zen-mode={zenMode}>
+<div class="editor-shell" class:zen-mode={goalEditor.zenMode}>
   <NoteRecoveryBanner
     bind:show={showRecoveryPrompt}
     onApply={applyDraft}
     onDismiss={dismissDraft}
   />
 
-  {#if !zenMode}
-  <div class="toolbar">
-    <div class="toolbar-left">
-      {#if goal}
-        <div
-          class="context-selector"
-          role="radiogroup"
-          aria-label={$t('goalsPage.contextLabel')}
-          title={$t('goalsPage.contextHelper')}
+  {#if !goalEditor.zenMode}
+    <div class="toolbar">
+      <div class="toolbar-left">
+        {#if goal}
+          <div
+            class="context-selector"
+            role="radiogroup"
+            aria-label={$t('goalsPage.contextLabel')}
+            title={$t('goalsPage.contextHelper')}
+          >
+            {#each CONTEXT_OPTIONS as ctx}
+              <button
+                class="context-chip"
+                class:active={goalContext === ctx}
+                role="radio"
+                aria-checked={goalContext === ctx}
+                disabled={goalEditor.contextSaving}
+                onclick={() => selectContext(ctx)}
+                title={$t(`goalsPage.${CONTEXT_HINT_KEYS[ctx]}`)}
+              >
+                {#if ctx === 'MORNING'}<Sun size={12} />{:else if ctx === 'NIGHT'}<Moon
+                    size={12}
+                  />{:else}<Zap size={12} />{/if}
+                <span>{$t(`goalsPage.${CONTEXT_LABEL_KEYS[ctx]}`)}</span>
+              </button>
+            {/each}
+          </div>
+        {/if}
+      </div>
+
+      <div class="toolbar-right">
+        <span class="stat">{wordCount} palabras</span>
+        <span class="stat">{charCount} caracteres</span>
+
+        <button
+          class="toolbar-btn icon-only"
+          class:active={goalEditor.zenMode}
+          aria-pressed={goalEditor.zenMode}
+          onclick={() => (goalEditor.zenMode = !goalEditor.zenMode)}
+          title={$t('goalEditor.zenMode')}
+          aria-label={$t('goalEditor.zenModeShort')}
         >
-          {#each CONTEXT_OPTIONS as ctx}
-            <button
-              class="context-chip"
-              class:active={goalContext === ctx}
-              role="radio"
-              aria-checked={goalContext === ctx}
-              disabled={contextSaving}
-              onclick={() => selectContext(ctx)}
-              title={$t(`goalsPage.${CONTEXT_HINT_KEYS[ctx]}`)}
-            >
-              {#if ctx === 'MORNING'}<Sun size={12} />{:else if ctx === 'NIGHT'}<Moon size={12} />{:else}<Zap size={12} />{/if}
-              <span>{$t(`goalsPage.${CONTEXT_LABEL_KEYS[ctx]}`)}</span>
-            </button>
-          {/each}
-        </div>
-      {/if}
+          <Maximize size={14} />
+        </button>
+
+        <button
+          class="toolbar-btn preview-toggle"
+          class:active={goalEditor.previewMode}
+          aria-pressed={goalEditor.previewMode}
+          onclick={togglePreview}
+          title={$t('goalEditor.togglePreview')}
+        >
+          {#if goalEditor.previewMode}<EyeOff size={14} />{:else}<Eye size={14} />{/if}
+          <span>{goalEditor.previewMode ? 'Editor' : 'Vista previa'}</span>
+        </button>
+
+        <button
+          class="toolbar-btn complete-btn"
+          class:completed={goal?.is_completed}
+          onclick={() => dispatch('complete')}
+          title={goal?.is_completed ? 'Marcar como pendiente' : 'Completar objetivo'}
+        >
+          <CheckCircle2 size={14} />
+          <span>{goal?.is_completed ? 'Completado' : 'Completar'}</span>
+        </button>
+
+        <button
+          class="toolbar-btn save-btn"
+          class:saved={goalEditor.saved}
+          onclick={handleSave}
+          disabled={goalEditor.saving || !goalEditor.title.trim()}
+          title={$t('goalEditor.save')}
+        >
+          <Save size={14} />
+          <span class="save-status"
+            >{goalEditor.saved ? 'Guardado' : goalEditor.saving ? '...' : 'Guardar'}</span
+          >
+        </button>
+
+        <button
+          class="toolbar-btn"
+          onclick={() => dispatch('edit')}
+          title={$t('goalEditor.editGoalSettings')}
+        >
+          <Settings size={14} />
+          <span>{$t('goalEditor.settings')}</span>
+        </button>
+
+        <button
+          class="toolbar-btn delete-btn"
+          class:confirming={goalEditor.deleteConfirm}
+          onclick={handleDeleteClick}
+          title={goalEditor.deleteConfirm ? 'Haz clic de nuevo para eliminar' : 'Eliminar objetivo'}
+        >
+          <Trash2 size={14} />
+          <span>{goalEditor.deleteConfirm ? '¿Eliminar?' : 'Eliminar'}</span>
+        </button>
+
+        <button
+          class="toolbar-btn"
+          onclick={() => dispatch('cancel')}
+          title={$t('goalEditor.close')}
+          aria-label={$t('goalEditor.close')}
+        >
+          <X size={14} />
+        </button>
+      </div>
     </div>
-
-    <div class="toolbar-right">
-      <span class="stat">{wordCount} palabras</span>
-      <span class="stat">{charCount} caracteres</span>
-
-      <button
-        class="toolbar-btn icon-only"
-        class:active={zenMode}
-        aria-pressed={zenMode}
-        onclick={() => zenMode = !zenMode}
-        title={$t('goalEditor.zenMode')}
-        aria-label={$t('goalEditor.zenModeShort')}
-      >
-        <Maximize size={14} />
-      </button>
-
-      <button
-        class="toolbar-btn"
-        class:active={previewMode}
-        aria-pressed={previewMode}
-        onclick={() => previewMode = !previewMode}
-        title={$t('goalEditor.togglePreview')}
-      >
-        {#if previewMode}<EyeOff size={14} />{:else}<Eye size={14} />{/if}
-        <span>{previewMode ? 'Editor' : 'Vista previa'}</span>
-      </button>
-
-      <button
-        class="toolbar-btn complete-btn"
-        class:completed={goal?.is_completed}
-        onclick={() => dispatch('complete')}
-        title={goal?.is_completed ? 'Marcar como pendiente' : 'Completar objetivo'}
-      >
-        <CheckCircle2 size={14} />
-        <span>{goal?.is_completed ? 'Completado' : 'Completar'}</span>
-      </button>
-
-      <button
-        class="toolbar-btn save-btn"
-        class:saved
-        onclick={handleSave}
-        disabled={saving || !title.trim()}
-        title={$t('goalEditor.save')}
-      >
-        <Save size={14} />
-        <span class="save-status">{saved ? 'Guardado' : saving ? '...' : 'Guardar'}</span>
-      </button>
-
-      <button class="toolbar-btn" onclick={() => dispatch('edit')} title={$t('goalEditor.editGoalSettings')}>
-        <Settings size={14} />
-        <span>{$t('goalEditor.settings')}</span>
-      </button>
-
-      <button
-        class="toolbar-btn delete-btn"
-        class:confirming={deleteConfirm}
-        onclick={handleDeleteClick}
-        title={deleteConfirm ? 'Haz clic de nuevo para eliminar' : 'Eliminar objetivo'}
-      >
-        <Trash2 size={14} />
-        <span>{deleteConfirm ? '¿Eliminar?' : 'Eliminar'}</span>
-      </button>
-
-      <button class="toolbar-btn" onclick={() => dispatch('cancel')} title={$t('goalEditor.close')} aria-label={$t('goalEditor.close')}>
-        <X size={14} />
-      </button>
-    </div>
-  </div>
   {/if}
 
   <div class="title-row">
     <input
       class="title-input"
-      bind:value={title}
+      bind:value={goalEditor.title}
       placeholder={$t('goalEditor.titlePlaceholder')}
       aria-label={$t('goalEditor.titlePlaceholder')}
       oninput={() => triggerAutosave()}
@@ -396,33 +412,88 @@
     />
   </div>
 
-  <div class="content-area">
-    {#if previewMode}
-      <div class="preview" ondblclick={() => previewMode = false} role="button" tabindex="-1">
-        {@html renderedHtml}
-      </div>
-    {:else}
-      <div class="editor-container">
-        <div class="line-gutter" aria-hidden="true">
-          {#each lineNumbers as line}
-            <div class="line-number">{line}</div>
-          {/each}
-        </div>
-        <div class="backdrop" bind:this={backdropEl} aria-hidden="true">
-          <div class="highlights">{@html editorHighlightedHtml}</div>
-        </div>
-        <textarea
-          class="content-textarea"
-          bind:this={textareaEl}
-          value={content}
-          oninput={updateContent}
-          onscroll={syncScroll}
-          placeholder={$t('goalEditor.contentPlaceholder')}
-          aria-label={$t('goalEditor.contentPlaceholder')}
-          spellcheck="false"
-        ></textarea>
-      </div>
-    {/if}
+  <!-- Mobile pane switcher — only rendered <768px (see .pane-tabs styles) -->
+  <div
+    class="pane-tabs"
+    role="tablist"
+    aria-label={$t('goalEditor.paneSwitcher')}
+    tabindex="-1"
+    onkeydown={onTablistKeydown}
+  >
+    <button
+      type="button"
+      role="tab"
+      id="goal-tab-editor"
+      class="pane-tab"
+      class:active={goalEditor.mobilePane === 'editor'}
+      aria-selected={goalEditor.mobilePane === 'editor'}
+      aria-controls="goal-pane-editor"
+      tabindex={goalEditor.mobilePane === 'editor' ? 0 : -1}
+      onclick={() => (goalEditor.mobilePane = 'editor')}
+    >
+      <Pencil size={13} />
+      <span>{$t('goalEditor.tabEditor')}</span>
+    </button>
+    <button
+      type="button"
+      role="tab"
+      id="goal-tab-preview"
+      class="pane-tab"
+      class:active={goalEditor.mobilePane === 'preview'}
+      aria-selected={goalEditor.mobilePane === 'preview'}
+      aria-controls="goal-pane-preview"
+      tabindex={goalEditor.mobilePane === 'preview' ? 0 : -1}
+      onclick={() => (goalEditor.mobilePane = 'preview')}
+    >
+      <Eye size={13} />
+      <span>{$t('goalEditor.tabPreview')}</span>
+    </button>
+    <button
+      type="button"
+      role="tab"
+      id="goal-tab-properties"
+      class="pane-tab"
+      class:active={goalEditor.mobilePane === 'properties'}
+      aria-selected={goalEditor.mobilePane === 'properties'}
+      aria-controls="goal-pane-properties"
+      tabindex={goalEditor.mobilePane === 'properties' ? 0 : -1}
+      onclick={() => (goalEditor.mobilePane = 'properties')}
+    >
+      <SlidersHorizontal size={13} />
+      <span>{$t('goalEditor.tabProperties')}</span>
+    </button>
+  </div>
+
+  <!-- Responsive pane grid: columns/rows are driven by media queries; which
+       pane is visible below 768px is driven by data-pane. -->
+  <div class="panes" data-pane={goalEditor.mobilePane} class:preview-mode={goalEditor.previewMode}>
+    <div
+      class="pane pane-editor"
+      id="goal-pane-editor"
+      role="tabpanel"
+      aria-labelledby="goal-tab-editor"
+      aria-label={$t('goalEditor.editorPaneLabel')}
+    >
+      <GoalEditorContent oninput={triggerAutosave} />
+    </div>
+    <div
+      class="pane pane-preview"
+      id="goal-pane-preview"
+      role="tabpanel"
+      aria-labelledby="goal-tab-preview"
+      aria-label={$t('goalEditor.previewPaneLabel')}
+    >
+      <GoalEditorPreview onrequestedit={showEditorPane} />
+    </div>
+    <div
+      class="pane pane-properties"
+      id="goal-pane-properties"
+      role="tabpanel"
+      aria-labelledby="goal-tab-properties"
+      aria-label={$t('goalEditor.propertiesPaneLabel')}
+    >
+      <GoalPropertiesPanel {notes} {tags} onUpdate={handleGoalUpdate} {onCreateNote} />
+    </div>
   </div>
 </div>
 
@@ -463,10 +534,12 @@
     z-index: 20;
   }
 
-  .toolbar-left, .toolbar-right {
+  .toolbar-left,
+  .toolbar-right {
     display: flex;
     align-items: center;
     gap: var(--s2);
+    flex-wrap: wrap;
   }
 
   .context-selector {
@@ -492,9 +565,18 @@
     cursor: pointer;
     transition: all var(--t-fast);
   }
-  .context-chip:hover:not(:disabled) { color: var(--text-primary); }
-  .context-chip.active { background: var(--accent); color: var(--accent-contrast-text, var(--bg)); font-weight: 600; }
-  .context-chip:disabled { opacity: 0.5; cursor: default; }
+  .context-chip:hover:not(:disabled) {
+    color: var(--text-primary);
+  }
+  .context-chip.active {
+    background: var(--accent);
+    color: var(--accent-contrast-text, var(--bg));
+    font-weight: 600;
+  }
+  .context-chip:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
 
   .stat {
     font-size: 11px;
@@ -516,21 +598,59 @@
     cursor: pointer;
     transition: all var(--t-fast);
   }
-  .toolbar-btn:hover { background: var(--elevated); color: var(--text-primary); }
-  .toolbar-btn.active { border-color: var(--text-secondary); color: var(--text-primary); }
-  .toolbar-btn:disabled { opacity: 0.4; cursor: default; }
+  .toolbar-btn:hover {
+    background: var(--elevated);
+    color: var(--text-primary);
+  }
+  .toolbar-btn.active {
+    border-color: var(--text-secondary);
+    color: var(--text-primary);
+  }
+  .toolbar-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
 
-  .save-btn { border-color: var(--accent); color: var(--accent); }
-  .save-btn:hover { background: var(--accent); color: var(--accent-contrast-text, var(--bg)); }
-  .save-btn.saved { background: var(--success); border-color: var(--success); color: var(--text-primary); }
+  .save-btn {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .save-btn:hover {
+    background: var(--accent);
+    color: var(--accent-contrast-text, var(--bg));
+  }
+  .save-btn.saved {
+    background: var(--success);
+    border-color: var(--success);
+    color: var(--text-primary);
+  }
 
-  .complete-btn { border-color: var(--success, #22c55e); color: var(--success, #22c55e); }
-  .complete-btn:hover { background: color-mix(in srgb, var(--success, #22c55e) 15%, transparent); }
-  .complete-btn.completed { background: var(--success, #22c55e); color: #ffffff; }
+  .complete-btn {
+    border-color: var(--success, #22c55e);
+    color: var(--success, #22c55e);
+  }
+  .complete-btn:hover {
+    background: color-mix(in srgb, var(--success, #22c55e) 15%, transparent);
+  }
+  .complete-btn.completed {
+    background: var(--success, #22c55e);
+    color: #ffffff;
+  }
 
-  .delete-btn { border-color: color-mix(in srgb, #ef4444 50%, var(--border)); color: #ef4444; }
-  .delete-btn:hover { background: color-mix(in srgb, #ef4444 15%, transparent); border-color: #ef4444; }
-  .delete-btn.confirming { background: #ef4444; color: #ffffff; border-color: #ef4444; font-weight: 600; }
+  .delete-btn {
+    border-color: color-mix(in srgb, #ef4444 50%, var(--border));
+    color: #ef4444;
+  }
+  .delete-btn:hover {
+    background: color-mix(in srgb, #ef4444 15%, transparent);
+    border-color: #ef4444;
+  }
+  .delete-btn.confirming {
+    background: #ef4444;
+    color: #ffffff;
+    border-color: #ef4444;
+    font-weight: 600;
+  }
 
   .save-status {
     display: inline-block;
@@ -554,7 +674,9 @@
     color: var(--text-primary);
     line-height: 1.3;
   }
-  .title-input::placeholder { color: var(--text-muted); }
+  .title-input::placeholder {
+    color: var(--text-muted);
+  }
 
   .title-row {
     display: flex;
@@ -565,117 +687,132 @@
     flex-shrink: 0;
   }
 
-  .content-area {
-    flex: 1;
-    overflow: hidden;
-    display: flex;
-  }
-
-  .editor-container {
-    position: relative;
-    flex: 1;
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
-  }
-
-  .line-gutter {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 44px;
-    height: 100%;
-    padding: 24px 0;
+  /* ── Pane switcher (mobile only) ── */
+  .pane-tabs {
+    display: none;
+    align-items: stretch;
+    gap: 4px;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--border);
     background: var(--surface);
-    border-right: 1px solid var(--border-light, var(--border));
-    font-family: var(--font-mono);
-    font-size: 12px;
-    color: var(--text-muted);
-    text-align: right;
-    overflow: hidden;
-    pointer-events: none;
+    flex-shrink: 0;
   }
 
-  .line-number {
-    height: 1.7em;
-    line-height: 1.7;
-    padding-right: 10px;
-  }
-
-  .backdrop {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
-    pointer-events: none;
-    background: transparent;
-  }
-
-  .highlights {
-    padding: 24px 24px 24px 60px;
-    font-family: var(--font-mono);
-    font-size: 14px;
-    line-height: 1.7;
-    white-space: pre-wrap;
-    word-wrap: break-word;
-    color: var(--text-primary);
-    tab-size: 2;
-  }
-
-  .content-textarea:focus-visible {
-    outline: 2px solid var(--xp);
-    outline-offset: -2px;
-  }
-  .content-textarea {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: transparent;
-    border: none;
-    outline: none;
-    resize: none;
-    padding: 24px 24px 24px 60px;
-    font-size: 14px;
-    font-family: var(--font-mono);
-    line-height: 1.7;
-    color: transparent;
-    caret-color: var(--text-primary);
-    white-space: pre-wrap;
-    word-wrap: break-word;
-    tab-size: 2;
-    overflow-y: auto;
-  }
-  .content-textarea::placeholder { color: var(--text-muted); }
-
-  .content-textarea::selection {
-    background: color-mix(in srgb, var(--xp) 30%, transparent);
-    color: transparent;
-  }
-
-  .preview {
+  .pane-tab {
     flex: 1;
-    overflow-y: auto;
-    padding: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 12px;
     font-family: var(--font-sans);
-    font-size: 14px;
-    line-height: 1.8;
+    cursor: pointer;
+    transition: all var(--t-fast);
+  }
+  .pane-tab:hover {
     color: var(--text-primary);
+    background: var(--elevated);
+  }
+  .pane-tab.active,
+  .pane-tab[aria-selected='true'] {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-contrast-text, var(--bg));
+    font-weight: 600;
+  }
+  .pane-tab:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
   }
 
-  .preview :global(h1) { font-size: 20px; font-weight: 500; margin: 0 0 12px; color: var(--md-h1, var(--text-primary)); }
-  .preview :global(h2) { font-size: 16px; font-weight: 500; margin: 16px 0 8px; color: var(--md-h2, var(--text-primary)); border-bottom: 1px solid var(--border); padding-bottom: 4px; }
-  .preview :global(h3) { font-size: 14px; font-weight: 500; margin: 12px 0 6px; color: var(--md-h3, var(--text-secondary)); }
-  .preview :global(p) { margin: 0 0 12px; }
-  .preview :global(ul) { margin: 0 0 12px; padding-left: 20px; }
-  .preview :global(li) { margin: 4px 0; }
-  .preview :global(code) { font-family: var(--font-mono); font-size: 12px; background: var(--elevated); padding: 1px 5px; border-radius: 2px; color: var(--md-h1, var(--xp)); }
-  .preview :global(pre) { background: var(--elevated); border: 1px solid var(--border); border-radius: var(--r); padding: 16px; overflow-x: auto; margin: 12px 0; white-space: pre; }
-  .preview :global(blockquote) { border-left: 2px solid var(--border); margin: 0; padding: 4px 12px; color: var(--text-secondary); font-style: italic; }
-  .preview :global(strong) { font-weight: 600; }
-  .preview :global(em) { font-style: italic; }
-  .preview :global(del) { text-decoration: line-through; color: var(--text-muted); }
+  /* ── Responsive pane grid ──
+     ≥1200px (default): three columns — editor | live preview | properties */
+  .panes {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(260px, 320px);
+  }
+
+  .pane {
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .pane-preview {
+    border-left: 1px solid var(--border-light, var(--border));
+    border-right: 1px solid var(--border-light, var(--border));
+  }
+
+  /* Zen mode focuses on writing: editor pane only. */
+  .editor-shell.zen-mode .panes {
+    grid-template-columns: 1fr;
+  }
+  .editor-shell.zen-mode .pane-preview,
+  .editor-shell.zen-mode .pane-properties,
+  .editor-shell.zen-mode .pane-tabs {
+    display: none;
+  }
+
+  /* 768–1199px: editor (or preview) stacked over the properties panel */
+  @media (min-width: 768px) and (max-width: 1199px) {
+    .panes {
+      grid-template-columns: 1fr;
+      grid-template-rows: minmax(0, 1fr) auto;
+    }
+    .panes:not(.preview-mode) .pane-preview {
+      display: none;
+    }
+    .panes.preview-mode .pane-editor {
+      display: none;
+    }
+    .pane-preview {
+      border: none;
+    }
+    .pane-properties {
+      max-height: 42%;
+      border-top: 1px solid var(--border);
+    }
+  }
+
+  /* <768px: single column — the tab bar picks the visible pane */
+  @media (max-width: 767px) {
+    .panes {
+      grid-template-columns: 1fr;
+    }
+    .panes .pane {
+      display: none;
+    }
+    .panes[data-pane='editor'] .pane-editor,
+    .panes[data-pane='preview'] .pane-preview,
+    .panes[data-pane='properties'] .pane-properties {
+      display: flex;
+    }
+    .pane-preview {
+      border: none;
+    }
+    .pane-tabs {
+      display: flex;
+    }
+    /* The tabs replace the toolbar preview toggle on mobile. */
+    .preview-toggle {
+      display: none;
+    }
+  }
+
+  /* ≥1200px the live preview is a dedicated always-on pane — the toggle that
+     swaps editor↔preview only makes sense below that breakpoint. */
+  @media (min-width: 1200px) {
+    .preview-toggle {
+      display: none;
+    }
+  }
 </style>

@@ -1,6 +1,7 @@
 import json
 import re
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
 
 
 class BaseLLMClient(ABC):
@@ -27,6 +28,26 @@ class BaseLLMClient(ABC):
     ) -> str:
         """Generate text response."""
         pass
+
+    async def generate_stream(
+        self,
+        prompt: str,
+        temperature: float = 0.2,
+        max_tokens: int = 256,
+        system_prompt: str | None = None,
+    ) -> AsyncIterator[str]:
+        """Stream the response as text chunks (#1131).
+
+        Default implementation for providers without native streaming: yields
+        the full ``generate()`` output as a single chunk so callers can use a
+        uniform streaming interface.
+        """
+        yield await self.generate(
+            prompt,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            system_prompt=system_prompt,
+        )
 
     async def health_check(self) -> bool:
         """Ping the provider to verify it's reachable. Returns True if healthy."""

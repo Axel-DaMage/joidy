@@ -3,6 +3,39 @@ description: Suggest a new feature or improvement.
 title: '[feat] '
 labels: ['enhancement']
 body:
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: >-
+        How important is this to you? Maintainers apply the matching
+        `priority:P*` label during triage.
+      options:
+        - Unsure — let maintainers triage
+        - P0 — Critical (fix immediately)
+        - P1 — High priority
+        - P2 — Medium priority
+        - P3 — Low priority / backlog
+      default: 0
+    validations:
+      required: true
+  - type: dropdown
+    id: urgency
+    attributes:
+      label: Urgency
+      description: >-
+        What is the impact? Maintainers apply the matching `urgency:*` label
+        during triage.
+      options:
+        - Unsure — let maintainers triage
+        - critical — Security vulnerability or data loss risk
+        - high — Incorrect behavior, data corruption, memory leaks
+        - medium — Important improvement, refactoring, UX issue
+        - low — Chore, docs, minor cleanup
+        - backlog — Nice-to-have, not currently prioritized
+      default: 0
+    validations:
+      required: true
   - type: textarea
     id: problem
     attributes:

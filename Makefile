@@ -212,10 +212,11 @@ test-frontend-check: ## Run frontend typechecking (svelte-check) inside Docker
 
 test: test-api test-ai test-frontend test-frontend-check ## Run all unit/typecheck suites (API + AI service + Frontend). E2E is separate: make test-frontend-e2e (needs make dev running)
 
-lint-api: ## Check syntax of all Python services via Docker (compileall)
+lint-api: ## Docker fallback: compileall syntax check only (prefer `make lint`)
 	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml run --rm api python -m compileall -q /app/api /app/ai-service /app/worker || (echo "Syntax errors found"; exit 1)
 
-lint: lint-api ## Run all linters and code checkers
+lint: ## Lint like CI on the host (no Docker): compileall + ruff + ruff format --check + mypy + bandit + frontend svelte-check
+	bash scripts/lint.sh
 
 fix-permissions: ## Clean Docker artifacts and fix project permissions (no sudo needed since #886)
 	bash scripts/fix-permissions.sh

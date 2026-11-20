@@ -50,7 +50,7 @@ os.environ["APP_ENV"] = "test"
 os.environ.setdefault("OBSIDIAN_VAULT_PATH", "/vault")
 
 # Test-only bcrypt cost (#996). Hash strength is irrelevant under test and
-# passlib's default (12 rounds) made auth tests the slowest single test in the
+# bcrypt's default (12 rounds) made auth tests the slowest single test in the
 # suite. Must be set before app modules import `config.settings`, which reads
 # BCRYPT_ROUNDS once at Settings construction time. Overridable by exporting
 # BCRYPT_ROUNDS explicitly.
@@ -375,6 +375,11 @@ def client(db_session):
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_current_user] = override_get_current_user
     app.dependency_overrides[get_current_user_or_internal] = override_get_current_user
+
+    # The TestClient default peer ("testclient") is NOT a loopback IP — since
+    # #1282 the dev auth bypass applies to loopback clients only, so tests
+    # that exercise it (dev-mode /ws, /webhook/obsidian) must present a
+    # loopback peer address explicitly.
 
     with TestClient(app, client=("127.0.0.1", 50000)) as test_client:
         yield test_client

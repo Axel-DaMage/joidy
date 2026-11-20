@@ -872,7 +872,7 @@ async def start_device_flow():
         try:
             err_json = e.response.json()
             error_msg = err_json.get("error_description") or err_json.get("error") or error_msg
-        except Exception:
+        except Exception:  # noqa: S110 — non-JSON error body; keep status-code fallback message
             pass
         raise HTTPException(status_code=400, detail=error_msg)
     except Exception as e:
@@ -905,7 +905,7 @@ async def poll_device_code(
     if not settings.github_client_id:
         raise HTTPException(status_code=400, detail="GitHub OAuth not configured")
 
-    token_url = "https://github.com/login/oauth/access_token"
+    token_url = "https://github.com/login/oauth/access_token"  # noqa: S105 — OAuth endpoint URL, not a password
 
     try:
         async with http_client(timeout=30.0) as client:
@@ -929,7 +929,7 @@ async def poll_device_code(
         try:
             err_json = e.response.json()
             error_msg = err_json.get("error_description") or err_json.get("error") or error_msg
-        except Exception:
+        except Exception:  # noqa: S110 — non-JSON error body; keep status-code fallback message
             pass
         raise HTTPException(status_code=400, detail=error_msg)
     except Exception as e:
@@ -1018,7 +1018,7 @@ async def oauth_callback(
             status_code=400, detail="GitHub OAuth not configured. Set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET in .env"
         )
 
-    token_url = "https://github.com/login/oauth/access_token"
+    token_url = "https://github.com/login/oauth/access_token"  # noqa: S105 — OAuth endpoint URL, not a password
 
     async with http_client(timeout=30.0) as client:
         r = await client.post(

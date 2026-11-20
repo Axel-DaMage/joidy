@@ -34,10 +34,20 @@ async def _embeddings_available() -> bool:
     available = False
     try:
         async with http_client(timeout=3.0) as client:
-            r = await client.get(f"{settings.ai_service_url}/health")
+            headers = {}
+            if settings.internal_secret:
+                headers["X-Internal-Secret"] = settings.internal_secret
+            r = await client.get(f"{settings.ai_service_url}/health", headers=headers)
             if r.status_code == 200:
                 body = r.json()
-                available = bool((body.get("provider") or {}).get("embedding", {}).get("available"))
+                # Since #1291 the provider inventory is only returned to
+                # internal callers; ``embedding_available`` is the minimal
+                # public signal. The provider path stays for compatibility
+                # with older ai-service versions.
+                available = bool(
+                    body.get("embedding_available")
+                    or (body.get("provider") or {}).get("embedding", {}).get("available")
+                )
     except Exception:
         logger.warning("[embedding] ai-service health check failed, assuming unavailable", exc_info=True)
     _embedding_health_cache = (available, now)
