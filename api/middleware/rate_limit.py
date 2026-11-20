@@ -193,9 +193,7 @@ class UserRateLimiter:
             if len(self._login_attempts) >= self._max_login_attempts:
                 # Bound memory: drop entries whose lockout already expired.
                 now = time.time()
-                self._login_attempts = {
-                    k: v for k, v in self._login_attempts.items() if v.locked_until > now
-                }
+                self._login_attempts = {k: v for k, v in self._login_attempts.items() if v.locked_until > now}
             attempt = self._login_attempts.setdefault(ip, LoginAttempt())
         attempt.failures += 1
         if attempt.failures >= self.login_max_failures:

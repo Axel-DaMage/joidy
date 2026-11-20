@@ -25,18 +25,14 @@ class StrictRouteTests(unittest.TestCase):
 
     def test_login_ignores_rotating_bearer(self):
         allowed = sum(
-            self.limiter.check_rate_limit(
-                _request(path="/auth/login", headers={"Authorization": f"Bearer tok{i}"})
-            )[0]
+            self.limiter.check_rate_limit(_request(path="/auth/login", headers={"Authorization": f"Bearer tok{i}"}))[0]
             for i in range(50)
         )
         self.assertEqual(allowed, 5)
 
     def test_login_ignores_spoofed_xff(self):
         allowed = sum(
-            self.limiter.check_rate_limit(
-                _request(path="/auth/login", headers={"X-Forwarded-For": f"10.9.{i}.1"})
-            )[0]
+            self.limiter.check_rate_limit(_request(path="/auth/login", headers={"X-Forwarded-For": f"10.9.{i}.1"}))[0]
             for i in range(50)
         )
         self.assertEqual(allowed, 5)
@@ -53,9 +49,7 @@ class StrictRouteTests(unittest.TestCase):
 
     def test_authenticated_routes_still_get_auth_bucket(self):
         allowed = sum(
-            self.limiter.check_rate_limit(
-                _request(path="/notes/", headers={"Authorization": f"Bearer tok{i}"})
-            )[0]
+            self.limiter.check_rate_limit(_request(path="/notes/", headers={"Authorization": f"Bearer tok{i}"}))[0]
             for i in range(50)
         )
         self.assertEqual(allowed, 50)  # each distinct token → 5000/min bucket
@@ -65,9 +59,7 @@ class TrustedProxyTests(unittest.TestCase):
     def test_xff_ignored_without_trusted_proxies(self):
         limiter = UserRateLimiter(requests_per_minute=3)
         results = [
-            limiter.check_rate_limit(
-                _request(ip="9.9.9.9", headers={"X-Forwarded-For": f"1.1.1.{i}"})
-            )[0]
+            limiter.check_rate_limit(_request(ip="9.9.9.9", headers={"X-Forwarded-For": f"1.1.1.{i}"}))[0]
             for i in range(4)
         ]
         self.assertEqual(results, [True, True, True, False])
@@ -75,9 +67,7 @@ class TrustedProxyTests(unittest.TestCase):
     def test_xff_ignored_for_untrusted_peer(self):
         limiter = UserRateLimiter(requests_per_minute=3, trusted_proxies="10.0.0.0/8")
         results = [
-            limiter.check_rate_limit(
-                _request(ip="9.9.9.9", headers={"X-Forwarded-For": f"1.1.1.{i}"})
-            )[0]
+            limiter.check_rate_limit(_request(ip="9.9.9.9", headers={"X-Forwarded-For": f"1.1.1.{i}"}))[0]
             for i in range(4)
         ]
         self.assertEqual(results, [True, True, True, False])
@@ -86,15 +76,11 @@ class TrustedProxyTests(unittest.TestCase):
         limiter = UserRateLimiter(requests_per_minute=2, trusted_proxies="10.0.0.0/8,127.0.0.1")
         # Different forwarded IPs behind the trusted peer → separate buckets.
         for i in range(4):
-            ok, _ = limiter.check_rate_limit(
-                _request(ip="10.0.0.5", headers={"X-Forwarded-For": f"203.0.113.{i}"})
-            )
+            ok, _ = limiter.check_rate_limit(_request(ip="10.0.0.5", headers={"X-Forwarded-For": f"203.0.113.{i}"}))
             self.assertTrue(ok)
         # Same forwarded IP → its own bucket fills at the per-IP limit.
         results = [
-            limiter.check_rate_limit(
-                _request(ip="10.0.0.5", headers={"X-Forwarded-For": "203.0.113.7"})
-            )[0]
+            limiter.check_rate_limit(_request(ip="10.0.0.5", headers={"X-Forwarded-For": "203.0.113.7"}))[0]
             for _ in range(3)
         ]
         self.assertEqual(results, [True, True, False])
@@ -103,9 +89,7 @@ class TrustedProxyTests(unittest.TestCase):
         # TestClient peers ("testclient") are not parseable IPs → XFF ignored.
         limiter = UserRateLimiter(requests_per_minute=2, trusted_proxies="0.0.0.0/0,::/0")
         results = [
-            limiter.check_rate_limit(
-                _request(ip="testclient", headers={"X-Forwarded-For": f"2.2.2.{i}"})
-            )[0]
+            limiter.check_rate_limit(_request(ip="testclient", headers={"X-Forwarded-For": f"2.2.2.{i}"}))[0]
             for i in range(3)
         ]
         self.assertEqual(results, [True, True, False])
