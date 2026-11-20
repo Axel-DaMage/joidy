@@ -1,3 +1,5 @@
+import os
+
 from config import settings
 from database import get_db
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Response
@@ -37,6 +39,7 @@ from services.pagination import add_pagination_headers
 from services.sanitizer import MAX_TAG_LENGTH, sanitize_content, sanitize_tag, sanitize_title
 from services.skill_tree import sync_skills_for_tags
 from services.tag_graph import sync_tag_cooccurrences_for_tags
+from services.vault_paths import normalize_source_path, resolve_confined_source_path
 from sqlalchemy import text
 from sqlalchemy.orm import Session, selectinload
 
@@ -171,6 +174,56 @@ def _is_truthy_header(value: str | None) -> bool:
     return value is not None and value.lower() in {"1", "true", "yes", "on"}
 
 
+def _note_id_owning_resolved(db: Session, resolved: str) -> int | None:
+    """Id of the note whose stored ``source_path`` resolves to ``resolved``.
+
+    Compares realpaths, not strings, so symlink aliases of the same file can
+    never belong to two different notes.
+    """
+    for note_id, stored in db.query(Note.id, Note.source_path).filter(Note.source_path.isnot(None)):
+        if stored and resolve_confined_source_path(stored) == resolved:
+            return note_id
+    return None
+
+
+def _validated_source_path(
+    db: Session,
+    source_path: str | None,
+    *,
+    note_id: int | None,
+    writes_file: bool,
+) -> None:
+    """Reject an unsafe client-supplied ``source_path`` with a generic 400.
+
+    The path must normalize onto the canonical vault domain and resolve,
+    after ``realpath``, strictly inside the effective vault root as a ``.md``
+    file outside hidden dirs (``.obsidian`` …) and ``_joidy/`` — so prefix
+    confusion, traversal, symlink escapes, and Joidy/Obsidian internals are
+    all refused (#1287, #1314).
+
+    When the request could write the file (``writes_file`` — i.e. it did not
+    come from the vault watcher), an already-existing target must be the
+    note's own file: creations fall through to ``create_note``'s
+    source_path dedup, and updates may only keep their own file — a client
+    can never aim a write at a vault file no note owns.
+
+    One generic detail for every rejection: distinguishing "outside vault"
+    from "already exists" would leak a file-existence oracle (#1314).
+    """
+    if source_path is None:
+        return
+    normalized = normalize_source_path(source_path)
+    if normalized is None:
+        return
+    resolved = resolve_confined_source_path(normalized)
+    if resolved is None:
+        raise HTTPException(status_code=400, detail="Invalid source_path")
+    if writes_file and os.path.exists(resolved):
+        owner_id = _note_id_owning_resolved(db, resolved)
+        if owner_id is None or (note_id is not None and owner_id != note_id):
+            raise HTTPException(status_code=400, detail="Invalid source_path")
+
+
 @router.get("/")
 def list_notes(
     skip: int = Query(0, ge=0),
@@ -288,6 +341,12 @@ def create_note(
     x_from_vault: str | None = Header(default=None, alias="X-From-Vault"),
     db: Session = Depends(get_db),
 ):
+    _validated_source_path(
+        db,
+        data.source_path,
+        note_id=None,
+        writes_file=not _is_truthy_header(x_from_vault),
+    )
     note, gami = create_note_service(
         db,
         title=data.title,
@@ -312,6 +371,12 @@ def update_note(
     x_from_vault: str | None = Header(default=None, alias="X-From-Vault"),
     db: Session = Depends(get_db),
 ):
+    _validated_source_path(
+        db,
+        data.source_path,
+        note_id=note_id,
+        writes_file=not _is_truthy_header(x_from_vault),
+    )
     note, gami = update_note_service(
         db,
         note_id,

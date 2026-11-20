@@ -50,6 +50,7 @@ from services.auth_service import (
     get_current_user_or_internal,
     verify_token,
 )
+from services.env_file import env_file_permissions, get_env_file
 from services.http_client import aclose_http_clients, http_client
 from services.response_cache import get_cache_stats
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -92,6 +93,19 @@ async def lifespan(app: FastAPI):
         raise RuntimeError(
             "AUTH_PASSWORD must be set when APP_ENV=production. "
             "Authentication is disabled without it — refusing to start."
+        )
+
+    # Startup warning (#1281): the .env file holds every deployment secret.
+    # Flag permissions looser than owner-only so files created by hand or
+    # under a permissive umask get noticed — the CLI (`joidy` bootstrap) and
+    # write_env() both enforce 0o600, but neither may have run yet.
+    env_perms = env_file_permissions()
+    if env_perms is not None and env_perms & 0o077:
+        logger.warning(
+            "%s has mode %04o — readable by other users on this host. It contains secrets; run 'chmod 600 %s'.",
+            get_env_file(),
+            env_perms,
+            get_env_file(),
         )
 
     init_db()

@@ -6,11 +6,15 @@ router must never be imported from a service.
 """
 
 import json
+import logging
 import os
 import re
+import stat
 from collections.abc import Callable
 from pathlib import Path, PurePosixPath
 from urllib.parse import urlparse
+
+logger = logging.getLogger(__name__)
 
 
 def _default_env_file() -> Path:
@@ -40,6 +44,41 @@ def get_env_file() -> Path:
 # ``routers/config.py``). Prefer ``get_env_file()`` — it picks up runtime
 # changes to ``JOIDY_ENV_FILE``.
 ENV_FILE = get_env_file()
+
+
+# ── .env file permissions (#1281) ───────────────────────────────────────────
+# .env holds every deployment secret (SECRET_KEY, POSTGRES_PASSWORD, OAuth
+# client secrets, the AUTH_PASSWORD hash, INTERNAL_API_TOKEN, ...). Any mode
+# looser than owner-only lets local users/processes read all of them, so:
+#   * write_env() creates the file 0o600 and tightens pre-existing loose
+#     files on every write;
+#   * env_file_permissions() backs the API startup warning so files created
+#     by hand or with a permissive umask get flagged even before the first
+#     write.
+# The CLI (`joidy` bootstrap) enforces the same 0o600 on every invocation;
+# both together cover "create" and "mutate" paths on host and in-container.
+ENV_FILE_MODE = 0o600
+
+
+def env_file_permissions() -> int | None:
+    """Permission bits of the env file (e.g. ``0o644``), or ``None``.
+
+    ``None`` when the file does not exist or cannot be stat'ed — callers
+    should treat that as "nothing to warn about".
+    """
+    env_file = get_env_file()
+    try:
+        return stat.S_IMODE(env_file.stat().st_mode)
+    except OSError:
+        return None
+
+
+def _secure_env_file(env_file: Path) -> None:
+    """Best-effort ``chmod 0o600``; a failure must never break a write."""
+    try:
+        os.chmod(env_file, ENV_FILE_MODE)
+    except OSError as exc:
+        logger.warning("could not restrict permissions on %s: %s", env_file, exc)
 
 
 def read_env() -> dict:
@@ -298,8 +337,14 @@ def write_env(env_vars: dict) -> None:
             output.append("")
         output.extend(f"{key}={value}" for key, value in remaining.items())
 
-    with open(env_file, "w") as f:
+    # os.open with mode 0o600 so a *new* file is never readable by other
+    # users even under a permissive umask (umask can only strip bits), then
+    # chmod to tighten files that predate this fix or were created by hand
+    # with a loose mode (#1281).
+    fd = os.open(env_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, ENV_FILE_MODE)
+    with os.fdopen(fd, "w") as f:
         f.write("\n".join(output).rstrip("\n") + "\n")
+    _secure_env_file(env_file)
 
 
 def get_persisted(key: str) -> str:

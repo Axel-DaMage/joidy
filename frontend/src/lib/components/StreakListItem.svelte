@@ -291,7 +291,7 @@
 
   .item-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
   .item-name { font-size: 13px; font-weight: 500; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .item-meta { font-size: 9px; color: var(--text-disabled); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item-meta { font-size: 9px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   .item-count {
     display: flex; align-items: center; gap: 6px; flex-shrink: 0;

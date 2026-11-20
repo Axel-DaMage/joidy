@@ -109,6 +109,7 @@ step "Configuring environment..."
 
 if [ ! -f .env ]; then
   cp .env.example .env
+  chmod 600 .env
   ok "Created .env from .env.example"
 
   # Auto-generate secrets so first boot works without manual edits

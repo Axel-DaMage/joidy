@@ -319,7 +319,7 @@
 
   .inbox-card-date {
     font-size: 10px;
-    color: var(--text-disabled);
+    color: var(--text-muted);
     font-family: var(--font-mono);
   }
 

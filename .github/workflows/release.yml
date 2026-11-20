@@ -16,13 +16,15 @@ on:
         required: false
         default: true
 
-permissions:
-  contents: write
+# Fail closed: every job must declare its own permissions explicitly.
+permissions: {}
 
 jobs:
   release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -30,11 +32,34 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Validate dispatch inputs
+        env:
+          # Inputs mapped to env — ${{ }} interpolation inside run: expands
+          # before the shell parses the line, so a crafted input could break
+          # quoting and inject arbitrary commands (#1295).
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          # Repo tags are always 'vMAJOR.MINOR.PATCH' with optional
+          # '-prerelease.N' suffix (e.g. v1.1.0-beta.8).
+          if [ -n "$INPUT_VERSION" ] && [[ ! "$INPUT_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
+            echo "::error::Invalid version '$INPUT_VERSION' — expected a tag like v1.2.3 or v1.2.3-beta.4"
+            exit 1
+          fi
+          if [ -n "$INPUT_PRERELEASE" ] && [[ ! "$INPUT_PRERELEASE" =~ ^(true|false)$ ]]; then
+            echo "::error::Invalid prerelease value '$INPUT_PRERELEASE' — expected true or false"
+            exit 1
+          fi
+          echo "Dispatch inputs are valid"
+
       - name: Determine version
         id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_PRERELEASE: ${{ inputs.prerelease }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.version }}" ]; then
-            VERSION="${{ inputs.version }}"
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ -n "$INPUT_VERSION" ]; then
+            VERSION="$INPUT_VERSION"
           else
             # Auto-bump: find the latest tag overall (including pre-releases).
             # If the latest tag is a pre-release (contains `-`), continue the
@@ -72,8 +97,8 @@ jobs:
           echo "version_clean=${VERSION_CLEAN}" >> "$GITHUB_OUTPUT"
           # Auto-detect prerelease: anything with a hyphen suffix (alpha/beta/rc)
           # is a pre-release. Manual dispatch can override via input.
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            PRERELEASE="${{ inputs.prerelease }}"
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            PRERELEASE="$INPUT_PRERELEASE"
           else
             case "$VERSION" in
               *-*) PRERELEASE=true ;;
@@ -83,9 +108,10 @@ jobs:
           echo "prerelease=${PRERELEASE}" >> "$GITHUB_OUTPUT"
 
       - name: Bump version strings
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          VERSION_CLEAN: ${{ steps.version.outputs.version_clean }}
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          VERSION_CLEAN="${{ steps.version.outputs.version_clean }}"
           TODAY=$(date +%Y-%m-%d)
 
           # README badge. Consume everything up to the closing quote and
@@ -135,8 +161,9 @@ jobs:
           git diff --stat
 
       - name: Commit version bump
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add -A
@@ -148,9 +175,9 @@ jobs:
       - name: Create tag and release
         env:
           GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+          VERSION: ${{ steps.version.outputs.version }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          PRERELEASE="${{ steps.version.outputs.prerelease }}"
           # Tag the commit with the version bump.
           git tag "$VERSION"
           git push origin "$VERSION"
