@@ -256,7 +256,7 @@ def test_google_calendars_list(client, monkeypatch):
     fake_response.raise_for_status.return_value = None
 
     with patch("httpx.AsyncClient.get", new=AsyncMock(return_value=fake_response)):
-        resp = client.get("/integrations/google/calendars?token=xyz")
+        resp = client.get("/integrations/google/calendars", headers={"X-Google-Token": "xyz"})
 
     assert resp.status_code == 200
     data = resp.json()
@@ -271,17 +271,44 @@ def test_google_gmail_messages_list(client, monkeypatch):
         "http://localhost:8000/integrations/google/callback",
     )
 
-    fake_response = MagicMock()
-    fake_response.json.return_value = {"messages": [{"id": "msg1", "threadId": "t1"}]}
-    fake_response.raise_for_status.return_value = None
+    list_response = MagicMock()
+    list_response.json.return_value = {"messages": [{"id": "msg1", "threadId": "t1"}]}
+    list_response.raise_for_status.return_value = None
 
-    with patch("httpx.AsyncClient.get", new=AsyncMock(return_value=fake_response)):
-        resp = client.get("/integrations/google/gmail?token=xyz&max_results=5")
+    # messages.list returns bare stubs; the endpoint hydrates each with a
+    # per-message format=metadata get so summaries carry real fields (#1458).
+    message_response = MagicMock()
+    message_response.json.return_value = {
+        "id": "msg1",
+        "threadId": "t1",
+        "labelIds": ["INBOX"],
+        "snippet": "hi",
+        "internalDate": "1704103200000",
+    }
+    message_response.raise_for_status.return_value = None
+
+    with patch(
+        "httpx.AsyncClient.get",
+        new=AsyncMock(side_effect=[list_response, message_response]),
+    ):
+        resp = client.get("/integrations/google/gmail?max_results=5", headers={"X-Google-Token": "xyz"})
 
     assert resp.status_code == 200
     data = resp.json()
     assert len(data) == 1
     assert data[0]["id"] == "msg1"
+    assert data[0]["snippet"] == "hi"
+    assert data[0]["labelIds"] == ["INBOX"]
+
+
+def test_google_gmail_messages_list_query_token_ignored(client):
+    """``?token=`` must NOT be honored — credentials in URLs leak into logs.
+    With no stored connection the request falls through to the stored-token
+    path and answers 401 (#1461)."""
+    with patch("httpx.AsyncClient.get", new=AsyncMock()) as mock_get:
+        resp = client.get("/integrations/google/gmail?token=xyz")
+    assert resp.status_code == 401
+    mock_get.assert_not_called()
 
 
 def test_google_contacts_list(client, monkeypatch):
@@ -296,7 +323,7 @@ def test_google_contacts_list(client, monkeypatch):
     fake_response.raise_for_status.return_value = None
 
     with patch("httpx.AsyncClient.get", new=AsyncMock(return_value=fake_response)):
-        resp = client.get("/integrations/google/contacts?token=xyz&page_size=10")
+        resp = client.get("/integrations/google/contacts?page_size=10", headers={"X-Google-Token": "xyz"})
 
     assert resp.status_code == 200
     data = resp.json()

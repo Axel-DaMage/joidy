@@ -4,6 +4,11 @@ Provides OAuth flow, token persistence, status, and data endpoints.
 The callback persists the refresh token (encrypted) so users stay
 connected across restarts and returns a tiny HTML page that closes
 the popup window (#42 — one-click setup from Settings, GitHub-style).
+
+Token transport (#1461): data endpoints honor an explicit access-token
+override via the ``X-Google-Token`` header only — never a ``?token=`` query
+param, where credentials would leak into logs (same hardening as
+``X-Spotify-Token``/``X-Strava-Token``, #1372).
 """
 
 import html as html_module
@@ -11,10 +16,11 @@ from datetime import datetime
 
 import httpx
 from database import get_db
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from models.google_calendar_event import GoogleCalendarEvent
 from pydantic import BaseModel, Field
+from services import gmail_service as gms
 from services import google_calendar_service as gcs
 from services import google_service as gs
 from services import google_token_service as gts
@@ -162,13 +168,13 @@ async def google_disconnect(
 
 @router.get("/calendars")
 async def get_google_calendars(
-    token: str | None = None,
+    google_token: str | None = Header(default=None, alias="X-Google-Token"),
     db: Session = Depends(get_db),
     user: dict = Depends(get_current_user),
 ):
-    """List Google Calendars. Uses the stored token if `token` is not provided."""
+    """List Google Calendars. Uses the stored token unless ``X-Google-Token`` overrides it."""
     try:
-        return await gs.list_calendars(await _access_token(token, db))
+        return await gs.list_calendars(await _access_token(google_token, db))
     except httpx.HTTPStatusError as exc:
         raise HTTPException(status_code=exc.response.status_code, detail="Google API error")
 
@@ -176,54 +182,58 @@ async def get_google_calendars(
 @router.get("/calendars/{calendar_id}/events")
 async def get_google_calendar_events(
     calendar_id: str,
-    token: str | None = None,
+    google_token: str | None = Header(default=None, alias="X-Google-Token"),
     db: Session = Depends(get_db),
     user: dict = Depends(get_current_user),
 ):
-    """List events from a Google Calendar. Uses the stored token if `token` is not provided."""
+    """List events from a Google Calendar. Uses the stored token unless ``X-Google-Token`` overrides it."""
     try:
-        return await gs.list_events(await _access_token(token, db), calendar_id)
+        return await gs.list_events(await _access_token(google_token, db), calendar_id)
     except httpx.HTTPStatusError as exc:
         raise HTTPException(status_code=exc.response.status_code, detail="Google API error")
 
 
 @router.get("/tasks")
 async def get_google_task_lists(
-    token: str | None = None,
+    google_token: str | None = Header(default=None, alias="X-Google-Token"),
     db: Session = Depends(get_db),
     user: dict = Depends(get_current_user),
 ):
-    """List Google Tasks lists. Uses the stored token if `token` is not provided."""
+    """List Google Tasks lists. Uses the stored token unless ``X-Google-Token`` overrides it."""
     try:
-        return await gs.list_task_lists(await _access_token(token, db))
+        return await gs.list_task_lists(await _access_token(google_token, db))
     except httpx.HTTPStatusError as exc:
         raise HTTPException(status_code=exc.response.status_code, detail="Google API error")
 
 
 @router.get("/gmail")
 async def get_google_gmail_messages(
-    token: str | None = None,
-    max_results: int = 10,
+    google_token: str | None = Header(default=None, alias="X-Google-Token"),
+    max_results: int = Query(default=10, ge=1, le=500),
     db: Session = Depends(get_db),
     user: dict = Depends(get_current_user),
 ):
-    """List recent Gmail message headers. Uses the stored token if `token` is not provided."""
+    """List recent Gmail message summaries. Uses the stored token unless
+    ``X-Google-Token`` overrides it. Bare id/threadId stubs are hydrated with
+    real metadata fields — same fix as the dedicated gmail router (#1458)."""
+    access_token = await _access_token(google_token, db)
     try:
-        return await gs.list_gmail_messages(await _access_token(token, db), max_results)
+        stubs = await gs.list_gmail_messages(access_token, max_results)
+        return await gms.hydrate_message_stubs(access_token, [m for m in stubs if isinstance(m, dict)])
     except httpx.HTTPStatusError as exc:
         raise HTTPException(status_code=exc.response.status_code, detail="Google API error")
 
 
 @router.get("/contacts")
 async def get_google_contacts(
-    token: str | None = None,
+    google_token: str | None = Header(default=None, alias="X-Google-Token"),
     page_size: int = 50,
     db: Session = Depends(get_db),
     user: dict = Depends(get_current_user),
 ):
-    """List Google Contacts. Uses the stored token if `token` is not provided."""
+    """List Google Contacts. Uses the stored token unless ``X-Google-Token`` overrides it."""
     try:
-        return await gs.list_contacts(await _access_token(token, db), page_size)
+        return await gs.list_contacts(await _access_token(google_token, db), page_size)
     except httpx.HTTPStatusError as exc:
         raise HTTPException(status_code=exc.response.status_code, detail="Google API error")
 
@@ -304,7 +314,9 @@ async def google_calendar_events(
 
 
 async def _access_token(token: str | None, db: Session) -> str:
-    """Resolve the access token: explicit `token` wins, else stored/refreshed."""
+    """Resolve the access token: an explicit ``X-Google-Token`` header wins,
+    else the stored/auto-refreshed token. The override arrives by header
+    only — credentials never travel in the query string (#1461)."""
     if token:
         return token
     stored = await gts.get_valid_access_token(db)

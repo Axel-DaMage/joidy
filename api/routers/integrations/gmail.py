@@ -11,11 +11,16 @@ Reads need ``gmail.readonly``; label mutations (archive/trash/unread) need
 granted before the scope bump provably lacking a capability answer 403
 ``GmailReconsentRequired`` so the client can prompt a reconnect — same
 pattern as contacts (#43) and calendar write-back (#1233).
+
+Token transport (#1461): read endpoints honor an explicit access-token
+override via the ``X-Google-Token`` header only — never a ``?token=`` query
+param, where credentials would leak into logs (same hardening as
+``X-Spotify-Token``/``X-Strava-Token``, #1372).
 """
 
 import httpx
 from database import get_db
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 from services import gmail_service as gms
 from services import google_token_service as gts
@@ -152,8 +157,10 @@ class GmailStatusOut(BaseModel):
 
 
 async def _read_token(token: str | None, db: Session) -> str:
-    """Resolve the access token for read calls: explicit ``token`` wins, else
-    the stored/auto-refreshed Google token (same semantics as google.py)."""
+    """Resolve the access token for read calls: an explicit ``X-Google-Token``
+    header wins, else the stored/auto-refreshed Google token (same semantics
+    as google.py). The override arrives by header only — credentials never
+    travel in the query string (#1461)."""
     if token:
         return token
     stored = await gts.get_valid_access_token(db)
@@ -248,13 +255,13 @@ async def list_gmail_messages(
     label_ids: str | None = Query(default=None, max_length=1024, description="Comma-separated label ids"),
     max_results: int = Query(default=50, ge=1, le=500),
     page_token: str | None = Query(default=None, max_length=2048),
-    token: str | None = Query(default=None, max_length=4096),
+    google_token: str | None = Header(default=None, alias="X-Google-Token"),
     db: Session = Depends(get_db),
     user: dict = Depends(get_current_user),
 ):
-    """List message stubs. ``q`` accepts Gmail search operators; ``since``
+    """List message summaries. ``q`` accepts Gmail search operators; ``since``
     is the polling-friendly incremental filter (maps to ``after:<epoch>``)."""
-    access_token = await _read_token(token, db)
+    access_token = await _read_token(google_token, db)
     try:
         return await gms.list_messages(
             access_token,
@@ -296,12 +303,12 @@ async def send_gmail_message(
 @router.get("/messages/{message_id}", response_model=GmailMessageOut)
 async def get_gmail_message(
     message_id: str,
-    token: str | None = Query(default=None, max_length=4096),
+    google_token: str | None = Header(default=None, alias="X-Google-Token"),
     db: Session = Depends(get_db),
     user: dict = Depends(get_current_user),
 ):
     """Full message detail: headers, text/html bodies, attachment metadata."""
-    access_token = await _read_token(token, db)
+    access_token = await _read_token(google_token, db)
     try:
         return await gms.get_message(access_token, message_id)
     except gms.GmailReconsentRequired as exc:
@@ -316,13 +323,13 @@ async def get_gmail_message(
 async def get_gmail_attachment(
     message_id: str,
     attachment_id: str,
-    token: str | None = Query(default=None, max_length=4096),
+    google_token: str | None = Header(default=None, alias="X-Google-Token"),
     db: Session = Depends(get_db),
     user: dict = Depends(get_current_user),
 ):
     """Download one attachment as standard base64 (JSON). Pair ``attachment_id``
     with the message's ``attachments[]`` metadata for filename/mime type."""
-    access_token = await _read_token(token, db)
+    access_token = await _read_token(google_token, db)
     try:
         return await gms.get_attachment(access_token, message_id, attachment_id)
     except gms.GmailReconsentRequired as exc:
@@ -456,13 +463,13 @@ async def gmail_history(
     page_token: str | None = Query(default=None, max_length=2048),
     max_results: int = Query(default=100, ge=1, le=500),
     label_id: str | None = Query(default=None, max_length=128),
-    token: str | None = Query(default=None, max_length=4096),
+    google_token: str | None = Header(default=None, alias="X-Google-Token"),
     db: Session = Depends(get_db),
     user: dict = Depends(get_current_user),
 ):
     """Incremental mailbox changes since ``start_history_id`` — the polling
     counterpart of users.watch for detecting new mail."""
-    access_token = await _read_token(token, db)
+    access_token = await _read_token(google_token, db)
     try:
         return await gms.get_history(
             access_token,
