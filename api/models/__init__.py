@@ -9,6 +9,7 @@ from .goal import *
 from .google_calendar_event import *
 from .google_calendar_sync import *
 from .google_token import *
+from .integration_token import *
 from .mood_entry import *
 from .note import *
 from .personal_streaks import *
