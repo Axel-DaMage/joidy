@@ -3,6 +3,7 @@ from enum import Enum as PyEnum
 from typing import TYPE_CHECKING
 
 from database import Base
+from encryption import EncryptedText
 from sqlalchemy import (
     JSON,
     Boolean,
@@ -58,7 +59,10 @@ class GitHubRepo(Base):
 
     status: Mapped[GitHubRepoStatus] = mapped_column(Enum(GitHubRepoStatus), default=GitHubRepoStatus.ACTIVE)
     webhook_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    webhook_secret: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # Fernet ciphertext exceeds String(100) — widened to TEXT in the
+    # encryption-at-rest migration (#1329). Column stores the encrypted
+    # webhook-forgery secret; reads return plaintext.
+    webhook_secret: Mapped[str | None] = mapped_column(EncryptedText, nullable=True)
 
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

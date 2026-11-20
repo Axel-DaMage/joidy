@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from database import Base
+from encryption import EncryptedText
 from sqlalchemy import (
     Boolean,
     DateTime,
@@ -28,9 +29,12 @@ class GoogleCalendarEvent(Base):
     user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     calendar_id: Mapped[str] = mapped_column(String(255), nullable=False)
     google_id: Mapped[str] = mapped_column(String(255), nullable=False)
-    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
-    description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    location: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Event content is encrypted at rest (#1329). No query filters on these
+    # columns (list queries use user_id/calendar_id/start_at), so
+    # non-deterministic ciphertext is safe.
+    summary: Mapped[str | None] = mapped_column(EncryptedText, nullable=True)
+    description: Mapped[str | None] = mapped_column(EncryptedText, nullable=True)
+    location: Mapped[str | None] = mapped_column(EncryptedText, nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="confirmed")
     all_day: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

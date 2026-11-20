@@ -86,3 +86,45 @@ completo dentro de la API.
   despliegues reproducibles usa `docker-compose.release.yml` (adjunto a cada
   release e instalado por el paquete AUR), `IMAGE_TAG=<release>` en `.env`, o
   fija por digest `imagen@sha256:<digest>`.
+## Cifrado de datos en reposo (#1286, #1329)
+
+Los campos sensibles se almacenan cifrados con **Fernet** (AES-128-CBC + HMAC)
+usando una clave derivada de `SECRET_KEY` mediante SHA-256. El tipo
+`EncryptedText` (`api/encryption.py`) cifra al escribir y descifra al leer de
+forma transparente; las filas escritas antes del cambio se reescriben cifradas
+en la migración `f8a9b0c1d2e3` y, como red de seguridad, cualquier resto de
+texto plano se descifra de forma tolerante (migración perezosa).
+
+Campos cifrados actualmente:
+
+| Tabla | Columnas |
+|-------|----------|
+| `google_tokens` | `access_token`, `refresh_token_encrypted` |
+| `email_messages` | `body_text` |
+| `github_repos` | `webhook_secret` |
+| `push_subscriptions` | `endpoint`, `p256dh`, `auth` |
+| `google_calendar_events` | `summary`, `description`, `location` |
+| `google_calendar_sync_state` | `sync_token` |
+
+**Permanecen en texto plano a propósito** (Fernet no es determinista — el
+ciphertext nunca coincide con filtros de igualdad ni `ILIKE`):
+
+- `email_messages.subject/sender/snippet` — los busca el filtro `q` del inbox.
+- Contenido de notas, `google_calendar_events.html_link` y metadatos en
+  general (títulos, etiquetas, timestamps).
+
+**Rotación de `SECRET_KEY`:** invalida todos los campos cifrados a la vez
+(tokens OAuth incluidos — habría que reconectar Google). No existe un path de
+re-cifrado automático; rota solo con migración manual planificada.
+
+### Copias de seguridad
+
+Los volcados `pg_dump -Fc` contienen la base de datos completa — incluidos
+los secretos no cifrados a nivel de columna — y por defecto se escriben **en
+texto plano** en el disco del host (`<data>/backups`, permisos `0600`/`umask
+077` desde su creación, #1281). Trátalos como material sensible: cifra el
+directorio de backups a nivel de SO o, mejor, define `BACKUP_ENCRYPTION_KEY`
+en `.env` para que el sidecar y `joidy backup` escriban `*.dump.enc`
+(AES-256-CBC/PBKDF2 vía openssl — el texto plano nunca toca disco).
+`joidy restore <archivo.dump.enc>` descifra con la misma clave. **Sin la clave,
+los volcados cifrados son irrecuperables.**
