@@ -301,7 +301,34 @@ interactive OpenAPI docs at `/docs` for full schemas.
 | GET | `/integrations/google/gmail` | Yes | List Gmail messages | — | messages list |
 | GET | `/integrations/google/contacts` | Yes | List Google Contacts | — | contacts list |
 
-### 2.24 Integrations — Spotify (`integrations/spotify.py`)
+### 2.24 Integrations — Google Contacts (`integrations/contacts.py`)
+
+Proxy autenticado sobre Google People API (`people.googleapis.com/v1`) que
+reutiliza el token OAuth de Google almacenado (`/integrations/google/*`).
+Todas las rutas exigen JWT y devuelven datos de contacto normalizados
+(`resource_name`, `display_name`, `emails[]`, `phones[]`, `organizations[]`,
+`addresses[]`, `birthdays[]`, `urls[]`, `photos[]`, `memberships[]`).
+
+Las operaciones de escritura (POST/PUT/DELETE) requieren el scope
+`https://www.googleapis.com/auth/contacts`; un token concedido solo con
+`contacts.readonly` puede leer pero recibirá `403` en escritura hasta
+reconectar la cuenta desde Ajustes.
+
+| Method | Path | Auth | Description | Request Body | Response |
+|--------|------|------|-------------|--------------|----------|
+| GET | `/integrations/contacts/status` | Yes | Estado de conexión + scopes de Contacts (`connected`, `contacts_read`, `contacts_write`) | — | status object |
+| GET | `/integrations/contacts/` | Yes | Listar contactos; `q`/`query` busca vía `people:searchContacts`, `page_size`/`page_token` paginan (`people/me/connections`); `group` filtra por `contactGroups/{id}` o id numérico | — | `{contacts[], next_page_token, total_items}` |
+| GET | `/integrations/contacts/{resource_name}` | Yes | Detalle de un contacto (`people/{id}`); incluye `etag` para updates optimistas | — | contact object |
+| POST | `/integrations/contacts/` | Yes | Crear contacto (`people:createContact`) | contact object (`given_name`, `family_name`, `emails[]`, `phones[]`, `note`, `memberships[]`, …) | contact object |
+| PUT | `/integrations/contacts/{resource_name}` | Yes | Actualizar contacto (`:updateContact`); envía solo los campos informados en `updatePersonFields` y preserva `metadata.sources`/`etag` | contact object (campos a reemplazar + `etag` opcional) | contact object |
+| DELETE | `/integrations/contacts/{resource_name}` | Yes | Eliminar contacto (`:deleteContact`) | — | `{status, resource_name}` |
+| GET | `/integrations/contacts/groups` | Yes | Listar grupos de contactos (`contactGroups.list`); `page_size`/`page_token` paginan | — | `{groups[], next_page_token, total_items}` |
+
+Errores: `401` token ausente/inválido o Google rechazó el token,
+`403` scope insuficiente (reconectar), `409` conflicto de `etag`
+(`failedPrecondition`), `400` `resource_name`/payload inválido.
+
+### 2.25 Integrations — Spotify (`integrations/spotify.py`)
 
 | Method | Path | Auth | Description | Request Body | Response |
 |--------|------|------|-------------|--------------|----------|
@@ -311,7 +338,7 @@ interactive OpenAPI docs at `/docs` for full schemas.
 | GET | `/integrations/spotify/top-tracks` | Yes | Top tracks (`limit` query; token in `X-Spotify-Token` header) | — | tracks list |
 | GET | `/integrations/spotify/playlists` | Yes | User playlists (`limit` query; token in `X-Spotify-Token` header) | — | playlists list |
 
-### 2.25 Integrations — Strava (`integrations/strava.py`)
+### 2.26 Integrations — Strava (`integrations/strava.py`)
 
 > OAuth tokens are stored server-side, encrypted at rest, in the
 > provider-agnostic `integration_tokens` table — the callback never returns
