@@ -1,13 +1,19 @@
 """CRUD for internal joidy calendar tasks (#1230)."""
 
 import json
-from datetime import UTC, datetime, time
+from calendar import monthrange
+from datetime import UTC, datetime, time, timedelta
 from datetime import date as date_type
 from typing import cast
 
 from database import get_db
 from fastapi import APIRouter, Depends, HTTPException
-from models.calendar_task import CalendarTask, CalendarTaskPriority, CalendarTaskSource
+from models.calendar_task import (
+    CalendarTask,
+    CalendarTaskPriority,
+    CalendarTaskRecurrence,
+    CalendarTaskSource,
+)
 from models.gamification import XPEvent
 from models.goal import Goal, GoalMeasurement
 from pydantic import BaseModel, Field
@@ -107,10 +113,78 @@ def _adjust_goal_progress(db: Session, task: CalendarTask, delta: float) -> None
     goal.current_value = max(0.0, goal.current_value + delta)
 
 
+def _next_date(day: date_type, recurrence: CalendarTaskRecurrence) -> date_type:
+    """Advance ``day`` by one recurrence step (#1238).
+
+    MONTHLY keeps the same day-of-month clamped to the target month's
+    length (Jan 31 → Feb 28/29, which then stays on the 28th/29th — the
+    clamp does not restore the original day).
+    """
+    if recurrence == CalendarTaskRecurrence.DAILY:
+        return day + timedelta(days=1)
+    if recurrence == CalendarTaskRecurrence.WEEKLY:
+        return day + timedelta(days=7)
+    if recurrence == CalendarTaskRecurrence.MONTHLY:
+        month = day.month % 12 + 1
+        year = day.year + (1 if day.month == 12 else 0)
+        last_day = monthrange(year, month)[1]
+        return date_type(year, month, min(day.day, last_day))
+    return day
+
+
+def _spawn_next_occurrence(db: Session, task: CalendarTask) -> None:
+    """Create the next occurrence of a recurring task on the done edge (#1238).
+
+    Scope: only scheduled tasks (``date`` set) that are NOT goal-linked —
+    goal-linked recurring work is tracked by the goal progress paths
+    (#1234) and a spawned copy would double-count it. Unscheduled tasks may
+    carry a recurrence value but never spawn (no date to advance).
+
+    The spawned row is a fresh joidy task: ``google_event_id`` is cleared
+    (it is NOT auto-published to Google — write-back stays out of scope)
+    and the reminder offset is carried over so the series keeps firing.
+
+    Idempotency: re-toggling a task undone → done must not mint duplicates,
+    so the spawn is skipped when a same-title, same-source task already
+    exists on the computed next date.
+    """
+    if task.recurrence == CalendarTaskRecurrence.NONE or task.date is None or task.goal_id is not None:
+        return
+    next_date = _next_date(task.date, task.recurrence)
+    already_spawned = (
+        db.query(CalendarTask)
+        .filter(
+            CalendarTask.title == task.title,
+            CalendarTask.date == next_date,
+            CalendarTask.source == task.source,
+        )
+        .first()
+    )
+    if already_spawned is not None:
+        return
+    db.add(
+        CalendarTask(
+            title=task.title,
+            date=next_date,
+            start_time=task.start_time,
+            end_time=task.end_time,
+            priority=task.priority,
+            done=False,
+            goal_id=None,
+            source=task.source,
+            google_event_id=None,
+            color=task.color,
+            recurrence=task.recurrence,
+            reminder_minutes=task.reminder_minutes,
+        )
+    )
+
+
 def _apply_done_transition(db: Session, task: CalendarTask, was_done: bool) -> None:
     if not was_done and task.done:
         _award_task_xp(db, task)
         _adjust_goal_progress(db, task, 1)
+        _spawn_next_occurrence(db, task)
         db.commit()
     elif was_done and not task.done:
         _adjust_goal_progress(db, task, -1)
@@ -126,6 +200,9 @@ class CalendarTaskCreate(BaseModel):
     priority: CalendarTaskPriority = CalendarTaskPriority.MEDIUM
     goal_id: int | None = None
     color: str | None = Field(default=None, max_length=20)
+    recurrence: CalendarTaskRecurrence = CalendarTaskRecurrence.NONE
+    # Minutes before start_time; NULL = no reminder. Capped at one day.
+    reminder_minutes: int | None = Field(default=None, ge=0, le=1440)
 
 
 class CalendarTaskUpdate(BaseModel):
@@ -137,6 +214,8 @@ class CalendarTaskUpdate(BaseModel):
     done: bool | None = None
     goal_id: int | None = None
     color: str | None = Field(default=None, max_length=20)
+    recurrence: CalendarTaskRecurrence | None = None
+    reminder_minutes: int | None = Field(default=None, ge=0, le=1440)
     # Write-back mirror (#1233): set by the frontend after creating the
     # Google event, so later edits/deletes can propagate to Google.
     google_event_id: str | None = Field(default=None, max_length=255)
@@ -155,6 +234,8 @@ class CalendarTaskOut(BaseModel):
     source: CalendarTaskSource
     google_event_id: str | None
     color: str | None
+    recurrence: CalendarTaskRecurrence
+    reminder_minutes: int | None
     created_at: datetime
     updated_at: datetime
 
@@ -187,6 +268,8 @@ def _task_out(task: CalendarTask) -> CalendarTaskOut:
         source=task.source,
         google_event_id=task.google_event_id,
         color=task.color,
+        recurrence=task.recurrence,
+        reminder_minutes=task.reminder_minutes,
         created_at=task.created_at,
         updated_at=task.updated_at,
     )
@@ -258,6 +341,8 @@ def create_task(body: CalendarTaskCreate, db: Session = Depends(get_db)):
         priority=body.priority,
         goal_id=body.goal_id,
         color=body.color,
+        recurrence=body.recurrence,
+        reminder_minutes=body.reminder_minutes,
     )
     db.add(task)
     db.commit()
@@ -278,7 +363,17 @@ def update_task(task_id: int, body: CalendarTaskUpdate, db: Session = Depends(ge
         if goal_id is not None and not db.get(Goal, goal_id):
             raise HTTPException(status_code=404, detail="Goal not found")
         task.goal_id = goal_id
-    for field in ("title", "date", "start_time", "end_time", "priority", "color", "google_event_id"):
+    for field in (
+        "title",
+        "date",
+        "start_time",
+        "end_time",
+        "priority",
+        "color",
+        "google_event_id",
+        "recurrence",
+        "reminder_minutes",
+    ):
         if field in data:
             setattr(task, field, data[field])
     _validate_times(cast("time | None", task.start_time), cast("time | None", task.end_time))

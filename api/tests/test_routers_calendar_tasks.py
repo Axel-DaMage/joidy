@@ -350,3 +350,150 @@ def test_done_goalless_or_missing_goal_is_safe(client: TestClient, db_session):
     response = client.post(f"/calendar/tasks/{task.id}/done")
     assert response.status_code == 200
     assert response.json()["done"] is True
+
+
+# ── Recurrence + reminders (#1238) ─────────────────────────────────────────
+
+
+def _tasks_on(db_session, day: dt.date, title: str):
+    return db_session.query(CalendarTask).filter(CalendarTask.date == day, CalendarTask.title == title).all()
+
+
+def test_task_out_carries_recurrence_and_reminder(client: TestClient):
+    response = client.post(
+        "/calendar/tasks",
+        json={"title": "Check mail", "date": FUTURE_DATE, "recurrence": "DAILY", "reminder_minutes": 15},
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert data["recurrence"] == "DAILY"
+    assert data["reminder_minutes"] == 15
+
+
+def test_create_task_defaults_no_recurrence_no_reminder(client: TestClient):
+    response = client.post("/calendar/tasks", json={"title": "One-off", "date": FUTURE_DATE})
+    assert response.status_code == 201
+    data = response.json()
+    assert data["recurrence"] == "NONE"
+    assert data["reminder_minutes"] is None
+
+
+def test_done_spawns_daily_occurrence(client: TestClient, db_session):
+    task = _make_task(
+        db_session,
+        title="Standup",
+        date=dt.date(2099, 8, 1),
+        recurrence="DAILY",
+        start_time=dt.time(9, 0),
+        end_time=dt.time(9, 15),
+        priority="HIGH",
+        color="#123456",
+        reminder_minutes=10,
+        google_event_id="g-evt-1",
+    )
+    response = client.post(f"/calendar/tasks/{task.id}/done")
+    assert response.status_code == 200
+
+    spawned = _tasks_on(db_session, dt.date(2099, 8, 2), "Standup")
+    assert len(spawned) == 1
+    occ = spawned[0]
+    assert occ.id != task.id
+    assert occ.done is False
+    assert occ.recurrence.value == "DAILY"
+    assert occ.start_time == dt.time(9, 0)
+    assert occ.end_time == dt.time(9, 15)
+    assert occ.priority.value == "HIGH"
+    assert occ.color == "#123456"
+    assert occ.reminder_minutes == 10
+    # Fresh occurrence: it must not claim the parent's Google mirror.
+    assert occ.google_event_id is None
+
+
+def test_done_spawns_weekly_occurrence(client: TestClient, db_session):
+    task = _make_task(db_session, title="Weekly review", date=dt.date(2099, 7, 30), recurrence="WEEKLY")
+    client.post(f"/calendar/tasks/{task.id}/done")
+    spawned = _tasks_on(db_session, dt.date(2099, 8, 6), "Weekly review")
+    assert len(spawned) == 1
+
+
+def test_done_spawns_monthly_same_day(client: TestClient, db_session):
+    task = _make_task(db_session, title="Pay rent", date=dt.date(2099, 1, 15), recurrence="MONTHLY")
+    client.post(f"/calendar/tasks/{task.id}/done")
+    spawned = _tasks_on(db_session, dt.date(2099, 2, 15), "Pay rent")
+    assert len(spawned) == 1
+
+
+def test_done_spawns_monthly_clamps_month_end(client: TestClient, db_session):
+    # 2099 is not a leap year: Jan 31 → Feb 28 (clamped, no dateutil needed).
+    task = _make_task(db_session, title="Month-end", date=dt.date(2099, 1, 31), recurrence="MONTHLY")
+    client.post(f"/calendar/tasks/{task.id}/done")
+    assert len(_tasks_on(db_session, dt.date(2099, 2, 28), "Month-end")) == 1
+    assert len(_tasks_on(db_session, dt.date(2099, 3, 3), "Month-end")) == 0
+
+
+def test_retoggle_done_does_not_duplicate_occurrence(client: TestClient, db_session):
+    task = _make_task(db_session, title="No dupes", date=dt.date(2099, 8, 1), recurrence="DAILY")
+    for _ in range(3):
+        client.post(f"/calendar/tasks/{task.id}/done")
+    assert len(_tasks_on(db_session, dt.date(2099, 8, 2), "No dupes")) == 1
+
+
+def test_done_without_recurrence_spawns_nothing(client: TestClient, db_session):
+    task = _make_task(db_session, title="One-off", date=dt.date(2099, 8, 1))
+    client.post(f"/calendar/tasks/{task.id}/done")
+    assert len(_tasks_on(db_session, dt.date(2099, 8, 2), "One-off")) == 0
+
+
+def test_goal_linked_recurring_task_does_not_spawn(client: TestClient, db_session):
+    goal = _make_goal(db_session, title="Recurring goal")
+    task = _make_task(db_session, title="Goal step", date=dt.date(2099, 8, 1), recurrence="DAILY", goal_id=goal.id)
+    client.post(f"/calendar/tasks/{task.id}/done")
+    assert len(_tasks_on(db_session, dt.date(2099, 8, 2), "Goal step")) == 0
+
+
+def test_unscheduled_recurring_task_does_not_spawn(client: TestClient, db_session):
+    task = _make_task(db_session, title="Floating daily", date=None, recurrence="DAILY")
+    response = client.post(f"/calendar/tasks/{task.id}/done")
+    assert response.status_code == 200
+    remaining = db_session.query(CalendarTask).filter(CalendarTask.title == "Floating daily").all()
+    assert len(remaining) == 1
+
+
+def test_patch_done_via_update_spawns_occurrence(client: TestClient, db_session):
+    task = _make_task(db_session, title="Patch spawn", date=dt.date(2099, 8, 1), recurrence="DAILY")
+    client.patch(f"/calendar/tasks/{task.id}", json={"done": True})
+    assert len(_tasks_on(db_session, dt.date(2099, 8, 2), "Patch spawn")) == 1
+
+
+def test_patch_task_updates_recurrence(client: TestClient, db_session):
+    task = _make_task(db_session, title="Make weekly")
+    response = client.patch(f"/calendar/tasks/{task.id}", json={"recurrence": "WEEKLY"})
+    assert response.status_code == 200
+    assert response.json()["recurrence"] == "WEEKLY"
+
+
+def test_reminder_minutes_bounds(client: TestClient, db_session):
+    task = _make_task(db_session, title="Remind me")
+    assert (
+        client.post("/calendar/tasks", json={"title": "x", "date": FUTURE_DATE, "reminder_minutes": -5}).status_code
+        == 422
+    )
+    assert (
+        client.post("/calendar/tasks", json={"title": "x", "date": FUTURE_DATE, "reminder_minutes": 1441}).status_code
+        == 422
+    )
+    response = client.patch(f"/calendar/tasks/{task.id}", json={"reminder_minutes": 30})
+    assert response.status_code == 200
+    assert response.json()["reminder_minutes"] == 30
+    # Explicit null clears the reminder.
+    response = client.patch(f"/calendar/tasks/{task.id}", json={"reminder_minutes": None})
+    assert response.status_code == 200
+    assert response.json()["reminder_minutes"] is None
+
+
+def test_create_task_rejects_bad_recurrence(client: TestClient):
+    response = client.post(
+        "/calendar/tasks",
+        json={"title": "x", "date": FUTURE_DATE, "recurrence": "YEARLY"},
+    )
+    assert response.status_code == 422

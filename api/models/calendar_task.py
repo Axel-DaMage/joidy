@@ -29,6 +29,13 @@ class CalendarTaskSource(str, PyEnum):
     GOOGLE = "GOOGLE"
 
 
+class CalendarTaskRecurrence(str, PyEnum):
+    NONE = "NONE"
+    DAILY = "DAILY"
+    WEEKLY = "WEEKLY"
+    MONTHLY = "MONTHLY"
+
+
 class CalendarTask(Base):
     """Internal joidy calendar task: schedulable unit with time, priority and done state.
 
@@ -61,6 +68,16 @@ class CalendarTask(Base):
     )
     google_event_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     color: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # Recurring tasks (#1238): completing a scheduled non-goal task spawns the
+    # next occurrence. NONE disables spawning entirely.
+    recurrence: Mapped[CalendarTaskRecurrence] = mapped_column(
+        Enum(CalendarTaskRecurrence, name="calendar_task_recurrence"),
+        nullable=False,
+        default=CalendarTaskRecurrence.NONE,
+        server_default="NONE",
+    )
+    # Minutes before start_time to remind at; NULL = no reminder (frontend fires it).
+    reminder_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
