@@ -42,6 +42,12 @@ os.environ["JOIDY_ENV_FILE"] = str(_TEST_ENV_FILE)
 # stayed green.
 os.environ["APP_ENV"] = "test"
 
+# Vault confinement (#1362) resolves source_path against
+# settings.obsidian_vault_path; webhook/sync tests use ``/vault/...``
+# paths, so the suite needs a configured vault root (a nonexistent dir is
+# fine — confinement only compares realpaths lexically).
+os.environ.setdefault("OBSIDIAN_VAULT_PATH", "/vault")
+
 # Test-only bcrypt cost (#996). Hash strength is irrelevant under test and
 # passlib's default (12 rounds) made auth tests the slowest single test in the
 # suite. Must be set before app modules import `config.settings`, which reads
