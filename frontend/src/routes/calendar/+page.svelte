@@ -9,6 +9,7 @@
     type PlanSuggestion,
   } from '$lib/api';
   import { logger } from '$lib/utils/logger';
+  import { parseLocalDate } from '$lib/utils/date';
   import { showNotification } from '$lib/stores/notifications';
   import {
     dueTaskReminders,
@@ -150,6 +151,18 @@
 
   let todayKey = $state(currentDayKey());
 
+  // Re-derive "today" after a midnight rollover (#1306). A selection pinned
+  // to the old "today" follows the new day; explicit picks are left alone.
+  // Returns true when the day actually changed.
+  function syncToday(): boolean {
+    const next = currentDayKey();
+    if (next === todayKey) return false;
+    const prev = todayKey;
+    todayKey = next;
+    if (selectedDay === prev) selectedDay = next;
+    return true;
+  }
+
   // Grid cells (Monday-first): 6 weeks × 7 days, with in-month flags.
   let gridCells = $derived.by(() => {
     const first = new Date(viewYear, viewMonth, 1);
@@ -261,9 +274,10 @@
     }
   }
 
-  // Week view: 7 days based on current weekOffset
+  // Week view: 7 days based on current weekOffset. Anchored to `todayKey`
+  // (not `new Date()`) so the derived recomputes on midnight rollover.
   let weekDays = $derived.by(() => {
-    const today = new Date();
+    const today = parseLocalDate(todayKey);
     const dayOfWeek = (today.getDay() + 6) % 7; // Monday = 0
     const monday = new Date(
       today.getFullYear(),
@@ -304,7 +318,7 @@
 
   // Agenda view: Next 14 days starting from today (or selectedDay if set)
   let agendaDays = $derived.by(() => {
-    const start = new Date();
+    const start = parseLocalDate(todayKey);
     const days: { date: Date; key: string; items: DayItem[] }[] = [];
     for (let i = 0; i < 14; i++) {
       const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
@@ -377,7 +391,7 @@
 
   async function refresh(): Promise<void> {
     try {
-      todayKey = currentDayKey();
+      syncToday();
       // The cache stores all-day events at UTC midnight, which in
       // negative-offset zones is an instant on the previous local day —
       // pad the lower bound by one day so those rows are still returned.
@@ -595,6 +609,12 @@
   async function saveEdit(task: CalendarTask): Promise<void> {
     const title = editTitle.trim();
     if (!title) return;
+    // Never persist an end ≤ start — Google rejects the inverted window
+    // and a mirrored task would carry a broken dateTime pair (#1306).
+    if (editTime && editEndTime && editEndTime <= editTime) {
+      showNotification($t('calendar.endBeforeStart'), 'error');
+      return;
+    }
     if (editReminder !== null) void requestNotificationPermission();
     await updateTask(task, {
       title,
@@ -835,8 +855,21 @@
       await refresh();
       await maybeAutoSync();
     })();
-    const timer = setInterval(checkTaskReminders, 30_000);
-    return () => clearInterval(timer);
+    // The 30s reminder poll doubles as the midnight-rollover check: when the
+    // day changed, ranges shift so events/tasks must be refetched (#1306).
+    const timer = setInterval(() => {
+      if (syncToday()) void refresh();
+      checkTaskReminders();
+    }, 30_000);
+    // Throttled tabs may skip the interval past midnight — resync on focus.
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && syncToday()) void refresh();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   });
 </script>
 

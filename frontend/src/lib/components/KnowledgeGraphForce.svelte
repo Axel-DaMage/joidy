@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
   import { browser } from '$app/env';
+  import { goto } from '$app/navigation';
   import { graphData, selectedTag } from '$lib/stores/graph';
   import type { GraphNode, GraphEdge } from '$lib/api';
   import { forceCollide } from 'd3';
@@ -184,24 +185,29 @@
     rebuildGraph();
   }
 
+  // Manual double-click emulation: the 300 ms window only counts when both
+  // clicks land on the SAME node — two quick clicks on different nodes are
+  // two selections, not an open action (#1306).
   let lastClickTime = 0;
+  let lastClickedNodeId: number | string | null = null;
   function handleNodeClick(node: GraphNode) {
     const currentTime = Date.now();
-    const delay = currentTime - lastClickTime;
+    const isDoubleClick = currentTime - lastClickTime < 300 && lastClickedNodeId === node.id;
+    lastClickTime = currentTime;
+    lastClickedNodeId = node.id;
 
     selectedTag.set(node.id);
+    if (!isDoubleClick) return;
 
-    if (delay < 300) {
-      const nodeType = getNodeType(node);
-      if (nodeType === 'note') {
-        window.location.href = `/notes?id=${node.id}`;
-      } else if (nodeType === 'tag') {
-        window.location.href = `/notes?search=${encodeURIComponent('tag:' + node.name)}`;
-      } else if (nodeType === 'unresolved') {
-        window.location.href = `/notes?new=1&title=${encodeURIComponent(node.title || '')}`;
-      }
+    const nodeType = getNodeType(node);
+    // goto() (client-side) instead of window.location.href (full reload).
+    if (nodeType === 'note') {
+      goto(`/notes?id=${node.id}`);
+    } else if (nodeType === 'tag') {
+      goto(`/notes?search=${encodeURIComponent('tag:' + node.name)}`);
+    } else if (nodeType === 'unresolved') {
+      goto(`/notes?new=1&title=${encodeURIComponent(node.title || '')}`);
     }
-    lastClickTime = currentTime;
   }
 
   onMount(async () => {

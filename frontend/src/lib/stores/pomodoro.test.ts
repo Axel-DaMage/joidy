@@ -24,7 +24,15 @@ vi.mock('$lib/utils/userSettings', () => ({
   patchUserSettings: vi.fn(),
 }));
 
-import { phase, resetTimer, skipTimer, startTimer, running, workMins } from './pomodoro';
+import {
+  phase,
+  resetTimer,
+  skipTimer,
+  startTimer,
+  running,
+  workMins,
+  secondsLeft,
+} from './pomodoro';
 
 const WORK_MS = 25 * 60 * 1000;
 const TICK_MS = 1000;
@@ -106,5 +114,68 @@ describe('pomodoro XP awarding', () => {
       duration_minutes: 45,
       pomodoro_id: expect.any(String),
     });
+  });
+});
+
+describe('pomodoro wall-clock countdown (#1306)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.spyOn(HTMLAudioElement.prototype, 'play').mockResolvedValue(undefined);
+    apiMock.gamification.pomodoro.mockResolvedValue({ xp_awarded: 15 });
+    workMins.set(25);
+    resetTimer();
+  });
+
+  afterEach(() => {
+    resetTimer();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
+  });
+
+  it('derives remaining time from the clock, not the tick count', async () => {
+    startTimer();
+    // Simulate a hidden tab: the clock jumps 60s with no tick firing — the
+    // next tick must still report the true remaining time (61s elapsed once
+    // that tick itself consumes a second).
+    vi.setSystemTime(Date.now() + 60_000);
+    await vi.advanceTimersByTimeAsync(TICK_MS);
+
+    expect(get(secondsLeft)).toBe(25 * 60 - 61);
+  });
+
+  it('completes on real wall-clock time even when ticks were skipped', async () => {
+    startTimer();
+    // Whole 25-min phase elapses with zero ticks (throttled background tab):
+    // the very next tick must end the phase instead of decrementing once.
+    vi.setSystemTime(Date.now() + WORK_MS + 5_000);
+    await vi.advanceTimersByTimeAsync(TICK_MS);
+
+    expect(get(phase)).toBe('break');
+    expect(apiMock.gamification.pomodoro).toHaveBeenCalledTimes(1);
+  });
+
+  it('resyncs and advances overdue phases when the tab becomes visible', () => {
+    startTimer();
+    vi.setSystemTime(Date.now() + WORK_MS + 1_000);
+
+    const visSpy = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    document.dispatchEvent(new Event('visibilitychange'));
+
+    expect(get(phase)).toBe('break');
+    visSpy.mockRestore();
+  });
+
+  it('does not resync while the tab is still hidden', async () => {
+    startTimer();
+    vi.setSystemTime(Date.now() + WORK_MS + 1_000);
+
+    const visSpy = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+    document.dispatchEvent(new Event('visibilitychange'));
+
+    // No tick ran → phase stays on work (the overdue advance fires on the
+    // next real tick or on becoming visible).
+    expect(get(phase)).toBe('work');
+    visSpy.mockRestore();
   });
 });
