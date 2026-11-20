@@ -112,12 +112,11 @@ jobs:
         # Coverage: --cov=. measures everything imported from api/ (modules
         # import as top-level names, so --cov=api matched nothing and coverage
         # was silently empty before #994; see api/.coveragerc, which omits
-        # tests/). Floor 80 = measured ~83% on development (CI run
-        # 44790581392 and local run, 2026-11-20) rounded down with headroom;
-        # ratchet up only. The previous comment claimed floor 85 from a
-        # 86.6% measurement (2026-10-31) while the flag was 78 — coverage
-        # genuinely regressed below 85; restoring it is tracked in #1401.
-        run: python -m pytest tests/ -v -n auto --durations=20 --cov=. --cov-report=xml --cov-report=term-missing --cov-fail-under=80
+        # tests/). Floor 85 = measured ~91% on this branch (CI run
+        # 44814716386, TOTAL 9627 stmts / 841 missed, 2026-11-20) rounded
+        # down with headroom; ratchet up only. Restores the documented 85%
+        # floor after #1401 lifted coverage back above it.
+        run: python -m pytest tests/ -v -n auto --durations=20 --cov=. --cov-report=xml --cov-report=term-missing --cov-fail-under=85
 
       # Hermeticity regression guard (#991): reproduce a real dev environment
       # where .env is fully populated. env_file resolves <repo>/.env on the
