@@ -108,7 +108,7 @@ def get_xp_table(db: Session | None = None) -> dict[str, int]:
                         merged[key] = value
                 _xp_table_cache = merged
                 return merged
-        except Exception:
+        except Exception:  # noqa: S110 — optional config source; fall through to the next fallback
             pass
 
     # Try database config
@@ -117,7 +117,7 @@ def get_xp_table(db: Session | None = None) -> dict[str, int]:
             config = get_xp_table_from_db(db)
             _xp_table_cache = config
             return config
-        except Exception:
+        except Exception:  # noqa: S110 — optional config source; fall through to the next fallback
             pass
 
     # Fallback to cached defaults
@@ -135,7 +135,7 @@ def get_plant_stages(db: Session | None = None) -> list[tuple[int, str]]:
             stages = get_plant_stages_from_db(db)
             _plant_stages_cache = stages
             return stages
-        except Exception:
+        except Exception:  # noqa: S110 — optional config source; fall through to the next fallback
             pass
 
     if _plant_stages_cache is None:

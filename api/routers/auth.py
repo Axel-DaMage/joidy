@@ -21,7 +21,7 @@ class LoginRequest(BaseModel):
 
 class LoginResponse(BaseModel):
     access_token: str
-    token_type: str = "bearer"
+    token_type: str = "bearer"  # noqa: S105 — OAuth2 token-type label, not a password
 
 
 @router.post("/login", response_model=LoginResponse)

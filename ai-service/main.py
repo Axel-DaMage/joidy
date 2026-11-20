@@ -1,4 +1,5 @@
 import asyncio
+import hmac
 import json
 import logging
 from collections.abc import AsyncIterator
@@ -158,6 +159,9 @@ class InternalAuthMiddleware(BaseHTTPMiddleware):
       secret can never leave the service unauthenticated on a network.
     - secret unset + non-production     → permissive (dev convenience);
       a warning is logged at startup.
+
+    The comparison uses ``hmac.compare_digest`` to avoid leaking the
+    secret's length/prefix through response timing (#1288).
     """
 
     async def dispatch(self, request: Request, call_next):
@@ -173,12 +177,25 @@ class InternalAuthMiddleware(BaseHTTPMiddleware):
                 )
             return await call_next(request)
         provided = request.headers.get("X-Internal-Secret", "")
-        if provided != settings.internal_secret:
+        if not hmac.compare_digest(provided, settings.internal_secret):
             return JSONResponse(
                 status_code=403,
                 content={"detail": "Forbidden: invalid internal secret"},
             )
         return await call_next(request)
+
+
+def _internal_secret_valid(request: Request) -> bool:
+    """True when INTERNAL_SECRET is configured and the request carries a
+    matching ``X-Internal-Secret`` header (constant-time comparison, #1288).
+
+    Returns False when no secret is configured — privileged disclosures
+    fail closed rather than becoming unauthenticated by default (#1291).
+    """
+    if not settings.internal_secret:
+        return False
+    provided = request.headers.get("X-Internal-Secret", "")
+    return hmac.compare_digest(provided, settings.internal_secret)
 
 
 app.add_middleware(InternalAuthMiddleware)
@@ -258,20 +275,27 @@ def _has_fallback() -> bool:
 
 
 @app.get("/health")
-async def health():
+async def health(request: Request):
     provider_info = _get_provider_info()
     # The service is "degraded" if the configured LLM/embedding provider is
     # not actually available (e.g. GEMINI_API_KEY not set but model is gemini:*).
     llm_ok = provider_info["llm"]["available"]
     emb_ok = provider_info["embedding"]["available"]
     status = "ok" if (llm_ok and emb_ok) else "degraded"
-    return {
+    body = {
         "status": status,
         "service": "joidy-ai",
         "ai_enabled": settings.is_ai_enabled,
-        "provider": provider_info,
-        "fallback_enabled": _has_fallback(),
+        # Minimal boolean the API needs for its embedding-availability probe —
+        # no provider or model names (#1291).
+        "embedding_available": emb_ok,
     }
+    # The provider/model inventory is privileged: only internal callers
+    # presenting a valid X-Internal-Secret receive it (#1291).
+    if _internal_secret_valid(request):
+        body["provider"] = provider_info
+        body["fallback_enabled"] = _has_fallback()
+    return body
 
 
 @app.get("/metrics")
@@ -281,7 +305,15 @@ def metrics():
 
 
 @app.get("/providers")
-def providers():
+def providers(request: Request):
+    """Provider/model inventory — internal callers only (#1291).
+
+    Requires a configured INTERNAL_SECRET presented via X-Internal-Secret.
+    With no secret configured the endpoint fails closed (403) instead of
+    exposing the full provider config map unauthenticated.
+    """
+    if not _internal_secret_valid(request):
+        raise HTTPException(status_code=403, detail="Forbidden: internal secret required")
     return {
         "available": settings.available_providers,
         "configured": dict.fromkeys(settings.provider_config, True),
@@ -758,7 +790,8 @@ async def cluster_notes(
             params = {f"id_{idx}": i for idx, i in enumerate(ids)}
             placeholders = ", ".join(f":id_{idx}" for idx in range(len(ids)))
             title_rows = conn.execute(
-                sql_text(f"SELECT id, title FROM notes WHERE id IN ({placeholders})"),
+                # Only generated :id_N placeholders are interpolated; values bind via params.
+                sql_text(f"SELECT id, title FROM notes WHERE id IN ({placeholders})"),  # noqa: S608
                 params,
             ).fetchall()
             title_map = {r[0]: r[1] for r in title_rows}

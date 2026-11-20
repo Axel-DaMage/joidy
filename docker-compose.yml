@@ -182,6 +182,8 @@ services:
       - BACKUP_RETENTION_WEEKS=${BACKUP_RETENTION_WEEKS:-4}
       - BACKUP_WEEKLY_DAY=${BACKUP_WEEKLY_DAY:-0}
       - BACKUP_ON_START=${BACKUP_ON_START:-false}
+      # Optional: encrypt dumps with AES-256-CBC via openssl (#1286). Empty = plaintext dumps.
+      - BACKUP_ENCRYPTION_KEY=${BACKUP_ENCRYPTION_KEY:-}
       - TZ=${USER_TIMEZONE:-UTC}
     command: ["bash", "/scripts/db_backup_loop.sh"]
     depends_on:

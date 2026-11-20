@@ -313,6 +313,7 @@ See [QUICKSTART.md](QUICKSTART.md) for a step-by-step dev onboarding guide.
 ## Documentation
 
 - [Instalación detallada](./INSTALL.md)
+- [Terminal CLI (`joidy`)](./cli/README.md) — interactive picker + agent-native `--json`/`--jq` interface
 - [Architecture](./docs/architecture.md)
 - [Architecture Decision Records](./docs/adr/README.md)
 - [Frontend Architecture](./docs/frontend.md)

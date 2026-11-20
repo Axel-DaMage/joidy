@@ -7,7 +7,7 @@ from config import settings
 from services.http_client import http_client
 
 STRAVA_AUTH_URL = "https://www.strava.com/oauth/authorize"
-STRAVA_TOKEN_URL = "https://www.strava.com/oauth/token"
+STRAVA_TOKEN_URL = "https://www.strava.com/oauth/token"  # noqa: S105 — OAuth endpoint URL, not a password
 STRAVA_API = "https://www.strava.com/api/v3"
 
 

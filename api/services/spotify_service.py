@@ -7,7 +7,7 @@ from config import settings
 from services.http_client import http_client
 
 SPOTIFY_AUTH_URL = "https://accounts.spotify.com/authorize"
-SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
+SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"  # noqa: S105 — OAuth endpoint URL, not a password
 SPOTIFY_API = "https://api.spotify.com/v1"
 
 

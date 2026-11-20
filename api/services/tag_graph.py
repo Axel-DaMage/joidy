@@ -36,7 +36,8 @@ def sync_tag_cooccurrences_for_tags(db: Session, tag_ids: set[int]) -> None:
     placeholders = ", ".join(f":tag_{idx}" for idx in range(len(params)))
 
     db.execute(
-        text(f"DELETE FROM tag_cooccurrences WHERE tag_a_id IN ({placeholders}) OR tag_b_id IN ({placeholders})"),
+        # Interpolates only generated :tag_N placeholders; values bind via params.
+        text(f"DELETE FROM tag_cooccurrences WHERE tag_a_id IN ({placeholders}) OR tag_b_id IN ({placeholders})"),  # noqa: S608
         params,
     )
 
@@ -56,7 +57,7 @@ def sync_tag_cooccurrences_for_tags(db: Session, tag_ids: set[int]) -> None:
                OR nt2.tag_id IN ({placeholders})
             GROUP BY nt1.tag_id, nt2.tag_id
             HAVING COUNT(DISTINCT nt1.note_id) >= 2
-            """
+            """  # noqa: S608 — only generated :tag_N placeholders are interpolated; values bind via params
         ),
         params,
     )

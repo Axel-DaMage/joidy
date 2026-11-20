@@ -2,15 +2,16 @@
 JWT Authentication Service.
 """
 
+import ipaddress
 import logging
 import secrets
 from datetime import UTC, datetime, timedelta
 
+import bcrypt
 import jwt
 from config import settings
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from passlib.context import CryptContext
 from services.env_file import get_persisted
 
 logger = logging.getLogger(__name__)
@@ -19,10 +20,10 @@ ALGORITHM = "HS256"
 TOKEN_EXPIRE_HOURS = 24 * 7  # 1 week
 
 security = HTTPBearer(auto_error=False)
-_pwd_context_kwargs: dict = {"schemes": ["bcrypt"], "deprecated": "auto"}
-if settings.bcrypt_rounds:
-    _pwd_context_kwargs["bcrypt__rounds"] = settings.bcrypt_rounds
-pwd_context = CryptContext(**_pwd_context_kwargs)
+# bcrypt cost factor (default 12). Tests lower it via BCRYPT_ROUNDS (#996);
+# passlib was dropped for direct bcrypt use — passlib 1.7.4 is unmaintained
+# and breaks on bcrypt >= 4.1 (#1290).
+_BCRYPT_ROUNDS: int = settings.bcrypt_rounds or 12
 
 
 def _effective_auth_password() -> str:
@@ -76,13 +77,18 @@ def verify_password(plain: str, stored: str) -> bool:
     Supports bcrypt hashes (starting with $2b$) and plaintext for backward compat.
     """
     if stored.startswith("$2b$"):
-        return bool(pwd_context.verify(plain, stored))
+        try:
+            return bcrypt.checkpw(plain.encode("utf-8"), stored.encode("utf-8"))
+        except ValueError:
+            # Malformed stored hash: report a non-match instead of a 500,
+            # matching the behaviour passlib's CryptContext.verify provided.
+            return False
     return secrets.compare_digest(plain, stored)
 
 
 def hash_password(plain: str) -> str:
     """Hash a password using bcrypt."""
-    return str(pwd_context.hash(plain))
+    return bcrypt.hashpw(plain.encode("utf-8"), bcrypt.gensalt(rounds=_BCRYPT_ROUNDS)).decode("utf-8")
 
 
 def create_access_token(user_id: int, username: str = "user") -> str:
@@ -126,10 +132,41 @@ def get_current_user_id(token: str) -> int | None:
     return None
 
 
-def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> int | None:
+def _is_loopback(host: str | None) -> bool:
+    """Return True only when ``host`` is a literal loopback IP (127.0.0.0/8, ::1).
+
+    Anything that is not a loopback IP — public/private addresses, empty
+    strings, hostnames, malformed values — fails closed (#1282). IPv4-mapped
+    IPv6 addresses (``::ffff:127.0.0.1``) are unwrapped before the check so
+    dual-stack dev setups still count as loopback.
+    """
+    if not host:
+        return False
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+        ip = ip.ipv4_mapped
+    return ip.is_loopback
+
+
+def _connection_host(conn) -> str | None:
+    """Extract the peer host from a Request or WebSocket (None when absent)."""
+    client = getattr(conn, "client", None)
+    return client.host if client else None
+
+
+def get_current_user(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+) -> int | None:
     """Dependency to get current user from Bearer token.
 
-    In development without AUTH_PASSWORD, auth is bypassed for convenience.
+    In development without AUTH_PASSWORD, auth is bypassed for loopback
+    clients only (#1282): a request arriving via a non-loopback interface
+    means the dev server is exposed to the LAN and must present a valid
+    token like any authenticated deployment.
     In production, auth is always required — missing AUTH_PASSWORD means
     no valid token can be issued, so all requests are rejected.
     """
@@ -141,7 +178,15 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
                 detail="Authentication not configured. Set AUTH_PASSWORD in .env.",
                 headers={"WWW-Authenticate": "Bearer"},
             )
-        return 1
+        client_host = _connection_host(request)
+        if _is_loopback(client_host):
+            return 1
+        # Non-loopback dev client: fall through to token validation.
+        if not credentials:
+            logger.warning(
+                "Rejected unauthenticated request from non-loopback client %s (dev auth bypass is loopback-only)",
+                client_host,
+            )
 
     if not credentials:
         raise HTTPException(
@@ -159,7 +204,10 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
     return user_id
 
 
-def get_current_user_or_internal(credentials: HTTPAuthorizationCredentials = Depends(security)) -> int | None:
+def get_current_user_or_internal(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+) -> int | None:
     """Dedicated dependency for routes also reachable by internal services.
 
     Accepts ``Authorization: Bearer <INTERNAL_API_TOKEN>`` (worker, n8n) in
@@ -169,4 +217,4 @@ def get_current_user_or_internal(credentials: HTTPAuthorizationCredentials = Dep
     """
     if credentials and verify_internal_token(credentials.credentials):
         return 1
-    return get_current_user(credentials)
+    return get_current_user(request, credentials)
