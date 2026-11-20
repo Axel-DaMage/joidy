@@ -89,21 +89,30 @@ cd "$PROJECT_DIR"
 # Detect the engine early so the env bootstrap can make engine-specific
 # decisions (e.g. skip DOCKER_GID for Podman rootless, set socket path).
 # Priority: docker-compose → docker compose → podman compose → podman-compose.
+# Only commands that drive the compose stack require an engine — `joidy
+# help` and usage errors must work on a bare machine: install.sh explicitly
+# lets users install Docker *after* the CLI is on PATH, and help is the
+# first thing they reach for.
 CONTAINER_ENGINE="docker"
-if command -v docker-compose &>/dev/null; then
-  DOCKER_CMD="docker-compose"
-elif command -v docker &>/dev/null; then
-  DOCKER_CMD="docker compose"
-elif command -v podman &>/dev/null && podman compose version &>/dev/null 2>&1; then
-  DOCKER_CMD="podman compose"
-  CONTAINER_ENGINE="podman"
-elif command -v podman-compose &>/dev/null; then
-  DOCKER_CMD="podman-compose"
-  CONTAINER_ENGINE="podman"
-else
-  echo -e "${RED}✗ Error: Neither docker nor podman was found in PATH.${NC}" >&2
-  exit 1
-fi
+DOCKER_CMD="docker compose"
+case "${1:-help}" in
+  up|down|sleep|wake|restart|status|pull|logs|idle|backup|restore)
+    if command -v docker-compose &>/dev/null; then
+      DOCKER_CMD="docker-compose"
+    elif command -v docker &>/dev/null; then
+      DOCKER_CMD="docker compose"
+    elif command -v podman &>/dev/null && podman compose version &>/dev/null 2>&1; then
+      DOCKER_CMD="podman compose"
+      CONTAINER_ENGINE="podman"
+    elif command -v podman-compose &>/dev/null; then
+      DOCKER_CMD="podman-compose"
+      CONTAINER_ENGINE="podman"
+    else
+      echo -e "${RED}✗ Error: Neither docker nor podman was found in PATH.${NC}" >&2
+      exit 1
+    fi
+    ;;
+esac
 
 # ─── .env bootstrap ───────────────────────────────────────────────
 # Resolve which .env file to use:
@@ -656,7 +665,7 @@ idle_watcher_alive() {
 # Service names of currently running compose services (one per line).
 idle_running_services() {
   local profile out
-  profile="$(ai_profile_args)"
+  profile="$(profile_args)"
   out=$($DOCKER_CMD $ENV_FILE_ARG $profile ps --services --filter status=running 2>/dev/null || true)
   if [ -z "$out" ]; then
     # Fallback for engines without `ps --services`: match known names in `ps`.
@@ -736,7 +745,7 @@ idle_any_activity() {
 idle_do_sleep() {
   local hibernate_db="$1"
   local profile running
-  profile="$(ai_profile_args)"
+  profile="$(profile_args)"
   running="$(idle_running_services)"
   if [ -z "$(echo "$running" | tr -d '[:space:]')" ]; then
     idle_log "idle timeout reached but no services running — nothing to sleep"
@@ -764,7 +773,7 @@ idle_do_sleep() {
 idle_restore_state() {
   local file="$IDLE_STATE_DIR/pre_sleep_services"
   local profile running svc
-  profile="$(ai_profile_args)"
+  profile="$(profile_args)"
   running="$(idle_running_services)"
   if [ -f "$file" ]; then
     for svc in postgres api frontend worker ai-service; do

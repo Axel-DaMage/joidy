@@ -1,0 +1,350 @@
+# Distribution-channel smoke tests (#1253).
+#
+# Every distribution path — install.sh, install.ps1, the AUR PKGBUILD, the
+# `joidy` CLI and release.yml's version bump — has shipped at least one
+# regression that was only discovered by a user (#848, #849, #876, #981,
+# #983, #1163). This workflow exercises those paths in CI before merge so
+# first-run breakage is caught here instead of in production.
+#
+# Triggered on PRs/pushes that touch scripts/, aur/ or the release/publish
+# workflows, and on every published release.
+name: Dist Smoke
+
+on:
+  push:
+    branches: [main, development]
+    paths:
+      - 'scripts/**'
+      - 'aur/**'
+      - 'install*.sh'
+      - 'install*.ps1'
+      - '.env.example'
+      - '.github/workflows/dist-smoke.yml'
+      - '.github/workflows/release.yml'
+      - '.github/workflows/aur-publish.yml'
+      - '.github/workflows/publish.yml'
+  pull_request:
+    branches: [main, development]
+    paths:
+      - 'scripts/**'
+      - 'aur/**'
+      - 'install*.sh'
+      - 'install*.ps1'
+      - '.env.example'
+      - '.github/workflows/dist-smoke.yml'
+      - '.github/workflows/release.yml'
+      - '.github/workflows/aur-publish.yml'
+      - '.github/workflows/publish.yml'
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bash-scripts:
+    name: Bash script checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Syntax-check all shell scripts
+        run: |
+          set -e
+          for f in scripts/*.sh; do
+            echo "bash -n $f"
+            bash -n "$f"
+          done
+
+      # Severity `error` only: warnings are advisory (existing scripts have
+      # some), but errors catch real breakage — unset-var traps, unclosed
+      # quotes, unreachable branches — the class of bug that ships broken
+      # installers.
+      - name: Shellcheck (errors only)
+        run: shellcheck -S error scripts/*.sh
+
+  install-sh:
+    name: install.sh smoke (${{ matrix.distro }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - distro: ubuntu
+            image: ubuntu:22.04
+          - distro: archlinux
+            image: archlinux:base-devel
+    container:
+      image: ${{ matrix.image }}
+    steps:
+      - name: Install dependencies (ubuntu)
+        if: matrix.distro == 'ubuntu'
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update -qq
+          apt-get install -y -qq git openssl ca-certificates
+
+      - name: Install dependencies (archlinux)
+        if: matrix.distro == 'archlinux'
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm --needed git openssl
+
+      - uses: actions/checkout@v7
+
+      # install.sh normally `git clone`s the development branch from GitHub,
+      # which would test the *published* code, not this revision. Stub `git`
+      # so the clone copies the PR checkout instead — the installer still
+      # runs end-to-end (clone, .env bootstrap, CLI shim, PATH wiring).
+      - name: Mock git clone
+        env:
+          JOIDY_MOCK_SOURCE: ${{ github.workspace }}
+        run: |
+          mkdir -p "$HOME/mockbin"
+          cat > "$HOME/mockbin/git" <<'MOCK'
+          #!/usr/bin/env bash
+          # Test double: `git clone` copies the PR checkout instead of
+          # hitting the network so install.sh exercises this revision.
+          if [ "${1:-}" = "clone" ]; then
+            dest="${!#}"
+            mkdir -p "$dest"
+            cp -a "$JOIDY_MOCK_SOURCE"/. "$dest"
+            exit 0
+          fi
+          echo "mock-git: unsupported 'git $*'" >&2
+          exit 1
+          MOCK
+          chmod +x "$HOME/mockbin/git"
+
+      - name: Run install.sh
+        env:
+          JOIDY_MOCK_SOURCE: ${{ github.workspace }}
+          JOIDY_DIR: /tmp/joidy-install
+        run: |
+          export PATH="$HOME/mockbin:$PATH"
+          bash scripts/install.sh
+
+      - name: Assert the joidy CLI was installed and works
+        env:
+          JOIDY_DIR: /tmp/joidy-install
+        run: |
+          set -e
+          export PATH="$HOME/mockbin:$HOME/.local/bin:$PATH"
+
+          # Shim on PATH, executable, pointing at the installed CLI (#848).
+          test -x "$HOME/.local/bin/joidy"
+          command -v joidy >/dev/null
+          [ "$(readlink -f "$HOME/.local/bin/joidy")" = "$JOIDY_DIR/scripts/joidy.sh" ]
+
+          # Project path persisted so the CLI works from any directory.
+          grep -qx "$JOIDY_DIR" "$HOME/.config/joidy/path"
+
+          # First-run .env bootstrap with generated secrets (#873).
+          test -f "$JOIDY_DIR/.env"
+          grep -qE '^SECRET_KEY=[0-9a-f]{64}$' "$JOIDY_DIR/.env"
+          grep -qE '^POSTGRES_PASSWORD=.{32,}$' "$JOIDY_DIR/.env"
+
+          # The assertion the issue asks for: `joidy --help` exits 0 on a
+          # clean machine (no container engine installed).
+          joidy --help >/dev/null
+          joidy help >/dev/null
+
+          # Unknown commands fail with usage — not with an engine error.
+          if joidy bogus-cmd >/tmp/bogus.out 2>&1; then
+            echo "::error::'joidy bogus-cmd' exited 0 — expected failure"
+            exit 1
+          fi
+          grep -q "Unknown command" /tmp/bogus.out
+
+          # Stack commands still hard-require an engine — clean error, exit 1.
+          if joidy up >/tmp/up.out 2>&1; then
+            echo "::error::'joidy up' exited 0 without a container engine"
+            exit 1
+          fi
+          grep -qiE 'docker|podman' /tmp/up.out
+
+  install-ps1:
+    name: PowerShell scripts (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      # Parse-check every .ps1 — catches the #981 class of encoding/syntax
+      # failures before merge (a syntax error aborts the whole script).
+      - name: Parse-check all .ps1 scripts
+        shell: pwsh
+        run: |
+          $failed = $false
+          foreach ($f in Get-ChildItem scripts\*.ps1) {
+            $errs = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile(
+              $f.FullName, [ref]$null, [ref]$errs)
+            if ($errs -and $errs.Count -gt 0) {
+              $failed = $true
+              foreach ($e in $errs) {
+                Write-Host "::error file=$($f.Name),line=$($e.Extent.StartLineNumber)::$($e.Message)"
+              }
+            } else {
+              Write-Host "OK: $($f.Name)"
+            }
+          }
+          if ($failed) { exit 1 }
+
+      - name: PSScriptAnalyzer (errors only)
+        shell: pwsh
+        run: |
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
+          $results = @(Invoke-ScriptAnalyzer -Path scripts -Recurse -Severity Error)
+          if ($results.Count -gt 0) {
+            $results | Format-Table -AutoSize | Out-String | Write-Host
+            exit 1
+          }
+          Write-Host "PSScriptAnalyzer: no errors"
+
+      # Exercises the real Windows path end to end: project-dir resolution,
+      # .env bootstrap, secret generation, and command dispatch. `help` must
+      # exit 0 even though no container engine is guaranteed on the runner.
+      - name: joidy.ps1 help exits 0
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\joidy.ps1 help
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::'joidy.ps1 help' exited $LASTEXITCODE"
+            exit 1
+          }
+
+      # Runs the PR's install.ps1 end-to-end on the ephemeral runner — it
+      # clones the published repo, installs the joidy.ps1 + joidy.cmd shims
+      # into ~/.local/bin and wires PATH. Asserts the #848 regression (an
+      # installer that never installed the CLI) cannot come back, and that
+      # the #981 joidy.cmd shim is generated correctly.
+      - name: Run install.ps1 and assert the CLI shims land
+        shell: pwsh
+        env:
+          JOIDY_DIR: C:\joidy-install
+        run: |
+          pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::install.ps1 exited $LASTEXITCODE"
+            exit $LASTEXITCODE
+          }
+          $localBin = Join-Path $HOME ".local\bin"
+          foreach ($shim in @("joidy.ps1", "joidy.cmd")) {
+            if (-not (Test-Path (Join-Path $localBin $shim))) {
+              Write-Host "::error::$shim was not installed to $localBin"
+              exit 1
+            }
+          }
+          $cmd = Get-Content (Join-Path $localBin "joidy.cmd") -Raw
+          if ($cmd -notmatch 'powershell' -or $cmd -notmatch 'joidy\.ps1') {
+            Write-Host "::error::joidy.cmd shim does not invoke joidy.ps1"
+            exit 1
+          }
+          if (-not (Test-Path (Join-Path $HOME ".config\joidy\path"))) {
+            Write-Host "::error::project path file was not written"
+            exit 1
+          }
+          Write-Host "install.ps1 installed the joidy CLI shims"
+
+  aur-pkgbuild:
+    name: AUR PKGBUILD / .SRCINFO
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container:
+      image: archlinux:base-devel
+    steps:
+      - name: Install dependencies
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm --needed git
+
+      - uses: actions/checkout@v7
+
+      # `makepkg --printsrcinfo` parses the PKGBUILD and emits canonical
+      # .SRCINFO metadata — the same output AUR consumes. Comparing it to the
+      # committed file catches the #1163 class of bug (stale pkgver/source
+      # shipped to the AUR). makepkg refuses to run as root, so use an
+      # unprivileged user in a writable copy of aur/.
+      - name: Assert .SRCINFO is in sync with PKGBUILD
+        run: |
+          useradd -m builder
+          cp -a aur /tmp/aur-check
+          chown -R builder /tmp/aur-check
+          su builder -c "cd /tmp/aur-check && makepkg --printsrcinfo" > /tmp/SRCINFO.generated
+          if ! diff -u aur/.SRCINFO /tmp/SRCINFO.generated; then
+            echo "::error::aur/.SRCINFO is out of sync with aur/PKGBUILD."
+            echo "Regenerate with: cd aur && makepkg --printsrcinfo > .SRCINFO"
+            exit 1
+          fi
+
+          # Belt & braces explicit checks for the fields that went stale in
+          # #1163: pkgver must match and the source URL must derive from it.
+          PKGVER=$(sed -n 's/^pkgver=//p' aur/PKGBUILD)
+          SRCVER=$(sed -n 's/^[[:space:]]*pkgver = //p' aur/.SRCINFO)
+          [ "$PKGVER" = "$SRCVER" ] || {
+            echo "::error::pkgver mismatch: PKGBUILD=$PKGVER .SRCINFO=$SRCVER"
+            exit 1
+          }
+          grep -q '_tag=${pkgver//_/-}' aur/PKGBUILD || {
+            echo "::error::PKGBUILD must derive _tag from pkgver"
+            exit 1
+          }
+          TAG="${PKGVER//_/-}"
+          grep -q "archive/v\${_tag}.tar.gz" aur/PKGBUILD || {
+            echo "::error::PKGBUILD source must point at archive/v\${_tag}.tar.gz"
+            exit 1
+          }
+          grep -q "archive/v${TAG}.tar.gz" aur/.SRCINFO || {
+            echo "::error::.SRCINFO source must point at archive/v${TAG}.tar.gz"
+            exit 1
+          }
+          echo "AUR metadata consistent (pkgver=$PKGVER, tag=v$TAG)"
+
+      # `makepkg --nobuild` downloads and extracts every source entry — this
+      # validates that the PKGBUILD parses AND that the release tarball URL
+      # actually resolves (a stale/bad URL is exactly what #1163 shipped).
+      # --nodeps because the `docker` dependency is not installed in CI.
+      - name: makepkg downloads and extracts sources
+        run: su builder -c "cd /tmp/aur-check && makepkg --nobuild --nodeps"
+
+  release-bump-dry-run:
+    name: release.yml bump dry run
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Extract the real 'Bump version strings' step from release.yml and
+      # execute it with a fake version — catches broken seds (the #876 /
+      # #1163 class) in the same code the release job runs.
+      - name: Dry-run the version-bump block
+        run: |
+          python3 -c "import yaml" 2>/dev/null || pip3 install --quiet pyyaml
+          python3 - <<'PY'
+          import yaml
+          wf = yaml.safe_load(open('.github/workflows/release.yml'))
+          step = next(s for s in wf['jobs']['release']['steps']
+                      if s.get('name') == 'Bump version strings')
+          body = (step['run']
+                  .replace('${{ steps.version.outputs.version }}', 'v9.9.9-cismoke.1')
+                  .replace('${{ steps.version.outputs.version_clean }}', '9.9.9-cismoke.1'))
+          open('/tmp/bump-version.sh', 'w').write(body)
+          PY
+          bash -n /tmp/bump-version.sh
+          bash /tmp/bump-version.sh
+
+      - name: Verify the bump applied cleanly
+        run: |
+          set -e
+          git diff --check
+          grep -q '^pkgver=9.9.9_cismoke.1$' aur/PKGBUILD
+          grep -q 'pkgver = 9.9.9_cismoke.1' aur/.SRCINFO
+          # PKGBUILD's URL stays literal `v${_tag}.tar.gz` — it derives from
+          # pkgver. The generated .SRCINFO must carry the resolved URL.
+          grep -q 'archive/v${_tag}.tar.gz' aur/PKGBUILD
+          grep -q 'archive/v9.9.9-cismoke.1.tar.gz' aur/.SRCINFO
+          grep -q 'badge/JOIDY-v9.9.9-cismoke.1-blue' README.md
+          echo "version bump block produced consistent edits"
