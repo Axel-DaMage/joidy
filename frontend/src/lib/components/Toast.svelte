@@ -20,14 +20,26 @@
   <div class="toast-container">
     {#each $notifications as notif (notif.id)}
       {@const cfg = TYPE_CONFIG[notif.type] ?? TYPE_CONFIG.info}
-      <button
-        class="toast toast-{notif.type}"
-        transition:fly={{ y: -20, duration: 200 }}
-        onclick={() => dismissNotification(notif.id)}
-      >
-        <DynamicIcon name={cfg.icon} size={16} color={cfg.color} />
-        <span class="toast-message">{notif.message}</span>
-      </button>
+      {#if notif.href}
+        <a
+          class="toast toast-{notif.type}"
+          href={notif.href}
+          transition:fly={{ y: -20, duration: 200 }}
+          onclick={() => dismissNotification(notif.id)}
+        >
+          <DynamicIcon name={cfg.icon} size={16} color={cfg.color} />
+          <span class="toast-message">{notif.message}</span>
+        </a>
+      {:else}
+        <button
+          class="toast toast-{notif.type}"
+          transition:fly={{ y: -20, duration: 200 }}
+          onclick={() => dismissNotification(notif.id)}
+        >
+          <DynamicIcon name={cfg.icon} size={16} color={cfg.color} />
+          <span class="toast-message">{notif.message}</span>
+        </button>
+      {/if}
     {/each}
   </div>
 {/if}
@@ -60,6 +72,10 @@
   }
   .toast:hover {
     opacity: 0.85;
+  }
+  a.toast {
+    text-decoration: none;
+    color: inherit;
   }
 
   .toast-message {

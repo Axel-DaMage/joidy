@@ -200,7 +200,10 @@
     "placeholder": "Capture a quick idea...",
     "defaultTitle": "Quick note",
     "created": "Note created!",
-    "error": "Could not create note"
+    "error": "Could not create note",
+    "toInbox": "To Inbox",
+    "inboxCreated": "Captured to Inbox — triage it anytime",
+    "inboxError": "Could not capture to Inbox"
   },
   "mood": {
     "title": "MOOD",
@@ -339,7 +342,25 @@
     "cancelArchive": "Cancel (archive without penalty)",
     "deletePermanent": "Delete permanently",
     "deleteGoalConfirmTitle": "Delete goal",
-    "deleteGoalConfirmMessage": "Are you sure you want to delete \"{title}\"? This action is permanent."
+    "deleteGoalConfirmMessage": "Are you sure you want to delete \"{title}\"? This action is permanent.",
+    "inboxTab": "Inbox",
+    "inboxTitle": "Inbox",
+    "inboxHint": "Untriaged captures wait here — classify them or discard them.",
+    "inboxEmpty": "Inbox is empty",
+    "inboxEmptyHint": "Use Quick Capture to drop ideas here and triage them later.",
+    "inboxTriageError": "Could not send goal to the queue",
+    "inboxDiscardError": "Could not discard goal",
+    "contextLabel": "Energy context",
+    "contextHelper": "When does this fit best? Morning favors deep work, night favors low-friction tasks.",
+    "contextAny": "Any time",
+    "contextMorning": "Morning",
+    "contextNight": "Night",
+    "contextAnyHint": "Fits any moment of the day",
+    "contextMorningHint": "Deep work — best early in the day",
+    "contextNightHint": "Low-friction tasks for the evening",
+    "toQueue": "To queue",
+    "discard": "Discard",
+    "discardConfirm": "Confirm?"
   },
   "notesPage": {
     "createNote": "Create note",

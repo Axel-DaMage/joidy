@@ -291,7 +291,8 @@
       const cachedGoals = getCachedData<Goal[]>('goals');
       const cachedStreaks = getCachedData<PersonalStreak[]>('streaks');
       if (cachedGoals) {
-        pendingTasks = cachedGoals.filter((goal: Goal) => !goal.is_completed).length;
+        // Untriaged inbox captures don't count as pending tasks (#1200)
+        pendingTasks = cachedGoals.filter((goal: Goal) => !goal.is_completed && goal.state !== 'INBOX').length;
       }
       if (cachedStreaks) {
         pendingStreaks = cachedStreaks.filter(
@@ -301,7 +302,7 @@
 
       try {
         const goals = await api.goals.list();
-        pendingTasks = goals.filter((goal) => !goal.is_completed).length;
+        pendingTasks = goals.filter((goal) => !goal.is_completed && goal.state !== 'INBOX').length;
         setCachedData('goals', goals);
       } catch (e) {
         logger.error('[layout] goals list failed:', e);

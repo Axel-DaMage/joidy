@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { page } from '$app/state';
-  import { goto } from '$app/navigation';
+  import { goto, replaceState } from '$app/navigation';
   import {
     Plus,
     Check,
@@ -27,6 +27,7 @@
     Settings,
     Palette,
     Hexagon,
+    Inbox,
     ListFilter,
     TriangleAlert,
     FilePen,
@@ -35,9 +36,11 @@
     Pin,
     PinOff,
   } from 'lucide-svelte';
-  import { api, type Goal, type Tag as TagType, type Note } from '$lib/api';
+  import { api, type Goal, type GoalContext, type Tag as TagType, type Note } from '$lib/api';
   import GoalFilters from '$lib/components/GoalFilters.svelte';
+  import GoalInbox from '$lib/components/GoalInbox.svelte';
   import GoalList from '$lib/components/GoalList.svelte';
+  import { inboxCount } from '$lib/utils/goalTriage';
   import { use24HourClock } from '$lib/stores/settings';
   import { getLocale } from '$lib/stores/locale';
   import { applyGamificationResult, showXPGain } from '$lib/stores/gamification';
@@ -82,13 +85,17 @@
   let notes = $state<Note[]>([]);
   // XP events from gamification — used for real activity timestamps
   let xpEvents = $state<{ type: string; xp: number; at: string }[]>([]);
-  let currentTab = $state<'today' | 'planning' | 'history' | 'analytics' | 'editor'>('editor');
+  const VALID_TABS = ['editor', 'today', 'inbox', 'planning', 'history', 'analytics'] as const;
+  let currentTab = $state<(typeof VALID_TABS)[number]>('editor');
   let currentPlanningTab = $state<'WEEKLY' | 'MONTHLY' | 'ANNUAL'>('ANNUAL');
   let showAddForm = $state(false);
   let goalSearchQuery = $state('');
   let goalFilterState = $state<string | null>(null);
+  // Energy-context filter for the editor list (#1200); persisted in goalsUi.
+  let goalContextFilter = $state<GoalContext | null>(null);
   // Matches the states rendered by GoalFilters.svelte (null = "Todos")
-  const VALID_EDITOR_FILTERS = ['PINNED', 'ACTIVE', 'COMPLETED', 'CANCELLED', 'FAILED'] as const;
+  const VALID_EDITOR_FILTERS = ['PINNED', 'ACTIVE', 'COMPLETED', 'CANCELLED', 'FAILED', 'INBOX'] as const;
+  let inboxBadgeCount = $derived(inboxCount(goals));
   let pinnedGoals = $state<Set<number>>(new Set());
   let deleteConfirm = $state<number | null>(null);
 
@@ -276,6 +283,7 @@
     ANNUAL: 'Anual',
   };
   const STATE_LABELS: Record<string, string> = {
+    INBOX: 'Inbox',
     ACTIVE: 'Activo',
     PAUSED: 'Pausado',
     COMPLETED: 'Completado',
@@ -333,10 +341,13 @@
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   });
+  // Untriaged inbox captures (#1200) live in their own tab — they must not
+  // leak into dashboards, planning lists or statistics.
+  const isListGoal = (g: Goal) => g.state !== 'INBOX' && g.state !== 'CANCELLED';
   let dailyGoals = $derived(
-    goals.filter((g) => g.state !== 'CANCELLED' && isAssigned(g.id, _todayStr))
+    goals.filter((g) => isListGoal(g) && isAssigned(g.id, _todayStr))
   );
-  let planningGoals = $derived(goals.filter((g) => g.state !== 'CANCELLED'));
+  let planningGoals = $derived(goals.filter(isListGoal));
   let pendingGoals = $derived(goals.filter((g) => g.pending_removal));
 
   let historyData = $state<any[]>([]);
@@ -425,7 +436,9 @@
     // restore UI state immediately to prevent flash
     try {
       const savedTab = localStorage.getItem('goals.currentTab');
-      if (savedTab) currentTab = savedTab as typeof currentTab;
+      if (savedTab && (VALID_TABS as readonly string[]).includes(savedTab)) {
+        currentTab = savedTab as typeof currentTab;
+      }
       const savedDate = localStorage.getItem('goals.selectedPlanningDate');
       if (savedDate) selectedPlanningDate = savedDate;
       const savedHistoryDate = localStorage.getItem('goals.selectedHistoryDate');
@@ -459,6 +472,15 @@
       }
       if (typeof saved?.editorSearch === 'string') {
         goalSearchQuery = saved.editorSearch;
+      }
+      const savedContext = saved?.editorContextFilter;
+      if (
+        savedContext === null ||
+        savedContext === 'ANY' ||
+        savedContext === 'MORNING' ||
+        savedContext === 'NIGHT'
+      ) {
+        goalContextFilter = savedContext;
       }
     } catch {
       // ignore storage errors
@@ -638,7 +660,7 @@
     for (const date of sortedDates) {
       for (const id of assignments[date]) {
         const goal = goals.find((g) => g.id === id);
-        if (goal && goal.state !== 'COMPLETED' && goal.state !== 'FAILED') {
+        if (goal && isListGoal(goal) && goal.state !== 'COMPLETED' && goal.state !== 'FAILED') {
           if (!futureAssignments.some((a) => a.goal.id === id && a.date === date)) {
             futureAssignments.push({ date, goal });
           }
@@ -747,7 +769,7 @@
 
   let filteredUnassignedGoals = $derived.by(() => {
     let unassigned = goals.filter(
-      (g) => g.state !== 'CANCELLED' && !isAssigned(g.id, selectedPlanningDate)
+      (g) => isListGoal(g) && !isAssigned(g.id, selectedPlanningDate)
     );
     if (listSortBy === 'alpha') {
       unassigned.sort((a, b) => a.title.localeCompare(b.title));
@@ -814,7 +836,21 @@
   // persist editor filter and search in userSettings (#1096);
   // the search is debounced to avoid a localStorage write per keystroke
   $effect(() => {
-    patchUserSettings({ goalsUi: { editorFilter: goalFilterState } });
+    patchUserSettings({
+      goalsUi: { editorFilter: goalFilterState, editorContextFilter: goalContextFilter },
+    });
+  });
+
+  // Deep-link support: /goals?tab=inbox (used by Quick Capture toasts, #1200).
+  // The param is consumed once so manual tab navigation isn't overridden.
+  $effect(() => {
+    const tabParam = page.url.searchParams.get('tab');
+    if (tabParam && (VALID_TABS as readonly string[]).includes(tabParam)) {
+      currentTab = tabParam as typeof currentTab;
+      const clean = new URL(page.url.href);
+      clean.searchParams.delete('tab');
+      replaceState(`${clean.pathname}${clean.search}${clean.hash}`, page.state);
+    }
   });
 
   $effect(() => {
@@ -951,7 +987,7 @@
 
   let progressOverview = $derived.by(() => {
     return ['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL', 'ONEOFF'].map((temp) => {
-      const tempGoals = goals.filter((g) => g.temporality === temp && g.state !== 'CANCELLED');
+      const tempGoals = goals.filter((g) => g.temporality === temp && isListGoal(g));
       const avgProgress =
         tempGoals.length > 0
           ? Math.round(
@@ -1173,7 +1209,7 @@
   });
 
   let funnelData = $derived.by(() => {
-    const total = goals.length || 1;
+    const total = goals.filter(isListGoal).length || 1;
     const completed = goals.filter((g) => g.state === 'COMPLETED' || g.is_completed).length;
     const failed = goals.filter((g) => g.state === 'FAILED').length;
     const active = goals.filter((g) => g.state === 'ACTIVE').length;
@@ -1250,6 +1286,16 @@
       </button>
       <button
         class="tab"
+        class:active={currentTab === 'inbox'}
+        onclick={() => (currentTab = 'inbox')}
+      >
+        <Inbox size={14} /> {$t('goalsPage.inboxTab')}
+        {#if inboxBadgeCount > 0}
+          <span class="tab-badge">{inboxBadgeCount}</span>
+        {/if}
+      </button>
+      <button
+        class="tab"
         class:active={currentTab === 'planning'}
         onclick={() => (currentTab = 'planning')}
       >
@@ -1278,8 +1324,14 @@
       currentTab === 'history' ||
       currentTab === 'planning' ||
       currentTab === 'today' ||
+      currentTab === 'inbox' ||
       currentTab === 'editor'}
   >
+    {#if currentTab === 'inbox'}
+      <div class="tab-content fade-in">
+        <GoalInbox bind:goals onOpen={openGoalEditor} />
+      </div>
+    {/if}
     {#if currentTab === 'today'}
       <div class="tab-content fade-in today-layout">
         <div class="dashboard-main-col">
@@ -2781,7 +2833,11 @@
   {#if currentTab === 'editor'}
     <div class="tab-content fade-in editor-tab">
       <div class="editor-header-row">
-        <GoalFilters bind:query={goalSearchQuery} bind:filter={goalFilterState} />
+        <GoalFilters
+          bind:query={goalSearchQuery}
+          bind:filter={goalFilterState}
+          bind:contextFilter={goalContextFilter}
+        />
         <button
           class="btn btn-primary new-goal-cta-inline"
           onclick={() => {
@@ -2801,6 +2857,7 @@
         {goals}
         query={goalSearchQuery}
         filter={goalFilterState}
+        contextFilter={goalContextFilter}
         pinned={pinnedGoals}
         {tags}
         {notes}
@@ -2899,6 +2956,18 @@
     background: var(--surface-active);
     color: var(--text-primary);
     font-weight: 500;
+  }
+  .tab-badge {
+    min-width: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: var(--accent-contrast-text, var(--bg));
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 16px;
+    text-align: center;
+    font-family: var(--font-mono);
   }
   .goals-body {
     flex: 1;

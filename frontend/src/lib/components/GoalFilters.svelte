@@ -1,11 +1,23 @@
 <script lang="ts">
-  import { Search } from 'lucide-svelte';
+  import { Search, Sun, Moon, Zap } from 'lucide-svelte';
   import { t } from 'svelte-i18n';
+  import type { GoalContext } from '$lib/api';
 
   let {
     query = $bindable(''),
-    filter = $bindable<string | null>(null)
+    filter = $bindable<string | null>(null),
+    contextFilter = $bindable<GoalContext | null>(null)
   } = $props();
+
+  const CONTEXT_CHIPS: { value: GoalContext; key: string }[] = [
+    { value: 'MORNING', key: 'contextMorning' },
+    { value: 'NIGHT', key: 'contextNight' },
+    { value: 'ANY', key: 'contextAny' },
+  ];
+
+  function toggleContext(ctx: GoalContext) {
+    contextFilter = contextFilter === ctx ? null : ctx;
+  }
 </script>
 
 <div class="editor-header">
@@ -50,6 +62,25 @@
         class:active={filter === 'FAILED'}
         onclick={() => filter = 'FAILED'}
       >{$t('goalFilters.failed')}</button>
+      <button
+        class="filter-btn inbox-filter"
+        class:active={filter === 'INBOX'}
+        onclick={() => filter = 'INBOX'}
+      >{$t('goalsPage.inboxTab')}</button>
+    </div>
+    <div class="context-filter" role="group" aria-label={$t('goalsPage.contextLabel')}>
+      {#each CONTEXT_CHIPS as chip}
+        <button
+          class="filter-btn context-chip"
+          class:active={contextFilter === chip.value}
+          onclick={() => toggleContext(chip.value)}
+          title={$t(`goalsPage.${chip.key}Hint`)}
+          aria-pressed={contextFilter === chip.value}
+        >
+          {#if chip.value === 'MORNING'}<Sun size={11} />{:else if chip.value === 'NIGHT'}<Moon size={11} />{:else}<Zap size={11} />{/if}
+          {$t(`goalsPage.${chip.key}`)}
+        </button>
+      {/each}
     </div>
   </div>
 </div>
@@ -133,6 +164,20 @@
     font-weight: 500;
   }
 
+  .context-filter {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    padding-left: 8px;
+    border-left: 1px solid var(--border);
+  }
+
+  .context-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
   @media (max-width: 768px) {
     .editor-header {
       flex-direction: column;
@@ -166,6 +211,11 @@
     .filter-buttons {
       flex-wrap: wrap;
       gap: var(--s1);
+    }
+    .context-filter {
+      border-left: none;
+      padding-left: 0;
+      flex-wrap: wrap;
     }
     .filter-btn {
       padding: var(--s2) var(--s2_5);

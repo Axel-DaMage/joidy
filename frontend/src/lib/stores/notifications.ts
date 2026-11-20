@@ -4,6 +4,8 @@ export interface Notification {
   id: string;
   message: string;
   type: 'info' | 'success' | 'level' | 'error';
+  /** Optional link target rendered inside the toast (#1200 inbox shortcut). */
+  href?: string;
 }
 
 export const notifications = writable<Notification[]>([]);
@@ -18,7 +20,8 @@ const dismissTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 export function showNotification(
   message: string,
-  type: 'info' | 'success' | 'level' | 'error' = 'info'
+  type: 'info' | 'success' | 'level' | 'error' = 'info',
+  href?: string
 ): void {
   // If this exact notification is already active, ignore it
   if (activeNotifications.has(message)) {
@@ -36,7 +39,7 @@ export function showNotification(
   }, 3000);
 
   const id = `notif-${Date.now()}`;
-  notifications.update(ns => [...ns, { id, message, type }]);
+  notifications.update(ns => [...ns, { id, message, type, href }]);
   // intentional: auto-dismiss one-shot on a module store; tracked in
   // dismissTimers and bulk-cleared by clearAllNotificationTimers() (#1003)
   const timer = setTimeout(() => {
