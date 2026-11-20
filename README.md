@@ -319,6 +319,7 @@ See [QUICKSTART.md](QUICKSTART.md) for a step-by-step dev onboarding guide.
 - [Frontend Architecture](./docs/frontend.md)
 - [Database](./docs/database.md)
 - [Troubleshooting](./docs/troubleshooting.md)
+- [Privacy Policy](./PRIVACY.md)
 - [Full docs index](./docs/index.md)
 
 ## License

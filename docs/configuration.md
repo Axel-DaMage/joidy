@@ -71,6 +71,12 @@ GITHUB_TOKEN=
 GITHUB_USERNAME=
 GITHUB_WEBHOOK_URL=
 
+# ── Google OAuth (Calendar, Tasks, Gmail, Contacts) ──────
+# Crea credenciales en: https://console.cloud.google.com/apis/credentials
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_REDIRECT_URI=http://localhost:8000/integrations/google/callback
+
 # ── Telegram Bot (opcional) ───────────────────────────────
 # Crea con @BotFather en Telegram
 TELEGRAM_BOT_TOKEN=
@@ -155,7 +161,34 @@ API_PORT=8000
 
 ---
 
-### 2.4 Telegram
+### 2.4 Google (Calendar, Tasks, Gmail, Contacts)
+
+| Variable | Requerido | Tipo | Descripción |
+|----------|-----------|------|-------------|
+| GOOGLE_CLIENT_ID | No | string | Client ID del OAuth client |
+| GOOGLE_CLIENT_SECRET | No | string | Client Secret del OAuth client |
+| GOOGLE_REDIRECT_URI | No | string | Callback URL (default `http://localhost:8000/integrations/google/callback`) |
+
+**Obtención de OAuth:**
+1. Ir a [Google Cloud Console → Credentials](https://console.cloud.google.com/apis/credentials)
+2. Crear OAuth client ID (tipo Web application)
+3. Añadir `GOOGLE_REDIRECT_URI` a *Authorized redirect URIs*
+4. Habilitar las APIs: Calendar, Tasks, Gmail y People (Contacts)
+5. Configurar la pantalla de consentimiento OAuth con los scopes que pide Joidy
+   (`calendar.events`, `calendar.readonly`, `tasks.readonly`,
+   `gmail.readonly`, `contacts.readonly`)
+
+**Verificación de Google:**
+Un OAuth client en modo "Testing" funciona solo para usuarios de prueba
+registrados. Para sacarlo a producción (cualquier cuenta de Google), Google
+exige verificación de la pantalla de consentimiento, que incluye una **URL
+pública de política de privacidad** — usa
+[`PRIVACY.md`](../PRIVACY.md) del repositorio. Ver
+[Google API Services User Data Policy](https://developers.google.com/terms/api-services-user-data-policy).
+
+---
+
+### 2.5 Telegram
 
 | Variable | Requerido | Tipo | Descripción |
 |----------|-----------|------|-------------|
@@ -178,7 +211,7 @@ update llegue firmado. Cada interacción queda registrada en la tabla
 
 ---
 
-### 2.5 Aplicación
+### 2.6 Aplicación
 
 | Variable | Default | Tipo | Descripción |
 |----------|---------|------|-------------|
@@ -198,7 +231,7 @@ python3 -c "import secrets; print(secrets.token_hex(32))"
 
 ---
 
-### 2.6 Puertos
+### 2.7 Puertos
 
 | Variable | Default | Descripción |
 |----------|---------|-------------|
