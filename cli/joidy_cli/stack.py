@@ -90,7 +90,7 @@ def run(argv: list[str]) -> int:
             output.EXIT_USAGE,
         )
     try:
-        proc = subprocess.run([str(script), *argv], check=False)
+        proc = subprocess.run([str(script), *argv], check=False)  # noqa: S603
     except OSError as exc:
         output.die(f"failed to run stack CLI {script}: {exc}", output.EXIT_ERROR)
         return output.EXIT_ERROR  # unreachable
@@ -106,8 +106,8 @@ def status_json() -> None:
             output.EXIT_USAGE,
         )
     try:
-        proc = subprocess.run(
-            ["docker", "compose", "ps", "--format", "json"],
+        proc = subprocess.run(  # noqa: S603
+            ["docker", "compose", "ps", "--format", "json"],  # noqa: S607
             cwd=proj,
             check=False,
             capture_output=True,
