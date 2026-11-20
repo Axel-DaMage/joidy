@@ -67,15 +67,18 @@
       // endpoint reads them from settings, and an unsaved form would 400
       // with "Google OAuth is not configured" (#1148).
       const creds: Record<string, string> = {};
-      if (systemConfig.google_client_id?.trim()) creds.google_client_id = systemConfig.google_client_id.trim();
-      if (systemConfig.google_client_secret?.trim()) creds.google_client_secret = systemConfig.google_client_secret.trim();
-      if (systemConfig.google_redirect_uri?.trim()) creds.google_redirect_uri = systemConfig.google_redirect_uri.trim();
+      if (systemConfig.google_client_id?.trim())
+        creds.google_client_id = systemConfig.google_client_id.trim();
+      if (systemConfig.google_client_secret?.trim())
+        creds.google_client_secret = systemConfig.google_client_secret.trim();
+      if (systemConfig.google_redirect_uri?.trim())
+        creds.google_redirect_uri = systemConfig.google_redirect_uri.trim();
       if (Object.keys(creds).length > 0) {
         await api.config.update(creds);
       }
 
       const data = await api.google.authUrl();
-      window.open(data.url, '_blank');
+      window.open(data.url, '_blank', 'noopener,noreferrer');
       // The callback persists the tokens server-side; poll until status flips.
       googlePollInterval = setInterval(async () => {
         await checkGoogleStatus();
@@ -164,7 +167,7 @@
     <p class="hint" style="color: var(--danger); margin: 0;">{googleError}</p>
   {/if}
 
-    {#if showAdvancedGoogle}
+  {#if showAdvancedGoogle}
     <div
       style="display: flex; flex-direction: column; gap: 8px; border-left: 2px solid var(--border); padding-left: 12px; margin-left: 4px;"
     >
@@ -236,8 +239,8 @@
           bind:value={systemConfig.google_redirect_uri}
         />
         <p class="hint" style="margin: 0;">
-          Registra este URI exacto en tu OAuth client de Google Cloud (Authorized redirect
-          URIs). Scopes: Calendar, Tasks, Gmail y Contacts (solo lectura).
+          Registra este URI exacto en tu OAuth client de Google Cloud (Authorized redirect URIs).
+          Scopes: Calendar, Tasks, Gmail y Contacts (solo lectura).
         </p>
       </div>
     </div>

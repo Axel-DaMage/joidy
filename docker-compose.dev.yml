@@ -109,8 +109,6 @@ services:
         # Dev image ships test/lint tooling so tests run in-container (#999)
         INSTALL_DEV: "true"
     user: ${UID:-1000}:${GID:-1000}
-    ports:
-      - "${WORKER_PORT:-8001}:8001"
     volumes:
       - ./worker:/app
       - ./data/db:/data/db

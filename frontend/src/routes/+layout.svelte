@@ -45,7 +45,15 @@
   import { achievements } from '$lib/stores/achievements';
   import { initConnectionStore } from '$lib/stores/connection';
   import { loadNotes } from '$lib/stores/notes';
-  import { deferredPrompt, showInstallBanner, isAppInstalled } from '$lib/stores/pwa';
+  import {
+    deferredPrompt,
+    showInstallBanner,
+    isAppInstalled,
+    waitingWorker,
+    showUpdateBanner,
+    initServiceWorkerRegistration,
+    applyServiceWorkerUpdate,
+  } from '$lib/stores/pwa';
   import { syncStore } from '$lib/stores/sync';
   import { toggle as toggleCommandPalette } from '$lib/stores/commandPalette';
   import ConflictResolutionModal from '$lib/components/ConflictResolutionModal.svelte';
@@ -270,10 +278,12 @@
     // "ServiceWorker script evaluation failed" on every page load. The SW
     // fetch handler would also intercept API calls and return 503 Offline
     // while the dev backend is restarting, breaking the dev workflow (#205).
+    // Kit 3 emits service-worker.js as an ESM bundle, so registration must
+    // use { type: 'module' } — a classic registration fails with a SyntaxError
+    // and the SW never installs (#1310). The helper also wires the
+    // "update available" banner → skipWaiting → controllerchange reload flow.
     if (import.meta.env.PROD && 'serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/service-worker.js').catch((err) => {
-        logger.warn('SW registration failed:', err);
-      });
+      initServiceWorkerRegistration();
     }
 
     const handleAppInstalled = () => {
@@ -292,7 +302,9 @@
       const cachedStreaks = getCachedData<PersonalStreak[]>('streaks');
       if (cachedGoals) {
         // Untriaged inbox captures don't count as pending tasks (#1200)
-        pendingTasks = cachedGoals.filter((goal: Goal) => !goal.is_completed && goal.state !== 'INBOX').length;
+        pendingTasks = cachedGoals.filter(
+          (goal: Goal) => !goal.is_completed && goal.state !== 'INBOX'
+        ).length;
       }
       if (cachedStreaks) {
         pendingStreaks = cachedStreaks.filter(
@@ -557,6 +569,25 @@
         </div>
       {/if}
 
+      {#if $showUpdateBanner && $waitingWorker}
+        <div class="pwa-banner" transition:fade={{ duration: 150 }}>
+          <DynamicIcon name="RefreshCw" size={13} />
+          <span>{$t('pwa.updateAvailable')}</span>
+          <div class="pwa-actions">
+            <button class="pwa-btn pwa-install" onclick={() => applyServiceWorkerUpdate()}
+              >{$t('pwa.update')}</button
+            >
+            <button
+              class="pwa-btn pwa-dismiss"
+              aria-label={$t('pwa.closeUpdateNotice')}
+              onclick={() => showUpdateBanner.set(false)}
+            >
+              <DynamicIcon name="X" size={12} />
+            </button>
+          </div>
+        </div>
+      {/if}
+
       <div style="flex:1;"></div>
 
       <!-- Vault sync indicator (#73) -->
@@ -669,11 +700,18 @@
         <span
           class="status-pill status-tasks"
           class:has-pending={pendingTasks > 0}
-          class:is-completed={pendingTasks === 0}
-        >{pendingTasks} {$t('common.tasks')}</span>
+          class:is-completed={pendingTasks === 0}>{pendingTasks} {$t('common.tasks')}</span
+        >
         {#if pendingStreaks > 0}
-          <span class="status-pill status-streak-alert has-pending" title={$t('status.pendingStreaks')}>
-            <DynamicIcon name="Flame" size={12} color="var(--accent-contrast, var(--warning, #f59e0b))" />
+          <span
+            class="status-pill status-streak-alert has-pending"
+            title={$t('status.pendingStreaks')}
+          >
+            <DynamicIcon
+              name="Flame"
+              size={12}
+              color="var(--accent-contrast, var(--warning, #f59e0b))"
+            />
             <span>{pendingStreaks}</span>
           </span>
         {/if}
@@ -882,8 +920,16 @@
   .status-tasks.has-pending,
   .status-streak-alert.has-pending {
     color: var(--accent-contrast, var(--warning, #f59e0b));
-    border-color: color-mix(in srgb, var(--accent-contrast, var(--warning, #f59e0b)) 50%, var(--border));
-    background: color-mix(in srgb, var(--accent-contrast, var(--warning, #f59e0b)) 16%, transparent);
+    border-color: color-mix(
+      in srgb,
+      var(--accent-contrast, var(--warning, #f59e0b)) 50%,
+      var(--border)
+    );
+    background: color-mix(
+      in srgb,
+      var(--accent-contrast, var(--warning, #f59e0b)) 16%,
+      transparent
+    );
     font-weight: 600;
   }
 

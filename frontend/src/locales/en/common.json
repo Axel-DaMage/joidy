@@ -88,7 +88,18 @@
     "reminderMin15": "15 min",
     "reminderMin30": "30 min",
     "reminderMin60": "1 h",
-    "taskReminder": "Reminder: {title}"
+    "taskReminder": "Reminder: {title}",
+    "planSuggest": "Suggest plan",
+    "planSuggestHint": "AI planning: propose slots for open tasks around busy events",
+    "planWorking": "Planning…",
+    "planUnavailable": "AI planning is not configured — add an AI provider in Settings",
+    "planEmpty": "No suggestions — nothing open to plan or no free slots",
+    "planError": "Could not get AI planning suggestions",
+    "planApplied": "Plan applied",
+    "planPending": "AI suggestions ({count})",
+    "planAcceptAll": "Accept all",
+    "planDismiss": "Dismiss",
+    "planAcceptHint": "Click to accept this slot"
   },
   "emails": {
     "title": "Mail",
@@ -187,7 +198,10 @@
   "pwa": {
     "installPrompt": "Install Joidy for quick access",
     "closeInstallNotice": "Close install notice",
-    "installed": "Joidy installed! You can now access it from your desktop."
+    "installed": "Joidy installed! You can now access it from your desktop.",
+    "updateAvailable": "A new version of Joidy is available",
+    "update": "Update",
+    "closeUpdateNotice": "Close update notice"
   },
   "onboarding": {
     "skipTour": "Skip welcome tour",

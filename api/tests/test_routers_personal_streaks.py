@@ -1,6 +1,6 @@
 """Router tests for the personal streaks endpoints (#13)."""
 
-from datetime import date
+from datetime import date, timedelta
 
 from fastapi.testclient import TestClient
 from models.personal_streaks import StreakCheckIn
@@ -38,7 +38,9 @@ def test_create_streak(client: TestClient):
 
 
 def test_create_streak_with_future_start_date_no_backfill(client: TestClient):
-    future = date(2099, 1, 1)
+    # Future start dates within the planning horizon (~1y) are allowed — the
+    # UI lets users schedule a streak — but must not trigger backfill (#1321).
+    future = date.today() + timedelta(days=30)
     payload = {"name": "Future Streak", "start_date": future.isoformat()}
     response = client.post("/personal-streaks/", json=payload)
     assert response.status_code == 201
@@ -200,3 +202,167 @@ def test_get_history(client: TestClient):
 def test_get_history_not_found(client: TestClient):
     response = client.get("/personal-streaks/9999/history")
     assert response.status_code == 404
+
+
+# ── Input validation (#1321) ────────────────────────────────────────────────────
+
+
+def _create_streak(client: TestClient, name: str = "Validation Streak") -> int:
+    resp = client.post("/personal-streaks/", json={"name": name})
+    assert resp.status_code == 201
+    return resp.json()["id"]
+
+
+def test_create_streak_rejects_absurd_past_start_date(client: TestClient):
+    """start_date=0001-01-01 used to trigger a ~740k-row backfill (#1321)."""
+    resp = client.post("/personal-streaks/", json={"name": "Ancient", "start_date": "0001-01-01"})
+    assert resp.status_code == 422
+
+
+def test_create_streak_rejects_far_future_start_date(client: TestClient):
+    resp = client.post("/personal-streaks/", json={"name": "Far Future", "start_date": "2099-01-01"})
+    assert resp.status_code == 422
+
+
+def test_create_streak_accepts_reasonable_past_start_date(client: TestClient):
+    start = date.today() - timedelta(days=10)
+    resp = client.post("/personal-streaks/", json={"name": "Recent", "start_date": start.isoformat()})
+    assert resp.status_code == 201
+
+
+def test_create_streak_rejects_out_of_range_fields(client: TestClient):
+    for payload in (
+        {"name": "NegOffset", "offset": -1},
+        {"name": "HugeOffset", "offset": 10**9},
+        {"name": "NegFreeze", "freeze_count": -1},
+        {"name": "HugeFreeze", "freeze_count": 10**6},
+        {"name": "BadFreq", "frequency": "fortnightly-ish"},
+        {"name": "ZeroFreqDays", "frequency_days": 0},
+        {"name": "HugeFreqDays", "frequency_days": 99999},
+        {"name": "   "},  # whitespace-only name
+        {"name": "LongCat", "category": "x" * 51},
+        {"name": "LongNote2", "description": "x" * 2001},
+    ):
+        resp = client.post("/personal-streaks/", json=payload)
+        assert resp.status_code == 422, f"expected 422 for {payload}, got {resp.status_code}"
+
+
+def test_create_streak_normalizes_frequency_case(client: TestClient):
+    resp = client.post("/personal-streaks/", json={"name": "CaseFreq", "frequency": "DAILY"})
+    assert resp.status_code == 201
+    assert resp.json()["frequency"] == "daily"
+
+
+def test_update_streak_rejects_server_computed_fields(client: TestClient):
+    """best_streak / total_checkins / freeze_used are server-computed and must
+    not be mass-assignable through the update schema (#1321)."""
+    streak_id = _create_streak(client)
+    for field in ("best_streak", "total_checkins", "freeze_used", "current_streak"):
+        resp = client.put(f"/personal-streaks/{streak_id}", json={field: 9999})
+        assert resp.status_code == 422, f"{field} should be rejected"
+    # Stored server-computed values must be untouched.
+    streak = next(s for s in client.get("/personal-streaks/").json() if s["id"] == streak_id)
+    assert streak["best_streak"] == 0
+    assert streak["freeze_used"] == 0
+    assert streak["total_checkins"] == 0
+
+
+def test_update_streak_rejects_invalid_field_values(client: TestClient):
+    streak_id = _create_streak(client)
+    for payload in (
+        {"freeze_count": -1},
+        {"freeze_count": 10**6},
+        {"frequency_days": 0},
+        {"frequency": "bogus"},
+    ):
+        resp = client.put(f"/personal-streaks/{streak_id}", json=payload)
+        assert resp.status_code == 422, f"expected 422 for {payload}"
+
+
+def test_checkin_rejects_future_check_date(client: TestClient):
+    streak_id = _create_streak(client)
+    resp = client.post(f"/personal-streaks/{streak_id}/checkin", json={"check_date": "2030-01-01"})
+    assert resp.status_code == 422
+
+
+def test_checkin_rejects_absurd_past_check_date(client: TestClient):
+    streak_id = _create_streak(client)
+    resp = client.post(f"/personal-streaks/{streak_id}/checkin", json={"check_date": "0001-01-01"})
+    assert resp.status_code == 422
+
+
+def test_checkin_rejects_out_of_range_mood(client: TestClient):
+    streak_id = _create_streak(client)
+    today = date.today().isoformat()
+    for mood in (0, 6, -1, 99):
+        resp = client.post(
+            f"/personal-streaks/{streak_id}/checkin",
+            json={"check_date": today, "mood": mood},
+        )
+        assert resp.status_code == 422, f"mood={mood} should be rejected"
+
+
+def test_checkin_accepts_boundary_moods(client: TestClient):
+    streak_id = _create_streak(client)
+    today = date.today().isoformat()
+    for mood in (1, 5):
+        resp = client.post(
+            f"/personal-streaks/{streak_id}/checkin",
+            json={"check_date": today, "mood": mood},
+        )
+        assert resp.status_code == 200, f"mood={mood} should be accepted"
+
+
+def test_checkin_rejects_oversized_note_and_extra_fields(client: TestClient):
+    streak_id = _create_streak(client)
+    resp = client.post(
+        f"/personal-streaks/{streak_id}/checkin",
+        json={"check_date": date.today().isoformat(), "note": "x" * 501},
+    )
+    assert resp.status_code == 422
+    resp = client.post(
+        f"/personal-streaks/{streak_id}/checkin",
+        json={"check_date": date.today().isoformat(), "best_streak": 999},
+    )
+    assert resp.status_code == 422
+
+
+def test_checkin_valid_payload_still_works(client: TestClient):
+    streak_id = _create_streak(client)
+    yesterday = (date.today() - timedelta(days=1)).isoformat()
+    resp = client.post(
+        f"/personal-streaks/{streak_id}/checkin",
+        json={"check_date": yesterday, "note": "backfill note", "mood": 3},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["total_checkins"] == 1
+
+
+def test_backfill_capped_for_old_start_date(client: TestClient):
+    """A start_date near the 5y validation bound must never generate more than
+    MAX_BACKFILL_DAYS check-ins in a single create call (#1321)."""
+    start = date.today() - timedelta(days=1500)
+    resp = client.post(
+        "/personal-streaks/",
+        json={"name": "Long History", "start_date": start.isoformat()},
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    # 400-day service cap respected; backfill still produced recent history.
+    assert 0 < data["total_checkins"] <= 400
+
+
+def test_mood_rejects_out_of_range_score_and_oversized_note(client: TestClient):
+    for payload in (
+        {"score": 0},
+        {"score": 6},
+        {"score": 3, "note": "x" * 501},
+    ):
+        resp = client.post("/mood/", json=payload)
+        assert resp.status_code == 422, f"expected 422 for {payload}"
+
+
+def test_mood_valid_payload_still_works(client: TestClient):
+    resp = client.post("/mood/", json={"score": 4, "note": "Solid day"})
+    assert resp.status_code == 200
+    assert resp.json()["score"] == 4

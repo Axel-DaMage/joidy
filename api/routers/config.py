@@ -6,7 +6,7 @@ from config import settings
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from services.auth_service import get_current_user, hash_password
-from services.env_file import ENV_FILE, read_env, write_env  # noqa: F401  (ENV_FILE re-exported)
+from services.env_file import ENV_FILE, read_env, validate_env_value, write_env  # noqa: F401  (ENV_FILE re-exported)
 
 router = APIRouter(prefix="/config", tags=["config"])
 
@@ -31,6 +31,14 @@ CONFIG_KEYS = {
     "app_env": "APP_ENV",
     "ai_service_enabled": "AI_SERVICE_ENABLED",
 }
+
+# Keys where an empty string is a deliberate "clear" request (e.g. the GitHub
+# disconnect flow sends ``github_token: ""`` to wipe the stored token). For
+# every other key an empty value means "not provided": writing it into .env
+# would silently clobber a working config with "" (#1304). Secret fields are
+# never returned by GET /config, so clients can't distinguish "clear" from
+# "field left blank" for them — they must stay non-clearable.
+CLEARABLE_KEYS = {"github_token", "github_username", "daily_notes_folder"}
 
 PUBLIC_KEYS = {
     "gemini_api_key": False,
@@ -131,6 +139,12 @@ def update_config(update: ConfigUpdate):
 
     update_data = update.model_dump(exclude_none=True)
 
+    # Empty values mean "not provided" for non-clearable keys — strip them so
+    # an empty string can never clobber a working .env entry or an in-memory
+    # setting (pydantic reads "" as set). Only CLEARABLE_KEYS accept "" as a
+    # deliberate clear (#1304).
+    update_data = {k: v for k, v in update_data.items() if k in CLEARABLE_KEYS or (v or "").strip()}
+
     # Detect vault path change — Docker bind mounts are immutable, so changing
     # OBSIDIAN_VAULT_PATH requires recreating the worker/api containers for the
     # new path to take effect (#784).
@@ -141,17 +155,21 @@ def update_config(update: ConfigUpdate):
     for short_key, env_key in CONFIG_KEYS.items():
         if short_key in update_data:
             value = update_data[short_key]
-            # Skip empty overrides for non-secret provider settings: an empty
-            # string would clobber a working config (pydantic reads "" as set).
-            if (
-                short_key in ("llm_model", "embedding_model", "openai_base_url", "google_redirect_uri")
-                and not (value or "").strip()
-            ):
-                continue
             if value is not None:
-                env_vars[env_key] = value
+                try:
+                    env_vars[env_key] = validate_env_value(env_key, value)
+                except ValueError as exc:
+                    raise HTTPException(status_code=400, detail=f"Invalid value for '{short_key}': {exc}") from exc
+                # Keep the in-memory update below in sync with the persisted
+                # (possibly normalized) value.
+                update_data[short_key] = env_vars[env_key]
 
-    write_env(env_vars)
+    try:
+        write_env(env_vars)
+    except ValueError as exc:
+        # A key already on disk can fail the universal safety check (#1312) —
+        # fail closed rather than round-trip a poisoned value.
+        raise HTTPException(status_code=400, detail=f"Refusing to persist .env: {exc}") from exc
 
     # Update in-memory settings so services see the new values immediately
     for short_key, value in update_data.items():
@@ -500,9 +518,19 @@ def perform_setup(request: Request, req: SetupRequest):
 
     _validate_setup_password(req.auth_password)
 
-    env_vars["AUTH_PASSWORD"] = hash_password(req.auth_password)
+    # Validate free-text input before it touches .env (#1312): a crafted vault
+    # path used to persist verbatim — newlines forged extra KEY= lines and
+    # $(...) executed on the next `make` invocation that sourced the file.
+    vault_path: str | None = None
     if req.obsidian_vault_path:
-        env_vars["OBSIDIAN_VAULT_PATH"] = req.obsidian_vault_path
+        try:
+            vault_path = validate_env_value("OBSIDIAN_VAULT_PATH", req.obsidian_vault_path)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid obsidian_vault_path: {exc}") from exc
+
+    env_vars["AUTH_PASSWORD"] = hash_password(req.auth_password)
+    if vault_path:
+        env_vars["OBSIDIAN_VAULT_PATH"] = vault_path
 
     # Always mint a fresh SECRET_KEY on successful setup (#1292): rotating it
     # invalidates any tokens signed before setup completed (e.g. under a
@@ -510,15 +538,22 @@ def perform_setup(request: Request, req: SetupRequest):
     # already carried a placeholder entry.
     env_vars["SECRET_KEY"] = secrets.token_urlsafe(32)
 
-    write_env(env_vars)
+    if not env_vars.get("INTERNAL_API_TOKEN"):
+        env_vars["INTERNAL_API_TOKEN"] = secrets.token_urlsafe(32)
+
+    try:
+        write_env(env_vars)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Refusing to persist .env: {exc}") from exc
 
     # Reload settings in memory (best-effort — the authoritative source is
     # now the .env file, which every worker reads via get_persisted()).
     settings.auth_password = env_vars["AUTH_PASSWORD"]
     settings.secret_key = env_vars["SECRET_KEY"]
-    if req.obsidian_vault_path:
-        os.environ["OBSIDIAN_VAULT_PATH"] = req.obsidian_vault_path
-        settings.obsidian_vault_path = req.obsidian_vault_path
+    settings.internal_api_token = env_vars["INTERNAL_API_TOKEN"]
+    if vault_path:
+        os.environ["OBSIDIAN_VAULT_PATH"] = vault_path
+        settings.obsidian_vault_path = vault_path
 
     return {
         "status": "ok",

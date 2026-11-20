@@ -106,7 +106,7 @@
       githubPollInterval = data.interval || 5;
       githubExpiresAt = Date.now() + (data.expires_in || 900) * 1000;
       if (githubVerificationUri) {
-        window.open(githubVerificationUri, '_blank');
+        window.open(githubVerificationUri, '_blank', 'noopener,noreferrer');
       }
       await pollGithubDeviceCode();
     } catch (e: any) {

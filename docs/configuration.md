@@ -85,8 +85,8 @@ APP_ENV=development
 # ── Puertos (cambiar si hay conflictos) ──────────────────
 FRONTEND_PORT=3000
 API_PORT=8000
-AI_SERVICE_PORT=8002
-WORKER_PORT=8001
+# Dirección de enlace de los puertos publicados (por defecto solo localhost)
+#BIND_ADDR=127.0.0.1
 ```
 
 ---
@@ -196,8 +196,12 @@ python3 -c "import secrets; print(secrets.token_hex(32))"
 |----------|---------|-------------|
 | FRONTEND_PORT | 3000 | Puerto del frontend |
 | API_PORT | 8000 | Puerto de la API |
-| AI_SERVICE_PORT | 8002 | Puerto del AI service |
-| WORKER_PORT | 8001 | Puerto del worker |
+| BIND_ADDR | 127.0.0.1 | Dirección de enlace de los puertos publicados (frontend, api, n8n). `0.0.0.0` expone Joidy en la LAN |
+
+Desde #1277, ai-service (8002) y worker (8001) no publican puerto al host —
+solo son accesibles en la red interna de Docker Compose. Las llamadas de la
+API al ai-service se autentican con `INTERNAL_SECRET` (cabecera
+`X-Internal-Secret`).
 
 **Cambiar si hay conflictos:**
 
