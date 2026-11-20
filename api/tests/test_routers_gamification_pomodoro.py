@@ -95,17 +95,14 @@ def test_multiple_pomodoros_per_day_all_award(client: TestClient, db_session):
         assert len(_pomodoro_events(db_session, pomodoro_id)) == 1
 
 
-def test_pomodoro_id_optional(client: TestClient, db_session):
-    duration = 37  # uncommon value to filter this test's event out of leaks
+def test_pomodoro_id_required(client: TestClient, db_session):
+    """#1320: without pomodoro_id there is no idempotency key, so the request
+    is rejected instead of minting unbounded XP."""
+    res = client.post("/gamification/pomodoro", json={"duration_minutes": 25})
+    assert res.status_code == 422
 
-    res = client.post("/gamification/pomodoro", json={"duration_minutes": duration})
-    assert res.status_code == 200
-    assert res.json()["status"] == "awarded"
-
-    events = [
-        e
-        for e in db_session.query(XPEvent).filter(XPEvent.event_type == "pomodoro_completed").all()
-        if json.loads(e.metadata_json or "{}").get("duration_minutes") == duration
-        and json.loads(e.metadata_json or "{}").get("pomodoro_id") is None
-    ]
-    assert len(events) == 1
+    assert client.post("/gamification/pomodoro", json={"duration_minutes": 25, "pomodoro_id": ""}).status_code == 422
+    assert (
+        client.post("/gamification/pomodoro", json={"duration_minutes": 25, "pomodoro_id": "x" * 101}).status_code
+        == 422
+    )

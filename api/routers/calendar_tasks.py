@@ -1,6 +1,5 @@
 """CRUD for internal joidy calendar tasks (#1230)."""
 
-import json
 from calendar import monthrange
 from datetime import UTC, datetime, time, timedelta
 from datetime import date as date_type
@@ -36,25 +35,16 @@ _PRIORITY_RANK = case(
 )
 
 
-def _xp_event_recorded(db: Session, event_type: str, key: str, value: object) -> bool:
-    """True when an ``xp_events`` row of ``event_type`` already stores ``key: value``.
+def _xp_event_recorded(db: Session, event_types: tuple[str, ...], dedup_key: str) -> bool:
+    """True when an ``xp_events`` row already carries this idempotency key.
 
-    Idempotency guard for the XP awards below: ``metadata_json`` is a
-    serialized JSON blob, so a LIKE pre-filter (the ``json.dumps`` rendering
-    is deterministic — these rows are only ever written by ``process_event``)
-    narrows candidates and a real parse confirms the key, which the LIKE
-    alone cannot (``"task_id": 5`` is a substring of ``"task_id": 55``).
+    Uses the indexed ``dedup_key`` column (#1320) instead of scanning and
+    reparsing ``metadata_json`` blobs.
     """
-    needle = f'"{key}": {json.dumps(value)}'
-    rows = db.query(XPEvent).filter(XPEvent.event_type == event_type, XPEvent.metadata_json.like(f"%{needle}%")).all()
-    for row in rows:
-        try:
-            meta = json.loads(row.metadata_json or "{}")
-        except (TypeError, ValueError):
-            continue
-        if isinstance(meta, dict) and meta.get(key) == value:
-            return True
-    return False
+    return (
+        db.query(XPEvent).filter(XPEvent.event_type.in_(event_types), XPEvent.dedup_key == dedup_key).first()
+        is not None
+    )
 
 
 def _award_task_xp(db: Session, task: CalendarTask) -> None:
@@ -75,11 +65,17 @@ def _award_task_xp(db: Session, task: CalendarTask) -> None:
     if task.goal_id is not None:
         return
     event = "calendar_task_completed" if task.start_time else "calendar_task_completed_no_time"
-    already_completed = _xp_event_recorded(db, "calendar_task_completed", "task_id", task.id) or _xp_event_recorded(
-        db, "calendar_task_completed_no_time", "task_id", task.id
+    dedup_key = f"calendar_task:{task.id}"
+    already_completed = _xp_event_recorded(
+        db, ("calendar_task_completed", "calendar_task_completed_no_time"), dedup_key
     )
     if not already_completed:
-        process_event(db, event, {"task_id": task.id, "title": task.title, "date": str(task.date)})
+        process_event(
+            db,
+            event,
+            {"task_id": task.id, "title": task.title, "date": str(task.date)},
+            dedup_key=dedup_key,
+        )
 
     if task.date is None:
         return
@@ -89,8 +85,9 @@ def _award_task_xp(db: Session, task: CalendarTask) -> None:
         .filter(CalendarTask.date == task.date, CalendarTask.done.is_(False), CalendarTask.id != task.id)
         .count()
     )
-    if open_left == 0 and not _xp_event_recorded(db, "day_fully_planned", "date", str(task.date)):
-        process_event(db, "day_fully_planned", {"date": str(task.date)})
+    day_dedup_key = f"day_fully_planned:{task.date}"
+    if open_left == 0 and not _xp_event_recorded(db, ("day_fully_planned",), day_dedup_key):
+        process_event(db, "day_fully_planned", {"date": str(task.date)}, dedup_key=day_dedup_key)
 
 
 def _adjust_goal_progress(db: Session, task: CalendarTask, delta: float) -> None:
