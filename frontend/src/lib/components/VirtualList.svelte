@@ -10,6 +10,10 @@
   // Fired when the user scrolls within `bottomThreshold` pixels of the end.
   export let onNearBottom: () => void = () => {};
   export let bottomThreshold = 300;
+  // Optional semantics for the outer container (e.g. role="tree" for the
+  // virtualized notes tree, #1269). Left undefined by default.
+  export let role: string | undefined = undefined;
+  export let ariaLabel: string | undefined = undefined;
 
   let containerEl: HTMLElement;
   let containerHeight = 400;
@@ -29,15 +33,16 @@
     let currentY = 0;
     positions = items.map((_, i) => {
       const p = currentY;
-      currentY += (heights[i] || itemHeight);
+      currentY += heights[i] || itemHeight;
       return p;
     });
   }
 
   // Calculate total height
-  $: totalHeight = positions.length > 0 
-    ? positions[positions.length - 1] + (heights[heights.length - 1] || itemHeight)
-    : 0;
+  $: totalHeight =
+    positions.length > 0
+      ? positions[positions.length - 1] + (heights[heights.length - 1] || itemHeight)
+      : 0;
 
   // Binary search for start index (since positions is sorted)
   function findIndex(scrollTop: number) {
@@ -106,7 +111,8 @@
             const indexStr = (entry.target as HTMLElement).dataset.index;
             if (indexStr !== undefined) {
               const idx = parseInt(indexStr, 10);
-              const height = entry.borderBoxSize?.[0]?.blockSize ?? entry.target.getBoundingClientRect().height;
+              const height =
+                entry.borderBoxSize?.[0]?.blockSize ?? entry.target.getBoundingClientRect().height;
               if (heights[idx] !== height) {
                 heights[idx] = height;
                 changed = true;
@@ -130,7 +136,7 @@
   function observeItem(node: HTMLElement, index: number) {
     node.dataset.index = index.toString();
     if (ro) ro.observe(node);
-    
+
     // Initial sync
     const h = node.getBoundingClientRect().height;
     if (heights[index] !== h) {
@@ -144,16 +150,24 @@
       },
       destroy() {
         if (ro) ro.unobserve(node);
-      }
+      },
     };
   }
 </script>
 
-<div class="virtual-container" bind:this={containerEl} onscroll={onScroll}>
-  <div class="virtual-spacer" style="height: {totalHeight}px;">
-    <div class="virtual-content" style="transform: translateY({offsetY}px);">
+<div
+  class="virtual-container"
+  bind:this={containerEl}
+  onscroll={onScroll}
+  {role}
+  aria-label={ariaLabel}
+>
+  <!-- The spacer/content/item wrappers are purely structural; marking them
+       presentational keeps ARIA ownership (tree → treeitem) intact (#1269). -->
+  <div class="virtual-spacer" style="height: {totalHeight}px;" role="presentation">
+    <div class="virtual-content" style="transform: translateY({offsetY}px);" role="presentation">
       {#each visibleItems as item, i (getKey(item, startIndex + i))}
-        <div use:observeItem={startIndex + i}>
+        <div use:observeItem={startIndex + i} role="presentation">
           <slot {item} index={startIndex + i} />
         </div>
       {/each}

@@ -1,9 +1,10 @@
 from database import get_db
 from fastapi import APIRouter, Depends, HTTPException, Response
 from models.note import Note, NoteLink, NoteTag, Tag, TagCooccurrence
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from services.gamification_engine import process_event
 from services.response_cache import clear_api_caches, register_cache_clearer, ttl_cache
+from services.sanitizer import MAX_TAG_LENGTH, sanitize_tag
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -11,8 +12,16 @@ router = APIRouter(prefix="/tags", tags=["tags"])
 
 
 class TagCreate(BaseModel):
-    name: str
+    name: str = Field(min_length=1, max_length=MAX_TAG_LENGTH)
     parent_id: int | None = None
+
+    @field_validator("name")
+    @classmethod
+    def name_is_sanitized(cls, v: str) -> str:
+        cleaned = sanitize_tag(v)
+        if not cleaned:
+            raise ValueError("Tag name is empty after sanitization")
+        return cleaned
 
 
 @ttl_cache(ignore_params={"db"})
@@ -44,7 +53,7 @@ def list_tags(db: Session = Depends(get_db)):
 
 @router.post("/", status_code=201)
 def create_tag(data: TagCreate, db: Session = Depends(get_db)):
-    existing = db.query(Tag).filter(Tag.name == data.name.lower().strip()).first()
+    existing = db.query(Tag).filter(Tag.name == data.name).first()
     if existing:
         raise HTTPException(status_code=409, detail="Tag already exists")
     # A brand-new tag can't form a cycle (it has no id yet), but the parent
@@ -53,7 +62,7 @@ def create_tag(data: TagCreate, db: Session = Depends(get_db)):
         parent = db.query(Tag).filter(Tag.id == data.parent_id).first()
         if not parent:
             raise HTTPException(status_code=400, detail="Parent tag no existe")
-    tag = Tag(name=data.name.lower().strip(), parent_id=data.parent_id)
+    tag = Tag(name=data.name, parent_id=data.parent_id)
     db.add(tag)
     db.commit()
     db.refresh(tag)

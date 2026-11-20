@@ -14,10 +14,15 @@ on:
         required: false
         default: '1'
 
+# Fail closed: every job must declare its own permissions explicitly.
+permissions: {}
+
 jobs:
   docker:
     name: Docker Hub
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     strategy:
       matrix:
         service: [api, frontend, ai-service, worker]
@@ -49,13 +54,30 @@ jobs:
     name: Homebrew
     runs-on: ubuntu-latest
     if: github.event_name == 'release' || inputs.version != ''
+    permissions:
+      contents: read
+    env:
+      # Input mapped to env — ${{ }} interpolation inside run: expands
+      # before the shell parses the line, so a crafted version string could
+      # break quoting and inject arbitrary commands (#1295).
+      VERSION: ${{ inputs.version || github.ref_name }}
     steps:
       - uses: actions/checkout@v7
-      - name: Update homebrew-tap formula
+      - name: Validate version
+        # Repo tags are always 'vMAJOR.MINOR.PATCH' with optional
+        # '-prerelease.N' suffix (e.g. v1.1.0-beta.8).
         run: |
-          VERSION="${{ inputs.version || github.ref_name }}"
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
+            echo "::error::Invalid version '$VERSION' — expected a tag like v1.2.3 or v1.2.3-beta.4"
+            exit 1
+          fi
+          echo "Version '$VERSION' is valid"
+      - name: Update homebrew-tap formula
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
           SHA=$(curl -sL "https://github.com/Axel-DaMage/joidy/archive/refs/tags/${VERSION}.tar.gz" | sha256sum | cut -d' ' -f1)
-          git clone https://x-access-token:${{ secrets.GH_PAT }}@github.com/Axel-DaMage/homebrew-tap.git
+          git clone "https://x-access-token:${GH_PAT}@github.com/Axel-DaMage/homebrew-tap.git"
           cd homebrew-tap
           sed -i "s|url \".*\"|url \"https://github.com/Axel-DaMage/joidy/archive/refs/tags/${VERSION}.tar.gz\"|" Formula/joidy.rb
           sed -i "s|sha256 \".*\"|sha256 \"${SHA}\"|" Formula/joidy.rb

@@ -113,5 +113,7 @@ services:
       - ./worker:/app
       - ./data/db:/data/db
       - ./.env:/app/.env
-      - ${OBSIDIAN_VAULT_PATH:-./data/vault}:/vault
+      # Read-only like production — the worker never writes to the vault
+      # (#1300); vault writes go through the API's joidy_vault_writer.
+      - ${OBSIDIAN_VAULT_PATH:-./data/vault}:/vault:ro
     command: watchfiles "python main.py" /app

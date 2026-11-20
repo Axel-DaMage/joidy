@@ -95,6 +95,8 @@ run_backup() {
     exit 1
   fi
   export PGPASSWORD
+  # Dumps contain the full DB contents — owner-only from creation (#1281).
+  umask 077
   mkdir -p "$BACKUP_DIR"
   local ts name tmp
   ts=$(date +%Y%m%d-%H%M%S)
@@ -104,6 +106,7 @@ run_backup() {
   log "dumping ${PGDATABASE}@${PGHOST}:${PGPORT} → $BACKUP_DIR/$name"
   pg_dump -Fc -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -f "$tmp"
   mv "$tmp" "$BACKUP_DIR/$name"
+  chmod 600 "$BACKUP_DIR/$name"
   trap - EXIT
   log "backup complete: $name ($(du -h "$BACKUP_DIR/$name" | cut -f1))"
 }

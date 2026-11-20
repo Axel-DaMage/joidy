@@ -86,6 +86,8 @@ class VaultSyncBroadcastTestBase(unittest.TestCase):
         # Disable rate limits for tests.
         _default_limiter.requests_per_minute = 10_000
         _default_limiter.auth_requests_per_minute = 10_000
+        _default_limiter.strict_requests_per_minute = 10_000
+        _default_limiter.login_max_failures = 10_000
 
     def tearDown(self) -> None:
         self._vault_patcher.stop()

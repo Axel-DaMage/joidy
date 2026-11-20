@@ -908,7 +908,7 @@
   }
   .date-label {
     font-size: 9px;
-    color: var(--text-disabled);
+    color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
@@ -968,7 +968,7 @@
     align-items: center;
     gap: 6px;
     font-size: 12px;
-    color: var(--text-disabled);
+    color: var(--text-muted);
     animation: pulse-hint 2s ease-in-out infinite;
   }
 
@@ -1042,7 +1042,7 @@
 
   .delete-modal-warning {
     font-size: 12px;
-    color: var(--text-disabled);
+    color: var(--text-muted);
     margin: 0;
     line-height: 1.4;
     font-style: italic;
