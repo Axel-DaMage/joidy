@@ -40,11 +40,11 @@ services:
       # every /config request fails.
       - ${JOIDY_ENV_FILE:-./.env}:/app/.env
       - ${OBSIDIAN_VAULT_PATH:-./data/vault}:/vault
-      # Container engine socket for power management (sleep/wake/shutdown from web UI).
-      # Docker: /var/run/docker.sock (set DOCKER_GID in .env to the docker group GID)
-      # Podman rootless: /run/user/$UID/podman/podman.sock (no DOCKER_GID needed)
-      # `joidy up` detects the engine and sets DOCKER_SOCK_PATH automatically.
-      - ${DOCKER_SOCK_PATH:-/var/run/docker.sock}:/var/run/docker.sock
+      # The container engine socket is NOT mounted by default (#1278): it
+      # grants full daemon control (effectively host root) to any code exec
+      # inside this container. Power management from Settings → Servicios is
+      # opt-in via the docker-compose.power.yml overlay — set
+      # POWER_MANAGEMENT_ENABLED=true and `joidy up` adds it automatically.
     environment:
       - DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER:-joidy}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-joidy}
       - AI_SERVICE_URL=http://ai-service:8002
@@ -54,11 +54,11 @@ services:
       - UPLOAD_DIR=/data/uploads
       - OBSIDIAN_VAULT_PATH=/vault
       - VAULT_PATH=/vault
-      - DOCKER_SOCK_PATH=/var/run/docker.sock
-    # Add the host's docker group so the app user can access the Docker socket
-    # (Docker only — Podman rootless doesn't need this). Set DOCKER_GID in .env.
-    group_add:
-      - "${DOCKER_GID:-0}"
+      # Power management is opt-in (#1278). With the overlay applied the
+      # engine socket is mounted and this flag turns true; without it the
+      # /system/power mutation routes are not registered at all and
+      # /system/power/status reports docker_available=false.
+      - POWER_MANAGEMENT_ENABLED=${POWER_MANAGEMENT_ENABLED:-false}
     depends_on:
       postgres:
         condition: service_healthy
