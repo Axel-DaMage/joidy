@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 from services import google_calendar_service as gcs
 from services import google_service as gs
 from services import google_token_service as gts
+from services import oauth_state
 from services.auth_service import get_current_user
 from sqlalchemy.orm import Session
 
@@ -43,16 +44,22 @@ class GoogleConnectCallback(BaseModel):
 
 @router.get("/auth", response_model=GoogleAuthUrl, dependencies=[Depends(get_current_user)])
 async def get_google_auth_url():
-    """Return the Google OAuth consent URL."""
+    """Return the Google OAuth consent URL with a signed CSRF ``state`` (#1280)."""
     try:
-        url = gs.get_auth_url()
+        state = oauth_state.generate_state("google")
+        url = gs.get_auth_url(state=state)
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     return {"url": url}
 
 
 @router.get("/callback")
-async def google_oauth_callback(code: str = "", error: str = "", db: Session = Depends(get_db)):
+async def google_oauth_callback(
+    code: str = "",
+    error: str = "",
+    state: str = "",
+    db: Session = Depends(get_db),
+):
     """Handle the OAuth callback from Google.
 
     This is hit by a browser redirect (no Bearer header available), so it must
@@ -64,6 +71,11 @@ async def google_oauth_callback(code: str = "", error: str = "", db: Session = D
         return _callback_page(ok=False, message="Error de autorización con Google")
     if not code:
         return _callback_page(ok=False, message="Falta el código de autorización")
+    # CSRF gate (#1280): the state must be one this instance signed in /auth.
+    # Verified before any token exchange so a forged callback cannot bind an
+    # attacker's Google account here.
+    if not oauth_state.verify_state(state, "google"):
+        return _callback_page(ok=False, message="Estado OAuth inválido o expirado", status_code=403)
 
     try:
         tokens = await gs.exchange_code(code)
@@ -84,7 +96,7 @@ async def google_oauth_callback(code: str = "", error: str = "", db: Session = D
     return _callback_page(ok=True, message="Google conectado")
 
 
-def _callback_page(ok: bool, message: str) -> HTMLResponse:
+def _callback_page(ok: bool, message: str, status_code: int = 200) -> HTMLResponse:
     """Minimal self-closing page for the popup opened by the settings panel."""
     icon = "OK" if ok else "ERROR"
     color = "#2e9e4f" if ok else "#c0392b"
@@ -99,7 +111,7 @@ def _callback_page(ok: bool, message: str) -> HTMLResponse:
 </div>
 <script>setTimeout(function(){{ window.close(); }}, 1200);</script>
 </body></html>"""
-    return HTMLResponse(content=page, status_code=200)
+    return HTMLResponse(content=page, status_code=status_code)
 
 
 @router.post("/connect")
