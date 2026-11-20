@@ -1038,21 +1038,18 @@ export const api = {
       ),
     startDeviceAuth: () =>
       req<{
-        device_code: string;
+        poll_token: string;
         user_code: string;
         verification_uri: string;
         verification_uri_secondary?: string;
         expires_in: number;
         interval: number;
       }>('GET', '/integrations/github/oauth/device/start'),
-    pollDeviceCode: (device_code: string) =>
+    pollDeviceCode: (pollToken: string) =>
       req<
         | { status: 'authorized'; access_token: string; token_type: string; scope: string }
         | { status: 'pending' | 'slowdown' | 'expired' | 'denied'; message: string }
-      >(
-        'POST',
-        `/integrations/github/oauth/device/polling?device_code=${encodeURIComponent(device_code)}`
-      ),
+      >('POST', '/integrations/github/oauth/device/polling', { poll_token: pollToken }),
     startWebFlow: () =>
       req<{ authorize_url: string; redirect_uri: string }>(
         'GET',

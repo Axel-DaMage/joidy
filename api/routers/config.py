@@ -24,6 +24,7 @@ CONFIG_KEYS = {
     "github_username": "GITHUB_USERNAME",
     "github_client_id": "GITHUB_CLIENT_ID",
     "github_client_secret": "GITHUB_CLIENT_SECRET",
+    "github_webhook_secret": "GITHUB_WEBHOOK_SECRET",
     "google_client_id": "GOOGLE_CLIENT_ID",
     "google_client_secret": "GOOGLE_CLIENT_SECRET",
     "google_redirect_uri": "GOOGLE_REDIRECT_URI",
@@ -55,6 +56,7 @@ PUBLIC_KEYS = {
     "github_username": True,
     "github_client_id": False,
     "github_client_secret": False,
+    "github_webhook_secret": False,
     "google_client_id": False,
     "google_client_secret": False,
     "google_redirect_uri": True,
@@ -108,6 +110,7 @@ class ConfigUpdate(BaseModel):
     github_username: str | None = None
     github_client_id: str | None = None
     github_client_secret: str | None = None
+    github_webhook_secret: str | None = None
     google_client_id: str | None = None
     google_client_secret: str | None = None
     google_redirect_uri: str | None = None
@@ -229,6 +232,7 @@ def get_key_description(key: str) -> str:
         "github_username": "GitHub username",
         "github_client_id": "GitHub OAuth App client ID",
         "github_client_secret": "GitHub OAuth App client secret",
+        "github_webhook_secret": "Shared secret GitHub signs webhook deliveries with (X-Hub-Signature-256)",
         "telegram_bot_token": "Telegram Bot API token",
         "telegram_allowed_user_id": "Your Telegram user ID",
         "telegram_webhook_secret": "Secret token Telegram sends on each webhook call",
