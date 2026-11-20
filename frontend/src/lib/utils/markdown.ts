@@ -8,6 +8,8 @@
 import { Marked, Renderer } from 'marked';
 import DOMPurify from 'dompurify';
 import hljs from 'highlight.js';
+import { BASE } from '$lib/api';
+import { getToken } from '$lib/stores/session';
 
 // Configure a dedicated Marked instance with GFM and syntax highlighting via
 // highlight.js. A fresh instance (instead of `marked.use()` on the global
@@ -127,6 +129,50 @@ function injectWikilinks(html: string, spans: string[]): string {
 }
 
 /**
+ * `/uploads/` is auth-gated (#1279): the API requires a valid JWT as an
+ * `Authorization: Bearer` header or a `?token=` query param (see
+ * SafeStaticFiles in api/main.py — same pattern as the `/ws` endpoint).
+ * `<img>`/`<a>` elements rendered from markdown cannot send headers, so the
+ * session token is appended to upload URLs at render time; stored markdown
+ * keeps clean, token-free URLs.
+ *
+ * Only URLs on our own API origin (or root-relative `/uploads/...`) are
+ * rewritten — appending the JWT to a foreign `/uploads/` path would leak it
+ * to that host.
+ */
+const UPLOADS_URL_PATTERN = new RegExp(
+  `(src|href)="((?:${BASE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})?/uploads/[^"]*)"`,
+  'g'
+);
+
+/**
+ * Append the session JWT as `?token=` to `/uploads/` src/href URLs in a
+ * rendered-HTML string. No-op when there is no session token (e.g. SSR or
+ * logged out — auth is also bypassed in dev without AUTH_PASSWORD).
+ */
+export function authorizeUploadUrls(html: string): string {
+  const token = getToken();
+  if (!token) return html;
+  return html.replace(UPLOADS_URL_PATTERN, (match, attr: string, url: string) => {
+    if (/[?&]token=/.test(url)) return match;
+    const sep = url.includes('?') ? '&' : '?';
+    return `${attr}="${url}${sep}token=${encodeURIComponent(token)}"`;
+  });
+}
+
+/**
+ * Inverse of {@link authorizeUploadUrls}: strip injected `?token=` params
+ * from `/uploads/` URLs in rendered HTML. WysiwygEditor runs this before
+ * serializing back to markdown so the JWT is never persisted into note
+ * content or synced to the vault.
+ */
+export function stripUploadAuth(html: string): string {
+  return html
+    .replace(/(\/uploads\/[^"'\s?]+)\?token=[^"'\s&]*/g, '$1')
+    .replace(/(\/uploads\/[^"'\s]*?)(?:&|&amp;)token=[^"'\s&]*/g, '$1');
+}
+
+/**
  * Render markdown to sanitized HTML.
  *
  * @param md        - Raw markdown string
@@ -154,5 +200,5 @@ export function renderMarkdown(
   // markup. Rendering is client-side only, so an empty string is the safe
   // SSR fallback (#1317).
   if (typeof window === 'undefined') return '';
-  return injectWikilinks(DOMPurify.sanitize(html), spans);
+  return authorizeUploadUrls(injectWikilinks(DOMPurify.sanitize(html), spans));
 }
