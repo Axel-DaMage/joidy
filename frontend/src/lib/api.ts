@@ -28,6 +28,8 @@ const inflight = new Map<string, Promise<unknown>>();
 export interface RequestOptions {
   silent?: boolean;
   signal?: AbortSignal;
+  /** Extra request headers merged over the defaults (e.g. X-Spotify-Token). */
+  headers?: Record<string, string>;
 }
 
 // Silent access-token renewal (#1285): a 401 triggers one refresh attempt.
@@ -83,7 +85,7 @@ async function req<T>(
     try {
       const doFetch = () => {
         const token = getToken();
-        const headers: Record<string, string> = {};
+        const headers: Record<string, string> = { ...(opts?.headers ?? {}) };
         if (body) headers['Content-Type'] = 'application/json';
         if (token) headers['Authorization'] = `Bearer ${token}`;
         return fetch(`${BASE}${path}`, {
@@ -133,7 +135,14 @@ async function req<T>(
         if (!silent) {
           showNotification(userMsg, 'error');
         }
-        throw new Error(`API ${method} ${path} → ${res.status}: ${raw}`);
+        // Attach the HTTP status so callers can branch on it (e.g. Spotify
+        // 403 = Premium required, 404 = no active device) without parsing
+        // the message string (#45).
+        const err = new Error(
+          `API ${method} ${path} → ${res.status}: ${raw}`
+        ) as Error & { status?: number };
+        err.status = res.status;
+        throw err;
       }
 
       if (res.status === 204) return undefined as T;
@@ -162,6 +171,16 @@ async function req<T>(
   }
 
   return exec();
+}
+
+/** Shared request options for the Spotify namespace (#45): silent errors (the
+ * UI maps status codes to dedicated states) plus the optional
+ * `X-Spotify-Token` header override when a manual token is configured. */
+function spotifyOpts(token?: string | null): RequestOptions {
+  return {
+    silent: true,
+    headers: token ? { 'X-Spotify-Token': token } : undefined,
+  };
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -564,6 +583,101 @@ export interface UsageSummary {
   avg_session_duration_min: number;
   top_features: { feature: string; count: number }[];
   top_pages: { path: string; count: number }[];
+}
+
+// ── Spotify integration types (#45) ─────────────────────────────────────────
+// Shapes mirror the normalized payloads produced by
+// api/services/spotify_service.py — snake_case, images already flattened to
+// a single `*_image_url`, playback state always present (never null).
+
+export interface SpotifyArtist {
+  id: string | null;
+  uri: string | null;
+  name: string | null;
+  image_url: string | null;
+  genres: string[];
+  followers: number | null;
+  popularity: number | null;
+}
+
+export interface SpotifyAlbumRef {
+  id: string | null;
+  name: string | null;
+  uri: string | null;
+}
+
+export interface SpotifyArtistRef {
+  id: string | null;
+  name: string | null;
+  uri: string | null;
+}
+
+export interface SpotifyTrack {
+  id: string | null;
+  uri: string | null;
+  name: string | null;
+  artists: SpotifyArtistRef[];
+  artist_names: string;
+  album: SpotifyAlbumRef;
+  album_name: string | null;
+  album_image_url: string | null;
+  duration_ms: number | null;
+  explicit: boolean;
+  preview_url: string | null;
+  is_playable: boolean | null;
+}
+
+export interface SpotifyPlaylist {
+  id: string | null;
+  uri: string | null;
+  name: string | null;
+  description: string | null;
+  image_url: string | null;
+  owner: { id: string | null; display_name: string | null };
+  tracks_count: number | null;
+  public: boolean | null;
+  collaborative: boolean | null;
+  external_url: string | null;
+  /** Only populated by GET /playlists/{id}. */
+  tracks?: SpotifyTrack[];
+}
+
+export interface SpotifyPlaybackState {
+  is_playing: boolean;
+  progress_ms: number;
+  duration_ms: number | null;
+  track: SpotifyTrack | null;
+  context: { type: string | null; uri: string | null; name: string | null } | null;
+  device: {
+    id: string | null;
+    name: string | null;
+    type: string | null;
+    is_active: boolean | null;
+    volume_percent: number | null;
+  } | null;
+  shuffle_state: boolean;
+  repeat_state: 'off' | 'track' | 'context' | null;
+}
+
+export interface SpotifyAccount {
+  id: string | null;
+  display_name: string | null;
+  email: string | null;
+}
+
+export interface SpotifyStatus {
+  configured: boolean;
+  connected: boolean;
+  account: SpotifyAccount | null;
+}
+
+export interface SpotifyPlayRequest {
+  device_id?: string | null;
+  context_uri?: string | null;
+  uris?: string[] | null;
+  offset_position?: number | null;
+  offset_uri?: string | null;
+  position_ms?: number | null;
 }
 
 export interface AnalyticsDashboard {
@@ -1132,6 +1246,80 @@ export const api = {
         'DELETE',
         `/integrations/google/calendar/events/${encodeURIComponent(googleEventId)}${qs}`
       );
+    },
+  },
+
+  // Spotify integration (#45). All endpoints accept an optional access-token
+  // override sent as `X-Spotify-Token` (backend contract: header wins over the
+  // stored OAuth token). Calls run silent — the /spotify UI maps 401/403/404/429
+  // to dedicated states (reconnect, Premium upsell, no device, rate limit)
+  // instead of generic error toasts.
+  spotify: {
+    authUrl: () => req<{ url: string }>('GET', '/integrations/spotify/auth'),
+    status: (token?: string | null) =>
+      req<SpotifyStatus>('GET', '/integrations/spotify/status', undefined, spotifyOpts(token)),
+    disconnect: () =>
+      req<{ status: string; manage_apps_url: string }>(
+        'POST',
+        '/integrations/spotify/disconnect',
+        undefined,
+        { silent: true }
+      ),
+    currentlyPlaying: (token?: string | null) =>
+      req<SpotifyPlaybackState>(
+        'GET',
+        '/integrations/spotify/currently-playing',
+        undefined,
+        spotifyOpts(token)
+      ),
+    recentlyPlayed: (limit = 20, token?: string | null) =>
+      req<{ played_at: string | null; track: SpotifyTrack | null }[]>(
+        'GET',
+        `/integrations/spotify/recently-played?limit=${limit}`,
+        undefined,
+        spotifyOpts(token)
+      ),
+    topArtists: (timeRange = 'medium_term', limit = 20, token?: string | null) =>
+      req<SpotifyArtist[]>(
+        'GET',
+        `/integrations/spotify/top-artists?time_range=${encodeURIComponent(timeRange)}&limit=${limit}`,
+        undefined,
+        spotifyOpts(token)
+      ),
+    topTracks: (timeRange = 'medium_term', limit = 20, token?: string | null) =>
+      req<SpotifyTrack[]>(
+        'GET',
+        `/integrations/spotify/top-tracks?time_range=${encodeURIComponent(timeRange)}&limit=${limit}`,
+        undefined,
+        spotifyOpts(token)
+      ),
+    playlists: (limit = 20, offset = 0, token?: string | null) =>
+      req<SpotifyPlaylist[]>(
+        'GET',
+        `/integrations/spotify/playlists?limit=${limit}&offset=${offset}`,
+        undefined,
+        spotifyOpts(token)
+      ),
+    playlist: (playlistId: string, token?: string | null) =>
+      req<SpotifyPlaylist>(
+        'GET',
+        `/integrations/spotify/playlists/${encodeURIComponent(playlistId)}`,
+        undefined,
+        spotifyOpts(token)
+      ),
+    play: (body: SpotifyPlayRequest, token?: string | null) =>
+      req<{ status: string }>('PUT', '/integrations/spotify/play', body, spotifyOpts(token)),
+    pause: (deviceId?: string | null, token?: string | null) => {
+      const qs = deviceId ? `?device_id=${encodeURIComponent(deviceId)}` : '';
+      return req<{ status: string }>('PUT', `/integrations/spotify/pause${qs}`, undefined, spotifyOpts(token));
+    },
+    next: (deviceId?: string | null, token?: string | null) => {
+      const qs = deviceId ? `?device_id=${encodeURIComponent(deviceId)}` : '';
+      return req<{ status: string }>('POST', `/integrations/spotify/next${qs}`, undefined, spotifyOpts(token));
+    },
+    previous: (deviceId?: string | null, token?: string | null) => {
+      const qs = deviceId ? `?device_id=${encodeURIComponent(deviceId)}` : '';
+      return req<{ status: string }>('POST', `/integrations/spotify/previous${qs}`, undefined, spotifyOpts(token));
     },
   },
 
