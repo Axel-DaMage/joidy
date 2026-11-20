@@ -5,7 +5,7 @@ import logging
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Annotated
+from typing import Annotated, Any
 
 from circuit_breaker import CircuitBreakerError, emb_circuit_breaker, llm_circuit_breaker
 from clients import aclose_clients, get_embedding_client, get_llm_client
@@ -313,7 +313,13 @@ async def _probe_client_chain(kind: str) -> dict:
     first reachable provider (the one actually serving traffic); ``providers``
     maps provider name → reachability for privileged diagnostics.
     """
-    empty = {"configured": False, "available": False, "primary_ok": False, "active": None, "providers": {}}
+    empty: dict[str, Any] = {
+        "configured": False,
+        "available": False,
+        "primary_ok": False,
+        "active": None,
+        "providers": {},
+    }
     get_client = get_llm_client if kind == "llm" else get_embedding_client
     try:
         client = get_client()

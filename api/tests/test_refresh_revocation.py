@@ -15,6 +15,8 @@ if "sqlite_vec" not in sys.modules:
     _stub.load = lambda _conn: None  # type: ignore
     sys.modules["sqlite_vec"] = _stub
 
+from typing import cast
+
 import jwt
 import pytest
 from config import settings
@@ -46,19 +48,19 @@ def _configure_auth() -> None:
 def _login(client: TestClient) -> dict:
     response = client.post("/auth/login", json={"password": "s3cret"})
     assert response.status_code == 200
-    return response.json()
+    return cast(dict, response.json())
 
 
 def _claims(token: str) -> dict:
-    return jwt.decode(token, options={"verify_signature": False})
+    return cast(dict, jwt.decode(token, options={"verify_signature": False}))
 
 
 def _jti(token: str) -> str:
-    return _claims(token)["jti"]
+    return cast(str, _claims(token)["jti"])
 
 
 def _row(db_session, jti: str) -> RefreshToken | None:
-    return db_session.query(RefreshToken).filter_by(jti=jti).first()
+    return cast("RefreshToken | None", db_session.query(RefreshToken).filter_by(jti=jti).first())
 
 
 def test_login_registers_refresh_token(client: TestClient, db_session):
@@ -87,7 +89,7 @@ def test_refresh_rotation_happy_path(client: TestClient, db_session):
     # The presented jti is consumed; its successor shares the family.
     old_row = _row(db_session, _jti(pair["refresh_token"]))
     new_row = _row(db_session, _jti(rotated["refresh_token"]))
-    assert old_row.consumed_at is not None
+    assert old_row is not None and old_row.consumed_at is not None
     assert new_row is not None and new_row.consumed_at is None
     assert new_row.family_id == old_row.family_id
 
@@ -111,7 +113,9 @@ def test_refresh_reuse_revokes_family(client: TestClient, db_session):
     successor = client.post("/auth/refresh", json={"refresh_token": rotated["refresh_token"]})
     assert successor.status_code == 401
 
-    family_id = _row(db_session, _jti(pair["refresh_token"])).family_id
+    consumed_row = _row(db_session, _jti(pair["refresh_token"]))
+    assert consumed_row is not None
+    family_id = consumed_row.family_id
     rows = db_session.query(RefreshToken).filter_by(family_id=family_id).all()
     assert rows and all(r.revoked_at is not None for r in rows)
 
