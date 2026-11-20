@@ -30,6 +30,14 @@ CONFIG_KEYS = {
     "ai_service_enabled": "AI_SERVICE_ENABLED",
 }
 
+# Keys where an empty string is a deliberate "clear" request (e.g. the GitHub
+# disconnect flow sends ``github_token: ""`` to wipe the stored token). For
+# every other key an empty value means "not provided": writing it into .env
+# would silently clobber a working config with "" (#1304). Secret fields are
+# never returned by GET /config, so clients can't distinguish "clear" from
+# "field left blank" for them — they must stay non-clearable.
+CLEARABLE_KEYS = {"github_token", "github_username", "daily_notes_folder"}
+
 PUBLIC_KEYS = {
     "gemini_api_key": False,
     "obsidian_vault_path": True,
@@ -118,6 +126,16 @@ def update_config(update: ConfigUpdate):
 
     update_data = update.model_dump(exclude_none=True)
 
+    # Empty values mean "not provided" for non-clearable keys — strip them so
+    # an empty string can never clobber a working .env entry or an in-memory
+    # setting (pydantic reads "" as set). Only CLEARABLE_KEYS accept "" as a
+    # deliberate clear (#1304).
+    update_data = {
+        k: v
+        for k, v in update_data.items()
+        if k in CLEARABLE_KEYS or (v or "").strip()
+    }
+
     # Detect vault path change — Docker bind mounts are immutable, so changing
     # OBSIDIAN_VAULT_PATH requires recreating the worker/api containers for the
     # new path to take effect (#784).
@@ -128,13 +146,6 @@ def update_config(update: ConfigUpdate):
     for short_key, env_key in CONFIG_KEYS.items():
         if short_key in update_data:
             value = update_data[short_key]
-            # Skip empty overrides for non-secret provider settings: an empty
-            # string would clobber a working config (pydantic reads "" as set).
-            if (
-                short_key in ("llm_model", "embedding_model", "openai_base_url", "google_redirect_uri")
-                and not (value or "").strip()
-            ):
-                continue
             if value is not None:
                 env_vars[env_key] = value
 
