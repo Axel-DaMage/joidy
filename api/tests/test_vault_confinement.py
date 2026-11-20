@@ -17,9 +17,8 @@ import os
 from datetime import UTC, datetime
 
 import pytest
-from fastapi.testclient import TestClient
-
 from config import settings
+from fastapi.testclient import TestClient
 from models.note import Note
 from models.sync_state import SyncState
 from services.note_service import write_to_vault
