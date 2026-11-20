@@ -337,7 +337,10 @@ jobs:
           open('/tmp/bump-version.sh', 'w').write(body)
           PY
           bash -n /tmp/bump-version.sh
-          bash /tmp/bump-version.sh
+          # Steps may receive the outputs via `env:` (e.g. VERSION/VERSION_CLEAN)
+          # instead of inline expressions — export both so the extracted body
+          # works in either style.
+          VERSION=v9.9.9-cismoke.1 VERSION_CLEAN=9.9.9-cismoke.1 PRERELEASE=true bash /tmp/bump-version.sh
 
       - name: Verify the bump applied cleanly
         run: |
