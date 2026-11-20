@@ -3,6 +3,7 @@
   import { Send, Sparkles, Trash2, LoaderCircle } from 'lucide-svelte';
   import { Marked } from 'marked';
   import DOMPurify from 'dompurify';
+  import { authorizeUploadUrls } from '$lib/utils/markdown';
   import { messages, isLoading, suggestions, sendMessage, clearChat } from '$lib/stores/chat';
   import { t } from 'svelte-i18n';
 
@@ -38,7 +39,7 @@
 
   function renderMarkdown(md: string): string {
     if (!md.trim()) return '';
-    return DOMPurify.sanitize(String(mdParser.parse(md)));
+    return authorizeUploadUrls(DOMPurify.sanitize(String(mdParser.parse(md))));
   }
 
   async function handleSend() {

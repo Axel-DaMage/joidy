@@ -50,7 +50,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next) -> Response:
         try:
-            response = await call_next(request)
+            response: Response = await call_next(request)
         except Exception:
             # Outer middlewares can still raise (e.g. a middleware bug); make
             # sure even those paths emit the headers instead of a bare 500

@@ -42,6 +42,12 @@ os.environ["JOIDY_ENV_FILE"] = str(_TEST_ENV_FILE)
 # stayed green.
 os.environ["APP_ENV"] = "test"
 
+# Vault confinement (#1362) resolves source_path against
+# settings.obsidian_vault_path; webhook/sync tests use ``/vault/...``
+# paths, so the suite needs a configured vault root (a nonexistent dir is
+# fine — confinement only compares realpaths lexically).
+os.environ.setdefault("OBSIDIAN_VAULT_PATH", "/vault")
+
 # Test-only bcrypt cost (#996). Hash strength is irrelevant under test and
 # passlib's default (12 rounds) made auth tests the slowest single test in the
 # suite. Must be set before app modules import `config.settings`, which reads
@@ -298,6 +304,20 @@ def _disable_rate_limits():
 
 
 @pytest.fixture(autouse=True)
+def _restore_mutable_settings(monkeypatch):
+    """Restore process-global ``config.settings`` mutated by endpoints under test.
+
+    /config and /config/setup write values into ``settings`` in place; without
+    a per-test restore a posted ``obsidian_vault_path`` poisons vault
+    confinement for every later test in the same xdist worker.
+    """
+    import config as _config
+
+    for attr in ("obsidian_vault_path", "auth_password", "secret_key"):
+        monkeypatch.setattr(_config.settings, attr, getattr(_config.settings, attr))
+
+
+@pytest.fixture(autouse=True)
 def _isolated_env_file(tmp_path, monkeypatch):
     """Give every test its own empty persisted .env (#991).
 
@@ -336,7 +356,7 @@ def client(db_session):
     app.dependency_overrides[get_current_user] = override_get_current_user
     app.dependency_overrides[get_current_user_or_internal] = override_get_current_user
 
-    with TestClient(app) as test_client:
+    with TestClient(app, client=("127.0.0.1", 50000)) as test_client:
         yield test_client
 
     app.dependency_overrides.clear()
@@ -358,7 +378,7 @@ def client_no_auth():
     app.dependency_overrides[get_current_user] = override_get_current_user
     app.dependency_overrides[get_current_user_or_internal] = override_get_current_user
 
-    with TestClient(app) as test_client:
+    with TestClient(app, client=("127.0.0.1", 50000)) as test_client:
         yield test_client
 
     app.dependency_overrides.clear()

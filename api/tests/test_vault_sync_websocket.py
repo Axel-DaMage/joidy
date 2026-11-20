@@ -48,7 +48,7 @@ def _build_client(db_session):
     original_overrides = dict(app.dependency_overrides)
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_current_user] = override_get_current_user
-    client = TestClient(app)
+    client = TestClient(app, client=("127.0.0.1", 50000))
     client._original_overrides = original_overrides  # type: ignore[attr-defined]
     return client
 
