@@ -364,7 +364,7 @@ export type CalendarTaskPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
 export interface CalendarTask {
   id: number;
   title: string;
-  date: string;
+  date: string | null;
   start_time: string | null;
   end_time: string | null;
   priority: CalendarTaskPriority;
@@ -380,7 +380,7 @@ export interface CalendarTask {
 
 export interface CalendarTaskCreateInput {
   title: string;
-  date: string;
+  date?: string | null;
   start_time?: string | null;
   end_time?: string | null;
   priority?: CalendarTaskPriority;
@@ -390,7 +390,7 @@ export interface CalendarTaskCreateInput {
 
 export interface CalendarTaskUpdateInput {
   title?: string;
-  date?: string;
+  date?: string | null;
   start_time?: string | null;
   end_time?: string | null;
   priority?: CalendarTaskPriority;
@@ -611,10 +611,11 @@ export const api = {
         'GET',
         `/planning/assignments?date=${encodeURIComponent(date)}`
       ),
-    setAssignments: (date: string, goal_ids: number[]) =>
+    setAssignments: (date: string, goal_ids: number[], create_calendar_task = false) =>
       req<{ date: string; goal_ids: number[] }>('POST', '/planning/assignments', {
         date,
         goal_ids,
+        create_calendar_task,
       }),
   },
 
@@ -880,13 +881,18 @@ export const api = {
   },
 
   calendarTasks: {
-    list: (params?: { start?: string; end?: string; date?: string }) => {
+    list: (params?: { start?: string; end?: string; date?: string; unscheduled?: boolean }) => {
       const qs = new URLSearchParams();
       if (params?.start) qs.set('start', params.start);
       if (params?.end) qs.set('end', params.end);
       if (params?.date) qs.set('date', params.date);
+      if (params?.unscheduled) qs.set('unscheduled', 'true');
       const suffix = qs.toString() ? `?${qs.toString()}` : '';
       return req<CalendarTask[]>('GET', `/calendar/tasks${suffix}`);
+    },
+    executionQueue: (date?: string) => {
+      const suffix = date ? `?date=${encodeURIComponent(date)}` : '';
+      return req<CalendarTask[]>('GET', `/calendar/tasks/execution-queue${suffix}`);
     },
     create: (input: CalendarTaskCreateInput) =>
       req<CalendarTask>('POST', '/calendar/tasks', input),

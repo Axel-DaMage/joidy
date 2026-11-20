@@ -79,7 +79,11 @@
     },
     "prevWeek": "Previous week",
     "nextWeek": "Next week",
-    "noEventsRange": "No events or tasks in this range"
+    "noEventsRange": "No events or tasks in this range",
+    "unscheduled": "Unscheduled",
+    "unscheduledEmpty": "No unscheduled tasks — drop a task here to park it",
+    "unscheduledAddPlaceholder": "New task without a day…",
+    "taskUnscheduled": "Task moved to unscheduled"
   },
   "emails": {
     "title": "Mail",
@@ -256,6 +260,7 @@
     "assignToDay": "Assign to selected day",
     "paused": "Paused",
     "assign": "Assign",
+    "mirrorToCalendar": "Mirror to calendar",
     "calendar": "Calendar",
     "assignedOn": "Assigned · {date}",
     "remove": "Remove",

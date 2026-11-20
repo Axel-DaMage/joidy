@@ -35,13 +35,15 @@ class CalendarTask(Base):
     Lives alongside the read-only Google Calendar cache (google_calendar_events).
     A task may optionally link to a goal and mirror itself into a Google Calendar
     event (source=GOOGLE + google_event_id) once write-back exists (#1233).
+    A NULL date means the task sits in the unscheduled queue ("sin planificar",
+    #1234) until it is dragged onto a day.
     """
 
     __tablename__ = "calendar_tasks"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     title: Mapped[str] = mapped_column(String(500), nullable=False)
-    date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
     start_time: Mapped[datetime | None] = mapped_column(Time, nullable=True)
     end_time: Mapped[datetime | None] = mapped_column(Time, nullable=True)
     priority: Mapped[CalendarTaskPriority] = mapped_column(

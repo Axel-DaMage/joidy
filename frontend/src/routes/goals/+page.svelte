@@ -742,6 +742,8 @@
   }
 
   let listSortBy = $state<'recent' | 'alpha' | 'state'>('recent');
+  // When on, assigning a goal to a day also creates a calendar_task (#1234).
+  let mirrorToCalendar = $state(false);
 
   let filteredUnassignedGoals = $derived.by(() => {
     let unassigned = goals.filter(
@@ -861,7 +863,7 @@
     if (!assignments[normDate].includes(goalId)) assignments[normDate].push(goalId);
 
     try {
-      await api.planning.setAssignments(normDate, assignments[normDate]);
+      await api.planning.setAssignments(normDate, assignments[normDate], mirrorToCalendar);
     } catch (e) {
       logger.error('Error saving assignment:', e);
     }
@@ -880,7 +882,7 @@
       [normDate]: assignments[normDate].filter((id) => id !== goalId),
     };
     try {
-      await api.planning.setAssignments(normDate, assignments[normDate]);
+      await api.planning.setAssignments(normDate, assignments[normDate], mirrorToCalendar);
     } catch (e) {
       logger.error('Error saving assignment removal:', e);
     }
@@ -1679,6 +1681,10 @@
               <option value="alpha">{$t('goalsPage.sortAlpha')}</option>
               <option value="state">{$t('goalsPage.sortState')}</option>
             </select>
+            <label class="mirror-to-calendar" title={$t('goalsPage.assignToDay')}>
+              <input type="checkbox" bind:checked={mirrorToCalendar} />
+              <span>{$t('goalsPage.mirrorToCalendar')}</span>
+            </label>
           </div>
 
           <div class="history-goal-list" style="width: 100%;">
@@ -3050,9 +3056,20 @@
   .sort-control-centered {
     display: flex;
     justify-content: center;
+    align-items: center;
+    gap: 10px;
     padding: 0 0 8px 0;
     border-bottom: 1px solid var(--border-light);
     margin-bottom: 8px;
+  }
+  .mirror-to-calendar {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    color: var(--text-muted);
+    cursor: pointer;
+    user-select: none;
   }
   .sort-select-square {
     padding: 6px 10px;
