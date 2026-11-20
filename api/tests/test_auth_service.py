@@ -53,6 +53,41 @@ class PasswordTest(unittest.TestCase):
         self.assertFalse(verify_password(h, h))
 
 
+class EscapedBcryptStoredPasswordTest(unittest.TestCase):
+    """#1456: an AUTH_PASSWORD stored with docker-compose ``$$`` escaping
+    (``$$2b$$12$$…``) must verify as the underlying bcrypt hash — not fall
+    into the plaintext-compare path where the literal escaped string became
+    the working password and the real one locked out."""
+
+    def _escaped(self) -> str:
+        return hash_password("s3cret").replace("$", "$$")
+
+    def test_verify_escaped_bcrypt_accepts_real_password(self):
+        self.assertTrue(verify_password("s3cret", self._escaped()))
+
+    def test_verify_escaped_bcrypt_rejects_literal_and_wrong(self):
+        escaped = self._escaped()
+        # The literal escaped string must NOT authenticate (the #1456 hole),
+        # and neither must the unescaped hash text or a wrong password.
+        self.assertFalse(verify_password(escaped, escaped))
+        self.assertFalse(verify_password(escaped.replace("$$", "$"), escaped))
+        self.assertFalse(verify_password("wrong", escaped))
+
+    def test_is_plaintext_false_for_escaped_bcrypt(self):
+        self.assertFalse(is_plaintext_stored_password(self._escaped()))
+
+    def test_no_plaintext_warning_for_escaped_bcrypt(self):
+        escaped = self._escaped()
+        with (
+            mock.patch(
+                "services.auth_service._effective_auth_password",
+                return_value=escaped,
+            ),
+            self.assertNoLogs("services.auth_service", level="WARNING"),
+        ):
+            warn_if_plaintext_auth_password()
+
+
 class PlaintextPasswordWarningTest(unittest.TestCase):
     """#1265: a plaintext AUTH_PASSWORD must produce a loud startup warning.
 

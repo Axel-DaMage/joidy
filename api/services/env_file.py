@@ -347,6 +347,29 @@ def write_env(env_vars: dict) -> None:
     _secure_env_file(env_file)
 
 
+def unescape_env_value(value: str) -> str:
+    """Collapse docker-compose ``$$`` escapes to a literal ``$`` (#1456).
+
+    The deployment ``.env`` is dual-purpose: compose reads it for ``${VAR}``
+    interpolation — where ``$$`` is the documented escape for a literal
+    ``$`` — AND the API reads the same file raw through this module (the
+    secrets below are never passed via compose ``environment:``). A secret
+    written ``$$``-escaped for interpolation would otherwise be consumed
+    verbatim: ``AUTH_PASSWORD=$$2b$$…`` failed the ``$2b$`` bcrypt prefix
+    check, silently degraded to the plaintext-compare path, and made the
+    literal escaped string the working password.
+
+    ``read_env()`` intentionally stays raw (``update_config`` round-trips it
+    through ``write_env()``); the unescape belongs to the *effective value*
+    read path used by secret consumers. A ``$$`` in a file-consumed key is
+    only ever authored as a compose escape, so collapsing it always yields
+    the value the user meant.
+    """
+    if "$$" not in value:
+        return value
+    return value.replace("$$", "$")
+
+
 def get_persisted(key: str) -> str:
     """Read a single key straight from disk.
 
@@ -354,7 +377,7 @@ def get_persisted(key: str) -> str:
     worker that handled a request is invisible to its siblings, whose in-memory
     ``settings`` object still holds the value loaded at startup.
     """
-    return str(read_env().get(key, ""))
+    return unescape_env_value(str(read_env().get(key, "")))
 
 
 # ── Shipped placeholder values (#1393) ────────────────────────────────────

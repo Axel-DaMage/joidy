@@ -80,6 +80,28 @@ def verify_internal_token(token: str) -> bool:
     return bool(expected) and secrets.compare_digest(token, expected)
 
 
+def _normalize_stored_password(stored: str) -> str:
+    """Unescape a docker-compose ``$$``-escaped bcrypt hash (#1456).
+
+    ``.env`` doubles as compose's interpolation source, so users (and older
+    installers) sometimes write ``AUTH_PASSWORD=$$2b$$12$$…`` — the ``$$``
+    escape compose needs inside ``environment:``. AUTH_PASSWORD is consumed
+    from the file raw, never through ``environment:``, so the escaped form
+    used to fall into the plaintext-compare path: the literal ``$$2b$$…``
+    string became the working password while the real one locked out.
+    ``get_persisted`` already unescapes on read; this guards the same value
+    arriving via ``settings`` (pydantic's own raw read of the file) or any
+    direct caller.
+
+    Only the ``$$2b$$`` prefix is rewritten — an odd number of ``$`` or a
+    non-bcrypt value is left alone so plaintext compare semantics for
+    hand-edited entries stay byte-exact.
+    """
+    if stored.startswith("$$2b$$"):
+        return stored.replace("$$", "$")
+    return stored
+
+
 def verify_password(plain: str, stored: str) -> bool:
     """Verify a password against a stored hash or plaintext.
 
@@ -89,6 +111,7 @@ def verify_password(plain: str, stored: str) -> bool:
     logs a loud warning via ``warn_if_plaintext_auth_password`` whenever it
     is in effect.
     """
+    stored = _normalize_stored_password(stored)
     if stored.startswith("$2b$"):
         try:
             return bcrypt.checkpw(plain.encode("utf-8"), stored.encode("utf-8"))
@@ -104,9 +127,10 @@ def is_plaintext_stored_password(stored: str) -> bool:
 
     Mirrors ``verify_password``: only ``$2b$`` values are treated as bcrypt,
     so anything else — including hand-edited .env entries predating hashing —
-    takes the constant-time plaintext compare.
+    takes the constant-time plaintext compare. A ``$$``-escaped bcrypt hash
+    counts as bcrypt (#1456), not plaintext.
     """
-    return bool(stored) and not stored.startswith("$2b$")
+    return bool(stored) and not _normalize_stored_password(stored).startswith("$2b$")
 
 
 def warn_if_plaintext_auth_password() -> None:
@@ -132,13 +156,23 @@ def hash_password(plain: str) -> str:
     return bcrypt.hashpw(plain.encode("utf-8"), bcrypt.gensalt(rounds=_BCRYPT_ROUNDS)).decode("utf-8")
 
 
-def _create_token(user_id: int, username: str, token_type: str, lifetime: timedelta) -> str:
+def _create_token(
+    user_id: int,
+    username: str,
+    token_type: str,
+    lifetime: timedelta,
+    jti: str | None = None,
+    family_id: str | None = None,
+) -> str:
     """Sign a JWT with the registered claims enforced at verify time (#1285).
 
     ``iat``/``iss``/``aud`` make every token attributable to this deployment
     (an ``iss``/``aud`` mismatch is rejected on decode); ``typ`` keeps refresh
     tokens from being replayed as access tokens; ``jti`` uniquely identifies
-    each refresh token so rotated credentials are never identical.
+    each refresh token so rotated credentials are never identical. For
+    refresh tokens ``jti``/``family_id`` may be supplied by
+    ``refresh_token_service`` so the same identifiers are persisted in the
+    ``refresh_tokens`` table for rotation tracking (#1457).
     """
     secret = _effective_secret_key()
     if not secret:
@@ -156,7 +190,9 @@ def _create_token(user_id: int, username: str, token_type: str, lifetime: timede
     if username:
         claims["username"] = username
     if token_type == TOKEN_TYPE_REFRESH:
-        claims["jti"] = secrets.token_urlsafe(16)
+        claims["jti"] = jti or secrets.token_urlsafe(16)
+        if family_id:
+            claims["fam"] = family_id
     return jwt.encode(claims, secret, algorithm=ALGORITHM)
 
 
@@ -170,17 +206,28 @@ def create_access_token(user_id: int, username: str = "user") -> str:
     )
 
 
-def create_refresh_token(user_id: int, username: str = "user") -> str:
+def create_refresh_token(
+    user_id: int,
+    username: str = "user",
+    jti: str | None = None,
+    family_id: str | None = None,
+) -> str:
     """Create a long-lived JWT refresh token for ``POST /auth/refresh`` (#1285).
 
     The token is only accepted by the refresh endpoint (``typ=refresh``);
     each call returns a new ``jti`` so refreshes rotate the credential.
+    ``jti``/``family_id`` are normally supplied by
+    ``services.refresh_token_service.issue_refresh_token``, which registers
+    them in the ``refresh_tokens`` table — tokens minted without a row are
+    rejected at rotation time (#1457).
     """
     return _create_token(
         user_id,
         username,
         TOKEN_TYPE_REFRESH,
         timedelta(days=settings.refresh_token_expire_days),
+        jti=jti,
+        family_id=family_id,
     )
 
 
