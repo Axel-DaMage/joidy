@@ -3,6 +3,7 @@ import { browser } from '$app/env';
 import { api, type Note, type AISuggestion } from '$lib/api';
 import { applyGamificationResult } from './gamification';
 import { logger } from '$lib/utils/logger';
+import { SESSION_RESET_EVENT } from './session';
 import {
   isOnline as offlineIsOnline,
   queueChange,
@@ -176,7 +177,7 @@ export async function createNote(title: string, content: string, tags: string[],
   }
 }
 
-export async function updateNote(id: number, data: Partial<{ title: string; content: string; tags: string[] }>): Promise<void> {
+export async function updateNote(id: number, data: Partial<{ title: string; content: string; tags: string[]; source_path: string | null }>): Promise<void> {
   // When offline, queue the change instead of failing.
   if (browser && !get(offlineIsOnline)) {
     try {
@@ -190,6 +191,7 @@ export async function updateNote(id: number, data: Partial<{ title: string; cont
         title: data.title ?? existing.title,
         content: data.content ?? existing.content,
         tags: data.tags ?? existing.tags,
+        source_path: data.source_path !== undefined ? data.source_path : existing.source_path,
         updated_at: new Date().toISOString(),
       };
       notes.update((ns) => ns.map((n) => (n.id === id ? updated : n)));
@@ -317,6 +319,24 @@ export const noteSearchQuery = writable('');
 export const noteSearchTag = writable<string | null>(null);
 export const noteSortBy = writable<'updated' | 'created' | 'title'>('updated');
 export const noteSortAsc = writable(false);
+
+// Drop all note state when the session resets (logout / 401) so the next
+// user on the same browser profile never sees the previous notes (#1305).
+if (browser) {
+  window.addEventListener(SESSION_RESET_EVENT, () => {
+    notes.set([]);
+    currentNote.set(null);
+    aiSuggestions.set([]);
+    selectedNoteIds.set(new Set());
+    bulkMode.set(false);
+    hasMoreNotes.set(false);
+    loadingMore.set(false);
+    notesLoadedOnce.set(false);
+    notesLoaded = false;
+    cacheLoadDone = false;
+    lastTag = undefined;
+  });
+}
 
 export const filteredNotes = derived(
   [notes, noteSearchQuery, noteSearchTag, noteSortBy, noteSortAsc],
