@@ -48,9 +48,10 @@ function createSessionStore() {
     logout() {
       saveSession(null);
       set(null);
+      clearServiceWorkerCaches();
     },
     updatePreferences(prefs: Partial<UserSession['preferences']>) {
-      update(s => {
+      update((s) => {
         if (!s) return null;
         const updated = { ...s, preferences: { ...s.preferences, ...prefs } };
         saveSession(updated);
@@ -58,7 +59,7 @@ function createSessionStore() {
       });
     },
     updateProfile(data: Partial<Pick<UserSession, 'username' | 'email' | 'avatar'>>) {
-      update(s => {
+      update((s) => {
         if (!s) return null;
         const updated = { ...s, ...data };
         saveSession(updated);
@@ -70,10 +71,28 @@ function createSessionStore() {
 
 export const session = createSessionStore();
 
+/**
+ * Wipes every `joidy-*` CacheStorage cache on logout/session reset so
+ * runtime-cached responses can never leak to the next user of the same
+ * browser profile (#1310). Precached build assets simply re-fetch on demand
+ * via the service worker's cacheFirst handler.
+ */
+function clearServiceWorkerCaches(): void {
+  if (!browser || !('caches' in window)) return;
+  caches
+    .keys()
+    .then((keys) =>
+      Promise.all(keys.filter((key) => key.startsWith('joidy-')).map((key) => caches.delete(key)))
+    )
+    .catch(() => {
+      /* best-effort cleanup */
+    });
+}
+
 export const isAuthenticated = {
   subscribe: (run: (value: boolean) => void) => {
-    return session.subscribe(s => run(!!s));
-  }
+    return session.subscribe((s) => run(!!s));
+  },
 };
 
 export function getToken(): string | null {

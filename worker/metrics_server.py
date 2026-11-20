@@ -4,6 +4,11 @@ The worker is not a FastAPI app, so it can't use the same /metrics router
 pattern as the API and AI service. Instead, this starts a minimal HTTP server
 in a background thread that serves the default Prometheus registry on port
 8001, so Prometheus can scrape it alongside the other services (#406).
+
+The bind address comes from WORKER_BIND_ADDR (#1277): loopback by default
+when running outside Docker; docker-compose.yml sets it to 0.0.0.0 since the
+port is not published to the host but must be reachable on the internal
+compose network (Prometheus on the external `joidy` network, healthchecks).
 """
 
 import json
@@ -13,6 +18,7 @@ import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import task_status
+from config import settings
 from prometheus_client import Counter, Histogram, generate_latest
 
 logger = logging.getLogger(__name__)
@@ -80,9 +86,13 @@ def start_metrics_server(port: int = 8001) -> None:
     if _metrics_server is not None:
         return
     try:
-        _metrics_server = HTTPServer(("0.0.0.0", port), _MetricsHandler)
+        _metrics_server = HTTPServer((settings.worker_bind_addr, port), _MetricsHandler)
         thread = threading.Thread(target=_metrics_server.serve_forever, daemon=True, name="metrics-server")
         thread.start()
-        logger.info("[worker] Metrics server listening on :%d/metrics", port)
+        logger.info(
+            "[worker] Metrics server listening on %s:%d/metrics",
+            settings.worker_bind_addr,
+            port,
+        )
     except Exception as exc:
         logger.warning("[worker] Failed to start metrics server: %s", exc)

@@ -215,7 +215,7 @@ xp_table_json: str = ""
 
 | Atributo | Valor |
 |----------|-------|
-| Puerto | 8002 |
+| Puerto | 8002 (solo red interna, sin publicar al host) |
 | Framework | FastAPI (Python 3.12) |
 | Puerto interno | 8002 |
 | Dependencias | API (service_healthy) |
@@ -253,7 +253,7 @@ ai-service/
 
 | Atributo | Valor |
 |----------|-------|
-| Puerto | 8001 |
+| Puerto | 8001 (solo red interna, sin publicar al host) |
 | Framework | Python asyncio |
 | Puerto interno | 8001 |
 | Dependencias | API (service_healthy) |

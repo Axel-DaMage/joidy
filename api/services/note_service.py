@@ -80,7 +80,9 @@ def note_to_response(note: Note) -> dict:
 
 
 def get_or_create_tag(db: Session, name: str) -> Tag:
-    normalized = name.lower().strip()
+    # Sanitize at the chokepoint so every tag-creation path (note tags, bulk
+    # ops, AI tag acceptance) applies the same normalization (#1322).
+    normalized = sanitize_tag(name)
     tag = db.query(Tag).filter(Tag.name == normalized).first()
     if not tag:
         tag = Tag(name=normalized)

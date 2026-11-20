@@ -113,6 +113,22 @@ export function getFileIcon(title: string, content: string): string {
   return 'File';
 }
 
+// ── Note ↔ folder path matching ──────────────────────────────────────────────
+
+// Segment-boundary match (#1304): true when `sourcePath` lives inside folder
+// `folderPath` (or equals it). Normalizes separators and strips the `/vault/`
+// prefix exactly like buildTree does, so deleting folder `foo` does NOT match
+// `foo2/x.md` or `a/foobar/y.md` — a plain substring check used to wipe
+// sibling folders' notes.
+export function isNoteInFolder(sourcePath: string, folderPath: string): boolean {
+  const clean = (p: string) =>
+    p.replace(/\\/g, '/').replace(/^\/vault\/?/, '').replace(/^\/+|\/+$/g, '');
+  const notePath = clean(sourcePath);
+  const folder = clean(folderPath);
+  if (!folder || !notePath) return false;
+  return notePath === folder || notePath.startsWith(folder + '/');
+}
+
 // ── Flat node (pre-processed, avoids recursive component rendering) ───────────
 
 export interface FlatNode {
@@ -192,12 +208,16 @@ export function buildTree(
       }
       const filename = parts[parts.length - 1] ?? note.title;
       const stem = filename.replace(/\.md$/, '');
-      node[stem] = { type: 'file', name: stem, note, children: {} };
+      // Key by the unique source_path, not the stem: two notes sharing a
+      // filename stem in one folder (or duplicate DB rows for one file) must
+      // not overwrite each other — `name` stays the display label (#1304).
+      node[note.source_path] = { type: 'file', name: stem, note, children: {} };
     } else {
-      // Joidy-created notes → virtual folder
+      // Joidy-created notes → virtual folder. Key by note.id: titles are not
+      // unique, so two notes titled "Todo" must both render (#1304).
       const key = '✦ joidy';
       if (!root[key]) root[key] = { type: 'folder', name: '✦ joidy', children: {} };
-      root[key].children[note.title] = { type: 'file', name: note.title, note, children: {} };
+      root[key].children[String(note.id)] = { type: 'file', name: note.title, note, children: {} };
     }
   }
 

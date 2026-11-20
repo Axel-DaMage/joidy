@@ -17,6 +17,9 @@ package() {
   cd "${srcdir}/joidy-${_tag}"
   install -Dm755 scripts/joidy.sh "${pkgdir}/usr/bin/joidy"
   install -Dm644 docker-compose.yml "${pkgdir}/usr/share/joidy/docker-compose.yml"
+  # Opt-in overlay for power management (#1278); `joidy up` adds it only when
+  # POWER_MANAGEMENT_ENABLED=true.
+  install -Dm644 docker-compose.power.yml "${pkgdir}/usr/share/joidy/docker-compose.power.yml"
   install -Dm644 .env.example "${pkgdir}/usr/share/joidy/.env.example"
   # Backup sidecar scripts — docker-compose.yml bind-mounts ./scripts read-only
   # into the `backup` service.

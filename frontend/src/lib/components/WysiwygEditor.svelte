@@ -12,6 +12,7 @@
   import TurndownService from 'turndown';
   import DOMPurify from 'dompurify';
   import { authorizeUploadUrls, stripUploadAuth } from '$lib/utils/markdown';
+  import { isAllowedLinkUrl } from '$lib/utils/markdownFormat';
 
   const dispatch = createEventDispatcher<{
     contentchange: string;
@@ -64,6 +65,10 @@
         Link.configure({
           openOnClick: false,
           HTMLAttributes: { class: 'tiptap-link' },
+          // Scheme allowlist (#1331): enforced on setLink/toggleLink, paste,
+          // autolink, and parseHTML — so javascript:/data: hrefs never enter
+          // the editor DOM, while http(s)/mailto/relative links still work.
+          isAllowedUri: (url, ctx) => ctx.defaultValidate(url) && isAllowedLinkUrl(url),
         }),
         Image.configure({
           inline: false,
@@ -111,23 +116,48 @@
   });
 
   // Toolbar actions
-  export function toggleBold() { editor?.chain().focus().toggleBold().run(); }
-  export function toggleItalic() { editor?.chain().focus().toggleItalic().run(); }
-  export function toggleUnderline() { editor?.chain().focus().toggleUnderline().run(); }
-  export function toggleStrike() { editor?.chain().focus().toggleStrike().run(); }
-  export function toggleH1() { editor?.chain().focus().toggleHeading({ level: 1 }).run(); }
-  export function toggleH2() { editor?.chain().focus().toggleHeading({ level: 2 }).run(); }
-  export function toggleH3() { editor?.chain().focus().toggleHeading({ level: 3 }).run(); }
-  export function toggleBulletList() { editor?.chain().focus().toggleBulletList().run(); }
-  export function toggleOrderedList() { editor?.chain().focus().toggleOrderedList().run(); }
-  export function toggleTaskList() { editor?.chain().focus().toggleTaskList().run(); }
-  export function toggleBlockquote() { editor?.chain().focus().toggleBlockquote().run(); }
-  export function toggleCodeBlock() { editor?.chain().focus().toggleCodeBlock().run(); }
+  export function toggleBold() {
+    editor?.chain().focus().toggleBold().run();
+  }
+  export function toggleItalic() {
+    editor?.chain().focus().toggleItalic().run();
+  }
+  export function toggleUnderline() {
+    editor?.chain().focus().toggleUnderline().run();
+  }
+  export function toggleStrike() {
+    editor?.chain().focus().toggleStrike().run();
+  }
+  export function toggleH1() {
+    editor?.chain().focus().toggleHeading({ level: 1 }).run();
+  }
+  export function toggleH2() {
+    editor?.chain().focus().toggleHeading({ level: 2 }).run();
+  }
+  export function toggleH3() {
+    editor?.chain().focus().toggleHeading({ level: 3 }).run();
+  }
+  export function toggleBulletList() {
+    editor?.chain().focus().toggleBulletList().run();
+  }
+  export function toggleOrderedList() {
+    editor?.chain().focus().toggleOrderedList().run();
+  }
+  export function toggleTaskList() {
+    editor?.chain().focus().toggleTaskList().run();
+  }
+  export function toggleBlockquote() {
+    editor?.chain().focus().toggleBlockquote().run();
+  }
+  export function toggleCodeBlock() {
+    editor?.chain().focus().toggleCodeBlock().run();
+  }
   export function setLink(url: string) {
     if (url === '') {
       editor?.chain().focus().unsetLink().run();
-    } else {
-      editor?.chain().focus().setLink({ href: url }).run();
+    } else if (isAllowedLinkUrl(url)) {
+      // Rejected URLs (javascript:, data:, etc.) are dropped silently (#1331).
+      editor?.chain().focus().setLink({ href: url.trim() }).run();
     }
   }
   export function insertImage(src: string, alt: string = '') {
@@ -198,18 +228,18 @@
     list-style: decimal;
   }
 
-  :global(.wysiwyg-editor .tiptap-prose ul[data-type="taskList"]) {
+  :global(.wysiwyg-editor .tiptap-prose ul[data-type='taskList']) {
     list-style: none;
     padding-left: 0;
   }
 
-  :global(.wysiwyg-editor .tiptap-prose ul[data-type="taskList"] li) {
+  :global(.wysiwyg-editor .tiptap-prose ul[data-type='taskList'] li) {
     display: flex;
     align-items: flex-start;
     gap: 8px;
   }
 
-  :global(.wysiwyg-editor .tiptap-prose ul[data-type="taskList"] li > label) {
+  :global(.wysiwyg-editor .tiptap-prose ul[data-type='taskList'] li > label) {
     flex-shrink: 0;
     user-select: none;
   }

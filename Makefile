@@ -6,6 +6,13 @@ PLATFORM := $(shell uname -s | tr '[:upper:]' '[:lower:]')
 # Portable sed in-place: GNU sed uses -i, BSD sed (macOS) needs -i ''
 SED_INPLACE := $(shell sed --version >/dev/null 2>&1 && echo "sed -i" || echo "sed -i ''")
 
+# Read a single KEY=value from .env WITHOUT sourcing the file (#1312).
+# `. .env` used to execute $(...) and backticks inside values — a poisoned
+# .env (e.g. written through the settings API) turned the next `make` run into
+# host command execution. grep|cut returns the raw text, never evaluated.
+# tail -n1 mirrors services/env_file.read_env()'s last-wins semantics.
+env_key = $$(grep -E '^$(1)=' .env 2>/dev/null | tail -n1 | cut -d'=' -f2-)
+
 # Host UID/GID passed to the dev compose overlay so dev containers run as the
 # host user and bind-mounted artifacts (.svelte-kit, data/logs) never need sudo
 # to clean (#886). Resolved by make (not the shell) to avoid bash's readonly UID.
@@ -57,11 +64,31 @@ setup: ## First-time setup: copy .env, create data directories
 		echo "$(GREEN)✓$(NC) .env already exists"; \
 		echo "  Run 'make doctor' to check your configuration"; \
 	fi
-	@. .env 2>/dev/null || true; \
+	@POSTGRES_PASSWORD=$(call env_key,POSTGRES_PASSWORD); \
 	if [ -z "$$POSTGRES_PASSWORD" ]; then \
 		NEW_PW=$$(openssl rand -hex 24 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(24))" 2>/dev/null || echo "dev_pw_$$(date +%s)"); \
 		$(SED_INPLACE) "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$$NEW_PW|" .env; \
 		echo "$(GREEN)✓$(NC) Generated POSTGRES_PASSWORD"; \
+	fi
+	@INTERNAL_SECRET=$(call env_key,INTERNAL_SECRET); \
+	if [ -z "$$INTERNAL_SECRET" ]; then \
+		NEW_IS=$$(openssl rand -hex 32 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null || echo "dev_internal_$$(date +%s)"); \
+		if grep -qE '^\#?INTERNAL_SECRET=' .env; then \
+			$(SED_INPLACE) "s|^\#?INTERNAL_SECRET=.*|INTERNAL_SECRET=$$NEW_IS|" .env; \
+		else \
+			printf '\nINTERNAL_SECRET=%s\n' "$$NEW_IS" >> .env; \
+		fi; \
+		echo "$(GREEN)✓$(NC) Generated INTERNAL_SECRET"; \
+	fi
+	@INTERNAL_API_TOKEN=$(call env_key,INTERNAL_API_TOKEN); \
+	if [ -z "$$INTERNAL_API_TOKEN" ]; then \
+		NEW_TOKEN=$$(openssl rand -hex 32 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null || echo "dev_tok_$$(date +%s)"); \
+		if grep -qE '^INTERNAL_API_TOKEN=' .env; then \
+			$(SED_INPLACE) "s|^INTERNAL_API_TOKEN=.*|INTERNAL_API_TOKEN=$$NEW_TOKEN|" .env; \
+		else \
+			echo "INTERNAL_API_TOKEN=$$NEW_TOKEN" >> .env; \
+		fi; \
+		echo "$(GREEN)✓$(NC) Generated INTERNAL_API_TOKEN"; \
 	fi
 	@echo ""
 	@echo "Or use 'make start' for a guided setup + start!"
@@ -70,24 +97,24 @@ setup: ## First-time setup: copy .env, create data directories
 dev: ## Start all services in development mode (with hot reload)
 	@if [ ! -f .env ]; then echo "Run 'make setup' first"; exit 1; fi
 	@mkdir -p data/db data/uploads data/vault data/backups
-	@. .env 2>/dev/null || true; \
+	@OBSIDIAN_VAULT_PATH=$(call env_key,OBSIDIAN_VAULT_PATH); \
 	case "$$OBSIDIAN_VAULT_PATH" in ~/*) export OBSIDIAN_VAULT_PATH="$(HOME)/$${OBSIDIAN_VAULT_PATH#~/}";; ~) export OBSIDIAN_VAULT_PATH="$(HOME)";; esac; \
 	UID=$(HOST_UID) GID=$(HOST_GID) $(DOCKER_COMPOSE) -p $(COMPOSE_PROJECT) -f docker-compose.yml -f docker-compose.dev.yml --profile ai up --build
 
 dev-d: ## Start all services in development mode (detached)
 	@if [ ! -f .env ]; then echo "Run 'make setup' first"; exit 1; fi
 	@mkdir -p data/db data/uploads data/vault data/backups
-	@. .env 2>/dev/null || true; \
+	@OBSIDIAN_VAULT_PATH=$(call env_key,OBSIDIAN_VAULT_PATH); \
 	case "$$OBSIDIAN_VAULT_PATH" in ~/*) export OBSIDIAN_VAULT_PATH="$(HOME)/$${OBSIDIAN_VAULT_PATH#~/}";; ~) export OBSIDIAN_VAULT_PATH="$(HOME)";; esac; \
 	UID=$(HOST_UID) GID=$(HOST_GID) $(DOCKER_COMPOSE) -p $(COMPOSE_PROJECT) -f docker-compose.yml -f docker-compose.dev.yml --profile ai up --build -d
 
 dev-reset: ## Recreate all services in development mode from scratch (one command)
 	@if [ ! -f .env ]; then echo "Run 'make setup' first"; exit 1; fi
 	@mkdir -p data/db data/uploads data/vault data/backups
-	@. .env 2>/dev/null || true; \
+	@OBSIDIAN_VAULT_PATH=$(call env_key,OBSIDIAN_VAULT_PATH); \
 	case "$$OBSIDIAN_VAULT_PATH" in ~/*) export OBSIDIAN_VAULT_PATH="$(HOME)/$${OBSIDIAN_VAULT_PATH#~/}";; ~) export OBSIDIAN_VAULT_PATH="$(HOME)";; esac; \
 	UID=$(HOST_UID) GID=$(HOST_GID) $(DOCKER_COMPOSE) -p $(COMPOSE_PROJECT) -f docker-compose.yml -f docker-compose.dev.yml --profile ai down --remove-orphans --volumes
-	@. .env 2>/dev/null || true; \
+	@OBSIDIAN_VAULT_PATH=$(call env_key,OBSIDIAN_VAULT_PATH); \
 	case "$$OBSIDIAN_VAULT_PATH" in ~/*) export OBSIDIAN_VAULT_PATH="$(HOME)/$${OBSIDIAN_VAULT_PATH#~/}";; ~) export OBSIDIAN_VAULT_PATH="$(HOME)";; esac; \
 	UID=$(HOST_UID) GID=$(HOST_GID) $(DOCKER_COMPOSE) -p $(COMPOSE_PROJECT) -f docker-compose.yml -f docker-compose.dev.yml --profile ai up --build -d --force-recreate --remove-orphans --wait
 	@echo "✓ Services recreated. Use 'make logs' to follow output."
@@ -95,7 +122,7 @@ dev-reset: ## Recreate all services in development mode from scratch (one comman
 prod: ## Start all services in production mode
 	@if [ ! -f .env ]; then echo "Run 'make setup' first"; exit 1; fi
 	@mkdir -p data/db data/uploads data/vault data/backups
-	@. .env 2>/dev/null || true; \
+	@OBSIDIAN_VAULT_PATH=$(call env_key,OBSIDIAN_VAULT_PATH); \
 	case "$$OBSIDIAN_VAULT_PATH" in ~/*) export OBSIDIAN_VAULT_PATH="$(HOME)/$${OBSIDIAN_VAULT_PATH#~/}";; ~) export OBSIDIAN_VAULT_PATH="$(HOME)";; esac; \
 	$(DOCKER_COMPOSE) up --build -d
 
@@ -271,7 +298,8 @@ doctor: ## Verify all prerequisites are met
 		echo "$(GREEN)✓$(NC) .env exists"; \
 	fi; \
 	echo ""; \
-	. .env 2>/dev/null || true; \
+	GEMINI_API_KEY=$(call env_key,GEMINI_API_KEY); \
+	OBSIDIAN_VAULT_PATH=$(call env_key,OBSIDIAN_VAULT_PATH); \
 	if [ -z "$$GEMINI_API_KEY" ] || [ "$$GEMINI_API_KEY" = "your_gemini_api_key_here" ]; then \
 		echo "$(YELLOW)⚠$(NC) GEMINI_API_KEY not configured"; \
 		echo "  Get free key at: https://aistudio.google.com/"; \
@@ -352,7 +380,7 @@ start: ## 🚀 Quick start: setup + start all services
 		echo "$(RED)Failed to create .env$(NC)"; \
 		exit 1; \
 	fi
-	@. .env 2>/dev/null || true; \
+	@GEMINI_API_KEY=$(call env_key,GEMINI_API_KEY); \
 	if [ -z "$$GEMINI_API_KEY" ] || [ "$$GEMINI_API_KEY" = "your_gemini_api_key_here" ]; then \
 		echo ""; \
 		echo "$(YELLOW)⚠ GEMINI_API_KEY not set in .env$(NC)"; \
@@ -366,7 +394,7 @@ start: ## 🚀 Quick start: setup + start all services
 			exit 1; \
 		fi; \
 	fi
-	@. .env 2>/dev/null || true; \
+	@OBSIDIAN_VAULT_PATH=$(call env_key,OBSIDIAN_VAULT_PATH); \
 	if [ -z "$$OBSIDIAN_VAULT_PATH" ] || [ "$$OBSIDIAN_VAULT_PATH" = "/path/to/your/obsidian/vault" ] || [ "$$OBSIDIAN_VAULT_PATH" = "~/Documentos/notas/mi-vault" ]; then \
 		echo ""; \
 		echo "$(YELLOW)⚠ OBSIDIAN_VAULT_PATH not set in .env$(NC)"; \
@@ -380,21 +408,41 @@ start: ## 🚀 Quick start: setup + start all services
 			echo "  ✓ Updated OBSIDIAN_VAULT_PATH in .env"; \
 		fi; \
 	fi
-	@. .env 2>/dev/null || true; \
+	@SECRET_KEY=$(call env_key,SECRET_KEY); \
 	if [ -z "$$SECRET_KEY" ] || [ "$$SECRET_KEY" = "change_this_to_a_random_secret_key" ]; then \
 		NEW_SECRET=$$(openssl rand -hex 32 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null || echo "dev_secret_$$(date +%s)"); \
 		$(SED_INPLACE) "s|^SECRET_KEY=.*|SECRET_KEY=$$NEW_SECRET|" .env; \
 		echo "  ✓ Generated new SECRET_KEY"; \
 	fi
-	@. .env 2>/dev/null || true; \
+	@POSTGRES_PASSWORD=$(call env_key,POSTGRES_PASSWORD); \
 	if [ -z "$$POSTGRES_PASSWORD" ]; then \
 		NEW_PW=$$(openssl rand -hex 24 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(24))" 2>/dev/null || echo "dev_pw_$$(date +%s)"); \
 		$(SED_INPLACE) "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$$NEW_PW|" .env; \
 		echo "  ✓ Generated new POSTGRES_PASSWORD"; \
 	fi
+	@INTERNAL_SECRET=$(call env_key,INTERNAL_SECRET); \
+	if [ -z "$$INTERNAL_SECRET" ]; then \
+		NEW_IS=$$(openssl rand -hex 32 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null || echo "dev_internal_$$(date +%s)"); \
+		if grep -qE '^\#?INTERNAL_SECRET=' .env; then \
+			$(SED_INPLACE) "s|^\#?INTERNAL_SECRET=.*|INTERNAL_SECRET=$$NEW_IS|" .env; \
+		else \
+			printf '\nINTERNAL_SECRET=%s\n' "$$NEW_IS" >> .env; \
+		fi; \
+		echo "  ✓ Generated new INTERNAL_SECRET"; \
+	fi
+	@INTERNAL_API_TOKEN=$(call env_key,INTERNAL_API_TOKEN); \
+	if [ -z "$$INTERNAL_API_TOKEN" ]; then \
+		NEW_TOKEN=$$(openssl rand -hex 32 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null || echo "dev_tok_$$(date +%s)"); \
+		if grep -qE '^INTERNAL_API_TOKEN=' .env; then \
+			$(SED_INPLACE) "s|^INTERNAL_API_TOKEN=.*|INTERNAL_API_TOKEN=$$NEW_TOKEN|" .env; \
+		else \
+			echo "INTERNAL_API_TOKEN=$$NEW_TOKEN" >> .env; \
+		fi; \
+		echo "  ✓ Generated new INTERNAL_API_TOKEN"; \
+	fi
 	@echo ""
 	@echo "Step 2: Starting services..."
-	@. .env 2>/dev/null || true; \
+	@OBSIDIAN_VAULT_PATH=$(call env_key,OBSIDIAN_VAULT_PATH); \
 	case "$$OBSIDIAN_VAULT_PATH" in ~/*) export OBSIDIAN_VAULT_PATH="$(HOME)/$${OBSIDIAN_VAULT_PATH#~/}";; ~) export OBSIDIAN_VAULT_PATH="$(HOME)";; esac; \
 	$(DOCKER_COMPOSE) -p $(COMPOSE_PROJECT) -f docker-compose.yml -f docker-compose.dev.yml up --build -d
 	@echo ""

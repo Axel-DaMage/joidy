@@ -14,6 +14,7 @@ from logging_config import setup_logging
 from middleware.metrics import MetricsMiddleware
 from middleware.rate_limit import RateLimitMiddleware
 from middleware.request_id import RequestIdMiddleware
+from middleware.security_headers import SecurityHeadersMiddleware
 from routers import (
     achievements,
     ai,
@@ -43,7 +44,12 @@ from routers import (
     websocket,
 )
 from routers.integrations import github, google, spotify, strava
-from services.auth_service import _effective_auth_password, get_current_user, verify_token
+from services.auth_service import (
+    _effective_auth_password,
+    get_current_user,
+    get_current_user_or_internal,
+    verify_token,
+)
 from services.http_client import aclose_http_clients, http_client
 from services.response_cache import get_cache_stats
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -215,12 +221,15 @@ app.add_middleware(
 )
 app.add_middleware(CorsSafetyMiddleware)
 app.add_middleware(RequestIdMiddleware)
+# Outermost: security headers must reach every response, including CORS
+# preflights, rate-limit 429s and exception-path 500s (#1283).
+app.add_middleware(SecurityHeadersMiddleware)
 
-app.include_router(notes.router, dependencies=[Depends(get_current_user)])
+app.include_router(notes.router, dependencies=[Depends(get_current_user_or_internal)])
 app.include_router(config.router)
 app.include_router(metrics.router, dependencies=[Depends(get_current_user)])
 app.include_router(mood.router, dependencies=[Depends(get_current_user)])
-app.include_router(emails.router, dependencies=[Depends(get_current_user)])
+app.include_router(emails.router, dependencies=[Depends(get_current_user_or_internal)])
 app.include_router(tags.router, dependencies=[Depends(get_current_user)])
 app.include_router(skills.router, dependencies=[Depends(get_current_user)])
 app.include_router(goals.router, dependencies=[Depends(get_current_user)])
@@ -234,7 +243,7 @@ app.include_router(github.router, dependencies=[Depends(get_current_user)])
 app.include_router(google.router)
 app.include_router(strava.router, dependencies=[Depends(get_current_user)])
 app.include_router(spotify.router, dependencies=[Depends(get_current_user)])
-app.include_router(vault.router, dependencies=[Depends(get_current_user)])
+app.include_router(vault.router, dependencies=[Depends(get_current_user_or_internal)])
 app.include_router(folders.router, dependencies=[Depends(get_current_user)])
 app.include_router(ai.router, dependencies=[Depends(get_current_user)])
 app.include_router(planning.router, dependencies=[Depends(get_current_user)])
@@ -247,7 +256,15 @@ app.include_router(stats.router, dependencies=[Depends(get_current_user)])
 app.include_router(analytics.router, dependencies=[Depends(get_current_user)])
 app.include_router(sync.router, dependencies=[Depends(get_current_user)])
 app.include_router(upload.router, dependencies=[Depends(get_current_user)])
-app.include_router(system.router, dependencies=[Depends(get_current_user)])
+# /system/power is opt-in (#1278): the engine socket is only mounted via the
+# docker-compose.power.yml overlay. When the feature is off we register a
+# status-only stub so GET /system/power/status still answers cleanly
+# (docker_available=false → the Settings → Servicios panel shows its CLI hint)
+# while the sleep/wake/shutdown routes do not exist at all.
+if settings.power_management_enabled:
+    app.include_router(system.router, dependencies=[Depends(get_current_user)])
+else:
+    app.include_router(system.disabled_router, dependencies=[Depends(get_current_user)])
 
 # Ensure the upload directory exists before serving it. This is best-effort:
 # uploads are a non-critical feature, so an unwritable path (read-only mount,

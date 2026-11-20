@@ -422,6 +422,23 @@ export interface CalendarTaskUpdateInput {
   reminder_minutes?: number | null;
 }
 
+// AI plan suggestions (#1237): ghost slots proposed by the ai-service.
+export interface PlanSuggestion {
+  task_id: number;
+  date: string;
+  start_time: string;
+  end_time: string | null;
+  rationale: string;
+}
+
+export interface PlanSuggestResponse {
+  suggestions: PlanSuggestion[];
+  available: boolean;
+  reason?: string;
+  provider?: string;
+  status?: string;
+}
+
 export interface EmailInbox {
   items: EmailSummary[];
   total: number;
@@ -781,6 +798,12 @@ export const api = {
         { messages },
         { silent: true }
       ),
+    planSuggest: (input: {
+      week_start: string;
+      week_end: string;
+      timezone: string;
+      context_hint?: string | null;
+    }) => req<PlanSuggestResponse>('POST', '/ai/plan-suggest', input, { silent: true }),
   },
 
   github: {

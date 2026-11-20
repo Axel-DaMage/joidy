@@ -41,6 +41,38 @@ ExecStart=${PROJECT_DIR}/scripts/joidy_startup.sh
 RemainAfterExit=yes
 ExecStop=${PROJECT_DIR}/scripts/joidy.sh down
 
+# ── Baseline sandboxing (#1327) ───────────────────────────────────────
+# This is a systemd --user unit: the namespace options below implicitly
+# enable PrivateUsers= and need unprivileged user namespaces
+# (kernel.unprivileged_userns_clone=1 — the default on most distros).
+NoNewPrivileges=yes
+PrivateTmp=yes
+# Mount the whole filesystem read-only except the paths allow-listed in
+# ReadWritePaths= (the "-" prefix silently skips paths that don't exist
+# instead of failing namespace setup). The CLI writes: the project dir
+# (.env + data/, resolved at install time), the XDG data dir (data/idle
+# state + backups/), ~/.config/joidy (env file on read-only installs),
+# docker/podman client state and rootless podman storage.
+ProtectSystem=strict
+ReadWritePaths=-${PROJECT_DIR} -${XDG_DATA_HOME:-$HOME/.local/share}/joidy
+ReadWritePaths=-%h/joidy -%h/.config/joidy -%h/.local/share/joidy -%h/.docker
+ReadWritePaths=-%h/.config/containers -%h/.local/share/containers -%h/.cache/containers
+ReadWritePaths=-%t/containers -%t/podman
+# Home and /run/user stay READABLE — ~/.config/joidy/path, the .env file
+# and the Obsidian vault (OBSIDIAN_VAULT_PATH) are read from there — but
+# writable only via the allow-list above.
+ProtectHome=read-only
+RestrictSUIDSGID=yes
+LockPersonality=yes
+ProtectKernelModules=yes
+# AF_UNIX: engine socket + journal. AF_INET/AF_INET6: API health checks.
+# AF_NETLINK: iproute2 (ss, ip, hostname -I) used by the port checks and
+# LAN-IP detection in scripts/joidy.sh — without it ss fails
+# silently and busy ports would appear free.
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+# Only bash and the docker/podman clients run — no JIT needs W+X pages.
+MemoryDenyWriteExecute=yes
+
 [Install]
 WantedBy=default.target
 EOF
