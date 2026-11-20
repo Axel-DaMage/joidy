@@ -720,6 +720,9 @@
     "thinking": "Thinking…",
     "inputPlaceholder": "Type a message… (Enter to send, Shift+Enter for newline)",
     "send": "Send",
+    "retry": "Retry",
+    "errorSend": "The message could not be sent.",
+    "sourcesLabel": "Based on your notes",
     "conversation": "Conversation with the assistant",
     "you": "You"
   },
