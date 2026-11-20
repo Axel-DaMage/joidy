@@ -110,79 +110,25 @@ jobs:
       - name: Bump version strings
         env:
           VERSION: ${{ steps.version.outputs.version }}
-          VERSION_CLEAN: ${{ steps.version.outputs.version_clean }}
         run: |
-          TODAY=$(date +%Y-%m-%d)
-
-          # README badge. Consume everything up to the closing quote and
-          # re-append the color: the old pattern ([0-9a-z.\-]*-[0-9A-Fa-f]*)
-          # matched only "-b" of "-blue" ('l' is not a hex char), leaving
-          # "lue" behind and accumulating junk like "v1.1.0-beta.7ta.6..."
-          # on every release.
-          sed -i "s|badge/JOIDY-v[^?\"]*|badge/JOIDY-v${VERSION_CLEAN}-blue|" README.md
-
-          # AUR PKGBUILD & .SRCINFO (Arch package version forbids hyphens)
-          VERSION_AUR="${VERSION_CLEAN//-/_}"
-          sed -i "s|^pkgver=.*|pkgver=${VERSION_AUR}|" aur/PKGBUILD
-          # NOTE on the version class: inside a sed bracket expression `\-`
-          # is NOT an escaped hyphen — `.\-_` parses as the RANGE \ to _
-          # (0x5C-0x5F), which drops the literal '-' and never matches
-          # pre-release tags like v1.1.0-beta.7. The hyphen goes last.
-          sed -i "s|archive/v[0-9a-z._-]*\.tar\.gz|archive/v${VERSION_CLEAN}.tar.gz|" aur/PKGBUILD
-
-          # .SRCINFO fields are TAB-indented (makepkg format), so anchors
-          # without \t never matched and the file shipped a stale pkgver +
-          # source URL to the AUR (it published 1.1.0_beta.0 during the
-          # v1.1.0-beta.6 release while PKGBUILD was correct).
-          sed -i "s|^\tpkgver = .*|\tpkgver = ${VERSION_AUR}|" aur/.SRCINFO
-          sed -i "s|^\tsource = https://github.com/Axel-DaMage/joidy/archive/v[0-9a-z._-]*\.tar\.gz|\tsource = https://github.com/Axel-DaMage/joidy/archive/v${VERSION_CLEAN}.tar.gz|" aur/.SRCINFO
-
-          # Reset sha256sums to SKIP for the new version (#1296, #1394): the
-          # release tarball does not exist until the tag is pushed, so the
-          # real sums are injected post-tag by the "Inject release checksums"
-          # step below (and again by aur-publish.yml at publish time).
-          sed -i "s|^sha256sums=(.*|sha256sums=('SKIP' 'SKIP')|" aur/PKGBUILD
-          sed -i "s|^\tsha256sums = .*|\tsha256sums = SKIP|" aur/.SRCINFO
-
-          # docker-compose.release.yml pins the image tags of the release it
-          # ships with (#1394) — keep it in lockstep with the version.
-          sed -i "s|\(image: d4mag3/joidy-[a-z-]*:\)[0-9a-z.-]*|\1${VERSION_CLEAN}|g" docker-compose.release.yml
-
-          # Pin the one-shot installer URLs in docs and the installers'
-          # own usage headers to the release tag (#1394) — a tagged URL is
-          # immutable, unlike the raw branch refs they replaced.
-          # NOTE: ERE (-E) and ';' delimiter — GNU sed BRE does not support
-          # '\|' inside '\(\)' groups, and '|' clashes with the alternation.
-          for f in README.md INSTALL.md scripts/install.sh scripts/install.ps1; do
-            sed -i -E "s;(raw\.githubusercontent\.com/Axel-DaMage/joidy/)[^/]+/(scripts/install\.(sh|ps1));\1${VERSION}/\2;g" "$f"
-          done
-
-          # docs metadata (index.md, api.md, architecture.md)
-          for f in docs/index.md docs/api.md docs/architecture.md; do
-            [ -f "$f" ] && sed -i "s|^version: [0-9a-z.\-]*|version: ${VERSION_CLEAN}|" "$f"
-          done
-
-          # docs/troubleshooting.md
-          sed -i "s|^last_updated: .*|last_updated: ${TODAY}|" docs/troubleshooting.md
-          sed -i "s|^version: [0-9a-z.\-]*|version: ${VERSION_CLEAN}|" docs/troubleshooting.md
-
-          # frontend/package.json + package-lock.json (previously never
-          # bumped by releases)
-          sed -i "s|\"version\": \"[0-9a-z.\-]*\"|\"version\": \"${VERSION_CLEAN}\"|" frontend/package.json
-          # bump the "version" line that follows each "name": "joidy-frontend" occurrence
-          # (braces are required: an unaddressed s/// would rewrite every
-          # dependency version in the lockfile)
-          sed -i '/"name": "joidy-frontend",/{N;s/"version": "[0-9a-z.\-]*"/"version": "${VERSION_CLEAN}"/;}' frontend/package-lock.json
-
-          # CHANGELOG.md: move [Unreleased] body to new version section
-          # This is handled manually for major releases; for auto-bump
-          # patch releases the [Unreleased] section stays as-is and the
-          # new tag is referenced at the bottom.
-          # Update compare links
-          sed -i "s|\[unreleased\]: .*/compare/v[0-9a-z.\-]*\.\.\.HEAD|[unreleased]: https://github.com/Axel-DaMage/joidy/compare/v${VERSION_CLEAN}...HEAD|" CHANGELOG.md
-
-          # Show what changed
+          # Single-source versioning (#1258): VERSION is canonical;
+          # scripts/release_bump.sh regenerates every dependent —
+          # VERSION itself, pyproject.toml, frontend package.json +
+          # lockfile, aur/PKGBUILD + makepkg-generated .SRCINFO,
+          # docker-compose.release.yml, README badge, pinned installer
+          # URLs, docs metadata, CHANGELOG compare link — and verifies
+          # they all agree before returning. No more per-file seds.
+          bash scripts/release_bump.sh "$VERSION"
           git diff --stat
+
+      - name: Verify version consistency
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          # Post-bump assertion (#1258): fail loudly if any versioned file
+          # disagrees with the release version — the silent-drift failure
+          # mode this replaces used to ship wrong versions to users.
+          bash scripts/release_bump.sh --check "$VERSION"
 
       - name: Commit version bump
         env:
