@@ -86,11 +86,14 @@ def _write_md(path: Path, title: str, body: str, tags=None) -> str:
     return fm
 
 
-async def _run_consumer_once(queue, client, *, debounce=0.05, flush=0.02):
+async def _run_consumer_once(queue, client, *, vault=None, debounce=0.05, flush=0.02):
     """Run the consumer loop for a single batch then stop it.
 
     Patches the debounce/flush intervals to keep tests fast, and sets the
     shutdown event after the first batch completes so the loop exits cleanly.
+    ``vault`` is the directory treated as the vault root for the containment
+    check (#1293); it defaults to the system temp dir since test vaults are
+    TemporaryDirectory instances.
     """
     event_log = PersistentEventLog(os.path.join(tempfile.gettempdir(), "test_events.db"))
     try:
@@ -98,6 +101,7 @@ async def _run_consumer_once(queue, client, *, debounce=0.05, flush=0.02):
             patch("watchers.vault_watcher.DEBOUNCE_SECONDS", debounce),
             patch("watchers.vault_watcher.QUEUE_FLUSH_INTERVAL", flush),
             patch("watchers.vault_watcher.get_auth_token", new=AsyncMock(return_value="token")),
+            patch.object(vault_watcher.settings, "vault_path", str(vault or tempfile.gettempdir())),
         ):
             consumer_task = asyncio.create_task(_consume_vault_events(queue, client, "token", event_log))
             # Wait until the consumer has processed the batch (queue drained
@@ -156,7 +160,7 @@ class TestVaultWatcherIntegration(unittest.IsolatedAsyncioTestCase):
                 ]
             )
 
-            await _run_consumer_once(queue, client)
+            await _run_consumer_once(queue, client, vault=vault)
 
             assert client.post.call_count == 1
             payload = client.post.call_args.kwargs["json"]
@@ -181,7 +185,7 @@ class TestVaultWatcherIntegration(unittest.IsolatedAsyncioTestCase):
                 ]
             )
 
-            await _run_consumer_once(queue, client)
+            await _run_consumer_once(queue, client, vault=vault)
 
             assert client.put.call_count == 1
             url = client.put.call_args.args[0]
@@ -207,7 +211,7 @@ class TestVaultWatcherIntegration(unittest.IsolatedAsyncioTestCase):
                 ]
             )
 
-            await _run_consumer_once(queue, client)
+            await _run_consumer_once(queue, client, vault=vault)
 
             assert client.delete.call_count == 1
             url = client.delete.call_args.args[0]
@@ -239,7 +243,7 @@ class TestVaultWatcherIntegration(unittest.IsolatedAsyncioTestCase):
                 ]
             )
 
-            await _run_consumer_once(queue, client)
+            await _run_consumer_once(queue, client, vault=vault)
 
             assert client.post.call_count == 2
             paths = [call.kwargs["json"]["source_path"] for call in client.post.call_args_list]
@@ -273,7 +277,7 @@ class TestVaultWatcherIntegration(unittest.IsolatedAsyncioTestCase):
                 ]
             )
 
-            await _run_consumer_once(queue, client)
+            await _run_consumer_once(queue, client, vault=vault)
 
             # Rename path: PUT to update source_path, no DELETE, no POST.
             assert client.put.call_count == 1
@@ -310,7 +314,7 @@ class TestVaultDebounce(unittest.IsolatedAsyncioTestCase):
             )
 
             # Use a longer debounce to verify timing.
-            elapsed = await self._timed_consumer(queue, client, debounce=0.3, flush=0.02)
+            elapsed = await self._timed_consumer(queue, client, debounce=0.3, flush=0.02, vault=vault)
 
             assert elapsed >= 0.3, f"Debounce not respected: {elapsed:.3f}s < 0.3s"
             assert client.post.call_count == 1
@@ -335,12 +339,12 @@ class TestVaultDebounce(unittest.IsolatedAsyncioTestCase):
                 ]
             )
 
-            await _run_consumer_once(queue, client, debounce=0.05, flush=0.02)
+            await _run_consumer_once(queue, client, vault=vault, debounce=0.05, flush=0.02)
 
             # Dedup: only one POST despite three events for the same path.
             assert client.post.call_count == 1
 
-    async def _timed_consumer(self, queue, client, *, debounce, flush):
+    async def _timed_consumer(self, queue, client, *, debounce, flush, vault=None):
         """Run the consumer and return elapsed wall-clock time."""
         import time
 
@@ -351,6 +355,7 @@ class TestVaultDebounce(unittest.IsolatedAsyncioTestCase):
                 patch("watchers.vault_watcher.DEBOUNCE_SECONDS", debounce),
                 patch("watchers.vault_watcher.QUEUE_FLUSH_INTERVAL", flush),
                 patch("watchers.vault_watcher.get_auth_token", new=AsyncMock(return_value="token")),
+                patch.object(vault_watcher.settings, "vault_path", str(vault or tempfile.gettempdir())),
             ):
                 consumer_task = asyncio.create_task(_consume_vault_events(queue, client, "token", event_log))
                 await asyncio.sleep(debounce + flush + 0.3)
@@ -381,7 +386,7 @@ class TestVaultConflictEdgeCases(unittest.IsolatedAsyncioTestCase):
                 ]
             )
 
-            await _run_consumer_once(queue, client)
+            await _run_consumer_once(queue, client, vault=vault)
 
             assert client.delete.call_count == 0
             assert client.post.call_count == 0
@@ -412,10 +417,70 @@ class TestVaultConflictEdgeCases(unittest.IsolatedAsyncioTestCase):
                 ]
             )
 
-            await _run_consumer_once(queue, client)
+            await _run_consumer_once(queue, client, vault=vault)
 
             # Last event wins → delete.
             assert client.delete.call_count == 1
+            assert client.put.call_count == 0
+
+
+class TestVaultSymlinkSecurity(unittest.IsolatedAsyncioTestCase):
+    """Vault reads must never follow symlinks or escape the vault root —
+    ``ln -s /app/.env vault/leak.md`` would otherwise store secrets as a note
+    readable via the API (#1293)."""
+
+    async def test_symlink_event_never_reaches_api(self):
+        with tempfile.TemporaryDirectory() as vault, tempfile.TemporaryDirectory() as outside:
+            secret = Path(outside) / ".env"
+            secret.write_text("SECRET_KEY=abc\nPOSTGRES_PASSWORD=x", encoding="utf-8")
+            link = Path(vault) / "leak.md"
+            link.symlink_to(secret)
+
+            queue = asyncio.Queue()
+            await queue.put(VaultEvent(path=str(link), change_type=Change.added))
+
+            client = _make_client([])
+            await _run_consumer_once(queue, client, vault=vault)
+
+            assert client.get.call_count == 0
+            assert client.post.call_count == 0
+            assert client.put.call_count == 0
+            assert client.delete.call_count == 0
+
+    async def test_symlinked_parent_dir_escape_is_skipped(self):
+        """A file under a symlinked dir inside the vault resolves outside the
+        vault root and must be skipped, even though the path itself is not a
+        symlink (#1293)."""
+        with tempfile.TemporaryDirectory() as vault, tempfile.TemporaryDirectory() as outside:
+            secret = Path(outside) / "escaped.md"
+            secret.write_text("SECRET", encoding="utf-8")
+            (Path(vault) / "linkdir").symlink_to(outside, target_is_directory=True)
+            escaped = Path(vault) / "linkdir" / "escaped.md"
+
+            queue = asyncio.Queue()
+            await queue.put(VaultEvent(path=str(escaped), change_type=Change.added))
+
+            client = _make_client([])
+            await _run_consumer_once(queue, client, vault=vault)
+
+            assert client.get.call_count == 0
+            assert client.post.call_count == 0
+            assert client.put.call_count == 0
+
+    async def test_non_regular_file_event_is_skipped(self):
+        """FIFOs/sockets/devices inside the vault are never read (#1293)."""
+        with tempfile.TemporaryDirectory() as vault:
+            fifo = Path(vault) / "pipe.md"
+            os.mkfifo(fifo)
+
+            queue = asyncio.Queue()
+            await queue.put(VaultEvent(path=str(fifo), change_type=Change.added))
+
+            client = _make_client([])
+            await _run_consumer_once(queue, client, vault=vault)
+
+            assert client.get.call_count == 0
+            assert client.post.call_count == 0
             assert client.put.call_count == 0
 
 
