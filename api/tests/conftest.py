@@ -49,6 +49,12 @@ os.environ["APP_ENV"] = "test"
 # BCRYPT_ROUNDS explicitly.
 os.environ.setdefault("BCRYPT_ROUNDS", "4")
 
+# The /system/power router is opt-in in production (#1278). The suite exercises
+# its endpoints through the shared `app`, so enable it before `import main`
+# builds the route table; the disabled-mode stub is tested in isolation in
+# test_routers_system.py.
+os.environ.setdefault("POWER_MANAGEMENT_ENABLED", "true")
+
 # Safety: only allow destructive TRUNCATE on databases whose name contains
 # "test" to prevent accidentally wiping a shared dev/production database (#503).
 from urllib.parse import urlparse, urlunparse

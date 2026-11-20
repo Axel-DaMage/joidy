@@ -132,6 +132,18 @@ elif [ -f "$PROJECT_DIR/.env.example" ]; then
   ENV_FILE_ARG="--env-file $ENV_FILE"
 fi
 
+# ─── Power management flag (#1278) ────────────────────────────────
+# Resolved once here: env var → .env → default off. When true, `joidy up` adds
+# the docker-compose.power.yml overlay (mounts the engine socket into api) and
+# the DOCKER_GID detection below runs so `group_add` gets a real GID — never
+# group 0/root. Off by default: the socket grants full control of the
+# container engine (see SECURITY.md § "Gestión de energía").
+POWER_MGMT_ENABLED="${POWER_MANAGEMENT_ENABLED:-}"
+if [ -z "$POWER_MGMT_ENABLED" ] && [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
+  POWER_MGMT_ENABLED=$(grep -E '^POWER_MANAGEMENT_ENABLED=' "$ENV_FILE" | head -1 | cut -d'=' -f2-)
+fi
+[ "$POWER_MGMT_ENABLED" = "true" ] || POWER_MGMT_ENABLED="false"
+
 # Auto-generate required secrets if empty or placeholder
 generate_secret() {
   local len="$1"
@@ -161,6 +173,20 @@ if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
     print_ok "Generated SECRET_KEY"
     CHANGED=1
   fi
+  # INTERNAL_SECRET — shared secret for API → ai-service auth (#1277).
+  # .env files predating #1277 have no INTERNAL_SECRET line at all, so append
+  # it when missing instead of relying on sed substitution alone.
+  IS=$(grep -E '^INTERNAL_SECRET=' "$ENV_FILE" | cut -d'=' -f2-)
+  if [ -z "$IS" ]; then
+    NEW_IS=$(generate_secret 32)
+    if grep -qE '^#?INTERNAL_SECRET=' "$ENV_FILE"; then
+      sed -i "s|^#\?INTERNAL_SECRET=.*|INTERNAL_SECRET=${NEW_IS}|" "$ENV_FILE"
+    else
+      printf '\nINTERNAL_SECRET=%s\n' "$NEW_IS" >>"$ENV_FILE"
+    fi
+    print_ok "Generated INTERNAL_SECRET"
+    CHANGED=1
+  fi
   # GRAFANA_ADMIN_PASSWORD
   GRAFANA_PW=$(grep -E '^GRAFANA_ADMIN_PASSWORD=' "$ENV_FILE" | cut -d'=' -f2-)
   if [ -z "$GRAFANA_PW" ]; then
@@ -173,13 +199,14 @@ if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
     print_warn "Auto-generated required secrets in $ENV_FILE"
     print_warn "Edit $ENV_FILE to add: GEMINI_API_KEY, OBSIDIAN_VAULT_PATH, etc."
   fi
-  # DOCKER_GID — group owning the Docker socket. The API joins it via
-  # `group_add` so the web UI (Settings → Servicios) can query and stop/start
-  # services. Without it the default is 0 (root), which cannot read
-  # /var/run/docker.sock on Linux and the panel reports Docker as unavailable.
+  # DOCKER_GID — group owning the Docker socket. Only needed when power
+  # management is enabled (#1278): the opt-in docker-compose.power.yml overlay
+  # requires it for `group_add` and refuses to fall back to group 0 (root).
+  # When unset we detect the socket's owner group here and persist it to .env;
+  # if detection fails, compose fails fast with a clear `DOCKER_GID:?` error.
   # Skip for Podman: rootless containers already have socket access via UID
-  # mapping, so no group_add is needed.
-  if [ "$CONTAINER_ENGINE" != "podman" ]; then
+  # mapping, so no group_add is needed for access (see the Podman section).
+  if [ "$POWER_MGMT_ENABLED" = "true" ] && [ "$CONTAINER_ENGINE" != "podman" ]; then
     DOCKER_GID_CURRENT=$(grep -E '^DOCKER_GID=' "$ENV_FILE" | cut -d'=' -f2-)
     if [ -z "$DOCKER_GID_CURRENT" ]; then
       DOCKER_SOCK=$(grep -E '^DOCKER_SOCK_PATH=' "$ENV_FILE" | cut -d'=' -f2-)
@@ -195,6 +222,9 @@ if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
           printf '\nDOCKER_GID=%s\n' "$DETECTED_GID" >>"$ENV_FILE"
         fi
         print_ok "Detected Docker socket group (DOCKER_GID=${DETECTED_GID})"
+      else
+        print_warn "POWER_MANAGEMENT_ENABLED=true but DOCKER_GID could not be detected"
+        print_warn "Set it in $ENV_FILE: getent group docker | cut -d: -f3"
       fi
     fi
   fi
@@ -256,12 +286,22 @@ IDLE_STATE_DIR="${JOIDY_DATA_DIR}/idle"
 # Podman rootless uses a per-user socket at $XDG_RUNTIME_DIR/podman/podman.sock
 # (typically /run/user/$UID/podman/podman.sock), owned by the user — no group
 # needed. Docker uses /var/run/docker.sock owned by the docker group.
-# We set DOCKER_SOCK_PATH so compose mounts the right socket, and skip DOCKER_GID
+# We set DOCKER_SOCK_PATH so the opt-in power overlay mounts the right socket
+# (only applied when POWER_MANAGEMENT_ENABLED=true, #1278), and skip DOCKER_GID
 # detection for Podman since rootless containers already have socket access.
 if [ "$CONTAINER_ENGINE" = "podman" ]; then
   PODMAN_SOCK="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/podman/podman.sock"
   if [ -S "$PODMAN_SOCK" ]; then
     export DOCKER_SOCK_PATH="$PODMAN_SOCK"
+    # docker-compose.power.yml interpolates ${DOCKER_GID:?} for group_add and
+    # refuses a root default. Rootless doesn't need group_add for access, so
+    # satisfy the required var with the socket's owner group (the user's own
+    # GID) — honoring a DOCKER_GID the user set explicitly.
+    if [ "$POWER_MGMT_ENABLED" = "true" ] && [ -z "${DOCKER_GID:-}" ]; then
+      DOCKER_GID=$(stat -c '%g' "$PODMAN_SOCK" 2>/dev/null || stat -f '%g' "$PODMAN_SOCK" 2>/dev/null || id -g)
+      export DOCKER_GID
+      print_ok "Set DOCKER_GID=${DOCKER_GID} for power overlay (Podman)"
+    fi
     # Ensure the env file has the Podman socket path for compose
     if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
       CURRENT_SOCK=$(grep -E '^DOCKER_SOCK_PATH=' "$ENV_FILE" | cut -d'=' -f2-)
@@ -302,8 +342,15 @@ get_lan_ip() {
 
 print_access_url() {
   local port="${FRONTEND_PORT:-3000}"
-  local ip
-  ip=$(get_lan_ip)
+  local ip bind
+  # Ports bind to loopback by default (#1277): only advertise a LAN URL when
+  # BIND_ADDR actually exposes the services.
+  bind=$(read_setting BIND_ADDR "127.0.0.1")
+  if [ "$bind" = "0.0.0.0" ] || [ "$bind" = "::" ]; then
+    ip=$(get_lan_ip)
+  else
+    ip="localhost"
+  fi
   echo ""
   echo -e "${GREEN}╔══════════════════════════════════════════════╗${NC}"
   echo -e "${GREEN}║  Joidy is running at:                        ║${NC}"
@@ -331,11 +378,24 @@ profile_args() {
   echo "$args"
 }
 
+# Extra `-f` args for opt-in compose overlays.
+#   docker-compose.power.yml — mounts the engine socket into `api` and sets
+#   POWER_MANAGEMENT_ENABLED=true; only added when the flag is on (#1278).
+#   Only `up` needs it: the socket is baked into the container at create time;
+#   `down`/`stop`/`start`/`ps` operate on existing containers either way.
+power_compose_args() {
+  if [ "$POWER_MGMT_ENABLED" = "true" ] && [ -f "$PROJECT_DIR/docker-compose.power.yml" ]; then
+    echo "-f docker-compose.power.yml"
+  fi
+}
+
 # ─── Port fallback helpers ─────────────────────────────────────────
-# Before `joidy up`, resolve a free host port for each service. If the
-# configured port is busy by a foreign process, try up to 5 subsequent ports.
-# Ports held by our own compose project's containers are reused (idempotent).
-# If no free port is found, abort without running `compose up`.
+# Before `joidy up`, resolve a free host port for each service that publishes
+# to the host (api, frontend — ai-service and worker have no published port
+# since #1277 and stay on the internal compose network). If the configured
+# port is busy by a foreign process, try up to 5 subsequent ports. Ports held
+# by our own compose project's containers are reused (idempotent). If no free
+# port is found, abort without running `compose up`.
 
 # Read a setting: env var → .env file → default.
 read_setting() {
@@ -404,32 +464,21 @@ find_free_port() {
   return 1
 }
 
-# Resolve free host ports for all 4 services and export them. Aborts (exit 1)
-# without invoking compose if any service cannot get a free port.
+# Resolve free host ports for the services that publish to the host (api,
+# frontend) and export them. Aborts (exit 1) without invoking compose if any
+# service cannot get a free port.
 resolve_ports() {
-  local api_def ai_def worker_def frontend_def
+  local api_def frontend_def
   api_def=$(read_port API_PORT 8000)
-  ai_def=$(read_port AI_SERVICE_PORT 8002)
-  worker_def=$(read_port WORKER_PORT 8001)
   frontend_def=$(read_port FRONTEND_PORT 3000)
 
   RESOLVED_PORTS=()
-  local api ai worker frontend
+  local api frontend
   api=$(find_free_port "$api_def") || {
     print_err "No free port for api (tried ${api_def}..$((api_def + 5))) — aborting."
     exit 1
   }
   RESOLVED_PORTS+=("$api")
-  ai=$(find_free_port "$ai_def") || {
-    print_err "No free port for ai-service (tried ${ai_def}..$((ai_def + 5))) — aborting."
-    exit 1
-  }
-  RESOLVED_PORTS+=("$ai")
-  worker=$(find_free_port "$worker_def") || {
-    print_err "No free port for worker (tried ${worker_def}..$((worker_def + 5))) — aborting."
-    exit 1
-  }
-  RESOLVED_PORTS+=("$worker")
   frontend=$(find_free_port "$frontend_def") || {
     print_err "No free port for frontend (tried ${frontend_def}..$((frontend_def + 5))) — aborting."
     exit 1
@@ -437,13 +486,9 @@ resolve_ports() {
   RESOLVED_PORTS+=("$frontend")
 
   export API_PORT="$api"
-  export AI_SERVICE_PORT="$ai"
-  export WORKER_PORT="$worker"
   export FRONTEND_PORT="$frontend"
 
   [ "$api" != "$api_def" ] && print_warn "API_PORT bumped ${api_def}→${api}"
-  [ "$ai" != "$ai_def" ] && print_warn "AI_SERVICE_PORT bumped ${ai_def}→${ai}"
-  [ "$worker" != "$worker_def" ] && print_warn "WORKER_PORT bumped ${worker_def}→${worker}"
   [ "$frontend" != "$frontend_def" ] && print_warn "FRONTEND_PORT bumped ${frontend_def}→${frontend}"
   return 0
 }
@@ -463,13 +508,17 @@ cmd_pull() {
 cmd_up() {
   print_status "Starting Joidy services..."
   resolve_ports
-  local profile
+  local profile power
   profile="$(profile_args)"
-  if [ -n "$profile" ]; then
-    $DOCKER_CMD $ENV_FILE_ARG $profile up -d
-  else
-    $DOCKER_CMD $ENV_FILE_ARG up -d
+  power="$(power_compose_args)"
+  if [ -n "$power" ]; then
+    print_warn "Power management enabled — mounting the engine socket into api (docker-compose.power.yml)"
+  elif [ "$POWER_MGMT_ENABLED" = "true" ]; then
+    print_warn "POWER_MANAGEMENT_ENABLED=true but docker-compose.power.yml not found in $PROJECT_DIR"
+    print_warn "The socket will NOT be mounted and Settings → Servicios will show Docker as unavailable."
   fi
+  # Intentional word splitting: $power/$profile expand to zero or more flags.
+  $DOCKER_CMD $ENV_FILE_ARG $power $profile up -d
   print_status "Waiting for services to stabilize..."
   sleep 5
   cmd_status
@@ -673,8 +722,9 @@ idle_vault_activity() {
 
 idle_any_activity() {
   local ports
-  ports="$(read_port FRONTEND_PORT 3000) $(read_port API_PORT 8000) \
-$(read_port AI_SERVICE_PORT 8002) $(read_port WORKER_PORT 8001)"
+  # Only host-published ports can carry observable client traffic; ai-service
+  # and worker are internal-only since #1277.
+  ports="$(read_port FRONTEND_PORT 3000) $(read_port API_PORT 8000)"
   idle_tcp_activity $ports && return 0
   idle_db_activity && return 0
   idle_vault_activity && return 0
@@ -1027,18 +1077,27 @@ pg_dump -Fc on BACKUP_SCHEDULE (cron, default "0 3 * * *"), dumps in
 BACKUP_RETENTION_WEEKS weekly dumps. Set BACKUP_ENABLED=false to opt out.
 Verify backups end-to-end with: make backup-verify
 
+Power management (Settings → Servicios): DISABLED by default (#1278).
+Set POWER_MANAGEMENT_ENABLED=true in .env and `joidy up` mounts the engine
+socket into the API via docker-compose.power.yml (DOCKER_GID auto-detected
+on Docker). The socket grants full container-engine control — read the
+residual-risk section in SECURITY.md before enabling.
+
 On first run, .env is auto-created from .env.example with generated
-POSTGRES_PASSWORD, SECRET_KEY, and GRAFANA_ADMIN_PASSWORD.
+POSTGRES_PASSWORD, SECRET_KEY, INTERNAL_SECRET, and GRAFANA_ADMIN_PASSWORD.
 For AUR installs (read-only /usr/share/joidy), .env is stored in
 ~/.config/joidy/.env. Edit it to add GEMINI_API_KEY, OBSIDIAN_VAULT_PATH, etc.
 
 The project directory is auto-detected from the script location.
 
-Port fallback: `joidy up` checks the host ports for api (8000), ai-service
-(8002), worker (8001) and frontend (3000). If a port is already bound by a
-foreign process, it tries up to 5 subsequent ports; if none are free, it
-aborts without starting any service (no half-started stack). Ports held by
-joidy's own containers are reused, so re-running `joidy up` is idempotent.
+Port fallback: `joidy up` checks the host ports for api (8000) and frontend
+(3000) — the only services published to the host, bound to BIND_ADDR
+(default 127.0.0.1; set BIND_ADDR=0.0.0.0 in .env for LAN access).
+ai-service (8002) and worker (8001) stay on the internal compose network.
+If a port is already bound by a foreign process, it tries up to 5
+subsequent ports; if none are free, it aborts without starting any service
+(no half-started stack). Ports held by joidy's own containers are reused,
+so re-running `joidy up` is idempotent.
 HELP
 }
 

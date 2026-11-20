@@ -213,6 +213,23 @@ if ([string]::IsNullOrEmpty($secretKey) -or $secretKey -eq "change_this_to_a_ran
     Write-Success "Generated new SECRET_KEY"
 }
 
+# Check/Generate INTERNAL_SECRET — shared secret for API -> ai-service auth
+# (#1277). Older .env files may lack the line entirely, so append it when the
+# -replace finds nothing to substitute.
+$internalSecret = $envVars["INTERNAL_SECRET"]
+if ([string]::IsNullOrEmpty($internalSecret) -or $internalSecret -match '^0+$') {
+    $bytes = New-Object byte[] 32
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    $rng.GetBytes($bytes)
+    $newInternalSecret = -join ($bytes | ForEach-Object { $_.ToString("x2") })
+    if ((Get-Content ".env" -Raw) -match '(?m)^#?INTERNAL_SECRET=') {
+        (Get-Content ".env") -replace '^#?INTERNAL_SECRET=.*', "INTERNAL_SECRET=$newInternalSecret" | Set-Content ".env"
+    } else {
+        Add-Content ".env" "`nINTERNAL_SECRET=$newInternalSecret"
+    }
+    Write-Success "Generated new INTERNAL_SECRET"
+}
+
 # Check/Generate POSTGRES_PASSWORD
 $postgresPassword = $envVars["POSTGRES_PASSWORD"]
 if ([string]::IsNullOrEmpty($postgresPassword) -or $postgresPassword -match '^0+$') {

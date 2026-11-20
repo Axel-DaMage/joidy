@@ -131,6 +131,20 @@ if ($EnvFile -and (Test-Path $EnvFile)) {
     $changed = $true
   }
 
+  # INTERNAL_SECRET - shared secret for API -> ai-service auth (#1277).
+  # .env files predating #1277 may not contain the line at all: append it
+  # when missing instead of relying on -replace alone.
+  if ($envContent -notmatch '(?m)^INTERNAL_SECRET=\S') {
+    $newIs = Generate-Secret 32
+    if ($envContent -match '(?m)^#?INTERNAL_SECRET=') {
+      $envContent = $envContent -replace '(?m)^#?INTERNAL_SECRET=.*', "INTERNAL_SECRET=$newIs"
+    } else {
+      $envContent = $envContent.TrimEnd() + "`nINTERNAL_SECRET=$newIs`n"
+    }
+    Write-Ok "Generated INTERNAL_SECRET"
+    $changed = $true
+  }
+
   # GRAFANA_ADMIN_PASSWORD
   if ($envContent -match '(?m)^GRAFANA_ADMIN_PASSWORD=(\s*|0+)\s*$') {
     $newGrafanaPw = Generate-Secret 24
@@ -409,12 +423,12 @@ function Test-IdleWatcherAlive {
 }
 
 # Signal 1: an established TCP connection on a published service port.
+# Only api/frontend publish to the host; ai-service and worker are
+# internal-only since #1277.
 function Test-IdleTcp {
   $ports = @(
     [int](Get-IdleEnv 'FRONTEND_PORT' '3000'),
-    [int](Get-IdleEnv 'API_PORT' '8000'),
-    [int](Get-IdleEnv 'AI_SERVICE_PORT' '8002'),
-    [int](Get-IdleEnv 'WORKER_PORT' '8001')
+    [int](Get-IdleEnv 'API_PORT' '8000')
   )
   foreach ($p in $ports) {
     if (Get-NetTCPConnection -LocalPort $p -State Established -ErrorAction SilentlyContinue) { return $true }
@@ -761,7 +775,7 @@ function Show-Help {
   Write-Host "data\backups (or JOIDY_BACKUP_DIR). Set BACKUP_ENABLED=false to opt out."
   Write-Host ""
   Write-Host "On first run, .env is auto-created from .env.example with generated"
-  Write-Host "POSTGRES_PASSWORD, SECRET_KEY, and GRAFANA_ADMIN_PASSWORD."
+  Write-Host "POSTGRES_PASSWORD, SECRET_KEY, INTERNAL_SECRET, and GRAFANA_ADMIN_PASSWORD."
   Write-Host "For system installs (read-only project dir), .env is stored in"
   Write-Host "~/.config/joidy/.env. Edit it to add GEMINI_API_KEY, OBSIDIAN_VAULT_PATH, etc."
   Write-Host ""

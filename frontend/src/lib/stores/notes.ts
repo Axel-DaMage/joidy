@@ -9,6 +9,7 @@ import {
   getAllNotes,
   putNote,
   deleteNote as idbDeleteNote,
+  onTempIdRemap,
 } from './offlineSync';
 
 export const notes        = writable<Note[]>([]);
@@ -25,6 +26,17 @@ let notesLoaded = false;
 let lastTag: string | undefined = undefined;
 let pendingLoad = false;
 let cacheLoadDone = false;
+
+// When an offline `create` is synced, its temp (negative) id is remapped to
+// the real server id. Update the in-memory stores so the note doesn't
+// duplicate and subsequent edits/deletes target the real id (#1304).
+onTempIdRemap((tempId, realNote) => {
+  notes.update((ns) => ns.map((n) => (n.id === tempId ? realNote : n)));
+  currentNote.update((n) => (n && n.id === tempId ? realNote : n));
+  selectedNoteIds.update((s) =>
+    s.has(tempId) ? new Set(Array.from(s, (i) => (i === tempId ? realNote.id : i))) : s
+  );
+});
 
 /** Page size for paginated note fetching. */
 const NOTES_PAGE_SIZE = 200;

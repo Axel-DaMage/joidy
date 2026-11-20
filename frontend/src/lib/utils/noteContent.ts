@@ -29,6 +29,24 @@ export function escapeRegExp(string: string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+// Reattaches slices that were stripped from the editable "visible" content
+// (the `# Tags:` line and/or the YAML frontmatter block) to rebuild the full
+// note content. Callers pass each slice only when it was actually hidden from
+// the view the user edited (#1304).
+export function recomposeHiddenSlices(
+  visible: string,
+  opts: { tagsLine?: string; frontmatter?: string }
+): string {
+  let next = visible;
+  if (opts.tagsLine && !next.includes(opts.tagsLine)) {
+    next = next.trim() + '\n\n' + opts.tagsLine;
+  }
+  if (opts.frontmatter) {
+    next = opts.frontmatter + '\n\n' + next.trim();
+  }
+  return next;
+}
+
 // Returns the updated content with `key: value` written into (or added to) the
 // YAML frontmatter block. Callers persist the result back into editor state.
 export function updateFrontmatterInContent(content: string, key: string, value: string): string {

@@ -416,10 +416,14 @@ docker compose exec ai-service bash
 
 ### 11.3 Test Manual
 
+El ai-service no publica puerto al host (#1277) — ejecutar desde la red
+interna de Compose. Sin `X-Internal-Secret` válido responde 403:
+
 ```bash
-curl -X POST http://localhost:8002/embed \
+docker compose exec api curl -X POST http://ai-service:8002/embed \
   -H "Content-Type: application/json" \
-  -d '{"text": "Hello world"}'
+  -H "X-Internal-Secret: $INTERNAL_SECRET" \
+  -d '{"note_id": 1, "content": "Hello world"}'
 ```
 
 ---

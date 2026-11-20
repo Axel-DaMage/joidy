@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     # only honored (for rate-limit bucketing) when the direct peer matches one
     # of these (#1276). Empty = always use the direct peer IP.
     trusted_proxies: str = ""
+    # Power management (Settings → Servicios) — opt-in (#1278). When false the
+    # /system/power mutation routes are not registered at all and
+    # /system/power/status reports docker_available=false. The engine socket
+    # is only mounted via the docker-compose.power.yml overlay, never by the
+    # base docker-compose.yml.
+    power_management_enabled: bool = False
 
     # GitHub Integration (OAuth - Web Flow + Device Flow)
     github_client_id: str = ""

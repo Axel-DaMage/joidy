@@ -247,7 +247,15 @@ app.include_router(stats.router, dependencies=[Depends(get_current_user)])
 app.include_router(analytics.router, dependencies=[Depends(get_current_user)])
 app.include_router(sync.router, dependencies=[Depends(get_current_user)])
 app.include_router(upload.router, dependencies=[Depends(get_current_user)])
-app.include_router(system.router, dependencies=[Depends(get_current_user)])
+# /system/power is opt-in (#1278): the engine socket is only mounted via the
+# docker-compose.power.yml overlay. When the feature is off we register a
+# status-only stub so GET /system/power/status still answers cleanly
+# (docker_available=false → the Settings → Servicios panel shows its CLI hint)
+# while the sleep/wake/shutdown routes do not exist at all.
+if settings.power_management_enabled:
+    app.include_router(system.router, dependencies=[Depends(get_current_user)])
+else:
+    app.include_router(system.disabled_router, dependencies=[Depends(get_current_user)])
 
 # Ensure the upload directory exists before serving it. This is best-effort:
 # uploads are a non-critical feature, so an unwritable path (read-only mount,

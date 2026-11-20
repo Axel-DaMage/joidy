@@ -17,12 +17,37 @@ class FolderCreate(BaseModel):
     path: str
 
 
+def _is_hidden_or_internal(name: str) -> bool:
+    """True for path segments the folder API must never list nor mutate.
+
+    Single source of truth shared by _list_vault_folders (traversal pruning)
+    and _get_safe_path (create/delete denylist, #1313): any hidden directory
+    (".obsidian", ".git", ".trash", …) plus the internal "_joidy/" state dir,
+    at any depth.
+    """
+    return name.startswith(".") or name == "_joidy"
+
+
 def _get_safe_path(vault: str, requested: str) -> str:
-    """Resolve a vault-relative path and make sure it stays inside the vault."""
+    """Resolve a vault-relative path and make sure it stays inside the vault.
+
+    Beyond containment (commonpath), targets that must never be mutated
+    through this API are rejected (#1313):
+    - the vault root itself: "." or traversal ("a/..", "%2e%2e" segments
+      decoded by the router) resolve to ``vault``, which the commonpath check
+      alone accepts — and DELETE would rmtree the whole vault;
+    - any hidden/internal segment, mirroring _list_vault_folders pruning, so
+      directories the API hides (".obsidian", ".git", ".trash", "_joidy", …)
+      cannot be created or deleted either.
+    """
     full_path = os.path.realpath(os.path.join(vault, requested))
     vault_path = os.path.realpath(vault)
     if os.path.commonpath([full_path, vault_path]) != vault_path:
         raise HTTPException(status_code=400, detail="Invalid path")
+    if full_path == vault_path:
+        raise HTTPException(status_code=400, detail="Cannot target the vault root")
+    if any(_is_hidden_or_internal(part) for part in requested.split("/")):
+        raise HTTPException(status_code=400, detail="Folder is hidden or internal")
     return full_path
 
 
@@ -46,7 +71,7 @@ def _list_vault_folders(vault: str) -> list[str]:
     base = os.path.realpath(vault)
     folders: list[str] = []
     for root, dirs, _files in os.walk(base):
-        dirs[:] = [d for d in dirs if not d.startswith(".") and d != "_joidy"]
+        dirs[:] = [d for d in dirs if not _is_hidden_or_internal(d)]
         rel = os.path.relpath(root, base)
         for d in dirs:
             rel_dir = d if rel == "." else os.path.join(rel, d)
@@ -98,6 +123,9 @@ def delete_folder(
     if not vault:
         raise HTTPException(status_code=400, detail="OBSIDIAN_VAULT_PATH not set")
 
+    # Same contract as create (#1313): reject "."/".."/empty segments and
+    # invalid characters before the resolved path ever reaches rmtree.
+    _validate_folder_name(path)
     full_path = _get_safe_path(vault, path)
     if not os.path.exists(full_path):
         raise HTTPException(status_code=404, detail="Folder not found")
