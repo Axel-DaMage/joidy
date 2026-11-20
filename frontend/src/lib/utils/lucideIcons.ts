@@ -14,6 +14,7 @@
 // (uncurated names still render — just after a lazy chunk fetch).
 
 import Activity from 'lucide-svelte/icons/activity';
+import AlarmClock from 'lucide-svelte/icons/alarm-clock';
 import Apple from 'lucide-svelte/icons/apple';
 import AtSign from 'lucide-svelte/icons/at-sign';
 import Banknote from 'lucide-svelte/icons/banknote';
@@ -146,6 +147,7 @@ function kebabToPascal(kebab: string): string {
 // Curated synchronous set — see the module docstring for how to extend it.
 const CURATED_ICONS: Record<string, any> = {
   Activity,
+  AlarmClock,
   Apple,
   AtSign,
   Banknote,
@@ -330,7 +332,17 @@ export async function loadLucideIcon(name: string): Promise<any | null> {
   const hit = getLucideIcon(name);
   if (hit) return hit;
   const ns = await loadFullSet();
-  return lookup(ns, name);
+  const icon = lookup(ns, name);
+  // Cache the lazy hit back into the curated map. Callers resolve via
+  // `getLucideIcon` on every re-render — without this, a lazily-loaded icon
+  // flips back to the `Circle` fallback on the next reactive pass and the
+  // loader fires again, ping-ponging the component forever (#1311).
+  if (icon) {
+    const resolved = resolveName(name);
+    _icons.set(resolved, icon);
+    _icons.set(kebabToPascal(resolved), icon);
+  }
+  return icon;
 }
 
 /**
