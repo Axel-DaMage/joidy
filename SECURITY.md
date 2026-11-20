@@ -87,7 +87,8 @@ vulnerabilidades del Anexo I, Parte II, del
 (Ley de Ciberresiliencia, CRA): política de divulgación coordinada, punto de
 contacto para reportes, avisos públicos de las vulnerabilidades corregidas y
 actualizaciones de seguridad sin demora. No constituyen una declaración de
-conformidad; véase [docs/security-compliance.md](docs/security-compliance.md).
+conformidad; está previsto un documento de cumplimiento dedicado
+(`docs/security-compliance.md`) en el seguimiento del issue #1392.
 
 Agradecemos tu ayuda para mantener Joidy seguro.
 
