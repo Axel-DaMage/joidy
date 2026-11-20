@@ -21,13 +21,14 @@
 
 /* ── Custom Properties ──────────────────────────────────────────────────────── */
 :root {
-  /* Base surfaces — AMOLED */
+  /* Base surfaces — AMOLED base with a real elevation ramp (#1270): cards,
+     modals and overlays must sit on distinguishable levels, not flat black. */
   --bg: #000000;
-  --surface: #000000;
-  --elevated: #000000;
-  --hover: #0c0c0c;
-  --border: #1a1a1a;
-  --border-light: #111111;
+  --surface: #0c0c0c;
+  --elevated: #161616;
+  --hover: #1c1c1c;
+  --border: #262626;
+  --border-light: #1a1a1a;
 
   /* Text — all white-range */
   --text-primary: #ffffff;
@@ -36,7 +37,7 @@
   --text-disabled: #444444;
 
   /* Accents — used sparingly */
-  --accent: #e0e0e0; /* Primary interactive elements */
+  --accent: #c8a96e; /* Primary interactive elements — JS-overridden by applyColors() (alias of --xp) */
   --accent-contrast: #f59e0b; /* Dynamic complementary contrast color (JS-overridden) */
   --xp: #c8a96e; /* Primary accent color (JS-overridden) */
   --xp-2: #9f8660; /* Secondary accent color (JS-overridden) */
@@ -117,8 +118,10 @@
   --surface: #ffffff;
   --elevated: #ffffff;
   --hover: #f0f0f0;
-  --border: #000000;
-  --border-light: #cfcfcf;
+  /* Mid-gray hairlines — pure-black borders were the inverse of what the
+     light theme needs (#1270). */
+  --border: #b8b8b8;
+  --border-light: #dcdcdc;
   --text-primary: #000000;
   --text-secondary: #222222;
   --text-muted: #666666;
@@ -367,12 +370,6 @@ body.zen-mode-active .app-shell {
 .btn-primary:hover {
   background: var(--xp-2);
   color: var(--xp-contrast-text, var(--bg));
-  border-color: var(--xp-2);
-}
-
-.btn-primary:hover {
-  background: var(--xp-2);
-  color: var(--bg);
   border-color: var(--xp-2);
 }
 

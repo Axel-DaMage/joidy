@@ -5,7 +5,7 @@
   import { Search, CornerDownLeft } from 'lucide-svelte';
   import DynamicIcon from './DynamicIcon.svelte';
   import { notes } from '$lib/stores/notes';
-  import { darkMode, devMode } from '$lib/stores/settings';
+  import { themeMode, devMode } from '$lib/stores/settings';
   import { isOpen, close } from '$lib/stores/commandPalette';
   import { get } from 'svelte/store';
   import { t } from 'svelte-i18n';
@@ -79,7 +79,7 @@
       title: 'Toggle tema',
       icon: 'SunMoon',
       action: () => {
-        darkMode.toggle();
+        themeMode.toggle();
       },
     },
     {
@@ -362,7 +362,7 @@
   }
 
   .cp-input::placeholder {
-    color: var(--text-disabled);
+    color: var(--text-muted);
   }
 
   .cp-esc {
@@ -389,7 +389,7 @@
   .cp-group-title {
     padding: 4px 16px;
     font-size: 10px;
-    color: var(--text-disabled);
+    color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     margin-top: 8px;

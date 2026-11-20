@@ -48,7 +48,7 @@
       style="display: flex; align-items: center; gap: 2px; padding: 0 10px; background: var(--elevated); border: 1px solid var(--border); border-radius: var(--r);"
       class="input-wrapper"
     >
-      <span class="mono" style="color: var(--text-disabled); font-size: 11px;">~</span>
+      <span class="mono" style="color: var(--text-muted); font-size: 11px;">~</span>
       <input
         type="text"
         class="setting-input mono"

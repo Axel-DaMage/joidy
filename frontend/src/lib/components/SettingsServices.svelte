@@ -271,7 +271,7 @@
   }
 
   .power-service-badge.stopped {
-    color: var(--text-disabled);
+    color: var(--text-muted);
   }
 
   .power-actions {
