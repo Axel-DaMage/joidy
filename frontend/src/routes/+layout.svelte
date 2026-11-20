@@ -837,7 +837,7 @@
     border: 1px solid var(--border);
     border-radius: var(--r);
     background: var(--elevated);
-    color: var(--text-disabled);
+    color: var(--text-muted);
     transition: all var(--t-normal);
   }
   .mini-pomo.is-running {

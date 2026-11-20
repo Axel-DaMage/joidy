@@ -9,10 +9,10 @@
   // `:global(svg)` CSS rules — which left icons uncolored and low-contrast in
   // dark mode (#793).
   const TYPE_CONFIG: Record<string, { icon: string; color: string }> = {
-    success: { icon: 'CircleCheckBig', color: 'var(--success, #22c55e)' },
-    level: { icon: 'TrendingUp', color: 'var(--xp, #f59e0b)' },
+    success: { icon: 'CircleCheckBig', color: 'var(--success, #10b981)' },
+    level: { icon: 'TrendingUp', color: 'var(--xp, #c8a96e)' },
     error: { icon: 'TriangleAlert', color: 'var(--error, #ef4444)' },
-    info: { icon: 'Info', color: 'var(--accent, #6366f1)' },
+    info: { icon: 'Info', color: 'var(--accent, #e0e0e0)' },
   };
 </script>
 
@@ -61,12 +61,12 @@
     align-items: center;
     gap: 8px;
     padding: 10px 14px;
-    border-radius: var(--r, 8px);
+    border-radius: var(--r, 4px);
     font-size: 13px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     pointer-events: auto;
     max-width: 320px;
-    background: var(--elevated, #1a1a1a);
+    background: var(--elevated, #161616);
     border: 1px solid var(--border);
     cursor: pointer;
   }
@@ -79,40 +79,40 @@
   }
 
   .toast-message {
-    color: var(--text-primary, #e0e0e0);
+    color: var(--text-primary, #ffffff);
     line-height: 1.3;
   }
 
   .toast-info {
-    border-color: var(--accent, #6366f1);
+    border-color: var(--accent, #e0e0e0);
   }
   .toast-info :global(svg) {
-    color: var(--accent, #6366f1);
+    color: var(--accent, #e0e0e0);
   }
 
   .toast-success {
-    border-color: var(--success, #22c55e);
-    background: color-mix(in srgb, var(--success, #22c55e) 10%, var(--elevated, #1a1a1a));
+    border-color: var(--success, #10b981);
+    background: color-mix(in srgb, var(--success, #10b981) 10%, var(--elevated, #161616));
   }
   .toast-success :global(svg) {
-    color: var(--success, #22c55e);
+    color: var(--success, #10b981);
   }
 
   .toast-level {
-    border-color: var(--xp, #f59e0b);
+    border-color: var(--xp, #c8a96e);
     background: linear-gradient(
       135deg,
-      color-mix(in srgb, var(--xp, #f59e0b) 15%, var(--elevated, #1a1a1a)),
+      color-mix(in srgb, var(--xp, #c8a96e) 15%, var(--elevated, #161616)),
       transparent
     );
   }
   .toast-level :global(svg) {
-    color: var(--xp, #f59e0b);
+    color: var(--xp, #c8a96e);
   }
 
   .toast-error {
     border-color: var(--error, #ef4444);
-    background: color-mix(in srgb, var(--error, #ef4444) 10%, var(--elevated, #1a1a1a));
+    background: color-mix(in srgb, var(--error, #ef4444) 10%, var(--elevated, #161616));
   }
   .toast-error :global(svg) {
     color: var(--error, #ef4444);
