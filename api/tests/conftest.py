@@ -121,7 +121,7 @@ from database import Base, get_db
 from fastapi.testclient import TestClient
 from main import app
 from middleware.rate_limit import _default_limiter
-from services.auth_service import get_current_user
+from services.auth_service import get_current_user, get_current_user_or_internal
 
 # Prevent the app lifespan from running Alembic migrations during tests. The
 # test fixture creates the schema directly via Base.metadata.create_all(), and
@@ -326,6 +326,7 @@ def client(db_session):
     original_overrides = dict(app.dependency_overrides)
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_current_user] = override_get_current_user
+    app.dependency_overrides[get_current_user_or_internal] = override_get_current_user
 
     with TestClient(app) as test_client:
         yield test_client
@@ -347,6 +348,7 @@ def client_no_auth():
 
     original_overrides = dict(app.dependency_overrides)
     app.dependency_overrides[get_current_user] = override_get_current_user
+    app.dependency_overrides[get_current_user_or_internal] = override_get_current_user
 
     with TestClient(app) as test_client:
         yield test_client

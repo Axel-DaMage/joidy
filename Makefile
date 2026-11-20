@@ -63,6 +63,16 @@ setup: ## First-time setup: copy .env, create data directories
 		$(SED_INPLACE) "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$$NEW_PW|" .env; \
 		echo "$(GREEN)✓$(NC) Generated POSTGRES_PASSWORD"; \
 	fi
+	@. .env 2>/dev/null || true; \
+	if [ -z "$$INTERNAL_API_TOKEN" ]; then \
+		NEW_TOKEN=$$(openssl rand -hex 32 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null || echo "dev_tok_$$(date +%s)"); \
+		if grep -qE '^INTERNAL_API_TOKEN=' .env; then \
+			$(SED_INPLACE) "s|^INTERNAL_API_TOKEN=.*|INTERNAL_API_TOKEN=$$NEW_TOKEN|" .env; \
+		else \
+			echo "INTERNAL_API_TOKEN=$$NEW_TOKEN" >> .env; \
+		fi; \
+		echo "$(GREEN)✓$(NC) Generated INTERNAL_API_TOKEN"; \
+	fi
 	@echo ""
 	@echo "Or use 'make start' for a guided setup + start!"
 	@echo "────────────────────────────────────────────────────"
@@ -391,6 +401,16 @@ start: ## 🚀 Quick start: setup + start all services
 		NEW_PW=$$(openssl rand -hex 24 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(24))" 2>/dev/null || echo "dev_pw_$$(date +%s)"); \
 		$(SED_INPLACE) "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$$NEW_PW|" .env; \
 		echo "  ✓ Generated new POSTGRES_PASSWORD"; \
+	fi
+	@. .env 2>/dev/null || true; \
+	if [ -z "$$INTERNAL_API_TOKEN" ]; then \
+		NEW_TOKEN=$$(openssl rand -hex 32 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null || echo "dev_tok_$$(date +%s)"); \
+		if grep -qE '^INTERNAL_API_TOKEN=' .env; then \
+			$(SED_INPLACE) "s|^INTERNAL_API_TOKEN=.*|INTERNAL_API_TOKEN=$$NEW_TOKEN|" .env; \
+		else \
+			echo "INTERNAL_API_TOKEN=$$NEW_TOKEN" >> .env; \
+		fi; \
+		echo "  ✓ Generated new INTERNAL_API_TOKEN"; \
 	fi
 	@echo ""
 	@echo "Step 2: Starting services..."

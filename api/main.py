@@ -43,7 +43,7 @@ from routers import (
     websocket,
 )
 from routers.integrations import github, google, spotify, strava
-from services.auth_service import get_current_user
+from services.auth_service import get_current_user, get_current_user_or_internal
 from services.http_client import aclose_http_clients, http_client
 from services.response_cache import get_cache_stats
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -216,11 +216,11 @@ app.add_middleware(
 app.add_middleware(CorsSafetyMiddleware)
 app.add_middleware(RequestIdMiddleware)
 
-app.include_router(notes.router, dependencies=[Depends(get_current_user)])
+app.include_router(notes.router, dependencies=[Depends(get_current_user_or_internal)])
 app.include_router(config.router)
 app.include_router(metrics.router, dependencies=[Depends(get_current_user)])
 app.include_router(mood.router, dependencies=[Depends(get_current_user)])
-app.include_router(emails.router, dependencies=[Depends(get_current_user)])
+app.include_router(emails.router, dependencies=[Depends(get_current_user_or_internal)])
 app.include_router(tags.router, dependencies=[Depends(get_current_user)])
 app.include_router(skills.router, dependencies=[Depends(get_current_user)])
 app.include_router(goals.router, dependencies=[Depends(get_current_user)])
@@ -234,7 +234,7 @@ app.include_router(github.router, dependencies=[Depends(get_current_user)])
 app.include_router(google.router)
 app.include_router(strava.router, dependencies=[Depends(get_current_user)])
 app.include_router(spotify.router, dependencies=[Depends(get_current_user)])
-app.include_router(vault.router, dependencies=[Depends(get_current_user)])
+app.include_router(vault.router, dependencies=[Depends(get_current_user_or_internal)])
 app.include_router(folders.router, dependencies=[Depends(get_current_user)])
 app.include_router(ai.router, dependencies=[Depends(get_current_user)])
 app.include_router(planning.router, dependencies=[Depends(get_current_user)])

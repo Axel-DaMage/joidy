@@ -17,21 +17,6 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "={{ $env.JOIDY_API_URL }}/auth/login",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ password: $env.JOIDY_AUTH_PASSWORD, username: 'user' }) }}",
-        "options": {}
-      },
-      "id": "a1b2c3d4-0002-4a01-9001-000000000002",
-      "name": "Joidy Login",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [-400, 0]
-    },
-    {
-      "parameters": {
         "resource": "message",
         "operation": "getAll",
         "returnAll": false,
@@ -105,7 +90,7 @@
           "parameters": [
             {
               "name": "Authorization",
-              "value": "=Bearer {{ $('Joidy Login').first().json.access_token }}"
+              "value": "=Bearer {{ $env.JOIDY_INTERNAL_API_TOKEN }}"
             }
           ]
         },
@@ -139,9 +124,6 @@
   ],
   "connections": {
     "Cada 15 min": {
-      "main": [[{ "node": "Joidy Login", "type": "main", "index": 0 }]]
-    },
-    "Joidy Login": {
       "main": [
         [
           { "node": "Gmail cuenta A", "type": "main", "index": 0 },
