@@ -7,12 +7,16 @@ import json
 import logging
 
 from config import settings
-from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from services.auth_service import _connection_host, _effective_auth_password, _is_loopback, verify_token
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["websocket"])
+
+# Marker subprotocol the client offers alongside its JWT so the server can
+# answer the handshake with a protocol both sides agreed on (#1285).
+WS_AUTH_SUBPROTOCOL = "bearer"
 
 # Main event loop, captured at startup so broadcast_* helpers can schedule
 # coroutines from sync endpoints running in the threadpool (#992).
@@ -51,8 +55,8 @@ class ConnectionManager:
     def __init__(self):
         self.active_connections: set[WebSocket] = set()
 
-    async def connect(self, websocket: WebSocket):
-        await websocket.accept()
+    async def connect(self, websocket: WebSocket, subprotocol: str | None = None):
+        await websocket.accept(subprotocol=subprotocol)
         self.active_connections.add(websocket)
         logger.info(f"WebSocket connected. Active: {len(self.active_connections)}")
 
@@ -77,36 +81,56 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
+def _offered_subprotocols(websocket: WebSocket) -> list[str]:
+    """Parse the client's ``Sec-WebSocket-Protocol`` offer into a list."""
+    header = websocket.headers.get("sec-websocket-protocol", "")
+    return [p.strip() for p in header.split(",") if p.strip()]
+
+
+def _ws_token_from_subprotocols(websocket: WebSocket) -> str | None:
+    """Return a verified access JWT offered via ``Sec-WebSocket-Protocol``.
+
+    Browser WebSocket clients cannot set arbitrary headers, so the JWT is
+    offered as a subprotocol next to the ``bearer`` marker —
+    ``new WebSocket(url, ["bearer", token])``. This keeps credentials out of
+    the request URL: query-string tokens end up in proxy access logs and
+    browser history (#1285).
+    """
+    for offered in _offered_subprotocols(websocket)[:4]:
+        if offered == WS_AUTH_SUBPROTOCOL:
+            continue
+        if verify_token(offered):
+            return offered
+    return None
+
+
 @router.websocket("/ws")
-async def websocket_endpoint(
-    websocket: WebSocket,
-    token: str = Query(default=""),
-):
+async def websocket_endpoint(websocket: WebSocket):
     """Main WebSocket endpoint for real-time updates.
 
-    Validates JWT token via query parameter for authentication.
+    Validates the JWT via the ``Sec-WebSocket-Protocol`` handshake header —
+    ``?token=`` query credentials are not accepted (#1285).
     In development without AUTH_PASSWORD, auth is bypassed for loopback
     clients only (#1282).
     """
-    # Authenticate: verify token if auth is configured. The dev-mode bypass
-    # (no AUTH_PASSWORD) applies to loopback clients only (#1282): a peer on
-    # a non-loopback interface means the dev server is exposed to the LAN
-    # and must present a valid token.
+    # Authenticate: verify the token offered via Sec-WebSocket-Protocol when
+    # auth is configured. The dev-mode bypass (no AUTH_PASSWORD) applies to
+    # loopback clients only (#1282): a peer on a non-loopback interface means
+    # the dev server is exposed to the LAN and must present a valid token.
     auth_configured = bool(_effective_auth_password())
     if not auth_configured and settings.app_env == "production":
         await websocket.close(code=4001, reason="Authentication not configured")
         return
 
     if auth_configured or not _is_loopback(_connection_host(websocket)):
-        if not token:
-            await websocket.close(code=4001, reason="Missing authentication token")
-            return
-        payload = verify_token(token)
-        if not payload:
-            await websocket.close(code=4001, reason="Invalid authentication token")
+        if not _ws_token_from_subprotocols(websocket):
+            await websocket.close(code=4001, reason="Missing or invalid authentication token")
             return
 
-    await manager.connect(websocket)
+    # Answer with the ``bearer`` marker when the client offered it, so the
+    # browser's subprotocol negotiation completes cleanly.
+    subprotocol = WS_AUTH_SUBPROTOCOL if WS_AUTH_SUBPROTOCOL in _offered_subprotocols(websocket) else None
+    await manager.connect(websocket, subprotocol=subprotocol)
     try:
         while True:
             # Keep connection alive, handle incoming messages

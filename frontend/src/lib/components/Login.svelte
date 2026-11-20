@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api } from '$lib/api';
-  import { session, saveToken } from '$lib/stores/session';
+  import { session } from '$lib/stores/session';
   import { showNotification } from '$lib/stores/notifications';
   import { getLocale } from '$lib/stores/locale';
   import { t } from 'svelte-i18n';
@@ -16,12 +16,13 @@
     loginError = '';
     try {
       const res = await api.auth.login(password, username);
-      saveToken(res.access_token);
+      session.setTokens(res.access_token, res.refresh_token);
 
       session.login({
         id: '1',
         username,
         token: res.access_token,
+        refreshToken: res.refresh_token,
         preferences: { theme: 'dark', timezone: 'UTC', language: getLocale() },
         createdAt: new Date().toISOString()
       });

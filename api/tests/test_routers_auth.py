@@ -16,7 +16,7 @@ if "sqlite_vec" not in sys.modules:
 
 from config import settings
 from fastapi.testclient import TestClient
-from services.auth_service import hash_password
+from services.auth_service import TOKEN_TYPE_REFRESH, hash_password, verify_token
 
 
 def test_login_with_valid_credentials(client: TestClient):
@@ -143,4 +143,102 @@ def test_login_rejects_query_param_credentials(client: TestClient):
         assert response.status_code == 422
     finally:
         settings.auth_password = orig_password
+        settings.secret_key = orig_key
+
+
+def test_login_returns_refresh_token(client: TestClient):
+    """Login returns an access + refresh token pair (#1285)."""
+    orig_password = settings.auth_password
+    orig_key = settings.secret_key
+    try:
+        settings.secret_key = "test-secret-key-for-auth-router"
+        settings.auth_password = hash_password("s3cret")
+        response = client.post("/auth/login", json={"password": "s3cret"})
+        assert response.status_code == 200
+        data = response.json()
+        assert "refresh_token" in data
+        # The refresh token must verify as typ=refresh, not access.
+        payload = verify_token(data["refresh_token"], expected_type=TOKEN_TYPE_REFRESH)
+        assert payload is not None
+        assert payload["sub"] == "1"
+    finally:
+        settings.auth_password = orig_password
+        settings.secret_key = orig_key
+
+
+def test_refresh_returns_rotated_token_pair(client: TestClient):
+    """POST /auth/refresh exchanges a refresh token for a new pair (#1285)."""
+    orig_password = settings.auth_password
+    orig_key = settings.secret_key
+    try:
+        settings.secret_key = "test-secret-key-for-auth-router"
+        settings.auth_password = hash_password("s3cret")
+        login = client.post("/auth/login", json={"password": "s3cret"}).json()
+
+        response = client.post("/auth/refresh", json={"refresh_token": login["refresh_token"]})
+        assert response.status_code == 200
+        data = response.json()
+        assert data["token_type"] == "bearer"
+        # New access token verifies and authenticates as user 1.
+        from services.auth_service import get_current_user_id
+
+        assert get_current_user_id(data["access_token"]) == 1
+        # Rotation: the new refresh token differs from the presented one.
+        assert data["refresh_token"] != login["refresh_token"]
+        assert verify_token(data["refresh_token"], expected_type=TOKEN_TYPE_REFRESH) is not None
+    finally:
+        settings.auth_password = orig_password
+        settings.secret_key = orig_key
+
+
+def test_refresh_rejects_access_token(client: TestClient):
+    """An access token (typ=access) cannot be used as a refresh token."""
+    orig_password = settings.auth_password
+    orig_key = settings.secret_key
+    try:
+        settings.secret_key = "test-secret-key-for-auth-router"
+        settings.auth_password = hash_password("s3cret")
+        login = client.post("/auth/login", json={"password": "s3cret"}).json()
+
+        response = client.post("/auth/refresh", json={"refresh_token": login["access_token"]})
+        assert response.status_code == 401
+    finally:
+        settings.auth_password = orig_password
+        settings.secret_key = orig_key
+
+
+def test_refresh_rejects_garbage_token(client: TestClient):
+    orig_key = settings.secret_key
+    try:
+        settings.secret_key = "test-secret-key-for-auth-router"
+        response = client.post("/auth/refresh", json={"refresh_token": "not.a.jwt"})
+        assert response.status_code == 401
+    finally:
+        settings.secret_key = orig_key
+
+
+def test_refresh_rejects_expired_refresh_token(client: TestClient):
+    from datetime import UTC, datetime, timedelta
+
+    import jwt
+    from services.auth_service import ALGORITHM, AUDIENCE, ISSUER
+
+    orig_key = settings.secret_key
+    try:
+        settings.secret_key = "test-secret-key-for-auth-router"
+        expired = jwt.encode(
+            {
+                "sub": "1",
+                "typ": TOKEN_TYPE_REFRESH,
+                "iss": ISSUER,
+                "aud": AUDIENCE,
+                "iat": datetime.now(UTC) - timedelta(days=10),
+                "exp": datetime.now(UTC) - timedelta(days=3),
+            },
+            settings.secret_key,
+            algorithm=ALGORITHM,
+        )
+        response = client.post("/auth/refresh", json={"refresh_token": expired})
+        assert response.status_code == 401
+    finally:
         settings.secret_key = orig_key
