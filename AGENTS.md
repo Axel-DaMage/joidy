@@ -144,6 +144,7 @@ When working as an autonomous coding agent on this codebase:
 7. ~~Vault watcher can leave orphaned tasks~~ — **Fixed**: `worker/watchers/vault_watcher.py` has `PersistentEventLog` for crash recovery, `_in_flight` task tracking, graceful two-phase shutdown with `asyncio.shield`, and per-file locks.
 8. ai-service `/cluster` endpoint had connection leak + SQL injection — **Fixed** (#610).
 9. ai-service database engine missing `pool_pre_ping`/`pool_recycle` — **Fixed** (#611).
+10. `DELETE /folders/{path}` could rmtree the vault root (`.`, `a/..`, `%2e%2e`) and hidden/internal dirs (`.obsidian`, `.git`, `_joidy`) — **Fixed** (#1313): `_get_safe_path` rejects vault-root resolution and any segment matching `_is_hidden_or_internal` (shared with `_list_vault_folders`), and delete now runs `_validate_folder_name` like create.
 
 ## System Install (AUR) vs Git Clone
 
