@@ -291,20 +291,20 @@ interactive OpenAPI docs at `/docs` for full schemas.
 
 | Method | Path | Auth | Description | Request Body | Response |
 |--------|------|------|-------------|--------------|----------|
-| GET | `/integrations/spotify/auth` | Yes | Spotify OAuth consent URL | — | `{url}` |
-| GET | `/integrations/spotify/callback` | Yes | Spotify OAuth callback (`code`, `error` query) | — | token object |
-| GET | `/integrations/spotify/recently-played` | Yes | Recently played tracks (`token`, `limit`) | — | tracks list |
-| GET | `/integrations/spotify/top-tracks` | Yes | Top tracks (`token`, `limit`) | — | tracks list |
-| GET | `/integrations/spotify/playlists` | Yes | User playlists (`token`) | — | playlists list |
+| GET | `/integrations/spotify/auth` | Yes | Spotify OAuth consent URL (signed `state` embedded) | — | `{url}` |
+| GET | `/integrations/spotify/callback` | Yes | Spotify OAuth callback (`code`, `error`, `state` query) | — | token object |
+| GET | `/integrations/spotify/recently-played` | Yes | Recently played tracks (`limit` query; token in `X-Spotify-Token` header) | — | tracks list |
+| GET | `/integrations/spotify/top-tracks` | Yes | Top tracks (`limit` query; token in `X-Spotify-Token` header) | — | tracks list |
+| GET | `/integrations/spotify/playlists` | Yes | User playlists (`limit` query; token in `X-Spotify-Token` header) | — | playlists list |
 
 ### 2.25 Integrations — Strava (`integrations/strava.py`)
 
 | Method | Path | Auth | Description | Request Body | Response |
 |--------|------|------|-------------|--------------|----------|
-| GET | `/integrations/strava/auth` | Yes | Strava OAuth consent URL | — | `{url}` |
-| GET | `/integrations/strava/callback` | Yes | Strava OAuth callback (`code`, `error` query) | — | token object |
-| GET | `/integrations/strava/activities` | Yes | Recent activities (`token`, `per_page`) | — | activities list |
-| GET | `/integrations/strava/athlete` | Yes | Athlete profile (`token`) | — | athlete object |
+| GET | `/integrations/strava/auth` | Yes | Strava OAuth consent URL (signed `state` embedded) | — | `{url}` |
+| GET | `/integrations/strava/callback` | Yes | Strava OAuth callback (`code`, `error`, `state` query) | — | token object |
+| GET | `/integrations/strava/activities` | Yes | Recent activities (`per_page` query; token in `X-Strava-Token` header) | — | activities list |
+| GET | `/integrations/strava/athlete` | Yes | Athlete profile (token in `X-Strava-Token` header) | — | athlete object |
 
 ---
 

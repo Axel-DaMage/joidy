@@ -1,5 +1,6 @@
 import { writable } from 'svelte/store';
 import { browser } from '$app/env';
+import { clearUserData } from '$lib/utils/indexedDB';
 
 export interface UserSession {
   id: string;
@@ -48,7 +49,16 @@ function createSessionStore() {
     logout() {
       saveSession(null);
       set(null);
+      resetSession();
       clearServiceWorkerCaches();
+    },
+    setToken(token: string) {
+      update((s) => {
+        if (!s) return null;
+        const updated = { ...s, token };
+        saveSession(updated);
+        return updated;
+      });
     },
     updatePreferences(prefs: Partial<UserSession['preferences']>) {
       update((s) => {
@@ -109,13 +119,57 @@ export function getToken(): string | null {
 
 export function saveToken(token: string) {
   if (!browser) return;
+  // Route through the store so $session.token stays in sync — the previous
+  // implementation mutated localStorage only, leaving the in-memory session
+  // stale while getToken() returned the new token (#1305).
+  session.setToken(token);
+}
+
+/**
+ * Custom event fired on logout/session reset so user-scoped stores can drop
+ * their in-memory state without importing each other (avoids import cycles:
+ * session ← api ← feature stores). Subscribe in browser contexts only (#1305).
+ */
+export const SESSION_RESET_EVENT = 'joidy:session-reset';
+
+/** localStorage keys that hold user data rather than device-level prefs
+ *  (theme, icon pack, dev mode etc. intentionally survive logout). */
+const USER_DATA_KEYS = [
+  'joidy-achievements',
+  'joidy_route_cache',
+  'joidy_github_cache_v2',
+  'joidy-user-settings-v1',
+  'joidy-last-ping',
+] as const;
+
+const USER_DATA_PREFIXES = ['goals.'] as const;
+
+/**
+ * Wipes user-scoped persisted state on logout so the next session on the
+ * same browser profile cannot observe the previous user's data (#1305).
+ * SessionStorage is cleared wholesale — every key written there is
+ * user-scoped (chat messages, notes/data caches). The IndexedDB `joidy`
+ * database (notes cache + offline outbox) is dropped via clearUserData().
+ */
+function resetSession(): void {
+  if (!browser) return;
   try {
-    const raw = localStorage.getItem(SESSION_KEY);
-    if (!raw) return;
-    const s = JSON.parse(raw) as UserSession;
-    s.token = token;
-    localStorage.setItem(SESSION_KEY, JSON.stringify(s));
+    for (const key of USER_DATA_KEYS) localStorage.removeItem(key);
+    const prefixed: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && USER_DATA_PREFIXES.some((p) => key.startsWith(p))) prefixed.push(key);
+    }
+    for (const key of prefixed) localStorage.removeItem(key);
   } catch {
-    // ignore
+    /* best-effort cleanup */
   }
+  try {
+    sessionStorage.clear();
+  } catch {
+    /* best-effort cleanup */
+  }
+  // Fire-and-forget — logout must not block on cache cleanup.
+  void clearUserData();
+  window.dispatchEvent(new Event(SESSION_RESET_EVENT));
 }

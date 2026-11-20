@@ -78,7 +78,14 @@
   let goalId = 0;
   function syncGoalId(rawId: string | undefined) {
     const parsed = parseInt(rawId || '0');
-    if (parsed > 0) goalId = parsed;
+    if (parsed > 0) {
+      goalId = parsed;
+    } else {
+      // Invalid id (NaN/0/negative) never triggered loadGoal, leaving the
+      // page stuck on the loading spinner forever — fail loudly instead.
+      loading = false;
+      loadError = $t('goalDetail.notFound');
+    }
   }
   onMount(() => {
     ensureGoalEditor();

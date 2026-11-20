@@ -17,6 +17,16 @@
 
   function handleKeydown(event: KeyboardEvent) {
     if (!$onboarding.active) return;
+    // Don't hijack arrows while the user is typing in a field (#1268).
+    const target = event.target;
+    if (
+      target instanceof HTMLInputElement ||
+      target instanceof HTMLTextAreaElement ||
+      target instanceof HTMLSelectElement ||
+      (target instanceof HTMLElement && target.isContentEditable)
+    ) {
+      return;
+    }
     if (event.key === 'Escape') {
       event.preventDefault();
       onboarding.skipTour();

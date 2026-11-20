@@ -17,6 +17,7 @@
   import { locale as localeStore } from '$lib/stores/locale';
   import { openShare } from '$lib/stores/shareAchievement';
   import { focusTrap } from '$lib/actions/focusTrap';
+  import { showNotification } from '$lib/stores/notifications';
   import { logger } from '$lib/utils/logger';
   import { Share2 } from 'lucide-svelte';
   import { t } from 'svelte-i18n';
@@ -85,8 +86,6 @@
 
   // ── Check-in state ────────────────────────────────────────────────────────
   let busy = new Set<number>();
-  let checkinNote = '';
-  let showCheckinExtra = false;
 
   function notifyStreaksUpdated() {
     if (typeof window !== 'undefined') {
@@ -154,9 +153,6 @@
   async function handleSave(e: CustomEvent) {
     const data = e.detail;
     const targetId = editTarget?.id ?? null;
-    // Close modal immediately
-    showModal = false;
-    editTarget = null;
     try {
       if (targetId !== null) {
         const updated = await api.personalStreaks.update(targetId, data);
@@ -171,8 +167,13 @@
       }
       stats = await api.personalStreaks.stats();
       notifyStreaksUpdated();
+      // Close only on success — the old close-first flow discarded the
+      // user's input when the save failed (#1305).
+      showModal = false;
+      editTarget = null;
     } catch (e) {
       logger.error('[streaks] save error:', e);
+      showNotification($t('streaks.connectionError'), 'error');
     }
   }
 
@@ -200,14 +201,14 @@
       const localDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
       const updated = await api.personalStreaks.checkin(id, {
-        note: checkinNote || undefined,
         check_date: localDate,
       });
       streaks = streaks.map((s) => (s.id === id ? updated : s));
-      checkinNote = '';
-      showCheckinExtra = false;
       stats = await api.personalStreaks.stats();
       notifyStreaksUpdated();
+    } catch (e) {
+      logger.error('[streaks] checkin error:', e);
+      showNotification($t('streaks.connectionError'), 'error');
     } finally {
       busy.delete(id);
       busy = new Set(busy);
@@ -256,6 +257,9 @@
       streaks = streaks.map((s) => (s.id === id ? updated : s));
       stats = await api.personalStreaks.stats();
       notifyStreaksUpdated();
+    } catch (e) {
+      logger.error('[streaks] undo error:', e);
+      showNotification($t('streaks.connectionError'), 'error');
     } finally {
       busy.delete(id);
       busy = new Set(busy);
