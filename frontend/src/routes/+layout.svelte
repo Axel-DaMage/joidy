@@ -26,6 +26,7 @@
   } from '$lib/stores/gamification';
   import { running, secondsLeft, phase } from '$lib/stores/pomodoro';
   import { initPomodoroSettings } from '$lib/stores/pomodoro';
+  import { initTimersEngine } from '$lib/stores/timers';
   import {
     accentColors,
     activeIconPack,
@@ -89,7 +90,13 @@
     { href: '/goals', label: $t('nav.goals'), icon: 'Target', status: 'ready' },
     { href: '/emails', label: $t('nav.emails'), icon: 'Mail', status: 'ready' },
     { href: '/calendar', label: $t('nav.calendar'), icon: 'Calendar', status: 'ready' },
+    { href: '/timers', label: $t('nav.timers'), icon: 'AlarmClock', status: 'ready' },
   ] as { href: string; label: string; icon: string; status: NavItemStatus }[];
+
+  // Clock engine (#969): alarms must keep ticking wherever the user is in the
+  // app. Only starts once authenticated — it pulls persisted alarms from the
+  // API, which 401s (and force-logs-out) on the login screen otherwise.
+  $: if (browser && $isAuthenticated) initTimersEngine();
 
   // Track page views on route changes (foreground-only, debounced in the
   // store). This runs in afterNavigate — a legacy `$:` statement never

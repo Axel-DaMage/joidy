@@ -103,8 +103,8 @@ class Goal(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
-    tag: Mapped["Tag | None"] = relationship("Tag")  # type: ignore
-    note: Mapped["Note | None"] = relationship("Note")  # type: ignore
+    tag: Mapped["Tag | None"] = relationship("Tag")
+    note: Mapped["Note | None"] = relationship("Note")
 
     __table_args__ = (
         # PostgreSQL does not auto-create indexes on FKs. These cover the

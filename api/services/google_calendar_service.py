@@ -236,7 +236,9 @@ async def sync_all(db: Session) -> dict[str, Any]:
             results.append({"calendar_id": calendar_id, "error": f"HTTP {exc.response.status_code}"})
         except Exception as exc:  # keep syncing the remaining calendars
             logger.error("[google] Sync failed for %s: %s", calendar_id, exc)
-            results.append({"calendar_id": calendar_id, "error": str(exc)})
+            # Generic message — str(exc) can embed URLs/paths that must not
+            # be reflected back through the API response (#1332).
+            results.append({"calendar_id": calendar_id, "error": "Sync failed"})
 
     # Prune state (and cached events) for calendars removed from the account.
     stale = db.query(GoogleCalendarSyncState).filter(GoogleCalendarSyncState.user_id == 1).all()

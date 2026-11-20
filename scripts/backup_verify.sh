@@ -20,37 +20,46 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-cd "$PROJECT_DIR"
+cd -- "$PROJECT_DIR"
 
 TEST_DB="${BACKUP_VERIFY_DB:-joidy_test_restore}"
+# TEST_DB is interpolated into CREATE/DROP DATABASE statements below — it is
+# a SQL identifier, so it must match the Postgres identifier grammar or a
+# crafted value (e.g. `x; DROP DATABASE joidy; --`) would inject SQL (#1326).
+if [[ ! "$TEST_DB" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]]; then
+  echo "ERROR: invalid BACKUP_VERIFY_DB '$TEST_DB' — must match ^[a-zA-Z_][a-zA-Z0-9_]*$" >&2
+  exit 1
+fi
 
 # ─── Compose detection (same priority as scripts/joidy.sh) ────────
+# DOCKER_CMD is an argv array so multi-word engines ("docker compose") stay
+# intact and nothing is ever word-split (#1326).
 if command -v docker-compose &>/dev/null; then
-  DOCKER_CMD="docker-compose"
+  DOCKER_CMD=(docker-compose)
 elif command -v docker &>/dev/null; then
-  DOCKER_CMD="docker compose"
+  DOCKER_CMD=(docker compose)
 elif command -v podman-compose &>/dev/null; then
-  DOCKER_CMD="podman-compose"
+  DOCKER_CMD=(podman-compose)
 elif command -v podman &>/dev/null && podman compose version &>/dev/null 2>&1; then
-  DOCKER_CMD="podman compose"
+  DOCKER_CMD=(podman compose)
 else
   echo "ERROR: neither docker nor podman compose found" >&2
   exit 1
 fi
 
-ENV_FILE_ARG=""
+ENV_FILE_ARG=()
 ENV_FILE=""
 if [ -f "$PROJECT_DIR/.env" ]; then
   ENV_FILE="$PROJECT_DIR/.env"
 elif [ -f "$HOME/.config/joidy/.env" ]; then
   ENV_FILE="$HOME/.config/joidy/.env"
-  ENV_FILE_ARG="--env-file $ENV_FILE"
+  ENV_FILE_ARG=(--env-file "$ENV_FILE")
 fi
 
 read_env() {
   local var="$1" default="$2" val=""
   if [ -n "$ENV_FILE" ]; then
-    val=$(grep -E "^${var}=" "$ENV_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
+    val=$(grep -E -- "^${var}=" "$ENV_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
   fi
   echo "${val:-$default}"
 }
@@ -58,7 +67,20 @@ read_env() {
 PGUSER="$(read_env POSTGRES_USER joidy)"
 PGDATABASE="$(read_env POSTGRES_DB joidy)"
 
-dc_exec() { $DOCKER_CMD $ENV_FILE_ARG exec -T postgres "$@"; }
+# The throwaway DB must never be the live database or a Postgres maintenance
+# database — the script drops TEST_DB on exit (#1326).
+case "$TEST_DB" in
+  "$PGDATABASE"|postgres|template0|template1)
+    echo "ERROR: BACKUP_VERIFY_DB '$TEST_DB' is not a safe throwaway name" >&2
+    exit 1
+    ;;
+esac
+
+# ${arr[@]+...}: keep `"$@"`-safe expansion on bash 3.2 (macOS), where an empty
+# array under `set -u` would otherwise abort.
+dc_exec() {
+  "${DOCKER_CMD[@]}" ${ENV_FILE_ARG[@]+"${ENV_FILE_ARG[@]}"} exec -T postgres "$@"
+}
 
 if ! dc_exec pg_isready -U "$PGUSER" -d "$PGDATABASE" >/dev/null 2>&1; then
   echo "ERROR: the 'postgres' service is not running (start it with 'joidy up' or 'make dev')" >&2
@@ -67,8 +89,8 @@ fi
 
 TMP_DIR="$(mktemp -d)"
 cleanup() {
-  rm -rf "$TMP_DIR"
-  dc_exec psql -U "$PGUSER" -d postgres -qc "DROP DATABASE IF EXISTS ${TEST_DB}" >/dev/null 2>&1 || true
+  rm -rf -- "$TMP_DIR"
+  dc_exec psql -U "$PGUSER" -d postgres -qc "DROP DATABASE IF EXISTS \"${TEST_DB}\"" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
@@ -80,16 +102,16 @@ echo ""
 # ─── 1. Dump ──────────────────────────────────────────────────────
 echo "[1/4] pg_dump -Fc $PGDATABASE → temp archive"
 dc_exec pg_dump -Fc -U "$PGUSER" -d "$PGDATABASE" > "$TMP_DIR/joidy.dump"
-if [ "$(head -c 5 "$TMP_DIR/joidy.dump")" != "PGDMP" ]; then
+if [ "$(head -c 5 -- "$TMP_DIR/joidy.dump")" != "PGDMP" ]; then
   echo "ERROR: dump is not a valid pg_dump custom-format archive" >&2
   exit 1
 fi
-echo "      archive: $(du -h "$TMP_DIR/joidy.dump" | cut -f1)"
+echo "      archive: $(du -h -- "$TMP_DIR/joidy.dump" | cut -f1)"
 
 # ─── 2. Restore into throwaway DB ────────────────────────────────
 echo "[2/4] pg_restore → $TEST_DB"
-dc_exec psql -U "$PGUSER" -d postgres -qc "DROP DATABASE IF EXISTS ${TEST_DB}"
-dc_exec psql -U "$PGUSER" -d postgres -qc "CREATE DATABASE ${TEST_DB}"
+dc_exec psql -U "$PGUSER" -d postgres -qc "DROP DATABASE IF EXISTS \"${TEST_DB}\""
+dc_exec psql -U "$PGUSER" -d postgres -qc "CREATE DATABASE \"${TEST_DB}\""
 dc_exec pg_restore -U "$PGUSER" -d "$TEST_DB" --no-owner --no-privileges < "$TMP_DIR/joidy.dump"
 
 # ─── 3. Health checks ────────────────────────────────────────────
