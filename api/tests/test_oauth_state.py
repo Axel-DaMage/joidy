@@ -71,3 +71,4 @@ def test_secret_key_required(monkeypatch):
     monkeypatch.setattr("config.settings.secret_key", "")
     with pytest.raises(RuntimeError, match="SECRET_KEY"):
         oauth_state.generate_state("google")
+    assert oauth_state.verify_state("a.b.c.d", "google") is False

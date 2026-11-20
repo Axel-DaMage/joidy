@@ -22,6 +22,7 @@ from services.note_service import (
     update_note,
 )
 from services.sync_service import detect_conflict, to_utc_naive
+from services.vault_paths import normalize_source_path, resolve_confined_source_path
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -68,10 +69,15 @@ def _update_sync_state(
     db: Session,
     note_id: int,
     remote_mtime: datetime | None,
+    *,
+    allow_conflict_flag: bool = True,
 ) -> SyncState:
     """Create or update the SyncState record for a note.
 
-    Detects conflicts by comparing local_mtime vs remote_mtime.
+    Detects conflicts by comparing local_mtime vs remote_mtime. When
+    ``allow_conflict_flag`` is False the conflict flag is left untouched —
+    callers that cannot prove the request carried the webhook secret must
+    not arm a ``keep_remote`` vault read by forging a mtime (#1314).
     """
     sync = db.query(SyncState).filter(SyncState.note_id == note_id).first()
     if not sync:
@@ -80,7 +86,8 @@ def _update_sync_state(
 
     sync.remote_mtime = remote_mtime
     sync.last_synced_at = to_utc_naive(datetime.now(UTC))
-    sync.conflict = detect_conflict(sync.local_mtime, remote_mtime)
+    if allow_conflict_flag:
+        sync.conflict = detect_conflict(sync.local_mtime, remote_mtime)
     return sync
 
 
@@ -92,6 +99,7 @@ def process_webhook_event(
     content: str | None = None,
     mtime: int | None = None,
     source: str = "obsidian",
+    allow_conflict_flag: bool = True,
 ) -> dict:
     """Process a single webhook event.
 
@@ -101,6 +109,10 @@ def process_webhook_event(
         content: The file content (required for create/update, ignored for delete).
         mtime: Optional remote modification time as Unix timestamp.
         source: The source label (e.g. "obsidian").
+        allow_conflict_flag: Whether this event may write the conflict flag.
+            HTTP callers pass False unless the request carried a configured
+            ``OBSIDIAN_WEBHOOK_SECRET`` — fail closed so an unauthenticated
+            or JWT-only caller cannot arm a ``keep_remote`` read (#1314).
 
     Returns:
         A dict with status info: {"status", "note_id", "action", "conflict"}
@@ -108,6 +120,13 @@ def process_webhook_event(
     event = event.lower().strip()
     if event not in ("create", "update", "delete"):
         raise ValueError(f"Unsupported event type: {event}")
+
+    # Confinement (#1314): the supplied path becomes a note's source_path —
+    # it must resolve inside the effective vault root, be a ``.md`` file, and
+    # stay clear of hidden dirs (``.obsidian`` …) and ``_joidy/``.
+    path = normalize_source_path(path)
+    if path is None or resolve_confined_source_path(path) is None:
+        raise ValueError("Invalid path")
 
     remote_mtime = to_utc_naive(datetime.fromtimestamp(mtime, tz=UTC)) if mtime else None
 
@@ -159,7 +178,7 @@ def process_webhook_event(
         )
         action = "created"
 
-    sync = _update_sync_state(db, note.id, remote_mtime)
+    sync = _update_sync_state(db, note.id, remote_mtime, allow_conflict_flag=allow_conflict_flag)
     db.commit()
 
     logger.info("[webhook] %s note %d for path %s", action, note.id, path)

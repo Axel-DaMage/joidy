@@ -7,9 +7,11 @@ down that mechanism; the CI step running the full suite with a populated
 ``.env`` proves the end-to-end behaviour.
 """
 
+import os
+import stat
 from pathlib import Path
 
-from services.env_file import get_env_file, get_persisted, read_env, write_env
+from services.env_file import env_file_permissions, get_env_file, get_persisted, read_env, write_env
 
 
 def test_env_file_is_not_the_repo_dotenv():
@@ -38,3 +40,30 @@ def test_write_env_lands_in_isolated_file(persisted_env):
     write_env({"FOO": "bar"})
     assert read_env() == {"FOO": "bar"}
     assert persisted_env.read_text().strip() == "FOO=bar"
+
+
+def test_write_env_creates_owner_only_file(persisted_env):
+    """#1281: a .env created by write_env() must be 0600 from the start."""
+    persisted_env.unlink()
+    write_env({"FOO": "bar"})
+    assert stat.S_IMODE(persisted_env.stat().st_mode) == 0o600
+
+
+def test_write_env_tightens_loose_permissions(persisted_env):
+    """#1281: writing settings must also fix a file left loose (e.g. 0644)."""
+    persisted_env.write_text("FOO=old\n")
+    os.chmod(persisted_env, 0o644)
+    write_env({"FOO": "bar"})
+    assert stat.S_IMODE(persisted_env.stat().st_mode) == 0o600
+
+
+def test_env_file_permissions_reports_mode(persisted_env):
+    os.chmod(persisted_env, 0o644)
+    assert env_file_permissions() == 0o644
+    os.chmod(persisted_env, 0o600)
+    assert env_file_permissions() == 0o600
+
+
+def test_env_file_permissions_missing_file(persisted_env):
+    persisted_env.unlink()
+    assert env_file_permissions() is None
