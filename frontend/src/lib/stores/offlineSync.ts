@@ -19,12 +19,22 @@ import {
   type OutboxChange,
 } from '$lib/utils/indexedDB';
 import { logger } from '$lib/utils/logger';
+import { SESSION_RESET_EVENT } from './session';
 
 export type SyncStatus = 'idle' | 'syncing' | 'error' | 'offline';
 
 export const isOnline = writable(true);
 export const pendingChanges = writable(0);
 export const syncStatus = writable<SyncStatus>('idle');
+
+// The outbox is dropped with the rest of IndexedDB on session reset (logout /
+// 401) — clear the counters so no stale "N pending" badge leaks (#1325).
+if (browser) {
+  window.addEventListener(SESSION_RESET_EVENT, () => {
+    pendingChanges.set(0);
+    syncStatus.set('idle');
+  });
+}
 
 const MAX_RETRIES = 5;
 let syncTimer: ReturnType<typeof setInterval> | null = null;

@@ -1,5 +1,6 @@
 import { writable, get } from 'svelte/store';
 import { browser } from '$app/env';
+import { SESSION_RESET_EVENT } from './session';
 
 interface PageSnapshot {
   path: string;
@@ -73,4 +74,10 @@ export function clearSnapshot(path: string): void {
     return next;
   });
   persist();
+}
+
+// Drop captured page state on session reset (logout / 401) — snapshots may
+// contain note content that must not leak to the next user (#1325).
+if (browser) {
+  window.addEventListener(SESSION_RESET_EVENT, () => snapshots.set({}));
 }

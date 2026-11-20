@@ -140,16 +140,29 @@ const USER_DATA_KEYS = [
   'joidy_github_cache_v2',
   'joidy-user-settings-v1',
   'joidy-last-ping',
+  // Geolocation coords + cached weather payload (#1325).
+  'joidy-weather-location',
+  'joidy-weather-cache',
+  // User-entered tag queries used to color graph groups (#1325).
+  'joidy-graph-color-groups',
+  // Vault folder paths → icon/color metadata (#1325).
+  'joidy-folder-meta',
 ] as const;
 
-const USER_DATA_PREFIXES = ['goals.'] as const;
+const USER_DATA_PREFIXES = [
+  'goals.',
+  // Note/goal editor draft payloads — full note text (#1325).
+  'joidy-draft-',
+  'joidy-goal-draft-',
+] as const;
 
 /**
  * Wipes user-scoped persisted state on logout so the next session on the
  * same browser profile cannot observe the previous user's data (#1305).
  * SessionStorage is cleared wholesale — every key written there is
  * user-scoped (chat messages, notes/data caches). The IndexedDB `joidy`
- * database (notes cache + offline outbox) is dropped via clearUserData().
+ * database (notes cache + offline outbox) is dropped via clearUserData()
+ * (#1325).
  */
 function resetSession(): void {
   if (!browser) return;
