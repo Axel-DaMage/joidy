@@ -7,12 +7,25 @@ from typing import cast
 from database import get_db
 from fastapi import APIRouter, Depends, HTTPException
 from models.calendar_task import CalendarTask, CalendarTaskPriority, CalendarTaskSource
-from models.goal import Goal
+from models.goal import Goal, GoalMeasurement
 from pydantic import BaseModel, Field
 from services.gamification_engine import process_event
+from services.timezone_utils import get_local_today
+from sqlalchemy import case
 from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/calendar", tags=["calendar"])
+
+# Execution-queue ordering (#1234): URGENT first, LOW last. A CASE ranking is
+# used instead of ordering the enum directly because SQLite sorts enum values
+# alphabetically (MEDIUM > LOW > HIGH), which would scramble the priority.
+_PRIORITY_RANK = case(
+    (CalendarTask.priority == CalendarTaskPriority.URGENT, 0),
+    (CalendarTask.priority == CalendarTaskPriority.HIGH, 1),
+    (CalendarTask.priority == CalendarTaskPriority.MEDIUM, 2),
+    (CalendarTask.priority == CalendarTaskPriority.LOW, 3),
+    else_=4,
+)
 
 
 def _award_task_xp(db: Session, task: CalendarTask) -> None:
@@ -20,7 +33,8 @@ def _award_task_xp(db: Session, task: CalendarTask) -> None:
 
     Anti-double-count: a task linked to a goal only awards XP through one
     channel. Since completing the goal already fires `goal_completed` (+50),
-    a linked task awards nothing — the greater XP wins.
+    a linked task awards nothing — the greater XP wins. Goal progress is
+    handled separately by `_adjust_goal_progress` (#1234).
     `day_fully_planned` fires when the last open task of the day is completed.
     """
     if task.goal_id is not None:
@@ -28,6 +42,8 @@ def _award_task_xp(db: Session, task: CalendarTask) -> None:
     event = "calendar_task_completed" if task.start_time else "calendar_task_completed_no_time"
     process_event(db, event, {"task_id": task.id, "title": task.title, "date": str(task.date)})
 
+    if task.date is None:
+        return
     # Day fully planned bonus: no open tasks left for that date.
     open_left = (
         db.query(CalendarTask)
@@ -38,9 +54,40 @@ def _award_task_xp(db: Session, task: CalendarTask) -> None:
         process_event(db, "day_fully_planned", {"date": str(task.date)})
 
 
+def _adjust_goal_progress(db: Session, task: CalendarTask, delta: float) -> None:
+    """Move the linked goal's ``current_value`` by ``delta`` (#1234).
+
+    Called symmetrically on the done edge (+1) and on the un-done edge (−1),
+    so un-completing a task never double-counts progress. Only manual COUNT
+    goals are moved: tag-derived COUNT goals compute progress from tagged
+    notes (see goal_service.get_goal_progress), not ``current_value``, and
+    BOOLEAN/PERCENT goals have their own completion path. Goal completion
+    itself is left to ``evaluate_active_goals`` / the complete endpoint.
+    """
+    if task.goal_id is None:
+        return
+    goal = db.get(Goal, task.goal_id)
+    if goal is None:
+        return
+    if goal.measurement_type != GoalMeasurement.COUNT or goal.tag_id is not None:
+        return
+    goal.current_value = max(0.0, goal.current_value + delta)
+
+
+def _apply_done_transition(db: Session, task: CalendarTask, was_done: bool) -> None:
+    if not was_done and task.done:
+        _award_task_xp(db, task)
+        _adjust_goal_progress(db, task, 1)
+        db.commit()
+    elif was_done and not task.done:
+        _adjust_goal_progress(db, task, -1)
+        db.commit()
+
+
 class CalendarTaskCreate(BaseModel):
     title: str = Field(min_length=1, max_length=500)
-    date: date_type
+    # NULL date → task lands in the unscheduled queue ("sin planificar", #1234).
+    date: date_type | None = None
     start_time: time | None = None
     end_time: time | None = None
     priority: CalendarTaskPriority = CalendarTaskPriority.MEDIUM
@@ -65,7 +112,7 @@ class CalendarTaskUpdate(BaseModel):
 class CalendarTaskOut(BaseModel):
     id: int
     title: str
-    date: date_type
+    date: date_type | None
     start_time: time | None
     end_time: time | None
     priority: CalendarTaskPriority
@@ -124,9 +171,15 @@ def list_tasks(
     start: str | None = None,
     end: str | None = None,
     date: str | None = None,
+    unscheduled: bool = False,
     db: Session = Depends(get_db),
 ):
     query = db.query(CalendarTask)
+    if unscheduled:
+        query = query.filter(CalendarTask.date.is_(None))
+    elif date or start or end:
+        # Unscheduled tasks (date IS NULL) never belong to a date/range filter.
+        query = query.filter(CalendarTask.date.isnot(None))
     if date:
         query = query.filter(CalendarTask.date == _parse_date(date))
     if start:
@@ -135,6 +188,28 @@ def list_tasks(
         query = query.filter(CalendarTask.date <= _parse_date(end))
     query = query.order_by(CalendarTask.date.asc(), CalendarTask.start_time.asc().nullslast(), CalendarTask.id.asc())
     return [_task_out(t) for t in query.all()]
+
+
+@router.get("/tasks/execution-queue", response_model=list[CalendarTaskOut])
+def execution_queue(date: str | None = None, db: Session = Depends(get_db)):
+    """Open tasks for ``date`` (default: today) in execution order (#1234).
+
+    Ordering: priority URGENT > HIGH > MEDIUM > LOW, then start_time
+    (timeless tasks last), then created_at. Consumed by the Modo Ejecución
+    view (#1201).
+    """
+    day = _parse_date(date) if date else get_local_today()
+    tasks = (
+        db.query(CalendarTask)
+        .filter(CalendarTask.date == day, CalendarTask.done.is_(False))
+        .order_by(
+            _PRIORITY_RANK,
+            CalendarTask.start_time.asc().nullslast(),
+            CalendarTask.created_at.asc(),
+        )
+        .all()
+    )
+    return [_task_out(t) for t in tasks]
 
 
 @router.post("/tasks", response_model=CalendarTaskOut, status_code=201)
@@ -176,9 +251,7 @@ def update_task(task_id: int, body: CalendarTaskUpdate, db: Session = Depends(ge
     _validate_times(cast("time | None", task.start_time), cast("time | None", task.end_time))
     db.commit()
     db.refresh(task)
-    if not was_done and task.done:
-        _award_task_xp(db, task)
-        db.commit()
+    _apply_done_transition(db, task, was_done)
     return _task_out(task)
 
 
@@ -197,7 +270,5 @@ def toggle_done(task_id: int, db: Session = Depends(get_db)):
     task.done_at = datetime.now(UTC) if task.done else None
     db.commit()
     db.refresh(task)
-    if not was_done and task.done:
-        _award_task_xp(db, task)
-        db.commit()
+    _apply_done_transition(db, task, was_done)
     return _task_out(task)

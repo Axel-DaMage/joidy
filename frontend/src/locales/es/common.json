@@ -79,7 +79,11 @@
     },
     "prevWeek": "Semana anterior",
     "nextWeek": "Semana siguiente",
-    "noEventsRange": "Sin eventos o tareas en este rango"
+    "noEventsRange": "Sin eventos o tareas en este rango",
+    "unscheduled": "Sin planificar",
+    "unscheduledEmpty": "Sin tareas sin planificar — arrastra una tarea aquí para aparcarla",
+    "unscheduledAddPlaceholder": "Nueva tarea sin día…",
+    "taskUnscheduled": "Tarea movida a sin planificar"
   },
   "emails": {
     "title": "Correos",
@@ -256,6 +260,7 @@
     "assignToDay": "Asignar al día seleccionado",
     "paused": "Pausado",
     "assign": "Asignar",
+    "mirrorToCalendar": "Duplicar en calendario",
     "calendar": "Calendario",
     "assignedOn": "Asignados · {date}",
     "remove": "Quitar",

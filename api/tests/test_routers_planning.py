@@ -1,6 +1,9 @@
 """Router tests for the planning assignment endpoints (#13)."""
 
+import datetime as dt
+
 from fastapi.testclient import TestClient
+from models.calendar_task import CalendarTask, CalendarTaskSource
 from models.goal import Goal
 from models.planning import PlanningAssignment
 
@@ -94,3 +97,50 @@ def test_set_then_get_assignments(client: TestClient, db_session):
     response = client.get(f"/planning/assignments?date={target_date}")
     assert response.status_code == 200
     assert response.json()["goal_ids"] == [g1]
+
+
+def _tasks_on(db_session, date_obj):
+    return db_session.query(CalendarTask).filter(CalendarTask.date == date_obj).all()
+
+
+def test_set_assignments_mirror_creates_calendar_tasks(client: TestClient, db_session):
+    g1 = _make_goal(db_session, "Mirror me")
+    target_date = "2099-10-11"
+    date_obj = dt.date(2099, 10, 11)
+
+    response = client.post(
+        "/planning/assignments",
+        json={"date": target_date, "goal_ids": [g1], "create_calendar_task": True},
+    )
+    assert response.status_code == 200
+
+    tasks = [t for t in _tasks_on(db_session, date_obj) if t.goal_id == g1]
+    assert len(tasks) == 1
+    assert tasks[0].title == "Mirror me"
+    assert tasks[0].source == CalendarTaskSource.JOIDY
+
+    # Re-saving the same assignments does not duplicate the task.
+    client.post(
+        "/planning/assignments",
+        json={"date": target_date, "goal_ids": [g1], "create_calendar_task": True},
+    )
+    assert len([t for t in _tasks_on(db_session, date_obj) if t.goal_id == g1]) == 1
+
+    # A goal added on a later save gets its own task; existing ones stay single.
+    g2 = _make_goal(db_session, "Mirror me too")
+    client.post(
+        "/planning/assignments",
+        json={"date": target_date, "goal_ids": [g1, g2], "create_calendar_task": True},
+    )
+    assert len([t for t in _tasks_on(db_session, date_obj) if t.goal_id == g1]) == 1
+    assert len([t for t in _tasks_on(db_session, date_obj) if t.goal_id == g2]) == 1
+
+
+def test_set_assignments_no_mirror_by_default(client: TestClient, db_session):
+    g1 = _make_goal(db_session, "No mirror")
+    target_date = "2099-10-12"
+
+    client.post("/planning/assignments", json={"date": target_date, "goal_ids": [g1]})
+
+    tasks = [t for t in _tasks_on(db_session, dt.date(2099, 10, 12)) if t.goal_id == g1]
+    assert tasks == []

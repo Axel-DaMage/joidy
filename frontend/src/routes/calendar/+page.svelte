@@ -6,7 +6,9 @@
   import {
     ChevronLeft,
     ChevronRight,
+    ChevronDown,
     CalendarDays,
+    Inbox,
     RefreshCw,
     Settings,
     Lock,
@@ -78,7 +80,7 @@
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }
 
-  function taskDay(task: CalendarTask): string {
+  function taskDay(task: CalendarTask): string | null {
     return task.date;
   }
 
@@ -118,6 +120,8 @@
     const byDay = new Map<string, CalendarTask[]>();
     for (const task of tasks) {
       const key = taskDay(task);
+      // NULL date → lives in the unscheduled tray, not on a day cell (#1234).
+      if (key === null) continue;
       if (!byDay.has(key)) byDay.set(key, []);
       byDay.get(key)!.push(task);
     }
@@ -165,6 +169,23 @@
   });
 
   let selectedDayItems = $derived(selectedDay ? (monthItems.get(selectedDay) ?? []) : []);
+
+  // Unscheduled queue ("sin planificar", #1234): tasks with no date.
+  let unscheduledTasks = $derived(
+    tasks.filter((t) => t.date === null).sort((a, b) => a.created_at.localeCompare(b.created_at))
+  );
+  let trayCollapsed = $state(
+    typeof localStorage !== 'undefined' && localStorage.getItem('joidy-calendar-tray-collapsed') === '1'
+  );
+  let trayAddTitle = $state('');
+  let trayAdding = $state(false);
+
+  function toggleTray(): void {
+    trayCollapsed = !trayCollapsed;
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('joidy-calendar-tray-collapsed', trayCollapsed ? '1' : '0');
+    }
+  }
 
   // Week view: 7 days based on current weekOffset
   let weekDays = $derived.by(() => {
@@ -337,6 +358,22 @@
     }
   }
 
+  async function addUnscheduledTask(): Promise<void> {
+    const title = trayAddTitle.trim();
+    if (!title) return;
+    trayAdding = true;
+    try {
+      const task = await api.calendarTasks.create({ title, date: null });
+      tasks = [...tasks, task];
+      trayAddTitle = '';
+    } catch (e) {
+      logger.error(e);
+      showNotification($t('calendar.taskAddError'), 'error');
+    } finally {
+      trayAdding = false;
+    }
+  }
+
   function addHour(hhmm: string): string {
     const [h, m] = hhmm.split(':').map(Number);
     const nh = (h + 1) % 24;
@@ -405,6 +442,9 @@
     if (task.google_event_id && status?.connected) {
       try {
         const day = task.date;
+        // The edit form only lives in the day panel — unscheduled tasks
+        // (date === null) never reach this path.
+        if (!day) return;
         const start = editTime ? `${day}T${editTime}:00` : day;
         const end = editEndTime
           ? `${day}T${editEndTime}:00`
@@ -482,6 +522,46 @@
       tasks = tasks.map((t) => (t.id === updated.id ? updated : t));
     } catch (e) {
       logger.error(e);
+      showNotification($t('calendar.taskUpdateError'), 'error');
+    }
+  }
+
+  // ── Unscheduled tray drop target (#1234) ─────────────────────────────────
+  let trayDropActive = $state(false);
+
+  function onTrayDragOver(event: DragEvent): void {
+    if (!draggedTask) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+    trayDropActive = true;
+  }
+
+  function onTrayDragLeave(): void {
+    trayDropActive = false;
+  }
+
+  function onTrayDrop(event: DragEvent): void {
+    event.preventDefault();
+    trayDropActive = false;
+    const task = draggedTask;
+    draggedTask = null;
+    dropTargetKey = null;
+    if (!task || task.date === null) return;
+    unscheduleTask(task);
+  }
+
+  async function unscheduleTask(task: CalendarTask): Promise<void> {
+    const previousDate = task.date;
+    // Optimistic update
+    tasks = tasks.map((t) => (t.id === task.id ? { ...t, date: null } : t));
+    try {
+      const updated = await api.calendarTasks.update(task.id, { date: null });
+      tasks = tasks.map((t) => (t.id === updated.id ? updated : t));
+      showNotification($t('calendar.taskUnscheduled'), 'success');
+    } catch (e) {
+      logger.error(e);
+      // Rollback
+      tasks = tasks.map((t) => (t.id === task.id ? { ...t, date: previousDate } : t));
       showNotification($t('calendar.taskUpdateError'), 'error');
     }
   }
@@ -828,6 +908,80 @@
           <span class="caption">{$t('calendar.pickDayHint')}</span>
         {/if}
       </div>
+    </div>
+
+    <div
+      class="unscheduled-tray"
+      class:collapsed={trayCollapsed}
+      class:drop-target={trayDropActive}
+      role="region"
+      aria-label={$t('calendar.unscheduled')}
+      ondragover={onTrayDragOver}
+      ondragleave={onTrayDragLeave}
+      ondrop={onTrayDrop}
+    >
+      <div class="tray-header">
+        <button
+          class="btn btn-ghost tray-toggle"
+          onclick={toggleTray}
+          aria-expanded={!trayCollapsed}
+          aria-label={$t('calendar.unscheduled')}
+        >
+          <ChevronDown size={14} class={trayCollapsed ? 'tray-chevron' : 'tray-chevron open'} />
+          <Inbox size={13} />
+          <span>{$t('calendar.unscheduled')}</span>
+          <span class="tray-count caption">{unscheduledTasks.length}</span>
+        </button>
+        {#if !trayCollapsed}
+          <form class="tray-add" onsubmit={(e) => { e.preventDefault(); addUnscheduledTask(); }}>
+            <input
+              class="input tray-add-input"
+              type="text"
+              bind:value={trayAddTitle}
+              placeholder={$t('calendar.unscheduledAddPlaceholder')}
+              maxlength="500"
+              disabled={trayAdding}
+            />
+            <button type="submit" class="btn btn-icon quick-submit" disabled={trayAdding || !trayAddTitle.trim()} aria-label={$t('calendar.addTask')}>
+              <Plus size={14} />
+            </button>
+          </form>
+        {/if}
+      </div>
+      {#if !trayCollapsed}
+        {#if unscheduledTasks.length === 0}
+          <span class="caption tray-empty">{$t('calendar.unscheduledEmpty')}</span>
+        {:else}
+          <div class="tray-items">
+            {#each unscheduledTasks as task (task.id)}
+              <div
+                class="tray-task"
+                class:done={task.done}
+                class:dragging={draggedTask?.id === task.id}
+                role="button"
+                tabindex="-1"
+                draggable="true"
+                ondragstart={(e) => onChipDragStart(e, task)}
+                ondragend={onChipDragEnd}
+              >
+                <button
+                  class="done-btn"
+                  class:checked={task.done}
+                  onclick={() => toggleDone(task)}
+                  aria-label={$t('calendar.toggleDone')}
+                >
+                  <Check size={12} />
+                </button>
+                <span class="priority-dot {priorityClass(task.priority)}"></span>
+                <span class="tray-task-title">{task.title}</span>
+                <button class="btn btn-ghost icon-btn" onclick={() => removeTask(task)} aria-label={$t('calendar.delete')}>
+                  <Trash2 size={12} />
+                </button>
+              </div>
+            {/each}
+          </div>
+        {/if}
+      {/if}
     </div>
   {/if}
 </div>
@@ -1489,6 +1643,121 @@
   .edit-actions {
     display: flex;
     gap: 4px;
+  }
+
+  /* Unscheduled tray ("sin planificar", #1234) */
+  .unscheduled-tray {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: var(--s2) var(--s3);
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 30%;
+    min-height: 0;
+    transition: border-color 0.15s ease;
+  }
+
+  .unscheduled-tray.drop-target {
+    border-color: var(--xp);
+    background: color-mix(in srgb, var(--xp) 12%, transparent);
+  }
+
+  .tray-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .tray-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 6px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .tray-chevron {
+    transition: transform 0.15s ease;
+  }
+
+  .tray-chevron.open {
+    transform: rotate(180deg);
+  }
+
+  .tray-count {
+    background: var(--surface-2, rgba(255, 255, 255, 0.06));
+    border: 1px solid var(--border);
+    border-radius: 99px;
+    padding: 0 6px;
+    font-size: 10px;
+  }
+
+  .tray-add {
+    display: flex;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
+    justify-content: flex-end;
+  }
+
+  .tray-add-input {
+    max-width: 280px;
+    flex: 1;
+    min-width: 0;
+    padding: var(--s1) var(--s2);
+    font-size: 12px;
+  }
+
+  .tray-empty {
+    font-style: italic;
+    opacity: 0.6;
+  }
+
+  .tray-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    overflow-y: auto;
+    min-height: 0;
+  }
+
+  .tray-task {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    border-radius: calc(var(--r) * 0.6);
+    background: var(--surface-2, rgba(255, 255, 255, 0.02));
+    font-size: 11px;
+    max-width: 320px;
+    cursor: grab;
+  }
+
+  .tray-task.done {
+    opacity: 0.55;
+  }
+
+  .tray-task.done .tray-task-title {
+    text-decoration: line-through;
+  }
+
+  .tray-task.dragging {
+    opacity: 0.35;
+  }
+
+  .tray-task-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .tray-task .icon-btn {
+    margin-left: auto;
   }
 
   .empty-wrap {
