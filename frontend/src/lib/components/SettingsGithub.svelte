@@ -214,6 +214,8 @@
       class="setting-input mono"
       style="font-size: 12px; padding: 6px 10px; flex: 1;"
       placeholder="Tu usuario de GitHub (ej: torvalds)"
+      aria-label="Usuario de GitHub"
+      autocomplete="off"
       bind:value={githubUsernameInput}
       onkeydown={(e) => {
         if (e.key === 'Enter') connectGithubByUsername();
@@ -244,6 +246,7 @@
     type="button"
     class="toggle"
     style="font-size: 10px; padding: 3px 8px;"
+    aria-expanded={showAdvancedGithub}
     onclick={() => (showAdvancedGithub = !showAdvancedGithub)}
   >
     <DynamicIcon name="SlidersHorizontal" size={11} />
@@ -293,8 +296,9 @@
     transition: border-color var(--t-fast);
     width: 100%;
   }
-  .setting-input:focus {
-    outline: none;
+  .setting-input:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
   }
 
   .configured-badge {

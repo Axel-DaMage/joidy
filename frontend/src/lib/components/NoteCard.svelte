@@ -92,6 +92,7 @@
         type="checkbox"
         class="note-checkbox"
         checked={selected}
+        aria-label={$t('noteCard.select', { values: { title: note.title } })}
         onclick={(e) => e.stopPropagation()}
         onchange={() => dispatch('toggleSelect', note.id)}
       />
@@ -187,17 +188,24 @@
 
   .note-settings-btn {
     flex-shrink: 0;
-    display: none;
+    display: flex;
     padding: 2px;
     background: transparent;
     border: none;
     color: var(--text-muted);
     cursor: pointer;
     border-radius: 3px;
+    /* Stay tabbable but visually hidden until hover/focus (#1308). */
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--t-fast);
   }
 
-  .note-card:hover .note-settings-btn {
-    display: flex;
+  .note-card:hover .note-settings-btn,
+  .note-card:focus-within .note-settings-btn,
+  .note-settings-btn:focus-visible {
+    opacity: 1;
+    pointer-events: auto;
   }
 
   .note-settings-btn:hover {

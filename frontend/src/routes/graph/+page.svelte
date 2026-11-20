@@ -114,6 +114,7 @@
           step="7"
           bind:value={dateRange}
           class="timeline-slider"
+          aria-label={$t('graph.timelineDays')}
         />
         <span class="caption mono">{dateRange}d</span>
       {/if}
@@ -122,6 +123,7 @@
       type="text"
       class="graph-search-input"
       placeholder={$t('graph.searchPlaceholder')}
+      aria-label={$t('graph.searchPlaceholder')}
       bind:value={graphSearch}
     />
   </div>
@@ -278,6 +280,10 @@
 
   .graph-search-input:focus {
     border-color: var(--accent);
+  }
+  .graph-search-input:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
   }
 
   .graph-search-input::placeholder {

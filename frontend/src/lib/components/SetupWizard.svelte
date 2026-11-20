@@ -10,15 +10,24 @@
   let loading = false;
   let step = 1; // 1: Welcome, 2: Password, 3: Vault, 4: Done
   let restartNotice = '';
+  let passwordError = '';
+
+  function validatePassword(): boolean {
+    if (password.length < 4) {
+      passwordError = $t('setupWizard.errorTooShort');
+      return false;
+    }
+    if (password !== confirmPassword) {
+      passwordError = $t('setupWizard.errorMismatch');
+      return false;
+    }
+    passwordError = '';
+    return true;
+  }
 
   async function handleSetup() {
-    if (password !== confirmPassword) {
-      showNotification('Las contraseñas no coinciden', 'error');
-      return;
-    }
-
-    if (password.length < 4) {
-      showNotification('La contraseña debe tener al menos 4 caracteres', 'error');
+    if (!validatePassword()) {
+      step = 2;
       return;
     }
 
@@ -67,7 +76,7 @@
         <form
           onsubmit={(e) => {
             e.preventDefault();
-            if (password && confirmPassword) step = 3;
+            if (password && confirmPassword && validatePassword()) step = 3;
           }}
         >
           <div class="field">
@@ -77,13 +86,29 @@
               type="password"
               bind:value={password}
               class="input"
+              autocomplete="new-password"
               required
+              aria-invalid={passwordError ? 'true' : undefined}
+              aria-describedby={passwordError ? 'pwd-error' : undefined}
             />
           </div>
           <div class="field" style="margin-top: 12px;">
             <label for="pwd2">{$t('setupWizard.confirmPassword')}</label>
-            <input id="pwd2" type="password" bind:value={confirmPassword} class="input" required />
+            <input
+              id="pwd2"
+              type="password"
+              bind:value={confirmPassword}
+              class="input"
+              autocomplete="new-password"
+              required
+              aria-invalid={passwordError ? 'true' : undefined}
+              aria-describedby={passwordError ? 'pwd-error' : undefined}
+            />
           </div>
+
+          {#if passwordError}
+            <p id="pwd-error" class="field-error" role="alert">{passwordError}</p>
+          {/if}
 
           <div class="actions">
             <button type="button" class="btn btn-ghost" onclick={() => (step = 1)}
@@ -272,6 +297,21 @@
 
   .input:focus {
     border-color: var(--xp);
+  }
+
+  .input:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
+  }
+
+  .input[aria-invalid='true'] {
+    border-color: var(--error);
+  }
+
+  .field-error {
+    margin: 12px 0 0;
+    font-size: 12px;
+    color: var(--error);
   }
 
   .actions {

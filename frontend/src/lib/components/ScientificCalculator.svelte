@@ -87,7 +87,7 @@
 <div class="scientific-calc">
   <div class="calc-display">
     <div class="calc-history"><DynamicIcon name="History" size={10} /></div>
-    <input class="calc-input" bind:value={calcInput} oninput={evaluateCalc} placeholder="0" />
+    <input class="calc-input" bind:value={calcInput} oninput={evaluateCalc} placeholder="0" aria-label="Calculator" />
     <div class="calc-res">{calcResult}</div>
   </div>
   <div class="calc-grid">
@@ -169,6 +169,10 @@
     color: var(--text-primary);
     width: 100%;
     padding: 2px 0;
+  }
+  .calc-input:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
   }
 
   .calc-res {

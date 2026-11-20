@@ -878,16 +878,19 @@
             <button
               class="btn btn-ghost view-btn"
               class:active={currentView === 'month'}
+              aria-pressed={currentView === 'month'}
               onclick={() => setView('month')}>{$t('calendar.views.month')}</button
             >
             <button
               class="btn btn-ghost view-btn"
               class:active={currentView === 'week'}
+              aria-pressed={currentView === 'week'}
               onclick={() => setView('week')}>{$t('calendar.views.week')}</button
             >
             <button
               class="btn btn-ghost view-btn"
               class:active={currentView === 'agenda'}
+              aria-pressed={currentView === 'agenda'}
               onclick={() => setView('agenda')}>{$t('calendar.views.agenda')}</button
             >
           </div>
@@ -1095,8 +1098,12 @@
                 role="button"
                 tabindex="0"
                 onclick={() => (selectedDay = selectedDay === day.key ? null : day.key)}
-                onkeydown={(e) =>
-                  e.key === 'Enter' && (selectedDay = selectedDay === day.key ? null : day.key)}
+                onkeydown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    selectedDay = selectedDay === day.key ? null : day.key;
+                  }
+                }}
               >
                 <div class="agenda-date-badge">
                   <span class="day-num">{day.date.getDate()}</span>
@@ -1211,10 +1218,11 @@
                           type="text"
                           bind:value={editTitle}
                           maxlength="500"
+                          aria-label={$t('calendar.editTitle')}
                         />
                         <div class="edit-times">
-                          <input class="input edit-input" type="time" bind:value={editTime} />
-                          <input class="input edit-input" type="time" bind:value={editEndTime} />
+                          <input class="input edit-input" type="time" bind:value={editTime} aria-label={$t('calendar.startTime')} />
+                          <input class="input edit-input" type="time" bind:value={editEndTime} aria-label={$t('calendar.endTime')} />
                         </div>
                         <div class="edit-times">
                           <select
@@ -1312,6 +1320,7 @@
               type="text"
               bind:value={quickAddTitle}
               placeholder={$t('calendar.quickAddPlaceholder')}
+              aria-label={$t('calendar.quickAddPlaceholder')}
               maxlength="500"
               disabled={addingTask}
             />
@@ -1319,6 +1328,7 @@
               class="input quick-time"
               type="time"
               bind:value={quickAddTime}
+              aria-label={$t('calendar.startTime')}
               disabled={addingTask}
             />
             <select
@@ -1411,6 +1421,7 @@
               type="text"
               bind:value={trayAddTitle}
               placeholder={$t('calendar.unscheduledAddPlaceholder')}
+              aria-label={$t('calendar.unscheduledAddPlaceholder')}
               maxlength="500"
               disabled={trayAdding}
             />

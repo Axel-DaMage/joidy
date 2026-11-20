@@ -528,7 +528,7 @@
   <DailyRecap />
 
   <!-- ── Left panel ─────────────────────────────────────────────────────────── -->
-  <section class="plant-section">
+  <section class="plant-section" role="list">
     {#each $dashboardLayout.left as wid, i (wid)}
       <Widget id={wid}>
         {@render renderWidget(wid)}
@@ -540,7 +540,7 @@
   <div class="resize-handle static"></div>
 
   <!-- ── Right panel ────────────────────────────────────────────────────────── -->
-  <section class="activity-section">
+  <section class="activity-section" role="list">
     {#each $dashboardLayout.right as wid, i (wid)}
       <Widget id={wid}>
         {@render renderWidget(wid)}

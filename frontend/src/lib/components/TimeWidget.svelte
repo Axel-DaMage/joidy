@@ -107,6 +107,7 @@
             class="tz-input mono"
             bind:value={tzInput}
             placeholder={$t('widgets.timezonePlaceholder')}
+            aria-label={$t('widgets.timezonePlaceholder')}
             onkeydown={(e) => e.key === 'Enter' && applyTzInput()}
           />
           <button
@@ -202,6 +203,10 @@
   }
   .tz-input:focus {
     border-color: var(--xp-2);
+  }
+  .tz-input:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
   }
   .tz-input::placeholder {
     color: var(--text-muted);

@@ -6,6 +6,7 @@
   import NoteEditorContent from './NoteEditorContent.svelte';
   import NoteTitleRow from './NoteTitleRow.svelte';
   import NoteRecoveryBanner from './NoteRecoveryBanner.svelte';
+  import PromptDialog from './PromptDialog.svelte';
   import { fetchAISuggestions } from '$lib/stores/notes';
   import { showFrontmatter, hideTagsLine } from '$lib/stores/settings';
   import { api, type Note } from '$lib/api';
@@ -14,6 +15,7 @@
   import { UndoHistory } from '$lib/utils/undoHistory';
   import { loadDraft, persistDraft, clearDraft } from '$lib/utils/noteDrafts';
   import { handleEditorKeydown } from '$lib/utils/editorKeys';
+  import { t } from 'svelte-i18n';
   import type WysiwygEditor from './WysiwygEditor.svelte';
 
   const AUTOSAVE_DELAY = 2000;
@@ -262,8 +264,17 @@
     }
   });
 
+  // Link-URL dialog state (replaces window.prompt(), #1308).
+  let linkDialogOpen = $state(false);
+  let linkDialogUrl = $state('');
+
   function formatMarkdown(type: string) {
     if (wysiwygMode && wysiwygRef) {
+      if (type === 'link') {
+        linkDialogUrl = '';
+        linkDialogOpen = true;
+        return;
+      }
       applyWysiwygFormat(wysiwygRef, type);
       return;
     }
@@ -354,6 +365,17 @@
     {scheduleSnapshot}
     {onContentChange}
     {handleSave}
+  />
+
+  <PromptDialog
+    open={linkDialogOpen}
+    title={$t('noteEditor.linkUrlTitle')}
+    label={$t('noteEditor.linkUrlPrompt')}
+    bind:value={linkDialogUrl}
+    placeholder="https://"
+    confirmLabel={$t('noteEditor.linkUrlInsert')}
+    onSubmit={(url) => wysiwygRef?.setLink(url)}
+    onClose={() => (linkDialogOpen = false)}
   />
 </div>
 

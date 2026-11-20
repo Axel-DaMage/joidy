@@ -115,6 +115,7 @@
             class="search-input"
             type="text"
             placeholder={$t('skills.searchPlaceholder')}
+            aria-label={$t('skills.searchPlaceholder')}
             bind:value={searchQuery}
           />
           {#if searchQuery}
@@ -285,6 +286,10 @@
 
   .search-input:focus {
     border-color: var(--accent);
+  }
+  .search-input:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
   }
 
   .search-clear {

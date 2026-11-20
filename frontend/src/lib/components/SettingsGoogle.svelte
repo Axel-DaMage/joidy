@@ -194,6 +194,8 @@
           placeholder={isConfigured('google_client_id')
             ? '•••••••••••••••••••••••• (configurado)'
             : '1234567890-abc.apps.googleusercontent.com'}
+          aria-label="Google OAuth Client ID"
+          autocomplete="off"
           bind:value={systemConfig.google_client_id}
         />
       </div>
@@ -220,6 +222,8 @@
           placeholder={isConfigured('google_client_secret') && !systemConfig.google_client_secret
             ? '•••••••••••••••• (configurado)'
             : 'GOCSPX-...'}
+          aria-label="Google OAuth Client Secret"
+          autocomplete="off"
           bind:value={systemConfig.google_client_secret}
         />
       </div>
@@ -233,6 +237,8 @@
           class="setting-input mono"
           style="font-size: 11px; padding: 4px 8px;"
           placeholder="http://localhost:8000/integrations/google/callback"
+          aria-label="Redirect URI"
+          autocomplete="off"
           bind:value={systemConfig.google_redirect_uri}
         />
         <p class="hint" style="margin: 0;">
@@ -275,8 +281,9 @@
     transition: border-color var(--t-fast);
     width: 100%;
   }
-  .setting-input:focus {
-    outline: none;
+  .setting-input:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
   }
   .configured-badge {
     font-size: 10px;

@@ -5,6 +5,7 @@
   import { showFrontmatter, hideTagsLine } from '$lib/stores/settings';
   import { extractTagsFromContent } from '$lib/utils/noteContent';
   import { highlightMarkdown } from '$lib/utils/markdownHighlight';
+  import { t } from 'svelte-i18n';
   import type { Note } from '$lib/api';
 
   interface Props {
@@ -177,6 +178,7 @@
         oninput={updateVisibleContent}
         onscroll={syncScroll}
         placeholder="Escribe en markdown... (Ctrl+S para guardar, Ctrl+P para preview)"
+        aria-label={$t('noteEditor.contentLabel')}
         spellcheck="false"></textarea>
     </div>
   {/if}
@@ -272,5 +274,11 @@
   .content-textarea::selection {
     background: color-mix(in srgb, var(--xp) 30%, transparent);
     color: transparent;
+  }
+
+  /* The editor is borderless by design — keep a subtle keyboard-focus cue. */
+  .content-textarea:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--xp) 60%, transparent);
+    outline-offset: -2px;
   }
 </style>

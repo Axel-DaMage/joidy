@@ -138,6 +138,10 @@
 <div bind:this={editorElement} class="wysiwyg-editor"></div>
 
 <style>
+  :global(.wysiwyg-editor .tiptap-prose:focus-visible) {
+    outline: 2px solid var(--xp);
+    outline-offset: -2px;
+  }
   :global(.wysiwyg-editor .tiptap-prose) {
     outline: none;
     min-height: 300px;

@@ -3,8 +3,10 @@
   import LazyIconPicker from './LazyIconPicker.svelte';
   import TreeContextMenu from './TreeContextMenu.svelte';
   import FolderPicker from './FolderPicker.svelte';
+  import ConfirmDialog from './ConfirmDialog.svelte';
   import { updateFolderMeta } from '$lib/stores/settings';
   import { updateNote } from '$lib/stores/notes';
+  import { showNotification } from '$lib/stores/notifications';
   import {
     refreshTree,
     handleRename,
@@ -14,6 +16,7 @@
     handleDeleteNote,
     handleNewNoteInFolder,
     handleDeleteFolder,
+    confirmDeleteFolder,
   } from '$lib/utils/notesPage';
   import {
     flatNodes,
@@ -30,6 +33,7 @@
     newFolderParent,
     newFolderIcon,
     newFolderColor,
+    deletingFolder,
   } from '$lib/stores/notesUi';
   import { t } from 'svelte-i18n';
 </script>
@@ -57,6 +61,7 @@
           class="input mono"
           bind:value={$newFolderName}
           placeholder={$t('notesPage.newFolderPlaceholder')}
+          aria-label={$t('notesPage.name')}
           style="width:100%; box-sizing:border-box;"
         />
       </div>
@@ -66,6 +71,7 @@
         <select
           class="input mono"
           bind:value={$newFolderParent}
+          aria-label={$t('notesPage.location')}
           style="width:100%; box-sizing:border-box;"
         >
           <option value="">(Raíz)</option>
@@ -77,12 +83,18 @@
 
       <div class="folder-color-row">
         <span class="folder-label mono">{$t('notesPage.color')}</span>
-        <input type="color" class="folder-color-input" bind:value={$newFolderColor} />
+        <input
+          type="color"
+          class="folder-color-input"
+          bind:value={$newFolderColor}
+          aria-label={$t('notesPage.color')}
+        />
         <input
           type="text"
           class="folder-hex-input mono"
           maxlength="7"
           bind:value={$newFolderColor}
+          aria-label="{$t('notesPage.color')} hex"
         />
       </div>
 
@@ -111,7 +123,7 @@
               $creatingFolder = false;
               await refreshTree();
             } catch (e) {
-              alert((e as any).message || 'Error al crear carpeta');
+              showNotification((e as any).message || 'Error al crear carpeta', 'error');
             }
           }}>{$t('notesPage.create')}</button
         >
@@ -153,6 +165,7 @@
         type="text"
         class="input mono"
         bind:value={$renameValue}
+        aria-label={$t('notesPage.renameTitle')}
         style="width:100%; box-sizing:border-box; margin-bottom:12px;"
         onkeydown={(e) => e.key === 'Enter' && confirmRename()}
       />
@@ -174,6 +187,19 @@
   />
 {/if}
 
+<!-- Folder delete confirmation (replaces window.confirm, #1308) -->
+<ConfirmDialog
+  open={$deletingFolder !== null}
+  title={$t('notesPage.deleteFolderTitle')}
+  message={$deletingFolder
+    ? $t('notesPage.deleteFolderMessage', { values: { name: $deletingFolder.name } })
+    : ''}
+  confirmLabel={$t('notesPage.deleteFolder')}
+  danger
+  onConfirm={confirmDeleteFolder}
+  onClose={() => ($deletingFolder = null)}
+/>
+
 {#if $editingFolder}
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -191,8 +217,19 @@
       <!-- Color bar -->
       <div class="folder-color-row">
         <span class="folder-label mono">{$t('notesPage.color')}</span>
-        <input type="color" class="folder-color-input" bind:value={$folderColor} />
-        <input type="text" class="folder-hex-input mono" maxlength="7" bind:value={$folderColor} />
+        <input
+          type="color"
+          class="folder-color-input"
+          bind:value={$folderColor}
+          aria-label={$t('notesPage.color')}
+        />
+        <input
+          type="text"
+          class="folder-hex-input mono"
+          maxlength="7"
+          bind:value={$folderColor}
+          aria-label="{$t('notesPage.color')} hex"
+        />
       </div>
 
       <!-- Icon picker -->
@@ -335,6 +372,10 @@
     background: var(--bg);
     border: 1px solid var(--border);
     border-radius: 6px;
+  }
+  :global(.folder-search-input:focus-visible) {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
   }
   :global(.folder-search-input) {
     background: transparent;

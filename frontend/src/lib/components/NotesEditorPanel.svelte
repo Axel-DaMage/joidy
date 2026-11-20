@@ -65,6 +65,7 @@
           <input
             type="text"
             placeholder={$t('notesPage.searchNotePlaceholder')}
+            aria-label={$t('notesPage.searchNotePlaceholder')}
             bind:value={$search}
           />
         </div>
@@ -179,6 +180,10 @@
     font-family: var(--font-sans);
     font-size: 14px;
     flex: 1;
+  }
+  input:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
   }
 
   .dash-widgets {

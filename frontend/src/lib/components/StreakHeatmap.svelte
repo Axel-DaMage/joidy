@@ -217,14 +217,14 @@
 
 <div class="activity" style="--ac: {color};">
   {#if !hideTabs}
-    <div class="tabs">
-      <button class="tab" class:on={view === 'week'} onclick={() => (view = 'week')}
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" class:on={view === 'week'} aria-selected={view === 'week'} onclick={() => (view = 'week')}
         >{$t('streakHeatmap.week')}</button
       >
-      <button class="tab" class:on={view === 'month'} onclick={() => (view = 'month')}
+      <button class="tab" role="tab" class:on={view === 'month'} aria-selected={view === 'month'} onclick={() => (view = 'month')}
         >{$t('streakHeatmap.month')}</button
       >
-      <button class="tab" class:on={view === 'year'} onclick={() => (view = 'year')}
+      <button class="tab" role="tab" class:on={view === 'year'} aria-selected={view === 'year'} onclick={() => (view = 'year')}
         >{$t('streakHeatmap.year')}</button
       >
     </div>

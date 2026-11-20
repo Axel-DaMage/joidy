@@ -169,6 +169,7 @@
         class="search-input"
         type="text"
         placeholder={$t('emails.searchPlaceholder')}
+        aria-label={$t('emails.searchPlaceholder')}
         bind:value={searchQuery}
         oninput={onSearchInput}
       />
@@ -322,6 +323,11 @@
     color: var(--text-primary);
     font-size: 13px;
   }
+  .search-input:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
+    border-radius: var(--r-sm);
+  }
 
   .emails-list {
     display: flex;
@@ -432,7 +438,8 @@
     transition: opacity 0.15s ease;
   }
 
-  .email-item:hover .email-ops {
+  .email-item:hover .email-ops,
+  .email-item:focus-within .email-ops {
     opacity: 1;
   }
 

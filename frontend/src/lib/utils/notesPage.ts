@@ -344,23 +344,31 @@ export function handleDeleteFolder() {
   const menu = get(ui.ctxMenu);
   if (!menu) return;
   const path = menu.node.path;
+  const name = menu.node.name;
   ui.ctxMenu.set(null);
-  if (confirm(`¿Eliminar carpeta "${menu.node.name}" y todas sus notas?`)) {
-    // Delete notes in this folder
-    const ids = get(notes)
-      .filter((n) => n.source_path && n.source_path.includes(path))
-      .map((n) => n.id);
-    Promise.all(ids.map((id) => deleteNote(id)))
-      .then(async () => {
-        try {
-          await api.folders.delete(path);
-        } catch (e) {
-          logger.warn('[notes] Failed to delete folder on disk:', e);
-        }
-        await refreshTree();
-      })
-      .catch((e) => logger.error('[notes] Failed to delete folder notes:', e));
-  }
+  // Defer to a ConfirmDialog rendered by NotesOverlays (#1308).
+  ui.deletingFolder.set({ path, name });
+}
+
+export function confirmDeleteFolder() {
+  const pending = get(ui.deletingFolder);
+  if (!pending) return;
+  const path = pending.path;
+  ui.deletingFolder.set(null);
+  // Delete notes in this folder
+  const ids = get(notes)
+    .filter((n) => n.source_path && n.source_path.includes(path))
+    .map((n) => n.id);
+  Promise.all(ids.map((id) => deleteNote(id)))
+    .then(async () => {
+      try {
+        await api.folders.delete(path);
+      } catch (e) {
+        logger.warn('[notes] Failed to delete folder on disk:', e);
+      }
+      await refreshTree();
+    })
+    .catch((e) => logger.error('[notes] Failed to delete folder notes:', e));
 }
 
 export async function openFolderCustomizer(node: {
