@@ -201,11 +201,7 @@ def test_retoggle_done_does_not_refarm_xp(client: TestClient, db_session):
     for _ in range(3):
         client.post(f"/calendar/tasks/{task.id}/done")
 
-    completed = (
-        db_session.query(XPEvent)
-        .filter(XPEvent.event_type == "calendar_task_completed_no_time")
-        .all()
-    )
+    completed = db_session.query(XPEvent).filter(XPEvent.event_type == "calendar_task_completed_no_time").all()
     assert len(completed) == 1
     planned = db_session.query(XPEvent).filter(XPEvent.event_type == "day_fully_planned").all()
     assert len(planned) == 1

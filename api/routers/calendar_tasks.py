@@ -40,11 +40,7 @@ def _xp_event_recorded(db: Session, event_type: str, key: str, value: object) ->
     alone cannot (``"task_id": 5`` is a substring of ``"task_id": 55``).
     """
     needle = f'"{key}": {json.dumps(value)}'
-    rows = (
-        db.query(XPEvent)
-        .filter(XPEvent.event_type == event_type, XPEvent.metadata_json.like(f"%{needle}%"))
-        .all()
-    )
+    rows = db.query(XPEvent).filter(XPEvent.event_type == event_type, XPEvent.metadata_json.like(f"%{needle}%")).all()
     for row in rows:
         try:
             meta = json.loads(row.metadata_json or "{}")
