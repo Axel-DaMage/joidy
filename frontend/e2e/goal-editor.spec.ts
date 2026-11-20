@@ -2,7 +2,7 @@ import { test, expect, authGoto } from './helpers/auth';
 
 /**
  * Goal Editor — comprehensive E2E tests.
- * Covers: open goal detail, title/content editing, settings modal (3 tabs),
+ * Covers: open goal detail, title/content editing, settings modal (sections),
  * goal creation modal, goal actions (pause/complete/delete).
  */
 test.describe('Goal Editor — open detail page', () => {
@@ -118,15 +118,17 @@ test.describe('Goal Editor — settings modal', () => {
     await expect(page.locator('.goal-settings-heading:has-text("Editar objetivo")')).toBeVisible();
   });
 
-  test('settings modal has 3 tabs', async ({ page }) => {
+  test('settings modal has 3 sections', async ({ page }) => {
     await page.locator('.toolbar-btn:has-text("Ajustes")').click();
     await page.waitForTimeout(500);
-    await expect(page.locator('.ng-tab:has-text("Basico")').or(page.locator('.ng-tab:has-text("Básico")'))).toBeVisible({ timeout: 3000 });
-    await expect(page.locator('.ng-tab:has-text("Apariencia")')).toBeVisible();
-    await expect(page.locator('.ng-tab:has-text("Avanzado")')).toBeVisible();
+    // The modal is a single scrollable panel — Básico/Apariencia/Avanzado
+    // are .ng-section-heading sections, not tabs.
+    await expect(page.locator('.ng-section-heading:has-text("Básico")')).toBeVisible({ timeout: 3000 });
+    await expect(page.locator('.ng-section-heading:has-text("Apariencia")')).toBeVisible();
+    await expect(page.locator('.ng-section-heading:has-text("Avanzado")')).toBeVisible();
   });
 
-  test('Basico tab has frequency buttons', async ({ page }) => {
+  test('Basico section has frequency buttons', async ({ page }) => {
     await page.locator('.toolbar-btn:has-text("Ajustes")').click();
     await page.waitForTimeout(500);
     // Frequency buttons: Diario, Semanal, Mensual, Anual
@@ -136,21 +138,17 @@ test.describe('Goal Editor — settings modal', () => {
     await expect(page.locator('.ng-freq-btn:has-text("Anual")')).toBeVisible();
   });
 
-  test('Apariencia tab has emoji and icon options', async ({ page }) => {
+  test('Apariencia section has emoji and icon options', async ({ page }) => {
     await page.locator('.toolbar-btn:has-text("Ajustes")').click();
     await page.waitForTimeout(500);
-    await page.locator('.ng-tab:has-text("Apariencia")').click();
-    await page.waitForTimeout(300);
     await expect(page.locator('.icon-type-btn:has-text("Emoji")')).toBeVisible({ timeout: 3000 });
     await expect(page.locator('.icon-type-btn:has-text("Icono")')).toBeVisible();
   });
 
-  test('Avanzado tab has measurement type', async ({ page }) => {
+  test('Avanzado section has measurement type', async ({ page }) => {
     await page.locator('.toolbar-btn:has-text("Ajustes")').click();
     await page.waitForTimeout(500);
-    await page.locator('.ng-tab:has-text("Avanzado")').click();
-    await page.waitForTimeout(300);
-    // Should show measurement type label
+    // Should show measurement type label inside the advanced section
     await expect(page.locator('.settings-advanced .label').first()).toBeVisible({ timeout: 3000 });
   });
 

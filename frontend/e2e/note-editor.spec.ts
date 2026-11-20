@@ -161,7 +161,7 @@ test.describe('Note Editor — export dropdown', () => {
 });
 
 test.describe('Note Editor — delete flow', () => {
-  test('delete button shows confirmation bar', async ({ page }) => {
+  test('delete button shows confirmation modal', async ({ page }) => {
     await authGoto(page, '/notes');
     await page.waitForTimeout(1500);
     await page.locator('.note-card').first().click();
@@ -169,14 +169,17 @@ test.describe('Note Editor — delete flow', () => {
     const deleteBtn = page.locator('.toolbar-btn.danger-btn[aria-label="Eliminar nota"]');
     await expect(deleteBtn).toBeVisible({ timeout: 5000 });
     await deleteBtn.click();
-    await page.waitForTimeout(500);
-    // Confirmation bar should appear
-    await expect(page.locator('.delete-confirm-bar')).toBeVisible({ timeout: 3000 });
-    await expect(page.locator('.delete-confirm-text:has-text("¿Eliminar esta nota?")')).toBeVisible();
+    // Confirmation modal (ModalDialog) should appear — the old
+    // .delete-confirm-bar was replaced by NotesDeleteModal (#210).
+    const modal = page.locator('.modal-overlay .modal');
+    await expect(modal).toBeVisible({ timeout: 3000 });
+    await expect(modal.locator('.modal-title')).toHaveText('Eliminar');
+    await expect(modal.locator('.delete-modal-desc')).toHaveText(
+      'Esta acción no se puede deshacer.'
+    );
     // Cancel
-    await page.locator('.btn-cancel:has-text("Cancelar")').click();
-    await page.waitForTimeout(300);
-    await expect(page.locator('.delete-confirm-bar')).not.toBeVisible({ timeout: 3000 });
+    await modal.locator('.btn-ghost:has-text("Cancelar")').click();
+    await expect(modal).not.toBeVisible({ timeout: 3000 });
   });
 });
 

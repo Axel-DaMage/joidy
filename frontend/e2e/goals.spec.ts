@@ -22,7 +22,7 @@ test.describe('Goals — page structure', () => {
     await expect(page.locator('button:has-text("Fijados")')).toBeVisible();
     await expect(page.locator('button:has-text("Activos")')).toBeVisible();
     await expect(page.locator('button:has-text("Completados")')).toBeVisible();
-    await expect(page.locator('button:has-text("Pausados")')).toBeVisible();
+    await expect(page.locator('button:has-text("Archivados")')).toBeVisible();
     await expect(page.locator('button:has-text("Fallidos")')).toBeVisible();
   });
 
@@ -123,7 +123,8 @@ test.describe('Goals — goal cards', () => {
     const count = await goalCards.count();
     if (count > 0) {
       // Pin button is a sibling within the goal-editor-card container
-      const pinBtn = page.locator('.goal-editor-card button[aria-label="Fijar objetivo"], .goal-editor-card button[aria-label="Desfijar objetivo"]').first();
+      // (aria-labels are "Fijar"/"Desfijar" — goalCard.pin/unpin).
+      const pinBtn = page.locator('.goal-editor-card button[aria-label="Fijar"], .goal-editor-card button[aria-label="Desfijar"]').first();
       await expect(pinBtn).toBeVisible({ timeout: 3000 });
     }
   });
@@ -145,12 +146,12 @@ test.describe('Goals — goal cards', () => {
     await page.waitForTimeout(1000);
     const firstGoalCard = page.locator('.goal-editor-card').first();
     if (await firstGoalCard.isVisible({ timeout: 2000 }).catch(() => false)) {
-      const firstPinBtn = firstGoalCard.locator('button[aria-label="Fijar objetivo"], button[aria-label="Desfijar objetivo"]').first();
+      const firstPinBtn = firstGoalCard.locator('button[aria-label="Fijar"], button[aria-label="Desfijar"]').first();
       await expect(firstPinBtn).toBeVisible({ timeout: 3000 });
       await firstPinBtn.click();
       await page.waitForTimeout(500);
       // The button should still be visible (toggled state, aria-label may change)
-      const toggledBtn = firstGoalCard.locator('button[aria-label="Fijar objetivo"], button[aria-label="Desfijar objetivo"]').first();
+      const toggledBtn = firstGoalCard.locator('button[aria-label="Fijar"], button[aria-label="Desfijar"]').first();
       await expect(toggledBtn).toBeVisible();
     }
   });

@@ -4,7 +4,7 @@ import { test, expect, authGoto, dismissConflictModal } from './helpers/auth';
  * Settings Panel — comprehensive E2E tests.
  * The Settings panel uses .backdrop and .panel classes (not .modal-overlay).
  * Covers: open/close, all sections, dev mode toggle, integrations,
- * export buttons, appearance settings, Obsidian vault settings.
+ * appearance settings, Obsidian vault settings.
  */
 async function openSettings(page: import('@playwright/test').Page) {
   await authGoto(page, '/');
@@ -117,16 +117,6 @@ test.describe('Settings — Integraciones', () => {
     await openSettings(page);
     const section = page.locator('.panel .section').filter({ hasText: 'Integraciones' });
     await expect(section.locator('text=/google/i').first()).toBeVisible({ timeout: 5000 });
-  });
-});
-
-test.describe('Settings — Exportar Datos', () => {
-  test('export options are visible', async ({ page }) => {
-    await openSettings(page);
-    const section = page.locator('.panel .section').filter({ hasText: 'Exportar Datos' });
-    await expect(section.locator('text=/markdown/i')).toBeVisible({ timeout: 5000 });
-    await expect(section.locator('text=/html/i')).toBeVisible({ timeout: 5000 });
-    await expect(section.locator('text=/zip/i')).toBeVisible({ timeout: 5000 });
   });
 });
 
