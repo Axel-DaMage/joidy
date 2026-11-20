@@ -17,6 +17,7 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
+import auth as shared_auth
 import httpx
 from config import settings
 from logging_config import get_correlation_id, set_correlation_id
@@ -43,7 +44,9 @@ _file_locks_guard = asyncio.Lock()
 
 # Last-synced content fingerprint per path, used to detect renames: a deleted
 # file whose hash matches an added file in the same batch is a move, not a
-# delete+create (#364).
+# delete+create (#364). Fingerprints are also written through to the
+# persistent event log (see _record_fingerprint) so rename detection still
+# works when a delete+add pair spans a worker restart (#1302).
 _fingerprints: dict[str, str] = {}
 
 # Set by the worker's signal handler to trigger a graceful two-phase shutdown:
@@ -71,6 +74,10 @@ class PersistentEventLog:
     so if the worker crashes mid-processing the events are replayed on the next
     startup (#371). The log keys on path (last write wins), mirroring the
     in-memory batch dedup.
+
+    The same DB also persists content fingerprints (path → sha256 of the
+    last-synced content), so a delete+add pair spanning a restart can still
+    be recognised as a rename and keep the note id/XP/history (#1302).
     """
 
     def __init__(self, path: str):
@@ -81,6 +88,9 @@ class PersistentEventLog:
             self._conn = sqlite3.connect(path, check_same_thread=False)
             self._conn.execute(
                 "CREATE TABLE IF NOT EXISTS pending_events (path TEXT PRIMARY KEY, change_type TEXT NOT NULL)"
+            )
+            self._conn.execute(
+                "CREATE TABLE IF NOT EXISTS fingerprints (path TEXT PRIMARY KEY, fingerprint TEXT NOT NULL)"
             )
             self._conn.commit()
         except Exception as exc:
@@ -127,6 +137,39 @@ class PersistentEventLog:
             logger.warning("[vault] Failed to read pending events: %s", type(exc).__name__)
             return []
 
+    def set_fingerprint(self, path: str, fingerprint: str) -> None:
+        """Persist the last-synced content fingerprint for ``path`` (#1302)."""
+        if self._conn is None:
+            return
+        try:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO fingerprints (path, fingerprint) VALUES (?, ?)",
+                (path, fingerprint),
+            )
+            self._conn.commit()
+        except Exception as exc:
+            logger.warning("[vault] Failed to persist fingerprint for %s: %s", _log_name(path), type(exc).__name__)
+
+    def remove_fingerprint(self, path: str) -> None:
+        if self._conn is None:
+            return
+        try:
+            self._conn.execute("DELETE FROM fingerprints WHERE path = ?", (path,))
+            self._conn.commit()
+        except Exception as exc:
+            logger.warning("[vault] Failed to remove fingerprint for %s: %s", _log_name(path), type(exc).__name__)
+
+    def fingerprints(self) -> dict[str, str]:
+        """All persisted fingerprints, used to seed rename detection (#1302)."""
+        if self._conn is None:
+            return {}
+        try:
+            rows = self._conn.execute("SELECT path, fingerprint FROM fingerprints").fetchall()
+            return dict(rows)
+        except Exception as exc:
+            logger.warning("[vault] Failed to read fingerprints: %s", type(exc).__name__)
+            return {}
+
     def close(self) -> None:
         if self._conn is not None:
             try:
@@ -136,14 +179,49 @@ class PersistentEventLog:
             self._conn = None
 
 
-async def get_auth_token(client: httpx.AsyncClient, *, force: bool = False) -> str:
-    """Return the INTERNAL_API_TOKEN service credential (#1275).
+# Event log bound by watch_vault() at startup so fingerprint writes also hit
+# the persistent store. Unbound (unit tests, direct calls) → memory-only.
+_event_log: PersistentEventLog | None = None
 
-    The worker authenticates to the API with a dedicated service token
-    instead of logging in with AUTH_PASSWORD. ``client`` and ``force`` are
-    kept so callers and 401-retry paths stay unchanged.
+
+def _bind_event_log(event_log: PersistentEventLog) -> None:
+    """Persist future fingerprints into ``event_log`` and seed the in-memory
+    rename table with fingerprints saved before a crash/restart (#1302).
+
+    Without this, a delete+add pair split by a restart is processed as
+    delete+create and the note loses its id, XP and history.
     """
-    return settings.internal_api_token or ""
+    global _event_log
+    _event_log = event_log
+    _fingerprints.update(event_log.fingerprints())
+
+
+def _unbind_event_log() -> None:
+    global _event_log
+    _event_log = None
+
+
+def _record_fingerprint(path: str, fingerprint: str) -> None:
+    """Store a content fingerprint in memory AND in the bound event log."""
+    _fingerprints[path] = fingerprint
+    if _event_log is not None:
+        _event_log.set_fingerprint(path, fingerprint)
+
+
+def _drop_fingerprint(path: str) -> None:
+    _fingerprints.pop(path, None)
+    if _event_log is not None:
+        _event_log.remove_fingerprint(path)
+
+
+async def get_auth_token(client: httpx.AsyncClient, *, force: bool = False) -> str:
+    """Return the INTERNAL_API_TOKEN service credential (#1275, #1302).
+
+    Delegates to the lock-guarded single-flight refresher shared by every
+    worker task, so a burst of concurrent 401s triggers exactly one fetch
+    instead of a refresh stampede.
+    """
+    return await shared_auth.get_auth_token(client, force=force)
 
 
 def _is_joidy_file(path: str) -> bool:
@@ -306,7 +384,16 @@ def _extract_tags_from_content(content: str, frontmatter: dict) -> list[str]:
 
 
 async def delete_note_by_path(path: str, client: httpx.AsyncClient, token: str):
-    """Find and delete a note by its source_path with retries."""
+    """Delete the note matching ``source_path`` via the atomic by-path
+    endpoint (#1302).
+
+    The old flow listed notes, captured an id, then deleted it — a note
+    re-created or updated between the list and the delete was removed
+    anyway (TOCTOU). Now the API matches ``source_path`` and verifies the
+    ``updated_at`` etag captured at lookup time inside a single locked
+    transaction: a note that changed or was recreated in between answers
+    409/404 and is left untouched (a later add/modify event resyncs it).
+    """
     for attempt in range(3):
         try:
             current_token = await get_auth_token(client)
@@ -322,17 +409,28 @@ async def delete_note_by_path(path: str, client: httpx.AsyncClient, token: str):
                 await get_auth_token(client, force=True)
                 continue
             if r.status_code == 200:
-                notes = r.json()
-                for n in notes:
-                    if n.get("source_path") == path:
-                        del_res = await client.delete(
-                            f"{settings.api_url}/notes/{n['id']}", headers=headers, timeout=10.0
+                target = next((n for n in r.json() if n.get("source_path") == path), None)
+                if target is not None:
+                    del_res = await client.delete(
+                        f"{settings.api_url}/notes/by-path",
+                        params={
+                            "source_path": path,
+                            "expected_updated_at": target.get("updated_at") or "",
+                        },
+                        headers=headers,
+                        timeout=10.0,
+                    )
+                    if del_res.status_code == 401:
+                        await get_auth_token(client, force=True)
+                        continue
+                    if del_res.status_code == 409:
+                        logger.info(
+                            "[vault] Skipping delete of %s — note changed since lookup",
+                            _log_name(path),
                         )
-                        if del_res.status_code == 401:
-                            await get_auth_token(client, force=True)
-                            continue
-                        logger.info("[vault] Deleted: %s", _log_name(path))
                         return
+                    logger.info("[vault] Deleted: %s", _log_name(path))
+                    return
             break  # Success or not found
         except Exception as e:
             if attempt == 2:
@@ -415,8 +513,8 @@ async def rename_note_path(old_path: str, new_path: Path, client: httpx.AsyncCli
                 await asyncio.sleep(2**attempt)
                 continue
             res.raise_for_status()
-            _fingerprints[str(new_path)] = _fingerprint(content)
-            _fingerprints.pop(old_path, None)
+            _record_fingerprint(str(new_path), _fingerprint(content))
+            _drop_fingerprint(old_path)
             logger.info("[vault] Renamed: %s -> %s", _log_name(old_path), _log_name(new_path))
             return
     except Exception as e:
@@ -520,7 +618,7 @@ async def import_or_update_note(filepath: Path, client: httpx.AsyncClient, token
             res.raise_for_status()
             break
 
-        _fingerprints[str(filepath)] = _fingerprint(content)
+        _record_fingerprint(str(filepath), _fingerprint(content))
         logger.info("[vault] Synced: %s", _log_name(filepath))
 
     except Exception as e:
@@ -559,6 +657,135 @@ async def initial_scan(vault_path: Path, client: httpx.AsyncClient, token: str):
         break
 
 
+async def _process_batch(
+    pending: dict[str, Change],
+    client: httpx.AsyncClient,
+    token: str,
+    event_log: PersistentEventLog,
+    in_flight: set[asyncio.Task] | None = None,
+):
+    """Process one deduped batch of vault events.
+
+    Shared by the live consumer and by startup replay (#1302): events
+    persisted before a crash are reconciled through this same path BEFORE
+    the initial scan, so a delete+add pair spanning a restart is still
+    detected as a rename — the note keeps its id/XP/history instead of
+    being deleted and re-created as a duplicate at the new path.
+    """
+    # Rename detection (#364): pair a deleted path with an added path
+    # whose content fingerprint matches the last-seen content of the
+    # deleted path. Treat the pair as a move (update source_path) and
+    # drop both from the delete/add processing.
+    deletes: dict[str, Change] = {}
+    adds: dict[str, Change] = {}
+    for path, ct in pending.items():
+        if ct == Change.deleted:
+            deletes[path] = ct
+        else:
+            adds[path] = ct
+
+    renames: list[tuple[str, str]] = []  # (old_path, new_path)
+    consumed_adds: set[str] = set()
+    for old_path in list(deletes.keys()):
+        old_fp = _fingerprints.get(old_path)
+        if not old_fp:
+            continue
+        for new_path in adds:
+            if new_path in consumed_adds:
+                continue
+            try:
+                if Path(new_path).exists() and _is_valid_vault_path(new_path, Change.added, _vault_root()):
+                    content = _read_vault_file(Path(new_path))
+                    if content is not None and _fingerprint(content) == old_fp:
+                        renames.append((old_path, new_path))
+                        consumed_adds.add(new_path)
+                        break
+            except Exception:  # noqa: S112 — unreadable candidate file; try the next one
+                continue
+
+    for old_path, new_path in renames:
+        deletes.pop(old_path, None)
+        pending.pop(old_path, None)
+        pending.pop(new_path, None)
+
+    remaining = {**deletes}
+    for path, ct in adds.items():
+        if path not in consumed_adds:
+            remaining[path] = ct
+
+    async def process(path: str, change_type: Change):
+        # Re-validate queued paths: the awatch producer filters events
+        # before enqueue, but persisted replays and direct queue
+        # injection must not reach a vault read unvalidated (#1293).
+        if not _is_valid_vault_path(path, change_type, _vault_root()):
+            logger.warning("[vault] Skipping invalid queued path %s", _log_name(path))
+            event_log.remove(path)
+            return
+        lock = await _get_file_lock(path)
+        async with lock:
+            try:
+                if change_type == Change.deleted and Path(path).exists():
+                    # The file reappeared after the delete event fired —
+                    # recreated inside the debounce window or while the
+                    # worker was down. Resync instead of deleting so the
+                    # note keeps its id/history (#1302).
+                    change_type = Change.modified
+                # Shield the critical write so a shutdown cancellation
+                # does not interrupt a mid-flight API call (#371).
+                if change_type == Change.deleted:
+                    await asyncio.shield(delete_note_by_path(path, client, token))
+                else:
+                    await asyncio.shield(import_or_update_note(Path(path), client, token))
+                event_log.remove(path)
+            except asyncio.CancelledError:
+                # Propagate cancellation but keep the event logged so
+                # it is retried on the next startup.
+                raise
+            except Exception as exc:
+                # Exception type only — tracebacks/str(exc) can embed
+                # vault paths and request URLs (#1299, #1301).
+                logger.error(
+                    "[vault] Failed to process %s (%s): %s",
+                    _log_name(path),
+                    change_type.name,
+                    type(exc).__name__,
+                )
+
+    async def process_rename(old_path: str, new_path: str):
+        if not _is_valid_vault_path(new_path, Change.added, _vault_root()):
+            logger.warning("[vault] Skipping invalid rename target %s", _log_name(new_path))
+            event_log.remove(old_path)
+            event_log.remove(new_path)
+            return
+        lock = await _get_file_lock(old_path)
+        async with lock:
+            try:
+                await asyncio.shield(rename_note_path(old_path, Path(new_path), client, token))
+                event_log.remove(old_path)
+                event_log.remove(new_path)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.error(
+                    "[vault] Failed to rename %s -> %s: %s",
+                    _log_name(old_path),
+                    _log_name(new_path),
+                    type(exc).__name__,
+                )
+
+    batch_tasks: list[asyncio.Task] = []
+    for old_path, new_path in renames:
+        batch_tasks.append(asyncio.ensure_future(process_rename(old_path, new_path)))
+    for path, change_type in remaining.items():
+        batch_tasks.append(asyncio.ensure_future(process(path, change_type)))
+
+    if in_flight is not None:
+        in_flight.update(batch_tasks)
+    await asyncio.gather(*batch_tasks, return_exceptions=True)
+    if in_flight is not None:
+        in_flight.difference_update(batch_tasks)
+
+
 async def _consume_vault_events(
     queue: asyncio.Queue[VaultEvent],
     client: httpx.AsyncClient,
@@ -586,111 +813,7 @@ async def _consume_vault_events(
                     break
 
             await asyncio.sleep(DEBOUNCE_SECONDS)
-
-            # Rename detection (#364): pair a deleted path with an added path
-            # whose content fingerprint matches the last-seen content of the
-            # deleted path. Treat the pair as a move (update source_path) and
-            # drop both from the delete/add processing.
-            deletes: dict[str, Change] = {}
-            adds: dict[str, Change] = {}
-            for path, ct in pending.items():
-                if ct == Change.deleted:
-                    deletes[path] = ct
-                else:
-                    adds[path] = ct
-
-            renames: list[tuple[str, str]] = []  # (old_path, new_path)
-            consumed_adds: set[str] = set()
-            for old_path in list(deletes.keys()):
-                old_fp = _fingerprints.get(old_path)
-                if not old_fp:
-                    continue
-                for new_path in adds:
-                    if new_path in consumed_adds:
-                        continue
-                    try:
-                        if Path(new_path).exists() and _is_valid_vault_path(new_path, Change.added, _vault_root()):
-                            content = _read_vault_file(Path(new_path))
-                            if content is not None and _fingerprint(content) == old_fp:
-                                renames.append((old_path, new_path))
-                                consumed_adds.add(new_path)
-                                break
-                    except Exception:  # noqa: S112 — unreadable candidate file; try the next one
-                        continue
-
-            for old_path, new_path in renames:
-                deletes.pop(old_path, None)
-                pending.pop(old_path, None)
-                pending.pop(new_path, None)
-
-            remaining = {**deletes}
-            for path, ct in adds.items():
-                if path not in consumed_adds:
-                    remaining[path] = ct
-
-            async def process(path: str, change_type: Change):
-                # Re-validate queued paths: the awatch producer filters events
-                # before enqueue, but persisted replays and direct queue
-                # injection must not reach a vault read unvalidated (#1293).
-                if not _is_valid_vault_path(path, change_type, _vault_root()):
-                    logger.warning("[vault] Skipping invalid queued path %s", _log_name(path))
-                    event_log.remove(path)
-                    return
-                lock = await _get_file_lock(path)
-                async with lock:
-                    try:
-                        # Shield the critical write so a shutdown cancellation
-                        # does not interrupt a mid-flight API call (#371).
-                        if change_type == Change.deleted:
-                            await asyncio.shield(delete_note_by_path(path, client, token))
-                        else:
-                            await asyncio.shield(import_or_update_note(Path(path), client, token))
-                        event_log.remove(path)
-                    except asyncio.CancelledError:
-                        # Propagate cancellation but keep the event logged so
-                        # it is retried on the next startup.
-                        raise
-                    except Exception as exc:
-                        # Exception type only — tracebacks/str(exc) can embed
-                        # vault paths and request URLs (#1299, #1301).
-                        logger.error(
-                            "[vault] Failed to process %s (%s): %s",
-                            _log_name(path),
-                            change_type.name,
-                            type(exc).__name__,
-                        )
-
-            async def process_rename(old_path: str, new_path: str):
-                if not _is_valid_vault_path(new_path, Change.added, _vault_root()):
-                    logger.warning("[vault] Skipping invalid rename target %s", _log_name(new_path))
-                    event_log.remove(old_path)
-                    event_log.remove(new_path)
-                    return
-                lock = await _get_file_lock(old_path)
-                async with lock:
-                    try:
-                        await asyncio.shield(rename_note_path(old_path, Path(new_path), client, token))
-                        event_log.remove(old_path)
-                        event_log.remove(new_path)
-                    except asyncio.CancelledError:
-                        raise
-                    except Exception as exc:
-                        logger.error(
-                            "[vault] Failed to rename %s -> %s: %s",
-                            _log_name(old_path),
-                            _log_name(new_path),
-                            type(exc).__name__,
-                        )
-
-            batch_tasks: list[asyncio.Task] = []
-            for old_path, new_path in renames:
-                batch_tasks.append(asyncio.ensure_future(process_rename(old_path, new_path)))
-            for path, change_type in remaining.items():
-                batch_tasks.append(asyncio.ensure_future(process(path, change_type)))
-
-            _in_flight.update(batch_tasks)
-            await asyncio.gather(*batch_tasks, return_exceptions=True)
-            _in_flight.difference_update(batch_tasks)
+            await _process_batch(pending, client, token, event_log, _in_flight)
         except asyncio.CancelledError:
             # Hard cancellation (e.g. timeout after graceful phase). Let any
             # in-flight tasks finish that can; cancel the rest.
@@ -706,19 +829,20 @@ async def _consume_vault_events(
             await asyncio.sleep(1)  # Prevent tight error loop
 
 
-async def _replay_pending_events(
+def _replay_pending_events(
     event_log: PersistentEventLog,
-    queue: asyncio.Queue[VaultEvent],
     vault_root: Path,
-) -> int:
-    """Re-enqueue events persisted before a crash, after re-validation (#1294).
+) -> dict[str, Change]:
+    """Collect events persisted before a crash, after re-validation (#1294).
 
     The event log lives on a host-mounted volume with no integrity check, so
     replayed rows get the same validation as live ``awatch`` events. Rows that
     fail are refused, logged once, and dropped from the log so they are not
-    re-validated on every startup. Returns the number of accepted events.
+    re-validated on every startup. Returns the accepted events keyed by path
+    (last write wins, mirroring the in-memory batch dedup and the log's own
+    primary key).
     """
-    accepted = 0
+    accepted: dict[str, Change] = {}
     for path, change_type in event_log.pending():
         if not _is_valid_vault_path(path, change_type, vault_root):
             logger.warning(
@@ -728,8 +852,7 @@ async def _replay_pending_events(
             )
             event_log.remove(path)
             continue
-        await queue.put(VaultEvent(path=path, change_type=change_type))
-        accepted += 1
+        accepted[path] = change_type
     return accepted
 
 
@@ -743,6 +866,9 @@ async def watch_vault():
     logger.info("[vault] Watching: %s", vault_path)
 
     event_log = PersistentEventLog(settings.event_log_path)
+    # Persist fingerprints into the log and seed the in-memory rename table
+    # with the fingerprints saved before the last shutdown (#1302).
+    _bind_event_log(event_log)
     async with httpx.AsyncClient(timeout=30.0) as client:
         consumer = None
         try:
@@ -750,17 +876,26 @@ async def watch_vault():
             if not token and settings.app_env == "production":
                 logger.error("[vault] INTERNAL_API_TOKEN is not configured; aborting vault sync")
                 return
+
+            # Replay events persisted but not processed before a previous
+            # crash (#371) BEFORE the initial scan (#1302): a delete+add
+            # pair spanning the restart is reconciled as a rename through
+            # the same code path as live batches, so the note keeps its
+            # id/XP/history and the scan cannot create a duplicate at the
+            # new path. Replayed rows get the same validation as live
+            # events — the log is host-writable with no integrity check,
+            # so injected paths would otherwise be synced on startup
+            # (#1294). Successfully processed events are removed from the
+            # log by _process_batch; anything left stays pending for the
+            # next startup.
+            replayed = _replay_pending_events(event_log, vault_path)
+            if replayed:
+                logger.info("[vault] Recovering %d pending event(s) from previous run", len(replayed))
+                await _process_batch(replayed, client, token, event_log)
+
             await initial_scan(vault_path, client, token)
 
             queue: asyncio.Queue[VaultEvent] = asyncio.Queue(maxsize=1000)
-
-            # Replay events that were persisted but not processed before a
-            # previous crash (#371). Replayed rows get the same validation as
-            # live events — the log is host-writable with no integrity check,
-            # so injected paths would otherwise be synced on startup (#1294).
-            recovered = await _replay_pending_events(event_log, queue, vault_path)
-            if recovered:
-                logger.info("[vault] Recovering %d pending event(s) from previous run", recovered)
 
             consumer = asyncio.create_task(
                 _consume_vault_events(queue, client, token, event_log),
@@ -806,5 +941,6 @@ async def watch_vault():
                     except (asyncio.CancelledError, Exception):  # noqa: S110 — shutdown path: swallow the expected cancellation
                         pass
         finally:
+            _unbind_event_log()
             event_log.close()
             logger.info("[vault] Watcher stopped cleanly")

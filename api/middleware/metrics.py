@@ -64,9 +64,9 @@ class MetricsCollector:
     def __init__(self, max_samples_per_key: int = 1000, max_keys: int = 512):
         self.max_samples_per_key = max_samples_per_key
         self.max_keys = max_keys
-        self.request_counts = defaultdict(int)
+        self.request_counts: defaultdict[str, int] = defaultdict(int)
         self.request_times: defaultdict[str, deque] = defaultdict(lambda: deque(maxlen=max_samples_per_key))
-        self.status_codes = defaultdict(int)
+        self.status_codes: defaultdict[int, int] = defaultdict(int)
 
     def record(
         self,
@@ -107,7 +107,7 @@ class MetricsCollector:
 
     def get_metrics(self) -> dict:
         """Get current metrics."""
-        result = {
+        result: dict[str, dict] = {
             "requests": {},
             "status_codes": {},
             "summary": {},
@@ -159,7 +159,7 @@ class MetricsMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next) -> Response:
         start_time = time.perf_counter()
-        response = await call_next(request)
+        response: Response = await call_next(request)
         duration = time.perf_counter() - start_time
 
         if self._known_roots is None:

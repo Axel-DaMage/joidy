@@ -51,7 +51,7 @@ def _cached_stats(db: Session):
     }
 
 
-register_cache_clearer(_cached_stats.cache_clear)  # type: ignore[attr-defined]
+register_cache_clearer(_cached_stats.cache_clear)
 
 
 @router.get("/stats")
@@ -82,7 +82,7 @@ def get_recent_events(limit: int = 20, db: Session = Depends(get_db)):
     return _cached_recent_events(limit=limit, db=db)
 
 
-register_cache_clearer(_cached_recent_events.cache_clear)  # type: ignore[attr-defined]
+register_cache_clearer(_cached_recent_events.cache_clear)
 
 
 @router.get("/recent-events")

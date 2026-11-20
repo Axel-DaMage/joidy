@@ -40,6 +40,40 @@ def _normalize_enum_value(value):
     return value
 
 
+def _frontmatter_scalar(value) -> str:
+    """Render ``value`` as a safe single-line frontmatter scalar.
+
+    Values are written as raw ``key: value`` lines and parsed back with a
+    naive per-line ``key.partition(":")`` split — a value containing a line
+    break would smuggle extra keys into ``_joidy`` files (#1332). Collapse
+    embedded newlines/CRs to spaces so one value always stays on one line.
+    """
+    return str(_serialize_value(value)).replace("\r", " ").replace("\n", " ")
+
+
+def _frontmatter_key(key) -> str | None:
+    """Return ``key`` if it is a safe frontmatter key, else ``None``.
+
+    Keys come from code-owned dicts, but a malformed one (``:`` or a line
+    break) would corrupt or inject into the frontmatter block, so anything
+    unusual is skipped rather than written (#1332).
+    """
+    k = str(key).strip()
+    if not k or ":" in k or "\n" in k or "\r" in k:
+        return None
+    return k
+
+
+def _parse_frontmatter_int(value) -> int | None:
+    """Best-effort ``int`` for frontmatter scalars ("12", 12, "None")."""
+    if value is None or value == "None":
+        return None
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        return None
+
+
 def get_vault_path() -> Path | None:
     vault = settings.obsidian_vault_path
     if not vault:
@@ -123,7 +157,9 @@ def update_goal_file(goal_id: int, title: str, content: str, metadata: dict) -> 
 
     content_lines = ["---"]
     for k, v in meta.items():
-        content_lines.append(f"{k}: {_serialize_value(v)}")
+        key = _frontmatter_key(k)
+        if key is not None:
+            content_lines.append(f"{key}: {_frontmatter_scalar(v)}")
     content_lines.append("---\n")
     content_lines.append(f"# {title}\n")
     if content:
@@ -157,6 +193,9 @@ def restore_goals_from_vault(db: Session) -> dict:
     restored = 0
     skipped = 0
     failed = 0
+    # (goal_id, parsed frontmatter) for restored goals — the FK pass below
+    # re-applies note_id/tag_id/parent_id after all goals exist.
+    pending_refs: list[tuple[int, dict]] = []
 
     for f in sorted(obj_dir.glob("*.md")):
         content = f.read_text(encoding="utf-8")
@@ -198,14 +237,15 @@ def restore_goals_from_vault(db: Session) -> dict:
                     fail_emoji=parsed.get("fail_emoji", "🔴"),
                     color=parsed.get("color", "#c8a96e"),
                     theme=parsed.get("theme", "solid"),
-                    max_assignment_days=int(parsed["max_assignment_days"])
-                    if parsed.get("max_assignment_days") and parsed["max_assignment_days"] != "None"
-                    else None,
-                    note_id=int(parsed["note_id"]) if parsed.get("note_id") and parsed["note_id"] != "None" else None,
-                    tag_id=int(parsed["tag_id"]) if parsed.get("tag_id") and parsed["tag_id"] != "None" else None,
-                    parent_id=int(parsed["parent_id"])
-                    if parsed.get("parent_id") and parsed["parent_id"] != "None"
-                    else None,
+                    max_assignment_days=_parse_frontmatter_int(parsed.get("max_assignment_days")),
+                    # Foreign-key refs are deliberately NOT ingested from
+                    # frontmatter: the file is user-editable, so planted or
+                    # dangling ids would create integrity junk. They are
+                    # re-applied in a second pass once every restored goal
+                    # exists — and only when the target row exists (#1332).
+                    note_id=None,
+                    tag_id=None,
+                    parent_id=None,
                     is_completed=str(parsed.get("is_completed", "")).lower() == "true",
                     completed_at=datetime.fromisoformat(parsed["completed_at"])
                     if parsed.get("completed_at") and parsed["completed_at"] != "None"
@@ -215,16 +255,61 @@ def restore_goals_from_vault(db: Session) -> dict:
                 db.add(goal)
                 db.flush()
             restored += 1
+            pending_refs.append((goal_id, parsed))
         except Exception:
             db.rollback()
             failed += 1
             continue
+
+    _apply_restored_goal_refs(db, pending_refs)
 
     db.commit()
     result = {"status": "ok", "restored": restored, "skipped": skipped}
     if failed:
         result["failed"] = failed
     return result
+
+
+def _apply_restored_goal_refs(db: Session, pending_refs: list[tuple[int, dict]]) -> None:
+    """Re-apply FK refs from restored goal frontmatter, whitelisted by existence.
+
+    Frontmatter is untrusted (user-editable files), so ``note_id``/``tag_id``/
+    ``parent_id`` are only adopted when the referenced row actually exists,
+    and ``parent_id`` additionally must not close a goal-parent cycle (#1332).
+    Running after all files are restored also lets a child pick up a parent
+    that was restored from a later file in the same pass.
+    """
+    from models.note import Note
+
+    for goal_id, parsed in pending_refs:
+        goal = db.get(Goal, goal_id)
+        if goal is None:
+            continue
+
+        note_id = _parse_frontmatter_int(parsed.get("note_id"))
+        if note_id is not None and db.get(Note, note_id) is not None:
+            goal.note_id = note_id
+
+        tag_id = _parse_frontmatter_int(parsed.get("tag_id"))
+        if tag_id is not None and db.get(Tag, tag_id) is not None:
+            goal.tag_id = tag_id
+
+        parent_id = _parse_frontmatter_int(parsed.get("parent_id"))
+        if parent_id is not None and parent_id != goal_id and db.get(Goal, parent_id) is not None:
+            # Walk the ancestor chain — two planted files must not create a
+            # parent loop.
+            seen = {goal_id}
+            cur: int | None = parent_id
+            cycle = False
+            while cur is not None:
+                if cur in seen:
+                    cycle = True
+                    break
+                seen.add(cur)
+                ancestor = db.get(Goal, cur)
+                cur = ancestor.parent_id if ancestor is not None else None
+            if not cycle:
+                goal.parent_id = parent_id
 
 
 def write_daily(db: Session, target_date: date | None = None) -> bool:
@@ -308,7 +393,9 @@ def _write_goal_file(db: Session, goal: Goal, obj_dir: Path) -> Path | None:
     content_lines = ["---"]
     for k, v in frontmatter.items():
         if v is not None:
-            content_lines.append(f"{k}: {_serialize_value(v)}")
+            key = _frontmatter_key(k)
+            if key is not None:
+                content_lines.append(f"{key}: {_frontmatter_scalar(v)}")
     content_lines.append("---\n")
 
     content_lines.append(f"# {goal.title}\n")
@@ -438,7 +525,7 @@ def _goal_progress(goal: Goal, db: Session) -> str:
         from models.note import NoteTag
 
         count = db.query(NoteTag).filter(NoteTag.tag_id == goal.tag_id).count()
-        return f" ({count}/{goal.target_notes} notas)"
+        return f" ({count}/{int(goal.target_value)} notas)"
     return ""
 
 

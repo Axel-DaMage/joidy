@@ -1038,8 +1038,7 @@ export const api = {
         'POST',
         '/integrations/google/calendar/sync'
       ),
-    calendars: () =>
-      req<GoogleCalendarListItem[]>('GET', '/integrations/google/calendars'),
+    calendars: () => req<GoogleCalendarListItem[]>('GET', '/integrations/google/calendars'),
     calendarEvents: (params?: { start?: string; end?: string; calendar_id?: string }) => {
       const qs = new URLSearchParams();
       if (params?.start) qs.set('start', params.start);
@@ -1268,6 +1267,25 @@ export const api = {
       result.url = result.url.startsWith('http') ? result.url : `${BASE}${result.url}`;
       return result;
     },
+  },
+
+  // Generic per-user JSON settings persisted in the DB (#969). Values are
+  // namespaced server-side; `key` must match /^[a-z][a-z0-9_-]{0,62}$/.
+  userSettings: {
+    get: <T = unknown>(key: string) =>
+      req<{ key: string; value: T | null }>(
+        'GET',
+        `/user-settings/${encodeURIComponent(key)}`,
+        undefined,
+        { silent: true }
+      ),
+    set: (key: string, value: unknown) =>
+      req<{ key: string; value: unknown }>(
+        'PUT',
+        `/user-settings/${encodeURIComponent(key)}`,
+        { value },
+        { silent: true }
+      ),
   },
 
   push: {

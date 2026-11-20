@@ -1,0 +1,15 @@
+# Ruff violation budgets (#1264) — site-count ratchet for globally-ignored rules.
+#
+# Format: ``RULE = COUNT``. ``ruff check --select <RULE>`` must report at
+# most COUNT violations across api/, ai-service/ and worker/. These rules are
+# in [tool.ruff.lint].ignore (see pyproject.toml) because fixing them changes
+# runtime semantics; the budget keeps the debt from growing and burns it
+# down as sites are fixed.
+#
+# CI fails when the count EXCEEDS the budget (new violations) and when the
+# count DROPS BELOW it (budget is stale). After fixing sites, lower the
+# number or regenerate:
+#     python scripts/check_quality_baselines.py --update
+
+B904 = 60   # raise-without-from-inside-except
+UP042 = 12  # replace-str-enum

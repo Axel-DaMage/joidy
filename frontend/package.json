@@ -71,5 +71,6 @@
     "cookie": "^1.1.1",
     "nanoid": ">=3.3.18"
   },
-  "type": "module"
+  "type": "module",
+  "license": "GPL-3.0-or-later"
 }
