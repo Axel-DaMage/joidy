@@ -463,7 +463,9 @@
     "editorLoading": "Loading editor...",
     "searchNotePlaceholder": "Search note in your vault...",
     "configureDailyNote": "Configure daily note path",
-    "loadMore": "Load more"
+    "loadMore": "Load more",
+    "resizePanel": "Resize panel",
+    "treeLabel": "Notes tree"
   },
   "goalDetail": {
     "loading": "Loading...",
@@ -610,7 +612,8 @@
     "customize": "Customize"
   },
   "modalDialog": {
-    "close": "Close"
+    "close": "Close",
+    "dialog": "Dialog"
   },
   "iconPicker": {
     "searchPlaceholder": "Search icons..."
@@ -707,7 +710,15 @@
     "vaultTitle": "Connect your Vault (Optional)",
     "vaultDesc": "If you use Obsidian, enter the path to your vault (e.g. ~/Documents/notes/my-vault). Otherwise, leave it blank and Joidy will use its internal storage.",
     "vaultPath": "Vault Path (e.g. ~/Documents/notes/my-vault)",
-    "doneDesc": "Your environment has been secured and configured successfully. Redirecting to the system..."
+    "doneDesc": "Your environment has been secured and configured successfully. Redirecting to the system...",
+    "passwordHint": "Minimum {min} characters — a passphrase is stronger than a complex word.",
+    "passwordTooShort": "Password must be at least {min} characters long",
+    "passwordMismatch": "Passwords do not match",
+    "strengthLabel": "Strength",
+    "strengthWeak": "Weak",
+    "strengthFair": "Fair",
+    "strengthGood": "Good",
+    "strengthStrong": "Strong"
   },
   "folderPicker": {
     "title": "Move note to folder",
@@ -743,7 +754,9 @@
     "label": "Command palette",
     "searchPlaceholder": "Search commands, notes, #tags...",
     "searchLabel": "Search commands",
-    "noResults": "No results found"
+    "noResults": "No results found",
+    "resultsLabel": "Results",
+    "resultCount": "{count} results"
   },
   "topicClusters": {
     "analyzing": "Analyzing...",

@@ -15,10 +15,15 @@ class Settings(BaseSettings):
     worker_url: str = "http://worker:8001"
     secret_key: str = ""
     internal_secret: str = ""  # Shared secret for API → ai-service auth
+    internal_api_token: str = ""  # Dedicated service token for worker/n8n → API auth (#1275)
     app_env: str = "development"
     cors_allowed_origins: str = (
         ""  # Comma-separated origins for production (e.g. "https://joidy.app,https://www.joidy.app")
     )
+    # Comma-separated IPs/CIDRs of trusted reverse proxies. X-Forwarded-For is
+    # only honored (for rate-limit bucketing) when the direct peer matches one
+    # of these (#1276). Empty = always use the direct peer IP.
+    trusted_proxies: str = ""
     # Power management (Settings → Servicios) — opt-in (#1278). When false the
     # /system/power mutation routes are not registered at all and
     # /system/power/status reports docker_available=false. The engine socket
@@ -77,6 +82,11 @@ class Settings(BaseSettings):
     spotify_client_id: str = ""
     spotify_client_secret: str = ""
     spotify_redirect_uri: str = ""
+
+    # Telegram Bot (quick capture via /telegram/webhook)
+    telegram_bot_token: str = ""
+    telegram_allowed_user_id: str = ""  # When set, only this Telegram user ID can use the bot
+    telegram_webhook_secret: str = ""  # Optional secret_token verified on incoming webhooks
 
     # User timezone for day-boundary calculations (streaks, gamification, mood).
     # IANA zone name (e.g. "America/Santiago", "Europe/Madrid"). Defaults to UTC

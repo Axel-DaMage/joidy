@@ -226,6 +226,20 @@ class TestOpenAIClient(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(_is_retryable_error(Exception("rate_limit")))
         self.assertFalse(_is_retryable_error(Exception("bad request")))
 
+    def test_base_url_http_remote_refused(self):
+        from clients.openai import OpenAIClient
+
+        with self.assertRaises(ValueError):
+            OpenAIClient(api_key="k", model="m", base_url="http://evil.example.com/v1")
+
+    def test_http_client_ignores_env_proxies(self):
+        from clients.openai import OpenAIClient
+
+        with patch("clients.openai.AsyncOpenAI") as mock_cls:
+            OpenAIClient(api_key="k", model="m")
+        http_client = mock_cls.call_args.kwargs["http_client"]
+        self.assertFalse(http_client.trust_env)
+
 
 # ── Anthropic ──────────────────────────────────────────────────────────
 
@@ -282,6 +296,14 @@ class TestAnthropicClient(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(_is_retryable_error(Exception("overloaded")))
         self.assertFalse(_is_retryable_error(Exception("not found")))
 
+    def test_http_client_ignores_env_proxies(self):
+        from clients.anthropic import AnthropicClient
+
+        with patch("clients.anthropic.anthropic.AsyncAnthropic") as mock_cls:
+            AnthropicClient(api_key="k", model="m")
+        http_client = mock_cls.call_args.kwargs["http_client"]
+        self.assertFalse(http_client.trust_env)
+
 
 # ── Cohere ─────────────────────────────────────────────────────────────
 
@@ -329,6 +351,14 @@ class TestCohereClient(unittest.IsolatedAsyncioTestCase):
             await client.generate("hi")
         self.assertEqual(inst.chat.await_count, 1)
 
+    def test_httpx_client_ignores_env_proxies(self):
+        from clients.cohere import CohereClient
+
+        with patch("clients.cohere.cohere.AsyncClient") as mock_cls:
+            CohereClient(api_key="k", model="m")
+        httpx_client = mock_cls.call_args.kwargs["httpx_client"]
+        self.assertFalse(httpx_client.trust_env)
+
 
 # ── Ollama (aiohttp) ──────────────────────────────────────────────────
 
@@ -337,7 +367,7 @@ class TestOllamaClient(unittest.IsolatedAsyncioTestCase):
     def _make_client(self, session, is_embedding: bool = False):
         from clients.ollama import OllamaClient
 
-        client = OllamaClient(base_url="http://ollama:11434/", model="llama3", is_embedding=is_embedding)
+        client = OllamaClient(base_url="http://localhost:11434/", model="llama3", is_embedding=is_embedding)
         client._session = session
         return client
 
@@ -348,7 +378,7 @@ class TestOllamaClient(unittest.IsolatedAsyncioTestCase):
         result = await client.embed("text")
         self.assertEqual(result, [0.9, 0.1])
         url, kwargs = session.posts[0]
-        self.assertEqual(url, "http://ollama:11434/api/embeddings")
+        self.assertEqual(url, "http://localhost:11434/api/embeddings")
         self.assertEqual(kwargs["json"], {"model": "llama3", "prompt": "text"})
 
     async def test_embed_error_status_raises(self):
@@ -366,8 +396,11 @@ class TestOllamaClient(unittest.IsolatedAsyncioTestCase):
         result = await client.generate("hi", temperature=0.3, max_tokens=64, system_prompt="sys")
         self.assertEqual(result, "ollama says")
         url, kwargs = session.posts[0]
-        self.assertEqual(url, "http://ollama:11434/api/generate")
-        self.assertEqual(kwargs["json"]["prompt"], "sys\n\nhi")
+        self.assertEqual(url, "http://localhost:11434/api/generate")
+        # system_prompt goes in its own payload field — not concatenated into
+        # the user prompt (#1330).
+        self.assertEqual(kwargs["json"]["prompt"], "hi")
+        self.assertEqual(kwargs["json"]["system"], "sys")
         self.assertEqual(kwargs["json"]["options"], {"num_predict": 64})
         self.assertEqual(kwargs["json"]["temperature"], 0.3)
 
@@ -383,7 +416,7 @@ class TestOllamaClient(unittest.IsolatedAsyncioTestCase):
         session = _FakeSession(get_resp=_FakeResponse(200, {}))
         client = self._make_client(session)
         self.assertTrue(await client.health_check())
-        self.assertEqual(session.gets[0][0], "http://ollama:11434/api/tags")
+        self.assertEqual(session.gets[0][0], "http://localhost:11434/api/tags")
 
     async def test_health_check_false_on_exception(self):
         class BoomSession(_FakeSession):
@@ -392,6 +425,18 @@ class TestOllamaClient(unittest.IsolatedAsyncioTestCase):
 
         client = self._make_client(BoomSession())
         self.assertFalse(await client.health_check())
+
+    def test_base_url_http_remote_refused(self):
+        from clients.ollama import OllamaClient
+
+        with self.assertRaises(ValueError):
+            OllamaClient(base_url="http://remote.example.com:11434", model="llama3")
+
+    def test_base_url_https_remote_accepted(self):
+        from clients.ollama import OllamaClient
+
+        client = OllamaClient(base_url="https://ollama.example.com", model="llama3")
+        self.assertEqual(client._base_url, "https://ollama.example.com")
 
 
 # ── OpenRouter (aiohttp) ──────────────────────────────────────────────

@@ -23,6 +23,7 @@ os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import pytest
+import rate_limiter
 from circuit_breaker import CircuitState, emb_circuit_breaker, llm_circuit_breaker
 from clients.factory import ClientFactory
 from response_cache import get_cache
@@ -32,9 +33,10 @@ from response_cache import get_cache
 def _reset_shared_state():
     """Reset module-level singletons so tests never leak state.
 
-    The circuit breakers, client factory cache and response cache are global
-    singletons in the service; a failure recorded by one test would otherwise
-    poison the next.
+    The circuit breakers, client factory cache, response cache and named
+    rate limiters are global singletons in the service; a failure recorded
+    by one test would otherwise poison the next (and a reused limiter's
+    asyncio.Lock could be bound to another test's event loop).
     """
     ClientFactory.reset()
     for breaker in (llm_circuit_breaker, emb_circuit_breaker):
@@ -42,6 +44,7 @@ def _reset_shared_state():
         breaker.failures = 0
         breaker.last_failure_time = 0.0
     get_cache().clear()
+    rate_limiter._limiters.clear()
     yield
     ClientFactory.reset()
     for breaker in (llm_circuit_breaker, emb_circuit_breaker):
@@ -49,3 +52,4 @@ def _reset_shared_state():
         breaker.failures = 0
         breaker.last_failure_time = 0.0
     get_cache().clear()
+    rate_limiter._limiters.clear()

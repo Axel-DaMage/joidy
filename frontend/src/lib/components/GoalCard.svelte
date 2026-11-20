@@ -517,7 +517,7 @@
     align-items: center;
     gap: 8px;
     font-size: 10px;
-    color: var(--text-disabled);
+    color: var(--text-muted);
     margin-top: 2px;
   }
 

@@ -124,7 +124,9 @@ services:
     volumes:
       - ${JOIDY_DATA_DIR:-./data}/db:/data/db
       - ${JOIDY_ENV_FILE:-./.env}:/app/.env:ro
-      - ${OBSIDIAN_VAULT_PATH:-./data/vault}:/vault
+      # Read-only: the worker only reads the vault (watch + import); vault
+      # writes go through the API's joidy_vault_writer (#1300).
+      - ${OBSIDIAN_VAULT_PATH:-./data/vault}:/vault:ro
     environment:
       - DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER:-joidy}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-joidy}
       - API_URL=http://api:8000
@@ -213,7 +215,7 @@ services:
       - GENERIC_TIMEZONE=${USER_TIMEZONE:-UTC}
       - N8N_RUNNERS_ENABLED=true
       - JOIDY_API_URL=${JOIDY_API_URL:-http://api:8000}
-      - JOIDY_AUTH_PASSWORD=${AUTH_PASSWORD:-}
+      - JOIDY_INTERNAL_API_TOKEN=${INTERNAL_API_TOKEN:-}
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://localhost:5678/healthz || exit 1"]
       interval: 15s
