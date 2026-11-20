@@ -66,6 +66,7 @@
     "cancel": "Cancelar",
     "taskAddError": "No se pudo crear la tarea",
     "taskUpdateError": "No se pudo actualizar la tarea",
+    "endBeforeStart": "La hora de fin debe ser posterior a la de inicio",
     "taskDeleteError": "No se pudo eliminar la tarea",
     "publishToGoogle": "Google",
     "publishToGoogleHint": "Publicar también en Google Calendar",
@@ -631,7 +632,8 @@
     "noFailures": "No hay embeddings fallidos."
   },
   "skillTree": {
-    "requiresMore": "Requiere {count} notas más para desbloquear"
+    "requiresMore": "Requiere {count} notas más para desbloquear",
+    "summary": "Árbol de habilidades: {total} habilidades, {unlocked} desbloqueadas"
   },
   "plant": {
     "stageLabel": "Etapa: {stage} (Nivel {level})"
@@ -717,7 +719,9 @@
     "welcomeTitle": "Conversa con tu asistente",
     "thinking": "Pensando…",
     "inputPlaceholder": "Escribe un mensaje… (Enter para enviar, Shift+Enter para salto de línea)",
-    "send": "Enviar"
+    "send": "Enviar",
+    "conversation": "Conversación con el asistente",
+    "you": "Tú"
   },
   "conflict": {
     "title": "Conflicto de Sincronización",
@@ -824,7 +828,14 @@
     "year": "Año",
     "currentWeek": "Semana actual",
     "prevYear": "Año anterior",
-    "nextYear": "Año siguiente"
+    "nextYear": "Año siguiente",
+    "viewTabs": "Vista del historial",
+    "dayChecked": "completado",
+    "dayFailed": "fallido",
+    "dayToday": "hoy",
+    "dayTarget": "objetivo",
+    "daySelected": "seleccionado",
+    "dayNoRecord": "sin registro"
   },
   "shareAchievement": {
     "title": "Compartir logro",
@@ -861,7 +872,10 @@
     "tabGithub": "GitHub",
     "tabRecentNotes": "Notas recientes",
     "recentNotesEmpty": "Sin notas recientes",
-    "viewAllNotes": "Ver todas →"
+    "viewAllNotes": "Ver todas →",
+    "workMinutes": "Minutos de trabajo",
+    "breakMinutes": "Minutos de descanso",
+    "pomodorosDone": "{done} de {total} pomodoros completados"
   },
   "graph": {
     "searchPlaceholder": "Buscar en grafo...",
@@ -999,5 +1013,13 @@
     "avgSessionMin": "Sesión media (min)",
     "totalEvents": "Eventos totales",
     "topPages": "Páginas más visitadas"
+  },
+  "a11y": {
+    "graphSummary": "Grafo de conocimiento: {notes} notas, {tags} tags, {links} conexiones",
+    "graphNodesList": "Lista de nodos del grafo",
+    "xpProgress": "Progreso de experiencia",
+    "dayActive": "día activo",
+    "dayInactive": "sin actividad",
+    "pomodoroTime": "{phase}: quedan {time}"
   }
 }
