@@ -6,6 +6,7 @@
   import hljs from 'highlight.js';
   import 'highlight.js/styles/github-dark.css';
   import { api, type Goal, type GoalContext } from '$lib/api';
+  import { authorizeUploadUrls } from '$lib/utils/markdown';
   import { t } from 'svelte-i18n';
   import { logger } from '$lib/utils/logger';
   import { createTimerRegistry } from '$lib/utils/timer';
@@ -211,7 +212,7 @@
 
   function renderMarkdown(md: string): string {
     if (!md.trim()) return `<p style="color:var(--text-muted);font-style:italic;">${$t('goalEditor.previewPlaceholder')}</p>`;
-    return DOMPurify.sanitize(String(marked.parse(md)));
+    return authorizeUploadUrls(DOMPurify.sanitize(String(marked.parse(md))));
   }
 
   function updateContent(e: Event) {
