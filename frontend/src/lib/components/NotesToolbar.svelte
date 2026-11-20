@@ -43,6 +43,7 @@
     handleDelete,
   } from '$lib/utils/notesPage';
   import type { SortMode } from '$lib/utils/fileTree';
+  import { menuNav } from '$lib/actions/menuNav';
   import { t } from 'svelte-i18n';
 
   let showSortMenu = false;
@@ -78,6 +79,9 @@
         class="icon-btn"
         title={$t('notesPage.changeOrder')}
         aria-label={$t('notesPage.changeOrder')}
+        aria-haspopup="menu"
+        aria-expanded={showSortMenu}
+        aria-controls="notes-sort-menu"
         onclick={(e) => {
           e.stopPropagation();
           showSortMenu = !showSortMenu;
@@ -88,17 +92,38 @@
       {#if showSortMenu}
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div class="sort-menu" onclick={(e) => e.stopPropagation()}>
-          <button class="sort-btn" class:active={$sortMode === 'az'} onclick={() => onSetSort('az')}
-            >{$t('notesPage.sortAz')}</button
+        <div
+          id="notes-sort-menu"
+          class="sort-menu"
+          role="menu"
+          aria-label={$t('notesPage.changeOrder')}
+          tabindex="-1"
+          use:menuNav={{ onClose: () => (showSortMenu = false) }}
+          onclick={(e) => e.stopPropagation()}
+        >
+          <button
+            class="sort-btn"
+            class:active={$sortMode === 'az'}
+            role="menuitemradio"
+            aria-checked={$sortMode === 'az'}
+            tabindex="-1"
+            onclick={() => onSetSort('az')}>{$t('notesPage.sortAz')}</button
           >
-          <button class="sort-btn" class:active={$sortMode === 'za'} onclick={() => onSetSort('za')}
-            >{$t('notesPage.sortZa')}</button
+          <button
+            class="sort-btn"
+            class:active={$sortMode === 'za'}
+            role="menuitemradio"
+            aria-checked={$sortMode === 'za'}
+            tabindex="-1"
+            onclick={() => onSetSort('za')}>{$t('notesPage.sortZa')}</button
           >
-          <div class="sort-divider"></div>
+          <div class="sort-divider" role="separator"></div>
           <button
             class="sort-btn"
             class:active={$sortMode === 'edit-new'}
+            role="menuitemradio"
+            aria-checked={$sortMode === 'edit-new'}
+            tabindex="-1"
             onclick={() => onSetSort('edit-new')}
             >{$t('notesPage.sortEditNew')}
             {#if $sortMode === 'edit-new'}✓{/if}</button
@@ -106,14 +131,20 @@
           <button
             class="sort-btn"
             class:active={$sortMode === 'edit-old'}
+            role="menuitemradio"
+            aria-checked={$sortMode === 'edit-old'}
+            tabindex="-1"
             onclick={() => onSetSort('edit-old')}
             >{$t('notesPage.sortEditOld')}
             {#if $sortMode === 'edit-old'}✓{/if}</button
           >
-          <div class="sort-divider"></div>
+          <div class="sort-divider" role="separator"></div>
           <button
             class="sort-btn"
             class:active={$sortMode === 'create-new'}
+            role="menuitemradio"
+            aria-checked={$sortMode === 'create-new'}
+            tabindex="-1"
             onclick={() => onSetSort('create-new')}
             >{$t('notesPage.sortCreateNew')}
             {#if $sortMode === 'create-new'}✓{/if}</button
@@ -121,6 +152,9 @@
           <button
             class="sort-btn"
             class:active={$sortMode === 'create-old'}
+            role="menuitemradio"
+            aria-checked={$sortMode === 'create-old'}
+            tabindex="-1"
             onclick={() => onSetSort('create-old')}
             >{$t('notesPage.sortCreateOld')}
             {#if $sortMode === 'create-old'}✓{/if}</button

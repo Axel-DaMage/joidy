@@ -11,6 +11,7 @@
   import SettingsSession from './SettingsSession.svelte';
   import SettingsServices from './SettingsServices.svelte';
   import SettingsDeveloper from './SettingsDeveloper.svelte';
+  import { focusTrap } from '$lib/actions/focusTrap';
   import { api } from '$lib/api';
   import { logger } from '$lib/utils/logger';
   import { t } from 'svelte-i18n';
@@ -172,19 +173,22 @@
   function onBackdropClick(e: MouseEvent) {
     if (e.target === e.currentTarget) close();
   }
-
-  function onKeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape') close();
-  }
 </script>
 
-<svelte:window onkeydown={onKeydown} />
-
 {#if open}
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="backdrop" role="presentation" onclick={onBackdropClick}>
-    <div class="panel">
+    <div
+      class="panel"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="settings-panel-title"
+      tabindex="-1"
+      use:focusTrap={{ onEscape: close }}
+    >
       <div class="panel-header">
-        <span class="mono" style="font-size:12px; letter-spacing:0.08em;"
+        <span id="settings-panel-title" class="mono" style="font-size:12px; letter-spacing:0.08em;"
           >{$t('settings.title')}</span
         >
         <button class="close-btn" onclick={close} aria-label={$t('common.close')}
