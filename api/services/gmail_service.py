@@ -14,9 +14,11 @@ scope bump provably lacking a capability are rejected up front with
 ``insufficientPermissions`` responses map the same way.
 """
 
+import asyncio
 import base64
 import binascii
 import json
+import logging
 import re
 from collections.abc import Iterator
 from datetime import UTC, datetime
@@ -31,6 +33,8 @@ from repositories import ConfigRepository
 from services import google_service as gs
 from services.google_token_service import get_stored_token
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
 GMAIL_MODIFY_SCOPE = "https://www.googleapis.com/auth/gmail.modify"
@@ -73,6 +77,16 @@ MAX_IN_ATTACHMENT_B64_CHARS = 28_000_000
 # Body extraction caps: bound decode work and the JSON payload size.
 MAX_BODY_BYTES = 2 * 1024 * 1024
 MAX_BODY_CHARS = 500_000
+
+# List-page hydration (#1458): messages.list returns bare id/threadId stubs,
+# so every summary field needs a per-message users.messages.get. The get runs
+# with format=metadata — it returns labelIds/snippet/historyId/internalDate/
+# sizeEstimate plus the headers named in metadataHeaders, without downloading
+# MIME bodies (format=full would cost N× the payload for no summary gain).
+LIST_METADATA_HEADERS: tuple[str, ...] = ("Subject", "From", "Date")
+# Cap on in-flight hydration gets — bounds quota burn and worst-case latency
+# (each request is individually bounded by the shared client's 30s timeout).
+LIST_HYDRATION_CONCURRENCY = 10
 
 
 class GmailReconsentRequired(RuntimeError):
@@ -424,6 +438,54 @@ def normalize_history(data: dict[str, Any]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+async def _hydrate_stub(token: str, stub: dict[str, Any], semaphore: asyncio.Semaphore) -> dict[str, Any]:
+    """One list stub → a format=metadata Message resource.
+
+    A failed or malformed get degrades to the original stub — one bad message
+    never fails the page (#1458). The ``id``/``threadId`` pair from
+    messages.list is authoritative and is re-asserted if the get omits it.
+    """
+    message_id = stub.get("id")
+    if not isinstance(message_id, str) or not _GMAIL_ID_RE.match(message_id):
+        return stub
+    async with semaphore:
+        try:
+            message = await gs.get_gmail_message_raw(
+                token,
+                message_id,
+                {"format": "metadata", "metadataHeaders": list(LIST_METADATA_HEADERS)},
+            )
+        except Exception:  # noqa: BLE001 — per-message degradation is the contract
+            logger.warning("[gmail] list hydration failed for message %s", message_id, exc_info=True)
+            return stub
+    if not isinstance(message, dict):
+        return stub
+    message.setdefault("id", stub.get("id"))
+    message.setdefault("threadId", stub.get("threadId"))
+    return message
+
+
+async def hydrate_message_stubs(
+    token: str,
+    stubs: list[dict[str, Any]],
+    *,
+    concurrency: int = LIST_HYDRATION_CONCURRENCY,
+) -> list[dict[str, Any]]:
+    """Hydrate ``users.messages.list`` stubs into metadata-rich resources.
+
+    messages.list returns only ``id``/``threadId`` per item — every other
+    summary field (``snippet``, ``labelIds``, ``internalDate``, ``historyId``,
+    ``sizeEstimate``) is empty until a per-message ``users.messages.get``
+    runs. Gets are fanned out concurrently, bounded by ``concurrency``;
+    per-message failures keep the stub. Order is preserved.
+    """
+    if not stubs:
+        return []
+    semaphore = asyncio.Semaphore(concurrency)
+    hydrated = await asyncio.gather(*(_hydrate_stub(token, stub, semaphore) for stub in stubs))
+    return [m for m in hydrated if isinstance(m, dict)]
+
+
 async def list_messages(
     token: str,
     *,
@@ -433,8 +495,9 @@ async def list_messages(
     max_results: int = 50,
     page_token: str | None = None,
 ) -> dict[str, Any]:
-    """One page of message stubs. ``since`` becomes an ``after:<epoch>``
-    clause so polling clients can fetch only newer mail."""
+    """One page of message summaries. ``since`` becomes an ``after:<epoch>``
+    clause so polling clients can fetch only newer mail. Page items are
+    hydrated with real summary fields (#1458)."""
     params: dict[str, Any] = {"maxResults": max_results}
     query = _build_list_query(q, since)
     if query:
@@ -447,8 +510,10 @@ async def list_messages(
         data = await gs.list_gmail_messages_raw(token, params)
     except httpx.HTTPStatusError as exc:
         _reconsent_if_needed(exc)
+    stubs = [m for m in data.get("messages") or [] if isinstance(m, dict)]
+    hydrated = await hydrate_message_stubs(token, stubs)
     return {
-        "messages": [normalize_message_summary(m) for m in data.get("messages") or [] if isinstance(m, dict)],
+        "messages": [normalize_message_summary(m) for m in hydrated],
         "next_page_token": data.get("nextPageToken"),
         "result_size_estimate": data.get("resultSizeEstimate"),
     }

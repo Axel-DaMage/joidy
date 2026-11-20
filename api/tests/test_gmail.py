@@ -194,16 +194,31 @@ def test_list_without_connection_401(client):
 
 
 def test_list_messages(client, db_session, monkeypatch):
+    """Page items are hydrated with real summary fields via format=metadata
+    gets — the bare id/threadId stubs from messages.list never reach the
+    client (#1458)."""
     _connect(db_session, monkeypatch)
     payload = {
         "messages": [
-            {"id": "m1", "threadId": "t1", "labelIds": ["INBOX"], "snippet": "hi", "internalDate": "1704103200000"},
+            {"id": "m1", "threadId": "t1"},
             {"id": "m2", "threadId": "t2"},
         ],
         "nextPageToken": "page-2",
         "resultSizeEstimate": 42,
     }
-    with patch("httpx.AsyncClient.get", new=AsyncMock(return_value=_fake_response(payload))) as mock_get:
+    meta_m1 = {
+        "id": "m1",
+        "threadId": "t1",
+        "labelIds": ["INBOX"],
+        "snippet": "hi",
+        "internalDate": "1704103200000",
+        "historyId": "777",
+        "sizeEstimate": 4321,
+        "payload": {"headers": [{"name": "Subject", "value": "s"}]},
+    }
+    meta_m2 = {"id": "m2", "threadId": "t2"}
+    responses = [_fake_response(payload), _fake_response(meta_m1), _fake_response(meta_m2)]
+    with patch("httpx.AsyncClient.get", new=AsyncMock(side_effect=responses)) as mock_get:
         resp = client.get(
             "/integrations/gmail/messages?q=is:unread&max_results=10&page_token=tok1&label_ids=INBOX,Label_9"
         )
@@ -217,7 +232,10 @@ def test_list_messages(client, db_session, monkeypatch):
     assert first["id"] == "m1"
     assert first["thread_id"] == "t1"
     assert first["label_ids"] == ["INBOX"]
+    assert first["snippet"] == "hi"
     assert first["internal_date"] == "2024-01-01T10:00:00+00:00"
+    assert first["history_id"] == "777"
+    assert first["size_estimate"] == 4321
     assert data["messages"][1]["internal_date"] is None
 
     call = mock_get.call_args_list[0]
@@ -228,6 +246,81 @@ def test_list_messages(client, db_session, monkeypatch):
     assert params["pageToken"] == "tok1"
     assert params["labelIds"] == ["INBOX", "Label_9"]
     assert call.kwargs["headers"]["Authorization"] == "Bearer ACCESS_TOKEN"
+
+
+def test_list_messages_hydration_uses_metadata_format(client, db_session, monkeypatch):
+    """Hydration gets run format=metadata + metadataHeaders — never format=full
+    (whole MIME bodies at N× the payload for no summary gain)."""
+    _connect(db_session, monkeypatch)
+    payload = {"messages": [{"id": "m1", "threadId": "t1"}]}
+    responses = [_fake_response(payload), _fake_response({"id": "m1", "snippet": "s"})]
+    with patch("httpx.AsyncClient.get", new=AsyncMock(side_effect=responses)) as mock_get:
+        resp = client.get("/integrations/gmail/messages")
+
+    assert resp.status_code == 200
+    get_call = mock_get.call_args_list[1]
+    assert get_call.args[0] == f"{GMAIL_API}/messages/m1"
+    params = get_call.kwargs["params"]
+    assert params["format"] == "metadata"
+    assert set(params["metadataHeaders"]) == {"Subject", "From", "Date"}
+
+
+def test_list_messages_hydration_failure_degrades_to_stub(client, db_session, monkeypatch):
+    """A single failing messages.get must not fail the page — that item keeps
+    its bare id/threadId stub while siblings hydrate normally (#1458)."""
+    _connect(db_session, monkeypatch)
+    payload = {
+        "messages": [
+            {"id": "m1", "threadId": "t1"},
+            {"id": "m2", "threadId": "t2"},
+        ]
+    }
+    meta_m1 = {
+        "id": "m1",
+        "threadId": "t1",
+        "labelIds": ["INBOX"],
+        "snippet": "ok",
+        "internalDate": "1704103200000",
+    }
+
+    def fake_get(url, **kwargs):
+        if url.endswith("/messages"):
+            return _fake_response(payload)
+        if url.endswith("/messages/m2"):
+            return _error_response(404)
+        return _fake_response(meta_m1)
+
+    with patch("httpx.AsyncClient.get", new=AsyncMock(side_effect=fake_get)):
+        resp = client.get("/integrations/gmail/messages")
+
+    assert resp.status_code == 200
+    messages = {m["id"]: m for m in resp.json()["messages"]}
+    assert messages["m1"]["snippet"] == "ok"
+    assert messages["m1"]["label_ids"] == ["INBOX"]
+    assert messages["m2"]["thread_id"] == "t2"
+    assert messages["m2"]["snippet"] is None
+    assert messages["m2"]["label_ids"] == []
+
+
+def test_list_messages_hydration_timeout_degrades_to_stub(client, db_session, monkeypatch):
+    """A hanging/slow messages.get surfaces as an httpx error — same stub
+    degradation as a status error, never a page-level 500."""
+    _connect(db_session, monkeypatch)
+    payload = {"messages": [{"id": "m1", "threadId": "t1"}]}
+
+    def fake_get(url, **kwargs):
+        if url.endswith("/messages"):
+            return _fake_response(payload)
+        raise httpx.TimeoutException("slow", request=httpx.Request("GET", url))
+
+    with patch("httpx.AsyncClient.get", new=AsyncMock(side_effect=fake_get)):
+        resp = client.get("/integrations/gmail/messages")
+
+    assert resp.status_code == 200
+    msg = resp.json()["messages"][0]
+    assert msg["id"] == "m1"
+    assert msg["thread_id"] == "t1"
+    assert msg["snippet"] is None
 
 
 def test_list_messages_since_epoch(client, db_session, monkeypatch):
@@ -267,10 +360,22 @@ def test_list_messages_invalid_label(client, db_session, monkeypatch):
 
 
 def test_list_messages_explicit_token(client):
-    """?token= bypasses the stored-token lookup (parity with google.py reads)."""
-    with patch("httpx.AsyncClient.get", new=AsyncMock(return_value=_fake_response({"messages": []}))):
-        resp = client.get("/integrations/gmail/messages?token=xyz")
+    """The ``X-Google-Token`` header bypasses the stored-token lookup — the
+    legacy ``?token=`` query param was removed (#1461)."""
+    with patch("httpx.AsyncClient.get", new=AsyncMock(return_value=_fake_response({"messages": []}))) as mock_get:
+        resp = client.get("/integrations/gmail/messages", headers={"X-Google-Token": "xyz"})
     assert resp.status_code == 200
+    assert mock_get.call_args_list[0].kwargs["headers"]["Authorization"] == "Bearer xyz"
+
+
+def test_list_messages_query_token_ignored(client):
+    """``?token=`` must NOT be honored — credentials in URLs leak into logs.
+    With no stored connection the request falls through to the stored-token
+    path and answers 401 (#1461)."""
+    with patch("httpx.AsyncClient.get", new=AsyncMock()) as mock_get:
+        resp = client.get("/integrations/gmail/messages?token=xyz")
+    assert resp.status_code == 401
+    mock_get.assert_not_called()
 
 
 def test_list_messages_no_read_scope_rejected(client, db_session, monkeypatch):

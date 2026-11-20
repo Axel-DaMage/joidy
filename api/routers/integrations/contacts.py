@@ -9,11 +9,16 @@ Reads work with ``contacts`` or ``contacts.readonly`` scopes. Writes
 (POST/PUT/DELETE) require the full ``contacts`` scope: tokens granted before
 the scope bump answer 403 ``ContactsReconsentRequired`` so the client can
 prompt a reconnect — same pattern as calendar write-back (#1233).
+
+Token transport (#1461): read endpoints honor an explicit access-token
+override via the ``X-Google-Token`` header only — never a ``?token=`` query
+param, where credentials would leak into logs (same hardening as
+``X-Spotify-Token``/``X-Strava-Token``, #1372).
 """
 
 import httpx
 from database import get_db
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 from services import google_contacts_service as gccs
 from services import google_token_service as gts
@@ -208,8 +213,10 @@ class ContactsStatusOut(BaseModel):
 
 
 async def _read_token(token: str | None, db: Session) -> str:
-    """Resolve the access token for read calls: explicit ``token`` wins, else
-    the stored/auto-refreshed Google token (same semantics as google.py)."""
+    """Resolve the access token for read calls: an explicit ``X-Google-Token``
+    header wins, else the stored/auto-refreshed Google token (same semantics
+    as google.py). The override arrives by header only — credentials never
+    travel in the query string (#1461)."""
     if token:
         return token
     stored = await gts.get_valid_access_token(db)
@@ -295,12 +302,12 @@ async def contacts_status(
 async def list_contact_groups(
     page_size: int = Query(default=100, ge=1, le=1000),
     page_token: str | None = Query(default=None, max_length=2048),
-    token: str | None = Query(default=None, max_length=4096),
+    google_token: str | None = Header(default=None, alias="X-Google-Token"),
     db: Session = Depends(get_db),
     user: dict = Depends(get_current_user),
 ):
     """List Google contact groups (``contactGroups/{id}`` resource names)."""
-    access_token = await _read_token(token, db)
+    access_token = await _read_token(google_token, db)
     try:
         return await gccs.list_contact_groups(access_token, page_size, page_token)
     except gccs.ContactsReconsentRequired as exc:
@@ -317,12 +324,12 @@ async def list_contacts(
     group: str | None = Query(default=None, max_length=256, description="Filter by contactGroups/{id}"),
     page_size: int = Query(default=100, ge=1, le=1000),
     page_token: str | None = Query(default=None, max_length=2048),
-    token: str | None = Query(default=None, max_length=4096),
+    google_token: str | None = Header(default=None, alias="X-Google-Token"),
     db: Session = Depends(get_db),
     user: dict = Depends(get_current_user),
 ):
     """List contacts, optionally filtered by search query or contact group."""
-    access_token = await _read_token(token, db)
+    access_token = await _read_token(google_token, db)
     search = (q or query or "").strip() or None
     try:
         return await gccs.list_contacts(
@@ -362,12 +369,12 @@ async def create_contact(
 @router.get("/{resource_name:path}", response_model=ContactOut)
 async def get_contact(
     resource_name: str,
-    token: str | None = Query(default=None, max_length=4096),
+    google_token: str | None = Header(default=None, alias="X-Google-Token"),
     db: Session = Depends(get_db),
     user: dict = Depends(get_current_user),
 ):
     """Contact detail. ``resource_name`` is ``people/{id}`` (URL-encoded path)."""
-    access_token = await _read_token(token, db)
+    access_token = await _read_token(google_token, db)
     try:
         return await gccs.get_contact(access_token, resource_name)
     except gccs.ContactsReconsentRequired as exc:

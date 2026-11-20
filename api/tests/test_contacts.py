@@ -241,11 +241,23 @@ def test_list_contacts_invalid_group(client, db_session, monkeypatch):
 
 
 def test_list_contacts_explicit_token(client):
-    """?token= bypasses the stored-token lookup (parity with google.py reads)."""
+    """The ``X-Google-Token`` header bypasses the stored-token lookup — the
+    legacy ``?token=`` query param was removed (#1461)."""
     payload = {"connections": []}
-    with patch("httpx.AsyncClient.get", new=AsyncMock(return_value=_fake_response(payload))):
-        resp = client.get("/integrations/contacts/?token=xyz")
+    with patch("httpx.AsyncClient.get", new=AsyncMock(return_value=_fake_response(payload))) as mock_get:
+        resp = client.get("/integrations/contacts/", headers={"X-Google-Token": "xyz"})
     assert resp.status_code == 200
+    assert mock_get.call_args_list[0].kwargs["headers"]["Authorization"] == "Bearer xyz"
+
+
+def test_list_contacts_query_token_ignored(client):
+    """``?token=`` must NOT be honored — credentials in URLs leak into logs.
+    With no stored connection the request falls through to the stored-token
+    path and answers 401 (#1461)."""
+    with patch("httpx.AsyncClient.get", new=AsyncMock()) as mock_get:
+        resp = client.get("/integrations/contacts/?token=xyz")
+    assert resp.status_code == 401
+    mock_get.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
