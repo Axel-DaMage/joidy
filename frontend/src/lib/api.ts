@@ -5,7 +5,7 @@ import { browser } from '$app/env';
 import { showNotification } from './stores/notifications';
 import { session, getToken } from './stores/session';
 
-const BASE = browser
+export const BASE = browser
   ? (import.meta.env.VITE_API_URL as string) ||
     `${window.location.protocol}//${window.location.hostname}:8000`
   : (import.meta.env.VITE_INTERNAL_API_URL as string) || 'http://api:8000';

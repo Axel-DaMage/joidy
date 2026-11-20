@@ -183,21 +183,17 @@
   }
 
   // #1164 — persistir los filtros de GitHub (sin TTL, a diferencia del
-  // cache de datos). Guardado tras modulePrefsReady: el efecto corre antes
-  // del onMount que restaura los valores guardados y los pisaba con los
-  // defaults (#1305). Debounce de 300 ms para no escribir por tecla en
-  // ghSearch (misma técnica que la página de goals).
-  let ghPrefsTimer: ReturnType<typeof setTimeout> | null = null;
+  // cache de datos). ghSearch escribe por tecla: misma técnica que
+  // notesUi.search.
   $effect(() => {
-    if (!modulePrefsReady) return;
-    const dashboard = {
-      githubFilter: ghFilter,
-      githubType: ghType,
-      githubState: ghState,
-      githubSearch: ghSearch,
-    };
-    if (ghPrefsTimer) clearTimeout(ghPrefsTimer);
-    ghPrefsTimer = setTimeout(() => patchUserSettings({ dashboard }), 300);
+    patchUserSettings({
+      dashboard: {
+        githubFilter: ghFilter,
+        githubType: ghType,
+        githubState: ghState,
+        githubSearch: ghSearch,
+      },
+    });
   });
 
   function setActivityTab(tab: 'github' | 'recent-notes') {
@@ -242,10 +238,8 @@
     return (Date.now() - last.getTime()) / 86400000 > 2;
   });
 
-  // $state — the dashboard-tti $effect reads these, and plain lets are
-  // non-reactive so the metric could never fire (#1305).
-  let githubStatusChecked = $state(false);
-  let ttiMeasured = $state(false);
+  let githubStatusChecked = false;
+  let ttiMeasured = false;
 
   onMount(() => {
     if (typeof performance !== 'undefined') {
@@ -534,6 +528,7 @@
   <DailyRecap />
 
   <!-- ── Left panel ─────────────────────────────────────────────────────────── -->
+  <!-- role=list: child <Widget> elements expose role=listitem (#1309) -->
   <section class="plant-section" role="list">
     {#each $dashboardLayout.left as wid, i (wid)}
       <Widget id={wid}>

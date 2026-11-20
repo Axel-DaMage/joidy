@@ -3,6 +3,7 @@
   import { Send, Sparkles, Trash2, LoaderCircle, RotateCcw } from 'lucide-svelte';
   import { Marked } from 'marked';
   import DOMPurify from 'dompurify';
+  import { authorizeUploadUrls } from '$lib/utils/markdown';
   import {
     messages,
     isLoading,
@@ -40,7 +41,13 @@
 
   async function scrollToBottom() {
     await tick();
-    if (scrollContainer) {
+    if (!scrollContainer) return;
+    // Only auto-scroll when the user is already near the bottom — otherwise
+    // every appended message yanks the view away from what they were
+    // reading (#1309).
+    const distanceFromBottom =
+      scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight;
+    if (distanceFromBottom < 120) {
       scrollContainer.scrollTop = scrollContainer.scrollHeight;
     }
   }
@@ -53,7 +60,7 @@
 
   function renderMarkdown(md: string): string {
     if (!md.trim()) return '';
-    return DOMPurify.sanitize(String(mdParser.parse(md)));
+    return authorizeUploadUrls(DOMPurify.sanitize(String(mdParser.parse(md))));
   }
 
   async function handleSend() {
@@ -84,13 +91,24 @@
       <span>{$t('chat.assistantName')}</span>
     </div>
     {#if !isEmpty}
-      <button class="clear-btn" onclick={clearChat} title={$t('chat.clearConversation')}>
+      <button
+        class="clear-btn"
+        onclick={clearChat}
+        title={$t('chat.clearConversation')}
+        aria-label={$t('chat.clearConversation')}
+      >
         <Trash2 size={15} />
       </button>
     {/if}
   </div>
 
-  <div class="chat-messages" bind:this={scrollContainer}>
+  <div
+    class="chat-messages"
+    bind:this={scrollContainer}
+    role="log"
+    aria-live="polite"
+    aria-label={$t('chat.conversation')}
+  >
     {#if isEmpty}
       <div class="empty-state">
         <div class="empty-icon"><Sparkles size={28} /></div>
@@ -111,9 +129,14 @@
         </div>
       </div>
     {:else}
-      {#each $messages as msg (msg.timestamp)}
+      {#each $messages as msg, i (`${msg.timestamp}-${msg.role}-${i}`)}
         <div class="msg {msg.role}">
           <div class="bubble">
+            <!-- Role prefix for screen readers — bubbles are visually
+                 distinguished by position/color only (#1309) -->
+            <span class="visually-hidden">
+              {msg.role === 'user' ? $t('chat.you') : $t('chat.assistantName')}:
+            </span>
             {#if msg.role === 'assistant'}
               <div class="markdown">{@html renderMarkdown(msg.content)}</div>
               {#if msg.sources?.length}
@@ -141,9 +164,9 @@
       {/if}
 
       {#if $isLoading && !$isStreaming}
-        <div class="msg assistant">
+        <div class="msg assistant" role="status">
           <div class="bubble loading-bubble">
-            <LoaderCircle size={16} class="spin" />
+            <LoaderCircle size={16} class="spin" aria-hidden="true" />
             <span>{$t('chat.thinking')}</span>
           </div>
         </div>
@@ -174,6 +197,7 @@
       onclick={handleSend}
       disabled={$isLoading || !input.trim()}
       title={$t('chat.send')}
+      aria-label={$t('chat.send')}
     >
       <Send size={17} />
     </button>
