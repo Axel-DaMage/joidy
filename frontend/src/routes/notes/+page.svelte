@@ -51,6 +51,7 @@
   import NotesOverlays from '$lib/components/NotesOverlays.svelte';
   import NotesEditorPanel from '$lib/components/NotesEditorPanel.svelte';
   import NotesDeleteModal from '$lib/components/NotesDeleteModal.svelte';
+  import { t } from 'svelte-i18n';
 
   // Resizable panel — min width matches the dashboard's default panel width
   // so the left sidebar (plant, timer, etc.) on the index page is never
@@ -263,7 +264,7 @@
     class="resize-handle"
     role="separator"
     aria-orientation="vertical"
-    aria-label="Resize panel"
+    aria-label={$t('notesPage.resizePanel')}
     onmousedown={startResize}
   ></div>
 

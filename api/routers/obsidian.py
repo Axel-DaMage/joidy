@@ -102,6 +102,20 @@ def _verify_access(request: Request, secret: str, db: Session) -> None:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
 
+def _conflict_writes_allowed(secret: str) -> bool:
+    """Whether this request may write ``SyncState.conflict`` (fail-closed).
+
+    ``conflict=True`` arms the ``keep_remote`` vault read in conflict
+    resolution — forging it used to require nothing more than a JWT (or, in
+    dev, no auth at all). Only requests authenticated by a *configured*
+    ``OBSIDIAN_WEBHOOK_SECRET`` may set or clear the flag; with no secret
+    configured every webhook request leaves it untouched (#1314). When the
+    secret IS configured, ``_verify_access`` has already guaranteed the
+    presented secret matches.
+    """
+    return bool(settings.obsidian_webhook_secret) and secret == settings.obsidian_webhook_secret
+
+
 @router.post("")
 def obsidian_webhook(
     payload: ObsidianWebhookIn,
@@ -125,6 +139,7 @@ def obsidian_webhook(
             content=payload.content,
             mtime=payload.mtime,
             source="obsidian",
+            allow_conflict_flag=_conflict_writes_allowed(secret),
         )
         return result
     except ValueError as e:
@@ -164,12 +179,17 @@ def obsidian_webhook_legacy(
     sync.remote_mtime = to_utc_naive(datetime.fromtimestamp(remote_mtime, tz=UTC)) if remote_mtime else None
     sync.last_synced_at = to_utc_naive(datetime.now(UTC))
 
-    local = to_utc_naive(sync.local_mtime)
-    remote = to_utc_naive(sync.remote_mtime)
-    if local is not None and remote is not None and local != remote:
-        sync.conflict = True
-    else:
-        sync.conflict = False
+    # Fail closed (#1314): the conflict flag may only be written when the
+    # request carried a configured OBSIDIAN_WEBHOOK_SECRET — JWT-fallback and
+    # dev-open callers get the mtime bookkeeping above but never arm or
+    # disarm a conflict.
+    if _conflict_writes_allowed(secret):
+        local = to_utc_naive(sync.local_mtime)
+        remote = to_utc_naive(sync.remote_mtime)
+        if local is not None and remote is not None and local != remote:
+            sync.conflict = True
+        else:
+            sync.conflict = False
 
     db.commit()
 

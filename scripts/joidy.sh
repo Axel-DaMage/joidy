@@ -332,6 +332,23 @@ if [ "$CONTAINER_ENGINE" = "podman" ]; then
   fi
 fi
 
+# ─── .env permissions (#1281) ─────────────────────────────────
+# .env holds every deployment secret (SECRET_KEY, POSTGRES_PASSWORD, OAuth
+# client secrets, AUTH_PASSWORD hash, INTERNAL_API_TOKEN). Enforce owner-only
+# read/write on every invocation — this covers files created above via `cp`,
+# written by sed -i/appends, created by hand, or left loose by an older
+# release (0644 under a default umask).
+if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
+  ENV_PERMS=$(stat -c '%a' "$ENV_FILE" 2>/dev/null || stat -f '%Lp' "$ENV_FILE" 2>/dev/null || true)
+  if [ -n "$ENV_PERMS" ] && [ "$ENV_PERMS" != "600" ]; then
+    if chmod 600 "$ENV_FILE"; then
+      print_warn "Tightened .env permissions (${ENV_PERMS} → 600): $ENV_FILE"
+    else
+      print_err "Could not chmod 600 $ENV_FILE — it may be readable by other users"
+    fi
+  fi
+fi
+
 # Detect the LAN IP address (exclude loopback, docker, virbr, etc.)
 get_lan_ip() {
   local ip=""
@@ -984,8 +1001,10 @@ cmd_backup() {
   print_status "Dumping '$pg_db' → $file"
   # Local socket auth inside the postgres container is trust, so no password is
   # needed here. Write to a temp name first: a failed dump never leaves a
-  # truncated archive masquerading as a good backup.
-  if $DOCKER_CMD $ENV_FILE_ARG exec -T postgres pg_dump -Fc -U "$pg_user" -d "$pg_db" > "$file.tmp"; then
+  # truncated archive masquerading as a good backup. umask 077 in the subshell
+  # makes the archive owner-only from creation — dumps contain the full DB
+  # contents, including secrets (#1281).
+  if (umask 077; $DOCKER_CMD $ENV_FILE_ARG exec -T postgres pg_dump -Fc -U "$pg_user" -d "$pg_db" > "$file.tmp"); then
     mv "$file.tmp" "$file"
   else
     rm -f "$file.tmp"

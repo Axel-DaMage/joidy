@@ -107,7 +107,7 @@
                 <DynamicIcon
                   name={vis.icon}
                   size={12}
-                  color={vis.color || 'var(--text-disabled)'}
+                  color={vis.color || 'var(--text-muted)'}
                   pack={vis.pack}
                 />
                 <span class="recent-name" use:autoScrollTitle={note.title}>
@@ -361,7 +361,7 @@
   }
   .recent-time {
     font-size: 10px;
-    color: var(--text-disabled);
+    color: var(--text-muted);
     font-family: var(--font-mono);
   }
 

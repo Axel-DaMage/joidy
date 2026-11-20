@@ -873,7 +873,7 @@
   .ng-preview-label {
     font-size: 10px;
     font-family: var(--font-mono);
-    color: var(--text-disabled);
+    color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     text-align: center;

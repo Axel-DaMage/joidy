@@ -168,7 +168,7 @@
   .color-limit-note {
     margin: -4px 0 10px;
     font-size: 10px;
-    color: var(--text-disabled);
+    color: var(--text-muted);
     letter-spacing: 0.04em;
   }
 
@@ -186,7 +186,7 @@
 
   .color-idx {
     font-size: 9px;
-    color: var(--text-disabled);
+    color: var(--text-muted);
     width: 10px;
     text-align: right;
   }
