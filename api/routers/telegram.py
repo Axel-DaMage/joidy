@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/telegram", tags=["telegram"])
 
-SECRET_HEADER = "x-telegram-bot-api-secret-token"
+SECRET_HEADER = "x-telegram-bot-api-secret-token"  # noqa: S105 — HTTP header name, not a secret value
 
 
 class WebhookUrl(BaseModel):

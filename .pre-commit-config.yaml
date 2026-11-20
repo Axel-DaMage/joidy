@@ -11,6 +11,19 @@ repos:
       - id: ruff
         args: [ --fix ]
       - id: ruff-format
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.11.0.1
+    hooks:
+      # Error severity matches the CI gate (dist-smoke.yml: `shellcheck -S
+      # error`). Warning/info findings in the existing scripts are a known
+      # baseline — tighten the level once they are ratcheted down (#1290).
+      - id: shellcheck
+        args: [ --severity=error ]
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: [ --baseline, .secrets.baseline ]
   - repo: local
     hooks:
       - id: svelte-check
@@ -25,9 +38,6 @@ repos:
         language: system
         files: ^frontend/.*\.(svelte|ts|js)$
         pass_filenames: false
-      - id: prettier
-        name: prettier (check)
-        entry: bash -c 'cd frontend && npm run format:check'
-        language: system
-        files: ^frontend/.*\.(svelte|ts|js|css|json)$
-        pass_filenames: false
+      # NOTE: prettier was removed from the frontend toolchain (#1257) — the
+      # tree was never prettier-clean and nothing ran it, so the config was
+      # dead weight. eslint + svelte-check remain the frontend gates.

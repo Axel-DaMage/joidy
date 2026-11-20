@@ -1,4 +1,5 @@
 # Maintainer: Joidy App <https://github.com/Axel-DaMage/joidy>
+# shellcheck shell=bash
 pkgname=joidy
 pkgver=1.1.0_beta.7
 _tag=${pkgver//_/-}

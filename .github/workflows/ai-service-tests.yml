@@ -47,6 +47,17 @@ jobs:
       - name: Check Python syntax
         run: python -m compileall -q ai-service
 
+      # Coverage floor (#1259): --cov=. matches the api convention (modules
+      # import as top-level names; see ai-service/.coveragerc, which omits
+      # tests/). Floor 80 = measured ~83% on development (local run,
+      # 2026-11-20) rounded down with headroom; ratchet up only.
       - name: Run ai-service tests
         working-directory: ai-service
-        run: python -m pytest tests/ -v
+        run: python -m pytest tests/ -v --cov=. --cov-report=xml --cov-report=term-missing --cov-fail-under=80
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-report-ai-service
+          path: ai-service/coverage.xml
+          retention-days: 30
