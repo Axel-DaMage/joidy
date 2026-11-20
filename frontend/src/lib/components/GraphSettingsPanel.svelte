@@ -75,6 +75,8 @@
   class="settings-toggle-btn"
   class:panel-open={showSettingsPanel}
   title={$t('knowledgeGraphForce.settingsTitle')}
+  aria-label={$t('knowledgeGraphForce.settingsTitle')}
+  aria-expanded={showSettingsPanel}
   onclick={() => (showSettingsPanel = !showSettingsPanel)}
 >
   <svg
@@ -123,6 +125,7 @@
                 class="panel-search"
                 type="text"
                 placeholder={$t('knowledgeGraphForce.searchPlaceholder')}
+                aria-label={$t('knowledgeGraphForce.searchPlaceholder')}
                 bind:value={searchQuery}
                 oninput={applyStyling}
               />
@@ -212,6 +215,7 @@
                   <input
                     type="color"
                     class="color-picker-input"
+                    aria-label="{$t('knowledgeGraphForce.colorGroups')} {idx + 1}"
                     bind:value={group.color}
                     onchange={saveGroups}
                   />
@@ -219,6 +223,7 @@
                     type="text"
                     class="group-query-input"
                     placeholder="tag:idea o palabra clave..."
+                    aria-label="{$t('knowledgeGraphForce.colorGroups')} {idx + 1} query"
                     bind:value={group.query}
                     oninput={saveGroups}
                   />
@@ -286,6 +291,7 @@
                 min="0.5"
                 max="3.0"
                 step="0.1"
+                aria-label={$t('knowledgeGraphForce.nodeSize')}
                 bind:value={nodeSizeScale}
                 oninput={applyStyling}
               />
@@ -301,6 +307,7 @@
                 min="0.1"
                 max="3.0"
                 step="0.1"
+                aria-label={$t('knowledgeGraphForce.lineWidth')}
                 bind:value={linkThicknessScale}
                 oninput={applyStyling}
               />
@@ -316,6 +323,7 @@
                 min="0.5"
                 max="2.0"
                 step="0.1"
+                aria-label={$t('knowledgeGraphForce.textScale')}
                 bind:value={textScale}
                 oninput={applyStyling}
               />
@@ -331,6 +339,7 @@
                 min="0.2"
                 max="2.5"
                 step="0.1"
+                aria-label={$t('knowledgeGraphForce.fadeThreshold')}
                 bind:value={labelThreshold}
                 oninput={applyStyling}
               />
@@ -357,7 +366,14 @@
                 <span>{$t('knowledgeGraphForce.repulsion')}</span>
                 <span>{repelForce}</span>
               </div>
-              <input type="range" min="30" max="600" step="10" bind:value={repelForce} />
+              <input
+                type="range"
+                min="30"
+                max="600"
+                step="10"
+                aria-label={$t('knowledgeGraphForce.repulsion')}
+                bind:value={repelForce}
+              />
             </div>
 
             <div class="slider-control">
@@ -365,7 +381,14 @@
                 <span>{$t('knowledgeGraphForce.linkDistance')}</span>
                 <span>{linkDistance}px</span>
               </div>
-              <input type="range" min="15" max="180" step="5" bind:value={linkDistance} />
+              <input
+                type="range"
+                min="15"
+                max="180"
+                step="5"
+                aria-label={$t('knowledgeGraphForce.linkDistance')}
+                bind:value={linkDistance}
+              />
             </div>
 
             <div class="slider-control">
@@ -373,7 +396,14 @@
                 <span>{$t('knowledgeGraphForce.linkAttraction')}</span>
                 <span>{linkForce.toFixed(1)}</span>
               </div>
-              <input type="range" min="0.1" max="2.0" step="0.1" bind:value={linkForce} />
+              <input
+                type="range"
+                min="0.1"
+                max="2.0"
+                step="0.1"
+                aria-label={$t('knowledgeGraphForce.linkAttraction')}
+                bind:value={linkForce}
+              />
             </div>
 
             <button class="btn btn-ghost reset-btn" onclick={resetForces}>
@@ -411,7 +441,9 @@
     opacity: 0.4;
   }
 
-  :global(.graph-wrapper):hover .settings-toggle-btn {
+  :global(.graph-wrapper):hover .settings-toggle-btn,
+  :global(.graph-wrapper):focus-within .settings-toggle-btn,
+  .settings-toggle-btn:focus-visible {
     opacity: 1;
   }
 
@@ -599,6 +631,11 @@
     border-color: var(--accent);
   }
 
+  .panel-search:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
+  }
+
   .panel-search-clear {
     position: absolute;
     top: 50%;
@@ -680,6 +717,12 @@
     transform: translateX(12px);
   }
 
+  /* The checkbox is visually hidden — surface its keyboard focus on the slider. */
+  .switch input:focus-visible + .slider {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
+  }
+
   /* COLOR GROUPS STYLE */
   .groups-list {
     display: flex;
@@ -731,6 +774,16 @@
     font-size: 11px;
     outline: none;
     padding: 2px 0;
+  }
+
+  .group-query-input:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
+  }
+
+  .color-picker-input:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
   }
 
   .group-query-input::placeholder {
@@ -794,6 +847,11 @@
     border-radius: 2px;
     outline: none;
     accent-color: var(--accent);
+  }
+
+  .slider-control input[type='range']:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
   }
 
   .reset-btn {

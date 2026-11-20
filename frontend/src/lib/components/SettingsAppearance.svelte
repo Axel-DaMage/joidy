@@ -75,7 +75,13 @@
       <DynamicIcon name="Clock3" size={13} />
       <span>{$t('settings.timeFormat')}</span>
     </div>
-    <button class="toggle" onclick={() => use24HourClock.toggle()}>
+    <button
+      class="toggle"
+      role="switch"
+      aria-checked={$use24HourClock}
+      aria-label={$t('settings.timeFormat')}
+      onclick={() => use24HourClock.toggle()}
+    >
       <span class:active={$use24HourClock}>24h</span>
       <span class="sep">/</span>
       <span class:active={!$use24HourClock}>12h</span>
@@ -86,9 +92,9 @@
   <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
     <div class="row-label">
       <DynamicIcon name="Clock" size={13} />
-      <span>{$t('settings.clockStyle')}</span>
+      <span id="sa-clock-style-label">{$t('settings.clockStyle')}</span>
     </div>
-    <select class="setting-input mono" bind:value={$clockStyle}>
+    <select class="setting-input mono" aria-labelledby="sa-clock-style-label" bind:value={$clockStyle}>
       {#each CLOCK_STYLES as style}
         <option value={style}>{$t(`settings.clockStyles.${style}`)}</option>
       {/each}
@@ -100,9 +106,9 @@
   <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
     <div class="row-label">
       <DynamicIcon name="Languages" size={13} />
-      <span>{$t('settings.language')}</span>
+      <span id="sa-language-label">{$t('settings.language')}</span>
     </div>
-    <select class="setting-input mono" value={currentLocale} onchange={onLocaleChange}>
+    <select class="setting-input mono" aria-labelledby="sa-language-label" value={currentLocale} onchange={onLocaleChange}>
       {#each LANGUAGE_OPTIONS as lang}
         <option value={lang.value}>{lang.label}</option>
       {/each}
@@ -117,8 +123,8 @@
     class="row"
     style="margin-top: 16px; flex-direction: column; align-items: stretch; gap: 8px;"
   >
-    <div class="row-label"><span>Set de Iconos (Alternativa Emojis)</span></div>
-    <select class="setting-input mono" bind:value={$activeIconPack}>
+    <div class="row-label"><span id="sa-iconpack-label">Set de Iconos (Alternativa Emojis)</span></div>
+    <select class="setting-input mono" aria-labelledby="sa-iconpack-label" bind:value={$activeIconPack}>
       {#each ICON_PACKS as pack}
         <option value={pack.value}>{pack.label}</option>
       {/each}
@@ -200,8 +206,9 @@
     transition: border-color var(--t-fast);
     width: 100%;
   }
-  .setting-input:focus {
-    outline: none;
+  .setting-input:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
   }
 
   /* Theme mode selector */
@@ -239,5 +246,10 @@
     opacity: 0;
     width: 0;
     height: 0;
+  }
+  /* The radio is visually hidden — surface its keyboard focus on the label. */
+  .theme-mode-option:has(input:focus-visible) {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
   }
 </style>

@@ -21,8 +21,13 @@
   class:clickable
   role={clickable ? 'button' : undefined}
   tabindex={clickable ? 0 : undefined}
-  aria-label={clickable ? 'Card' : undefined}
-  onkeydown={(e) => clickable && (e.key === 'Enter' || e.key === ' ') && e.currentTarget.click()}
+  onkeydown={(e) => {
+    if (!clickable) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      e.currentTarget.click();
+    }
+  }}
 >
   {@render children?.()}
 </div>

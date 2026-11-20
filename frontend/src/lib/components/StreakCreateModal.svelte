@@ -6,6 +6,7 @@
   import type { PersonalStreak } from '$lib/api';
   import { suggestEmoji, suggestIcon, suggestIconKey } from '$lib/utils/iconSuggest';
   import { liquidGlass } from '$lib/actions/liquidGlass';
+  import { focusTrap } from '$lib/actions/focusTrap';
   import { getContrastColor } from '$lib/stores/settings';
   import { t } from 'svelte-i18n';
 
@@ -180,10 +181,6 @@
     if (e.target === e.currentTarget) close();
   }
 
-  function onKey(e: KeyboardEvent) {
-    if (e.key === 'Escape') close();
-  }
-
   $: isEdit = !!editStreak;
   $: canSave = name.trim().length > 0;
 
@@ -216,14 +213,23 @@
   }
 </script>
 
-<svelte:window onkeydown={onKey} />
-
 {#if open}
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="modal-backdrop" role="presentation" onclick={onBackdrop}>
     <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <div class="modal-panel" role="dialog" tabindex="-1" aria-modal="true" aria-label={$t('streakCreateModal.createTitle')} onclick={(e) => e.stopPropagation()}>
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+    <div
+      class="modal-panel"
+      role="dialog"
+      tabindex="-1"
+      aria-modal="true"
+      aria-labelledby="streak-modal-title"
+      use:focusTrap={{ initialFocus: '#streak-modal-name', onEscape: close }}
+      onclick={(e) => e.stopPropagation()}
+    >
       <div class="modal-header">
-        <span class="modal-title mono">{isEdit ? 'EDITAR RACHA' : 'NUEVA RACHA'}</span>
+        <span id="streak-modal-title" class="modal-title mono">{isEdit ? 'EDITAR RACHA' : 'NUEVA RACHA'}</span>
         <button class="close-btn" onclick={close} aria-label={$t('streakCreateModal.close')}><X size={14} /></button>
       </div>
 
@@ -244,17 +250,17 @@
             <div class="field">
               <span class="field-label">{$t('streakCreateModal.frequency')}</span>
               <div class="freq-row">
-                <button class="freq-btn" class:selected={frequency === 'daily'} onclick={() => { frequency = 'daily'; frequencyDays = 1; }}>{$t('streakCreateModal.daily')}</button>
-                <button class="freq-btn" class:selected={frequency === 'weekly'} onclick={() => { frequency = 'weekly'; frequencyDays = 1; }}>{$t('streakCreateModal.weekly')}</button>
-                <button class="freq-btn" class:selected={frequency === 'monthly'} onclick={() => { frequency = 'monthly'; frequencyDays = 1; }}>{$t('streakCreateModal.monthly')}</button>
-                <button class="freq-btn" class:selected={frequency === 'every_n'} onclick={() => { frequency = 'every_n'; }}>{$t('streakCreateModal.everyN')}</button>
+                <button class="freq-btn" class:selected={frequency === 'daily'} aria-pressed={frequency === 'daily'} onclick={() => { frequency = 'daily'; frequencyDays = 1; }}>{$t('streakCreateModal.daily')}</button>
+                <button class="freq-btn" class:selected={frequency === 'weekly'} aria-pressed={frequency === 'weekly'} onclick={() => { frequency = 'weekly'; frequencyDays = 1; }}>{$t('streakCreateModal.weekly')}</button>
+                <button class="freq-btn" class:selected={frequency === 'monthly'} aria-pressed={frequency === 'monthly'} onclick={() => { frequency = 'monthly'; frequencyDays = 1; }}>{$t('streakCreateModal.monthly')}</button>
+                <button class="freq-btn" class:selected={frequency === 'every_n'} aria-pressed={frequency === 'every_n'} onclick={() => { frequency = 'every_n'; }}>{$t('streakCreateModal.everyN')}</button>
               </div>
             </div>
 
             {#if frequency === 'every_n'}
               <div class="freq-n-row">
                 <span class="freq-n-label">{$t('streakCreateModal.every')}</span>
-                <input type="number" bind:value={frequencyDays} min="1" max="365" class="freq-n-input" />
+                <input type="number" bind:value={frequencyDays} min="1" max="365" class="freq-n-input" aria-label={$t('streakCreateModal.everyNDays')} />
                 <span class="freq-n-label">{$t('streakCreateModal.days')}</span>
               </div>
             {/if}
@@ -293,7 +299,7 @@
               <span class="field-label">{$t('streakCreateModal.visualTheme')}</span>
               <div class="theme-grid">
                 {#each THEMES as themeOpt}
-                  <button class="theme-btn" class:selected={theme === themeOpt.id} onclick={() => theme = themeOpt.id}>
+                  <button class="theme-btn" class:selected={theme === themeOpt.id} aria-pressed={theme === themeOpt.id} onclick={() => theme = themeOpt.id}>
                     {themeOpt.label}
                   </button>
                 {/each}
@@ -344,7 +350,7 @@
               <div class="field icon-picker-field">
                 <div class="emoji-grid">
                   {#each EMOJIS as e}
-                    <button class="emoji-btn" class:selected={emoji === e} onclick={() => { emoji = e; emojiManual = true; }}>{e}</button>
+                    <button class="emoji-btn" class:selected={emoji === e} aria-pressed={emoji === e} onclick={() => { emoji = e; emojiManual = true; }}>{e}</button>
                   {/each}
                 </div>
               </div>
@@ -375,6 +381,7 @@
                     class="color-swatch"
                     value={color}
                     oninput={(e) => color = e.currentTarget.value}
+                    aria-label={$t('streakCreateModal.streakColor')}
                   />
                 </div>
                 <input
@@ -383,6 +390,7 @@
                   maxlength="7"
                   bind:value={color}
                   placeholder="#c8a96e"
+                  aria-label={$t('streakCreateModal.streakColorHex')}
                 />
               </div>
             </div>
@@ -618,6 +626,10 @@
     font-size: 13px; outline: none; transition: border-color 0.15s;
   }
   .field input:focus { border-color: var(--text-muted); }
+  .field input:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
+  }
 
   .field input[type="number"] {
     -moz-appearance: textfield;
@@ -682,6 +694,10 @@
     -moz-appearance: textfield; appearance: textfield;
   }
   .freq-n-input:focus { border-color: var(--text-muted); }
+  .freq-n-input:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
+  }
   .freq-n-input::-webkit-outer-spin-button,
   .freq-n-input::-webkit-inner-spin-button {
     -webkit-appearance: none; margin: 0;
@@ -825,6 +841,10 @@
     transition: border-color 0.15s;
   }
   .hex-input:focus { border-color: var(--text-muted); }
+  .hex-input:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
+  }
 
   /* Footer */
   .modal-footer {

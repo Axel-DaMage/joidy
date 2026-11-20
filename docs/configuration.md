@@ -161,12 +161,20 @@ API_PORT=8000
 |----------|-----------|------|-------------|
 | TELEGRAM_BOT_TOKEN | No | string | Token del bot |
 | TELEGRAM_ALLOWED_USER_ID | No | string | Tu user ID |
+| TELEGRAM_WEBHOOK_SECRET | No | string | Secreto del webhook (`X-Telegram-Bot-Api-Secret-Token`) |
 
 **Obtención:**
 1. Buscar `@BotFather` en Telegram
 2. `/newbot` para crear bot
 3. Copiar token
 4. Buscar `@userinfobot` para obtener tu ID
+
+**Webhook (quick capture):** el API expone `POST /telegram/webhook` con los
+comandos `/note`, `/goal`, `/checkin`, `/ask` y `/status` (ver README →
+Telegram Bot). Regístralo con `PUT /telegram/webhook` (con JWT) o con la Bot
+API de Telegram usando `secret_token=TELEGRAM_WEBHOOK_SECRET` para que cada
+update llegue firmado. Cada interacción queda registrada en la tabla
+`telegram_events`.
 
 ---
 

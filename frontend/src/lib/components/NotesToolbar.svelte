@@ -43,9 +43,29 @@
     handleDelete,
   } from '$lib/utils/notesPage';
   import type { SortMode } from '$lib/utils/fileTree';
+  import PromptDialog from './PromptDialog.svelte';
+  import { menuNav } from '$lib/actions/menuNav';
   import { t } from 'svelte-i18n';
 
-  let showSortMenu = false;
+  let showSortMenu = $state(false);
+  // Bulk-tag dialog state (replaces window.prompt(), #1308).
+  let tagDialogMode: 'add' | 'remove' | null = $state(null);
+  let tagDialogValue = $state('');
+
+  function openTagDialog(mode: 'add' | 'remove') {
+    tagDialogValue = '';
+    tagDialogMode = mode;
+  }
+
+  function submitTagDialog(value: string) {
+    const tags = value
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (!tags.length) return;
+    if (tagDialogMode === 'add') tagSelectedNotes(tags);
+    else if (tagDialogMode === 'remove') untagSelectedNotes(tags);
+  }
 
   function onSetSort(mode: SortMode) {
     setSortMode(mode);
@@ -78,6 +98,9 @@
         class="icon-btn"
         title={$t('notesPage.changeOrder')}
         aria-label={$t('notesPage.changeOrder')}
+        aria-haspopup="menu"
+        aria-expanded={showSortMenu}
+        aria-controls="notes-sort-menu"
         onclick={(e) => {
           e.stopPropagation();
           showSortMenu = !showSortMenu;
@@ -88,17 +111,38 @@
       {#if showSortMenu}
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div class="sort-menu" onclick={(e) => e.stopPropagation()}>
-          <button class="sort-btn" class:active={$sortMode === 'az'} onclick={() => onSetSort('az')}
-            >{$t('notesPage.sortAz')}</button
+        <div
+          id="notes-sort-menu"
+          class="sort-menu"
+          role="menu"
+          aria-label={$t('notesPage.changeOrder')}
+          tabindex="-1"
+          use:menuNav={{ onClose: () => (showSortMenu = false) }}
+          onclick={(e) => e.stopPropagation()}
+        >
+          <button
+            class="sort-btn"
+            class:active={$sortMode === 'az'}
+            role="menuitemradio"
+            aria-checked={$sortMode === 'az'}
+            tabindex="-1"
+            onclick={() => onSetSort('az')}>{$t('notesPage.sortAz')}</button
           >
-          <button class="sort-btn" class:active={$sortMode === 'za'} onclick={() => onSetSort('za')}
-            >{$t('notesPage.sortZa')}</button
+          <button
+            class="sort-btn"
+            class:active={$sortMode === 'za'}
+            role="menuitemradio"
+            aria-checked={$sortMode === 'za'}
+            tabindex="-1"
+            onclick={() => onSetSort('za')}>{$t('notesPage.sortZa')}</button
           >
-          <div class="sort-divider"></div>
+          <div class="sort-divider" role="separator"></div>
           <button
             class="sort-btn"
             class:active={$sortMode === 'edit-new'}
+            role="menuitemradio"
+            aria-checked={$sortMode === 'edit-new'}
+            tabindex="-1"
             onclick={() => onSetSort('edit-new')}
             >{$t('notesPage.sortEditNew')}
             {#if $sortMode === 'edit-new'}✓{/if}</button
@@ -106,14 +150,20 @@
           <button
             class="sort-btn"
             class:active={$sortMode === 'edit-old'}
+            role="menuitemradio"
+            aria-checked={$sortMode === 'edit-old'}
+            tabindex="-1"
             onclick={() => onSetSort('edit-old')}
             >{$t('notesPage.sortEditOld')}
             {#if $sortMode === 'edit-old'}✓{/if}</button
           >
-          <div class="sort-divider"></div>
+          <div class="sort-divider" role="separator"></div>
           <button
             class="sort-btn"
             class:active={$sortMode === 'create-new'}
+            role="menuitemradio"
+            aria-checked={$sortMode === 'create-new'}
+            tabindex="-1"
             onclick={() => onSetSort('create-new')}
             >{$t('notesPage.sortCreateNew')}
             {#if $sortMode === 'create-new'}✓{/if}</button
@@ -121,6 +171,9 @@
           <button
             class="sort-btn"
             class:active={$sortMode === 'create-old'}
+            role="menuitemradio"
+            aria-checked={$sortMode === 'create-old'}
+            tabindex="-1"
             onclick={() => onSetSort('create-old')}
             >{$t('notesPage.sortCreateOld')}
             {#if $sortMode === 'create-old'}✓{/if}</button
@@ -144,6 +197,7 @@
       class:active={$viewMode === 'tree'}
       title="Vista de carpetas"
       aria-label="Vista de carpetas"
+      aria-pressed={$viewMode === 'tree'}
       onclick={() => {
         $viewMode = 'tree';
         if ($notesPrefsReady) persist();
@@ -156,6 +210,7 @@
       class:active={$viewMode === 'list'}
       title="Vista de lista"
       aria-label="Vista de lista"
+      aria-pressed={$viewMode === 'list'}
       onclick={() => {
         $viewMode = 'list';
         if ($notesPrefsReady) persist();
@@ -169,7 +224,12 @@
 <div class="list-toolbar">
   <div class="search-wrap">
     <Search size={11} style="color: var(--text-muted); flex-shrink:0;" />
-    <input class="search-input" bind:value={$search} placeholder={$t('notesPage.search')} />
+    <input
+      class="search-input"
+      bind:value={$search}
+      placeholder={$t('notesPage.search')}
+      aria-label={$t('notesPage.search')}
+    />
     {#if $search}
       <button
         class="icon-btn"
@@ -185,6 +245,7 @@
     class="toolbar-btn bulk-toggle"
     class:active={$bulkMode}
     aria-label={$t('notesPage.bulkMode')}
+    aria-pressed={$bulkMode}
     onclick={() => {
       bulkMode.set(!$bulkMode);
       clearNoteSelection();
@@ -236,19 +297,7 @@
       >
       Eliminar
     </button>
-    <button
-      class="bulk-btn"
-      onclick={() => {
-        const t = prompt('Tags a añadir (separadas por coma):');
-        if (t)
-          tagSelectedNotes(
-            t
-              .split(',')
-              .map((s) => s.trim())
-              .filter(Boolean)
-          );
-      }}
-    >
+    <button class="bulk-btn" onclick={() => openTagDialog('add')}>
       <svg
         width="12"
         height="12"
@@ -262,19 +311,7 @@
       >
       Etiquetar
     </button>
-    <button
-      class="bulk-btn"
-      onclick={() => {
-        const t = prompt('Tags a quitar (separadas por coma):');
-        if (t)
-          untagSelectedNotes(
-            t
-              .split(',')
-              .map((s) => s.trim())
-              .filter(Boolean)
-          );
-      }}
-    >
+    <button class="bulk-btn" onclick={() => openTagDialog('remove')}>
       <svg
         width="12"
         height="12"
@@ -291,6 +328,17 @@
     <button class="bulk-btn" onclick={() => clearNoteSelection()}> Cancelar </button>
   </div>
 {/if}
+
+<PromptDialog
+  open={tagDialogMode !== null}
+  title={tagDialogMode === 'add' ? $t('notesPage.addTagsTitle') : $t('notesPage.removeTagsTitle')}
+  label={tagDialogMode === 'add' ? $t('notesPage.addTagsTitle') : $t('notesPage.removeTagsTitle')}
+  bind:value={tagDialogValue}
+  placeholder={$t('notesPage.tagsPlaceholder')}
+  confirmLabel={$t('common.save')}
+  onSubmit={submitTagDialog}
+  onClose={() => (tagDialogMode = null)}
+/>
 
 <style>
   .tree-actions-bar {
@@ -380,6 +428,9 @@
     border-radius: var(--r);
     padding: 4px 7px;
   }
+  .search-wrap:focus-within {
+    border-color: var(--xp);
+  }
 
   .search-input {
     background: transparent;
@@ -390,6 +441,10 @@
     color: var(--text-primary);
     flex: 1;
     min-width: 0;
+  }
+  input:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
   }
   .search-input::placeholder {
     color: var(--text-muted);

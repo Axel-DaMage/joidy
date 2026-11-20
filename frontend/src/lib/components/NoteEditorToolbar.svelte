@@ -288,6 +288,7 @@
         onclick={() => (zenMode = !zenMode)}
         title={$t('noteEditor.zenMode')}
         aria-label={$t('noteEditor.zenModeShort')}
+        aria-pressed={zenMode}
       >
         <Maximize size={14} />
       </button>
@@ -298,6 +299,7 @@
         onclick={() => (wysiwygMode = !wysiwygMode)}
         title={$t('noteEditor.wysiwyg')}
         aria-label={$t('noteEditor.wysiwygShort')}
+        aria-pressed={wysiwygMode}
       >
         <Type size={14} />
         <span>{wysiwygMode ? 'Raw' : 'Visual'}</span>
@@ -309,6 +311,7 @@
         onclick={() => (previewMode = !previewMode)}
         title={$t('noteEditor.preview')}
         aria-label={$t('noteEditor.previewShort')}
+        aria-pressed={previewMode}
       >
         {#if previewMode}<EyeOff size={14} />{:else}<Eye size={14} />{/if}
         <span>{previewMode ? 'Editor' : 'Vista previa'}</span>

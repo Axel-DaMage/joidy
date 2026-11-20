@@ -16,6 +16,7 @@
   import LazyIconPicker from '$lib/components/LazyIconPicker.svelte';
   import NoteLinkPicker from '$lib/components/NoteLinkPicker.svelte';
   import StreakIcon from '$lib/components/StreakIcon.svelte';
+  import { focusTrap } from '$lib/actions/focusTrap';
   import { GOALS_SPECIFIC_COLOR_PRESETS, DEFAULT_GOAL_COLOR } from '$lib/utils/goalColors';
   import { t } from 'svelte-i18n';
 
@@ -77,7 +78,14 @@
   let goalId = 0;
   function syncGoalId(rawId: string | undefined) {
     const parsed = parseInt(rawId || '0');
-    if (parsed > 0) goalId = parsed;
+    if (parsed > 0) {
+      goalId = parsed;
+    } else {
+      // Invalid id (NaN/0/negative) never triggered loadGoal, leaving the
+      // page stuck on the loading spinner forever — fail loudly instead.
+      loading = false;
+      loadError = $t('goalDetail.notFound');
+    }
   }
   onMount(() => {
     ensureGoalEditor();
@@ -304,18 +312,26 @@
 
 {#if showSettings}
   <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-  <div class="goal-settings-backdrop" onclick={() => showSettings = false} role="dialog" tabindex="-1">
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="goal-settings-backdrop" onclick={() => showSettings = false} role="presentation">
     <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="goal-settings-panel slide-down" onclick={(e) => e.stopPropagation()}>
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+    <div
+      class="goal-settings-panel slide-down"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="goal-settings-heading"
+      tabindex="-1"
+      use:focusTrap={{ initialFocus: '#edit-goal-title', onEscape: () => (showSettings = false) }}
+      onclick={(e) => e.stopPropagation()}
+    >
       <div class="goal-settings-header">
         <div class="goal-settings-title-row">
           <div class="goal-settings-icon-wrap">
             <StreakIcon name={editUseFailIcon ? editFailIcon : editFailEmoji} size={16} color={editColor} />
           </div>
           <div>
-            <h3 class="goal-settings-heading">{$t('goalDetail.editGoal')}</h3>
+            <h3 id="goal-settings-heading" class="goal-settings-heading">{$t('goalDetail.editGoal')}</h3>
             <span class="goal-settings-sub">{$t('goalDetail.editGoalSub')}</span>
           </div>
         </div>
@@ -374,10 +390,10 @@
               <span class="label">{$t('goalDetail.identityColor')}</span>
               <div class="color-presets ng-expanded-presets">
                 {#each COLOR_PRESETS as c}
-                  <button class="color-dot" class:selected={editColor === c.hex} style="background: {c.hex}; color: {c.hex};" onclick={() => editColor = c.hex} title={c.name} aria-label={c.name}></button>
+                  <button class="color-dot" class:selected={editColor === c.hex} aria-pressed={editColor === c.hex} style="background: {c.hex}; color: {c.hex};" onclick={() => editColor = c.hex} title={c.name} aria-label={c.name}></button>
                 {/each}
                 <div class="color-custom" style="background: {editColor};">
-                  <input type="color" bind:value={editColor} class="color-picker" />
+                  <input type="color" bind:value={editColor} class="color-picker" aria-label={$t('goalsPage.goalColor')} />
                 </div>
               </div>
             </div>

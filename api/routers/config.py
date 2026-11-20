@@ -27,6 +27,7 @@ CONFIG_KEYS = {
     "embedding_model": "EMBEDDING_MODEL",
     "telegram_bot_token": "TELEGRAM_BOT_TOKEN",
     "telegram_allowed_user_id": "TELEGRAM_ALLOWED_USER_ID",
+    "telegram_webhook_secret": "TELEGRAM_WEBHOOK_SECRET",
     "secret_key": "SECRET_KEY",
     "app_env": "APP_ENV",
     "ai_service_enabled": "AI_SERVICE_ENABLED",
@@ -57,6 +58,7 @@ PUBLIC_KEYS = {
     "embedding_model": True,
     "telegram_bot_token": False,
     "telegram_allowed_user_id": False,
+    "telegram_webhook_secret": False,
     "secret_key": False,
     "app_env": True,
     "ai_service_enabled": True,
@@ -111,6 +113,7 @@ class ConfigUpdate(BaseModel):
     embedding_model: str | None = None
     telegram_bot_token: str | None = None
     telegram_allowed_user_id: str | None = None
+    telegram_webhook_secret: str | None = None
     secret_key: str | None = None
 
 
@@ -224,6 +227,7 @@ def get_key_description(key: str) -> str:
         "github_client_secret": "GitHub OAuth App client secret",
         "telegram_bot_token": "Telegram Bot API token",
         "telegram_allowed_user_id": "Your Telegram user ID",
+        "telegram_webhook_secret": "Secret token Telegram sends on each webhook call",
         "secret_key": "Session signing secret key",
         "app_env": "Application environment (development/production)",
     }

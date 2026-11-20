@@ -2,6 +2,7 @@
   import { createEventDispatcher, onMount } from 'svelte';
   import type { FlatNode } from '$lib/utils/fileTree';
   import { SquarePen, MoveRight, Trash2, FilePlus, FolderX } from 'lucide-svelte';
+  import { menuNav } from '$lib/actions/menuNav';
 
   export let x: number;
   export let y: number;
@@ -74,30 +75,42 @@
   bind:this={menuEl}
   {style}
   role="menu"
+  aria-label={node.name}
   tabindex="-1"
+  use:menuNav={{ onClose: () => dispatch('close') }}
   onclick={(e) => e.stopPropagation()}
   oncontextmenu={(e) => e.stopPropagation()}
   onkeydown={(e) => e.stopPropagation()}
 >
   {#if node.type === 'file'}
-    <button class="ctx-item" onclick={handleItem('rename')}>
+    <button class="ctx-item" role="menuitem" tabindex="-1" onclick={handleItem('rename')}>
       <SquarePen size={12} /> Renombrar
     </button>
-    <button class="ctx-item" onclick={handleItem('move')}>
+    <button class="ctx-item" role="menuitem" tabindex="-1" onclick={handleItem('move')}>
       <MoveRight size={12} /> Mover a...
     </button>
-    <div class="ctx-divider"></div>
-    <button class="ctx-item ctx-danger" onclick={handleItem('deleteNote')}>
+    <div class="ctx-divider" role="separator"></div>
+    <button
+      class="ctx-item ctx-danger"
+      role="menuitem"
+      tabindex="-1"
+      onclick={handleItem('deleteNote')}
+    >
       <Trash2 size={12} /> Eliminar
     </button>
   {:else}
-    <button class="ctx-item" onclick={handleItem('newNoteInFolder')}>
+    <button class="ctx-item" role="menuitem" tabindex="-1" onclick={handleItem('newNoteInFolder')}>
       <FilePlus size={12} /> Nueva nota aquí
     </button>
-    <button class="ctx-item" onclick={handleItem('rename')}>
+    <button class="ctx-item" role="menuitem" tabindex="-1" onclick={handleItem('rename')}>
       <SquarePen size={12} /> Renombrar
     </button>
-    <button class="ctx-item ctx-danger" onclick={handleItem('deleteFolder')}>
+    <button
+      class="ctx-item ctx-danger"
+      role="menuitem"
+      tabindex="-1"
+      onclick={handleItem('deleteFolder')}
+    >
       <FolderX size={12} /> Eliminar carpeta
     </button>
   {/if}

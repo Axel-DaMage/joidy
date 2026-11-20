@@ -1,13 +1,15 @@
 <script lang="ts">
   import { tick } from 'svelte';
   import { Send, Sparkles, Trash2, LoaderCircle } from 'lucide-svelte';
-  import { marked } from 'marked';
+  import { Marked } from 'marked';
   import DOMPurify from 'dompurify';
   import { authorizeUploadUrls } from '$lib/utils/markdown';
   import { messages, isLoading, suggestions, sendMessage, clearChat } from '$lib/stores/chat';
   import { t } from 'svelte-i18n';
 
-  marked.use({ gfm: true, breaks: true });
+  // Instance-scoped parser — `marked.use()` on the global singleton would
+  // leak this config into every other marked caller (#1317).
+  const mdParser = new Marked({ gfm: true, breaks: true });
 
   let input = $state('');
   let scrollContainer: HTMLDivElement | null = $state(null);
@@ -37,7 +39,7 @@
 
   function renderMarkdown(md: string): string {
     if (!md.trim()) return '';
-    return authorizeUploadUrls(DOMPurify.sanitize(String(marked.parse(md))));
+    return authorizeUploadUrls(DOMPurify.sanitize(String(mdParser.parse(md))));
   }
 
   async function handleSend() {
@@ -133,6 +135,7 @@
       bind:value={input}
       onkeydown={handleKeydown}
       placeholder={$t('chat.inputPlaceholder')}
+      aria-label={$t('chat.inputPlaceholder')}
       rows="1"
       disabled={$isLoading}></textarea>
     <button
@@ -381,6 +384,10 @@
   }
   .chat-input textarea:focus {
     border-color: var(--xp, #c8a96e);
+  }
+  .chat-input textarea:focus-visible {
+    outline: 2px solid var(--xp, #c8a96e);
+    outline-offset: 2px;
   }
   .chat-input textarea::placeholder {
     color: var(--text-muted, #888);
