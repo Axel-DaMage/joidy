@@ -7,6 +7,12 @@ from services import google_token_service as gts
 from services import oauth_state
 
 
+def _configure_secret(monkeypatch):
+    """Give token encryption a real SECRET_KEY (#1393): an empty or placeholder
+    key now refuses to encrypt instead of silently using a known value."""
+    monkeypatch.setattr("config.settings.secret_key", "test-secret")
+
+
 def _configure_google(monkeypatch):
     monkeypatch.setattr("services.google_service.settings.google_client_id", "google-client-id")
     monkeypatch.setattr("services.google_service.settings.google_client_secret", "google-client-secret")
@@ -129,6 +135,7 @@ def test_google_status_not_connected(client):
 
 
 def test_google_connect_persists_tokens(client, db_session, monkeypatch):
+    _configure_secret(monkeypatch)
     monkeypatch.setattr("services.google_service.settings.google_client_id", "google-client-id")
     monkeypatch.setattr("services.google_service.settings.google_client_secret", "google-client-secret")
     monkeypatch.setattr(
@@ -159,6 +166,7 @@ def test_google_connect_persists_tokens(client, db_session, monkeypatch):
 
 def test_google_disconnect_clears_tokens(client, db_session, monkeypatch):
     # First connect
+    _configure_secret(monkeypatch)
     monkeypatch.setattr("services.google_service.settings.google_client_id", "google-client-id")
     monkeypatch.setattr("services.google_service.settings.google_client_secret", "google-client-secret")
     monkeypatch.setattr(
@@ -189,16 +197,18 @@ def test_google_disconnect_clears_tokens(client, db_session, monkeypatch):
     assert resp.json()["connected"] is False
 
 
-def test_google_token_service_encrypt_decrypt(db_session):
+def test_google_token_service_encrypt_decrypt(db_session, monkeypatch):
     """Test that token encryption/decryption round-trips correctly."""
+    _configure_secret(monkeypatch)
     encrypted = gts.encrypt_token("my-secret-token")
     assert encrypted != "my-secret-token"
     decrypted = gts.decrypt_token(encrypted)
     assert decrypted == "my-secret-token"
 
 
-def test_google_token_service_store_and_retrieve(db_session):
+def test_google_token_service_store_and_retrieve(db_session, monkeypatch):
     """Test storing and retrieving tokens from the database."""
+    _configure_secret(monkeypatch)
     row = gts.store_tokens(
         db_session,
         access_token="ACCESS123",
@@ -218,8 +228,9 @@ def test_google_token_service_store_and_retrieve(db_session):
     assert gts.is_connected(db_session) is True
 
 
-def test_google_token_service_clear_tokens(db_session):
+def test_google_token_service_clear_tokens(db_session, monkeypatch):
     """Test clearing tokens from the database."""
+    _configure_secret(monkeypatch)
     gts.store_tokens(
         db_session,
         access_token="ACCESS",

@@ -3,7 +3,7 @@
 // server-renders pages inside the container where localhost:PORT isn't mapped.
 import { browser } from '$app/env';
 import { showNotification } from './stores/notifications';
-import { session, getToken } from './stores/session';
+import { session, getToken, getRefreshToken } from './stores/session';
 
 export const BASE = browser
   ? (import.meta.env.VITE_API_URL as string) ||
@@ -30,6 +30,38 @@ export interface RequestOptions {
   signal?: AbortSignal;
 }
 
+// Silent access-token renewal (#1285): a 401 triggers one refresh attempt.
+// Concurrent requests share the in-flight promise so a burst of 401s fires a
+// single POST /auth/refresh, then each request retries once with the new
+// token before falling back to the logout flow. Also used by the WebSocket
+// reconnect path when the server closes the socket with code 4001.
+let refreshInflight: Promise<boolean> | null = null;
+
+export function refreshAccessToken(): Promise<boolean> {
+  if (!refreshInflight) {
+    refreshInflight = (async () => {
+      const refreshToken = getRefreshToken();
+      if (!refreshToken) return false;
+      try {
+        const res = await fetch(`${BASE}/auth/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh_token: refreshToken })
+        });
+        if (!res.ok) return false;
+        const data = (await res.json()) as { access_token: string; refresh_token: string };
+        session.setTokens(data.access_token, data.refresh_token);
+        return true;
+      } catch {
+        return false;
+      }
+    })().finally(() => {
+      refreshInflight = null;
+    });
+  }
+  return refreshInflight;
+}
+
 async function req<T>(
   method: string,
   path: string,
@@ -49,17 +81,28 @@ async function req<T>(
 
   const exec = async (): Promise<T> => {
     try {
-      const token = getToken();
-      const headers: Record<string, string> = {};
-      if (body) headers['Content-Type'] = 'application/json';
-      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const doFetch = () => {
+        const token = getToken();
+        const headers: Record<string, string> = {};
+        if (body) headers['Content-Type'] = 'application/json';
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        return fetch(`${BASE}${path}`, {
+          method,
+          headers,
+          body: body ? JSON.stringify(body) : undefined,
+          signal,
+        });
+      };
 
-      const res = await fetch(`${BASE}${path}`, {
-        method,
-        headers,
-        body: body ? JSON.stringify(body) : undefined,
-        signal,
-      });
+      let res = await doFetch();
+
+      // Expired access token → try one silent refresh and retry the request
+      // with the renewed credential before treating it as a dead session
+      // (#1285). Auth endpoints are excluded: a 401 there means bad
+      // credentials, not an expired token.
+      if (res.status === 401 && !path.startsWith('/auth/') && (await refreshAccessToken())) {
+        res = await doFetch();
+      }
 
       if (res.status === 401) {
         if (!isHandlingLogout) {
@@ -556,10 +599,20 @@ export interface SyncConflict {
 export const api = {
   auth: {
     login: (password: string, username = 'user') =>
-      req<{ access_token: string; token_type: string }>('POST', '/auth/login', {
-        password,
-        username,
-      }),
+      req<{ access_token: string; refresh_token: string; token_type: string }>(
+        'POST',
+        '/auth/login',
+        {
+          password,
+          username,
+        }
+      ),
+    refresh: (refreshToken: string) =>
+      req<{ access_token: string; refresh_token: string; token_type: string }>(
+        'POST',
+        '/auth/refresh',
+        { refresh_token: refreshToken }
+      ),
     status: () => req<{ enabled: boolean }>('GET', '/auth/status'),
   },
 
@@ -985,21 +1038,18 @@ export const api = {
       ),
     startDeviceAuth: () =>
       req<{
-        device_code: string;
+        poll_token: string;
         user_code: string;
         verification_uri: string;
         verification_uri_secondary?: string;
         expires_in: number;
         interval: number;
       }>('GET', '/integrations/github/oauth/device/start'),
-    pollDeviceCode: (device_code: string) =>
+    pollDeviceCode: (pollToken: string) =>
       req<
         | { status: 'authorized'; access_token: string; token_type: string; scope: string }
         | { status: 'pending' | 'slowdown' | 'expired' | 'denied'; message: string }
-      >(
-        'POST',
-        `/integrations/github/oauth/device/polling?device_code=${encodeURIComponent(device_code)}`
-      ),
+      >('POST', '/integrations/github/oauth/device/polling', { poll_token: pollToken }),
     startWebFlow: () =>
       req<{ authorize_url: string; redirect_uri: string }>(
         'GET',

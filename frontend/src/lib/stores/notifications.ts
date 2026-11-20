@@ -1,4 +1,6 @@
 import { writable } from 'svelte/store';
+import { browser } from '$app/env';
+import { SESSION_RESET_EVENT } from './session';
 
 export interface Notification {
   id: string;
@@ -71,4 +73,14 @@ export function clearAllNotificationTimers(): void {
   activeNotifications.clear();
   for (const timer of dismissTimers.values()) clearTimeout(timer);
   dismissTimers.clear();
+}
+
+// Drop pending toasts on session reset (logout / 401) — messages can embed
+// user content (note titles, conflict names) that must not leak to the next
+// user on the same browser profile (#1325).
+if (browser) {
+  window.addEventListener(SESSION_RESET_EVENT, () => {
+    clearAllNotificationTimers();
+    notifications.set([]);
+  });
 }

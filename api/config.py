@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     github_token: str = ""
     github_username: str = ""
     github_webhook_url: str = ""
+    # Shared secret GitHub signs webhook deliveries with (X-Hub-Signature-256).
+    # Per-repo secrets generated during webhook setup take precedence; when
+    # neither is configured the webhook endpoint fails closed (#1318).
+    github_webhook_secret: str = ""
 
     # AI & Embeddings
     embedding_retry_max_attempts: int = 8
@@ -59,6 +63,10 @@ class Settings(BaseSettings):
 
     # Authentication
     auth_password: str = ""  # Password for single-user auth (optional)
+    # JWT lifecycle (#1285): short-lived access tokens are renewed silently
+    # via POST /auth/refresh with a longer-lived rotating refresh token.
+    access_token_expire_minutes: int = 720  # 12h — within the 12–24h audit bound
+    refresh_token_expire_days: int = 7
     # bcrypt cost factor for password hashing. None = library default (12).
     # Tests set BCRYPT_ROUNDS=4 via conftest — hash strength is irrelevant
     # there and bcrypt was the slowest single test in the suite (#996).

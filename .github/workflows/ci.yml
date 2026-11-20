@@ -143,6 +143,11 @@ jobs:
           path: api/coverage.xml
           retention-days: 30
 
+  # Canonical ai-service test run (#1254): the standalone
+  # ai-service-tests.yml workflow was removed — it ran the identical suite
+  # a second time per event with a different dep-install path. This job
+  # installs requirements-dev.txt (runtime + test tooling) and is the only
+  # ai-service check.
   ai-service-test:
     name: AI Service Tests
     runs-on: ubuntu-latest
@@ -150,6 +155,10 @@ jobs:
       contents: read
     env:
       APP_ENV: test
+      # Tests mock all provider/DB calls; conftest.py also defaults to this,
+      # set explicitly so engine creation stays hermetic — no PostgreSQL
+      # service is needed for unit tests.
+      DATABASE_URL: "sqlite:///:memory:"
       LOG_DIR: logs
     steps:
       - uses: actions/checkout@v7
@@ -158,6 +167,13 @@ jobs:
         uses: actions/setup-python@v7
         with:
           python-version: '3.12'
+
+      - name: Cache pip
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-ai-${{ hashFiles('ai-service/requirements.txt', 'ai-service/requirements-dev.txt') }}
+          restore-keys: ${{ runner.os }}-pip-ai-
 
       - name: Install ai-service dependencies
         working-directory: ai-service
@@ -250,108 +266,14 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # The dev overlay runs containers as ${UID:-1000}:${GID:-1000} and the
-      # frontend image chowns /app with the same args. The runner user is not
-      # 1000, so export the real ids here: a mismatch makes the frontend
-      # container unable to write .svelte-kit through the ./frontend bind mount.
-      # Keeping these identical to frontend-e2e also keeps the GHA image cache
-      # shared instead of thrashing between different build args.
-      - name: Set runner UID/GID
-        run: |
-          echo "RUNNER_UID=$(id -u)" >> "$GITHUB_ENV"
-          echo "RUNNER_GID=$(id -g)" >> "$GITHUB_ENV"
+      # Shared definitions (#1254): the 4-image BuildKit build and the
+      # env-prep/stack-boot/health-check live in .github/actions so this
+      # job and frontend-e2e can never drift apart.
+      - name: Build images (BuildKit GHA cache)
+        uses: ./.github/actions/build-joidy-images
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      # Pre-build each image with a BuildKit GHA cache (same pattern as
-      # publish.yml), tagged exactly as compose expects, then loaded into the
-      # local daemon so `compose up` uses them instead of rebuilding.
-      - name: Build api image (BuildKit GHA cache)
-        uses: docker/build-push-action@v7
-        with:
-          context: ./api
-          load: true
-          tags: d4mag3/joidy-api:latest
-          cache-from: type=gha,scope=api
-          cache-to: type=gha,mode=max,scope=api
-
-      - name: Build ai-service image (BuildKit GHA cache)
-        uses: docker/build-push-action@v7
-        with:
-          context: ./ai-service
-          load: true
-          tags: d4mag3/joidy-ai-service:latest
-          cache-from: type=gha,scope=ai-service
-          cache-to: type=gha,mode=max,scope=ai-service
-
-      - name: Build worker image (BuildKit GHA cache)
-        uses: docker/build-push-action@v7
-        with:
-          context: ./worker
-          load: true
-          tags: d4mag3/joidy-worker:latest
-          cache-from: type=gha,scope=worker
-          cache-to: type=gha,mode=max,scope=worker
-
-      - name: Build frontend image (BuildKit GHA cache)
-        uses: docker/build-push-action@v7
-        with:
-          context: ./frontend
-          target: development
-          load: true
-          tags: d4mag3/joidy-frontend:latest
-          cache-from: type=gha,scope=frontend
-          cache-to: type=gha,mode=max,scope=frontend
-          # Same args as frontend-e2e so the GHA cache is shared, and so the
-          # anonymous /app/node_modules volume is writable by the container
-          # user (see "Set runner UID/GID" above).
-          build-args: |
-            UID=${{ env.RUNNER_UID }}
-            GID=${{ env.RUNNER_GID }}
-
-      - name: Prepare environment
-        run: |
-          cp .env.example .env
-          # docker-compose.yml requires non-empty POSTGRES_PASSWORD and
-          # INTERNAL_SECRET (${VAR:?...}); .env.example ships them empty,
-          # so set CI-only values here.
-          sed -i 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=joidy-ci/' .env
-          sed -i 's/^INTERNAL_SECRET=.*/INTERNAL_SECRET=joidy-ci-internal/' .env
-          sed -i 's/^SECRET_KEY=.*/SECRET_KEY=joidy-ci-secret-key-not-for-production/' .env
-          # Run the dev containers as the runner user (compose interpolates
-          # ${UID}/${GID} from .env) so the frontend container can write
-          # .svelte-kit through the ./frontend bind mount.
-          echo "UID=${RUNNER_UID}" >> .env
-          echo "GID=${RUNNER_GID}" >> .env
-          # Pre-create the node_modules mountpoint as the runner user: docker
-          # otherwise creates it root-owned (volume mountpoint inside the
-          # ./frontend bind mount).
-          mkdir -p frontend/node_modules data/db data/uploads data/vault
-
-      - name: Start services
-        run: |
-          # Images were pre-built above with the same tags compose expects.
-          # Start backend services first (frontend depends on API health,
-          # which may take time on first run due to migrations)
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d api ai-service worker
-          # Start frontend without waiting for API health (override depends_on)
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --no-deps frontend
-
-      - name: Verify API health
-        run: |
-          for i in $(seq 1 30); do
-            if curl -fsS http://localhost:8000/health; then
-              echo "API is healthy"
-              exit 0
-            fi
-            echo "Attempt $i/30: API not ready yet..."
-            sleep 2
-          done
-          echo "::error::API did not become healthy within 60 seconds"
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml logs --tail=100 api
-          exit 1
+      - name: Boot dev stack and verify API health
+        uses: ./.github/actions/boot-joidy-stack
 
       - name: Stop containers
         if: always()
@@ -368,105 +290,19 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # The dev overlay runs containers as ${UID:-1000}:${GID:-1000} and the
-      # frontend image chowns /app with the same args. The runner user is not
-      # 1000, so export the real ids here: a mismatch makes the frontend
-      # container unable to write .svelte-kit through the ./frontend bind mount.
-      - name: Set runner UID/GID
-        run: |
-          echo "RUNNER_UID=$(id -u)" >> "$GITHUB_ENV"
-          echo "RUNNER_GID=$(id -g)" >> "$GITHUB_ENV"
+      # Shared definitions (#1254): identical image build + stack boot as
+      # docker-build via .github/actions — the second job's builds are
+      # BuildKit cache hits, so this costs little and the definitions can
+      # never drift. extra-env adds the deterministic AUTH_PASSWORD the
+      # e2e login helper needs.
+      - name: Build images (BuildKit GHA cache)
+        uses: ./.github/actions/build-joidy-images
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      # Same BuildKit GHA cache pattern as docker-build: repeat PRs hit the
-      # cache so builds are fast; the tags match what compose expects.
-      - name: Build api image (BuildKit GHA cache)
-        uses: docker/build-push-action@v7
+      - name: Boot dev stack and verify API health
+        uses: ./.github/actions/boot-joidy-stack
         with:
-          context: ./api
-          load: true
-          tags: d4mag3/joidy-api:latest
-          cache-from: type=gha,scope=api
-          cache-to: type=gha,mode=max,scope=api
-
-      - name: Build ai-service image (BuildKit GHA cache)
-        uses: docker/build-push-action@v7
-        with:
-          context: ./ai-service
-          load: true
-          tags: d4mag3/joidy-ai-service:latest
-          cache-from: type=gha,scope=ai-service
-          cache-to: type=gha,mode=max,scope=ai-service
-
-      - name: Build worker image (BuildKit GHA cache)
-        uses: docker/build-push-action@v7
-        with:
-          context: ./worker
-          load: true
-          tags: d4mag3/joidy-worker:latest
-          cache-from: type=gha,scope=worker
-          cache-to: type=gha,mode=max,scope=worker
-
-      - name: Build frontend image (BuildKit GHA cache)
-        uses: docker/build-push-action@v7
-        with:
-          context: ./frontend
-          target: development
-          load: true
-          tags: d4mag3/joidy-frontend:latest
-          cache-from: type=gha,scope=frontend
-          cache-to: type=gha,mode=max,scope=frontend
-          # Build the dev image with the runner's ids so the anonymous
-          # /app/node_modules volume (populated from the image) is writable
-          # by the container user, which must match the runner (see below).
-          build-args: |
-            UID=${{ env.RUNNER_UID }}
-            GID=${{ env.RUNNER_GID }}
-
-      - name: Prepare environment
-        run: |
-          cp .env.example .env
-          # docker-compose.yml requires non-empty POSTGRES_PASSWORD and
-          # INTERNAL_SECRET (${VAR:?...}); .env.example ships them empty,
-          # so set CI-only values here.
-          sed -i 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=joidy-ci/' .env
-          sed -i 's/^INTERNAL_SECRET=.*/INTERNAL_SECRET=joidy-ci-internal/' .env
-          sed -i 's/^SECRET_KEY=.*/SECRET_KEY=joidy-ci-secret-key-not-for-production/' .env
-          # Deterministic single-user auth for the e2e login helper
-          # (plaintext supported by verify_password; bcrypt prefix optional).
-          echo "AUTH_PASSWORD=joidy-e2e-ci" >> .env
-          # Run the dev containers as the runner user (compose interpolates
-          # ${UID}/${GID} from .env) so the frontend container can write
-          # .svelte-kit through the ./frontend bind mount.
-          echo "UID=${RUNNER_UID}" >> .env
-          echo "GID=${RUNNER_GID}" >> .env
-          # Pre-create the node_modules mountpoint as the runner user: docker
-          # otherwise creates it root-owned (volume mountpoint inside the
-          # ./frontend bind mount), which makes the later `npm ci` fail with
-          # EACCES (npm ci only clears the *contents* of node_modules).
-          mkdir -p frontend/node_modules data/db data/uploads data/vault
-
-      - name: Start services
-        run: |
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d api ai-service worker
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --no-deps frontend
-
-      - name: Verify API health
-        run: |
-          for i in $(seq 1 30); do
-            if curl -fsS http://localhost:8000/health; then
-              echo "API is healthy"
-              exit 0
-            fi
-            echo "Attempt $i/30: API not ready yet..."
-            sleep 2
-          done
-          echo "::error::API did not become healthy within 60 seconds"
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml logs --tail=100 api
-          exit 1
+          extra-env: |
+            AUTH_PASSWORD=joidy-e2e-ci
 
       - name: Set up Node
         uses: actions/setup-node@v7
@@ -497,21 +333,65 @@ jobs:
           docker compose -f docker-compose.yml -f docker-compose.dev.yml logs --tail=100 frontend
           exit 1
 
-      # PRs run the smoke spec only (fast gate); pushes to main/development
-      # run the full 13-spec suite. GEMINI_API_KEY stays unset so the specs
-      # exercise the real "AI disabled" path of the CI stack.
-      - name: Run smoke e2e (pull requests)
+      # PRs run the smoke spec plus the specs covering the routes the PR
+      # touches — src/routes/<dir>/ maps to e2e/<dir>.spec.ts (#1255).
+      # Changes to shared frontend code (src/lib, root layout, e2e helpers,
+      # playwright config) can affect every route, so they run the full
+      # suite. Pushes to main/development always run everything.
+      # GEMINI_API_KEY stays unset so the specs exercise the real
+      # "AI disabled" path of the CI stack.
+      - name: Select e2e specs for changed routes (pull requests)
         if: github.event_name == 'pull_request'
+        id: e2e-specs
+        working-directory: frontend
+        run: |
+          git fetch --no-tags --depth=1 origin "+refs/heads/${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}"
+          CHANGED="$(git diff --name-only "origin/${{ github.base_ref }}...HEAD" -- frontend/ || true)"
+          echo "Changed frontend files:"
+          echo "${CHANGED:-<none>}"
+
+          SPECS="e2e/smoke.spec.ts"
+          RUN_ALL="false"
+
+          # Shared code affects every route — run the full suite.
+          if printf '%s\n' "$CHANGED" | grep -qE '^frontend/(src/lib/|src/routes/\+layout|src/hooks|e2e/|playwright\.config\.ts|package(-lock)?\.json)'; then
+            RUN_ALL="true"
+          fi
+
+          # Map each changed route directory to its spec(s).
+          ROUTE_DIRS="$(printf '%s\n' "$CHANGED" | grep -oE '^frontend/src/routes/[^/.+]+' | sed 's|^frontend/src/routes/||' | sort -u || true)"
+          for dir in $ROUTE_DIRS; do
+            case "$dir" in
+              notes)   SPECS="$SPECS e2e/notes.spec.ts e2e/note-editor.spec.ts" ;;
+              goals)   SPECS="$SPECS e2e/goals.spec.ts e2e/goal-editor.spec.ts e2e/analytics.spec.ts" ;;
+              streaks) SPECS="$SPECS e2e/streaks.spec.ts e2e/streak-interactions.spec.ts" ;;
+              *)       [ -f "e2e/${dir}.spec.ts" ] && SPECS="$SPECS e2e/${dir}.spec.ts" ;;
+            esac
+          done
+
+          # The root page (/) is covered by home + settings specs.
+          if printf '%s\n' "$CHANGED" | grep -q '^frontend/src/routes/+page.svelte'; then
+            SPECS="$SPECS e2e/home.spec.ts e2e/settings.spec.ts"
+          fi
+
+          {
+            echo "run_all=$RUN_ALL"
+            echo "specs=$SPECS"
+          } >> "$GITHUB_OUTPUT"
+          echo "Selected specs: ${SPECS:-<all>}"
+
+      - name: Run route-scoped e2e (pull requests)
+        if: github.event_name == 'pull_request' && steps.e2e-specs.outputs.run_all != 'true'
         working-directory: frontend
         env:
           CI: true
           PLAYWRIGHT_BASE_URL: http://localhost:3000
           PLAYWRIGHT_API_URL: http://localhost:8000
           JOIDY_TEST_PASSWORD: joidy-e2e-ci
-        run: npx playwright test e2e/smoke.spec.ts
+        run: npx playwright test ${{ steps.e2e-specs.outputs.specs }}
 
-      - name: Run full e2e suite (branch pushes)
-        if: github.event_name == 'push'
+      - name: Run full e2e suite (branch pushes + shared-code PRs)
+        if: github.event_name == 'push' || steps.e2e-specs.outputs.run_all == 'true'
         working-directory: frontend
         env:
           CI: true
@@ -604,3 +484,33 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: '1'
+
+  # Source-mode SBOM preview (#1386): exercises the same scripts publish.yml
+  # uses on every PR so a broken generator or a denied license is caught
+  # before release night. Manifest files carry sparse license metadata, so
+  # the policy check runs --quiet (denied licenses still fail; unknown ones
+  # are only counted). The authoritative image-based check runs in the
+  # publish workflow.
+  sbom:
+    name: SBOM & License Policy (source preview)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Generate source SBOMs (SPDX-JSON + CycloneDX-JSON)
+        run: ./scripts/generate_sbom.sh --mode source --out-dir sbom
+
+      - name: Enforce license policy
+        run: python3 scripts/check_licenses.py --quiet sbom/*.cdx.json
+
+      - name: Generate THIRD-PARTY-NOTICES (preview)
+        run: python3 scripts/generate_notices.py --output sbom/THIRD-PARTY-NOTICES.txt sbom/*.cdx.json
+
+      - name: Upload SBOM artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: sbom-source-preview
+          path: sbom/
+          retention-days: 30

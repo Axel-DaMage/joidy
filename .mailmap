@@ -1,0 +1,31 @@
+# .mailmap — canonical identities for Joidy contributors
+#
+# Used by `git shortlog`, `git log --use-mailmap` and `git blame` for
+# copyright attribution (see NOTICE). Only verifiably-same identities are
+# merged: same email address, same GitHub noreply id, or identities
+# verified against the public GitHub profile.
+
+# ---------------------------------------------------------------------------
+# Project maintainer — canonical identity: inop1a <axel.d4mage@gmail.com>
+# (all aliases share the maintainer's email address)
+inop1a <axel.d4mage@gmail.com> NULL <axel.d4mage@gmail.com>
+inop1a <axel.d4mage@gmail.com> devin <axel.d4mage@gmail.com>
+
+# ---------------------------------------------------------------------------
+# Diego Hernandez — same email (dh8939693@gmail.com); VERCTORG99 is the
+# GitHub account name used for some commits.
+Diego Hernandez <dh8939693@gmail.com> VERCTORG99 <dh8939693@gmail.com>
+
+# ---------------------------------------------------------------------------
+# Sebastian "Seb" Escobar — GitHub account Sebithaz-dev (id 172279538)
+# publicly lists sebastianescobar.lab@gmail.com; the duocuc.cl addresses
+# were used on commits from the same account.
+Sebithaz-dev <sebastianescobar.lab@gmail.com> Seb <se.escobarn@duocuc.cl>
+Sebithaz-dev <sebastianescobar.lab@gmail.com> Sebithaz-dev <se.escobarn@duocuc.cl>
+Sebithaz-dev <sebastianescobar.lab@gmail.com> Seb <sebastianescobar.lab@gmail.com>
+
+# ---------------------------------------------------------------------------
+# Devin AI bot — both addresses reference the devin-ai-integration[bot]
+# GitHub App account (one carries its users.noreply.github.com id).
+devin-ai-integration[bot] <158243242+devin-ai-integration[bot]@users.noreply.github.com> Devin <158243242+devin-ai-integration[bot]@users.noreply.github.com>
+devin-ai-integration[bot] <158243242+devin-ai-integration[bot]@users.noreply.github.com> devin-ai-integration[bot] <devin-ai-integration[bot]@users.noreply.github.com>

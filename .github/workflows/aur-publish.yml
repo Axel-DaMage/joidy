@@ -81,15 +81,60 @@ jobs:
           echo "  HostName aur.archlinux.org" >> ~/.ssh/config
           echo "  User aur" >> ~/.ssh/config
           echo "  IdentityFile ~/.ssh/aur_key" >> ~/.ssh/config
-          echo "  StrictHostKeyChecking no" >> ~/.ssh/config
+          echo "  IdentitiesOnly yes" >> ~/.ssh/config
+          # Host-key verification stays ON (#1296): StrictHostKeyChecking
+          # defaults to yes and known_hosts is populated by ssh-keyscan. A
+          # MITM impersonating aur.archlinux.org now fails the push instead of
+          # silently accepting a forged host key.
+          echo "  StrictHostKeyChecking yes" >> ~/.ssh/config
           ssh-keyscan aur.archlinux.org >> ~/.ssh/known_hosts 2>/dev/null
+          if [ ! -s ~/.ssh/known_hosts ]; then
+            echo "::error::ssh-keyscan returned no host keys for aur.archlinux.org — refusing to push unverified"
+            exit 1
+          fi
+
+      - name: Compute source checksums
+        id: checksums
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          # sha256 of the exact tarball makepkg will download from the AUR
+          # PKGBUILD source=() (#1296, #1394). Retry: GitHub generates the
+          # archive on first request, so a brand-new tag can 404 briefly.
+          TARBALL_URL="https://github.com/Axel-DaMage/joidy/archive/${VERSION}.tar.gz"
+          echo "Computing sha256 of ${TARBALL_URL}"
+          ok=0
+          for i in 1 2 3 4 5; do
+            if curl -fsSL "$TARBALL_URL" -o /tmp/joidy-src.tar.gz; then
+              ok=1
+              break
+            fi
+            echo "Download attempt $i failed — retrying in 10s..."
+            sleep 10
+          done
+          if [ "$ok" != "1" ] || [ ! -s /tmp/joidy-src.tar.gz ]; then
+            echo "::error::Could not download ${TARBALL_URL} after 5 attempts"
+            exit 1
+          fi
+          TARBALL_SHA=$(sha256sum /tmp/joidy-src.tar.gz | cut -d' ' -f1)
+          INSTALL_SHA=$(sha256sum aur/joidy.install | cut -d' ' -f1)
+          if [[ ! "$TARBALL_SHA" =~ ^[0-9a-f]{64}$ ]] || [[ ! "$INSTALL_SHA" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "::error::Failed to compute valid sha256 checksums"
+            exit 1
+          fi
+          echo "tarball_sha256=${TARBALL_SHA}" >> "$GITHUB_OUTPUT"
+          echo "install_sha256=${INSTALL_SHA}" >> "$GITHUB_OUTPUT"
+          echo "tarball sha256:      ${TARBALL_SHA}"
+          echo "joidy.install sha256: ${INSTALL_SHA}"
 
       - name: Publish to AUR
         env:
-          GIT_SSH_COMMAND: "ssh -i ~/.ssh/aur_key -o StrictHostKeyChecking=no"
           VERSION: ${{ steps.version.outputs.version }}
+          TARBALL_SHA256: ${{ steps.checksums.outputs.tarball_sha256 }}
+          INSTALL_SHA256: ${{ steps.checksums.outputs.install_sha256 }}
         run: |
-          # Clone the AUR repo
+          # Clone the AUR repo (host key verified against ~/.ssh/known_hosts
+          # via the ssh config written above — no GIT_SSH_COMMAND override).
           git clone "ssh://aur@aur.archlinux.org/joidy.git" /tmp/aur
           cd /tmp/aur
           git checkout -B master origin/master
@@ -102,6 +147,21 @@ jobs:
           cp "$GITHUB_WORKSPACE/aur/PKGBUILD" .
           cp "$GITHUB_WORKSPACE/aur/.SRCINFO" .
           cp "$GITHUB_WORKSPACE/aur/joidy.install" .
+
+          # Inject the real sha256sums computed in the previous step (#1296,
+          # #1394). A tagged PKGBUILD can never contain its own tarball hash
+          # (the artifact only exists after the tag is pushed), so the sums
+          # are always (re)injected at publish time from the live tarball
+          # makepkg will fetch — even when the checkout predates the fix.
+          sed -i "s|^sha256sums=(.*|sha256sums=('${TARBALL_SHA256}' '${INSTALL_SHA256}')|" PKGBUILD
+          awk -v tarball="${TARBALL_SHA256}" -v install="${INSTALL_SHA256}" '
+            /^\tsha256sums = / {
+              n++
+              $0 = "\tsha256sums = " (n == 1 ? tarball : install)
+            }
+            { print }
+          ' .SRCINFO > .SRCINFO.new && mv .SRCINFO.new .SRCINFO
+          grep -n 'sha256sums' PKGBUILD .SRCINFO
 
           # Check if there are changes
           if git diff --quiet; then

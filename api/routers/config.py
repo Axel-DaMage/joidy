@@ -6,7 +6,13 @@ from config import settings
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from services.auth_service import get_current_user, hash_password
-from services.env_file import ENV_FILE, read_env, validate_env_value, write_env  # noqa: F401  (ENV_FILE re-exported)
+from services.env_file import (  # noqa: F401  (ENV_FILE re-exported)
+    ENV_FILE,
+    is_placeholder_env_value,
+    read_env,
+    validate_env_value,
+    write_env,
+)
 
 router = APIRouter(prefix="/config", tags=["config"])
 
@@ -18,6 +24,7 @@ CONFIG_KEYS = {
     "github_username": "GITHUB_USERNAME",
     "github_client_id": "GITHUB_CLIENT_ID",
     "github_client_secret": "GITHUB_CLIENT_SECRET",
+    "github_webhook_secret": "GITHUB_WEBHOOK_SECRET",
     "google_client_id": "GOOGLE_CLIENT_ID",
     "google_client_secret": "GOOGLE_CLIENT_SECRET",
     "google_redirect_uri": "GOOGLE_REDIRECT_URI",
@@ -49,6 +56,7 @@ PUBLIC_KEYS = {
     "github_username": True,
     "github_client_id": False,
     "github_client_secret": False,
+    "github_webhook_secret": False,
     "google_client_id": False,
     "google_client_secret": False,
     "google_redirect_uri": True,
@@ -65,17 +73,15 @@ PUBLIC_KEYS = {
 }
 
 
-# Values shipped in .env.example (or used as placeholders) that must count as
-# "not configured" — otherwise a manual ``cp .env.example .env`` would trip
-# the setup-completed guard forever.
-_PLACEHOLDER_VALUES = frozenset({"", "your_gemini_api_key_here", "change_this_to_a_random_secret_key"})
-
-
 def _configured(value: str | None) -> bool:
-    """True when a value is present and not a shipped placeholder."""
-    if not value:
-        return False
-    return value.strip() not in _PLACEHOLDER_VALUES
+    """True when a value is present and not a shipped placeholder.
+
+    Placeholder values count as "not configured" — otherwise a manual
+    ``cp .env.example .env`` would trip the setup-completed guard forever.
+    The shared denylist lives in ``services.env_file`` (#1393) and is the same
+    one the auth layer enforces at use time.
+    """
+    return not is_placeholder_env_value(value)
 
 
 class ConfigResponse(BaseModel):
@@ -104,6 +110,7 @@ class ConfigUpdate(BaseModel):
     github_username: str | None = None
     github_client_id: str | None = None
     github_client_secret: str | None = None
+    github_webhook_secret: str | None = None
     google_client_id: str | None = None
     google_client_secret: str | None = None
     google_redirect_uri: str | None = None
@@ -225,6 +232,7 @@ def get_key_description(key: str) -> str:
         "github_username": "GitHub username",
         "github_client_id": "GitHub OAuth App client ID",
         "github_client_secret": "GitHub OAuth App client secret",
+        "github_webhook_secret": "Shared secret GitHub signs webhook deliveries with (X-Hub-Signature-256)",
         "telegram_bot_token": "Telegram Bot API token",
         "telegram_allowed_user_id": "Your Telegram user ID",
         "telegram_webhook_secret": "Secret token Telegram sends on each webhook call",

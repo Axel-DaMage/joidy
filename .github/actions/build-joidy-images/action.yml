@@ -1,0 +1,73 @@
+name: Build Joidy images (BuildKit GHA cache)
+description: >-
+  Build the four Joidy service images with per-service BuildKit GitHub
+  Actions caches and load them into the runner's Docker daemon under the
+  tags docker-compose expects. Single source of truth for the CI image
+  build (#1254): the docker-build and frontend-e2e jobs share this
+  definition so tags, cache scopes and frontend build args can never
+  drift apart — drift would thrash the shared GHA cache between runs.
+runs:
+  using: composite
+  steps:
+    # The dev overlay runs containers as ${UID:-1000}:${GID:-1000} and the
+    # frontend image chowns /app with the same args. The runner user is not
+    # 1000, so the frontend image must be built with the real ids: a
+    # mismatch makes the frontend container unable to write .svelte-kit
+    # through the ./frontend bind mount. boot-joidy-stack writes the same
+    # ids to .env, keeping image and runtime in lockstep.
+    - name: Resolve runner UID/GID
+      id: runner-ids
+      shell: bash
+      run: |
+        echo "uid=$(id -u)" >> "$GITHUB_OUTPUT"
+        echo "gid=$(id -g)" >> "$GITHUB_OUTPUT"
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v4
+
+    # Pre-build each image with a BuildKit GHA cache (same pattern as
+    # publish.yml), tagged exactly as compose expects, then loaded into the
+    # local daemon so `compose up` uses them instead of rebuilding.
+    - name: Build api image (BuildKit GHA cache)
+      uses: docker/build-push-action@v7
+      with:
+        context: ./api
+        load: true
+        tags: d4mag3/joidy-api:latest
+        cache-from: type=gha,scope=api
+        cache-to: type=gha,mode=max,scope=api
+
+    - name: Build ai-service image (BuildKit GHA cache)
+      uses: docker/build-push-action@v7
+      with:
+        context: ./ai-service
+        load: true
+        tags: d4mag3/joidy-ai-service:latest
+        cache-from: type=gha,scope=ai-service
+        cache-to: type=gha,mode=max,scope=ai-service
+
+    - name: Build worker image (BuildKit GHA cache)
+      uses: docker/build-push-action@v7
+      with:
+        context: ./worker
+        load: true
+        tags: d4mag3/joidy-worker:latest
+        cache-from: type=gha,scope=worker
+        cache-to: type=gha,mode=max,scope=worker
+
+    - name: Build frontend image (BuildKit GHA cache)
+      uses: docker/build-push-action@v7
+      with:
+        context: ./frontend
+        target: development
+        load: true
+        tags: d4mag3/joidy-frontend:latest
+        cache-from: type=gha,scope=frontend
+        cache-to: type=gha,mode=max,scope=frontend
+        # Build the dev image with the runner's ids so the anonymous
+        # /app/node_modules volume (populated from the image) is writable
+        # by the container user — the same ids boot-joidy-stack writes to
+        # .env (see "Resolve runner UID/GID" above).
+        build-args: |
+          UID=${{ steps.runner-ids.outputs.uid }}
+          GID=${{ steps.runner-ids.outputs.gid }}

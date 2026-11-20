@@ -172,7 +172,21 @@ class LoginLockoutTests(unittest.TestCase):
 
 
 def _jwt(sub: str, secret: str = "test-secret", exp_offset: float = 3600.0) -> str:
-    return jwt.encode({"sub": sub, "exp": time.time() + exp_offset}, secret, algorithm="HS256")
+    # Registered claims required by #1285 — the limiter validates iss/aud on
+    # decode, so test tokens must carry them.
+    from services.auth_service import AUDIENCE, ISSUER
+
+    return jwt.encode(
+        {
+            "sub": sub,
+            "exp": time.time() + exp_offset,
+            "iat": time.time(),
+            "iss": ISSUER,
+            "aud": AUDIENCE,
+        },
+        secret,
+        algorithm="HS256",
+    )
 
 
 class IdentityKeyTests(unittest.TestCase):

@@ -17,8 +17,13 @@ import jwt
 from config import settings
 from services.auth_service import (
     ALGORITHM,
+    AUDIENCE,
+    ISSUER,
+    TOKEN_TYPE_ACCESS,
+    TOKEN_TYPE_REFRESH,
     _is_loopback,
     create_access_token,
+    create_refresh_token,
     get_current_user_id,
     hash_password,
     is_plaintext_stored_password,
@@ -124,6 +129,10 @@ class TokenTest(unittest.TestCase):
             "sub": "5",
             "username": "bob",
             "exp": datetime.now(UTC) - timedelta(hours=1),
+            "iat": datetime.now(UTC) - timedelta(hours=2),
+            "iss": ISSUER,
+            "aud": AUDIENCE,
+            "typ": TOKEN_TYPE_ACCESS,
         }
         token = jwt.encode(payload, settings.secret_key, algorithm=ALGORITHM)
         self.assertIsNone(verify_token(token))
@@ -137,6 +146,101 @@ class TokenTest(unittest.TestCase):
         token = create_access_token(7)
         # Verify against a different secret.
         self.assertIsNone(verify_token(token + "x"))
+
+
+class TokenClaimsTest(unittest.TestCase):
+    """Registered claims and type discrimination added in #1285."""
+
+    def setUp(self):
+        self._orig_key = settings.secret_key
+        settings.secret_key = "test-secret-key"
+
+    def tearDown(self):
+        settings.secret_key = self._orig_key
+
+    def _unsigned_payload(self, token: str) -> dict:
+        return jwt.decode(token, options={"verify_signature": False})
+
+    def test_access_token_carries_registered_claims(self):
+        payload = self._unsigned_payload(create_access_token(42, "alice"))
+        self.assertEqual(payload["iss"], ISSUER)
+        self.assertEqual(payload["aud"], AUDIENCE)
+        self.assertEqual(payload["typ"], TOKEN_TYPE_ACCESS)
+        self.assertIn("iat", payload)
+
+    def test_access_token_ttl_matches_configured_lifetime(self):
+        # Default ACCESS_TOKEN_EXPIRE_MINUTES=720 (12h) — inside the 12–24h
+        # bound required by #1285.
+        self.assertLessEqual(settings.access_token_expire_minutes, 24 * 60)
+        payload = self._unsigned_payload(create_access_token(1))
+        self.assertEqual(payload["exp"] - payload["iat"], settings.access_token_expire_minutes * 60)
+
+    def test_verify_rejects_unknown_issuer(self):
+        token = jwt.encode(
+            {
+                "sub": "1",
+                "exp": datetime.now(UTC) + timedelta(hours=1),
+                "iat": datetime.now(UTC),
+                "iss": "evil-issuer",
+                "aud": AUDIENCE,
+                "typ": TOKEN_TYPE_ACCESS,
+            },
+            settings.secret_key,
+            algorithm=ALGORITHM,
+        )
+        self.assertIsNone(verify_token(token))
+
+    def test_verify_rejects_wrong_audience(self):
+        token = jwt.encode(
+            {
+                "sub": "1",
+                "exp": datetime.now(UTC) + timedelta(hours=1),
+                "iat": datetime.now(UTC),
+                "iss": ISSUER,
+                "aud": "someone-else",
+                "typ": TOKEN_TYPE_ACCESS,
+            },
+            settings.secret_key,
+            algorithm=ALGORITHM,
+        )
+        self.assertIsNone(verify_token(token))
+
+    def test_verify_rejects_legacy_token_without_registered_claims(self):
+        # Pre-#1285 tokens carried only sub/username/exp — they must now fail
+        # closed (unknown issuer/audience) so clients are forced to re-login.
+        token = jwt.encode(
+            {
+                "sub": "1",
+                "username": "user",
+                "exp": datetime.now(UTC) + timedelta(hours=1),
+            },
+            settings.secret_key,
+            algorithm=ALGORITHM,
+        )
+        self.assertIsNone(verify_token(token))
+
+    def test_refresh_token_roundtrip(self):
+        token = create_refresh_token(42, "alice")
+        payload = verify_token(token, expected_type=TOKEN_TYPE_REFRESH)
+        self.assertIsNotNone(payload)
+        self.assertEqual(payload["sub"], "42")
+        self.assertEqual(payload["typ"], TOKEN_TYPE_REFRESH)
+        self.assertIn("jti", payload)
+
+    def test_refresh_token_not_valid_as_access(self):
+        token = create_refresh_token(1)
+        self.assertIsNone(verify_token(token))  # defaults to access
+        self.assertIsNone(get_current_user_id(token))
+
+    def test_access_token_not_valid_as_refresh(self):
+        token = create_access_token(1)
+        self.assertIsNone(verify_token(token, expected_type=TOKEN_TYPE_REFRESH))
+
+    def test_refresh_tokens_rotate_jti(self):
+        self.assertNotEqual(
+            self._unsigned_payload(create_refresh_token(1))["jti"],
+            self._unsigned_payload(create_refresh_token(1))["jti"],
+        )
 
 
 class InternalTokenTest(unittest.TestCase):

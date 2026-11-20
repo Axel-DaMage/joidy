@@ -2,8 +2,9 @@
  * Global teardown for E2E tests — cleans up test data left in the database (#565).
  *
  * This runs after all Playwright tests complete. It deletes any notes, goals,
- * and personal streaks whose names match known E2E test patterns. This prevents
- * test artifacts from accumulating in the dev database across multiple test runs.
+ * personal streaks, calendar tasks and emails whose names match known E2E test
+ * patterns. This prevents test artifacts from accumulating in the dev database
+ * across multiple test runs.
  *
  * The cleanup uses the API directly (with JWT auth) rather than UI interactions,
  * so it's fast and doesn't depend on the frontend being in a specific state.
@@ -122,6 +123,56 @@ async function cleanupStreaks(token: string): Promise<number> {
   return deleted;
 }
 
+async function cleanupCalendarTasks(token: string): Promise<number> {
+  let deleted = 0;
+  try {
+    // No params returns every task (scheduled + unscheduled).
+    const res = await fetch(`${API_BASE}/calendar/tasks`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return 0;
+    const tasks = await res.json();
+    for (const task of tasks) {
+      if (matchesPattern(task.title || '')) {
+        const delRes = await fetch(`${API_BASE}/calendar/tasks/${task.id}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (delRes.ok) deleted++;
+      }
+    }
+  } catch (e) {
+    console.error('[cleanup] Calendar tasks cleanup error:', e);
+  }
+  return deleted;
+}
+
+async function cleanupEmails(token: string): Promise<number> {
+  let deleted = 0;
+  try {
+    // No unread/important filter so every seeded message is listed.
+    // limit is capped at 500 by the API (le=500) — do not raise.
+    const res = await fetch(`${API_BASE}/emails/?limit=500`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return 0;
+    const inbox = await res.json();
+    for (const email of inbox.items ?? []) {
+      const haystack = `${email.subject ?? ''} ${email.sender ?? ''} ${email.account ?? ''}`;
+      if (matchesPattern(haystack)) {
+        const delRes = await fetch(`${API_BASE}/emails/${email.id}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (delRes.ok) deleted++;
+      }
+    }
+  } catch (e) {
+    console.error('[cleanup] Emails cleanup error:', e);
+  }
+  return deleted;
+}
+
 export default async function globalTeardown() {
   console.log('[cleanup] Starting E2E test data cleanup (#565)...');
   const token = await getAuthToken();
@@ -133,8 +184,11 @@ export default async function globalTeardown() {
   const notesDeleted = await cleanupNotes(token);
   const goalsDeleted = await cleanupGoals(token);
   const streaksDeleted = await cleanupStreaks(token);
+  const calTasksDeleted = await cleanupCalendarTasks(token);
+  const emailsDeleted = await cleanupEmails(token);
 
   console.log(
-    `[cleanup] Done: ${notesDeleted} notes, ${goalsDeleted} goals, ${streaksDeleted} streaks deleted.`
+    `[cleanup] Done: ${notesDeleted} notes, ${goalsDeleted} goals, ${streaksDeleted} streaks, ` +
+      `${calTasksDeleted} calendar tasks, ${emailsDeleted} emails deleted.`
   );
 }
