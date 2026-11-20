@@ -102,3 +102,95 @@ jobs:
   # It used to be duplicated here and both jobs raced on the same AUR repo —
   # the loser's push was rejected non-fast-forward and the release showed a
   # spurious failure (v1.1.0-beta.6). Keep AUR updates in ONE place.
+
+  # Consumable SBOM + third-party license notices (#1386). Distinct from the
+  # buildkit `sbom:` attestation tracked in #1297: this job produces
+  # SPDX-JSON + CycloneDX-JSON documents a scanner can ingest, derives the
+  # THIRD-PARTY-NOTICES license report required by MIT/Apache/BSD attribution
+  # clauses, enforces the license policy (see scripts/check_licenses.py), and
+  # attaches everything to the pushed images as OCI referrers plus to the
+  # GitHub release as downloadable assets.
+  #
+  # Ordering caveat: `needs: docker` means images are already pushed when the
+  # license check runs. A policy failure still fails the pipeline and blocks
+  # the release assets — revoking a violating image tag is a manual
+  # follow-up. Scanning pre-push would require restructuring the docker
+  # matrix (build → load → scan → push); out of scope for #1386.
+  sbom:
+    name: SBOM & Third-Party Notices
+    runs-on: ubuntu-latest
+    needs: docker
+    permissions:
+      contents: write # gh release upload
+    env:
+      # Input mapped to env — see the homebrew job for the #1295 rationale.
+      VERSION: ${{ inputs.version || github.ref_name }}
+      DOCKERHUB_USER: ${{ secrets.DOCKERHUB_USERNAME }}
+      SYFT_VERSION: '1.57.2' # consumed by scripts/generate_sbom.sh
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Resolve image tag
+        id: tag
+        # docker/metadata-action emits the bare semver (v-stripped) for real
+        # releases; on a bare dispatch without a version only :latest exists.
+        run: |
+          if [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            echo "tag=${VERSION#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=latest" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: docker/login-action@v4.8.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # oras reads the docker config written by docker/login-action above,
+      # so no separate registry login is needed for `oras attach`.
+      - uses: oras-project/setup-oras@v2
+        with:
+          version: '1.3.6'
+
+      - name: Generate per-service image SBOMs (SPDX-JSON + CycloneDX-JSON)
+        # Scanning the pushed images captures the exact object code we
+        # distribute — dist-info / package.json inside the image carry the
+        # license metadata that requirements.txt lacks.
+        run: |
+          ./scripts/generate_sbom.sh --mode image \
+            --image-prefix "$DOCKERHUB_USER" \
+            --tag "${{ steps.tag.outputs.tag }}" \
+            --out-dir sbom
+
+      - name: Enforce license policy
+        # Policy families are documented in scripts/check_licenses.py:
+        # DENIED (AGPL/SSPL/GPL-2.0-only/non-free CC/BUSL/proprietary) fails
+        # the pipeline; weak copyleft (LGPL/MPL/EPL/CDDL) and undetected
+        # licenses are reported as warnings.
+        run: python3 scripts/check_licenses.py sbom/*.cdx.json
+
+      - name: Generate THIRD-PARTY-NOTICES
+        run: python3 scripts/generate_notices.py --output THIRD-PARTY-NOTICES.txt sbom/*.cdx.json
+
+      - name: Attach SBOMs + notices as OCI referrers
+        run: |
+          set -euo pipefail
+          for svc in api ai-service worker frontend; do
+            IMG="${DOCKERHUB_USER}/joidy-${svc}"
+            # Subject digest = sha256 of the pushed manifest/index content.
+            DIGEST="sha256:$(docker buildx imagetools inspect "${IMG}:${{ steps.tag.outputs.tag }}" --raw | sha256sum | cut -d' ' -f1)"
+            oras attach --artifact-type application/spdx+json \
+              "${IMG}@${DIGEST}" "sbom/joidy-${svc}.spdx.json:application/spdx+json"
+            oras attach --artifact-type application/vnd.cyclonedx+json \
+              "${IMG}@${DIGEST}" "sbom/joidy-${svc}.cdx.json:application/vnd.cyclonedx+json"
+            oras attach --artifact-type text/plain \
+              "${IMG}@${DIGEST}" "THIRD-PARTY-NOTICES.txt:text/plain"
+            oras discover "${IMG}@${DIGEST}" -o tree || true
+          done
+
+      - name: Upload SBOM assets to the GitHub release
+        if: github.event_name == 'release' || inputs.version != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ inputs.version || github.ref_name }}
+        run: gh release upload "$RELEASE_TAG" sbom/joidy-*.json THIRD-PARTY-NOTICES.txt --clobber

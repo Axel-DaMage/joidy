@@ -36,6 +36,7 @@ make test-frontend   # cd frontend && npx playwright test
 make lint            # CI-parity lint on host (no Docker): compileall + ruff + ruff format --check
                      # + mypy per service + bandit + frontend svelte-check — scripts/lint.sh
 make lint-api        # Docker fallback: compileall syntax check only
+make sbom            # SPDX + CycloneDX SBOMs + THIRD-PARTY-NOTICES into ./sbom/ (scripts/generate_sbom.sh)
 ```
 
 `make lint` mirrors the cheap CI gates locally (`.github/workflows/ci.yml`:
