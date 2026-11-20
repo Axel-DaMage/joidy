@@ -25,6 +25,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      # actions:read — the pre-tag gate queries the CI workflow runs for
+      # this commit via the REST API (#1464).
+      actions: read
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -51,6 +54,72 @@ jobs:
             exit 1
           fi
           echo "Dispatch inputs are valid"
+
+      # Release gate (#1464): never tag a commit whose CI is red, cancelled
+      # or missing. A push to main fires CI and this workflow at the same
+      # time, so the gate POLLS until this commit's latest CI run reaches
+      # a completed state and then requires conclusion=success — this
+      # works identically for merge, squash and direct commits, unlike a
+      # "check the development run" lookup that misses fresh merge
+      # commits. A cancelled/timed-out/failed run refuses the release;
+      # get CI green first, then re-push or re-dispatch (the gate
+      # re-evaluates the same commit). See docs/ci-pipeline.md.
+      - name: Verify CI is green on this commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          DEADLINE=$((SECONDS + 2700))   # 45 min cap — CI should take ~10
+          NONE_POLLS=0
+          API_ERRORS=0
+          while :; do
+            if ! RESP="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${HEAD_SHA}&per_page=10" \
+              --jq '(.workflow_runs | sort_by([.created_at, .run_attempt]) | .[-1]) // empty | [(.status // "-"), (.conclusion // "-"), (.html_url // "-")] | @tsv')"; then
+              # Transient API blips shouldn't kill a release, but a
+              # persistent failure (e.g. missing actions:read) must.
+              API_ERRORS=$((API_ERRORS + 1))
+              if [ "$API_ERRORS" -ge 10 ]; then
+                echo "::error::CI runs API query failed 10 times in a row — check the job's 'actions: read' permission and GH_TOKEN."
+                exit 1
+              fi
+              echo "CI API query failed (attempt $API_ERRORS) — retrying in 30s..."
+              sleep 30
+              continue
+            fi
+            API_ERRORS=0
+            STATUS="$(printf '%s' "$RESP" | cut -f1)"
+            CONCL="$(printf '%s' "$RESP" | cut -f2)"
+            URL="$(printf '%s' "$RESP" | cut -f3)"
+
+            if [ "$STATUS" = "completed" ]; then
+              if [ "$CONCL" = "success" ]; then
+                echo "CI run green on $HEAD_SHA — proceeding to release ($URL)"
+                exit 0
+              fi
+              echo "::error::Latest CI run for $HEAD_SHA completed with '$CONCL' ($URL). Refusing to release."
+              exit 1
+            fi
+
+            if [ -z "$STATUS" ] || [ "$STATUS" = "-" ]; then
+              # No CI run exists for this commit yet. Brief grace for the
+              # push-triggered run to register, then fail — a commit with
+              # no CI must not be released.
+              NONE_POLLS=$((NONE_POLLS + 1))
+              if [ "$NONE_POLLS" -ge 8 ]; then
+                echo "::error::No CI run found for $HEAD_SHA after ~4 minutes. Refusing to release a commit with no CI signal."
+                exit 1
+              fi
+            fi
+
+            if [ "$SECONDS" -ge "$DEADLINE" ]; then
+              echo "::error::Timed out after 45 min waiting for the CI run on $HEAD_SHA to complete (status=$STATUS). Refusing to release."
+              exit 1
+            fi
+
+            echo "CI on $HEAD_SHA: status=${STATUS:-none} — waiting 30s ($(( (DEADLINE - SECONDS) / 60 )) min left)..."
+            sleep 30
+          done
 
       - name: Determine version
         id: version
