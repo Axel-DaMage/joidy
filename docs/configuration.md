@@ -238,7 +238,7 @@ class Settings(BaseSettings):
     worker_url: str = "http://worker:8001"
 
     # Security
-    secret_key: str = "dev_secret_change_me"
+    secret_key: str = ""
 
     # Environment
     app_env: str = "development"
