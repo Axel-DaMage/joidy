@@ -15,6 +15,7 @@ from .note import *
 from .personal_streaks import *
 from .planning import *
 from .push_subscription import *
+from .refresh_token import *
 from .skill import *
 from .sync_state import *
 from .telegram_event import *
