@@ -131,6 +131,25 @@ def test_login_returns_valid_token(client: TestClient):
         settings.secret_key = orig_key
 
 
+def test_placeholder_secret_key_disables_auth(client: TestClient):
+    """Regression for #1393: the .env.example placeholder must count as unset —
+    /auth/status reports disabled and /auth/login refuses to issue a JWT."""
+    orig_password = settings.auth_password
+    orig_key = settings.secret_key
+    try:
+        settings.secret_key = "change_this_to_a_random_secret_key"
+        settings.auth_password = hash_password("s3cret")
+        status_response = client.get("/auth/status")
+        assert status_response.status_code == 200
+        assert status_response.json()["enabled"] is False
+        response = client.post("/auth/login", json={"password": "s3cret"})
+        assert response.status_code == 500
+        assert "access_token" not in response.json()
+    finally:
+        settings.auth_password = orig_password
+        settings.secret_key = orig_key
+
+
 def test_login_rejects_query_param_credentials(client: TestClient):
     """Credentials must not be accepted via query params (#647)."""
     orig_password = settings.auth_password

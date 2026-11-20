@@ -196,6 +196,12 @@ openssl rand -hex 32
 python3 -c "import secrets; print(secrets.token_hex(32))"
 ```
 
+Los valores de marcador de posición publicados en `.env.example`
+(`change_this_to_a_random_secret_key`, `changeme`, `secret`, ...) se tratan
+como "no configurados" en tiempo de ejecución: con un `SECRET_KEY` de
+marcador la API no emite JWT y marca la autenticación como deshabilitada
+(#1393). La misma denegación aplica a `INTERNAL_API_TOKEN`.
+
 ---
 
 ### 2.6 Puertos

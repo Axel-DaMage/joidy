@@ -11,7 +11,7 @@ import jwt
 from config import settings
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from services.env_file import get_persisted
+from services.env_file import get_effective_secret, get_persisted
 
 logger = logging.getLogger(__name__)
 
@@ -42,8 +42,12 @@ def _effective_secret_key() -> str:
 
     Same cross-worker rationale as ``_effective_auth_password``: tokens
     signed by the worker that ran setup must verify on its siblings.
+
+    Placeholder values shipped in .env.example (and common weak stand-ins)
+    are treated as unset (#1393): a signing key published in the repository
+    would let anyone forge JWTs, so token creation must fail closed.
     """
-    return get_persisted("SECRET_KEY") or settings.secret_key or ""
+    return get_effective_secret("SECRET_KEY", settings.secret_key)
 
 
 def signing_secret() -> str:
@@ -59,9 +63,11 @@ def signing_secret() -> str:
 def _effective_internal_api_token() -> str:
     """Return the current INTERNAL_API_TOKEN, reading from disk on every call.
 
-    Same cross-worker rationale as ``_effective_auth_password``.
+    Same cross-worker rationale as ``_effective_auth_password``. Placeholder
+    values are rejected the same way as SECRET_KEY (#1393): an internal token
+    set to a publicly known value would let anyone impersonate a service.
     """
-    return get_persisted("INTERNAL_API_TOKEN") or settings.internal_api_token or ""
+    return get_effective_secret("INTERNAL_API_TOKEN", settings.internal_api_token)
 
 
 def verify_internal_token(token: str) -> bool:

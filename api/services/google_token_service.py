@@ -14,6 +14,7 @@ from typing import Any
 from config import settings
 from cryptography.fernet import Fernet, InvalidToken
 from models.google_token import GoogleToken
+from services.env_file import get_effective_secret
 from services.http_client import http_client
 from sqlalchemy.orm import Session
 
@@ -23,8 +24,18 @@ GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"  # noqa: S105 — OAuth
 
 
 def _get_fernet() -> Fernet:
-    """Derive a Fernet key from the app's SECRET_KEY."""
-    key = hashlib.sha256(settings.secret_key.encode()).digest()
+    """Derive a Fernet key from the app's SECRET_KEY.
+
+    Reads the *effective* secret (persisted .env first, then ``settings``) so
+    ciphertext stays decryptable on sibling workers after a setup-time key
+    rotation, and refuses when SECRET_KEY is unset or a shipped placeholder
+    (#1393): encrypting a refresh token under a publicly known key is worse
+    than failing the request.
+    """
+    secret = get_effective_secret("SECRET_KEY", settings.secret_key)
+    if not secret:
+        raise RuntimeError("SECRET_KEY not configured — refusing to derive the token encryption key")
+    key = hashlib.sha256(secret.encode()).digest()
     return Fernet(base64.urlsafe_b64encode(key))
 
 

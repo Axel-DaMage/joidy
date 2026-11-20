@@ -355,3 +355,50 @@ def get_persisted(key: str) -> str:
     ``settings`` object still holds the value loaded at startup.
     """
     return read_env().get(key, "")
+
+
+# ── Shipped placeholder values (#1393) ────────────────────────────────────
+# .env.example publishes placeholder values for its secret keys
+# (``SECRET_KEY=change_this_to_a_random_secret_key``). A deployment created by
+# ``cp .env.example .env`` bypasses every write-path filter — the settings UI
+# refuses the SECRET_KEY placeholder, but nothing intercepts a manual copy —
+# so consumers must check at *use* time. A value on this list is treated as
+# "not configured" everywhere: signing/encryption with a key published in the
+# repository would be forgeable by anyone.
+PLACEHOLDER_ENV_VALUES = frozenset(
+    {
+        "",  # empty or whitespace-only values count as unset
+        "change_this_to_a_random_secret_key",  # shipped verbatim in .env.example
+        "dev_secret_change_me",  # legacy config.py default
+        "your_gemini_api_key_here",
+        "changeme",
+        "secret",
+    }
+)
+
+
+def is_placeholder_env_value(value: str | None) -> bool:
+    """True when ``value`` is empty or matches a known placeholder.
+
+    Comparison is case-insensitive and ignores surrounding whitespace. Callers
+    should treat a ``True`` result as "not configured" and fail closed.
+    """
+    if not value:
+        return True
+    return value.strip().lower() in PLACEHOLDER_ENV_VALUES
+
+
+def get_effective_secret(env_key: str, fallback: str = "") -> str:
+    """Effective value of a secret env key: persisted .env first, then ``fallback``.
+
+    ``settings`` is loaded once at startup, so the persisted file (which
+    ``POST /config/setup`` writes) is consulted first via :func:`get_persisted`
+    — this keeps every uvicorn worker consistent after setup without a restart.
+    A placeholder in the persisted file must not shadow a real ``fallback``
+    value, and a placeholder in either source counts as "not configured"
+    (returns ``""``) so callers fail closed (#1393).
+    """
+    for candidate in (get_persisted(env_key), fallback):
+        if not is_placeholder_env_value(candidate):
+            return candidate
+    return ""
