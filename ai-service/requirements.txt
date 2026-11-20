@@ -13,8 +13,7 @@ pgvector==0.5.1
 prometheus-client==0.26.0
 numpy==2.5.4
 scikit-learn==1.9.1
-# Test tooling — kept in requirements.txt (same convention as api/) so
-# `pytest tests/` works inside the ai-service container.
-pytest==9.2.0
-pytest-asyncio==1.4.1.post1
+# Runtime dep — clients/openai.py and clients/anthropic.py import httpx
+# directly. Test tooling lives in requirements-dev.txt (#999); production
+# images install this file only.
 httpx==0.28.1
