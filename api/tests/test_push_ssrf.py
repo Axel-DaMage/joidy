@@ -162,7 +162,9 @@ def test_subscribe_accepts_legit_https_endpoint(client, db_session):
     # Membership check, not a global count: under the SQLite fallback,
     # session commits can escape the per-test savepoint isolation and leak
     # rows between tests (pre-existing quirk; CI Postgres isolates properly).
-    assert db_session.query(PushSubscription).filter_by(endpoint=endpoint).count() == 1
+    # endpoint is encrypted at rest (#1286) — Fernet is non-deterministic, so
+    # it cannot be filtered in SQL; compare the decrypted attribute instead.
+    assert endpoint in [s.endpoint for s in db_session.query(PushSubscription).all()]
 
 
 def test_rejected_subscribe_keeps_existing_subscription(client, db_session):
