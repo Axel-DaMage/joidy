@@ -303,13 +303,36 @@ interactive OpenAPI docs at `/docs` for full schemas.
 
 ### 2.24 Integrations — Spotify (`integrations/spotify.py`)
 
+> OAuth tokens are stored server-side, encrypted at rest, in the
+> provider-agnostic `integration_tokens` table (provider `spotify`) — the
+> callback never returns them to the browser and renders a self-closing HTML
+> page instead. Data endpoints use the stored token (auto-refreshed ~1h
+> expiry); the legacy `X-Spotify-Token` header is still honored as an
+> explicit override. Never pass tokens as query params.
+>
+> Playback control (`/play`, `/pause`, `/next`, `/previous`) requires a
+> Spotify **Premium** account — free accounts get `403` (Premium required)
+> or `404` (no active device), surfaced as clear errors. Spotify has **no
+> token-revocation endpoint**: `/disconnect` deletes the stored row (the
+> refresh token dies with it; access tokens self-expire within ~1h) and
+> returns `manage_apps_url` pointing at the user's Spotify app settings.
+
 | Method | Path | Auth | Description | Request Body | Response |
 |--------|------|------|-------------|--------------|----------|
-| GET | `/integrations/spotify/auth` | Yes | Spotify OAuth consent URL (signed `state` embedded) | — | `{url}` |
-| GET | `/integrations/spotify/callback` | Yes | Spotify OAuth callback (`code`, `error`, `state` query) | — | token object |
-| GET | `/integrations/spotify/recently-played` | Yes | Recently played tracks (`limit` query; token in `X-Spotify-Token` header) | — | tracks list |
-| GET | `/integrations/spotify/top-tracks` | Yes | Top tracks (`limit` query; token in `X-Spotify-Token` header) | — | tracks list |
-| GET | `/integrations/spotify/playlists` | Yes | User playlists (`limit` query; token in `X-Spotify-Token` header) | — | playlists list |
+| GET | `/integrations/spotify/auth` | Yes | Spotify OAuth consent URL (signed `state` embedded; scopes: playback read/write, recently-played, top, playlists, profile) | — | `{url}` |
+| GET | `/integrations/spotify/callback` | Public (`state`) | Spotify OAuth callback (`code`, `error`, `state` query); persists tokens, returns self-closing HTML | — | HTML page |
+| GET | `/integrations/spotify/status` | Yes | Connection status (`configured`, `connected`, `account` profile summary) | — | status object |
+| POST | `/integrations/spotify/disconnect` | Yes | Delete stored tokens (no Spotify revoke API exists) | — | `{status, manage_apps_url}` |
+| GET | `/integrations/spotify/currently-playing` | Yes | Playback state: track, progress, device, shuffle/repeat (`is_playing: false` when idle) | — | playback object |
+| GET | `/integrations/spotify/recently-played` | Yes | Recently played tracks (`limit` ≤ 50) | — | `[{played_at, track}]` |
+| GET | `/integrations/spotify/top-artists` | Yes | Top artists (`time_range`: `short_term`/`medium_term`/`long_term`, `limit` ≤ 50) | — | artists list |
+| GET | `/integrations/spotify/top-tracks` | Yes | Top tracks (same params as top-artists) | — | tracks list |
+| GET | `/integrations/spotify/playlists` | Yes | User playlists (`limit` ≤ 50, `offset`) | — | playlists list |
+| GET | `/integrations/spotify/playlists/{playlist_id}` | Yes | Playlist detail + first page of tracks | — | playlist object |
+| PUT | `/integrations/spotify/play` | Yes | Resume/start playback — body optional (empty = active device); `device_id`, `context_uri`, `uris`, `offset_position`, `offset_uri`, `position_ms` | `SpotifyPlayRequest` | `{status}` |
+| PUT | `/integrations/spotify/pause` | Yes | Pause playback (`device_id` query, optional) | — | `{status}` |
+| POST | `/integrations/spotify/next` | Yes | Next track (`device_id` query, optional) | — | `{status}` |
+| POST | `/integrations/spotify/previous` | Yes | Previous track (`device_id` query, optional) | — | `{status}` |
 
 ### 2.25 Integrations — Strava (`integrations/strava.py`)
 
