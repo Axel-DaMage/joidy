@@ -64,17 +64,10 @@ def test_storage_is_namespaced(client, db_session):
     from models.config import SystemConfig
 
     client.put("/user-settings/alarms", json={"value": {"a": 1}})
-    row = (
-        db_session.query(SystemConfig)
-        .filter(SystemConfig.key == "user_settings:alarms")
-        .first()
-    )
+    row = db_session.query(SystemConfig).filter(SystemConfig.key == "user_settings:alarms").first()
     assert row is not None
     # No unprefixed key should exist for the same setting.
-    assert (
-        db_session.query(SystemConfig).filter(SystemConfig.key == "alarms").first()
-        is None
-    )
+    assert db_session.query(SystemConfig).filter(SystemConfig.key == "alarms").first() is None
 
 
 def test_requires_auth(client_no_auth):
