@@ -1,24 +1,142 @@
 # Política de Seguridad
 
+## Versiones soportadas
+
+Joidy lo mantiene una sola persona, así que las correcciones de seguridad se
+publican únicamente sobre la release más reciente. No se hacen backports a
+versiones anteriores.
+
+| Versión | ¿Recibe correcciones de seguridad? |
+|---------|------------------------------------|
+| Última release publicada (rama `main`; imágenes Docker `:latest`, AUR, Homebrew) | ✅ Sí |
+| Releases anteriores (cualquier tag previo al último) | ❌ No — actualiza a la última release |
+| Rama `development` (integración, sin publicar) | ⚠️ Recibe las correcciones primero, pero no es una versión soportada para despliegue |
+| Forks y builds modificados | ❌ No |
+
+A fecha de 2026-11-20 todas las
+[releases publicadas](https://github.com/Axel-DaMage/joidy/releases) son
+pre-releases (serie `1.1.0-beta`) y todavía no existe una release estable:
+«última release» significa hoy la pre-release más reciente. El esquema de
+versiones y ramas está descrito en [RELEASE.md](RELEASE.md).
+
 ## Reportar una Vulnerabilidad
 
-Si descubres una vulnerabilidad de seguridad en Joidy, por favor repórtala enviando un correo a **[d4mag3@duck.com](mailto:d4mag3@duck.com)** en lugar de abrir un issue público.
+Si descubres una vulnerabilidad de seguridad en Joidy, por favor **no abras un
+issue, discusión ni pull request público**. Usa uno de estos canales privados:
+
+1. **Canal principal — GitHub Private Vulnerability Reporting:**
+   [reportar una vulnerabilidad](https://github.com/Axel-DaMage/joidy/security/advisories/new)
+   (pestaña **Security → Report a vulnerability** del repositorio). El reporte
+   solo es visible para ti y para el mantenedor, viaja cifrado en tránsito
+   (HTTPS), permite preparar la corrección en privado y coordinar la
+   asignación de un identificador GHSA/CVE.
+2. **Alternativa — correo:** **[d4mag3@duck.com](mailto:d4mag3@duck.com)**, si
+   no tienes cuenta de GitHub o no puedes usar el canal anterior. No hay clave
+   PGP publicada, así que el correo no va cifrado de extremo a extremo: para
+   detalles sensibles (exploit, datos, secretos) usa el canal de GitHub, o
+   envía por correo solo un aviso inicial y acordamos cómo compartir el resto.
 
 Esperamos:
 
-- Una descripción clara del problema
-- Pasos para reproducirla (si aplica)
-- Versión del software afectada
+- Una descripción clara del problema y de su impacto
+- Componente afectado (`api`, `ai-service`, `worker`, `frontend`, CLI,
+  instaladores, imágenes Docker…)
+- Versión del software afectada (tag de release, tag/digest de la imagen o
+  commit) y canal de instalación (Docker, AUR, Homebrew, `git clone`)
+- Pasos para reproducirla o prueba de concepto (si aplica)
+- Configuración relevante (`BIND_ADDR`, proxy inverso, integraciones
+  activas…) — sin incluir secretos reales
 - Tu recomendación para mitigarla (opcional)
+- Cómo quieres que te acreditemos (opcional)
 
 ### Proceso
 
+Los plazos son **objetivos** de un proyecto con un único mantenedor, no
+garantías; si no podemos cumplir alguno, te lo diremos.
+
 1. **Acuse de recibo** en 48 horas hábiles
-2. **Evaluación** de la gravedad y alcance
-3. **Parche** — trabajamos en una corrección lo antes posible
+2. **Evaluación** de la gravedad y alcance — objetivo: 7 días naturales desde
+   el reporte, con confirmación (o descarte razonado) y gravedad estimada
+3. **Parche** — trabajamos en una corrección o mitigación lo antes posible;
+   objetivo: 30 días para gravedad crítica/alta y 90 días para media/baja
 4. **Divulgación** coordinada — publicamos el fix y te acreditamos (si lo deseas)
 
+Te mantendremos al tanto del avance en el mismo canal del reporte.
+
+### Divulgación coordinada
+
+- **Embargo:** te pedimos no divulgar los detalles hasta que exista una
+  release con la corrección, con un máximo orientativo de 90 días desde el
+  reporte, ampliable de mutuo acuerdo. Si hay explotación activa podemos
+  publicar antes una mitigación o un aviso.
+- **Avisos de seguridad:** cada vulnerabilidad corregida se publica como
+  [GitHub Security Advisory](https://github.com/Axel-DaMage/joidy/security/advisories)
+  (GHSA, con CVE cuando proceda) indicando versiones afectadas, gravedad,
+  impacto, versión corregida y mitigaciones; la corrección figura además en
+  la sección `Security` de [CHANGELOG.md](CHANGELOG.md).
+- **Actualizaciones de seguridad:** se distribuyen sin demora y sin coste por
+  los canales habituales de release — GitHub Releases, imágenes
+  `d4mag3/joidy-*` en Docker Hub, AUR y Homebrew. Cómo aplicarlas:
+  [INSTALL.md](INSTALL.md#actualización).
+- **Reconocimiento:** acreditamos en el aviso a quien reportó, salvo que
+  prefiera el anonimato. No hay programa de recompensas.
+
+Estas prácticas están alineadas con las expectativas de gestión de
+vulnerabilidades del Anexo I, Parte II, del
+[Reglamento (UE) 2024/2847](https://eur-lex.europa.eu/eli/reg/2024/2847/oj)
+(Ley de Ciberresiliencia, CRA): política de divulgación coordinada, punto de
+contacto para reportes, avisos públicos de las vulnerabilidades corregidas y
+actualizaciones de seguridad sin demora. No constituyen una declaración de
+conformidad; véase [docs/security-compliance.md](docs/security-compliance.md).
+
 Agradecemos tu ayuda para mantener Joidy seguro.
+
+## Alcance y responsabilidad del operador
+
+Joidy es software **autoalojado** (self-hosted): el proyecto no opera ningún
+servicio alojado. Cada instancia la despliega y la administra quien la
+instala, que es responsable de la postura de seguridad de su despliegue.
+
+**En alcance:**
+
+- El código de este repositorio: `api/`, `ai-service/`, `worker/`,
+  `frontend/`, la CLI (`cli/`, `scripts/`), los instaladores y los archivos
+  de compose.
+- Los artefactos oficiales: imágenes `d4mag3/joidy-*` en Docker Hub, el
+  paquete AUR `joidy` y la fórmula de Homebrew (`Axel-DaMage/homebrew-tap`).
+- Valores por defecto inseguros: una configuración de fábrica que exponga
+  datos o servicios sin que el operador lo haya pedido.
+
+**Fuera de alcance:**
+
+- Instancias de terceros — prueba solo contra despliegues que sean tuyos.
+- Problemas que dependen únicamente de la configuración del despliegue
+  (exponer Joidy a Internet sin TLS, secretos débiles o filtrados, versiones
+  no soportadas).
+- Vulnerabilidades de dependencias o servicios de terceros (PostgreSQL, n8n,
+  proveedores de IA, Google, GitHub…) sin un vector explotable propio de
+  Joidy — repórtalas al proyecto original. Si el uso que hace Joidy las
+  vuelve explotables, sí están en alcance.
+- Ataques que requieren acceso previo al host, al `.env`, al socket del
+  motor de contenedores o a la base de datos.
+- Riesgos residuales ya documentados en este archivo, salvo que demuestres
+  un impacto mayor que el descrito.
+- Ingeniería social, ataques físicos y denegación de servicio volumétrica.
+
+**Responsabilidad del operador:**
+
+- **Exposición:** los puertos publicados se enlazan por defecto a
+  `127.0.0.1` (`BIND_ADDR`). Abrirlos a la LAN (`0.0.0.0`) o a Internet
+  (túnel, proxy inverso) es decisión del operador.
+- **TLS:** la stack sirve HTTP plano; si accedes desde fuera de `localhost`,
+  termina TLS en un proxy inverso o túnel.
+- **Secretos:** generar, custodiar y rotar `SECRET_KEY`, `INTERNAL_SECRET`,
+  `POSTGRES_PASSWORD`, las claves de API y el archivo `.env`.
+- **Actualizaciones:** aplicar las releases de seguridad (`joidy pull`);
+  solo la última release recibe correcciones.
+- **Host y copias:** el endurecimiento del host y del motor de contenedores,
+  y la protección de las copias de seguridad (ver las secciones siguientes;
+  detalle de variables en [docs/configuration.md](docs/configuration.md)).
 
 ## Gestión de energía (docker.sock) — función opt-in (#1278)
 
