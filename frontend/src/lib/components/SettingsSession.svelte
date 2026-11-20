@@ -29,7 +29,7 @@
       {$t('settings.session.logout')}
     </button>
   </div>
-  <p class="hint">{$t('settings.session:global(hint) code')}</p>
+  <p class="hint">{$t('settings.session.hint')}</p>
 </section>
 
 <style>

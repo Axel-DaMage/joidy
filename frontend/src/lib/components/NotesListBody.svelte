@@ -107,6 +107,8 @@
         getKey={(n, i) => n.path ?? i}
         bind:scrollTop={$virtualScrollTop}
         onScrollChange={onVirtualScrollChange}
+        role="tree"
+        ariaLabel={$t('notesPage.treeLabel')}
         let:item
         let:index
       >
@@ -114,9 +116,13 @@
           <div
             class="tree-row folder-row"
             style="padding-left: {8 + item.depth * 14}px"
-            role="button"
+            role="treeitem"
             tabindex="0"
             aria-expanded={!$collapsed.has(item.path)}
+            aria-selected="false"
+            aria-level={item.depth + 1}
+            aria-setsize={$flatNodes.length}
+            aria-posinset={index + 1}
             onclick={() => toggleFolder(item.path)}
             onkeydown={(e) =>
               (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), toggleFolder(item.path))}
@@ -133,10 +139,7 @@
               class="folder-settings-btn"
               title={$t('notesPage.customizeFolder')}
               aria-label={$t('notesPage.customizeFolder')}
-              onclick={(e) => {
-                e.stopPropagation();
-                openFolderCustomizer(item);
-              }}
+              onclick={() => openFolderCustomizer(item)}
             >
               <Settings size={10} />
             </button>
@@ -147,9 +150,12 @@
             class="tree-row file-row"
             class:active={item.note?.id === $selectedNote?.id}
             style="padding-left: {20 + item.depth * 14}px"
-            role="button"
+            role="treeitem"
             tabindex="0"
-            aria-pressed={item.note?.id === $selectedNote?.id}
+            aria-selected={item.note?.id === $selectedNote?.id}
+            aria-level={item.depth + 1}
+            aria-setsize={$flatNodes.length}
+            aria-posinset={index + 1}
             onclick={() => item.note && openNote(item.note)}
             onkeydown={(e) =>
               (e.key === 'Enter' || e.key === ' ') &&
@@ -165,15 +171,13 @@
               class="folder-settings-btn"
               title={$t('notesPage.customizeNote')}
               aria-label={$t('notesPage.customizeNote')}
-              onclick={(e) => {
-                e.stopPropagation();
+              onclick={() =>
                 openFolderCustomizer({
                   path: item.note?.source_path || item.path,
                   icon: item.icon,
                   color: item.color,
                   note: item.note,
-                });
-              }}
+                })}
             >
               <Settings size={10} />
             </button>
@@ -181,15 +185,19 @@
         {/if}
       </VirtualList>
     {:else}
-      <div class="tree-wrap">
-        {#each $flatNodes as node (node.path)}
+      <div class="tree-wrap" role="tree" aria-label={$t('notesPage.treeLabel')}>
+        {#each $flatNodes as node, i (node.path)}
           {#if node.type === 'folder'}
             <div
               class="tree-row folder-row"
               style="padding-left: {8 + node.depth * 14}px"
-              role="button"
+              role="treeitem"
               tabindex="0"
               aria-expanded={!$collapsed.has(node.path)}
+              aria-selected="false"
+              aria-level={node.depth + 1}
+              aria-setsize={$flatNodes.length}
+              aria-posinset={i + 1}
               onclick={() => toggleFolder(node.path)}
               onkeydown={(e) =>
                 (e.key === 'Enter' || e.key === ' ') &&
@@ -207,10 +215,7 @@
                 class="folder-settings-btn"
                 title={$t('notesPage.customizeFolder')}
                 aria-label={$t('notesPage.customizeFolder')}
-                onclick={(e) => {
-                  e.stopPropagation();
-                  openFolderCustomizer(node);
-                }}
+                onclick={() => openFolderCustomizer(node)}
               >
                 <Settings size={10} />
               </button>
@@ -221,9 +226,12 @@
               class="tree-row file-row"
               class:active={node.note?.id === $selectedNote?.id}
               style="padding-left: {20 + node.depth * 14}px"
-              role="button"
+              role="treeitem"
               tabindex="0"
-              aria-pressed={node.note?.id === $selectedNote?.id}
+              aria-selected={node.note?.id === $selectedNote?.id}
+              aria-level={node.depth + 1}
+              aria-setsize={$flatNodes.length}
+              aria-posinset={i + 1}
               onclick={() => node.note && openNote(node.note)}
               onkeydown={(e) =>
                 (e.key === 'Enter' || e.key === ' ') &&
@@ -239,15 +247,13 @@
                 class="folder-settings-btn"
                 title={$t('notesPage.customizeNote')}
                 aria-label={$t('notesPage.customizeNote')}
-                onclick={(e) => {
-                  e.stopPropagation();
+                onclick={() =>
                   openFolderCustomizer({
                     path: node.note?.source_path || node.path,
                     icon: node.icon,
                     color: node.color,
                     note: node.note,
-                  });
-                }}
+                  })}
               >
                 <Settings size={10} />
               </button>
@@ -328,7 +334,26 @@
     font-family: var(--font-mono);
   }
 
-  /* ── Tree rows ── */
+  /* ── Tree rows ──
+     .tree-item wraps each row + its settings button so the button is not
+     nested inside the role="button" row (invalid interactive-in-interactive)
+     and stays in the tab order (#1268). */
+  .tree-item {
+    display: flex;
+    align-items: center;
+    margin: 0 4px;
+    border-radius: 3px;
+    transition: background var(--t-fast);
+    min-width: 0;
+  }
+  .tree-item:hover,
+  .tree-item:focus-within {
+    background: var(--hover);
+  }
+  .tree-item:has(> .file-row.active) {
+    background: var(--elevated);
+  }
+
   .tree-row {
     display: flex;
     align-items: center;
@@ -337,16 +362,8 @@
     height: 26px;
     cursor: pointer;
     user-select: none;
-    border-radius: 3px;
-    margin: 0 4px;
-    transition: background var(--t-fast);
+    flex: 1;
     min-width: 0;
-  }
-  .tree-row:hover {
-    background: var(--hover);
-  }
-  .file-row.active {
-    background: var(--elevated);
   }
 
   .chevron {
@@ -393,20 +410,29 @@
     flex-shrink: 0;
   }
 
-  /* Folder settings button */
+  /* Folder/note settings button — hidden visually but kept in the tab order
+     (opacity, not display:none) and revealed on row hover, row focus-within
+     or its own focus (#1268). */
   .folder-settings-btn {
-    display: none;
+    display: flex;
+    align-items: center;
+    opacity: 0;
+    pointer-events: none;
     padding: 2px;
     background: transparent;
     border: none;
     color: var(--text-muted);
     cursor: pointer;
     border-radius: 3px;
-    margin-left: 4px;
+    margin: 0 8px 0 4px;
+    flex-shrink: 0;
+    transition: opacity var(--t-fast);
   }
-  .folder-row:hover .folder-settings-btn,
-  .file-row:hover .folder-settings-btn {
-    display: flex;
+  .tree-item:hover .folder-settings-btn,
+  .tree-item:focus-within .folder-settings-btn,
+  .folder-settings-btn:focus-visible {
+    opacity: 1;
+    pointer-events: auto;
   }
   .folder-settings-btn:hover {
     color: var(--accent);

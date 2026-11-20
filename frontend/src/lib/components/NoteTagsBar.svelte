@@ -3,6 +3,7 @@
   import { aiSuggestions, findNoteByTitle } from '$lib/stores/notes';
   import { goto } from '$app/navigation';
   import { extractTagsFromContent, escapeRegExp } from '$lib/utils/noteContent';
+  import { t } from 'svelte-i18n';
 
   interface Props {
     tags: string[];
@@ -103,6 +104,7 @@
     bind:value={tagInput}
     onkeydown={onTagKeydown}
     placeholder="+ etiqueta..."
+    aria-label={$t('noteEditor.tagsLabel')}
   />
   {#if $aiSuggestions.length > 0}
     <span class="ai-label">ia:</span>
@@ -144,6 +146,11 @@
   }
   .tag-input::placeholder {
     color: var(--text-muted);
+  }
+  .tag-input:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
+    border-radius: 4px;
   }
 
   .ai-label {

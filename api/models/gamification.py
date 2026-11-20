@@ -1,7 +1,7 @@
 from datetime import date, datetime
 
 from database import Base
-from sqlalchemy import Date, DateTime, Integer, String, func
+from sqlalchemy import Date, DateTime, Index, Integer, String, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 
@@ -12,7 +12,22 @@ class XPEvent(Base):
     event_type: Mapped[str] = mapped_column(String(100), nullable=False)
     xp: Mapped[int] = mapped_column(Integer, nullable=False)
     metadata_json: Mapped[str] = mapped_column(String(500), default="{}")
+    # Idempotency key (issue #1320): callers that must never double-award pass
+    # a stable dedup key (e.g. "pomodoro:<uuid>", "goal:<id>"). NULL means the
+    # event is not dedup-guarded; the partial unique index ignores NULLs.
+    dedup_key: Mapped[str | None] = mapped_column(String(200), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    __table_args__ = (
+        Index(
+            "uq_xp_events_type_dedup",
+            "event_type",
+            "dedup_key",
+            unique=True,
+            postgresql_where=text("dedup_key IS NOT NULL"),
+            sqlite_where=text("dedup_key IS NOT NULL"),
+        ),
+    )
 
 
 class StreakRecord(Base):

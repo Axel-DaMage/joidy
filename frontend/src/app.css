@@ -21,13 +21,14 @@
 
 /* ── Custom Properties ──────────────────────────────────────────────────────── */
 :root {
-  /* Base surfaces — AMOLED */
+  /* Base surfaces — AMOLED base with a real elevation ramp (#1270): cards,
+     modals and overlays must sit on distinguishable levels, not flat black. */
   --bg: #000000;
-  --surface: #000000;
-  --elevated: #000000;
-  --hover: #0c0c0c;
-  --border: #1a1a1a;
-  --border-light: #111111;
+  --surface: #0c0c0c;
+  --elevated: #161616;
+  --hover: #1c1c1c;
+  --border: #262626;
+  --border-light: #1a1a1a;
 
   /* Text — all white-range */
   --text-primary: #ffffff;
@@ -36,7 +37,7 @@
   --text-disabled: #444444;
 
   /* Accents — used sparingly */
-  --accent: #e0e0e0; /* Primary interactive elements */
+  --accent: #c8a96e; /* Primary interactive elements — JS-overridden by applyColors() (alias of --xp) */
   --accent-contrast: #f59e0b; /* Dynamic complementary contrast color (JS-overridden) */
   --xp: #c8a96e; /* Primary accent color (JS-overridden) */
   --xp-2: #9f8660; /* Secondary accent color (JS-overridden) */
@@ -117,8 +118,10 @@
   --surface: #ffffff;
   --elevated: #ffffff;
   --hover: #f0f0f0;
-  --border: #000000;
-  --border-light: #cfcfcf;
+  /* Mid-gray hairlines — pure-black borders were the inverse of what the
+     light theme needs (#1270). */
+  --border: #b8b8b8;
+  --border-light: #dcdcdc;
   --text-primary: #000000;
   --text-secondary: #222222;
   --text-muted: #666666;
@@ -147,10 +150,12 @@ body {
   padding: 0;
   margin: 0;
   overflow: hidden;
-  /* Smooth transitions for dynamic theme changes (#356) */
+  /* Smooth transitions for dynamic theme changes (#356). Kept short (#1269):
+     the previous 2s fade read as a slow, uncancellable animation on every
+     theme toggle. */
   transition:
-    background-color 2s ease,
-    color 2s ease;
+    background-color 250ms ease,
+    color 250ms ease;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -160,6 +165,19 @@ body {
   }
   .app-main {
     scroll-behavior: auto;
+  }
+  /* WCAG 2.2.2 — when the user prefers reduced motion, no animation may loop
+     indefinitely (pulse dots, sync spinner, plant breathe/wilt, dev dot…)
+     and transitions must be effectively instant (#1269). Scoped component
+     styles carry higher specificity than a plain global selector, so
+     !important is required to win over them. */
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
@@ -330,7 +348,8 @@ body.zen-mode-active .app-shell {
   font-family: var(--font-mono);
 }
 
-.nav-item:hover .tooltip {
+.nav-item:hover .tooltip,
+.nav-item:focus-visible .tooltip {
   opacity: 1;
   transform: translateX(0);
 }
@@ -367,12 +386,6 @@ body.zen-mode-active .app-shell {
 .btn-primary:hover {
   background: var(--xp-2);
   color: var(--xp-contrast-text, var(--bg));
-  border-color: var(--xp-2);
-}
-
-.btn-primary:hover {
-  background: var(--xp-2);
-  color: var(--bg);
   border-color: var(--xp-2);
 }
 
@@ -624,6 +637,21 @@ textarea.input {
 }
 
 /* ── Utility ─────────────────────────────────────────────────────────────────── */
+/* Visually hidden but still exposed to assistive tech (live regions,
+   accessible names on icon-only controls). */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
 .flex {
   display: flex;
 }
@@ -846,11 +874,13 @@ textarea.input {
     height var(--t-fast);
 }
 .resize-handle:hover,
+.resize-handle:focus-visible,
 .dragging .resize-handle {
   border-left-color: color-mix(in srgb, var(--accent) 40%, var(--border));
   background: color-mix(in srgb, var(--accent) 6%, transparent);
 }
 .resize-handle:hover::before,
+.resize-handle:focus-visible::before,
 .dragging .resize-handle::before {
   background: var(--accent);
   height: 32px;

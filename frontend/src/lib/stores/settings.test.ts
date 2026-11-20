@@ -8,7 +8,7 @@ import {
   accentColors,
   accentColor,
   activeIconPack,
-  darkMode,
+  themeMode,
   showFrontmatter,
   showTrash,
   showHiddenFiles,
@@ -45,8 +45,8 @@ describe('settings store — initial values', () => {
     expect(get(activeIconPack)).toBe('lucide');
   });
 
-  it('darkMode defaults to true', () => {
-    expect(get(darkMode)).toBe(true);
+  it('themeMode defaults to dark', () => {
+    expect(get(themeMode)).toBe('dark');
   });
 
   it('showTrash defaults to true, others false', () => {
@@ -166,23 +166,52 @@ describe('activeIconPack store', () => {
   });
 });
 
-describe('boolean stores (darkMode etc.)', () => {
+describe('themeMode store (#1270)', () => {
   beforeEach(() => clearStorage());
 
-  it('darkMode.set persists to localStorage', () => {
-    darkMode.set(false);
-    expect(get(darkMode)).toBe(false);
-    expect(localStorage.getItem('joidy-dark-mode')).toBe('false');
+  it('set persists to the single joidy-theme-mode key', () => {
+    themeMode.set('light');
+    expect(get(themeMode)).toBe('light');
+    expect(localStorage.getItem('joidy-theme-mode')).toBe('light');
   });
 
-  it('darkMode reads saved value on subscribe', () => {
+  it('toggle flips the mode and persists it', () => {
+    themeMode.set('dark');
+    themeMode.toggle();
+    expect(get(themeMode)).toBe('light');
+    expect(localStorage.getItem('joidy-theme-mode')).toBe('light');
+    themeMode.toggle();
+    expect(get(themeMode)).toBe('dark');
+    expect(localStorage.getItem('joidy-theme-mode')).toBe('dark');
+  });
+
+  it('migrates the legacy joidy-dark-mode key on first init', async () => {
     localStorage.setItem('joidy-dark-mode', 'false');
-    // createBooleanStore reads on first subscribe; subscribing again reads it
-    darkMode.set(true); // ensure initialized flag set
-    localStorage.setItem('joidy-dark-mode', 'false');
-    // Re-import not possible; instead verify set+persist roundtrip
-    darkMode.set(false);
-    expect(localStorage.getItem('joidy-dark-mode')).toBe('false');
+    vi.resetModules();
+    const fresh = await import('./settings');
+    // First subscription triggers lazy init + migration.
+    expect(get(fresh.themeMode)).toBe('light');
+    expect(localStorage.getItem('joidy-theme-mode')).toBe('light');
+    expect(localStorage.getItem('joidy-dark-mode')).toBeNull();
+  });
+
+  it('migrates legacy joidy-dark-mode=true to dark', async () => {
+    localStorage.setItem('joidy-dark-mode', 'true');
+    vi.resetModules();
+    const fresh = await import('./settings');
+    expect(get(fresh.themeMode)).toBe('dark');
+    expect(localStorage.getItem('joidy-theme-mode')).toBe('dark');
+    expect(localStorage.getItem('joidy-dark-mode')).toBeNull();
+  });
+
+  it('an explicit joidy-theme-mode value wins over the legacy key', async () => {
+    localStorage.setItem('joidy-theme-mode', 'light');
+    localStorage.setItem('joidy-dark-mode', 'true');
+    vi.resetModules();
+    const fresh = await import('./settings');
+    expect(get(fresh.themeMode)).toBe('light');
+    // Legacy key is left untouched when no migration is needed.
+    expect(localStorage.getItem('joidy-dark-mode')).toBe('true');
   });
 
   it('showFrontmatter.set persists', () => {
@@ -195,25 +224,25 @@ describe('boolean stores (darkMode etc.)', () => {
 describe('initTheme', () => {
   beforeEach(() => clearStorage());
 
-  it('applies dark theme attribute when darkMode is true', () => {
-    darkMode.set(true);
+  it('applies dark theme attribute when themeMode is dark', () => {
+    themeMode.set('dark');
     const unsub = initTheme();
     expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
     unsub?.();
   });
 
-  it('applies light theme attribute when darkMode is false', () => {
-    darkMode.set(false);
+  it('applies light theme attribute when themeMode is light', () => {
+    themeMode.set('light');
     const unsub = initTheme();
     expect(document.documentElement.getAttribute('data-theme')).toBe('light');
     unsub?.();
   });
 
-  it('updates the attribute reactively when darkMode changes', () => {
-    darkMode.set(true);
+  it('updates the attribute reactively when themeMode changes', () => {
+    themeMode.set('dark');
     const unsub = initTheme();
     expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
-    darkMode.set(false);
+    themeMode.set('light');
     expect(document.documentElement.getAttribute('data-theme')).toBe('light');
     unsub?.();
   });

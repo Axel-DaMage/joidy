@@ -34,7 +34,7 @@ export function openDB(): Promise<IDBDatabase> {
   }
   if (dbPromise) return dbPromise;
 
-  dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
+  const pending = new Promise<IDBDatabase>((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
 
     request.onupgradeneeded = () => {
@@ -55,7 +55,38 @@ export function openDB(): Promise<IDBDatabase> {
     request.onblocked = () => reject(new Error('IndexedDB open blocked'));
   });
 
+  // Do not cache a rejection — one transient failure (blocked open, quota)
+  // would otherwise poison every later openDB() call for the session (#1305).
+  dbPromise = pending;
+  pending.catch(() => {
+    if (dbPromise === pending) dbPromise = null;
+  });
+
   return dbPromise;
+}
+
+/**
+ * Drops the entire "joidy" IndexedDB database — notes cache, offline outbox
+ * and metadata — so a logout leaves no user data behind (#1305). Closes the
+ * cached connection first; best-effort (blocked deletes resolve quietly).
+ */
+export async function clearUserData(): Promise<void> {
+  if (!browser) return;
+  try {
+    if (dbPromise) {
+      const db = await dbPromise.catch(() => null);
+      db?.close();
+      dbPromise = null;
+    }
+    await new Promise<void>((resolve) => {
+      const request = indexedDB.deleteDatabase(DB_NAME);
+      request.onsuccess = () => resolve();
+      request.onerror = () => resolve();
+      request.onblocked = () => resolve();
+    });
+  } catch {
+    /* best-effort cleanup */
+  }
 }
 
 /** Retrieves all cached notes from IndexedDB, sorted by updated_at desc. */

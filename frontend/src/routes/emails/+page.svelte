@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { api, type EmailSummary, type EmailAccountStats } from '$lib/api';
+  import { showNotification } from '$lib/stores/notifications';
   import { logger } from '$lib/utils/logger';
   import { Search, Inbox, Star, RefreshCw } from 'lucide-svelte';
   import EmptyState from '$lib/components/EmptyState.svelte';
@@ -10,6 +11,7 @@
   let total = $state(0);
   let accounts: EmailAccountStats[] = $state([]);
   let loading = $state(true);
+  let loadError = $state(false);
 
   let absoluteTotal = $derived(accounts.reduce((sum, a) => sum + a.total, 0));
 
@@ -65,8 +67,17 @@
       });
       emails = inbox.items;
       total = inbox.total;
+      loadError = false;
     } catch (e) {
       logger.error(e);
+      // Surface the failure — the old log-only path rendered the empty
+      // state, indistinguishable from "no emails". With stale results on
+      // screen a toast is enough (#1305).
+      if (emails.length === 0) {
+        loadError = true;
+      } else {
+        showNotification($t('emails.runFailed'), 'error');
+      }
     } finally {
       loading = false;
     }
@@ -133,6 +144,12 @@
     }
     await refresh();
   });
+
+  // Cancel a pending search debounce so it can't fire state writes after
+  // the page has unmounted (#1305).
+  onDestroy(() => {
+    clearTimeout(debounceTimer);
+  });
 </script>
 
 <div class="emails-page">
@@ -175,6 +192,7 @@
         class="search-input"
         type="text"
         placeholder={$t('emails.searchPlaceholder')}
+        aria-label={$t('emails.searchPlaceholder')}
         bind:value={searchQuery}
         oninput={onSearchInput}
       />
@@ -183,6 +201,19 @@
 
   {#if loading}
     <div class="loading-state caption">...</div>
+  {:else if loadError}
+    <div class="empty-wrap">
+      <EmptyState
+        title={$t('emails.runFailed')}
+        actionLabel={$t('common.retry')}
+        onAction={() => {
+          loading = true;
+          refresh();
+        }}
+      >
+        {#snippet icon()}<Inbox size={44} />{/snippet}
+      </EmptyState>
+    </div>
   {:else if absoluteTotal === 0}
     <div class="empty-wrap">
       <EmptyState
@@ -328,6 +359,11 @@
     color: var(--text-primary);
     font-size: 13px;
   }
+  .search-input:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
+    border-radius: var(--r-sm);
+  }
 
   .emails-list {
     display: flex;
@@ -438,7 +474,8 @@
     transition: opacity 0.15s ease;
   }
 
-  .email-item:hover .email-ops {
+  .email-item:hover .email-ops,
+  .email-item:focus-within .email-ops {
     opacity: 1;
   }
 

@@ -83,6 +83,10 @@
   aria-pressed={selected}
   onclick={() => (bulkMode ? dispatch('toggleSelect', note.id) : dispatch('select', note))}
   onkeydown={(e) =>
+    // Ignore keydowns bubbled from inner controls (checkbox, customize
+    // button) — they own their Enter/Space activation; preventDefault here
+    // would kill their native click (#1268).
+    e.target === e.currentTarget &&
     (e.key === 'Enter' || e.key === ' ') &&
     (e.preventDefault(), bulkMode ? dispatch('toggleSelect', note.id) : dispatch('select', note))}
 >
@@ -92,6 +96,7 @@
         type="checkbox"
         class="note-checkbox"
         checked={selected}
+        aria-label={$t('noteCard.select', { values: { title: note.title } })}
         onclick={(e) => e.stopPropagation()}
         onchange={() => dispatch('toggleSelect', note.id)}
       />
@@ -185,19 +190,29 @@
     cursor: pointer;
   }
 
+  /* Keep the button in the tab order (opacity, not display:none) and reveal
+     it on card hover, card focus-within or its own focus (#1268). */
   .note-settings-btn {
     flex-shrink: 0;
-    display: none;
+    display: flex;
+
     padding: 2px;
     background: transparent;
     border: none;
     color: var(--text-muted);
     cursor: pointer;
     border-radius: 3px;
+    /* Stay tabbable but visually hidden until hover/focus (#1308). */
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--t-fast);
   }
 
-  .note-card:hover .note-settings-btn {
-    display: flex;
+  .note-card:hover .note-settings-btn,
+  .note-card:focus-within .note-settings-btn,
+  .note-settings-btn:focus-visible {
+    opacity: 1;
+    pointer-events: auto;
   }
 
   .note-settings-btn:hover {

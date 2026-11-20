@@ -12,7 +12,9 @@ export const notifications = writable<Notification[]>([]);
 
 // Deduplication map to prevent identical toasts flooding during quick parallel requests
 const activeNotifications = new Set<string>();
-let dedupTimer: ReturnType<typeof setTimeout> | null = null;
+// Per-message dedup timers — a shared timer would let a newer notification
+// cancel the cleanup of an older message, permanently muting it (#1305).
+const dedupTimers = new Map<string, ReturnType<typeof setTimeout>>();
 // Track auto-dismiss timers per notification id so they can be cancelled on
 // manual dismiss or shutdown (prevents callbacks firing on a stale store and
 // avoids accumulating timers across rapid navigation, #413).
@@ -29,14 +31,17 @@ export function showNotification(
   }
 
   activeNotifications.add(message);
-  // Allow duplicate alerts only after 3 seconds
-  if (dedupTimer) clearTimeout(dedupTimer);
+  // Allow duplicate alerts only after 3 seconds. Each message owns its timer
+  // so firing message B cannot leak message A's dedup entry (#1305).
   // intentional: store-level self-dismissing one-shot; module lifetime,
   // bulk-cleared by clearAllNotificationTimers() (#1003)
-  dedupTimer = setTimeout(() => {
-    activeNotifications.delete(message);
-    dedupTimer = null;
-  }, 3000);
+  dedupTimers.set(
+    message,
+    setTimeout(() => {
+      activeNotifications.delete(message);
+      dedupTimers.delete(message);
+    }, 3000)
+  );
 
   const id = `notif-${Date.now()}`;
   notifications.update(ns => [...ns, { id, message, type, href }]);
@@ -60,10 +65,10 @@ export function dismissNotification(id: string): void {
 
 /** Cancel all pending notification timers (e.g. on teardown/logout). */
 export function clearAllNotificationTimers(): void {
-  if (dedupTimer) {
-    clearTimeout(dedupTimer);
-    dedupTimer = null;
-  }
+  for (const timer of dedupTimers.values()) clearTimeout(timer);
+  dedupTimers.clear();
+  // Clearing the timers also drops the only cleanup path for these entries.
+  activeNotifications.clear();
   for (const timer of dismissTimers.values()) clearTimeout(timer);
   dismissTimers.clear();
 }

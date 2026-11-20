@@ -29,15 +29,15 @@
   }
 
   .badge-success {
-    background: color-mix(in srgb, var(--success, #22c55e) 15%, transparent);
-    color: var(--success, #22c55e);
-    border: 1px solid color-mix(in srgb, var(--success, #22c55e) 30%, transparent);
+    background: color-mix(in srgb, var(--success, #10b981) 15%, transparent);
+    color: var(--success, #10b981);
+    border: 1px solid color-mix(in srgb, var(--success, #10b981) 30%, transparent);
   }
 
   .badge-warning {
-    background: color-mix(in srgb, var(--xp, #f59e0b) 15%, transparent);
-    color: var(--xp, #f59e0b);
-    border: 1px solid color-mix(in srgb, var(--xp, #f59e0b) 30%, transparent);
+    background: color-mix(in srgb, var(--xp, #c8a96e) 15%, transparent);
+    color: var(--xp, #c8a96e);
+    border: 1px solid color-mix(in srgb, var(--xp, #c8a96e) 30%, transparent);
   }
 
   .badge-error {
@@ -47,8 +47,8 @@
   }
 
   .badge-accent {
-    background: color-mix(in srgb, var(--accent, #6366f1) 15%, transparent);
-    color: var(--accent, #6366f1);
-    border: 1px solid color-mix(in srgb, var(--accent, #6366f1) 30%, transparent);
+    background: color-mix(in srgb, var(--accent, #e0e0e0) 15%, transparent);
+    color: var(--accent, #e0e0e0);
+    border: 1px solid color-mix(in srgb, var(--accent, #e0e0e0) 30%, transparent);
   }
 </style>

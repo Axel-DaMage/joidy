@@ -1,12 +1,14 @@
 <script lang="ts">
   import { tick } from 'svelte';
   import { Send, Sparkles, Trash2, LoaderCircle } from 'lucide-svelte';
-  import { marked } from 'marked';
+  import { Marked } from 'marked';
   import DOMPurify from 'dompurify';
   import { messages, isLoading, suggestions, sendMessage, clearChat } from '$lib/stores/chat';
   import { t } from 'svelte-i18n';
 
-  marked.use({ gfm: true, breaks: true });
+  // Instance-scoped parser — `marked.use()` on the global singleton would
+  // leak this config into every other marked caller (#1317).
+  const mdParser = new Marked({ gfm: true, breaks: true });
 
   let input = $state('');
   let scrollContainer: HTMLDivElement | null = $state(null);
@@ -36,7 +38,7 @@
 
   function renderMarkdown(md: string): string {
     if (!md.trim()) return '';
-    return DOMPurify.sanitize(String(marked.parse(md)));
+    return DOMPurify.sanitize(String(mdParser.parse(md)));
   }
 
   async function handleSend() {
@@ -132,6 +134,7 @@
       bind:value={input}
       onkeydown={handleKeydown}
       placeholder={$t('chat.inputPlaceholder')}
+      aria-label={$t('chat.inputPlaceholder')}
       rows="1"
       disabled={$isLoading}></textarea>
     <button
@@ -151,8 +154,8 @@
     flex-direction: column;
     height: 100%;
     min-height: 0;
-    background: var(--surface, #000);
-    border: 1px solid var(--border, #1a1a1a);
+    background: var(--surface, #0c0c0c);
+    border: 1px solid var(--border, #262626);
     border-radius: var(--r-lg, 8px);
     overflow: hidden;
   }
@@ -161,7 +164,7 @@
     align-items: center;
     justify-content: space-between;
     padding: var(--s3, 12px) var(--s4, 16px);
-    border-bottom: 1px solid var(--border, #1a1a1a);
+    border-bottom: 1px solid var(--border, #262626);
     flex-shrink: 0;
   }
   .chat-title {
@@ -186,7 +189,7 @@
   }
   .clear-btn:hover {
     color: var(--error, #ef4444);
-    background: var(--hover, #0c0c0c);
+    background: var(--hover, #1c1c1c);
   }
   .chat-messages {
     flex: 1;
@@ -227,8 +230,8 @@
   }
   .suggestion-chip {
     text-align: left;
-    background: var(--elevated, #000);
-    border: 1px solid var(--border, #1a1a1a);
+    background: var(--elevated, #161616);
+    border: 1px solid var(--border, #262626);
     color: var(--text-secondary, #d0d0d0);
     padding: var(--s3, 12px) var(--s4, 16px);
     border-radius: var(--r-lg, 8px);
@@ -240,7 +243,7 @@
   }
   .suggestion-chip:hover:not(:disabled) {
     border-color: var(--xp, #c8a96e);
-    background: var(--hover, #0c0c0c);
+    background: var(--hover, #1c1c1c);
   }
   .suggestion-chip:disabled {
     opacity: 0.5;
@@ -277,7 +280,7 @@
   }
   .msg.user .bubble {
     background: var(--xp, #c8a96e);
-    color: #1a1a1a;
+    color: var(--xp-contrast-text, #1a1a1a);
     border-bottom-right-radius: var(--r, 4px);
   }
   .msg.user .bubble p {
@@ -285,8 +288,8 @@
     white-space: pre-wrap;
   }
   .msg.assistant .bubble {
-    background: var(--elevated, #000);
-    border: 1px solid var(--border, #1a1a1a);
+    background: var(--elevated, #161616);
+    border: 1px solid var(--border, #262626);
     color: var(--text-primary, #fff);
     border-bottom-left-radius: var(--r, 4px);
   }
@@ -326,14 +329,14 @@
     font-size: 0.95rem;
   }
   .markdown :global(code) {
-    background: var(--hover, #0c0c0c);
+    background: var(--hover, #1c1c1c);
     padding: 2px var(--s1, 4px);
     border-radius: var(--r, 4px);
     font-family: var(--font-mono, monospace);
     font-size: 0.8rem;
   }
   .markdown :global(pre) {
-    background: var(--hover, #0c0c0c);
+    background: var(--hover, #1c1c1c);
     padding: var(--s3, 12px);
     border-radius: var(--r, 4px);
     overflow-x: auto;
@@ -360,15 +363,15 @@
     align-items: flex-end;
     gap: var(--s2, 8px);
     padding: var(--s3, 12px) var(--s4, 16px);
-    border-top: 1px solid var(--border, #1a1a1a);
+    border-top: 1px solid var(--border, #262626);
     flex-shrink: 0;
   }
   .chat-input textarea {
     flex: 1;
     resize: none;
     max-height: 120px;
-    background: var(--elevated, #000);
-    border: 1px solid var(--border, #1a1a1a);
+    background: var(--elevated, #161616);
+    border: 1px solid var(--border, #262626);
     border-radius: var(--r-lg, 8px);
     color: var(--text-primary, #fff);
     padding: var(--s3, 12px);
@@ -381,13 +384,17 @@
   .chat-input textarea:focus {
     border-color: var(--xp, #c8a96e);
   }
+  .chat-input textarea:focus-visible {
+    outline: 2px solid var(--xp, #c8a96e);
+    outline-offset: 2px;
+  }
   .chat-input textarea::placeholder {
     color: var(--text-muted, #888);
   }
   .send-btn {
     flex-shrink: 0;
     background: var(--xp, #c8a96e);
-    color: #1a1a1a;
+    color: var(--xp-contrast-text, #1a1a1a);
     border: none;
     border-radius: var(--r-lg, 8px);
     padding: var(--s3, 12px);

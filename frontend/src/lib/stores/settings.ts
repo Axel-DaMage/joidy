@@ -341,13 +341,34 @@ function createClockStyleStore() {
 
 export const clockStyle = createClockStyleStore();
 
-export const darkMode = createBooleanStore('joidy-dark-mode', true);
-
+// ── Theme mode (#1270) ───────────────────────────────────────────────────────
+// Single source of truth for the color theme. Replaces the old `darkMode`
+// boolean store (`joidy-dark-mode`), which competed with this one: both wrote
+// `data-theme`, and `darkMode` always won at boot — so the Settings "light"
+// choice silently reverted on every reload while the palette toggle flipped
+// the UI without updating the Settings radios.
 export type ThemeMode = 'light' | 'dark';
 const THEME_MODE_KEY = 'joidy-theme-mode';
+const LEGACY_DARK_MODE_KEY = 'joidy-dark-mode';
+
+function loadThemeMode(): ThemeMode {
+  if (!browser) return 'dark';
+  const raw = localStorage.getItem(THEME_MODE_KEY);
+  if (raw === 'light' || raw === 'dark') return raw;
+  // Migrate the legacy boolean key: 'false' meant light mode, anything else
+  // (including 'true') meant dark. Remove it so only one key survives.
+  const legacy = localStorage.getItem(LEGACY_DARK_MODE_KEY);
+  if (legacy !== null) {
+    const migrated: ThemeMode = legacy === 'false' ? 'light' : 'dark';
+    localStorage.setItem(THEME_MODE_KEY, migrated);
+    localStorage.removeItem(LEGACY_DARK_MODE_KEY);
+    return migrated;
+  }
+  return 'dark';
+}
 
 function createThemeModeStore() {
-  const { subscribe, set } = writable<ThemeMode>('dark');
+  const { subscribe, set, update } = writable<ThemeMode>('dark');
   let _initialized = false;
 
   function applyMode(mode: ThemeMode) {
@@ -355,15 +376,17 @@ function createThemeModeStore() {
     document.documentElement.setAttribute('data-theme', mode);
   }
 
+  function ensureInit() {
+    if (_initialized || !browser) return;
+    _initialized = true;
+    const saved = loadThemeMode();
+    set(saved);
+    applyMode(saved);
+  }
+
   return {
     subscribe: (run: (v: ThemeMode) => void, invalidate?: () => void) => {
-      if (!_initialized && browser) {
-        _initialized = true;
-        const raw = localStorage.getItem(THEME_MODE_KEY);
-        const saved: ThemeMode = raw === 'light' || raw === 'dark' ? raw : 'dark';
-        set(saved);
-        applyMode(saved);
-      }
+      ensureInit();
       return subscribe(run, invalidate);
     },
     set: (val: ThemeMode) => {
@@ -372,14 +395,16 @@ function createThemeModeStore() {
       applyMode(val);
       set(val);
     },
-    init: () => {
-      if (!browser) return;
-      _initialized = true;
-      const raw = localStorage.getItem(THEME_MODE_KEY);
-      const saved: ThemeMode = raw === 'light' || raw === 'dark' ? raw : 'dark';
-      set(saved);
-      applyMode(saved);
+    toggle: () => {
+      ensureInit();
+      update((v) => {
+        const next: ThemeMode = v === 'dark' ? 'light' : 'dark';
+        if (browser) localStorage.setItem(THEME_MODE_KEY, next);
+        applyMode(next);
+        return next;
+      });
     },
+    init: ensureInit,
   };
 }
 
@@ -389,9 +414,10 @@ export function initTheme(): (() => void) | void {
   // Return the unsubscribe function so the caller can clean it up.
   // Previously the subscription was auto-unsubscribed immediately via `()`,
   // which meant theme changes after init were never applied (#265).
-  return darkMode.subscribe((dark) => {
+  // Subscribing also triggers the store's lazy init/migration (#1270).
+  return themeMode.subscribe((mode) => {
     if (browser) {
-      document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', mode);
     }
   });
 }
