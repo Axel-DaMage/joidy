@@ -187,7 +187,10 @@
   "pwa": {
     "installPrompt": "Install Joidy for quick access",
     "closeInstallNotice": "Close install notice",
-    "installed": "Joidy installed! You can now access it from your desktop."
+    "installed": "Joidy installed! You can now access it from your desktop.",
+    "updateAvailable": "A new version of Joidy is available",
+    "update": "Update",
+    "closeUpdateNotice": "Close update notice"
   },
   "onboarding": {
     "skipTour": "Skip welcome tour",
