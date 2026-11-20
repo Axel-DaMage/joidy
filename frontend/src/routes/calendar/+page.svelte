@@ -74,6 +74,7 @@
   let tasks: CalendarTask[] = $state([]);
   let status: CalendarStatus | null = $state(null);
   let loading = $state(true);
+  let loadError = $state(false);
   let syncing = $state(false);
 
   type CalendarView = 'month' | 'week' | 'agenda';
@@ -391,8 +392,18 @@
       events = evts;
       status = st;
       tasks = [...scheduled, ...unscheduled];
+      loadError = false;
     } catch (e) {
       logger.error(e);
+      // Surface the failure — the old log-only path rendered an empty
+      // calendar indistinguishable from "no events". When stale data is
+      // already on screen a toast is enough; only swap to the error state
+      // when there is nothing to show (#1305).
+      if (events.length === 0 && tasks.length === 0) {
+        loadError = true;
+      } else {
+        showNotification($t('calendar.loadError'), 'error');
+      }
     } finally {
       loading = false;
     }
@@ -859,6 +870,20 @@
 
   {#if loading}
     <div class="loading-state caption">{$t('calendar.loading')}</div>
+  {:else if loadError}
+    <div class="empty-wrap">
+      <EmptyState
+        title={$t('calendar.loadError')}
+        message={$t('calendar.loadErrorHint')}
+        actionLabel={$t('common.retry')}
+        onAction={() => {
+          loading = true;
+          void refresh();
+        }}
+      >
+        {#snippet icon()}<RefreshCw size={44} />{/snippet}
+      </EmptyState>
+    </div>
   {:else if status && !status.connected}
     <div class="empty-wrap">
       <EmptyState
@@ -2108,10 +2133,23 @@
     font-size: 10px;
     color: var(--text-muted);
     user-select: none;
+    position: relative;
   }
 
+  /* Visually hidden but focusable: display:none would remove the checkbox
+     from the tab order entirely (#1268). */
   .publish-toggle input {
-    display: none;
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+    pointer-events: none;
+  }
+
+  .publish-toggle input:focus-visible + .publish-label {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
   }
 
   .publish-label {

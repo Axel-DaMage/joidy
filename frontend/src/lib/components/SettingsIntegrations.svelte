@@ -18,6 +18,9 @@
   async function openStravaLink() {
     window.open('https://strava.com', '_blank', 'noopener,noreferrer');
   }
+  async function openSpotifyLink() {
+    window.open('https://spotify.com', '_blank');
+  }
 </script>
 
 <!-- Integraciones -->
@@ -44,7 +47,7 @@
       <div class="row-label">
         <span>Spotify</span>
       </div>
-      <button class="link-btn">Enlazar</button>
+      <button class="link-btn" onclick={openSpotifyLink}>Enlazar</button>
     </div>
   {/if}
 </section>

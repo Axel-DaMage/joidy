@@ -1,4 +1,5 @@
 import { writable, get } from 'svelte/store';
+import { browser } from '$app/env';
 
 interface PageSnapshot {
   path: string;
@@ -8,8 +9,34 @@ interface PageSnapshot {
 }
 
 const SNAPSHOT_TTL = 10 * 60 * 1000;
+const STORAGE_KEY = 'joidy_page_snapshots';
 
-const snapshots = writable<Record<string, PageSnapshot>>({});
+// Snapshots are captured on `beforeunload` — an in-memory store loses them
+// on the very reload they were taken for, so they also write through to
+// sessionStorage (cleared on logout together with the other session data,
+// #1305).
+const snapshots = writable<Record<string, PageSnapshot>>(load());
+
+function load(): Record<string, PageSnapshot> {
+  if (!browser) return {};
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function persist(): void {
+  if (!browser) return;
+  try {
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(get(snapshots)));
+  } catch {
+    /* quota / private mode — ignore */
+  }
+}
 
 export function captureSnapshot(
   path: string,
@@ -25,6 +52,7 @@ export function captureSnapshot(
     ...s,
     [path]: { path, timestamp: Date.now(), state, scrollPositions: scroll }
   }));
+  persist();
 }
 
 export function getSnapshot(path: string): PageSnapshot | null {
@@ -44,4 +72,5 @@ export function clearSnapshot(path: string): void {
     delete next[path];
     return next;
   });
+  persist();
 }

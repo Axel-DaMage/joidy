@@ -488,10 +488,18 @@
     }
 
     try {
-      // Load only essential data immediately (goals + tags)
-      const [fetchedGoals, fetchedTags] = await Promise.all([api.goals.list(), api.tags.list()]);
+      // Load essential data immediately (goals + tags + notes). Notes are
+      // needed by the linked-note chip, NoteLinkPicker and the auto-track
+      // select on every tab — previously they only loaded under the
+      // analytics tab, leaving those controls silently empty (#1305).
+      const [fetchedGoals, fetchedTags, fetchedNotes] = await Promise.all([
+        api.goals.list(),
+        api.tags.list(),
+        api.notes.list(),
+      ]);
       goals = deduplicateGoals(fetchedGoals);
       tags = fetchedTags;
+      notes = fetchedNotes;
       setCachedData('goals', goals);
       setCachedData('tags', tags);
     } catch (e) {
@@ -512,8 +520,7 @@
     if (analyticsLoaded) return;
     analyticsLoaded = true;
     try {
-      [notes, streakData, xpEvents] = await Promise.all([
-        api.notes.list(),
+      [streakData, xpEvents] = await Promise.all([
         api.goals.streak(),
         api.gamification.events(500),
       ]);
@@ -1406,7 +1413,9 @@
                 <div class="goal-meta">
                   <span
                     class="tag-chip"
-                    style="background: {getGoalColor(goal)}20; border: 1px solid {getGoalColor(
+                    style="background: color-mix(in srgb, {getGoalColor(
+                      goal
+                    )} 12%, transparent); border: 1px solid {getGoalColor(
                       goal
                     )}; color: {getGoalColor(goal)};"
                     >{TEMPORALITY_LABELS[goal.temporality] || goal.temporality}</span
@@ -1427,7 +1436,9 @@
                   {#if goal.note_id}
                     <span
                       class="tag-chip"
-                      style="background: {getGoalColor(goal)}20; border: 1px solid {getGoalColor(
+                      style="background: color-mix(in srgb, {getGoalColor(
+                        goal
+                      )} 12%, transparent); border: 1px solid {getGoalColor(
                         goal
                       )}; color: {getGoalColor(goal)};"
                       >{notes.find((n) => n.id === goal.note_id)?.title || 'Nota vinculada'}</span
@@ -1435,7 +1446,9 @@
                   {:else if goal.tag_id}
                     <span
                       class="tag-chip"
-                      style="background: {getGoalColor(goal)}20; border: 1px solid {getGoalColor(
+                      style="background: color-mix(in srgb, {getGoalColor(
+                        goal
+                      )} 12%, transparent); border: 1px solid {getGoalColor(
                         goal
                       )}; color: {getGoalColor(goal)};"
                       >{tags.find((t) => t.id === goal.tag_id)?.name}</span
@@ -1613,7 +1626,9 @@
                     <span class="config-badge">{task.date}</span>
                     <span
                       class="tag-chip"
-                      style="background: {getGoalColor(g)}20; border: 1px solid {getGoalColor(
+                      style="background: color-mix(in srgb, {getGoalColor(
+                        g
+                      )} 12%, transparent); border: 1px solid {getGoalColor(
                         g
                       )}; color: {getGoalColor(g)};"
                       >{TEMPORALITY_LABELS[g.temporality] || g.temporality}</span
@@ -1780,7 +1795,9 @@
                   <div class="goal-meta">
                     <span
                       class="tag-chip"
-                      style="background: {getGoalColor(goal)}20; border: 1px solid {getGoalColor(
+                      style="background: color-mix(in srgb, {getGoalColor(
+                        goal
+                      )} 12%, transparent); border: 1px solid {getGoalColor(
                         goal
                       )}; color: {getGoalColor(goal)};"
                       >{TEMPORALITY_LABELS[goal.temporality] || goal.temporality}</span
@@ -1906,7 +1923,9 @@
                       <div class="goal-meta">
                         <span
                           class="tag-chip"
-                          style="background: {getGoalColor(g)}20; border: 1px solid {getGoalColor(
+                          style="background: color-mix(in srgb, {getGoalColor(
+                            g
+                          )} 12%, transparent); border: 1px solid {getGoalColor(
                             g
                           )}; color: {getGoalColor(g)};"
                           >{TEMPORALITY_LABELS[g.temporality] || g.temporality}</span
@@ -2019,7 +2038,9 @@
                       <div class="goal-meta">
                         <span
                           class="tag-chip"
-                          style="background: {getGoalColor(g)}20; border: 1px solid {getGoalColor(
+                          style="background: color-mix(in srgb, {getGoalColor(
+                            g
+                          )} 12%, transparent); border: 1px solid {getGoalColor(
                             g
                           )}; color: {getGoalColor(g)};"
                           >{TEMPORALITY_LABELS[g.temporality] || g.temporality}</span

@@ -157,6 +157,14 @@
             class:active={i === highlight}
             onpointerdown={() => pick(note)}
             onclick={() => pick(note)}
+            onkeydown={(e) => {
+              // pointerdown covers the mouse; Enter/Space activate the option
+              // for keyboard users whose focus lands here via Tab (#1268).
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                pick(note);
+              }
+            }}
             onmouseenter={() => (highlight = i)}
           >
             {note.title}
@@ -174,6 +182,12 @@
             class:active={highlight >= results.length}
             onpointerdown={create}
             onclick={create}
+            onkeydown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                create();
+              }
+            }}
             onmouseenter={() => (highlight = results.length)}
           >
             <FilePlus2 size={14} />

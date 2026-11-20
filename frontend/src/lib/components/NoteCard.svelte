@@ -83,6 +83,10 @@
   aria-pressed={selected}
   onclick={() => (bulkMode ? dispatch('toggleSelect', note.id) : dispatch('select', note))}
   onkeydown={(e) =>
+    // Ignore keydowns bubbled from inner controls (checkbox, customize
+    // button) — they own their Enter/Space activation; preventDefault here
+    // would kill their native click (#1268).
+    e.target === e.currentTarget &&
     (e.key === 'Enter' || e.key === ' ') &&
     (e.preventDefault(), bulkMode ? dispatch('toggleSelect', note.id) : dispatch('select', note))}
 >
@@ -186,9 +190,12 @@
     cursor: pointer;
   }
 
+  /* Keep the button in the tab order (opacity, not display:none) and reveal
+     it on card hover, card focus-within or its own focus (#1268). */
   .note-settings-btn {
     flex-shrink: 0;
     display: flex;
+
     padding: 2px;
     background: transparent;
     border: none;

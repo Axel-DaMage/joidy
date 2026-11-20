@@ -110,7 +110,9 @@
     "planAcceptHint": "Clic para aceptar este horario",
     "editTitle": "Título de la tarea",
     "startTime": "Hora de inicio",
-    "endTime": "Hora de fin"
+    "endTime": "Hora de fin",
+    "loadError": "No se pudo cargar el calendario",
+    "loadErrorHint": "Comprueba tu conexión e inténtalo de nuevo."
   },
   "emails": {
     "title": "Correos",
@@ -198,7 +200,8 @@
     "saved": "Guardado",
     "tasks": "tareas",
     "level": "NVL",
-    "betaNotice": "Funcionalidad beta: algunas características están en desarrollo y pueden cambiar."
+    "betaNotice": "Funcionalidad beta: algunas características están en desarrollo y pueden cambiar.",
+    "retry": "Reintentar"
   },
   "status": {
     "offline": "Sin conexión",
@@ -882,7 +885,8 @@
     "unlockedCount": "{count} habilidades desbloqueadas",
     "topSkill": "mejor habilidad",
     "construction": "En Construcción",
-    "constructionHint": "Activa el Modo Desarrollo en Ajustes para acceder al Árbol de Habilidades."
+    "constructionHint": "Activa el Modo Desarrollo en Ajustes para acceder al Árbol de Habilidades.",
+    "loadError": "No se pudieron cargar las habilidades."
   },
   "layout": {
     "testNotification": "Click para notificación de prueba",
@@ -890,7 +894,8 @@
     "testNotifSuccess": "Notificación de prueba - Success",
     "testNotifLevel": "Notificación de prueba - Level up!",
     "currentStatus": "Estado actual",
-    "globalTimer": "Temporizador global"
+    "globalTimer": "Temporizador global",
+    "skipToContent": "Saltar al contenido principal"
   },
   "ai": {
     "title": "Inteligencia Artificial",

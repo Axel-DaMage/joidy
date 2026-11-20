@@ -39,8 +39,11 @@
     const searchLower = graphSearch.toLowerCase();
 
     let nodes = $graphData.nodes.filter((n: GraphNode) => {
-      if (n.type === 'tag') return true; // always keep tags
-      if (dateFilterEnabled && n.path && n.path < cutoffStr) return false;
+      if (n.type !== 'note') return true; // always keep tags/unresolved stubs
+      // Compare against the note's updated_at — the old `n.path < cutoffStr`
+      // check compared a vault path to an ISO date lexicographically, so the
+      // timeline slider never actually filtered anything (#1305).
+      if (dateFilterEnabled && (!n.updated_at || n.updated_at < cutoffStr)) return false;
       if (graphSearch) {
         const name = (n.title || n.name || '').toLowerCase();
         if (!name.includes(searchLower)) return false;
@@ -140,7 +143,7 @@
         {/if}
       </div>
     {:else if KnowledgeGraphForce}
-      <KnowledgeGraphForce width={w} height={h} focusId={$selectedTag} />
+      <KnowledgeGraphForce width={w} height={h} focusId={$selectedTag} data={filteredGraphData} />
     {:else}
       <div class="loading-state caption">{$t('graph.loading')}</div>
     {/if}

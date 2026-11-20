@@ -12,6 +12,15 @@ const BASE = browser
 
 let isHandlingLogout = false;
 
+// Reset the dead-session latch when a fresh session appears — otherwise a
+// post-relogin 401 would produce no logout/notification because the flag
+// stayed latched from the first expiry (#1305).
+if (browser) {
+  session.subscribe((s) => {
+    if (s) isHandlingLogout = false;
+  });
+}
+
 // In-flight request dedup: identical GET requests share the same promise so
 // multiple components asking for the same resource at once fire one fetch (#350).
 const inflight = new Map<string, Promise<unknown>>();
@@ -223,6 +232,7 @@ export interface GraphNode {
   note_count?: number;
   parent_id?: number | string | null;
   path?: string | null;
+  updated_at?: string | null;
   tags?: string[];
   group: string;
 }

@@ -110,7 +110,9 @@
     "planAcceptHint": "Click to accept this slot",
     "editTitle": "Task title",
     "startTime": "Start time",
-    "endTime": "End time"
+    "endTime": "End time",
+    "loadError": "Could not load the calendar",
+    "loadErrorHint": "Check your connection and try again."
   },
   "emails": {
     "title": "Mail",
@@ -198,7 +200,8 @@
     "saved": "Saved",
     "tasks": "tasks",
     "level": "LVL",
-    "betaNotice": "Beta feature: some functionality is in development and may change."
+    "betaNotice": "Beta feature: some functionality is in development and may change.",
+    "retry": "Retry"
   },
   "status": {
     "offline": "Offline",
@@ -882,7 +885,8 @@
     "unlockedCount": "{count} skills unlocked",
     "topSkill": "top skill",
     "construction": "Under Construction",
-    "constructionHint": "Enable Dev Mode in Settings to access the Skill Tree."
+    "constructionHint": "Enable Dev Mode in Settings to access the Skill Tree.",
+    "loadError": "Could not load skills."
   },
   "layout": {
     "testNotification": "Click for test notification",
@@ -890,7 +894,8 @@
     "testNotifSuccess": "Test notification - Success",
     "testNotifLevel": "Test notification - Level up!",
     "currentStatus": "Current status",
-    "globalTimer": "Global timer"
+    "globalTimer": "Global timer",
+    "skipToContent": "Skip to main content"
   },
   "ai": {
     "title": "Artificial Intelligence",

@@ -139,10 +139,7 @@
               class="folder-settings-btn"
               title={$t('notesPage.customizeFolder')}
               aria-label={$t('notesPage.customizeFolder')}
-              onclick={(e) => {
-                e.stopPropagation();
-                openFolderCustomizer(item);
-              }}
+              onclick={() => openFolderCustomizer(item)}
             >
               <Settings size={10} />
             </button>
@@ -174,15 +171,13 @@
               class="folder-settings-btn"
               title={$t('notesPage.customizeNote')}
               aria-label={$t('notesPage.customizeNote')}
-              onclick={(e) => {
-                e.stopPropagation();
+              onclick={() =>
                 openFolderCustomizer({
                   path: item.note?.source_path || item.path,
                   icon: item.icon,
                   color: item.color,
                   note: item.note,
-                });
-              }}
+                })}
             >
               <Settings size={10} />
             </button>
@@ -220,10 +215,7 @@
                 class="folder-settings-btn"
                 title={$t('notesPage.customizeFolder')}
                 aria-label={$t('notesPage.customizeFolder')}
-                onclick={(e) => {
-                  e.stopPropagation();
-                  openFolderCustomizer(node);
-                }}
+                onclick={() => openFolderCustomizer(node)}
               >
                 <Settings size={10} />
               </button>
@@ -255,15 +247,13 @@
                 class="folder-settings-btn"
                 title={$t('notesPage.customizeNote')}
                 aria-label={$t('notesPage.customizeNote')}
-                onclick={(e) => {
-                  e.stopPropagation();
+                onclick={() =>
                   openFolderCustomizer({
                     path: node.note?.source_path || node.path,
                     icon: node.icon,
                     color: node.color,
                     note: node.note,
-                  });
-                }}
+                  })}
               >
                 <Settings size={10} />
               </button>
@@ -344,7 +334,26 @@
     font-family: var(--font-mono);
   }
 
-  /* ── Tree rows ── */
+  /* ── Tree rows ──
+     .tree-item wraps each row + its settings button so the button is not
+     nested inside the role="button" row (invalid interactive-in-interactive)
+     and stays in the tab order (#1268). */
+  .tree-item {
+    display: flex;
+    align-items: center;
+    margin: 0 4px;
+    border-radius: 3px;
+    transition: background var(--t-fast);
+    min-width: 0;
+  }
+  .tree-item:hover,
+  .tree-item:focus-within {
+    background: var(--hover);
+  }
+  .tree-item:has(> .file-row.active) {
+    background: var(--elevated);
+  }
+
   .tree-row {
     display: flex;
     align-items: center;
@@ -353,16 +362,8 @@
     height: 26px;
     cursor: pointer;
     user-select: none;
-    border-radius: 3px;
-    margin: 0 4px;
-    transition: background var(--t-fast);
+    flex: 1;
     min-width: 0;
-  }
-  .tree-row:hover {
-    background: var(--hover);
-  }
-  .file-row.active {
-    background: var(--elevated);
   }
 
   .chevron {
@@ -409,20 +410,29 @@
     flex-shrink: 0;
   }
 
-  /* Folder settings button */
+  /* Folder/note settings button — hidden visually but kept in the tab order
+     (opacity, not display:none) and revealed on row hover, row focus-within
+     or its own focus (#1268). */
   .folder-settings-btn {
-    display: none;
+    display: flex;
+    align-items: center;
+    opacity: 0;
+    pointer-events: none;
     padding: 2px;
     background: transparent;
     border: none;
     color: var(--text-muted);
     cursor: pointer;
     border-radius: 3px;
-    margin-left: 4px;
+    margin: 0 8px 0 4px;
+    flex-shrink: 0;
+    transition: opacity var(--t-fast);
   }
-  .folder-row:hover .folder-settings-btn,
-  .file-row:hover .folder-settings-btn {
-    display: flex;
+  .tree-item:hover .folder-settings-btn,
+  .tree-item:focus-within .folder-settings-btn,
+  .folder-settings-btn:focus-visible {
+    opacity: 1;
+    pointer-events: auto;
   }
   .folder-settings-btn:hover {
     color: var(--accent);
