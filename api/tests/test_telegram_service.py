@@ -54,6 +54,12 @@ def _event(db_session: Session, update_id: int) -> TelegramEvent | None:
     )
 
 
+def _require_event(db_session: Session, update_id: int) -> TelegramEvent:
+    event = _event(db_session, update_id)
+    assert event is not None
+    return event
+
+
 def _notes_titled(db_session: Session, title: str) -> list[Note]:
     return db_session.query(Note).filter(Note.title == title).all()
 

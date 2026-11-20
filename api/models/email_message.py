@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from database import Base
+from encryption import EncryptedText
 from sqlalchemy import (
     JSON,
     Boolean,
@@ -32,7 +33,10 @@ class EmailMessage(Base):
     subject: Mapped[str | None] = mapped_column(Text, nullable=True)
     sender: Mapped[str | None] = mapped_column(String(320), nullable=True)
     snippet: Mapped[str | None] = mapped_column(Text, nullable=True)
-    body_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # body_text is encrypted at rest (#1329). subject/sender/snippet stay
+    # plaintext on purpose: the inbox `q` filter searches them with ILIKE,
+    # which cannot match non-deterministic ciphertext.
+    body_text: Mapped[str | None] = mapped_column(EncryptedText, nullable=True)
     received_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     unread: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     important: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

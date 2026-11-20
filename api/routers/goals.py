@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from typing import Literal
 
 from database import get_db
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
@@ -776,7 +777,9 @@ def delete_goal(goal_id: int, db: Session = Depends(get_db)):
 
 
 class ResolveRemoval(BaseModel):
-    action: str  # 'delete' | 'manual' | 'cancel'
+    # Whitelisted (#1332): an arbitrary string used to reach the service and
+    # silently clear pending_removal without applying any resolution.
+    action: Literal["delete", "manual", "cancel"]
 
 
 @router.post("/{goal_id}/resolve-removal")

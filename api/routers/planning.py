@@ -38,7 +38,7 @@ def _cached_assignments(date: str | None = None, db: Session = Depends(get_db)):
     return {"date": date, "goal_ids": [r.goal_id for r in rows]}
 
 
-register_cache_clearer(_cached_assignments.cache_clear)  # type: ignore[attr-defined]
+register_cache_clearer(_cached_assignments.cache_clear)
 
 
 def _mirror_new_assignments_to_tasks(db: Session, date_obj: date, new_goal_ids: list[int]) -> None:

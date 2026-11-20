@@ -35,6 +35,12 @@ def vault(tmp_path, monkeypatch):
     return vault_dir
 
 
+@pytest.fixture
+def vault_headers(worker_headers):
+    """Auth + trust headers the vault worker sends (#1332)."""
+    return {**worker_headers, "X-From-Vault": "1"}
+
+
 def _conflicted_note(db_session, source_path):
     note = Note(title="Conflicted", content="local content", source="obsidian", source_path=source_path)
     db_session.add(note)
@@ -394,7 +400,7 @@ def test_post_note_existing_claimed_file_dedups(client: TestClient, db_session, 
     assert target.read_text() == "v1"
 
 
-def test_post_note_from_vault_existing_file_accepted(client: TestClient, db_session, vault):
+def test_post_note_from_vault_existing_file_accepted(client: TestClient, db_session, vault, vault_headers):
     """The vault watcher imports files that already exist on disk — from_vault
     skips the ownership check (no write happens anyway)."""
     target = vault / "watcher.md"
@@ -406,9 +412,28 @@ def test_post_note_from_vault_existing_file_accepted(client: TestClient, db_sess
             "content": "from obsidian",
             "source_path": str(target),
         },
-        headers={"X-From-Vault": "1"},
+        headers=vault_headers,
     )
     assert resp.status_code == 201
+
+
+def test_x_from_vault_header_ignored_without_internal_token(client: TestClient, db_session, vault):
+    """#1332: a regular client may not claim vault provenance — the header is
+    ignored, so the request takes the normal write path and the existing
+    unclaimed file is protected."""
+    target = vault / "watcher.md"
+    target.write_text("precious")
+    resp = client.post(
+        "/notes/",
+        json={
+            "title": "watcher",
+            "content": "from obsidian",
+            "source_path": str(target),
+        },
+        headers={"X-From-Vault": "1"},
+    )
+    assert resp.status_code == 400
+    assert target.read_text() == "precious"
 
 
 def test_put_note_source_path_to_unclaimed_file_rejected(client: TestClient, db_session, vault):
@@ -459,14 +484,14 @@ def test_put_note_source_path_new_file_allowed(client: TestClient, db_session, v
     assert resp.status_code == 200
 
 
-def test_put_note_source_path_from_vault_rename_accepted(client: TestClient, db_session, vault):
+def test_put_note_source_path_from_vault_rename_accepted(client: TestClient, db_session, vault, vault_headers):
     """Worker rename flow: target exists on disk, unclaimed — allowed only
     because X-From-Vault means no write happens."""
     old = vault / "old.md"
     create = client.post(
         "/notes/",
         json={"title": "r", "content": "c", "source_path": str(old)},
-        headers={"X-From-Vault": "1"},
+        headers=vault_headers,
     )
     note_id = create.json()["id"]
     renamed = vault / "renamed.md"
@@ -475,7 +500,7 @@ def test_put_note_source_path_from_vault_rename_accepted(client: TestClient, db_
     resp = client.put(
         f"/notes/{note_id}",
         json={"source_path": str(renamed), "content": "renamed on disk"},
-        headers={"X-From-Vault": "1"},
+        headers=vault_headers,
     )
     assert resp.status_code == 200
 

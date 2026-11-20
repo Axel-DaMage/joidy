@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 import time
 from datetime import UTC, datetime, timedelta
 
@@ -33,10 +34,20 @@ async def _embeddings_available() -> bool:
     available = False
     try:
         async with http_client(timeout=3.0) as client:
-            r = await client.get(f"{settings.ai_service_url}/health")
+            headers = {}
+            if settings.internal_secret:
+                headers["X-Internal-Secret"] = settings.internal_secret
+            r = await client.get(f"{settings.ai_service_url}/health", headers=headers)
             if r.status_code == 200:
                 body = r.json()
-                available = bool((body.get("provider") or {}).get("embedding", {}).get("available"))
+                # Since #1291 the provider inventory is only returned to
+                # internal callers; ``embedding_available`` is the minimal
+                # public signal. The provider path stays for compatibility
+                # with older ai-service versions.
+                available = bool(
+                    body.get("embedding_available")
+                    or (body.get("provider") or {}).get("embedding", {}).get("available")
+                )
     except Exception:
         logger.warning("[embedding] ai-service health check failed, assuming unavailable", exc_info=True)
     _embedding_health_cache = (available, now)
@@ -146,6 +157,22 @@ def get_retryable_embedding_notes(db: Session, limit: int = 20) -> list[Note]:
     return notes
 
 
+_URL_RE = re.compile(r"https?://\S+")
+_PATH_RE = re.compile(r"(?<![\w.])(?:/[\w.\-]+){2,}/?")
+
+
+def _redact_error(text: str) -> str:
+    """Strip URLs and absolute paths from a stored exception string.
+
+    The full detail stays in the ``embedding_failures`` row and the logs,
+    but the value is reflected back through the API — raw ``str(exc)``
+    (e.g. an httpx error) can embed internal hosts or file paths and act
+    as an existence oracle (#1332).
+    """
+    text = _URL_RE.sub("<url>", text)
+    return _PATH_RE.sub("<path>", text)
+
+
 def get_dead_letter_entries(db: Session, limit: int = 50) -> list[dict]:
     """Get embedding failures that exceeded max retry attempts (dead letter queue)."""
     max_attempts = settings.embedding_retry_max_attempts
@@ -160,7 +187,7 @@ def get_dead_letter_entries(db: Session, limit: int = 50) -> list[dict]:
         {
             "note_id": f.note_id,
             "attempts": f.attempts,
-            "last_error": f.last_error[:500],
+            "last_error": _redact_error(f.last_error or "")[:500],
             "updated_at": f.updated_at.isoformat() if f.updated_at else None,
         }
         for f in failures

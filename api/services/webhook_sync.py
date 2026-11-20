@@ -124,9 +124,10 @@ def process_webhook_event(
     # Confinement (#1314): the supplied path becomes a note's source_path —
     # it must resolve inside the effective vault root, be a ``.md`` file, and
     # stay clear of hidden dirs (``.obsidian`` …) and ``_joidy/``.
-    path = normalize_source_path(path)
-    if path is None or resolve_confined_source_path(path) is None:
+    normalized = normalize_source_path(path)
+    if normalized is None or resolve_confined_source_path(normalized) is None:
         raise ValueError("Invalid path")
+    path = normalized
 
     remote_mtime = to_utc_naive(datetime.fromtimestamp(mtime, tz=UTC)) if mtime else None
 

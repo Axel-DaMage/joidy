@@ -5,12 +5,16 @@ Receives external change notifications from Obsidian (or compatible
 markdown editors) and synchronizes them with the database.
 
 Authentication:
-    If ``OBSIDIAN_WEBHOOK_SECRET`` is configured, requests must include
-    a matching ``secret`` query parameter. When no secret is configured,
-    the endpoint falls back to JWT auth so it is never left wide open.
+    If ``OBSIDIAN_WEBHOOK_SECRET`` is configured, requests must carry a
+    matching ``X-Webhook-Secret`` header. The legacy ``?secret=`` query
+    parameter still works for backward compatibility but is deprecated —
+    it leaks via access/proxy logs — and logs a warning when used (#1288).
+    When no secret is configured, the endpoint falls back to JWT auth so
+    it is never left wide open.
 
 Webhook payload format:
-    POST /webhook/obsidian?secret=<secret>
+    POST /webhook/obsidian
+    X-Webhook-Secret: <secret>
     {
         "event": "create" | "update" | "delete",
         "path": "/vault/note.md",
@@ -19,6 +23,7 @@ Webhook payload format:
     }
 """
 
+import hmac
 import logging
 from datetime import UTC, datetime
 
@@ -26,7 +31,7 @@ from config import settings
 from database import get_db
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, field_validator
-from services.auth_service import _effective_auth_password, get_current_user_id
+from services.auth_service import _connection_host, _effective_auth_password, _is_loopback, get_current_user_id
 from services.sync_service import to_utc_naive
 from services.webhook_sync import process_webhook_event
 from sqlalchemy.orm import Session
@@ -56,20 +61,35 @@ class ObsidianWebhookIn(BaseModel):
 def _verify_access(request: Request, secret: str, db: Session) -> None:
     """Verify webhook access via shared secret or JWT fallback.
 
-    If ``OBSIDIAN_WEBHOOK_SECRET`` is configured, requests must include
-    a matching ``secret`` query parameter. When no secret is configured,
-    the endpoint falls back to JWT auth so it is never left wide open
-    in production. In development (no ``AUTH_PASSWORD``), the webhook
-    is accessible without auth for convenience.
+    If ``OBSIDIAN_WEBHOOK_SECRET`` is configured, the request must carry a
+    matching ``X-Webhook-Secret`` header (preferred) or ``?secret=`` query
+    param (deprecated, kept for backward compatibility). The comparison
+    uses ``hmac.compare_digest`` to avoid timing oracles (#1288).
+
+    When no secret is configured the endpoint falls back to JWT auth so it
+    is never left wide open. In development without ``AUTH_PASSWORD`` the
+    unauthenticated path applies to loopback clients only (#1282).
     """
+    provided = request.headers.get("X-Webhook-Secret")
+    if not provided:
+        # An absent (or empty) header falls back to the deprecated ?secret=
+        # query param for backward compatibility (#1288).
+        if secret:
+            logger.warning(
+                "[webhook] secret sent via ?secret= query param — deprecated, "
+                "use the X-Webhook-Secret header instead (#1288)"
+            )
+        provided = secret
+
     if settings.obsidian_webhook_secret:
-        if secret != settings.obsidian_webhook_secret:
+        if not hmac.compare_digest(provided, settings.obsidian_webhook_secret):
             raise HTTPException(status_code=401, detail="Invalid webhook secret")
         return
 
-    # No webhook secret configured — fall back to JWT auth in production
-    if not _effective_auth_password():
-        return  # dev mode: no auth configured, allow access
+    # No webhook secret configured — fall back to JWT auth. In development
+    # without AUTH_PASSWORD the bypass applies to loopback clients only.
+    if not _effective_auth_password() and _is_loopback(_connection_host(request)):
+        return
 
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):

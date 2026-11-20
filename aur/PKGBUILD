@@ -7,7 +7,7 @@ pkgrel=1
 pkgdesc="Personal knowledge management with gamification"
 arch=('any')
 url="https://joidy-web.vercel.app"
-license=('GPL3')
+license=('GPL-3.0-or-later')
 depends=('docker')
 install=joidy.install
 source=("https://github.com/Axel-DaMage/joidy/archive/v${_tag}.tar.gz"
@@ -22,6 +22,7 @@ package() {
   # POWER_MANAGEMENT_ENABLED=true.
   install -Dm644 docker-compose.power.yml "${pkgdir}/usr/share/joidy/docker-compose.power.yml"
   install -Dm644 .env.example "${pkgdir}/usr/share/joidy/.env.example"
+  install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
   # Backup sidecar scripts — docker-compose.yml bind-mounts ./scripts read-only
   # into the `backup` service.
   install -Dm755 scripts/db_backup.sh "${pkgdir}/usr/share/joidy/scripts/db_backup.sh"

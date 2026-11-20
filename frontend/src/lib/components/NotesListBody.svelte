@@ -343,12 +343,12 @@
     gap: 5px;
     padding-right: 8px;
     height: 26px;
+    margin: 0 4px;
+    border-radius: 3px;
     cursor: pointer;
     user-select: none;
     flex: 1;
     min-width: 0;
-    margin: 0 4px;
-    border-radius: 3px;
     transition: background var(--t-fast);
   }
   .tree-row:hover,
