@@ -359,6 +359,47 @@ export interface CalendarEvent {
   html_link: string | null;
 }
 
+export type CalendarTaskPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+
+export interface CalendarTask {
+  id: number;
+  title: string;
+  date: string;
+  start_time: string | null;
+  end_time: string | null;
+  priority: CalendarTaskPriority;
+  done: boolean;
+  done_at: string | null;
+  goal_id: number | null;
+  source: 'JOIDY' | 'GOOGLE';
+  google_event_id: string | null;
+  color: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CalendarTaskCreateInput {
+  title: string;
+  date: string;
+  start_time?: string | null;
+  end_time?: string | null;
+  priority?: CalendarTaskPriority;
+  goal_id?: number | null;
+  color?: string | null;
+}
+
+export interface CalendarTaskUpdateInput {
+  title?: string;
+  date?: string;
+  start_time?: string | null;
+  end_time?: string | null;
+  priority?: CalendarTaskPriority;
+  done?: boolean;
+  goal_id?: number | null;
+  color?: string | null;
+  google_event_id?: string | null;
+}
+
 export interface EmailInbox {
   items: EmailSummary[];
   total: number;
@@ -800,6 +841,60 @@ export const api = {
         `/integrations/google/calendar/events${suffix}`
       );
     },
+    calendarCreateEvent: (input: {
+      summary: string;
+      start: { dateTime?: string; date?: string };
+      end: { dateTime?: string; date?: string };
+      description?: string;
+      calendar_id?: string;
+    }) =>
+      req<{ google_id: string; calendar_id: string; summary: string | null }>(
+        'POST',
+        '/integrations/google/calendar/events',
+        input
+      ),
+    calendarUpdateEvent: (
+      googleEventId: string,
+      patch: {
+        summary?: string;
+        start?: { dateTime?: string; date?: string };
+        end?: { dateTime?: string; date?: string };
+        description?: string;
+      },
+      calendarId?: string
+    ) => {
+      const qs = calendarId ? `?calendar_id=${encodeURIComponent(calendarId)}` : '';
+      return req<{ google_id: string; summary: string | null }>(
+        'PATCH',
+        `/integrations/google/calendar/events/${encodeURIComponent(googleEventId)}${qs}`,
+        patch
+      );
+    },
+    calendarDeleteEvent: (googleEventId: string, calendarId?: string) => {
+      const qs = calendarId ? `?calendar_id=${encodeURIComponent(calendarId)}` : '';
+      return req<{ status: string }>(
+        'DELETE',
+        `/integrations/google/calendar/events/${encodeURIComponent(googleEventId)}${qs}`
+      );
+    },
+  },
+
+  calendarTasks: {
+    list: (params?: { start?: string; end?: string; date?: string }) => {
+      const qs = new URLSearchParams();
+      if (params?.start) qs.set('start', params.start);
+      if (params?.end) qs.set('end', params.end);
+      if (params?.date) qs.set('date', params.date);
+      const suffix = qs.toString() ? `?${qs.toString()}` : '';
+      return req<CalendarTask[]>('GET', `/calendar/tasks${suffix}`);
+    },
+    create: (input: CalendarTaskCreateInput) =>
+      req<CalendarTask>('POST', '/calendar/tasks', input),
+    update: (id: number, input: CalendarTaskUpdateInput) =>
+      req<CalendarTask>('PATCH', `/calendar/tasks/${id}`, input),
+    remove: (id: number) => req<void>('DELETE', `/calendar/tasks/${id}`),
+    toggleDone: (id: number) =>
+      req<CalendarTask>('POST', `/calendar/tasks/${id}/done`),
   },
 
   config: {

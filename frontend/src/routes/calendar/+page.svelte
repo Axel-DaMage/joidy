@@ -1,9 +1,21 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { api, type CalendarEvent } from '$lib/api';
+  import { api, type CalendarEvent, type CalendarTask, type CalendarTaskPriority } from '$lib/api';
   import { logger } from '$lib/utils/logger';
   import { showNotification } from '$lib/stores/notifications';
-  import { ChevronLeft, ChevronRight, CalendarDays, RefreshCw, Settings } from 'lucide-svelte';
+  import {
+    ChevronLeft,
+    ChevronRight,
+    CalendarDays,
+    RefreshCw,
+    Settings,
+    Lock,
+    Plus,
+    Trash2,
+    Pencil,
+    X,
+    Check,
+  } from 'lucide-svelte';
   import EmptyState from '$lib/components/EmptyState.svelte';
   import { t } from 'svelte-i18n';
 
@@ -14,14 +26,47 @@
     last_synced_at: string | null;
   }
 
+  type DayItem =
+    | { kind: 'google'; time: string | null; label: string; location?: string | null; allDay: boolean }
+    | { kind: 'task'; time: string | null; label: string; task: CalendarTask };
+
+  const PRIORITIES: CalendarTaskPriority[] = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
+
   let events: CalendarEvent[] = $state([]);
+  let tasks: CalendarTask[] = $state([]);
   let status: CalendarStatus | null = $state(null);
   let loading = $state(true);
   let syncing = $state(false);
 
+  type CalendarView = 'month' | 'week' | 'agenda';
+  let currentView = $state<CalendarView>(
+    (typeof localStorage !== 'undefined' && (localStorage.getItem('joidy-calendar-view') as CalendarView)) || 'month'
+  );
+  let weekOffset = $state(0);
+
+  function setView(view: CalendarView): void {
+    currentView = view;
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('joidy-calendar-view', view);
+    }
+  }
+
   let viewYear = $state(new Date().getFullYear());
   let viewMonth = $state(new Date().getMonth()); // 0-based
   let selectedDay = $state<string | null>(null);
+
+  // Quick-add state
+  let quickAddTitle = $state('');
+  let quickAddTime = $state('');
+  let quickAddPriority = $state<CalendarTaskPriority>('MEDIUM');
+  let publishToGoogle = $state(false);
+  let addingTask = $state(false);
+
+  // Inline edit state
+  let editingTaskId = $state<number | null>(null);
+  let editTitle = $state('');
+  let editTime = $state('');
+  let editEndTime = $state('');
 
   const dtFormatter = new Intl.DateTimeFormat(undefined, {
     hour: '2-digit',
@@ -31,6 +76,10 @@
   function eventDay(event: CalendarEvent): string {
     const d = new Date(event.start_at);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  function taskDay(task: CalendarTask): string {
+    return task.date;
   }
 
   const todayKey = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`;
@@ -65,30 +114,131 @@
     return byDay;
   });
 
-  let selectedDayEvents = $derived(selectedDay ? (monthEvents.get(selectedDay) ?? []) : []);
+  let monthTasks = $derived.by(() => {
+    const byDay = new Map<string, CalendarTask[]>();
+    for (const task of tasks) {
+      const key = taskDay(task);
+      if (!byDay.has(key)) byDay.set(key, []);
+      byDay.get(key)!.push(task);
+    }
+    for (const list of byDay.values()) {
+      list.sort((a, b) => {
+        const at = a.start_time ?? '99';
+        const bt = b.start_time ?? '99';
+        if (at !== bt) return at.localeCompare(bt);
+        return a.id - b.id;
+      });
+    }
+    return byDay;
+  });
 
-  function prevMonth(): void {
-    if (viewMonth === 0) {
-      viewYear -= 1;
-      viewMonth = 11;
+  let monthItems = $derived.by(() => {
+    const byDay = new Map<string, DayItem[]>();
+    for (const [key, evts] of monthEvents) {
+      byDay.set(
+        key,
+        evts.map((ev) => ({
+          kind: 'google' as const,
+          time: ev.all_day ? null : dtFormatter.format(new Date(ev.start_at)),
+          label: ev.summary || '—',
+          location: ev.location,
+          allDay: ev.all_day,
+        }))
+      );
+    }
+    for (const [key, dayTasks] of monthTasks) {
+      const list = byDay.get(key) ?? [];
+      for (const task of dayTasks) {
+        list.push({
+          kind: 'task' as const,
+          time: task.start_time ? task.start_time.slice(0, 5) : null,
+          label: task.title,
+          task,
+        });
+      }
+      byDay.set(key, list);
+    }
+    for (const list of byDay.values()) {
+      list.sort((a, b) => (a.time ?? '99:99').localeCompare(b.time ?? '99:99'));
+    }
+    return byDay;
+  });
+
+  let selectedDayItems = $derived(selectedDay ? (monthItems.get(selectedDay) ?? []) : []);
+
+  // Week view: 7 days based on current weekOffset
+  let weekDays = $derived.by(() => {
+    const today = new Date();
+    const dayOfWeek = (today.getDay() + 6) % 7; // Monday = 0
+    const monday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - dayOfWeek + weekOffset * 7);
+    const days: { day: number; key: string; weekdayIndex: number; monthName: string }[] = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      days.push({
+        day: d.getDate(),
+        key,
+        weekdayIndex: i,
+        monthName: $t(`calendar.months.${d.getMonth()}`),
+      });
+    }
+    return days;
+  });
+
+  let weekLabel = $derived.by(() => {
+    if (weekDays.length === 0) return '';
+    const first = weekDays[0];
+    const last = weekDays[6];
+    if (first.monthName === last.monthName) {
+      return `${first.day} - ${last.day} ${first.monthName} ${viewYear}`;
+    }
+    return `${first.day} ${first.monthName} - ${last.day} ${last.monthName} ${viewYear}`;
+  });
+
+  // Agenda view: Next 14 days starting from today (or selectedDay if set)
+  let agendaDays = $derived.by(() => {
+    const start = new Date();
+    const days: { date: Date; key: string; items: DayItem[] }[] = [];
+    for (let i = 0; i < 14; i++) {
+      const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const items = monthItems.get(key) ?? [];
+      days.push({ date: d, key, items });
+    }
+    return days;
+  });
+
+  function prevRange(): void {
+    if (currentView === 'week') {
+      weekOffset -= 1;
     } else {
-      viewMonth -= 1;
+      if (viewMonth === 0) {
+        viewYear -= 1;
+        viewMonth = 11;
+      } else {
+        viewMonth -= 1;
+      }
     }
   }
 
-  function nextMonth(): void {
-    if (viewMonth === 11) {
-      viewYear += 1;
-      viewMonth = 0;
+  function nextRange(): void {
+    if (currentView === 'week') {
+      weekOffset += 1;
     } else {
-      viewMonth += 1;
+      if (viewMonth === 11) {
+        viewYear += 1;
+        viewMonth = 0;
+      } else {
+        viewMonth += 1;
+      }
     }
   }
 
   function goToday(): void {
     viewYear = new Date().getFullYear();
     viewMonth = new Date().getMonth();
-    selectedDay = null;
+    weekOffset = 0;
+    selectedDay = todayKey;
   }
 
   function eventTime(ev: CalendarEvent): string {
@@ -98,12 +248,14 @@
 
   async function refresh(): Promise<void> {
     try {
-      const [evts, st] = await Promise.all([
+      const [evts, st, tks] = await Promise.all([
         api.google.calendarEvents(),
         api.google.calendarStatus(),
+        api.calendarTasks.list(),
       ]);
       events = evts;
       status = st;
+      tasks = tks;
     } catch (e) {
       logger.error(e);
     } finally {
@@ -111,17 +263,231 @@
     }
   }
 
-  async function sync(): Promise<void> {
+  // Auto-sync staleness threshold: sync on page entry if the last sync is
+  // older than this (or never happened).
+  const AUTO_SYNC_STALE_MS = 15 * 60 * 1000;
+
+  async function sync(silent = false): Promise<void> {
     syncing = true;
     try {
       await api.google.calendarSync();
-      showNotification($t('calendar.syncOk'), 'success');
+      if (!silent) showNotification($t('calendar.syncOk'), 'success');
       await refresh();
     } catch (e) {
       logger.error(e);
+      if (!silent) showNotification($t('calendar.syncError'), 'error');
     } finally {
       syncing = false;
     }
+  }
+
+  async function maybeAutoSync(): Promise<void> {
+    if (!status?.connected) return;
+    const last = status.last_synced_at ? new Date(status.last_synced_at).getTime() : 0;
+    if (Date.now() - last > AUTO_SYNC_STALE_MS) {
+      await sync(true);
+    }
+  }
+
+  async function addTask(): Promise<void> {
+    const title = quickAddTitle.trim();
+    if (!title || !selectedDay) return;
+    addingTask = true;
+    try {
+      const task = await api.calendarTasks.create({
+        title,
+        date: selectedDay,
+        start_time: quickAddTime ? `${quickAddTime}:00` : null,
+        priority: quickAddPriority,
+      });
+      if (publishToGoogle && status?.connected) {
+        try {
+          const start = quickAddTime
+            ? `${selectedDay}T${quickAddTime}:00`
+            : selectedDay;
+          const end = quickAddTime
+            ? `${selectedDay}T${addHour(quickAddTime)}:00`
+            : selectedDay;
+          const created = await api.google.calendarCreateEvent({
+            summary: title,
+            start: quickAddTime ? { dateTime: start } : { date: start },
+            end: quickAddTime ? { dateTime: end } : { date: end },
+          });
+          const mirrored = await api.calendarTasks.update(task.id, {
+            google_event_id: created.google_id,
+          });
+          tasks = [...tasks, mirrored];
+          await refresh();
+        } catch (e) {
+          logger.warn('Google publish failed', e);
+          showNotification($t('calendar.googlePublishError'), 'error');
+          tasks = [...tasks, task];
+        }
+      } else {
+        tasks = [...tasks, task];
+      }
+      quickAddTitle = '';
+      quickAddTime = '';
+      quickAddPriority = 'MEDIUM';
+    } catch (e) {
+      logger.error(e);
+      showNotification($t('calendar.taskAddError'), 'error');
+    } finally {
+      addingTask = false;
+    }
+  }
+
+  function addHour(hhmm: string): string {
+    const [h, m] = hhmm.split(':').map(Number);
+    const nh = (h + 1) % 24;
+    return `${String(nh).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  }
+
+  function cyclePriority(task: CalendarTask): void {
+    const idx = PRIORITIES.indexOf(task.priority);
+    const next = PRIORITIES[(idx + 1) % PRIORITIES.length];
+    updateTask(task, { priority: next });
+  }
+
+  async function updateTask(task: CalendarTask, patch: Partial<CalendarTask>): Promise<void> {
+    try {
+      const updated = await api.calendarTasks.update(task.id, patch);
+      tasks = tasks.map((t) => (t.id === updated.id ? updated : t));
+    } catch (e) {
+      logger.error(e);
+      showNotification($t('calendar.taskUpdateError'), 'error');
+    }
+  }
+
+  async function toggleDone(task: CalendarTask): Promise<void> {
+    try {
+      const updated = await api.calendarTasks.toggleDone(task.id);
+      tasks = tasks.map((t) => (t.id === updated.id ? updated : t));
+    } catch (e) {
+      logger.error(e);
+      showNotification($t('calendar.taskUpdateError'), 'error');
+    }
+  }
+
+  async function removeTask(task: CalendarTask): Promise<void> {
+    try {
+      if (task.google_event_id && status?.connected) {
+        try {
+          await api.google.calendarDeleteEvent(task.google_event_id);
+        } catch (e) {
+          logger.warn('Google delete failed', e);
+          showNotification($t('calendar.googlePublishError'), 'error');
+        }
+      }
+      await api.calendarTasks.remove(task.id);
+      tasks = tasks.filter((t) => t.id !== task.id);
+    } catch (e) {
+      logger.error(e);
+      showNotification($t('calendar.taskDeleteError'), 'error');
+    }
+  }
+
+  function startEdit(task: CalendarTask): void {
+    editingTaskId = task.id;
+    editTitle = task.title;
+    editTime = task.start_time ? task.start_time.slice(0, 5) : '';
+    editEndTime = task.end_time ? task.end_time.slice(0, 5) : '';
+  }
+
+  async function saveEdit(task: CalendarTask): Promise<void> {
+    const title = editTitle.trim();
+    if (!title) return;
+    await updateTask(task, {
+      title,
+      start_time: editTime ? `${editTime}:00` : null,
+      end_time: editEndTime ? `${editEndTime}:00` : null,
+    });
+    if (task.google_event_id && status?.connected) {
+      try {
+        const day = task.date;
+        const start = editTime ? `${day}T${editTime}:00` : day;
+        const end = editEndTime
+          ? `${day}T${editEndTime}:00`
+          : editTime
+            ? `${day}T${addHour(editTime)}:00`
+            : day;
+        await api.google.calendarUpdateEvent(task.google_event_id, {
+          summary: title,
+          start: editTime ? { dateTime: start } : { date: start },
+          end: editTime ? { dateTime: end } : { date: end },
+        });
+        await refresh();
+      } catch (e) {
+        logger.warn('Google update failed', e);
+        showNotification($t('calendar.googlePublishError'), 'error');
+      }
+    }
+    editingTaskId = null;
+  }
+
+  // ── Drag & drop between days (#1236) ──────────────────────────────────────
+  let draggedTask = $state<CalendarTask | null>(null);
+  let dropTargetKey = $state<string | null>(null);
+
+  function onChipDragStart(event: DragEvent, task: CalendarTask): void {
+    draggedTask = task;
+    event.dataTransfer?.setData('text/plain', String(task.id));
+    if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+  }
+
+  function onChipDragEnd(): void {
+    draggedTask = null;
+    dropTargetKey = null;
+  }
+
+  function onCellDragOver(event: DragEvent, cellKey: string): void {
+    if (!draggedTask) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+    dropTargetKey = cellKey;
+  }
+
+  function onCellDragLeave(cellKey: string): void {
+    if (dropTargetKey === cellKey) dropTargetKey = null;
+  }
+
+  function onCellDrop(event: DragEvent, cellKey: string): void {
+    event.preventDefault();
+    dropTargetKey = null;
+    const task = draggedTask;
+    draggedTask = null;
+    if (!task || task.date === cellKey) return;
+    rescheduleTask(task, cellKey);
+  }
+
+  async function rescheduleTask(task: CalendarTask, newDate: string): Promise<void> {
+    const previousDate = task.date;
+    // Optimistic update
+    tasks = tasks.map((t) => (t.id === task.id ? { ...t, date: newDate } : t));
+    try {
+      const updated = await api.calendarTasks.update(task.id, { date: newDate });
+      tasks = tasks.map((t) => (t.id === updated.id ? updated : t));
+      showNotification($t('calendar.taskRescheduled'), 'success');
+    } catch (e) {
+      logger.error(e);
+      // Rollback
+      tasks = tasks.map((t) => (t.id === task.id ? { ...t, date: previousDate } : t));
+      showNotification($t('calendar.taskUpdateError'), 'error');
+    }
+  }
+
+  async function undoReschedule(task: CalendarTask, previousDate: string): Promise<void> {
+    try {
+      const updated = await api.calendarTasks.update(task.id, { date: previousDate });
+      tasks = tasks.map((t) => (t.id === updated.id ? updated : t));
+    } catch (e) {
+      logger.error(e);
+      showNotification($t('calendar.taskUpdateError'), 'error');
+    }
+  }
+
+  function priorityClass(priority: CalendarTaskPriority): string {
+    return `prio prio-${priority.toLowerCase()}`;
   }
 
   function openSettings(): void {
@@ -130,6 +496,7 @@
 
   onMount(async () => {
     await refresh();
+    await maybeAutoSync();
   });
 </script>
 
@@ -154,7 +521,7 @@
       </span>
     </div>
     <div class="calendar-actions">
-      <button class="btn btn-ghost" onclick={sync} disabled={syncing || !status?.connected}>
+      <button class="btn btn-ghost" onclick={() => sync()} disabled={syncing || !status?.connected}>
         <span class={syncing ? 'spin' : ''}><RefreshCw size={13} /></span>
         {syncing ? $t('calendar.syncing') : $t('calendar.sync')}
       </button>
@@ -170,77 +537,298 @@
       </EmptyState>
     </div>
   {:else}
-    <div class="calendar-card">
-      <div class="calendar-toolbar">
-        <button class="btn btn-ghost nav-btn" onclick={prevMonth} aria-label={$t('calendar.prevMonth')}>
-          <ChevronLeft size={16} />
-        </button>
-        <span class="month-label">
-          {$t(`calendar.months.${viewMonth}`)} {viewYear}
-        </span>
-        <button class="btn btn-ghost nav-btn" onclick={goToday}>{$t('calendar.today')}</button>
-        <button class="btn btn-ghost nav-btn" onclick={nextMonth} aria-label={$t('calendar.nextMonth')}>
-          <ChevronRight size={16} />
-        </button>
-      </div>
+    <div class="calendar-body">
+      <div class="calendar-card">
+        <div class="calendar-toolbar">
+          <div class="view-switcher">
+            <button
+              class="btn btn-ghost view-btn"
+              class:active={currentView === 'month'}
+              onclick={() => setView('month')}
+            >{$t('calendar.views.month')}</button>
+            <button
+              class="btn btn-ghost view-btn"
+              class:active={currentView === 'week'}
+              onclick={() => setView('week')}
+            >{$t('calendar.views.week')}</button>
+            <button
+              class="btn btn-ghost view-btn"
+              class:active={currentView === 'agenda'}
+              onclick={() => setView('agenda')}
+            >{$t('calendar.views.agenda')}</button>
+          </div>
 
-      <div class="weekday-row">
-        {#each Array(7) as _, i}
-          <span class="weekday caption">{$t(`calendar.weekDays.${i}`)}</span>
-        {/each}
-      </div>
+          {#if currentView !== 'agenda'}
+            <button class="btn btn-ghost nav-btn" onclick={prevRange} aria-label={currentView === 'week' ? $t('calendar.prevWeek') : $t('calendar.prevMonth')}>
+              <ChevronLeft size={16} />
+            </button>
+          {/if}
 
-      <div class="day-grid">
-        {#each gridCells as cell (cell.key)}
-          <button
-            class="day-cell"
-            class:out={!cell.inMonth}
-            class:today={cell.key === todayKey}
-            class:selected={selectedDay === cell.key}
-            class:has-events={(monthEvents.get(cell.key) ?? []).length > 0}
-            onclick={() => (selectedDay = selectedDay === cell.key ? null : cell.key)}
-          >
-            <span class="day-num">{cell.day}</span>
-            {#if (monthEvents.get(cell.key) ?? []).length > 0}
-              <span class="event-dot"></span>
+          <span class="month-label">
+            {#if currentView === 'month'}
+              {$t(`calendar.months.${viewMonth}`)} {viewYear}
+            {:else if currentView === 'week'}
+              {weekLabel}
+            {:else}
+              {$t('calendar.views.agenda')} (14 {$t('calendar.today').toLowerCase() == 'hoy' ? 'días' : 'days'})
             {/if}
-          </button>
-        {/each}
-      </div>
-    </div>
+          </span>
 
-    {#if selectedDay}
-      <div class="day-detail">
-        <h4>
-          {new Date(`${selectedDay}T12:00:00`).toLocaleDateString(undefined, {
-            weekday: 'long',
-            day: 'numeric',
-            month: 'long',
-          })}
-        </h4>
-        {#if selectedDayEvents.length === 0}
-          <span class="caption">{$t('calendar.noEventsDay')}</span>
-        {:else}
-          <div class="event-list">
-            {#each selectedDayEvents as ev (ev.google_id)}
-              <div class="event-item">
-                <span class="event-time caption">{eventTime(ev)}</span>
-                <span class="event-summary">{ev.summary || '—'}</span>
-                {#if ev.location}
-                  <span class="event-location caption">{ev.location}</span>
-                {/if}
+          <button class="btn btn-ghost nav-btn" onclick={goToday}>{$t('calendar.today')}</button>
+
+          {#if currentView !== 'agenda'}
+            <button class="btn btn-ghost nav-btn" onclick={nextRange} aria-label={currentView === 'week' ? $t('calendar.nextWeek') : $t('calendar.nextMonth')}>
+              <ChevronRight size={16} />
+            </button>
+          {/if}
+        </div>
+
+        {#if currentView === 'month'}
+          <div class="weekday-row">
+            {#each Array(7) as _, i}
+              <span class="weekday caption">{$t(`calendar.weekDays.${i}`)}</span>
+            {/each}
+          </div>
+
+          <div class="day-grid">
+            {#each gridCells as cell (cell.key)}
+              {@const items = monthItems.get(cell.key) ?? []}
+              <button
+                class="day-cell"
+                class:out={!cell.inMonth}
+                class:today={cell.key === todayKey}
+                class:selected={selectedDay === cell.key}
+                class:drop-target={dropTargetKey === cell.key}
+                draggable={items.some((i) => i.kind === 'task')}
+                ondragover={(e) => onCellDragOver(e, cell.key)}
+                ondragleave={() => onCellDragLeave(cell.key)}
+                ondrop={(e) => onCellDrop(e, cell.key)}
+                onclick={() => (selectedDay = selectedDay === cell.key ? null : cell.key)}
+              >
+                <span class="day-num">{cell.day}</span>
+                <span class="cell-items">
+                  {#each items.slice(0, 2) as item}
+                    {#if item.kind === 'google'}
+                      <span class="chip chip-google"><Lock size={8} />{item.label}</span>
+                    {:else}
+                      <span
+                        class="chip {priorityClass(item.task.priority)}"
+                        class:done={item.task.done}
+                        class:dragging={draggedTask?.id === item.task.id}
+                        role="button"
+                        tabindex="-1"
+                        draggable="true"
+                        ondragstart={(e) => onChipDragStart(e, item.task)}
+                        ondragend={onChipDragEnd}
+                      >{item.label}</span>
+                    {/if}
+                  {/each}
+                  {#if items.length > 2}
+                    <span class="chip chip-more">+{items.length - 2}</span>
+                  {/if}
+                </span>
+              </button>
+            {/each}
+          </div>
+        {:else if currentView === 'week'}
+          <div class="weekday-row">
+            {#each weekDays as day}
+              <span class="weekday caption" class:bold={day.key === todayKey}>
+                {$t(`calendar.weekDays.${day.weekdayIndex}`)} {day.day}
+              </span>
+            {/each}
+          </div>
+
+          <div class="week-grid">
+            {#each weekDays as day (day.key)}
+              {@const items = monthItems.get(day.key) ?? []}
+              <div
+                class="week-col"
+                class:today={day.key === todayKey}
+                class:selected={selectedDay === day.key}
+                class:drop-target={dropTargetKey === day.key}
+                role="region"
+                aria-label="{day.key}"
+                ondragover={(e) => onCellDragOver(e, day.key)}
+                ondragleave={() => onCellDragLeave(day.key)}
+                ondrop={(e) => onCellDrop(e, day.key)}
+              >
+                <button
+                  class="week-col-header"
+                  onclick={() => (selectedDay = selectedDay === day.key ? null : day.key)}
+                >
+                  <span class="day-num">{day.day}</span>
+                  <span class="caption">{items.length}</span>
+                </button>
+                <div class="week-col-items">
+                  {#each items as item}
+                    {#if item.kind === 'google'}
+                      <div class="chip chip-google">
+                        <Lock size={8} />
+                        <span class="chip-time">{item.time || ''}</span>
+                        <span class="chip-label">{item.label}</span>
+                      </div>
+                    {:else}
+                      <div
+                        class="chip {priorityClass(item.task.priority)}"
+                        class:done={item.task.done}
+                        class:dragging={draggedTask?.id === item.task.id}
+                        role="button"
+                        tabindex="-1"
+                        draggable="true"
+                        ondragstart={(e) => onChipDragStart(e, item.task)}
+                        ondragend={onChipDragEnd}
+                      >
+                        {#if item.time}<span class="chip-time">{item.time}</span>{/if}
+                        <span class="chip-label">{item.label}</span>
+                      </div>
+                    {/if}
+                  {/each}
+                </div>
+              </div>
+            {/each}
+          </div>
+        {:else if currentView === 'agenda'}
+          <div class="agenda-view">
+            {#each agendaDays as day (day.key)}
+              <div
+                class="agenda-day-row"
+                class:today={day.key === todayKey}
+                class:selected={selectedDay === day.key}
+                role="button"
+                tabindex="0"
+                onclick={() => (selectedDay = selectedDay === day.key ? null : day.key)}
+                onkeydown={(e) => e.key === 'Enter' && (selectedDay = selectedDay === day.key ? null : day.key)}
+              >
+                <div class="agenda-date-badge">
+                  <span class="day-num">{day.date.getDate()}</span>
+                  <span class="caption">{day.date.toLocaleDateString(undefined, { weekday: 'short', month: 'short' })}</span>
+                </div>
+                <div class="agenda-day-items">
+                  {#if day.items.length === 0}
+                    <span class="caption empty-agenda-day">{$t('calendar.noEventsDay')}</span>
+                  {:else}
+                    {#each day.items as item}
+                      <div class="agenda-item-pill" class:done={item.kind === 'task' && item.task.done}>
+                        {#if item.kind === 'google'}
+                          <Lock size={9} class="lock-icon" />
+                          <span class="chip-time caption">{item.allDay ? $t('calendar.allDay') : item.time}</span>
+                          <span class="pill-title">{item.label}</span>
+                        {:else}
+                          <span class="priority-dot {priorityClass(item.task.priority)}"></span>
+                          {#if item.time}<span class="chip-time caption">{item.time}</span>{/if}
+                          <span class="pill-title">{item.label}</span>
+                        {/if}
+                      </div>
+                    {/each}
+                  {/if}
+                </div>
               </div>
             {/each}
           </div>
         {/if}
       </div>
-    {:else if events.length === 0}
-      <div class="empty-wrap">
-        <EmptyState title={$t('calendar.empty')} message={$t('calendar.emptyHint')}>
-          {#snippet icon()}<CalendarDays size={44} />{/snippet}
-        </EmptyState>
+
+      <div class="day-detail">
+        {#if selectedDay}
+          <h4>
+            {new Date(`${selectedDay}T12:00:00`).toLocaleDateString(undefined, {
+              weekday: 'long',
+              day: 'numeric',
+              month: 'long',
+            })}
+          </h4>
+          {#if selectedDayItems.length === 0}
+            <span class="caption">{$t('calendar.noEventsDay')}</span>
+          {:else}
+            <div class="event-list">
+              {#each selectedDayItems as item (item.kind === 'google' ? `g-${item.label}-${item.time}` : `t-${item.task.id}`)}
+                {#if item.kind === 'google'}
+                  <div class="event-item">
+                    <span class="event-time caption">{item.allDay ? $t('calendar.allDay') : item.time}</span>
+                    <span class="event-summary"><Lock size={10} class="lock-icon" /> {item.label}</span>
+                    {#if item.location}
+                      <span class="event-location caption">{item.location}</span>
+                    {/if}
+                  </div>
+                {:else}
+                  <div class="event-item task-item" class:done={item.task.done}>
+                    {#if editingTaskId === item.task.id}
+                      <div class="edit-form">
+                        <input class="input edit-input" type="text" bind:value={editTitle} maxlength="500" />
+                        <div class="edit-times">
+                          <input class="input edit-input" type="time" bind:value={editTime} />
+                          <input class="input edit-input" type="time" bind:value={editEndTime} />
+                        </div>
+                        <div class="edit-actions">
+                          <button class="btn btn-ghost icon-btn" onclick={() => saveEdit(item.task)} aria-label={$t('calendar.save')}>
+                            <Check size={13} />
+                          </button>
+                          <button class="btn btn-ghost icon-btn" onclick={() => (editingTaskId = null)} aria-label={$t('calendar.cancel')}>
+                            <X size={13} />
+                          </button>
+                        </div>
+                      </div>
+                    {:else}
+                      <button
+                        class="done-btn"
+                        class:checked={item.task.done}
+                        onclick={() => toggleDone(item.task)}
+                        aria-label={$t('calendar.toggleDone')}
+                      >
+                        <Check size={12} />
+                      </button>
+                      <span class="event-time caption">{item.time ?? '·'}</span>
+                      <button class="prio-btn {priorityClass(item.task.priority)}" onclick={() => cyclePriority(item.task)} title={$t('calendar.priority')} aria-label={$t('calendar.priority')}>
+                        {item.task.priority.slice(0, 1)}
+                      </button>
+                      <span class="event-summary">{item.task.title}</span>
+                      <span class="task-actions">
+                        <button class="btn btn-ghost icon-btn" onclick={() => startEdit(item.task)} aria-label={$t('calendar.edit')}>
+                          <Pencil size={12} />
+                        </button>
+                        <button class="btn btn-ghost icon-btn" onclick={() => removeTask(item.task)} aria-label={$t('calendar.delete')}>
+                          <Trash2 size={12} />
+                        </button>
+                      </span>
+                    {/if}
+                  </div>
+                {/if}
+              {/each}
+            </div>
+          {/if}
+
+          <form class="quick-add" onsubmit={(e) => { e.preventDefault(); addTask(); }}>
+            <input
+              class="input quick-input"
+              type="text"
+              bind:value={quickAddTitle}
+              placeholder={$t('calendar.quickAddPlaceholder')}
+              maxlength="500"
+              disabled={addingTask}
+            />
+            <input class="input quick-time" type="time" bind:value={quickAddTime} disabled={addingTask} />
+            <select class="input quick-prio" bind:value={quickAddPriority} disabled={addingTask} aria-label={$t('calendar.priority')}>
+              {#each PRIORITIES as p}
+                <option value={p}>{p}</option>
+              {/each}
+            </select>
+            {#if status?.connected}
+              <label class="publish-toggle" title={$t('calendar.publishToGoogleHint')}>
+                <input type="checkbox" bind:checked={publishToGoogle} disabled={addingTask} />
+                <span class="publish-label"><Lock size={10} />{$t('calendar.publishToGoogle')}</span>
+              </label>
+            {/if}
+            <button type="submit" class="btn btn-icon quick-submit" disabled={addingTask || !quickAddTitle.trim()} aria-label={$t('calendar.addTask')}>
+              <Plus size={14} />
+            </button>
+          </form>
+        {:else}
+          <h4>{$t('calendar.pickDay')}</h4>
+          <span class="caption">{$t('calendar.pickDayHint')}</span>
+        {/if}
       </div>
-    {/if}
+    </div>
   {/if}
 </div>
 
@@ -249,10 +837,14 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
-    max-width: 860px;
+    max-width: 1200px;
     margin: 0 auto;
     padding: var(--s4) var(--s3);
     width: 100%;
+    flex: 1;
+    min-height: 0;
+    box-sizing: border-box;
+    overflow: hidden;
   }
 
   .calendar-header {
@@ -260,6 +852,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
+    flex-shrink: 0;
   }
 
   .calendar-header h3 {
@@ -271,11 +864,263 @@
     gap: 8px;
   }
 
+  .calendar-body {
+    display: grid;
+    grid-template-columns: 1fr minmax(280px, 340px);
+    grid-template-rows: 1fr;
+    gap: 12px;
+    flex: 1;
+    min-height: 0;
+  }
+
   .calendar-card {
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--r);
     padding: var(--s3);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .view-switcher {
+    display: inline-flex;
+    align-items: center;
+    background: var(--surface-2, rgba(255, 255, 255, 0.04));
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: 2px;
+    gap: 2px;
+  }
+
+  .view-btn {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: calc(var(--r) * 0.7);
+    color: var(--text-muted);
+    border: none;
+    transition: all 0.15s ease;
+  }
+
+  .view-btn:hover {
+    color: var(--text-primary);
+  }
+
+  .view-btn.active {
+    background: var(--surface);
+    color: var(--xp);
+    font-weight: 600;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  }
+
+  .weekday.bold {
+    font-weight: 700;
+    color: var(--xp);
+  }
+
+  /* Week Grid */
+  .week-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    grid-template-rows: 1fr;
+    gap: 6px;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .week-col {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border);
+    border-radius: calc(var(--r) * 0.7);
+    background: var(--surface-2, rgba(255, 255, 255, 0.02));
+    min-height: 0;
+    overflow: hidden;
+    transition: border-color 0.15s ease;
+  }
+
+  .week-col.today {
+    border-color: var(--xp);
+    background: color-mix(in srgb, var(--xp) 8%, transparent);
+  }
+
+  .week-col.selected {
+    border-color: var(--xp);
+    box-shadow: 0 0 0 1px var(--xp);
+  }
+
+  .week-col.drop-target {
+    border-color: var(--xp);
+    background: color-mix(in srgb, var(--xp) 18%, transparent);
+  }
+
+  .week-col-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 6px;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    background: transparent;
+    cursor: pointer;
+    color: inherit;
+    width: 100%;
+  }
+
+  .week-col-header:hover {
+    background: var(--hover);
+  }
+
+  .week-col-items {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 6px;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .week-col-items .chip {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    width: 100%;
+    box-sizing: border-box;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .chip-time {
+    font-size: 9px;
+    opacity: 0.75;
+    flex-shrink: 0;
+  }
+
+  .chip-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+  }
+
+  /* Agenda View */
+  .agenda-view {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+
+  .agenda-day-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    background: var(--surface-2, rgba(255, 255, 255, 0.02));
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .agenda-day-row:hover {
+    background: var(--hover);
+  }
+
+  .agenda-day-row.today {
+    border-color: var(--xp);
+    background: color-mix(in srgb, var(--xp) 10%, transparent);
+  }
+
+  .agenda-day-row.selected {
+    border-color: var(--xp);
+    box-shadow: 0 0 0 1px var(--xp);
+  }
+
+  .agenda-date-badge {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 48px;
+    padding: 4px;
+    border-radius: calc(var(--r) * 0.6);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .agenda-date-badge .day-num {
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .agenda-date-badge .caption {
+    font-size: 10px;
+    text-transform: capitalize;
+  }
+
+  .agenda-day-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    flex: 1;
+    min-height: 28px;
+  }
+
+  .empty-agenda-day {
+    font-style: italic;
+    opacity: 0.5;
+  }
+
+  .agenda-item-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    font-size: 11px;
+    max-width: 260px;
+  }
+
+  .agenda-item-pill.done {
+    opacity: 0.55;
+    text-decoration: line-through;
+  }
+
+  .pill-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .priority-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .priority-dot.prio-high {
+    background: var(--danger, #ef4444);
+  }
+
+  .priority-dot.prio-medium {
+    background: var(--xp, #c8a96e);
+  }
+
+  .priority-dot.prio-low {
+    background: var(--text-muted);
   }
 
   .calendar-toolbar {
@@ -283,6 +1128,7 @@
     align-items: center;
     gap: 8px;
     margin-bottom: var(--s2);
+    flex-shrink: 0;
   }
 
   .month-label {
@@ -300,6 +1146,7 @@
     grid-template-columns: repeat(7, 1fr);
     gap: 4px;
     margin-bottom: 4px;
+    flex-shrink: 0;
   }
 
   .weekday {
@@ -310,23 +1157,29 @@
   .day-grid {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
+    grid-template-rows: repeat(6, 1fr);
     gap: 4px;
+    flex: 1;
+    min-height: 0;
   }
 
   .day-cell {
     position: relative;
-    aspect-ratio: 1 / 0.85;
     display: flex;
     flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 3px;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 2px;
+    padding: 3px 4px;
     border: 1px solid transparent;
     border-radius: calc(var(--r) * 0.6);
     background: transparent;
     cursor: pointer;
     color: var(--text-primary);
-    font-size: 12px;
+    font-size: 11px;
+    min-height: 0;
+    overflow: hidden;
+    text-align: left;
   }
 
   .day-cell:hover {
@@ -339,34 +1192,105 @@
   }
 
   .day-cell.today {
-    border-color: var(--accent);
+    border-color: var(--xp);
+    background: color-mix(in srgb, var(--xp) 12%, transparent);
+  }
+
+  .day-cell.today .day-num {
+    color: var(--xp);
+    font-weight: 700;
   }
 
   .day-cell.selected {
-    background: var(--accent);
-    color: #fff;
+    background: var(--xp);
+    color: var(--bg);
   }
 
-  .event-dot {
-    width: 5px;
-    height: 5px;
-    border-radius: 50%;
-    background: var(--accent);
+  .day-cell.selected .day-num {
+    color: var(--bg);
+    font-weight: 700;
   }
 
-  .day-cell.selected .event-dot {
-    background: #fff;
+  .day-cell.selected .chip {
+    background: rgba(0, 0, 0, 0.15);
+    color: var(--bg);
   }
+
+  .day-cell.selected:hover {
+    background: var(--xp-2);
+  }
+
+  .day-num {
+    font-size: 12px;
+    width: 100%;
+    text-align: left;
+  }
+
+  .cell-items {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .chip {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 9px;
+    line-height: 1.2;
+    padding: 0 3px;
+    border-radius: 3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+    background: color-mix(in srgb, var(--text-muted) 15%, transparent);
+  }
+
+  .chip-google {
+    color: var(--text-muted);
+  }
+
+  .chip.done {
+    text-decoration: line-through;
+    opacity: 0.55;
+  }
+
+  .chip.dragging {
+    opacity: 0.35;
+  }
+
+  .day-cell.drop-target {
+    border-color: var(--xp);
+    background: color-mix(in srgb, var(--xp) 18%, transparent);
+  }
+
+  .chip-more {
+    color: var(--text-muted);
+    background: transparent;
+  }
+
+  .prio-low { color: var(--text-muted); }
+  .prio-medium { color: var(--accent); }
+  .prio-high { color: #e08c3a; }
+  .prio-urgent { color: #d9534f; }
 
   .day-detail {
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--r);
     padding: var(--s3);
+    overflow-y: auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--s2);
   }
 
   .day-detail h4 {
-    margin: 0 0 var(--s2);
+    margin: 0;
     text-transform: capitalize;
   }
 
@@ -378,24 +1302,193 @@
 
   .event-item {
     display: flex;
-    align-items: baseline;
-    gap: 10px;
+    align-items: center;
+    gap: 8px;
     padding: 6px 8px;
     border: 1px solid var(--border);
     border-radius: calc(var(--r) * 0.6);
   }
 
+  .event-item.done {
+    opacity: 0.55;
+  }
+
+  .event-item.done .event-summary {
+    text-decoration: line-through;
+  }
+
   .event-time {
-    min-width: 64px;
+    min-width: 44px;
+    font-variant-numeric: tabular-nums;
   }
 
   .event-summary {
     font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .lock-icon {
+    flex-shrink: 0;
+    opacity: 0.6;
   }
 
   .event-location {
     margin-left: auto;
     text-align: right;
+  }
+
+  .task-actions {
+    margin-left: auto;
+    display: flex;
+    gap: 2px;
+  }
+
+  .icon-btn {
+    padding: 3px;
+  }
+
+  .done-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: transparent;
+    flex-shrink: 0;
+  }
+
+  .done-btn:hover {
+    border-color: var(--accent);
+  }
+
+  .done-btn.checked {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+
+  .prio-btn {
+    border: none;
+    border-radius: 4px;
+    width: 20px;
+    height: 18px;
+    font-size: 10px;
+    font-weight: 700;
+    cursor: pointer;
+    background: color-mix(in srgb, var(--text-muted) 15%, transparent);
+    flex-shrink: 0;
+  }
+
+  .quick-add {
+    display: flex;
+    gap: 6px;
+    margin-top: auto;
+    padding-top: var(--s2);
+    border-top: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .quick-input {
+    flex: 1;
+    min-width: 0;
+    padding: var(--s2) var(--s3);
+    font-size: 12px;
+  }
+
+  .quick-time,
+  .quick-prio {
+    width: auto;
+    flex-shrink: 0;
+    padding: var(--s2) var(--s2);
+    font-size: 12px;
+  }
+
+  .quick-prio {
+    max-width: 90px;
+  }
+
+  .quick-submit {
+    flex-shrink: 0;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+  }
+
+  .quick-submit:not(:disabled):hover {
+    color: var(--text-primary);
+    border-color: var(--border);
+    background: var(--elevated);
+  }
+
+  .quick-submit:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .publish-toggle {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    flex-shrink: 0;
+    font-size: 10px;
+    color: var(--text-muted);
+    user-select: none;
+  }
+
+  .publish-toggle input {
+    display: none;
+  }
+
+  .publish-label {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 6px;
+    border: 1px solid var(--border);
+    border-radius: 99px;
+    transition: all 0.15s;
+  }
+
+  .publish-toggle input:checked + .publish-label {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+  }
+
+  .edit-form {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+  }
+
+  .edit-times {
+    display: flex;
+    gap: 6px;
+  }
+
+  .edit-input {
+    width: 100%;
+  }
+
+  .edit-actions {
+    display: flex;
+    gap: 4px;
   }
 
   .empty-wrap {
@@ -416,6 +1509,11 @@
   }
 
   @media (max-width: 640px) {
+    .calendar-body {
+      grid-template-columns: 1fr;
+      grid-template-rows: minmax(0, 3fr) minmax(0, 2fr);
+    }
+
     .event-location {
       display: none;
     }

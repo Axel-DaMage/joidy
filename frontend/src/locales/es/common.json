@@ -29,13 +29,57 @@
     "goToSettings": "Ir a Ajustes",
     "allDay": "Todo el día",
     "noEventsDay": "Sin eventos este día",
-    "weekDays": ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"],
-    "months": [
-      "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-      "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+    "weekDays": [
+      "Lun",
+      "Mar",
+      "Mié",
+      "Jue",
+      "Vie",
+      "Sáb",
+      "Dom"
     ],
-    "lastSync": "Última sincronización: {{when}}",
-    "neverSynced": "Nunca sincronizado"
+    "months": [
+      "Enero",
+      "Febrero",
+      "Marzo",
+      "Abril",
+      "Mayo",
+      "Junio",
+      "Julio",
+      "Agosto",
+      "Septiembre",
+      "Octubre",
+      "Noviembre",
+      "Diciembre"
+    ],
+    "lastSync": "Última sincronización: {when}",
+    "neverSynced": "Nunca sincronizado",
+    "pickDay": "Selecciona un día",
+    "pickDayHint": "Haz clic en un día del mes para ver sus eventos",
+    "quickAddPlaceholder": "Nueva tarea… (título + Enter)",
+    "addTask": "Añadir tarea",
+    "toggleDone": "Completar tarea",
+    "priority": "Prioridad",
+    "edit": "Editar",
+    "delete": "Eliminar",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "taskAddError": "No se pudo crear la tarea",
+    "taskUpdateError": "No se pudo actualizar la tarea",
+    "taskDeleteError": "No se pudo eliminar la tarea",
+    "publishToGoogle": "Google",
+    "publishToGoogleHint": "Publicar también en Google Calendar",
+    "googlePublishError": "No se pudo sincronizar con Google Calendar",
+    "syncError": "No se pudo sincronizar con Google Calendar",
+    "taskRescheduled": "Tarea reprogramada",
+    "views": {
+      "month": "Mes",
+      "week": "Semana",
+      "agenda": "Agenda"
+    },
+    "prevWeek": "Semana anterior",
+    "nextWeek": "Semana siguiente",
+    "noEventsRange": "Sin eventos o tareas en este rango"
   },
   "emails": {
     "title": "Correos",

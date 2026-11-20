@@ -14,6 +14,7 @@ GOOGLE_GMAIL_API = "https://gmail.googleapis.com/gmail/v1"
 GOOGLE_PEOPLE_API = "https://people.googleapis.com/v1"
 GOOGLE_SCOPES = " ".join(
     [
+        "https://www.googleapis.com/auth/calendar.events",
         "https://www.googleapis.com/auth/calendar.readonly",
         "https://www.googleapis.com/auth/tasks.readonly",
         "https://www.googleapis.com/auth/gmail.readonly",
@@ -84,6 +85,58 @@ async def list_events(token: str, calendar_id: str = "primary") -> list[dict[str
 async def list_events_raw(token: str, calendar_id: str, params: dict[str, Any]) -> dict[str, Any]:
     """Raw events.list call with custom params (pagination, syncToken, ...)."""
     return await _request(token, f"{GOOGLE_CALENDAR_API}/calendars/{calendar_id}/events", params)
+
+
+async def _mutating_request(
+    token: str,
+    method: str,
+    url: str,
+    json: dict[str, Any] | None = None,
+    params: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+    async with http_client(timeout=30.0) as client:
+        r = await client.request(method, url, headers=headers, json=json, params=params or {})
+        r.raise_for_status()
+        if r.status_code == 204 or not r.content:
+            return {}
+        return r.json()
+
+
+async def create_event(
+    token: str, calendar_id: str, event: dict[str, Any], send_updates: str = "none"
+) -> dict[str, Any]:
+    """Create a Google Calendar event; returns the created event resource."""
+    return await _mutating_request(
+        token,
+        "POST",
+        f"{GOOGLE_CALENDAR_API}/calendars/{calendar_id}/events",
+        json=event,
+        params={"sendUpdates": send_updates},
+    )
+
+
+async def patch_event(
+    token: str, calendar_id: str, google_event_id: str, patch: dict[str, Any], send_updates: str = "none"
+) -> dict[str, Any]:
+    """Patch a Google Calendar event; returns the updated event resource."""
+    return await _mutating_request(
+        token,
+        "PATCH",
+        f"{GOOGLE_CALENDAR_API}/calendars/{calendar_id}/events/{google_event_id}",
+        json=patch,
+        params={"sendUpdates": send_updates},
+    )
+
+
+async def delete_event(token: str, calendar_id: str, google_event_id: str, send_updates: str = "none") -> None:
+    """Delete a Google Calendar event."""
+    await _mutating_request(
+        token,
+        "DELETE",
+        f"{GOOGLE_CALENDAR_API}/calendars/{calendar_id}/events/{google_event_id}",
+        params={"sendUpdates": send_updates},
+    )
 
 
 async def list_task_lists(token: str) -> list[dict[str, Any]]:

@@ -29,13 +29,57 @@
     "goToSettings": "Go to Settings",
     "allDay": "All day",
     "noEventsDay": "No events on this day",
-    "weekDays": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
-    "months": [
-      "January", "February", "March", "April", "May", "June",
-      "July", "August", "September", "October", "November", "December"
+    "weekDays": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri",
+      "Sat",
+      "Sun"
     ],
-    "lastSync": "Last sync: {{when}}",
-    "neverSynced": "Never synced"
+    "months": [
+      "January",
+      "February",
+      "March",
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December"
+    ],
+    "lastSync": "Last sync: {when}",
+    "neverSynced": "Never synced",
+    "pickDay": "Pick a day",
+    "pickDayHint": "Click a day in the month to see its events",
+    "quickAddPlaceholder": "New task… (title + Enter)",
+    "addTask": "Add task",
+    "toggleDone": "Toggle done",
+    "priority": "Priority",
+    "edit": "Edit",
+    "delete": "Delete",
+    "save": "Save",
+    "cancel": "Cancel",
+    "taskAddError": "Could not create the task",
+    "taskUpdateError": "Could not update the task",
+    "taskDeleteError": "Could not delete the task",
+    "publishToGoogle": "Google",
+    "publishToGoogleHint": "Also publish to Google Calendar",
+    "googlePublishError": "Could not sync with Google Calendar",
+    "syncError": "Could not sync with Google Calendar",
+    "taskRescheduled": "Task rescheduled",
+    "views": {
+      "month": "Month",
+      "week": "Week",
+      "agenda": "Agenda"
+    },
+    "prevWeek": "Previous week",
+    "nextWeek": "Next week",
+    "noEventsRange": "No events or tasks in this range"
   },
   "emails": {
     "title": "Mail",

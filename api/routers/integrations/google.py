@@ -14,7 +14,7 @@ from database import get_db
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from models.google_calendar_event import GoogleCalendarEvent
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from services import google_calendar_service as gcs
 from services import google_service as gs
 from services import google_token_service as gts
@@ -299,3 +299,87 @@ async def _access_token(token: str | None, db: Session) -> str:
     if not stored:
         raise HTTPException(status_code=401, detail="Google no está conectado")
     return stored
+
+
+class GoogleEventWriteIn(BaseModel):
+    summary: str = Field(min_length=1, max_length=500)
+    start: dict
+    end: dict
+    description: str | None = None
+    calendar_id: str = "primary"
+
+
+class GoogleEventPatchIn(BaseModel):
+    summary: str | None = Field(default=None, min_length=1, max_length=500)
+    start: dict | None = None
+    end: dict | None = None
+    description: str | None = None
+
+
+@router.post("/calendar/events")
+async def google_calendar_create_event(
+    body: GoogleEventWriteIn,
+    db: Session = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
+    """Create a Google Calendar event from joidy (write-back, #1233)."""
+    token = await _access_token(None, db)
+    try:
+        created = await gcs.create_google_event(
+            db, token, body.calendar_id, body.summary, body.start, body.end, body.description
+        )
+    except gcs.GoogleReconsentRequired as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=exc.response.status_code, detail="Google API error")
+    return {
+        "google_id": created.get("id"),
+        "calendar_id": body.calendar_id,
+        "summary": created.get("summary"),
+        "start": created.get("start"),
+        "end": created.get("end"),
+    }
+
+
+@router.patch("/calendar/events/{google_event_id}")
+async def google_calendar_update_event(
+    google_event_id: str,
+    body: GoogleEventPatchIn,
+    calendar_id: str = Query(default="primary"),
+    db: Session = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
+    """Patch a Google Calendar event from joidy (write-back, #1233)."""
+    token = await _access_token(None, db)
+    patch = body.model_dump(exclude_unset=True, exclude_none=True)
+    try:
+        updated = await gcs.update_google_event(db, token, calendar_id, google_event_id, patch)
+    except gcs.GoogleReconsentRequired as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=exc.response.status_code, detail="Google API error")
+    return {
+        "google_id": updated.get("id"),
+        "calendar_id": calendar_id,
+        "summary": updated.get("summary"),
+        "start": updated.get("start"),
+        "end": updated.get("end"),
+    }
+
+
+@router.delete("/calendar/events/{google_event_id}")
+async def google_calendar_delete_event(
+    google_event_id: str,
+    calendar_id: str = Query(default="primary"),
+    db: Session = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
+    """Delete a Google Calendar event from joidy (write-back, #1233)."""
+    token = await _access_token(None, db)
+    try:
+        await gcs.delete_google_event(db, token, calendar_id, google_event_id)
+    except gcs.GoogleReconsentRequired as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=exc.response.status_code, detail="Google API error")
+    return {"status": "deleted", "google_id": google_event_id}

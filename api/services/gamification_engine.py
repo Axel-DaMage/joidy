@@ -35,6 +35,9 @@ DEFAULT_XP_TABLE = {
     "streak_milestone_30": 100,
     "streak_milestone_100": 100,
     "note_imported_obsidian": 2,
+    "calendar_task_completed": 5,
+    "calendar_task_completed_no_time": 3,
+    "day_fully_planned": 15,
 }
 
 DEFAULT_PLANT_STAGES = [
