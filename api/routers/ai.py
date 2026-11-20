@@ -1,18 +1,22 @@
-from datetime import datetime, timedelta
+from datetime import date, datetime, time, timedelta
+from typing import cast
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx
 from config import settings
 from database import get_db
 from fastapi import APIRouter, Depends, HTTPException
 from middleware.correlation_id import get_correlation_id
+from models.calendar_task import CalendarTask
 from models.gamification import UserStats
 from models.goal import Goal, GoalState
+from models.google_calendar_event import GoogleCalendarEvent
 from models.note import Note, NoteTag, Tag
 from pydantic import BaseModel
 from services.auth_service import get_current_user
 from services.http_client import http_client
-from services.timezone_utils import get_local_today, to_utc_datetime
-from sqlalchemy import func
+from services.timezone_utils import get_local_today, get_user_tz, to_utc_datetime
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/ai", tags=["ai"])
@@ -259,3 +263,135 @@ async def chat(
                 ),
                 "suggestions": [],
             }
+
+
+# ── Plan suggestions (#1237) ────────────────────────────────────────────────
+
+# Priority order for the prompt: URGENT tasks get the earliest slots.
+_PLAN_PRIORITY_RANK = {"URGENT": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
+# Cap the planning window so a stray huge range cannot dump the whole
+# tasks/events tables into one LLM prompt.
+_PLAN_MAX_RANGE_DAYS = 62
+
+
+class PlanSuggestRequest(BaseModel):
+    week_start: str
+    week_end: str
+    timezone: str = "UTC"
+    context_hint: str | None = None
+
+
+def _task_duration_minutes(task: CalendarTask, day: date) -> int | None:
+    """Derive a duration from start/end times when both are set (else None → 30min default)."""
+    start = cast("time | None", task.start_time)
+    end = cast("time | None", task.end_time)
+    if start is None or end is None:
+        return None
+    minutes = int((datetime.combine(day, end) - datetime.combine(day, start)).total_seconds() // 60)
+    return minutes if minutes > 0 else None
+
+
+@router.post("/plan-suggest")
+async def plan_suggest(
+    req: PlanSuggestRequest,
+    db: Session = Depends(get_db),
+):
+    """AI planning suggestions (#1237): slot open tasks around busy blocks.
+
+    Builds the payload server-side — open calendar tasks (unscheduled NULL-date
+    tasks are the main candidates, plus scheduled-in-range ones the AI may
+    re-slot) and cached Google Calendar events as busy blocks — then forwards
+    to the ai-service. Always answers 200; ``available: false`` + ``reason``
+    when the AI side cannot produce suggestions.
+    """
+    if not settings.ai_service_enabled:
+        return {"suggestions": [], "available": False, "reason": "disabled"}
+
+    try:
+        week_start = datetime.strptime(req.week_start, "%Y-%m-%d").date()
+        week_end = datetime.strptime(req.week_end, "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+    if week_end < week_start:
+        raise HTTPException(status_code=400, detail="week_end must be on or after week_start")
+    if (week_end - week_start).days > _PLAN_MAX_RANGE_DAYS:
+        raise HTTPException(status_code=400, detail=f"Planning range too large (max {_PLAN_MAX_RANGE_DAYS} days)")
+
+    try:
+        tz = ZoneInfo(req.timezone)
+    except (ZoneInfoNotFoundError, ValueError):
+        tz = get_user_tz()
+
+    open_tasks = (
+        db.query(CalendarTask)
+        .filter(
+            CalendarTask.done.is_(False),
+            or_(CalendarTask.date.is_(None), CalendarTask.date.between(week_start, week_end)),
+        )
+        .all()
+    )
+    open_tasks.sort(key=lambda t: (_PLAN_PRIORITY_RANK.get(t.priority.value, 4), t.created_at))
+    anchor = week_start  # arbitrary day for time→datetime math; only the delta matters
+    tasks_payload = [
+        {
+            "id": t.id,
+            "title": t.title,
+            "priority": t.priority.value,
+            "duration_minutes": _task_duration_minutes(t, anchor),
+        }
+        for t in open_tasks
+    ]
+
+    # Busy blocks: cached Google events overlapping the window — including
+    # events that started before it but spill in (end_at > range_start).
+    range_start = datetime.combine(week_start, time.min, tzinfo=tz)
+    range_end = datetime.combine(week_end, time.max, tzinfo=tz)
+    events = (
+        db.query(GoogleCalendarEvent)
+        .filter(
+            GoogleCalendarEvent.user_id == 1,
+            GoogleCalendarEvent.status != "cancelled",
+            GoogleCalendarEvent.start_at <= range_end,
+            or_(GoogleCalendarEvent.end_at.is_(None), GoogleCalendarEvent.end_at > range_start),
+        )
+        .order_by(GoogleCalendarEvent.start_at)
+        .all()
+    )
+
+    busy_blocks = []
+    for e in events:
+        if e.all_day:
+            # All-day rows are stored as UTC-midnight instants whose date part
+            # IS the Google `date` — send a local-day block (Google's end.date
+            # is exclusive, so [start_day, end_day) covers the event's days).
+            start_day = e.start_at.date()
+            end_day = (e.end_at or e.start_at).date()
+            if end_day <= start_day:
+                end_day = start_day + timedelta(days=1)
+            busy_blocks.append({"start": f"{start_day.isoformat()}T00:00:00", "end": f"{end_day.isoformat()}T00:00:00"})
+        else:
+            busy_blocks.append({"start": e.start_at.isoformat(), "end": (e.end_at or e.start_at).isoformat()})
+
+    payload = {
+        "tasks": tasks_payload,
+        "busy_blocks": busy_blocks,
+        "week_start": week_start.isoformat(),
+        "week_end": week_end.isoformat(),
+        "timezone": req.timezone,
+        "context_hint": req.context_hint,
+    }
+
+    async with http_client(timeout=60.0) as client:
+        try:
+            headers = {"X-Request-ID": get_correlation_id()}
+            if settings.internal_secret:
+                headers["X-Internal-Secret"] = settings.internal_secret
+            r = await client.post(
+                f"{settings.ai_service_url}/plan-suggest",
+                json=payload,
+                headers=headers,
+            )
+            r.raise_for_status()
+            return r.json()
+        except httpx.HTTPError:
+            return {"suggestions": [], "available": False, "reason": "unavailable"}
