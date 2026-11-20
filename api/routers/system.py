@@ -128,7 +128,7 @@ async def _detect_project_name(docker) -> str | None:
                 if svc == "api" and state == "running":
                     _project_name = _get_compose_project(c)
                     return _project_name
-    except Exception:
+    except Exception:  # noqa: S110 — best-effort docker probe; unavailable docker is not fatal
         pass
     return None
 

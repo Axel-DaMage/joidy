@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
-GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"  # noqa: S105 — OAuth endpoint URL, not a password
 
 
 def _get_fernet() -> Fernet:
@@ -46,7 +46,7 @@ def store_tokens(
     access_token: str,
     refresh_token: str | None,
     expires_in: int,
-    token_type: str = "Bearer",
+    token_type: str = "Bearer",  # noqa: S107 — OAuth2 token-type label default, not a password
     scope: str | None = None,
 ) -> GoogleToken:
     """Store or update Google OAuth tokens in the database."""
