@@ -18,7 +18,11 @@ GOOGLE_SCOPES = " ".join(
         "https://www.googleapis.com/auth/calendar.readonly",
         "https://www.googleapis.com/auth/tasks.readonly",
         "https://www.googleapis.com/auth/gmail.readonly",
-        "https://www.googleapis.com/auth/contacts.readonly",
+        # `contacts` (read+write) supersedes `contacts.readonly` — the
+        # dedicated /integrations/contacts CRUD endpoints need write (#43).
+        # Tokens granted before this change keep working for reads; write
+        # endpoints answer 403 until the user reconnects.
+        "https://www.googleapis.com/auth/contacts",
     ]
 )
 
@@ -163,3 +167,100 @@ async def list_contacts(token: str, page_size: int = 50) -> list[dict[str, Any]]
         params={"personFields": "names,emailAddresses", "pageSize": page_size},
     )
     return data.get("connections", [])
+
+
+# ---------------------------------------------------------------------------
+# People API — dedicated contacts surface (#43). Raw dict passthroughs; the
+# business logic (normalization, scope checks, update merge) lives in
+# services/google_contacts_service.py.
+# ---------------------------------------------------------------------------
+
+
+async def get_person(token: str, resource_name: str, person_fields: str) -> dict[str, Any]:
+    """people.get — fetch one Person resource (``people/{id}``)."""
+    return await _request(
+        token,
+        f"{GOOGLE_PEOPLE_API}/{resource_name}",
+        params={"personFields": person_fields},
+    )
+
+
+async def search_contacts(token: str, query: str, read_mask: str, page_size: int = 30) -> dict[str, Any]:
+    """people:searchContacts — prefix search over names/emails/phones/orgs.
+
+    The endpoint is a GET with query params; ``pageSize`` is capped at 30 by
+    Google and the response carries no pagination token.
+    """
+    return await _request(
+        token,
+        f"{GOOGLE_PEOPLE_API}/people:searchContacts",
+        params={"query": query, "pageSize": min(page_size, 30), "readMask": read_mask},
+    )
+
+
+async def list_connections(
+    token: str,
+    person_fields: str,
+    page_size: int = 100,
+    page_token: str | None = None,
+    sort_order: str | None = None,
+) -> dict[str, Any]:
+    """people.connections.list — one page of contacts (raw, keeps nextPageToken)."""
+    params: dict[str, Any] = {"personFields": person_fields, "pageSize": page_size}
+    if page_token:
+        params["pageToken"] = page_token
+    if sort_order:
+        params["sortOrder"] = sort_order
+    return await _request(token, f"{GOOGLE_PEOPLE_API}/people/me/connections", params)
+
+
+async def create_contact(token: str, person: dict[str, Any], person_fields: str) -> dict[str, Any]:
+    """people:createContact — returns the created Person resource."""
+    return await _mutating_request(
+        token,
+        "POST",
+        f"{GOOGLE_PEOPLE_API}/people:createContact",
+        json=person,
+        params={"personFields": person_fields},
+    )
+
+
+async def update_contact(
+    token: str,
+    resource_name: str,
+    person: dict[str, Any],
+    update_person_fields: str,
+    person_fields: str,
+) -> dict[str, Any]:
+    """people:updateContact — PATCH; ``updatePersonFields`` is a required
+    comma-separated field mask naming the top-level Person fields to replace.
+    """
+    return await _mutating_request(
+        token,
+        "PATCH",
+        f"{GOOGLE_PEOPLE_API}/{resource_name}:updateContact",
+        json=person,
+        params={"updatePersonFields": update_person_fields, "personFields": person_fields},
+    )
+
+
+async def delete_contact(token: str, resource_name: str) -> None:
+    """people:deleteContact."""
+    await _mutating_request(token, "DELETE", f"{GOOGLE_PEOPLE_API}/{resource_name}:deleteContact")
+
+
+async def list_contact_groups(token: str, page_size: int = 100, page_token: str | None = None) -> dict[str, Any]:
+    """contactGroups.list — one page of the user's contact groups."""
+    params: dict[str, Any] = {"pageSize": page_size}
+    if page_token:
+        params["pageToken"] = page_token
+    return await _request(token, f"{GOOGLE_PEOPLE_API}/contactGroups", params)
+
+
+async def get_contact_group(token: str, resource_name: str, max_members: int = 10000) -> dict[str, Any]:
+    """contactGroups.get — includes ``memberResourceNames`` up to ``maxMembers``."""
+    return await _request(
+        token,
+        f"{GOOGLE_PEOPLE_API}/{resource_name}",
+        params={"maxMembers": max_members},
+    )

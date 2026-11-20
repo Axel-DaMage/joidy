@@ -45,7 +45,7 @@ from routers import (
     vault,
     websocket,
 )
-from routers.integrations import github, google, spotify, strava
+from routers.integrations import contacts, github, google, spotify, strava
 from services.auth_service import (
     _effective_auth_password,
     get_current_user,
@@ -306,6 +306,9 @@ app.include_router(github.router, dependencies=[Depends(get_current_user)])
 # Google: per-route auth (the OAuth /callback must be reachable by the bare
 # browser redirect; token/status/data routes declare their own deps).
 app.include_router(google.router)
+# Google Contacts (#43): all routes are JWT-protected; the router proxies the
+# shared Google OAuth token to the People API — no public endpoints.
+app.include_router(contacts.router, dependencies=[Depends(get_current_user)])
 app.include_router(strava.router, dependencies=[Depends(get_current_user)])
 app.include_router(spotify.router, dependencies=[Depends(get_current_user)])
 app.include_router(vault.router, dependencies=[Depends(get_current_user_or_internal)])
