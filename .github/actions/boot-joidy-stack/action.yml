@@ -1,0 +1,73 @@
+name: Boot Joidy dev stack
+description: >-
+  Prepare the CI environment (.env from .env.example with CI-only values),
+  start the docker-compose dev stack and wait for the API health endpoint.
+  Single source of truth for env-prep + stack boot + health check (#1254):
+  docker-build and frontend-e2e share this implementation so boot order and
+  health checks can never drift apart again.
+inputs:
+  extra-env:
+    description: >-
+      Optional extra KEY=VALUE lines appended to .env after the CI defaults
+      (frontend-e2e uses it for AUTH_PASSWORD, the deterministic single-user
+      login the Playwright helpers authenticate with).
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: Prepare environment
+      shell: bash
+      env:
+        EXTRA_ENV: ${{ inputs.extra-env }}
+      run: |
+        cp .env.example .env
+        # docker-compose.yml requires non-empty POSTGRES_PASSWORD and
+        # INTERNAL_SECRET (${VAR:?...}); .env.example ships them empty,
+        # so set CI-only values here.
+        sed -i 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=joidy-ci/' .env
+        sed -i 's/^INTERNAL_SECRET=.*/INTERNAL_SECRET=joidy-ci-internal/' .env
+        sed -i 's/^SECRET_KEY=.*/SECRET_KEY=joidy-ci-secret-key-not-for-production/' .env
+        # Caller-specific lines (e2e sets AUTH_PASSWORD here — plaintext is
+        # supported by verify_password; bcrypt prefix optional).
+        if [ -n "$EXTRA_ENV" ]; then
+          printf '%s\n' "$EXTRA_ENV" >> .env
+        fi
+        # Run the dev containers as the runner user (compose interpolates
+        # ${UID}/${GID} from .env) so the frontend container can write
+        # .svelte-kit through the ./frontend bind mount. These MUST be the
+        # same ids build-joidy-images passed as frontend build args.
+        echo "UID=$(id -u)" >> .env
+        echo "GID=$(id -g)" >> .env
+        # Pre-create the node_modules mountpoint as the runner user: docker
+        # otherwise creates it root-owned (volume mountpoint inside the
+        # ./frontend bind mount), which makes the later `npm ci` fail with
+        # EACCES (npm ci only clears the *contents* of node_modules).
+        mkdir -p frontend/node_modules data/db data/uploads data/vault
+
+    - name: Start services
+      shell: bash
+      run: |
+        # Images were pre-built by build-joidy-images with the same tags
+        # compose expects. Start backend services first (frontend depends
+        # on API health, which may take time on first run due to
+        # migrations); frontend starts without waiting (--no-deps) so the
+        # health check below gates on the API only.
+        docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres
+        docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d api ai-service worker
+        docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --no-deps frontend
+
+    - name: Verify API health
+      shell: bash
+      run: |
+        for i in $(seq 1 30); do
+          if curl -fsS http://localhost:8000/health; then
+            echo "API is healthy"
+            exit 0
+          fi
+          echo "Attempt $i/30: API not ready yet..."
+          sleep 2
+        done
+        echo "::error::API did not become healthy within 60 seconds"
+        docker compose -f docker-compose.yml -f docker-compose.dev.yml logs --tail=100 api
+        exit 1
