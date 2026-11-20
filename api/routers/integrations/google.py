@@ -19,7 +19,7 @@ from services import google_calendar_service as gcs
 from services import google_service as gs
 from services import google_token_service as gts
 from services import oauth_state
-from services.auth_service import get_current_user
+from services.auth_service import get_current_user, get_current_user_or_internal
 from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/integrations/google", tags=["integrations"])
@@ -265,7 +265,7 @@ async def google_calendar_status(
 @router.post("/calendar/sync", response_model=GoogleCalendarSyncResult)
 async def google_calendar_sync(
     db: Session = Depends(get_db),
-    user: dict = Depends(get_current_user),
+    user: dict = Depends(get_current_user_or_internal),
 ):
     """Sync all selected Google Calendars into the local cache."""
     try:

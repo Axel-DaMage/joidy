@@ -134,6 +134,26 @@ describe('renderMarkdown — sanitization (DOMPurify)', () => {
     expect(result).toContain('src="https://example.com/img.png"');
     expect(result).toContain('alt="alt text"');
   });
+
+  it('forces rel="noopener noreferrer" on target="_blank" links (#1331)', () => {
+    const result = renderMarkdown('<a href="https://example.com" target="_blank">click</a>');
+    expect(result).toContain('target="_blank"');
+    expect(result).toContain('rel="noopener noreferrer"');
+  });
+
+  it('overwrites a malicious rel="opener" on target="_blank" links (#1331)', () => {
+    const result = renderMarkdown(
+      '<a href="https://example.com" target="_blank" rel="opener">click</a>'
+    );
+    expect(result).toContain('rel="noopener noreferrer"');
+    expect(result).not.toContain('rel="opener"');
+  });
+
+  it('strips rel from links without target (#1331)', () => {
+    const result = renderMarkdown('<a href="https://example.com" rel="opener">click</a>');
+    expect(result).not.toContain('rel=');
+    expect(result).not.toContain('opener');
+  });
 });
 
 describe('renderMarkdown — hideTagsLine option', () => {

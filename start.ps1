@@ -213,6 +213,23 @@ if ([string]::IsNullOrEmpty($secretKey) -or $secretKey -eq "change_this_to_a_ran
     Write-Success "Generated new SECRET_KEY"
 }
 
+# Check/Generate INTERNAL_SECRET — shared secret for API -> ai-service auth
+# (#1277). Older .env files may lack the line entirely, so append it when the
+# -replace finds nothing to substitute.
+$internalSecret = $envVars["INTERNAL_SECRET"]
+if ([string]::IsNullOrEmpty($internalSecret) -or $internalSecret -match '^0+$') {
+    $bytes = New-Object byte[] 32
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    $rng.GetBytes($bytes)
+    $newInternalSecret = -join ($bytes | ForEach-Object { $_.ToString("x2") })
+    if ((Get-Content ".env" -Raw) -match '(?m)^#?INTERNAL_SECRET=') {
+        (Get-Content ".env") -replace '^#?INTERNAL_SECRET=.*', "INTERNAL_SECRET=$newInternalSecret" | Set-Content ".env"
+    } else {
+        Add-Content ".env" "`nINTERNAL_SECRET=$newInternalSecret"
+    }
+    Write-Success "Generated new INTERNAL_SECRET"
+}
+
 # Check/Generate POSTGRES_PASSWORD
 $postgresPassword = $envVars["POSTGRES_PASSWORD"]
 if ([string]::IsNullOrEmpty($postgresPassword) -or $postgresPassword -match '^0+$') {
@@ -234,6 +251,22 @@ if ([string]::IsNullOrEmpty($grafanaPassword) -or $grafanaPassword -match '^0+$'
     $newGrafanaPassword = -join ($bytes | ForEach-Object { $_.ToString("x2") })
     (Get-Content ".env") -replace 'GRAFANA_ADMIN_PASSWORD=.*', "GRAFANA_ADMIN_PASSWORD=$newGrafanaPassword" | Set-Content ".env"
     Write-Success "Generated new GRAFANA_ADMIN_PASSWORD"
+}
+
+# Check/Generate INTERNAL_API_TOKEN — dedicated service credential for
+# worker/n8n → API auth, never AUTH_PASSWORD (#1275)
+$internalApiToken = $envVars["INTERNAL_API_TOKEN"]
+if ([string]::IsNullOrEmpty($internalApiToken)) {
+    $bytes = New-Object byte[] 32
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    $rng.GetBytes($bytes)
+    $newToken = -join ($bytes | ForEach-Object { $_.ToString("x2") })
+    if ((Get-Content ".env") -match '^INTERNAL_API_TOKEN=') {
+        (Get-Content ".env") -replace 'INTERNAL_API_TOKEN=.*', "INTERNAL_API_TOKEN=$newToken" | Set-Content ".env"
+    } else {
+        Add-Content ".env" "`nINTERNAL_API_TOKEN=$newToken"
+    }
+    Write-Success "Generated new INTERNAL_API_TOKEN"
 }
 
 # Step 3: Start services

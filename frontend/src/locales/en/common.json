@@ -88,7 +88,18 @@
     "reminderMin15": "15 min",
     "reminderMin30": "30 min",
     "reminderMin60": "1 h",
-    "taskReminder": "Reminder: {title}"
+    "taskReminder": "Reminder: {title}",
+    "planSuggest": "Suggest plan",
+    "planSuggestHint": "AI planning: propose slots for open tasks around busy events",
+    "planWorking": "Planning…",
+    "planUnavailable": "AI planning is not configured — add an AI provider in Settings",
+    "planEmpty": "No suggestions — nothing open to plan or no free slots",
+    "planError": "Could not get AI planning suggestions",
+    "planApplied": "Plan applied",
+    "planPending": "AI suggestions ({count})",
+    "planAcceptAll": "Accept all",
+    "planDismiss": "Dismiss",
+    "planAcceptHint": "Click to accept this slot"
   },
   "emails": {
     "title": "Mail",
@@ -187,7 +198,10 @@
   "pwa": {
     "installPrompt": "Install Joidy for quick access",
     "closeInstallNotice": "Close install notice",
-    "installed": "Joidy installed! You can now access it from your desktop."
+    "installed": "Joidy installed! You can now access it from your desktop.",
+    "updateAvailable": "A new version of Joidy is available",
+    "update": "Update",
+    "closeUpdateNotice": "Close update notice"
   },
   "onboarding": {
     "skipTour": "Skip welcome tour",
@@ -693,7 +707,15 @@
     "vaultTitle": "Connect your Vault (Optional)",
     "vaultDesc": "If you use Obsidian, enter the path to your vault (e.g. ~/Documents/notes/my-vault). Otherwise, leave it blank and Joidy will use its internal storage.",
     "vaultPath": "Vault Path (e.g. ~/Documents/notes/my-vault)",
-    "doneDesc": "Your environment has been secured and configured successfully. Redirecting to the system..."
+    "doneDesc": "Your environment has been secured and configured successfully. Redirecting to the system...",
+    "passwordHint": "Minimum {min} characters — a passphrase is stronger than a complex word.",
+    "passwordTooShort": "Password must be at least {min} characters long",
+    "passwordMismatch": "Passwords do not match",
+    "strengthLabel": "Strength",
+    "strengthWeak": "Weak",
+    "strengthFair": "Fair",
+    "strengthGood": "Good",
+    "strengthStrong": "Strong"
   },
   "folderPicker": {
     "title": "Move note to folder",

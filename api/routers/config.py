@@ -1,10 +1,12 @@
+import ipaddress
+import os
 import secrets
 
 from config import settings
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from services.auth_service import get_current_user, hash_password
-from services.env_file import ENV_FILE, read_env, write_env  # noqa: F401  (ENV_FILE re-exported)
+from services.env_file import ENV_FILE, read_env, validate_env_value, write_env  # noqa: F401  (ENV_FILE re-exported)
 
 router = APIRouter(prefix="/config", tags=["config"])
 
@@ -30,6 +32,14 @@ CONFIG_KEYS = {
     "ai_service_enabled": "AI_SERVICE_ENABLED",
 }
 
+# Keys where an empty string is a deliberate "clear" request (e.g. the GitHub
+# disconnect flow sends ``github_token: ""`` to wipe the stored token). For
+# every other key an empty value means "not provided": writing it into .env
+# would silently clobber a working config with "" (#1304). Secret fields are
+# never returned by GET /config, so clients can't distinguish "clear" from
+# "field left blank" for them — they must stay non-clearable.
+CLEARABLE_KEYS = {"github_token", "github_username", "daily_notes_folder"}
+
 PUBLIC_KEYS = {
     "gemini_api_key": False,
     "obsidian_vault_path": True,
@@ -51,6 +61,17 @@ PUBLIC_KEYS = {
     "app_env": True,
     "ai_service_enabled": True,
 }
+
+
+# Values shipped in .env.example (or used as placeholders) that must count as
+# "not configured" — otherwise a manual ``cp .env.example .env`` would trip
+# the setup-completed guard forever.
+_PLACEHOLDER_VALUES = frozenset({"", "your_gemini_api_key_here", "change_this_to_a_random_secret_key"})
+
+
+def _configured(value: str | None) -> bool:
+    """True when a value is present and not a shipped placeholder."""
+    return bool(value) and value.strip() not in _PLACEHOLDER_VALUES
 
 
 class ConfigResponse(BaseModel):
@@ -101,7 +122,7 @@ def get_config():
         value = env_vars.get(env_key, "")
         is_public = PUBLIC_KEYS.get(short_key, False)
 
-        if value and value not in ("", "your_gemini_api_key_here", "change_this_to_a_random_secret_key"):
+        if _configured(value):
             configured.append(short_key)
 
         if is_public:
@@ -118,6 +139,12 @@ def update_config(update: ConfigUpdate):
 
     update_data = update.model_dump(exclude_none=True)
 
+    # Empty values mean "not provided" for non-clearable keys — strip them so
+    # an empty string can never clobber a working .env entry or an in-memory
+    # setting (pydantic reads "" as set). Only CLEARABLE_KEYS accept "" as a
+    # deliberate clear (#1304).
+    update_data = {k: v for k, v in update_data.items() if k in CLEARABLE_KEYS or (v or "").strip()}
+
     # Detect vault path change — Docker bind mounts are immutable, so changing
     # OBSIDIAN_VAULT_PATH requires recreating the worker/api containers for the
     # new path to take effect (#784).
@@ -128,17 +155,21 @@ def update_config(update: ConfigUpdate):
     for short_key, env_key in CONFIG_KEYS.items():
         if short_key in update_data:
             value = update_data[short_key]
-            # Skip empty overrides for non-secret provider settings: an empty
-            # string would clobber a working config (pydantic reads "" as set).
-            if (
-                short_key in ("llm_model", "embedding_model", "openai_base_url", "google_redirect_uri")
-                and not (value or "").strip()
-            ):
-                continue
             if value is not None:
-                env_vars[env_key] = value
+                try:
+                    env_vars[env_key] = validate_env_value(env_key, value)
+                except ValueError as exc:
+                    raise HTTPException(status_code=400, detail=f"Invalid value for '{short_key}': {exc}") from exc
+                # Keep the in-memory update below in sync with the persisted
+                # (possibly normalized) value.
+                update_data[short_key] = env_vars[env_key]
 
-    write_env(env_vars)
+    try:
+        write_env(env_vars)
+    except ValueError as exc:
+        # A key already on disk can fail the universal safety check (#1312) —
+        # fail closed rather than round-trip a poisoned value.
+        raise HTTPException(status_code=400, detail=f"Refusing to persist .env: {exc}") from exc
 
     # Update in-memory settings so services see the new values immediately
     for short_key, value in update_data.items():
@@ -224,49 +255,305 @@ class SetupRequest(BaseModel):
     obsidian_vault_path: str | None = None
 
 
+# Password policy for first-boot setup (#1284). The master password is the
+# single credential protecting the whole dataset, so a weak one defeats the
+# entire auth model. Dependency-free denylist: the most common passwords and
+# their trivially extended (≥12 char) variants.
+_SETUP_MIN_PASSWORD_LENGTH = 12
+
+_COMMON_SETUP_PASSWORDS = frozenset(
+    {
+        # Classic top-passwords lists (most are < 12 chars and already blocked
+        # by the length rule, but the denylist must also catch them after a
+        # suffix/prefix is appended).
+        "password",
+        "123456",
+        "123456789",
+        "12345678",
+        "1234567890",
+        "12345",
+        "1234567",
+        "1234",
+        "qwerty",
+        "abc123",
+        "111111",
+        "football",
+        "monkey",
+        "letmein",
+        "dragon",
+        "baseball",
+        "iloveyou",
+        "trustno1",
+        "sunshine",
+        "master",
+        "welcome",
+        "shadow",
+        "ashley",
+        "michael",
+        "ninja",
+        "mustang",
+        "password1",
+        "123123",
+        "admin",
+        "admin123",
+        "superman",
+        "batman",
+        "login",
+        "princess",
+        "qwerty123",
+        "qwertyuiop",
+        "starwars",
+        "whatever",
+        "freedom",
+        "hello",
+        "charlie",
+        "donald",
+        "123qwe",
+        "123321",
+        "654321",
+        "555555",
+        "7777777",
+        "888888",
+        "jordan",
+        "zxcvbnm",
+        "asdfgh",
+        "hunter",
+        "buster",
+        "soccer",
+        "harley",
+        "ranger",
+        "jessica",
+        "pepper",
+        "daniel",
+        "banana",
+        "hockey",
+        "killer",
+        "george",
+        "computer",
+        "michelle",
+        "passw0rd",
+        "p@ssw0rd",
+        "changeme",
+        "secret",
+        "letmein123",
+        # Common ≥12-character variants that would pass the length rule alone.
+        "password123",
+        "password1234",
+        "password12345",
+        "qwerty123456",
+        "qwerty1234567",
+        "administrator",
+        "administrator1",
+        "1q2w3e4r5t",
+        "1q2w3e4r5t6y",
+        "123456789012",
+        "1234567890123",
+        "12345678901234",
+        "1234567891011",
+        "iloveyou123",
+        "iloveyou1234",
+        "welcome123",
+        "welcome1234",
+        "changeme123",
+        "changeme1234",
+        "letmein1234",
+        "abc123456789",
+        "abcd12345678",
+        "supersecret",
+        "supersecret1",
+        "secret1234",
+        "joidyjoidy12",
+        "admin123456",
+        "admin1234567",
+        "root12345678",
+        "test12345678",
+        "user12345678",
+        "guest1234567",
+        "default12345",
+        "trustno11234",
+    }
+)
+
+# Headers that make the reported client address untrusted for the setup
+# lockdown (#1292). Uvicorn runs with ``--proxy-headers
+# --forwarded-allow-ips='*'``, so ``request.client`` reflects
+# ``X-Forwarded-For`` whenever the header is present — and any remote caller
+# can set it to ``127.0.0.1``. Nothing in the default deployment proxies this
+# endpoint, so a forwarding header here is either a spoof attempt or an
+# unsupported proxy path; both are refused.
+_UNTRUSTED_FORWARD_HEADERS = ("x-forwarded-for", "x-real-ip", "forwarded")
+
+
+def _default_gateway_ips() -> set[ipaddress.IPv4Address | ipaddress.IPv6Address]:
+    """Default gateway IPs of this process's network namespace.
+
+    Inside a container, traffic entering through a published port from the
+    Docker/Podman *host* arrives with the bridge (or slirp/pasta) gateway as
+    the source address — the gateway IS the host, so it counts as a local
+    client. Remote clients keep their own source IP and fail the check.
+    """
+    gateways: set[ipaddress.IPv4Address | ipaddress.IPv6Address] = set()
+    try:
+        with open("/proc/net/route") as f:
+            for line in f.read().splitlines()[1:]:
+                fields = line.split()
+                # Iface Destination Gateway Flags ... — destination 0.0.0.0 is
+                # the default route; gateway is little-endian hex IPv4.
+                if len(fields) >= 3 and fields[1] == "00000000":
+                    try:
+                        gateways.add(ipaddress.IPv4Address(bytes.fromhex(fields[2])[::-1]))
+                    except ValueError:
+                        continue
+    except OSError:
+        pass
+    try:
+        with open("/proc/net/ipv6_route") as f:
+            for line in f.read().splitlines():
+                fields = line.split()
+                # dest(32hex) prefixlen src(32hex) srclen nexthop(32hex) ...
+                if len(fields) >= 5 and fields[1] == "00" and int(fields[0], 16) == 0:
+                    try:
+                        nexthop = int(fields[4], 16)
+                    except ValueError:
+                        continue
+                    if nexthop:
+                        gateways.add(ipaddress.IPv6Address(nexthop))
+    except OSError:
+        pass
+    return gateways
+
+
+def _is_local_setup_client(request: Request) -> bool:
+    """True only when the request peer is the machine hosting Joidy.
+
+    Accepts loopback (bare-metal installs, ``docker exec``, SSH tunnels) and
+    the container's default gateway (host-originated traffic through published
+    ports). Everything else — remote LAN/WAN clients, forged or proxied
+    requests — is refused to close the first-boot race (#1292).
+    """
+    if any(header in request.headers for header in _UNTRUSTED_FORWARD_HEADERS):
+        return False
+    if request.client is None:
+        return False
+    try:
+        ip = ipaddress.ip_address(request.client.host)
+    except ValueError:
+        return False
+    mapped = getattr(ip, "ipv4_mapped", None)  # ::ffff:127.0.0.1 → 127.0.0.1
+    if mapped is not None:
+        ip = mapped
+    if ip.is_loopback:
+        return True
+    return ip in _default_gateway_ips()
+
+
+def _validate_setup_password(password: str) -> None:
+    """Enforce the first-boot password policy (#1284)."""
+    if not password or len(password) < _SETUP_MIN_PASSWORD_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Password must be at least {_SETUP_MIN_PASSWORD_LENGTH} characters long",
+        )
+    if password.lower() in _COMMON_SETUP_PASSWORDS or len(set(password)) == 1:
+        raise HTTPException(
+            status_code=400,
+            detail="Password is too common or predictable — choose a stronger passphrase",
+        )
+
+
+def _setup_is_complete(env_vars: dict) -> bool:
+    """True when ANY part of the auth config already exists (#1292).
+
+    Checking both keys used to be required to refuse re-setup, which let a
+    partial-config state (e.g. only SECRET_KEY present) allow re-setup to
+    overwrite AUTH_PASSWORD — a password takeover. Persisted file values and
+    process env (settings) are both consulted; placeholders don't count.
+    """
+    return any(
+        _configured(value)
+        for value in (
+            env_vars.get("AUTH_PASSWORD"),
+            env_vars.get("SECRET_KEY"),
+            settings.auth_password,
+            settings.secret_key,
+        )
+    )
+
+
 @router.get("/setup-status")
 def setup_status():
     env_vars = read_env()
-    needs_setup = not (env_vars.get("AUTH_PASSWORD") and env_vars.get("SECRET_KEY"))
+    # needs_setup stays False only once BOTH keys are genuinely configured;
+    # placeholder values from .env.example don't count as configured.
+    needs_setup = not (_configured(env_vars.get("AUTH_PASSWORD")) and _configured(env_vars.get("SECRET_KEY")))
     # Only reveal whether setup is needed — no sensitive information
     return {"needs_setup": needs_setup}
 
 
 @router.post("/setup")
-def perform_setup(req: SetupRequest):
-    env_vars = read_env()
-
-    # Reject if setup already completed — prevents re-setup attacks
-    if env_vars.get("AUTH_PASSWORD") and env_vars.get("SECRET_KEY"):
+def perform_setup(request: Request, req: SetupRequest):
+    # First-boot endpoint — restricted to the machine hosting the service
+    # (#1292). Remote clients racing a fresh deployment to claim the instance
+    # get a 403, as do requests carrying forwarding headers (the reported
+    # client would be spoofable).
+    if not _is_local_setup_client(request):
         raise HTTPException(
             status_code=403,
-            detail="Setup already completed. Use the settings page to change configuration.",
+            detail="Setup can only be performed from the machine hosting Joidy.",
         )
 
-    if not req.auth_password or len(req.auth_password) < 4:
+    env_vars = read_env()
+
+    # Reject when setup is even partially done — prevents re-setup and
+    # password-takeover attacks (#1292).
+    if _setup_is_complete(env_vars):
         raise HTTPException(
-            status_code=400,
-            detail="Password must be at least 4 characters long",
+            status_code=403,
+            detail=(
+                "Setup already completed. Use the settings page to change "
+                "configuration, or remove AUTH_PASSWORD/SECRET_KEY from .env "
+                "to re-run setup."
+            ),
         )
+
+    _validate_setup_password(req.auth_password)
+
+    # Validate free-text input before it touches .env (#1312): a crafted vault
+    # path used to persist verbatim — newlines forged extra KEY= lines and
+    # $(...) executed on the next `make` invocation that sourced the file.
+    vault_path: str | None = None
+    if req.obsidian_vault_path:
+        try:
+            vault_path = validate_env_value("OBSIDIAN_VAULT_PATH", req.obsidian_vault_path)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid obsidian_vault_path: {exc}") from exc
 
     env_vars["AUTH_PASSWORD"] = hash_password(req.auth_password)
-    if req.obsidian_vault_path:
-        env_vars["OBSIDIAN_VAULT_PATH"] = req.obsidian_vault_path
+    if vault_path:
+        env_vars["OBSIDIAN_VAULT_PATH"] = vault_path
 
-    if not env_vars.get("SECRET_KEY"):
-        env_vars["SECRET_KEY"] = secrets.token_urlsafe(32)
+    # Always mint a fresh SECRET_KEY on successful setup (#1292): rotating it
+    # invalidates any tokens signed before setup completed (e.g. under a
+    # placeholder secret), and a fresh key lands in the file even when .env
+    # already carried a placeholder entry.
+    env_vars["SECRET_KEY"] = secrets.token_urlsafe(32)
 
-    write_env(env_vars)
+    if not env_vars.get("INTERNAL_API_TOKEN"):
+        env_vars["INTERNAL_API_TOKEN"] = secrets.token_urlsafe(32)
+
+    try:
+        write_env(env_vars)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Refusing to persist .env: {exc}") from exc
 
     # Reload settings in memory (best-effort — the authoritative source is
     # now the .env file, which every worker reads via get_persisted()).
-    import os
-
-    settings.auth_password = hash_password(req.auth_password)
+    settings.auth_password = env_vars["AUTH_PASSWORD"]
     settings.secret_key = env_vars["SECRET_KEY"]
-    if req.obsidian_vault_path:
-        os.environ["OBSIDIAN_VAULT_PATH"] = req.obsidian_vault_path
-        settings.obsidian_vault_path = req.obsidian_vault_path
+    settings.internal_api_token = env_vars["INTERNAL_API_TOKEN"]
+    if vault_path:
+        os.environ["OBSIDIAN_VAULT_PATH"] = vault_path
+        settings.obsidian_vault_path = vault_path
 
     return {
         "status": "ok",

@@ -88,7 +88,18 @@
     "reminderMin15": "15 min",
     "reminderMin30": "30 min",
     "reminderMin60": "1 h",
-    "taskReminder": "Recordatorio: {title}"
+    "taskReminder": "Recordatorio: {title}",
+    "planSuggest": "Sugerir planificación",
+    "planSuggestHint": "Planificación con IA: propone horarios para las tareas abiertas alrededor de los eventos",
+    "planWorking": "Planificando…",
+    "planUnavailable": "La planificación con IA no está configurada — añade un proveedor de IA en Ajustes",
+    "planEmpty": "Sin sugerencias — no hay tareas abiertas ni huecos libres",
+    "planError": "No se pudieron obtener sugerencias de planificación con IA",
+    "planApplied": "Plan aplicado",
+    "planPending": "Sugerencias de IA ({count})",
+    "planAcceptAll": "Aceptar todo",
+    "planDismiss": "Descartar",
+    "planAcceptHint": "Clic para aceptar este horario"
   },
   "emails": {
     "title": "Correos",
@@ -187,7 +198,10 @@
   "pwa": {
     "installPrompt": "Instala Joidy para acceso rápido",
     "closeInstallNotice": "Cerrar aviso de instalación",
-    "installed": "¡Joidy instalado! Ahora puedes acceder desde tu escritorio."
+    "installed": "¡Joidy instalado! Ahora puedes acceder desde tu escritorio.",
+    "updateAvailable": "Hay una nueva versión de Joidy disponible",
+    "update": "Actualizar",
+    "closeUpdateNotice": "Cerrar aviso de actualización"
   },
   "onboarding": {
     "skipTour": "Saltar tour de bienvenida",
@@ -693,7 +707,15 @@
     "vaultTitle": "Conecta tu Vault (Opcional)",
     "vaultDesc": "Si usas Obsidian, introduce la ruta a tu bóveda (ej: ~/Documentos/notas/mi-vault). Si no, déjalo en blanco y Joidy usará su almacenamiento interno.",
     "vaultPath": "Ruta del Vault (ej: ~/Documentos/notas/mi-vault)",
-    "doneDesc": "Tu entorno ha sido asegurado y configurado con éxito. Redirigiendo al sistema..."
+    "doneDesc": "Tu entorno ha sido asegurado y configurado con éxito. Redirigiendo al sistema...",
+    "passwordHint": "Mínimo {min} caracteres — una frase de paso es más fuerte que una palabra compleja.",
+    "passwordTooShort": "La contraseña debe tener al menos {min} caracteres",
+    "passwordMismatch": "Las contraseñas no coinciden",
+    "strengthLabel": "Seguridad",
+    "strengthWeak": "Débil",
+    "strengthFair": "Aceptable",
+    "strengthGood": "Buena",
+    "strengthStrong": "Fuerte"
   },
   "folderPicker": {
     "title": "Mover nota a carpeta",

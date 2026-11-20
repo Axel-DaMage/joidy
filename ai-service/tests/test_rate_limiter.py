@@ -36,10 +36,10 @@ class TestRateLimiter(unittest.IsolatedAsyncioTestCase):
 
 class TestGetLimiter(unittest.TestCase):
     def setUp(self):
-        rate_limiter._limiter = None
+        rate_limiter._limiters.clear()
 
     def tearDown(self):
-        rate_limiter._limiter = None
+        rate_limiter._limiters.clear()
 
     def test_get_limiter_returns_singleton(self):
         first = get_limiter()
@@ -49,6 +49,23 @@ class TestGetLimiter(unittest.TestCase):
     def test_get_limiter_respects_max_per_minute(self):
         limiter = get_limiter(max_per_minute=15)
         self.assertEqual(limiter.max_per_minute, 15)
+
+    def test_distinct_names_get_distinct_limiters(self):
+        embed = get_limiter(10, name="embed")
+        chat = get_limiter(600, name="chat")
+        self.assertIsNot(embed, chat)
+        self.assertEqual(embed.max_per_minute, 10)
+        self.assertEqual(chat.max_per_minute, 600)
+
+    def test_same_name_reuses_and_honors_new_rpm(self):
+        first = get_limiter(12, name="rag")
+        again = get_limiter(60, name="rag")
+        self.assertIs(first, again)
+        self.assertEqual(again.max_per_minute, 60)
+        self.assertAlmostEqual(again.interval, 1.0)
+
+    def test_rpm_clamped_to_minimum_one(self):
+        self.assertEqual(get_limiter(0).max_per_minute, 1)
 
 
 if __name__ == "__main__":

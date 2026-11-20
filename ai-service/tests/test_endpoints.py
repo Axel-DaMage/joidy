@@ -34,6 +34,10 @@ def ai_disabled(monkeypatch):
         monkeypatch.setattr(settings, key, "")
     monkeypatch.setattr(settings, "ollama_base_url", "")
     monkeypatch.setattr(settings, "internal_secret", "")
+    # Pin to non-production: with no internal_secret a developer .env set to
+    # APP_ENV=production would make the fail-closed middleware (#1277) return
+    # 503 for every endpoint test below.
+    monkeypatch.setattr(settings, "app_env", "development")
     monkeypatch.setattr(settings, "llm_model", "gemini:gemini-2.0-flash")
     monkeypatch.setattr(settings, "embedding_model", "gemini:models/text-embedding-004")
     return settings
@@ -51,6 +55,9 @@ def ai_enabled(monkeypatch):
         monkeypatch.setattr(settings, key, "")
     monkeypatch.setattr(settings, "gemini_api_key", "test-key")
     monkeypatch.setattr(settings, "internal_secret", "")
+    # Pin to non-production so the fail-closed middleware (#1277) does not
+    # reject requests when INTERNAL_SECRET is empty.
+    monkeypatch.setattr(settings, "app_env", "development")
     monkeypatch.setattr(settings, "llm_model", "gemini:gemini-2.0-flash")
     monkeypatch.setattr(settings, "embedding_model", "gemini:models/text-embedding-004")
 
@@ -255,6 +262,102 @@ class TestChatEndpoint:
         assert resp.status_code == 422
 
 
+# ── /classify cache-key ambiguity (#1330) ──────────────────────────────
+
+
+class TestClassifyCacheKeys:
+    def test_comma_containing_tags_produce_distinct_keys(self, ai_enabled):
+        """["a,b","c"] and ["a","b,c"] must not share a cache entry."""
+        client = _client()
+        base = {"note_id": 1, "content": "same content"}
+
+        r1 = client.post("/classify", json={**base, "existing_tags": ["a,b", "c"]})
+        r2 = client.post("/classify", json={**base, "existing_tags": ["a", "b,c"]})
+        assert r1.json()["status"] == "success"
+        assert r2.json()["status"] == "success"
+        # If the two tag lists collapsed into one key, the second request
+        # would be a cache hit and classify would only be awaited once.
+        assert ai_enabled.llm.classify.await_count == 2
+
+        # An identical repeat request IS a cache hit — still only 2 calls.
+        r3 = client.post("/classify", json={**base, "existing_tags": ["a,b", "c"]})
+        assert r3.json()["status"] == "success"
+        assert ai_enabled.llm.classify.await_count == 2
+
+
+# ── /cluster ───────────────────────────────────────────────────────────
+
+
+def _mock_cluster_db(monkeypatch, rows):
+    """Point /cluster's engine at a fake connection returning `rows`."""
+    engine = MagicMock()
+    conn = engine.connect.return_value.__enter__.return_value
+    conn.execute.return_value.fetchall.return_value = rows
+    monkeypatch.setattr(database, "engine", engine)
+
+
+class TestClusterEndpoint:
+    def test_malformed_embedding_row_returns_422(self, ai_disabled, monkeypatch):
+        _mock_cluster_db(
+            monkeypatch,
+            [(1, "[0.1,0.2,0.3]"), (2, "not-a-vector"), (3, "[0.4,0.5,0.6]")],
+        )
+        resp = _client().post("/cluster?min_samples=1")
+        assert resp.status_code == 422
+        assert "Malformed embedding" in resp.json()["detail"]
+
+    def test_ragged_embedding_dimensions_returns_422(self, ai_disabled, monkeypatch):
+        _mock_cluster_db(
+            monkeypatch,
+            [(1, "[0.1,0.2,0.3]"), (2, "[0.4,0.5]"), (3, "[0.6,0.7,0.8]")],
+        )
+        resp = _client().post("/cluster?min_samples=1")
+        assert resp.status_code == 422
+
+    def test_valid_embeddings_do_not_422(self, ai_disabled, monkeypatch):
+        _mock_cluster_db(
+            monkeypatch,
+            [
+                (1, "[1.0,0.0]"),
+                (2, "[0.9,0.1]"),
+                (3, "[0.0,1.0]"),
+                (4, "[0.1,0.9]"),
+            ],
+        )
+        resp = _client().post("/cluster?eps=2.0&min_samples=1")
+        assert resp.status_code == 200
+        assert "clusters" in resp.json()
+
+    def test_too_few_notes_short_circuits(self, ai_disabled, monkeypatch):
+        _mock_cluster_db(monkeypatch, [(1, "[0.1,0.2]")])
+        resp = _client().post("/cluster?min_samples=5")
+        assert resp.status_code == 200
+        assert resp.json()["clusters"] == []
+
+
+# ── /chat prompt delimiters (#1330) ────────────────────────────────────
+
+
+class TestChatPromptDelimiters:
+    def test_messages_wrapped_in_delimiters(self, ai_enabled):
+        resp = _client().post(
+            "/chat",
+            json={
+                "messages": [
+                    {"role": "user", "content": "hola"},
+                    {"role": "assistant", "content": "¡buenas!"},
+                    {"role": "user", "content": "resume mis notas"},
+                ]
+            },
+        )
+        assert resp.json()["status"] == "success"
+        kwargs = ai_enabled.llm.generate.call_args.kwargs
+        assert '<chat_message role="user">' in kwargs["prompt"]
+        assert "resume mis notas" in kwargs["prompt"]
+        assert "</chat_message>" in kwargs["prompt"]
+        assert "<personal_context>" in kwargs["system_prompt"]
+
+
 # ── internal auth middleware ───────────────────────────────────────────
 
 
@@ -276,6 +379,26 @@ class TestInternalAuth:
     def test_health_public_even_with_secret(self, ai_enabled, monkeypatch):
         monkeypatch.setattr(settings, "internal_secret", "s3cr3t")
         assert _client().get("/health").status_code == 200
+
+    def test_fail_closed_in_production_without_secret(self, ai_enabled, monkeypatch):
+        # #1277: a production deployment missing INTERNAL_SECRET must refuse
+        # data endpoints instead of serving them unauthenticated.
+        monkeypatch.setattr(settings, "app_env", "production")
+        monkeypatch.setattr(settings, "internal_secret", "")
+        resp = _client().post("/embed", json={"note_id": 1, "content": "x"})
+        assert resp.status_code == 503
+
+    def test_health_and_metrics_public_in_production_without_secret(self, ai_enabled, monkeypatch):
+        monkeypatch.setattr(settings, "app_env", "production")
+        monkeypatch.setattr(settings, "internal_secret", "")
+        client = _client()
+        assert client.get("/health").status_code == 200
+        assert client.get("/metrics").status_code == 200
+
+    def test_permissive_in_dev_without_secret(self, ai_enabled):
+        # Non-production stays permissive when INTERNAL_SECRET is unset.
+        resp = _client().post("/embed", json={"note_id": 1, "content": "x"})
+        assert resp.status_code == 200
 
 
 if __name__ == "__main__":

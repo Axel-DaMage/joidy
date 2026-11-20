@@ -1,0 +1,38 @@
+# Opt-in overlay: power management (Settings → Servicios) — issue #1278.
+#
+# Mounts the container engine socket into `api` so the /system/power/*
+# endpoints can list and stop/start the compose services of this stack.
+# DISABLED BY DEFAULT: the socket grants full control of the container engine
+# (any container, any image, host root via a privileged container) to anyone
+# who reaches it, so the base compose file never mounts it. Read the
+# "Gestión de energía (docker.sock)" section in SECURITY.md before enabling.
+#
+# Enable:
+#   POWER_MANAGEMENT_ENABLED=true joidy up       (the CLI adds this file itself)
+#   # or, with plain compose:
+#   docker compose -f docker-compose.yml -f docker-compose.power.yml up -d
+#   # or in development, after the dev overlay:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml \
+#     -f docker-compose.power.yml up -d
+#
+# DOCKER_GID (Docker only) must be the real GID of the group owning the socket
+# — `getent group docker | cut -d: -f3`. `joidy up` detects it automatically.
+# It is REQUIRED here (`:?` below): never default to group 0/root. Podman
+# rootless does not need it for access; `joidy up` exports the user's own GID
+# to satisfy the interpolation.
+services:
+  api:
+    volumes:
+      # Host path to the engine socket (container path is always
+      # /var/run/docker.sock). Docker: /var/run/docker.sock — Podman rootless:
+      # /run/user/$UID/podman/podman.sock. `joidy up` detects the engine and
+      # sets DOCKER_SOCK_PATH automatically.
+      - ${DOCKER_SOCK_PATH:-/var/run/docker.sock}:/var/run/docker.sock
+    group_add:
+      # Real GID of the group owning the socket so the non-root `app` user can
+      # access it. Fails fast with a clear error when unset/empty instead of
+      # silently falling back to group 0 (root).
+      - "${DOCKER_GID:?DOCKER_GID is required when POWER_MANAGEMENT_ENABLED=true — set it to the docker group GID in .env (getent group docker | cut -d: -f3)}"
+    environment:
+      - POWER_MANAGEMENT_ENABLED=true
+      - DOCKER_SOCK_PATH=/var/run/docker.sock

@@ -13,7 +13,6 @@ as conflicted. Resolution options:
 """
 
 import logging
-import os
 from datetime import UTC, datetime
 from typing import Literal
 
@@ -21,6 +20,7 @@ from config import settings
 from models.note import Note
 from models.sync_state import SyncState
 from services.note_service import update_note
+from services.vault_paths import resolve_confined_source_path
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -114,21 +114,26 @@ def resolve_conflict(
         logger.info("[sync] Resolved conflict for note %d: keep_local", note_id)
 
     elif resolution == "keep_remote":
-        # Accept remote content — read from the vault file
-        vault_path = settings.obsidian_vault_path
-        if not vault_path or not note.source_path:
-            return {"status": "error", "message": "Cannot read remote: vault path or source_path missing"}
+        # Accept remote content — read from the vault file. The source path is
+        # confined exactly like write_to_vault (#1287, #1314): realpath +
+        # commonpath against the vault root, ``.md`` only, no hidden dirs or
+        # ``_joidy/`` — so a stored path can never exfiltrate a file outside
+        # the vault (e.g. through a planted symlink). Every failure below
+        # returns the same generic message: distinguishing "outside vault"
+        # from "does not exist" would leak a file-existence oracle (#1314).
+        if not settings.obsidian_vault_path or not note.source_path:
+            return {"status": "error", "message": "Cannot read remote vault file"}
 
-        full_path = os.path.abspath(note.source_path)
-        vault = os.path.abspath(vault_path)
-        if not full_path.startswith(vault):
-            return {"status": "error", "message": "Source path outside vault"}
+        full_path = resolve_confined_source_path(note.source_path)
+        if full_path is None:
+            return {"status": "error", "message": "Cannot read remote vault file"}
 
         try:
             with open(full_path, encoding="utf-8") as f:
                 remote_content = f.read()
-        except Exception as e:
-            return {"status": "error", "message": f"Cannot read vault file: {e}"}
+        except Exception:
+            logger.warning("[sync] keep_remote: cannot read %s", full_path, exc_info=True)
+            return {"status": "error", "message": "Cannot read remote vault file"}
 
         update_note(
             db,

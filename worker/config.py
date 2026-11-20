@@ -9,7 +9,8 @@ class Settings(BaseSettings):
     ai_service_url: str = "http://ai-service:8002"
     vault_path: str = "/vault"
     app_env: str = "development"
-    auth_password: str | None = None
+    # Dedicated service token for worker → API auth. Never AUTH_PASSWORD (#1275).
+    internal_api_token: str | None = None
     # Local SQLite log of pending vault events, so events survive a worker
     # crash (kill -9 / OOM) and are replayed on next startup (#371).
     event_log_path: str = "/data/db/vault_events.db"
@@ -17,8 +18,19 @@ class Settings(BaseSettings):
     # identical content, treating the pair as a rename instead of delete+create
     # (#364).
     rename_match_window: float = 1.0
+    # Maximum vault-file size (bytes) the watcher will read into memory
+    # (#1298). Default 5 MiB: safely above the API's 500 KB content-truncation
+    # cap (api/services/sanitizer.py MAX_CONTENT_LENGTH), so normal notes sync
+    # unchanged, while multi-hundred-MB files — which would OOM the
+    # 512M-limited worker — are skipped with a warning instead of read.
+    max_note_file_size: int = 5 * 1024 * 1024
     # Interval (seconds) between Google Calendar sync triggers (#1134).
     calendar_sync_interval: int = 900
+    # Bind address for the /metrics + /health HTTP server (#1277). Loopback
+    # by default; docker-compose.yml sets WORKER_BIND_ADDR=0.0.0.0 because
+    # the port is not published to the host but must stay reachable on the
+    # internal compose network (Prometheus scrape, container healthchecks).
+    worker_bind_addr: str = "127.0.0.1"
 
 
 settings = Settings()

@@ -109,11 +109,11 @@ services:
         # Dev image ships test/lint tooling so tests run in-container (#999)
         INSTALL_DEV: "true"
     user: ${UID:-1000}:${GID:-1000}
-    ports:
-      - "${WORKER_PORT:-8001}:8001"
     volumes:
       - ./worker:/app
       - ./data/db:/data/db
       - ./.env:/app/.env
-      - ${OBSIDIAN_VAULT_PATH:-./data/vault}:/vault
+      # Read-only like production — the worker never writes to the vault
+      # (#1300); vault writes go through the API's joidy_vault_writer.
+      - ${OBSIDIAN_VAULT_PATH:-./data/vault}:/vault:ro
     command: watchfiles "python main.py" /app
