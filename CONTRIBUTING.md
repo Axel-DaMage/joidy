@@ -132,6 +132,23 @@ router = APIRouter()
 <Card>{note.title}</Card>
 ```
 
+### Licencia y Copyright (REUSE)
+
+El repositorio cumple la especificación [REUSE](https://reuse.software/) (#1384) y CI lo verifica con `reuse lint` (`.github/workflows/reuse.yml`).
+
+- **Archivos nuevos**: añade la cabecera SPDX como comentario al inicio del archivo (`#` en Python/shell/YAML/Dockerfile, `//` en TypeScript, `<!-- -->` en Svelte/HTML/Markdown):
+
+<!-- REUSE-IgnoreStart -->
+```python
+# SPDX-FileCopyrightText: 2025 D4MAG3_WIZ4RD and contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+```
+<!-- REUSE-IgnoreEnd -->
+
+- **Todo lo demás** (archivos existentes y formatos sin comentarios como JSON o imágenes) queda cubierto por la anotación global de [`REUSE.toml`](REUSE.toml); una cabecera en el archivo tiene prioridad sobre ella.
+- **Contenido de terceros** (fuentes, iconos, código copiado): no lo declares como propio. Añade una entrada en `REUSE.toml` con su titular y licencia reales, y el texto de la licencia en `LICENSES/` (`reuse download <SPDX-ID>`).
+- **Verificación local**: `pip install reuse && reuse lint` (o `pre-commit run reuse --all-files`).
+
 ## Guías de Estilo
 
 ### Python

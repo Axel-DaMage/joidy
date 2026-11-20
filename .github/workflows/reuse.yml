@@ -1,0 +1,46 @@
+# SPDX-FileCopyrightText: 2025 D4MAG3_WIZ4RD and contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+name: REUSE Compliance
+
+# Enforces https://reuse.software/ — every file must have copyright and
+# license information, either through an in-file SPDX header or through the
+# bulk annotations in REUSE.toml (#1384). Safe for fork PRs: no secrets, no
+# write permissions.
+
+on:
+  push:
+    branches: [main, development]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Only cancel in-flight runs for pull_request events (same policy as the
+  # other workflows, #1261).
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  reuse-lint:
+    name: REUSE Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+
+      # Keep this version in sync with the `reuse` hook rev in
+      # .pre-commit-config.yaml.
+      - name: Install reuse
+        run: python -m pip install --disable-pip-version-check reuse==6.3.0
+
+      - name: reuse lint
+        run: reuse lint
