@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 # Unauthenticated credential/secret endpoints. These are always keyed by the
 # direct peer IP — rotating Bearer/API-key headers or spoofed XFF must not
 # escape the bucket (#1276).
-_STRICT_PATHS = frozenset({"/auth/login", "/config/setup"})
+_STRICT_PATHS = frozenset({"/auth/login", "/auth/refresh", "/config/setup"})
 _STRICT_PREFIXES = ("/webhook/",)
 
 
@@ -116,7 +116,13 @@ class UserRateLimiter:
         if not secret:
             return None
         try:
-            payload = jwt.decode(token, secret, algorithms=[auth_service.ALGORITHM])
+            payload = jwt.decode(
+                token,
+                secret,
+                algorithms=[auth_service.ALGORITHM],
+                issuer=auth_service.ISSUER,
+                audience=auth_service.AUDIENCE,
+            )
         except jwt.InvalidTokenError:
             return None
         sub = payload.get("sub")

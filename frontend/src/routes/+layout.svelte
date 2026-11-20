@@ -14,7 +14,7 @@
   import StatusBarGitHub from '$lib/components/StatusBarGitHub.svelte';
   import Login from '$lib/components/Login.svelte';
   import SetupWizard from '$lib/components/SetupWizard.svelte';
-  import { api, type Goal, type PersonalStreak } from '$lib/api';
+  import { api, refreshAccessToken, type Goal, type PersonalStreak } from '$lib/api';
   import { session, isAuthenticated, getToken } from '$lib/stores/session';
   import {
     totalXP,
@@ -211,12 +211,15 @@
           wsHost = `${host}:8000`;
         }
       }
-      const wsUrl = `${wsProto}//${wsHost}/ws${getToken() ? `?token=${encodeURIComponent(getToken()!)}` : ''}`;
+      const wsUrl = `${wsProto}//${wsHost}/ws`;
 
-      // Log the URL without the query string — wsUrl carries the JWT in
-      // ?token= and tokens must never reach console output (#1317).
-      logger.info('[layout] Connecting to WebSocket:', wsUrl.split('?')[0]);
-      ws = new WebSocket(wsUrl);
+      // WS auth rides the Sec-WebSocket-Protocol handshake header instead of
+      // a ?token= query param, which used to leak the JWT into proxy access
+      // logs, browser history and console output (#1285, #1317). The server
+      // answers the "bearer" marker to complete protocol negotiation.
+      logger.info('[layout] Connecting to WebSocket:', wsUrl);
+      const wsToken = getToken();
+      ws = wsToken ? new WebSocket(wsUrl, ['bearer', wsToken]) : new WebSocket(wsUrl);
 
       ws.onopen = () => {
         logger.info('[layout] WebSocket connected');
@@ -269,11 +272,20 @@
         }
       };
 
-      ws.onclose = () => {
+      ws.onclose = (event) => {
         if (wsReconnectTimeout) clearTimeout(wsReconnectTimeout);
         const delay = Math.min(wsRetryDelay, 60000);
         logger.warn(`[layout] WebSocket connection closed, reconnecting in ${delay}ms...`);
-        wsReconnectTimeout = setTimeout(connectWS, delay);
+        // 4001 = auth rejected at handshake. The access token may have expired
+        // while the page was open — renew it silently so the reconnect picks
+        // up a fresh credential via getToken() (#1285).
+        if (event.code === 4001) {
+          refreshAccessToken().finally(() => {
+            wsReconnectTimeout = setTimeout(connectWS, delay);
+          });
+        } else {
+          wsReconnectTimeout = setTimeout(connectWS, delay);
+        }
         wsRetryDelay = Math.min(wsRetryDelay * 2, 60000);
       };
 

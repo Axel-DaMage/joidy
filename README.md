@@ -40,7 +40,7 @@ Personal knowledge management system with gamification. Manage notes, goals, str
 ### Linux / macOS
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Axel-DaMage/joidy/development/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Axel-DaMage/joidy/v1.1.0-beta.8/scripts/install.sh | bash
 ```
 
 Clona el repo, genera secretos automáticamente e instala el comando `joidy`. Luego:
@@ -58,10 +58,10 @@ Docker Desktop en Windows requiere WSL2. El camino más simple:
 # 1. Instala WSL2 con Ubuntu (como Administrador, una sola vez):
 wsl --install
 # 2. Reinicia y abre Ubuntu desde el menú de inicio, luego pega:
-#    curl -fsSL https://raw.githubusercontent.com/Axel-DaMage/joidy/development/scripts/install.sh | bash
+#    curl -fsSL https://raw.githubusercontent.com/Axel-DaMage/joidy/v1.1.0-beta.8/scripts/install.sh | bash
 ```
 
-> PowerShell nativo (sin WSL2): `irm https://raw.githubusercontent.com/Axel-DaMage/joidy/development/scripts/install.ps1 | iex`
+> PowerShell nativo (sin WSL2): `irm https://raw.githubusercontent.com/Axel-DaMage/joidy/v1.1.0-beta.8/scripts/install.ps1 | iex`
 
 ### Otros métodos
 
@@ -72,8 +72,8 @@ brew tap Axel-DaMage/homebrew-tap && brew install joidy
 # AUR (Arch Linux)
 yay -S joidy
 
-# Manual
-git clone https://github.com/Axel-DaMage/joidy.git && cd joidy && cp .env.example .env && docker compose up -d
+# Manual (clona la última release publicada)
+git clone --depth 1 --branch "$(curl -fsSL https://api.github.com/repos/Axel-DaMage/joidy/releases?per_page=1 | grep -m1 '"tag_name"' | cut -d'"' -f4)" https://github.com/Axel-DaMage/joidy.git && cd joidy && cp .env.example .env && docker compose up -d
 ```
 
 → Guía completa de instalación: [INSTALL.md](INSTALL.md)

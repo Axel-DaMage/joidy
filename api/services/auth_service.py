@@ -12,12 +12,15 @@ import jwt
 from config import settings
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from services.env_file import get_persisted
+from services.env_file import get_effective_secret, get_persisted
 
 logger = logging.getLogger(__name__)
 
 ALGORITHM = "HS256"
-TOKEN_EXPIRE_HOURS = 24 * 7  # 1 week
+ISSUER = "joidy-api"
+AUDIENCE = "joidy-app"
+TOKEN_TYPE_ACCESS = "access"  # noqa: S105 — JWT typ claim label, not a password
+TOKEN_TYPE_REFRESH = "refresh"  # noqa: S105 — JWT typ claim label, not a password
 
 security = HTTPBearer(auto_error=False)
 # bcrypt cost factor (default 12). Tests lower it via BCRYPT_ROUNDS (#996);
@@ -43,8 +46,12 @@ def _effective_secret_key() -> str:
 
     Same cross-worker rationale as ``_effective_auth_password``: tokens
     signed by the worker that ran setup must verify on its siblings.
+
+    Placeholder values shipped in .env.example (and common weak stand-ins)
+    are treated as unset (#1393): a signing key published in the repository
+    would let anyone forge JWTs, so token creation must fail closed.
     """
-    return get_persisted("SECRET_KEY") or settings.secret_key or ""
+    return get_effective_secret("SECRET_KEY", settings.secret_key)
 
 
 def signing_secret() -> str:
@@ -60,9 +67,11 @@ def signing_secret() -> str:
 def _effective_internal_api_token() -> str:
     """Return the current INTERNAL_API_TOKEN, reading from disk on every call.
 
-    Same cross-worker rationale as ``_effective_auth_password``.
+    Same cross-worker rationale as ``_effective_auth_password``. Placeholder
+    values are rejected the same way as SECRET_KEY (#1393): an internal token
+    set to a publicly known value would let anyone impersonate a service.
     """
-    return get_persisted("INTERNAL_API_TOKEN") or settings.internal_api_token or ""
+    return get_effective_secret("INTERNAL_API_TOKEN", settings.internal_api_token)
 
 
 def verify_internal_token(token: str) -> bool:
@@ -123,37 +132,90 @@ def hash_password(plain: str) -> str:
     return bcrypt.hashpw(plain.encode("utf-8"), bcrypt.gensalt(rounds=_BCRYPT_ROUNDS)).decode("utf-8")
 
 
-def create_access_token(user_id: int, username: str = "user") -> str:
-    """Create a JWT access token."""
+def _create_token(user_id: int, username: str, token_type: str, lifetime: timedelta) -> str:
+    """Sign a JWT with the registered claims enforced at verify time (#1285).
+
+    ``iat``/``iss``/``aud`` make every token attributable to this deployment
+    (an ``iss``/``aud`` mismatch is rejected on decode); ``typ`` keeps refresh
+    tokens from being replayed as access tokens; ``jti`` uniquely identifies
+    each refresh token so rotated credentials are never identical.
+    """
     secret = _effective_secret_key()
     if not secret:
         raise ValueError("SECRET_KEY not configured")
 
-    expire = datetime.now(UTC) + timedelta(hours=TOKEN_EXPIRE_HOURS)
-    to_encode = {
+    now = datetime.now(UTC)
+    claims: dict = {
         "sub": str(user_id),
-        "username": username,
-        "exp": expire,
+        "exp": now + lifetime,
+        "iat": now,
+        "iss": ISSUER,
+        "aud": AUDIENCE,
+        "typ": token_type,
     }
-    return jwt.encode(to_encode, secret, algorithm=ALGORITHM)
+    if username:
+        claims["username"] = username
+    if token_type == TOKEN_TYPE_REFRESH:
+        claims["jti"] = secrets.token_urlsafe(16)
+    return jwt.encode(claims, secret, algorithm=ALGORITHM)
 
 
-def verify_token(token: str) -> dict | None:
-    """Verify and decode a JWT token."""
+def create_access_token(user_id: int, username: str = "user") -> str:
+    """Create a short-lived JWT access token (#1285)."""
+    return _create_token(
+        user_id,
+        username,
+        TOKEN_TYPE_ACCESS,
+        timedelta(minutes=settings.access_token_expire_minutes),
+    )
+
+
+def create_refresh_token(user_id: int, username: str = "user") -> str:
+    """Create a long-lived JWT refresh token for ``POST /auth/refresh`` (#1285).
+
+    The token is only accepted by the refresh endpoint (``typ=refresh``);
+    each call returns a new ``jti`` so refreshes rotate the credential.
+    """
+    return _create_token(
+        user_id,
+        username,
+        TOKEN_TYPE_REFRESH,
+        timedelta(days=settings.refresh_token_expire_days),
+    )
+
+
+def verify_token(token: str, expected_type: str = TOKEN_TYPE_ACCESS) -> dict | None:
+    """Verify and decode a JWT token.
+
+    Enforces the registered claims: signature, ``exp``, ``iss``, ``aud``,
+    numeric ``iat``, plus the ``typ`` discriminant — a refresh token is
+    rejected wherever an access token is expected and vice versa (#1285).
+    """
     secret = _effective_secret_key()
     if not secret:
         logger.warning("SECRET_KEY not configured, token verification skipped")
         return None
 
     try:
-        payload = jwt.decode(token, secret, algorithms=[ALGORITHM])
-        return payload
+        payload = jwt.decode(
+            token,
+            secret,
+            algorithms=[ALGORITHM],
+            issuer=ISSUER,
+            audience=AUDIENCE,
+        )
     except jwt.ExpiredSignatureError:
         logger.warning("Token expired")
         return None
     except jwt.InvalidTokenError as e:
         logger.warning(f"Invalid token: {e}")
         return None
+
+    token_type = payload.get("typ")
+    if token_type != expected_type:
+        logger.warning(f"Unexpected token type {token_type!r} (expected {expected_type!r})")
+        return None
+    return payload
 
 
 def get_current_user_id(token: str) -> int | None:

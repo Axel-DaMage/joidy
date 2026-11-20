@@ -8,6 +8,7 @@ export interface UserSession {
   email?: string;
   avatar?: string;
   token?: string;
+  refreshToken?: string;
   preferences: {
     theme: 'dark' | 'light';
     timezone: string;
@@ -16,6 +17,14 @@ export interface UserSession {
   createdAt: string;
 }
 
+// Residual risk (#1285): the JWT pair lives in localStorage, readable by any
+// script that ever executes in this origin (XSS, a compromised dependency).
+// Accepted mitigations: access tokens expire after ~12h and renew through a
+// rotating refresh token, so a stolen access token has a short abuse window;
+// tokens travel via the Authorization header and Sec-WebSocket-Protocol —
+// never in URLs, where they would leak into logs/history. If a single-origin
+// deployment (frontend == API) ever ships, prefer an
+// `HttpOnly; SameSite=Strict` cookie so credentials are not script-readable.
 const SESSION_KEY = 'joidy_session';
 
 function loadSession(): UserSession | null {
@@ -56,6 +65,14 @@ function createSessionStore() {
       update((s) => {
         if (!s) return null;
         const updated = { ...s, token };
+        saveSession(updated);
+        return updated;
+      });
+    },
+    setTokens(token: string, refreshToken?: string) {
+      update((s) => {
+        if (!s) return null;
+        const updated = refreshToken !== undefined ? { ...s, token, refreshToken } : { ...s, token };
         saveSession(updated);
         return updated;
       });
@@ -117,6 +134,18 @@ export function getToken(): string | null {
   }
 }
 
+export function getRefreshToken(): string | null {
+  if (!browser) return null;
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    const s = JSON.parse(raw) as UserSession;
+    return s.refreshToken ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function saveToken(token: string) {
   if (!browser) return;
   // Route through the store so $session.token stays in sync — the previous
@@ -140,16 +169,29 @@ const USER_DATA_KEYS = [
   'joidy_github_cache_v2',
   'joidy-user-settings-v1',
   'joidy-last-ping',
+  // Geolocation coords + cached weather payload (#1325).
+  'joidy-weather-location',
+  'joidy-weather-cache',
+  // User-entered tag queries used to color graph groups (#1325).
+  'joidy-graph-color-groups',
+  // Vault folder paths → icon/color metadata (#1325).
+  'joidy-folder-meta',
 ] as const;
 
-const USER_DATA_PREFIXES = ['goals.'] as const;
+const USER_DATA_PREFIXES = [
+  'goals.',
+  // Note/goal editor draft payloads — full note text (#1325).
+  'joidy-draft-',
+  'joidy-goal-draft-',
+] as const;
 
 /**
  * Wipes user-scoped persisted state on logout so the next session on the
  * same browser profile cannot observe the previous user's data (#1305).
  * SessionStorage is cleared wholesale — every key written there is
  * user-scoped (chat messages, notes/data caches). The IndexedDB `joidy`
- * database (notes cache + offline outbox) is dropped via clearUserData().
+ * database (notes cache + offline outbox) is dropped via clearUserData()
+ * (#1325).
  */
 function resetSession(): void {
   if (!browser) return;

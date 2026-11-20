@@ -59,6 +59,10 @@ class Settings(BaseSettings):
 
     # Authentication
     auth_password: str = ""  # Password for single-user auth (optional)
+    # JWT lifecycle (#1285): short-lived access tokens are renewed silently
+    # via POST /auth/refresh with a longer-lived rotating refresh token.
+    access_token_expire_minutes: int = 720  # 12h — within the 12–24h audit bound
+    refresh_token_expire_days: int = 7
     # bcrypt cost factor for password hashing. None = library default (12).
     # Tests set BCRYPT_ROUNDS=4 via conftest — hash strength is irrelevant
     # there and bcrypt was the slowest single test in the suite (#996).

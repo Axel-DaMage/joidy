@@ -51,12 +51,18 @@ export const chatError = writable<string | null>(null);
 export const sessionId = writable<number | null>(null);
 
 // Drop chat history on session reset (logout / 401) so the next user on the
-// same browser profile never sees the previous conversation (#1305).
+// same browser profile never sees the previous conversation (#1305). The
+// backend session id and any streaming/error state also point at the old
+// user — reset them too (#1325).
 if (browser) {
   window.addEventListener(SESSION_RESET_EVENT, () => {
     messages.set([]);
     isLoading.set(false);
     suggestions.set([]);
+    isStreaming.set(false);
+    chatError.set(null);
+    sessionId.set(null);
+    historyLoaded = false;
   });
 }
 

@@ -153,6 +153,9 @@ function createAchievementsStore() {
         sync().catch((e) => logger.error('[achievements] Post-login sync failed:', e));
       } else if (!s) {
         hadSession = false;
+        // Drop in-memory unlocks on logout so the next user on this browser
+        // profile never sees the previous user's achievements (#1325).
+        set(emptyAchievements());
       }
     });
   }
