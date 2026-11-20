@@ -1,7 +1,7 @@
 """add chat_sessions table for persisted AI chat conversations
 
 Revision ID: b8e9f0a1b2c3
-Revises: f4a5b6c7d8e9
+Revises: f7a8b9c0d1e2
 Create Date: 2026-11-06 00:00:00.000000
 
 AI chat with RAG (#1131) — persists per-user chat conversations so the /ai
@@ -15,7 +15,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "b8e9f0a1b2c3"
-down_revision: str | None = "f4a5b6c7d8e9"
+down_revision: str | None = "f7a8b9c0d1e2"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
