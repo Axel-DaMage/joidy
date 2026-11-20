@@ -14,6 +14,7 @@ from logging_config import setup_logging
 from middleware.metrics import MetricsMiddleware
 from middleware.rate_limit import RateLimitMiddleware
 from middleware.request_id import RequestIdMiddleware
+from middleware.security_headers import SecurityHeadersMiddleware
 from routers import (
     achievements,
     ai,
@@ -215,6 +216,9 @@ app.add_middleware(
 )
 app.add_middleware(CorsSafetyMiddleware)
 app.add_middleware(RequestIdMiddleware)
+# Outermost: security headers must reach every response, including CORS
+# preflights, rate-limit 429s and exception-path 500s (#1283).
+app.add_middleware(SecurityHeadersMiddleware)
 
 app.include_router(notes.router, dependencies=[Depends(get_current_user_or_internal)])
 app.include_router(config.router)
@@ -270,13 +274,25 @@ except OSError:
 
 
 class SafeStaticFiles(StaticFiles):
-    """StaticFiles that forces Content-Disposition: attachment for SVG files."""
+    """StaticFiles that forces Content-Disposition: attachment for file types
+    a browser would otherwise render inline and execute (#1283, audit F-07).
+
+    The upload router validates declared MIME types, but the stored filename
+    extension decides the served Content-Type — a file uploaded as
+    ``text/plain`` but named ``evil.html`` would be served as ``text/html``.
+    Forcing attachment for active-content extensions removes the inline-HTML
+    XSS path regardless of how the file got there.
+    """
+
+    _FORCE_ATTACHMENT_EXTENSIONS = (".svg", ".html", ".htm", ".xhtml", ".xml")
 
     async def get_response(self, path: str, scope):
         response = await super().get_response(path, scope)
-        if path.lower().endswith(".svg"):
+        lower = path.lower()
+        if lower.endswith(self._FORCE_ATTACHMENT_EXTENSIONS):
             response.headers["Content-Disposition"] = "attachment"
-            response.headers["Content-Type"] = "image/svg+xml"
+            if lower.endswith(".svg"):
+                response.headers["Content-Type"] = "image/svg+xml"
         return response
 
 
