@@ -78,6 +78,11 @@ class Settings(BaseSettings):
     spotify_client_secret: str = ""
     spotify_redirect_uri: str = ""
 
+    # Telegram Bot (quick capture via /telegram/webhook)
+    telegram_bot_token: str = ""
+    telegram_allowed_user_id: str = ""  # When set, only this Telegram user ID can use the bot
+    telegram_webhook_secret: str = ""  # Optional secret_token verified on incoming webhooks
+
     # User timezone for day-boundary calculations (streaks, gamification, mood).
     # IANA zone name (e.g. "America/Santiago", "Europe/Madrid"). Defaults to UTC
     # so behaviour is unchanged when not configured. See issue #650.

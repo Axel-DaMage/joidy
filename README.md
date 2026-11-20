@@ -105,8 +105,9 @@ Optional:
 ```env
 GITHUB_TOKEN=          # GitHub sync
 GITHUB_USERNAME=
-TELEGRAM_BOT_TOKEN=    # Notifications
+TELEGRAM_BOT_TOKEN=    # Telegram quick-capture bot
 TELEGRAM_ALLOWED_USER_ID=
+TELEGRAM_WEBHOOK_SECRET=
 ```
 
 ---
@@ -224,6 +225,50 @@ POST http://localhost:8000/webhook/obsidian?secret=YOUR_SECRET
 #### Legacy endpoint
 
 `POST /webhook/obsidian/legacy` — accepts the old payload format (`note_id`, `path`, `remote_mtime`) for backward compatibility. Only records sync state without processing content.
+
+---
+
+### Telegram Bot (quick capture)
+
+Joidy exposes a Telegram bot webhook (`POST /telegram/webhook`) for quick
+capture from your phone: notes land in your vault, goals and mood check-ins
+are stored in the database, and `/ask` answers questions over your notes via
+RAG.
+
+#### Setup
+
+1. In Telegram, open `@BotFather` → `/newbot` → copy the bot token.
+2. Set it in `.env` (or Settings → Integrations → Telegram Bot):
+
+   ```env
+   TELEGRAM_BOT_TOKEN=123456:ABC-DEF...
+   TELEGRAM_ALLOWED_USER_ID=123456789   # optional; get it from @userinfobot
+   TELEGRAM_WEBHOOK_SECRET=any-random-string  # optional, recommended
+   ```
+
+3. Expose the API over HTTPS (reverse proxy or tunnel) and register the
+   webhook — either `PUT /telegram/webhook` with `{"url": "https://example.com/telegram/webhook"}`
+   (JWT required), or directly against the Bot API:
+
+   ```bash
+   curl -X POST "https://api.telegram.org/bot<TOKEN>/setWebhook" \
+     -d url=https://example.com/telegram/webhook \
+     -d secret_token=<TELEGRAM_WEBHOOK_SECRET>
+   ```
+
+#### Commands
+
+| Command | Effect |
+|---------|--------|
+| `/note <text>` | Creates a note persisted to `<vault>/Telegram/<date>-<slug>.md` |
+| `/goal <text>` | Creates an active goal |
+| `/checkin <1-5> [note]` | Records today's mood entry |
+| `/ask <question>` | Answers over your notes via ai-service RAG |
+| `/status` | XP, plant stage, streaks, mood and today's goals |
+| `/help` | Command list |
+
+Every incoming update is persisted to the `telegram_events` table (command,
+sender, status, response) for auditing and webhook retry de-duplication.
 
 ---
 
