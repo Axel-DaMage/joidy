@@ -34,6 +34,25 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
 
-      - name: Run worker tests
+      # Coverage floor (#1259): the suite stays on `unittest discover`; it is
+      # wrapped in `coverage run` instead of switching runners. See
+      # worker/.coveragerc (source = ., omits tests/). Floor 60 = measured
+      # ~65% on development (local run, 2026-11-20) rounded down with
+      # headroom; ratchet up only.
+      - name: Run worker tests with coverage
         working-directory: worker
-        run: python -m unittest discover -s tests -v
+        # Status capture (instead of plain `bash -e` short-circuit) keeps the
+        # coverage report + floor check running even when tests fail, so a
+        # red suite still emits the coverage signal.
+        run: |
+          python -m coverage run -m unittest discover -s tests -v || status=$?
+          python -m coverage xml
+          python -m coverage report -m --fail-under=60 || status=$?
+          exit ${status:-0}
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-report-worker
+          path: worker/coverage.xml
+          retention-days: 30
