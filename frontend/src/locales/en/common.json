@@ -463,7 +463,9 @@
     "editorLoading": "Loading editor...",
     "searchNotePlaceholder": "Search note in your vault...",
     "configureDailyNote": "Configure daily note path",
-    "loadMore": "Load more"
+    "loadMore": "Load more",
+    "resizePanel": "Resize panel",
+    "treeLabel": "Notes tree"
   },
   "goalDetail": {
     "loading": "Loading...",
@@ -610,7 +612,8 @@
     "customize": "Customize"
   },
   "modalDialog": {
-    "close": "Close"
+    "close": "Close",
+    "dialog": "Dialog"
   },
   "iconPicker": {
     "searchPlaceholder": "Search icons..."
@@ -743,7 +746,9 @@
     "label": "Command palette",
     "searchPlaceholder": "Search commands, notes, #tags...",
     "searchLabel": "Search commands",
-    "noResults": "No results found"
+    "noResults": "No results found",
+    "resultsLabel": "Results",
+    "resultCount": "{count} results"
   },
   "topicClusters": {
     "analyzing": "Analyzing...",

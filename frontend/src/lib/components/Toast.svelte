@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { notifications, dismissNotification } from '$lib/stores/notifications';
+  import { notifications, dismissNotification, type Notification } from '$lib/stores/notifications';
   import { fly } from 'svelte/transition';
   import DynamicIcon from './DynamicIcon.svelte';
 
@@ -14,35 +14,52 @@
     error: { icon: 'TriangleAlert', color: 'var(--error, #ef4444)' },
     info: { icon: 'Info', color: 'var(--accent, #6366f1)' },
   };
+
+  // WCAG 4.1.3 (#1269): toasts are split into two persistent live regions so
+  // screen readers announce every status message — `role="status"` (polite)
+  // for info/success/level and `role="alert"` (assertive) for errors. The
+  // regions stay mounted even when empty; a live region that only appears
+  // together with its content is not reliably announced.
+  $: politeToasts = $notifications.filter((n) => n.type !== 'error');
+  $: errorToasts = $notifications.filter((n) => n.type === 'error');
 </script>
 
-{#if $notifications.length > 0}
-  <div class="toast-container">
-    {#each $notifications as notif (notif.id)}
-      {@const cfg = TYPE_CONFIG[notif.type] ?? TYPE_CONFIG.info}
-      {#if notif.href}
-        <a
-          class="toast toast-{notif.type}"
-          href={notif.href}
-          transition:fly={{ y: -20, duration: 200 }}
-          onclick={() => dismissNotification(notif.id)}
-        >
-          <DynamicIcon name={cfg.icon} size={16} color={cfg.color} />
-          <span class="toast-message">{notif.message}</span>
-        </a>
-      {:else}
-        <button
-          class="toast toast-{notif.type}"
-          transition:fly={{ y: -20, duration: 200 }}
-          onclick={() => dismissNotification(notif.id)}
-        >
-          <DynamicIcon name={cfg.icon} size={16} color={cfg.color} />
-          <span class="toast-message">{notif.message}</span>
-        </button>
-      {/if}
+{#snippet toast(notif: Notification)}
+  {@const cfg = TYPE_CONFIG[notif.type] ?? TYPE_CONFIG.info}
+  {#if notif.href}
+    <a
+      class="toast toast-{notif.type}"
+      href={notif.href}
+      transition:fly={{ y: -20, duration: 200 }}
+      onclick={() => dismissNotification(notif.id)}
+    >
+      <DynamicIcon name={cfg.icon} size={16} color={cfg.color} />
+      <span class="toast-message">{notif.message}</span>
+    </a>
+  {:else}
+    <button
+      class="toast toast-{notif.type}"
+      transition:fly={{ y: -20, duration: 200 }}
+      onclick={() => dismissNotification(notif.id)}
+    >
+      <DynamicIcon name={cfg.icon} size={16} color={cfg.color} />
+      <span class="toast-message">{notif.message}</span>
+    </button>
+  {/if}
+{/snippet}
+
+<div class="toast-container">
+  <div class="toast-region" role="status" aria-live="polite" aria-atomic="true">
+    {#each politeToasts as notif (notif.id)}
+      {@render toast(notif)}
     {/each}
   </div>
-{/if}
+  <div class="toast-region" role="alert" aria-atomic="true">
+    {#each errorToasts as notif (notif.id)}
+      {@render toast(notif)}
+    {/each}
+  </div>
+</div>
 
 <style>
   .toast-container {
@@ -54,6 +71,12 @@
     flex-direction: column;
     gap: 8px;
     pointer-events: none;
+  }
+
+  .toast-region {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
   }
 
   .toast {

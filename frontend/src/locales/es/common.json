@@ -463,7 +463,9 @@
     "editorLoading": "Cargando editor...",
     "searchNotePlaceholder": "Buscar nota en tu baúl...",
     "configureDailyNote": "Configurar ruta de nota diaria",
-    "loadMore": "Cargar más"
+    "loadMore": "Cargar más",
+    "resizePanel": "Redimensionar panel",
+    "treeLabel": "Árbol de notas"
   },
   "goalDetail": {
     "loading": "Cargando...",
@@ -610,7 +612,8 @@
     "customize": "Personalizar"
   },
   "modalDialog": {
-    "close": "Cerrar"
+    "close": "Cerrar",
+    "dialog": "Diálogo"
   },
   "iconPicker": {
     "searchPlaceholder": "Buscar iconos..."
@@ -743,7 +746,9 @@
     "label": "Paleta de comandos",
     "searchPlaceholder": "Buscar comandos, notas, #etiquetas...",
     "searchLabel": "Buscar comandos",
-    "noResults": "No se encontraron resultados"
+    "noResults": "No se encontraron resultados",
+    "resultsLabel": "Resultados",
+    "resultCount": "{count} resultados"
   },
   "topicClusters": {
     "analyzing": "Analizando...",

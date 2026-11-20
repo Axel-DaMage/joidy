@@ -32,9 +32,19 @@
     { type: 'Navegación', title: 'Ir a Rachas', icon: 'Flame', action: () => goto('/streaks') },
     { type: 'Navegación', title: 'Ir a IA', icon: 'Brain', action: () => goto('/ai') },
     { type: 'Navegación', title: 'Ir a Correos', icon: 'Mail', action: () => goto('/emails') },
-    { type: 'Navegación', title: 'Ir a Calendario', icon: 'Calendar', action: () => goto('/calendar') },
+    {
+      type: 'Navegación',
+      title: 'Ir a Calendario',
+      icon: 'Calendar',
+      action: () => goto('/calendar'),
+    },
     { type: 'Navegación', title: 'Ir a Offline', icon: 'CloudOff', action: () => goto('/offline') },
-    { type: 'Navegación', title: 'Ajustes', icon: 'Settings', action: () => window.dispatchEvent(new CustomEvent('joidy:open-settings')) },
+    {
+      type: 'Navegación',
+      title: 'Ajustes',
+      icon: 'Settings',
+      action: () => window.dispatchEvent(new CustomEvent('joidy:open-settings')),
+    },
   ];
 
   const actionCommands: Command[] = [
@@ -208,6 +218,13 @@
     }
   });
 
+  // APG combobox pattern (#1269): the input advertises the option it would
+  // activate via aria-activedescendant so screen readers can track arrow-key
+  // navigation through the listbox.
+  const activeDescendantId = $derived(
+    filteredItems.length > 0 ? `cp-option-${selectedIndex}` : undefined
+  );
+
   function scrollToSelected() {
     timers.timeout(() => {
       const el = listEl?.querySelector<HTMLElement>('.cp-item.is-selected');
@@ -270,16 +287,19 @@
     onclick={handleBackdropClick}
     transition:fade={{ duration: 100 }}
   >
-    <div
-      class="cp-modal"
-      transition:fly={{ y: -20, duration: 150 }}
-    >
+    <div class="cp-modal" transition:fly={{ y: -20, duration: 150 }}>
       <div class="cp-header">
         <Search size={16} />
         <input
           bind:this={searchInput}
           bind:value={query}
           class="cp-input"
+          type="text"
+          role="combobox"
+          aria-autocomplete="list"
+          aria-expanded={filteredItems.length > 0}
+          aria-controls="cp-listbox"
+          aria-activedescendant={activeDescendantId}
           placeholder={$t('commandPalette.searchPlaceholder')}
           aria-label={$t('commandPalette.searchLabel')}
           autocomplete="off"
@@ -288,22 +308,40 @@
         <span class="cp-esc mono">ESC</span>
       </div>
 
-      <div class="cp-body" bind:this={listEl}>
+      <!-- Result count is announced through a persistent live region so SR
+           users hear how many options the query produced (#1269). -->
+      <div class="visually-hidden" role="status">
+        {$t('commandPalette.resultCount', { values: { count: filteredItems.length } })}
+      </div>
+
+      <div
+        class="cp-body"
+        bind:this={listEl}
+        role="listbox"
+        id="cp-listbox"
+        aria-label={$t('commandPalette.resultsLabel')}
+      >
         {#if filteredItems.length === 0}
           <div class="cp-empty">{$t('commandPalette.noResults')}</div>
         {:else}
           {#each filteredItems as item, index (item.title + index)}
             {#if index === 0 || filteredItems[index - 1].type !== item.type}
-              <div class="cp-group-title mono">{item.type}</div>
+              <div class="cp-group-title mono" role="presentation">{item.type}</div>
             {/if}
             <button
               class="cp-item"
               class:is-selected={index === selectedIndex}
+              role="option"
+              id="cp-option-{index}"
+              aria-selected={index === selectedIndex}
+              aria-posinset={index + 1}
+              aria-setsize={filteredItems.length}
               onmouseenter={() => (selectedIndex = index)}
               onclick={() => selectItem(index)}
             >
               <DynamicIcon name={item.icon} size={14} />
               <span class="cp-item-title">{item.title}</span>
+              <span class="visually-hidden">{item.type}</span>
               {#if index === selectedIndex}
                 <span class="cp-item-hint">
                   <CornerDownLeft size={12} />
@@ -359,6 +397,14 @@
     color: var(--text-primary);
     font-size: 15px;
     outline: none;
+    border-radius: var(--r-sm);
+  }
+
+  /* The input itself has no border, so keyboard focus needs an explicit
+     visible indicator (#1269, WCAG 2.4.7). */
+  .cp-input:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
   }
 
   .cp-input::placeholder {
