@@ -150,7 +150,7 @@
     <span class="legend-item"><span class="line linked"></span>enlazado</span>
     <span class="legend-item"><span class="dot note"></span>nota</span>
     <span class="legend-item"><span class="dot tag"></span>tag</span>
-    <span class="legend-hint">doble-click para abrir · drag parafixar</span>
+    <span class="legend-hint">doble-click para abrir · drag parafixar · Tab para lista de nodos</span>
   </div>
 
   <TopicClusters />
@@ -201,7 +201,11 @@
   }
 
   .dot.note { background: var(--text-secondary); }
-  .dot.tag { background: var(--text-muted); }
+  .dot.tag {
+    background: var(--text-muted);
+    /* Non-color cue: tags shown as squares, notes as circles (#1309, WCAG 1.4.1) */
+    border-radius: 0;
+  }
 
   .graph-container {
     flex: 1;

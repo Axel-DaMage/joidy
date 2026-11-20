@@ -10,8 +10,9 @@
   let text = $state('');
   let submitting = $state(false);
   let submittingInbox = $state(false);
+  let textareaEl: HTMLTextAreaElement | null = $state(null);
 
-  async function handleCapture(e: MouseEvent) {
+  async function handleCapture(point?: { x: number; y: number }) {
     const trimmed = text.trim();
     if (!trimmed || submitting) return;
     submitting = true;
@@ -21,7 +22,18 @@
     if (note) {
       text = '';
       showNotification($_('quickCapture.created'), 'success');
-      showXPGain(10, e.clientX, e.clientY);
+      // For keyboard submits there is no pointer position — anchor the XP
+      // float to the textarea that triggered the action (#1309).
+      let x = point?.x;
+      let y = point?.y;
+      if (x === undefined || y === undefined) {
+        const rect = textareaEl?.getBoundingClientRect();
+        if (rect) {
+          x = rect.left + rect.width / 2;
+          y = rect.top;
+        }
+      }
+      showXPGain(10, x, y);
     } else {
       showNotification($_('quickCapture.error'), 'error');
     }
@@ -30,7 +42,7 @@
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
-      handleCapture(e as unknown as MouseEvent);
+      handleCapture();
     }
   }
 
@@ -63,6 +75,7 @@
 <div class="quick-capture">
   <textarea
     bind:value={text}
+    bind:this={textareaEl}
     placeholder={$_('quickCapture.placeholder')}
     onkeydown={handleKeydown}
     rows="2"
@@ -85,7 +98,7 @@
     </button>
     <button
       class="qc-btn"
-      onclick={handleCapture}
+      onclick={(e) => handleCapture({ x: e.clientX, y: e.clientY })}
       disabled={submitting || submittingInbox || !text.trim()}
       aria-label={$_('common.save')}
     >

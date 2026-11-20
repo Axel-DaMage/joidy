@@ -1921,6 +1921,19 @@
     color: #d9534f;
   }
 
+  /* Non-color priority cues (#1309, WCAG 1.4.1): level stays perceivable
+     through font style/weight even without color. */
+  .prio-medium {
+    font-style: italic;
+  }
+  .prio-high {
+    font-weight: 600;
+  }
+  .prio-urgent {
+    font-weight: 700;
+    text-decoration: underline;
+  }
+
   .day-detail {
     background: var(--surface);
     border: 1px solid var(--border);

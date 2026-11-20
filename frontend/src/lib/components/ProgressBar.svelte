@@ -9,11 +9,22 @@
   export let color = '';
   export let height = 6;
   export let variant: 'default' | 'success' = 'default';
+  /** Accessible name announced by screen readers (#1309). */
+  export let label = '';
 
   $: pct = max > 0 ? Math.min(100, Math.max(0, (value / max) * 100)) : 0;
 </script>
 
-<div class="progress-track" style="height: {height}px; border-radius: {Math.max(1, height / 2)}px;">
+<div
+  class="progress-track"
+  style="height: {height}px; border-radius: {Math.max(1, height / 2)}px;"
+  role="progressbar"
+  aria-valuemin={0}
+  aria-valuemax={max}
+  aria-valuenow={Math.round(value * 100) / 100}
+  aria-valuetext="{Math.round(pct)}%"
+  aria-label={label || undefined}
+>
   <div
     class="progress-fill"
     class:success={variant === 'success'}

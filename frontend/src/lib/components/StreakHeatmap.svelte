@@ -1,6 +1,7 @@
 <script lang="ts">
   import StreakIcon from './StreakIcon.svelte';
   import type { StreakDay } from '$lib/api';
+  import { getLocale } from '$lib/stores/locale';
   import { t } from 'svelte-i18n';
 
   let {
@@ -198,6 +199,31 @@
     onselect(iso);
   }
 
+  type Cell = ReturnType<typeof buildCell>;
+
+  /**
+   * Accessible text alternative for a heatmap cell (#1309, WCAG 1.4.1):
+   * a localized date plus its state in words, so the status is not
+   * conveyed by color alone. Reused for `aria-label` and `title`.
+   */
+  function cellLabel(cell: Cell): string {
+    if (!cell.iso) return '';
+    const dateStr = parseLocalIso(cell.iso).toLocaleDateString(getLocale(), {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
+    const states: string[] = [];
+    if (cell.isToday) states.push($t('streakHeatmap.dayToday'));
+    if (cell.checked) states.push($t('streakHeatmap.dayChecked'));
+    else if (cell.failed) states.push($t('streakHeatmap.dayFailed'));
+    if (cell.isTarget) states.push($t('streakHeatmap.dayTarget'));
+    if (cell.isSelected) states.push($t('streakHeatmap.daySelected'));
+    if (states.length === 0) states.push($t('streakHeatmap.dayNoRecord'));
+    return `${dateStr} — ${states.join(', ')}`;
+  }
+
   const weekDays = $derived(getWeekDays(dayDataMap));
   const monthGrid = $derived(getMonthGrid(dayDataMap));
   const yearGrid = $derived(getMonthGrid(dayDataMap, yearCursor));
@@ -217,20 +243,35 @@
 
 <div class="activity" style="--ac: {color};">
   {#if !hideTabs}
-    <div class="tabs">
-      <button class="tab" class:on={view === 'week'} onclick={() => (view = 'week')}
+    <div class="tabs" role="tablist" aria-label={$t('streakHeatmap.viewTabs')}>
+      <button
+        class="tab"
+        class:on={view === 'week'}
+        role="tab"
+        aria-selected={view === 'week'}
+        onclick={() => (view = 'week')}
         >{$t('streakHeatmap.week')}</button
       >
-      <button class="tab" class:on={view === 'month'} onclick={() => (view = 'month')}
+      <button
+        class="tab"
+        class:on={view === 'month'}
+        role="tab"
+        aria-selected={view === 'month'}
+        onclick={() => (view = 'month')}
         >{$t('streakHeatmap.month')}</button
       >
-      <button class="tab" class:on={view === 'year'} onclick={() => (view = 'year')}
+      <button
+        class="tab"
+        class:on={view === 'year'}
+        role="tab"
+        aria-selected={view === 'year'}
+        onclick={() => (view = 'year')}
         >{$t('streakHeatmap.year')}</button
       >
     </div>
   {/if}
 
-  <div class="view-title-row">
+  <div class="view-title-row" aria-live="polite">
     {#if view === 'week'}
       <span class="title">{$t('streakHeatmap.currentWeek')}</span>
     {:else if view === 'month'}
@@ -276,7 +317,10 @@
               class:target={day.isTarget}
               class:selected={day.isSelected}
               onclick={() => selectDay(day.iso)}
-              title={day.iso}
+              title={cellLabel(day)}
+              aria-label={cellLabel(day)}
+              aria-pressed={day.isSelected}
+              aria-current={day.isToday ? 'date' : undefined}
             >
               <div class="wd-num-wrap">
                 <span
@@ -312,7 +356,11 @@
                 class:target={cell.isTarget}
                 class:selected={cell.isSelected}
                 onclick={() => selectDay(cell.iso)}
-                title={cell.iso || undefined}
+                title={cellLabel(cell) || undefined}
+                aria-label={cellLabel(cell) || undefined}
+                aria-pressed={cell.inMonth ? cell.isSelected : undefined}
+                aria-current={cell.isToday ? 'date' : undefined}
+                aria-hidden={cell.inMonth ? undefined : 'true'}
                 disabled={!cell.inMonth}
               >
                 {#if cell.inMonth}
@@ -353,7 +401,11 @@
                   class:target={cell.isTarget}
                   class:selected={cell.isSelected}
                   onclick={() => selectDay(cell.iso)}
-                  title={cell.iso || undefined}
+                  title={cellLabel(cell) || undefined}
+                  aria-label={cellLabel(cell) || undefined}
+                  aria-pressed={cell.inMonth ? cell.isSelected : undefined}
+                  aria-current={cell.isToday ? 'date' : undefined}
+                  aria-hidden={cell.inMonth ? undefined : 'true'}
                   disabled={!cell.inMonth}
                 >
                   {#if cell.inMonth}
@@ -670,6 +722,50 @@
     opacity: 1;
     cursor: default;
     pointer-events: none;
+  }
+
+  /* ── Non-color state markers (#1309, WCAG 1.4.1) ─────────────────────────
+     Cells also carry an icon glyph so checked/failed/target are perceivable
+     without relying on color alone. */
+  .mcell,
+  .week-col {
+    position: relative;
+  }
+
+  .mcell::after,
+  .week-col::after {
+    position: absolute;
+    font-family: var(--font-mono);
+    font-weight: 700;
+    line-height: 1;
+    pointer-events: none;
+  }
+
+  .mcell.checked::after,
+  .week-col.checked::after {
+    content: '✓';
+    top: 3px;
+    right: 4px;
+    font-size: 10px;
+    color: var(--ac);
+  }
+
+  .mcell.failed:not(.checked)::after,
+  .week-col.failed:not(.checked)::after {
+    content: '✕';
+    top: 3px;
+    right: 4px;
+    font-size: 9px;
+    color: var(--error);
+  }
+
+  .mcell.target::after,
+  .week-col.target::after {
+    content: '◆';
+    bottom: 3px;
+    right: 4px;
+    font-size: 7px;
+    color: var(--target);
   }
 
   .mcell:disabled {

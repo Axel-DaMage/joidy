@@ -109,9 +109,23 @@ export function applyStats(stats: Partial<GamificationStats>): void {
 // accumulation across rapid navigation (#413).
 const xpTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
+/**
+ * Show a floating "+N XP" indicator.
+ *
+ * `x`/`y` are client (pixel) coordinates — e.g. `MouseEvent.clientX/Y` or a
+ * point derived from `getBoundingClientRect()`. `XPBar` positions the float
+ * in viewport *percentages*, so they are converted here (#1309): passing raw
+ * pixels produced `left: 500%` and the float rendered off-viewport.
+ */
 export function showXPGain(amount: number, x?: number, y?: number): void {
   const id = `xp-${Date.now()}-${Math.random()}`;
-  xpEvents.update(evts => [...evts, { amount, id, x, y }]);
+  let px: number | undefined;
+  let py: number | undefined;
+  if (typeof window !== 'undefined' && x !== undefined && y !== undefined) {
+    px = Math.min(100, Math.max(0, (x / window.innerWidth) * 100));
+    py = Math.min(100, Math.max(0, (y / window.innerHeight) * 100));
+  }
+  xpEvents.update(evts => [...evts, { amount, id, x: px, y: py }]);
   // intentional: auto-dismiss one-shot on a module store; tracked in
   // xpTimers and bulk-cleared by clearAllXpTimers() (#1003)
   const timer = setTimeout(() => {

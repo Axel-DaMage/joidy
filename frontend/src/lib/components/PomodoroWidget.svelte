@@ -28,32 +28,50 @@
   $: dashOffset = CIRC * (1 - progress);
   $: timerParts = getTimerParts($secondsLeft);
 
+  // Unique per-instance id — avoids #pomodoroRingBlend collisions on
+  // double-mount (#1309)
+  const ringGradId = `pomodoroRingBlend-${Math.random().toString(36).slice(2, 8)}`;
+
   const PHASE_LABEL: Record<string, string> = {
     work: 'TRABAJO',
     break: 'DESCANSO',
     longBreak: 'DESCANSO LARGO',
   };
+
+  $: timeLeft =
+    timerParts.h > 0
+      ? `${timerParts.hours}:${timerParts.minutes}:${timerParts.seconds}`
+      : `${timerParts.minutes}:${timerParts.seconds}`;
+  $: timerLabel = $t('a11y.pomodoroTime', {
+    values: { phase: PHASE_LABEL[$phase] ?? $phase, time: timeLeft },
+  });
 </script>
 
 <div class="pomodoro">
-  <!-- Phase title -->
-  <span class="phase-title mono">{PHASE_LABEL[$phase]}</span>
+  <!-- Phase title — role="status" announces transitions politely (#1309) -->
+  <span class="phase-title mono" role="status">{PHASE_LABEL[$phase]}</span>
 
   <!-- Big ring (the 'circular' clock style owns its own dial — #707) -->
-  <div class="ring-wrap">
+  <div class="ring-wrap" role="timer" aria-label={timerLabel}>
     {#if $clockStyle === 'circular'}
       <ClockDisplay mode="timer" {progress} {...timerParts} />
       <div class="ring-overlay dots-overlay">
-        <div class="pomo-dots">
+        <div
+          class="pomo-dots"
+          role="img"
+          aria-label={$t('widgets.pomodorosDone', {
+            values: { done: $pomodorosDone % 4, total: 4 },
+          })}
+        >
           {#each Array(4) as _, i}
-            <span class="pdot" class:lit={i < $pomodorosDone % 4}></span>
+            <span class="pdot" class:lit={i < $pomodorosDone % 4} aria-hidden="true"></span>
           {/each}
         </div>
       </div>
     {:else}
-      <svg viewBox="0 0 150 150" class="ring-svg">
+      <svg viewBox="0 0 150 150" class="ring-svg" aria-hidden="true" focusable="false">
         <defs>
-          <linearGradient id="pomodoroRingBlend" x1="0%" y1="0%" x2="100%" y2="100%">
+          <linearGradient id={ringGradId} x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" stop-color="var(--xp)" />
             <stop offset="52%" stop-color="var(--xp-2)" />
             <stop offset="100%" stop-color="var(--xp-3)" />
@@ -66,7 +84,7 @@
           cx="75"
           cy="75"
           r={R}
-          stroke="url(#pomodoroRingBlend)"
+          stroke="url(#{ringGradId})"
           stroke-width="4"
           fill="none"
           stroke-linecap="round"
@@ -80,9 +98,15 @@
       <!-- Overlay: styled timer readout + dots only -->
       <div class="ring-overlay">
         <span class="timer"><ClockDisplay mode="timer" {progress} {...timerParts} /></span>
-        <div class="pomo-dots">
+        <div
+          class="pomo-dots"
+          role="img"
+          aria-label={$t('widgets.pomodorosDone', {
+            values: { done: $pomodorosDone % 4, total: 4 },
+          })}
+        >
           {#each Array(4) as _, i}
-            <span class="pdot" class:lit={i < $pomodorosDone % 4}></span>
+            <span class="pdot" class:lit={i < $pomodorosDone % 4} aria-hidden="true"></span>
           {/each}
         </div>
       </div>
@@ -116,10 +140,11 @@
         class="dur-input mono"
         bind:value={$workMins}
         disabled={$running}
+        aria-label={$t('widgets.workMinutes')}
       />
-      <span class="dur-label">min trabajo</span>
+      <span class="dur-label" aria-hidden="true">min trabajo</span>
     </div>
-    <span class="dur-sep">·</span>
+    <span class="dur-sep" aria-hidden="true">·</span>
     <div class="dur-input-wrap" class:disabled={$running}>
       <input
         type="number"
@@ -128,8 +153,9 @@
         class="dur-input mono"
         bind:value={$breakMins}
         disabled={$running}
+        aria-label={$t('widgets.breakMinutes')}
       />
-      <span class="dur-label">min descanso</span>
+      <span class="dur-label" aria-hidden="true">min descanso</span>
     </div>
   </div>
 </div>
@@ -212,11 +238,15 @@
     width: 5px;
     height: 5px;
     border-radius: 50%;
-    background: var(--border);
-    transition: background var(--t-normal);
+    /* Hollow vs filled: completed count is perceivable without color (#1309) */
+    background: transparent;
+    border: 1px solid var(--border);
+    transition: all var(--t-normal);
   }
   .pdot.lit {
     background: var(--xp);
+    border-color: var(--xp);
+    transform: scale(1.2);
   }
 
   /* ── Controls ── */
