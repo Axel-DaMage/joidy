@@ -5,6 +5,7 @@
 ## Índice
 
 - [Código de Conducta](#código-de-conducta)
+- [Certificado de Origen del Desarrollador (DCO)](#certificado-de-origen-del-desarrollador-dco)
 - [Cómo Empezar](#cómo-empezar)
 - [Primeros Pasos para Contribuir](#primeros-pasos-para-contribuir)
 - [Estructura del Proyecto](#estructura-del-proyecto)
@@ -24,6 +25,77 @@
 ## Código de Conducta
 
 Este proyecto sigue un [Código de Conducta](CODE_OF_CONDUCT.md). Al participar, se espera que mantengas un ambiente respetuoso e inclusivo.
+
+## Certificado de Origen del Desarrollador (DCO)
+
+Joidy adopta el [Developer Certificate of Origin](https://developercertificate.org/) (DCO) v1.1 — el mismo mecanismo ligero usado por el kernel de Linux y los proyectos de la CNCF — en lugar de un CLA. Al contribuir certificas que tienes derecho a enviar tu trabajo y que lo licencias bajo `GPL-3.0-or-later` (*inbound = outbound*: tu contribución entra bajo la misma licencia del proyecto; ver [LICENSE](LICENSE)).
+
+### Cómo firmar tus commits
+
+Cada commit de un Pull Request debe llevar el trailer `Signed-off-by:` con tu nombre real y correo. Añádelo con `git commit -s`:
+
+```bash
+git commit -s -m "feat: mi cambio"
+```
+
+Esto agrega una línea al final del mensaje:
+
+```text
+Signed-off-by: Tu Nombre <tu@email.com>
+```
+
+Para firmar commits ya existentes en tu rama sin reescribir sus mensajes:
+
+```bash
+git rebase --signoff development
+```
+
+El job `DCO` de CI (`.github/workflows/dco.yml`) verifica los trailers `Signed-off-by` en cada Pull Request y falla si algún commit no los lleva. Los commits de la automatización del propio repositorio (cuentas `*[bot]` como `dependabot[bot]`, y `github-actions`) están exentos del check.
+
+### Contribuciones generadas por agentes de IA
+
+Para código generado por agentes de IA (Hermes, Devin, etc.) la política del proyecto es: el **operador humano** añade el `Signed-off-by:` al commit y asume la responsabilidad del DCO sobre el código generado.
+
+### Texto del DCO
+
+El texto canónico también está disponible en el archivo [`DCO`](DCO), en la raíz del repositorio:
+
+```text
+Developer Certificate of Origin
+Version 1.1
+
+Copyright (C) 2004, 2006 The Linux Foundation and its contributors.
+
+Everyone is permitted to copy and distribute verbatim copies of this
+license document, but changing it is not allowed.
+
+
+Developer's Certificate of Origin 1.1
+
+By making a contribution to this project, I certify that:
+
+(a) The contribution was created in whole or in part by me and I
+    have the right to submit it under the open source license
+    indicated in the file; or
+
+(b) The contribution is based upon previous work that, to the best
+    of my knowledge, is covered under an appropriate open source
+    license and I have the right under that license to submit that
+    work with modifications, whether created in whole or in part
+    by me, under the same open source license (unless I am
+    permitted to submit under a different license), as indicated
+    in the file; or
+
+(c) The contribution was provided directly to me by some other
+    person who certified (a), (b) or (c) and I have not modified
+    it.
+
+(d) I understand and agree that this project and the contribution
+    are public and that a record of the contribution (including all
+    personal information I submit with it, including my sign-off) is
+    maintained indefinitely and may be redistributed consistent with
+    this project or the open source license(s) involved.
+```
 
 ## Cómo Empezar
 
@@ -194,6 +266,7 @@ test: add gamification engine edge cases
 - Un cambio lógico por commit
 - Mensajes en presente imperativo ("add", no "added")
 - No mezclar cambios de código con cambios de formato
+- **Firma cada commit con `git commit -s`** (trailer `Signed-off-by:`) — es un requisito del [DCO](#certificado-de-origen-del-desarrollador-dco) y la CI lo verifica en cada PR
 - Para WIP usa `wip:` como prefijo y no hagas PR hasta que esté listo
 - **Añade una entrada al `CHANGELOG.md`** en la sección `[Unreleased]` bajo la categoría correspondiente (Added/Changed/Fixed/Removed/Security)
 
@@ -240,7 +313,8 @@ make test
 1. Asegúrate de que tu fork está actualizado con `development`
 2. Ejecuta los tests y verifica que pasen: `make test`
 3. Verifica lint: `make lint`
-4. Si tu cambio afecta la UI, incluye capturas (opcional pero útil)
+4. Verifica que todos tus commits llevan `Signed-off-by:` (ver [DCO](#certificado-de-origen-del-desarrollador-dco))
+5. Si tu cambio afecta la UI, incluye capturas (opcional pero útil)
 
 ### Proceso
 
