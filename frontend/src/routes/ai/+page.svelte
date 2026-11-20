@@ -4,21 +4,41 @@
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
   import BetaBanner from '$lib/components/BetaBanner.svelte';
   import AiDisclosure from '$lib/components/AiDisclosure.svelte';
+  import { aiStatusFromUsage } from '$lib/utils/aiStatus';
+  import { logger } from '$lib/utils/logger';
   import { t } from 'svelte-i18n';
 
-  let usage = $state<{ ai_enabled: boolean; estimated_cost_usd: number } | null>(null);
+  let usage = $state<Awaited<ReturnType<typeof api.ai.usage>> | null>(null);
   let loadingUsage = $state(true);
+
+  // Effective pill status (#1460): consumes the backend's real reachability
+  // report (ai_status) when present, falls back to the ai_enabled env flag
+  // on older backends.
+  let aiStatus = $derived(aiStatusFromUsage(usage));
 
   // Lazy-load the heavy ChatInterface (376 lines, pulls in marked, dompurify)
   // so it is split into a separate chunk and only downloaded when the AI page
-  // is opened (#347).
+  // is opened (#347). A failed import must surface an error + retry — never
+  // an infinite "Cargando chat…" (#1459).
   let ChatInterface = $state<typeof import('$lib/components/ChatInterface.svelte').default | null>(
     null
   );
+  let chatLoadError = $state(false);
+  let chatLoading = $state(false);
+  function loadChatInterface() {
+    if (ChatInterface || chatLoading) return;
+    chatLoading = true;
+    chatLoadError = false;
+    import('$lib/components/ChatInterface.svelte')
+      .then((m) => (ChatInterface = m.default))
+      .catch((err) => {
+        logger.error('[ai] ChatInterface chunk failed:', err);
+        chatLoadError = true;
+      })
+      .finally(() => (chatLoading = false));
+  }
   $effect(() => {
-    if (!ChatInterface) {
-      import('$lib/components/ChatInterface.svelte').then((m) => (ChatInterface = m.default));
-    }
+    if (!ChatInterface && !chatLoadError) loadChatInterface();
   });
 
   // Lazy-load DeadLetterQueue — it lives inside a collapsed <details>, so
@@ -26,10 +46,22 @@
   let DeadLetterQueue = $state<typeof import('$lib/components/DeadLetterQueue.svelte').default | null>(
     null
   );
+  let dlqLoadError = $state(false);
+  let dlqLoading = $state(false);
+  function loadDeadLetterQueue() {
+    if (DeadLetterQueue || dlqLoading) return;
+    dlqLoading = true;
+    dlqLoadError = false;
+    import('$lib/components/DeadLetterQueue.svelte')
+      .then((m) => (DeadLetterQueue = m.default))
+      .catch((err) => {
+        logger.error('[ai] DeadLetterQueue chunk failed:', err);
+        dlqLoadError = true;
+      })
+      .finally(() => (dlqLoading = false));
+  }
   $effect(() => {
-    if (!DeadLetterQueue) {
-      import('$lib/components/DeadLetterQueue.svelte').then((m) => (DeadLetterQueue = m.default));
-    }
+    if (!DeadLetterQueue && !dlqLoadError) loadDeadLetterQueue();
   });
 
   onMount(async () => {
@@ -53,10 +85,18 @@
       {:else if usage}
         <span
           class="status-pill"
-          class:enabled={usage.ai_enabled}
-          class:disabled={!usage.ai_enabled}
+          class:enabled={aiStatus === 'ok'}
+          class:degraded={aiStatus === 'degraded'}
+          class:disabled={aiStatus === 'unavailable' || aiStatus === 'disabled'}
+          title={usage.ai_status_detail ?? undefined}
         >
-          {usage.ai_enabled ? $t('ai.active') : $t('ai.inactive')}
+          {aiStatus === 'ok'
+            ? $t('ai.active')
+            : aiStatus === 'degraded'
+              ? $t('ai.degraded')
+              : aiStatus === 'unavailable'
+                ? $t('ai.unavailable')
+                : $t('ai.inactive')}
         </span>
       {/if}
     </div>
@@ -67,6 +107,14 @@
   <div class="ai-content">
     {#if ChatInterface}
       <ChatInterface />
+    {:else if chatLoadError}
+      <div
+        class="caption"
+        style="padding: 24px; text-align: center; color: var(--text-muted); display: flex; flex-direction: column; align-items: center; gap: 10px;"
+      >
+        <span>{$t('ai.chatLoadError')}</span>
+        <button class="btn btn-ghost" onclick={loadChatInterface}>{$t('common.retry')}</button>
+      </div>
     {:else}
       <div class="caption" style="padding: 24px; text-align: center; color: var(--text-muted);">
         {$t('ai.loadingChat')}
@@ -98,7 +146,18 @@
           <p class="muted">{$t('ai.statusUnavailable')}</p>
         {/if}
       </div>
-      {#if DeadLetterQueue}<DeadLetterQueue />{/if}
+      {#if DeadLetterQueue}
+        <DeadLetterQueue />
+      {:else if dlqLoadError}
+        <div class="dev-card">
+          <p class="muted">
+            {$t('common.loadFailed')}
+            <button class="btn btn-ghost" onclick={loadDeadLetterQueue}>
+              {$t('common.retry')}
+            </button>
+          </p>
+        </div>
+      {/if}
     </div>
   </details>
 </div>
@@ -142,6 +201,11 @@
   .status-pill.enabled {
     color: var(--success, #10b981);
     border-color: var(--success, #10b981);
+  }
+  /* Degraded: primary provider down, fallback serving (#1460) */
+  .status-pill.degraded {
+    color: var(--warning, #f59e0b);
+    border-color: var(--warning, #f59e0b);
   }
   .status-pill.disabled {
     color: var(--error, #ef4444);

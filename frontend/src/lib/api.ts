@@ -894,7 +894,15 @@ export const api = {
         { note_id: noteId, content, existing_tags: existingTags },
         { silent: true }
       ),
-    usage: () => req<{ ai_enabled: boolean; estimated_cost_usd: number }>('GET', '/ai/usage'),
+    // `ai_status`/`ai_status_detail` are optional — older backends only
+    // expose the env flag, and the pill falls back to it (#1460).
+    usage: () =>
+      req<{
+        ai_enabled: boolean;
+        estimated_cost_usd: number;
+        ai_status?: 'ok' | 'degraded' | 'unavailable' | 'disabled' | (string & {});
+        ai_status_detail?: string | null;
+      }>('GET', '/ai/usage'),
     dailyRecap: (date?: string) =>
       req<{ status: string; recap: string; suggestions: string[]; provider?: string }>(
         'POST',

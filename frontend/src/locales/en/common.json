@@ -195,7 +195,9 @@
     "tasks": "tasks",
     "level": "LVL",
     "betaNotice": "Beta feature: some functionality is in development and may change.",
-    "retry": "Retry"
+    "retry": "Retry",
+    "reload": "Reload",
+    "loadFailed": "Could not load this module."
   },
   "status": {
     "offline": "Offline",
@@ -922,14 +924,19 @@
     "testNotifLevel": "Test notification - Level up!",
     "currentStatus": "Current status",
     "globalTimer": "Global timer",
-    "skipToContent": "Skip to main content"
+    "skipToContent": "Skip to main content",
+    "loading": "Loading Joidy…",
+    "setupCheckFailed": "Could not reach the server. Check your connection and try again."
   },
   "ai": {
     "title": "Artificial Intelligence",
     "checking": "Checking…",
     "active": "AI active",
     "inactive": "AI inactive",
+    "degraded": "AI degraded",
+    "unavailable": "AI unavailable",
     "loadingChat": "Loading chat...",
+    "chatLoadError": "Could not load the chat.",
     "devSection": "Dev mode — Service status & error queue",
     "serviceStatus": "Service status",
     "apiKeyConfigured": "API Key configured:",

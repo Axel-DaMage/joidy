@@ -4,16 +4,30 @@
   import { graphData, graphLoading, loadGraph, selectedTag } from '$lib/stores/graph';
   import BetaBanner from '$lib/components/BetaBanner.svelte';
   import type { GraphNode, GraphEdge } from '$lib/api';
+  import { logger } from '$lib/utils/logger';
   import { t } from 'svelte-i18n';
 
   // Lazy-load the heavy graph component (d3 + force-graph, 1300+ lines) so it
   // is split into a separate chunk and only downloaded when the user actually
-  // opens the graph page (#347).
+  // opens the graph page (#347). A failed chunk must surface an error + retry
+  // instead of an infinite "Cargando grafo…" (#1459).
   let KnowledgeGraphForce = $state<typeof import('$lib/components/KnowledgeGraphForce.svelte').default | null>(null);
+  let graphChunkError = $state(false);
+  let graphChunkLoading = $state(false);
+  function loadGraphComponent() {
+    if (KnowledgeGraphForce || graphChunkLoading) return;
+    graphChunkLoading = true;
+    graphChunkError = false;
+    import('$lib/components/KnowledgeGraphForce.svelte')
+      .then((m) => (KnowledgeGraphForce = m.default))
+      .catch((err) => {
+        logger.error('[graph] KnowledgeGraphForce chunk failed:', err);
+        graphChunkError = true;
+      })
+      .finally(() => (graphChunkLoading = false));
+  }
   $effect(() => {
-    if (!KnowledgeGraphForce) {
-      import('$lib/components/KnowledgeGraphForce.svelte').then(m => KnowledgeGraphForce = m.default);
-    }
+    if (!KnowledgeGraphForce && !graphChunkError) loadGraphComponent();
   });
 
   let containerEl = $state<HTMLDivElement>();
@@ -154,6 +168,11 @@
       </div>
     {:else if KnowledgeGraphForce}
       <KnowledgeGraphForce width={w} height={h} focusId={$selectedTag} data={filteredGraphData} />
+    {:else if graphChunkError}
+      <div class="loading-state caption chunk-error">
+        <span>{$t('common.loadFailed')}</span>
+        <button class="btn btn-ghost" onclick={loadGraphComponent}>{$t('common.retry')}</button>
+      </div>
     {:else}
       <div class="loading-state caption">{$t('graph.loading')}</div>
     {/if}
@@ -237,6 +256,13 @@
     left: 50%;
     transform: translate(-50%, -50%);
     color: var(--text-muted);
+  }
+
+  .chunk-error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
   }
 
   .graph-legend {
