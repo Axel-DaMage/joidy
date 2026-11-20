@@ -2,9 +2,10 @@ import os
 
 from config import settings
 from database import get_db
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request, Response
 from models.note import EmbeddingFailure, Note, NoteTag, Tag
 from pydantic import BaseModel, Field, field_validator
+from services.auth_service import verify_internal_token
 from services.embedding_service import (
     get_dead_letter_entries,
     get_retryable_embedding_notes,
@@ -47,6 +48,10 @@ router = APIRouter(prefix="/notes", tags=["notes"])
 
 
 ALLOWED_SOURCES = {"joidy", "obsidian", "api", "import"}
+# Provenance only the internal service token may claim (#1332): a regular
+# client asserting "obsidian" would trigger the vault_synced broadcast and
+# the note_imported_obsidian XP event meant for real watcher traffic.
+_INTERNAL_SOURCES = {"obsidian", "import"}
 
 
 def _clean_tag_list(tags: list[str]) -> list[str]:
@@ -172,6 +177,20 @@ class BulkTagRequest(BaseModel):
 
 def _is_truthy_header(value: str | None) -> bool:
     return value is not None and value.lower() in {"1", "true", "yes", "on"}
+
+
+def _internal_service_request(request: Request) -> bool:
+    """True when the caller authenticated with the INTERNAL_API_TOKEN.
+
+    ``X-From-Vault``/``X-Bulk-Import`` change provenance and skip work
+    (file-write checks, derived-graph rebuilds), so they are trust headers
+    only the vault worker may send. Any other client presenting them has
+    the headers ignored — the request proceeds as a normal note write,
+    which applies the stricter validation path (#1332).
+    """
+    auth = request.headers.get("authorization") or ""
+    scheme, _, token = auth.partition(" ")
+    return scheme.lower() == "bearer" and verify_internal_token(token)
 
 
 def _note_id_owning_resolved(db: Session, resolved: str) -> int | None:
@@ -335,27 +354,35 @@ def get_note(note_id: int, db: Session = Depends(get_db)):
 
 @router.post("/", status_code=201)
 def create_note(
+    request: Request,
     data: NoteCreate,
     background_tasks: BackgroundTasks,
     x_bulk_import: str | None = Header(default=None, alias="X-Bulk-Import"),
     x_from_vault: str | None = Header(default=None, alias="X-From-Vault"),
     db: Session = Depends(get_db),
 ):
+    # Trust headers are honored only for the internal service token — a
+    # regular client sending them gets the normal (stricter) write path.
+    internal = _internal_service_request(request)
+    from_vault = internal and _is_truthy_header(x_from_vault)
+    bulk_import = internal and _is_truthy_header(x_bulk_import)
+    # Internal-only provenance is clamped to "joidy" for regular clients.
+    source = data.source if internal or data.source not in _INTERNAL_SOURCES else "joidy"
     _validated_source_path(
         db,
         data.source_path,
         note_id=None,
-        writes_file=not _is_truthy_header(x_from_vault),
+        writes_file=not from_vault,
     )
     note, gami = create_note_service(
         db,
         title=data.title,
         content=data.content,
         tags=data.tags,
-        source=data.source,
+        source=source,
         source_path=data.source_path,
-        rebuild_derived_data=not _is_truthy_header(x_bulk_import),
-        from_vault=_is_truthy_header(x_from_vault),
+        rebuild_derived_data=not bulk_import,
+        from_vault=from_vault,
     )
     background_tasks.add_task(trigger_embedding, note.id, note.content)
 
@@ -365,17 +392,23 @@ def create_note(
 @router.put("/{note_id}")
 def update_note(
     note_id: int,
+    request: Request,
     data: NoteUpdate,
     background_tasks: BackgroundTasks,
     x_bulk_import: str | None = Header(default=None, alias="X-Bulk-Import"),
     x_from_vault: str | None = Header(default=None, alias="X-From-Vault"),
     db: Session = Depends(get_db),
 ):
+    # Same internal-token gating as create_note (#1332).
+    internal = _internal_service_request(request)
+    from_vault = internal and _is_truthy_header(x_from_vault)
+    bulk_import = internal and _is_truthy_header(x_bulk_import)
+    source = data.source if internal or data.source not in _INTERNAL_SOURCES else "joidy"
     _validated_source_path(
         db,
         data.source_path,
         note_id=note_id,
-        writes_file=not _is_truthy_header(x_from_vault),
+        writes_file=not from_vault,
     )
     note, gami = update_note_service(
         db,
@@ -384,9 +417,9 @@ def update_note(
         content=data.content,
         tags=data.tags,
         source_path=data.source_path,
-        source=data.source,
-        rebuild_derived_data=not _is_truthy_header(x_bulk_import),
-        from_vault=_is_truthy_header(x_from_vault),
+        source=source,
+        rebuild_derived_data=not bulk_import,
+        from_vault=from_vault,
     )
     if note is None or gami is None:
         raise HTTPException(status_code=404, detail="Note not found")

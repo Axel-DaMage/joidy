@@ -218,14 +218,14 @@ make test
 
 ### Antes de Abrir
 
-1. Asegúrate de que tu fork está actualizado con `main`
+1. Asegúrate de que tu fork está actualizado con `development`
 2. Ejecuta los tests y verifica que pasen: `make test`
 3. Verifica lint: `make lint`
 4. Si tu cambio afecta la UI, incluye capturas (opcional pero útil)
 
 ### Proceso
 
-1. Abre un Pull Request desde tu rama a `main`
+1. Abre un Pull Request desde tu rama a `development`
 2. Rellena el template describiendo:
    - Qué cambia y por qué
    - Qué issue resuelve (si aplica)
@@ -238,7 +238,7 @@ make test
 - PRs pequeños y enfocados se revisan más rápido
 - Explica el "por qué" detrás del cambio
 - Responde a los comentarios de revisión
-- Mantén el PR actualizado con `main`
+- Mantén el PR actualizado con `development`
 
 ## Reportar Bugs
 

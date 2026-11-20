@@ -46,7 +46,7 @@ from routers import (
 )
 from routers.integrations import github, google, spotify, strava
 from services.auth_service import get_current_user, get_current_user_or_internal
-from services.env_file import env_file_permissions, get_env_file
+from services.env_file import env_file_permissions, get_env_file, get_persisted
 from services.http_client import aclose_http_clients, http_client
 from services.response_cache import get_cache_stats
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -90,6 +90,30 @@ async def lifespan(app: FastAPI):
             "AUTH_PASSWORD must be set when APP_ENV=production. "
             "Authentication is disabled without it — refusing to start."
         )
+
+    # Security guard (#1332): SECRET_KEY signs every JWT. .env.example ships
+    # the placeholder "change_this_to_a_random_secret_key" — manual
+    # `docker compose` deploys can boot with it, making every token forgeable.
+    # Refuse to start in production; warn loudly elsewhere (the CLI generates
+    # a real key, so this should never fire in managed installs).
+    _secret_key = get_persisted("SECRET_KEY") or settings.secret_key
+    _placeholder_secrets = {
+        "",
+        "change_this_to_a_random_secret_key",
+        "dev_secret_change_me",
+        "changeme",
+        "secret",
+    }
+    if _secret_key.strip().lower() in _placeholder_secrets:
+        _msg = (
+            "SECRET_KEY is unset or still the .env.example placeholder — JWTs "
+            "signed with it are forgeable. Generate one with "
+            "'openssl rand -hex 32'."
+        )
+        if settings.app_env == "production":
+            logger.critical("%s Refusing to start.", _msg)
+            raise RuntimeError(_msg)
+        logger.warning("%s Fix it before exposing this instance.", _msg)
 
     # Startup warning (#1281): the .env file holds every deployment secret.
     # Flag permissions looser than owner-only so files created by hand or
@@ -208,8 +232,11 @@ app = FastAPI(
 
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 app.add_middleware(RequestTimingMiddleware)
-app.add_middleware(MetricsMiddleware)
 app.add_middleware(RateLimitMiddleware)
+# Metrics must wrap the rate limiter — middleware added later runs further
+# out, and 429s returned inside RateLimitMiddleware used to bypass request
+# metrics entirely (#1332).
+app.add_middleware(MetricsMiddleware)
 
 
 def _get_cors_origins() -> list[str]:

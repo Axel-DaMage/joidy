@@ -25,6 +25,7 @@ if "sqlite_vec" not in sys.modules:
     sys.modules["sqlite_vec"] = _stub
 
 import main as main_module
+from config import settings
 from database import Base, get_db
 from main import app
 from middleware.rate_limit import _default_limiter
@@ -34,6 +35,11 @@ from services.auth_service import get_current_user
 
 # Prevent lifespan migrations during tests.
 main_module.init_db = lambda: None
+
+# The vault worker authenticates with INTERNAL_API_TOKEN — X-From-Vault is a
+# trust header honored only alongside that credential (#1332).
+_WORKER_TOKEN = "test-internal-token"
+_WORKER_HEADERS = {"Authorization": f"Bearer {_WORKER_TOKEN}", "X-From-Vault": "1"}
 
 
 def _build_client(db_session):
@@ -83,6 +89,9 @@ class VaultSyncBroadcastTestBase(unittest.TestCase):
 
         self._vault_patcher = patch("services.note_service.write_to_vault", return_value=False)
         self._vault_patcher.start()
+        # Give the worker trust headers a credential to check against (#1332).
+        self._prev_iat = settings.internal_api_token
+        settings.internal_api_token = _WORKER_TOKEN
         # Disable rate limits for tests.
         _default_limiter.requests_per_minute = 10_000
         _default_limiter.auth_requests_per_minute = 10_000
@@ -90,6 +99,7 @@ class VaultSyncBroadcastTestBase(unittest.TestCase):
         _default_limiter.login_max_failures = 10_000
 
     def tearDown(self) -> None:
+        settings.internal_api_token = self._prev_iat
         self._vault_patcher.stop()
         self.engine.dispose()
 
@@ -114,7 +124,7 @@ class TestVaultSyncedBroadcast(VaultSyncBroadcastTestBase):
                             "source": "obsidian",
                             "source_path": "/vault/note.md",
                         },
-                        headers={"X-From-Vault": "1"},
+                        headers=_WORKER_HEADERS,
                     )
                     self.assertEqual(response.status_code, 201)
                     mock_broadcast.assert_called_once()
@@ -159,7 +169,7 @@ class TestVaultSyncedBroadcast(VaultSyncBroadcastTestBase):
                         "source": "obsidian",
                         "source_path": "/vault/update.md",
                     },
-                    headers={"X-From-Vault": "1"},
+                    headers=_WORKER_HEADERS,
                 )
                 note_id = create_res.json()["id"]
 
@@ -175,7 +185,7 @@ class TestVaultSyncedBroadcast(VaultSyncBroadcastTestBase):
                             "source": "obsidian",
                             "source_path": "/vault/update.md",
                         },
-                        headers={"X-From-Vault": "1"},
+                        headers=_WORKER_HEADERS,
                     )
                     self.assertEqual(update_res.status_code, 200)
                     mock_broadcast.assert_called_once()

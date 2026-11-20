@@ -164,13 +164,22 @@ generate_secret() {
   fi
 }
 
+# Replace `KEY=...` (optionally commented) in the env file WITHOUT putting the
+# secret on the process argv — `sed -i "s|...|KEY=${SECRET}|"` exposes the
+# value in /proc/<pid>/cmdline and `ps` for anyone on the host while it runs
+# (#1332). The sed program is fed through stdin instead.
+envfile_set_secret() {
+  local key="$1" value="$2" file="$3"
+  printf 's|^#\\?%s=.*|%s=%s|\n' "$key" "$key" "$value" | sed -i -f - "$file"
+}
+
 if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
   CHANGED=0
   # POSTGRES_PASSWORD
   PG_PW=$(grep -E '^POSTGRES_PASSWORD=' "$ENV_FILE" | cut -d'=' -f2-)
   if [ -z "$PG_PW" ]; then
     NEW_PW=$(generate_secret 24)
-    sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=${NEW_PW}|" "$ENV_FILE"
+    envfile_set_secret POSTGRES_PASSWORD "$NEW_PW" "$ENV_FILE"
     print_ok "Generated POSTGRES_PASSWORD"
     CHANGED=1
   fi
@@ -178,7 +187,7 @@ if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
   SK=$(grep -E '^SECRET_KEY=' "$ENV_FILE" | cut -d'=' -f2-)
   if [ -z "$SK" ] || [ "$SK" = "change_this_to_a_random_secret_key" ]; then
     NEW_SK=$(generate_secret 32)
-    sed -i "s|^SECRET_KEY=.*|SECRET_KEY=${NEW_SK}|" "$ENV_FILE"
+    envfile_set_secret SECRET_KEY "$NEW_SK" "$ENV_FILE"
     print_ok "Generated SECRET_KEY"
     CHANGED=1
   fi
@@ -189,7 +198,7 @@ if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
   if [ -z "$IS" ]; then
     NEW_IS=$(generate_secret 32)
     if grep -qE '^#?INTERNAL_SECRET=' "$ENV_FILE"; then
-      sed -i "s|^#\?INTERNAL_SECRET=.*|INTERNAL_SECRET=${NEW_IS}|" "$ENV_FILE"
+      envfile_set_secret INTERNAL_SECRET "$NEW_IS" "$ENV_FILE"
     else
       printf '\nINTERNAL_SECRET=%s\n' "$NEW_IS" >>"$ENV_FILE"
     fi
@@ -200,7 +209,7 @@ if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
   GRAFANA_PW=$(grep -E '^GRAFANA_ADMIN_PASSWORD=' "$ENV_FILE" | cut -d'=' -f2-)
   if [ -z "$GRAFANA_PW" ]; then
     NEW_GRAFANA_PW=$(generate_secret 24)
-    sed -i "s|^GRAFANA_ADMIN_PASSWORD=.*|GRAFANA_ADMIN_PASSWORD=${NEW_GRAFANA_PW}|" "$ENV_FILE"
+    envfile_set_secret GRAFANA_ADMIN_PASSWORD "$NEW_GRAFANA_PW" "$ENV_FILE"
     print_ok "Generated GRAFANA_ADMIN_PASSWORD"
     CHANGED=1
   fi
@@ -209,7 +218,7 @@ if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
   if [ -z "$IAT" ]; then
     NEW_IAT=$(generate_secret 32)
     if grep -qE '^INTERNAL_API_TOKEN=' "$ENV_FILE"; then
-      sed -i "s|^INTERNAL_API_TOKEN=.*|INTERNAL_API_TOKEN=${NEW_IAT}|" "$ENV_FILE"
+      envfile_set_secret INTERNAL_API_TOKEN "$NEW_IAT" "$ENV_FILE"
     else
       printf '\nINTERNAL_API_TOKEN=%s\n' "$NEW_IAT" >>"$ENV_FILE"
     fi
@@ -848,7 +857,11 @@ cmd_idle_run() {
   poll_s=$(read_port JOIDY_IDLE_POLL_SECONDS 60)
   hibernate_db=0
   if [ -f "$IDLE_STATE_DIR/watcher.conf" ]; then
-    . "$IDLE_STATE_DIR/watcher.conf"
+    # Parse the single expected key instead of dot-sourcing the file —
+    # $IDLE_STATE_DIR lives under the user-writable data dir, so `.` would
+    # execute anything planted there (#1332).
+    IDLE_HIBERNATE_DB=$(grep -E '^IDLE_HIBERNATE_DB=' "$IDLE_STATE_DIR/watcher.conf" | tail -1 | cut -d= -f2-)
+    case "$IDLE_HIBERNATE_DB" in 0 | 1) ;; *) IDLE_HIBERNATE_DB="" ;; esac
   fi
   hibernate_db="${IDLE_HIBERNATE_DB:-$hibernate_db}"
   # Numeric sanity — fall back to defaults on garbage values.

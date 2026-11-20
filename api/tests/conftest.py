@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import tempfile
 import types
@@ -75,6 +76,12 @@ def _ensure_database(admin_url: str, db_name: str) -> str:
     connect to the database already present in ``admin_url`` purely as an
     entry point to the server.
     """
+    # ``db_name`` comes from the env-derived DATABASE_URL path and is
+    # interpolated into a CREATE DATABASE below — reject anything that is
+    # not a plain identifier so a crafted URL cannot break out of the
+    # quoted name (CI-trusted, but cheap to enforce, #1332).
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_-]*", db_name):
+        raise ValueError(f"Refusing to create database with non-identifier name: {db_name!r}")
     parsed = urlparse(admin_url)
     new_url = urlunparse(parsed._replace(path=f"/{db_name}"))
     admin_engine = create_engine(admin_url, isolation_level="AUTOCOMMIT")
@@ -321,6 +328,19 @@ def persisted_env(_isolated_env_file):
     real .env (#991).
     """
     return _isolated_env_file
+
+
+@pytest.fixture
+def worker_headers(persisted_env):
+    """Authorization header the internal services (worker, n8n) send.
+
+    Trust headers (``X-From-Vault``, ``X-Bulk-Import``) and vault/import
+    note provenance are honored only for requests authenticated with
+    INTERNAL_API_TOKEN (#1332), so tests simulating the vault watcher must
+    present that credential.
+    """
+    persisted_env.write_text("INTERNAL_API_TOKEN=test-internal-token\n")
+    return {"Authorization": "Bearer test-internal-token"}
 
 
 @pytest.fixture

@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from datetime import UTC, datetime
 from typing import Any
 
@@ -21,6 +22,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/integrations/github", tags=["integrations"])
+
+logger = logging.getLogger(__name__)
 
 GITHUB_API = "https://api.github.com"
 
@@ -313,7 +316,7 @@ async def get_my_issues(
                     i["_repo_full_name"] = repo["full_name"]
                 return issues
             except Exception as e:
-                print(f"Error fetching issues for {repo.get('full_name')}: {e}")
+                logger.warning("Error fetching issues for %s: %s", repo.get("full_name"), e)
                 return []
 
         results = await asyncio.gather(*[fetch_issues_for_repo(repo) for repo in repos[:15]], return_exceptions=True)
@@ -356,7 +359,7 @@ async def get_my_issues(
             "filter": filter,
         }
     except Exception as e:
-        print(f"Error in get_my_issues: {e}")
+        logger.warning("Error in get_my_issues: %s", e)
         return {
             "issues": [],
             "stats": {"total": 0, "open": 0, "closed": 0},
@@ -411,7 +414,7 @@ async def get_my_pulls(
                     p["_repo_full_name"] = repo["full_name"]
                 return pulls
             except Exception as e:
-                print(f"Error fetching pulls for {repo.get('full_name')}: {e}")
+                logger.warning("Error fetching pulls for %s: %s", repo.get("full_name"), e)
                 return []
 
         results = await asyncio.gather(*[fetch_pulls_for_repo(repo) for repo in repos[:15]], return_exceptions=True)
@@ -453,7 +456,7 @@ async def get_my_pulls(
             "filter": filter,
         }
     except Exception as e:
-        print(f"Error in get_my_pulls: {e}")
+        logger.warning("Error in get_my_pulls: %s", e)
         return {
             "pulls": [],
             "stats": {"total": 0, "open": 0, "closed": 0, "draft": 0},
