@@ -596,6 +596,179 @@ export interface SyncConflict {
   last_synced_at: string | null;
 }
 
+// ── Google Contacts (#43) ──────────────────────────────────────────────────
+// Shapes mirror api/routers/integrations/contacts.py response models
+// (snake_case, normalized from Google Person resources).
+
+export interface ContactEmail {
+  value: string | null;
+  type: string | null;
+  primary: boolean;
+  display_name?: string | null;
+}
+
+export interface ContactPhone {
+  value: string | null;
+  type: string | null;
+  primary: boolean;
+}
+
+export interface ContactOrganization {
+  name: string | null;
+  title: string | null;
+  department: string | null;
+  type: string | null;
+  current: boolean | null;
+  job_description: string | null;
+  primary: boolean;
+}
+
+export interface ContactAddress {
+  type: string | null;
+  formatted_value: string | null;
+  po_box: string | null;
+  street_address: string | null;
+  extended_address: string | null;
+  city: string | null;
+  region: string | null;
+  postal_code: string | null;
+  country: string | null;
+  country_code: string | null;
+  primary: boolean;
+}
+
+export interface ContactBirthday {
+  year: number | null;
+  month: number | null;
+  day: number | null;
+  text: string | null;
+}
+
+export interface ContactUrl {
+  value: string | null;
+  type: string | null;
+  primary: boolean;
+}
+
+export interface Contact {
+  resource_name: string | null;
+  etag: string | null;
+  display_name: string | null;
+  given_name: string | null;
+  family_name: string | null;
+  middle_name: string | null;
+  honorific_prefix: string | null;
+  honorific_suffix: string | null;
+  emails: ContactEmail[];
+  phones: ContactPhone[];
+  organizations: ContactOrganization[];
+  addresses: ContactAddress[];
+  birthdays: ContactBirthday[];
+  urls: ContactUrl[];
+  photo_url: string | null;
+  note: string | null;
+  memberships: string[];
+}
+
+export interface ContactList {
+  contacts: Contact[];
+  next_page_token: string | null;
+  total_items: number | null;
+}
+
+export interface ContactGroup {
+  resource_name: string | null;
+  name: string | null;
+  formatted_name: string | null;
+  group_type: string | null;
+  member_count: number | null;
+}
+
+export interface ContactGroupList {
+  groups: ContactGroup[];
+  next_page_token: string | null;
+  total_items: number | null;
+}
+
+export interface ContactsStatus {
+  connected: boolean;
+  /** null = unknown (legacy token row without a stored scope string). */
+  contacts_read: boolean | null;
+  contacts_write: boolean | null;
+}
+
+// Write payloads (ContactWriteIn). Only keys present in the JSON body reach
+// Google — `undefined` fields are dropped by JSON.stringify, matching the
+// backend's `model_dump(exclude_unset=True)` semantics. Provided sections
+// fully replace the stored ones (PUT semantics).
+export interface ContactEmailInput {
+  value: string;
+  type?: string | null;
+  display_name?: string | null;
+  primary?: boolean | null;
+}
+
+export interface ContactPhoneInput {
+  value: string;
+  type?: string | null;
+  primary?: boolean | null;
+}
+
+export interface ContactOrganizationInput {
+  name?: string | null;
+  title?: string | null;
+  department?: string | null;
+  type?: string | null;
+  current?: boolean | null;
+  job_description?: string | null;
+  primary?: boolean | null;
+}
+
+export interface ContactAddressInput {
+  type?: string | null;
+  formatted_value?: string | null;
+  po_box?: string | null;
+  street_address?: string | null;
+  extended_address?: string | null;
+  city?: string | null;
+  region?: string | null;
+  postal_code?: string | null;
+  country?: string | null;
+  country_code?: string | null;
+  primary?: boolean | null;
+}
+
+export interface ContactBirthdayInput {
+  year?: number | null;
+  month?: number | null;
+  day?: number | null;
+  text?: string | null;
+}
+
+export interface ContactUrlInput {
+  value: string;
+  type?: string | null;
+  primary?: boolean | null;
+}
+
+export interface ContactWriteInput {
+  given_name?: string | null;
+  family_name?: string | null;
+  middle_name?: string | null;
+  honorific_prefix?: string | null;
+  honorific_suffix?: string | null;
+  unstructured_name?: string | null;
+  emails?: ContactEmailInput[];
+  phones?: ContactPhoneInput[];
+  organizations?: ContactOrganizationInput[];
+  addresses?: ContactAddressInput[];
+  birthdays?: ContactBirthdayInput[];
+  note?: string | null;
+  urls?: ContactUrlInput[];
+  memberships?: string[];
+  etag?: string | null;
+}
+
 export const api = {
   auth: {
     login: (password: string, username = 'user') =>
@@ -1384,5 +1557,50 @@ export const api = {
         'POST',
         '/system/power/shutdown'
       ),
+  },
+
+  // ── Google Contacts (#43) — dedicated surface over the People API via
+  // /integrations/contacts (JWT-protected, shares the Google OAuth token).
+  contacts: {
+    status: () => req<ContactsStatus>('GET', '/integrations/contacts/status'),
+    list: (params?: {
+      q?: string;
+      group?: string;
+      pageSize?: number;
+      pageToken?: string;
+    }) => {
+      const qs = new URLSearchParams();
+      if (params?.q) qs.set('q', params.q);
+      if (params?.group) qs.set('group', params.group);
+      if (params?.pageSize) qs.set('page_size', String(params.pageSize));
+      if (params?.pageToken) qs.set('page_token', params.pageToken);
+      const suffix = qs.toString() ? `?${qs.toString()}` : '';
+      return req<ContactList>('GET', `/integrations/contacts/${suffix}`);
+    },
+    get: (resourceName: string) =>
+      req<Contact>(
+        'GET',
+        `/integrations/contacts/${resourceName.split('/').map(encodeURIComponent).join('/')}`
+      ),
+    create: (data: ContactWriteInput) =>
+      req<Contact>('POST', '/integrations/contacts/', data),
+    update: (resourceName: string, data: ContactWriteInput) =>
+      req<Contact>(
+        'PUT',
+        `/integrations/contacts/${resourceName.split('/').map(encodeURIComponent).join('/')}`,
+        data
+      ),
+    remove: (resourceName: string) =>
+      req<{ status: string; resource_name: string }>(
+        'DELETE',
+        `/integrations/contacts/${resourceName.split('/').map(encodeURIComponent).join('/')}`
+      ),
+    groups: (params?: { pageSize?: number; pageToken?: string }) => {
+      const qs = new URLSearchParams();
+      if (params?.pageSize) qs.set('page_size', String(params.pageSize));
+      if (params?.pageToken) qs.set('page_token', params.pageToken);
+      const suffix = qs.toString() ? `?${qs.toString()}` : '';
+      return req<ContactGroupList>('GET', `/integrations/contacts/groups${suffix}`);
+    },
   },
 };

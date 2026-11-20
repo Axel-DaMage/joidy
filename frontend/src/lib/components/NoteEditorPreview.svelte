@@ -61,14 +61,19 @@
     const target = e.target as HTMLElement;
     if (target.classList.contains('wikilink')) {
       const title = target.getAttribute('data-title');
-      if (title) {
-        const linkedNote = findNoteByTitle(title);
-        if (linkedNote) {
-          goto(`/notes?id=${linkedNote.id}`);
-        } else {
-          // Future: Option to create missing note
-          logger.log('Note not found:', title);
-        }
+      if (!title) return;
+      // [[Contact:Name]] → contacts page search (#43). Checked before the
+      // note lookup: a note literally titled "Contact:X" would otherwise win.
+      if (target.classList.contains('wikilink-contact')) {
+        goto(`/contactos?q=${encodeURIComponent(title)}`);
+        return;
+      }
+      const linkedNote = findNoteByTitle(title);
+      if (linkedNote) {
+        goto(`/notes?id=${linkedNote.id}`);
+      } else {
+        // Future: Option to create missing note
+        logger.log('Note not found:', title);
       }
     }
   }
@@ -227,6 +232,14 @@
   }
   .preview :global(.wikilink:hover) {
     border-bottom-color: var(--xp);
+  }
+  /* [[Contact:Name]] links (#43) — teal accent to distinguish from note links */
+  .preview :global(.wikilink-contact) {
+    color: var(--success, #3fb950);
+    border-bottom-color: color-mix(in srgb, var(--success, #3fb950) 40%, transparent);
+  }
+  .preview :global(.wikilink-contact:hover) {
+    border-bottom-color: var(--success, #3fb950);
   }
 
   .backlinks-section {
