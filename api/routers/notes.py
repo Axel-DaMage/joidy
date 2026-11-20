@@ -1,10 +1,12 @@
 import os
+from datetime import UTC, datetime
 
 from config import settings
 from database import get_db
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request, Response
 from models.note import EmbeddingFailure, Note, NoteTag, Tag
 from pydantic import BaseModel, Field, field_validator
+from services.auth_service import verify_internal_token
 from services.embedding_service import (
     get_dead_letter_entries,
     get_retryable_embedding_notes,
@@ -47,6 +49,10 @@ router = APIRouter(prefix="/notes", tags=["notes"])
 
 
 ALLOWED_SOURCES = {"joidy", "obsidian", "api", "import"}
+# Provenance only the internal service token may claim (#1332): a regular
+# client asserting "obsidian" would trigger the vault_synced broadcast and
+# the note_imported_obsidian XP event meant for real watcher traffic.
+_INTERNAL_SOURCES = {"obsidian", "import"}
 
 
 def _clean_tag_list(tags: list[str]) -> list[str]:
@@ -174,6 +180,20 @@ def _is_truthy_header(value: str | None) -> bool:
     return value is not None and value.lower() in {"1", "true", "yes", "on"}
 
 
+def _internal_service_request(request: Request) -> bool:
+    """True when the caller authenticated with the INTERNAL_API_TOKEN.
+
+    ``X-From-Vault``/``X-Bulk-Import`` change provenance and skip work
+    (file-write checks, derived-graph rebuilds), so they are trust headers
+    only the vault worker may send. Any other client presenting them has
+    the headers ignored — the request proceeds as a normal note write,
+    which applies the stricter validation path (#1332).
+    """
+    auth = request.headers.get("authorization") or ""
+    scheme, _, token = auth.partition(" ")
+    return scheme.lower() == "bearer" and verify_internal_token(token)
+
+
 def _note_id_owning_resolved(db: Session, resolved: str) -> int | None:
     """Id of the note whose stored ``source_path`` resolves to ``resolved``.
 
@@ -226,12 +246,12 @@ def _validated_source_path(
 
 @router.get("/")
 def list_notes(
+    response: Response,
     skip: int = Query(0, ge=0),
     limit: int = Query(1000, ge=1, le=1000),
     tag: str | None = None,
     source_path: str | None = None,
     db: Session = Depends(get_db),
-    response: Response = None,
 ):
     from sqlalchemy.orm import defer
 
@@ -335,27 +355,35 @@ def get_note(note_id: int, db: Session = Depends(get_db)):
 
 @router.post("/", status_code=201)
 def create_note(
+    request: Request,
     data: NoteCreate,
     background_tasks: BackgroundTasks,
     x_bulk_import: str | None = Header(default=None, alias="X-Bulk-Import"),
     x_from_vault: str | None = Header(default=None, alias="X-From-Vault"),
     db: Session = Depends(get_db),
 ):
+    # Trust headers are honored only for the internal service token — a
+    # regular client sending them gets the normal (stricter) write path.
+    internal = _internal_service_request(request)
+    from_vault = internal and _is_truthy_header(x_from_vault)
+    bulk_import = internal and _is_truthy_header(x_bulk_import)
+    # Internal-only provenance is clamped to "joidy" for regular clients.
+    source = data.source if internal or data.source not in _INTERNAL_SOURCES else "joidy"
     _validated_source_path(
         db,
         data.source_path,
         note_id=None,
-        writes_file=not _is_truthy_header(x_from_vault),
+        writes_file=not from_vault,
     )
     note, gami = create_note_service(
         db,
         title=data.title,
         content=data.content,
         tags=data.tags,
-        source=data.source,
+        source=source,
         source_path=data.source_path,
-        rebuild_derived_data=not _is_truthy_header(x_bulk_import),
-        from_vault=_is_truthy_header(x_from_vault),
+        rebuild_derived_data=not bulk_import,
+        from_vault=from_vault,
     )
     background_tasks.add_task(trigger_embedding, note.id, note.content)
 
@@ -365,17 +393,23 @@ def create_note(
 @router.put("/{note_id}")
 def update_note(
     note_id: int,
+    request: Request,
     data: NoteUpdate,
     background_tasks: BackgroundTasks,
     x_bulk_import: str | None = Header(default=None, alias="X-Bulk-Import"),
     x_from_vault: str | None = Header(default=None, alias="X-From-Vault"),
     db: Session = Depends(get_db),
 ):
+    # Same internal-token gating as create_note (#1332).
+    internal = _internal_service_request(request)
+    from_vault = internal and _is_truthy_header(x_from_vault)
+    bulk_import = internal and _is_truthy_header(x_bulk_import)
+    source = data.source if internal or data.source not in _INTERNAL_SOURCES else "joidy"
     _validated_source_path(
         db,
         data.source_path,
         note_id=note_id,
-        writes_file=not _is_truthy_header(x_from_vault),
+        writes_file=not from_vault,
     )
     note, gami = update_note_service(
         db,
@@ -384,9 +418,9 @@ def update_note(
         content=data.content,
         tags=data.tags,
         source_path=data.source_path,
-        source=data.source,
-        rebuild_derived_data=not _is_truthy_header(x_bulk_import),
-        from_vault=_is_truthy_header(x_from_vault),
+        source=source,
+        rebuild_derived_data=not bulk_import,
+        from_vault=from_vault,
     )
     if note is None or gami is None:
         raise HTTPException(status_code=404, detail="Note not found")
@@ -452,6 +486,56 @@ def bulk_untag(data: BulkTagRequest, db: Session = Depends(get_db)):
         sync_skills_for_tags(db, touched_tags)
     db.commit()
     return {"removed": removed, "notes": len(data.ids), "tags": data.tags}
+
+
+@router.delete("/by-path", status_code=200)
+def delete_note_by_source_path(
+    source_path: str = Query(..., max_length=1000),
+    expected_updated_at: str | None = Query(default=None, max_length=64),
+    db: Session = Depends(get_db),
+):
+    """Atomically delete the note whose ``source_path`` matches (#1302).
+
+    The vault watcher used to list notes, capture an id, then delete it —
+    a note re-created or updated between the list and the delete was
+    removed anyway (TOCTOU). Here the match and the delete run inside one
+    ``SELECT ... FOR UPDATE``-locked transaction, and
+    ``expected_updated_at`` acts as an optimistic etag: when supplied and
+    the row's ``updated_at`` differs (note changed or was recreated after
+    the lookup), the delete is refused with 409 instead of silently
+    removing the wrong note.
+
+    Declared before ``DELETE /{note_id}``: without an int path converter,
+    "by-path" would otherwise be swallowed by the ``{note_id}`` route and
+    rejected as a 422.
+    """
+    normalized = normalize_source_path(source_path)
+    if normalized is None or resolve_confined_source_path(normalized) is None:
+        # Generic detail — distinguishing "outside vault" from "missing"
+        # would leak a file-existence oracle (#1314).
+        raise HTTPException(status_code=400, detail="Invalid source_path")
+
+    note = db.query(Note).filter(Note.source_path == normalized).with_for_update().first()
+    if note is None:
+        raise HTTPException(status_code=404, detail="Note not found")
+
+    if expected_updated_at:
+        try:
+            expected = datetime.fromisoformat(expected_updated_at.replace("Z", "+00:00"))
+        except ValueError:
+            expected = None
+        if expected is not None and expected.tzinfo is not None:
+            # note.updated_at is a naive UTC datetime; the API serializes
+            # it as isoformat + "Z", so an aware etag is compared in UTC.
+            expected = expected.astimezone(UTC).replace(tzinfo=None)
+        if expected is None or expected != note.updated_at:
+            raise HTTPException(status_code=409, detail="Note changed since lookup")
+
+    note_id = note.id
+    deleted = delete_note_service(db, note_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Note not found")
+    return {"deleted": note_id, "source_path": normalized}
 
 
 @router.delete("/{note_id}", status_code=204)

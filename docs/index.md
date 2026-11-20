@@ -51,12 +51,13 @@ Joidy es un sistema personal de gestión del conocimiento que integra:
 | 14 | [Monitoring](MONITORING.md) | Métricas Prometheus, endpoint `/metrics`, Grafana |
 | 15 | [Comunidad](COMMUNITY.md) | Canales de participación, contribuciones, código de conducta |
 | 16 | [Real-Time & Security](realtime-security.md) | WebSockets, error handling, rate limiting, seguridad |
+| 17 | [Política de Privacidad](../PRIVACY.md) | Datos accedidos por integración, almacenamiento, retención y procesadores externos |
 
 ### Architecture Decision Records
 
 | # | Documento | Descripción |
 |---|-----------|-------------|
-| 17 | [ADRs](adr/README.md) | Índice de Architecture Decision Records (0001–0006) |
+| 18 | [ADRs](adr/README.md) | Índice de Architecture Decision Records (0001–0006) |
 
 ---
 

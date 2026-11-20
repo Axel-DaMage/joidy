@@ -48,7 +48,7 @@ def login(
     """Log in and store the JWT in ~/.config/joidy/config.toml."""
     flags = Flags.make(ctx, json=json, jq=jq, yes=yes, api_url=api_url, token=token)
 
-    if password == "-":
+    if password == "-":  # noqa: S105
         password = _read_stdin_once()
     if password is None:
         if not sys.stdin.isatty():

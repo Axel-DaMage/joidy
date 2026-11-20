@@ -35,7 +35,7 @@ def _tags_with_note_counts(db: Session):
     )
 
 
-register_cache_clearer(_tags_with_note_counts.cache_clear)  # type: ignore[attr-defined]
+register_cache_clearer(_tags_with_note_counts.cache_clear)
 
 
 @router.get("/")
@@ -91,7 +91,7 @@ def set_parent(tag_id: int, parent_id: int | None, db: Session = Depends(get_db)
     # Detect cycles: walk up the parent chain from parent_id
     if parent_id is not None:
         visited = {tag_id}
-        current = parent_id
+        current: int | None = parent_id
         while current is not None:
             if current in visited:
                 raise HTTPException(status_code=400, detail="Setting this parent would create a circular hierarchy")
@@ -236,11 +236,11 @@ def _cached_tag_graph(db: Session):
     return {"nodes": nodes, "edges": edges}
 
 
-register_cache_clearer(_cached_tag_graph.cache_clear)  # type: ignore[attr-defined]
+register_cache_clearer(_cached_tag_graph.cache_clear)
 
 
 @router.get("/graph")
-def get_tag_graph(db: Session = Depends(get_db), response: Response = None):
+def get_tag_graph(response: Response, db: Session = Depends(get_db)):
     data = _cached_tag_graph(db)
     if response is not None:
         response.headers["X-Total-Nodes"] = str(len(data.get("nodes", [])))

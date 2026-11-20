@@ -45,7 +45,8 @@ async def exchange_code(code: str) -> dict[str, Any]:
     async with http_client(timeout=30.0) as client:
         r = await client.post(STRAVA_TOKEN_URL, data=payload)
         r.raise_for_status()
-        return r.json()
+        tokens: dict[str, Any] = r.json()
+        return tokens
 
 
 async def _request(token: str, url: str, params: dict | None = None) -> Any:
@@ -58,13 +59,15 @@ async def _request(token: str, url: str, params: dict | None = None) -> Any:
 
 async def list_activities(token: str, per_page: int = 30) -> list[dict[str, Any]]:
     """List the athlete's recent activities."""
-    return await _request(
+    activities: list[dict[str, Any]] = await _request(
         token,
         f"{STRAVA_API}/athlete/activities",
         params={"per_page": per_page},
     )
+    return activities
 
 
 async def get_athlete(token: str) -> dict[str, Any]:
     """Get the authenticated athlete's profile."""
-    return await _request(token, f"{STRAVA_API}/athlete")
+    athlete: dict[str, Any] = await _request(token, f"{STRAVA_API}/athlete")
+    return athlete

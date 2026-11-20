@@ -153,6 +153,20 @@ class TestPersistentEventLog(unittest.TestCase):
             assert pending[0] == ("/vault/unsynced.md", Change.modified)
             log2.close()
 
+    def test_fingerprints_survive_reopen(self):
+        """Rename fingerprints persist across restarts (#1302)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "events.db"
+            log = PersistentEventLog(log_path)
+            log.set_fingerprint("/vault/a.md", "deadbeef")
+            log.close()
+
+            log2 = PersistentEventLog(log_path)
+            assert log2.fingerprints() == {"/vault/a.md": "deadbeef"}
+            log2.remove_fingerprint("/vault/a.md")
+            assert log2.fingerprints() == {}
+            log2.close()
+
 
 class TestVaultSync(unittest.IsolatedAsyncioTestCase):
     def _client(self, responses):

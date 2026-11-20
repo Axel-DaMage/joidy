@@ -56,7 +56,7 @@ def sanitize_html(text: str) -> str:
     """Remove dangerous HTML constructs while preserving markdown using bleach."""
     if not text:
         return text
-    return bleach.clean(text, tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRIBUTES, strip=True)
+    return str(bleach.clean(text, tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRIBUTES, strip=True))
 
 
 def sanitize_title(title: str) -> str:

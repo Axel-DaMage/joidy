@@ -354,7 +354,7 @@ def get_persisted(key: str) -> str:
     worker that handled a request is invisible to its siblings, whose in-memory
     ``settings`` object still holds the value loaded at startup.
     """
-    return read_env().get(key, "")
+    return str(read_env().get(key, ""))
 
 
 # ── Shipped placeholder values (#1393) ────────────────────────────────────

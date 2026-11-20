@@ -61,14 +61,14 @@ print_err() {
 
 # Resolve project directory.
 # Priority: JOIDY_DIR env var → ~/.config/joidy/path (user) → /etc/joidy/path (system, e.g. AUR) → script location (../)
-SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f -- "$0")")" && pwd)"
 
 if [ -n "$JOIDY_DIR" ] && [ -d "$JOIDY_DIR" ]; then
   PROJECT_DIR="$JOIDY_DIR"
 elif [ -f "$HOME/.config/joidy/path" ]; then
-  PROJECT_DIR="$(cat "$HOME/.config/joidy/path")"
+  PROJECT_DIR="$(cat -- "$HOME/.config/joidy/path")"
 elif [ -f "/etc/joidy/path" ]; then
-  PROJECT_DIR="$(cat "/etc/joidy/path")"
+  PROJECT_DIR="$(cat -- "/etc/joidy/path")"
 else
   PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 fi
@@ -81,9 +81,9 @@ fi
 
 # Compose project name = lowercased basename of the project dir. Used to tell
 # our own containers apart from foreign ones holding a port we want to bind.
-COMPOSE_PROJECT="$(basename "$PROJECT_DIR" | tr '[:upper:]' '[:lower:]')"
+COMPOSE_PROJECT="$(basename -- "$PROJECT_DIR" | tr '[:upper:]' '[:lower:]')"
 
-cd "$PROJECT_DIR"
+cd -- "$PROJECT_DIR"
 
 # ─── Container engine detection ───────────────────────────────────
 # Detect the engine early so the env bootstrap can make engine-specific
@@ -93,19 +93,23 @@ cd "$PROJECT_DIR"
 # help` and usage errors must work on a bare machine: install.sh explicitly
 # lets users install Docker *after* the CLI is on PATH, and help is the
 # first thing they reach for.
+# DOCKER_CMD is an argv array, not a string: multi-word engines
+# ("docker compose") stay intact and every later expansion is exactly one
+# word — no unquoted expansion is ever word-split or able to become an
+# option it was not meant to be (#1326). All compose calls go through dc().
 CONTAINER_ENGINE="docker"
-DOCKER_CMD="docker compose"
+DOCKER_CMD=(docker compose)
 case "${1:-help}" in
   up|down|sleep|wake|restart|status|pull|logs|idle|backup|restore)
     if command -v docker-compose &>/dev/null; then
-      DOCKER_CMD="docker-compose"
+      DOCKER_CMD=(docker-compose)
     elif command -v docker &>/dev/null; then
-      DOCKER_CMD="docker compose"
+      DOCKER_CMD=(docker compose)
     elif command -v podman &>/dev/null && podman compose version &>/dev/null 2>&1; then
-      DOCKER_CMD="podman compose"
+      DOCKER_CMD=(podman compose)
       CONTAINER_ENGINE="podman"
     elif command -v podman-compose &>/dev/null; then
-      DOCKER_CMD="podman-compose"
+      DOCKER_CMD=(podman-compose)
       CONTAINER_ENGINE="podman"
     else
       echo -e "${RED}✗ Error: Neither docker nor podman was found in PATH.${NC}" >&2
@@ -120,26 +124,31 @@ esac
 # 2. ~/.config/joidy/.env        (AUR/system install — project dir is read-only)
 # 3. Auto-create from .env.example with generated secrets
 ENV_FILE=""
-ENV_FILE_ARG=""
+ENV_FILE_ARG=()
 CONFIG_DIR_JOIDY="$HOME/.config/joidy"
 
 if [ -f "$PROJECT_DIR/.env" ]; then
   ENV_FILE="$PROJECT_DIR/.env"
 elif [ -w "$PROJECT_DIR" ] && [ -f "$PROJECT_DIR/.env.example" ]; then
   # Project dir is writable (git clone) — create .env there
-  cp "$PROJECT_DIR/.env.example" "$PROJECT_DIR/.env"
+  cp -- "$PROJECT_DIR/.env.example" "$PROJECT_DIR/.env"
   ENV_FILE="$PROJECT_DIR/.env"
   print_status "Created .env from .env.example"
 elif [ -f "$PROJECT_DIR/.env.example" ]; then
   # Project dir is read-only (AUR install) — use user config dir
-  mkdir -p "$CONFIG_DIR_JOIDY"
+  mkdir -p -- "$CONFIG_DIR_JOIDY"
   ENV_FILE="$CONFIG_DIR_JOIDY/.env"
   if [ ! -f "$ENV_FILE" ]; then
-    cp "$PROJECT_DIR/.env.example" "$ENV_FILE"
+    cp -- "$PROJECT_DIR/.env.example" "$ENV_FILE"
     print_status "Created .env in $CONFIG_DIR_JOIDY (project dir is read-only)"
   fi
-  ENV_FILE_ARG="--env-file $ENV_FILE"
+  ENV_FILE_ARG=(--env-file "$ENV_FILE")
 fi
+
+# Invoke the compose engine with the resolved env-file args. Quoting the
+# arrays keeps paths with spaces (e.g. $HOME on some systems) as single
+# arguments end-to-end.
+dc() { "${DOCKER_CMD[@]}" "${ENV_FILE_ARG[@]}" "$@"; }
 
 # ─── Power management flag (#1278) ────────────────────────────────
 # Resolved once here: env var → .env → default off. When true, `joidy up` adds
@@ -164,13 +173,22 @@ generate_secret() {
   fi
 }
 
+# Replace `KEY=...` (optionally commented) in the env file WITHOUT putting the
+# secret on the process argv — `sed -i "s|...|KEY=${SECRET}|"` exposes the
+# value in /proc/<pid>/cmdline and `ps` for anyone on the host while it runs
+# (#1332). The sed program is fed through stdin instead.
+envfile_set_secret() {
+  local key="$1" value="$2" file="$3"
+  printf 's|^#\\?%s=.*|%s=%s|\n' "$key" "$key" "$value" | sed -i -f - "$file"
+}
+
 if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
   CHANGED=0
   # POSTGRES_PASSWORD
   PG_PW=$(grep -E '^POSTGRES_PASSWORD=' "$ENV_FILE" | cut -d'=' -f2-)
   if [ -z "$PG_PW" ]; then
     NEW_PW=$(generate_secret 24)
-    sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=${NEW_PW}|" "$ENV_FILE"
+    envfile_set_secret POSTGRES_PASSWORD "$NEW_PW" "$ENV_FILE"
     print_ok "Generated POSTGRES_PASSWORD"
     CHANGED=1
   fi
@@ -178,7 +196,7 @@ if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
   SK=$(grep -E '^SECRET_KEY=' "$ENV_FILE" | cut -d'=' -f2-)
   if [ -z "$SK" ] || [ "$SK" = "change_this_to_a_random_secret_key" ]; then
     NEW_SK=$(generate_secret 32)
-    sed -i "s|^SECRET_KEY=.*|SECRET_KEY=${NEW_SK}|" "$ENV_FILE"
+    envfile_set_secret SECRET_KEY "$NEW_SK" "$ENV_FILE"
     print_ok "Generated SECRET_KEY"
     CHANGED=1
   fi
@@ -189,7 +207,7 @@ if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
   if [ -z "$IS" ]; then
     NEW_IS=$(generate_secret 32)
     if grep -qE '^#?INTERNAL_SECRET=' "$ENV_FILE"; then
-      sed -i "s|^#\?INTERNAL_SECRET=.*|INTERNAL_SECRET=${NEW_IS}|" "$ENV_FILE"
+      envfile_set_secret INTERNAL_SECRET "$NEW_IS" "$ENV_FILE"
     else
       printf '\nINTERNAL_SECRET=%s\n' "$NEW_IS" >>"$ENV_FILE"
     fi
@@ -200,7 +218,7 @@ if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
   GRAFANA_PW=$(grep -E '^GRAFANA_ADMIN_PASSWORD=' "$ENV_FILE" | cut -d'=' -f2-)
   if [ -z "$GRAFANA_PW" ]; then
     NEW_GRAFANA_PW=$(generate_secret 24)
-    sed -i "s|^GRAFANA_ADMIN_PASSWORD=.*|GRAFANA_ADMIN_PASSWORD=${NEW_GRAFANA_PW}|" "$ENV_FILE"
+    envfile_set_secret GRAFANA_ADMIN_PASSWORD "$NEW_GRAFANA_PW" "$ENV_FILE"
     print_ok "Generated GRAFANA_ADMIN_PASSWORD"
     CHANGED=1
   fi
@@ -209,7 +227,7 @@ if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
   if [ -z "$IAT" ]; then
     NEW_IAT=$(generate_secret 32)
     if grep -qE '^INTERNAL_API_TOKEN=' "$ENV_FILE"; then
-      sed -i "s|^INTERNAL_API_TOKEN=.*|INTERNAL_API_TOKEN=${NEW_IAT}|" "$ENV_FILE"
+      envfile_set_secret INTERNAL_API_TOKEN "$NEW_IAT" "$ENV_FILE"
     else
       printf '\nINTERNAL_API_TOKEN=%s\n' "$NEW_IAT" >>"$ENV_FILE"
     fi
@@ -234,7 +252,7 @@ if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
       [ -z "$DOCKER_SOCK" ] && DOCKER_SOCK="/var/run/docker.sock"
       DETECTED_GID=""
       if [ -S "$DOCKER_SOCK" ]; then
-        DETECTED_GID=$(stat -c '%g' "$DOCKER_SOCK" 2>/dev/null || stat -f '%g' "$DOCKER_SOCK" 2>/dev/null || true)
+        DETECTED_GID=$(stat -c '%g' -- "$DOCKER_SOCK" 2>/dev/null || stat -f '%g' "$DOCKER_SOCK" 2>/dev/null || true)
       fi
       if [ -n "$DETECTED_GID" ]; then
         if grep -qE '^#?DOCKER_GID=' "$ENV_FILE"; then
@@ -288,7 +306,7 @@ if [ -w "$PROJECT_DIR" ]; then
 else
   export JOIDY_DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/joidy/data"
 fi
-mkdir -p "$JOIDY_DATA_DIR/db" "$JOIDY_DATA_DIR/uploads" "$JOIDY_DATA_DIR/vault" "$JOIDY_DATA_DIR/backups"
+mkdir -p -- "$JOIDY_DATA_DIR/db" "$JOIDY_DATA_DIR/uploads" "$JOIDY_DATA_DIR/vault" "$JOIDY_DATA_DIR/backups"
 
 # Compose interpolates ${UID}/${GID} for the `backup` service so its dumps land
 # on the bind mount owned by the host user instead of root. Export them here;
@@ -297,7 +315,7 @@ export UID
 export GID="${GID:-$(id -g)}"
 
 # Services that are stopped during hibernation
-HIBERNATE_SERVICES="ai-service worker"
+HIBERNATE_SERVICES=(ai-service worker)
 
 # Idle-watchdog state directory. Honors the same writable-dir fallback as
 # JOIDY_DATA_DIR (read-only installs land under ~/.local/share/joidy/data).
@@ -319,7 +337,7 @@ if [ "$CONTAINER_ENGINE" = "podman" ]; then
     # satisfy the required var with the socket's owner group (the user's own
     # GID) — honoring a DOCKER_GID the user set explicitly.
     if [ "$POWER_MGMT_ENABLED" = "true" ] && [ -z "${DOCKER_GID:-}" ]; then
-      DOCKER_GID=$(stat -c '%g' "$PODMAN_SOCK" 2>/dev/null || stat -f '%g' "$PODMAN_SOCK" 2>/dev/null || id -g)
+      DOCKER_GID=$(stat -c '%g' -- "$PODMAN_SOCK" 2>/dev/null || stat -f '%g' "$PODMAN_SOCK" 2>/dev/null || id -g)
       export DOCKER_GID
       print_ok "Set DOCKER_GID=${DOCKER_GID} for power overlay (Podman)"
     fi
@@ -348,9 +366,9 @@ fi
 # written by sed -i/appends, created by hand, or left loose by an older
 # release (0644 under a default umask).
 if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
-  ENV_PERMS=$(stat -c '%a' "$ENV_FILE" 2>/dev/null || stat -f '%Lp' "$ENV_FILE" 2>/dev/null || true)
+  ENV_PERMS=$(stat -c '%a' -- "$ENV_FILE" 2>/dev/null || stat -f '%Lp' "$ENV_FILE" 2>/dev/null || true)
   if [ -n "$ENV_PERMS" ] && [ "$ENV_PERMS" != "600" ]; then
-    if chmod 600 "$ENV_FILE"; then
+    if chmod 600 -- "$ENV_FILE"; then
       print_warn "Tightened .env permissions (${ENV_PERMS} → 600): $ENV_FILE"
     else
       print_err "Could not chmod 600 $ENV_FILE — it may be readable by other users"
@@ -401,19 +419,21 @@ print_access_url() {
 #   backup  — opt-out: enabled by default; BACKUP_ENABLED=false disables it.
 #             The backup sidecar reuses the postgres image, so it costs ~0 MB
 #             of extra pull and only a few MB of RAM while idle.
+# Fills the global PROFILE_ARGS argv array — callers splice it quoted so no
+# flag list is ever word-split by accident (#1326).
+PROFILE_ARGS=()
 profile_args() {
-  local args=""
+  PROFILE_ARGS=()
   if [ -n "$ENV_FILE" ] && grep -q '^AI_SERVICE_ENABLED=true' "$ENV_FILE" 2>/dev/null; then
-    args="--profile ai"
+    PROFILE_ARGS+=(--profile ai)
   fi
   local backup_flag=""
   if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
     backup_flag=$(grep -E '^BACKUP_ENABLED=' "$ENV_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
   fi
   if [ "$backup_flag" != "false" ]; then
-    args="${args:+$args }--profile backup"
+    PROFILE_ARGS+=(--profile backup)
   fi
-  echo "$args"
 }
 
 # Extra `-f` args for opt-in compose overlays.
@@ -421,9 +441,12 @@ profile_args() {
 #   POWER_MANAGEMENT_ENABLED=true; only added when the flag is on (#1278).
 #   Only `up` needs it: the socket is baked into the container at create time;
 #   `down`/`stop`/`start`/`ps` operate on existing containers either way.
+# Fills the global POWER_ARGS argv array (same quoting rationale as above).
+POWER_ARGS=()
 power_compose_args() {
+  POWER_ARGS=()
   if [ "$POWER_MGMT_ENABLED" = "true" ] && [ -f "$PROJECT_DIR/docker-compose.power.yml" ]; then
-    echo "-f docker-compose.power.yml"
+    POWER_ARGS=(-f docker-compose.power.yml)
   fi
 }
 
@@ -533,30 +556,23 @@ resolve_ports() {
 
 cmd_pull() {
   print_status "Pulling latest Joidy images..."
-  local profile
-  profile="$(profile_args)"
-  if [ -n "$profile" ]; then
-    $DOCKER_CMD $ENV_FILE_ARG $profile pull || print_warn "Could not pull latest images, using local/cached images."
-  else
-    $DOCKER_CMD $ENV_FILE_ARG pull || print_warn "Could not pull latest images, using local/cached images."
-  fi
+  profile_args
+  dc "${PROFILE_ARGS[@]}" pull || print_warn "Could not pull latest images, using local/cached images."
   print_ok "Pull complete."
 }
 
 cmd_up() {
   print_status "Starting Joidy services..."
   resolve_ports
-  local profile power
-  profile="$(profile_args)"
-  power="$(power_compose_args)"
-  if [ -n "$power" ]; then
+  profile_args
+  power_compose_args
+  if [ "${#POWER_ARGS[@]}" -gt 0 ]; then
     print_warn "Power management enabled — mounting the engine socket into api (docker-compose.power.yml)"
   elif [ "$POWER_MGMT_ENABLED" = "true" ]; then
     print_warn "POWER_MANAGEMENT_ENABLED=true but docker-compose.power.yml not found in $PROJECT_DIR"
     print_warn "The socket will NOT be mounted and Settings → Servicios will show Docker as unavailable."
   fi
-  # Intentional word splitting: $power/$profile expand to zero or more flags.
-  $DOCKER_CMD $ENV_FILE_ARG $power $profile up -d
+  dc "${POWER_ARGS[@]}" "${PROFILE_ARGS[@]}" up -d
   print_status "Waiting for services to stabilize..."
   sleep 5
   cmd_status
@@ -565,16 +581,17 @@ cmd_up() {
 
 cmd_down() {
   print_status "Stopping all Joidy services..."
-  $DOCKER_CMD $ENV_FILE_ARG down
+  dc down
   print_ok "All services stopped."
 }
 
 cmd_sleep() {
   print_status "Hibernating heavy services (ai-service, worker)..."
-  for svc in $HIBERNATE_SERVICES; do
+  local svc
+  for svc in "${HIBERNATE_SERVICES[@]}"; do
     # Check if the service is running by looking at docker compose ps output
-    if $DOCKER_CMD $ENV_FILE_ARG ps "$svc" 2>/dev/null | grep -q "$svc"; then
-      $DOCKER_CMD $ENV_FILE_ARG stop "$svc"
+    if dc ps "$svc" 2>/dev/null | grep -q "$svc"; then
+      dc stop "$svc"
       print_ok "Stopped $svc"
     else
       print_warn "$svc is already stopped"
@@ -587,15 +604,15 @@ cmd_sleep() {
 
 cmd_wake() {
   print_status "Waking heavy services from hibernation..."
-  local profile
-  profile="$(profile_args)"
-  for svc in $HIBERNATE_SERVICES; do
+  local svc
+  profile_args
+  for svc in "${HIBERNATE_SERVICES[@]}"; do
     # Check if the service is NOT running (use -a to include stopped containers)
-    if $DOCKER_CMD $ENV_FILE_ARG $profile ps -a "$svc" 2>/dev/null | grep -q "$svc"; then
-      if $DOCKER_CMD $ENV_FILE_ARG $profile ps "$svc" 2>/dev/null | grep -q "$svc"; then
+    if dc "${PROFILE_ARGS[@]}" ps -a "$svc" 2>/dev/null | grep -q "$svc"; then
+      if dc "${PROFILE_ARGS[@]}" ps "$svc" 2>/dev/null | grep -q "$svc"; then
         print_warn "$svc is already running"
       else
-        $DOCKER_CMD $ENV_FILE_ARG $profile start "$svc"
+        dc "${PROFILE_ARGS[@]}" start "$svc"
         print_ok "Started $svc"
       fi
     else
@@ -619,13 +636,8 @@ cmd_wake() {
 
 cmd_restart() {
   print_status "Restarting all Joidy services..."
-  local profile
-  profile="$(profile_args)"
-  if [ -n "$profile" ]; then
-    $DOCKER_CMD $ENV_FILE_ARG $profile restart
-  else
-    $DOCKER_CMD $ENV_FILE_ARG restart
-  fi
+  profile_args
+  dc "${PROFILE_ARGS[@]}" restart
   print_ok "All services restarted."
   print_access_url
 }
@@ -633,15 +645,15 @@ cmd_restart() {
 cmd_status() {
   print_status "Joidy service status:"
   echo ""
-  $DOCKER_CMD $ENV_FILE_ARG ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || $DOCKER_CMD $ENV_FILE_ARG ps
+  dc ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || dc ps
 }
 
 cmd_logs() {
   local svc="${1:-}"
   if [ -n "$svc" ]; then
-    $DOCKER_CMD $ENV_FILE_ARG logs -f "$svc"
+    dc logs -f -- "$svc"
   else
-    $DOCKER_CMD $ENV_FILE_ARG logs -f
+    dc logs -f
   fi
 }
 
@@ -678,7 +690,7 @@ idle_fmt_epoch() {
 
 idle_last_activity() {
   if [ -f "$IDLE_STATE_DIR/last_activity" ]; then
-    cat "$IDLE_STATE_DIR/last_activity"
+    cat -- "$IDLE_STATE_DIR/last_activity"
   else
     idle_now
   fi
@@ -687,18 +699,21 @@ idle_last_activity() {
 idle_watcher_alive() {
   local pid
   [ -f "$IDLE_STATE_DIR/watcher.pid" ] || return 1
-  pid=$(cat "$IDLE_STATE_DIR/watcher.pid" 2>/dev/null) || return 1
-  [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
+  pid=$(cat -- "$IDLE_STATE_DIR/watcher.pid" 2>/dev/null) || return 1
+  # The pid file is filesystem-controlled data — it must be a bare number
+  # before it is trusted by kill/kill -0 anywhere (#1326).
+  [[ "$pid" =~ ^[0-9]+$ ]] || return 1
+  kill -0 "$pid" 2>/dev/null
 }
 
 # Service names of currently running compose services (one per line).
 idle_running_services() {
-  local profile out
-  profile="$(profile_args)"
-  out=$($DOCKER_CMD $ENV_FILE_ARG $profile ps --services --filter status=running 2>/dev/null || true)
+  local out
+  profile_args
+  out=$(dc "${PROFILE_ARGS[@]}" ps --services --filter status=running 2>/dev/null || true)
   if [ -z "$out" ]; then
     # Fallback for engines without `ps --services`: match known names in `ps`.
-    out=$($DOCKER_CMD $ENV_FILE_ARG $profile ps 2>/dev/null \
+    out=$(dc "${PROFILE_ARGS[@]}" ps 2>/dev/null \
       | grep -oE 'postgres|ai-service|worker|frontend|api' | sort -u || true)
   fi
   echo "$out"
@@ -738,7 +753,7 @@ idle_db_activity() {
   idle_is_running postgres || return 1
   pg_user=$(read_port POSTGRES_USER joidy)
   pg_db=$(read_port POSTGRES_DB joidy)
-  n=$($DOCKER_CMD $ENV_FILE_ARG exec -T postgres psql -U "$pg_user" -d "$pg_db" -tAc \
+  n=$(dc exec -T postgres psql -U "$pg_user" -d "$pg_db" -tAc \
       "SELECT count(*) FROM pg_stat_activity WHERE state='active' AND pid<>pg_backend_pid()" \
       2>/dev/null | tr -d '[:space:]')
   case "$n" in ''|*[!0-9]*) return 1 ;; esac
@@ -754,16 +769,14 @@ idle_vault_activity() {
   if [ -d "$vault" ] && [ -f "$marker" ]; then
     hit=$(find "$vault" -type f -newer "$marker" -print -quit 2>/dev/null)
   fi
-  touch "$marker" 2>/dev/null || true
+  touch -- "$marker" 2>/dev/null || true
   [ -n "$hit" ]
 }
 
 idle_any_activity() {
-  local ports
   # Only host-published ports can carry observable client traffic; ai-service
   # and worker are internal-only since #1277.
-  ports="$(read_port FRONTEND_PORT 3000) $(read_port API_PORT 8000)"
-  idle_tcp_activity $ports && return 0
+  idle_tcp_activity "$(read_port FRONTEND_PORT 3000)" "$(read_port API_PORT 8000)" && return 0
   idle_db_activity && return 0
   idle_vault_activity && return 0
   return 1
@@ -773,24 +786,23 @@ idle_any_activity() {
 # plus the frontend (and postgres only when --idle-hibernate-db was given).
 idle_do_sleep() {
   local hibernate_db="$1"
-  local profile running
-  profile="$(profile_args)"
+  local running
+  profile_args
   running="$(idle_running_services)"
   if [ -z "$(echo "$running" | tr -d '[:space:]')" ]; then
     idle_log "idle timeout reached but no services running — nothing to sleep"
     idle_now >"$IDLE_STATE_DIR/last_activity"
     return 0
   fi
-  # shellcheck disable=SC2086 # intentional word-split of the service list
-  printf '%s\n' $running >"$IDLE_STATE_DIR/pre_sleep_services"
+  printf '%s\n' "$running" >"$IDLE_STATE_DIR/pre_sleep_services"
   idle_log "idle timeout reached — sleeping (was running: $(echo "$running" | tr '\n' ' '), hibernate_db=$hibernate_db)"
   cmd_sleep || true
   if echo "$running" | grep -qx frontend; then
-    $DOCKER_CMD $ENV_FILE_ARG $profile stop frontend >/dev/null 2>&1 \
+    dc "${PROFILE_ARGS[@]}" stop frontend >/dev/null 2>&1 \
       && idle_log "stopped frontend" || true
   fi
   if [ "$hibernate_db" = "1" ] && echo "$running" | grep -qx postgres; then
-    $DOCKER_CMD $ENV_FILE_ARG $profile stop postgres >/dev/null 2>&1 \
+    dc "${PROFILE_ARGS[@]}" stop postgres >/dev/null 2>&1 \
       && idle_log "stopped postgres (--idle-hibernate-db)" || true
   fi
   idle_now >"$IDLE_STATE_DIR/slept"
@@ -801,14 +813,14 @@ idle_do_sleep() {
 # Shared by `joidy wake` and the watcher's auto-restore on new activity.
 idle_restore_state() {
   local file="$IDLE_STATE_DIR/pre_sleep_services"
-  local profile running svc
-  profile="$(profile_args)"
+  local running svc
+  profile_args
   running="$(idle_running_services)"
   if [ -f "$file" ]; then
     for svc in postgres api frontend worker ai-service; do
-      grep -qx "$svc" "$file" 2>/dev/null || continue
+      grep -qx -- "$svc" "$file" 2>/dev/null || continue
       echo "$running" | grep -qx "$svc" && continue
-      if $DOCKER_CMD $ENV_FILE_ARG $profile start "$svc" >/dev/null 2>&1; then
+      if dc "${PROFILE_ARGS[@]}" start "$svc" >/dev/null 2>&1; then
         idle_log "restored $svc"
       else
         idle_log "WARN: could not start $svc"
@@ -817,38 +829,43 @@ idle_restore_state() {
     # Any recorded service outside the known list (future services).
     while IFS= read -r svc; do
       case "$svc" in postgres|api|frontend|worker|ai-service|'') continue ;; esac
-      echo "$running" | grep -qx "$svc" && continue
-      $DOCKER_CMD $ENV_FILE_ARG $profile start "$svc" >/dev/null 2>&1 \
+      echo "$running" | grep -qx -- "$svc" && continue
+      dc "${PROFILE_ARGS[@]}" start "$svc" >/dev/null 2>&1 \
         && idle_log "restored $svc" || true
     done <"$file"
-    rm -f "$file"
+    rm -f -- "$file"
   fi
-  rm -f "$IDLE_STATE_DIR/slept"
+  rm -f -- "$IDLE_STATE_DIR/slept"
   idle_now >"$IDLE_STATE_DIR/last_activity"
 }
 
 # Foreground watcher loop. Spawned detached by `joidy idle enable`; also the
 # ExecStart of scripts/joidy-idle-watchdog.service (systemd --user).
 cmd_idle_run() {
-  mkdir -p "$IDLE_STATE_DIR"
+  mkdir -p -- "$IDLE_STATE_DIR"
   # Refuse to run a second watcher instance.
   if [ -f "$IDLE_STATE_DIR/watcher.pid" ]; then
     local old_pid
-    old_pid=$(cat "$IDLE_STATE_DIR/watcher.pid" 2>/dev/null || true)
-    if [ -n "$old_pid" ] && [ "$old_pid" != "$$" ] && kill -0 "$old_pid" 2>/dev/null; then
+    old_pid=$(cat -- "$IDLE_STATE_DIR/watcher.pid" 2>/dev/null || true)
+    # Only trust the pid file when it holds a bare number (#1326).
+    if [[ "$old_pid" =~ ^[0-9]+$ ]] && [ "$old_pid" != "$$" ] && kill -0 "$old_pid" 2>/dev/null; then
       echo "idle watcher already running (pid $old_pid) — exiting" >&2
       exit 0
     fi
   fi
   echo "$$" >"$IDLE_STATE_DIR/watcher.pid"
-  trap 'rm -f "$IDLE_STATE_DIR/watcher.pid"; exit 0' TERM INT
+  trap 'rm -f -- "$IDLE_STATE_DIR/watcher.pid"; exit 0' TERM INT
 
   local timeout_min poll_s hibernate_db
   timeout_min=$(read_port JOIDY_IDLE_TIMEOUT 15)
   poll_s=$(read_port JOIDY_IDLE_POLL_SECONDS 60)
   hibernate_db=0
   if [ -f "$IDLE_STATE_DIR/watcher.conf" ]; then
-    . "$IDLE_STATE_DIR/watcher.conf"
+    # Parse the single expected key instead of dot-sourcing the file —
+    # $IDLE_STATE_DIR lives under the user-writable data dir, so `.` would
+    # execute anything planted there (#1332).
+    IDLE_HIBERNATE_DB=$(grep -E '^IDLE_HIBERNATE_DB=' "$IDLE_STATE_DIR/watcher.conf" | tail -1 | cut -d= -f2-)
+    case "$IDLE_HIBERNATE_DB" in 0 | 1) ;; *) IDLE_HIBERNATE_DB="" ;; esac
   fi
   hibernate_db="${IDLE_HIBERNATE_DB:-$hibernate_db}"
   # Numeric sanity — fall back to defaults on garbage values.
@@ -886,9 +903,9 @@ cmd_idle_enable() {
       *) print_err "Unknown option: $arg"; return 1 ;;
     esac
   done
-  mkdir -p "$IDLE_STATE_DIR"
+  mkdir -p -- "$IDLE_STATE_DIR"
   if idle_watcher_alive; then
-    print_warn "Idle watcher already running (pid $(cat "$IDLE_STATE_DIR/watcher.pid" 2>/dev/null))"
+    print_warn "Idle watcher already running (pid $(cat -- "$IDLE_STATE_DIR/watcher.pid" 2>/dev/null))"
     return 0
   fi
   printf 'IDLE_HIBERNATE_DB=%s\n' "$hibernate_db" >"$IDLE_STATE_DIR/watcher.conf"
@@ -896,9 +913,9 @@ cmd_idle_enable() {
   # Re-exec the resolved script path so this works both for repo checkouts
   # and single-file installs (/usr/local/bin/joidy).
   local self
-  self="$(readlink -f "$0" 2>/dev/null || true)"
+  self="$(readlink -f -- "$0" 2>/dev/null || true)"
   [ -f "$self" ] || self="$0"
-  nohup bash "$self" idle run </dev/null >>"$IDLE_STATE_DIR/watcher.log" 2>&1 &
+  nohup bash -- "$self" idle run </dev/null >>"$IDLE_STATE_DIR/watcher.log" 2>&1 &
   local pid=$!
   disown "$pid" 2>/dev/null || true
   echo "$pid" >"$IDLE_STATE_DIR/watcher.pid"
@@ -914,10 +931,18 @@ cmd_idle_disable() {
   local pid i
   if ! idle_watcher_alive; then
     print_warn "Idle watcher is not running"
-    rm -f "$IDLE_STATE_DIR/watcher.pid"
+    rm -f -- "$IDLE_STATE_DIR/watcher.pid"
     return 0
   fi
-  pid=$(cat "$IDLE_STATE_DIR/watcher.pid" 2>/dev/null)
+  pid=$(cat -- "$IDLE_STATE_DIR/watcher.pid" 2>/dev/null)
+  # idle_watcher_alive() already proved the pid file holds a bare number and a
+  # live process, but re-validate at the kill site — never signal a value we
+  # have not checked (#1326).
+  if [[ ! "$pid" =~ ^[0-9]+$ ]]; then
+    print_err "watcher.pid is corrupt ('$pid') — removing it without signalling anything"
+    rm -f -- "$IDLE_STATE_DIR/watcher.pid"
+    return 1
+  fi
   kill "$pid" 2>/dev/null || true
   for i in 1 2 3 4 5 6 7 8 9 10; do
     kill -0 "$pid" 2>/dev/null || break
@@ -926,7 +951,7 @@ cmd_idle_disable() {
   if kill -0 "$pid" 2>/dev/null; then
     kill -9 "$pid" 2>/dev/null || true
   fi
-  rm -f "$IDLE_STATE_DIR/watcher.pid"
+  rm -f -- "$IDLE_STATE_DIR/watcher.pid"
   print_ok "Idle watcher stopped (the stack was left untouched)."
 }
 
@@ -936,21 +961,21 @@ cmd_idle_status() {
   poll_s=$(read_port JOIDY_IDLE_POLL_SECONDS 60)
   echo ""
   if idle_watcher_alive; then
-    print_ok "Idle watcher: RUNNING (pid $(cat "$IDLE_STATE_DIR/watcher.pid" 2>/dev/null), poll ${poll_s}s)"
+    print_ok "Idle watcher: RUNNING (pid $(cat -- "$IDLE_STATE_DIR/watcher.pid" 2>/dev/null), poll ${poll_s}s)"
   else
     print_warn "Idle watcher: stopped — enable with 'joidy idle enable'"
   fi
   echo "  Timeout:       ${timeout_min} min (JOIDY_IDLE_TIMEOUT)"
-  if [ -f "$IDLE_STATE_DIR/watcher.conf" ] && grep -q 'IDLE_HIBERNATE_DB=1' "$IDLE_STATE_DIR/watcher.conf"; then
+  if [ -f "$IDLE_STATE_DIR/watcher.conf" ] && grep -q -- 'IDLE_HIBERNATE_DB=1' "$IDLE_STATE_DIR/watcher.conf"; then
     echo "  Hibernate DB:  yes (--idle-hibernate-db)"
   fi
   if [ -f "$IDLE_STATE_DIR/last_activity" ]; then
-    last=$(cat "$IDLE_STATE_DIR/last_activity" 2>/dev/null)
+    last=$(cat -- "$IDLE_STATE_DIR/last_activity" 2>/dev/null)
     case "$last" in ''|*[!0-9]*) last=$(idle_now) ;; esac
     now=$(idle_now)
     echo "  Last activity: $(idle_fmt_epoch "$last")"
     if [ -f "$IDLE_STATE_DIR/slept" ]; then
-      echo "  Stack state:   ASLEEP since $(idle_fmt_epoch "$(cat "$IDLE_STATE_DIR/slept" 2>/dev/null)")"
+      echo "  Stack state:   ASLEEP since $(idle_fmt_epoch "$(cat -- "$IDLE_STATE_DIR/slept" 2>/dev/null)")"
       echo "                 ('joidy wake' restores the recorded services)"
     else
       remaining=$((timeout_min * 60 - (now - last)))
@@ -992,7 +1017,7 @@ pg_ready_or_fail() {
   local pg_user pg_db
   pg_user=$(read_setting POSTGRES_USER joidy)
   pg_db=$(read_setting POSTGRES_DB joidy)
-  if ! $DOCKER_CMD $ENV_FILE_ARG exec -T postgres pg_isready -U "$pg_user" -d "$pg_db" >/dev/null 2>&1; then
+  if ! dc exec -T postgres pg_isready -U "$pg_user" -d "$pg_db" >/dev/null 2>&1; then
     print_err "The 'postgres' service is not running — start it first (joidy up or make dev)."
     exit 1
   fi
@@ -1004,23 +1029,48 @@ cmd_backup() {
   pg_user=$(read_setting POSTGRES_USER joidy)
   pg_db=$(read_setting POSTGRES_DB joidy)
   dir=$(backup_dir)
-  mkdir -p "$dir"
+  mkdir -p -- "$dir"
   ts=$(date +%Y%m%d-%H%M%S)
-  file="$dir/joidy-${ts}.dump"
+  local enc_key encrypt=0
+  # env var → .env file (read_setting handles both)
+  enc_key=$(read_setting BACKUP_ENCRYPTION_KEY "")
+  if [ -n "$enc_key" ]; then
+    if command -v openssl >/dev/null 2>&1; then
+      encrypt=1
+      file="$dir/joidy-${ts}.dump.enc"
+    else
+      print_warn "BACKUP_ENCRYPTION_KEY is set but openssl is not installed — writing an UNENCRYPTED dump"
+      file="$dir/joidy-${ts}.dump"
+    fi
+  else
+    file="$dir/joidy-${ts}.dump"
+  fi
   print_status "Dumping '$pg_db' → $file"
   # Local socket auth inside the postgres container is trust, so no password is
   # needed here. Write to a temp name first: a failed dump never leaves a
   # truncated archive masquerading as a good backup. umask 077 in the subshell
   # makes the archive owner-only from creation — dumps contain the full DB
-  # contents, including secrets (#1281).
-  if (umask 077; $DOCKER_CMD $ENV_FILE_ARG exec -T postgres pg_dump -Fc -U "$pg_user" -d "$pg_db" > "$file.tmp"); then
-    mv "$file.tmp" "$file"
+  # contents, including secrets (#1281). With BACKUP_ENCRYPTION_KEY set the
+  # dump stream is piped through openssl AES-256-CBC so plaintext never
+  # touches disk (#1286).
+  if [ "$encrypt" -eq 1 ]; then
+    if (umask 077; dc exec -T postgres pg_dump -Fc -U "$pg_user" -d "$pg_db" \
+      | BACKUP_ENCRYPTION_KEY="$enc_key" openssl enc -aes-256-cbc -pbkdf2 -salt \
+        -pass env:BACKUP_ENCRYPTION_KEY > "$file.tmp"); then
+      mv -- "$file.tmp" "$file"
+    else
+      rm -f -- "$file.tmp"
+      print_err "pg_dump/encryption failed"
+      exit 1
+    fi
+  elif (umask 077; dc exec -T postgres pg_dump -Fc -U "$pg_user" -d "$pg_db" > "$file.tmp"); then
+    mv -- "$file.tmp" "$file"
   else
-    rm -f "$file.tmp"
+    rm -f -- "$file.tmp"
     print_err "pg_dump failed"
     exit 1
   fi
-  print_ok "Backup written: $file ($(du -h "$file" | cut -f1))"
+  print_ok "Backup written: $file ($(du -h -- "$file" | cut -f1))"
   # Apply the same retention policy the scheduled sidecar uses. The script
   # lives next to joidy in repo clones and in <project>/scripts on system
   # installs (e.g. AUR /usr/share/joidy/scripts).
@@ -1033,7 +1083,7 @@ cmd_backup() {
     BACKUP_RETENTION_DAYS="$(read_setting BACKUP_RETENTION_DAYS 14)" \
     BACKUP_RETENTION_WEEKS="$(read_setting BACKUP_RETENTION_WEEKS 4)" \
     BACKUP_WEEKLY_DAY="$(read_setting BACKUP_WEEKLY_DAY 0)" \
-      bash "$prune_script" prune || print_warn "retention pruning failed"
+      bash -- "$prune_script" prune || print_warn "retention pruning failed"
   fi
 }
 
@@ -1054,7 +1104,32 @@ cmd_restore() {
     echo "  Dumps live in: $(backup_dir)" >&2
     exit 1
   fi
-  if [ "$(head -c 5 "$file" 2>/dev/null)" != "PGDMP" ]; then
+  # Encrypted dumps (*.dump.enc, #1286) are decrypted to a temp file first;
+  # the rest of the flow then sees a normal pg_dump custom archive.
+  # display_name keeps the original path for user-facing messages after
+  # `file` is repointed at the temp copy.
+  local display_name="$file"
+  if [ "${file%.enc}" != "$file" ]; then
+    local enc_key dec_tmp
+    enc_key=$(read_setting BACKUP_ENCRYPTION_KEY "")
+    if [ -z "$enc_key" ]; then
+      print_err "'$file' is encrypted — set BACKUP_ENCRYPTION_KEY (env or .env) to decrypt it."
+      exit 1
+    fi
+    if ! command -v openssl >/dev/null 2>&1; then
+      print_err "openssl is required to decrypt '$file' but is not installed."
+      exit 1
+    fi
+    dec_tmp="$(mktemp "${TMPDIR:-/tmp}/joidy-restore-XXXXXX.dump")"
+    trap 'rm -f "$dec_tmp"' EXIT
+    if ! BACKUP_ENCRYPTION_KEY="$enc_key" openssl enc -d -aes-256-cbc -pbkdf2 \
+      -pass env:BACKUP_ENCRYPTION_KEY -in "$file" -out "$dec_tmp"; then
+      print_err "Decryption failed — wrong BACKUP_ENCRYPTION_KEY?"
+      exit 1
+    fi
+    file="$dec_tmp"
+  fi
+  if [ "$(head -c 5 -- "$file" 2>/dev/null)" != "PGDMP" ]; then
     print_err "'$file' is not a pg_dump custom-format archive (missing PGDMP header)"
     exit 1
   fi
@@ -1062,16 +1137,16 @@ cmd_restore() {
   local pg_user pg_db n_tables
   pg_user=$(read_setting POSTGRES_USER joidy)
   pg_db=$(read_setting POSTGRES_DB joidy)
-  n_tables=$($DOCKER_CMD $ENV_FILE_ARG exec -T postgres psql -U "$pg_user" -d "$pg_db" -tAc \
+  n_tables=$(dc exec -T postgres psql -U "$pg_user" -d "$pg_db" -tAc \
     "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'" 2>/dev/null || echo "")
   if [ -n "$n_tables" ] && [ "$n_tables" -gt 0 ] && [ "$force" -ne 1 ]; then
     print_err "Database '$pg_db' is live ($n_tables tables) — refusing to overwrite without --force."
     echo "  The restore runs pg_restore --clean, which drops existing objects first."
-    echo "  To proceed:  joidy restore $file --force"
+    echo "  To proceed:  joidy restore $display_name --force"
     exit 1
   fi
-  print_status "Restoring $file → '$pg_db'"
-  cat "$file" | $DOCKER_CMD $ENV_FILE_ARG exec -T postgres \
+  print_status "Restoring $display_name → '$pg_db'"
+  cat -- "$file" | dc exec -T postgres \
     pg_restore -U "$pg_user" -d "$pg_db" --clean --if-exists --no-owner --no-privileges
   print_ok "Restore complete."
   print_warn "Restart the services so they pick up the restored state: joidy restart"
@@ -1115,6 +1190,9 @@ Scheduled backups: `joidy up` starts the `backup` sidecar automatically —
 pg_dump -Fc on BACKUP_SCHEDULE (cron, default "0 3 * * *"), dumps in
 <data>/backups (or JOIDY_BACKUP_DIR), pruned to BACKUP_RETENTION_DAYS daily +
 BACKUP_RETENTION_WEEKS weekly dumps. Set BACKUP_ENABLED=false to opt out.
+Set BACKUP_ENCRYPTION_KEY to encrypt dumps with AES-256-CBC (openssl) —
+files are written as *.dump.enc and `joidy restore` decrypts them with the
+same key (#1286). Dumps are plaintext otherwise — see SECURITY.md.
 Verify backups end-to-end with: make backup-verify
 
 Power management (Settings → Servicios): DISABLED by default (#1278).

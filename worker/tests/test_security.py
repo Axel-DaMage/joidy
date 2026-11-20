@@ -13,7 +13,6 @@ Covers the worker-service findings from audit #1273:
 - #1300 (W-05): the worker's ``/vault`` bind mount is read-only.
 """
 
-import asyncio
 import json
 import os
 import re
@@ -207,10 +206,10 @@ class TestReplayPathValidation(unittest.TestCase):
             assert not _is_valid_vault_path(str(Path(tmp) / "gone.md"), Change.deleted, root)
 
 
-class TestReplayPendingEvents(unittest.IsolatedAsyncioTestCase):
+class TestReplayPendingEvents(unittest.TestCase):
     """#1294: poisoned event-log rows are refused and dropped on replay."""
 
-    async def test_injected_row_dropped_legit_row_replayed(self):
+    def test_injected_row_dropped_legit_row_replayed(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "vault"
             root.mkdir()
@@ -225,16 +224,11 @@ class TestReplayPendingEvents(unittest.IsolatedAsyncioTestCase):
             log.close()
 
             log2 = PersistentEventLog(db)
-            queue: asyncio.Queue = asyncio.Queue()
             with self.assertLogs("watchers.vault_watcher", level="WARNING") as cm:
-                accepted = await _replay_pending_events(log2, queue, root)
+                accepted = _replay_pending_events(log2, root)
             log2.close()
 
-            self.assertEqual(accepted, 1)
-            self.assertEqual(queue.qsize(), 1)
-            event = queue.get_nowait()
-            self.assertEqual(event.path, str(legit))
-            self.assertEqual(event.change_type, Change.added)
+            self.assertEqual(accepted, {str(legit): Change.added})
 
             # The poisoned row was deleted from the log — not just skipped —
             # so it cannot be retried on the next startup either.
@@ -244,14 +238,12 @@ class TestReplayPendingEvents(unittest.IsolatedAsyncioTestCase):
 
             self.assertTrue(any(".env" in r.getMessage() for r in cm.records))
 
-    async def test_empty_log_replays_nothing(self):
+    def test_empty_log_replays_nothing(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "vault"
             root.mkdir()
             log = PersistentEventLog(Path(tmp) / "events.db")
-            queue: asyncio.Queue = asyncio.Queue()
-            self.assertEqual(await _replay_pending_events(log, queue, root), 0)
-            self.assertEqual(queue.qsize(), 0)
+            self.assertEqual(_replay_pending_events(log, root), {})
             log.close()
 
 

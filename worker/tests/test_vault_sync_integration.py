@@ -17,6 +17,7 @@ from unittest.mock import AsyncMock, patch
 # Make worker sources importable from repo root during CI.
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+import auth
 from watchers import vault_watcher
 from watchers.vault_watcher import (
     PersistentEventLog,
@@ -200,22 +201,34 @@ class TestVaultWatcherIntegration(unittest.IsolatedAsyncioTestCase):
             vault_path = Path(vault)
             md = vault_path / "doomed.md"
             _write_md(md, "Doomed", "Bye")
+            md.unlink()
 
             queue = asyncio.Queue()
             await queue.put(VaultEvent(path=str(md), change_type=Change.deleted))
 
             client = _make_client(
                 [
-                    ("GET", FakeResponse(200, [{"id": 99, "source_path": str(md)}])),
-                    ("DELETE", FakeResponse(204)),
+                    (
+                        "GET",
+                        FakeResponse(
+                            200,
+                            [{"id": 99, "source_path": str(md), "updated_at": "2025-01-01T00:00:00Z"}],
+                        ),
+                    ),
+                    ("DELETE", FakeResponse(200)),
                 ]
             )
 
             await _run_consumer_once(queue, client, vault=vault)
 
+            # Atomic delete: server-side source_path match + updated_at etag
+            # (#1302), not list-then-delete by id.
             assert client.delete.call_count == 1
             url = client.delete.call_args.args[0]
-            assert url.endswith("/notes/99")
+            assert url.endswith("/notes/by-path")
+            params = client.delete.call_args.kwargs["params"]
+            assert params["source_path"] == str(md)
+            assert params["expected_updated_at"] == "2025-01-01T00:00:00Z"
 
     async def test_concurrent_edits_two_files_both_sync(self):
         """Requirement: escritura concurrente desde API y vault (conflictos).
@@ -376,6 +389,7 @@ class TestVaultConflictEdgeCases(unittest.IsolatedAsyncioTestCase):
             vault_path = Path(vault)
             md = vault_path / "orphan.md"
             _write_md(md, "Orphan", "No DB entry")
+            md.unlink()
 
             queue = asyncio.Queue()
             await queue.put(VaultEvent(path=str(md), change_type=Change.deleted))
@@ -405,6 +419,7 @@ class TestVaultConflictEdgeCases(unittest.IsolatedAsyncioTestCase):
             vault_path = Path(vault)
             md = vault_path / "transient.md"
             _write_md(md, "Transient", "Soon gone")
+            md.unlink()
 
             queue = asyncio.Queue()
             await queue.put(VaultEvent(path=str(md), change_type=Change.modified))
@@ -482,6 +497,222 @@ class TestVaultSymlinkSecurity(unittest.IsolatedAsyncioTestCase):
             assert client.get.call_count == 0
             assert client.post.call_count == 0
             assert client.put.call_count == 0
+
+
+class TestSyncRaces(unittest.IsolatedAsyncioTestCase):
+    """#1302 (W-07): delete TOCTOU, fingerprint loss on restart, token
+    stampede."""
+
+    def tearDown(self):
+        # Module-global fingerprint/auth state must not leak between tests.
+        vault_watcher._unbind_event_log()
+        vault_watcher._fingerprints.clear()
+        auth._token_cache = None
+        auth._refresh_generation = 0
+
+    async def test_delete_and_add_across_restart_preserves_note(self):
+        """AC: delete+create across a worker restart preserves the note
+        id/history — the pair is reconciled as a rename, not a delete plus
+        a fresh create that would also duplicate the note (#1302)."""
+        with tempfile.TemporaryDirectory() as vault:
+            root = Path(vault)
+            old_path = root / "old_name.md"
+            new_path = root / "new_name.md"
+            db_path = root / "events.db"
+            content = _write_md(old_path, "Renamed", "Same content #move")
+
+            # Worker "v1" synced old_name.md (fingerprint persisted), then
+            # recorded the delete+add events and crashed before processing.
+            log = PersistentEventLog(db_path)
+            log.set_fingerprint(str(old_path), _fingerprint(content))
+            log.add(str(old_path), Change.deleted)
+            log.add(str(new_path), Change.added)
+            log.close()
+            old_path.unlink()
+            new_path.write_text(content, encoding="utf-8")
+
+            # Worker "v2" boots: binds the log (seeds _fingerprints), replays
+            # pending events through the same batch pipeline, THEN scans —
+            # so the scan sees the renamed note and cannot duplicate it.
+            log2 = PersistentEventLog(db_path)
+            vault_watcher._bind_event_log(log2)
+            try:
+                replayed = vault_watcher._replay_pending_events(log2, root)
+                client = _make_client(
+                    [
+                        # rename_note_path lookup by OLD source_path.
+                        ("GET", FakeResponse(200, [{"id": 55, "source_path": str(old_path)}])),
+                        ("PUT", FakeResponse(200)),
+                        # initial_scan lookup for new_name.md finds the
+                        # renamed note — update in place, not a create.
+                        ("GET", FakeResponse(200, [{"id": 55, "source_path": str(new_path)}])),
+                        ("PUT", FakeResponse(200)),
+                        ("POST", FakeResponse(200)),  # rebuild-derived
+                    ]
+                )
+                with (
+                    patch("watchers.vault_watcher.get_auth_token", new=AsyncMock(return_value="token")),
+                    patch.object(vault_watcher.settings, "vault_path", vault),
+                ):
+                    await vault_watcher._process_batch(replayed, client, "token", log2)
+                    await vault_watcher.initial_scan(root, client, "token")
+
+                # Same note id updated in place — no delete, no create.
+                assert client.delete.call_count == 0
+                note_creates = [c for c in client.post.call_args_list if "json" in c.kwargs]
+                assert note_creates == []
+                put_urls = [c.args[0] for c in client.put.call_args_list]
+                assert put_urls and all(u.endswith("/notes/55") for u in put_urls)
+                rename_payload = client.put.call_args_list[0].kwargs["json"]
+                assert rename_payload["source_path"] == str(new_path)
+
+                # Events consumed → removed from the persistent log.
+                assert log2.pending() == []
+            finally:
+                log2.close()
+
+    async def test_delete_event_for_recreated_file_resyncs_not_deletes(self):
+        """Delete TOCTOU: the file reappeared before the delete event was
+        processed (recreated in the debounce window or while down) — the
+        note is resynced in place, never deleted (#1302)."""
+        with tempfile.TemporaryDirectory() as vault:
+            md = Path(vault) / "back.md"
+            _write_md(md, "Back", "Recreated content")
+
+            queue = asyncio.Queue()
+            await queue.put(VaultEvent(path=str(md), change_type=Change.deleted))
+
+            client = _make_client(
+                [
+                    ("GET", FakeResponse(200, [{"id": 7, "source_path": str(md)}])),
+                    ("PUT", FakeResponse(200)),
+                ]
+            )
+
+            await _run_consumer_once(queue, client, vault=vault)
+
+            assert client.delete.call_count == 0
+            assert client.put.call_count == 1
+            assert client.put.call_args.args[0].endswith("/notes/7")
+
+    async def test_delete_note_by_path_uses_atomic_endpoint_with_etag(self):
+        """The delete carries source_path + the updated_at etag captured at
+        lookup, so the API can refuse a note that changed in between."""
+        md = "/vault/doomed.md"
+        client = _make_client(
+            [
+                (
+                    "GET",
+                    FakeResponse(200, [{"id": 9, "source_path": md, "updated_at": "2025-06-01T10:00:00Z"}]),
+                ),
+                ("DELETE", FakeResponse(200)),
+            ]
+        )
+
+        await vault_watcher.delete_note_by_path(md, client, "token")
+
+        assert client.delete.call_count == 1
+        assert client.delete.call_args.args[0].endswith("/notes/by-path")
+        params = client.delete.call_args.kwargs["params"]
+        assert params == {"source_path": md, "expected_updated_at": "2025-06-01T10:00:00Z"}
+
+    async def test_delete_note_by_path_respects_409_conflict(self):
+        """409 = note changed since the lookup — leave it untouched instead
+        of deleting a note that was recreated or updated in between."""
+        md = "/vault/conflicted.md"
+        client = _make_client(
+            [
+                ("GET", FakeResponse(200, [{"id": 9, "source_path": md, "updated_at": "t0"}])),
+                ("DELETE", FakeResponse(409)),
+            ]
+        )
+
+        await vault_watcher.delete_note_by_path(md, client, "token")
+
+        assert client.delete.call_count == 1  # refused once, not retried
+
+    async def test_fingerprint_persisted_via_bound_event_log(self):
+        """_record_fingerprint writes through to the bound event log, so a
+        fresh worker process can still pair a delete+add rename (#1302)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "events.db"
+            log = PersistentEventLog(db_path)
+            vault_watcher._bind_event_log(log)
+            try:
+                vault_watcher._record_fingerprint("/vault/x.md", "f00d")
+            finally:
+                log.close()
+
+            # "Restart": a new log instance sees the persisted fingerprint.
+            log2 = PersistentEventLog(db_path)
+            assert log2.fingerprints() == {"/vault/x.md": "f00d"}
+            vault_watcher._bind_event_log(log2)
+            try:
+                assert vault_watcher._fingerprints["/vault/x.md"] == "f00d"
+                vault_watcher._drop_fingerprint("/vault/x.md")
+                assert log2.fingerprints() == {}
+            finally:
+                log2.close()
+
+
+class TestTokenSingleFlight(unittest.IsolatedAsyncioTestCase):
+    """AC: concurrent 401s trigger exactly one token fetch (#1302)."""
+
+    def setUp(self):
+        auth._token_cache = None
+        auth._refresh_generation = 0
+
+    def tearDown(self):
+        auth._token_cache = None
+        auth._refresh_generation = 0
+
+    async def test_concurrent_force_refresh_fetches_once(self):
+        calls = 0
+
+        async def fake_fetch(client):
+            nonlocal calls
+            calls += 1
+            await asyncio.sleep(0.05)
+            return "tok"
+
+        client = AsyncMock()
+        with patch("auth._fetch_token", new=fake_fetch):
+            results = await asyncio.gather(*(auth.get_auth_token(client, force=True) for _ in range(10)))
+
+        assert calls == 1
+        assert results == ["tok"] * 10
+
+    async def test_cached_token_reused_without_force(self):
+        calls = 0
+
+        async def fake_fetch(client):
+            nonlocal calls
+            calls += 1
+            return "tok"
+
+        client = AsyncMock()
+        with patch("auth._fetch_token", new=fake_fetch):
+            assert await auth.get_auth_token(client) == "tok"
+            assert await auth.get_auth_token(client) == "tok"
+
+        assert calls == 1
+
+    async def test_new_401_after_completed_refresh_fetches_again(self):
+        """A 401 arriving after a refresh finished must still force a fresh
+        fetch — the single-flight only coalesces *concurrent* callers."""
+        calls = 0
+
+        async def fake_fetch(client):
+            nonlocal calls
+            calls += 1
+            return f"tok{calls}"
+
+        client = AsyncMock()
+        with patch("auth._fetch_token", new=fake_fetch):
+            assert await auth.get_auth_token(client, force=True) == "tok1"
+            assert await auth.get_auth_token(client, force=True) == "tok2"
+
+        assert calls == 2
 
 
 if __name__ == "__main__":

@@ -25,6 +25,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Rows parked in the unscheduled queue have no date to keep.
+    # WARNING — data loss on downgrade (#1332): rows parked in the
+    # unscheduled queue have no date to keep, so they are DELETEd outright
+    # before restoring NOT NULL. Review them first if the data matters:
+    #   SELECT * FROM calendar_tasks WHERE date IS NULL;
     op.execute("DELETE FROM calendar_tasks WHERE date IS NULL")
     op.alter_column("calendar_tasks", "date", existing_type=sa.Date(), nullable=False)
