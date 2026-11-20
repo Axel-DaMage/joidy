@@ -7,7 +7,12 @@ import { api, type Note } from '$lib/api';
 import { logger } from '$lib/utils/logger';
 import { DEFAULT_GOAL_COLOR } from '$lib/utils/goalColors';
 import { getTodayKey } from '$lib/utils/clock';
-import { extractFrontmatter, getFileIcon, type SortMode } from '$lib/utils/fileTree';
+import {
+  extractFrontmatter,
+  getFileIcon,
+  isNoteInFolder,
+  type SortMode,
+} from '$lib/utils/fileTree';
 import { updateFolderMeta } from '$lib/stores/settings';
 import { patchUserSettings, loadUserSettings } from '$lib/utils/userSettings';
 import { captureSnapshot } from '$lib/stores/pageSnapshots';
@@ -346,9 +351,10 @@ export function handleDeleteFolder() {
   const path = menu.node.path;
   ui.ctxMenu.set(null);
   if (confirm(`¿Eliminar carpeta "${menu.node.name}" y todas sus notas?`)) {
-    // Delete notes in this folder
+    // Delete notes in this folder — segment-boundary match so `foo` does not
+    // also wipe `foo2/` or `a/foobar/` (#1304).
     const ids = get(notes)
-      .filter((n) => n.source_path && n.source_path.includes(path))
+      .filter((n) => n.source_path && isNoteInFolder(n.source_path, path))
       .map((n) => n.id);
     Promise.all(ids.map((id) => deleteNote(id)))
       .then(async () => {
