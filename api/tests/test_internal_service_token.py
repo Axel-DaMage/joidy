@@ -14,6 +14,7 @@ from database import get_db
 from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 from fastapi.testclient import TestClient
+from starlette.requests import Request
 from main import app
 from services.auth_service import get_current_user_or_internal, hash_password
 
@@ -32,12 +33,13 @@ def test_internal_token_dependency(persisted_env):
     """The dedicated dependency accepts the service token, rejects the rest."""
     persisted_env.write_text("INTERNAL_API_TOKEN=service-tok\nAUTH_PASSWORD=x\n")
 
+    request = Request({"type": "http", "method": "POST", "path": "/", "headers": [], "client": ("127.0.0.1", 50000)})
     creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials="service-tok")
-    assert get_current_user_or_internal(creds) == 1
+    assert get_current_user_or_internal(request, creds) == 1
 
     bad = HTTPAuthorizationCredentials(scheme="Bearer", credentials="nope")
     with pytest.raises(HTTPException):
-        get_current_user_or_internal(bad)
+        get_current_user_or_internal(request, bad)
 
 
 def test_internal_token_authenticates_vault_routes(persisted_env, db_session):
