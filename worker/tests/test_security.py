@@ -348,6 +348,7 @@ class TestComposeVaultMountReadOnly(unittest.TestCase):
         text = compose.read_text(encoding="utf-8")
         match = re.search(r"^  worker:\n(.*?)(?=^  \S|\Z)", text, re.S | re.M)
         self.assertIsNotNone(match, f"no worker service in {compose.name}")
+        assert match is not None
         return match.group(1)
 
     @unittest.skipUnless(

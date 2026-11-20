@@ -184,6 +184,7 @@ class TestResolveRemoval(GoalServiceTestBase):
         with self.Session() as db:
             goal = self._create_pending_goal(db)
             result = resolve_pending_removal(db, goal.id, "cancel")
+            assert result is not None
             db.commit()
             self.assertEqual(result.state, GoalState.CANCELLED)
             self.assertFalse(result.pending_removal)
@@ -205,6 +206,7 @@ class TestResolveRemoval(GoalServiceTestBase):
             db.flush()
 
             result = resolve_pending_removal(db, goal.id, "manual")
+            assert result is not None
             db.commit()
             self.assertIsNone(result.note_id)
 

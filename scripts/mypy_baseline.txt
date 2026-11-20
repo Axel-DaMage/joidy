@@ -1,0 +1,20 @@
+# mypy ignore_errors baseline (#1264) — the ratchet list.
+#
+# Every module pattern allowed to appear in [[tool.mypy.overrides]] entries
+# with ``ignore_errors = true`` in pyproject.toml, one per line. The list can
+# only SHRINK: CI fails if a module is added (new debt sneaks in unchecked)
+# and also fails if the file drifts out of sync when a module is un-ignored.
+#
+# After fixing a module's type errors, remove its entry from pyproject.toml
+# and regenerate this file:
+#     python scripts/check_quality_baselines.py --update
+repositories
+routers.integrations.github
+routers.personal_streaks
+routers.system
+services.email_service
+services.github_service
+services.google_service
+tests.test_google_token_service
+tests.test_joidy_vault_writer
+tests.test_webhook_sync

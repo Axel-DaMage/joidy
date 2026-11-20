@@ -123,7 +123,8 @@ async def _ai_usage() -> dict:
                 headers["X-Internal-Secret"] = settings.internal_secret
             r = await client.get(f"{settings.ai_service_url}/usage", headers=headers)
             r.raise_for_status()
-            return r.json()
+            data: dict = r.json()
+            return data
         except httpx.HTTPError:
             return {"ai_enabled": False, "estimated_cost_usd": 0, "error": "AI service unreachable"}
 

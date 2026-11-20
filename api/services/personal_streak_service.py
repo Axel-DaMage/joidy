@@ -1,6 +1,7 @@
 """Personal Streaks Service — extracted from routers for better separation of concerns."""
 
 from datetime import date, timedelta
+from typing import cast
 
 from models.personal_streaks import PersonalStreak, StreakCheckIn
 from repositories import StreakCheckInRepository
@@ -49,7 +50,9 @@ def backfill_streak_history(db: Session, streak: PersonalStreak) -> None:
         current += timedelta(days=1)
 
     if added_count > 0:
-        streak.total_checkins = (streak.total_checkins or 0) + added_count
+        # Instrumented Column attribute: declared Column[int] but stores a
+        # plain int at runtime.
+        streak.total_checkins = (streak.total_checkins or 0) + added_count  # type: ignore[assignment]
         db.commit()
         db.refresh(streak)
 
@@ -147,8 +150,8 @@ def calculate_streak_stats(streak: PersonalStreak) -> dict:
     checkin_dates = [c.check_date for c in streak.checkins]
     current, longest = compute_streak(
         checkin_dates,
-        streak.frequency or "daily",
-        streak.frequency_days or 1,
+        cast(str, streak.frequency or "daily"),
+        cast(int, streak.frequency_days or 1),
         snowball_mode=bool(getattr(streak, "snowball_mode", False)),
     )
     return {

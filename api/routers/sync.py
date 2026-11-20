@@ -6,13 +6,14 @@ Joidy and external sources (e.g. Obsidian).
 """
 
 from datetime import UTC, datetime
+from typing import cast
 
 from database import get_db
 from fastapi import APIRouter, Depends, HTTPException
 from models.note import Note
 from models.sync_state import SyncState
 from pydantic import BaseModel, field_validator
-from services.sync_service import list_conflicts, resolve_conflict
+from services.sync_service import ConflictResolution, list_conflicts, resolve_conflict
 from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/sync", tags=["sync"])
@@ -59,7 +60,8 @@ def resolve_note_conflict(
     result = resolve_conflict(
         db,
         note_id=note_id,
-        resolution=payload.resolution,
+        # The field_validator above already narrowed this to the Literal set.
+        resolution=cast(ConflictResolution, payload.resolution),
         merged_content=payload.merged_content,
     )
 

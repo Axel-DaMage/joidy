@@ -60,7 +60,7 @@ logger = logging.getLogger(__name__)
 class RequestTimingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         start = perf_counter()
-        response = await call_next(request)
+        response: Response = await call_next(request)
         duration_ms = (perf_counter() - start) * 1000
         response.headers["X-Process-Time"] = f"{duration_ms:.2f}ms"
         if duration_ms >= 500:

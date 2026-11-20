@@ -129,7 +129,7 @@ async def get_valid_access_token(db: Session) -> str | None:
         logger.error("[google] Token refresh failed: %s", e)
         return None
 
-    new_access = data.get("access_token", "")
+    new_access: str = data.get("access_token", "")
     expires_in = data.get("expires_in", 3600)
 
     row.access_token = new_access

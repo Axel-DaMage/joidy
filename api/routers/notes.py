@@ -226,12 +226,12 @@ def _validated_source_path(
 
 @router.get("/")
 def list_notes(
+    response: Response,
     skip: int = Query(0, ge=0),
     limit: int = Query(1000, ge=1, le=1000),
     tag: str | None = None,
     source_path: str | None = None,
     db: Session = Depends(get_db),
-    response: Response = None,
 ):
     from sqlalchemy.orm import defer
 

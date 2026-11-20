@@ -76,13 +76,13 @@ def verify_password(plain: str, stored: str) -> bool:
     Supports bcrypt hashes (starting with $2b$) and plaintext for backward compat.
     """
     if stored.startswith("$2b$"):
-        return pwd_context.verify(plain, stored)
+        return bool(pwd_context.verify(plain, stored))
     return secrets.compare_digest(plain, stored)
 
 
 def hash_password(plain: str) -> str:
     """Hash a password using bcrypt."""
-    return pwd_context.hash(plain)
+    return str(pwd_context.hash(plain))
 
 
 def create_access_token(user_id: int, username: str = "user") -> str:
