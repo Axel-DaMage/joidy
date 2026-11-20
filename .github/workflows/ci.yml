@@ -63,14 +63,14 @@ jobs:
           pip install -r requirements-dev.txt
 
       - name: Check Python syntax
-        run: python -m compileall api ai-service worker
+        run: python -m compileall api ai-service worker cli
 
       # Real lint gate (#994): ruff (pinned via requirements-dev.txt) fails on
       # violations; baseline exceptions live in pyproject.toml [tool.ruff.lint].
       - name: Ruff lint + format check
         run: |
-          ruff check api ai-service worker
-          ruff format --check api ai-service worker
+          ruff check api ai-service worker cli
+          ruff format --check api ai-service worker cli
 
       # Real typecheck gate (#994). One invocation per service so
       # cwd-relative module names (models, services, ...) stay unambiguous;
@@ -188,6 +188,27 @@ jobs:
       - name: Unit tests
         working-directory: frontend
         run: npm run test:run
+
+  cli-tests:
+    name: CLI Tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Install CLI + test deps
+        run: pip install -e './cli[test]'
+
+      - name: Run CLI unit tests
+        # Mocked transport — no stack needed. The live smoke test
+        # (cli/tests/test_smoke.py) stays opt-in via JOIDY_SMOKE_API_URL.
+        run: python -m pytest cli/tests -v
 
   docker-build:
     name: Docker Build & Smoke Test
