@@ -252,6 +252,10 @@ app.include_router(gamification.router, dependencies=[Depends(get_current_user)]
 app.include_router(achievements.router, dependencies=[Depends(get_current_user)])
 app.include_router(personal_streaks.router, dependencies=[Depends(get_current_user)])
 app.include_router(push.router, dependencies=[Depends(get_current_user)])
+# GitHub's servers call /integrations/github/webhook without a JWT; the
+# endpoint authenticates deliveries via the X-Hub-Signature-256 HMAC itself
+# (#1318). Every other GitHub route stays behind the router dependency.
+app.include_router(github.webhook_router)
 app.include_router(github.router, dependencies=[Depends(get_current_user)])
 # Google: per-route auth (the OAuth /callback must be reachable by the bare
 # browser redirect; token/status/data routes declare their own deps).

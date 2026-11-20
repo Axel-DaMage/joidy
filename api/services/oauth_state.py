@@ -82,3 +82,50 @@ def verify_state(state: str, provider: str, max_age: int = STATE_TTL_SECONDS) ->
         return False
     payload = f"{state_provider}.{nonce}.{issued_at}"
     return hmac.compare_digest(_signature(key, payload), signature)
+
+
+def seal_value(purpose: str, value: str) -> str:
+    """Embed ``value`` in a signed token: ``<issued_at>.<value>.<signature>``.
+
+    Used to hand a client an opaque handle for a server-side secret — e.g. the
+    GitHub OAuth ``device_code`` (#1318) — so the raw secret never reaches the
+    browser, a query string or the access logs, and the redemption endpoint
+    can prove the handle was minted by this instance for ``purpose``.
+
+    Raises ``RuntimeError`` when SECRET_KEY is not configured, mirroring
+    ``generate_state``.
+    """
+    key = _signing_key()
+    if not key:
+        raise RuntimeError("SECRET_KEY not configured")
+    issued_at = str(int(time.time()))
+    signature = _signature(key, f"{purpose}.{issued_at}.{value}")
+    return f"{issued_at}.{value}.{signature}"
+
+
+def unseal_value(purpose: str, token: str, max_age: int = STATE_TTL_SECONDS) -> str | None:
+    """Return the value embedded by ``seal_value``, or ``None`` if invalid.
+
+    Any deviation — missing key, malformed token, foreign purpose,
+    malformed/future/expired timestamp or signature mismatch — yields
+    ``None``; callers must deny without leaking which check failed.
+    """
+    key = _signing_key()
+    if not key or not token:
+        return None
+    issued_at, sep, rest = token.partition(".")
+    if not sep:
+        return None
+    value, sep, signature = rest.rpartition(".")
+    if not sep or not value or not signature:
+        return None
+    try:
+        age = int(time.time()) - int(issued_at)
+    except ValueError:
+        return None
+    if not 0 <= age <= max_age:
+        return None
+    expected = _signature(key, f"{purpose}.{issued_at}.{value}")
+    if not hmac.compare_digest(expected, signature):
+        return None
+    return value

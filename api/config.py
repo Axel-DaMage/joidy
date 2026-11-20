@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     github_token: str = ""
     github_username: str = ""
     github_webhook_url: str = ""
+    # Shared secret GitHub signs webhook deliveries with (X-Hub-Signature-256).
+    # Per-repo secrets generated during webhook setup take precedence; when
+    # neither is configured the webhook endpoint fails closed (#1318).
+    github_webhook_secret: str = ""
 
     # AI & Embeddings
     embedding_retry_max_attempts: int = 8

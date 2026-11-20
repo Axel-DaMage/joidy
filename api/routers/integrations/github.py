@@ -1,11 +1,16 @@
 import asyncio
+import hashlib
+import hmac
+import json
+import logging
+import re
 from datetime import UTC, datetime
 from typing import Any
 
 import httpx
 from config import settings
 from database import get_db
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from models.github import (
     GitHubEvent,
     GitHubEventType,
@@ -20,21 +25,69 @@ from services.http_client import http_client
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/integrations/github", tags=["integrations"])
+
+# GitHub's servers cannot present a JWT, so the delivery endpoint lives on a
+# separate router mounted WITHOUT the auth dependency (see main.py). It
+# authenticates each call via the X-Hub-Signature-256 HMAC instead (#1318).
+webhook_router = APIRouter(prefix="/integrations/github", tags=["integrations"])
 
 GITHUB_API = "https://api.github.com"
 
+# GitHub owner/repo names are interpolated into api.github.com request paths;
+# anything outside this charset could smuggle extra path segments, queries or
+# traversal into the upstream URL (#1318). Bare "." and ".." are rejected too
+# because they resolve to a different endpoint after normalization.
+_REPO_PART_RE = re.compile(r"^[A-Za-z0-9_.-]{1,100}$")
+_FULL_NAME_RE = r"^[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}$"
+
+
+def _repo_part(value: str) -> str:
+    """Return ``value`` when it is a safe GitHub owner/repo name, else 400."""
+    if not _REPO_PART_RE.fullmatch(value) or value in (".", ".."):
+        raise HTTPException(status_code=400, detail="Invalid owner or repository name")
+    return value
+
+
+def _repo_full_name_parts(full_name: str) -> tuple[str, str]:
+    """Split and validate an ``owner/repo`` string."""
+    parts = full_name.split("/")
+    if len(parts) != 2:
+        raise HTTPException(status_code=400, detail="Invalid format. Use owner/repo")
+    return _repo_part(parts[0]), _repo_part(parts[1])
+
 
 class GitHubRepoCreate(BaseModel):
-    full_name: str = Field(..., description="Owner/repo format")
+    full_name: str = Field(..., pattern=_FULL_NAME_RE, description="Owner/repo format")
     auto_sync: bool = Field(default=False, description="Enable auto-sync for this repo")
 
 
 class GitHubIssueCreate(BaseModel):
-    repo_full_name: str = Field(..., description="Owner/repo format")
+    repo_full_name: str = Field(..., pattern=_FULL_NAME_RE, description="Owner/repo format")
     title: str = Field(..., min_length=1, max_length=500)
-    body: str = Field(default="")
-    labels: list[str] = Field(default_factory=list)
+    body: str = Field(default="", max_length=65536)
+    labels: list[str] = Field(default_factory=list, max_length=20)
+
+
+class DevicePollRequest(BaseModel):
+    """Redemption handle minted by ``/oauth/device/start`` (#1318).
+
+    The raw ``device_code`` never leaves the server; polling submits this
+    HMAC-sealed token so a leaked value cannot redeem a different code and
+    no secret ever travels in a query string.
+    """
+
+    poll_token: str = Field(..., min_length=1, max_length=2048)
+
+
+class RevokeTokenRequest(BaseModel):
+    token: str | None = Field(
+        default=None,
+        max_length=512,
+        description="Token to revoke; defaults to the configured token",
+    )
 
 
 class GitHubIssueUpdate(BaseModel):
@@ -49,13 +102,13 @@ class GitHubGoalLink(BaseModel):
 
 
 class CreateIssueRequest(BaseModel):
-    title: str
-    body: str | None = None
-    labels: list[str] = []
+    title: str = Field(..., min_length=1, max_length=500)
+    body: str | None = Field(default=None, max_length=65536)
+    labels: list[str] = Field(default_factory=list, max_length=20)
 
 
 class CreateCommentRequest(BaseModel):
-    body: str
+    body: str = Field(..., min_length=1, max_length=65536)
 
 
 def _headers(optional: bool = False) -> dict[str, str]:
@@ -157,7 +210,7 @@ def get_repo_color(repo_name: str, is_dark: bool = True) -> str:
 async def list_repos(
     page: int = Query(1, ge=1),
     per_page: int = Query(30, ge=1, le=100),
-    sort: str = Query("updated"),
+    sort: str = Query("updated", pattern="^(created|updated|pushed|full_name)$"),
     is_dark: bool = Query(True, description="Usar colores claros para tema oscuro"),
 ):
     if settings.github_token:
@@ -191,18 +244,16 @@ async def list_repos(
 
 @router.get("/repos/{owner}/{repo}")
 async def get_repo(owner: str, repo: str):
+    owner, repo = _repo_part(owner), _repo_part(repo)
     return await _fetch(f"/repos/{owner}/{repo}", optional_auth=True)
 
 
 @router.post("/repos/db")
 async def add_repo_to_db(
     db: Session = Depends(get_db),
-    full_name: str = Query(..., description="owner/repo"),
+    full_name: str = Query(..., max_length=201, description="owner/repo"),
 ):
-    parts = full_name.split("/")
-    if len(parts) != 2:
-        raise HTTPException(status_code=400, detail="Invalid format. Use owner/repo")
-    owner, name = parts
+    owner, name = _repo_full_name_parts(full_name)
 
     try:
         gh_repo = await _fetch(f"/repos/{owner}/{name}")
@@ -313,7 +364,7 @@ async def get_my_issues(
                     i["_repo_full_name"] = repo["full_name"]
                 return issues
             except Exception as e:
-                print(f"Error fetching issues for {repo.get('full_name')}: {e}")
+                logger.warning("Error fetching issues for %s: %s", repo.get("full_name"), type(e).__name__)
                 return []
 
         results = await asyncio.gather(*[fetch_issues_for_repo(repo) for repo in repos[:15]], return_exceptions=True)
@@ -356,7 +407,7 @@ async def get_my_issues(
             "filter": filter,
         }
     except Exception as e:
-        print(f"Error in get_my_issues: {e}")
+        logger.warning("Error in get_my_issues: %s", type(e).__name__)
         return {
             "issues": [],
             "stats": {"total": 0, "open": 0, "closed": 0},
@@ -411,7 +462,7 @@ async def get_my_pulls(
                     p["_repo_full_name"] = repo["full_name"]
                 return pulls
             except Exception as e:
-                print(f"Error fetching pulls for {repo.get('full_name')}: {e}")
+                logger.warning("Error fetching pulls for %s: %s", repo.get("full_name"), type(e).__name__)
                 return []
 
         results = await asyncio.gather(*[fetch_pulls_for_repo(repo) for repo in repos[:15]], return_exceptions=True)
@@ -453,7 +504,7 @@ async def get_my_pulls(
             "filter": filter,
         }
     except Exception as e:
-        print(f"Error in get_my_pulls: {e}")
+        logger.warning("Error in get_my_pulls: %s", type(e).__name__)
         return {
             "pulls": [],
             "stats": {"total": 0, "open": 0, "closed": 0, "draft": 0},
@@ -468,6 +519,7 @@ async def get_repo_issues(
     state: str = Query("open", pattern="^(open|closed|all)$"),
     per_page: int = Query(30, le=100),
 ):
+    owner, repo = _repo_part(owner), _repo_part(repo)
     issues = await _fetch(
         f"/repos/{owner}/{repo}/issues",
         {"state": state, "per_page": per_page, "sort": "updated"},
@@ -494,6 +546,7 @@ async def get_repo_issues(
 
 @router.get("/repos/{owner}/{repo}/issues/{issue_number}")
 async def get_issue(owner: str, repo: str, issue_number: int):
+    owner, repo = _repo_part(owner), _repo_part(repo)
     issue = await _fetch(f"/repos/{owner}/{repo}/issues/{issue_number}")
     return {
         "id": issue["id"],
@@ -516,6 +569,7 @@ async def create_issue(
     repo: str,
     request: CreateIssueRequest,
 ):
+    owner, repo = _repo_part(owner), _repo_part(repo)
     data: dict[str, Any] = {"title": request.title}
     if request.body:
         data["body"] = request.body
@@ -537,11 +591,12 @@ async def update_issue(
     owner: str,
     repo: str,
     issue_number: int,
-    title: str | None = Query(None),
-    body: str | None = Query(None),
+    title: str | None = Query(None, max_length=500),
+    body: str | None = Query(None, max_length=65536),
     state: str | None = Query(None, pattern="^(open|closed)$"),
-    labels: list[str] | None = Query(None),
+    labels: list[str] | None = Query(None, max_length=20),
 ):
+    owner, repo = _repo_part(owner), _repo_part(repo)
     data: dict[str, Any] = {}
     if title is not None:
         data["title"] = title
@@ -563,12 +618,14 @@ async def update_issue(
 
 @router.post("/repos/{owner}/{repo}/issues/{issue_number}/close")
 async def close_issue(owner: str, repo: str, issue_number: int):
+    owner, repo = _repo_part(owner), _repo_part(repo)
     issue = await _patch(f"/repos/{owner}/{repo}/issues/{issue_number}", {"state": "closed"})
     return {"number": issue["number"], "state": issue["state"]}
 
 
 @router.get("/repos/{owner}/{repo}/issues/{issue_number}/comments")
 async def get_comments(owner: str, repo: str, issue_number: int):
+    owner, repo = _repo_part(owner), _repo_part(repo)
     comments = await _fetch(f"/repos/{owner}/{repo}/issues/{issue_number}/comments")
     return {
         "comments": [
@@ -590,6 +647,7 @@ async def add_comment(
     issue_number: int,
     request: CreateCommentRequest,
 ):
+    owner, repo = _repo_part(owner), _repo_part(repo)
     comment = await _post(f"/repos/{owner}/{repo}/issues/{issue_number}/comments", {"body": request.body})
     return {"id": comment["id"], "body": comment["body"]}
 
@@ -601,6 +659,7 @@ async def get_pulls(
     state: str = Query("open", pattern="^(open|closed|all)$"),
     per_page: int = Query(30, le=100),
 ):
+    owner, repo = _repo_part(owner), _repo_part(repo)
     pulls = await _fetch(
         f"/repos/{owner}/{repo}/pulls",
         {"state": state, "per_page": per_page, "sort": "updated"},
@@ -628,8 +687,9 @@ async def get_commits(
     owner: str,
     repo: str,
     per_page: int = Query(30, le=100),
-    sha: str | None = Query(None),
+    sha: str | None = Query(None, max_length=128, pattern=r"^[A-Za-z0-9_./-]+$"),
 ):
+    owner, repo = _repo_part(owner), _repo_part(repo)
     params: dict[str, Any] = {"per_page": per_page}
     if sha:
         params["sha"] = sha
@@ -738,34 +798,68 @@ async def get_events(
     }
 
 
-@router.post("/webhook")
+def _webhook_secret_for(db: Session, repo_full_name: str) -> str | None:
+    """Resolve the shared secret a delivery should be signed with (#1318).
+
+    The per-repo secret generated by ``setup_repo_webhook`` wins; the global
+    ``GITHUB_WEBHOOK_SECRET`` covers manually configured hooks. ``None`` when
+    nothing is configured — the caller must fail closed.
+    """
+    if repo_full_name:
+        repo = db.execute(select(GitHubRepo).where(GitHubRepo.full_name == repo_full_name)).scalar_one_or_none()
+        if repo and repo.webhook_secret:
+            return repo.webhook_secret
+    return settings.github_webhook_secret or None
+
+
+@webhook_router.post("/webhook")
 async def receive_webhook(
+    request: Request,
     db: Session = Depends(get_db),
-    x_github_event: str | None = None,
-    payload: dict | None = None,
+    x_github_event: str | None = Header(None),
+    x_hub_signature_256: str | None = Header(None),
 ):
+    """Receive webhook events from GitHub.
+
+    Mounted without the router-level JWT dependency (``webhook_router`` —
+    GitHub's servers cannot hold a token), so every delivery is authenticated
+    by verifying ``X-Hub-Signature-256`` (HMAC-SHA256 over the raw body)
+    against the per-repo or global shared secret. When no secret is
+    configured the endpoint fails closed (#1318).
     """
-    Receive webhook events from GitHub.
-    This endpoint should be called by GitHub via webhook configuration.
-    """
-    event_type = x_github_event or "unknown"
-    action = payload.get("action", "") if payload else ""
+    body = await request.body()
+    try:
+        payload = json.loads(body) if body else {}
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Invalid webhook payload")
 
     repo_full_name = ""
     sender = ""
+    if isinstance(payload.get("repository"), dict):
+        repo_full_name = payload["repository"].get("full_name", "")
+    if isinstance(payload.get("sender"), dict):
+        sender = payload["sender"].get("login", "")
 
-    if payload:
-        if "repository" in payload:
-            repo_full_name = payload["repository"].get("full_name", "")
-        if "sender" in payload:
-            sender = payload["sender"].get("login", "")
+    secret = _webhook_secret_for(db, repo_full_name)
+    if not secret or not x_hub_signature_256:
+        raise HTTPException(status_code=401, detail="Invalid webhook signature")
+    expected = "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, x_hub_signature_256):
+        raise HTTPException(status_code=401, detail="Invalid webhook signature")
+
+    event_type = x_github_event or "unknown"
+    action = payload.get("action", "")
 
     try:
         gh_event_type = GitHubEventType(event_type)
     except ValueError:
-        gh_event_type = GitHubEventType.ISSUES
+        # Authenticated but not actionable (e.g. the "ping" sent on hook
+        # creation): acknowledge without recording a bogus event.
+        return {"status": "ignored", "event_type": event_type}
 
-    event = gh_svc.process_webhook_event(db, repo_full_name, gh_event_type, action, sender, payload or {})
+    event = gh_svc.process_webhook_event(db, repo_full_name, gh_event_type, action, sender, payload)
 
     return {"status": "received", "event_id": event.id if event else None}
 
@@ -830,12 +924,20 @@ async def sync_repo(repo_id: int, db: Session = Depends(get_db)):
     }
 
 
+# Least privilege (#1318): issue/PR reading and issue/comment authoring on
+# public repos. The previous grant ("repo" + "workflow") gave tokens full
+# control of private repositories AND GitHub Actions — far beyond what this
+# integration needs. Private repos remain reachable via a manually
+# configured GITHUB_TOKEN PAT with the scopes the user chooses.
 GITHUB_OAUTH_SCOPES = [
-    "repo",
+    "public_repo",
     "read:user",
     "user:email",
-    "workflow",
 ]
+
+# GitHub device codes expire ~15 min after issuance; the sealed poll token
+# minted alongside them shares that bound.
+DEVICE_CODE_TTL_SECONDS = 900
 
 
 @router.get("/oauth/device/start")
@@ -881,8 +983,21 @@ async def start_device_flow():
             detail=data.get("error_description") or data.get("error"),
         )
 
+    device_code = data.get("device_code")
+    if not device_code:
+        raise HTTPException(status_code=502, detail="GitHub did not return a device code")
+
+    # Seal the device_code into an opaque handle (#1318): the raw code never
+    # leaves the server, and /oauth/device/polling only redeems codes this
+    # instance issued — a leaked query string or token cannot be swapped for
+    # a different device_code.
+    try:
+        poll_token = oauth_state.seal_value("github-device", device_code)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
     return {
-        "device_code": data.get("device_code"),
+        "poll_token": poll_token,
         "user_code": data.get("user_code"),
         "verification_uri": data.get("verification_uri"),
         "verification_uri_secondary": data.get("verification_uri_secondary"),
@@ -892,15 +1007,21 @@ async def start_device_flow():
 
 
 @router.post("/oauth/device/polling")
-async def poll_device_code(
-    device_code: str = Query(..., description="Device code from start endpoint"),
-):
+async def poll_device_code(payload: DevicePollRequest):
     """
     Hace polling del device_code para obtener el token de acceso.
     Usuario debe autorizar en otro dispositivo first.
+
+    The ``device_code`` travels sealed inside ``poll_token`` (JSON body) —
+    never in a query string — and is bound to the flow this instance
+    started (#1318).
     """
     if not settings.github_client_id:
         raise HTTPException(status_code=400, detail="GitHub OAuth not configured")
+
+    device_code = oauth_state.unseal_value("github-device", payload.poll_token, max_age=DEVICE_CODE_TTL_SECONDS)
+    if not device_code:
+        raise HTTPException(status_code=403, detail="Invalid or expired poll token")
 
     token_url = "https://github.com/login/oauth/access_token"  # noqa: S105 — OAuth endpoint URL, not a password
 
@@ -1052,13 +1173,15 @@ async def oauth_callback(
 
 
 @router.post("/oauth/revoke")
-async def revoke_token(
-    token: str | None = Query(None, description="Token to revoke; defaults to the configured token"),
-):
+async def revoke_token(payload: RevokeTokenRequest | None = None):
     """
     Revoca el token de acceso GitHub configurado.
+
+    The token rides in the JSON body, never in the URL (#1318). When the
+    body is omitted the configured ``github_token`` is revoked — the
+    Settings "Disconnect" flow relies on that default.
     """
-    token = token or settings.github_token
+    token = (payload.token if payload else None) or settings.github_token
     if not token:
         raise HTTPException(status_code=400, detail="No GitHub token to revoke")
 
