@@ -1,5 +1,25 @@
 import { getLocale } from '$lib/stores/locale';
 
+/**
+ * Parse a date-only `YYYY-MM-DD` string as a *local* date, anchored at local
+ * noon so DST transitions can't roll it into an adjacent day. `new Date(s)`
+ * treats bare date strings as UTC midnight, which renders/compares one day
+ * early in UTC−N zones (#1306). Full datetimes pass through to `new Date`.
+ */
+export function parseLocalDate(s: string): Date {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(`${s}T12:00:00`);
+  return new Date(s);
+}
+
+/**
+ * Local `YYYY-MM-DD` key for a Date. `d.toISOString().slice(0, 10)` returns
+ * the *UTC* day, which drifts one day off the local date near midnight
+ * (#1306) — day bucketing must use this instead.
+ */
+export function localDayKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 export function formatRelativeDate(date: string | Date): string {
   const d = typeof date === 'string' ? new Date(date) : date;
   const now = new Date();
