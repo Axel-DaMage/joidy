@@ -95,6 +95,7 @@
     { href: '/goals', label: $t('nav.goals'), icon: 'Target', status: 'ready' },
     { href: '/emails', label: $t('nav.emails'), icon: 'Mail', status: 'ready' },
     { href: '/gmail', label: $t('nav.gmail'), icon: 'Send', status: 'ready' },
+    { href: '/contactos', label: $t('nav.contacts'), icon: 'Users', status: 'ready' },
     { href: '/calendar', label: $t('nav.calendar'), icon: 'Calendar', status: 'ready' },
     { href: '/timers', label: $t('nav.timers'), icon: 'AlarmClock', status: 'ready' },
     // Strava integration page (#44) — appended last to keep merges clean.
