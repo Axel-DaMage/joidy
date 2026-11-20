@@ -16,3 +16,22 @@ You should have received a copy of the GNU General Public License
 along with this program (see LICENSE). If not, see <https://www.gnu.org/licenses/>.
 
 SPDX-License-Identifier: GPL-3.0-or-later
+
+---
+
+Documentation license
+---------------------
+
+All project documentation — the `docs/` directory, `README.md`, and the
+images referenced by them — is distributed under the same GNU General
+Public License v3.0 or later (`GPL-3.0-or-later`) as the source code.
+See `LICENSE` for the full text.
+
+---
+
+Trademarks
+----------
+
+Names and logos of third-party products and services referenced in the
+user interface are trademarks of their respective owners. See
+`docs/TRADEMARKS.md` for the full attribution notice.
