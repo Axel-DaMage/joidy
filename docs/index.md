@@ -53,12 +53,13 @@ Joidy es un sistema personal de gestión del conocimiento que integra:
 | 16 | [Real-Time & Security](realtime-security.md) | WebSockets, error handling, rate limiting, seguridad |
 | 17 | [SBOM y Licencias](sbom.md) | SBOM SPDX/CycloneDX, THIRD-PARTY-NOTICES, política de licencias |
 | 18 | [Política de Privacidad](../PRIVACY.md) | Datos accedidos por integración, almacenamiento, retención y procesadores externos |
+| 19 | [Transparencia de IA](ai-transparency.md) | Qué datos se envían a cada proveedor de IA, procesamiento en segundo plano y opt-out (EU AI Act art. 50) |
 
 ### Architecture Decision Records
 
 | # | Documento | Descripción |
 |---|-----------|-------------|
-| 19 | [ADRs](adr/README.md) | Índice de Architecture Decision Records (0001–0006) |
+| 20 | [ADRs](adr/README.md) | Índice de Architecture Decision Records (0001–0006) |
 
 ---
 
@@ -99,6 +100,7 @@ en `.env` para exponer en LAN); ai-service y worker son internos (#1277).
 | Web App | http://localhost:3000 |
 | API Docs | http://localhost:8000/docs |
 | GitHub | https://github.com/Axel-DaMage/joidy |
+| Cumplimiento de seguridad | [security-compliance.md](security-compliance.md) |
 
 ---
 

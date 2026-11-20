@@ -3,6 +3,7 @@
   import { api } from '$lib/api';
   import { goto } from '$app/navigation';
   import DynamicIcon from './DynamicIcon.svelte';
+  import AiDisclosure from './AiDisclosure.svelte';
   import { t } from 'svelte-i18n';
 
   let clusters = $state<{ cluster_id: number; note_ids: number[]; note_count: number; representative_title: string; titles: string[] }[]>([]);
@@ -37,6 +38,7 @@
   <div class="clusters-header">
     <h4><DynamicIcon name="Layers" size={16} /> Temas detectados</h4>
     {#if loading}<span class="caption">{$t('topicClusters.analyzing')}</span>{/if}
+    <AiDisclosure compact />
   </div>
 
   {#if error}

@@ -85,6 +85,9 @@ class Settings(BaseSettings):
     strava_client_id: str = ""
     strava_client_secret: str = ""
     strava_redirect_uri: str = ""
+    # Verify token for the Strava webhook subscription handshake (#44).
+    # Empty = /integrations/strava/webhook disabled (404).
+    strava_webhook_verify_token: str = ""
 
     # Spotify OAuth (Playback, Playlists, Top tracks)
     spotify_client_id: str = ""

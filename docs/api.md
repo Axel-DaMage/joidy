@@ -340,12 +340,27 @@ Errores: `401` token ausente/inválido o Google rechazó el token,
 
 ### 2.26 Integrations — Strava (`integrations/strava.py`)
 
+> OAuth tokens are stored server-side, encrypted at rest, in the
+> provider-agnostic `integration_tokens` table — the callback never returns
+> them to the browser. Data endpoints use the stored token (auto-refreshed);
+> the legacy `X-Strava-Token` header is still honored as an explicit
+> override. Never pass tokens as query params.
+
 | Method | Path | Auth | Description | Request Body | Response |
 |--------|------|------|-------------|--------------|----------|
 | GET | `/integrations/strava/auth` | Yes | Strava OAuth consent URL (signed `state` embedded) | — | `{url}` |
-| GET | `/integrations/strava/callback` | Yes | Strava OAuth callback (`code`, `error`, `state` query) | — | token object |
-| GET | `/integrations/strava/activities` | Yes | Recent activities (`per_page` query; token in `X-Strava-Token` header) | — | activities list |
-| GET | `/integrations/strava/athlete` | Yes | Athlete profile (token in `X-Strava-Token` header) | — | athlete object |
+| GET | `/integrations/strava/callback` | Public (`state`) | Strava OAuth callback (`code`, `error`, `state` query); persists tokens, returns self-closing HTML | — | HTML page |
+| GET | `/integrations/strava/status` | Yes | Connection status (`configured`, `connected`, `athlete` summary) | — | status object |
+| POST | `/integrations/strava/disconnect` | Yes | Deauthorize at Strava (best-effort) + delete stored tokens | — | `{status}` |
+| GET | `/integrations/strava/activities` | Yes | Recent activities (`per_page`, `page`, `before`, `after`, `sport_type` queries) | — | activities list |
+| GET | `/integrations/strava/activities/{activity_id}` | Yes | Activity detail (map, laps/splits, elevation) | — | activity object |
+| GET | `/integrations/strava/activities/{activity_id}/streams` | Yes | Activity streams (`keys` query, default time/latlng/altitude/hr/…) | — | streams object |
+| GET | `/integrations/strava/athlete` | Yes | Athlete profile | — | athlete object |
+| GET | `/integrations/strava/stats` | Yes | Athlete stats (recent / YTD / all-time) | — | stats object |
+| GET | `/integrations/strava/routes` | Yes | Saved routes (`per_page`, `page` queries) | — | routes list |
+| POST | `/integrations/strava/sync` | Yes | Pull recent activities, award XP idempotently (+5/activity, weekly bonus) | — | sync result |
+| GET | `/integrations/strava/webhook` | Public (verify token) | Strava subscription handshake — echoes `hub.challenge` when `hub.verify_token` matches `STRAVA_WEBHOOK_VERIFY_TOKEN` | — | `{hub.challenge}` |
+| POST | `/integrations/strava/webhook` | Public (verify token) | Strava activity events → idempotent XP award; disabled (404) unless `STRAVA_WEBHOOK_VERIFY_TOKEN` is set | event JSON | `{status, ...}` |
 
 ---
 

@@ -309,7 +309,10 @@ app.include_router(google.router)
 # Google Contacts (#43): all routes are JWT-protected; the router proxies the
 # shared Google OAuth token to the People API — no public endpoints.
 app.include_router(contacts.router, dependencies=[Depends(get_current_user)])
-app.include_router(strava.router, dependencies=[Depends(get_current_user)])
+# Strava: per-route auth like Google — /callback (browser redirect) and
+# /webhook (Strava servers) must be reachable without a user JWT; every
+# other route declares get_current_user itself (#44).
+app.include_router(strava.router)
 app.include_router(spotify.router, dependencies=[Depends(get_current_user)])
 app.include_router(vault.router, dependencies=[Depends(get_current_user_or_internal)])
 app.include_router(folders.router, dependencies=[Depends(get_current_user)])
