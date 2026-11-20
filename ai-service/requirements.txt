@@ -16,5 +16,5 @@ scikit-learn==1.9.1
 # Test tooling — kept in requirements.txt (same convention as api/) so
 # `pytest tests/` works inside the ai-service container.
 pytest==9.2.0
-pytest-asyncio==1.4.1
+pytest-asyncio==1.4.1.post1
 httpx==0.28.1
