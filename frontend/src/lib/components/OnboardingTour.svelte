@@ -35,7 +35,6 @@
     // Arrow navigation must not hijack keys while the user is typing in a
     // spotlighted input/textarea/select/contenteditable (#1307).
     if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;
-    const target = event.target;
     if (
       target instanceof HTMLElement &&
       (target.tagName === 'INPUT' ||
