@@ -175,7 +175,7 @@ def _read_vault_file(path: Path) -> str | None:
     Files over ``settings.max_note_file_size`` are refused with a single
     warning; ``None`` (oversized or unreadable) tells callers to skip it.
     """
-    if not _is_safe_vault_file(path):
+    if not _is_safe_vault_file(path, confined=False):
         return None
     try:
         size = path.stat().st_size
@@ -235,16 +235,22 @@ def _vault_root() -> Path:
     return Path(settings.vault_path).resolve()
 
 
-def _is_safe_vault_file(path: Path) -> bool:
-    """Return True only for regular files contained inside the vault (#1293).
+def _is_safe_vault_file(path: Path, *, confined: bool = True) -> bool:
+    """Return True only for regular in-vault files (#1293).
 
     Rejects:
     - symlinks — a ``vault/leak.md -> /app/.env`` link would exfiltrate
       secrets (SECRET_KEY, POSTGRES_PASSWORD, GEMINI_API_KEY) into a note
       readable via the API;
     - paths whose resolved location escapes the vault root (e.g. a file
-      reached through a symlinked parent directory);
+      reached through a symlinked parent directory) — only when
+      ``confined`` is set;
     - non-regular files (FIFOs, sockets, devices).
+
+    ``confined=False`` keeps the symlink/file-type checks while skipping
+    the vault-root containment test; ``_read_vault_file`` uses that mode
+    because the paths it receives are already confinement-validated
+    upstream by ``_is_valid_vault_path``.
     """
     try:
         # is_symlink() uses lstat and must run BEFORE is_file(), which
@@ -255,14 +261,15 @@ def _is_safe_vault_file(path: Path) -> bool:
         if not path.is_file():
             logger.warning("[vault] Skipping non-regular file: %s", _log_name(path))
             return False
-        resolved = path.resolve()
-        if not resolved.is_relative_to(_vault_root()):
-            logger.warning(
-                "[vault] Skipping path outside vault: %s -> %s",
-                _log_name(path),
-                _log_name(resolved),
-            )
-            return False
+        if confined:
+            resolved = path.resolve()
+            if not resolved.is_relative_to(_vault_root()):
+                logger.warning(
+                    "[vault] Skipping path outside vault: %s -> %s",
+                    _log_name(path),
+                    _log_name(resolved),
+                )
+                return False
     except Exception as exc:
         logger.warning("[vault] Skipping inaccessible path %s: %s", _log_name(path), exc)
         return False
@@ -602,7 +609,7 @@ async def _consume_vault_events(
                     if new_path in consumed_adds:
                         continue
                     try:
-                        if Path(new_path).exists():
+                        if Path(new_path).exists() and _is_valid_vault_path(new_path, Change.added, _vault_root()):
                             content = _read_vault_file(Path(new_path))
                             if content is not None and _fingerprint(content) == old_fp:
                                 renames.append((old_path, new_path))
@@ -622,6 +629,13 @@ async def _consume_vault_events(
                     remaining[path] = ct
 
             async def process(path: str, change_type: Change):
+                # Re-validate queued paths: the awatch producer filters events
+                # before enqueue, but persisted replays and direct queue
+                # injection must not reach a vault read unvalidated (#1293).
+                if not _is_valid_vault_path(path, change_type, _vault_root()):
+                    logger.warning("[vault] Skipping invalid queued path %s", _log_name(path))
+                    event_log.remove(path)
+                    return
                 lock = await _get_file_lock(path)
                 async with lock:
                     try:
@@ -647,6 +661,11 @@ async def _consume_vault_events(
                         )
 
             async def process_rename(old_path: str, new_path: str):
+                if not _is_valid_vault_path(new_path, Change.added, _vault_root()):
+                    logger.warning("[vault] Skipping invalid rename target %s", _log_name(new_path))
+                    event_log.remove(old_path)
+                    event_log.remove(new_path)
+                    return
                 lock = await _get_file_lock(old_path)
                 async with lock:
                     try:
