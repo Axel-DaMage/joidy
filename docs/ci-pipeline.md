@@ -49,8 +49,8 @@ Two separate problems were conflated as "every run gets cancelled":
 - **`e2e-plan`** computes the diff for the event and emits `run`,
   `specs`, `shards` (JSON matrix array).
 - **Push to `main`/`development`**: always the **full suite** — post-merge
-  verification stays complete — split across `SHARD_COUNT` (default 6)
-  parallel legs via `npx playwright test --shard=n/6`. Each shard boots
+  verification stays complete — split across `SHARD_COUNT` (default 8)
+  parallel legs via `npx playwright test --shard=n/M`. Each shard boots
   its **own** docker stack + Postgres, so tests remain serial per shard
   (`workers: 1`, matching the config's CI posture) and fully isolated.
 - **Pull requests**: smoke + route-scoped specs on a **single** leg
@@ -78,10 +78,14 @@ Two separate problems were conflated as "every run gets cancelled":
 
 ### Tuning
 
-If a shard leg starts approaching ~10 min again, raise `SHARD_COUNT` in
-`e2e-plan` — do **not** raise Playwright `workers`: tests share the
-shard's API + DB and are only guaranteed serially safe. `timeout-minutes:
-30` on the job stays as the hard bound.
+Measured on run `44833334196` (2026-11-20): ~55-60 min of total serial
+test time — shard legs ran 3-10 min of tests plus ~2.5 min setup.
+`SHARD_COUNT: 8` keeps a typical leg around ~10 min wall clock including
+retry inflation when tests fail. If a shard leg starts approaching ~10
+min again, raise `SHARD_COUNT` in `e2e-plan` — do **not** raise
+Playwright `workers`: tests share the shard's API + DB and are only
+guaranteed serially safe. `timeout-minutes: 30` on the job stays as the
+hard bound.
 
 Artifacts are per-shard (`playwright-report-<n>`) because
 `upload-artifact` v4+ rejects duplicate names across parallel legs.

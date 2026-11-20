@@ -320,12 +320,14 @@ jobs:
           # Full-suite parallelism: N runners, each booting its own
           # docker stack + DB and running ~1/N of the suite serially
           # (workers:1 stays — see playwright.config.ts). Serial runtime
-          # exceeded the 30-min timeout on 2026-11-20 (~230 tests, 15
-          # specs); 6 shards target ~5-8 min of tests per leg plus ~2.5 min
-          # of image/stack/browser setup. If the suite outgrows ~10
-          # min/shard, raise this — do NOT raise workers instead: tests
-          # share the shard's API/DB and are only serially safe.
-          SHARD_COUNT: '6'
+          # exceeded the 30-min timeout on 2026-11-20; measured ~55-60 min
+          # across 8 shards on run 44833334196 (~230 tests, 15 specs).
+          # 8 shards target ~7-8 min of tests per leg plus ~2.5 min of
+          # image/stack/browser setup, keeping headroom for retry
+          # inflation when tests fail. If a leg outgrows ~10 min, raise
+          # this — do NOT raise workers instead: tests share the shard's
+          # API/DB and are only serially safe.
+          SHARD_COUNT: '8'
         run: |
           set -euo pipefail
 
