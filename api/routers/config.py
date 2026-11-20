@@ -4,7 +4,7 @@ from config import settings
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from services.auth_service import get_current_user, hash_password
-from services.env_file import ENV_FILE, read_env, write_env  # noqa: F401  (ENV_FILE re-exported)
+from services.env_file import ENV_FILE, read_env, validate_env_value, write_env  # noqa: F401  (ENV_FILE re-exported)
 
 router = APIRouter(prefix="/config", tags=["config"])
 
@@ -136,9 +136,20 @@ def update_config(update: ConfigUpdate):
             ):
                 continue
             if value is not None:
-                env_vars[env_key] = value
+                try:
+                    env_vars[env_key] = validate_env_value(env_key, value)
+                except ValueError as exc:
+                    raise HTTPException(status_code=400, detail=f"Invalid value for '{short_key}': {exc}") from exc
+                # Keep the in-memory update below in sync with the persisted
+                # (possibly normalized) value.
+                update_data[short_key] = env_vars[env_key]
 
-    write_env(env_vars)
+    try:
+        write_env(env_vars)
+    except ValueError as exc:
+        # A key already on disk can fail the universal safety check (#1312) —
+        # fail closed rather than round-trip a poisoned value.
+        raise HTTPException(status_code=400, detail=f"Refusing to persist .env: {exc}") from exc
 
     # Update in-memory settings so services see the new values immediately
     for short_key, value in update_data.items():
@@ -249,14 +260,27 @@ def perform_setup(req: SetupRequest):
             detail="Password must be at least 4 characters long",
         )
 
-    env_vars["AUTH_PASSWORD"] = hash_password(req.auth_password)
+    # Validate free-text input before it touches .env (#1312): a crafted vault
+    # path used to persist verbatim — newlines forged extra KEY= lines and
+    # $(...) executed on the next `make` invocation that sourced the file.
+    vault_path: str | None = None
     if req.obsidian_vault_path:
-        env_vars["OBSIDIAN_VAULT_PATH"] = req.obsidian_vault_path
+        try:
+            vault_path = validate_env_value("OBSIDIAN_VAULT_PATH", req.obsidian_vault_path)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid obsidian_vault_path: {exc}") from exc
+
+    env_vars["AUTH_PASSWORD"] = hash_password(req.auth_password)
+    if vault_path:
+        env_vars["OBSIDIAN_VAULT_PATH"] = vault_path
 
     if not env_vars.get("SECRET_KEY"):
         env_vars["SECRET_KEY"] = secrets.token_urlsafe(32)
 
-    write_env(env_vars)
+    try:
+        write_env(env_vars)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Refusing to persist .env: {exc}") from exc
 
     # Reload settings in memory (best-effort — the authoritative source is
     # now the .env file, which every worker reads via get_persisted()).
@@ -264,9 +288,9 @@ def perform_setup(req: SetupRequest):
 
     settings.auth_password = hash_password(req.auth_password)
     settings.secret_key = env_vars["SECRET_KEY"]
-    if req.obsidian_vault_path:
-        os.environ["OBSIDIAN_VAULT_PATH"] = req.obsidian_vault_path
-        settings.obsidian_vault_path = req.obsidian_vault_path
+    if vault_path:
+        os.environ["OBSIDIAN_VAULT_PATH"] = vault_path
+        settings.obsidian_vault_path = vault_path
 
     return {
         "status": "ok",
