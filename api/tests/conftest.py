@@ -135,6 +135,10 @@ if _USE_POSTGRES and _DB_NAME:
 
 _CAN_DROP = "test" in _DB_NAME.lower() if _DB_NAME else False
 
+# Wiping is safe when the DB is either a *_test postgres schema or the
+# throwaway in-memory SQLite fallback — both are test-only by construction.
+_CAN_WIPE = _CAN_DROP or not _USE_POSTGRES
+
 import main as main_module
 from database import Base, get_db
 from fastapi.testclient import TestClient
@@ -157,7 +161,7 @@ def _wipe_all_tables(engine) -> None:
     transaction — ``SessionLocal`` background-task paths, ``real_commit``
     tests, or residue from an aborted previous run.
     """
-    if not _CAN_DROP:
+    if not _CAN_WIPE:
         warnings.warn(
             f"Skipping table wipe for non-test database '{_DB_NAME}'. "
             "Use a database with 'test' in the name for test isolation.",
@@ -268,6 +272,14 @@ def db_session(request, _db_engine):
 
     conn = _db_engine.connect()
     outer_txn = conn.begin()
+    if not _USE_POSTGRES:
+        # pysqlite's ``do_begin`` is a no-op — SQLAlchemy relies on the driver's
+        # implicit begin-before-DML, but Python 3.12's statement interception
+        # swallows the fixture's SAVEPOINT statements, so every ``commit()``
+        # silently autocommits and ``outer_txn.rollback()`` reverts nothing.
+        # Open the real outer transaction at the DBAPI level; the session's
+        # SAVEPOINT/RELEASE then nest correctly inside it.
+        conn.connection.dbapi_connection.execute("BEGIN")
     session = Session(bind=conn, join_transaction_mode="create_savepoint")
     try:
         yield session
@@ -279,7 +291,7 @@ def db_session(request, _db_engine):
         # Rollback already reverts everything the fixture session wrote; only
         # pay for a table wipe when writes escaped the transaction (SessionLocal
         # background paths) or an earlier run left committed residue.
-        if _CAN_DROP and _has_committed_rows(_db_engine):
+        if _CAN_WIPE and _has_committed_rows(_db_engine):
             _wipe_all_tables(_db_engine)
         _clear_app_caches()
 
