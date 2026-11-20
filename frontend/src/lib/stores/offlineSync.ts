@@ -13,6 +13,7 @@ import {
   addToOutbox,
   getOutbox,
   removeFromOutbox,
+  updateOutboxChange,
   setMeta,
   getMeta,
   type OutboxChange,
@@ -28,6 +29,17 @@ export const syncStatus = writable<SyncStatus>('idle');
 const MAX_RETRIES = 5;
 let syncTimer: ReturnType<typeof setInterval> | null = null;
 let initialized = false;
+
+// Offline-created notes get a temporary negative id (-Date.now()) until the
+// outbox `create` is synced and the server assigns the real id. The notes
+// store registers a handler here so it can swap the id in memory (avoiding a
+// circular import: stores/notes already imports this module) (#1304).
+type TempIdRemapHandler = (tempId: number, realNote: Note) => void;
+let tempIdRemapHandler: TempIdRemapHandler | null = null;
+
+export function onTempIdRemap(handler: TempIdRemapHandler): void {
+  tempIdRemapHandler = handler;
+}
 
 /** Refreshes the pending change count from the outbox. */
 export async function refreshPendingCount(): Promise<void> {
@@ -82,7 +94,23 @@ export async function processOutbox(): Promise<void> {
             tags: change.note.tags,
             source_path: change.note.source_path ?? undefined,
           });
+          const tempId = change.note.id;
           await putNote(result);
+          if (tempId < 0 && tempId !== result.id) {
+            // The note was created offline with a temp id: drop the temp
+            // cache copy (otherwise it duplicates on next load) and retarget
+            // queued changes still pointing at the temp id — an update/delete
+            // against a negative id 404s and is dropped after MAX_RETRIES,
+            // silently losing the user's edits (#1304).
+            await deleteNote(tempId);
+            for (const later of outbox) {
+              if (later.id !== change.id && later.note.id === tempId) {
+                later.note = { ...later.note, id: result.id };
+                await updateOutboxChange(later);
+              }
+            }
+            tempIdRemapHandler?.(tempId, result);
+          }
           break;
         }
         case 'update': {

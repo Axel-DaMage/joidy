@@ -29,7 +29,7 @@ from services.joidy_vault_writer import (
     update_goal_file,
 )
 from services.note_service import write_to_vault
-from services.sanitizer import sanitize_color, sanitize_content, sanitize_emoji, sanitize_title
+from services.sanitizer import sanitize_color, sanitize_content, sanitize_emoji, sanitize_theme, sanitize_title
 from services.sync_service import update_local_mtime
 from services.timezone_utils import get_local_now
 from sqlalchemy.orm import Session
@@ -44,6 +44,47 @@ def _validate_priority_range(v: int) -> int:
     if not 0 <= v <= GOAL_PRIORITY_MAX:
         raise ValueError(f"Priority must be between 0 and {GOAL_PRIORITY_MAX}")
     return v
+
+
+def _reject_newlines(v: str, field: str) -> str:
+    """Reject CR/LF in single-line scalars written verbatim into vault
+    ``.md`` files — a newline injects extra frontmatter keys or body
+    lines (``theme="x\\nstate: COMPLETED"``, ``# {title}`` headings) (#1319)."""
+    if "\n" in v or "\r" in v:
+        raise ValueError(f"{field} must be a single line")
+    return v
+
+
+# Terminal goal states carry side effects (XP award, ``completed_at``,
+# snowball redistribution) and must be reached only through the dedicated
+# /complete and /fail endpoints — never via plain create/update payloads,
+# which would fabricate phantom completions (#1319).
+_GOAL_TERMINAL_STATES = frozenset({GoalState.COMPLETED, GoalState.FAILED})
+
+
+def _reject_terminal_state(v: GoalState) -> GoalState:
+    if v in _GOAL_TERMINAL_STATES:
+        raise ValueError(
+            "Goal state can only become COMPLETED or FAILED via POST /goals/{id}/complete or POST /goals/{id}/fail"
+        )
+    return v
+
+
+def _validate_note_exists(db: Session, note_id: int) -> None:
+    """Reject linking a goal to a note that does not exist — the save path
+    would otherwise overwrite an arbitrary/absent note body or blow up with
+    a FK IntegrityError (500) (#1319)."""
+    if db.query(Note).filter(Note.id == note_id).first() is None:
+        raise HTTPException(status_code=404, detail="Note not found")
+
+
+def _validate_tag_exists(db: Session, tag_id: int) -> None:
+    """Same existence guarantee as ``_validate_note_exists`` for the
+    ``tag_id`` FK — avoids raw IntegrityError 500s on bogus ids (#1319)."""
+    from models.note import Tag
+
+    if db.query(Tag).filter(Tag.id == tag_id).first() is None:
+        raise HTTPException(status_code=404, detail="Tag not found")
 
 
 class GoalCreate(BaseModel):
@@ -73,7 +114,7 @@ class GoalCreate(BaseModel):
     @field_validator("title")
     @classmethod
     def title_not_empty(cls, v: str) -> str:
-        return sanitize_title(v)
+        return _reject_newlines(sanitize_title(v), "Title")
 
     @field_validator("target_value")
     @classmethod
@@ -82,10 +123,20 @@ class GoalCreate(BaseModel):
             raise ValueError("Target value must be positive")
         return v
 
+    @field_validator("state")
+    @classmethod
+    def state_not_terminal(cls, v: GoalState) -> GoalState:
+        return _reject_terminal_state(v)
+
     @field_validator("color")
     @classmethod
     def validate_color(cls, v: str) -> str:
         return sanitize_color(v)
+
+    @field_validator("theme")
+    @classmethod
+    def validate_theme(cls, v: str) -> str:
+        return sanitize_theme(v)
 
     @field_validator("fail_emoji")
     @classmethod
@@ -110,7 +161,9 @@ class GoalUpdate(BaseModel):
     context: GoalContext | None = None
     measurement_type: GoalMeasurement | None = None
     target_value: float | None = None
-    current_value: float | None = None
+    # ``current_value`` is computed server-side (get_goal_progress) and is not
+    # client-settable; extra fields are ignored by Pydantic, so a stray
+    # ``{"current_value": 999}`` is silently dropped rather than stored (#1319).
     state: GoalState | None = None
     fail_config: GoalFailConfig | None = None
     fail_emoji: str | None = None
@@ -127,7 +180,7 @@ class GoalUpdate(BaseModel):
     def title_not_empty(cls, v: str | None) -> str | None:
         if v is None:
             return v
-        return sanitize_title(v)
+        return _reject_newlines(sanitize_title(v), "Title")
 
     @field_validator("target_value")
     @classmethod
@@ -137,6 +190,22 @@ class GoalUpdate(BaseModel):
         if v <= 0:
             raise ValueError("Target value must be positive")
         return v
+
+    @field_validator("state")
+    @classmethod
+    def state_not_terminal(cls, v: GoalState | None) -> GoalState | None:
+        # Pause/cancel/reactivate/un-complete via PUT stays allowed; only the
+        # side-effectful terminal states are forced through /complete|/fail.
+        if v is None:
+            return v
+        return _reject_terminal_state(v)
+
+    @field_validator("theme")
+    @classmethod
+    def validate_theme(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        return sanitize_theme(v)
 
     @field_validator("description")
     @classmethod
@@ -175,6 +244,15 @@ class GoalUpdate(BaseModel):
 
 
 class GoalContent(BaseModel):
+    """Payload for POST /goals/{id}/content — mirrors GoalCreate's
+    sanitization so editor saves cannot inject XSS into stored titles or
+    extra keys into vault frontmatter (#1319).
+
+    ``state`` is accepted for payload compatibility with GET /content's
+    response shape but is NEVER applied server-side — state transitions
+    must go through PUT /goals/{id} (non-terminal) or /complete|/fail.
+    """
+
     title: str
     content: str
     temporality: GoalTemporality = GoalTemporality.ONEOFF
@@ -191,6 +269,43 @@ class GoalContent(BaseModel):
     parent_id: int | None = None
     max_assignment_days: int | None = None
     description: str = ""
+
+    @field_validator("title")
+    @classmethod
+    def title_not_empty(cls, v: str) -> str:
+        return _reject_newlines(sanitize_title(v), "Title")
+
+    @field_validator("content")
+    @classmethod
+    def validate_content(cls, v: str) -> str:
+        return sanitize_content(v)
+
+    @field_validator("description")
+    @classmethod
+    def validate_description(cls, v: str) -> str:
+        return sanitize_content(v)
+
+    @field_validator("target_value")
+    @classmethod
+    def target_positive(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError("Target value must be positive")
+        return v
+
+    @field_validator("color")
+    @classmethod
+    def validate_color(cls, v: str) -> str:
+        return sanitize_color(v)
+
+    @field_validator("theme")
+    @classmethod
+    def validate_theme(cls, v: str) -> str:
+        return sanitize_theme(v)
+
+    @field_validator("fail_emoji")
+    @classmethod
+    def validate_emoji(cls, v: str) -> str:
+        return sanitize_emoji(v)
 
 
 def _serialize_goal(goal: Goal, db: Session, precalculated_progress: float | None = None) -> dict:
@@ -256,6 +371,14 @@ def create_goal(data: GoalCreate, db: Session = Depends(get_db)):
     # validate anyway for consistency and to reject non-existent parents.
     validate_goal_parent(db, goal_id=None, parent_id=data.parent_id)
 
+    # FK targets must exist before linking — otherwise the commit dies with
+    # a raw IntegrityError (500) and, for note_id, a later save would
+    # silently overwrite an arbitrary note's body (#1319).
+    if data.note_id is not None:
+        _validate_note_exists(db, data.note_id)
+    if data.tag_id is not None:
+        _validate_tag_exists(db, data.tag_id)
+
     note_id = data.note_id
     if note_id is None:
         from services.note_service import create_note as create_note_service
@@ -300,6 +423,13 @@ def update_goal(goal_id: int, data: GoalUpdate, db: Session = Depends(get_db)):
 
     if "parent_id" in update_data:
         validate_goal_parent(db, goal_id=goal.id, parent_id=update_data["parent_id"])
+
+    # Linked FKs must exist before the setattr loop — a bogus note_id would
+    # otherwise 500 on commit and open the linked-note overwrite path (#1319).
+    if "note_id" in update_data:
+        _validate_note_exists(db, update_data["note_id"])
+    if "tag_id" in update_data:
+        _validate_tag_exists(db, update_data["tag_id"])
 
     for field, value in update_data.items():
         setattr(goal, field, value)
@@ -485,12 +615,23 @@ def save_goal_content(goal_id: int, data: GoalContent, db: Session = Depends(get
     if not goal:
         raise HTTPException(status_code=404, detail="Goal not found")
 
+    # FK targets must exist before linking — a bogus note_id used to 500 on
+    # commit and let clients aim the linked-note overwrite below at any
+    # note they chose (#1319). ``None`` unlinks, which is allowed.
+    if data.note_id is not None:
+        _validate_note_exists(db, data.note_id)
+    if data.tag_id is not None:
+        _validate_tag_exists(db, data.tag_id)
+
     goal.title = data.title
     goal.description = data.content
     goal.temporality = data.temporality
     goal.measurement_type = data.measurement_type
     goal.target_value = data.target_value
-    goal.state = data.state
+    # #1319 — data.state is deliberately NOT applied: the editor echoes the
+    # current state back in every save, and mass-assigning it let clients
+    # fabricate COMPLETED goals bypassing /complete (XP, completed_at,
+    # snowball). Transitions: PUT /goals/{id} or /complete|/fail.
     goal.fail_config = data.fail_config
     goal.fail_emoji = data.fail_emoji
     goal.color = data.color

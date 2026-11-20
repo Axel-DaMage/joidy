@@ -17,6 +17,7 @@ from watchers.vault_watcher import (
     _extract_tags_from_content,
     _fingerprint,
     _is_joidy_file,
+    _is_safe_vault_file,
     _parse_frontmatter,
     delete_note_by_path,
     import_or_update_note,
@@ -67,6 +68,58 @@ class TestVaultParsing(unittest.TestCase):
     def test_fingerprint_stable_and_distinct(self):
         assert _fingerprint("abc") == _fingerprint("abc")
         assert _fingerprint("abc") != _fingerprint("abd")
+
+
+class TestVaultFileSafety(unittest.TestCase):
+    """Reject symlinks, vault escapes and non-regular files before any
+    read_text() call — a ``vault/leak.md -> /app/.env`` link would otherwise
+    exfiltrate secrets into a note readable via the API (#1293)."""
+
+    def test_regular_file_inside_vault_accepted(self):
+        with tempfile.TemporaryDirectory() as vault:
+            md = Path(vault) / "note.md"
+            md.write_text("content", encoding="utf-8")
+            with patch.object(vault_watcher.settings, "vault_path", vault):
+                assert _is_safe_vault_file(md)
+
+    def test_symlink_rejected(self):
+        with tempfile.TemporaryDirectory() as vault, tempfile.TemporaryDirectory() as outside:
+            secret = Path(outside) / ".env"
+            secret.write_text("SECRET_KEY=x", encoding="utf-8")
+            link = Path(vault) / "leak.md"
+            link.symlink_to(secret)
+            with patch.object(vault_watcher.settings, "vault_path", vault):
+                assert not _is_safe_vault_file(link)
+
+    def test_symlink_inside_vault_also_rejected(self):
+        """Symlinks are skipped unconditionally — even one pointing at a
+        legit vault file is not a regular vault file itself."""
+        with tempfile.TemporaryDirectory() as vault:
+            real = Path(vault) / "real.md"
+            real.write_text("real", encoding="utf-8")
+            link = Path(vault) / "alias.md"
+            link.symlink_to(real)
+            with patch.object(vault_watcher.settings, "vault_path", vault):
+                assert not _is_safe_vault_file(link)
+
+    def test_symlinked_parent_escape_rejected(self):
+        """A file reached through a symlinked directory inside the vault
+        resolves outside the vault root and must be skipped, even though the
+        path itself is not a symlink."""
+        with tempfile.TemporaryDirectory() as vault, tempfile.TemporaryDirectory() as outside:
+            secret = Path(outside) / "escaped.md"
+            secret.write_text("SECRET", encoding="utf-8")
+            (Path(vault) / "linkdir").symlink_to(outside, target_is_directory=True)
+            with patch.object(vault_watcher.settings, "vault_path", vault):
+                assert not _is_safe_vault_file(Path(vault) / "linkdir" / "escaped.md")
+
+    def test_non_regular_file_rejected(self):
+        """FIFOs, sockets and devices must never be read as notes (#1293)."""
+        with tempfile.TemporaryDirectory() as vault:
+            fifo = Path(vault) / "pipe.md"
+            os.mkfifo(fifo)
+            with patch.object(vault_watcher.settings, "vault_path", vault):
+                assert not _is_safe_vault_file(fifo)
 
 
 class TestPersistentEventLog(unittest.TestCase):
@@ -126,7 +179,8 @@ class TestVaultSync(unittest.IsolatedAsyncioTestCase):
             ]
             client = self._client(responses)
 
-            await import_or_update_note(md, client, "token")
+            with patch.object(vault_watcher.settings, "vault_path", tmp):
+                await import_or_update_note(md, client, "token")
 
             assert client.post.call_count == 1
             payload = client.post.call_args.kwargs["json"]
@@ -145,10 +199,52 @@ class TestVaultSync(unittest.IsolatedAsyncioTestCase):
             ]
             client = self._client(responses)
 
-            await import_or_update_note(md, client, "token")
+            with patch.object(vault_watcher.settings, "vault_path", tmp):
+                await import_or_update_note(md, client, "token")
 
             assert client.put.call_count == 1
             assert client.put.call_args.args[0].endswith("/notes/7")
+
+    @patch("watchers.vault_watcher.get_auth_token", new=AsyncMock(return_value="token"))
+    async def test_import_or_update_note_skips_symlink(self):
+        """``vault/leak.md -> /app/.env`` must never reach the API (#1293)."""
+        with tempfile.TemporaryDirectory() as vault, tempfile.TemporaryDirectory() as outside:
+            secret = Path(outside) / ".env"
+            secret.write_text("SECRET_KEY=abc\nGEMINI_API_KEY=x", encoding="utf-8")
+            link = Path(vault) / "leak.md"
+            link.symlink_to(secret)
+
+            client = self._client([])
+            with patch.object(vault_watcher.settings, "vault_path", vault):
+                await import_or_update_note(link, client, "token")
+
+            assert client.get.call_count == 0
+            assert client.post.call_count == 0
+            assert client.put.call_count == 0
+
+    @patch("watchers.vault_watcher.get_auth_token", new=AsyncMock(return_value="token"))
+    async def test_initial_scan_skips_symlink(self):
+        """initial_scan filters symlinks before importing (#1293)."""
+        with tempfile.TemporaryDirectory() as vault, tempfile.TemporaryDirectory() as outside:
+            real = Path(vault) / "real.md"
+            real.write_text("real content", encoding="utf-8")
+            secret = Path(outside) / "secret.md"
+            secret.write_text("SECRET", encoding="utf-8")
+            link = Path(vault) / "leak.md"
+            link.symlink_to(secret)
+
+            responses = [
+                FakeResponse(200, []),  # no existing note for real.md
+                FakeResponse(201),  # create real.md
+                FakeResponse(200),  # rebuild-derived
+            ]
+            client = self._client(responses)
+            with patch.object(vault_watcher.settings, "vault_path", vault):
+                await vault_watcher.initial_scan(Path(vault), client, "token")
+
+            posted = [c.kwargs["json"]["source_path"] for c in client.post.call_args_list if "json" in c.kwargs]
+            assert str(real) in posted
+            assert str(link) not in posted
 
     @patch("watchers.vault_watcher.get_auth_token", new=AsyncMock(return_value="token"))
     async def test_delete_note_by_path(self):

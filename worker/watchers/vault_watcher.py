@@ -27,7 +27,6 @@ logger = logging.getLogger(__name__)
 JOIDY_DIR = "_joidy"
 DEBOUNCE_SECONDS = 2.0
 QUEUE_FLUSH_INTERVAL = 0.5
-MAX_AUTH_RETRIES = 5
 SHUTDOWN_TIMEOUT = 15.0  # seconds to let in-flight writes finish on shutdown
 
 
@@ -36,9 +35,6 @@ class VaultEvent:
     path: str
     change_type: Change
 
-
-_auth_token: str = ""
-_auth_lock = asyncio.Lock()
 
 # Per-file locks so rapid successive edits to the same file cannot start
 # concurrent imports for that file (#364).
@@ -141,53 +137,13 @@ class PersistentEventLog:
 
 
 async def get_auth_token(client: httpx.AsyncClient, *, force: bool = False) -> str:
-    """Get or refresh the API auth token with retries.
+    """Return the INTERNAL_API_TOKEN service credential (#1275).
 
-    Caches the token locally. Use `force=True` to bypass the cache and fetch a
-    new token, e.g. after a 401 response.
+    The worker authenticates to the API with a dedicated service token
+    instead of logging in with AUTH_PASSWORD. ``client`` and ``force`` are
+    kept so callers and 401-retry paths stay unchanged.
     """
-    global _auth_token
-
-    if not settings.auth_password:
-        return ""
-
-    async with _auth_lock:
-        if not force and _auth_token:
-            return _auth_token
-
-        for attempt in range(MAX_AUTH_RETRIES):
-            try:
-                cid = get_correlation_id()
-                r = await client.post(
-                    f"{settings.api_url}/auth/login",
-                    json={"password": settings.auth_password},
-                    headers={"X-Request-ID": cid},
-                    timeout=10.0,
-                )
-                if r.status_code == 200:
-                    _auth_token = r.json().get("access_token", "")
-                    if _auth_token:
-                        logger.info("[vault] Auth token refreshed")
-                        return _auth_token
-                    logger.warning("[vault] Auth response missing access_token")
-                else:
-                    logger.warning("[vault] Auth login returned %s", r.status_code)
-            except Exception as e:
-                # Exception type only — str(e) can embed request URLs (#1299).
-                logger.error(
-                    "[vault] Failed to get auth token (attempt %d/%d): %s",
-                    attempt + 1,
-                    MAX_AUTH_RETRIES,
-                    type(e).__name__,
-                )
-
-            if attempt < MAX_AUTH_RETRIES - 1:
-                wait = min(2**attempt, 30.0)
-                logger.info("[vault] Retrying auth in %.1fs", wait)
-                await asyncio.sleep(wait)
-
-        _auth_token = ""
-        return ""
+    return settings.internal_api_token or ""
 
 
 def _is_joidy_file(path: str) -> bool:
@@ -219,6 +175,8 @@ def _read_vault_file(path: Path) -> str | None:
     Files over ``settings.max_note_file_size`` are refused with a single
     warning; ``None`` (oversized or unreadable) tells callers to skip it.
     """
+    if not _is_safe_vault_file(path):
+        return None
     try:
         size = path.stat().st_size
     except OSError:
@@ -270,6 +228,45 @@ def _is_valid_vault_path(path: str, change_type: Change, vault_root: Path) -> bo
         return not candidate.is_symlink() and candidate.is_file()
     except OSError:
         return False
+
+
+def _vault_root() -> Path:
+    """Resolved vault root used to confine file reads inside the vault."""
+    return Path(settings.vault_path).resolve()
+
+
+def _is_safe_vault_file(path: Path) -> bool:
+    """Return True only for regular files contained inside the vault (#1293).
+
+    Rejects:
+    - symlinks — a ``vault/leak.md -> /app/.env`` link would exfiltrate
+      secrets (SECRET_KEY, POSTGRES_PASSWORD, GEMINI_API_KEY) into a note
+      readable via the API;
+    - paths whose resolved location escapes the vault root (e.g. a file
+      reached through a symlinked parent directory);
+    - non-regular files (FIFOs, sockets, devices).
+    """
+    try:
+        # is_symlink() uses lstat and must run BEFORE is_file(), which
+        # follows links and would pass a symlink to a real file as "regular".
+        if path.is_symlink():
+            logger.warning("[vault] Skipping symlink: %s", _log_name(path))
+            return False
+        if not path.is_file():
+            logger.warning("[vault] Skipping non-regular file: %s", _log_name(path))
+            return False
+        resolved = path.resolve()
+        if not resolved.is_relative_to(_vault_root()):
+            logger.warning(
+                "[vault] Skipping path outside vault: %s -> %s",
+                _log_name(path),
+                _log_name(resolved),
+            )
+            return False
+    except Exception as exc:
+        logger.warning("[vault] Skipping inaccessible path %s: %s", _log_name(path), exc)
+        return False
+    return True
 
 
 def _parse_frontmatter(content: str) -> tuple[dict, str]:
@@ -731,8 +728,8 @@ async def watch_vault():
         consumer = None
         try:
             token = await get_auth_token(client)
-            if settings.auth_password and not token:
-                logger.error("[vault] Could not get auth token; aborting vault sync")
+            if not token and settings.app_env == "production":
+                logger.error("[vault] INTERNAL_API_TOKEN is not configured; aborting vault sync")
                 return
             await initial_scan(vault_path, client, token)
 

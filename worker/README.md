@@ -1,8 +1,8 @@
 # Worker Service
 
 Python asyncio background worker for Joidy. Handles Obsidian vault syncing and
-scheduled daily writes. Runs on **port 8001** (healthcheck only — there is no
-HTTP server).
+scheduled daily writes. Serves `/metrics` and `/health` on **port 8001** —
+internal compose network only, no host port is published (#1277).
 
 ## Tech Stack
 
@@ -40,7 +40,9 @@ for the full list — do not duplicate here):
 - `OBSIDIAN_VAULT_PATH` — host path to the Obsidian vault (supports `~`, expanded by `joidy up`)
   (mounted read-only at `/vault` inside the container)
 - `DATABASE_URL` — shared PostgreSQL connection
-- `WORKER_PORT` — override the default 8001 (healthcheck only)
+- `WORKER_BIND_ADDR` — bind address for the `/metrics` + `/health` HTTP server
+  (default `127.0.0.1`; docker-compose sets `0.0.0.0` so compose-network peers
+  like Prometheus can reach it — the port is not published to the host)
 
 ## Testing
 
@@ -57,8 +59,10 @@ The worker runs two concurrent asyncio tasks from `main.py`:
 - **`schedule_daily_writes()`** — at midnight, writes daily summary files into
   the vault's `_joidy/` directory.
 
-There is **no HTTP server** — the `:8001` port is used only by the Docker
-healthcheck, which verifies the worker process is alive via a PID check.
+The `:8001` HTTP server (`metrics_server.py`) exposes only `/metrics` and
+`/health` for the Docker healthcheck and Prometheus scraping. It is reachable
+on the internal compose network — Docker Compose does not publish it to the
+host (#1277).
 
 ## Project Structure
 

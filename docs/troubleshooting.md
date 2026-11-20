@@ -48,13 +48,12 @@ Error response from daemon: port is already allocated
 
 **Solución:**
 
-Editar `.env` y cambiar los puertos:
+Editar `.env` y cambiar los puertos publicados (ai-service y worker no
+publican puerto al host desde #1277 — son internos a la red de Compose):
 
 ```env
 FRONTEND_PORT=3001
 API_PORT=8001
-AI_SERVICE_PORT=8003
-WORKER_PORT=8002
 ```
 
 Luego reiniciar:
@@ -689,6 +688,9 @@ docker compose restart frontend
 
 ### 9.4 Verificar Puertos
 
+Solo frontend (3000) y api (8000) publican puerto al host — y solo en
+loopback salvo que `BIND_ADDR` se configure (#1277):
+
 ```bash
-lsof -i :3000 -i :8000 -i :8001 -i :8002
+lsof -i :3000 -i :8000
 ```

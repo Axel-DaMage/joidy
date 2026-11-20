@@ -26,5 +26,38 @@ RestartSec=30
 StandardOutput=journal
 StandardError=journal
 
+# ── Baseline sandboxing (#1327) ───────────────────────────────────────
+# This is a `systemd --user` unit: the namespace options below implicitly
+# enable PrivateUsers= and need unprivileged user namespaces
+# (kernel.unprivileged_userns_clone=1 — the default on most distros).
+NoNewPrivileges=yes
+PrivateTmp=yes
+# Mount the whole filesystem read-only except the paths allow-listed in
+# ReadWritePaths= (the "-" prefix silently skips paths that don't exist
+# instead of failing namespace setup). The watcher writes: the checkout
+# dir (.env + data/idle state, e.g. the ~/joidy fallback below),
+# ~/.config/joidy (env file on read-only installs), the XDG data dir
+# (data/idle + backups/), docker/podman client state and rootless podman
+# storage. If your checkout or JOIDY_DATA_DIR lives outside the listed
+# paths, add it here.
+ProtectSystem=strict
+ReadWritePaths=-%h/joidy -%h/.config/joidy -%h/.local/share/joidy -%h/.docker
+ReadWritePaths=-%h/.config/containers -%h/.local/share/containers -%h/.cache/containers
+ReadWritePaths=-%t/containers -%t/podman
+# Home and /run/user stay READABLE — ~/.config/joidy/path, the .env file
+# and the Obsidian vault (OBSIDIAN_VAULT_PATH, polled via `find -newer`)
+# are read from there — but writable only via the allow-list above.
+ProtectHome=read-only
+RestrictSUIDSGID=yes
+LockPersonality=yes
+ProtectKernelModules=yes
+# AF_UNIX: engine socket + journal. AF_INET/AF_INET6: nothing outbound,
+# but the engine API and health probes use TCP. AF_NETLINK: the watcher
+# polls established connections with `ss` (iproute2) — without it the
+# activity check goes blind and the stack would sleep while in use.
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+# Only bash and the docker/podman clients run — no JIT needs W+X pages.
+MemoryDenyWriteExecute=yes
+
 [Install]
 WantedBy=default.target
