@@ -215,3 +215,139 @@ def test_ai_daily_recap_service_unavailable(mock_client_cls, client: TestClient)
     data = resp.json()
     assert data["status"] == "unavailable"
     assert "recap" in data
+
+
+# --- POST /ai/plan-suggest ---------------------------------------------------
+
+
+@patch("routers.ai.http_client")
+def test_plan_suggest_forwards_db_built_payload(mock_client_cls, client: TestClient, db_session):
+    """The proxy gathers open tasks + cached Google events, then forwards (#1237)."""
+    from datetime import UTC, datetime, time
+
+    from models.calendar_task import CalendarTask, CalendarTaskPriority
+    from models.google_calendar_event import GoogleCalendarEvent
+
+    db_session.add(CalendarTask(title="Unscheduled task", date=None, priority=CalendarTaskPriority.HIGH))
+    db_session.add(CalendarTask(title="Done task", date=None, done=True))
+    db_session.add(
+        CalendarTask(
+            title="Timed task",
+            date=datetime(2026, 3, 10).date(),
+            start_time=time(9, 0),
+            end_time=time(10, 30),
+            priority=CalendarTaskPriority.URGENT,
+        )
+    )
+    db_session.add(
+        GoogleCalendarEvent(
+            user_id=1,
+            calendar_id="primary",
+            google_id="ev-busy",
+            summary="Meeting",
+            status="confirmed",
+            all_day=False,
+            start_at=datetime(2026, 3, 10, 14, 0, tzinfo=UTC),
+            end_at=datetime(2026, 3, 10, 15, 0, tzinfo=UTC),
+        )
+    )
+    db_session.commit()
+
+    mock_cls, mock_instance = _mock_httpx(
+        {"suggestions": [{"task_id": 1, "date": "2026-03-10", "start_time": "16:00"}], "available": True}
+    )
+    mock_client_cls.side_effect = mock_cls
+
+    resp = client.post(
+        "/ai/plan-suggest",
+        json={"week_start": "2026-03-09", "week_end": "2026-03-15", "timezone": "UTC"},
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["available"] is True
+    assert len(data["suggestions"]) == 1
+
+    mock_instance.post.assert_awaited_once()
+    payload = mock_instance.post.await_args.kwargs["json"]
+    assert payload["week_start"] == "2026-03-09"
+    assert payload["week_end"] == "2026-03-15"
+    # Done task excluded; unscheduled task included; URGENT timed task first.
+    titles = [t["title"] for t in payload["tasks"]]
+    assert titles == ["Timed task", "Unscheduled task"]
+    timed = payload["tasks"][0]
+    assert timed["duration_minutes"] == 90
+    # Busy block from the cached Google event.
+    assert payload["busy_blocks"] == [{"start": "2026-03-10T14:00:00+00:00", "end": "2026-03-10T15:00:00+00:00"}]
+
+
+@patch("routers.ai.http_client")
+def test_plan_suggest_all_day_event_blocks_local_day(mock_client_cls, client: TestClient, db_session):
+    """All-day cache rows are sent as local-day busy blocks (#1237)."""
+    from datetime import UTC, datetime
+
+    from models.google_calendar_event import GoogleCalendarEvent
+
+    db_session.add(
+        GoogleCalendarEvent(
+            user_id=1,
+            calendar_id="primary",
+            google_id="ev-allday",
+            summary="Conference",
+            status="confirmed",
+            all_day=True,
+            start_at=datetime(2026, 3, 11, 0, 0, tzinfo=UTC),
+            end_at=datetime(2026, 3, 12, 0, 0, tzinfo=UTC),
+        )
+    )
+    db_session.commit()
+
+    mock_cls, mock_instance = _mock_httpx({"suggestions": [], "available": True})
+    mock_client_cls.side_effect = mock_cls
+
+    resp = client.post(
+        "/ai/plan-suggest",
+        json={"week_start": "2026-03-09", "week_end": "2026-03-15", "timezone": "UTC"},
+    )
+
+    assert resp.status_code == 200
+    payload = mock_instance.post.await_args.kwargs["json"]
+    assert {"start": "2026-03-11T00:00:00", "end": "2026-03-12T00:00:00"} in payload["busy_blocks"]
+
+
+@patch("routers.ai.http_client")
+def test_plan_suggest_unreachable_returns_graceful_fallback(mock_client_cls, client: TestClient):
+    """When the AI service is down the endpoint degrades, never 5xx (#1237)."""
+    import httpx
+
+    mock_instance = MagicMock()
+    mock_instance.post = AsyncMock(side_effect=httpx.HTTPError("down"))
+    mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+    mock_instance.__aexit__ = AsyncMock(return_value=None)
+    mock_client_cls.return_value = mock_instance
+
+    resp = client.post(
+        "/ai/plan-suggest",
+        json={"week_start": "2026-03-09", "week_end": "2026-03-15", "timezone": "UTC"},
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["available"] is False
+    assert data["reason"] == "unavailable"
+    assert data["suggestions"] == []
+
+
+def test_plan_suggest_invalid_dates(client: TestClient):
+    resp = client.post("/ai/plan-suggest", json={"week_start": "bad", "week_end": "2026-03-15"})
+    assert resp.status_code == 400
+    resp = client.post("/ai/plan-suggest", json={"week_start": "2026-03-15", "week_end": "2026-03-09"})
+    assert resp.status_code == 400
+
+
+def test_plan_suggest_range_too_large(client: TestClient):
+    resp = client.post(
+        "/ai/plan-suggest",
+        json={"week_start": "2026-01-01", "week_end": "2026-12-31"},
+    )
+    assert resp.status_code == 400

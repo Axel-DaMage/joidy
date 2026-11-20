@@ -9,6 +9,7 @@ from cost_tracker import get_monthly_stats, record_usage
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from logging_config import get_correlation_id, set_correlation_id, setup_logging
+from plan_suggest import build_plan_prompt, parse_plan_response
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
 from pydantic import BaseModel, Field
 from rate_limiter import get_limiter
@@ -25,6 +26,10 @@ ai_classify_requests = Counter("ai_classify_requests_total", "Classification req
 ai_classify_errors = Counter("ai_classify_errors_total", "Classification errors", ["provider"])
 ai_rag_requests = Counter("ai_rag_requests_total", "RAG requests", ["provider"])
 ai_rag_errors = Counter("ai_rag_errors_total", "RAG errors", ["provider"])
+ai_plan_requests = Counter("ai_plan_requests_total", "Plan-suggest requests", ["provider"])
+ai_plan_errors = Counter("ai_plan_errors_total", "Plan-suggest errors", ["provider"])
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -40,6 +45,22 @@ async def lifespan(app: FastAPI):
     available = settings.available_providers
     llm_provider = settings.llm_provider
     emb_provider = settings.embedding_provider
+
+    # Internal auth posture (#1277): without INTERNAL_SECRET the service must
+    # never sit unauthenticated on a network. In production the middleware
+    # fails closed (refuses every non-/health request); other environments
+    # stay permissive for local development.
+    if not settings.internal_secret:
+        if settings.app_env == "production":
+            logger.error(
+                "[ai-service] INTERNAL_SECRET is not set — refusing all "
+                "non-/health requests (fail-closed). Generate one with "
+                "`openssl rand -hex 32` and set INTERNAL_SECRET in .env."
+            )
+        else:
+            logger.warning(
+                "[ai-service] INTERNAL_SECRET is not set — internal auth disabled (permissive non-production mode)"
+            )
 
     if not available:
         logger.info("[ai-service] No AI providers configured — AI features disabled")
@@ -126,20 +147,33 @@ app.add_middleware(
 class InternalAuthMiddleware(BaseHTTPMiddleware):
     """Validate internal secret for non-health endpoints.
 
-    If INTERNAL_SECRET is configured, all endpoints except /health
-    require an X-Internal-Secret header matching the configured value.
+    All endpoints except /health and /metrics require an X-Internal-Secret
+    header matching INTERNAL_SECRET (#1277):
+    - secret configured   → header must match, otherwise 403.
+    - secret unset + APP_ENV=production → fail closed (503) so a missing
+      secret can never leave the service unauthenticated on a network.
+    - secret unset + non-production     → permissive (dev convenience);
+      a warning is logged at startup.
     """
 
     async def dispatch(self, request: Request, call_next):
         # /health and /metrics are always public so Prometheus can scrape
         # without needing the internal secret (#406).
-        if settings.internal_secret and request.url.path not in ("/health", "/metrics"):
-            provided = request.headers.get("X-Internal-Secret", "")
-            if provided != settings.internal_secret:
+        if request.url.path in ("/health", "/metrics"):
+            return await call_next(request)
+        if not settings.internal_secret:
+            if settings.app_env == "production":
                 return JSONResponse(
-                    status_code=403,
-                    content={"detail": "Forbidden: invalid internal secret"},
+                    status_code=503,
+                    content={"detail": "Service misconfigured: INTERNAL_SECRET is not set"},
                 )
+            return await call_next(request)
+        provided = request.headers.get("X-Internal-Secret", "")
+        if provided != settings.internal_secret:
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "Forbidden: invalid internal secret"},
+            )
         return await call_next(request)
 
 
@@ -505,6 +539,71 @@ Responde en formato JSON: {{"recap": "...", "suggestions": ["...", "..."]}}"""
     except Exception:
         ai_classify_errors.labels(provider=settings.llm_model or "unknown").inc()
         raise HTTPException(status_code=500, detail="Daily recap failed")
+
+
+class PlanTaskIn(BaseModel):
+    id: int
+    title: str = Field(max_length=500)
+    priority: str = Field(default="MEDIUM", max_length=20)
+    duration_minutes: int | None = Field(default=None, ge=1, le=24 * 60)
+
+
+class BusyBlockIn(BaseModel):
+    start: str = Field(max_length=64)
+    end: str | None = Field(default=None, max_length=64)
+
+
+class PlanSuggestRequest(BaseModel):
+    tasks: list[PlanTaskIn] = Field(default_factory=list, max_length=200)
+    busy_blocks: list[BusyBlockIn] = Field(default_factory=list, max_length=500)
+    week_start: str = Field(max_length=10)
+    week_end: str = Field(max_length=10)
+    timezone: str = Field(default="UTC", max_length=64)
+    context_hint: str | None = Field(default=None, max_length=1000)
+
+
+@app.post("/plan-suggest")
+async def plan_suggest(req: PlanSuggestRequest):
+    """Propose time slots for open tasks around busy calendar blocks (#1237).
+
+    Always returns 200: when no LLM provider is configured or the provider
+    fails, the response carries ``available: false`` with a ``reason`` so the
+    frontend can degrade gracefully instead of erroring out.
+    """
+    if not settings.is_llm_configured:
+        return {"suggestions": [], "available": False, "reason": "no_provider"}
+
+    await get_limiter(settings.max_requests_per_minute).acquire()
+
+    try:
+        client = get_llm_client()
+    except Exception:
+        return {"suggestions": [], "available": False, "reason": "no_provider"}
+
+    tasks = [t.model_dump() for t in req.tasks]
+    busy = [b.model_dump() for b in req.busy_blocks]
+    if not tasks:
+        return {"suggestions": [], "available": True, "provider": client.provider_name}
+
+    prompt = build_plan_prompt(tasks, busy, req.week_start, req.week_end, req.timezone, req.context_hint)
+    ai_plan_requests.labels(provider=client.provider_name).inc()
+    try:
+        response = await llm_circuit_breaker.call(
+            client.generate,
+            prompt=prompt,
+            temperature=0.3,
+            max_tokens=1024,
+        )
+    except CircuitBreakerError:
+        return {"suggestions": [], "available": False, "reason": "circuit_open"}
+    except Exception:
+        ai_plan_errors.labels(provider=client.provider_name).inc()
+        logger.warning("plan-suggest provider call failed", exc_info=True)
+        return {"suggestions": [], "available": False, "reason": "provider_error"}
+
+    record_usage("plan-suggest", input_tokens=_estimate_tokens(prompt))
+    suggestions = parse_plan_response(response, tasks, busy, req.week_start, req.week_end, req.timezone)
+    return {"suggestions": suggestions, "available": True, "provider": client.provider_name}
 
 
 @app.post("/cluster")

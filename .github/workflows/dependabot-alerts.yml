@@ -1,0 +1,71 @@
+name: Dependabot Alerts Gate
+
+# Scheduled follow-up to the npm audit gate (#1263): CI only sees the
+# dependency tree when a commit lands — newly disclosed advisories against
+# already-merged pins can sit open between pushes. This job polls the
+# Dependabot Alerts API daily and fails when an open HIGH/CRITICAL alert
+# is older than GRACE_DAYS, so stale findings surface on their own instead
+# of accumulating silently (the failure mode that produced #1263).
+#
+# Scheduled workflows only ever run on the default branch. workflow_dispatch
+# keeps it manually triggerable for verification.
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+jobs:
+  open-alerts:
+    name: Open HIGH/CRITICAL dependabot alerts
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: read # required for GET /repos/{owner}/{repo}/dependabot/alerts
+    steps:
+      - name: Check open dependabot alerts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # One full dependabot cycle (weekly) to ship a fix PR before a
+          # fresh disclosure is allowed to red the gate.
+          GRACE_DAYS: '7'
+        run: |
+          set -euo pipefail
+
+          gh api 'repos/${{ github.repository }}/dependabot/alerts?state=open&per_page=100' \
+            > /tmp/open-alerts.json
+
+          echo "== Open dependabot alerts (all severities) =="
+          jq -r '.[] |
+            [.security_advisory.severity, .dependency.package.name,
+             .security_advisory.ghsa_id, .created_at] | @tsv' \
+            /tmp/open-alerts.json || true
+
+          cutoff=$(date -u -d "-${GRACE_DAYS} days" +%Y-%m-%dT%H:%M:%SZ)
+
+          stale=$(jq --arg cutoff "$cutoff" -r '
+            [.[] | select(
+                 (.security_advisory.severity == "high" or
+                  .security_advisory.severity == "critical") and
+                 .created_at < $cutoff)
+             | [.security_advisory.severity, .dependency.package.name,
+                .security_advisory.ghsa_id, .created_at] | @tsv]
+            | .[]' /tmp/open-alerts.json)
+
+          within_grace=$(jq --arg cutoff "$cutoff" '
+            [.[] | select(
+                 (.security_advisory.severity == "high" or
+                  .security_advisory.severity == "critical") and
+                 .created_at >= $cutoff)]
+            | length' /tmp/open-alerts.json)
+
+          if [ -n "$stale" ]; then
+            echo "::error title=Stale security alerts::Open HIGH/CRITICAL dependabot alerts older than ${GRACE_DAYS} days — bump the dependency or dismiss with a documented reason:"
+            echo "$stale"
+            exit 1
+          fi
+
+          if [ "$within_grace" -gt 0 ]; then
+            echo "::warning title=Fresh security alerts::${within_grace} open HIGH/CRITICAL alert(s) inside the ${GRACE_DAYS}d grace window — triage before they go stale."
+          fi
+
+          echo "Dependabot alerts gate passed."

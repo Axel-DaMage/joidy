@@ -12,6 +12,7 @@ The aiodocker client is faked entirely; no Docker socket is required.
 """
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from routers import system
 
@@ -277,3 +278,42 @@ def test_shutdown_stops_in_order_keeps_api_and_postgres(client: TestClient, fake
     handles = docker.containers._by_name
     assert not handles["joidy-api-1"].stopped
     assert not handles["joidy-postgres-1"].stopped
+
+
+# --- Disabled-mode stub (#1278) --------------------------------------------------
+#
+# main.py registers `system.disabled_router` instead of `system.router` when
+# POWER_MANAGEMENT_ENABLED=false. The shared test `app` is built with the flag
+# on (conftest), so the stub is exercised here on a throwaway FastAPI app.
+
+
+def test_power_management_disabled_by_default():
+    """The Settings default is off — production must opt in explicitly (#1278)."""
+    from config import Settings
+
+    assert Settings.model_fields["power_management_enabled"].default is False
+
+
+def test_disabled_stub_status_only():
+    """The disabled stub answers /status cleanly and exposes nothing else."""
+    stub_app = FastAPI()
+    stub_app.include_router(system.disabled_router)
+    stub = TestClient(stub_app)
+
+    response = stub.get("/system/power/status")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["docker_available"] is False
+    assert data["services"] == []
+    assert data["hibernating"] is False
+
+
+def test_disabled_stub_has_no_mutation_routes():
+    """sleep/wake/shutdown are absent entirely — no code path reaches the
+    engine socket when the feature is off (#1278)."""
+    stub_app = FastAPI()
+    stub_app.include_router(system.disabled_router)
+    stub = TestClient(stub_app)
+
+    for path in ("sleep", "wake", "shutdown"):
+        assert stub.post(f"/system/power/{path}").status_code == 404

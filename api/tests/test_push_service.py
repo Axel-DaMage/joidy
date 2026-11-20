@@ -4,6 +4,7 @@ Mocks the pywebpush.webpush HTTP call so no real network/FCM traffic occurs.
 Covers successful send and failure (WebPushException) handling.
 """
 
+import ipaddress
 import sys
 import types
 import unittest
@@ -33,8 +34,16 @@ class PushServiceTestBase(unittest.TestCase):
         self._orig_email = settings.vapid_claim_email
         settings.vapid_private_key = "test-vapid-key"
         settings.vapid_claim_email = "test@example.com"
+        # Endpoints are re-validated (incl. DNS) at send time (#1316); stub
+        # resolution to a public IP so no real DNS/network is needed.
+        self._dns_patcher = patch(
+            "services.url_security._resolve_ips",
+            return_value={ipaddress.ip_address("93.184.216.34")},
+        )
+        self._dns_patcher.start()
 
     def tearDown(self) -> None:
+        self._dns_patcher.stop()
         settings.vapid_private_key = self._orig_key
         settings.vapid_claim_email = self._orig_email
         self.engine.dispose()

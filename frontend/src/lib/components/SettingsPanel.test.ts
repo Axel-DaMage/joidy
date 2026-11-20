@@ -108,3 +108,52 @@ describe('SettingsPanel — reactividad de configuredKeys', () => {
     await waitFor(() => expect(getByTestId('ai-configured')).toBeTruthy());
   });
 });
+
+// #1304 — el listener global de Ctrl+S no comprobaba `open`: el panel vive
+// montado en +layout, así que Ctrl+S en cualquier página disparaba saveConfig()
+// y posteaba systemConfig con los secretos en '' (GET /config no los devuelve),
+// borrando GEMINI_API_KEY, OBSIDIAN_VAULT_PATH y la config de Telegram en .env.
+describe('SettingsPanel — guard de Ctrl+S (#1304)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    cleanup();
+    apiMock.config.update.mockResolvedValue({ status: 'ok' });
+  });
+
+  it('ignora Ctrl+S con el panel cerrado aunque esté montado', async () => {
+    render(SettingsPanel, { open: false, onClose: vi.fn() });
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true }));
+    // Give a hypothetical unguarded handler a tick to run.
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(apiMock.config.update).not.toHaveBeenCalled();
+    expect(apiMock.config.get).not.toHaveBeenCalled();
+  });
+
+  it('Ctrl+S sí guarda con el panel abierto y la config cargada', async () => {
+    apiMock.config.get.mockResolvedValue({
+      configured_keys: ['obsidian_vault_path'],
+      obsidian_vault_path: '/vault',
+      daily_notes_folder: 'daily',
+      llm_model: '',
+      embedding_model: '',
+      openai_base_url: '',
+    });
+
+    render(SettingsPanel, { open: true, onClose: vi.fn() });
+    await waitFor(() => expect(apiMock.config.get).toHaveBeenCalled());
+
+    // Re-dispatch until loadConfig() flips configLoaded — the guard requires
+    // both `open` and a finished initial load before honouring Ctrl+S.
+    await waitFor(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true }));
+      expect(apiMock.config.update).toHaveBeenCalled();
+    });
+    // Los secretos vacíos no se envían (GET /config nunca los devuelve).
+    const payload = apiMock.config.update.mock.calls[0][0];
+    expect(payload).not.toHaveProperty('gemini_api_key');
+    expect(payload).not.toHaveProperty('telegram_bot_token');
+    expect(payload).not.toHaveProperty('telegram_allowed_user_id');
+  });
+});

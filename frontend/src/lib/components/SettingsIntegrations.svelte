@@ -13,10 +13,10 @@
   let { systemConfig = $bindable(), isConfigured }: Props = $props();
 
   async function openGoogleContactsLink() {
-    window.open('https://contacts.google.com', '_blank');
+    window.open('https://contacts.google.com', '_blank', 'noopener,noreferrer');
   }
   async function openStravaLink() {
-    window.open('https://strava.com', '_blank');
+    window.open('https://strava.com', '_blank', 'noopener,noreferrer');
   }
 </script>
 
