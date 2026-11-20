@@ -34,12 +34,18 @@ def record_activity(name: str) -> None:
 
 
 def mark_crashed(name: str, exc: BaseException) -> None:
-    """Record that a task crashed with ``exc`` (surfaced via /health)."""
+    """Record that a task crashed with ``exc`` (surfaced via /health).
+
+    Only the exception *type name* is stored — a fixed, code-controlled
+    identifier. ``str(exc)``/``repr(exc)`` must never reach the unauthenticated
+    /health endpoint: httpx and SQLite messages embed internal URLs,
+    ``source_path`` params, and container paths (#1299).
+    """
     with _lock:
         entry = _tasks.setdefault(name, _entry("crashed"))
         entry["state"] = "crashed"
         entry["last_activity"] = time.time()
-        entry["error"] = repr(exc)
+        entry["error"] = type(exc).__name__
 
 
 def mark_stopped(name: str) -> None:
