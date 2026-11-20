@@ -56,7 +56,9 @@ SECRET_KEY            # openssl rand -hex 32
 ```
 
 Optional: `GITHUB_CLIENT_ID/SECRET/TOKEN/USERNAME`, `TELEGRAM_BOT_TOKEN`,
-`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `COHERE_API_KEY`, `OLLAMA_BASE_URL`.
+`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `COHERE_API_KEY`, `OLLAMA_BASE_URL`,
+`TRUSTED_PROXIES` (comma-separated proxy IPs/CIDRs whose `X-Forwarded-For` is
+honored for rate limiting; empty = only the direct peer IP is trusted).
 
 Port overrides: `FRONTEND_PORT`, `API_PORT`. Published ports bind to
 `BIND_ADDR` (default `127.0.0.1`; set `0.0.0.0` for LAN access). Since #1277

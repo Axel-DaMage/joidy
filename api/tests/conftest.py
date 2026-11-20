@@ -293,6 +293,8 @@ def _clear_app_caches() -> None:
 def _disable_rate_limits():
     _default_limiter.requests_per_minute = 10_000
     _default_limiter.auth_requests_per_minute = 10_000
+    _default_limiter.strict_requests_per_minute = 10_000
+    _default_limiter.login_max_failures = 10_000
 
 
 @pytest.fixture(autouse=True)

@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     cors_allowed_origins: str = (
         ""  # Comma-separated origins for production (e.g. "https://joidy.app,https://www.joidy.app")
     )
+    # Comma-separated IPs/CIDRs of trusted reverse proxies. X-Forwarded-For is
+    # only honored (for rate-limit bucketing) when the direct peer matches one
+    # of these (#1276). Empty = always use the direct peer IP.
+    trusted_proxies: str = ""
     # Power management (Settings → Servicios) — opt-in (#1278). When false the
     # /system/power mutation routes are not registered at all and
     # /system/power/status reports docker_available=false. The engine socket
