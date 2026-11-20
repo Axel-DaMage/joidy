@@ -24,7 +24,7 @@ def _create_vault_note(client, path: str) -> dict:
         json={"title": "t", "content": "body", "source": "obsidian", "source_path": path},
     )
     assert resp.status_code == 201
-    return resp.json()
+    return dict(resp.json())
 
 
 def test_delete_by_path_removes_matching_note(client, db_session, vault):
