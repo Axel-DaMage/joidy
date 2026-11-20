@@ -517,14 +517,16 @@ jobs:
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 
-      # Blocking at CRITICAL since #994 (verified clean on development:
-      # 0 high / 0 critical as of 2026-10-31). The tree still carries 12
-      # moderate + 5 low advisories — those remain advisory on purpose and
-      # only clear with major dependency bumps; CRITICAL/HIGH disclosures
-      # now fail the job until remediated.
+      # Blocking at HIGH since #1263 (was CRITICAL-only since #994 — that
+      # threshold let 9 open HIGH advisories accumulate behind a green
+      # pipeline). Tree verified clean at every severity as of 2026-11-20
+      # after the minimatch chain bump (eslint 10.15 + typescript-eslint
+      # 8.73 pull minimatch 11). MODERATE/LOW disclosures stay advisory;
+      # HIGH/CRITICAL fail the job until remediated — that is the gate
+      # working, not a flake.
       - name: npm audit — Frontend dependencies
         working-directory: frontend
-        run: npm audit --audit-level=critical
+        run: npm audit --audit-level=high
 
       # Pinned to a tagged release since #994 (was @master — supply-chain
       # risk). ignore-unfixed: skip vulnerabilities with no fixed version
