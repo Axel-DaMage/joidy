@@ -65,9 +65,7 @@ class EngineDedupTest(unittest.TestCase):
     def test_distinct_dedup_keys_all_award(self) -> None:
         self._seed_daily_activity()
         for _ in range(3):
-            result = ge.process_event(
-                self.db, "pomodoro_completed", dedup_key=f"pomodoro:{uuid4().hex}"
-            )
+            result = ge.process_event(self.db, "pomodoro_completed", dedup_key=f"pomodoro:{uuid4().hex}")
             self.assertEqual(result.xp_awarded, 15)
         events = self.db.query(XPEvent).filter(XPEvent.event_type == "pomodoro_completed").all()
         self.assertEqual(len(events), 3)
