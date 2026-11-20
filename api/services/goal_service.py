@@ -31,7 +31,7 @@ def validate_goal_parent(db: Session, goal_id: int | None, parent_id: int | None
     visited: set[int] = set()
     if goal_id is not None:
         visited.add(goal_id)
-    current = parent_id
+    current: int | None = parent_id
     while current is not None:
         if current in visited:
             raise HTTPException(status_code=400, detail="Ciclo detectado en jerarquía de goals")
@@ -351,7 +351,8 @@ def get_goal_streak(db: Session) -> dict:
     # Build set of dates with completions
     completion_dates: set = set()
     for g in completed_daily:
-        completion_dates.add(g.completed_at.date())
+        if g.completed_at is not None:
+            completion_dates.add(g.completed_at.date())
 
     if not completion_dates:
         return {"current_streak": 0, "best_streak": 0}

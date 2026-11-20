@@ -168,17 +168,26 @@ backup: ## Backup all user data to a timestamped archive
 	tar -czf $$BACKUP_FILE data/; \
 	echo "✓ Backup saved to $$BACKUP_FILE"
 
+# FILE travels to the recipe through the environment (target-specific export),
+# not through textual $(FILE) expansion — quotes/spaces/dashes in the value
+# can no longer break out of the shell quoting or inject tar options (#1326).
+# `-f` consumes the archive name verbatim, so a FILE starting with '-' is also
+# safe; --no-same-owner keeps an untrusted archive from chowning files when
+# restored as root.
+restore: export FILE := $(FILE)
 restore: ## Restore from a backup file: make restore FILE=joidy-backup-xxx.tar.gz
-	@if [ -z "$(FILE)" ]; then echo "Usage: make restore FILE=joidy-backup-xxx.tar.gz"; exit 1; fi
-	tar -xzf $(FILE)
-	@echo "✓ Restored from $(FILE)"
+	@test -n "$$FILE" || { echo "Usage: make restore FILE=joidy-backup-xxx.tar.gz" >&2; exit 1; }
+	@test -f "$$FILE" || { echo "Backup file not found: $$FILE" >&2; exit 1; }
+	tar -xz --no-same-owner -f "$$FILE"
+	@echo "✓ Restored from $$FILE"
 
 db-backup: ## Dump the database (pg_dump -Fc) to the backups dir — same as `joidy backup`
 	bash scripts/joidy.sh backup
 
+db-restore: export FILE := $(FILE)
 db-restore: ## Restore a database dump: make db-restore FILE=data/backups/joidy-*.dump [FORCE=1]
-	@if [ -z "$(FILE)" ]; then echo "Usage: make db-restore FILE=<dump file> [FORCE=1]"; exit 1; fi
-	bash scripts/joidy.sh restore "$(FILE)" $(if $(FORCE),--force,)
+	@test -n "$$FILE" || { echo "Usage: make db-restore FILE=<dump file> [FORCE=1]" >&2; exit 1; }
+	bash scripts/joidy.sh restore "$$FILE" $(if $(FORCE),--force,)
 
 backup-verify: ## Round-trip test: dump → restore into throwaway DB → health check (needs a running stack)
 	COMPOSE_PROJECT_NAME=$(COMPOSE_PROJECT) bash scripts/backup_verify.sh

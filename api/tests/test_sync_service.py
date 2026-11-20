@@ -267,6 +267,7 @@ class TestUpdateLocalMtime(SyncServiceTestBase):
 
             sync = db.query(SyncState).filter(SyncState.note_id == note.id).first()
             self.assertIsNotNone(sync)
+            assert sync is not None
             self.assertIsNotNone(sync.local_mtime)
 
     def test_updates_existing_sync_state(self) -> None:

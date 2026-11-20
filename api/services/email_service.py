@@ -13,6 +13,15 @@ MAX_BODY_TEXT = 50_000
 MAX_SNIPPET = 2_000
 
 
+def _escape_like(term: str) -> str:
+    """Escape LIKE wildcards in a user-supplied search term.
+
+    ``%`` and ``_`` in ``q`` would otherwise broaden the pattern beyond a
+    literal substring match (#1332). Escape char is ``\\``.
+    """
+    return term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 def upsert_email(
     db: Session,
     user_id: int,
@@ -107,9 +116,11 @@ def _filtered_query(
     if account:
         query = query.filter(EmailMessage.account == account)
     if q:
-        like = f"%{q}%"
+        like = f"%{_escape_like(q)}%"
         query = query.filter(
-            EmailMessage.subject.ilike(like) | EmailMessage.sender.ilike(like) | EmailMessage.snippet.ilike(like)
+            EmailMessage.subject.ilike(like, escape="\\")
+            | EmailMessage.sender.ilike(like, escape="\\")
+            | EmailMessage.snippet.ilike(like, escape="\\")
         )
     return query
 

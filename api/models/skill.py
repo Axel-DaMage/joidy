@@ -27,7 +27,7 @@ class Skill(Base):
     first_unlocked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
-    tag: Mapped["Tag"] = relationship("Tag")  # type: ignore
+    tag: Mapped["Tag"] = relationship("Tag")
 
 
 def compute_skill_level(note_count: int) -> str:

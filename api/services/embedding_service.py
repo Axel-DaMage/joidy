@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 import time
 from datetime import UTC, datetime, timedelta
 
@@ -156,6 +157,22 @@ def get_retryable_embedding_notes(db: Session, limit: int = 20) -> list[Note]:
     return notes
 
 
+_URL_RE = re.compile(r"https?://\S+")
+_PATH_RE = re.compile(r"(?<![\w.])(?:/[\w.\-]+){2,}/?")
+
+
+def _redact_error(text: str) -> str:
+    """Strip URLs and absolute paths from a stored exception string.
+
+    The full detail stays in the ``embedding_failures`` row and the logs,
+    but the value is reflected back through the API — raw ``str(exc)``
+    (e.g. an httpx error) can embed internal hosts or file paths and act
+    as an existence oracle (#1332).
+    """
+    text = _URL_RE.sub("<url>", text)
+    return _PATH_RE.sub("<path>", text)
+
+
 def get_dead_letter_entries(db: Session, limit: int = 50) -> list[dict]:
     """Get embedding failures that exceeded max retry attempts (dead letter queue)."""
     max_attempts = settings.embedding_retry_max_attempts
@@ -170,7 +187,7 @@ def get_dead_letter_entries(db: Session, limit: int = 50) -> list[dict]:
         {
             "note_id": f.note_id,
             "attempts": f.attempts,
-            "last_error": f.last_error[:500],
+            "last_error": _redact_error(f.last_error or "")[:500],
             "updated_at": f.updated_at.isoformat() if f.updated_at else None,
         }
         for f in failures

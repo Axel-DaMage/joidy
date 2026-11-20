@@ -97,8 +97,8 @@ class GitHubItem(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
-    repo: Mapped["GitHubRepo"] = relationship("GitHubRepo")  # type: ignore
-    goal: Mapped["Goal | None"] = relationship("Goal")  # type: ignore
+    repo: Mapped["GitHubRepo"] = relationship("GitHubRepo")
+    goal: Mapped["Goal | None"] = relationship("Goal")
 
 
 class GitHubEvent(Base):
@@ -120,4 +120,4 @@ class GitHubEvent(Base):
 
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
-    repo: Mapped["GitHubRepo"] = relationship("GitHubRepo")  # type: ignore
+    repo: Mapped["GitHubRepo"] = relationship("GitHubRepo")

@@ -13,7 +13,7 @@ if "sqlite_vec" not in sys.modules:
     def _load(_connection):
         return None
 
-    sqlite_vec_stub.load = _load
+    sqlite_vec_stub.load = _load  # type: ignore[attr-defined]
     sys.modules["sqlite_vec"] = sqlite_vec_stub
 
 from services.skill_tree import sync_skills, sync_skills_for_tags

@@ -27,7 +27,7 @@ def _cached_list_skills(db: Session):
     ]
 
 
-register_cache_clearer(_cached_list_skills.cache_clear)  # type: ignore[attr-defined]
+register_cache_clearer(_cached_list_skills.cache_clear)
 
 
 @router.get("/")
@@ -40,7 +40,7 @@ def _cached_skill_tree(db: Session):
     return get_skill_tree(db)
 
 
-register_cache_clearer(_cached_skill_tree.cache_clear)  # type: ignore[attr-defined]
+register_cache_clearer(_cached_skill_tree.cache_clear)
 
 
 @router.get("/tree")

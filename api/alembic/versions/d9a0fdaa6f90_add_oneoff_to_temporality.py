@@ -18,7 +18,9 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     with op.get_context().autocommit_block():
-        op.execute("ALTER TYPE goaltemporality ADD VALUE 'ONEOFF'")
+        # IF NOT EXISTS keeps the migration idempotent — re-running it on a
+        # DB where the value is already present must not abort (#1332).
+        op.execute("ALTER TYPE goaltemporality ADD VALUE IF NOT EXISTS 'ONEOFF'")
 
 
 def downgrade() -> None:

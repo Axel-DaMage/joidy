@@ -41,6 +41,7 @@ from routers import (
     tags,
     telegram,
     upload,
+    user_settings,
     vault,
     websocket,
 )
@@ -50,8 +51,9 @@ from services.auth_service import (
     get_current_user,
     get_current_user_or_internal,
     verify_token,
+    warn_if_plaintext_auth_password,
 )
-from services.env_file import env_file_permissions, get_env_file
+from services.env_file import env_file_permissions, get_env_file, get_persisted
 from services.http_client import aclose_http_clients, http_client
 from services.response_cache import get_cache_stats
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -65,7 +67,7 @@ logger = logging.getLogger(__name__)
 class RequestTimingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         start = perf_counter()
-        response = await call_next(request)
+        response: Response = await call_next(request)
         duration_ms = (perf_counter() - start) * 1000
         response.headers["X-Process-Time"] = f"{duration_ms:.2f}ms"
         if duration_ms >= 500:
@@ -96,6 +98,30 @@ async def lifespan(app: FastAPI):
             "Authentication is disabled without it — refusing to start."
         )
 
+    # Security guard (#1332): SECRET_KEY signs every JWT. .env.example ships
+    # the placeholder "change_this_to_a_random_secret_key" — manual
+    # `docker compose` deploys can boot with it, making every token forgeable.
+    # Refuse to start in production; warn loudly elsewhere (the CLI generates
+    # a real key, so this should never fire in managed installs).
+    _secret_key = get_persisted("SECRET_KEY") or settings.secret_key
+    _placeholder_secrets = {
+        "",
+        "change_this_to_a_random_secret_key",
+        "dev_secret_change_me",
+        "changeme",
+        "secret",
+    }
+    if _secret_key.strip().lower() in _placeholder_secrets:
+        _msg = (
+            "SECRET_KEY is unset or still the .env.example placeholder — JWTs "
+            "signed with it are forgeable. Generate one with "
+            "'openssl rand -hex 32'."
+        )
+        if settings.app_env == "production":
+            logger.critical("%s Refusing to start.", _msg)
+            raise RuntimeError(_msg)
+        logger.warning("%s Fix it before exposing this instance.", _msg)
+
     # Loud warning when the dev auth bypass is active (#1282). The bypass is
     # restricted to loopback clients, but an operator publishing ports on
     # 0.0.0.0 must still know the API is running unauthenticated for local
@@ -120,6 +146,11 @@ async def lifespan(app: FastAPI):
             env_perms,
             get_env_file(),
         )
+
+    # Startup warning (#1265): a plaintext AUTH_PASSWORD silently works via
+    # the backward-compat path in verify_password — flag it so prod auth is
+    # never running on a raw .env string unnoticed.
+    warn_if_plaintext_auth_password()
 
     init_db()
     logger.info("Database initialization complete")
@@ -225,8 +256,11 @@ app = FastAPI(
 
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 app.add_middleware(RequestTimingMiddleware)
-app.add_middleware(MetricsMiddleware)
 app.add_middleware(RateLimitMiddleware)
+# Metrics must wrap the rate limiter — middleware added later runs further
+# out, and 429s returned inside RateLimitMiddleware used to bypass request
+# metrics entirely (#1332).
+app.add_middleware(MetricsMiddleware)
 
 
 def _get_cors_origins() -> list[str]:
@@ -286,6 +320,7 @@ app.include_router(export.router, dependencies=[Depends(get_current_user)])
 app.include_router(stats.router, dependencies=[Depends(get_current_user)])
 app.include_router(analytics.router, dependencies=[Depends(get_current_user)])
 app.include_router(sync.router, dependencies=[Depends(get_current_user)])
+app.include_router(user_settings.router, dependencies=[Depends(get_current_user)])
 app.include_router(upload.router, dependencies=[Depends(get_current_user)])
 # /system/power is opt-in (#1278): the engine socket is only mounted via the
 # docker-compose.power.yml overlay. When the feature is off we register a
