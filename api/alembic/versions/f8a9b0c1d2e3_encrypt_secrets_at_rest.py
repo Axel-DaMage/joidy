@@ -84,11 +84,15 @@ def _crypt_existing_rows(*, encrypt: bool) -> None:
     for table, columns in _ENCRYPTED_COLUMNS.items():
         for col in columns:
             # table/col are hardcoded in _ENCRYPTED_COLUMNS (not user input).
-            rows = conn.execute(
-                sa.text(
-                    f"SELECT id, {col} AS v FROM {table} WHERE {col} IS NOT NULL"  # noqa: S608
+            rows = (
+                conn.execute(
+                    sa.text(
+                        f"SELECT id, {col} AS v FROM {table} WHERE {col} IS NOT NULL"  # noqa: S608
+                    )
                 )
-            ).mappings().all()
+                .mappings()
+                .all()
+            )
             for row in rows:
                 value = row["v"]
                 try:
