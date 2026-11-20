@@ -2,7 +2,7 @@ import logging
 from typing import cast
 
 import aiohttp
-from config import settings
+from config import settings, validate_base_url
 
 from .base import BaseLLMClient, EmbeddingClient
 
@@ -11,7 +11,11 @@ logger = logging.getLogger(__name__)
 
 class OllamaClient(BaseLLMClient, EmbeddingClient):
     def __init__(self, base_url: str, model: str, is_embedding: bool = False):
-        self._base_url = base_url.rstrip("/")
+        # Fail fast on insecure/malformed URLs: http:// is only allowed for
+        # loopback targets since Ollama is expected to be local (#1330).
+        self._base_url = validate_base_url(
+            base_url, name="OLLAMA_BASE_URL", allow_insecure=settings.allow_insecure_base_urls
+        )
         self._model = model
         self._is_embedding = is_embedding
         self._session: aiohttp.ClientSession | None = None
@@ -24,7 +28,8 @@ class OllamaClient(BaseLLMClient, EmbeddingClient):
         if self._session is None or self._session.closed:
             total = settings.embed_timeout if self._is_embedding else settings.llm_timeout
             timeout = aiohttp.ClientTimeout(total=total, connect=settings.connect_timeout)
-            self._session = aiohttp.ClientSession(timeout=timeout)
+            # trust_env=False: ignore ambient HTTP(S)_PROXY env vars (#1330).
+            self._session = aiohttp.ClientSession(timeout=timeout, trust_env=False)
         return self._session
 
     async def close(self) -> None:
@@ -52,16 +57,20 @@ class OllamaClient(BaseLLMClient, EmbeddingClient):
         max_tokens: int = 256,
         system_prompt: str | None = None,
     ) -> str:
-        full_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
+        payload = {
+            "model": self._model,
+            "prompt": prompt,
+            "temperature": temperature,
+            "options": {"num_predict": max_tokens},
+        }
+        if system_prompt:
+            # Send the system prompt in its own field instead of smashing it
+            # together with user content — keeps roles separated (#1330).
+            payload["system"] = system_prompt
         session = await self._get_session()
         async with session.post(
             f"{self._base_url}/api/generate",
-            json={
-                "model": self._model,
-                "prompt": full_prompt,
-                "temperature": temperature,
-                "options": {"num_predict": max_tokens},
-            },
+            json=payload,
         ) as resp:
             if resp.status != 200:
                 raise Exception(f"Ollama generate failed: {await resp.text()}")

@@ -3,9 +3,11 @@ import logging
 from typing import cast
 
 import cohere
+import httpx
 from config import settings
 
 from .base import BaseLLMClient, EmbeddingClient
+from .httpx_utils import build_async_http_client
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +18,12 @@ class CohereClient(BaseLLMClient, EmbeddingClient):
         self._client = cohere.AsyncClient(
             api_key=api_key,
             timeout=timeout,
+            # trust_env=False so ambient HTTP(S)_PROXY vars are ignored unless
+            # PROVIDER_PROXY_URL is explicitly configured (#1330).
+            httpx_client=build_async_http_client(
+                httpx.AsyncClient,
+                httpx.Timeout(timeout, connect=settings.connect_timeout),
+            ),
         )
         self._model = model
         self._is_embedding = is_embedding

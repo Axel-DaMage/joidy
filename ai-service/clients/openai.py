@@ -2,22 +2,36 @@ import asyncio
 import logging
 from typing import cast
 
-import httpx
-from config import settings
-from openai import AsyncOpenAI
+import httpx2  # the openai SDK vendors this httpx fork; its transport requires it
+from config import settings, validate_base_url
+from openai import AsyncOpenAI, DefaultAsyncHttpx2Client
 
 from .base import BaseLLMClient, EmbeddingClient
+from .httpx_utils import build_async_http_client
 
 logger = logging.getLogger(__name__)
 
 
 class OpenAIClient(BaseLLMClient, EmbeddingClient):
     def __init__(self, api_key: str, model: str, is_embedding: bool = False, base_url: str = ""):
-        timeout = settings.embed_timeout if is_embedding else settings.llm_timeout
+        if base_url:
+            # Custom OpenAI-compatible routers must use https:// unless they
+            # point at loopback — a cleartext remote base_url would send note
+            # content and the api_key to an arbitrary host (#1330).
+            base_url = validate_base_url(
+                base_url, name="OPENAI_BASE_URL", allow_insecure=settings.allow_insecure_base_urls
+            )
+        timeout = httpx2.Timeout(
+            settings.embed_timeout if is_embedding else settings.llm_timeout,
+            connect=settings.connect_timeout,
+        )
         self._client = AsyncOpenAI(
             api_key=api_key,
             base_url=base_url or None,
-            timeout=httpx.Timeout(timeout, connect=settings.connect_timeout),
+            timeout=timeout,
+            # trust_env=False so ambient HTTP(S)_PROXY vars are ignored unless
+            # PROVIDER_PROXY_URL is explicitly configured (#1330).
+            http_client=build_async_http_client(DefaultAsyncHttpx2Client, timeout),
         )
         self._model = model
         self._is_embedding = is_embedding
