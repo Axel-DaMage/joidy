@@ -210,7 +210,7 @@ def test_get_history_not_found(client: TestClient):
 def _create_streak(client: TestClient, name: str = "Validation Streak") -> int:
     resp = client.post("/personal-streaks/", json={"name": name})
     assert resp.status_code == 201
-    return resp.json()["id"]
+    return int(resp.json()["id"])
 
 
 def test_create_streak_rejects_absurd_past_start_date(client: TestClient):

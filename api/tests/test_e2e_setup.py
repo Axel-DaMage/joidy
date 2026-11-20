@@ -9,6 +9,7 @@ Covers the first-boot hardening:
 """
 
 import ipaddress
+import os
 
 import pytest
 import routers.config as config_router
@@ -29,6 +30,11 @@ def _clean_settings(monkeypatch):
     """
     monkeypatch.setattr(config_router.settings, "auth_password", "")
     monkeypatch.setattr(config_router.settings, "secret_key", "")
+    # perform_setup also mutates settings.obsidian_vault_path and
+    # os.environ["OBSIDIAN_VAULT_PATH"] — snapshot both so vault confinement
+    # (#1314) keeps seeing the suite root for the rest of the worker.
+    monkeypatch.setattr(config_router.settings, "obsidian_vault_path", config_router.settings.obsidian_vault_path)
+    monkeypatch.setenv("OBSIDIAN_VAULT_PATH", os.environ.get("OBSIDIAN_VAULT_PATH", "/vault"))
 
 
 def _client(host: str = "127.0.0.1", port: int = 40000) -> TestClient:
