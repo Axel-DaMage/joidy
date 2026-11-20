@@ -2,6 +2,7 @@ import { writable, get } from 'svelte/store';
 import { browser } from '$app/env';
 import { api } from '$lib/api';
 import { showNotification } from './notifications';
+import { SESSION_RESET_EVENT } from './session';
 import { logger } from '$lib/utils/logger';
 
 export interface ChatMessage {
@@ -48,6 +49,16 @@ export const suggestions = writable<string[]>([]);
 /** Text of the last user message that failed to send — drives the retry button (#1131). */
 export const chatError = writable<string | null>(null);
 export const sessionId = writable<number | null>(null);
+
+// Drop chat history on session reset (logout / 401) so the next user on the
+// same browser profile never sees the previous conversation (#1305).
+if (browser) {
+  window.addEventListener(SESSION_RESET_EVENT, () => {
+    messages.set([]);
+    isLoading.set(false);
+    suggestions.set([]);
+  });
+}
 
 messages.subscribe((msgs) => persistMessages(msgs));
 

@@ -67,6 +67,7 @@
   import LazyIconPicker from '$lib/components/LazyIconPicker.svelte';
   import ModalDialog from '$lib/components/ModalDialog.svelte';
   import NoteLinkPicker from '$lib/components/NoteLinkPicker.svelte';
+  import { focusTrap } from '$lib/actions/focusTrap';
   import { t } from 'svelte-i18n';
 
   // Lazy-load the heavy StreakHeatmap (561 lines) so it is split into a
@@ -488,10 +489,18 @@
     }
 
     try {
-      // Load only essential data immediately (goals + tags)
-      const [fetchedGoals, fetchedTags] = await Promise.all([api.goals.list(), api.tags.list()]);
+      // Load essential data immediately (goals + tags + notes). Notes are
+      // needed by the linked-note chip, NoteLinkPicker and the auto-track
+      // select on every tab — previously they only loaded under the
+      // analytics tab, leaving those controls silently empty (#1305).
+      const [fetchedGoals, fetchedTags, fetchedNotes] = await Promise.all([
+        api.goals.list(),
+        api.tags.list(),
+        api.notes.list(),
+      ]);
       goals = deduplicateGoals(fetchedGoals);
       tags = fetchedTags;
+      notes = fetchedNotes;
       setCachedData('goals', goals);
       setCachedData('tags', tags);
     } catch (e) {
@@ -512,8 +521,7 @@
     if (analyticsLoaded) return;
     analyticsLoaded = true;
     try {
-      [notes, streakData, xpEvents] = await Promise.all([
-        api.notes.list(),
+      [streakData, xpEvents] = await Promise.all([
         api.goals.streak(),
         api.gamification.events(500),
       ]);
@@ -1216,7 +1224,7 @@
     const active = goals.filter((g) => g.state === 'ACTIVE').length;
     const cancelled = goals.filter((g) => g.state === 'CANCELLED' || g.state === 'PAUSED').length;
     return [
-      { label: 'Iniciados', value: total, color: 'var(--text-disabled)' },
+      { label: 'Iniciados', value: total, color: 'var(--text-muted)' },
       { label: 'Activos', value: active, color: 'var(--xp)' },
       { label: 'Completados', value: completed, color: 'var(--success)' },
       { label: 'Abandonados', value: cancelled + failed, color: 'var(--error)' },
@@ -1252,14 +1260,12 @@
   }
 </script>
 
+<!-- Escape for showAddForm is handled by the focusTrap on its panel so a
+     stacked dialog above it closes first. -->
 <svelte:window
   onkeydown={(e) => {
-    if (e.key === 'Escape') {
-      if (deleteConfirm !== null) {
-        deleteConfirm = null;
-        return;
-      }
-      showAddForm = false;
+    if (e.key === 'Escape' && deleteConfirm !== null) {
+      deleteConfirm = null;
     }
   }}
 />
@@ -1270,27 +1276,33 @@
   {/if}
 
   <div class="goals-header">
-    <div class="tabs">
+    <div class="tabs" role="tablist">
       <a class="tab exec-link" href="/goals/ejecucion">
         <Zap size={14} /> {$t('executionPage.tabLabel')}
       </a>
       <button
         class="tab"
+        role="tab"
         class:active={currentTab === 'editor'}
+        aria-selected={currentTab === 'editor'}
         onclick={() => (currentTab = 'editor')}
       >
         <Pencil size={14} /> Editor
       </button>
       <button
         class="tab"
+        role="tab"
         class:active={currentTab === 'today'}
+        aria-selected={currentTab === 'today'}
         onclick={() => (currentTab = 'today')}
       >
         <LayoutDashboard size={14} /> Inicio
       </button>
       <button
         class="tab"
+        role="tab"
         class:active={currentTab === 'inbox'}
+        aria-selected={currentTab === 'inbox'}
         onclick={() => (currentTab = 'inbox')}
       >
         <Inbox size={14} /> {$t('goalsPage.inboxTab')}
@@ -1300,21 +1312,27 @@
       </button>
       <button
         class="tab"
+        role="tab"
         class:active={currentTab === 'planning'}
+        aria-selected={currentTab === 'planning'}
         onclick={() => (currentTab = 'planning')}
       >
         <Clock size={14} /> Planificación
       </button>
       <button
         class="tab"
+        role="tab"
         class:active={currentTab === 'history'}
+        aria-selected={currentTab === 'history'}
         onclick={() => (currentTab = 'history')}
       >
         <Calendar size={14} /> Historial
       </button>
       <button
         class="tab"
+        role="tab"
         class:active={currentTab === 'analytics'}
+        aria-selected={currentTab === 'analytics'}
         onclick={() => (currentTab = 'analytics')}
       >
         <ChartColumn size={14} /> Análisis
@@ -1394,7 +1412,9 @@
                 <div class="goal-meta">
                   <span
                     class="tag-chip"
-                    style="background: {getGoalColor(goal)}20; border: 1px solid {getGoalColor(
+                    style="background: color-mix(in srgb, {getGoalColor(
+                      goal
+                    )} 12%, transparent); border: 1px solid {getGoalColor(
                       goal
                     )}; color: {getGoalColor(goal)};"
                     >{TEMPORALITY_LABELS[goal.temporality] || goal.temporality}</span
@@ -1415,7 +1435,9 @@
                   {#if goal.note_id}
                     <span
                       class="tag-chip"
-                      style="background: {getGoalColor(goal)}20; border: 1px solid {getGoalColor(
+                      style="background: color-mix(in srgb, {getGoalColor(
+                        goal
+                      )} 12%, transparent); border: 1px solid {getGoalColor(
                         goal
                       )}; color: {getGoalColor(goal)};"
                       >{notes.find((n) => n.id === goal.note_id)?.title || 'Nota vinculada'}</span
@@ -1423,7 +1445,9 @@
                   {:else if goal.tag_id}
                     <span
                       class="tag-chip"
-                      style="background: {getGoalColor(goal)}20; border: 1px solid {getGoalColor(
+                      style="background: color-mix(in srgb, {getGoalColor(
+                        goal
+                      )} 12%, transparent); border: 1px solid {getGoalColor(
                         goal
                       )}; color: {getGoalColor(goal)};"
                       >{tags.find((t) => t.id === goal.tag_id)?.name}</span
@@ -1601,7 +1625,9 @@
                     <span class="config-badge">{task.date}</span>
                     <span
                       class="tag-chip"
-                      style="background: {getGoalColor(g)}20; border: 1px solid {getGoalColor(
+                      style="background: color-mix(in srgb, {getGoalColor(
+                        g
+                      )} 12%, transparent); border: 1px solid {getGoalColor(
                         g
                       )}; color: {getGoalColor(g)};"
                       >{TEMPORALITY_LABELS[g.temporality] || g.temporality}</span
@@ -1732,7 +1758,7 @@
             </div>
           </div>
           <div class="sort-control-centered">
-            <select class="input sort-select-square" bind:value={listSortBy}>
+            <select class="input sort-select-square" bind:value={listSortBy} aria-label={$t('goalsPage.sortBy')}>
               <option value="recent">{$t('goalsPage.sortRecent')}</option>
               <option value="alpha">{$t('goalsPage.sortAlpha')}</option>
               <option value="state">{$t('goalsPage.sortState')}</option>
@@ -1768,7 +1794,9 @@
                   <div class="goal-meta">
                     <span
                       class="tag-chip"
-                      style="background: {getGoalColor(goal)}20; border: 1px solid {getGoalColor(
+                      style="background: color-mix(in srgb, {getGoalColor(
+                        goal
+                      )} 12%, transparent); border: 1px solid {getGoalColor(
                         goal
                       )}; color: {getGoalColor(goal)};"
                       >{TEMPORALITY_LABELS[goal.temporality] || goal.temporality}</span
@@ -1894,7 +1922,9 @@
                       <div class="goal-meta">
                         <span
                           class="tag-chip"
-                          style="background: {getGoalColor(g)}20; border: 1px solid {getGoalColor(
+                          style="background: color-mix(in srgb, {getGoalColor(
+                            g
+                          )} 12%, transparent); border: 1px solid {getGoalColor(
                             g
                           )}; color: {getGoalColor(g)};"
                           >{TEMPORALITY_LABELS[g.temporality] || g.temporality}</span
@@ -2007,7 +2037,9 @@
                       <div class="goal-meta">
                         <span
                           class="tag-chip"
-                          style="background: {getGoalColor(g)}20; border: 1px solid {getGoalColor(
+                          style="background: color-mix(in srgb, {getGoalColor(
+                            g
+                          )} 12%, transparent); border: 1px solid {getGoalColor(
                             g
                           )}; color: {getGoalColor(g)};"
                           >{TEMPORALITY_LABELS[g.temporality] || g.temporality}</span
@@ -2246,7 +2278,7 @@
                 <div class="day-col">
                   <span
                     class="day-val"
-                    style="color: {day.value > 0 ? 'var(--text-primary)' : 'var(--text-disabled)'}"
+                    style="color: {day.value > 0 ? 'var(--text-primary)' : 'var(--text-muted)'}"
                     >{day.value}</span
                   >
                   <div class="day-bar-wrap">
@@ -2478,17 +2510,24 @@
       onclick={(e) => {
         if (e.target === e.currentTarget) showAddForm = false;
       }}
-      role="dialog"
-      tabindex="-1"
+      role="presentation"
     >
-      <div class="new-goal-panel slide-down">
+      <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+      <div
+        class="new-goal-panel slide-down"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="new-goal-heading"
+        tabindex="-1"
+        use:focusTrap={{ initialFocus: '#new-goal-title', onEscape: () => (showAddForm = false) }}
+      >
         <div class="new-goal-header">
           <div class="new-goal-title-row">
             <div class="new-goal-icon-wrap">
               <Plus size={16} />
             </div>
             <div>
-              <h3 class="new-goal-heading">{$t('goalsPage.newGoal')}</h3>
+              <h3 id="new-goal-heading" class="new-goal-heading">{$t('goalsPage.newGoal')}</h3>
               <span class="new-goal-sub">{$t('goalsPage.newGoalSub')}</span>
             </div>
           </div>
@@ -2525,6 +2564,7 @@
                     <button
                       class="ng-freq-btn"
                       class:active={newTemporality === temp}
+                      aria-pressed={newTemporality === temp}
                       onclick={() => (newTemporality = temp)}
                     >
                       {temp === 'DAILY'
@@ -2567,6 +2607,7 @@
                     <button
                       class="ng-priority-btn"
                       class:active={newPriority === p}
+                      aria-pressed={newPriority === p}
                       onclick={() => (newPriority = p)}
                       title={p === 0 ? $t('goalsPage.priorityNone') : $t('goalsPage.priorityLevel', { values: { level: p } })}
                     >
@@ -2641,6 +2682,7 @@
                     <button
                       class="ng-color-btn"
                       class:selected={newGoalColor === c.hex}
+                      aria-pressed={newGoalColor === c.hex}
                       style="background: {c.hex};"
                       onclick={() => (newGoalColor = c.hex)}
                       title={c.name}
@@ -2655,6 +2697,7 @@
                       class="ng-color-swatch"
                       value={newGoalColor}
                       oninput={(e) => (newGoalColor = e.currentTarget.value)}
+                      aria-label={$t('goalsPage.goalColor')}
                     />
                   </div>
                   <input
@@ -2663,6 +2706,7 @@
                     maxlength="7"
                     bind:value={newGoalColor}
                     placeholder="#c8a96e"
+                    aria-label={$t('goalsPage.goalColorHex')}
                   />
                 </div>
               </div>
@@ -2692,6 +2736,7 @@
                   <button
                     class="ng-fail-btn"
                     class:active={newFailConfig === 'STATIC'}
+                    aria-pressed={newFailConfig === 'STATIC'}
                     onclick={() => (newFailConfig = 'STATIC')}
                   >
                     <strong>{$t('goalsPage.static')}</strong>
@@ -2700,6 +2745,7 @@
                   <button
                     class="ng-fail-btn"
                     class:active={newFailConfig === 'ROLLOVER'}
+                    aria-pressed={newFailConfig === 'ROLLOVER'}
                     onclick={() => (newFailConfig = 'ROLLOVER')}
                   >
                     <strong>{$t('goalsPage.rollover')}</strong>
@@ -2708,6 +2754,7 @@
                   <button
                     class="ng-fail-btn"
                     class:active={newFailConfig === 'SNOWBALL'}
+                    aria-pressed={newFailConfig === 'SNOWBALL'}
                     onclick={() => (newFailConfig = 'SNOWBALL')}
                   >
                     <strong>{$t('goalsPage.snowball')}</strong>
@@ -3399,7 +3446,7 @@
   .ng-preview-label {
     font-size: 10px;
     font-family: var(--font-mono);
-    color: var(--text-disabled);
+    color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.1em;
     text-align: center;
@@ -3552,7 +3599,7 @@
   }
   .optional {
     font-size: 10px;
-    color: var(--text-disabled);
+    color: var(--text-muted);
     font-style: italic;
   }
 
@@ -3632,6 +3679,10 @@
   }
   .ng-hex-input:focus {
     border-color: var(--text-muted);
+  }
+  .ng-hex-input:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
   }
 
   /* Responsive — stack columns on narrow viewports (#726) */
@@ -4363,7 +4414,7 @@
     align-items: center;
     justify-content: center;
     gap: 6px;
-    color: var(--text-disabled);
+    color: var(--text-muted);
     font-size: 11px;
     height: 100%;
     text-align: center;
@@ -4376,7 +4427,7 @@
     border: 1px solid var(--border);
     border-radius: 4px;
     font-family: var(--font-mono);
-    color: var(--text-disabled);
+    color: var(--text-muted);
     text-transform: none;
     font-weight: 400;
     letter-spacing: 0;
@@ -4728,7 +4779,7 @@
 
   .history-hint {
     font-size: 11px;
-    color: var(--text-disabled);
+    color: var(--text-muted);
     font-family: var(--font-mono);
     letter-spacing: 0.03em;
   }
@@ -4766,7 +4817,7 @@
   }
 
   .history-detail-icon {
-    color: var(--text-disabled);
+    color: var(--text-muted);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -4775,7 +4826,7 @@
 
   .history-detail-msg {
     font-size: 12px;
-    color: var(--text-disabled);
+    color: var(--text-muted);
     line-height: 1.6;
     max-width: 220px;
   }
@@ -4798,7 +4849,7 @@
 
   .history-no-activity {
     font-size: 12px;
-    color: var(--text-disabled);
+    color: var(--text-muted);
     padding: var(--s3);
     text-align: center;
     flex: 1;

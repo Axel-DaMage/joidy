@@ -65,6 +65,7 @@
           <input
             type="text"
             placeholder={$t('notesPage.searchNotePlaceholder')}
+            aria-label={$t('notesPage.searchNotePlaceholder')}
             bind:value={$search}
           />
         </div>
@@ -107,7 +108,7 @@
                 <DynamicIcon
                   name={vis.icon}
                   size={12}
-                  color={vis.color || 'var(--text-disabled)'}
+                  color={vis.color || 'var(--text-muted)'}
                   pack={vis.pack}
                 />
                 <span class="recent-name" use:autoScrollTitle={note.title}>
@@ -179,6 +180,10 @@
     font-family: var(--font-sans);
     font-size: 14px;
     flex: 1;
+  }
+  input:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
   }
 
   .dash-widgets {
@@ -361,7 +366,7 @@
   }
   .recent-time {
     font-size: 10px;
-    color: var(--text-disabled);
+    color: var(--text-muted);
     font-family: var(--font-mono);
   }
 

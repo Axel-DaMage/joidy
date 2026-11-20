@@ -1,10 +1,8 @@
 <script lang="ts">
   import { createEventDispatcher, onDestroy, onMount } from 'svelte';
   import { Eye, EyeOff, Save, Trash2, X, Maximize, ChevronLeft, ChevronRight, Settings, CheckCircle2, Sun, Moon, Zap } from 'lucide-svelte';
-  import { marked } from 'marked';
-  import DOMPurify from 'dompurify';
-  import hljs from 'highlight.js';
   import 'highlight.js/styles/github-dark.css';
+  import { renderMarkdown as renderMarkdownShared } from '$lib/utils/markdown';
   import { api, type Goal, type GoalContext } from '$lib/api';
   import { t } from 'svelte-i18n';
   import { logger } from '$lib/utils/logger';
@@ -15,32 +13,6 @@
   const timers = createTimerRegistry();
 
   const AUTOSAVE_DELAY = 2000;
-
-  const renderer = new marked.Renderer();
-  renderer.code = ({ text, lang }) => {
-    const language = lang && hljs.getLanguage(lang) ? lang : '';
-    let highlighted: string;
-    try {
-      highlighted = language
-        ? hljs.highlight(text, { language }).value
-        : hljs.highlightAuto(text).value;
-    } catch {
-      highlighted = text;
-    }
-    return `<pre><code class="hljs language-${language || 'auto'}">${highlighted}</code></pre>`;
-  };
-  marked.use({ gfm: true, breaks: true, renderer });
-
-  DOMPurify.setConfig({
-    ALLOWED_TAGS: [
-      'p', 'br', 'strong', 'em', 'a', 'ul', 'ol', 'li',
-      'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-      'pre', 'code', 'blockquote',
-      'table', 'thead', 'tbody', 'tr', 'th', 'td',
-      'span', 'div', 'hr', 'img', 'del', 'ins', 'sup', 'sub',
-    ],
-    ALLOWED_ATTR: ['href', 'target', 'rel', 'src', 'alt', 'class', 'data-title'],
-  });
 
   interface Props {
     goal?: Goal | null;
@@ -211,7 +183,7 @@
 
   function renderMarkdown(md: string): string {
     if (!md.trim()) return `<p style="color:var(--text-muted);font-style:italic;">${$t('goalEditor.previewPlaceholder')}</p>`;
-    return DOMPurify.sanitize(String(marked.parse(md)));
+    return renderMarkdownShared(md);
   }
 
   function updateContent(e: Event) {
@@ -351,6 +323,7 @@
       <button
         class="toolbar-btn icon-only"
         class:active={zenMode}
+        aria-pressed={zenMode}
         onclick={() => zenMode = !zenMode}
         title={$t('goalEditor.zenMode')}
         aria-label={$t('goalEditor.zenModeShort')}
@@ -361,6 +334,7 @@
       <button
         class="toolbar-btn"
         class:active={previewMode}
+        aria-pressed={previewMode}
         onclick={() => previewMode = !previewMode}
         title={$t('goalEditor.togglePreview')}
       >
@@ -416,6 +390,7 @@
       class="title-input"
       bind:value={title}
       placeholder={$t('goalEditor.titlePlaceholder')}
+      aria-label={$t('goalEditor.titlePlaceholder')}
       oninput={() => triggerAutosave()}
       onkeydown={(e) => e.key === 'Enter' && handleSave()}
     />
@@ -443,6 +418,7 @@
           oninput={updateContent}
           onscroll={syncScroll}
           placeholder={$t('goalEditor.contentPlaceholder')}
+          aria-label={$t('goalEditor.contentPlaceholder')}
           spellcheck="false"
         ></textarea>
       </div>
@@ -562,6 +538,11 @@
     text-align: center;
   }
 
+  .title-input:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
+    border-radius: var(--r-sm);
+  }
   .title-input {
     flex: 1;
     background: transparent;
@@ -643,6 +624,10 @@
     tab-size: 2;
   }
 
+  .content-textarea:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: -2px;
+  }
   .content-textarea {
     position: absolute;
     top: 0;

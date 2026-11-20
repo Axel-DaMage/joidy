@@ -18,7 +18,7 @@
   </div>
   <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
     <div class="row-label">
-      <span>Directorio del Vault</span>
+      <span id="sv-vault-dir-label">Directorio del Vault</span>
       {#if isConfigured('obsidian_vault_path')}<span class="configured-badge">✓</span>{/if}
     </div>
     <div
@@ -30,6 +30,8 @@
         class="setting-input mono"
         style="border: none; background: transparent; flex: 1; padding-left: 2px;"
         placeholder="~/Documentos/notas/mi-vault"
+        aria-labelledby="sv-vault-dir-label"
+        autocomplete="off"
         bind:value={systemConfig.obsidian_vault_path}
       />
     </div>
@@ -41,19 +43,21 @@
   </div>
   <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
     <div class="row-label">
-      <span>Carpeta de notas diarias</span>
+      <span id="sv-daily-folder-label">Carpeta de notas diarias</span>
       {#if isConfigured('daily_notes_folder')}<span class="configured-badge">✓</span>{/if}
     </div>
     <div
       style="display: flex; align-items: center; gap: 2px; padding: 0 10px; background: var(--elevated); border: 1px solid var(--border); border-radius: var(--r);"
       class="input-wrapper"
     >
-      <span class="mono" style="color: var(--text-disabled); font-size: 11px;">~</span>
+      <span class="mono" style="color: var(--text-muted); font-size: 11px;">~</span>
       <input
         type="text"
         class="setting-input mono"
         style="border: none; background: transparent; flex: 1; padding-left: 2px;"
         placeholder="Ejemplo/Daily"
+        aria-labelledby="sv-daily-folder-label"
+        autocomplete="off"
         bind:value={systemConfig.daily_notes_folder}
       />
     </div>
@@ -63,7 +67,13 @@
       <DynamicIcon name="FolderRoot" size={13} />
       <span>Escribir en Vault nativo</span>
     </div>
-    <button class="toggle" onclick={() => writeInObsidian.toggle()}>
+    <button
+      class="toggle"
+      role="switch"
+      aria-checked={$writeInObsidian}
+      aria-label="Escribir en Vault nativo"
+      onclick={() => writeInObsidian.toggle()}
+    >
       <span class:active={!$writeInObsidian}>aislado</span>
       <span class="sep">/</span>
       <span class:active={$writeInObsidian}>nativo</span>
@@ -159,8 +169,9 @@
     transition: border-color var(--t-fast);
     width: 100%;
   }
-  .setting-input:focus {
-    outline: none;
+  .setting-input:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
   }
 
   .input-wrapper:focus-within {

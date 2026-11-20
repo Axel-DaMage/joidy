@@ -4,6 +4,7 @@
   import { activeIconPack } from '$lib/stores/settings';
   import { extractFrontmatter, getFileIcon } from '$lib/utils/fileTree';
   import { updateFrontmatterInContent } from '$lib/utils/noteContent';
+  import { t } from 'svelte-i18n';
   import type { Note } from '$lib/api';
 
   interface Props {
@@ -40,12 +41,21 @@
   let noteIconPack = $derived(iconMeta.pack || undefined);
 
   function pickIcon(ic: string) {
-    updateFrontmatter('icon', ic);
-    updateFrontmatter('iconPack', $activeIconPack);
+    updateFrontmatterMany([
+      ['icon', ic],
+      ['iconPack', $activeIconPack],
+    ]);
   }
 
   function updateFrontmatter(key: string, value: string) {
-    content = updateFrontmatterInContent(content, key, value);
+    updateFrontmatterMany([[key, value]]);
+  }
+
+  function updateFrontmatterMany(entries: [string, string][]) {
+    content = entries.reduce(
+      (c, [key, value]) => updateFrontmatterInContent(c, key, value),
+      content
+    );
     onContentChange();
     handleSave();
   }
@@ -66,6 +76,7 @@
     class="title-input"
     bind:value={title}
     placeholder="Título de la nota..."
+    aria-label={$t('noteEditor.titleLabel')}
     onkeydown={(e) => e.key === 'Enter' && handleSave()}
     oninput={triggerAutosave}
   />
@@ -75,6 +86,7 @@
   bind:open={showIconSettings}
   bind:customColor
   {updateFrontmatter}
+  {updateFrontmatterMany}
   {pickIcon}
 />
 
@@ -111,6 +123,11 @@
   }
   .title-input::placeholder {
     color: var(--text-muted);
+  }
+  .title-input:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
+    border-radius: 4px;
   }
 
   .title-row {

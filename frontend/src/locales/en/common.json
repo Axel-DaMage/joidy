@@ -29,7 +29,15 @@
     "goToSettings": "Go to Settings",
     "allDay": "All day",
     "noEventsDay": "No events on this day",
-    "weekDays": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+    "weekDays": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri",
+      "Sat",
+      "Sun"
+    ],
     "months": [
       "January",
       "February",
@@ -99,7 +107,12 @@
     "planPending": "AI suggestions ({count})",
     "planAcceptAll": "Accept all",
     "planDismiss": "Dismiss",
-    "planAcceptHint": "Click to accept this slot"
+    "planAcceptHint": "Click to accept this slot",
+    "editTitle": "Task title",
+    "startTime": "Start time",
+    "endTime": "End time",
+    "loadError": "Could not load the calendar",
+    "loadErrorHint": "Check your connection and try again."
   },
   "emails": {
     "title": "Mail",
@@ -187,7 +200,8 @@
     "saved": "Saved",
     "tasks": "tasks",
     "level": "LVL",
-    "betaNotice": "Beta feature: some functionality is in development and may change."
+    "betaNotice": "Beta feature: some functionality is in development and may change.",
+    "retry": "Retry"
   },
   "status": {
     "offline": "Offline",
@@ -390,6 +404,7 @@
     "snowballDesc": "Debt accumulates exponentially",
     "linkToProject": "Link to Project (Note)",
     "noLinkedNote": "No linked note",
+    "unlinkNote": "Remove linked note",
     "recentNotes": "Recent notes",
     "searchNote": "Search or create a note...",
     "createNote": "Create note",
@@ -429,7 +444,10 @@
     "contextNightHint": "Low-friction tasks for the evening",
     "toQueue": "To queue",
     "discard": "Discard",
-    "discardConfirm": "Confirm?"
+    "discardConfirm": "Confirm?",
+    "sortBy": "Sort goals",
+    "goalColor": "Goal color",
+    "goalColorHex": "Goal color (hex)"
   },
   "notesPage": {
     "createNote": "Create note",
@@ -463,7 +481,15 @@
     "editorLoading": "Loading editor...",
     "searchNotePlaceholder": "Search note in your vault...",
     "configureDailyNote": "Configure daily note path",
-    "loadMore": "Load more"
+    "loadMore": "Load more",
+    "addTagsTitle": "Add tags",
+    "removeTagsTitle": "Remove tags",
+    "tagsPlaceholder": "tag1, tag2, ...",
+    "deleteFolderTitle": "Delete folder",
+    "deleteFolderMessage": "Delete folder \"{name}\" and all its notes?",
+    "deleteFolder": "Delete",
+    "resizePanel": "Resize panel",
+    "treeLabel": "Notes tree"
   },
   "goalDetail": {
     "loading": "Loading...",
@@ -501,6 +527,7 @@
     "snowballDesc": "Debt accumulates exponentially",
     "linkToProject": "Link to project (note)",
     "noLinkedNote": "No linked note",
+    "unlinkNote": "Remove linked note",
     "searchNote": "Search or create a note...",
     "tagSync": "Tag sync",
     "manualUpdate": "Manual update",
@@ -576,7 +603,10 @@
     "freezeHint": "Protects your streak if you miss a day.",
     "cancel": "Cancel",
     "update": "Update",
-    "create": "Create Streak"
+    "create": "Create Streak",
+    "everyNDays": "Every N days",
+    "streakColor": "Streak color",
+    "streakColorHex": "Streak color (hex)"
   },
   "tagChip": {
     "aiSuggestion": "AI suggestion",
@@ -607,12 +637,15 @@
     "stageLabel": "Stage: {stage} (Level {level})"
   },
   "noteCard": {
-    "customize": "Customize"
+    "customize": "Customize",
+    "select": "Select note {title}"
   },
   "modalDialog": {
-    "close": "Close"
+    "close": "Close",
+    "dialog": "Dialog"
   },
   "iconPicker": {
+    "title": "Icons",
     "searchPlaceholder": "Search icons..."
   },
   "offlinePage": {
@@ -648,7 +681,13 @@
     "wysiwyg": "Visual editor (WYSIWYG) — write with formatting (Ctrl+Shift+V)",
     "wysiwygShort": "Visual editor",
     "preview": "Rendered preview — read only (Ctrl+P)",
-    "previewShort": "Preview"
+    "previewShort": "Preview",
+    "contentLabel": "Note content (markdown)",
+    "titleLabel": "Note title",
+    "tagsLabel": "Tags",
+    "linkUrlPrompt": "Link URL",
+    "linkUrlTitle": "Insert link",
+    "linkUrlInsert": "Insert"
   },
   "goalEditor": {
     "previewPlaceholder": "Write something to see the preview...",
@@ -711,6 +750,8 @@
     "vaultDesc": "If you use Obsidian, enter the path to your vault (e.g. ~/Documents/notes/my-vault). Otherwise, leave it blank and Joidy will use its internal storage.",
     "vaultPath": "Vault Path (e.g. ~/Documents/notes/my-vault)",
     "doneDesc": "Your environment has been secured and configured successfully. Redirecting to the system...",
+    "errorMismatch": "Passwords do not match",
+    "errorTooShort": "Password must be at least 4 characters",
     "passwordHint": "Minimum {min} characters — a passphrase is stronger than a complex word.",
     "passwordTooShort": "Password must be at least {min} characters long",
     "passwordMismatch": "Passwords do not match",
@@ -741,7 +782,8 @@
     "password": "Password",
     "passwordPlaceholder": "Your master password",
     "entering": "Logging in...",
-    "enter": "Log in"
+    "enter": "Log in",
+    "error": "Could not log in. Check your credentials and try again."
   },
   "focus": {
     "modeLabel": "Focus mode",
@@ -754,7 +796,9 @@
     "label": "Command palette",
     "searchPlaceholder": "Search commands, notes, #tags...",
     "searchLabel": "Search commands",
-    "noResults": "No results found"
+    "noResults": "No results found",
+    "resultsLabel": "Results",
+    "resultCount": "{count} results"
   },
   "topicClusters": {
     "analyzing": "Analyzing...",
@@ -794,6 +838,8 @@
   "widgets": {
     "reset": "Reset",
     "skip": "Skip",
+    "workMinutes": "Work minutes",
+    "breakMinutes": "Break minutes",
     "pause": "Pause",
     "start": "Start",
     "refresh": "Refresh",
@@ -822,6 +868,7 @@
   },
   "graph": {
     "searchPlaceholder": "Search graph...",
+    "timelineDays": "Timeline range in days",
     "loading": "Loading graph...",
     "noData": "No data yet. Create notes and add tags to see the graph.",
     "noResults": "No results for the current filter.",
@@ -841,7 +888,8 @@
     "unlockedCount": "{count} skills unlocked",
     "topSkill": "top skill",
     "construction": "Under Construction",
-    "constructionHint": "Enable Dev Mode in Settings to access the Skill Tree."
+    "constructionHint": "Enable Dev Mode in Settings to access the Skill Tree.",
+    "loadError": "Could not load skills."
   },
   "layout": {
     "testNotification": "Click for test notification",
@@ -849,7 +897,8 @@
     "testNotifSuccess": "Test notification - Success",
     "testNotifLevel": "Test notification - Level up!",
     "currentStatus": "Current status",
-    "globalTimer": "Global timer"
+    "globalTimer": "Global timer",
+    "skipToContent": "Skip to main content"
   },
   "ai": {
     "title": "Artificial Intelligence",

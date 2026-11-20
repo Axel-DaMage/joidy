@@ -1,14 +1,16 @@
+import asyncio
 import json
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import Annotated
 
 from circuit_breaker import CircuitBreakerError, emb_circuit_breaker, llm_circuit_breaker
 from clients import aclose_clients, get_embedding_client, get_llm_client
 from clients.prompts import CHAT_SYSTEM_PROMPT, CLASSIFY_PROMPT, RAG_PROMPT
 from config import settings
 from cost_tracker import get_monthly_stats, record_usage
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from logging_config import get_correlation_id, set_correlation_id, setup_logging
 from plan_suggest import build_plan_prompt, parse_plan_response
@@ -182,20 +184,28 @@ class InternalAuthMiddleware(BaseHTTPMiddleware):
 app.add_middleware(InternalAuthMiddleware)
 
 
+# Input bounds (#1324): every string/list field that reaches a paid provider
+# or a CPU-bound computation is capped via settings-tunable Field limits so a
+# single oversized request is rejected with 422 before any work is done.
+_BoundedTag = Annotated[str, Field(max_length=settings.max_tag_chars)]
+_BoundedContextItem = Annotated[str, Field(max_length=settings.max_chat_context_item_chars)]
+_BoundedRecapTitle = Annotated[str, Field(max_length=settings.max_recap_title_chars)]
+
+
 class EmbedRequest(BaseModel):
     note_id: int
-    content: str = Field(max_length=100_000)
+    content: str = Field(max_length=settings.max_embed_content_chars)
 
 
 class ClassifyRequest(BaseModel):
     note_id: int
-    content: str = Field(max_length=10_000)
-    existing_tags: list[str] = []
+    content: str = Field(max_length=settings.max_classify_content_chars)
+    existing_tags: list[_BoundedTag] = Field(default_factory=list, max_length=settings.max_classify_tag_items)
 
 
 class RAGRequest(BaseModel):
-    question: str = Field(max_length=1000)
-    top_k: int = Field(default=5, ge=1, le=20)
+    question: str = Field(max_length=settings.max_rag_question_chars)
+    top_k: int = Field(default=5, ge=1, le=settings.max_rag_top_k)
 
 
 def _estimate_tokens(text: str) -> int:
@@ -204,20 +214,20 @@ def _estimate_tokens(text: str) -> int:
 
 
 class ChatMessage(BaseModel):
-    role: str
-    content: str
+    role: str = Field(max_length=20)
+    content: str = Field(max_length=settings.max_chat_message_chars)
 
 
 class ChatContext(BaseModel):
-    goals: list[dict] = []
-    streaks: list[dict] = []
-    xp: int | None = None
-    top_tags: list[str] = []
-    recent_notes: list[str] = []
+    goals: list[dict] = Field(default_factory=list, max_length=settings.max_chat_context_items)
+    streaks: list[dict] = Field(default_factory=list, max_length=settings.max_chat_context_items)
+    xp: int | None = Field(default=None, ge=0)
+    top_tags: list[_BoundedContextItem] = Field(default_factory=list, max_length=settings.max_chat_context_items)
+    recent_notes: list[_BoundedContextItem] = Field(default_factory=list, max_length=settings.max_chat_context_items)
 
 
 class ChatRequest(BaseModel):
-    messages: list[ChatMessage]
+    messages: list[ChatMessage] = Field(min_length=1, max_length=settings.max_chat_messages)
     context: ChatContext | None = None
     stream: bool = False
 
@@ -499,14 +509,14 @@ async def rag(req: RAGRequest):
 
 
 class DailyRecapRequest(BaseModel):
-    date: str  # YYYY-MM-DD
-    notes_created: int = 0
-    notes_edited: int = 0
-    xp_gained: int = 0
+    date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")  # YYYY-MM-DD
+    notes_created: int = Field(default=0, ge=0)
+    notes_edited: int = Field(default=0, ge=0)
+    xp_gained: int = Field(default=0, ge=0)
     streak_maintained: bool = False
-    goals_completed: int = 0
-    focus_time_minutes: int = 0
-    note_titles: list[str] = []
+    goals_completed: int = Field(default=0, ge=0)
+    focus_time_minutes: int = Field(default=0, ge=0)
+    note_titles: list[_BoundedRecapTitle] = Field(default_factory=list, max_length=settings.max_recap_note_titles)
 
 
 @app.post("/daily-recap")
@@ -640,35 +650,18 @@ async def plan_suggest(req: PlanSuggestRequest):
     return {"suggestions": suggestions, "available": True, "provider": client.provider_name}
 
 
-@app.post("/cluster")
-async def cluster_notes(eps: float = 0.3, min_samples: int = 3, max_notes: int = 500):
-    """Cluster notes by embedding similarity using DBSCAN (#393).
+def _parse_and_cluster(rows, eps: float, min_samples: int):
+    """Parse pgvector rows and run DBSCAN — synchronous, CPU-bound.
 
-    Returns clusters of note IDs that share semantic themes, plus a
-    representative title for each cluster (the note closest to the centroid).
+    Called via ``asyncio.to_thread`` so the O(n²) fit on up to
+    ``max_cluster_notes`` dense vectors (plus the float parsing) never blocks
+    the event loop (#1324).
+
+    Returns ``(note_ids, labels, malformed)``; ``labels`` is ``None`` when
+    malformed rows were found.
     """
-    from database import engine
-    from sqlalchemy import text as sql_text
-
-    with engine.connect() as conn:
-        rows = conn.execute(
-            sql_text("""
-                SELECT ne.note_id, ne.embedding
-                FROM note_embeddings ne
-                JOIN notes n ON n.id = ne.note_id
-                ORDER BY n.created_at DESC
-                LIMIT :max_notes
-            """),
-            {"max_notes": max_notes},
-        ).fetchall()
-
-    if len(rows) < min_samples:
-        return {"clusters": [], "total_notes": len(rows)}
-
-    # Parse embeddings from pgvector string format. Defensive: a malformed
-    # or ragged row (bad float, mismatched dimension) must fail the request
-    # with 422, not a 500 from np.array (#1330).
     import numpy as np
+    from sklearn.cluster import DBSCAN
 
     note_ids: list[int] = []
     embeddings: list[list[float]] = []
@@ -692,18 +685,61 @@ async def cluster_notes(eps: float = 0.3, min_samples: int = 3, max_notes: int =
         embeddings.append(vec)
 
     if malformed:
+        return note_ids, None, malformed
+
+    # DBSCAN clustering — no need to specify number of clusters
+    X = np.array(embeddings)
+    clustering = DBSCAN(eps=eps, min_samples=min_samples, metric="cosine").fit(X)
+    return note_ids, clustering.labels_.tolist(), malformed
+
+
+@app.post("/cluster")
+async def cluster_notes(
+    eps: float = Query(default=0.3, gt=0.0, le=2.0),
+    min_samples: int = Query(default=3, ge=1, le=settings.max_cluster_min_samples),
+    max_notes: int = Query(default=500, ge=1, le=settings.max_cluster_notes),
+):
+    """Cluster notes by embedding similarity using DBSCAN (#393).
+
+    Returns clusters of note IDs that share semantic themes, plus a
+    representative title for each cluster (the note closest to the centroid).
+    """
+    # Clustering is an AI feature — same gate as the other endpoints, plus a
+    # rate-limit slot since the DBSCAN fit is CPU-heavy (#1324).
+    if not settings.is_ai_enabled:
+        return {"status": "disabled", "clusters": [], "total_notes": 0, "error": "No AI provider configured"}
+
+    await get_limiter(settings.max_requests_per_minute, name="cluster").acquire()
+
+    from database import engine
+    from sqlalchemy import text as sql_text
+
+    with engine.connect() as conn:
+        rows = conn.execute(
+            sql_text("""
+                SELECT ne.note_id, ne.embedding
+                FROM note_embeddings ne
+                JOIN notes n ON n.id = ne.note_id
+                ORDER BY n.created_at DESC
+                LIMIT :max_notes
+            """),
+            {"max_notes": max_notes},
+        ).fetchall()
+
+    if len(rows) < min_samples:
+        return {"clusters": [], "total_notes": len(rows)}
+
+    # Parse embeddings from pgvector string format and fit DBSCAN off the
+    # event loop. Defensive: a malformed or ragged row (bad float, mismatched
+    # dimension) must fail the request with 422, not a 500 from np.array
+    # (#1330).
+    note_ids, labels, malformed = await asyncio.to_thread(_parse_and_cluster, rows, eps, min_samples)
+
+    if malformed:
         raise HTTPException(
             status_code=422,
             detail=f"Malformed embedding rows for note_id(s): {malformed[:10]}",
         )
-
-    X = np.array(embeddings)
-
-    # DBSCAN clustering — no need to specify number of clusters
-    from sklearn.cluster import DBSCAN
-
-    clustering = DBSCAN(eps=eps, min_samples=min_samples, metric="cosine").fit(X)
-    labels = clustering.labels_
 
     # Build cluster results
     from collections import defaultdict

@@ -74,6 +74,7 @@
   let tasks: CalendarTask[] = $state([]);
   let status: CalendarStatus | null = $state(null);
   let loading = $state(true);
+  let loadError = $state(false);
   let syncing = $state(false);
 
   type CalendarView = 'month' | 'week' | 'agenda';
@@ -391,8 +392,18 @@
       events = evts;
       status = st;
       tasks = [...scheduled, ...unscheduled];
+      loadError = false;
     } catch (e) {
       logger.error(e);
+      // Surface the failure — the old log-only path rendered an empty
+      // calendar indistinguishable from "no events". When stale data is
+      // already on screen a toast is enough; only swap to the error state
+      // when there is nothing to show (#1305).
+      if (events.length === 0 && tasks.length === 0) {
+        loadError = true;
+      } else {
+        showNotification($t('calendar.loadError'), 'error');
+      }
     } finally {
       loading = false;
     }
@@ -859,6 +870,20 @@
 
   {#if loading}
     <div class="loading-state caption">{$t('calendar.loading')}</div>
+  {:else if loadError}
+    <div class="empty-wrap">
+      <EmptyState
+        title={$t('calendar.loadError')}
+        message={$t('calendar.loadErrorHint')}
+        actionLabel={$t('common.retry')}
+        onAction={() => {
+          loading = true;
+          void refresh();
+        }}
+      >
+        {#snippet icon()}<RefreshCw size={44} />{/snippet}
+      </EmptyState>
+    </div>
   {:else if status && !status.connected}
     <div class="empty-wrap">
       <EmptyState
@@ -878,16 +903,19 @@
             <button
               class="btn btn-ghost view-btn"
               class:active={currentView === 'month'}
+              aria-pressed={currentView === 'month'}
               onclick={() => setView('month')}>{$t('calendar.views.month')}</button
             >
             <button
               class="btn btn-ghost view-btn"
               class:active={currentView === 'week'}
+              aria-pressed={currentView === 'week'}
               onclick={() => setView('week')}>{$t('calendar.views.week')}</button
             >
             <button
               class="btn btn-ghost view-btn"
               class:active={currentView === 'agenda'}
+              aria-pressed={currentView === 'agenda'}
               onclick={() => setView('agenda')}>{$t('calendar.views.agenda')}</button
             >
           </div>
@@ -1095,8 +1123,12 @@
                 role="button"
                 tabindex="0"
                 onclick={() => (selectedDay = selectedDay === day.key ? null : day.key)}
-                onkeydown={(e) =>
-                  e.key === 'Enter' && (selectedDay = selectedDay === day.key ? null : day.key)}
+                onkeydown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    selectedDay = selectedDay === day.key ? null : day.key;
+                  }
+                }}
               >
                 <div class="agenda-date-badge">
                   <span class="day-num">{day.date.getDate()}</span>
@@ -1211,10 +1243,11 @@
                           type="text"
                           bind:value={editTitle}
                           maxlength="500"
+                          aria-label={$t('calendar.editTitle')}
                         />
                         <div class="edit-times">
-                          <input class="input edit-input" type="time" bind:value={editTime} />
-                          <input class="input edit-input" type="time" bind:value={editEndTime} />
+                          <input class="input edit-input" type="time" bind:value={editTime} aria-label={$t('calendar.startTime')} />
+                          <input class="input edit-input" type="time" bind:value={editEndTime} aria-label={$t('calendar.endTime')} />
                         </div>
                         <div class="edit-times">
                           <select
@@ -1312,6 +1345,7 @@
               type="text"
               bind:value={quickAddTitle}
               placeholder={$t('calendar.quickAddPlaceholder')}
+              aria-label={$t('calendar.quickAddPlaceholder')}
               maxlength="500"
               disabled={addingTask}
             />
@@ -1319,6 +1353,7 @@
               class="input quick-time"
               type="time"
               bind:value={quickAddTime}
+              aria-label={$t('calendar.startTime')}
               disabled={addingTask}
             />
             <select
@@ -1411,6 +1446,7 @@
               type="text"
               bind:value={trayAddTitle}
               placeholder={$t('calendar.unscheduledAddPlaceholder')}
+              aria-label={$t('calendar.unscheduledAddPlaceholder')}
               maxlength="500"
               disabled={trayAdding}
             />
@@ -2097,10 +2133,23 @@
     font-size: 10px;
     color: var(--text-muted);
     user-select: none;
+    position: relative;
   }
 
+  /* Visually hidden but focusable: display:none would remove the checkbox
+     from the tab order entirely (#1268). */
   .publish-toggle input {
-    display: none;
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+    pointer-events: none;
+  }
+
+  .publish-toggle input:focus-visible + .publish-label {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
   }
 
   .publish-label {

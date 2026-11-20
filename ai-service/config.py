@@ -142,6 +142,25 @@ class Settings(BaseSettings):
     cache_ttl_seconds: float = 3600.0
     cache_max_size: int = 2048
 
+    # Request-size bounds (#1324): cap text lengths, batch sizes and result
+    # counts so a single request cannot burn paid-provider quota, exhaust
+    # memory, or stall the event loop on CPU-bound work. Overridable via env
+    # for deployments that legitimately need larger limits.
+    max_embed_content_chars: int = 100_000
+    max_classify_content_chars: int = 10_000
+    max_classify_tag_items: int = 100
+    max_tag_chars: int = 100
+    max_rag_question_chars: int = 1_000
+    max_rag_top_k: int = 20
+    max_chat_messages: int = 50
+    max_chat_message_chars: int = 20_000
+    max_chat_context_items: int = 50
+    max_chat_context_item_chars: int = 500
+    max_recap_note_titles: int = 50
+    max_recap_title_chars: int = 200
+    max_cluster_notes: int = 2_000
+    max_cluster_min_samples: int = 200
+
     @model_validator(mode="after")
     def _validate_provider_base_urls(self) -> "Settings":
         """Refuse to start on insecure/malformed provider base URLs (#1330).

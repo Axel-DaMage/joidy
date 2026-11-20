@@ -2,6 +2,7 @@
   import '../app.css';
   import { browser } from '$app/env';
   import { page } from '$app/state';
+  import { afterNavigate } from '$app/navigation';
   import { onMount } from 'svelte';
   import { fade } from 'svelte/transition';
   import { isOnline, wasOffline } from '$lib/stores/connection';
@@ -90,10 +91,14 @@
     { href: '/calendar', label: $t('nav.calendar'), icon: 'Calendar', status: 'ready' },
   ] as { href: string; label: string; icon: string; status: NavItemStatus }[];
 
-  // Track page views on route changes (foreground-only, debounced in the store).
-  $: if (mounted && $isAuthenticated) {
-    trackPageView(page.url.pathname);
-  }
+  // Track page views on route changes (foreground-only, debounced in the
+  // store). This runs in afterNavigate — a legacy `$:` statement never
+  // re-runs on $app/state changes, so SPA navigations were invisible (#1305).
+  afterNavigate((nav) => {
+    if ($isAuthenticated && nav.to?.url.pathname) {
+      trackPageView(nav.to.url.pathname);
+    }
+  });
 
   let settingsOpen = false;
   let now = new Date();
@@ -201,7 +206,9 @@
       }
       const wsUrl = `${wsProto}//${wsHost}/ws${getToken() ? `?token=${encodeURIComponent(getToken()!)}` : ''}`;
 
-      logger.info('[layout] Connecting to WebSocket:', wsUrl);
+      // Log the URL without the query string — wsUrl carries the JWT in
+      // ?token= and tokens must never reach console output (#1317).
+      logger.info('[layout] Connecting to WebSocket:', wsUrl.split('?')[0]);
       ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {
@@ -369,10 +376,9 @@
     };
     requestAnimationFrame(() => init());
 
-    // Start sync conflict polling when authenticated
-    if ($isAuthenticated) {
-      syncStore.startPolling();
-    }
+    // Sync conflict polling is driven by the session lifecycle inside the
+    // sync store itself (session.subscribe) so it also starts on in-session
+    // logins, not just on mount (#1305).
 
     // Global error handlers
     const handleOnerror = (
@@ -533,6 +539,18 @@
   <Toast />
 {:else}
   <div class="app-shell">
+    <!-- Skip link: first tab stop on every route (#1268). The click handler
+         moves focus explicitly because SPA hash navigation does not reliably
+         focus the target. -->
+    <a
+      href="#main-content"
+      class="skip-link"
+      onclick={(e) => {
+        e.preventDefault();
+        document.getElementById('main-content')?.focus();
+      }}>{$t('layout.skipToContent')}</a
+    >
+
     <!-- Header -->
     <header class="app-header">
       <span class="logo mono">JOIDY</span>
@@ -605,14 +623,14 @@
         </div>
       {/if}
 
-      <!-- Connectivity Indicator -->
+      <!-- Connectivity Indicator — announced via a status live region (#1269) -->
       {#if !$isOnline}
-        <div class="connectivity-pill offline" transition:fade={{ duration: 150 }}>
+        <div class="connectivity-pill offline" role="status" transition:fade={{ duration: 150 }}>
           <span class="pulse-dot red"></span>
           <span>{$t('status.offline')}</span>
         </div>
       {:else if showConnectedPill}
-        <div class="connectivity-pill online" transition:fade={{ duration: 150 }}>
+        <div class="connectivity-pill online" role="status" transition:fade={{ duration: 150 }}>
           <span class="pulse-dot green"></span>
           <span>{$t('status.online')}</span>
         </div>
@@ -660,6 +678,7 @@
             class:nav-dev={status === 'dev'}
             class:nav-placeholder={status === 'placeholder'}
             title={label}
+            aria-current={active ? 'page' : undefined}
           >
             <DynamicIcon name={icon} size={16} />
             {#if status === 'dev'}
@@ -674,7 +693,8 @@
     </nav>
 
     <!-- Main content -->
-    <main class="app-main">
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+    <main class="app-main" id="main-content" tabindex="-1">
       <slot />
     </main>
 
@@ -706,6 +726,7 @@
           <span
             class="status-pill status-streak-alert has-pending"
             title={$t('status.pendingStreaks')}
+            role="status"
           >
             <DynamicIcon
               name="Flame"
@@ -837,7 +858,7 @@
     border: 1px solid var(--border);
     border-radius: var(--r);
     background: var(--elevated);
-    color: var(--text-disabled);
+    color: var(--text-muted);
     transition: all var(--t-normal);
   }
   .mini-pomo.is-running {
@@ -1094,5 +1115,32 @@
   }
   .nav-item.nav-placeholder:hover {
     opacity: 0.8;
+  }
+
+  /* Skip link — visually hidden until focused (#1268) */
+  .skip-link {
+    position: fixed;
+    top: var(--s2);
+    left: var(--s2);
+    z-index: var(--z-tooltip);
+    padding: var(--s2) var(--s4);
+    background: var(--elevated);
+    color: var(--text-primary);
+    border: 1px solid var(--accent);
+    border-radius: var(--r);
+    font-size: 12px;
+    font-family: var(--font-mono);
+    text-decoration: none;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-8px);
+    transition:
+      opacity var(--t-fast),
+      transform var(--t-fast);
+  }
+  .skip-link:focus-visible {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
   }
 </style>

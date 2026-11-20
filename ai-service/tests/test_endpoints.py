@@ -297,7 +297,13 @@ def _mock_cluster_db(monkeypatch, rows):
 
 
 class TestClusterEndpoint:
-    def test_malformed_embedding_row_returns_422(self, ai_disabled, monkeypatch):
+    def test_disabled_when_ai_not_configured(self, ai_disabled):
+        resp = _client().post("/cluster")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "disabled"
+        assert resp.json()["clusters"] == []
+
+    def test_malformed_embedding_row_returns_422(self, ai_enabled, monkeypatch):
         _mock_cluster_db(
             monkeypatch,
             [(1, "[0.1,0.2,0.3]"), (2, "not-a-vector"), (3, "[0.4,0.5,0.6]")],
@@ -306,7 +312,7 @@ class TestClusterEndpoint:
         assert resp.status_code == 422
         assert "Malformed embedding" in resp.json()["detail"]
 
-    def test_ragged_embedding_dimensions_returns_422(self, ai_disabled, monkeypatch):
+    def test_ragged_embedding_dimensions_returns_422(self, ai_enabled, monkeypatch):
         _mock_cluster_db(
             monkeypatch,
             [(1, "[0.1,0.2,0.3]"), (2, "[0.4,0.5]"), (3, "[0.6,0.7,0.8]")],
@@ -314,7 +320,7 @@ class TestClusterEndpoint:
         resp = _client().post("/cluster?min_samples=1")
         assert resp.status_code == 422
 
-    def test_valid_embeddings_do_not_422(self, ai_disabled, monkeypatch):
+    def test_valid_embeddings_do_not_422(self, ai_enabled, monkeypatch):
         _mock_cluster_db(
             monkeypatch,
             [
@@ -328,7 +334,7 @@ class TestClusterEndpoint:
         assert resp.status_code == 200
         assert "clusters" in resp.json()
 
-    def test_too_few_notes_short_circuits(self, ai_disabled, monkeypatch):
+    def test_too_few_notes_short_circuits(self, ai_enabled, monkeypatch):
         _mock_cluster_db(monkeypatch, [(1, "[0.1,0.2]")])
         resp = _client().post("/cluster?min_samples=5")
         assert resp.status_code == 200

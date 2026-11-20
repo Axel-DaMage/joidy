@@ -26,18 +26,21 @@
 		<input
 			type="text"
 			placeholder={$t('iconPicker.searchPlaceholder')}
+			aria-label={$t('iconPicker.searchPlaceholder')}
 			bind:value={$searchTerm}
 			onfocus={() => picker.visibleLimit.set(150)}
 		/>
 		<span class="count">{$filteredAll.length}</span>
 	</div>
 
-	<div class="icon-grid scrollbar-hide" onscroll={(e) => picker.handleScroll(e)}>
+	<div class="icon-grid scrollbar-hide" role="listbox" aria-label={$t('iconPicker.title')} onscroll={(e) => picker.handleScroll(e)}>
 		{#each $visibleIcons as icon}
 			<button
 				type="button"
 				class="icon-btn"
 				class:active={selected === icon}
+				role="option"
+				aria-selected={selected === icon}
 				onclick={() => select(icon)}
 				title={icon}
 				aria-label={icon}
@@ -78,6 +81,11 @@
 		background: rgba(255, 255, 255, 0.08);
 	}
 
+
+	input:focus-visible {
+		outline: 2px solid var(--xp);
+		outline-offset: 2px;
+	}
 
 	input {
 		flex: 1;

@@ -66,6 +66,8 @@ export const newFolderName = writable('');
 export const newFolderParent = writable('');
 export const newFolderIcon = writable('Folder');
 export const newFolderColor = writable('');
+// Pending folder deletion, confirmed via ConfirmDialog (replaces window.confirm, #1308).
+export const deletingFolder = writable<{ path: string; name: string } | null>(null);
 
 // Internal scroll/positions shared between the page (prefs persist) and the
 // sidebar (list scroll owner). Underscore-prefixed = not part of the public API.

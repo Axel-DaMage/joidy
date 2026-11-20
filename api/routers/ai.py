@@ -1,13 +1,13 @@
 import json
 import logging
-from datetime import date, datetime, time, timedelta
-from typing import cast
+from datetime import UTC, date, datetime, time, timedelta
+from typing import Annotated, cast
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx
 from config import settings
 from database import SessionLocal, get_db
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from middleware.correlation_id import get_correlation_id
 from models.calendar_task import CalendarTask
@@ -16,7 +16,7 @@ from models.gamification import UserStats
 from models.goal import Goal, GoalState
 from models.google_calendar_event import GoogleCalendarEvent
 from models.note import Note, NoteTag, Tag
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from services.auth_service import get_current_user
 from services.http_client import http_client
 from services.timezone_utils import get_local_today, get_user_tz, to_utc_datetime
@@ -40,8 +40,8 @@ def _ai_disabled_response(endpoint: str) -> dict:
 
 class ClassifyRequest(BaseModel):
     note_id: int
-    content: str
-    existing_tags: list[str] = []
+    content: str = Field(max_length=10_000)
+    existing_tags: list[Annotated[str, Field(max_length=100)]] = Field(default_factory=list, max_length=100)
 
 
 @router.post("/classify")
@@ -81,7 +81,11 @@ async def usage():
 
 
 @router.post("/cluster")
-async def cluster_notes(eps: float = 0.3, min_samples: int = 3, max_notes: int = 500):
+async def cluster_notes(
+    eps: float = Query(default=0.3, gt=0.0, le=2.0),
+    min_samples: int = Query(default=3, ge=1, le=200),
+    max_notes: int = Query(default=500, ge=1, le=2_000),
+):
     """Cluster notes by semantic similarity via the ai-service (#393)."""
     if not settings.ai_service_enabled:
         return {**_ai_disabled_response("cluster"), "clusters": [], "total_notes": 0}
@@ -173,12 +177,12 @@ async def daily_recap(
 
 
 class ChatMessage(BaseModel):
-    role: str
-    content: str
+    role: str = Field(max_length=20)
+    content: str = Field(max_length=20_000)
 
 
 class ChatRequest(BaseModel):
-    messages: list[ChatMessage]
+    messages: list[ChatMessage] = Field(min_length=1, max_length=50)
     session_id: int | None = None
 
 
@@ -528,6 +532,15 @@ def _task_duration_minutes(task: CalendarTask, day: date) -> int | None:
     return minutes if minutes > 0 else None
 
 
+def _aware_utc(dt: datetime) -> datetime:
+    """Return ``dt`` tz-aware in UTC.
+
+    ``DateTime(timezone=True)`` columns come back naive on SQLite (the test
+    engine); values are stored as UTC instants, so reattaching UTC is safe.
+    """
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
+
+
 @router.post("/plan-suggest")
 async def plan_suggest(
     req: PlanSuggestRequest,
@@ -608,7 +621,9 @@ async def plan_suggest(
                 end_day = start_day + timedelta(days=1)
             busy_blocks.append({"start": f"{start_day.isoformat()}T00:00:00", "end": f"{end_day.isoformat()}T00:00:00"})
         else:
-            busy_blocks.append({"start": e.start_at.isoformat(), "end": (e.end_at or e.start_at).isoformat()})
+            busy_blocks.append(
+                {"start": _aware_utc(e.start_at).isoformat(), "end": _aware_utc(e.end_at or e.start_at).isoformat()}
+            )
 
     payload = {
         "tasks": tasks_payload,

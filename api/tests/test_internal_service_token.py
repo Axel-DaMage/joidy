@@ -23,7 +23,7 @@ def test_login_rejects_stored_hash(persisted_env):
     stored = hash_password("s3cret")
     persisted_env.write_text(f"AUTH_PASSWORD={stored}\nSECRET_KEY=test-secret\n")
 
-    with TestClient(app) as client:
+    with TestClient(app, client=("127.0.0.1", 50000)) as client:
         assert client.post("/auth/login", json={"password": stored}).status_code == 401
         assert client.post("/auth/login", json={"password": "s3cret"}).status_code == 200
 
@@ -50,13 +50,12 @@ def test_internal_token_authenticates_vault_routes(persisted_env, db_session):
 
     app.dependency_overrides[get_db] = override_get_db
     try:
-        with TestClient(app) as client, patch("routers.vault.write_daily", return_value=True):
+        with (
+            TestClient(app, client=("127.0.0.1", 50000)) as client,
+            patch("routers.vault.write_daily", return_value=True),
+        ):
             assert client.post("/vault/write-daily").status_code == 401
-            assert (
-                client.post("/vault/write-daily", headers={"Authorization": "Bearer service-tok"}).status_code == 200
-            )
-            assert (
-                client.post("/vault/write-daily", headers={"Authorization": f"Bearer {stored}"}).status_code == 401
-            )
+            assert client.post("/vault/write-daily", headers={"Authorization": "Bearer service-tok"}).status_code == 200
+            assert client.post("/vault/write-daily", headers={"Authorization": f"Bearer {stored}"}).status_code == 401
     finally:
         app.dependency_overrides.pop(get_db, None)

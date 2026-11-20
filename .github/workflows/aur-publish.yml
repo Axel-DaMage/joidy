@@ -28,11 +28,28 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Validate dispatch inputs
+        env:
+          # Input mapped to env — ${{ }} interpolation inside run: expands
+          # before the shell parses the line, so a crafted version string
+          # could break quoting and inject arbitrary commands (#1295).
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          # Repo tags are always 'vMAJOR.MINOR.PATCH' with optional
+          # '-prerelease.N' suffix (e.g. v1.1.0-beta.8).
+          if [ -n "$INPUT_VERSION" ] && [[ ! "$INPUT_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
+            echo "::error::Invalid version '$INPUT_VERSION' — expected a tag like v1.2.3 or v1.2.3-beta.4"
+            exit 1
+          fi
+          echo "Dispatch inputs are valid"
+
       - name: Determine version
         id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.version }}" ]; then
-            VERSION="${{ inputs.version }}"
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ -n "$INPUT_VERSION" ]; then
+            VERSION="$INPUT_VERSION"
           else
             VERSION="${GITHUB_REF#refs/tags/}"
           fi
@@ -40,8 +57,9 @@ jobs:
           echo "Publishing AUR package for ${VERSION}"
 
       - name: Verify AUR files are up to date
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
           VERSION_CLEAN="${VERSION#v}"
           VERSION_AUR="${VERSION_CLEAN//-/_}"
           PKGBUILD_VER=$(grep '^pkgver=' aur/PKGBUILD | cut -d= -f2)
@@ -53,9 +71,11 @@ jobs:
           echo "AUR files are up to date (pkgver=$PKGBUILD_VER)"
 
       - name: Configure SSH
+        env:
+          AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.AUR_SSH_KEY }}" > ~/.ssh/aur_key
+          echo "$AUR_SSH_KEY" > ~/.ssh/aur_key
           chmod 600 ~/.ssh/aur_key
           echo "Host aur.archlinux.org" >> ~/.ssh/config
           echo "  HostName aur.archlinux.org" >> ~/.ssh/config
@@ -67,8 +87,8 @@ jobs:
       - name: Publish to AUR
         env:
           GIT_SSH_COMMAND: "ssh -i ~/.ssh/aur_key -o StrictHostKeyChecking=no"
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
           # Clone the AUR repo
           git clone "ssh://aur@aur.archlinux.org/joidy.git" /tmp/aur
           cd /tmp/aur
