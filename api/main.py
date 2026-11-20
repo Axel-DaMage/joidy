@@ -41,6 +41,7 @@ from routers import (
     tags,
     telegram,
     upload,
+    user_settings,
     vault,
     websocket,
 )
@@ -313,6 +314,7 @@ app.include_router(export.router, dependencies=[Depends(get_current_user)])
 app.include_router(stats.router, dependencies=[Depends(get_current_user)])
 app.include_router(analytics.router, dependencies=[Depends(get_current_user)])
 app.include_router(sync.router, dependencies=[Depends(get_current_user)])
+app.include_router(user_settings.router, dependencies=[Depends(get_current_user)])
 app.include_router(upload.router, dependencies=[Depends(get_current_user)])
 # /system/power is opt-in (#1278): the engine socket is only mounted via the
 # docker-compose.power.yml overlay. When the feature is off we register a
