@@ -2,8 +2,8 @@ import { test, expect, authGoto, dismissConflictModal } from './helpers/auth';
 
 /**
  * Home/Dashboard feature — comprehensive E2E tests.
- * Covers: plant widget, pomodoro, mood tracker, quick capture,
- * GitHub widget, recent notes, clock, focus mode.
+ * Covers: module carousel, XP stats, pomodoro, GitHub widget,
+ * recent notes, clock, focus mode.
  */
 test.describe('Home — dashboard structure', () => {
   test('dashboard loads with plant widget', async ({ page }) => {
@@ -19,11 +19,6 @@ test.describe('Home — dashboard structure', () => {
     await expect(page.locator('text=/NVL\\s+\\d+/i')).toBeVisible({ timeout: 5000 });
   });
 
-  test('activity week tracker is visible', async ({ page }) => {
-    await authGoto(page, '/');
-    // Week days LMXJVSD
-    await expect(page.locator('text=/LMXJVSD/i')).toBeVisible({ timeout: 5000 });
-  });
 });
 
 test.describe('Home — plant visualization', () => {
@@ -96,39 +91,21 @@ test.describe('Home — pomodoro timer', () => {
 test.describe('Home — focus mode', () => {
   test('focus mode button is visible', async ({ page }) => {
     await authGoto(page, '/');
-    await expect(page.locator('button:has-text("Modo Enfoque")')).toBeVisible({ timeout: 5000 });
+    // The focus-mode trigger is the icon-only mini-focus-btn in the status
+    // bar (aria-label "Iniciar modo enfoque" in es locale — has-text does
+    // not match the title attribute).
+    await expect(page.locator('.mini-focus-btn')).toBeVisible({ timeout: 5000 });
   });
 
   test('can toggle focus mode', async ({ page }) => {
     await authGoto(page, '/');
-    const focusBtn = page.locator('button:has-text("Modo Enfoque")');
+    const focusBtn = page.locator('.mini-focus-btn');
     await focusBtn.click();
-    await page.waitForTimeout(500);
-    // Focus mode overlay should appear or button state changes
+    // Focus mode overlay should appear
+    await expect(page.locator('.focus-overlay')).toBeVisible({ timeout: 5000 });
     // Press Escape to exit if overlay appeared
     await page.keyboard.press('Escape');
     await page.waitForTimeout(300);
-  });
-});
-
-test.describe('Home — mood tracker', () => {
-  test('mood buttons are visible', async ({ page }) => {
-    await authGoto(page, '/');
-    // 5 mood emoji buttons — Spanish aria-label: "Ánimo X de 5"
-    await expect(page.locator('button[aria-label="Ánimo 1 de 5"]')).toBeVisible({ timeout: 5000 });
-    await expect(page.locator('button[aria-label="Ánimo 2 de 5"]')).toBeVisible();
-    await expect(page.locator('button[aria-label="Ánimo 3 de 5"]')).toBeVisible();
-    await expect(page.locator('button[aria-label="Ánimo 4 de 5"]')).toBeVisible();
-    await expect(page.locator('button[aria-label="Ánimo 5 de 5"]')).toBeVisible();
-  });
-
-  test('can select a mood', async ({ page }) => {
-    await authGoto(page, '/');
-    const moodBtn = page.locator('button[aria-label="Ánimo 4 de 5"]');
-    await moodBtn.click();
-    await page.waitForTimeout(300);
-    // The button should become active/selected
-    await expect(moodBtn).toHaveClass(/active|selected/);
   });
 });
 

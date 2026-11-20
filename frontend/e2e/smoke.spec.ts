@@ -24,10 +24,15 @@ test.describe('Smoke — app shell', () => {
     await expect(xp).toBeVisible({ timeout: 5000 });
   });
 
-  test('all 7 nav items are present and clickable', async ({ page }) => {
+  test('all 10 nav items are present and clickable', async ({ page }) => {
     await authGoto(page, '/');
     const nav = page.locator('nav.app-sidebar');
-    const expectedHrefs = ['/', '/notes', '/graph', '/skills', '/ai', '/streaks', '/goals'];
+    // /graph and /skills are dev-status items — visible because the auth
+    // helper enables Dev Mode (joidy-dev-mode localStorage key).
+    const expectedHrefs = [
+      '/', '/notes', '/graph', '/skills', '/ai',
+      '/streaks', '/goals', '/emails', '/calendar', '/timers',
+    ];
     for (const href of expectedHrefs) {
       const link = nav.locator(`a[href="${href}"]`);
       await expect(link).toBeVisible();
@@ -74,6 +79,9 @@ test.describe('Smoke — navigation between pages', () => {
     { path: '/ai', title: 'AI' },
     { path: '/streaks', title: 'Streaks' },
     { path: '/goals', title: 'Goals' },
+    { path: '/emails', title: 'Emails' },
+    { path: '/calendar', title: 'Calendar' },
+    { path: '/timers', title: 'Timers' },
   ];
 
   for (const p of pages) {

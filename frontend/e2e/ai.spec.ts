@@ -15,9 +15,15 @@ test.describe('AI — page structure', () => {
     await expect(page.locator('.beta-banner')).toBeVisible();
   });
 
-  test('IA active status is shown', async ({ page }) => {
+  test('IA status pill is shown', async ({ page }) => {
     await authGoto(page, '/ai');
-    await expect(page.locator('text=/IA activa/i')).toBeVisible({ timeout: 5000 });
+    // The pill reports real backend reachability (#1460): "IA activa",
+    // "IA degradada", "IA inactiva" or "IA no disponible" depending on the
+    // environment's AI provider config. Any of them means the status
+    // indicator rendered — assert the pill itself is visible with "IA".
+    const pill = page.locator('.ai-status .status-pill');
+    await expect(pill).toBeVisible({ timeout: 10000 });
+    await expect(pill).toContainText(/IA/i);
   });
 
   test('chat interface is visible', async ({ page }) => {

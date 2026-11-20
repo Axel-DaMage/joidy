@@ -101,8 +101,8 @@ test.describe('Streaks — create modal', () => {
     await expect(page.locator('button[aria-label="Crear nueva racha"]')).toBeVisible({ timeout: 5000 });
     await page.locator('button[aria-label="Crear nueva racha"]').click();
     await page.waitForTimeout(500);
-    // Modal should appear
-    await expect(page.locator('[aria-label="Crear racha"]')).toBeVisible({ timeout: 3000 });
+    // Modal should appear (StreakCreateModal: .modal-panel role=dialog)
+    await expect(page.locator('.modal-backdrop .modal-panel')).toBeVisible({ timeout: 3000 });
     await expect(page.locator('text=NUEVA RACHA')).toBeVisible({ timeout: 3000 });
   });
 
@@ -111,7 +111,7 @@ test.describe('Streaks — create modal', () => {
     await page.locator('button[aria-label="Crear nueva racha"]').click();
     await page.waitForTimeout(500);
     // Should have a name/title input
-    const nameInput = page.locator('[aria-label="Crear racha"] input').first();
+    const nameInput = page.locator('.modal-backdrop .modal-panel input').first();
     await expect(nameInput).toBeVisible({ timeout: 3000 });
   });
 
@@ -127,10 +127,10 @@ test.describe('Streaks — create modal', () => {
     await authGoto(page, '/streaks');
     await page.locator('button[aria-label="Crear nueva racha"]').click();
     await page.waitForTimeout(500);
-    await expect(page.locator('[aria-label="Crear racha"]')).toBeVisible({ timeout: 3000 });
+    await expect(page.locator('.modal-backdrop .modal-panel')).toBeVisible({ timeout: 3000 });
     await page.locator('button:has-text("Cancelar")').click();
     await page.waitForTimeout(500);
-    await expect(page.locator('[aria-label="Crear racha"]')).not.toBeVisible({ timeout: 3000 });
+    await expect(page.locator('.modal-backdrop .modal-panel')).not.toBeVisible({ timeout: 3000 });
   });
 });
 
