@@ -475,21 +475,65 @@ jobs:
           docker compose -f docker-compose.yml -f docker-compose.dev.yml logs --tail=100 frontend
           exit 1
 
-      # PRs run the smoke spec only (fast gate); pushes to main/development
-      # run the full 13-spec suite. GEMINI_API_KEY stays unset so the specs
-      # exercise the real "AI disabled" path of the CI stack.
-      - name: Run smoke e2e (pull requests)
+      # PRs run the smoke spec plus the specs covering the routes the PR
+      # touches — src/routes/<dir>/ maps to e2e/<dir>.spec.ts (#1255).
+      # Changes to shared frontend code (src/lib, root layout, e2e helpers,
+      # playwright config) can affect every route, so they run the full
+      # suite. Pushes to main/development always run everything.
+      # GEMINI_API_KEY stays unset so the specs exercise the real
+      # "AI disabled" path of the CI stack.
+      - name: Select e2e specs for changed routes (pull requests)
         if: github.event_name == 'pull_request'
+        id: e2e-specs
+        working-directory: frontend
+        run: |
+          git fetch --no-tags --depth=1 origin "+refs/heads/${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}"
+          CHANGED="$(git diff --name-only "origin/${{ github.base_ref }}...HEAD" -- frontend/ || true)"
+          echo "Changed frontend files:"
+          echo "${CHANGED:-<none>}"
+
+          SPECS="e2e/smoke.spec.ts"
+          RUN_ALL="false"
+
+          # Shared code affects every route — run the full suite.
+          if printf '%s\n' "$CHANGED" | grep -qE '^frontend/(src/lib/|src/routes/\+layout|src/hooks|e2e/|playwright\.config\.ts|package(-lock)?\.json)'; then
+            RUN_ALL="true"
+          fi
+
+          # Map each changed route directory to its spec(s).
+          ROUTE_DIRS="$(printf '%s\n' "$CHANGED" | grep -oE '^frontend/src/routes/[^/.+]+' | sed 's|^frontend/src/routes/||' | sort -u || true)"
+          for dir in $ROUTE_DIRS; do
+            case "$dir" in
+              notes)   SPECS="$SPECS e2e/notes.spec.ts e2e/note-editor.spec.ts" ;;
+              goals)   SPECS="$SPECS e2e/goals.spec.ts e2e/goal-editor.spec.ts e2e/analytics.spec.ts" ;;
+              streaks) SPECS="$SPECS e2e/streaks.spec.ts e2e/streak-interactions.spec.ts" ;;
+              *)       [ -f "e2e/${dir}.spec.ts" ] && SPECS="$SPECS e2e/${dir}.spec.ts" ;;
+            esac
+          done
+
+          # The root page (/) is covered by home + settings specs.
+          if printf '%s\n' "$CHANGED" | grep -q '^frontend/src/routes/+page.svelte'; then
+            SPECS="$SPECS e2e/home.spec.ts e2e/settings.spec.ts"
+          fi
+
+          {
+            echo "run_all=$RUN_ALL"
+            echo "specs=$SPECS"
+          } >> "$GITHUB_OUTPUT"
+          echo "Selected specs: ${SPECS:-<all>}"
+
+      - name: Run route-scoped e2e (pull requests)
+        if: github.event_name == 'pull_request' && steps.e2e-specs.outputs.run_all != 'true'
         working-directory: frontend
         env:
           CI: true
           PLAYWRIGHT_BASE_URL: http://localhost:3000
           PLAYWRIGHT_API_URL: http://localhost:8000
           JOIDY_TEST_PASSWORD: joidy-e2e-ci
-        run: npx playwright test e2e/smoke.spec.ts
+        run: npx playwright test ${{ steps.e2e-specs.outputs.specs }}
 
-      - name: Run full e2e suite (branch pushes)
-        if: github.event_name == 'push'
+      - name: Run full e2e suite (branch pushes + shared-code PRs)
+        if: github.event_name == 'push' || steps.e2e-specs.outputs.run_all == 'true'
         working-directory: frontend
         env:
           CI: true
