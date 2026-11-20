@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     cors_allowed_origins: str = (
         ""  # Comma-separated origins for production (e.g. "https://joidy.app,https://www.joidy.app")
     )
+    # Comma-separated IPs/CIDRs of trusted reverse proxies. X-Forwarded-For is
+    # only honored (for rate-limit bucketing) when the direct peer matches one
+    # of these (#1276). Empty = always use the direct peer IP.
+    trusted_proxies: str = ""
 
     # GitHub Integration (OAuth - Web Flow + Device Flow)
     github_client_id: str = ""
