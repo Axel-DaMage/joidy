@@ -168,6 +168,9 @@
       <button class="filter-chip" class:active={onlyImportant} onclick={toggleImportantFilter}>
         <Star size={13} /> {$t('emails.importantOnly')}
       </button>
+      <!-- Native Gmail client (#42) — separate live-API surface from this
+           n8n-synced inbox; plain <a> keeps it working without JS. -->
+      <a class="filter-chip gmail-link" href="/gmail">{$t('nav.gmail')}</a>
       <button class="filter-chip refresh" onclick={refresh} aria-label="refresh">
         <RefreshCw size={13} />
       </button>
@@ -326,6 +329,10 @@
     background: var(--accent);
     border-color: var(--accent);
     color: var(--bg-primary, #fff);
+  }
+
+  .gmail-link {
+    text-decoration: none;
   }
 
   .account-chips {

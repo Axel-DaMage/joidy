@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import ExternalLink from 'lucide-svelte/icons/external-link';
   import DynamicIcon from './DynamicIcon.svelte';
+  import SettingsGmail from './SettingsGmail.svelte';
   import { api } from '$lib/api';
   import { showNotification } from '$lib/stores/notifications';
   import type { SystemConfig } from '$lib/utils/settingsTypes';
@@ -252,6 +253,10 @@
     </div>
   {/if}
 </div>
+
+<!-- Gmail capability + watch status (#42) — lives under the Google OAuth group
+     since it reuses the same connection; reconnect re-runs this flow. -->
+<SettingsGmail googleConnected={googleConnected} onReconnect={startGoogleAuth} />
 
 <style>
   .row {
