@@ -67,6 +67,7 @@
   let previewMode = $state(false);
   let wysiwygMode = $state(false);
   let wysiwygRef = $state<WysiwygEditor | undefined>();
+  let contentRef = $state<NoteEditorContent | undefined>();
   let textareaEl = $state<HTMLTextAreaElement | undefined>();
   let aiTimeout: ReturnType<typeof setTimeout>;
   let autosaveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -222,6 +223,9 @@
 
   async function handleSave() {
     if (!title.trim()) return;
+    // Tag extraction is debounced per keystroke (#1311) — flush before the
+    // save payload is built so a just-typed `# Tags:` line is not lost.
+    contentRef?.flushTagSync?.();
     saving = true;
     dispatch('save', { title: title.trim(), content, tags });
     saving = false;
@@ -366,6 +370,7 @@
 
   <!-- Content area -->
   <NoteEditorContent
+    bind:this={contentRef}
     bind:content
     bind:tags
     bind:previousContentTags

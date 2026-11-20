@@ -5,7 +5,9 @@
   import { displayTagName } from '$lib/utils/format';
   import BetaBanner from '$lib/components/BetaBanner.svelte';
   import { openShare } from '$lib/stores/shareAchievement';
-  import { Search, X, Share2 } from 'lucide-svelte';
+  import Search from 'lucide-svelte/icons/search';
+  import X from 'lucide-svelte/icons/x';
+  import Share2 from 'lucide-svelte/icons/share-2';
   import { t } from 'svelte-i18n';
 
   // Lazy-load the heavy SkillTree (236 lines, pulls in d3) so it is split

@@ -1,28 +1,26 @@
 <script lang="ts">
-  import {
-    Eye,
-    EyeOff,
-    Save,
-    Trash2,
-    X,
-    ChevronLeft,
-    ChevronRight,
-    Bold,
-    Italic,
-    Strikethrough,
-    Heading1,
-    Heading2,
-    Heading3,
-    List,
-    ListOrdered,
-    Link,
-    Quote,
-    Code,
-    Image,
-    Paperclip,
-    Type,
-    Maximize,
-  } from 'lucide-svelte';
+  import Eye from 'lucide-svelte/icons/eye';
+  import EyeOff from 'lucide-svelte/icons/eye-off';
+  import Save from 'lucide-svelte/icons/save';
+  import Trash2 from 'lucide-svelte/icons/trash-2';
+  import X from 'lucide-svelte/icons/x';
+  import ChevronLeft from 'lucide-svelte/icons/chevron-left';
+  import ChevronRight from 'lucide-svelte/icons/chevron-right';
+  import Bold from 'lucide-svelte/icons/bold';
+  import Italic from 'lucide-svelte/icons/italic';
+  import Strikethrough from 'lucide-svelte/icons/strikethrough';
+  import Heading1 from 'lucide-svelte/icons/heading-1';
+  import Heading2 from 'lucide-svelte/icons/heading-2';
+  import Heading3 from 'lucide-svelte/icons/heading-3';
+  import List from 'lucide-svelte/icons/list';
+  import ListOrdered from 'lucide-svelte/icons/list-ordered';
+  import Link from 'lucide-svelte/icons/link';
+  import Quote from 'lucide-svelte/icons/quote';
+  import Code from 'lucide-svelte/icons/code';
+  import Image from 'lucide-svelte/icons/image';
+  import Paperclip from 'lucide-svelte/icons/paperclip';
+  import Type from 'lucide-svelte/icons/type';
+  import Maximize from 'lucide-svelte/icons/maximize';
   import { api, type Note } from '$lib/api';
   import { showNotification } from '$lib/stores/gamification';
   import NoteExportMenu from './NoteExportMenu.svelte';

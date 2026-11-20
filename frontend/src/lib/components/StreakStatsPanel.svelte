@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { StreakStats } from '$lib/api';
-  import { ChartNoAxesColumn, Calendar } from 'lucide-svelte';
+  import ChartNoAxesColumn from 'lucide-svelte/icons/chart-no-axes-column';
+  import Calendar from 'lucide-svelte/icons/calendar';
   import { t } from 'svelte-i18n';
 
   export let stats: StreakStats | null = null;

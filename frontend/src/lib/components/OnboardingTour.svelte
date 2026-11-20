@@ -2,7 +2,10 @@
   import { onboarding, ONBOARDING_STEPS } from '$lib/stores/onboarding';
   import { highlightElement, clearHighlight } from '$lib/utils/spotlight';
   import { fly, fade } from 'svelte/transition';
-  import { ArrowRight, ArrowLeft, X, Check } from 'lucide-svelte';
+  import ArrowRight from 'lucide-svelte/icons/arrow-right';
+  import ArrowLeft from 'lucide-svelte/icons/arrow-left';
+  import X from 'lucide-svelte/icons/x';
+  import Check from 'lucide-svelte/icons/check';
   import { t } from 'svelte-i18n';
 
   $: step = ONBOARDING_STEPS[$onboarding.currentStep];

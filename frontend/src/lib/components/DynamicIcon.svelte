@@ -1,7 +1,7 @@
 <script lang="ts">
   import { activeIconPack } from '$lib/stores/settings';
-  import { Circle } from 'lucide-svelte';
-  import { getLucideIcon } from '$lib/utils/lucideIcons';
+  import Circle from 'lucide-svelte/icons/circle';
+  import { getLucideIcon, loadLucideIcon } from '$lib/utils/lucideIcons';
 
   export let name: string;
   export let size: number = 18;
@@ -63,9 +63,9 @@
     Wrench: PWrench,
   };
 
-  // Lucide icons are resolved synchronously from the bundled namespace
-  // import — no async placeholder flicker (#693). Falls back to `Circle`
-  // for unknown names.
+  // Lucide icons resolve synchronously from the curated map (#1311). Names
+  // outside it (e.g. user-picked picker icons not referenced in code) load
+  // the full set as a single lazy chunk — `Circle` shows until it lands.
   let comp: any = Circle;
   $: {
     const packName = pack || $activeIconPack;
@@ -77,6 +77,12 @@
       comp = phosphorMap[name] || (getLucideIcon(name) ?? Circle);
     } else {
       comp = getLucideIcon(name) ?? Circle;
+    }
+    if (!isEmoji && (!comp || comp === Circle)) {
+      const requested = name;
+      loadLucideIcon(requested).then((loaded) => {
+        if (loaded && name === requested) comp = loaded;
+      });
     }
   }
 </script>

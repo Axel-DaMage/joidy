@@ -57,18 +57,27 @@
     }
   }
 
-  // Cheap computations stay on visibleEditorContent (instant feedback)
-  let lineCount = $derived(Math.max(1, visibleEditorContent.split('\n').length));
-  let lineNumbers = $derived(Array.from({ length: lineCount }, (_, i) => i + 1));
+  // Cheap computations stay on visibleEditorContent (instant feedback).
+  // countLines avoids the full split() array allocation on every keystroke —
+  // on a 2,000-line note that is a 2,000-element array per character (#1311).
+  function countLines(s: string): number {
+    let n = 1;
+    for (let i = 0; i < s.length; i++) if (s.charCodeAt(i) === 10) n++;
+    return n;
+  }
+  let lineCount = $derived(countLines(visibleEditorContent));
+  // One pre-formatted text node replaces the old {#each} of one div per line
+  // (2,000+ DOM nodes recreated on every newline on large notes, #1311).
+  let lineNumbersText = $derived(
+    Array.from({ length: lineCount }, (_, i) => i + 1).join('\n')
+  );
 
-  function updateVisibleContent(e: Event) {
-    const val = (e.currentTarget as HTMLTextAreaElement).value;
-    scheduleSnapshot();
-    content = recomposeHiddenSlices(val, {
-      tagsLine: $hideTagsLine && tags.length > 0 ? currentTagsLine : '',
-      frontmatter: !$showFrontmatter ? rawFrontmatter : '',
-    });
+  // Tag extraction runs two regex sweeps over the entire document — debounce
+  // it instead of scanning 100KB+ per keystroke (#1311). A trailing call
+  // keeps tags in sync; flushTagSync() forces it before save/destroy.
+  let tagSyncTimer: ReturnType<typeof setTimeout> | null = null;
 
+  function syncTagsFromContent() {
     const currentContentTags = extractTagsFromContent(content);
     const added = currentContentTags.filter((t) => !previousContentTags.includes(t));
     const removed = previousContentTags.filter((t) => !currentContentTags.includes(t));
@@ -92,7 +101,35 @@
 
     if (tagsChanged) tags = newTags;
     previousContentTags = currentContentTags;
+  }
 
+  function scheduleTagSync() {
+    if (tagSyncTimer) clearTimeout(tagSyncTimer);
+    tagSyncTimer = setTimeout(() => {
+      tagSyncTimer = null;
+      syncTagsFromContent();
+    }, 300);
+  }
+
+  // Flushes any pending tag sync — called by NoteEditor before saving so a
+  // `# Tags:` line typed <300ms before Ctrl+S is not lost (#1311).
+  export function flushTagSync() {
+    if (tagSyncTimer) {
+      clearTimeout(tagSyncTimer);
+      tagSyncTimer = null;
+      syncTagsFromContent();
+    }
+  }
+
+  function updateVisibleContent(e: Event) {
+    const val = (e.currentTarget as HTMLTextAreaElement).value;
+    scheduleSnapshot();
+    content = recomposeHiddenSlices(val, {
+      tagsLine: $hideTagsLine && tags.length > 0 ? currentTagsLine : '',
+      frontmatter: !$showFrontmatter ? rawFrontmatter : '',
+    });
+
+    scheduleTagSync();
     onContentChange();
   }
 
@@ -117,13 +154,27 @@
   // Editor syntax highlight: update on the next animation frame instead of the
   // 300ms debounce. rAF coalesces multiple keystrokes into a single ~16ms
   // render, so typed characters are styled immediately without re-running the
-  // regex highlighter more than once per frame (#703).
+  // regex highlighter more than once per frame (#703). On very large notes the
+  // regex pass is too heavy for a per-frame budget, so it trails at 250ms
+  // instead — typing stays responsive and highlighting catches up on a pause
+  // (#1311).
+  const HIGHLIGHT_DEBOUNCE_THRESHOLD = 50_000; // chars
   let editorHighlightedHtml = $state('');
   let highlightRaf: ReturnType<typeof requestAnimationFrame> | null = null;
+  let highlightTimer: ReturnType<typeof setTimeout> | null = null;
 
   $effect(() => {
     const current = visibleEditorContent;
-    if (typeof requestAnimationFrame === 'function') {
+    if (highlightTimer !== null) {
+      clearTimeout(highlightTimer);
+      highlightTimer = null;
+    }
+    if (current.length > HIGHLIGHT_DEBOUNCE_THRESHOLD) {
+      highlightTimer = setTimeout(() => {
+        editorHighlightedHtml = highlightMarkdown(current);
+        highlightTimer = null;
+      }, 250);
+    } else if (typeof requestAnimationFrame === 'function') {
       if (highlightRaf !== null) cancelAnimationFrame(highlightRaf);
       highlightRaf = requestAnimationFrame(() => {
         editorHighlightedHtml = highlightMarkdown(current);
@@ -136,6 +187,9 @@
 
   onDestroy(() => {
     if (highlightRaf !== null) cancelAnimationFrame(highlightRaf);
+    if (highlightTimer !== null) clearTimeout(highlightTimer);
+    if (tagSyncTimer) clearTimeout(tagSyncTimer);
+    syncTagsFromContent();
   });
 </script>
 
@@ -154,9 +208,7 @@
   {:else}
     <div class="editor-container">
       <div class="line-gutter" bind:this={lineGutterEl} aria-hidden="true">
-        {#each lineNumbers as line}
-          <div class="line-number">{line}</div>
-        {/each}
+        <pre class="line-numbers">{lineNumbersText}</pre>
       </div>
       <div class="backdrop" bind:this={backdropEl} aria-hidden="true">
         <div class="highlights">{@html editorHighlightedHtml}</div>
@@ -207,10 +259,13 @@
     pointer-events: none;
   }
 
-  .line-number {
-    height: 1.7em;
+  .line-numbers {
+    margin: 0;
+    font: inherit;
     line-height: 1.7;
     padding-right: 10px;
+    text-align: right;
+    user-select: none;
   }
 
   .backdrop {

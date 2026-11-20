@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { createIconPickerStore } from '$lib/stores/iconPicker';
 	import DynamicIcon from './DynamicIcon.svelte';
-	import { Search } from 'lucide-svelte';
+	import Search from 'lucide-svelte/icons/search';
 	import { t } from 'svelte-i18n';
 
 	interface Props {

@@ -1,6 +1,10 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
-  import { Send, Sparkles, Trash2, LoaderCircle, RotateCcw } from 'lucide-svelte';
+  import Send from 'lucide-svelte/icons/send';
+  import Sparkles from 'lucide-svelte/icons/sparkles';
+  import Trash2 from 'lucide-svelte/icons/trash-2';
+  import LoaderCircle from 'lucide-svelte/icons/loader-circle';
+  import RotateCcw from 'lucide-svelte/icons/rotate-ccw';
   import { Marked } from 'marked';
   import DOMPurify from 'dompurify';
   import { authorizeUploadUrls } from '$lib/utils/markdown';

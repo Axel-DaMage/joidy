@@ -38,14 +38,16 @@ export function highlightMarkdown(text: string): string {
     '<span style="font-weight: bold; color: var(--text-primary);">$1$2$1</span>'
   );
 
-  // Italic (using negative lookbehinds/lookaheads to prevent matching bold borders)
+  // Italic. Lookbehind regexes are a parse-time SyntaxError on Safari <16.4,
+  // which killed the whole highlighter there (#1311) — capture the boundary
+  // character instead and emit it back as $1.
   html = html.replace(
-    /(?<!\*)\*([^\s\*](?:.*?[^\s\*])?)\*(?!\*)/g,
-    '<span style="font-style: italic; color: var(--text-secondary);">*$1*</span>'
+    /(^|[^*])\*([^\s\*](?:.*?[^\s\*])?)\*(?!\*)/g,
+    '$1<span style="font-style: italic; color: var(--text-secondary);">*$2*</span>'
   );
   html = html.replace(
-    /(?<!_)_([^\s_](?:.*?[^\s_])?)_(?!_)/g,
-    '<span style="font-style: italic; color: var(--text-secondary);">_$1_</span>'
+    /(^|[^_])_([^\s_](?:.*?[^\s_])?)_(?!_)/g,
+    '$1<span style="font-style: italic; color: var(--text-secondary);">_$2_</span>'
   );
 
   // Strikethrough

@@ -81,8 +81,23 @@ export const scrollReady = writable(false);
 export const listScrollEl = writable<HTMLDivElement | null>(null);
 export const virtualScrollTop = writable(0);
 
+// Debounced mirror of `search`: the `tree`/`filtered` deriveds run buildTree
+// (frontmatter regex + ~30 icon regexes per node + sort) — doing that per
+// keystroke stalls typing on large vaults (#1311). Input-bound code keeps
+// using `search`; consumers needing the raw value (persist, maybeLoadMore)
+// also keep it.
+export const searchDebounced = writable('');
+let searchTimer: ReturnType<typeof setTimeout> | null = null;
+search.subscribe((value) => {
+  if (searchTimer) clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    searchTimer = null;
+    searchDebounced.set(value);
+  }, 200);
+});
+
 // Derived tree/list data (moved from the page's reactive block, #210).
-export const filtered = derived([notes, search], ([$notes, $search]) =>
+export const filtered = derived([notes, searchDebounced], ([$notes, $search]) =>
   $notes.filter(
     (n) =>
       !$search ||
@@ -92,7 +107,7 @@ export const filtered = derived([notes, search], ([$notes, $search]) =>
 );
 
 export const tree = derived(
-  [notes, viewMode, search, showTrash, showHiddenFiles, sortMode, folderMetaStore, vaultFolders],
+  [notes, viewMode, searchDebounced, showTrash, showHiddenFiles, sortMode, folderMetaStore, vaultFolders],
   ([
     $notes,
     $viewMode,

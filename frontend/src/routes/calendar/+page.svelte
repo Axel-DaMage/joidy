@@ -16,23 +16,21 @@
     fireTaskNotification,
     requestNotificationPermission,
   } from '$lib/utils/taskReminders';
-  import {
-    ChevronLeft,
-    ChevronRight,
-    ChevronDown,
-    CalendarDays,
-    Inbox,
-    RefreshCw,
-    Settings,
-    Lock,
-    Plus,
-    Trash2,
-    Pencil,
-    X,
-    Check,
-    Repeat,
-    Sparkles,
-  } from 'lucide-svelte';
+  import ChevronLeft from 'lucide-svelte/icons/chevron-left';
+  import ChevronRight from 'lucide-svelte/icons/chevron-right';
+  import ChevronDown from 'lucide-svelte/icons/chevron-down';
+  import CalendarDays from 'lucide-svelte/icons/calendar-days';
+  import Inbox from 'lucide-svelte/icons/inbox';
+  import RefreshCw from 'lucide-svelte/icons/refresh-cw';
+  import Settings from 'lucide-svelte/icons/settings';
+  import Lock from 'lucide-svelte/icons/lock';
+  import Plus from 'lucide-svelte/icons/plus';
+  import Trash2 from 'lucide-svelte/icons/trash-2';
+  import Pencil from 'lucide-svelte/icons/pencil';
+  import X from 'lucide-svelte/icons/x';
+  import Check from 'lucide-svelte/icons/check';
+  import Repeat from 'lucide-svelte/icons/repeat';
+  import Sparkles from 'lucide-svelte/icons/sparkles';
   import EmptyState from '$lib/components/EmptyState.svelte';
   import { t } from 'svelte-i18n';
 

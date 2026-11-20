@@ -2,7 +2,8 @@
   import { onMount, onDestroy } from 'svelte';
   import { goto } from '$app/navigation';
   import { fade, fly } from 'svelte/transition';
-  import { Search, CornerDownLeft } from 'lucide-svelte';
+  import Search from 'lucide-svelte/icons/search';
+  import CornerDownLeft from 'lucide-svelte/icons/corner-down-left';
   import DynamicIcon from './DynamicIcon.svelte';
   import { notes } from '$lib/stores/notes';
   import { themeMode, devMode } from '$lib/stores/settings';

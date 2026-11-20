@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { Search, FilePen, Plus } from 'lucide-svelte';
+  import Search from 'lucide-svelte/icons/search';
+  import FilePen from 'lucide-svelte/icons/file-pen';
+  import Plus from 'lucide-svelte/icons/plus';
   import DynamicIcon from './DynamicIcon.svelte';
   import QuickCaptureWidget from './QuickCaptureWidget.svelte';
   import ScientificCalculator from './ScientificCalculator.svelte';

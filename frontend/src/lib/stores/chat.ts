@@ -66,7 +66,28 @@ if (browser) {
   });
 }
 
-messages.subscribe((msgs) => persistMessages(msgs));
+// Streaming updates `messages` once per token — serializing the whole history
+// on every append is write amplification (#1311). Trail to a single write
+// 300 ms after the last update; flush on pagehide so the tail is not lost.
+let persistTimer: ReturnType<typeof setTimeout> | null = null;
+messages.subscribe((msgs) => {
+  if (!browser) return;
+  if (persistTimer) clearTimeout(persistTimer);
+  persistTimer = setTimeout(() => {
+    persistTimer = null;
+    persistMessages(msgs);
+  }, 300);
+});
+
+if (browser) {
+  window.addEventListener('pagehide', () => {
+    if (persistTimer) {
+      clearTimeout(persistTimer);
+      persistTimer = null;
+      persistMessages(get(messages));
+    }
+  });
+}
 
 let historyLoaded = false;
 

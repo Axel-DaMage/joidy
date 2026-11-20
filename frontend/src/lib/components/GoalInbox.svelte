@@ -1,5 +1,10 @@
 <script lang="ts">
-  import { Inbox, Sun, Moon, Zap, Trash2, ListPlus } from 'lucide-svelte';
+  import Inbox from 'lucide-svelte/icons/inbox';
+  import Sun from 'lucide-svelte/icons/sun';
+  import Moon from 'lucide-svelte/icons/moon';
+  import Zap from 'lucide-svelte/icons/zap';
+  import Trash2 from 'lucide-svelte/icons/trash-2';
+  import ListPlus from 'lucide-svelte/icons/list-plus';
   import { t } from 'svelte-i18n';
   import { api, type Goal, type GoalContext } from '$lib/api';
   import {

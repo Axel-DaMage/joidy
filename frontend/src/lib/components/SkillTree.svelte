@@ -1,9 +1,28 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import * as d3 from 'd3';
+  import {
+    drag as d3drag,
+    forceCenter,
+    forceCollide,
+    forceLink,
+    forceManyBody,
+    forceSimulation,
+    select,
+    zoom as d3zoom,
+  } from 'd3';
+  import type {
+    D3DragEvent,
+    D3ZoomEvent,
+    Simulation,
+    SimulationLinkDatum,
+  } from 'd3';
   import type { SkillTree, SkillNode } from '$lib/api';
   import { displayTagName } from '$lib/utils/format';
-  import { Star, Hash, Zap, Shield, Sparkles } from 'lucide-svelte';
+  import Star from 'lucide-svelte/icons/star';
+  import Hash from 'lucide-svelte/icons/hash';
+  import Zap from 'lucide-svelte/icons/zap';
+  import Shield from 'lucide-svelte/icons/shield';
+  import Sparkles from 'lucide-svelte/icons/sparkles';
   import { t } from 'svelte-i18n';
 
   export let data: SkillTree = { nodes: [], edges: [] };
@@ -12,9 +31,9 @@
 
   let svgEl: SVGSVGElement;
   interface SimNode extends SkillNode { x?: number; y?: number; fx?: number | null; fy?: number | null; }
-  interface SimLink extends d3.SimulationLinkDatum<SimNode> { source: SimNode | string | number; target: SimNode | string | number; }
+  interface SimLink extends SimulationLinkDatum<SimNode> { source: SimNode | string | number; target: SimNode | string | number; }
 
-  let simulation: d3.Simulation<SimNode, undefined>;
+  let simulation: Simulation<SimNode, undefined>;
   let tooltip = { visible: false, x: 0, y: 0, node: null as SkillNode | null };
 
   // Non-visual summary for the SVG (WCAG 1.1.1, #1309) — the adjacent
@@ -44,16 +63,16 @@
     if (!svgEl || data.nodes.length === 0) return;
     
     // Clear previous
-    d3.select(svgEl).selectAll('*').remove();
+    select(svgEl).selectAll('*').remove();
     if (simulation) simulation.stop();
 
-    const svg = d3.select(svgEl);
+    const svg = select(svgEl);
     const g = svg.append('g');
 
     // Zoom behavior
-    const zoom = d3.zoom<SVGSVGElement, unknown>()
+    const zoom = d3zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.5, 3])
-      .on('zoom', (e: d3.D3ZoomEvent<SVGSVGElement, unknown>) => g.attr('transform', e.transform.toString()));
+      .on('zoom', (e: D3ZoomEvent<SVGSVGElement, unknown>) => g.attr('transform', e.transform.toString()));
     svg.call(zoom);
 
     // Filters for glow
@@ -70,11 +89,11 @@
       target: nodes.find(n => n.id === (typeof d.target === 'number' ? d.target : (d.target as SimNode).id)) as SimNode,
     })).filter((l): l is SimLink => Boolean(l.source && l.target));
 
-    simulation = d3.forceSimulation<SimNode>(nodes)
-      .force('link', d3.forceLink<SimNode, SimLink>(links).id((d: SimNode) => d.id).distance(100).strength(0.5))
-      .force('charge', d3.forceManyBody().strength(-300))
-      .force('center', d3.forceCenter(width / 2, height / 2))
-      .force('collision', d3.forceCollide().radius(40));
+    simulation = forceSimulation<SimNode>(nodes)
+      .force('link', forceLink<SimNode, SimLink>(links).id((d: SimNode) => d.id).distance(100).strength(0.5))
+      .force('charge', forceManyBody().strength(-300))
+      .force('center', forceCenter(width / 2, height / 2))
+      .force('collision', forceCollide().radius(40));
 
     // Links (Pulse animation)
     const link = g.append('g')
@@ -98,7 +117,7 @@
         tooltip = { visible: true, x: e.clientX, y: e.clientY, node: d };
       })
       .on('mouseout', () => tooltip.visible = false)
-      .call((d3.drag<SVGGElement, SimNode>()
+      .call((d3drag<SVGGElement, SimNode>()
         .on('start', dragstarted)
         .on('drag', dragged)
         .on('end', dragended)) as any
@@ -131,24 +150,24 @@
 
     simulation.on('tick', () => {
       link
-        .attr('x1', (d: d3.SimulationLinkDatum<SimNode>) => (d.source as SimNode).x ?? 0)
-        .attr('y1', (d: d3.SimulationLinkDatum<SimNode>) => (d.source as SimNode).y ?? 0)
-        .attr('x2', (d: d3.SimulationLinkDatum<SimNode>) => (d.target as SimNode).x ?? 0)
-        .attr('y2', (d: d3.SimulationLinkDatum<SimNode>) => (d.target as SimNode).y ?? 0);
+        .attr('x1', (d: SimulationLinkDatum<SimNode>) => (d.source as SimNode).x ?? 0)
+        .attr('y1', (d: SimulationLinkDatum<SimNode>) => (d.source as SimNode).y ?? 0)
+        .attr('x2', (d: SimulationLinkDatum<SimNode>) => (d.target as SimNode).x ?? 0)
+        .attr('y2', (d: SimulationLinkDatum<SimNode>) => (d.target as SimNode).y ?? 0);
 
       node.attr('transform', (d: SimNode) => `translate(${d.x ?? 0},${d.y ?? 0})`);
     });
 
-    function dragstarted(event: d3.D3DragEvent<SVGGElement, SimNode, SimNode>) {
+    function dragstarted(event: D3DragEvent<SVGGElement, SimNode, SimNode>) {
       if (!event.active) simulation.alphaTarget(0.3).restart();
       event.subject.fx = event.subject.x;
       event.subject.fy = event.subject.y;
     }
-    function dragged(event: d3.D3DragEvent<SVGGElement, SimNode, SimNode>) {
+    function dragged(event: D3DragEvent<SVGGElement, SimNode, SimNode>) {
       event.subject.fx = event.x;
       event.subject.fy = event.y;
     }
-    function dragended(event: d3.D3DragEvent<SVGGElement, SimNode, SimNode>) {
+    function dragended(event: D3DragEvent<SVGGElement, SimNode, SimNode>) {
       if (!event.active) simulation.alphaTarget(0);
       event.subject.fx = null;
       event.subject.fy = null;

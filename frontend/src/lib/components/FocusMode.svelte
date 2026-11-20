@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
   import { fade, scale } from 'svelte/transition';
-  import { Target } from 'lucide-svelte';
+  import Target from 'lucide-svelte/icons/target';
   import {
     isActive,
     focusSession,

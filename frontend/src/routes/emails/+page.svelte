@@ -3,7 +3,10 @@
   import { api, type EmailSummary, type EmailAccountStats } from '$lib/api';
   import { showNotification } from '$lib/stores/notifications';
   import { logger } from '$lib/utils/logger';
-  import { Search, Inbox, Star, RefreshCw } from 'lucide-svelte';
+  import Search from 'lucide-svelte/icons/search';
+  import Inbox from 'lucide-svelte/icons/inbox';
+  import Star from 'lucide-svelte/icons/star';
+  import RefreshCw from 'lucide-svelte/icons/refresh-cw';
   import EmptyState from '$lib/components/EmptyState.svelte';
   import { t } from 'svelte-i18n';
 

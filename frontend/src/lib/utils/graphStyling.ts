@@ -12,37 +12,66 @@ import {
 // GraphNode extended with force-graph runtime properties (x, y added by the simulation)
 type ForceGraphNode = GraphNode & NodeObject;
 
+// Styling inputs the paint callbacks need live — read via getters so a
+// hover/selection/search change is picked up by the very next repaint without
+// re-registering callbacks (#1311 — the by-value captures left highlights
+// permanently stale).
 export interface GraphStylingContext {
-  hoveredNode: GraphNode | null;
-  selectedTag: number | string | null;
-  searchQuery: string;
-  focusId: number | string | null;
+  getHoveredNode: () => GraphNode | null;
+  getSelectedTag: () => number | string | null;
+  getSearchQuery: () => string;
+  getFocusId: () => number | string | null;
   neighbors: Map<number | string, Set<number | string>>;
-  nodeSizeScale: number;
-  linkThicknessScale: number;
-  showLabels: boolean;
-  textScale: number;
-  labelThreshold: number;
-  colorGroups: ColorGroup[];
+  getNodeSizeScale: () => number;
+  getLinkThicknessScale: () => number;
+  getShowLabels: () => boolean;
+  getTextScale: () => number;
+  getLabelThreshold: () => number;
+  getColorGroups: () => ColorGroup[];
+}
+
+// Radial gradients are position-independent once the context is translated to
+// the node center — cache one per (color, radius) instead of allocating a new
+// CanvasGradient for every node on every frame.
+const gradientCache = new WeakMap<object, Map<string, CanvasGradient>>();
+
+function getNodeGradient(
+  graph: object,
+  ctx2: CanvasRenderingContext2D,
+  color: string,
+  r: number,
+): CanvasGradient {
+  let cache = gradientCache.get(graph);
+  if (!cache) {
+    cache = new Map();
+    gradientCache.set(graph, cache);
+  }
+  const key = `${color}:${r}`;
+  let gradient = cache.get(key);
+  if (!gradient) {
+    gradient = ctx2.createRadialGradient(-r * 0.3, -r * 0.3, 0, 0, 0, r);
+    gradient.addColorStop(0, lightenColor(color, 0.25));
+    gradient.addColorStop(1, color);
+    cache.set(key, gradient);
+  }
+  return gradient;
 }
 
 export function applyGraphStyling(graph: any, ctx: GraphStylingContext) {
   if (!graph) return;
   const {
-    hoveredNode,
-    selectedTag,
-    searchQuery,
-    focusId,
+    getHoveredNode,
+    getSelectedTag,
+    getSearchQuery,
+    getFocusId,
     neighbors,
-    nodeSizeScale,
-    linkThicknessScale,
-    showLabels,
-    textScale,
-    labelThreshold,
-    colorGroups,
+    getNodeSizeScale,
+    getLinkThicknessScale,
+    getShowLabels,
+    getTextScale,
+    getLabelThreshold,
+    getColorGroups,
   } = ctx;
-  const focus = hoveredNode?.id ?? selectedTag;
-  const q = searchQuery.trim().toLowerCase();
 
   graph
     .nodeRelSize(3.2)
@@ -50,6 +79,18 @@ export function applyGraphStyling(graph: any, ctx: GraphStylingContext) {
       const x = node.x;
       const y = node.y;
       if (x === undefined || y === undefined || !Number.isFinite(x) || !Number.isFinite(y)) return;
+
+      const hoveredNode = getHoveredNode();
+      const selectedTag = getSelectedTag();
+      const q = getSearchQuery().trim().toLowerCase();
+      const focusId = getFocusId();
+      const nodeSizeScale = getNodeSizeScale();
+      const showLabels = getShowLabels();
+      const textScale = getTextScale();
+      const labelThreshold = getLabelThreshold();
+      const colorGroups = getColorGroups();
+      const focus = hoveredNode?.id ?? selectedTag;
+
       const label = getNodeLabel(node);
       const isTag = node.type === 'tag';
       const isUnresolved = node.type === 'unresolved';
@@ -81,8 +122,8 @@ export function applyGraphStyling(graph: any, ctx: GraphStylingContext) {
       }
 
       // Draw node shape
-      ctx2.beginPath();
       if (isUnresolved) {
+        ctx2.beginPath();
         // Unresolved nodes draw with a dashed border
         ctx2.strokeStyle = nodeColor;
         ctx2.lineWidth = 1.2 / scale;
@@ -94,13 +135,14 @@ export function applyGraphStyling(graph: any, ctx: GraphStylingContext) {
         ctx2.fillStyle = hexToRgba(nodeColor, 0.15);
         ctx2.fill();
       } else {
-        // Normal nodes draw with gradient fill
-        const gradient = ctx2.createRadialGradient(x - r * 0.3, y - r * 0.3, 0, x, y, r);
-        gradient.addColorStop(0, lightenColor(nodeColor, 0.25));
-        gradient.addColorStop(1, nodeColor);
-        ctx2.fillStyle = gradient;
-        ctx2.arc(x, y, r, 0, Math.PI * 2);
+        // Normal nodes draw with a cached gradient fill (#1311)
+        ctx2.save();
+        ctx2.translate(x, y);
+        ctx2.beginPath();
+        ctx2.fillStyle = getNodeGradient(graph, ctx2, nodeColor, r);
+        ctx2.arc(0, 0, r, 0, Math.PI * 2);
         ctx2.fill();
+        ctx2.restore();
       }
 
       // Draw hover border
@@ -142,19 +184,22 @@ export function applyGraphStyling(graph: any, ctx: GraphStylingContext) {
       }
     })
     .linkWidth((l: GraphEdge) => {
+      const linkThicknessScale = getLinkThicknessScale();
+      const focus = getHoveredNode()?.id ?? getSelectedTag();
       let baseWidth = l.type === 'hierarchy' ? 1.5 : 0.8;
       if (l.weight) {
         baseWidth *= Math.sqrt(l.weight);
       }
       baseWidth *= linkThicknessScale;
 
-      if (focus === null) return baseWidth;
+      if (focus === null || focus === undefined) return baseWidth;
 
       const sourceId = typeof l.source === 'object' ? (l.source as any).id : l.source;
       const targetId = typeof l.target === 'object' ? (l.target as any).id : l.target;
       return sourceId === focus || targetId === focus ? baseWidth * 1.5 : baseWidth * 0.2;
     })
     .linkColor((l: GraphEdge) => {
+      const focus = getHoveredNode()?.id ?? getSelectedTag();
       const sourceId = typeof l.source === 'object' ? (l.source as any).id : l.source;
       const targetId = typeof l.target === 'object' ? (l.target as any).id : l.target;
 
@@ -165,7 +210,7 @@ export function applyGraphStyling(graph: any, ctx: GraphStylingContext) {
       else if (l.type === 'linked') color = '#404040';
       else if (l.type === 'tagged') color = '#4a4a4a';
 
-      if (focus === null) return color;
+      if (focus === null || focus === undefined) return color;
 
       if (sourceId === focus || targetId === focus) {
         // Highlight color based on type

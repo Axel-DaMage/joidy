@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { ExternalLink } from 'lucide-svelte';
+  import ExternalLink from 'lucide-svelte/icons/external-link';
   import DynamicIcon from './DynamicIcon.svelte';
   import { api } from '$lib/api';
   import { showNotification } from '$lib/stores/notifications';

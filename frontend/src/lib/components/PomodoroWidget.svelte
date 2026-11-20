@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
-  import { RotateCcw, SkipForward } from 'lucide-svelte';
+  import RotateCcw from 'lucide-svelte/icons/rotate-ccw';
+  import SkipForward from 'lucide-svelte/icons/skip-forward';
   import { t } from 'svelte-i18n';
 
   // ── Timer ──────────────────────────────────────────────────────────────────

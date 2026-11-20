@@ -1,18 +1,26 @@
 import { writable, derived } from 'svelte/store';
-import { ALL_LUCIDE_ICON_NAMES } from '$lib/utils/lucideIcons';
+import { loadAllLucideIconNames } from '$lib/utils/lucideIcons';
 
-// Icon names come from `import.meta.glob` over lucide-svelte's icon files, so
-// no icon code is imported just to enumerate names (see #209).
-const ALL_ICONS = ALL_LUCIDE_ICON_NAMES;
+// The full ~1,900-name list is fetched lazily the first time a picker opens —
+// it pulls the lucide namespace as an async chunk and must stay out of the
+// entry bundle (#1311).
+const allIcons = writable<string[]>([]);
+let loadStarted = false;
+function ensureIconNames() {
+  if (loadStarted) return;
+  loadStarted = true;
+  loadAllLucideIconNames().then((names) => allIcons.set(names));
+}
 
 export function createIconPickerStore() {
+  ensureIconNames();
   const searchTerm = writable('');
   const visibleLimit = writable(150);
 
-  const filteredAll = derived(searchTerm, ($search) => {
-    if (!$search) return ALL_ICONS;
+  const filteredAll = derived([allIcons, searchTerm], ([$all, $search]) => {
+    if (!$search) return $all;
     const q = $search.toLowerCase();
-    return ALL_ICONS.filter((ic) => ic.toLowerCase().includes(q));
+    return $all.filter((ic) => ic.toLowerCase().includes(q));
   });
 
   const visibleIcons = derived([filteredAll, visibleLimit], ([$all, $limit]) => {

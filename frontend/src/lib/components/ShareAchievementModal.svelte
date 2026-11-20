@@ -1,6 +1,8 @@
 <script lang="ts">
   import { toPng } from 'html-to-image';
-  import { Download, Copy, X } from 'lucide-svelte';
+  import Download from 'lucide-svelte/icons/download';
+  import Copy from 'lucide-svelte/icons/copy';
+  import X from 'lucide-svelte/icons/x';
   import ModalDialog from '$lib/components/ModalDialog.svelte';
   import AchievementCard from '$lib/components/AchievementCard.svelte';
   import { currentAchievement, closeShare } from '$lib/stores/shareAchievement';
