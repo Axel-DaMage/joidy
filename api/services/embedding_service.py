@@ -95,6 +95,14 @@ def _record_embedding_failure_sync(note_id: int, error_message: str, db: Session
 
 
 def record_embedding_failure(db: Session, note_id: int, error_message: str) -> None:
+    # embedding_failures.note_id FKs to notes(id). The failure record can run
+    # on a session where the note is not yet visible — trigger_embedding uses
+    # a fresh SessionLocal and may execute before the creating transaction
+    # commits. Recording must degrade to a no-op, not raise IntegrityError
+    # (#1463).
+    if db.get(Note, note_id) is None:
+        logger.debug("[embedding] failure not recorded — note_id=%s not visible in this session", note_id)
+        return
     failure = db.query(EmbeddingFailure).filter(EmbeddingFailure.note_id == note_id).first()
     if failure is None:
         failure = EmbeddingFailure(note_id=note_id, attempts=0)
