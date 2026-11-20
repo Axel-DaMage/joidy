@@ -299,7 +299,7 @@ def _apply_restored_goal_refs(db: Session, pending_refs: list[tuple[int, dict]])
             # Walk the ancestor chain — two planted files must not create a
             # parent loop.
             seen = {goal_id}
-            cur = parent_id
+            cur: int | None = parent_id
             cycle = False
             while cur is not None:
                 if cur in seen:
