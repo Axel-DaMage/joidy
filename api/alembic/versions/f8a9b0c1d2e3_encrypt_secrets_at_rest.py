@@ -1,7 +1,7 @@
 """encrypt secrets and sensitive fields at rest
 
 Revision ID: f8a9b0c1d2e3
-Revises: f7a8b9c0d1e2
+Revises: b8e9f0a1b2c3
 Create Date: 2026-11-24 12:00:00.000000
 
 Issues #1286 (F-14) and #1329 (D-01) — ISO 27001:2022 Annex A 8.24.
@@ -32,7 +32,7 @@ from cryptography.fernet import Fernet, InvalidToken
 
 # revision identifiers, used by Alembic.
 revision: str = "f8a9b0c1d2e3"
-down_revision: str | None = "f7a8b9c0d1e2"
+down_revision: str | None = "b8e9f0a1b2c3"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
