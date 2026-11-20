@@ -144,11 +144,13 @@ async def get_auth_token(client: httpx.AsyncClient, *, force: bool = False) -> s
 
     Caches the token locally. Use `force=True` to bypass the cache and fetch a
     new token, e.g. after a 401 response.
+
+    Always attempts login: in development without AUTH_PASSWORD the API's
+    /auth/login still issues a token for any password — and since #1282 the
+    dev auth bypass is loopback-only, this service (a non-loopback peer)
+    must present one.
     """
     global _auth_token
-
-    if not settings.auth_password:
-        return ""
 
     async with _auth_lock:
         if not force and _auth_token:

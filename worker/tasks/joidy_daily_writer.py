@@ -19,13 +19,16 @@ _auth_token: str | None = None
 
 
 async def _get_auth_token(client: httpx.AsyncClient) -> str | None:
-    """Login to the API and return a bearer token (#266)."""
+    """Login to the API and return a bearer token (#266).
+
+    Always attempts login: in development without AUTH_PASSWORD the API's
+    /auth/login still issues a token for any password — and since #1282 the
+    dev auth bypass is loopback-only, this service (a non-loopback peer)
+    must present one.
+    """
     global _auth_token
     if _auth_token:
         return _auth_token
-    if not settings.auth_password:
-        logger.warning("[writer] No AUTH_PASSWORD configured — vault writes will fail")
-        return None
     try:
         resp = await client.post(
             f"{settings.api_url}/auth/login",

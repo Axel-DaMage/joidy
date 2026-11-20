@@ -327,7 +327,11 @@ def client(db_session):
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_current_user] = override_get_current_user
 
-    with TestClient(app) as test_client:
+    # The TestClient default peer ("testclient") is NOT a loopback IP — since
+    # #1282 the dev auth bypass applies to loopback clients only, so tests
+    # that exercise it (dev-mode /ws, /webhook/obsidian) must present a
+    # loopback peer address explicitly.
+    with TestClient(app, client=("127.0.0.1", 50000)) as test_client:
         yield test_client
 
     app.dependency_overrides.clear()
@@ -348,7 +352,7 @@ def client_no_auth():
     original_overrides = dict(app.dependency_overrides)
     app.dependency_overrides[get_current_user] = override_get_current_user
 
-    with TestClient(app) as test_client:
+    with TestClient(app, client=("127.0.0.1", 50000)) as test_client:
         yield test_client
 
     app.dependency_overrides.clear()

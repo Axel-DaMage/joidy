@@ -1,3 +1,4 @@
+import hmac
 import logging
 from contextlib import asynccontextmanager
 
@@ -128,6 +129,8 @@ class InternalAuthMiddleware(BaseHTTPMiddleware):
 
     If INTERNAL_SECRET is configured, all endpoints except /health
     require an X-Internal-Secret header matching the configured value.
+    The comparison uses ``hmac.compare_digest`` to avoid leaking the
+    secret's length/prefix through response timing (#1288).
     """
 
     async def dispatch(self, request: Request, call_next):
@@ -135,12 +138,25 @@ class InternalAuthMiddleware(BaseHTTPMiddleware):
         # without needing the internal secret (#406).
         if settings.internal_secret and request.url.path not in ("/health", "/metrics"):
             provided = request.headers.get("X-Internal-Secret", "")
-            if provided != settings.internal_secret:
+            if not hmac.compare_digest(provided, settings.internal_secret):
                 return JSONResponse(
                     status_code=403,
                     content={"detail": "Forbidden: invalid internal secret"},
                 )
         return await call_next(request)
+
+
+def _internal_secret_valid(request: Request) -> bool:
+    """True when INTERNAL_SECRET is configured and the request carries a
+    matching ``X-Internal-Secret`` header (constant-time comparison, #1288).
+
+    Returns False when no secret is configured — privileged disclosures
+    fail closed rather than becoming unauthenticated by default (#1291).
+    """
+    if not settings.internal_secret:
+        return False
+    provided = request.headers.get("X-Internal-Secret", "")
+    return hmac.compare_digest(provided, settings.internal_secret)
 
 
 app.add_middleware(InternalAuthMiddleware)
@@ -211,20 +227,27 @@ def _has_fallback() -> bool:
 
 
 @app.get("/health")
-async def health():
+async def health(request: Request):
     provider_info = _get_provider_info()
     # The service is "degraded" if the configured LLM/embedding provider is
     # not actually available (e.g. GEMINI_API_KEY not set but model is gemini:*).
     llm_ok = provider_info["llm"]["available"]
     emb_ok = provider_info["embedding"]["available"]
     status = "ok" if (llm_ok and emb_ok) else "degraded"
-    return {
+    body = {
         "status": status,
         "service": "joidy-ai",
         "ai_enabled": settings.is_ai_enabled,
-        "provider": provider_info,
-        "fallback_enabled": _has_fallback(),
+        # Minimal boolean the API needs for its embedding-availability probe —
+        # no provider or model names (#1291).
+        "embedding_available": emb_ok,
     }
+    # The provider/model inventory is privileged: only internal callers
+    # presenting a valid X-Internal-Secret receive it (#1291).
+    if _internal_secret_valid(request):
+        body["provider"] = provider_info
+        body["fallback_enabled"] = _has_fallback()
+    return body
 
 
 @app.get("/metrics")
@@ -234,7 +257,15 @@ def metrics():
 
 
 @app.get("/providers")
-def providers():
+def providers(request: Request):
+    """Provider/model inventory — internal callers only (#1291).
+
+    Requires a configured INTERNAL_SECRET presented via X-Internal-Secret.
+    With no secret configured the endpoint fails closed (403) instead of
+    exposing the full provider config map unauthenticated.
+    """
+    if not _internal_secret_valid(request):
+        raise HTTPException(status_code=403, detail="Forbidden: internal secret required")
     return {
         "available": settings.available_providers,
         "configured": dict.fromkeys(settings.provider_config, True),
