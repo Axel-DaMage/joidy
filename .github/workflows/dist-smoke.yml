@@ -324,13 +324,16 @@ jobs:
         run: |
           python3 -c "import yaml" 2>/dev/null || pip3 install --quiet pyyaml
           python3 - <<'PY'
-          import yaml
+          import re, yaml
           wf = yaml.safe_load(open('.github/workflows/release.yml'))
           step = next(s for s in wf['jobs']['release']['steps']
                       if s.get('name') == 'Bump version strings')
-          body = (step['run']
-                  .replace('${{ steps.version.outputs.version }}', 'v9.9.9-cismoke.1')
-                  .replace('${{ steps.version.outputs.version_clean }}', '9.9.9-cismoke.1'))
+          # Substitute the step's outputs with a fake version. The regex is
+          # written escaped so this script contains no literal expression
+          # marker, which GitHub would expand before the script runs.
+          vals = {'version': 'v9.9.9-cismoke.1', 'version_clean': '9.9.9-cismoke.1'}
+          pat = re.compile(r'\$\{\{\s*steps\.version\.outputs\.(\w+)\s*\}\}')
+          body = pat.sub(lambda m: vals.get(m.group(1), ''), step['run'])
           open('/tmp/bump-version.sh', 'w').write(body)
           PY
           bash -n /tmp/bump-version.sh
