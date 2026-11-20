@@ -100,6 +100,8 @@
     { href: '/timers', label: $t('nav.timers'), icon: 'AlarmClock', status: 'ready' },
     // Strava integration page (#44) — appended last to keep merges clean.
     { href: '/strava', label: $t('nav.strava'), icon: 'Activity', status: 'ready' },
+    // #45 — Spotify integration (backend merged via #1448).
+    { href: '/spotify', label: $t('nav.spotify'), icon: 'Music', status: 'ready' },
   ] as { href: string; label: string; icon: string; status: NavItemStatus }[];
 
   // Clock engine (#969): alarms must keep ticking wherever the user is in the

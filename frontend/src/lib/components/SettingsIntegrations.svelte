@@ -6,7 +6,7 @@
   // Google Contacts is a real integration now (#43) — real status/connect row,
   // no longer gated behind dev mode like the Strava/Spotify placeholders.
   import SettingsContacts from './SettingsContacts.svelte';
-  import { devMode } from '$lib/stores/settings';
+  import SettingsSpotify from './SettingsSpotify.svelte';
   import type { SystemConfig } from '$lib/utils/settingsTypes';
 
   interface Props {
@@ -17,9 +17,6 @@
   let { systemConfig = $bindable(), isConfigured }: Props = $props();
 
 
-  async function openSpotifyLink() {
-    window.open('https://spotify.com', '_blank');
-  }
 </script>
 
 <!-- Integraciones -->
@@ -33,14 +30,7 @@
   <SettingsStrava />
   <!-- Google Contacts: real status/connect row (#43) -->
   <SettingsContacts bind:systemConfig {isConfigured} />
-  {#if $devMode}
-    <div class="row">
-      <div class="row-label">
-        <span>Spotify</span>
-      </div>
-      <button class="link-btn" onclick={openSpotifyLink}>Enlazar</button>
-    </div>
-  {/if}
+  <SettingsSpotify />
 </section>
 
 <style>
