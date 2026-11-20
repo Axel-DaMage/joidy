@@ -101,7 +101,7 @@ sleep_interruptible() {
   # `sleep` as a foreground child would delay TERM until it finishes; run it in
   # the background so `wait` is interrupted and the trap fires immediately.
   sleep "$1" &
-  wait $! 2>/dev/null || true
+  wait "$!" 2>/dev/null || true
 }
 
 trap 'log "shutting down"; exit 0' TERM INT
