@@ -1,0 +1,67 @@
+# Developer Certificate of Origin check (#1385).
+#
+# Every non-merge commit in a pull request must carry a
+# "Signed-off-by: Name <email>" trailer matching its author or committer,
+# certifying the DCO (see the `DCO` file and CONTRIBUTING.md).
+#
+# Exemptions (same class of commits the probot/dco app skips): merge
+# commits and commits authored by repository automation accounts
+# (`*[bot]` such as dependabot[bot], and github-actions). Per project
+# policy, AI-agent-generated commits (Hermes/Devin) are NOT exempt: the
+# human operator signs them off.
+name: DCO
+
+on:
+  pull_request:
+    branches: [main, development]
+
+jobs:
+  signoff-check:
+    name: Signed-off-by check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Verify Signed-off-by trailers
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          missing=0
+          while IFS= read -r sha; do
+            author_name="$(git show -s --format='%an' "$sha")"
+            author_email="$(git show -s --format='%ae' "$sha")"
+            committer_name="$(git show -s --format='%cn' "$sha")"
+            committer_email="$(git show -s --format='%ce' "$sha")"
+            subject="$(git show -s --format='%s' "$sha")"
+
+            if [[ "$author_name" == *"[bot]"* || "$author_email" == *"[bot]"* || "$author_name" == "github-actions" ]]; then
+              echo "SKIP (automation): ${sha:0:8} ${author_name} — ${subject}"
+              continue
+            fi
+
+            signoffs="$(git show -s --format='%(trailers:key=Signed-off-by,valueonly)' "$sha")"
+            expected_author="${author_name} <${author_email}>"
+            expected_committer="${committer_name} <${committer_email}>"
+
+            if printf '%s\n' "$signoffs" | grep -Fxqi -- "$expected_author" \
+              || printf '%s\n' "$signoffs" | grep -Fxqi -- "$expected_committer"; then
+              echo "OK: ${sha:0:8} ${subject}"
+            else
+              echo "::error::Commit ${sha} (${subject}) has no Signed-off-by matching '${expected_author}' or '${expected_committer}'."
+              missing=1
+            fi
+          done < <(git rev-list --no-merges --reverse "${BASE_SHA}..${HEAD_SHA}")
+
+          if [[ "$missing" -ne 0 ]]; then
+            echo "::error title=DCO check failed::Every commit needs a 'Signed-off-by: Name <email>' trailer. Fix with 'git rebase --signoff <base>' or 'git commit --amend -s'. See CONTRIBUTING.md (Developer Certificate of Origin)."
+            exit 1
+          fi
+
+          echo "All commits carry a valid Signed-off-by trailer."
