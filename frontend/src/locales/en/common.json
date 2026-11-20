@@ -851,7 +851,8 @@
     "testNotifSuccess": "Test notification - Success",
     "testNotifLevel": "Test notification - Level up!",
     "currentStatus": "Current status",
-    "globalTimer": "Global timer"
+    "globalTimer": "Global timer",
+    "skipToContent": "Skip to main content"
   },
   "ai": {
     "title": "Artificial Intelligence",

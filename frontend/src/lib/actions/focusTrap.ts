@@ -1,10 +1,14 @@
 const FOCUSABLE =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-let previousActiveElement: Element | null = null;
+// Stack of previously-focused elements so nested traps (e.g. a modal opened
+// from another modal or panel) restore focus to their own invoker in LIFO
+// order instead of clobbering a module-level singleton (#1268).
+const restoreStack: (Element | null)[] = [];
 
 export function focusTrap(node: HTMLElement) {
-  previousActiveElement = document.activeElement;
+  const entry = document.activeElement;
+  restoreStack.push(entry);
 
   function getFocusable(): HTMLElement[] {
     return Array.from(node.querySelectorAll<HTMLElement>(FOCUSABLE));
@@ -44,9 +48,14 @@ export function focusTrap(node: HTMLElement) {
   return {
     destroy() {
       node.removeEventListener('keydown', trapFocus);
-      if (previousActiveElement instanceof HTMLElement) {
-        previousActiveElement.focus();
+      const idx = restoreStack.lastIndexOf(entry);
+      if (idx !== -1) restoreStack.splice(idx, 1);
+      // Restore focus only when this is the topmost trap — a deeper trap still
+      // open restores its own invoker. The invoker must also still be on the
+      // page (it may be gone after a route change or conditional unmount).
+      if (idx === restoreStack.length && entry instanceof HTMLElement && entry.isConnected) {
+        entry.focus();
       }
-    }
+    },
   };
 }

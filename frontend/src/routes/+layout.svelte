@@ -533,6 +533,18 @@
   <Toast />
 {:else}
   <div class="app-shell">
+    <!-- Skip link: first tab stop on every route (#1268). The click handler
+         moves focus explicitly because SPA hash navigation does not reliably
+         focus the target. -->
+    <a
+      href="#main-content"
+      class="skip-link"
+      onclick={(e) => {
+        e.preventDefault();
+        document.getElementById('main-content')?.focus();
+      }}>{$t('layout.skipToContent')}</a
+    >
+
     <!-- Header -->
     <header class="app-header">
       <span class="logo mono">JOIDY</span>
@@ -675,7 +687,8 @@
     </nav>
 
     <!-- Main content -->
-    <main class="app-main">
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+    <main class="app-main" id="main-content" tabindex="-1">
       <slot />
     </main>
 
@@ -1096,5 +1109,32 @@
   }
   .nav-item.nav-placeholder:hover {
     opacity: 0.8;
+  }
+
+  /* Skip link — visually hidden until focused (#1268) */
+  .skip-link {
+    position: fixed;
+    top: var(--s2);
+    left: var(--s2);
+    z-index: var(--z-tooltip);
+    padding: var(--s2) var(--s4);
+    background: var(--elevated);
+    color: var(--text-primary);
+    border: 1px solid var(--accent);
+    border-radius: var(--r);
+    font-size: 12px;
+    font-family: var(--font-mono);
+    text-decoration: none;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-8px);
+    transition:
+      opacity var(--t-fast),
+      transform var(--t-fast);
+  }
+  .skip-link:focus-visible {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
   }
 </style>
