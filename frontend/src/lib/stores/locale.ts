@@ -29,6 +29,15 @@ function detectLocale(): string {
 
 export const locale = writable<string>(detectLocale());
 
+// Keep <html lang> in sync with the selected locale (WCAG 3.1.1, #1269).
+// app.html ships a static lang="es"; this subscription updates it on load and
+// whenever the user changes the locale.
+if (browser) {
+  locale.subscribe((value) => {
+    document.documentElement.lang = value;
+  });
+}
+
 export function setLocale(value: string): void {
   locale.set(value);
   if (browser) {
@@ -43,7 +52,7 @@ export function setLocale(value: string): void {
 /** Synchronous accessor for use in non-reactive `.ts` utilities. */
 export function getLocale(): string {
   let value = detectLocale();
-  const unsub = locale.subscribe(v => (value = v));
+  const unsub = locale.subscribe((v) => (value = v));
   unsub();
   return value;
 }

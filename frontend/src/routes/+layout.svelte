@@ -605,14 +605,14 @@
         </div>
       {/if}
 
-      <!-- Connectivity Indicator -->
+      <!-- Connectivity Indicator — announced via a status live region (#1269) -->
       {#if !$isOnline}
-        <div class="connectivity-pill offline" transition:fade={{ duration: 150 }}>
+        <div class="connectivity-pill offline" role="status" transition:fade={{ duration: 150 }}>
           <span class="pulse-dot red"></span>
           <span>{$t('status.offline')}</span>
         </div>
       {:else if showConnectedPill}
-        <div class="connectivity-pill online" transition:fade={{ duration: 150 }}>
+        <div class="connectivity-pill online" role="status" transition:fade={{ duration: 150 }}>
           <span class="pulse-dot green"></span>
           <span>{$t('status.online')}</span>
         </div>
@@ -660,6 +660,7 @@
             class:nav-dev={status === 'dev'}
             class:nav-placeholder={status === 'placeholder'}
             title={label}
+            aria-current={active ? 'page' : undefined}
           >
             <DynamicIcon name={icon} size={16} />
             {#if status === 'dev'}
@@ -706,6 +707,7 @@
           <span
             class="status-pill status-streak-alert has-pending"
             title={$t('status.pendingStreaks')}
+            role="status"
           >
             <DynamicIcon
               name="Flame"
