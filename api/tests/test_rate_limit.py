@@ -1,14 +1,18 @@
-"""Unit tests for middleware.rate_limit.UserRateLimiter (#1276).
+"""Unit tests for middleware.rate_limit.UserRateLimiter (#1276, #1323).
 
 Covers the strict-route IP bucketing (Bearer/XFF bypass fix), trusted-proxy
-XFF handling, and the /auth/login failure lockout. The limiter is exercised
-in isolation with lightweight request stubs — no TestClient needed.
+XFF handling, the /auth/login failure lockout, and the M-01 hardening:
+bounded in-memory state and un-spoofable identity keys. The limiter is
+exercised in isolation with lightweight request stubs — no TestClient needed.
 """
 
+import time
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 
-from middleware.rate_limit import UserRateLimiter
+import jwt
+from middleware.rate_limit import UserLimit, UserRateLimiter
 
 
 def _request(path="/notes/", ip="1.2.3.4", headers=None):
@@ -47,12 +51,17 @@ class StrictRouteTests(unittest.TestCase):
         results = [self.limiter.check_rate_limit(_request(path="/auth/login/"))[0] for _ in range(6)]
         self.assertEqual(results, [True] * 5 + [False])
 
-    def test_authenticated_routes_still_get_auth_bucket(self):
+    def test_forged_bearer_tokens_share_ip_bucket(self):
+        # Rotating unverifiable tokens must not escape into fresh
+        # authenticated buckets — they collapse onto the caller's IP
+        # bucket and exhaust the per-IP quota (#1323).
+        limiter = UserRateLimiter(requests_per_minute=5)
         allowed = sum(
-            self.limiter.check_rate_limit(_request(path="/notes/", headers={"Authorization": f"Bearer tok{i}"}))[0]
+            limiter.check_rate_limit(_request(path="/notes/", headers={"Authorization": f"Bearer tok{i}"}))[0]
             for i in range(50)
         )
-        self.assertEqual(allowed, 50)  # each distinct token → 5000/min bucket
+        self.assertEqual(allowed, 5)
+        self.assertEqual(set(limiter._user_windows), {"ip:1.2.3.4"})
 
 
 class TrustedProxyTests(unittest.TestCase):
@@ -152,6 +161,127 @@ class LoginLockoutTests(unittest.TestCase):
             self.limiter.record_login_result(self.login, 401)
         self.assertGreater(self.limiter.login_lock_remaining(self.login), 0)
         self.assertEqual(self.limiter.login_lock_remaining(other), 0.0)
+
+    def test_login_attempts_map_is_capped(self):
+        # A spray of distinct source IPs must not grow _login_attempts past
+        # its bound, even while every tracked lockout is still live (#1323).
+        limiter = UserRateLimiter(max_login_attempts=5, login_max_failures=1)
+        for i in range(10):
+            limiter.record_login_result(_request(path="/auth/login", ip=f"10.0.0.{i}"), 401)
+        self.assertLessEqual(len(limiter._login_attempts), 5)
+
+
+def _jwt(sub: str, secret: str = "test-secret", exp_offset: float = 3600.0) -> str:
+    return jwt.encode({"sub": sub, "exp": time.time() + exp_offset}, secret, algorithm="HS256")
+
+
+class IdentityKeyTests(unittest.TestCase):
+    """Authenticated buckets are keyed on *validated* identities (#1323)."""
+
+    def test_valid_jwt_gets_user_bucket(self):
+        limiter = UserRateLimiter()
+        with patch("services.auth_service.signing_secret", return_value="test-secret"):
+            identifier, limit = limiter._get_limit_for_request(
+                _request(headers={"Authorization": f"Bearer {_jwt('7')}"})
+            )
+        self.assertEqual(identifier, "user:7")
+        self.assertEqual(limit, limiter.auth_requests_per_minute)
+
+    def test_expired_jwt_falls_back_to_ip(self):
+        limiter = UserRateLimiter()
+        with patch("services.auth_service.signing_secret", return_value="test-secret"):
+            identifier, limit = limiter._get_limit_for_request(
+                _request(headers={"Authorization": f"Bearer {_jwt('7', exp_offset=-10)}"})
+            )
+        self.assertEqual(identifier, "ip:1.2.3.4")
+        self.assertEqual(limit, limiter.requests_per_minute)
+
+    def test_wrong_signature_jwt_falls_back_to_ip(self):
+        limiter = UserRateLimiter()
+        forged = _jwt("7", secret="attacker-secret")
+        with patch("services.auth_service.signing_secret", return_value="test-secret"):
+            identifier, _ = limiter._get_limit_for_request(_request(headers={"Authorization": f"Bearer {forged}"}))
+        self.assertEqual(identifier, "ip:1.2.3.4")
+
+    def test_internal_service_token_gets_own_bucket(self):
+        limiter = UserRateLimiter()
+        with (
+            patch("services.auth_service.signing_secret", return_value="test-secret"),
+            patch("services.auth_service.verify_internal_token", return_value=True),
+        ):
+            identifier, limit = limiter._get_limit_for_request(
+                _request(headers={"Authorization": "Bearer internal-token"})
+            )
+        self.assertEqual(identifier, "token:internal")
+        self.assertEqual(limit, limiter.auth_requests_per_minute)
+
+    def test_jwt_prefix_no_longer_collapses_buckets(self):
+        # The old token[:15] key shared one bucket across all JWTs (common
+        # 'eyJhbGciOiJIUzI' prefix); validated subs stay separate (#1323).
+        limiter = UserRateLimiter()
+        with patch("services.auth_service.signing_secret", return_value="test-secret"):
+            first, _ = limiter._get_limit_for_request(_request(headers={"Authorization": f"Bearer {_jwt('1')}"}))
+            second, _ = limiter._get_limit_for_request(_request(headers={"Authorization": f"Bearer {_jwt('2')}"}))
+        self.assertEqual(first, "user:1")
+        self.assertEqual(second, "user:2")
+
+    def test_x_api_key_header_is_ignored(self):
+        # X-API-Key is not an auth credential anywhere in the API; it must no
+        # longer mint a fresh authenticated bucket per invented value (#1323).
+        limiter = UserRateLimiter(requests_per_minute=5)
+        allowed = sum(limiter.check_rate_limit(_request(headers={"X-API-Key": f"key-{i}"}))[0] for i in range(50))
+        self.assertEqual(allowed, 5)
+        self.assertEqual(set(limiter._user_windows), {"ip:1.2.3.4"})
+
+
+class BoundedStateTests(unittest.TestCase):
+    """_user_windows is an LRU with a hard cap and periodic sweep (#1323)."""
+
+    def test_windows_lru_capped(self):
+        limiter = UserRateLimiter(requests_per_minute=1000, max_windows=50)
+        for i in range(200):
+            limiter.check_rate_limit(_request(ip=f"10.1.{i // 256}.{i % 256}"))
+        self.assertEqual(len(limiter._user_windows), 50)
+
+    def test_lru_evicts_least_recently_used(self):
+        limiter = UserRateLimiter(requests_per_minute=1000, max_windows=3)
+        for ip in ("1.1.1.1", "2.2.2.2", "3.3.3.3"):
+            limiter.check_rate_limit(_request(ip=ip))
+        # Touch 1.1.1.1 → 2.2.2.2 becomes the LRU entry.
+        limiter.check_rate_limit(_request(ip="1.1.1.1"))
+        limiter.check_rate_limit(_request(ip="4.4.4.4"))
+        self.assertIn("ip:1.1.1.1", limiter._user_windows)
+        self.assertIn("ip:4.4.4.4", limiter._user_windows)
+        self.assertNotIn("ip:2.2.2.2", limiter._user_windows)
+
+    def test_periodic_sweep_reclaims_stale_windows(self):
+        limiter = UserRateLimiter(requests_per_minute=1000, sweep_interval_seconds=30)
+        stale = time.time() - 3600
+        for i in range(10):
+            limiter._user_windows[f"ip:10.0.0.{i}"] = UserLimit(requests=[stale])
+        limiter._last_sweep = 0.0  # force the next check to sweep
+        limiter.check_rate_limit(_request(ip="9.9.9.9"))
+        self.assertEqual(set(limiter._user_windows), {"ip:9.9.9.9"})
+
+    def test_sweep_throttled_by_interval(self):
+        limiter = UserRateLimiter(requests_per_minute=1000, sweep_interval_seconds=3600)
+        stale = time.time() - 3600
+        limiter._user_windows["ip:8.8.8.8"] = UserLimit(requests=[stale])
+        limiter._last_sweep = time.time()  # sweep not due yet
+        limiter.check_rate_limit(_request(ip="9.9.9.9"))
+        self.assertIn("ip:8.8.8.8", limiter._user_windows)
+
+    def test_full_map_prefers_sweeping_dead_windows_over_lru(self):
+        limiter = UserRateLimiter(requests_per_minute=1000, max_windows=3)
+        stale = time.time() - 3600
+        limiter._user_windows["ip:dead.1"] = UserLimit(requests=[stale])
+        limiter._user_windows["ip:dead.2"] = UserLimit(requests=[stale])
+        limiter._user_windows["ip:1.1.1.1"] = UserLimit(requests=[time.time()])
+        # Map is full but two entries are dead: the live entry must survive.
+        limiter.check_rate_limit(_request(ip="2.2.2.2"))
+        self.assertIn("ip:1.1.1.1", limiter._user_windows)
+        self.assertIn("ip:2.2.2.2", limiter._user_windows)
+        self.assertNotIn("ip:dead.1", limiter._user_windows)
 
 
 if __name__ == "__main__":
