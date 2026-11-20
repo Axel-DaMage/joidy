@@ -6,11 +6,11 @@ import logging
 import secrets
 from datetime import UTC, datetime, timedelta
 
+import bcrypt
 import jwt
 from config import settings
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from passlib.context import CryptContext
 from services.env_file import get_persisted
 
 logger = logging.getLogger(__name__)
@@ -19,10 +19,10 @@ ALGORITHM = "HS256"
 TOKEN_EXPIRE_HOURS = 24 * 7  # 1 week
 
 security = HTTPBearer(auto_error=False)
-_pwd_context_kwargs: dict = {"schemes": ["bcrypt"], "deprecated": "auto"}
-if settings.bcrypt_rounds:
-    _pwd_context_kwargs["bcrypt__rounds"] = settings.bcrypt_rounds
-pwd_context = CryptContext(**_pwd_context_kwargs)
+# bcrypt cost factor (default 12). Tests lower it via BCRYPT_ROUNDS (#996);
+# passlib was dropped for direct bcrypt use — passlib 1.7.4 is unmaintained
+# and breaks on bcrypt >= 4.1 (#1290).
+_BCRYPT_ROUNDS: int = settings.bcrypt_rounds or 12
 
 
 def _effective_auth_password() -> str:
@@ -76,13 +76,18 @@ def verify_password(plain: str, stored: str) -> bool:
     Supports bcrypt hashes (starting with $2b$) and plaintext for backward compat.
     """
     if stored.startswith("$2b$"):
-        return pwd_context.verify(plain, stored)
+        try:
+            return bcrypt.checkpw(plain.encode("utf-8"), stored.encode("utf-8"))
+        except ValueError:
+            # Malformed stored hash: report a non-match instead of a 500,
+            # matching the behaviour passlib's CryptContext.verify provided.
+            return False
     return secrets.compare_digest(plain, stored)
 
 
 def hash_password(plain: str) -> str:
     """Hash a password using bcrypt."""
-    return pwd_context.hash(plain)
+    return bcrypt.hashpw(plain.encode("utf-8"), bcrypt.gensalt(rounds=_BCRYPT_ROUNDS)).decode("utf-8")
 
 
 def create_access_token(user_id: int, username: str = "user") -> str:

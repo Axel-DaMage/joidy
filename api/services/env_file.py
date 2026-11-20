@@ -198,7 +198,7 @@ def _validate_port_value(key: str, value: str) -> str:
     return value
 
 
-_TOKEN_DESC = "letters, digits and _ - . : / @ + = $ only"
+_TOKEN_DESC = "letters, digits and _ - . : / @ + = $ only"  # noqa: S105 — validation hint text, not a password
 _KEY_VALIDATORS: dict[str, Callable[[str, str], str]] = {
     # Paths & folders
     "OBSIDIAN_VAULT_PATH": _validate_path_value,

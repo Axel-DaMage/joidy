@@ -17,6 +17,7 @@ select = [
     "C4",  # flake8-comprehensions
     "B",   # flake8-bugbear
     "UP",  # pyupgrade
+    "S",   # flake8-bandit (security)
 ]
 ignore = [
     # FastAPI dependency injection idiom: Depends()/Query()/Body() calls in
@@ -48,6 +49,12 @@ ignore = [
 # Prompt prose must stay verbatim: these lines are LLM system prompts where a
 # reflow would alter the exact bytes sent to the model.
 "ai-service/clients/prompts.py" = ["E501"]
+# Security lint parity with the CI bandit job (ci.yml: `-x api/tests,...`),
+# which excludes test dirs entirely: fixtures legitimately hardcode fake
+# credentials, bind 0.0.0.0, use /tmp paths and swallow exceptions. The "S"
+# ruleset stays fully active for all production code — pre-existing findings
+# there are suppressed individually via inline `# noqa: S<n>` justifications.
+"**/tests/**" = ["S"]
 
 [tool.mypy]
 python_version = "3.12"

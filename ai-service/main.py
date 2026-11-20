@@ -724,7 +724,8 @@ async def cluster_notes(
             params = {f"id_{idx}": i for idx, i in enumerate(ids)}
             placeholders = ", ".join(f":id_{idx}" for idx in range(len(ids)))
             title_rows = conn.execute(
-                sql_text(f"SELECT id, title FROM notes WHERE id IN ({placeholders})"),
+                # Only generated :id_N placeholders are interpolated; values bind via params.
+                sql_text(f"SELECT id, title FROM notes WHERE id IN ({placeholders})"),  # noqa: S608
                 params,
             ).fetchall()
             title_map = {r[0]: r[1] for r in title_rows}

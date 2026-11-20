@@ -43,7 +43,7 @@ os.environ["JOIDY_ENV_FILE"] = str(_TEST_ENV_FILE)
 os.environ["APP_ENV"] = "test"
 
 # Test-only bcrypt cost (#996). Hash strength is irrelevant under test and
-# passlib's default (12 rounds) made auth tests the slowest single test in the
+# bcrypt's default (12 rounds) made auth tests the slowest single test in the
 # suite. Must be set before app modules import `config.settings`, which reads
 # BCRYPT_ROUNDS once at Settings construction time. Overridable by exporting
 # BCRYPT_ROUNDS explicitly.
