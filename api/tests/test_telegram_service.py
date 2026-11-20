@@ -45,13 +45,15 @@ def _handle(db_session: Session, update: dict) -> dict:
     return asyncio.run(ts.handle_update(db_session, update))
 
 
-def _event(db_session: Session, update_id: int) -> TelegramEvent | None:
-    return (
+def _event(db_session: Session, update_id: int) -> TelegramEvent:
+    event = (
         db_session.query(TelegramEvent)
         .filter(TelegramEvent.update_id == update_id)
         .order_by(TelegramEvent.id.desc())
         .first()
     )
+    assert event is not None
+    return event
 
 
 def _notes_titled(db_session: Session, title: str) -> list[Note]:
