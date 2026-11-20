@@ -196,7 +196,10 @@
     "placeholder": "Captura una idea rápida...",
     "defaultTitle": "Nota rápida",
     "created": "¡Nota creada!",
-    "error": "No se pudo crear la nota"
+    "error": "No se pudo crear la nota",
+    "toInbox": "Al Inbox",
+    "inboxCreated": "Capturado en Inbox — clasifícalo cuando quieras",
+    "inboxError": "No se pudo capturar en Inbox"
   },
   "mood": {
     "title": "ÁNIMO",
@@ -334,7 +337,25 @@
     "cancelArchive": "Cancelar (archivar sin penalización)",
     "deletePermanent": "Eliminar permanentemente",
     "deleteGoalConfirmTitle": "Eliminar objetivo",
-    "deleteGoalConfirmMessage": "¿Seguro que deseas eliminar \"{title}\"? Esta acción es permanente."
+    "deleteGoalConfirmMessage": "¿Seguro que deseas eliminar \"{title}\"? Esta acción es permanente.",
+    "inboxTab": "Inbox",
+    "inboxTitle": "Inbox",
+    "inboxHint": "Las capturas sin clasificar esperan aquí — clasifícalas o descártalas.",
+    "inboxEmpty": "El Inbox está vacío",
+    "inboxEmptyHint": "Usa Captura Rápida para soltar ideas aquí y clasificarlas luego.",
+    "inboxTriageError": "No se pudo enviar el objetivo a la cola",
+    "inboxDiscardError": "No se pudo descartar el objetivo",
+    "contextLabel": "Contexto de energía",
+    "contextHelper": "¿Cuándo encaja mejor? La mañana favorece el trabajo profundo, la noche las tareas de baja fricción.",
+    "contextAny": "Cualquier momento",
+    "contextMorning": "Mañana",
+    "contextNight": "Noche",
+    "contextAnyHint": "Encaja en cualquier momento del día",
+    "contextMorningHint": "Trabajo profundo — mejor temprano en el día",
+    "contextNightHint": "Tareas de baja fricción para la tarde/noche",
+    "toQueue": "A la cola",
+    "discard": "Descartar",
+    "discardConfirm": "¿Confirmar?"
   },
   "notesPage": {
     "createNote": "Crear nota",

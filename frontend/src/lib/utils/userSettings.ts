@@ -34,6 +34,7 @@ export interface UserSettings {
   goalsUi?: {
     pinnedGoalIds?: number[];
     editorFilter?: string | null;
+    editorContextFilter?: string | null;
     editorSearch?: string;
   };
   statusBarUi?: {

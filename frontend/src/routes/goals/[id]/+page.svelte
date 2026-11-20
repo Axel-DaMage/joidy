@@ -10,7 +10,7 @@
   import { afterNavigate } from '$app/navigation';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
-  import { api, type Goal, type Tag as TagType, type Note } from '$lib/api';
+  import { api, type Goal, type GoalContext, type Tag as TagType, type Note } from '$lib/api';
   import { logger } from '$lib/utils/logger';
   import { suggestEmoji, suggestIcon, suggestIconKey } from '$lib/utils/iconSuggest';
   import LazyIconPicker from '$lib/components/LazyIconPicker.svelte';
@@ -205,6 +205,7 @@
       await api.goals.saveContent(goalId, {
         ...e.detail,
         temporality: goal.temporality || 'DAILY',
+        context: goal.context || 'ANY',
         measurement_type: goal.measurement_type || 'COUNT',
         target_value: goal.target_value || 1,
         state: goal.state || 'ACTIVE',
@@ -267,6 +268,12 @@
       logger.error('Error al eliminar objetivo:', e);
     }
   }
+
+  // Context chips inside GoalEditor persist immediately — sync local state
+  // so later content saves don't overwrite the new value (#1200).
+  function handleContextChange(e: CustomEvent<{ context: GoalContext; goal: Goal }>) {
+    if (goal) goal = { ...goal, ...e.detail.goal, context: e.detail.context };
+  }
 </script>
 
 <div class="goal-detail-page">
@@ -285,6 +292,7 @@
         on:cancel={handleCancel}
         on:complete={handleComplete}
         on:delete={handleDelete}
+        on:contextChange={handleContextChange}
       />
     {:else}
       <div class="loading">{$t('goalDetail.editorLoading')}</div>

@@ -1,7 +1,7 @@
 <script lang="ts">
   import GoalCard from './GoalCard.svelte';
   import EmptyState from './EmptyState.svelte';
-  import type { Goal, Note } from '$lib/api';
+  import type { Goal, GoalContext, Note } from '$lib/api';
   import type { Tag as TagType } from '$lib/api';
   import { setGoalContext } from '$lib/stores/goalContext';
 
@@ -9,6 +9,7 @@
     goals: Goal[];
     query: string;
     filter: string | null;
+    contextFilter?: GoalContext | null;
     pinned: Set<number>;
     tags: TagType[];
     notes: Note[];
@@ -28,6 +29,7 @@
     goals,
     query,
     filter,
+    contextFilter = null,
     pinned,
     tags,
     notes,
@@ -60,7 +62,13 @@
     get onArchive() { return onArchive; },
   });
 
-  function filteredGoals(goals: Goal[], query: string, filter: string | null, pinned: Set<number>) {
+  function filteredGoals(
+    goals: Goal[],
+    query: string,
+    filter: string | null,
+    contextFilter: GoalContext | null,
+    pinned: Set<number>
+  ) {
     let result = goals;
     if (query) {
       const q = query.toLowerCase();
@@ -73,13 +81,18 @@
       if (filter === 'COMPLETED') {
         result = result.filter(g => g.state === 'COMPLETED' || g.is_completed);
       } else if (filter === 'PINNED') {
-        result = result.filter(g => pinned.has(g.id));
+        // Pinned view keeps its semantics but still hides raw inbox captures
+        result = result.filter(g => pinned.has(g.id) && g.state !== 'INBOX');
       } else {
         result = result.filter(g => g.state === filter);
       }
     } else {
-      // "Todos" filter (filter === null) excludes archived/cancelled goals
-      result = result.filter(g => g.state !== 'CANCELLED');
+      // "Todos" filter (filter === null) excludes archived/cancelled goals and
+      // untriaged inbox captures (#1200 — inbox lives in its own section)
+      result = result.filter(g => g.state !== 'CANCELLED' && g.state !== 'INBOX');
+    }
+    if (contextFilter) {
+      result = result.filter(g => (g.context ?? 'ANY') === contextFilter);
     }
     return [...result].sort((a, b) => {
       const aPinned = pinned.has(a.id) ? 0 : 1;
@@ -91,7 +104,7 @@
     });
   }
 
-  let visibleGoals = $derived(filteredGoals(goals, query, filter, pinned));
+  let visibleGoals = $derived(filteredGoals(goals, query, filter, contextFilter, pinned));
 </script>
 
 <div class="editor-grid-container">

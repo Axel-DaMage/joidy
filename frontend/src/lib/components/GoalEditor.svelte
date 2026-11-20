@@ -1,12 +1,13 @@
 <script lang="ts">
   import { createEventDispatcher, onDestroy, onMount } from 'svelte';
-  import { Eye, EyeOff, Save, Trash2, X, Maximize, ChevronLeft, ChevronRight, Settings, CheckCircle2 } from 'lucide-svelte';
+  import { Eye, EyeOff, Save, Trash2, X, Maximize, ChevronLeft, ChevronRight, Settings, CheckCircle2, Sun, Moon, Zap } from 'lucide-svelte';
   import { marked } from 'marked';
   import DOMPurify from 'dompurify';
   import hljs from 'highlight.js';
   import 'highlight.js/styles/github-dark.css';
-  import { api, type Goal } from '$lib/api';
+  import { api, type Goal, type GoalContext } from '$lib/api';
   import { t } from 'svelte-i18n';
+  import { logger } from '$lib/utils/logger';
   import { createTimerRegistry } from '$lib/utils/timer';
   import { loadDraft, persistDraft, clearDraft } from '$lib/utils/noteDrafts';
   import NoteRecoveryBanner from './NoteRecoveryBanner.svelte';
@@ -54,6 +55,7 @@
     delete: void;
     complete: void;
     edit: void;
+    contextChange: { context: GoalContext; goal: Goal };
   }>();
 
   let title = $state('');
@@ -62,6 +64,43 @@
   let previewMode = $state(false);
   let zenMode = $state(false);
   let deleteConfirm = $state(false);
+
+  // Energy context (#1200): ANY is the default so classification stays
+  // optional. Persisted immediately via the goal update endpoint.
+  let goalContext = $state<GoalContext>('ANY');
+  let contextSaving = $state(false);
+
+  $effect(() => {
+    goalContext = goal?.context ?? 'ANY';
+  });
+
+  const CONTEXT_OPTIONS: GoalContext[] = ['ANY', 'MORNING', 'NIGHT'];
+  const CONTEXT_LABEL_KEYS: Record<GoalContext, string> = {
+    ANY: 'contextAny',
+    MORNING: 'contextMorning',
+    NIGHT: 'contextNight',
+  };
+  const CONTEXT_HINT_KEYS: Record<GoalContext, string> = {
+    ANY: 'contextAnyHint',
+    MORNING: 'contextMorningHint',
+    NIGHT: 'contextNightHint',
+  };
+
+  async function selectContext(ctx: GoalContext) {
+    if (!goal || ctx === goalContext || contextSaving) return;
+    const prev = goalContext;
+    goalContext = ctx;
+    contextSaving = true;
+    try {
+      const updated = await api.goals.update(goal.id, { context: ctx });
+      dispatch('contextChange', { context: ctx, goal: updated });
+    } catch (e) {
+      goalContext = prev;
+      logger.error('[GoalEditor] context update failed:', e);
+    } finally {
+      contextSaving = false;
+    }
+  }
 
   // Autosave (#1129): debounced draft persistence + dispatch of the save event.
   let autosaveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -280,6 +319,29 @@
   {#if !zenMode}
   <div class="toolbar">
     <div class="toolbar-left">
+      {#if goal}
+        <div
+          class="context-selector"
+          role="radiogroup"
+          aria-label={$t('goalsPage.contextLabel')}
+          title={$t('goalsPage.contextHelper')}
+        >
+          {#each CONTEXT_OPTIONS as ctx}
+            <button
+              class="context-chip"
+              class:active={goalContext === ctx}
+              role="radio"
+              aria-checked={goalContext === ctx}
+              disabled={contextSaving}
+              onclick={() => selectContext(ctx)}
+              title={$t(`goalsPage.${CONTEXT_HINT_KEYS[ctx]}`)}
+            >
+              {#if ctx === 'MORNING'}<Sun size={12} />{:else if ctx === 'NIGHT'}<Moon size={12} />{:else}<Zap size={12} />{/if}
+              <span>{$t(`goalsPage.${CONTEXT_LABEL_KEYS[ctx]}`)}</span>
+            </button>
+          {/each}
+        </div>
+      {/if}
     </div>
 
     <div class="toolbar-right">
@@ -430,6 +492,33 @@
     align-items: center;
     gap: var(--s2);
   }
+
+  .context-selector {
+    display: inline-flex;
+    gap: 3px;
+    padding: 3px;
+    background: var(--surface-hover);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+
+  .context-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 9px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 11px;
+    font-family: var(--font-sans);
+    cursor: pointer;
+    transition: all var(--t-fast);
+  }
+  .context-chip:hover:not(:disabled) { color: var(--text-primary); }
+  .context-chip.active { background: var(--accent); color: var(--accent-contrast-text, var(--bg)); font-weight: 600; }
+  .context-chip:disabled { opacity: 0.5; cursor: default; }
 
   .stat {
     font-size: 11px;

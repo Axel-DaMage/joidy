@@ -1,12 +1,15 @@
 <script lang="ts">
   import { _ } from 'svelte-i18n';
   import { createNote } from '$lib/stores/notes';
+  import { api } from '$lib/api';
   import { showNotification } from '$lib/stores/notifications';
   import { showXPGain } from '$lib/stores/gamification';
-  import { Send } from 'lucide-svelte';
+  import { logger } from '$lib/utils/logger';
+  import { Send, Inbox } from 'lucide-svelte';
 
   let text = $state('');
   let submitting = $state(false);
+  let submittingInbox = $state(false);
 
   async function handleCapture(e: MouseEvent) {
     const trimmed = text.trim();
@@ -30,6 +33,31 @@
       handleCapture(e as unknown as MouseEvent);
     }
   }
+
+  // Capture straight into the goals Inbox (#1200): title-only ONEOFF goal,
+  // triaged later from the inbox tab.
+  async function handleInboxCapture() {
+    const trimmed = text.trim();
+    if (!trimmed || submittingInbox || submitting) return;
+    submittingInbox = true;
+    try {
+      const title = trimmed.split('\n')[0].slice(0, 60) || $_('quickCapture.defaultTitle');
+      await api.goals.create({
+        title,
+        description: trimmed,
+        temporality: 'ONEOFF',
+        context: 'ANY',
+        state: 'INBOX',
+      });
+      text = '';
+      showNotification($_('quickCapture.inboxCreated'), 'success', '/goals?tab=inbox');
+    } catch (e) {
+      logger.error('Failed to capture inbox goal:', e);
+      showNotification($_('quickCapture.inboxError'), 'error');
+    } finally {
+      submittingInbox = false;
+    }
+  }
 </script>
 
 <div class="quick-capture">
@@ -40,19 +68,35 @@
     rows="2"
     aria-label={$_('quickCapture.placeholder')}
   ></textarea>
-  <button
-    class="qc-btn"
-    onclick={handleCapture}
-    disabled={submitting || !text.trim()}
-    aria-label={$_('common.save')}
-  >
-    {#if submitting}
-      <span class="qc-spinner"></span>
-    {:else}
-      <Send size={14} />
-    {/if}
-    <span>{submitting ? $_('common.saving') : $_('common.save')}</span>
-  </button>
+  <div class="qc-actions">
+    <button
+      class="qc-btn qc-inbox-btn"
+      onclick={handleInboxCapture}
+      disabled={submitting || submittingInbox || !text.trim()}
+      aria-label={$_('quickCapture.toInbox')}
+      title={$_('quickCapture.toInbox')}
+    >
+      {#if submittingInbox}
+        <span class="qc-spinner"></span>
+      {:else}
+        <Inbox size={14} />
+      {/if}
+      <span>{$_('quickCapture.toInbox')}</span>
+    </button>
+    <button
+      class="qc-btn"
+      onclick={handleCapture}
+      disabled={submitting || submittingInbox || !text.trim()}
+      aria-label={$_('common.save')}
+    >
+      {#if submitting}
+        <span class="qc-spinner"></span>
+      {:else}
+        <Send size={14} />
+      {/if}
+      <span>{submitting ? $_('common.saving') : $_('common.save')}</span>
+    </button>
+  </div>
 </div>
 
 <style>
@@ -102,6 +146,23 @@
     cursor: pointer;
     transition: opacity 0.15s;
     align-self: flex-end;
+  }
+
+  .qc-actions {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+  }
+
+  .qc-inbox-btn {
+    background: var(--surface, rgba(255, 255, 255, 0.05));
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+    color: var(--text-muted, rgba(255, 255, 255, 0.6));
+  }
+
+  .qc-inbox-btn:not(:disabled):hover {
+    color: var(--text, inherit);
+    border-color: var(--accent, #4f9cf9);
   }
 
   .qc-btn:disabled {

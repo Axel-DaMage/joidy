@@ -184,16 +184,20 @@ export interface SkillTree {
   edges: SkillEdge[];
 }
 
+export type GoalContext = 'ANY' | 'MORNING' | 'NIGHT';
+export type GoalState = 'INBOX' | 'ACTIVE' | 'COMPLETED' | 'FAILED' | 'PAUSED' | 'CANCELLED';
+
 export interface Goal {
   id: number;
   title: string;
   description: string;
   source_path: string | null;
   temporality: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'ANNUAL' | 'ONEOFF';
+  context: GoalContext;
   measurement_type: 'COUNT' | 'BOOLEAN' | 'PERCENT';
   target_value: number;
   current_value: number;
-  state: 'ACTIVE' | 'COMPLETED' | 'FAILED' | 'PAUSED' | 'CANCELLED';
+  state: GoalState;
   fail_config: 'STATIC' | 'ROLLOVER' | 'SNOWBALL';
   fail_emoji: string;
   color: string;
@@ -540,18 +544,24 @@ export const api = {
   },
 
   goals: {
-    list: (skip?: number, limit?: number) =>
-      req<Goal[]>(
-        'GET',
-        `/goals/${skip !== undefined || limit !== undefined ? `?${skip !== undefined ? `skip=${skip}&` : ''}${limit !== undefined ? `limit=${limit}` : ''}` : ''}`
-      ),
+    list: (skip?: number, limit?: number, filters?: { state?: GoalState; context?: GoalContext }) => {
+      const params = new URLSearchParams();
+      if (skip !== undefined) params.set('skip', String(skip));
+      if (limit !== undefined) params.set('limit', String(limit));
+      if (filters?.state) params.set('state', filters.state);
+      if (filters?.context) params.set('context', filters.context);
+      const qs = params.toString();
+      return req<Goal[]>('GET', `/goals/${qs ? `?${qs}` : ''}`);
+    },
     get: (id: number) => req<Goal>('GET', `/goals/${id}`),
     create: (data: {
       title: string;
       description?: string;
       temporality?: string;
+      context?: GoalContext;
       measurement_type?: string;
       target_value?: number;
+      state?: GoalState;
       fail_config?: string;
       fail_emoji?: string;
       color?: string;
@@ -572,6 +582,11 @@ export const api = {
     streak: () => req<{ current_streak: number; best_streak: number }>('GET', '/goals/streak'),
     resolveRemoval: (id: number, action: 'delete' | 'manual' | 'cancel') =>
       req<Goal | { status: string }>('POST', `/goals/${id}/resolve-removal`, { action }),
+    executionQueue: (context: 'auto' | 'morning' | 'night' = 'auto') =>
+      req<{ context: GoalContext; generated_at: string; items: Goal[] }>(
+        'GET',
+        `/goals/execution-queue?context=${context}`
+      ),
     getContent: (id: number) =>
       req<{
         title: string;
@@ -589,6 +604,7 @@ export const api = {
         title: string;
         content: string;
         temporality?: string;
+        context?: GoalContext;
         measurement_type?: string;
         target_value?: number;
         state?: string;
