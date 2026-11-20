@@ -45,13 +45,18 @@ from routers import (
     websocket,
 )
 from routers.integrations import github, google, spotify, strava
-from services.auth_service import get_current_user, get_current_user_or_internal
+from services.auth_service import (
+    _effective_auth_password,
+    get_current_user,
+    get_current_user_or_internal,
+    verify_token,
+)
 from services.env_file import env_file_permissions, get_env_file
 from services.http_client import aclose_http_clients, http_client
 from services.response_cache import get_cache_stats
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 from starlette.staticfiles import StaticFiles
 
 logger = logging.getLogger(__name__)
@@ -293,25 +298,61 @@ except OSError:
 
 
 class SafeStaticFiles(StaticFiles):
-    """StaticFiles that forces Content-Disposition: attachment for file types
-    a browser would otherwise render inline and execute (#1283, audit F-07).
+    """StaticFiles hardened for user-uploaded content (#1279).
 
-    The upload router validates declared MIME types, but the stored filename
-    extension decides the served Content-Type — a file uploaded as
-    ``text/plain`` but named ``evil.html`` would be served as ``text/html``.
-    Forcing attachment for active-content extensions removes the inline-HTML
-    XSS path regardless of how the file got there.
+    - **Auth**: requests must carry a valid JWT, either as an
+      ``Authorization: Bearer`` header or a ``?token=`` query param — the
+      latter so ``<img src>``/``<a href>`` embeds in rendered notes work
+      (same pattern as the ``/ws`` endpoint). Mirrors ``get_current_user``:
+      bypassed outside production when AUTH_PASSWORD is unset, fails closed
+      in production.
+    - ``X-Content-Type-Options: nosniff`` on every response.
+    - ``Content-Disposition: attachment`` for active-content extensions
+      (.svg/.html/.htm/.xhtml/.xml), so stored markup can never render
+      inline in the API origin.
     """
 
-    _FORCE_ATTACHMENT_EXTENSIONS = (".svg", ".html", ".htm", ".xhtml", ".xml")
+    # Extensions allowed to display inline. Matches the stored-extension
+    # allowlist in routers/upload.py for validated image/* uploads only.
+    _INLINE_EXTENSIONS = frozenset({".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"})
+
+    @staticmethod
+    def _unauthorized(scope) -> Response | None:
+        """Return a 401 response unless the request carries a valid token."""
+        if not _effective_auth_password():
+            # Dev bypass, mirroring get_current_user: no AUTH_PASSWORD means
+            # open access outside production and fail-closed in production.
+            if settings.app_env == "production":
+                return JSONResponse(
+                    {"detail": "Authentication not configured. Set AUTH_PASSWORD in .env."},
+                    status_code=401,
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            return None
+
+        request = Request(scope)
+        token = ""
+        scheme, _, param = request.headers.get("authorization", "").partition(" ")
+        if scheme.lower() == "bearer":
+            token = param.strip()
+        if not token:
+            token = request.query_params.get("token", "")
+        if token and verify_token(token):
+            return None
+        return JSONResponse(
+            {"detail": "Not authenticated"},
+            status_code=401,
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     async def get_response(self, path: str, scope):
+        denied = self._unauthorized(scope)
+        if denied is not None:
+            return denied
         response = await super().get_response(path, scope)
-        lower = path.lower()
-        if lower.endswith(self._FORCE_ATTACHMENT_EXTENSIONS):
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        if Path(path).suffix.lower() not in self._INLINE_EXTENSIONS:
             response.headers["Content-Disposition"] = "attachment"
-            if lower.endswith(".svg"):
-                response.headers["Content-Type"] = "image/svg+xml"
         return response
 
 

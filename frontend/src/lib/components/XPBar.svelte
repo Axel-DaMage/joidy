@@ -1,5 +1,6 @@
 <script lang="ts">
   import { totalXP, nextStageXP, plantProgress, xpEvents } from '$lib/stores/gamification';
+  import { t } from 'svelte-i18n';
 </script>
 
 <div class="xp-bar-wrapper">
@@ -16,17 +17,28 @@
       {/if}
     </div>
   </div>
-  <div class="progress-track">
+  <div
+    class="progress-track"
+    role="progressbar"
+    aria-valuemin={0}
+    aria-valuemax={100}
+    aria-valuenow={Math.round($plantProgress)}
+    aria-valuetext={$nextStageXP
+      ? `${$totalXP.toLocaleString()} / ${$nextStageXP.toLocaleString()} XP`
+      : `${$totalXP.toLocaleString()} XP`}
+    aria-label={$t('a11y.xpProgress')}
+  >
     <div class="progress-fill" style="width: {$plantProgress}%">
       <div class="progress-glow"></div>
     </div>
   </div>
 </div>
 
-<!-- Floating XP events -->
+<!-- Floating XP events (visual only — announced via the live region below) -->
 {#each $xpEvents as evt (evt.id)}
   <div
     class="xp-float"
+    aria-hidden="true"
     style="
       left: {evt.x ?? 50}%;
       top: {evt.y ?? 60}%;
@@ -36,6 +48,13 @@
     +{evt.amount} XP
   </div>
 {/each}
+
+<!-- Screen-reader announcement for XP gains (#1309) -->
+<div class="visually-hidden" aria-live="polite">
+  {#each $xpEvents as evt (evt.id)}
+    <span>+{evt.amount} XP</span>
+  {/each}
+</div>
 
 <style>
   .xp-bar-wrapper {

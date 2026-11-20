@@ -73,7 +73,9 @@ _PLACEHOLDER_VALUES = frozenset({"", "your_gemini_api_key_here", "change_this_to
 
 def _configured(value: str | None) -> bool:
     """True when a value is present and not a shipped placeholder."""
-    return value is not None and value.strip() not in _PLACEHOLDER_VALUES
+    if not value:
+        return False
+    return value.strip() not in _PLACEHOLDER_VALUES
 
 
 class ConfigResponse(BaseModel):

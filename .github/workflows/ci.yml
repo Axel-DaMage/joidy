@@ -273,6 +273,7 @@ jobs:
           # so set CI-only values here.
           sed -i 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=joidy-ci/' .env
           sed -i 's/^INTERNAL_SECRET=.*/INTERNAL_SECRET=joidy-ci-internal/' .env
+          sed -i 's/^SECRET_KEY=.*/SECRET_KEY=joidy-ci-secret-key-not-for-production/' .env
           # Run the dev containers as the runner user (compose interpolates
           # ${UID}/${GID} from .env) so the frontend container can write
           # .svelte-kit through the ./frontend bind mount.
@@ -387,6 +388,7 @@ jobs:
           # so set CI-only values here.
           sed -i 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=joidy-ci/' .env
           sed -i 's/^INTERNAL_SECRET=.*/INTERNAL_SECRET=joidy-ci-internal/' .env
+          sed -i 's/^SECRET_KEY=.*/SECRET_KEY=joidy-ci-secret-key-not-for-production/' .env
           # Deterministic single-user auth for the e2e login helper
           # (plaintext supported by verify_password; bcrypt prefix optional).
           echo "AUTH_PASSWORD=joidy-e2e-ci" >> .env

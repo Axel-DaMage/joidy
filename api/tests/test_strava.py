@@ -20,8 +20,8 @@ def _configure_strava(monkeypatch):
 
 def _auth_url_state(client) -> str:
     """Round-trip helper: fetch /auth and extract the signed state param."""
-    url: str = client.get("/integrations/strava/auth").json()["url"]
-    return parse_qs(urlparse(url).query)["state"][0]
+    url = client.get("/integrations/strava/auth").json()["url"]
+    return str(parse_qs(urlparse(url).query)["state"][0])
 
 
 def test_strava_auth_url_unconfigured(client):

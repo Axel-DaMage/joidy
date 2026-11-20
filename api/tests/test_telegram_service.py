@@ -153,7 +153,8 @@ class TestNoteCommand:
         result = _handle(db_session, update)
         assert result["handled"] is True, result
         assert "Usage" in result["reply"]
-        event = _require_event(db_session, update["update_id"])
+        event = _event(db_session, update["update_id"])
+        assert event is not None
         assert event.status == "processed"
 
 
@@ -166,13 +167,14 @@ class TestGoalCommand:
         goal = db_session.query(Goal).filter(Goal.title == "run 5k telegramtest").one()
         assert goal.state == GoalState.ACTIVE
         assert goal.temporality == GoalTemporality.ONEOFF
-        assert _require_event(db_session, update["update_id"]).command == "goal"
+        assert (e := _event(db_session, update["update_id"])) is not None and e.command == "goal"
 
     def test_goal_without_args_returns_usage(self, db_session: Session):
         update = _update("/goal")
         result = _handle(db_session, update)
         assert "Usage" in result["reply"]
-        event = _require_event(db_session, update["update_id"])
+        event = _event(db_session, update["update_id"])
+        assert event is not None
         assert event.command == "goal"
         assert event.status == "processed"
 
@@ -281,7 +283,7 @@ class TestAskCommand:
 
         assert result["reply"] == "The answer is 42."
         assert client.requests[0]["json"]["question"] == "what is the meaning?"
-        assert _require_event(db_session, update["update_id"]).command == "ask"
+        assert (e := _event(db_session, update["update_id"])) is not None and e.command == "ask"
 
     def test_ask_without_args_returns_usage(self, db_session: Session):
         result = _handle(db_session, _update("/ask"))
@@ -304,13 +306,13 @@ class TestUpdateHandling:
         assert result["handled"] is True
         assert result["command"] == "message"
         assert "/help" in result["reply"]
-        assert _require_event(db_session, update["update_id"]).status == "processed"
+        assert (e := _event(db_session, update["update_id"])) is not None and e.status == "processed"
 
     def test_unknown_command(self, db_session: Session):
         update = _update("/fly to the moon")
         result = _handle(db_session, update)
         assert "Unknown command" in result["reply"]
-        assert _require_event(db_session, update["update_id"]).command == "fly"
+        assert (e := _event(db_session, update["update_id"])) is not None and e.command == "fly"
 
     def test_unauthorized_user_is_ignored(self, db_session: Session):
         update = _update("/note secret telegramtest", user_id=8)
@@ -320,7 +322,7 @@ class TestUpdateHandling:
         assert result["handled"] is False
         assert result["reason"] == "unauthorized"
         assert _notes_titled(db_session, "secret telegramtest") == []
-        assert _require_event(db_session, update["update_id"]).status == "unauthorized"
+        assert (e := _event(db_session, update["update_id"])) is not None and e.status == "unauthorized"
 
     def test_duplicate_update_is_deduplicated(self, db_session: Session):
         update = _update("/note only once telegramtest")
@@ -344,7 +346,7 @@ class TestUpdateHandling:
         result = _handle(db_session, {"update_id": update_id, "callback_query": {"id": "x"}})
         assert result["handled"] is False
         assert result["reason"] == "unsupported_update"
-        assert _require_event(db_session, update_id).status == "ignored"
+        assert (e := _event(db_session, update_id)) is not None and e.status == "ignored"
 
 
 # ── Webhook router ────────────────────────────────

@@ -19,8 +19,8 @@ def _configure_google(monkeypatch):
 
 def _auth_url_state(client) -> str:
     """Round-trip helper: fetch /auth and extract the signed state param."""
-    url: str = client.get("/integrations/google/auth").json()["url"]
-    return parse_qs(urlparse(url).query)["state"][0]
+    url = client.get("/integrations/google/auth").json()["url"]
+    return str(parse_qs(urlparse(url).query)["state"][0])
 
 
 def test_google_auth_url_unconfigured(client):

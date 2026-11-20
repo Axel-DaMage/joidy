@@ -183,8 +183,7 @@ async def set_webhook(url: str) -> dict[str, Any]:
             json=payload,
         )
         r.raise_for_status()
-        result: dict[str, Any] = r.json()
-        return result
+        return dict(r.json())
 
 
 async def delete_webhook() -> dict[str, Any]:
@@ -194,8 +193,7 @@ async def delete_webhook() -> dict[str, Any]:
     async with http_client(timeout=15.0) as client:
         r = await client.post(f"{TELEGRAM_API}/bot{settings.telegram_bot_token}/deleteWebhook")
         r.raise_for_status()
-        result: dict[str, Any] = r.json()
-        return result
+        return dict(r.json())
 
 
 # ── Command handlers ──────────────────────────────
