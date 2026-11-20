@@ -6,6 +6,12 @@ labels: bug
 assignees: ''
 ---
 
+**Prioridad / Urgencia**
+Indica una de las etiquetas canónicas (el equipo aplicará `priority:P*` y `urgency:*` en el triage):
+
+- Prioridad: `P0` (crítico) · `P1` (alto) · `P2` (medio) · `P3` (backlog)
+- Urgencia: `critical` · `high` · `medium` · `low` · `backlog`
+
 **Describe el bug**
 Una descripción clara y concisa del problema.
 
