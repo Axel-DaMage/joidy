@@ -1,4 +1,81 @@
+import ipaddress
+import logging
+from urllib.parse import urlparse
+
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger(__name__)
+
+# Host-gateway aliases that resolve to the local machine from inside a
+# container — http:// traffic to these never leaves the host.
+_LOOPBACK_HOSTNAMES = {
+    "localhost",
+    "host.docker.internal",  # Docker (see .env.example OLLAMA_BASE_URL)
+    "host.containers.internal",  # Podman equivalent
+}
+
+
+def _is_loopback_host(hostname: str) -> bool:
+    """True when the hostname can only resolve to the local machine."""
+    host = hostname.strip().rstrip(".").lower()
+    if host in _LOOPBACK_HOSTNAMES or host.endswith(".localhost"):
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback  # 127.0.0.0/8, ::1
+    except ValueError:
+        return False
+
+
+def validate_base_url(url: str, *, name: str = "base_url", allow_insecure: bool = False) -> str:
+    """Validate a provider base URL and return it normalized (no trailing /).
+
+    Policy (#1330):
+    - ``https://`` is required for remote hosts — cleartext http to a remote
+      host would expose note content and provider API keys.
+    - ``http://`` is allowed only for loopback targets (localhost,
+      *.localhost, 127.0.0.0/8, ::1 and the Docker/Podman host-gateway
+      aliases) since e.g. Ollama is expected to run on the local machine.
+
+    Raises ValueError on rejection unless ``allow_insecure`` is set, which
+    downgrades the refusal to a loud warning (explicit operator opt-in —
+    e.g. Ollama in a sibling container on a private docker network).
+    """
+    cleaned = url.strip()
+    try:
+        parsed = urlparse(cleaned)
+        hostname = parsed.hostname
+        _ = parsed.port  # raises ValueError on malformed ports
+    except ValueError:
+        parsed, hostname = None, None
+
+    reason = None
+    if parsed is None or not parsed.scheme:
+        reason = "missing URL scheme — expected 'https://' or 'http://'"
+    else:
+        scheme = parsed.scheme.lower()
+        if scheme == "https":
+            if not hostname:
+                reason = "missing host"
+        elif scheme == "http":
+            if not hostname:
+                reason = "missing host"
+            elif not _is_loopback_host(hostname):
+                reason = "http:// is only allowed for loopback hosts"
+        else:
+            reason = f"unsupported scheme '{parsed.scheme}' — expected 'https://' or 'http://'"
+
+    if reason is not None:
+        msg = f"Invalid {name} {cleaned!r}: {reason}."
+        if allow_insecure:
+            logger.warning(f"{msg} ALLOW_INSECURE_BASE_URLS is enabled — accepting anyway.")
+            return cleaned.rstrip("/")
+        raise ValueError(
+            f"{msg} Remote hosts must use https://; http:// is only allowed for loopback "
+            "targets (localhost, *.localhost, 127.0.0.0/8, ::1, host.docker.internal, "
+            "host.containers.internal). Set ALLOW_INSECURE_BASE_URLS=true to override."
+        )
+    return cleaned.rstrip("/")
 
 
 class Settings(BaseSettings):
@@ -24,6 +101,18 @@ class Settings(BaseSettings):
     openrouter_api_key: str = ""
     cohere_api_key: str = ""
     ollama_base_url: str = "http://localhost:11434"
+
+    # Security: provider base-URL policy (#1330). http:// is only accepted
+    # for loopback targets; remote hosts must use https://. Setting
+    # ALLOW_INSECURE_BASE_URLS=true downgrades the startup refusal to a
+    # warning — needed e.g. when Ollama runs in a sibling container
+    # (OLLAMA_BASE_URL=http://ollama:11434 on a private docker network).
+    allow_insecure_base_urls: bool = False
+    # Optional explicit proxy for provider HTTP clients. httpx-based SDK
+    # transports are built with trust_env=False so ambient HTTP(S)_PROXY /
+    # ALL_PROXY variables are ignored; set this when providers must egress
+    # through a proxy.
+    provider_proxy_url: str = ""
 
     # Model configuration (format: "provider:model" or just "model" for default provider)
     # Examples: "gemini:gemini-2.0-flash", "openai:gpt-4", "anthropic:claude-3-opus", "ollama:llama3"
@@ -52,6 +141,21 @@ class Settings(BaseSettings):
     # Response cache: avoids re-calling providers for identical inputs.
     cache_ttl_seconds: float = 3600.0
     cache_max_size: int = 2048
+
+    @model_validator(mode="after")
+    def _validate_provider_base_urls(self) -> "Settings":
+        """Refuse to start on insecure/malformed provider base URLs (#1330).
+
+        Runs at Settings() construction (module import) so a tampered env
+        fails fast instead of silently exfiltrating note content.
+        """
+        for env_name, url in (
+            ("OPENAI_BASE_URL", self.openai_base_url),
+            ("OLLAMA_BASE_URL", self.ollama_base_url),
+        ):
+            if url:
+                validate_base_url(url, name=env_name, allow_insecure=self.allow_insecure_base_urls)
+        return self
 
     @property
     def provider_config(self) -> dict:

@@ -3,19 +3,27 @@ import logging
 from typing import cast
 
 import anthropic
-import httpx
+import httpx2  # the anthropic SDK vendors this httpx fork; http_client requires it
 from config import settings
 
 from .base import BaseLLMClient
+from .httpx_utils import build_async_http_client
 
 logger = logging.getLogger(__name__)
 
 
 class AnthropicClient(BaseLLMClient):
     def __init__(self, api_key: str, model: str):
+        timeout = httpx2.Timeout(settings.llm_timeout, connect=settings.connect_timeout)
         self._client = anthropic.AsyncAnthropic(
             api_key=api_key,
-            timeout=httpx.Timeout(settings.llm_timeout, connect=settings.connect_timeout),
+            timeout=timeout,
+            # trust_env=False so ambient HTTP(S)_PROXY vars are ignored unless
+            # PROVIDER_PROXY_URL is explicitly configured (#1330). NOTE: a
+            # plain httpx2.AsyncClient is used on purpose — the SDK's
+            # DefaultAsyncHttpxClient reads env proxies itself and would mount
+            # them even with trust_env=False.
+            http_client=build_async_http_client(httpx2.AsyncClient, timeout),
         )
         self._model = model
 
