@@ -12,12 +12,20 @@ depends=('docker')
 install=joidy.install
 source=("https://github.com/Axel-DaMage/joidy/archive/v${_tag}.tar.gz"
         "joidy.install")
-sha256sums=('SKIP' 'SKIP')
+# Real checksums (#1296, #1394): injected by the release pipeline
+# (.github/workflows/release.yml) after the tag is pushed and re-verified by
+# aur-publish.yml at publish time. A tagged PKGBUILD can only ever ship SKIP
+# for its own tarball (the artifact does not exist until the tag exists).
+# Keep this on ONE line: the pipeline rewrites it with `s|^sha256sums=(.*|`.
+sha256sums=('c77dee045f15f1ef2ed37d5946c9620e45da4eb54b19b6643739ba6e8b628a70' '9a001f380672aa9eea28d0d5acd34ac532d68969fb9e0c0e4d236be2dc3311ce')
 
 package() {
   cd "${srcdir}/joidy-${_tag}"
   install -Dm755 scripts/joidy.sh "${pkgdir}/usr/bin/joidy"
   install -Dm644 docker-compose.yml "${pkgdir}/usr/share/joidy/docker-compose.yml"
+  # Release-pinned image tags overlay (#1394): opt-in reproducible installs via
+  # `docker compose -f docker-compose.yml -f docker-compose.release.yml up -d`.
+  install -Dm644 docker-compose.release.yml "${pkgdir}/usr/share/joidy/docker-compose.release.yml"
   # Opt-in overlay for power management (#1278); `joidy up` adds it only when
   # POWER_MANAGEMENT_ENABLED=true.
   install -Dm644 docker-compose.power.yml "${pkgdir}/usr/share/joidy/docker-compose.power.yml"

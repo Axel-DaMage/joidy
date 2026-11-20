@@ -20,7 +20,7 @@ import secrets
 import time
 
 from config import settings
-from services.env_file import get_persisted
+from services.env_file import get_effective_secret
 
 # OAuth consent flows complete in minutes; reject stale states so a leaked
 # authorize URL cannot be replayed later.
@@ -30,11 +30,12 @@ STATE_TTL_SECONDS = 600
 def _signing_key() -> str:
     """Current SECRET_KEY — same cross-worker lookup as ``auth_service``.
 
-    ``settings.secret_key`` is loaded once at startup; ``get_persisted``
+    ``settings.secret_key`` is loaded once at startup; ``get_effective_secret``
     re-reads the deployment .env so a key written by one uvicorn worker is
-    visible to its siblings.
+    visible to its siblings. Shipped placeholders are rejected (#1393): an
+    HMAC keyed with a publicly known value is as forgeable as a JWT.
     """
-    return get_persisted("SECRET_KEY") or settings.secret_key or ""
+    return get_effective_secret("SECRET_KEY", settings.secret_key)
 
 
 def _signature(key: str, payload: str) -> str:

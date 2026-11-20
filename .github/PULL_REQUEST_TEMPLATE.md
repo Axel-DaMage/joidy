@@ -13,4 +13,5 @@ Relates to #X
 - [ ] Unit/API tests pass
 - [ ] Frontend typecheck passes
 - [ ] Docker build smoke test passes
+- [ ] E2E spec added/updated for touched routes (`frontend/e2e/<route>.spec.ts` — PRs run route-scoped specs plus smoke)
 - [ ] Manual verification

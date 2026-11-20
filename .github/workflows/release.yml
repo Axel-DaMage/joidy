@@ -137,6 +137,26 @@ jobs:
           sed -i "s|^\tpkgver = .*|\tpkgver = ${VERSION_AUR}|" aur/.SRCINFO
           sed -i "s|^\tsource = https://github.com/Axel-DaMage/joidy/archive/v[0-9a-z._-]*\.tar\.gz|\tsource = https://github.com/Axel-DaMage/joidy/archive/v${VERSION_CLEAN}.tar.gz|" aur/.SRCINFO
 
+          # Reset sha256sums to SKIP for the new version (#1296, #1394): the
+          # release tarball does not exist until the tag is pushed, so the
+          # real sums are injected post-tag by the "Inject release checksums"
+          # step below (and again by aur-publish.yml at publish time).
+          sed -i "s|^sha256sums=(.*|sha256sums=('SKIP' 'SKIP')|" aur/PKGBUILD
+          sed -i "s|^\tsha256sums = .*|\tsha256sums = SKIP|" aur/.SRCINFO
+
+          # docker-compose.release.yml pins the image tags of the release it
+          # ships with (#1394) — keep it in lockstep with the version.
+          sed -i "s|\(image: d4mag3/joidy-[a-z-]*:\)[0-9a-z.-]*|\1${VERSION_CLEAN}|g" docker-compose.release.yml
+
+          # Pin the one-shot installer URLs in docs and the installers'
+          # own usage headers to the release tag (#1394) — a tagged URL is
+          # immutable, unlike the raw branch refs they replaced.
+          # NOTE: ERE (-E) and ';' delimiter — GNU sed BRE does not support
+          # '\|' inside '\(\)' groups, and '|' clashes with the alternation.
+          for f in README.md INSTALL.md scripts/install.sh scripts/install.ps1; do
+            sed -i -E "s;(raw\.githubusercontent\.com/Axel-DaMage/joidy/)[^/]+/(scripts/install\.(sh|ps1));\1${VERSION}/\2;g" "$f"
+          done
+
           # docs metadata (index.md, api.md, architecture.md)
           for f in docs/index.md docs/api.md docs/architecture.md; do
             [ -f "$f" ] && sed -i "s|^version: [0-9a-z.\-]*|version: ${VERSION_CLEAN}|" "$f"
@@ -176,20 +196,89 @@ jobs:
             git push
           fi
 
-      - name: Create tag and release
+      - name: Create tag
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          # Tag the commit with the version bump.
+          git tag "$VERSION"
+          git push origin "$VERSION"
+
+      - name: Inject release checksums
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          # The tag now exists — download the exact source tarball users
+          # (and makepkg on AUR installs) will fetch and record its sha256
+          # (#1296, #1394). Retry: GitHub generates the archive on first
+          # request, so a brand-new tag can 404 briefly.
+          TARBALL_URL="https://github.com/Axel-DaMage/joidy/archive/${VERSION}.tar.gz"
+          echo "Computing sha256 of ${TARBALL_URL}"
+          ok=0
+          for i in 1 2 3 4 5; do
+            if curl -fsSL "$TARBALL_URL" -o /tmp/joidy-src.tar.gz; then
+              ok=1
+              break
+            fi
+            echo "Download attempt $i failed — retrying in 10s..."
+            sleep 10
+          done
+          if [ "$ok" != "1" ] || [ ! -s /tmp/joidy-src.tar.gz ]; then
+            echo "::error::Could not download ${TARBALL_URL} after 5 attempts"
+            exit 1
+          fi
+          TARBALL_SHA=$(sha256sum /tmp/joidy-src.tar.gz | cut -d' ' -f1)
+          INSTALL_SHA=$(sha256sum aur/joidy.install | cut -d' ' -f1)
+          if [[ ! "$TARBALL_SHA" =~ ^[0-9a-f]{64}$ ]] || [[ ! "$INSTALL_SHA" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "::error::Failed to compute valid sha256 checksums"
+            exit 1
+          fi
+
+          # Inject the real sums into the repo copies of the AUR files so
+          # main carries verifiable checksums even though the tagged commit
+          # itself must keep SKIP (a tag cannot contain its own tarball hash).
+          sed -i "s|^sha256sums=(.*|sha256sums=('${TARBALL_SHA}' '${INSTALL_SHA}')|" aur/PKGBUILD
+          awk -v tarball="${TARBALL_SHA}" -v install="${INSTALL_SHA}" '
+            /^\tsha256sums = / {
+              n++
+              $0 = "\tsha256sums = " (n == 1 ? tarball : install)
+            }
+            { print }
+          ' aur/.SRCINFO > aur/.SRCINFO.new && mv aur/.SRCINFO.new aur/.SRCINFO
+          grep -n 'sha256sums' aur/PKGBUILD aur/.SRCINFO
+
+          git add aur/PKGBUILD aur/.SRCINFO
+          if ! git diff --quiet --cached; then
+            git config user.name "github-actions"
+            git config user.email "github-actions@github.com"
+            git commit -m "chore: inject AUR source sha256sums for ${VERSION}"
+            # Same credentials as the version-bump push (GITHUB_TOKEN) —
+            # pushes made with it do not retrigger this workflow.
+            git push
+          fi
+
+          # SHA256SUMS.txt covers every file end users download: the source
+          # tarball, the one-shot installers and the pinned compose overlay.
+          mkdir -p release-assets
+          awk -v sha="${TARBALL_SHA}" -v name="${VERSION}.tar.gz" \
+            'BEGIN { print sha "  " name }' > release-assets/SHA256SUMS.txt
+          (cd scripts && sha256sum install.sh install.ps1) >> release-assets/SHA256SUMS.txt
+          sha256sum docker-compose.release.yml >> release-assets/SHA256SUMS.txt
+          cat release-assets/SHA256SUMS.txt
+
+      - name: Create release
         env:
           GITHUB_TOKEN: ${{ secrets.GH_PAT }}
           VERSION: ${{ steps.version.outputs.version }}
           PRERELEASE: ${{ steps.version.outputs.prerelease }}
         run: |
-          # Tag the commit with the version bump.
-          git tag "$VERSION"
-          git push origin "$VERSION"
           ARGS=(--title "Joidy ${VERSION}" --generate-notes --verify-tag)
           if [ "$PRERELEASE" = "true" ]; then
             ARGS+=(--prerelease)
           fi
-          gh release create "$VERSION" "${ARGS[@]}"
+          gh release create "$VERSION" "${ARGS[@]}" \
+            release-assets/SHA256SUMS.txt \
+            docker-compose.release.yml
           # Prepend pre-release warning (gh CLI on runners doesn't support --notes-prepend)
           if [ "$PRERELEASE" = "true" ]; then
             PREPEND=$(printf '## ⚠️ Pre-Release — Non-Production Ready\n\nThis is a **pre-release**. Expect breaking changes, bugs, and incomplete features. Do **not** use in production.\n\n')
