@@ -12,7 +12,7 @@ from models.goal import (
 )
 from models.note import Note
 from pydantic import BaseModel, field_validator
-from services.gamification_engine import process_event
+from services.gamification_engine import no_award_result, process_event
 from services.goal_service import (
     evaluate_active_goals,
     get_bulk_goal_progress,
@@ -694,6 +694,12 @@ def complete_goal(
     if not goal:
         raise HTTPException(status_code=404, detail="Goal not found")
 
+    # #1320 — completing is terminal and idempotent: replaying /complete on an
+    # already-completed goal is a no-op, not another +50 XP mint.
+    if goal.is_completed or goal.state == GoalState.COMPLETED:
+        gami = no_award_result(db, "Goal already completed")
+        return {"goal": _serialize_goal(goal, db), "gamification": vars(gami), "already_completed": True}
+
     was_failed = goal.state == GoalState.FAILED
     old_current = goal.current_value
 
@@ -716,7 +722,12 @@ def complete_goal(
             child.target_value = max(goal.target_value, child.target_value - shortfall)
             db.add(child)
 
-    gami = process_event(db, "goal_completed", {"goal_id": goal_id, "title": goal.title})
+    gami = process_event(
+        db,
+        "goal_completed",
+        {"goal_id": goal_id, "title": goal.title},
+        dedup_key=f"goal:{goal_id}",
+    )
     db.commit()
     db.refresh(goal)
     if child:

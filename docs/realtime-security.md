@@ -42,10 +42,11 @@ To achieve instantaneous updates across the personal knowledge workspace, Joidy 
 To secure the REST API against brute-force, scraping, or loops, Joidy enforces sliding window rate limiting.
 
 - **Path:** [api/middleware/rate_limit.py](api/middleware/rate_limit.py)
-- **Flexible Request Identification:** Instead of simple global or pure IP boundaries, the limiter checks request headers sequentially:
-  1. `X-API-Key`: Uses the API key string prefix `apikey:<key>`.
-  2. `Authorization: Bearer <token>`: Extracts the token and hashes it safely as `token:<token_prefix>` to avoid security logs leakage.
-  3. `Client IP` (Fallback): Resolves via `X-Forwarded-For` proxy headers or direct socket address as `ip:<host>`.
+- **Flexible Request Identification:** Instead of simple global or pure IP boundaries, the limiter derives the identity from validated credentials:
+  1. `Authorization: Bearer <token>`: Valid JWTs are keyed on their `sub` claim (`user:<sub>`); the internal service token gets its own `token:internal` bucket. Forged or expired tokens fall back to the per-IP bucket so they cannot mint fresh quotas.
+  2. `Client IP` (Fallback): Resolves via `X-Forwarded-For` only when the direct peer is a configured trusted proxy (`TRUSTED_PROXIES`), otherwise the direct socket address, as `ip:<host>`.
+  - `X-API-Key` is intentionally **not** honored: it is not an auth credential anywhere in the API.
+- **Bounded State:** Rate-limit windows live in an LRU map hard-capped at ~10k entries with a periodic sweep of dead windows; per-key timing samples use fixed-size ring buffers, and metric labels collapse unknown paths/methods into a single `other` series — a request spray cannot exhaust memory or Prometheus cardinality.
 - **Dynamic Tier Limits:**
   - **Anonymous / IP traffic:** Enforces a safe limit of `60 requests per minute`.
   - **Authenticated Keys / Bearer tokens:** Awards a higher limit of `120 requests per minute`.

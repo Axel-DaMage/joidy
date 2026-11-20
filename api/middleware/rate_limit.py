@@ -5,10 +5,13 @@ Per-user rate limiting middleware using sliding window.
 import ipaddress
 import logging
 import time
+from collections import OrderedDict
 from dataclasses import dataclass
 
+import jwt
 from config import settings
 from fastapi import Request
+from services import auth_service
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
@@ -60,6 +63,9 @@ class UserRateLimiter:
         login_lockout_base_seconds: float = 60.0,
         login_lockout_max_seconds: float = 3600.0,
         trusted_proxies: str = "",
+        max_windows: int = 10_000,
+        max_login_attempts: int = 10_000,
+        sweep_interval_seconds: float = 60.0,
     ):
         self.requests_per_minute = requests_per_minute
         self.auth_requests_per_minute = auth_requests_per_minute
@@ -69,13 +75,21 @@ class UserRateLimiter:
         self.login_lockout_max_seconds = login_lockout_max_seconds
         self.window_size = 60.0
         self._trusted_networks = _parse_trusted_proxies(trusted_proxies)
-        # Plain dict (not defaultdict): entries are created on demand and
-        # removed once their window empties out, so inactive IPs/tokens/keys
-        # don't accumulate forever (previously a monotonic memory leak).
-        self._user_windows: dict[str, UserLimit] = {}
+        # OrderedDict used as an LRU: entries are touched on every access and
+        # hard-capped at ``max_windows`` (expired ones first, then the least
+        # recently used), so one-shot identifiers — rotating Bearer tokens or
+        # spoofed XFFs — cannot grow the map without bound (#1323). A periodic
+        # sweep also reclaims windows that are never revisited, independently
+        # of which identifier the current request carries.
+        self._user_windows: OrderedDict[str, UserLimit] = OrderedDict()
+        self._max_windows = max_windows
+        self._sweep_interval = sweep_interval_seconds
+        self._last_sweep = 0.0
         # Consecutive login failures per peer IP → escalating lockout (#1276).
+        # Hard-capped like _user_windows: an IP-spoofed login spray must not
+        # grow this map past ``max_login_attempts`` (#1323).
         self._login_attempts: dict[str, LoginAttempt] = {}
-        self._max_login_attempts = 10_000
+        self._max_login_attempts = max_login_attempts
 
     def _client_ip(self, request: Request) -> str:
         """Direct peer IP; X-Forwarded-For is honored only when the peer is a
@@ -92,6 +106,38 @@ class UserRateLimiter:
             return peer
         return forwarded.split(",")[0].strip() or peer
 
+    def _decode_bearer_sub(self, token: str) -> str | None:
+        """Validate a Bearer JWT and return its ``sub``, or None when invalid.
+
+        Decodes quietly (no per-request warning logs) so a spray of forged
+        tokens cannot turn into log-flooding either (#1323).
+        """
+        secret = auth_service.signing_secret()
+        if not secret:
+            return None
+        try:
+            payload = jwt.decode(token, secret, algorithms=[auth_service.ALGORITHM])
+        except jwt.InvalidTokenError:
+            return None
+        sub = payload.get("sub")
+        return str(sub) if sub is not None else None
+
+    def _bearer_identity(self, token: str) -> str | None:
+        """Rate-limit identity for a Bearer token, or None when unverifiable.
+
+        A verified JWT keys on its ``sub`` claim — it cannot be forged to
+        share another user's bucket. The internal service token gets its own
+        stable bucket. Anything else (forged, expired, garbage) returns None
+        so the caller falls back to the per-IP bucket instead of granting a
+        fresh high-quota bucket per invented token (#1323).
+        """
+        sub = self._decode_bearer_sub(token)
+        if sub:
+            return f"user:{sub}"
+        if auth_service.verify_internal_token(token):
+            return "token:internal"
+        return None
+
     def _get_limit_for_request(self, request: Request) -> tuple[str, int]:
         """Extract identifier and limit for rate limiting."""
         # Strict routes first: credential endpoints are keyed by peer IP no
@@ -100,20 +146,22 @@ class UserRateLimiter:
         if _is_strict_path(path):
             return f"strict:{path}:{self._client_ip(request)}", self.strict_requests_per_minute
 
-        # 1. Check API Key header
-        api_key = request.headers.get("X-API-Key")
-        if api_key:
-            return f"apikey:{api_key}", self.auth_requests_per_minute
-
-        # 2. Check Authorization Bearer header
+        # 1. Authorization Bearer header — only *validated* identities get an
+        #    authenticated bucket. X-API-Key is intentionally NOT honored: it
+        #    is not an auth credential anywhere in the API, so keying buckets
+        #    on it just gave every invented header value a fresh 5000/min
+        #    quota (#1323).
         auth_header = request.headers.get("Authorization")
         if auth_header and auth_header.startswith("Bearer "):
-            token = auth_header.split(" ")[1].strip()
+            token = auth_header.split(" ", 1)[1].strip()
             if token:
-                # Use prefix/hash to prevent logging sensitive details
-                return f"token:{token[:15]}", self.auth_requests_per_minute
+                identity = self._bearer_identity(token)
+                if identity:
+                    return identity, self.auth_requests_per_minute
+                # Forged/expired token → fall through to the IP bucket so a
+                # rotating-token spray cannot escape the per-IP limit.
 
-        # 3. Fallback to IP address
+        # 2. Fallback to IP address
         return f"ip:{self._client_ip(request)}", self.requests_per_minute
 
     def _clean_old_requests(self, user_limit: UserLimit, now: float):
@@ -121,11 +169,33 @@ class UserRateLimiter:
         cutoff = now - user_limit.window_size
         user_limit.requests = [ts for ts in user_limit.requests if ts > cutoff]
 
-    def _get_or_create_window(self, identifier: str) -> UserLimit:
+    def _sweep_expired(self, now: float) -> None:
+        """Drop every window whose newest request fell out of the window.
+
+        Request timestamps are appended in time order, so a stale newest
+        timestamp means the whole entry is dead. Runs at most once per
+        ``_sweep_interval`` from ``check_rate_limit`` — amortized O(n) over
+        live traffic, not tied to any single identifier (#1323).
+        """
+        cutoff = now - self.window_size
+        stale = [k for k, ul in self._user_windows.items() if not ul.requests or ul.requests[-1] <= cutoff]
+        for key in stale:
+            del self._user_windows[key]
+
+    def _get_or_create_window(self, identifier: str, now: float) -> UserLimit:
         user_limit = self._user_windows.get(identifier)
-        if user_limit is None:
-            user_limit = UserLimit(requests=[], window_size=self.window_size)
-            self._user_windows[identifier] = user_limit
+        if user_limit is not None:
+            self._user_windows.move_to_end(identifier)
+            return user_limit
+        if len(self._user_windows) >= self._max_windows:
+            # First reclaim windows that are already dead; if the map is still
+            # full, evict the least recently used entry so the cap is a hard
+            # bound regardless of identifier churn (#1323).
+            self._sweep_expired(now)
+        if len(self._user_windows) >= self._max_windows:
+            self._user_windows.popitem(last=False)
+        user_limit = UserLimit(requests=[], window_size=self.window_size)
+        self._user_windows[identifier] = user_limit
         return user_limit
 
     def _maybe_evict(self, identifier: str, user_limit: UserLimit) -> None:
@@ -139,7 +209,11 @@ class UserRateLimiter:
         identifier, limit = self._get_limit_for_request(request)
         now = time.time()
 
-        user_limit = self._get_or_create_window(identifier)
+        if now - self._last_sweep >= self._sweep_interval:
+            self._last_sweep = now
+            self._sweep_expired(now)
+
+        user_limit = self._get_or_create_window(identifier, now)
         self._clean_old_requests(user_limit, now)
 
         if len(user_limit.requests) >= limit:
@@ -194,6 +268,12 @@ class UserRateLimiter:
                 # Bound memory: drop entries whose lockout already expired.
                 now = time.time()
                 self._login_attempts = {k: v for k, v in self._login_attempts.items() if v.locked_until > now}
+            if len(self._login_attempts) >= self._max_login_attempts:
+                # Still at capacity (all lockouts live): evict the entry
+                # whose lockout expires soonest so the cap holds even under
+                # an IP-rotating credential spray (#1323).
+                oldest = min(self._login_attempts, key=lambda k: self._login_attempts[k].locked_until)
+                del self._login_attempts[oldest]
             attempt = self._login_attempts.setdefault(ip, LoginAttempt())
         attempt.failures += 1
         if attempt.failures >= self.login_max_failures:
