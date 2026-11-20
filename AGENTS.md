@@ -167,10 +167,16 @@ with `FATAL: password authentication failed for user "joidy"`. Fix without data 
 `docker exec joidy-postgres-1 psql -U joidy -d joidy -c "ALTER USER joidy WITH PASSWORD '<env value>'"`
 (local socket auth is `trust`, so this works even when TCP auth fails).
 
-`DOCKER_GID` must match the group owning `/var/run/docker.sock` (`getent group docker`),
-otherwise the API joins group 0, `/system/power/status` returns
-`docker_available: false`, and Settings → Servicios shows "Docker no está disponible".
-`joidy up` now autodetects it.
+Power management (Settings → Servicios) is **opt-in** since #1278: the engine
+socket is never mounted by the base `docker-compose.yml`. With
+`POWER_MANAGEMENT_ENABLED=true`, `joidy up` adds `docker-compose.power.yml`,
+which mounts `${DOCKER_SOCK_PATH:-/var/run/docker.sock}` at
+`/var/run/docker.sock` and requires a real `DOCKER_GID` (`${DOCKER_GID:?}` —
+never falls back to group 0/root). `DOCKER_GID` must match the group owning
+the socket (`getent group docker`); `joidy up` autodetects it when the flag is
+on. With the flag off, `/system/power` mutation routes are not registered and
+`/status` returns `docker_available: false` → Settings → Servicios shows
+"Docker no está disponible".
 
 ### Database Backups
 - `backup` compose **profile** (service `backup` in docker-compose.yml, reuses the
