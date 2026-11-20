@@ -9,6 +9,7 @@ from cost_tracker import get_monthly_stats, record_usage
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from logging_config import get_correlation_id, set_correlation_id, setup_logging
+from plan_suggest import build_plan_prompt, parse_plan_response
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
 from pydantic import BaseModel, Field
 from rate_limiter import get_limiter
@@ -25,6 +26,10 @@ ai_classify_requests = Counter("ai_classify_requests_total", "Classification req
 ai_classify_errors = Counter("ai_classify_errors_total", "Classification errors", ["provider"])
 ai_rag_requests = Counter("ai_rag_requests_total", "RAG requests", ["provider"])
 ai_rag_errors = Counter("ai_rag_errors_total", "RAG errors", ["provider"])
+ai_plan_requests = Counter("ai_plan_requests_total", "Plan-suggest requests", ["provider"])
+ai_plan_errors = Counter("ai_plan_errors_total", "Plan-suggest errors", ["provider"])
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -502,6 +507,71 @@ Responde en formato JSON: {{"recap": "...", "suggestions": ["...", "..."]}}"""
     except Exception:
         ai_classify_errors.labels(provider=settings.llm_model or "unknown").inc()
         raise HTTPException(status_code=500, detail="Daily recap failed")
+
+
+class PlanTaskIn(BaseModel):
+    id: int
+    title: str = Field(max_length=500)
+    priority: str = Field(default="MEDIUM", max_length=20)
+    duration_minutes: int | None = Field(default=None, ge=1, le=24 * 60)
+
+
+class BusyBlockIn(BaseModel):
+    start: str = Field(max_length=64)
+    end: str | None = Field(default=None, max_length=64)
+
+
+class PlanSuggestRequest(BaseModel):
+    tasks: list[PlanTaskIn] = Field(default_factory=list, max_length=200)
+    busy_blocks: list[BusyBlockIn] = Field(default_factory=list, max_length=500)
+    week_start: str = Field(max_length=10)
+    week_end: str = Field(max_length=10)
+    timezone: str = Field(default="UTC", max_length=64)
+    context_hint: str | None = Field(default=None, max_length=1000)
+
+
+@app.post("/plan-suggest")
+async def plan_suggest(req: PlanSuggestRequest):
+    """Propose time slots for open tasks around busy calendar blocks (#1237).
+
+    Always returns 200: when no LLM provider is configured or the provider
+    fails, the response carries ``available: false`` with a ``reason`` so the
+    frontend can degrade gracefully instead of erroring out.
+    """
+    if not settings.is_llm_configured:
+        return {"suggestions": [], "available": False, "reason": "no_provider"}
+
+    await get_limiter(settings.max_requests_per_minute).acquire()
+
+    try:
+        client = get_llm_client()
+    except Exception:
+        return {"suggestions": [], "available": False, "reason": "no_provider"}
+
+    tasks = [t.model_dump() for t in req.tasks]
+    busy = [b.model_dump() for b in req.busy_blocks]
+    if not tasks:
+        return {"suggestions": [], "available": True, "provider": client.provider_name}
+
+    prompt = build_plan_prompt(tasks, busy, req.week_start, req.week_end, req.timezone, req.context_hint)
+    ai_plan_requests.labels(provider=client.provider_name).inc()
+    try:
+        response = await llm_circuit_breaker.call(
+            client.generate,
+            prompt=prompt,
+            temperature=0.3,
+            max_tokens=1024,
+        )
+    except CircuitBreakerError:
+        return {"suggestions": [], "available": False, "reason": "circuit_open"}
+    except Exception:
+        ai_plan_errors.labels(provider=client.provider_name).inc()
+        logger.warning("plan-suggest provider call failed", exc_info=True)
+        return {"suggestions": [], "available": False, "reason": "provider_error"}
+
+    record_usage("plan-suggest", input_tokens=_estimate_tokens(prompt))
+    suggestions = parse_plan_response(response, tasks, busy, req.week_start, req.week_end, req.timezone)
+    return {"suggestions": suggestions, "available": True, "provider": client.provider_name}
 
 
 @app.post("/cluster")

@@ -88,7 +88,18 @@
     "reminderMin15": "15 min",
     "reminderMin30": "30 min",
     "reminderMin60": "1 h",
-    "taskReminder": "Recordatorio: {title}"
+    "taskReminder": "Recordatorio: {title}",
+    "planSuggest": "Sugerir planificación",
+    "planSuggestHint": "Planificación con IA: propone horarios para las tareas abiertas alrededor de los eventos",
+    "planWorking": "Planificando…",
+    "planUnavailable": "La planificación con IA no está configurada — añade un proveedor de IA en Ajustes",
+    "planEmpty": "Sin sugerencias — no hay tareas abiertas ni huecos libres",
+    "planError": "No se pudieron obtener sugerencias de planificación con IA",
+    "planApplied": "Plan aplicado",
+    "planPending": "Sugerencias de IA ({count})",
+    "planAcceptAll": "Aceptar todo",
+    "planDismiss": "Descartar",
+    "planAcceptHint": "Clic para aceptar este horario"
   },
   "emails": {
     "title": "Correos",
