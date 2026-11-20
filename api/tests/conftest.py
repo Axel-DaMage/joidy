@@ -360,6 +360,7 @@ def client(db_session):
     # #1282 the dev auth bypass applies to loopback clients only, so tests
     # that exercise it (dev-mode /ws, /webhook/obsidian) must present a
     # loopback peer address explicitly.
+
     with TestClient(app, client=("127.0.0.1", 50000)) as test_client:
         yield test_client
 

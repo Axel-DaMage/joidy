@@ -11,6 +11,7 @@
   import { marked } from 'marked';
   import TurndownService from 'turndown';
   import DOMPurify from 'dompurify';
+  import { authorizeUploadUrls, stripUploadAuth } from '$lib/utils/markdown';
   import { isAllowedLinkUrl } from '$lib/utils/markdownFormat';
 
   const dispatch = createEventDispatcher<{
@@ -36,16 +37,19 @@
     bulletListMarker: '-',
   });
 
-  // Convert markdown → HTML for TipTap
+  // Convert markdown → HTML for TipTap. Upload URLs get the session JWT as
+  // ?token= so auth-gated /uploads files render inside <img> (#1279); the
+  // token lives only in the editor document, never in saved markdown.
   function markdownToHtml(md: string): string {
     if (!md.trim()) return '';
     const html = marked.parse(md, { gfm: true, breaks: true });
-    return DOMPurify.sanitize(String(html));
+    return authorizeUploadUrls(DOMPurify.sanitize(String(html)));
   }
 
-  // Convert TipTap HTML → markdown
+  // Convert TipTap HTML → markdown. stripUploadAuth removes the ?token=
+  // injected above so the JWT can't round-trip into note content (#1279).
   function htmlToMarkdown(html: string): string {
-    return turndown.turndown(html);
+    return turndown.turndown(stripUploadAuth(html));
   }
 
   onMount(() => {

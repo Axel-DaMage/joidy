@@ -84,7 +84,7 @@ def test_uploads_regular_file_still_inline(client: TestClient):
     if not main_module._uploads_available:
         return
 
-    probe = Path(settings.upload_dir) / "probe_test.txt"
+    probe = Path(settings.upload_dir) / "probe_test.png"
     try:
         probe.write_text("hello")
         response = client.get(f"/uploads/{probe.name}")
