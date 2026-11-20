@@ -45,9 +45,17 @@ os.environ["APP_ENV"] = "test"
 
 # Vault confinement (#1362) resolves source_path against
 # settings.obsidian_vault_path; webhook/sync tests use ``/vault/...``
-# paths, so the suite needs a configured vault root (a nonexistent dir is
-# fine — confinement only compares realpaths lexically).
-os.environ.setdefault("OBSIDIAN_VAULT_PATH", "/vault")
+# paths, so the suite needs a configured vault root. In the dev stack
+# /vault is a bind mount of the user's REAL Obsidian vault, so vault-bound
+# writes (write_to_vault, /vault/write-*) used to leak files into real user
+# data and leave residue that failed the next run — the notes router
+# rejects a create whose target file exists but is owned by no note
+# (#1463). CI has no /vault mount so writes simply no-op'd there, masking
+# the coupling. FORCED (not setdefault) because compose injects
+# OBSIDIAN_VAULT_PATH=/vault into the container. The canonical
+# ``/vault/...`` source_path domain still works: the autouse
+# ``_isolated_vault`` fixture below aliases it onto each test's root.
+os.environ["OBSIDIAN_VAULT_PATH"] = tempfile.mkdtemp(prefix="joidy-test-vault-")
 
 # Test-only bcrypt cost (#996). Hash strength is irrelevant under test and
 # bcrypt's default (12 rounds) made auth tests the slowest single test in the
@@ -56,11 +64,34 @@ os.environ.setdefault("OBSIDIAN_VAULT_PATH", "/vault")
 # BCRYPT_ROUNDS explicitly.
 os.environ.setdefault("BCRYPT_ROUNDS", "4")
 
-# The /system/power router is opt-in in production (#1278). The suite exercises
-# its endpoints through the shared `app`, so enable it before `import main`
-# builds the route table; the disabled-mode stub is tested in isolation in
-# test_routers_system.py.
-os.environ.setdefault("POWER_MANAGEMENT_ENABLED", "true")
+# SECRET_KEY backs every EncryptedText column: the Fernet key is derived from
+# it at write/read time. CI exports SECRET_KEY; the dev containers only carry
+# it inside the bind-mounted /app/.env — which the JOIDY_ENV_FILE override
+# above deliberately isolates away — so without a fallback every encrypted
+# write raised "SECRET_KEY not configured" (#1463). setdefault keeps a
+# deliberate export (e.g. CI's ci-secret-not-for-production) winning.
+os.environ.setdefault("SECRET_KEY", "joidy-test-secret-key-not-for-production")
+
+# Deterministic feature flags for the shared `app` imported below. These are
+# FORCED (not setdefault) because docker compose injects the same env vars
+# into the dev containers — where setdefault would lose to the deployment's
+# values and leave the suite coupled to live-stack state (#1463):
+# - POWER_MANAGEMENT_ENABLED: registers the real /system/power routes in the
+#   route table at `import main` (#1278); the disabled-mode stub is exercised
+#   standalone on a throwaway app in test_routers_system.py.
+# - AI_SERVICE_URL: the suite must never depend on a live ai-service.
+#   Unmocked calls (e.g. trigger_embedding's health probe fired by note
+#   creates) fail fast against a dead address instead of hitting the real
+#   service; tests that exercise AI behaviour mock the service's
+#   http_client explicitly.
+os.environ["POWER_MANAGEMENT_ENABLED"] = "true"
+os.environ["AI_SERVICE_URL"] = "http://127.0.0.1:1"
+
+# The dev container exports UPLOAD_DIR=/data/uploads — a root-owned dir the
+# uid-1000 test process cannot write, so every upload endpoint 500'd
+# (#1463). Redirect to a writable tmpdir before `import main` resolves
+# settings.upload_dir and mounts the StaticFiles route.
+os.environ["UPLOAD_DIR"] = tempfile.mkdtemp(prefix="joidy-test-uploads-")
 
 # Safety: only allow destructive TRUNCATE on databases whose name contains
 # "test" to prevent accidentally wiping a shared dev/production database (#503).
@@ -348,6 +379,46 @@ def _isolated_env_file(tmp_path, monkeypatch):
     env_path.write_text("")
     monkeypatch.setenv("JOIDY_ENV_FILE", str(env_path))
     return env_path
+
+
+@pytest.fixture(autouse=True)
+def _isolated_vault(tmp_path, monkeypatch):
+    """Per-test throwaway vault root + ``/vault`` domain alias (#1463).
+
+    Stored ``source_path`` values keep the canonical container domain
+    (``/vault/note.md``) — ``normalize_source_path`` is untouched — but
+    every filesystem access that goes through ``resolve_confined_source_path``
+    is redirected under a fresh tmp_path: note/vault writes never touch a
+    mounted real vault, and the "existing file must be owned by a note"
+    check in the notes router sees no cross-test residue. The alias is
+    installed at each importer because ``from services.vault_paths import
+    resolve_confined_source_path`` binds the name at import time.
+    """
+    # Named distinctly from the ``vault`` tmp dir test_vault_confinement's
+    # fixture creates under the same tmp_path.
+    vault = tmp_path / "isolated-vault"
+    vault.mkdir()
+    monkeypatch.setattr("config.settings.obsidian_vault_path", str(vault))
+
+    import services.vault_paths as _vp
+
+    real_resolve = _vp.resolve_confined_source_path
+    vault_prefix = "/vault/"
+
+    def _resolve(path, **kwargs):
+        if path:
+            s = str(path).strip()
+            if s.startswith(vault_prefix):
+                return real_resolve(_vp.get_effective_vault_path() + s[len("/vault") :], **kwargs)
+        return real_resolve(path, **kwargs)
+
+    for module_name in (
+        "routers.notes",
+        "services.note_service",
+        "services.sync_service",
+        "services.webhook_sync",
+    ):
+        monkeypatch.setattr(f"{module_name}.resolve_confined_source_path", _resolve)
 
 
 @pytest.fixture
