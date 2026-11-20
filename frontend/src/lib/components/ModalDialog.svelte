@@ -20,35 +20,31 @@
     footer?: import('svelte').Snippet;
   } = $props();
 
-  function handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape' && onClose) {
-      onClose();
-    }
-  }
+  const uid = $props.id();
+  const titleId = `${uid}-modal-title`;
 </script>
 
-<svelte:window onkeydown={handleKeydown} />
-
 {#if open}
-  <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     class="modal-overlay"
-    role="dialog"
-    aria-modal="true"
-    aria-label={title || $t('modalDialog.dialog')}
-    tabindex="-1"
+    role="presentation"
     transition:fade={{ duration: 150 }}
     onclick={(e) => e.target === e.currentTarget && onClose?.()}
-    onkeydown={(e) => e.key === 'Escape' && onClose?.()}
   >
-    <div class="modal modal-{size}" transition:scale={{ duration: 200, start: 0.95 }} use:focusTrap>
+    <div
+      class="modal modal-{size}"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+      tabindex="-1"
+      transition:scale={{ duration: 200, start: 0.95 }}
+      use:focusTrap={{ onEscape: () => onClose?.() }}
+    >
       <div class="modal-header">
-        <h3 class="modal-title">{title}</h3>
-        <button
-          class="modal-close"
-          onclick={() => onClose?.()}
-          aria-label={$t('modalDialog.close')}
-        >
+        <h3 id={titleId} class="modal-title">{title}</h3>
+        <button class="modal-close" onclick={() => onClose?.()} aria-label={$t('modalDialog.close')}>
           <X size={18} />
         </button>
       </div>

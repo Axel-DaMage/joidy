@@ -35,6 +35,8 @@
       class="setting-input mono"
       style="font-size: 11px; padding: 4px 8px;"
       placeholder="ghp_..."
+      aria-label="Personal Access Token (PAT)"
+      autocomplete="off"
       bind:value={systemConfig.github_token}
     />
   </div>
@@ -58,6 +60,8 @@
       class="setting-input mono"
       style="font-size: 11px; padding: 4px 8px;"
       placeholder="Ov23..."
+      aria-label="GitHub OAuth Client ID"
+      autocomplete="off"
       bind:value={systemConfig.github_client_id}
     />
   </div>
@@ -81,6 +85,8 @@
       class="setting-input mono"
       style="font-size: 11px; padding: 4px 8px;"
       placeholder="client_secret_..."
+      aria-label="GitHub OAuth Client Secret"
+      autocomplete="off"
       bind:value={systemConfig.github_client_secret}
     />
   </div>
@@ -134,7 +140,8 @@
     width: 100%;
   }
 
-  .setting-input:focus {
-    outline: none;
+  .setting-input:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
   }
 </style>

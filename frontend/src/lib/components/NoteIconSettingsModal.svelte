@@ -1,10 +1,13 @@
 <script lang="ts">
+  import { focusTrap } from '$lib/actions/focusTrap';
   import LazyIconPicker from './LazyIconPicker.svelte';
 
   interface Props {
     open: boolean;
     customColor: string;
     updateFrontmatter: (key: string, value: string) => void;
+    /** Batch variant so multi-key updates trigger a single save (#1307). */
+    updateFrontmatterMany?: (entries: [string, string][]) => void;
     pickIcon: (icon: string) => void;
   }
 
@@ -12,34 +15,50 @@
     open = $bindable(),
     customColor = $bindable(),
     updateFrontmatter,
+    updateFrontmatterMany,
     pickIcon,
   }: Props = $props();
+
+  function resetIcon() {
+    const entries: [string, string][] = [
+      ['iconColor', ''],
+      ['icon', ''],
+      ['iconPack', ''],
+    ];
+    if (updateFrontmatterMany) {
+      updateFrontmatterMany(entries);
+    } else {
+      for (const [key, value] of entries) updateFrontmatter(key, value);
+    }
+    customColor = '#ffffff';
+    open = false;
+  }
 </script>
 
 <!-- Icon customize modal -->
 {#if open}
   <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-  <div
-    class="folder-modal-backdrop"
-    onclick={() => (open = false)}
-    role="presentation"
-    tabindex="-1"
-  >
+  <div class="folder-modal-backdrop" onclick={() => (open = false)} role="presentation">
+    <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
     <div
       class="folder-modal"
       onclick={(e) => e.stopPropagation()}
-      role="presentation"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="note-icon-settings-title"
       tabindex="-1"
+      use:focusTrap={{ onEscape: () => (open = false) }}
     >
-      <h3 class="folder-modal-title">Personalizar icono</h3>
+      <h3 id="note-icon-settings-title" class="folder-modal-title">Personalizar icono</h3>
 
       <!-- Color bar -->
       <div class="folder-color-row">
-        <span class="folder-label mono">Color</span>
+        <span class="folder-label mono" id="nism-color-label">Color</span>
         <input
           type="color"
           class="folder-color-input"
           bind:value={customColor}
+          aria-labelledby="nism-color-label"
           onchange={(e) => updateFrontmatter('iconColor', e.currentTarget.value)}
         />
         <input
@@ -47,6 +66,7 @@
           class="folder-hex-input mono"
           maxlength="7"
           bind:value={customColor}
+          aria-label="Color hex"
           onchange={(e) => updateFrontmatter('iconColor', e.currentTarget.value)}
         />
       </div>
@@ -63,15 +83,7 @@
       </div>
 
       <div class="folder-modal-btns">
-        <button
-          onclick={() => {
-            updateFrontmatter('iconColor', '');
-            updateFrontmatter('icon', '');
-            updateFrontmatter('iconPack', '');
-            customColor = '#ffffff';
-            open = false;
-          }}>Restablecer</button
-        >
+        <button onclick={resetIcon}>Restablecer</button>
         <button onclick={() => (open = false)}>Cerrar</button>
       </div>
     </div>

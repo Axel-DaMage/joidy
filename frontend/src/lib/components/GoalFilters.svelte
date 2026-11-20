@@ -28,6 +28,7 @@
       <input
         type="text"
         placeholder={$t('goalFilters.searchPlaceholder')}
+        aria-label={$t('goalFilters.searchPlaceholder')}
         bind:value={query}
       />
     </div>
@@ -35,36 +36,43 @@
       <button
         class="filter-btn"
         class:active={filter === null}
+        aria-pressed={filter === null}
         onclick={() => filter = null}
       >{$t('goalFilters.all')}</button>
       <button
         class="filter-btn"
         class:active={filter === 'PINNED'}
+        aria-pressed={filter === 'PINNED'}
         onclick={() => filter = 'PINNED'}
       >{$t('goalFilters.pinned')}</button>
       <button
         class="filter-btn"
         class:active={filter === 'ACTIVE'}
+        aria-pressed={filter === 'ACTIVE'}
         onclick={() => filter = 'ACTIVE'}
       >{$t('goalFilters.active')}</button>
       <button
         class="filter-btn"
         class:active={filter === 'COMPLETED'}
+        aria-pressed={filter === 'COMPLETED'}
         onclick={() => filter = 'COMPLETED'}
       >{$t('goalFilters.completed')}</button>
       <button
         class="filter-btn"
         class:active={filter === 'CANCELLED'}
+        aria-pressed={filter === 'CANCELLED'}
         onclick={() => filter = 'CANCELLED'}
       >{$t('goalFilters.archived')}</button>
       <button
         class="filter-btn"
         class:active={filter === 'FAILED'}
+        aria-pressed={filter === 'FAILED'}
         onclick={() => filter = 'FAILED'}
       >{$t('goalFilters.failed')}</button>
       <button
         class="filter-btn inbox-filter"
         class:active={filter === 'INBOX'}
+        aria-pressed={filter === 'INBOX'}
         onclick={() => filter = 'INBOX'}
       >{$t('goalsPage.inboxTab')}</button>
     </div>
@@ -130,6 +138,11 @@
     font-size: 13px;
     outline: none;
     width: 180px;
+  }
+  .search-box input:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
+    border-radius: var(--r-sm);
   }
 
   .search-box input::placeholder {

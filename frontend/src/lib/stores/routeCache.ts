@@ -1,5 +1,6 @@
 import { writable } from 'svelte/store';
 import { browser } from '$app/env';
+import { SESSION_RESET_EVENT } from './session';
 
 interface RouteCacheEntry<T> {
   data: T;
@@ -98,6 +99,9 @@ function createRouteCache() {
   // Load from localStorage on init
   if (browser) {
     load();
+    // Drop cached route data on session reset (logout / 401) — the
+    // localStorage key is removed by resetSession() (#1305).
+    window.addEventListener(SESSION_RESET_EVENT, () => cache.set({}));
   }
 
   return { cache, get, set, invalidate, load, getOrFetch, prefetch };

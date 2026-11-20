@@ -198,21 +198,28 @@ function Test-Command($Cmd) {
 
 $script:containerComposeCmd = "docker compose"
 
-if (Test-Command "docker") {
-  if (Test-Command "docker-compose") {
-    $script:containerComposeCmd = "docker-compose"
+# Only commands that drive the compose stack require a container engine —
+# `joidy help` and usage errors must work on a bare machine: install.ps1
+# lets users install Docker Desktop *after* the CLI is on PATH, and help is
+# the first thing they reach for.
+$stackCommands = @('up','down','sleep','wake','restart','status','pull','logs','idle','backup','restore')
+if ($stackCommands -contains $Command) {
+  if (Test-Command "docker") {
+    if (Test-Command "docker-compose") {
+      $script:containerComposeCmd = "docker-compose"
+    } else {
+      $script:containerComposeCmd = "docker compose"
+    }
+  } elseif (Test-Command "podman") {
+    if (Test-Command "podman-compose") {
+      $script:containerComposeCmd = "podman-compose"
+    } else {
+      $script:containerComposeCmd = "podman compose"
+    }
   } else {
-    $script:containerComposeCmd = "docker compose"
+    Write-Err "Neither Docker nor Podman is installed or in PATH"
+    exit 1
   }
-} elseif (Test-Command "podman") {
-  if (Test-Command "podman-compose") {
-    $script:containerComposeCmd = "podman-compose"
-  } else {
-    $script:containerComposeCmd = "podman compose"
-  }
-} else {
-  Write-Err "Neither Docker nor Podman is installed or in PATH"
-  exit 1
 }
 
 function Test-ContainerEngineReady {
@@ -409,7 +416,7 @@ function Write-IdleLog($msg) {
 }
 
 function Get-IdleRunningServices {
-  $profile = Get-AiProfileArgs
+  $profile = Get-ProfileArgs
   $out = Invoke-ComposeCommand @EnvFileArg @profile ps --services --filter status=running 2>$null
   return @($out | ForEach-Object { "$_".Trim() } | Where-Object { $_ })
 }
@@ -478,7 +485,7 @@ function Invoke-IdleSleep($HibernateDb) {
   $running | Set-Content (Join-Path $IdleDir "pre_sleep_services")
   Write-IdleLog "idle timeout — sleeping (was running: $($running -join ' '), hibernate_db=$HibernateDb)"
   Invoke-Sleep
-  $profile = Get-AiProfileArgs
+  $profile = Get-ProfileArgs
   if ($running -contains 'frontend') {
     Invoke-ComposeCommand @EnvFileArg @profile stop frontend 2>$null | Out-Null
     Write-IdleLog "stopped frontend"
@@ -493,7 +500,7 @@ function Invoke-IdleSleep($HibernateDb) {
 function Restore-IdleState {
   $file = Join-Path $IdleDir "pre_sleep_services"
   if (-not (Test-Path $file)) { return }
-  $profile = Get-AiProfileArgs
+  $profile = Get-ProfileArgs
   $running = Get-IdleRunningServices
   $recorded = Get-Content $file | ForEach-Object { $_.Trim() } | Where-Object { $_ }
   foreach ($svc in @('postgres','api','frontend','worker','ai-service') + ($recorded | Where-Object { $_ -notin @('postgres','api','frontend','worker','ai-service') })) {

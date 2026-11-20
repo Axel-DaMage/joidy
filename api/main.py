@@ -39,6 +39,7 @@ from routers import (
     sync,
     system,
     tags,
+    telegram,
     upload,
     vault,
     websocket,
@@ -271,6 +272,10 @@ app.include_router(planning.router, dependencies=[Depends(get_current_user)])
 app.include_router(calendar_tasks.router, dependencies=[Depends(get_current_user)])
 app.include_router(websocket.router)
 app.include_router(obsidian.router)
+# Telegram's servers call /telegram/webhook without a JWT; the webhook
+# verifies the secret header itself and management routes require auth
+# at the endpoint level (#1132).
+app.include_router(telegram.router)
 app.include_router(auth.router)
 app.include_router(export.router, dependencies=[Depends(get_current_user)])
 app.include_router(stats.router, dependencies=[Depends(get_current_user)])

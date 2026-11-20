@@ -30,6 +30,11 @@ describe('evaluateExpression — arithmetic', () => {
     expect(evaluateExpression('(2+3)!')).toBe(120);
     expect(evaluateExpression('3!+2')).toBe(8);
   });
+
+  it('tolerates whitespace around operators', () => {
+    expect(evaluateExpression(' 2 + 3 * 4 ')).toBe(14);
+    expect(evaluateExpression('Math.max( 1 , 2 )')).toBe(2);
+  });
 });
 
 describe('evaluateExpression — Math namespace', () => {
@@ -64,6 +69,10 @@ describe('evaluateExpression — rejects non-arithmetic input', () => {
     expect(() => evaluateExpression('2 3')).toThrow();
     expect(() => evaluateExpression('2.5!')).toThrow();
     expect(() => evaluateExpression('(-1)!')).toThrow();
+    expect(() => evaluateExpression('Math.sqrt(9')).toThrow();
+    expect(() => evaluateExpression('Math.max(1,)')).toThrow();
+    expect(() => evaluateExpression('2**')).toThrow();
+    expect(() => evaluateExpression('*2')).toThrow();
   });
 
   it('cannot execute code hidden in the expression', () => {

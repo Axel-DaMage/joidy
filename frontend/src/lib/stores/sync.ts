@@ -1,6 +1,8 @@
 import { writable } from 'svelte/store';
+import { browser } from '$app/env';
 import { api } from '$lib/api';
 import { showNotification } from './notifications';
+import { session } from './session';
 
 export interface SyncConflict {
   note_id: number;
@@ -33,8 +35,14 @@ function createSyncStore() {
   });
 
   let pollTimer: ReturnType<typeof setInterval> | null = null;
+  let checking = false;
 
   async function checkConflicts(): Promise<void> {
+    // Skip while hidden (no point polling a background tab) and never stack
+    // overlapping checks if a request outlives the poll interval (#1305).
+    if (checking) return;
+    if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+    checking = true;
     update(s => ({ ...s, loading: true }));
     try {
       const data = await api.sync.conflicts();
@@ -53,6 +61,8 @@ function createSyncStore() {
       }
     } catch {
       update(s => ({ ...s, loading: false }));
+    } finally {
+      checking = false;
     }
   }
 
@@ -88,6 +98,23 @@ function createSyncStore() {
     }
   }
 
+  function reset(): void {
+    set({ conflicts: [], loading: false, lastChecked: null, dismissed: new Set() });
+  }
+
+  // Start/stop polling with the session lifecycle so in-session logins start
+  // conflict polling without a reload and logout tears it down (#1305 —
+  // mirrors the achievements.ts session.subscribe pattern).
+  if (browser) {
+    session.subscribe((s) => {
+      if (s) startPolling();
+      else {
+        stopPolling();
+        reset();
+      }
+    });
+  }
+
   /** Mark a conflict as dismissed so the modal doesn't re-open on
    *  subsequent navigations within the same session (#550). */
   function dismissConflict(noteId: number): void {
@@ -104,7 +131,7 @@ function createSyncStore() {
     dismissConflict,
     startPolling,
     stopPolling,
-    reset: () => set({ conflicts: [], loading: false, lastChecked: null, dismissed: new Set() }),
+    reset,
   };
 }
 

@@ -106,11 +106,11 @@ export function updateConfig(patch: Partial<FocusModeConfig>) {
   persistConfig();
 }
 
-config.subscribe(() => {
-  if (typeof localStorage !== 'undefined') {
-    persistConfig();
-  }
-});
+// NOTE: there is intentionally no `config.subscribe(() => persistConfig())`
+// here — subscriptions fire synchronously on subscribe with DEFAULT_CONFIG,
+// which would overwrite the saved config in localStorage before
+// initFocusModeConfig() gets a chance to read it (#1305). updateConfig()
+// already persists on every change.
 
 function isNotificationAllowed(message: string, type: string): boolean {
   const cfg = get(config);

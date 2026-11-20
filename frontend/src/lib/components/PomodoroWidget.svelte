@@ -116,8 +116,9 @@
         class="dur-input mono"
         bind:value={$workMins}
         disabled={$running}
+        aria-label={$t('widgets.workMinutes')}
       />
-      <span class="dur-label">min trabajo</span>
+      <span class="dur-label" aria-hidden="true">min trabajo</span>
     </div>
     <span class="dur-sep">·</span>
     <div class="dur-input-wrap" class:disabled={$running}>
@@ -128,8 +129,9 @@
         class="dur-input mono"
         bind:value={$breakMins}
         disabled={$running}
+        aria-label={$t('widgets.breakMinutes')}
       />
-      <span class="dur-label">min descanso</span>
+      <span class="dur-label" aria-hidden="true">min descanso</span>
     </div>
   </div>
 </div>
@@ -302,6 +304,10 @@
     text-align: right;
     appearance: textfield;
     -moz-appearance: textfield;
+  }
+  .dur-input:focus-visible {
+    outline: 2px solid var(--xp);
+    outline-offset: 2px;
   }
   .dur-input::-webkit-outer-spin-button,
   .dur-input::-webkit-inner-spin-button {

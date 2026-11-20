@@ -84,6 +84,7 @@
       <button
         class="resolution-btn"
         class:active={resolution === 'keep_local'}
+        aria-pressed={resolution === 'keep_local'}
         onclick={() => (resolution = 'keep_local')}
       >
         <FileText size={18} />
@@ -96,6 +97,7 @@
       <button
         class="resolution-btn"
         class:active={resolution === 'keep_remote'}
+        aria-pressed={resolution === 'keep_remote'}
         onclick={() => (resolution = 'keep_remote')}
       >
         <Download size={18} />
@@ -108,6 +110,7 @@
       <button
         class="resolution-btn"
         class:active={resolution === 'merge'}
+        aria-pressed={resolution === 'merge'}
         onclick={() => (resolution = 'merge')}
       >
         <GitMerge size={18} />
