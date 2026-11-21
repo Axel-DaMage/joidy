@@ -2,6 +2,9 @@
   import DynamicIcon from './DynamicIcon.svelte';
   import SettingsGithub from './SettingsGithub.svelte';
   import SettingsGoogle from './SettingsGoogle.svelte';
+  // Google Contacts is a real integration now (#43) — real status/connect row,
+  // no longer gated behind dev mode like the Strava/Spotify placeholders.
+  import SettingsContacts from './SettingsContacts.svelte';
   import { devMode } from '$lib/stores/settings';
   import type { SystemConfig } from '$lib/utils/settingsTypes';
 
@@ -12,9 +15,6 @@
 
   let { systemConfig = $bindable(), isConfigured }: Props = $props();
 
-  async function openGoogleContactsLink() {
-    window.open('https://contacts.google.com', '_blank', 'noopener,noreferrer');
-  }
   async function openStravaLink() {
     window.open('https://strava.com', '_blank', 'noopener,noreferrer');
   }
@@ -30,13 +30,9 @@
   </div>
   <SettingsGithub bind:systemConfig {isConfigured} />
   <SettingsGoogle bind:systemConfig {isConfigured} />
+  <!-- Google Contacts: real status/connect row (#43) -->
+  <SettingsContacts bind:systemConfig {isConfigured} />
   {#if $devMode}
-    <div class="row">
-      <div class="row-label">
-        <span>Google Contacts</span>
-      </div>
-      <button class="link-btn" onclick={openGoogleContactsLink}>Enlazar</button>
-    </div>
     <div class="row">
       <div class="row-label">
         <span>Strava</span>
