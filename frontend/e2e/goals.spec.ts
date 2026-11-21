@@ -146,6 +146,10 @@ test.describe('Goals — goal cards', () => {
     await page.waitForTimeout(1000);
     const firstGoalCard = page.locator('.goal-editor-card').first();
     if (await firstGoalCard.isVisible({ timeout: 2000 }).catch(() => false)) {
+      // The pin button lives in .card-top-left-actions, which is
+      // pointer-events:none until the card is hovered (GoalCard.svelte) —
+      // hover first or the click actionability check times out.
+      await firstGoalCard.hover();
       const firstPinBtn = firstGoalCard.locator('button[aria-label="Fijar"], button[aria-label="Desfijar"]').first();
       await expect(firstPinBtn).toBeVisible({ timeout: 3000 });
       await firstPinBtn.click();

@@ -78,7 +78,15 @@ test.describe('Goal Editor — structure', () => {
   });
 
   test('preview toggle is visible', async ({ page }) => {
-    await expect(page.locator('.toolbar-btn:has-text("Vista previa")').or(page.locator('.toolbar-btn:has-text("Editor")'))).toBeVisible({ timeout: 5000 });
+    // GoalEditor has no toolbar preview toggle at ≥1200px (Playwright's
+    // default 1280px viewport): the live preview is a dedicated always-on
+    // pane there, and the .preview-toggle button is display:none by design
+    // (GoalEditor.svelte media query, #935). Assert that pane instead.
+    await expect(page.locator('#goal-pane-preview')).toBeVisible({ timeout: 5000 });
+    // The editor↔preview swap toggle only renders at 768–1199px (and is
+    // replaced by .pane-tabs below 768px).
+    await page.setViewportSize({ width: 1000, height: 720 });
+    await expect(page.locator('.toolbar-btn.preview-toggle')).toBeVisible({ timeout: 5000 });
   });
 
   test('word count stats are visible', async ({ page }) => {
