@@ -14,6 +14,10 @@ import { defineConfig, devices } from '@playwright/test';
  * In CI, the full Docker stack should be running before executing these
  * tests (see the `docker-build` job in .github/workflows/ci.yml).
  *
+ * Global setup (#1476): before tests run, a minimal dataset (notes, goals,
+ * personal streaks) is seeded via the API so specs that assert on existing
+ * data work against the fresh CI database.
+ *
  * Global teardown (#565): after all tests complete, any test artifacts
  * (notes, goals, streaks with E2E test names) are deleted from the
  * database to prevent accumulation across runs.
@@ -44,5 +48,6 @@ export default defineConfig({
         reuseExistingServer: true,
         timeout: 60_000,
       },
+  globalSetup: './e2e/helpers/seed.ts',
   globalTeardown: './e2e/helpers/cleanup.ts',
 });
