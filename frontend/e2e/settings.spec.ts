@@ -72,7 +72,12 @@ test.describe('Settings — sections', () => {
   });
 
   test('Integraciones section is visible', async ({ page }) => {
-    await expect(page.locator('.panel').locator('text=Integraciones')).toBeVisible({ timeout: 5000 });
+    // Scoped to .section-title: a bare text= match also hits the
+    // "integraciones experimentales" hint in SettingsDeveloper (strict mode
+    // violation).
+    await expect(
+      page.locator('.panel .section-title').filter({ hasText: 'Integraciones' }).first()
+    ).toBeVisible({ timeout: 5000 });
   });
 
   test('IA section is visible', async ({ page }) => {

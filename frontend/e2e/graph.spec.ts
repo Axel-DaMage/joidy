@@ -84,8 +84,10 @@ test.describe('Graph — settings panel', () => {
     const closeBtn = page.locator('.close-panel-btn');
     await closeBtn.click();
     await page.waitForTimeout(500);
-    // Panel should no longer have .open class
-    await expect(page.locator('.settings-sidebar')).not.toHaveClass(/open/, { timeout: 5000 });
+    // Closing fully unmounts the sidebar ({#if showSettingsPanel} in
+    // GraphSettingsPanel.svelte) — assert detachment, not a class change:
+    // .not.toHaveClass keeps polling "element(s) not found" until timeout.
+    await expect(page.locator('.settings-sidebar')).toHaveCount(0, { timeout: 5000 });
   });
 });
 

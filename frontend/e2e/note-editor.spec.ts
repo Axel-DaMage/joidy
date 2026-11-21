@@ -4,12 +4,16 @@ import { test, expect, authGoto } from './helpers/auth';
  * Note Editor — comprehensive E2E tests.
  * Covers: open editor, title editing, content editing, tags, formatting,
  * view modes (preview/WYSIWYG/zen), export dropdown, delete flow.
+ *
+ * Selector note (#1476): the notes list default view is the FILE TREE
+ * (NotesListBody, viewMode 'tree'), not card grid — notes are `.file-row`
+ * tree items; clicking one opens NoteEditor inside `.editor-panel`.
  */
 test.describe('Note Editor — open/close', () => {
   test('can open a note from the list', async ({ page }) => {
     await authGoto(page, '/notes');
     await page.waitForTimeout(1500);
-    const firstNote = page.locator('.note-card').first();
+    const firstNote = page.locator('.file-row').first();
     await expect(firstNote).toBeVisible({ timeout: 5000 });
     await firstNote.click();
     await page.waitForTimeout(1000);
@@ -20,7 +24,7 @@ test.describe('Note Editor — open/close', () => {
   test('can close editor with close button', async ({ page }) => {
     await authGoto(page, '/notes');
     await page.waitForTimeout(1500);
-    const firstNote = page.locator('.note-card').first();
+    const firstNote = page.locator('.file-row').first();
     await firstNote.click();
     await page.waitForTimeout(1000);
     await expect(page.locator('.editor-shell')).toBeVisible({ timeout: 5000 });
@@ -35,7 +39,7 @@ test.describe('Note Editor — structure', () => {
   test.beforeEach(async ({ page }) => {
     await authGoto(page, '/notes');
     await page.waitForTimeout(1500);
-    await page.locator('.note-card').first().click();
+    await page.locator('.file-row').first().click();
     await page.waitForTimeout(1000);
     await expect(page.locator('.editor-shell')).toBeVisible({ timeout: 5000 });
   });
@@ -76,7 +80,7 @@ test.describe('Note Editor — title editing', () => {
   test('can edit the note title', async ({ page }) => {
     await authGoto(page, '/notes');
     await page.waitForTimeout(1500);
-    await page.locator('.note-card').first().click();
+    await page.locator('.file-row').first().click();
     await page.waitForTimeout(1000);
     const titleInput = page.locator('.title-input');
     await expect(titleInput).toBeVisible({ timeout: 5000 });
@@ -90,7 +94,7 @@ test.describe('Note Editor — tag input', () => {
   test('can add a tag', async ({ page }) => {
     await authGoto(page, '/notes');
     await page.waitForTimeout(1500);
-    await page.locator('.note-card').first().click();
+    await page.locator('.file-row').first().click();
     await page.waitForTimeout(1000);
     const tagInput = page.locator('.tag-input');
     await expect(tagInput).toBeVisible({ timeout: 5000 });
@@ -106,7 +110,7 @@ test.describe('Note Editor — view modes', () => {
   test.beforeEach(async ({ page }) => {
     await authGoto(page, '/notes');
     await page.waitForTimeout(1500);
-    await page.locator('.note-card').first().click();
+    await page.locator('.file-row').first().click();
     await page.waitForTimeout(1000);
     await expect(page.locator('.editor-shell')).toBeVisible({ timeout: 5000 });
   });
@@ -144,7 +148,7 @@ test.describe('Note Editor — export dropdown', () => {
   test('export dropdown shows 3 options', async ({ page }) => {
     await authGoto(page, '/notes');
     await page.waitForTimeout(1500);
-    await page.locator('.note-card').first().click();
+    await page.locator('.file-row').first().click();
     await page.waitForTimeout(1000);
     const exportBtn = page.locator('.toolbar-btn:has-text("Exportar")');
     await expect(exportBtn).toBeVisible({ timeout: 5000 });
@@ -164,7 +168,7 @@ test.describe('Note Editor — delete flow', () => {
   test('delete button shows confirmation modal', async ({ page }) => {
     await authGoto(page, '/notes');
     await page.waitForTimeout(1500);
-    await page.locator('.note-card').first().click();
+    await page.locator('.file-row').first().click();
     await page.waitForTimeout(1000);
     const deleteBtn = page.locator('.toolbar-btn.danger-btn[aria-label="Eliminar nota"]');
     await expect(deleteBtn).toBeVisible({ timeout: 5000 });
@@ -187,7 +191,7 @@ test.describe('Note Editor — navigation', () => {
   test('prev/next navigation buttons are visible', async ({ page }) => {
     await authGoto(page, '/notes');
     await page.waitForTimeout(1500);
-    await page.locator('.note-card').first().click();
+    await page.locator('.file-row').first().click();
     await page.waitForTimeout(1000);
     await expect(page.locator('.toolbar-btn[aria-label="Nota anterior"]')).toBeVisible({ timeout: 5000 });
     await expect(page.locator('.toolbar-btn[aria-label="Siguiente nota"]')).toBeVisible({ timeout: 5000 });
@@ -196,7 +200,7 @@ test.describe('Note Editor — navigation', () => {
   test('can navigate to next note', async ({ page }) => {
     await authGoto(page, '/notes');
     await page.waitForTimeout(1500);
-    await page.locator('.note-card').first().click();
+    await page.locator('.file-row').first().click();
     await page.waitForTimeout(1000);
     const nextBtn = page.locator('.toolbar-btn[aria-label="Siguiente nota"]');
     // Click next if not disabled
@@ -214,7 +218,7 @@ test.describe('Note Editor — icon customization', () => {
   test('icon customization button is visible', async ({ page }) => {
     await authGoto(page, '/notes');
     await page.waitForTimeout(1500);
-    await page.locator('.note-card').first().click();
+    await page.locator('.file-row').first().click();
     await page.waitForTimeout(1000);
     const iconBtn = page.locator('.note-icon-btn[aria-label="Personalizar icono"]');
     await expect(iconBtn).toBeVisible({ timeout: 5000 });
@@ -223,7 +227,7 @@ test.describe('Note Editor — icon customization', () => {
   test('can open icon customization modal', async ({ page }) => {
     await authGoto(page, '/notes');
     await page.waitForTimeout(1500);
-    await page.locator('.note-card').first().click();
+    await page.locator('.file-row').first().click();
     await page.waitForTimeout(1000);
     const iconBtn = page.locator('.note-icon-btn[aria-label="Personalizar icono"]');
     await iconBtn.click();

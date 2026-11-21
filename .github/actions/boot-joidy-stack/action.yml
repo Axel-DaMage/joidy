@@ -44,6 +44,13 @@ runs:
         # ./frontend bind mount), which makes the later `npm ci` fail with
         # EACCES (npm ci only clears the *contents* of node_modules).
         mkdir -p frontend/node_modules data/db data/uploads data/vault
+        # .env.example points OBSIDIAN_VAULT_PATH at a developer machine path
+        # (~/Documentos/notas/mi-vault) that does not exist on the runner —
+        # the api/worker bind mount then fails (or is created root-owned),
+        # POST /goals 500s on its synchronous vault .md write and the e2e
+        # globalSetup can not seed goals (#1476). Point it at ./data/vault,
+        # the compose default, which is pre-created runner-owned above.
+        sed -i 's|^OBSIDIAN_VAULT_PATH=.*|OBSIDIAN_VAULT_PATH=./data/vault|' .env
 
     - name: Start services
       shell: bash

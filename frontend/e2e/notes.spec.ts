@@ -34,8 +34,9 @@ test.describe('Notes — list view', () => {
     const search = page.locator('input[placeholder="Buscar..."]');
     await search.fill('zzz_no_match_xyz_12345');
     await page.waitForTimeout(500);
-    // The note list should be empty (no note cards visible)
-    const noteCards = page.locator('.note-item, .note-card');
+    // The note list should be empty (no note entries visible in either the
+    // tree view — .file-row — or the legacy card/list views)
+    const noteCards = page.locator('.file-row, .note-item, .note-card');
     // Wait for filtering to complete
     await page.waitForTimeout(1000);
     expect(await noteCards.count()).toBe(0);
@@ -106,8 +107,9 @@ test.describe('Notes — note selection', () => {
     await authGoto(page, '/notes');
     // Wait for notes to load
     await page.waitForTimeout(1000);
-    // Click the first note item
-    const firstNote = page.locator('.note-item, .note-card, [class*="note-item"]').first();
+    // Click the first note item — the default list view is the file tree
+    // (NotesListBody), where notes are .file-row tree items (#1476)
+    const firstNote = page.locator('.file-row, .note-item, .note-card, [class*="note-item"]').first();
     if (await firstNote.isVisible({ timeout: 2000 }).catch(() => false)) {
       await firstNote.click();
       await page.waitForTimeout(1000);
