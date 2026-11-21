@@ -96,6 +96,8 @@
     { href: '/emails', label: $t('nav.emails'), icon: 'Mail', status: 'ready' },
     { href: '/calendar', label: $t('nav.calendar'), icon: 'Calendar', status: 'ready' },
     { href: '/timers', label: $t('nav.timers'), icon: 'AlarmClock', status: 'ready' },
+    // Strava integration page (#44) — appended last to keep merges clean.
+    { href: '/strava', label: $t('nav.strava'), icon: 'Activity', status: 'ready' },
   ] as { href: string; label: string; icon: string; status: NavItemStatus }[];
 
   // Clock engine (#969): alarms must keep ticking wherever the user is in the
