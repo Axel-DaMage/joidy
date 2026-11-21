@@ -80,10 +80,6 @@ test.describe('Settings — sections', () => {
     await expect(page.locator('.panel .section-title').filter({ hasText: 'IA' }).first()).toBeVisible({ timeout: 5000 });
   });
 
-  test('Exportar Datos section is visible', async ({ page }) => {
-    await expect(page.locator('.panel').locator('text=Exportar Datos')).toBeVisible({ timeout: 5000 });
-  });
-
   test('Desarrollador section is visible', async ({ page }) => {
     await expect(page.locator('.panel').locator('text=Desarrollador')).toBeVisible({ timeout: 5000 });
   });

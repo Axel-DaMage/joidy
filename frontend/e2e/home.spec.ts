@@ -139,9 +139,13 @@ test.describe('Home — clock', () => {
 test.describe('Home — GitHub widget', () => {
   test('GitHub widget section is visible', async ({ page }) => {
     await authGoto(page, '/');
-    // GitHub section may show "Conecta GitHub" if not connected,
-    // or Todo/Issues/PRs tabs if connected
-    const githubSection = page.locator('main.app-main').locator('text=/github|conecta github/i');
+    // The activity widget always renders a section header: the "GitHub" tab
+    // when an account is linked, or the "Notas recientes" heading when it
+    // isn't — a fresh CI stack has no GitHub credentials, so no "GitHub"
+    // text exists at all in that state.
+    const githubSection = page
+      .locator('main.app-main')
+      .locator('text=/github|notas recientes/i');
     await expect(githubSection.first()).toBeVisible({ timeout: 5000 });
   });
 });
