@@ -2,6 +2,7 @@
   import DynamicIcon from './DynamicIcon.svelte';
   import SettingsGithub from './SettingsGithub.svelte';
   import SettingsGoogle from './SettingsGoogle.svelte';
+  import SettingsSpotify from './SettingsSpotify.svelte';
   import { devMode } from '$lib/stores/settings';
   import type { SystemConfig } from '$lib/utils/settingsTypes';
 
@@ -18,9 +19,6 @@
   async function openStravaLink() {
     window.open('https://strava.com', '_blank', 'noopener,noreferrer');
   }
-  async function openSpotifyLink() {
-    window.open('https://spotify.com', '_blank');
-  }
 </script>
 
 <!-- Integraciones -->
@@ -30,6 +28,7 @@
   </div>
   <SettingsGithub bind:systemConfig {isConfigured} />
   <SettingsGoogle bind:systemConfig {isConfigured} />
+  <SettingsSpotify />
   {#if $devMode}
     <div class="row">
       <div class="row-label">
@@ -42,12 +41,6 @@
         <span>Strava</span>
       </div>
       <button class="link-btn" onclick={openStravaLink}>Enlazar</button>
-    </div>
-    <div class="row">
-      <div class="row-label">
-        <span>Spotify</span>
-      </div>
-      <button class="link-btn" onclick={openSpotifyLink}>Enlazar</button>
     </div>
   {/if}
 </section>
