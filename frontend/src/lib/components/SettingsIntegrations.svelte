@@ -3,10 +3,9 @@
   import SettingsGithub from './SettingsGithub.svelte';
   import SettingsGoogle from './SettingsGoogle.svelte';
   import SettingsStrava from './SettingsStrava.svelte';
-  // Google Contacts is a real integration now (#43) — real status/connect row,
-  // no longer gated behind dev mode like the Strava/Spotify placeholders.
   import SettingsContacts from './SettingsContacts.svelte';
   import SettingsSpotify from './SettingsSpotify.svelte';
+  import { devMode } from '$lib/stores/settings';
   import type { SystemConfig } from '$lib/utils/settingsTypes';
 
   interface Props {
@@ -26,11 +25,14 @@
   </div>
   <SettingsGithub bind:systemConfig {isConfigured} />
   <SettingsGoogle bind:systemConfig {isConfigured} />
-  <!-- Strava (#44): estado real de conexión — OAuth popup + poll, igual que Google. -->
-  <SettingsStrava />
-  <!-- Google Contacts: real status/connect row (#43) -->
-  <SettingsContacts bind:systemConfig {isConfigured} />
-  <SettingsSpotify />
+  {#if $devMode}
+    <!-- Strava/Contacts/Spotify UIs are gated behind dev mode (#1492): their
+         backends are partial/OAuth-dependent, so the rows stay hidden until
+         the integrations are production-ready. -->
+    <SettingsStrava />
+    <SettingsContacts bind:systemConfig {isConfigured} />
+    <SettingsSpotify />
+  {/if}
 </section>
 
 <style>
