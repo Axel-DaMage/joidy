@@ -12,6 +12,13 @@ export interface Notification {
 
 export const notifications = writable<Notification[]>([]);
 
+// Monotonic ids: `notif-${Date.now()}` collides when several WS messages land
+// in the same millisecond → duplicate {#each} keys in Toast (#1500).
+let nextNotificationId = 0;
+// Hard bound on the toast list — safety net so no flood path (a missed
+// coalescing case, a buggy emitter) can grow it without limit (#1500).
+const MAX_NOTIFICATIONS = 6;
+
 // Deduplication map to prevent identical toasts flooding during quick parallel requests
 const activeNotifications = new Set<string>();
 // Per-message dedup timers — a shared timer would let a newer notification
@@ -45,8 +52,8 @@ export function showNotification(
     }, 3000)
   );
 
-  const id = `notif-${Date.now()}`;
-  notifications.update(ns => [...ns, { id, message, type, href }]);
+  const id = `notif-${++nextNotificationId}`;
+  notifications.update(ns => [...ns, { id, message, type, href }].slice(-MAX_NOTIFICATIONS));
   // intentional: auto-dismiss one-shot on a module store; tracked in
   // dismissTimers and bulk-cleared by clearAllNotificationTimers() (#1003)
   const timer = setTimeout(() => {

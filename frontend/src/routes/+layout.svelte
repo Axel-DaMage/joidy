@@ -36,6 +36,7 @@
     themeMode,
   } from '$lib/stores/settings';
   import { getCachedData, setCachedData } from '$lib/utils/userSettings';
+  import { createVaultSyncBurst } from '$lib/utils/vaultSyncBurst';
   import { initKeyboardNavigation } from '$lib/utils/keyboardNavigation';
   import { initPushNotifications } from '$lib/push';
   import { logger } from '$lib/utils/logger';
@@ -234,6 +235,39 @@
       }, 1500);
     };
 
+    // Same coalescing for stats refetches: `xp_gained`/`streak_updated` arrive
+    // per gamification event (per tag per file during a bulk import), and each
+    // raw loadStats paid a fetch plus a full routeCache localStorage write
+    // (#1500).
+    let statsRefreshTimeout: ReturnType<typeof setTimeout> | null = null;
+    const scheduleStatsRefresh = () => {
+      if (statsRefreshTimeout) clearTimeout(statsRefreshTimeout);
+      statsRefreshTimeout = setTimeout(() => {
+        statsRefreshTimeout = null;
+        loadStats().catch(() => {});
+      }, 2000);
+    };
+
+    // A bulk vault sync emits one `vault_synced` per file plus note_created and
+    // xp_gained per event — per-message toasts cost a notifications.update +
+    // Toast re-render + aria-atomic announce on the main thread each, enough to
+    // freeze the tab mid-sync (#1500). While a burst is active, count files and
+    // accumulate XP, then emit a single summary when it ends.
+    const syncBurst = createVaultSyncBurst();
+    const flushSyncBurst = () => {
+      vaultSyncActive = false;
+      const { files, xp } = syncBurst.reset();
+      if (files > 1) {
+        queueNotificationIfActive(
+          $t('sync.syncedManyFromVault', { values: { count: files } }),
+          'info'
+        );
+      }
+      if (xp > 0) {
+        queueNotificationIfActive(`¡+${xp} XP!`, 'level');
+      }
+    };
+
     const connectWS = () => {
       if (typeof window === 'undefined') return;
 
@@ -283,37 +317,57 @@
           logger.info('[layout] WebSocket message received:', msg);
 
           if (msg.type === 'note_created') {
-            queueNotificationIfActive(`Nueva nota creada: "${msg.title}"`, 'success');
+            // During a sync burst these fire per imported file — the summary
+            // toast covers them; standalone creates keep their toast (#1500).
+            if (!vaultSyncActive) {
+              queueNotificationIfActive(`Nueva nota creada: "${msg.title}"`, 'success');
+            }
             scheduleNotesRefresh();
           } else if (msg.type === 'note_updated') {
-            queueNotificationIfActive(`Nota actualizada: "${msg.title}"`, 'info');
+            if (!vaultSyncActive) {
+              queueNotificationIfActive(`Nota actualizada: "${msg.title}"`, 'info');
+            }
             scheduleNotesRefresh();
           } else if (msg.type === 'xp_gained') {
-            queueNotificationIfActive(`¡+${msg.xp} XP!`, 'level');
-            loadStats().catch(() => {});
+            // Mid-burst XP pings accumulate into the summary; outside a sync
+            // they keep their instant toast (#1500).
+            if (vaultSyncActive) {
+              syncBurst.recordXp(Number(msg.xp) || 0);
+            } else {
+              queueNotificationIfActive(`¡+${msg.xp} XP!`, 'level');
+            }
+            scheduleStatsRefresh();
           } else if (msg.type === 'streak_updated') {
             queueNotificationIfActive(`¡Racha de ${msg.streak} días! 🔥`, 'info');
-            loadStats().catch(() => {});
+            scheduleStatsRefresh();
           } else if (msg.type === 'vault_synced') {
-            // A note was synced from the Obsidian vault (#73).
-            queueNotificationIfActive(
-              $t('sync.syncedFromVault', { values: { title: msg.title } }),
-              'info'
-            );
+            // A note was synced from the Obsidian vault (#73). The first file
+            // of a standalone sync keeps its per-file toast; files 2..N of a
+            // burst collapse into the flushSyncBurst summary (#1500).
+            if (syncBurst.recordFile() === 1 && !vaultSyncActive) {
+              queueNotificationIfActive(
+                $t('sync.syncedFromVault', { values: { title: msg.title } }),
+                'info'
+              );
+            }
             scheduleNotesRefresh();
             vaultSyncActive = true;
+            vaultSyncPulse = false;
             if (vaultSyncTimeout) clearTimeout(vaultSyncTimeout);
-            vaultSyncTimeout = setTimeout(() => {
-              vaultSyncActive = false;
-            }, 3000);
+            vaultSyncTimeout = setTimeout(flushSyncBurst, 3000);
           } else if (msg.type === 'vault_sync_started') {
-            vaultSyncActive = true;
+            // Flush any pending burst before starting a new one so its summary
+            // isn't silently discarded.
             if (vaultSyncTimeout) clearTimeout(vaultSyncTimeout);
+            vaultSyncTimeout = null;
+            flushSyncBurst();
+            vaultSyncActive = true;
           } else if (msg.type === 'vault_sync_complete') {
             scheduleNotesRefresh();
-            vaultSyncActive = false;
-            vaultSyncPulse = true;
             if (vaultSyncTimeout) clearTimeout(vaultSyncTimeout);
+            vaultSyncTimeout = null;
+            flushSyncBurst();
+            vaultSyncPulse = true;
             vaultSyncTimeout = setTimeout(() => {
               vaultSyncPulse = false;
             }, 2000);
@@ -571,6 +625,7 @@
       }
       if (wsReconnectTimeout) clearTimeout(wsReconnectTimeout);
       if (notesRefreshTimeout) clearTimeout(notesRefreshTimeout);
+      if (statsRefreshTimeout) clearTimeout(statsRefreshTimeout);
       if (pillTimeout) clearTimeout(pillTimeout);
       if (vaultSyncTimeout) clearTimeout(vaultSyncTimeout);
       if (cleanupTheme) cleanupTheme();
