@@ -14,8 +14,6 @@ services:
     ports:
       - "${BIND_ADDR:-127.0.0.1}:9090:9090"
     logging: *default-logging
-    networks:
-      - joidy
 
   grafana:
     image: grafana/grafana:13.3.1
@@ -32,12 +30,6 @@ services:
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
     logging: *default-logging
-    networks:
-      - joidy
-
-networks:
-  joidy:
-    external: true
 
 volumes:
   grafana-data:

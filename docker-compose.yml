@@ -120,7 +120,7 @@ services:
     image: ${DOCKER_REGISTRY:-d4mag3}/joidy-worker:${IMAGE_TAG:-latest}
     # No host port publish (#1277): /metrics and /health stay on the
     # internal compose network (Prometheus scrapes worker:8001 over the
-    # external `joidy` network, healthchecks run in-container).
+    # shared project network, healthchecks run in-container).
     volumes:
       - ${JOIDY_DATA_DIR:-./data}/db:/data/db
       - ${JOIDY_ENV_FILE:-./.env}:/app/.env:ro
@@ -134,7 +134,7 @@ services:
       - APP_ENV=${APP_ENV:-production}
       # The metrics/health HTTP server defaults to loopback; inside Docker
       # it must listen on the container interface so compose-network peers
-      # (Prometheus on the external `joidy` network) can reach it (#1277).
+      # (Prometheus on the shared project network) can reach it (#1277).
       - WORKER_BIND_ADDR=${WORKER_BIND_ADDR:-0.0.0.0}
       - PYTHONUNBUFFERED=1
     depends_on:
