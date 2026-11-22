@@ -21,8 +21,8 @@ from models.note import Tag as TagModel
 from models.skill import Skill
 from pydantic import BaseModel, field_validator
 from services.analytics_service import get_overview, webhook_github_activity
-from services.github_activity import fetch_weekly_activity
 from services.auth_service import get_current_user
+from services.github_activity import fetch_weekly_activity
 from services.http_client import http_client
 from services.mood_service import get_mood_history, get_mood_stats
 from services.usage_service import (

@@ -53,6 +53,9 @@ ignore = [
 # Prompt prose must stay verbatim: these lines are LLM system prompts where a
 # reflow would alter the exact bytes sent to the model.
 "ai-service/clients/prompts.py" = ["E501"]
+# github_activity.py embeds a GraphQL document where a reflow would alter the
+# query string sent upstream.
+"api/services/github_activity.py" = ["E501"]
 # Security lint parity with the CI bandit job (ci.yml: `-x api/tests,...`),
 # which excludes test dirs entirely: fixtures legitimately hardcode fake
 # credentials, bind 0.0.0.0, use /tmp paths and swallow exceptions. The "S"

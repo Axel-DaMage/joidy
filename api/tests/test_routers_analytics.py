@@ -11,7 +11,6 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 from fastapi.testclient import TestClient
-
 from models.gamification import UserStats, XPEvent
 from models.github import GitHubEvent, GitHubEventType, GitHubRepo
 from models.goal import Goal, GoalState, GoalTemporality
@@ -102,9 +101,7 @@ def test_track_event_valid(client: TestClient):
 
 
 def test_track_event_invalid_type(client: TestClient):
-    response = client.post(
-        "/analytics/track", json={"event_type": "definitely_not_valid"}
-    )
+    response = client.post("/analytics/track", json={"event_type": "definitely_not_valid"})
     assert response.status_code == 422
 
 
@@ -275,9 +272,7 @@ def test_overview_xp_by_type_sorted(client: TestClient, db_session):
     db_session.commit()
 
     xp_by_type = client.get("/analytics/overview?days=7").json()["xp_by_type"]
-    assert [t["xp"] for t in xp_by_type] == sorted(
-        (t["xp"] for t in xp_by_type), reverse=True
-    )
+    assert [t["xp"] for t in xp_by_type] == sorted((t["xp"] for t in xp_by_type), reverse=True)
     goal = next(t for t in xp_by_type if t["type"] == "goal_completed")
     assert goal["xp"] == 100
     assert goal["count"] == 2
@@ -327,9 +322,7 @@ def test_overview_pearson_perfect_correlation(client: TestClient, db_session):
     for i in range(4):
         moment = now - timedelta(days=3 - i)
         db_session.add(MoodEntry(user_id=1, score=i + 1, entry_date=moment.date()))
-        db_session.add(
-            XPEvent(event_type="note_created", xp=(i + 1) * 10, created_at=moment)
-        )
+        db_session.add(XPEvent(event_type="note_created", xp=(i + 1) * 10, created_at=moment))
     db_session.commit()
 
     mood = client.get("/analytics/overview?days=7").json()["mood_activity"]

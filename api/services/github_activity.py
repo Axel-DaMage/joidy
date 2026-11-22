@@ -22,7 +22,6 @@ import time
 from datetime import UTC, date, datetime, timedelta
 
 import httpx
-
 from config import settings
 from services.http_client import http_client
 
@@ -44,8 +43,7 @@ EVENT_BUCKET = {
 _cache: dict[str, tuple[float, dict]] = {}
 
 _CONTRIB_FIELDS = (
-    "totalCommitContributions totalPullRequestContributions "
-    "totalIssueContributions totalPullRequestReviewContributions"
+    "totalCommitContributions totalPullRequestContributions totalIssueContributions totalPullRequestReviewContributions"
 )
 # GraphQL contribution field → output bucket (reviews fill the "comments" bucket).
 _GRAPHQL_BUCKET = {
@@ -77,9 +75,7 @@ def is_configured() -> bool:
 
 async def _get(url: str, params: dict | None = None):
     async with http_client(timeout=20.0) as client:
-        r = await client.get(
-            f"{GITHUB_API}{url}", headers=_headers(), params=params or {}
-        )
+        r = await client.get(f"{GITHUB_API}{url}", headers=_headers(), params=params or {})
         r.raise_for_status()
         return r.json()
 
@@ -126,9 +122,7 @@ def contribution_streaks(days: list[dict], today: date) -> dict:
         run = run + 1 if d["count"] > 0 else 0
         longest = max(longest, run)
     by_date = {d["date"]: d["count"] for d in days}
-    cursor = (
-        today if by_date.get(today.isoformat(), 0) > 0 else today - timedelta(days=1)
-    )
+    cursor = today if by_date.get(today.isoformat(), 0) > 0 else today - timedelta(days=1)
     current = 0
     while by_date.get(cursor.isoformat(), 0) > 0:
         current += 1
@@ -173,9 +167,7 @@ def parse_extras(data: dict, today: date) -> dict:
             "commits": commits,
             "share": round(commits / total_commits * 100, 1),
         }
-        for (name, color), commits in sorted(
-            by_language.items(), key=lambda kv: kv[1], reverse=True
-        )
+        for (name, color), commits in sorted(by_language.items(), key=lambda kv: kv[1], reverse=True)
     ][:TOP_LANGUAGES]
 
     merged = data["merged"]
@@ -207,8 +199,7 @@ def parse_extras(data: dict, today: date) -> dict:
             "median_merge_hours": round(statistics.median(hours), 2) if hours else None,
             "additions": additions,
             "deletions": deletions,
-            "sampled": int(merged.get("issueCount") or 0)
-            > len(merged.get("nodes") or []),
+            "sampled": int(merged.get("issueCount") or 0) > len(merged.get("nodes") or []),
         },
         "threads": {
             "commented": int(data["commented"]["issueCount"]),
@@ -291,7 +282,7 @@ async def fetch_graphql_weekly(today: date, now: datetime) -> tuple[str, list[di
 
 async def _resolve_login() -> str:
     if settings.github_token:
-        return (await _get("/user"))["login"]
+        return str((await _get("/user"))["login"])
     return settings.github_username
 
 
@@ -299,9 +290,7 @@ async def fetch_user_events(login: str) -> list[dict]:
     """Newest-first events for ``login`` (paginated, capped at 300 by GitHub)."""
     events: list[dict] = []
     for page in range(1, MAX_PAGES + 1):
-        batch = await _get(
-            f"/users/{login}/events", {"per_page": PER_PAGE, "page": page}
-        )
+        batch = await _get(f"/users/{login}/events", {"per_page": PER_PAGE, "page": page})
         events.extend(batch)
         if len(batch) < PER_PAGE:
             break
@@ -338,11 +327,7 @@ def bucket_weekly(events: list[dict], today: date, weeks: int = WEEKS) -> dict:
         if key and week in buckets:
             buckets[week][key] += 1
     weekly = [{"week_start": wk, **vals} for wk, vals in buckets.items()]
-    truncated = (
-        len(events) >= PER_PAGE * MAX_PAGES
-        and oldest is not None
-        and oldest > first_monday
-    )
+    truncated = len(events) >= PER_PAGE * MAX_PAGES and oldest is not None and oldest > first_monday
     return {"weekly": weekly, "truncated": truncated}
 
 
@@ -351,10 +336,7 @@ def classify_failure(exc: Exception) -> str:
     if isinstance(exc, httpx.HTTPStatusError):
         status = exc.response.status_code
         remaining = exc.response.headers.get("x-ratelimit-remaining")
-        if status == 429 or (
-            status == 403
-            and (remaining == "0" or "rate limit" in exc.response.text.lower())
-        ):
+        if status == 429 or (status == 403 and (remaining == "0" or "rate limit" in exc.response.text.lower())):
             return "rate_limited"
         if status in (401, 403):
             return "bad_credentials"
