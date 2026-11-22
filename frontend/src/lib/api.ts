@@ -486,6 +486,97 @@ export interface EmailAccountStats {
   important: number;
 }
 
+// ── Gmail API (#42) ──────────────────────────────────────────────────────────
+// Native Gmail client surface served by /integrations/gmail/* (JWT-protected).
+// Distinct from the n8n-synced /emails inbox above: these are live Gmail API
+// resources keyed by Gmail message ids, not local EmailMessage rows.
+
+export interface GmailWatchState {
+  topic_name: string | null;
+  history_id: string | null;
+  expiration: string | null;
+  registered_at: string | null;
+}
+
+export interface GmailStatus {
+  connected: boolean;
+  /** null = unknown (legacy token row without a stored scope string). */
+  gmail_read: boolean | null;
+  gmail_modify: boolean | null;
+  gmail_send: boolean | null;
+  watch: { configured: boolean; state: GmailWatchState | null };
+}
+
+export interface GmailMessageSummary {
+  id: string | null;
+  thread_id: string | null;
+  label_ids: string[];
+  snippet: string | null;
+  /** ISO-8601 (backend converts Gmail epoch millis). */
+  internal_date: string | null;
+  size_estimate: number | null;
+  history_id: string | null;
+}
+
+export interface GmailAttachmentMeta {
+  attachment_id: string | null;
+  filename: string | null;
+  mime_type: string | null;
+  size: number | null;
+  part_id: string | null;
+}
+
+export interface GmailMessage extends GmailMessageSummary {
+  /** Lowercased header name → value (from/to/cc/bcc/subject/date/…). */
+  headers: Record<string, string>;
+  body_text: string | null;
+  /** RAW inbound HTML — must be sanitized (DOMPurify) before {@html}. */
+  body_html: string | null;
+  body_truncated: boolean;
+  attachments: GmailAttachmentMeta[];
+}
+
+export interface GmailMessageList {
+  messages: GmailMessageSummary[];
+  next_page_token: string | null;
+  result_size_estimate: number | null;
+}
+
+export interface GmailAttachmentDownload {
+  attachment_id: string;
+  size: number;
+  /** Standard base64 (not base64url) JSON payload. */
+  data_base64: string;
+}
+
+export interface GmailAttachmentInput {
+  filename: string;
+  content_type?: string | null;
+  data_base64: string;
+}
+
+export interface GmailSendInput {
+  to?: string | null;
+  cc?: string | null;
+  bcc?: string | null;
+  subject?: string | null;
+  body?: string | null;
+  body_html?: string | null;
+  attachments?: GmailAttachmentInput[];
+}
+
+export interface GmailSendResult {
+  id: string | null;
+  thread_id: string | null;
+  label_ids: string[];
+}
+
+export interface GmailMessageActionResult {
+  id: string | null;
+  thread_id: string | null;
+  label_ids: string[];
+}
+
 export interface CalendarEvent {
   google_id: string;
   calendar_id: string;
@@ -908,6 +999,67 @@ export const api = {
     patch: (id: number, data: { unread?: boolean; important?: boolean }) =>
       req<EmailSummary>('PATCH', `/emails/${id}`, data),
     remove: (id: number) => req<void>('DELETE', `/emails/${id}`),
+  },
+
+  // ── Gmail API (#42) — native Gmail client; complements the n8n /emails inbox.
+  // Errors: 401/403 → Google reconnect (scope bump), 404, 429, 413 attachment.
+  gmail: {
+    status: () => req<GmailStatus>('GET', '/integrations/gmail/status'),
+    list: (
+      params: {
+        /** Gmail search syntax (from:, subject:, is:unread, …). */
+        q?: string;
+        /** Epoch or ISO-8601 lower bound → backend maps to after:<epoch>. */
+        since?: string;
+        /** Comma-joined system label ids: INBOX, SENT, IMPORTANT, UNREAD, … */
+        labelIds?: string[];
+        maxResults?: number;
+        pageToken?: string | null;
+      } = {}
+    ) => {
+      const qs = new URLSearchParams();
+      if (params.q) qs.set('q', params.q);
+      if (params.since) qs.set('since', params.since);
+      if (params.labelIds?.length) qs.set('label_ids', params.labelIds.join(','));
+      qs.set('max_results', String(params.maxResults ?? 50));
+      if (params.pageToken) qs.set('page_token', params.pageToken);
+      return req<GmailMessageList>('GET', `/integrations/gmail/messages?${qs.toString()}`);
+    },
+    get: (id: string) =>
+      req<GmailMessage>('GET', `/integrations/gmail/messages/${encodeURIComponent(id)}`),
+    attachment: (messageId: string, attachmentId: string) =>
+      req<GmailAttachmentDownload>(
+        'GET',
+        `/integrations/gmail/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}`
+      ),
+    send: (input: GmailSendInput) =>
+      req<GmailSendResult>('POST', '/integrations/gmail/messages/send', input),
+    archive: (id: string) =>
+      req<GmailMessageActionResult>(
+        'POST',
+        `/integrations/gmail/messages/${encodeURIComponent(id)}/archive`
+      ),
+    trash: (id: string) =>
+      req<GmailMessageActionResult>('POST', `/integrations/gmail/messages/${encodeURIComponent(id)}/trash`),
+    untrash: (id: string) =>
+      req<GmailMessageActionResult>(
+        'POST',
+        `/integrations/gmail/messages/${encodeURIComponent(id)}/untrash`
+      ),
+    read: (id: string) =>
+      req<GmailMessageActionResult>('POST', `/integrations/gmail/messages/${encodeURIComponent(id)}/read`),
+    unread: (id: string) =>
+      req<GmailMessageActionResult>(
+        'POST',
+        `/integrations/gmail/messages/${encodeURIComponent(id)}/unread`
+      ),
+    watchStatus: () =>
+      req<{ configured: boolean; state: GmailWatchState | null }>('GET', '/integrations/gmail/watch'),
+    watchRegister: (labelIds?: string[]) => {
+      const qs = labelIds?.length ? `?label_ids=${encodeURIComponent(labelIds.join(','))}` : '';
+      return req<GmailWatchState>('POST', `/integrations/gmail/watch${qs}`);
+    },
+    watchStop: () => req<{ status: string }>('DELETE', '/integrations/gmail/watch'),
   },
 
   ai: {

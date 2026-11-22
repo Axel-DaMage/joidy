@@ -107,6 +107,7 @@ import RotateCcw from 'lucide-svelte/icons/rotate-ccw';
 import Save from 'lucide-svelte/icons/save';
 import Scale from 'lucide-svelte/icons/scale';
 import Search from 'lucide-svelte/icons/search';
+import Send from 'lucide-svelte/icons/send';
 import Settings from 'lucide-svelte/icons/settings';
 import SkipForward from 'lucide-svelte/icons/skip-forward';
 import SlidersHorizontal from 'lucide-svelte/icons/sliders-horizontal';
@@ -250,6 +251,7 @@ const CURATED_ICONS: Record<string, any> = {
   Save,
   Scale,
   Search,
+  Send,
   Settings,
   SkipForward,
   SlidersHorizontal,
