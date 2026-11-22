@@ -74,14 +74,29 @@
       if (item.checked || (item as any).failed) newMap.set(item.date, item);
     }
 
-    // If there is no explicit history yet, infer active days from start date.
-    if (newMap.size === 0 && startDate) {
+    // Infer "assumed" activity for the untracked period: a streak whose
+    // start_date predates its first real check-in shows that span as done.
+    // The inference only covers dates BEFORE the earliest recorded day (or
+    // up to today when there are no records at all), so real misses inside
+    // the tracked window still show as gaps and the first check-in no longer
+    // wipes the inferred past (#1503).
+    if (startDate) {
       const start = parseLocalIso(startDate);
-      const end = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      let firstRecorded: Date | null = null;
+      for (const key of newMap.keys()) {
+        const d = parseLocalIso(key);
+        if (!Number.isNaN(d.getTime()) && (!firstRecorded || d < firstRecorded)) {
+          firstRecorded = d;
+        }
+      }
+      const end = firstRecorded
+        ? new Date(firstRecorded.getFullYear(), firstRecorded.getMonth(), firstRecorded.getDate() - 1)
+        : new Date(today.getFullYear(), today.getMonth(), today.getDate());
       if (!Number.isNaN(start.getTime()) && start <= end) {
         const cursor = new Date(start);
         while (cursor <= end) {
-          newMap.set(localIso(cursor), { checked: true });
+          const iso = localIso(cursor);
+          if (!newMap.has(iso)) newMap.set(iso, { checked: true });
           cursor.setDate(cursor.getDate() + 1);
         }
       }

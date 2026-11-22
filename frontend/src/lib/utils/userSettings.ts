@@ -30,6 +30,10 @@ export interface UserSettings {
   };
   streaksUi?: {
     panelWidth?: number;
+    /** Last streak open in the detail panel (#1504). */
+    selectedId?: number | null;
+    /** Whether the archived list was being viewed (#1504). */
+    showArchived?: boolean;
   };
   goalsUi?: {
     pinnedGoalIds?: number[];

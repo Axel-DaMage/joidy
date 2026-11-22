@@ -354,27 +354,26 @@ body.zen-mode-active .app-shell {
   transform: translateX(0);
 }
 
-/* Hover/focus expands the rail item so the label becomes part of the pill
-   instead of a detached tooltip. Only where real hover exists — touch keeps
-   the icon rail. The icon stays anchored at the sidebar's center. */
+/* Hover/focus keeps the icon anchored as a fixed bordered circle in the
+   rail while the label slides out to its right as plain text — only the
+   text extends past the rail edge (#1505). Scoped to real hover so touch
+   layouts keep the icon-only rail. */
 @media (hover: hover) and (pointer: fine) {
   .nav-item:hover,
   .nav-item:focus-visible {
-    width: auto;
-    align-self: flex-start;
-    justify-content: flex-start;
-    gap: var(--s2);
-    padding: 0 var(--s3) 0 16px;
     border-radius: 999px;
+    border-color: var(--border);
     background: var(--hover);
     z-index: var(--z-dropdown);
   }
 
+  .nav-item.active:hover,
+  .nav-item.active:focus-visible {
+    border-color: var(--xp);
+  }
+
   .nav-item:hover .tooltip,
   .nav-item:focus-visible .tooltip {
-    position: static;
-    opacity: 1;
-    transform: none;
     background: transparent;
     border: 0;
     padding: 0;
