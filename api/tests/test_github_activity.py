@@ -6,7 +6,6 @@ from datetime import date
 
 import httpx
 from fastapi.testclient import TestClient
-
 from services import github_activity as gh
 
 TODAY = date(2026, 11, 22)  # a Sunday
@@ -73,11 +72,7 @@ def test_fetch_weekly_activity_uses_events_and_caches(monkeypatch):
     monkeypatch.setattr(gh, "fetch_user_events", fake_events)
     first = asyncio.run(gh.fetch_weekly_activity(TODAY))
     second = asyncio.run(gh.fetch_weekly_activity(TODAY))
-    assert (
-        first["available"] is True
-        and first["source"] == "events"
-        and first["login"] == "octo"
-    )
+    assert first["available"] is True and first["source"] == "events" and first["login"] == "octo"
     assert first["weekly"][-1]["pushes"] == 1
     assert second is first and calls["n"] == 1
     gh.clear_cache()
@@ -90,14 +85,8 @@ def _http_error(status: int, headers: dict | None = None, text: str = ""):
 
 
 def test_classify_failure_reasons():
-    assert (
-        gh.classify_failure(_http_error(403, {"x-ratelimit-remaining": "0"}))
-        == "rate_limited"
-    )
-    assert (
-        gh.classify_failure(_http_error(403, text="API rate limit exceeded"))
-        == "rate_limited"
-    )
+    assert gh.classify_failure(_http_error(403, {"x-ratelimit-remaining": "0"})) == "rate_limited"
+    assert gh.classify_failure(_http_error(403, text="API rate limit exceeded")) == "rate_limited"
     assert gh.classify_failure(_http_error(429)) == "rate_limited"
     assert gh.classify_failure(_http_error(401)) == "bad_credentials"
     assert gh.classify_failure(RuntimeError("net")) == "unavailable"
@@ -154,9 +143,7 @@ def test_graphql_query_has_one_alias_per_week_and_clamps_to_now():
     q = gh.build_graphql_query(gh.week_starts(TODAY), now)
     assert q.count("contributionsCollection") == gh.WEEKS
     assert "w0:" in q and f"w{gh.WEEKS - 1}:" in q
-    assert (
-        'to: "2026-11-22T12:00:00Z"' in q
-    )  # current week ends now, not Sunday 23:59:59
+    assert 'to: "2026-11-22T12:00:00Z"' in q  # current week ends now, not Sunday 23:59:59
 
 
 def test_parse_graphql_weeks_maps_contribution_fields():
@@ -195,11 +182,7 @@ def test_fetch_weekly_activity_prefers_graphql_with_token(monkeypatch):
     monkeypatch.setattr(gh, "fetch_graphql_weekly", fake_graphql)
     monkeypatch.setattr(gh, "fetch_user_events", no_events)
     out = asyncio.run(gh.fetch_weekly_activity(TODAY))
-    assert (
-        out["source"] == "graphql"
-        and out["login"] == "octo"
-        and out["truncated"] is False
-    )
+    assert out["source"] == "graphql" and out["login"] == "octo" and out["truncated"] is False
     gh.clear_cache()
 
 
@@ -252,9 +235,7 @@ def test_endpoint_falls_back_to_webhook_events(client: TestClient, monkeypatch):
     assert data["weekly"] == []
 
 
-def test_endpoint_reports_error_reason_with_webhook_fallback(
-    client: TestClient, monkeypatch
-):
+def test_endpoint_reports_error_reason_with_webhook_fallback(client: TestClient, monkeypatch):
     async def failed():
         return {
             "available": False,
@@ -302,7 +283,6 @@ def test_contribution_streaks_gap_breaks_current():
 
 
 def test_parse_extras_maps_repos_languages_prs_calendar():
-    mondays = gh.week_starts(TODAY)
     data = {
         "win": {
             "contributionsCollection": {

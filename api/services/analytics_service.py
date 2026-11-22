@@ -175,7 +175,7 @@ def _mood_activity(db: Session, user_id: int, window_start: date, xp_map: dict[s
         .order_by(MoodEntry.entry_date.asc())
         .all()
     )
-    points = [
+    points: list[dict] = [
         {
             "date": e.entry_date.isoformat(),
             "mood": e.score,
@@ -185,7 +185,7 @@ def _mood_activity(db: Session, user_id: int, window_start: date, xp_map: dict[s
     ]
     return {
         "points": points,
-        "pearson_r": _pearson([p["mood"] for p in points], [p["xp"] for p in points]),
+        "pearson_r": _pearson([float(p["mood"]) for p in points], [float(p["xp"]) for p in points]),
         "sample_size": len(points),
     }
 
@@ -238,16 +238,16 @@ def _goals(db: Session) -> dict:
 
     by_temporality = []
     for temp in GoalTemporality:
-        group = temp_groups.get(temp.value)
-        if not group:
+        tgroup = temp_groups.get(temp.value)
+        if not tgroup:
             continue
-        avg = round(sum(group["progress"]) / len(group["progress"]), 1) if group["progress"] else 0.0
+        avg = round(sum(tgroup["progress"]) / len(tgroup["progress"]), 1) if tgroup["progress"] else 0.0
         by_temporality.append(
             {
                 "temporality": temp.value,
-                "total": group["total"],
-                "completed": group["completed"],
-                "failed": group["failed"],
+                "total": tgroup["total"],
+                "completed": tgroup["completed"],
+                "failed": tgroup["failed"],
                 "avg_progress": min(100.0, max(0.0, avg)),
             }
         )
@@ -268,10 +268,10 @@ def _streaks(db: Session, stats: UserStats | None) -> dict:
     streak, ``30 // frequency_days`` possible check-ins vs. actual check-ins in
     the last 30 days.
     """
-    active_freqs = [
-        row[0] or 1
-        for row in db.query(PersonalStreak.frequency_days).filter(PersonalStreak.is_archived.is_(False)).all()
-    ]
+    freq_rows: list[tuple[int | None]] = (
+        db.query(PersonalStreak.frequency_days).filter(PersonalStreak.is_archived.is_(False)).all()
+    )
+    active_freqs = [row[0] or 1 for row in freq_rows]
     total_checkins = db.query(func.count(StreakCheckIn.id)).scalar() or 0
 
     thirty_ago = get_local_today() - timedelta(days=CHECKIN_RATE_WINDOW_DAYS)
@@ -281,7 +281,7 @@ def _streaks(db: Session, stats: UserStats | None) -> dict:
         .join(PersonalStreak, StreakCheckIn.streak_id == PersonalStreak.id)
         .filter(
             PersonalStreak.is_archived.is_(False),
-            StreakCheckIn.check_date >= thirty_ago,
+            StreakCheckIn.check_date.op(">=")(thirty_ago),
         )
         .scalar()
         or 0
