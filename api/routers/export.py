@@ -5,7 +5,7 @@ Export endpoints for notes.
 import io
 import zipfile
 from collections.abc import Iterator
-from datetime import datetime
+from datetime import UTC, datetime
 
 from database import get_db
 from fastapi import APIRouter, Depends, HTTPException
@@ -127,7 +127,7 @@ def export_notes_markdown(db: Session = Depends(get_db), user: dict = Depends(ge
     return StreamingResponse(
         generate(),
         media_type="text/markdown",
-        headers={"Content-Disposition": f"attachment; filename=joidy-export-{datetime.now().date()}.md"},
+        headers={"Content-Disposition": f"attachment; filename=joidy-export-{datetime.now(UTC).date()}.md"},
     )
 
 
@@ -137,8 +137,8 @@ def export_notes_html(db: Session = Depends(get_db), user: dict = Depends(get_cu
     if db.query(Note).count() == 0:
         raise HTTPException(status_code=404, detail="No notes to export")
 
-    export_date = datetime.now().date()
-    export_iso = datetime.now().isoformat()
+    export_date = datetime.now(UTC).date()
+    export_iso = datetime.now(UTC).isoformat()
 
     def generate():
         yield f"""<!DOCTYPE html>
@@ -190,5 +190,5 @@ def export_notes_zip(db: Session = Depends(get_db), user: dict = Depends(get_cur
     return StreamingResponse(
         buffer,
         media_type="application/zip",
-        headers={"Content-Disposition": f"attachment; filename=joidy-notes-{datetime.now().date()}.zip"},
+        headers={"Content-Disposition": f"attachment; filename=joidy-notes-{datetime.now(UTC).date()}.zip"},
     )

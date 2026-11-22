@@ -57,7 +57,7 @@ class DevFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         color = self.COLORS.get(record.levelname, "")
         reset = self.RESET
-        timestamp = datetime.now().strftime("%H:%M:%S")
+        timestamp = datetime.now(UTC).strftime("%H:%M:%S")
         cid = get_correlation_id()
         prefix = f" [{cid[:8]}]" if cid else ""
         return f"{color}{timestamp} {record.levelname:8s}{reset}{prefix} [{record.name}] {record.getMessage()}"
