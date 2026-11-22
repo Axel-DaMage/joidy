@@ -9,6 +9,7 @@ import {
   queueChange,
   getAllNotes,
   putNote,
+  putNotes,
   deleteNote as idbDeleteNote,
   onTempIdRemap,
 } from './offlineSync';
@@ -101,7 +102,7 @@ export async function loadNotes(tag?: string, force = false): Promise<void> {
     notesLoadedOnce.set(true);
     // Persist fetched notes into IndexedDB for offline access.
     if (browser) {
-      Promise.all(data.map((n) => putNote(n))).catch(() => {});
+      putNotes(data).catch(() => {});
     }
   } catch (e) {
     logger.error('[notes] Failed to load:', e);
@@ -143,7 +144,7 @@ export async function loadMore(): Promise<void> {
       const fresh = data.filter((n) => !existingIds.has(n.id));
       notes.update((ns) => [...ns, ...fresh]);
       if (browser) {
-        Promise.all(fresh.map((n) => putNote(n))).catch(() => {});
+        putNotes(fresh).catch(() => {});
       }
     }
     hasMoreNotes.set(data.length >= NOTES_PAGE_SIZE);

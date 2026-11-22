@@ -9,6 +9,7 @@ import {
   openDB,
   getAllNotes,
   putNote,
+  putNotes,
   deleteNote,
   addToOutbox,
   getOutbox,
@@ -266,4 +267,4 @@ export function initOfflineSync(): () => void {
   };
 }
 
-export { getAllNotes, putNote, deleteNote, getMeta, setMeta };
+export { getAllNotes, putNote, putNotes, deleteNote, getMeta, setMeta };
