@@ -12,6 +12,7 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import date
+from time import monotonic
 
 from config import settings
 from models.gamification import StreakRecord, UserStats, XPEvent
@@ -56,13 +57,27 @@ DEFAULT_PLANT_STAGES = [
 ]
 
 
+# system_config is re-read on every gamified event (xp table + plant stages +
+# stage recompute = up to 4 full-table scans per process_event call). The only
+# writers are user_settings:* blobs and the Gmail watch key — neither touches
+# the xp_*/plant_stage_* keys this module reads — so a short TTL is safe (#1515).
+_CONFIG_CACHE_TTL_SECONDS = 30.0
+_db_config_cache: tuple[float, dict[str, str]] | None = None
+
+
 def load_config_from_db(db: Session) -> dict[str, str]:
     """Load config from database, returns key-value dict."""
+    global _db_config_cache
+    now = monotonic()
+    if _db_config_cache is not None and now - _db_config_cache[0] < _CONFIG_CACHE_TTL_SECONDS:
+        return _db_config_cache[1]
     try:
-        return ConfigRepository(db).get_all_as_dict()
+        config = ConfigRepository(db).get_all_as_dict()
     except Exception:
         logger.warning("Failed to load system_config from DB, using defaults")
         return {}
+    _db_config_cache = (now, config)
+    return config
 
 
 def get_xp_table_from_db(db: Session) -> dict[str, int]:
