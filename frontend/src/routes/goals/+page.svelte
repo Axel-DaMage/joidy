@@ -6,7 +6,6 @@
   import Check from 'lucide-svelte/icons/check';
   import ChevronDown from 'lucide-svelte/icons/chevron-down';
   import Calendar from 'lucide-svelte/icons/calendar';
-  import ChartColumn from 'lucide-svelte/icons/chart-column';
   import Clock from 'lucide-svelte/icons/clock';
   import LayoutDashboard from 'lucide-svelte/icons/layout-dashboard';
   import Pause from 'lucide-svelte/icons/pause';
@@ -14,20 +13,12 @@
   import Ban from 'lucide-svelte/icons/ban';
   import Pencil from 'lucide-svelte/icons/pencil';
   import X from 'lucide-svelte/icons/x';
-  import Flame from 'lucide-svelte/icons/flame';
   import ChevronRight from 'lucide-svelte/icons/chevron-right';
   import ChevronLeft from 'lucide-svelte/icons/chevron-left';
-  import TrendingUp from 'lucide-svelte/icons/trending-up';
-  import TrendingDown from 'lucide-svelte/icons/trending-down';
-  import ChartPie from 'lucide-svelte/icons/chart-pie';
-  import Activity from 'lucide-svelte/icons/activity';
-  import Target from 'lucide-svelte/icons/target';
-  import Trophy from 'lucide-svelte/icons/trophy';
   import Settings from 'lucide-svelte/icons/settings';
   import Palette from 'lucide-svelte/icons/palette';
   import Hexagon from 'lucide-svelte/icons/hexagon';
   import Inbox from 'lucide-svelte/icons/inbox';
-  import ListFilter from 'lucide-svelte/icons/list-filter';
   import TriangleAlert from 'lucide-svelte/icons/triangle-alert';
   import FilePen from 'lucide-svelte/icons/file-pen';
   import Tag from 'lucide-svelte/icons/tag';
@@ -40,8 +31,6 @@
   import GoalInbox from '$lib/components/GoalInbox.svelte';
   import GoalList from '$lib/components/GoalList.svelte';
   import { inboxCount } from '$lib/utils/goalTriage';
-  import { use24HourClock } from '$lib/stores/settings';
-  import { getLocale } from '$lib/stores/locale';
   import { localDayKey } from '$lib/utils/date';
   import { applyGamificationResult, showXPGain } from '$lib/stores/gamification';
   import {
@@ -103,9 +92,7 @@
   let goals = $state<Goal[]>([]);
   let tags = $state<TagType[]>([]);
   let notes = $state<Note[]>([]);
-  // XP events from gamification — used for real activity timestamps
-  let xpEvents = $state<{ type: string; xp: number; at: string }[]>([]);
-  const VALID_TABS = ['editor', 'today', 'inbox', 'planning', 'history', 'analytics'] as const;
+  const VALID_TABS = ['editor', 'today', 'inbox', 'planning', 'history'] as const;
   let currentTab = $state<(typeof VALID_TABS)[number]>('editor');
   let currentPlanningTab = $state<'WEEKLY' | 'MONTHLY' | 'ANNUAL'>('ANNUAL');
   let showAddForm = $state(false);
@@ -434,7 +421,6 @@
   }
 
   let loadError = $state('');
-  let streakData = $state({ current_streak: 0, best_streak: 0 });
 
   function deduplicateGoals(arr: Goal[]): Goal[] {
     const seen = new Set<number>();
@@ -458,7 +444,11 @@
     // restore UI state immediately to prevent flash
     try {
       const savedTab = localStorage.getItem('goals.currentTab');
-      if (savedTab && (VALID_TABS as readonly string[]).includes(savedTab)) {
+      // Analytics moved to its own page (#1499) — migrate the legacy tab.
+      if (savedTab === 'analytics') {
+        localStorage.removeItem('goals.currentTab');
+        void goto('/analytics', { replaceState: true });
+      } else if (savedTab && (VALID_TABS as readonly string[]).includes(savedTab)) {
         currentTab = savedTab as typeof currentTab;
       }
       const savedDate = localStorage.getItem('goals.selectedPlanningDate');
@@ -530,10 +520,6 @@
       }
     }
 
-    // Lazy-load analytics data only when needed
-    if (currentTab === 'analytics') {
-      loadAnalyticsData();
-    }
     })();
 
     return () => {
@@ -541,20 +527,6 @@
       document.removeEventListener('visibilitychange', onVisible);
     };
   });
-
-  let analyticsLoaded = false;
-  async function loadAnalyticsData() {
-    if (analyticsLoaded) return;
-    analyticsLoaded = true;
-    try {
-      [streakData, xpEvents] = await Promise.all([
-        api.goals.streak(),
-        api.gamification.events(500),
-      ]);
-    } catch (e) {
-      logger.error('[goals] loadAnalyticsData failed:', e);
-    }
-  }
 
   let addError = $state('');
 
@@ -681,9 +653,6 @@
       logger.error('Error al actualizar temporalidad:', e);
     }
   }
-
-  // ── Analytics expandable state ──
-  let showPerformanceChart = $state(true);
 
   // ── Dashboard State ──
   let upcomingTasks = $derived.by(() => {
@@ -858,8 +827,6 @@
   // persist current tab and selected planning date in localStorage
   $effect(() => {
     if (typeof localStorage !== 'undefined') localStorage.setItem('goals.currentTab', currentTab);
-    // Lazy-load analytics data when analytics tab is opened
-    if (currentTab === 'analytics') loadAnalyticsData();
   });
 
   $effect(() => {
@@ -895,7 +862,9 @@
   // The param is consumed once so manual tab navigation isn't overridden.
   $effect(() => {
     const tabParam = page.url.searchParams.get('tab');
-    if (tabParam && (VALID_TABS as readonly string[]).includes(tabParam)) {
+    if (tabParam === 'analytics') {
+      void goto('/analytics', { replaceState: true });
+    } else if (tabParam && (VALID_TABS as readonly string[]).includes(tabParam)) {
       currentTab = tabParam as typeof currentTab;
       const clean = new URL(page.url.href);
       clean.searchParams.delete('tab');
@@ -991,286 +960,6 @@
   function openGoalEditor(goal: Goal) {
     goto(`/goals/${goal.id}`);
   }
-
-  // ── Advanced Analytics Calculations ──
-  let completedGoalsCount = $derived(
-    goals.filter((g) => g.state === 'COMPLETED' || g.is_completed).length
-  );
-  let failedGoalsCount = $derived(goals.filter((g) => g.state === 'FAILED').length);
-  let successRate = $derived(
-    completedGoalsCount + failedGoalsCount > 0
-      ? Math.round((completedGoalsCount / (completedGoalsCount + failedGoalsCount)) * 100)
-      : 0
-  );
-
-  let completionsByDay = $derived.by(() => {
-    const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
-    const counts = [0, 0, 0, 0, 0, 0, 0];
-    goals
-      .filter((g) => (g.state === 'COMPLETED' || g.is_completed) && g.completed_at)
-      .forEach((g) => {
-        const dateParts = g.completed_at!.split('T')[0].split('-');
-        const d = new Date(Number(dateParts[0]), Number(dateParts[1]) - 1, Number(dateParts[2]));
-        counts[d.getDay()]++;
-      });
-    return days.map((label, i) => ({ label, value: counts[i] }));
-  });
-
-  let topTagsBySuccess = $derived.by(() => {
-    const tagMap = new Map();
-    goals
-      .filter((g) => (g.state === 'COMPLETED' || g.is_completed) && (g.tag_id || g.note_id))
-      .forEach((g) => {
-        let name = 'Sin Etiqueta';
-        if (g.tag_id) {
-          name = tags.find((t) => t.id === g.tag_id)?.name || 'Sin Etiqueta';
-        } else if (g.note_id) {
-          name = notes.find((n) => n.id === g.note_id)?.title || 'Nota';
-        }
-        tagMap.set(name, (tagMap.get(name) || 0) + 1);
-      });
-    return Array.from(tagMap.entries())
-      .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 5);
-  });
-
-  let progressOverview = $derived.by(() => {
-    return ['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL', 'ONEOFF'].map((temp) => {
-      const tempGoals = goals.filter((g) => g.temporality === temp && isListGoal(g));
-      const avgProgress =
-        tempGoals.length > 0
-          ? Math.round(
-              tempGoals.reduce(
-                (acc, g) =>
-                  acc + (g.state === 'COMPLETED' || g.is_completed ? 100 : g.progress_pct || 0),
-                0
-              ) / tempGoals.length
-            )
-          : 0;
-      const completed = tempGoals.filter((g) => g.state === 'COMPLETED' || g.is_completed).length;
-      const failed = tempGoals.filter((g) => g.state === 'FAILED').length;
-      return { temp, avgProgress, count: tempGoals.length, completed, failed };
-    });
-  });
-
-  let prediction = $derived.by(() => {
-    const nowMs = Date.now();
-    const MS_PER_DAY = 1000 * 60 * 60 * 24;
-    const last7Start = nowMs - 7 * MS_PER_DAY;
-    const prev7Start = nowMs - 14 * MS_PER_DAY;
-
-    const completionEvents = xpEvents.filter((e) => e.type === 'goal_completed');
-
-    const countCompletionsInRange = (startMs: number, endMs: number) => {
-      if (completionEvents.length > 0) {
-        return completionEvents.filter((e) => {
-          const t = new Date(e.at).getTime();
-          return t >= startMs && t < endMs;
-        }).length;
-      }
-      return goals.filter(
-        (g) =>
-          (g.state === 'COMPLETED' || g.is_completed) &&
-          g.completed_at &&
-          new Date(g.completed_at).getTime() >= startMs &&
-          new Date(g.completed_at).getTime() < endMs
-      ).length;
-    };
-
-    const last7 = countCompletionsInRange(last7Start, nowMs);
-    const prev7 = countCompletionsInRange(prev7Start, last7Start);
-
-    const trend = last7 >= prev7 ? 'UP' : 'DOWN';
-    const percentChange =
-      prev7 > 0 ? Math.round(((last7 - prev7) / prev7) * 100) : last7 > 0 ? 100 : 0;
-
-    return {
-      trend,
-      percentChange,
-      estimateNextMonth: Math.round(last7 * 4),
-      last7Days: last7,
-      prev7Days: prev7,
-    };
-  });
-
-  let dailyActivity = $derived.by(() => {
-    const results: { date: string; label: string; completed: number; failed: number }[] = [];
-    for (let i = 13; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const m = String(d.getMonth() + 1).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
-      const dateStr = `${d.getFullYear()}-${m}-${day}`;
-      const comps = goals.filter(
-        (g) => (g.state === 'COMPLETED' || g.is_completed) && g.completed_at?.startsWith(dateStr)
-      ).length;
-      const fails = goals.filter(
-        (g) => g.state === 'FAILED' && g.updated_at?.startsWith(dateStr)
-      ).length;
-      results.push({
-        date: dateStr,
-        label: `${d.getDate()}/${d.getMonth() + 1}`,
-        completed: comps,
-        failed: fails,
-      });
-    }
-    return results;
-  });
-
-  let maxDaily = $derived(Math.max(1, ...dailyActivity.flatMap((d) => [d.completed, d.failed])));
-
-  let activityTab = $state<'horas' | 'dias'>('horas');
-  let activityDayOfWeek = $state(new Date().getDay());
-  const daysOfWeek = ['Domingos', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábados'];
-
-  function prevActivityDay() {
-    activityDayOfWeek = (activityDayOfWeek - 1 + 7) % 7;
-  }
-  function nextActivityDay() {
-    activityDayOfWeek = (activityDayOfWeek + 1) % 7;
-  }
-
-  function formatHourLabel(hour: number) {
-    const safeHour = ((hour % 24) + 24) % 24;
-    if ($use24HourClock) {
-      return `${String(safeHour).padStart(2, '0')}:00`;
-    }
-    const d = new Date(2020, 0, 1, safeHour, 0, 0, 0);
-    return d.toLocaleTimeString(getLocale(), {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-    });
-  }
-
-  function formatHourRange(startHour: number, endHour: number) {
-    return `${formatHourLabel(startHour)} - ${formatHourLabel(endHour)}`;
-  }
-
-  // Activity charts use XP events (written at exact user-action time) instead of
-  // goals[*].completed_at which is set by the backend evaluate_active_goals() batch
-  // call — meaning all goals get the same timestamp (the moment the page loaded).
-  let activityBinnedByHour = $derived.by(() => {
-    const bins = new Array(8).fill(0);
-    // Use goal_completed XP events for real user-action timestamps
-    const completionEvents = xpEvents.filter((e) => e.type === 'goal_completed');
-    completionEvents.forEach((e) => {
-      const d = new Date(e.at);
-      if (d.getDay() === activityDayOfWeek) {
-        const hour = d.getHours();
-        if (!isNaN(hour)) {
-          const binIndex = Math.floor(hour / 3);
-          if (binIndex >= 0 && binIndex < 8) bins[binIndex]++;
-        }
-      }
-    });
-    // Fallback: if no XP events exist yet, try goals completed_at (legacy)
-    if (completionEvents.length === 0) {
-      goals.forEach((g) => {
-        if ((g.state === 'COMPLETED' || g.is_completed) && g.completed_at) {
-          const d = new Date(g.completed_at);
-          if (d.getDay() === activityDayOfWeek) {
-            const hour = d.getHours();
-            if (!isNaN(hour)) {
-              const binIndex = Math.floor(hour / 3);
-              if (binIndex >= 0 && binIndex < 8) bins[binIndex]++;
-            }
-          }
-        }
-      });
-    }
-    return bins.map((c, i) => {
-      const startHour = i * 3;
-      const endHour = (startHour + 3) % 24;
-      return {
-        hour: startHour,
-        label: formatHourLabel(startHour),
-        rangeLabel: formatHourRange(startHour, endHour),
-        val: c,
-        pct: Math.min(1, c / 5),
-      };
-    });
-  });
-
-  let activityByDay = $derived.by(() => {
-    const days = new Array(7).fill(0);
-    const completionEvents = xpEvents.filter((e) => e.type === 'goal_completed');
-    completionEvents.forEach((e) => {
-      const d = new Date(e.at);
-      const day = d.getDay();
-      if (!isNaN(day) && day >= 0 && day < 7) {
-        days[day]++;
-      }
-    });
-    // Fallback: if no XP events exist yet, use goals completed_at
-    if (completionEvents.length === 0) {
-      goals.forEach((g) => {
-        if ((g.state === 'COMPLETED' || g.is_completed) && g.completed_at) {
-          const d = new Date(g.completed_at);
-          const day = d.getDay();
-          if (!isNaN(day) && day >= 0 && day < 7) {
-            days[day]++;
-          }
-        }
-      });
-    }
-    return days.map((c, i) => ({
-      label: daysOfWeek[i].substring(0, 3),
-      val: c,
-      pct: Math.min(1, c / 5),
-    }));
-  });
-
-  let radarData = $derived.by(() => {
-    const categories = topTagsBySuccess.slice(0, 6);
-    while (categories.length > 0 && categories.length < 3) {
-      categories.push({ name: '', count: 0 });
-    }
-    if (categories.length === 0) return [];
-    const maxVal = Math.max(...categories.map((c) => c.count)) || 1;
-    return categories.map((c, i) => {
-      const angle = (Math.PI * 2 * i) / categories.length - Math.PI / 2;
-      return {
-        name: c.name,
-        value: c.count,
-        pct: c.count / maxVal,
-        x: 50 + 40 * Math.cos(angle),
-        y: 50 + 40 * Math.sin(angle),
-        labelX: 50 + 50 * Math.cos(angle),
-        labelY: 50 + 50 * Math.sin(angle),
-        angle,
-      };
-    });
-  });
-
-  let debtData = $derived.by(() => {
-    const dGoals = goals.filter(
-      (g) => (g.fail_config === 'ROLLOVER' || g.fail_config === 'SNOWBALL') && g.state === 'ACTIVE'
-    );
-    const total = dGoals.reduce((acc, g) => acc + Math.max(0, g.target_value - g.current_value), 0);
-    return {
-      goals: dGoals
-        .map((g) => ({ title: g.title, debt: Math.max(0, g.target_value - g.current_value) }))
-        .sort((a, b) => b.debt - a.debt)
-        .slice(0, 5),
-      total,
-    };
-  });
-
-  let funnelData = $derived.by(() => {
-    const total = goals.filter(isListGoal).length || 1;
-    const completed = goals.filter((g) => g.state === 'COMPLETED' || g.is_completed).length;
-    const failed = goals.filter((g) => g.state === 'FAILED').length;
-    const active = goals.filter((g) => g.state === 'ACTIVE').length;
-    const cancelled = goals.filter((g) => g.state === 'CANCELLED' || g.state === 'PAUSED').length;
-    return [
-      { label: 'Iniciados', value: total, color: 'var(--text-muted)' },
-      { label: 'Activos', value: active, color: 'var(--xp)' },
-      { label: 'Completados', value: completed, color: 'var(--success)' },
-      { label: 'Abandonados', value: cancelled + failed, color: 'var(--error)' },
-    ];
-  });
 
   function getGoalColor(goal: Goal): string {
     // Semantic states win over custom colors so terminal readouts never mix
@@ -1372,22 +1061,12 @@
       >
         <Calendar size={14} /> Historial
       </button>
-      <button
-        class="tab"
-        role="tab"
-        class:active={currentTab === 'analytics'}
-        aria-selected={currentTab === 'analytics'}
-        onclick={() => (currentTab = 'analytics')}
-      >
-        <ChartColumn size={14} /> Análisis
-      </button>
     </div>
   </div>
 
   <div
     class="goals-body"
-    class:full-width={currentTab === 'analytics' ||
-      currentTab === 'history' ||
+    class:full-width={currentTab === 'history' ||
       currentTab === 'planning' ||
       currentTab === 'today' ||
       currentTab === 'inbox' ||
@@ -2172,391 +1851,6 @@
         </div>
       </div>
     {/if}
-
-    {#if currentTab === 'analytics'}
-      <div class="tab-content fade-in full-height-dashboard">
-        <!-- Main Stats Bar -->
-        <div class="stats-top-bar">
-          <div class="stb-item">
-            <Trophy size={16} class="text-xp" />
-            <div style="display:flex; flex-direction:column; gap:2px;">
-              <span class="stb-val text-success">{completedGoalsCount}</span>
-              <span class="stb-label">{$t('goalsPage.completedLabel')}</span>
-            </div>
-          </div>
-          <div class="stb-item">
-            <X size={16} class="text-error" />
-            <div style="display:flex; flex-direction:column; gap:2px;">
-              <span class="stb-val text-error">{failedGoalsCount}</span>
-              <span class="stb-label">{$t('goalsPage.failedLabel')}</span>
-            </div>
-          </div>
-          <div
-            class="stb-item"
-            style="flex: 1; flex-direction: column; align-items: stretch; justify-content: center; gap: 8px;"
-          >
-            <div style="display:flex; justify-content:space-between; align-items: flex-end;">
-              <span class="stb-label">{$t('goalsPage.globalEffectiveness')}</span>
-              <span class="stb-val" style="line-height: 1;">{successRate}%</span>
-            </div>
-            <div class="success-meter" style="margin-top: 0;">
-              <div class="meter-fill" style="width: {successRate}%"></div>
-            </div>
-          </div>
-        </div>
-
-        <div class="dashboard-grid">
-          <div class="dash-card prediction-card">
-            <div class="dash-card-header">
-              <TrendingUp size={16} />
-              <span>{$t('goalsPage.predictionTrend')}</span>
-              <span class="pred-period-badge">30 días</span>
-            </div>
-            <div class="prediction-hero">
-              <div class="bar-chart-container">
-                {#if dailyActivity.every((d) => d.completed === 0 && d.failed === 0)}
-                  <div class="bar-empty-state">
-                    <TrendingUp size={24} style="opacity:0.2" />
-                    <span>{$t('goalsPage.insufficientDataYet')}</span>
-                    <small>{$t('goalsPage.completeOrFailHint')}</small>
-                  </div>
-                {:else}
-                  <svg viewBox="0 0 420 130" class="bar-svg" preserveAspectRatio="xMidYMid meet">
-                    <defs>
-                      <linearGradient id="compGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stop-color="var(--success)" stop-opacity="0.7" />
-                        <stop offset="100%" stop-color="var(--success)" stop-opacity="0.2" />
-                      </linearGradient>
-                      <linearGradient id="failGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stop-color="var(--error)" stop-opacity="0.7" />
-                        <stop offset="100%" stop-color="var(--error)" stop-opacity="0.2" />
-                      </linearGradient>
-                    </defs>
-
-                    {#each dailyActivity as day, i}
-                      {@const barW = 420 / dailyActivity.length}
-                      {@const barX = i * barW}
-                      {@const compH = (day.completed / maxDaily) * 100}
-                      {@const failH = (day.failed / maxDaily) * 100}
-                      {@const compY = 115 - compH}
-                      {@const failY = 115 - compH - failH}
-
-                      {#if day.failed > 0}
-                        <rect
-                          x={barX + 2}
-                          y={failY}
-                          width={barW * 0.35}
-                          height={failH}
-                          fill="url(#failGrad)"
-                          rx="2"
-                        />
-                      {/if}
-                      {#if day.completed > 0}
-                        <rect
-                          x={barX + barW * 0.5 + 1}
-                          y={compY}
-                          width={barW * 0.35}
-                          height={compH}
-                          fill="url(#compGrad)"
-                          rx="2"
-                        />
-                      {/if}
-
-                      {#if i % 2 === 0 || i === dailyActivity.length - 1}
-                        <text
-                          x={barX + barW / 2}
-                          y="124"
-                          font-size="6"
-                          fill="var(--text-muted)"
-                          text-anchor="middle"
-                          font-family="var(--font-mono)">{day.label}</text
-                        >
-                      {/if}
-                    {/each}
-
-                    <line
-                      x1="0"
-                      y1="115"
-                      x2="420"
-                      y2="115"
-                      stroke="var(--border)"
-                      stroke-width="0.5"
-                      opacity="0.3"
-                    />
-                  </svg>
-
-                  <div class="bar-legend">
-                    <span class="legend-item"
-                      ><span class="legend-dot" style="background:var(--success)"></span> Completados</span
-                    >
-                    <span class="legend-item"
-                      ><span class="legend-dot" style="background:var(--error)"></span> Fallados</span
-                    >
-                  </div>
-                {/if}
-              </div>
-
-              <div class="prediction-stats-row">
-                <div class="trend-summary">
-                  <div class="trend-icon-wrap {prediction.trend.toLowerCase()}">
-                    {#if prediction.trend === 'UP'}
-                      <TrendingUp size={14} />
-                    {:else}
-                      <TrendingDown size={14} />
-                    {/if}
-                    <span class="trend-pct"
-                      >{prediction.percentChange > 0 ? '+' : ''}{prediction.percentChange}%</span
-                    >
-                  </div>
-                  <span class="trend-label">vs semana anterior</span>
-                </div>
-                <div class="prediction-kpis">
-                  <div class="pred-kpi">
-                    <span class="pred-lab">{$t('goalsPage.last7d')}</span>
-                    <span class="pred-val">{prediction.last7Days} ✓</span>
-                  </div>
-                  <div class="pred-kpi">
-                    <span class="pred-lab">{$t('goalsPage.next30d')}</span>
-                    <span class="pred-val">~{prediction.estimateNextMonth} ✓</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="dash-card weekday-card">
-            <div class="dash-card-header">
-              <Activity size={16} />
-              <span>{$t('goalsPage.activityByDay')}</span>
-            </div>
-            <div class="weekday-chart">
-              {#each completionsByDay as day}
-                {@const maxVal = Math.max(...completionsByDay.map((d) => d.value)) || 1}
-                {@const intensity = day.value > 0 ? Math.max(30, (day.value / maxVal) * 100) : 0}
-                <div class="day-col">
-                  <span
-                    class="day-val"
-                    style="color: {day.value > 0 ? 'var(--text-primary)' : 'var(--text-muted)'}"
-                    >{day.value}</span
-                  >
-                  <div class="day-bar-wrap">
-                    <div
-                      class="day-bar"
-                      style="height: {day.value > 0
-                        ? Math.max(8, intensity)
-                        : 0}%; background: {day.value > 0
-                        ? `color-mix(in srgb, var(--xp) ${intensity}%, transparent)`
-                        : 'transparent'}; border: {day.value === 0
-                        ? '1px dashed var(--border)'
-                        : 'none'};"
-                    ></div>
-                  </div>
-                  <span class="day-label">{day.label}</span>
-                </div>
-              {/each}
-            </div>
-          </div>
-
-          <div class="dash-card temporality-card">
-            <div class="dash-card-header">
-              <Target size={16} />
-              <span>{$t('goalsPage.effectivenessByPeriod')}</span>
-            </div>
-            <div class="temporality-rows">
-              {#each progressOverview as p}
-                <div class="temp-row">
-                  <div class="temp-info">
-                    <span class="temp-name">{TEMPORALITY_LABELS[p.temp] || p.temp}</span>
-                    <span class="temp-stats">
-                      <span class="text-success">{p.completed} ✓</span> /
-                      <span class="text-error">{p.failed} ✗</span>
-                    </span>
-                  </div>
-                  <div
-                    class="temp-bar-wrapper"
-                    style="display: flex; align-items: center; gap: 8px;"
-                  >
-                    <div class="temp-bar-container" style="flex: 1;">
-                      {#if p.completed + p.failed > 0}
-                        <div
-                          class="temp-bar"
-                          style="width: {(p.completed / (p.completed + p.failed)) *
-                            100}%; background: var(--success);"
-                        ></div>
-                        <div
-                          class="temp-bar"
-                          style="width: {(p.failed / (p.completed + p.failed)) *
-                            100}%; background: var(--error);"
-                        ></div>
-                      {/if}
-                    </div>
-                    <span class="temp-perc-out"
-                      >{p.completed + p.failed > 0
-                        ? Math.round((p.completed / (p.completed + p.failed)) * 100)
-                        : 0}%</span
-                    >
-                  </div>
-                </div>
-              {/each}
-            </div>
-          </div>
-
-          <div
-            class="dash-card hourly-card"
-            style="padding: 20px; display: flex; flex-direction: column;"
-          >
-            <div
-              style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 12px;"
-            >
-              <div class="dash-card-header" style="flex-shrink: 0;">
-                <Activity size={16} />
-                <span>{$t('goalsPage.peakActivity')}</span>
-              </div>
-
-              <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
-                <div class="activity-tabs" style="display: flex; gap: 8px;">
-                  <button
-                    class="activity-tab {activityTab === 'horas' ? 'active' : ''}"
-                    onclick={() => (activityTab = 'horas')}>{$t('goalsPage.hours')}</button
-                  >
-                  <button
-                    class="activity-tab {activityTab === 'dias' ? 'active' : ''}"
-                    onclick={() => (activityTab = 'dias')}>{$t('goalsPage.days')}</button
-                  >
-                </div>
-
-                {#if activityTab === 'horas'}
-                  <div
-                    class="activity-day-selector"
-                    style="display: flex; justify-content: center; align-items: center; gap: 8px; background: var(--surface); padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border);"
-                  >
-                    <button
-                      class="icon-btn"
-                      onclick={prevActivityDay}
-                      aria-label={$t('goalsPage.prevDay')}
-                      style="background: none; border: none; cursor: pointer; color: var(--text-muted); display: flex; align-items: center; padding: 4px;"
-                      ><ChevronLeft size={16} /></button
-                    >
-                    <span
-                      style="font-size: 0.75rem; color: var(--text-secondary); min-width: 80px; text-align: center; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; font-family: var(--font-mono);"
-                      >{daysOfWeek[activityDayOfWeek]}</span
-                    >
-                    <button
-                      class="icon-btn"
-                      onclick={nextActivityDay}
-                      aria-label={$t('goalsPage.nextDay')}
-                      style="background: none; border: none; cursor: pointer; color: var(--text-muted); display: flex; align-items: center; padding: 4px;"
-                      ><ChevronRight size={16} /></button
-                    >
-                  </div>
-                {/if}
-              </div>
-            </div>
-
-            <div
-              class="hourly-chart"
-              style="display: flex; align-items: flex-end; gap: 2px; height: 160px; width: 100%; flex: 1;"
-            >
-              {#if activityTab === 'horas'}
-                {#each activityBinnedByHour as bin}
-                  <div
-                    class="hour-col"
-                    title="{bin.rangeLabel}: {bin.val} completados"
-                    style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%;"
-                  >
-                    <span
-                      class="bar-value"
-                      style="font-size: 0.75rem; font-weight: 700; color: {bin.val > 0
-                        ? 'var(--text-primary)'
-                        : 'transparent'};">{bin.val}</span
-                    >
-                    <div
-                      class="hour-bar-wrap"
-                      style="flex: 1; width: 100%; display: flex; align-items: flex-end; background: none;"
-                    >
-                      <div
-                        class="hour-bar"
-                        style="height: {bin.val > 0
-                          ? Math.max(6, bin.pct * 100)
-                          : 0}%; width: 100%; background: {bin.val > 0
-                          ? 'var(--xp)'
-                          : 'var(--border)'}; border-radius: 4px 4px 0 0; opacity: {bin.val > 0
-                          ? '1'
-                          : '0.3'};"
-                      ></div>
-                    </div>
-                    <span
-                      class="hour-label"
-                      style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-mono);"
-                      >{bin.label}</span
-                    >
-                  </div>
-                {/each}
-              {:else}
-                {#each activityByDay as day}
-                  <div
-                    class="hour-col"
-                    title="{day.label}: {day.val} completados"
-                    style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%;"
-                  >
-                    <span
-                      class="bar-value"
-                      style="font-size: 0.75rem; font-weight: 700; color: {day.val > 0
-                        ? 'var(--text-primary)'
-                        : 'transparent'};">{day.val}</span
-                    >
-                    <div
-                      class="hour-bar-wrap"
-                      style="flex: 1; width: 100%; display: flex; align-items: flex-end; background: none;"
-                    >
-                      <div
-                        class="hour-bar"
-                        style="height: {day.val > 0
-                          ? Math.max(6, day.pct * 100)
-                          : 0}%; width: 100%; background: {day.val > 0
-                          ? 'var(--xp)'
-                          : 'var(--border)'}; border-radius: 4px 4px 0 0; opacity: {day.val > 0
-                          ? '1'
-                          : '0.3'};"
-                      ></div>
-                    </div>
-                    <span
-                      class="hour-label"
-                      style="font-size: 0.85rem; color: var(--text-muted); font-weight: 500;"
-                      >{day.label}</span
-                    >
-                  </div>
-                {/each}
-              {/if}
-            </div>
-          </div>
-
-          <div class="dash-card funnel-card">
-            <div class="dash-card-header">
-              <ListFilter size={16} />
-              <span>{$t('goalsPage.conversionAbandon')}</span>
-            </div>
-            <div class="funnel-chart">
-              {#each funnelData as f}
-                <div class="funnel-row">
-                  <div class="funnel-label-col">
-                    <span class="funnel-name">{f.label}</span>
-                    <span class="funnel-val" style="color: {f.color}">{f.value}</span>
-                  </div>
-                  <div class="funnel-bar-col">
-                    <div
-                      class="funnel-bar"
-                      style="width: {(f.value / (funnelData[0]?.value || 1)) *
-                        100}%; background: {f.color};"
-                    ></div>
-                  </div>
-                </div>
-              {/each}
-            </div>
-          </div>
-        </div>
-      </div>
-    {/if}
   </div>
 
   <!-- ── New Goal Slide-Down Panel ── -->
@@ -3196,6 +2490,13 @@
     padding: 0 var(--s3) var(--s3);
     overflow: hidden;
     min-height: 0;
+  }
+  /* Full-width tabs fill the whole tab height. */
+  .goals-body.full-width .tab-content {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
   }
 
   .today-layout {
@@ -4214,58 +3515,6 @@
     width: 100%;
   }
 
-  /* Analytics Charts */
-  .analytics-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--r);
-    padding: var(--s4);
-  }
-  .bar-chart {
-    display: flex;
-    flex-direction: column;
-    gap: var(--s3);
-  }
-  .bar-row {
-    display: flex;
-    align-items: center;
-    gap: var(--s3);
-  }
-  .bar-label {
-    width: 60px;
-    font-size: 11px;
-    color: var(--text-muted);
-    font-family: var(--font-mono);
-  }
-  .bar-track {
-    flex: 1;
-    height: 8px;
-    background: var(--border);
-    border-radius: 4px;
-    position: relative;
-    overflow: hidden;
-  }
-  .bar-fill {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 0;
-    transition: width 0.3s ease;
-  }
-  .bar-fill.success {
-    background: var(--success);
-  }
-  .bar-fill.error {
-    background: var(--error);
-  }
-  .bar-value {
-    width: 40px;
-    text-align: right;
-    font-size: 11px;
-    color: var(--text-secondary);
-    font-family: var(--font-mono);
-  }
-
   /* Hierarchical Planning */
   .goal-group {
     margin-bottom: var(--s3);
@@ -4288,41 +3537,6 @@
     align-items: center;
   }
 
-  /* Expandable Analytics */
-  .expandable {
-    overflow: hidden;
-  }
-  .expand-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    width: 100%;
-    background: none;
-    border: none;
-    padding: 0;
-    cursor: pointer;
-    color: inherit;
-  }
-  /* Advanced Dashboard Styles */
-  .full-height-dashboard {
-    height: calc(100vh - 56px - 44px - var(--s3) * 2);
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    gap: var(--s2);
-  }
-  .dashboard-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    grid-template-rows: 1fr 1fr 1fr;
-    grid-template-areas:
-      'pred pred pred temp'
-      'pred pred pred funnel'
-      'hourly hourly hourly weekday';
-    gap: var(--s2);
-    flex: 1;
-    min-height: 0;
-  }
   .dash-card {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -4354,385 +3568,11 @@
     font-family: var(--font-mono);
   }
 
-  /* Stats Top Bar */
-  .stats-top-bar {
-    display: flex;
-    align-items: center;
-    gap: var(--s6);
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--r);
-    padding: var(--s2) var(--s4);
-    margin-bottom: 0;
-    flex-shrink: 0;
-  }
-  .stb-item {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-  .stb-label {
-    font-size: 10px;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-  .stb-val {
-    font-size: 18px;
-    font-weight: 700;
-    font-family: var(--font-mono);
-  }
-  .success-meter {
-    height: 4px;
-    background: var(--border);
-    border-radius: 2px;
-    overflow: hidden;
-    margin-top: auto;
-  }
-  .meter-fill {
-    height: 100%;
-    background: linear-gradient(
-      90deg,
-      var(--success),
-      color-mix(in srgb, var(--success) 70%, var(--bg))
-    );
-    border-radius: 2px;
-    transition: width 1s ease-out;
-  }
-
-  /* Prediction Card Styles */
-  .prediction-hero {
-    display: flex;
-    flex-direction: column;
-    gap: var(--s2);
-    flex: 1;
-    min-height: 0;
-    overflow: hidden;
-  }
-  .candle-chart-container {
-    flex: 1;
-    min-height: 80px;
-    background: color-mix(in srgb, var(--text-primary) 15%, transparent);
-    border-radius: var(--r-sm, 8px);
-    padding: var(--s2) var(--s3);
-    position: relative;
-    overflow: hidden;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .candle-svg {
-    width: 100%;
-    height: 100%;
-    display: block;
-  }
-  .prediction-stats-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0 var(--s1);
-  }
-  .trend-summary {
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-  }
-  .trend-icon-wrap {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 14px;
-    font-weight: 700;
-    font-family: var(--font-mono);
-  }
-  .trend-icon-wrap.up {
-    color: var(--success);
-  }
-  .trend-icon-wrap.down {
-    color: var(--error);
-  }
-
-  .prediction-estimate {
-    text-align: right;
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-  }
-  .trend-label,
-  .pred-lab {
-    font-size: 9px;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-  .pred-val {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text-secondary);
-  }
-
-  .candle-svg {
-    filter: drop-shadow(0 0 2px color-mix(in srgb, var(--text-primary) 15%, transparent));
-  }
-  .candle-empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    color: var(--text-muted);
-    font-size: 11px;
-    height: 100%;
-    text-align: center;
-  }
-  .pred-period-badge {
-    margin-left: auto;
-    font-size: 9px;
-    padding: 2px 6px;
-    background: color-mix(in srgb, var(--text-primary) 5%, transparent);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    font-family: var(--font-mono);
-    color: var(--text-muted);
-    text-transform: none;
-    font-weight: 400;
-    letter-spacing: 0;
-  }
-  .prediction-kpis {
-    display: flex;
-    gap: var(--s4);
-  }
-  .pred-kpi {
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-    align-items: flex-end;
-  }
-
-  /* Weekday Chart */
-  .weekday-card {
-    grid-column: span 1;
-  }
-  .weekday-chart {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-end;
-    flex: 1;
-    min-height: 0;
-    height: 100%;
-    padding: var(--s2) 0;
-  }
-  .day-col {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 4px;
-    flex: 1;
-    height: 100%;
-  }
-  .day-bar-wrap {
-    flex: 1;
-    width: 10px;
-    min-height: 0;
-    background: var(--border);
-    border-radius: 5px;
-    display: flex;
-    align-items: flex-end;
-    overflow: hidden;
-  }
-  .day-bar {
-    width: 100%;
-    background: var(--success);
-    border-radius: 5px;
-    transition: height 0.5s ease-out;
-  }
-  .day-val {
-    font-size: 10px;
-    font-weight: 700;
-    font-family: var(--font-mono);
-  }
-  .day-label {
-    font-size: 8px;
-    color: var(--text-muted);
-    font-family: var(--font-mono);
-  }
-
-  /* Temporality Rows */
-  .temporality-card {
-    grid-column: span 1;
-  }
-  .temporality-rows {
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    height: 100%;
-    gap: var(--s2);
-    padding-bottom: 8px;
-  }
-  .temp-row {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-  .temp-info {
-    display: flex;
-    justify-content: space-between;
-    font-size: 10px;
-  }
-  .temp-name {
-    font-weight: 600;
-    color: var(--text-secondary);
-  }
-  .temp-stats {
-    color: var(--text-muted);
-    font-family: var(--font-mono);
-  }
-  .temp-bar-container {
-    height: 10px;
-    background: var(--border);
-    border-radius: 5px;
-    position: relative;
-    overflow: hidden;
-    display: flex;
-    align-items: center;
-  }
-  .temp-bar {
-    height: 100%;
-    transition: width 0.5s;
-  }
-  .temp-perc-out {
-    font-size: 10px;
-    font-weight: 700;
-    color: var(--text-secondary);
-    font-family: var(--font-mono);
-    min-width: 28px;
-    text-align: right;
-  }
-
-  /* Tags List */
-  .tags-card {
-    grid-column: span 1;
-  }
-  .tags-list {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-  .tag-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-  .tag-rank {
-    width: 16px;
-    height: 16px;
-    background: var(--surface-active);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 9px;
-    font-weight: 700;
-    color: var(--text-muted);
-  }
-  .tag-name-wrap {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-  .tag-name {
-    font-size: 11px;
-    color: var(--text-secondary);
-  }
-  .tag-bar-wrap {
-    height: 3px;
-    background: var(--border);
-    border-radius: 1.5px;
-  }
-  .tag-bar {
-    height: 100%;
-    background: var(--success);
-    border-radius: 1.5px;
-    opacity: 0.6;
-  }
-  .tag-count {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--success);
-    font-family: var(--font-mono);
-  }
-
-  /* Summary Grid */
-  .projection-content {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: var(--s2);
-    margin-top: var(--s1);
-  }
-  .proj-item {
-    border-radius: var(--r);
-    margin-top: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-  .proj-label {
-    font-size: 10px;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-  .proj-val {
-    font-size: 16px;
-    font-weight: 700;
-    color: var(--text-primary);
-  }
-
   @media (max-width: 900px) {
-    .full-height-dashboard {
-      height: auto;
-      overflow-y: auto;
-    }
-    .dashboard-grid {
-      grid-template-columns: 1fr 1fr;
-      grid-template-rows: unset;
-      grid-template-areas: unset;
-    }
-    .prediction-card,
-    .weekday-card,
-    .temporality-card,
-    .hourly-card,
-    .funnel-card {
-      grid-area: unset;
-      grid-column: span 2;
-    }
-    .weekday-card,
-    .temporality-card,
-    .funnel-card {
-      grid-column: span 1;
-    }
     /* Today tab: stack sidebar below main content */
     .today-layout {
       grid-template-columns: 1fr;
       gap: var(--s4);
-    }
-    /* Analytics projection: stack 2-col grid */
-    .projection-content {
-      grid-template-columns: 1fr;
-    }
-  }
-
-  @media (max-width: 768px) {
-    .dashboard-grid {
-      grid-template-columns: 1fr;
-    }
-    .prediction-card,
-    .weekday-card,
-    .temporality-card,
-    .hourly-card,
-    .funnel-card {
-      grid-column: span 1;
     }
   }
 
@@ -5021,204 +3861,6 @@
     flex-shrink: 0;
     min-width: 32px;
     text-align: right;
-  }
-
-  /* Advanced Analytics Styles */
-  .prediction-card {
-    grid-area: pred;
-  }
-  .weekday-card {
-    grid-area: weekday;
-  }
-  .temporality-card {
-    grid-area: temp;
-  }
-  .hourly-card {
-    grid-area: hourly;
-  }
-  .funnel-card {
-    grid-area: funnel;
-  }
-
-  .hourly-chart {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-end;
-    height: 100%;
-    padding-top: var(--s2);
-  }
-  .hour-col {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 4px;
-    flex: 1;
-  }
-  .hour-bar-wrap {
-    flex: 1;
-    width: 10px;
-    background: color-mix(in srgb, var(--text-primary) 2%, transparent);
-    border-radius: 5px;
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-end;
-  }
-  .hourly-card {
-    padding: 20px;
-  }
-  .activity-tabs {
-    display: flex;
-    gap: 8px;
-  }
-  .activity-tab {
-    padding: 6px 12px;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    font-weight: 600;
-    cursor: pointer;
-    background: var(--surface);
-    color: var(--text-muted);
-    transition: all 0.2s;
-  }
-  .activity-tab:hover {
-    background: var(--elevated);
-    color: var(--text-secondary);
-  }
-  .activity-tab.active {
-    background: color-mix(in srgb, var(--xp) 15%, transparent);
-    color: var(--xp);
-    border-color: var(--xp);
-  }
-
-  .hour-bar {
-    width: 100%;
-    background: linear-gradient(0deg, transparent, var(--xp));
-    border-radius: 5px;
-    transition: height 0.5s;
-  }
-  .hour-label {
-    font-size: 8px;
-    color: var(--text-muted);
-    font-family: var(--font-mono);
-  }
-
-  .radar-container {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: var(--s2);
-  }
-  .radar-svg {
-    width: 100%;
-    height: 100%;
-    max-height: 180px;
-    overflow: visible;
-  }
-
-  .debt-content {
-    display: flex;
-    gap: var(--s4);
-    height: 100%;
-    align-items: center;
-  }
-  .debt-total {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    background: color-mix(in srgb, var(--error) 10%, transparent);
-    border: 1px solid color-mix(in srgb, var(--error) 20%, transparent);
-    border-radius: 50%;
-    width: 80px;
-    height: 80px;
-    flex-shrink: 0;
-  }
-  .debt-val {
-    font-size: 24px;
-    font-weight: 700;
-    color: var(--error);
-    font-family: var(--font-mono);
-    line-height: 1;
-  }
-  .debt-lab {
-    font-size: 9px;
-    color: var(--text-muted);
-    text-transform: uppercase;
-  }
-  .debt-list {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  .debt-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .debt-title {
-    font-size: 11px;
-    color: var(--text-primary);
-    width: 80px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .debt-bar-wrap {
-    flex: 1;
-    height: 6px;
-    background: var(--border);
-    border-radius: 3px;
-  }
-  .debt-bar {
-    height: 100%;
-    background: var(--error);
-    border-radius: 3px;
-  }
-  .debt-count {
-    font-size: 11px;
-    font-weight: 700;
-    font-family: var(--font-mono);
-    color: var(--error);
-  }
-
-  .funnel-chart {
-    display: flex;
-    flex-direction: column;
-    gap: var(--s2);
-    height: 100%;
-    justify-content: center;
-  }
-  .funnel-row {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-  .funnel-label-col {
-    display: flex;
-    justify-content: space-between;
-    font-size: 11px;
-  }
-  .funnel-name {
-    color: var(--text-muted);
-    text-transform: uppercase;
-    font-size: 9px;
-    letter-spacing: 0.05em;
-  }
-  .funnel-val {
-    font-weight: 700;
-    font-family: var(--font-mono);
-  }
-  .funnel-bar-col {
-    height: 8px;
-    background: var(--border);
-    border-radius: 4px;
-  }
-  .funnel-bar {
-    height: 100%;
-    border-radius: 4px;
-    transition: width 0.5s;
   }
 
   /* Editor de Objetivos - Nuevo Diseño */

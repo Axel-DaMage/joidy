@@ -2,18 +2,18 @@ import { test, expect, authGoto } from './helpers/auth';
 
 /**
  * Goals feature — comprehensive E2E tests.
- * Covers: tabs (Editor/Inicio/Planificación/Historial/Análisis),
+ * Covers: tabs (Editor/Inicio/Planificación/Historial),
  * filters, goal cards, pin, search, goal detail view.
  */
 test.describe('Goals — page structure', () => {
   test('goals page loads with all tabs', async ({ page }) => {
     await authGoto(page, '/goals');
-    // All 5 tabs should be visible
+    // All tabs should be visible (Análisis lives on its own /analytics page)
     await expect(page.locator('button:has-text("Editor")')).toBeVisible();
     await expect(page.locator('button:has-text("Inicio")')).toBeVisible();
     await expect(page.locator('button:has-text("Planificación")')).toBeVisible();
     await expect(page.locator('button:has-text("Historial")')).toBeVisible();
-    await expect(page.locator('button:has-text("Análisis")')).toBeVisible();
+    await expect(page.locator('button:has-text("Análisis")')).toHaveCount(0);
   });
 
   test('filter buttons are visible', async ({ page }) => {
@@ -55,22 +55,22 @@ test.describe('Goals — tabs navigation', () => {
     await expect(page.locator('button.tab:has-text("Historial")')).toHaveClass(/active/);
   });
 
-  test('can switch to Análisis tab', async ({ page }) => {
-    await authGoto(page, '/goals');
-    await page.locator('button:has-text("Análisis")').click();
-    await page.waitForTimeout(500);
-    await expect(page.locator('button.tab:has-text("Análisis")')).toHaveClass(/active/);
-  });
-
   test('can switch back to Editor tab', async ({ page }) => {
     await authGoto(page, '/goals');
     // Switch to another tab first
-    await page.locator('button:has-text("Análisis")').click();
+    await page.locator('button:has-text("Historial")').click();
     await page.waitForTimeout(300);
     // Then back to Editor
     await page.locator('button:has-text("Editor")').click();
     await page.waitForTimeout(300);
     await expect(page.locator('button.tab:has-text("Editor")')).toHaveClass(/active/);
+  });
+});
+
+test.describe('Goals — legacy analytics deep links', () => {
+  test('?tab=analytics redirects to the dedicated /analytics page', async ({ page }) => {
+    await authGoto(page, '/goals?tab=analytics');
+    await expect(page).toHaveURL(/\/analytics$/);
   });
 });
 

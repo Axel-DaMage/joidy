@@ -814,6 +814,121 @@ export interface AnalyticsDashboard {
   usage: UsageSummary;
 }
 
+// ── Holistic analytics overview (#1499) ─────────────────────────────────────
+// Shape mirrors GET /analytics/overview?days=N (api/services/analytics_service.py).
+// `seasonality.cells[].weekday` uses Mon=0..Sun=6; `hour` 0-23.
+export interface AnalyticsOverview {
+  days: number;
+  daily_activity: {
+    date: string;
+    xp: number;
+    events: number;
+    goals_completed: number;
+    pomodoros: number;
+    notes: number;
+  }[];
+  xp_by_type: { type: string; xp: number; count: number }[];
+  seasonality: {
+    cells: { weekday: number; hour: number; count: number; xp: number }[];
+    max: number;
+  };
+  mood_activity: {
+    points: { date: string; mood: number; xp: number }[];
+    pearson_r: number | null;
+    sample_size: number;
+  };
+  goals: {
+    by_state: Record<string, number>;
+    by_temporality: {
+      temporality: string;
+      total: number;
+      completed: number;
+      failed: number;
+      avg_progress: number;
+    }[];
+    funnel: { stage: string; count: number }[];
+  };
+  streaks: {
+    current_streak: number;
+    longest_streak: number;
+    active_streaks: number;
+    total_checkins: number;
+    checkin_rate_30d: number;
+  };
+  github: {
+    available: boolean;
+    weekly: {
+      week_start: string;
+      pushes: number;
+      pull_requests: number;
+      issues: number;
+      comments: number;
+    }[];
+  };
+  summary: {
+    total_xp: number;
+    /** XP earned inside the requested window. */
+    window_xp: number;
+    active_days: number;
+    avg_daily_xp: number;
+    best_day: { date: string; xp: number } | null;
+    /** Totals for the window of the same length immediately before this one. */
+    prev_total_xp: number;
+    prev_active_days: number;
+  };
+}
+
+export interface GithubRepoStat {
+  name: string;
+  private: boolean;
+  language: string | null;
+  color: string | null;
+  commits: number;
+}
+
+export interface GithubLanguageStat {
+  name: string | null;
+  color: string | null;
+  commits: number;
+  /** Percentage of commits in the window (0–100, one decimal). */
+  share: number;
+}
+
+/** Rich GitHub metrics (repos, languages, PRs, calendar) — token/GraphQL only. */
+export interface GithubSummary {
+  repos: GithubRepoStat[];
+  languages: GithubLanguageStat[];
+  prs: {
+    merged: number;
+    median_merge_hours: number | null;
+    additions: number;
+    deletions: number;
+    /** True when only the latest 100 merged PRs were sampled. */
+    sampled: boolean;
+  };
+  threads: { commented: number; issues_closed: number; discussions: number };
+  calendar: {
+    total: number;
+    active_days: number;
+    best_day: { date: string; count: number } | null;
+    current_streak: number;
+    longest_streak: number;
+  };
+}
+
+/** GET /analytics/github — API-first weekly activity (webhook events as fallback). */
+export type GithubActivityPayload = AnalyticsOverview['github'] & {
+  summary?: GithubSummary | null;
+  source?: 'graphql' | 'events' | 'webhook' | null;
+  login?: string | null;
+  /** The Events API cap (300) was hit inside the window — older weeks may be undercounted. */
+  truncated?: boolean;
+  /** Why live data is missing although an account is configured. */
+  error?: 'rate_limited' | 'bad_credentials' | 'unavailable';
+  /** Served from cache because the API failed. */
+  stale?: boolean;
+};
+
 // ── Notes ─────────────────────────────────────────────────────────────────────
 
 export interface SyncConflict {
@@ -1785,6 +1900,8 @@ export const api = {
   },
   analytics: {
     dashboard: (days = 30) => req<AnalyticsDashboard>('GET', `/analytics/dashboard?days=${days}`),
+    overview: (days = 180) =>
+      req<AnalyticsOverview>('GET', `/analytics/overview?days=${days}`),
     track: (event_type: string, event_data?: Record<string, unknown>) =>
       req<{ status: string; id: number }>(
         'POST',
@@ -1793,6 +1910,7 @@ export const api = {
         { silent: true }
       ),
     usage: (days = 30) => req<UsageSummary>('GET', `/analytics/usage?days=${days}`),
+    github: () => req<GithubActivityPayload>('GET', '/analytics/github'),
   },
   export: {
     markdownUrl: () => `${BASE}/export/notes/markdown`,

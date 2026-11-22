@@ -543,6 +543,321 @@
     "goalColor": "Color del objetivo",
     "goalColorHex": "Color del objetivo (hex)"
   },
+  "analyticsPage": {
+    "loading": "Cargando analíticas…",
+    "loadError": "No se pudieron cargar las analíticas.",
+    "empty": "Datos insuficientes — sigue usando Joidy para desbloquear las analíticas.",
+    "statTotalXp": "XP total",
+    "statStreak": "Racha actual",
+    "statActiveDays": "Días activos",
+    "statAvgXp": "XP diario medio",
+    "statBestDay": "Mejor día",
+    "statBestStreak": "Racha récord",
+    "rangeLabel": "Ventana",
+    "slides": {
+      "consistency": "Consistencia",
+      "trend": "Tendencia de productividad",
+      "seasonality": "Ritmo diario",
+      "mood": "Mood × XP",
+      "sources": "Fuentes de XP",
+      "goals": "Objetivos",
+      "github": "GitHub"
+    },
+    "heatmap": {
+      "less": "Menos",
+      "more": "Más",
+      "xpOn": "{xp} XP",
+      "events": "{count} eventos",
+      "goals": "{count} objetivos",
+      "pomodoros": "{count} pomodoros",
+      "notes": "{count} notas",
+      "noData": "sin actividad",
+      "summary": "Calendario de actividad: {active} de {total} días con actividad"
+    },
+    "trend": {
+      "dailyXp": "XP diario",
+      "movingAvg": "Media 7d",
+      "regression": "Tendencia",
+      "empty": "Sin XP registrado en este periodo."
+    },
+    "seasonality": {
+      "peak": "Pico: {day} {hour}",
+      "empty": "Sin actividad registrada aún."
+    },
+    "mood": {
+      "correlation": "r = {value}",
+      "samples": "{count} muestras",
+      "empty": "Registra tu mood para desbloquear este análisis.",
+      "moodAxis": "Mood",
+      "xpAxis": "XP",
+      "emptyTitle": "Aún sin datos de ánimo",
+      "cta": "Registrar mi ánimo"
+    },
+    "sources": {
+      "empty": "Sin eventos de XP aún.",
+      "total": "{xp} XP en total",
+      "other": "Otros"
+    },
+    "xpTypes": {
+      "goal_completed": "Objetivos",
+      "pomodoro_completed": "Pomodoros",
+      "note_created": "Notas",
+      "note_edited": "Ediciones",
+      "daily_activity": "Actividad diaria",
+      "streak_milestone": "Hito de racha",
+      "calendar_task": "Calendario",
+      "strava": "Strava",
+      "tag": "Tags",
+      "topic_connected": "Conexiones",
+      "note_imported_obsidian": "Obsidian",
+      "day_fully_planned": "Planificación"
+    },
+    "goals": {
+      "funnelTitle": "Embudo de conversión",
+      "temporalityTitle": "Efectividad por periodo",
+      "conversion": "{pct}%",
+      "avgProgress": "media {pct}%",
+      "empty": "Sin objetivos aún.",
+      "stages": {
+        "created": "Creados",
+        "activated": "Activados",
+        "completed": "Completados",
+        "abandoned": "Abandonados"
+      },
+      "temporalities": {
+        "DAILY": "Diarios",
+        "WEEKLY": "Semanales",
+        "MONTHLY": "Mensuales",
+        "ANNUAL": "Anuales",
+        "ONEOFF": "Puntuales"
+      },
+      "statesTitle": "Por estado",
+      "states": {
+        "ACTIVE": "Activos",
+        "INBOX": "Bandeja",
+        "COMPLETED": "Completados",
+        "FAILED": "Fallidos",
+        "PAUSED": "Pausados",
+        "CANCELLED": "Cancelados"
+      },
+      "habitsTitle": "Hábitos",
+      "checkinRate": "{pct}% check-ins (30d)",
+      "activeStreaks": "{count} activas",
+      "totalCheckins": "{count} check-ins",
+      "totalGoals": "objetivos",
+      "rateNote": "Porcentaje = completados ÷ decididos (completados + fallidos)."
+    },
+    "github": {
+      "pushes": "Commits",
+      "prs": "PRs",
+      "issues": "Issues",
+      "comments": "Reviews",
+      "empty": "Conecta tu cuenta de GitHub (token o usuario) para ver commits, PRs, issues y reviews por semana.",
+      "emptyTitle": "Aún sin actividad de GitHub",
+      "cta": "Abrir ajustes",
+      "viaApi": "vía API · @{login}",
+      "viaWebhook": "vía webhooks",
+      "loading": "Cargando actividad de GitHub…",
+      "truncated": "Sin token, GitHub devuelve como máximo 300 eventos recientes: las semanas más antiguas pueden estar subcontadas. Agrega un token para ver el historial completo.",
+      "errorTitle_rate_limited": "GitHub limitó las peticiones",
+      "errorBody_rate_limited": "Sin token, GitHub permite solo 60 peticiones por hora. Agrega un token en Ajustes para ver tu actividad de forma estable (y repos privados).",
+      "errorTitle_bad_credentials": "GitHub rechazó las credenciales",
+      "errorBody_bad_credentials": "El token configurado no es válido o expiró. Revísalo en Ajustes.",
+      "errorTitle_unavailable": "No se pudo consultar GitHub",
+      "errorBody_unavailable": "Hubo un problema al contactar la API de GitHub. Inténtalo de nuevo en unos minutos.",
+      "reposTitle": "Repos activos",
+      "langsTitle": "Lenguajes",
+      "pulseTitle": "Actividad",
+      "loadingShort": "Cargando…",
+      "summaryNeedToken": "Conecta un token de GitHub para ver repos, lenguajes y métricas.",
+      "noLanguage": "Sin lenguaje",
+      "prsSampled": "PRs: últimos {count} mergeados",
+      "p": {
+        "contributions": "contribuciones",
+        "activeDays": "días activos",
+        "bestDay": "mejor día",
+        "currentStreak": "racha actual",
+        "longestStreak": "mejor racha",
+        "prsMerged": "PRs mergeados",
+        "medianMerge": "merge mediano",
+        "additions": "líneas añadidas",
+        "deletions": "líneas eliminadas",
+        "commented": "hilos comentados",
+        "issuesClosed": "issues cerradas",
+        "discussions": "discusiones"
+      },
+      "other": "Otros"
+    },
+    "insightsTitle": "Insights",
+    "insightsEmpty": "Sigue usando Joidy — los insights aparecen con suficientes datos.",
+    "insights": {
+      "consistency.activeDays": "días con actividad",
+      "consistency.verdictHigh": "Muy consistente",
+      "consistency.verdictMid": "Bastante regular",
+      "consistency.verdictLow": "Esporádico: metas más cortas",
+      "consistency.currentStreak": "días de racha en curso",
+      "consistency.longestStreak": "tu racha récord",
+      "consistency.bestDay": "tu mejor día · {date}",
+      "trend.firstWindow": "Primera ventana con datos",
+      "trend.deltaUp": "más XP que antes",
+      "trend.deltaDown": "menos XP que antes",
+      "trend.deltaFlat": "similar a antes",
+      "trend.bestWeekday": "tu día más productivo",
+      "trend.bestDay": "pico de XP · {date}",
+      "trend.avgActiveDay": "XP por día activo",
+      "clock.peakHour": "tu hora con más XP",
+      "clock.peakDay": "tu día con más XP",
+      "clock.bandNight": "de tu XP, de madrugada",
+      "clock.bandMorning": "de tu XP, por la mañana",
+      "clock.bandAfternoon": "de tu XP, por la tarde",
+      "clock.bandEvening": "de tu XP, por la noche",
+      "clock.moreWeekend": "de tu XP, en fin de semana",
+      "clock.moreWeekdays": "de tu XP, entre semana",
+      "mood.needMore": "Registra tu ánimo para desbloquear esto",
+      "mood.samples": "registros de ánimo",
+      "mood.positive": "Mejor ánimo, más XP",
+      "mood.negative": "Más XP, peor ánimo",
+      "mood.neutral": "Sin relación clara ánimo–XP",
+      "sources.topType": "de tu XP viene de {name}",
+      "sources.concentrated": "Tu XP viene de una actividad",
+      "sources.balanced": "Tu XP está repartido",
+      "sources.events": "eventos de XP en esta ventana",
+      "goals.completionRate": "de lo activado se completa",
+      "goals.abandonRate": "de lo activado se abandona",
+      "goals.bestPeriod": "mejor periodo: {name}",
+      "goals.active": "objetivos activos ahora",
+      "github.top_pushes": "commits: lo que más haces",
+      "github.top_pull_requests": "PRs: lo que más haces",
+      "github.top_issues": "issues: lo que más haces",
+      "github.top_comments": "comentarios: colaboras mucho",
+      "github.busiestWeek": "eventos en tu mejor semana",
+      "mood.howTo": "Márcalo una vez al día en Inicio",
+      "mood.unlock": "Verás si tu ánimo impulsa tu XP",
+      "mood.average": "ánimo medio en esta ventana",
+      "mood.bestMood": "XP medio con ánimo {mood}",
+      "github.activeWeeks": "semanas con actividad",
+      "github.total": "eventos en 12 semanas",
+      "github.needConnect": "Conecta GitHub para ver esto",
+      "github.howTo": "Agrega tu usuario o token en Ajustes → GitHub",
+      "github.unlock": "Verás commits, PRs, issues y reviews por semana",
+      "github.error_rate_limited": "GitHub limitó las peticiones",
+      "github.error_bad_credentials": "GitHub rechazó tu token",
+      "github.error_unavailable": "No se pudo consultar GitHub",
+      "github.howToToken": "Agrega un token en Ajustes → GitHub (límite 5.000/h)",
+      "github.topRepo": "más commits: {repo}",
+      "github.topLang": "lenguaje principal: {lang}",
+      "github.mergeMedian": "mediana hasta merge",
+      "github.contribStreak": "días seguidos · mejor {best}d"
+    },
+    "clock": {
+      "all": "Todos",
+      "weekday": "Laboral",
+      "weekend": "Finde",
+      "events": "{count} eventos",
+      "peakLabel": "hora pico"
+    },
+    "railTitle": "Tu análisis",
+    "range90": "Últimos 90 días",
+    "range180": "Últimos 180 días",
+    "range365": "Último año",
+    "weekday": {
+      "title": "Por día de semana",
+      "avg": "~{xp} XP promedio",
+      "empty": "Sin actividad en esta ventana."
+    },
+    "streakPanel": {
+      "title": "Rachas y hábitos",
+      "current": "racha actual",
+      "record": "récord",
+      "active": "activas",
+      "checkins": "check-ins",
+      "rate30d": "tasa check-in 30d",
+      "toRecord": "de tu récord ({record}d)",
+      "rateHint": "check-ins hechos vs. esperados en tus hábitos activos"
+    },
+    "bands": {
+      "title": "Actividad por franja",
+      "night": "Madrugada",
+      "morning": "Mañana",
+      "afternoon": "Tarde",
+      "evening": "Noche"
+    },
+    "recent": {
+      "title": "Días recientes",
+      "today": "hoy"
+    },
+    "range90Short": "90d",
+    "range180Short": "180d",
+    "range365Short": "1a",
+    "kpi": {
+      "windowXp": "XP en la ventana",
+      "record": "récord {days}d",
+      "perActiveDay": "~{xp} en días activos",
+      "accumulated": "acumulado",
+      "vsPrevious": "vs. anterior"
+    },
+    "tabs": {
+      "consistency": "Consistencia",
+      "trend": "Tendencia",
+      "seasonality": "Ritmo",
+      "mood": "Ánimo",
+      "goals": "Objetivos",
+      "github": "GitHub"
+    },
+    "method": {
+      "consistency": {
+        "title": "Cómo se calcula",
+        "body": "Cada celda es un día; su tono depende del XP ganado, repartido en 5 niveles (cuantiles) para que un día enorme no apague al resto. La barra semanal suma el XP por semana ISO; su brillo indica cuántos de sus 7 días tuvieron actividad."
+      },
+      "trend": {
+        "title": "Cómo se calcula",
+        "body": "La media de 7 días suaviza los picos diarios. La línea punteada es una regresión lineal (mínimos cuadrados): si sube, tu ritmo mejora. Se compara con la ventana anterior de igual duración; cambios menores al 5% se consideran estables."
+      },
+      "seasonality": {
+        "title": "Cómo se calcula",
+        "body": "Se agrupa el XP ganado por hora y día de la semana. El reloj suma todas las semanas en 24 horas; la matriz conserva cada día. Las franjas reparten el XP en bloques de 6 horas. Las penalizaciones no cuentan."
+      },
+      "mood": {
+        "title": "Cómo se calcula",
+        "body": "Se cruza tu ánimo diario (1–5) con el XP de ese día. La correlación de Pearson (r) va de −1 a 1: cerca de 0 significa que no hay relación clara. Hacen falta al menos 3 días de registro; con más datos es más fiable."
+      },
+      "goals": {
+        "title": "Cómo se calcula",
+        "body": "El embudo cuenta los objetivos por etapa del ciclo de vida. La efectividad es completados ÷ (completados + fallidos): solo cuentan los objetivos ya decididos. Si no hay ninguno, se muestra el progreso medio."
+      },
+      "github": {
+        "title": "Cómo se calcula",
+        "body": "Con token se consultan tus contribuciones por semana ISO (commits, PRs e issues abiertos y reviews) en las últimas 12 semanas, más repos, lenguajes y PRs mergeados. Con solo usuario se usan tus eventos públicos recientes (máx. 300). Sin cuenta, los webhooks."
+      },
+      "hide": "Ocultar",
+      "show": "Mostrar"
+    },
+    "matrix": {
+      "title": "Día × hora",
+      "peak": "pico {day} {hour}"
+    },
+    "compare": {
+      "title": "Vs. período anterior",
+      "xp": "XP ganado",
+      "days": "Días activos",
+      "perDay": "XP por día activo",
+      "now": "Ahora",
+      "before": "Antes",
+      "noPrev": "sin datos previos",
+      "noPrevShort": "n/d"
+    },
+    "weekly": {
+      "title": "XP por semana",
+      "avg": "media {xp}/sem",
+      "weekOf": "Semana del {date}",
+      "activeDays": "{count} de {total} días activos"
+    },
+    "pageTitle": "Analítica — Joidy",
+    "description": "Consistencia, productividad, hábitos, ánimo y objetivos en un solo vistazo.",
+    "title": "Analítica",
+    "tablistLabel": "Secciones de analítica",
+    "refresh": "Actualizar datos"
+  },
   "notesPage": {
     "createNote": "Crear nota",
     "createFolder": "Crear carpeta",

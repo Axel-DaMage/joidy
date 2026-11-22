@@ -29,6 +29,12 @@
     { type: 'Navegación', title: 'Ir a Dashboard', icon: 'Home', action: () => goto('/') },
     { type: 'Navegación', title: 'Ir a Notas', icon: 'BookOpen', action: () => goto('/notes') },
     { type: 'Navegación', title: 'Ir a Goals', icon: 'Target', action: () => goto('/goals') },
+    {
+      type: 'Navegación',
+      title: 'Ir a Analítica',
+      icon: 'ChartColumn',
+      action: () => goto('/analytics'),
+    },
     { type: 'Navegación', title: 'Ir a Grafo', icon: 'Network', action: () => goto('/graph') },
     { type: 'Navegación', title: 'Ir a Skills', icon: 'Zap', action: () => goto('/skills') },
     { type: 'Navegación', title: 'Ir a Rachas', icon: 'Flame', action: () => goto('/streaks') },

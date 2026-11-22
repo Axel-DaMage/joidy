@@ -20,6 +20,8 @@ from models.note import Note
 from models.note import Tag as TagModel
 from models.skill import Skill
 from pydantic import BaseModel, field_validator
+from services.analytics_service import get_overview, webhook_github_activity
+from services.github_activity import fetch_weekly_activity
 from services.auth_service import get_current_user
 from services.http_client import http_client
 from services.mood_service import get_mood_history, get_mood_stats
@@ -159,6 +161,37 @@ async def get_dashboard(
         "ai_usage": ai_usage,
         "usage": usage,
     }
+
+
+@router.get("/overview")
+def overview(
+    days: int = Query(180, ge=1, le=366),
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user),
+):
+    """Holistic analytics overview for the last ``days`` days (#1499)."""
+    return get_overview(db, user_id, days)
+
+
+@router.get("/github")
+async def github_activity(
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user),
+):
+    """Weekly GitHub activity (last 12 ISO weeks) for the analytics page.
+
+    Read from the GitHub Events API when an account is connected (token or
+    username) — no webhook needed — otherwise from webhook-recorded events.
+    Kept separate from ``/overview`` so GitHub latency never blocks the page.
+    """
+    live = await fetch_weekly_activity()
+    if live is not None and live.get("available"):
+        return live
+    fallback = webhook_github_activity(db)
+    if live is not None and live.get("error"):
+        # Account configured but the API failed — tell the UI why.
+        fallback["error"] = live["error"]
+    return fallback
 
 
 @router.post("/track")
