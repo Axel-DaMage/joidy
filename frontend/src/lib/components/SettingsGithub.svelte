@@ -1,6 +1,10 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import DynamicIcon from './DynamicIcon.svelte';
+  // Lucide dropped brand icons, so DynamicIcon name="Github" never resolved —
+  // it pulled the full ~855 kB lucide chunk just to render a Circle fallback
+  // (#1543). Phosphor ships the real GitHub mark; import it directly (#257).
+  import { GithubLogoIcon } from 'phosphor-svelte';
   import SettingsGithubAdvanced from './SettingsGithubAdvanced.svelte';
   import { api } from '$lib/api';
   import { showNotification } from '$lib/stores/notifications';
@@ -179,7 +183,7 @@
 <!-- GitHub Integration -->
 <div class="row">
   <div class="row-label">
-    <DynamicIcon name="Github" size={13} />
+    <GithubLogoIcon size={13} />
     <span>GitHub</span>
     {#if githubConnected}<span class="configured-badge">✓</span>{/if}
   </div>
