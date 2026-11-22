@@ -111,6 +111,11 @@
   // API, which 401s (and force-logs-out) on the login screen otherwise.
   $: if (browser && $isAuthenticated) initTimersEngine();
 
+  // Push subscription sync (#1546): the push endpoints require auth, so
+  // running this on the login screen 401s → forced logout + a spurious
+  // "Sesión expirada" toast for anyone who once granted permission.
+  $: if (browser && $isAuthenticated) initPushNotifications();
+
   // Track page views on route changes (foreground-only, debounced in the
   // store). This runs in afterNavigate — a legacy `$:` statement never
   // re-runs on $app/state changes, so SPA navigations were invisible (#1305).
@@ -192,7 +197,6 @@
     initPomodoroSettings();
     initFocusModeConfig();
     const cleanupKeyboard = initKeyboardNavigation();
-    initPushNotifications();
     onboarding.init();
     achievements.init();
     devMode.init();
