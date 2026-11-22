@@ -15,6 +15,7 @@
   import WeatherWidget from '$lib/components/WeatherWidget.svelte';
   import Widget from '$lib/components/Widget.svelte';
   import GithubWidget from '$lib/components/GithubWidget.svelte';
+  import SpotifyWidget from '$lib/components/spotify/DashboardWidget.svelte';
   import DailyRecap from '$lib/components/DailyRecap.svelte';
   import {
     totalXP,
@@ -529,6 +530,8 @@
       onTabChange={setActivityTab}
       {recentNotes}
     />
+  {:else if wid === 'spotify-now-playing'}
+    <SpotifyWidget />
   {/if}
 {/snippet}
 
