@@ -1,8 +1,9 @@
 # Environment & secrets
 .env
-.env.local
-.env.bak
+.env.*
+!.env.example
 .npmrc
+*.bak
 
 # Data directory (user data, never in git)
 data/
