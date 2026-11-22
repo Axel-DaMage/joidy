@@ -4,7 +4,9 @@
   import { goto } from '$app/navigation';
   import { graphData, selectedTag } from '$lib/stores/graph';
   import type { GraphNode, GraphEdge } from '$lib/api';
-  import { forceCollide } from 'd3';
+  // forceCollide is the only d3 export used here — importing it from the
+  // 'd3' meta-package pulled all ~30 d3 modules into the graph chunk (#1544).
+  import { forceCollide } from 'd3-force';
   import type { NodeObject } from 'force-graph';
   import GraphSettingsPanel from './GraphSettingsPanel.svelte';
   import GraphQuickActions from './GraphQuickActions.svelte';
