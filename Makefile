@@ -19,6 +19,11 @@ env_key = $$(grep -E '^$(1)=' .env 2>/dev/null | tail -n1 | cut -d'=' -f2-)
 HOST_UID := $(shell id -u)
 HOST_GID := $(shell id -g)
 
+# Commit sha shown in the dev-mode status bar — the dev frontend bind-mounts
+# ./frontend without .git, so the compose env var is the only source (#1511).
+GIT_SHA := $(shell git rev-parse --short HEAD 2>/dev/null)
+export GIT_SHA
+
 RED := \033[0;31m
 GREEN := \033[0;32m
 YELLOW := \033[0;33m

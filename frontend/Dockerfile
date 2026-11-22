@@ -26,6 +26,11 @@ CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
 FROM deps AS build
 ARG VITE_API_URL=http://localhost:8000
 ENV VITE_API_URL=$VITE_API_URL
+# Baked into the bundle as __GIT_SHA__ so dev mode can show which commit the
+# build was cut from (.git is dockerignored — pass --build-arg GIT_SHA=$(git
+# rev-parse --short HEAD) when building for local verification).
+ARG GIT_SHA=
+ENV VITE_GIT_SHA=$GIT_SHA
 ENV NODE_OPTIONS=--max-old-space-size=4096
 
 COPY --chown=node:node . .

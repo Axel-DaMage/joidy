@@ -852,7 +852,7 @@
           // component state — safe to outlive the layout (#1003)
           setTimeout(() => showNotification($t('layout.testNotifSuccess'), 'success'), 600);
           setTimeout(() => showNotification($t('layout.testNotifLevel'), 'level'), 1200);
-        }}>joidy v{__APP_VERSION__}</button
+        }}>joidy v{__APP_VERSION__}{#if $devMode && __GIT_SHA__}&nbsp;<span class="mono">({__GIT_SHA__})</span>{/if}</button
       >
 
       <div class="status-live" title={$t('layout.currentStatus')}>

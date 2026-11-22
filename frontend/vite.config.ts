@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import { sveltekit } from '@sveltejs/kit/vite';
+import { execSync } from 'node:child_process';
 import pkg from './package.json' with { type: 'json' };
 import { kitOptions } from './kit.options';
 
@@ -7,10 +8,26 @@ import { kitOptions } from './kit.options';
 // the container's internal port (3000) when FRONTEND_PORT is overridden.
 const FRONTEND_PORT = (typeof process !== 'undefined' && Number(process.env.FRONTEND_PORT)) || 3000;
 
+// Commit the bundle was built from — surfaced in the status bar under dev mode
+// so it is obvious which build a tab is actually running (stale service-worker
+// precaches otherwise look identical). Docker images get it via --build-arg
+// GIT_SHA (.git is dockerignored); host builds fall back to `git rev-parse`.
+const GIT_SHA = (() => {
+  if (process.env.VITE_GIT_SHA) return process.env.VITE_GIT_SHA;
+  try {
+    return execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] })
+      .toString()
+      .trim();
+  } catch {
+    return '';
+  }
+})();
+
 export default defineConfig({
   plugins: [sveltekit(kitOptions)],
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
+    __GIT_SHA__: JSON.stringify(GIT_SHA),
   },
   esbuild: {
     target: 'esnext',
