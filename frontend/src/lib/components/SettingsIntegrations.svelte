@@ -50,35 +50,4 @@
     text-transform: uppercase;
     margin-bottom: 12px;
   }
-
-  .row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 6px 0;
-  }
-
-  /* Restaurados: se perdieron en el split #1067 (vivían en SettingsPanel). */
-  .link-btn {
-    background: var(--accent);
-    color: white;
-    border: none;
-    padding: 6px 12px;
-    border-radius: var(--r);
-    font-size: 11px;
-    cursor: pointer;
-    font-family: var(--font-mono);
-  }
-
-  .link-btn:hover {
-    opacity: 0.9;
-  }
-
-  .row-label {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    font-size: 12px;
-    color: var(--text-secondary);
-  }
 </style>
