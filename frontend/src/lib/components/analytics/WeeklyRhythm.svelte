@@ -49,7 +49,7 @@
     let last = -99;
     return weeks.map((w, i) => {
       const newMonth = i === 0 || w.start.getMonth() !== weeks[i - 1].start.getMonth();
-      if (!newMonth || i - last < 3) return '';
+      if (!newMonth || i - last < (weeks.length > 40 ? 5 : 3)) return '';
       last = i;
       return monthFmt.format(w.start).replace('.', '');
     });
@@ -65,18 +65,18 @@
   }
 </script>
 
-<ChartCard title={$t('goalsAnalytics.weekly.title')}>
+<ChartCard title={$t('analyticsPage.weekly.title')}>
   {#snippet icon()}<CalendarRange size={13} />{/snippet}
   {#snippet actions()}
     {#if hasData}
       <span class="wr-avg mono"
-        >{$t('goalsAnalytics.weekly.avg', { values: { xp: Math.round(avg).toLocaleString() } })}</span
+        >{$t('analyticsPage.weekly.avg', { values: { xp: Math.round(avg).toLocaleString() } })}</span
       >
     {/if}
   {/snippet}
 
   {#if !hasData}
-    <div class="chart-empty"><span>{$t('goalsAnalytics.weekday.empty')}</span></div>
+    <div class="chart-empty"><span>{$t('analyticsPage.weekday.empty')}</span></div>
   {:else}
     <div class="wr-wrap" bind:this={wrapEl}>
       <div class="wr-plot">
@@ -106,15 +106,15 @@
 
       <ChartTooltip x={tip?.x ?? 0} y={tip?.y ?? 0} visible={!!tip}>
         {#if tip}
-          <span class="tt-title">{$t('goalsAnalytics.weekly.weekOf', { values: { date: dayFmt.format(tip.w.start) } })}</span>
+          <span class="tt-title">{$t('analyticsPage.weekly.weekOf', { values: { date: dayFmt.format(tip.w.start) } })}</span>
           <span class="tt-row"
             ><span class="tt-dot" style="background: var(--xp)"></span>{$t(
-              'goalsAnalytics.heatmap.xpOn',
+              'analyticsPage.heatmap.xpOn',
               { values: { xp: tip.w.xp.toLocaleString() } }
             )}</span
           >
           <span class="tt-row"
-            >{$t('goalsAnalytics.weekly.activeDays', {
+            >{$t('analyticsPage.weekly.activeDays', {
               values: { count: tip.w.active, total: tip.w.days },
             })}</span
           >
@@ -177,14 +177,14 @@
   .wr-tick {
     flex: 1;
     min-width: 0;
-    font-size: 8.5px;
+    font-size: 10px;
     color: var(--text-muted);
     white-space: nowrap;
     overflow: visible;
     text-transform: capitalize;
   }
   .wr-avg {
-    font-size: 9px;
+    font-size: 10px;
     font-weight: 600;
     text-transform: none;
     letter-spacing: 0;

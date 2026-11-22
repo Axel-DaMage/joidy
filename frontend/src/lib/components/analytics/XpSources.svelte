@@ -38,12 +38,12 @@
   };
 
   function typeLabel(type: string): string {
-    if (EXACT_KEYS[type]) return $t(`goalsAnalytics.xpTypes.${EXACT_KEYS[type]}`);
+    if (EXACT_KEYS[type]) return $t(`analyticsPage.xpTypes.${EXACT_KEYS[type]}`);
     if (type.startsWith('streak_milestone'))
-      return $t('goalsAnalytics.xpTypes.streak_milestone');
-    if (type.startsWith('calendar_task')) return $t('goalsAnalytics.xpTypes.calendar_task');
-    if (type.startsWith('strava_')) return $t('goalsAnalytics.xpTypes.strava');
-    if (type.startsWith('tag_')) return $t('goalsAnalytics.xpTypes.tag');
+      return $t('analyticsPage.xpTypes.streak_milestone');
+    if (type.startsWith('calendar_task')) return $t('analyticsPage.xpTypes.calendar_task');
+    if (type.startsWith('strava_')) return $t('analyticsPage.xpTypes.strava');
+    if (type.startsWith('tag_')) return $t('analyticsPage.xpTypes.tag');
     // Fallback: humanize the raw event-type string.
     return type.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
   }
@@ -72,7 +72,7 @@
       ...head,
       {
         type: '__other',
-        label: $t('goalsAnalytics.sources.other'),
+        label: $t('analyticsPage.sources.other'),
         color: 'var(--text-muted)',
         xp: tail.reduce((a, s) => a + s.xp, 0),
         count: tail.reduce((a, s) => a + s.count, 0),
@@ -88,7 +88,7 @@
   );
 
   // Donut radius follows the container (fits both width share and height).
-  let size = $derived(Math.max(120, Math.min(boxH, boxW * 0.46, 320)));
+  let size = $derived(Math.max(120, Math.min(boxH, boxW * 0.4, 320)));
   let arcGen = $derived(
     arc<PieArcDatum<Slice>>()
       .innerRadius(size * 0.33)
@@ -100,12 +100,12 @@
   let hovered = $state<Slice | null>(null);
 </script>
 
-<ChartCard title={$t('goalsAnalytics.slides.sources')}>
+<ChartCard title={$t('analyticsPage.slides.sources')}>
   {#snippet icon()}<ChartPie size={13} />{/snippet}
   {#if byType.filter((s) => s.xp > 0).length === 0}
     <div class="chart-empty">
       <ChartPie size={22} style="opacity:0.25" />
-      <span>{$t('goalsAnalytics.sources.empty')}</span>
+      <span>{$t('analyticsPage.sources.empty')}</span>
     </div>
   {:else}
     <div class="xs-layout" bind:clientWidth={boxW} bind:clientHeight={boxH}>
@@ -115,7 +115,7 @@
           height={size}
           viewBox="{-size / 2} {-size / 2} {size} {size}"
           role="img"
-          aria-label={$t('goalsAnalytics.slides.sources')}
+          aria-label={$t('analyticsPage.slides.sources')}
         >
           {#each arcs as a (a.data.type)}
             <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -186,7 +186,7 @@
     font-family: var(--font-mono);
   }
   .xs-center-lab {
-    font-size: 9px;
+    font-size: 10px;
     fill: var(--text-muted);
     font-family: var(--font-mono);
     text-transform: uppercase;

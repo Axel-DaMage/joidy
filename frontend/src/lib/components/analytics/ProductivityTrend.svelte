@@ -118,23 +118,23 @@
   }
 </script>
 
-<ChartCard title={$t('goalsAnalytics.slides.trend')}>
+<ChartCard title={$t('analyticsPage.slides.trend')}>
   {#snippet icon()}<ChartLine size={13} />{/snippet}
   {#snippet actions()}
     <div class="pt-legend">
       <span class="pt-leg"
         ><span class="pt-dot" style="background: var(--xp)"></span>{$t(
-          'goalsAnalytics.trend.dailyXp'
+          'analyticsPage.trend.dailyXp'
         )}</span
       >
       <span class="pt-leg"
         ><span class="pt-dot" style="background: var(--link)"></span>{$t(
-          'goalsAnalytics.trend.movingAvg'
+          'analyticsPage.trend.movingAvg'
         )}</span
       >
       <span class="pt-leg"
         ><span class="pt-dash" style="background: var(--text-muted)"></span>{$t(
-          'goalsAnalytics.trend.regression'
+          'analyticsPage.trend.regression'
         )}</span
       >
     </div>
@@ -143,7 +143,7 @@
   {#if pts.length === 0}
     <div class="chart-empty">
       <ChartLine size={22} style="opacity:0.25" />
-      <span>{$t('goalsAnalytics.trend.empty')}</span>
+      <span>{$t('analyticsPage.trend.empty')}</span>
     </div>
   {:else}
     <div class="pt-wrap" bind:clientWidth={W} bind:clientHeight={H}>
@@ -153,7 +153,7 @@
           width={W}
           height={H}
           role="img"
-          aria-label={$t('goalsAnalytics.slides.trend')}
+          aria-label={$t('analyticsPage.slides.trend')}
           onmousemove={onMove}
           onmouseleave={() => (tip = null)}
         >
@@ -206,12 +206,12 @@
             <span class="tt-title">{tickFmt.format(tip.pt.date)}</span>
             <span class="tt-row"
               ><span class="tt-dot" style="background: var(--xp)"></span>{$t(
-                'goalsAnalytics.trend.dailyXp'
+                'analyticsPage.trend.dailyXp'
               )}<span class="tt-val">{tip.pt.xp.toLocaleString()}</span></span
             >
             <span class="tt-row"
               ><span class="tt-dot" style="background: var(--link)"></span>{$t(
-                'goalsAnalytics.trend.movingAvg'
+                'analyticsPage.trend.movingAvg'
               )}<span class="tt-val">{Math.round(ma[tip.pt.i] ?? 0).toLocaleString()}</span></span
             >
           {/if}
@@ -243,7 +243,7 @@
     stroke-width: 1;
   }
   .tick {
-    font-size: 9px;
+    font-size: 10px;
     fill: var(--text-muted);
     font-family: var(--font-mono);
   }
@@ -279,7 +279,7 @@
     stroke-width: 1.5;
   }
   .peak-label {
-    font-size: 9px;
+    font-size: 10px;
     font-family: var(--font-mono);
     fill: var(--text-secondary);
   }
@@ -307,7 +307,7 @@
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    font-size: 9px;
+    font-size: 10px;
     color: var(--text-muted);
     text-transform: none;
     letter-spacing: 0;

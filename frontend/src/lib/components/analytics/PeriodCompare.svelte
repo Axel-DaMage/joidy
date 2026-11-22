@@ -42,19 +42,20 @@
   const dir = (d: number | null) => (d === null ? 'none' : d >= 5 ? 'up' : d <= -5 ? 'down' : 'flat');
 </script>
 
-<ChartCard title={$t('goalsAnalytics.compare.title')}>
+<ChartCard title={$t('analyticsPage.compare.title')}>
   {#snippet icon()}<GitCompare size={13} />{/snippet}
 
-  <div class="pc-list">
+  <div class="pc-wrap"><div class="pc-list">
     {#each metrics as m, i (m.key)}
       {@const d = delta(m)}
       {@const top = Math.max(1, m.now, m.prev)}
       <div class="pc-row" style:--i={i}>
         <div class="pc-head">
-          <span class="pc-name">{$t(`goalsAnalytics.compare.${m.key}`)}</span>
+          <span class="pc-name">{$t(`analyticsPage.compare.${m.key}`)}</span>
           <span class="pc-chip {dir(d)}">
             {#if d === null}
-              {$t('goalsAnalytics.compare.noPrev')}
+              <span class="pc-long">{$t('analyticsPage.compare.noPrev')}</span>
+              <span class="pc-short">{$t('analyticsPage.compare.noPrevShort')}</span>
             {:else}
               {#if dir(d) === 'up'}<ArrowUp size={10} />{:else if dir(d) === 'down'}<ArrowDown size={10} />{:else}<Minus size={10} />{/if}
               {Math.abs(d)}%
@@ -63,22 +64,39 @@
         </div>
         <div class="pc-bars">
           <div class="pc-line">
-            <span class="pc-tag">{$t('goalsAnalytics.compare.now')}</span>
+            <span class="pc-tag">{$t('analyticsPage.compare.now')}</span>
             <div class="pc-track"><div class="pc-fill now" style:width="{(m.now / top) * 100}%"></div></div>
             <span class="pc-val mono">{m.now.toLocaleString()}</span>
           </div>
           <div class="pc-line">
-            <span class="pc-tag">{$t('goalsAnalytics.compare.before')}</span>
+            <span class="pc-tag">{$t('analyticsPage.compare.before')}</span>
             <div class="pc-track"><div class="pc-fill prev" style:width="{(m.prev / top) * 100}%"></div></div>
             <span class="pc-val mono dim">{m.prev.toLocaleString()}</span>
           </div>
         </div>
       </div>
     {/each}
-  </div>
+  </div></div>
 </ChartCard>
 
 <style>
+  .pc-wrap {
+    container-type: inline-size;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+  }
+  .pc-short {
+    display: none;
+  }
+  @container (max-width: 250px) {
+    .pc-long {
+      display: none;
+    }
+    .pc-short {
+      display: inline;
+    }
+  }
   .pc-list {
     flex: 1;
     min-height: 0;
@@ -130,7 +148,7 @@
   }
   .pc-chip.none {
     font-weight: 600;
-    font-size: 9px;
+    font-size: 10px;
   }
   .pc-bars {
     display: flex;
@@ -145,7 +163,7 @@
   .pc-tag {
     width: 44px;
     flex-shrink: 0;
-    font-size: 9px;
+    font-size: 10px;
     color: var(--text-muted);
     font-family: var(--font-mono);
     text-transform: uppercase;

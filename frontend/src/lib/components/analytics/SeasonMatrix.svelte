@@ -61,12 +61,12 @@
   }
 </script>
 
-<ChartCard title={$t('goalsAnalytics.matrix.title')}>
+<ChartCard title={$t('analyticsPage.matrix.title')}>
   {#snippet icon()}<Grid3x3 size={13} />{/snippet}
   {#snippet actions()}
     {#if peak}
       <span class="sm-peak mono"
-        >{$t('goalsAnalytics.matrix.peak', {
+        >{$t('analyticsPage.matrix.peak', {
           values: { day: dayNames[peak.d], hour: fmtHour(peak.h) },
         })}</span
       >
@@ -74,7 +74,7 @@
   {/snippet}
 
   {#if max === 0}
-    <div class="chart-empty"><span>{$t('goalsAnalytics.seasonality.empty')}</span></div>
+    <div class="chart-empty"><span>{$t('analyticsPage.seasonality.empty')}</span></div>
   {:else}
     <div class="sm-wrap" bind:this={wrapEl}>
       <div class="sm-grid">
@@ -97,9 +97,9 @@
         {/each}
       </div>
       <div class="sm-legend mono">
-        <span>{$t('goalsAnalytics.heatmap.less')}</span>
+        <span>{$t('analyticsPage.heatmap.less')}</span>
         {#each [0, 1, 2, 3, 4, 5] as lv (lv)}<span class="sm-lg lv{lv}"></span>{/each}
-        <span>{$t('goalsAnalytics.heatmap.more')}</span>
+        <span>{$t('analyticsPage.heatmap.more')}</span>
       </div>
 
       <ChartTooltip x={tip?.x ?? 0} y={tip?.y ?? 0} visible={!!tip} placeBelow={(tip?.y ?? 0) < 70}>
@@ -107,7 +107,7 @@
           <span class="tt-title">{dayNames[tip.d]} · {fmtHour(tip.h)}</span>
           <span class="tt-row"
             ><span class="tt-dot" style="background: var(--xp)"></span>{$t(
-              'goalsAnalytics.heatmap.xpOn',
+              'analyticsPage.heatmap.xpOn',
               { values: { xp: tip.v.toLocaleString() } }
             )}</span
           >
@@ -136,7 +136,7 @@
   }
   .sm-hour,
   .sm-day {
-    font-size: 8.5px;
+    font-size: 10px;
     color: var(--text-muted);
     display: flex;
     align-items: center;
@@ -183,7 +183,7 @@
     align-items: center;
     justify-content: flex-end;
     gap: 3px;
-    font-size: 9px;
+    font-size: 10px;
     color: var(--text-muted);
     flex-shrink: 0;
   }
@@ -193,7 +193,7 @@
     border-radius: var(--r-sm);
   }
   .sm-peak {
-    font-size: 9px;
+    font-size: 10px;
     font-weight: 700;
     text-transform: none;
     letter-spacing: 0;

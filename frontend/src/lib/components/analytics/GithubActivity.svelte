@@ -21,10 +21,10 @@
 
   const KEYS = ['pushes', 'pull_requests', 'issues', 'comments'] as const;
   const KEY_I18N: Record<(typeof KEYS)[number], string> = {
-    pushes: 'goalsAnalytics.github.pushes',
-    pull_requests: 'goalsAnalytics.github.prs',
-    issues: 'goalsAnalytics.github.issues',
-    comments: 'goalsAnalytics.github.comments',
+    pushes: 'analyticsPage.github.pushes',
+    pull_requests: 'analyticsPage.github.prs',
+    issues: 'analyticsPage.github.issues',
+    comments: 'analyticsPage.github.comments',
   };
   const KEY_COLORS: Record<(typeof KEYS)[number], string> = {
     pushes: 'var(--xp)',
@@ -85,7 +85,7 @@
   }
 </script>
 
-<ChartCard title={$t('goalsAnalytics.slides.github')}>
+<ChartCard title={$t('analyticsPage.slides.github')}>
   {#snippet icon()}<GitPullRequest size={13} />{/snippet}
   {#snippet actions()}
     <div class="gh-legend">
@@ -102,7 +102,7 @@
   {#if weeks.length === 0}
     <div class="chart-empty">
       <GitPullRequest size={22} style="opacity:0.25" />
-      <span>{$t('goalsAnalytics.github.empty')}</span>
+      <span>{$t('analyticsPage.github.empty')}</span>
     </div>
   {:else}
     <div class="gh-wrap" bind:this={wrapEl} bind:clientWidth={W} bind:clientHeight={H}>
@@ -110,7 +110,7 @@
         width={W}
         height={H}
         role="img"
-        aria-label={$t('goalsAnalytics.slides.github')}
+        aria-label={$t('analyticsPage.slides.github')}
       >
         {#each yTicks as tv (tv)}
           <line x1={M.left} x2={W - M.right} y1={y(tv)} y2={y(tv)} class="grid-line" />
@@ -165,7 +165,7 @@
             )}<span class="tt-val">{tip.value}</span></span
           >
           <span class="tt-row"
-            >{$t('goalsAnalytics.heatmap.events', {
+            >{$t('analyticsPage.heatmap.events', {
               values: {
                 count:
                   tip.week.pushes +
@@ -202,7 +202,7 @@
     stroke-width: 1;
   }
   .tick {
-    font-size: 9px;
+    font-size: 10px;
     fill: var(--text-muted);
     font-family: var(--font-mono);
   }
@@ -221,7 +221,7 @@
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    font-size: 9px;
+    font-size: 10px;
     color: var(--text-muted);
     text-transform: none;
     letter-spacing: 0;

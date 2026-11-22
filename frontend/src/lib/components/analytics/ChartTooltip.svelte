@@ -56,7 +56,7 @@
     font-weight: 700;
     color: var(--text-secondary);
     text-transform: uppercase;
-    font-size: 9px;
+    font-size: 10px;
     letter-spacing: 0.05em;
   }
   .chart-tooltip :global(.tt-row) {

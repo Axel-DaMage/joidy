@@ -6,7 +6,6 @@
   import Check from 'lucide-svelte/icons/check';
   import ChevronDown from 'lucide-svelte/icons/chevron-down';
   import Calendar from 'lucide-svelte/icons/calendar';
-  import ChartColumn from 'lucide-svelte/icons/chart-column';
   import Clock from 'lucide-svelte/icons/clock';
   import LayoutDashboard from 'lucide-svelte/icons/layout-dashboard';
   import Pause from 'lucide-svelte/icons/pause';
@@ -31,7 +30,6 @@
   import GoalFilters from '$lib/components/GoalFilters.svelte';
   import GoalInbox from '$lib/components/GoalInbox.svelte';
   import GoalList from '$lib/components/GoalList.svelte';
-  import AnalyticsDashboard from '$lib/components/analytics/AnalyticsDashboard.svelte';
   import { inboxCount } from '$lib/utils/goalTriage';
   import { localDayKey } from '$lib/utils/date';
   import { applyGamificationResult, showXPGain } from '$lib/stores/gamification';
@@ -94,7 +92,7 @@
   let goals = $state<Goal[]>([]);
   let tags = $state<TagType[]>([]);
   let notes = $state<Note[]>([]);
-  const VALID_TABS = ['editor', 'today', 'inbox', 'planning', 'history', 'analytics'] as const;
+  const VALID_TABS = ['editor', 'today', 'inbox', 'planning', 'history'] as const;
   let currentTab = $state<(typeof VALID_TABS)[number]>('editor');
   let currentPlanningTab = $state<'WEEKLY' | 'MONTHLY' | 'ANNUAL'>('ANNUAL');
   let showAddForm = $state(false);
@@ -446,7 +444,11 @@
     // restore UI state immediately to prevent flash
     try {
       const savedTab = localStorage.getItem('goals.currentTab');
-      if (savedTab && (VALID_TABS as readonly string[]).includes(savedTab)) {
+      // Analytics moved to its own page (#1499) — migrate the legacy tab.
+      if (savedTab === 'analytics') {
+        localStorage.removeItem('goals.currentTab');
+        void goto('/analytics', { replaceState: true });
+      } else if (savedTab && (VALID_TABS as readonly string[]).includes(savedTab)) {
         currentTab = savedTab as typeof currentTab;
       }
       const savedDate = localStorage.getItem('goals.selectedPlanningDate');
@@ -860,7 +862,9 @@
   // The param is consumed once so manual tab navigation isn't overridden.
   $effect(() => {
     const tabParam = page.url.searchParams.get('tab');
-    if (tabParam && (VALID_TABS as readonly string[]).includes(tabParam)) {
+    if (tabParam === 'analytics') {
+      void goto('/analytics', { replaceState: true });
+    } else if (tabParam && (VALID_TABS as readonly string[]).includes(tabParam)) {
       currentTab = tabParam as typeof currentTab;
       const clean = new URL(page.url.href);
       clean.searchParams.delete('tab');
@@ -1054,22 +1058,12 @@
       >
         <Calendar size={14} /> Historial
       </button>
-      <button
-        class="tab"
-        role="tab"
-        class:active={currentTab === 'analytics'}
-        aria-selected={currentTab === 'analytics'}
-        onclick={() => (currentTab = 'analytics')}
-      >
-        <ChartColumn size={14} /> Análisis
-      </button>
     </div>
   </div>
 
   <div
     class="goals-body"
-    class:full-width={currentTab === 'analytics' ||
-      currentTab === 'history' ||
+    class:full-width={currentTab === 'history' ||
       currentTab === 'planning' ||
       currentTab === 'today' ||
       currentTab === 'inbox' ||
@@ -1854,12 +1848,6 @@
         </div>
       </div>
     {/if}
-
-    {#if currentTab === 'analytics'}
-      <div class="tab-content fade-in">
-        <AnalyticsDashboard />
-      </div>
-    {/if}
   </div>
 
   <!-- ── New Goal Slide-Down Panel ── -->
@@ -2500,7 +2488,7 @@
     overflow: hidden;
     min-height: 0;
   }
-  /* The analytics dashboard fills the whole tab height (#1499). */
+  /* Full-width tabs fill the whole tab height. */
   .goals-body.full-width .tab-content {
     flex: 1;
     min-height: 0;

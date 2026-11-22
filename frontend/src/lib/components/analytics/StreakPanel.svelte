@@ -24,7 +24,7 @@
   const CIRC = 2 * Math.PI * R;
 </script>
 
-<ChartCard title={$t('goalsAnalytics.streakPanel.title')}>
+<ChartCard title={$t('analyticsPage.streakPanel.title')}>
   {#snippet icon()}<Flame size={13} />{/snippet}
 
   <div class="sp-body">
@@ -32,14 +32,14 @@
       <div class="sp-flame" class:lit={current > 0}><Flame size={24} /></div>
       <div class="sp-hero-text">
         <span class="sp-big"><CountUp value={current} /></span>
-        <span class="sp-label">{$t('goalsAnalytics.streakPanel.current')}</span>
+        <span class="sp-label">{$t('analyticsPage.streakPanel.current')}</span>
       </div>
     </div>
 
     <div class="sp-record">
       <div class="sp-record-bar"><div class="sp-record-fill" style:width="{toRecord}%"></div></div>
       <span class="sp-record-txt mono"
-        >{$t('goalsAnalytics.streakPanel.toRecord', { values: { record } })}</span
+        >{$t('analyticsPage.streakPanel.toRecord', { values: { record } })}</span
       >
     </div>
 
@@ -47,17 +47,17 @@
       <div class="sp-item">
         <Award size={13} />
         <span class="sp-val">{record}</span>
-        <span class="sp-key">{$t('goalsAnalytics.streakPanel.record')}</span>
+        <span class="sp-key">{$t('analyticsPage.streakPanel.record')}</span>
       </div>
       <div class="sp-item">
         <Target size={13} />
         <span class="sp-val">{streaks?.active_streaks ?? 0}</span>
-        <span class="sp-key">{$t('goalsAnalytics.streakPanel.active')}</span>
+        <span class="sp-key">{$t('analyticsPage.streakPanel.active')}</span>
       </div>
       <div class="sp-item">
         <CalendarCheck size={13} />
         <span class="sp-val">{(streaks?.total_checkins ?? 0).toLocaleString()}</span>
-        <span class="sp-key">{$t('goalsAnalytics.streakPanel.checkins')}</span>
+        <span class="sp-key">{$t('analyticsPage.streakPanel.checkins')}</span>
       </div>
     </div>
 
@@ -76,15 +76,18 @@
         <text x="40" y="45" text-anchor="middle" class="sp-ring-val">{Math.round(rate)}%</text>
       </svg>
       <div class="sp-rate-txt">
-        <span class="sp-rate-title">{$t('goalsAnalytics.streakPanel.rate30d')}</span>
-        <span class="sp-rate-sub">{$t('goalsAnalytics.streakPanel.rateHint')}</span>
+        <span class="sp-rate-title">{$t('analyticsPage.streakPanel.rate30d')}</span>
+        <span class="sp-rate-sub">{$t('analyticsPage.streakPanel.rateHint')}</span>
       </div>
     </div>
   </div>
 </ChartCard>
 
 <style>
+  /* Sizes scale with the tile height (container query units) so tall tiles
+     on large screens grow their content instead of leaving empty space. */
   .sp-body {
+    container-type: size;
     flex: 1;
     min-height: 0;
     display: flex;
@@ -100,8 +103,8 @@
   .sp-flame {
     display: grid;
     place-items: center;
-    width: 44px;
-    height: 44px;
+    width: clamp(44px, 13cqh, 72px);
+    height: clamp(44px, 13cqh, 72px);
     border-radius: var(--r);
     border: 1px solid var(--border);
     color: var(--text-muted);
@@ -116,14 +119,14 @@
     min-width: 0;
   }
   .sp-big {
-    font-size: 30px;
+    font-size: clamp(30px, 10cqh, 56px);
     font-weight: 800;
     font-family: var(--font-mono);
     line-height: 1;
     color: var(--text-primary);
   }
   .sp-label {
-    font-size: 9px;
+    font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.08em;
@@ -149,7 +152,7 @@
     transition: width 0.6s ease;
   }
   .sp-record-txt {
-    font-size: 9px;
+    font-size: 10px;
     color: var(--text-muted);
   }
   .sp-grid {
@@ -162,20 +165,20 @@
     flex-direction: column;
     align-items: center;
     gap: 2px;
-    padding: var(--s2) var(--s1);
+    padding: clamp(8px, 3cqh, 20px) var(--s1);
     border: 1px solid var(--border);
     border-radius: var(--r);
     color: var(--text-muted);
   }
   .sp-val {
-    font-size: 17px;
+    font-size: clamp(17px, 5cqh, 28px);
     font-weight: 800;
     font-family: var(--font-mono);
     color: var(--text-primary);
     line-height: 1.1;
   }
   .sp-key {
-    font-size: 8px;
+    font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.06em;
@@ -189,8 +192,8 @@
     gap: var(--s3);
   }
   .sp-ring {
-    width: 64px;
-    height: 64px;
+    width: clamp(64px, 18cqh, 108px);
+    height: clamp(64px, 18cqh, 108px);
     flex-shrink: 0;
   }
   .sp-ring-bg {

@@ -90,9 +90,14 @@
 
   let tip = $state<{ x: number; y: number; cell: Cell } | null>(null);
 
-  function onCell(e: Event, cell: Cell) {
-    const el = e.currentTarget as HTMLElement;
-    tip = { x: el.offsetLeft + el.offsetWidth / 2, y: el.offsetTop, cell };
+  // One delegated listener for the whole grid instead of one per cell
+  // (up to ~370 cells for the 1-year window).
+  let cellIndex = $derived(new Map(weeks.flatMap((w) => w.cells).map((c) => [c.key, c])));
+
+  function onGridOver(e: MouseEvent) {
+    const el = (e.target as HTMLElement).closest<HTMLElement>('[data-k]');
+    const cell = el?.dataset.k ? cellIndex.get(el.dataset.k) : undefined;
+    tip = el && cell ? { x: el.offsetLeft + el.offsetWidth / 2, y: el.offsetTop, cell } : null;
   }
 
   // Responsive cell size: fit the grid to the card width. Cells may be wider
@@ -104,29 +109,42 @@
     if (!wrapW || cols === 0) return 11;
     const labelW = 30;
     const gap = 3;
-    return Math.max(7, Math.min(46, Math.floor((wrapW - labelW - gap * (cols - 1)) / cols)));
+    return Math.max(4, Math.min(46, Math.floor((wrapW - labelW - gap * (cols - 1)) / cols)));
   });
-  // Cells grow taller than wide only as far as the card height allows.
+  // Cells grow taller than wide only as far as the card height allows. The
+  // parent grid gives this card a fixed row (independent of its content), so
+  // reading the height here cannot feed back into the layout.
   let wrapH = $state(0);
   let cellH = $derived.by(() => {
-    const fitH = wrapH > 0 ? Math.floor((wrapH - 43) / 7) : cellW;
-    return Math.max(7, Math.min(fitH, Math.round(cellW * 1.6), 40));
+    const fitH = wrapH > 0 ? Math.floor((wrapH - 14 - 18 - 8) / 7) : cellW;
+    return Math.max(6, Math.min(fitH, Math.round(cellW * 1.6), 40));
   });
 
-  function cellAria(cell: Cell): string {
-    const dateStr = dateFmt.format(cell.date);
-    if (cell.future || !cell.day || cell.day.xp <= 0) {
-      return `${dateStr} — ${$t('goalsAnalytics.heatmap.noData')}`;
-    }
-    return `${dateStr} — ${$t('goalsAnalytics.heatmap.xpOn', { values: { xp: cell.day.xp } })}`;
-  }
+  // The calendar is decorative for assistive tech (hundreds of cells would
+  // be noise) — a single summary replaces it; the insights panel carries the
+  // same figures in text.
+  let summaryLabel = $derived.by(() => {
+    const active = activity.filter((d) => d.xp > 0 || d.events > 0).length;
+    return $t('analyticsPage.heatmap.summary', { values: { active, total: days } });
+  });
 </script>
 
-<ChartCard title={$t('goalsAnalytics.slides.consistency')}>
-  {#snippet icon()}<CalendarCheck size={15} />{/snippet}
+<ChartCard title={$t('analyticsPage.slides.consistency')}>
+  {#snippet icon()}<CalendarCheck size={13} />{/snippet}
 
   <div class="hm-wrap" bind:clientWidth={wrapW} bind:clientHeight={wrapH}>
-    <div class="hm-grid" style:--cw="{cellW}px" style:--ch="{cellH}px">
+    <!-- Hover tooltip is a pointer enhancement; cells are not focusable on purpose
+         (hundreds of tab stops) — the summary label + insights carry the same data. -->
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions, a11y_mouse_events_have_key_events -->
+    <div
+      class="hm-grid"
+      role="img"
+      aria-label={summaryLabel}
+      style:--cw="{cellW}px"
+      style:--ch="{cellH}px"
+      onmouseover={onGridOver}
+      onmouseleave={() => (tip = null)}
+    >
       <div class="hm-wd-col">
         <span class="hm-month hm-month-spacer"></span>
         {#each WEEKDAY_ROWS as i (i)}
@@ -137,16 +155,7 @@
         <div class="hm-week" style:--col={wi}>
           <span class="hm-month">{week.monthLabel}</span>
           {#each week.cells as cell (cell.key)}
-            <button
-              type="button"
-              class="hm-cell lv{levelOf(cell)}"
-              class:future={cell.future}
-              aria-label={cellAria(cell)}
-              onmouseenter={(e) => onCell(e, cell)}
-              onmouseleave={() => (tip = null)}
-              onfocus={(e) => onCell(e, cell)}
-              onblur={() => (tip = null)}
-            ></button>
+            <div class="hm-cell lv{levelOf(cell)}" class:future={cell.future} data-k={cell.key}></div>
           {/each}
         </div>
       {/each}
@@ -163,43 +172,43 @@
         {#if tip.cell.day && !tip.cell.future && tip.cell.day.xp > 0}
           <span class="tt-row"
             ><span class="tt-dot" style="background: var(--xp)"></span>{$t(
-              'goalsAnalytics.heatmap.xpOn',
+              'analyticsPage.heatmap.xpOn',
               { values: { xp: tip.cell.day.xp } }
             )}</span
           >
           <span class="tt-row"
-            >{$t('goalsAnalytics.heatmap.events', {
+            >{$t('analyticsPage.heatmap.events', {
               values: { count: tip.cell.day.events },
             })}</span
           >
           <span class="tt-row"
-            >{$t('goalsAnalytics.heatmap.goals', {
+            >{$t('analyticsPage.heatmap.goals', {
               values: { count: tip.cell.day.goals_completed },
             })}</span
           >
           <span class="tt-row"
-            >{$t('goalsAnalytics.heatmap.pomodoros', {
+            >{$t('analyticsPage.heatmap.pomodoros', {
               values: { count: tip.cell.day.pomodoros },
             })}</span
           >
           <span class="tt-row"
-            >{$t('goalsAnalytics.heatmap.notes', {
+            >{$t('analyticsPage.heatmap.notes', {
               values: { count: tip.cell.day.notes },
             })}</span
           >
         {:else}
-          <span class="tt-row">{$t('goalsAnalytics.heatmap.noData')}</span>
+          <span class="tt-row">{$t('analyticsPage.heatmap.noData')}</span>
         {/if}
       {/if}
     </ChartTooltip>
   </div>
 
   <div class="hm-legend">
-    <span>{$t('goalsAnalytics.heatmap.less')}</span>
+    <span>{$t('analyticsPage.heatmap.less')}</span>
     {#each [0, 1, 2, 3, 4, 5] as lv (lv)}
       <span class="hm-cell hm-cell-legend lv{lv}"></span>
     {/each}
-    <span>{$t('goalsAnalytics.heatmap.more')}</span>
+    <span>{$t('analyticsPage.heatmap.more')}</span>
   </div>
 </ChartCard>
 
@@ -237,7 +246,7 @@
   .hm-month {
     width: var(--cw);
     height: 14px;
-    font-size: 9px;
+    font-size: 10px;
     color: var(--text-muted);
     font-family: var(--font-mono);
     line-height: 14px;
@@ -246,7 +255,7 @@
   }
   .hm-wd {
     height: var(--ch);
-    font-size: 8px;
+    font-size: 10px;
     color: var(--text-muted);
     font-family: var(--font-mono);
     line-height: var(--ch);
@@ -255,15 +264,12 @@
     width: var(--cw);
     height: var(--ch);
     border-radius: var(--r-sm);
-    border: none;
-    padding: 0;
     cursor: default;
     outline: 1px solid transparent;
     animation: hm-pop 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both;
     animation-delay: calc(var(--col, 0) * 8ms);
   }
-  .hm-cell:hover,
-  .hm-cell:focus-visible {
+  .hm-cell:hover {
     outline-color: var(--text-secondary);
   }
   .hm-cell.future {
@@ -314,7 +320,7 @@
     align-items: center;
     justify-content: flex-end;
     gap: 3px;
-    font-size: 9px;
+    font-size: 10px;
     color: var(--text-muted);
     font-family: var(--font-mono);
     padding-top: var(--s1);

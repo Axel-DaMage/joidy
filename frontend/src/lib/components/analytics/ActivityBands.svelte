@@ -38,11 +38,11 @@
   let hasData = $derived(shares.some((s) => s.pct > 0));
 </script>
 
-<ChartCard title={$t('goalsAnalytics.bands.title')}>
+<ChartCard title={$t('analyticsPage.bands.title')}>
   {#snippet icon()}<Sun size={13} />{/snippet}
 
   {#if !hasData}
-    <div class="chart-empty"><span>{$t('goalsAnalytics.seasonality.empty')}</span></div>
+    <div class="chart-empty"><span>{$t('analyticsPage.seasonality.empty')}</span></div>
   {:else}
     <div class="bands">
       {#each shares as band, i (band.key)}
@@ -51,7 +51,7 @@
           <span class="band-icon"><Icon size={14} /></span>
           <div class="band-main">
             <div class="band-head">
-              <span class="band-name">{$t(`goalsAnalytics.bands.${band.key}`)}</span>
+              <span class="band-name">{$t(`analyticsPage.bands.${band.key}`)}</span>
               <span class="band-hours mono">{band.range}</span>
               <span class="band-pct mono">{band.pct}%</span>
             </div>
@@ -120,7 +120,7 @@
     color: var(--xp);
   }
   .band-hours {
-    font-size: 9px;
+    font-size: 10px;
     color: var(--text-muted);
   }
   .band-pct {

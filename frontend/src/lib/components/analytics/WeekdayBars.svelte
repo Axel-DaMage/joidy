@@ -36,11 +36,11 @@
   }
 </script>
 
-<ChartCard title={$t('goalsAnalytics.weekday.title')}>
+<ChartCard title={$t('analyticsPage.weekday.title')}>
   {#snippet icon()}<ChartColumn size={13} />{/snippet}
 
   {#if !hasData}
-    <div class="chart-empty"><span>{$t('goalsAnalytics.weekday.empty')}</span></div>
+    <div class="chart-empty"><span>{$t('analyticsPage.weekday.empty')}</span></div>
   {:else}
     <div class="wd-wrap" bind:this={wrapEl}>
       {#each avgs as v, i (i)}
@@ -63,7 +63,7 @@
       <ChartTooltip x={tip?.x ?? 0} y={tip?.y ?? 0} visible={!!tip}>
         {#if tip}
           <span class="tt-title">{tip.day}</span>
-          <span class="tt-row">{$t('goalsAnalytics.weekday.avg', { values: { xp: tip.xp } })}</span>
+          <span class="tt-row">{$t('analyticsPage.weekday.avg', { values: { xp: tip.xp } })}</span>
         {/if}
       </ChartTooltip>
     </div>
@@ -88,7 +88,7 @@
     gap: 4px;
   }
   .wd-val {
-    font-size: 9px;
+    font-size: 10px;
     color: var(--text-muted);
     transition: color 0.2s;
   }
@@ -124,7 +124,7 @@
     font-weight: 700;
   }
   .wd-label {
-    font-size: 9px;
+    font-size: 10px;
     color: var(--text-muted);
     font-family: var(--font-mono);
     text-transform: capitalize;

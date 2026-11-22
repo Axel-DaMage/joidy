@@ -30,12 +30,12 @@
   let today = $derived(new Date().toDateString());
 </script>
 
-<ChartCard title={$t('goalsAnalytics.recent.title')}>
+<ChartCard title={$t('analyticsPage.recent.title')}>
   {#snippet icon()}<History size={13} />{/snippet}
 
   <div class="rd-body" bind:clientHeight={bodyH}>
     {#if rows.length === 0}
-      <div class="chart-empty"><span>{$t('goalsAnalytics.weekday.empty')}</span></div>
+      <div class="chart-empty"><span>{$t('analyticsPage.weekday.empty')}</span></div>
     {:else}
       <div class="rd-list">
         {#each rows as day, i (day.date)}
@@ -43,7 +43,7 @@
           <div class="rd-row" class:negative={day.xp < 0} style:--i={i}>
             <span class="rd-date">
               {dateFmt.format(d)}
-              {#if d.toDateString() === today}<span class="rd-today">{$t('goalsAnalytics.recent.today')}</span>{/if}
+              {#if d.toDateString() === today}<span class="rd-today">{$t('analyticsPage.recent.today')}</span>{/if}
             </span>
             <div class="rd-track">
               <div class="rd-fill" style:width="{Math.max(3, (Math.abs(day.xp) / max) * 100)}%"></div>
@@ -92,7 +92,7 @@
     white-space: nowrap;
   }
   .rd-today {
-    font-size: 8px;
+    font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.06em;

@@ -23,7 +23,7 @@
   let boxH = $state(0);
   let SIZE = $derived(Math.max(160, Math.min(boxW, boxH)));
   let C = $derived(SIZE / 2);
-  let LABEL_R = $derived(C - 12);
+  let LABEL_R = $derived(C - 24);
   let R0 = $derived(SIZE * 0.17);
   let MAX_LEN = $derived(Math.max(20, LABEL_R - 18 - R0));
   let STROKE = $derived(Math.max(5, Math.min(14, SIZE * 0.034)));
@@ -76,7 +76,7 @@
   }
 </script>
 
-<ChartCard title={$t('goalsAnalytics.slides.seasonality')}>
+<ChartCard title={$t('analyticsPage.slides.seasonality')}>
   {#snippet icon()}<Clock size={13} />{/snippet}
   {#snippet actions()}
     <div class="clk-scope">
@@ -85,7 +85,7 @@
           type="button"
           class="clk-scope-btn"
           class:active={scope === s}
-          onclick={() => (scope = s)}>{$t(`goalsAnalytics.clock.${s}`)}</button
+          onclick={() => (scope = s)}>{$t(`analyticsPage.clock.${s}`)}</button
         >
       {/each}
     </div>
@@ -94,7 +94,7 @@
   {#if total === 0}
     <div class="chart-empty">
       <Clock size={22} style="opacity:0.25" />
-      <span>{$t('goalsAnalytics.seasonality.empty')}</span>
+      <span>{$t('analyticsPage.seasonality.empty')}</span>
     </div>
   {:else}
     <div class="clk-wrap" bind:this={wrapEl} bind:clientWidth={boxW} bind:clientHeight={boxH}>
@@ -102,7 +102,7 @@
         width={SIZE}
         height={SIZE}
         role="img"
-        aria-label={$t('goalsAnalytics.slides.seasonality')}
+        aria-label={$t('analyticsPage.slides.seasonality')}
         style:--stroke="{STROKE}px"
       >
         <circle cx={C} cy={C} r={R0 - 8} class="clk-face" />
@@ -149,7 +149,7 @@
           >{total > 0 ? fmtHour(peakHour) : '—'}</text
         >
         <text x={C} y={C + 16} class="clk-peak-label" text-anchor="middle"
-          >{$t('goalsAnalytics.clock.peakLabel')}</text
+          >{$t('analyticsPage.clock.peakLabel')}</text
         >
       </svg>
 
@@ -157,7 +157,7 @@
         {#if tip}
           <span class="tt-title">{fmtHour(tip.hour)}</span>
           <span class="tt-row"
-            >{$t('goalsAnalytics.heatmap.xpOn', { values: { xp: tip.count.toLocaleString() } })}</span
+            >{$t('analyticsPage.heatmap.xpOn', { values: { xp: tip.count.toLocaleString() } })}</span
           >
         {/if}
       </ChartTooltip>
@@ -185,7 +185,7 @@
   }
   .tick {
     fill: var(--text-muted);
-    font-size: 9px;
+    font-size: 10px;
     font-family: var(--font-mono);
   }
   .clk-track {
@@ -226,7 +226,7 @@
   }
   .clk-peak-label {
     fill: var(--text-muted);
-    font-size: 9px;
+    font-size: 10px;
     text-transform: uppercase;
     letter-spacing: 0.08em;
     font-family: var(--font-mono);
@@ -241,7 +241,7 @@
     border-radius: var(--r);
     background: transparent;
     color: var(--text-muted);
-    font-size: 9px;
+    font-size: 10px;
     font-weight: 700;
     font-family: var(--font-mono);
     cursor: pointer;

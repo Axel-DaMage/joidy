@@ -542,7 +542,7 @@
     "goalColor": "Color del objetivo",
     "goalColorHex": "Color del objetivo (hex)"
   },
-  "goalsAnalytics": {
+  "analyticsPage": {
     "loading": "Cargando analíticas…",
     "loadError": "No se pudieron cargar las analíticas.",
     "empty": "Datos insuficientes — sigue usando Joidy para desbloquear las analíticas.",
@@ -570,7 +570,8 @@
       "goals": "{count} objetivos",
       "pomodoros": "{count} pomodoros",
       "notes": "{count} notas",
-      "noData": "sin actividad"
+      "noData": "sin actividad",
+      "summary": "Calendario de actividad: {active} de {total} días con actividad"
     },
     "trend": {
       "dailyXp": "XP diario",
@@ -793,14 +794,21 @@
       "perDay": "XP por día activo",
       "now": "Ahora",
       "before": "Antes",
-      "noPrev": "sin datos previos"
+      "noPrev": "sin datos previos",
+      "noPrevShort": "n/d"
     },
     "weekly": {
       "title": "XP por semana",
       "avg": "media {xp}/sem",
       "weekOf": "Semana del {date}",
       "activeDays": "{count} de {total} días activos"
-    }
+    },
+    "pageTitle": "Analítica — Joidy",
+    "description": "Consistencia, productividad, hábitos, ánimo y objetivos en un solo vistazo.",
+    "title": "Analítica",
+    "tablistLabel": "Secciones de analítica",
+    "refresh": "Actualizar datos",
+    "updatedAt": "actualizado {time}"
   },
   "notesPage": {
     "createNote": "Crear nota",

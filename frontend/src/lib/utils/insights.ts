@@ -17,13 +17,15 @@ export type InsightTone = 'good' | 'warn' | 'bad' | 'info';
 export interface Insight {
   /** Lucide icon name (rendered via DynamicIcon). */
   icon: string;
-  /** i18n key under `goalsAnalytics.insights.*`. */
+  /** i18n key under `analyticsPage.insights.*`. */
   key: string;
   values?: Record<string, string | number>;
   /** Headline figure rendered large on the insight card. */
   stat?: string;
-  /** Semantic colour; omitted = the slide accent. */
+  /** Semantic colour; omitted = the neutral accent. */
   tone?: InsightTone;
+  /** 0–100 share rendered as a thin meter under the label. */
+  meter?: number;
 }
 
 export interface InsightCtx {
@@ -91,6 +93,7 @@ export function consistencyInsights(data: Overview, ctx: InsightCtx): Insight[] 
     key: 'consistency.activeDays',
     values: { count: active_days, total },
     stat: `${active_days}/${total}`,
+    meter: Math.round(rate * 100),
   });
 
   const verdict =
@@ -103,6 +106,7 @@ export function consistencyInsights(data: Overview, ctx: InsightCtx): Insight[] 
     icon: rate >= 0.4 ? 'thumbs-up' : 'sprout',
     key: verdict,
     stat: `${Math.round(rate * 100)}%`,
+    meter: Math.round(rate * 100),
     tone: rate >= 0.7 ? 'good' : rate >= 0.4 ? 'info' : 'warn',
   });
 
@@ -249,6 +253,7 @@ export function clockInsights(data: Overview, ctx: InsightCtx): Insight[] {
     key: top.key,
     values: { pct: pct(topCount, totalEvents) },
     stat: `${pct(topCount, totalEvents)}%`,
+    meter: pct(topCount, totalEvents),
   });
 
   const weekdayCount = perWeekday.slice(0, 5).reduce((a, b) => a + b, 0);
@@ -261,6 +266,7 @@ export function clockInsights(data: Overview, ctx: InsightCtx): Insight[] {
       key: weekendShare >= 40 ? 'clock.moreWeekend' : 'clock.moreWeekdays',
       values: { pct: share },
       stat: `${share}%`,
+      meter: share,
     });
   }
   return out;
@@ -334,7 +340,7 @@ const XP_TYPE_KEY: [prefix: string, key: string][] = [
 
 export function xpTypeLabel(type: string, ctx: InsightCtx): string {
   const hit = XP_TYPE_KEY.find(([prefix]) => type.startsWith(prefix));
-  return hit ? ctx.t(`goalsAnalytics.xpTypes.${hit[1]}`) : type.replace(/_/g, ' ');
+  return hit ? ctx.t(`analyticsPage.xpTypes.${hit[1]}`) : type.replace(/_/g, ' ');
 }
 
 export function sourcesInsights(data: Overview, ctx: InsightCtx): Insight[] {
@@ -351,6 +357,7 @@ export function sourcesInsights(data: Overview, ctx: InsightCtx): Insight[] {
     key: 'sources.topType',
     values: { name: xpTypeLabel(top.type, ctx), pct: topShare },
     stat: `${topShare}%`,
+    meter: topShare,
   });
   out.push({
     icon: topShare >= 60 ? 'focus' : 'shuffle',
@@ -383,6 +390,7 @@ export function goalsInsights(data: Overview, ctx: InsightCtx): Insight[] {
       key: 'goals.completionRate',
       values: { pct: done },
       stat: `${done}%`,
+      meter: done,
       tone: done >= 60 ? 'good' : done >= 30 ? 'info' : 'warn',
     });
     if (abandoned > 0) {
@@ -391,6 +399,7 @@ export function goalsInsights(data: Overview, ctx: InsightCtx): Insight[] {
         key: 'goals.abandonRate',
         values: { pct: pct(abandoned, activated) },
         stat: `${pct(abandoned, activated)}%`,
+        meter: pct(abandoned, activated),
         tone: 'warn',
       });
     }
@@ -405,10 +414,11 @@ export function goalsInsights(data: Overview, ctx: InsightCtx): Insight[] {
       icon: 'medal',
       key: 'goals.bestPeriod',
       values: {
-        name: ctx.t(`goalsAnalytics.goals.temporalities.${best.temporality}`),
+        name: ctx.t(`analyticsPage.goals.temporalities.${best.temporality}`),
         pct: pct(best.completed, best.completed + best.failed),
       },
       stat: `${pct(best.completed, best.completed + best.failed)}%`,
+      meter: pct(best.completed, best.completed + best.failed),
       tone: 'good',
     });
   }
@@ -456,6 +466,7 @@ export function githubInsights(data: Overview): Insight[] {
       key: 'github.activeWeeks',
       values: { count: activeWeeks, total: weekly.length },
       stat: `${activeWeeks}/${weekly.length}`,
+      meter: Math.round((activeWeeks / weekly.length) * 100),
       tone: activeWeeks >= weekly.length * 0.7 ? 'good' : undefined,
     });
     out.push({ icon: 'activity', key: 'github.total', values: { count: total }, stat: num(total) });

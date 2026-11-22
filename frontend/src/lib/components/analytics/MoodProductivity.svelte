@@ -85,24 +85,24 @@
   }
 </script>
 
-<ChartCard title={$t('goalsAnalytics.slides.mood')}>
+<ChartCard title={$t('analyticsPage.slides.mood')}>
   {#snippet icon()}<Smile size={13} />{/snippet}
   {#snippet actions()}
     {#if hasData}
       <span class="mp-badge mono"
-        >{$t('goalsAnalytics.mood.correlation', {
+        >{$t('analyticsPage.mood.correlation', {
           values: { value: r !== null ? r.toFixed(2) : '—' },
         })}</span
       >
       <span class="mp-samples"
-        >{$t('goalsAnalytics.mood.samples', { values: { count: sampleSize } })}</span
+        >{$t('analyticsPage.mood.samples', { values: { count: sampleSize } })}</span
       >
     {/if}
   {/snippet}
 
   <div class="mp-wrap" bind:this={wrapEl} bind:clientWidth={W} bind:clientHeight={H}>
     {#if W > 0 && H > 0}
-      <svg width={W} height={H} role="img" aria-label={$t('goalsAnalytics.slides.mood')}>
+      <svg width={W} height={H} role="img" aria-label={$t('analyticsPage.slides.mood')}>
         {#each yTicks as tv (tv)}
           <line x1={M.left} x2={W - M.right} y1={y(tv)} y2={y(tv)} class="grid-line" />
           {#if hasData}
@@ -116,7 +116,7 @@
         {/each}
         <line x1={M.left} x2={W - M.right} y1={H - M.bottom} y2={H - M.bottom} class="axis" />
         <text x={(M.left + W - M.right) / 2} y={H - 2} class="tick axis-label" text-anchor="middle"
-          >{$t('goalsAnalytics.mood.moodAxis')}</text
+          >{$t('analyticsPage.mood.moodAxis')}</text
         >
 
         {#if hasData}
@@ -167,9 +167,9 @@
       {#if !hasData}
         <div class="mp-empty">
           <Smile size={20} />
-          <span class="mp-empty-title">{$t('goalsAnalytics.mood.emptyTitle')}</span>
-          <span class="mp-empty-body">{$t('goalsAnalytics.mood.empty')}</span>
-          <a class="mp-cta" href="/">{$t('goalsAnalytics.mood.cta')}</a>
+          <span class="mp-empty-title">{$t('analyticsPage.mood.emptyTitle')}</span>
+          <span class="mp-empty-body">{$t('analyticsPage.mood.empty')}</span>
+          <a class="mp-cta" href="/">{$t('analyticsPage.mood.cta')}</a>
         </div>
       {/if}
 
@@ -182,10 +182,10 @@
         {#if tip}
           <span class="tt-title">{dateFmt.format(parseLocalDate(tip.pt.date))}</span>
           <span class="tt-row"
-            >{$t('goalsAnalytics.mood.moodAxis')}<span class="tt-val">{tip.pt.mood}</span></span
+            >{$t('analyticsPage.mood.moodAxis')}<span class="tt-val">{tip.pt.mood}</span></span
           >
           <span class="tt-row"
-            >{$t('goalsAnalytics.mood.xpAxis')}<span class="tt-val">{tip.pt.xp}</span></span
+            >{$t('analyticsPage.mood.xpAxis')}<span class="tt-val">{tip.pt.xp}</span></span
           >
         {/if}
       </ChartTooltip>
@@ -214,7 +214,7 @@
     stroke-width: 1;
   }
   .tick {
-    font-size: 9px;
+    font-size: 10px;
     fill: var(--text-muted);
     font-family: var(--font-mono);
   }
@@ -254,7 +254,7 @@
     stroke-dasharray: 5 4;
   }
   .mp-badge {
-    font-size: 9px;
+    font-size: 10px;
     font-weight: 700;
     color: var(--text-secondary);
     border: 1px solid var(--border);
@@ -264,7 +264,7 @@
     letter-spacing: 0;
   }
   .mp-samples {
-    font-size: 9px;
+    font-size: 10px;
     font-weight: 400;
     text-transform: none;
     letter-spacing: 0;

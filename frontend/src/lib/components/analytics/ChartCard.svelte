@@ -45,7 +45,7 @@
     overflow: hidden;
     height: 100%;
     box-sizing: border-box;
-    backdrop-filter: blur(10px);
+    contain: layout paint;
     transition:
       border-color 0.2s,
       background 0.2s;

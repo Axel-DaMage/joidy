@@ -34,24 +34,24 @@
   let total = $derived(rows.reduce((a, [, n]) => a + n, 0));
 
   function stateLabel(state: string): string {
-    const key = `goalsAnalytics.goals.states.${state}`;
+    const key = `analyticsPage.goals.states.${state}`;
     const label = $t(key);
     return label === key ? state.toLowerCase() : label;
   }
 </script>
 
-<ChartCard title={$t('goalsAnalytics.goals.statesTitle')}>
+<ChartCard title={$t('analyticsPage.goals.statesTitle')}>
   {#snippet icon()}<Layers size={13} />{/snippet}
 
   {#if total === 0}
-    <div class="chart-empty"><span>{$t('goalsAnalytics.goals.empty')}</span></div>
+    <div class="chart-empty"><span>{$t('analyticsPage.goals.empty')}</span></div>
   {:else}
-    <div class="gs-body">
+    <div class="gs-wrap"><div class="gs-body">
       <div class="gs-total">
         <span class="gs-big"><CountUp value={total} /></span>
-        <span class="gs-cap">{$t('goalsAnalytics.goals.totalGoals')}</span>
+        <span class="gs-cap">{$t('analyticsPage.goals.totalGoals')}</span>
       </div>
-      <div class="gs-bar" role="img" aria-label={$t('goalsAnalytics.goals.statesTitle')}>
+      <div class="gs-bar" role="img" aria-label={$t('analyticsPage.goals.statesTitle')}>
         {#each rows as [state, n], i (state)}
           <div
             class="gs-seg"
@@ -72,11 +72,22 @@
           </div>
         {/each}
       </div>
-    </div>
+    </div></div>
   {/if}
 </ChartCard>
 
 <style>
+  .gs-wrap {
+    container-type: inline-size;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+  }
+  @container (max-width: 300px) {
+    .gs-legend {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
   .gs-body {
     flex: 1;
     min-height: 0;

@@ -26,7 +26,7 @@
   );
 
   function stageLabel(stage: string): string {
-    const key = `goalsAnalytics.goals.stages.${stage}`;
+    const key = `analyticsPage.goals.stages.${stage}`;
     const label = $t(key);
     return label === key ? stage.replace(/_/g, ' ') : label;
   }
@@ -47,7 +47,7 @@
   }
 
   function temporalityLabel(temp: string): string {
-    const key = `goalsAnalytics.goals.temporalities.${temp}`;
+    const key = `analyticsPage.goals.temporalities.${temp}`;
     const label = $t(key);
     return label === key ? temp : label;
   }
@@ -55,17 +55,18 @@
   let temporality = $derived(goals?.by_temporality ?? []);
 </script>
 
-<ChartCard title={$t('goalsAnalytics.slides.goals')}>
+<ChartCard title={$t('analyticsPage.slides.goals')}>
   {#snippet icon()}<Target size={13} />{/snippet}
   {#if funnel.length === 0 && temporality.length === 0}
     <div class="chart-empty">
       <Target size={22} style="opacity:0.25" />
-      <span>{$t('goalsAnalytics.goals.empty')}</span>
+      <span>{$t('analyticsPage.goals.empty')}</span>
     </div>
   {:else}
+    <div class="go-wrap">
     <div class="go-layout">
       <div class="go-col">
-        <span class="go-col-title">{$t('goalsAnalytics.goals.funnelTitle')}</span>
+        <span class="go-col-title">{$t('analyticsPage.goals.funnelTitle')}</span>
         <div class="go-rows">
           {#each funnel as stage, i (stage.stage)}
             {@const share = shareOf(i)}
@@ -91,7 +92,7 @@
       <div class="go-sep"></div>
 
       <div class="go-col">
-        <span class="go-col-title">{$t('goalsAnalytics.goals.temporalityTitle')}</span>
+        <span class="go-col-title">{$t('analyticsPage.goals.temporalityTitle')}</span>
         <div class="go-rows">
           {#each temporality as temp, i (temp.temporality)}
             {@const decided = temp.completed + temp.failed}
@@ -123,13 +124,20 @@
             </div>
           {/each}
         </div>
-        <span class="go-note">{$t('goalsAnalytics.goals.rateNote')}</span>
+        <span class="go-note">{$t('analyticsPage.goals.rateNote')}</span>
       </div>
+    </div>
     </div>
   {/if}
 </ChartCard>
 
 <style>
+  .go-wrap {
+    container-type: inline-size;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+  }
   .go-layout {
     flex: 1;
     min-height: 0;
@@ -148,7 +156,7 @@
     min-height: 0;
   }
   .go-col-title {
-    font-size: 9px;
+    font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.08em;
@@ -215,7 +223,7 @@
     color: var(--text-muted);
   }
   .go-note {
-    font-size: 9.5px;
+    font-size: 10px;
     line-height: 1.4;
     color: var(--text-muted);
   }
@@ -248,12 +256,20 @@
       transform: scaleX(1);
     }
   }
-  @media (max-width: 700px) {
+  /* Narrow tiles: stack the funnel above the effectiveness rows so the bars
+     keep a usable width. */
+  @container (max-width: 520px) {
     .go-layout {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: repeat(2, minmax(0, 1fr));
+      gap: var(--s3);
     }
-    .go-sep {
+    .go-sep,
+    .go-note {
       display: none;
+    }
+    .go-name {
+      width: 74px;
     }
   }
   @media (prefers-reduced-motion: reduce) {

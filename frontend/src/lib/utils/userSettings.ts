@@ -46,7 +46,7 @@ export interface UserSettings {
     calendarId?: string | null;
   };
   analyticsUi?: {
-    /** Active slide of the goals-analytics chart carousel (#1499). */
+    /** Active slide of the analytics page carousel (#1499). */
     slide?: number;
     /** Global analysis window in days (90 | 180 | 365) — applies to every slide. */
     rangeDays?: number;

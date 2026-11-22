@@ -542,7 +542,7 @@
     "goalColor": "Goal color",
     "goalColorHex": "Goal color (hex)"
   },
-  "goalsAnalytics": {
+  "analyticsPage": {
     "loading": "Loading analytics…",
     "loadError": "Could not load analytics.",
     "empty": "Not enough data yet — keep using Joidy to unlock analytics.",
@@ -570,7 +570,8 @@
       "goals": "{count} goals",
       "pomodoros": "{count} pomodoros",
       "notes": "{count} notes",
-      "noData": "no activity"
+      "noData": "no activity",
+      "summary": "Activity calendar: {active} of {total} days with activity"
     },
     "trend": {
       "dailyXp": "Daily XP",
@@ -793,14 +794,21 @@
       "perDay": "XP per active day",
       "now": "Now",
       "before": "Before",
-      "noPrev": "no earlier data"
+      "noPrev": "no earlier data",
+      "noPrevShort": "n/a"
     },
     "weekly": {
       "title": "XP per week",
       "avg": "avg {xp}/wk",
       "weekOf": "Week of {date}",
       "activeDays": "{count} of {total} days active"
-    }
+    },
+    "pageTitle": "Analytics — Joidy",
+    "description": "Consistency, productivity, habits, mood and goals at a glance.",
+    "title": "Analytics",
+    "tablistLabel": "Analytics sections",
+    "refresh": "Refresh data",
+    "updatedAt": "updated {time}"
   },
   "notesPage": {
     "createNote": "Create note",
