@@ -21,14 +21,14 @@
 
 /* ── Custom Properties ──────────────────────────────────────────────────────── */
 :root {
-  /* Base surfaces — AMOLED base with a real elevation ramp (#1270): cards,
-     modals and overlays must sit on distinguishable levels, not flat black. */
+  /* Base surfaces — unified flat background (#1482): Joidy's design language is
+     a single continuous surface; elevation lives in hover/border states. */
   --bg: #000000;
-  --surface: #0c0c0c;
-  --elevated: #161616;
-  --hover: #1c1c1c;
-  --border: #262626;
-  --border-light: #1a1a1a;
+  --surface: #000000;
+  --elevated: #000000;
+  --hover: #0c0c0c;
+  --border: #1a1a1a;
+  --border-light: #111111;
 
   /* Text — all white-range */
   --text-primary: #ffffff;
@@ -37,7 +37,7 @@
   --text-disabled: #444444;
 
   /* Accents — used sparingly */
-  --accent: #c8a96e; /* Primary interactive elements — JS-overridden by applyColors() (alias of --xp) */
+  --accent: #e0e0e0; /* Primary interactive elements — JS-overridden by applyColors() (alias of --xp) */
   --accent-contrast: #f59e0b; /* Dynamic complementary contrast color (JS-overridden) */
   --xp: #c8a96e; /* Primary accent color (JS-overridden) */
   --xp-2: #9f8660; /* Secondary accent color (JS-overridden) */
