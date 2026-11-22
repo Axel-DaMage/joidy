@@ -239,7 +239,7 @@
     // per gamification event (per tag per file during a bulk import), and each
     // raw loadStats paid a fetch plus a full routeCache localStorage write
     // (#1500).
-    let statsRefreshTimeout: any = null;
+    let statsRefreshTimeout: ReturnType<typeof setTimeout> | null = null;
     const scheduleStatsRefresh = () => {
       if (statsRefreshTimeout) clearTimeout(statsRefreshTimeout);
       statsRefreshTimeout = setTimeout(() => {
@@ -352,12 +352,16 @@
             }
             scheduleNotesRefresh();
             vaultSyncActive = true;
+            vaultSyncPulse = false;
             if (vaultSyncTimeout) clearTimeout(vaultSyncTimeout);
             vaultSyncTimeout = setTimeout(flushSyncBurst, 3000);
           } else if (msg.type === 'vault_sync_started') {
-            vaultSyncActive = true;
-            syncBurst.reset();
+            // Flush any pending burst before starting a new one so its summary
+            // isn't silently discarded.
             if (vaultSyncTimeout) clearTimeout(vaultSyncTimeout);
+            vaultSyncTimeout = null;
+            flushSyncBurst();
+            vaultSyncActive = true;
           } else if (msg.type === 'vault_sync_complete') {
             scheduleNotesRefresh();
             if (vaultSyncTimeout) clearTimeout(vaultSyncTimeout);
