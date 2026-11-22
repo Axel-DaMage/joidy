@@ -40,6 +40,7 @@
       icon: 'Calendar',
       action: () => goto('/calendar'),
     },
+    { type: 'Navegación', title: 'Ir a Strava', icon: 'Activity', action: () => goto('/strava') },
     { type: 'Navegación', title: 'Ir a Offline', icon: 'CloudOff', action: () => goto('/offline') },
     {
       type: 'Navegación',
