@@ -36,6 +36,9 @@
   import XpSources from './XpSources.svelte';
   import GoalsOverview from './GoalsOverview.svelte';
   import GithubActivity from './GithubActivity.svelte';
+  import GithubRepos from './GithubRepos.svelte';
+  import GithubLanguages from './GithubLanguages.svelte';
+  import GithubPulse from './GithubPulse.svelte';
   import SeasonMatrix from './SeasonMatrix.svelte';
   import PeriodCompare from './PeriodCompare.svelte';
   import WeeklyRhythm from './WeeklyRhythm.svelte';
@@ -66,6 +69,8 @@
   // GitHub activity comes from its own endpoint (API-first) and is fetched
   // lazily the first time its section is opened.
   let gh = $state<GithubActivityPayload | null>(null);
+  // Rich GitHub metrics only exist on the GraphQL (token) path.
+  let ghSummary = $derived(gh?.summary ?? null);
   let ghLoading = $state(false);
   // Avoid retry loops when the request fails — retries are manual (refresh).
   let ghTried = $state(false);
@@ -310,10 +315,13 @@
         <div class="a-streak"><StreakPanel streaks={data.streaks} /></div>
       </div>
     {:else if id === 'github'}
-      <div class="ad-grid g-wide">
-        <div class="a-main"><GithubActivity github={gh ?? data.github} loading={ghLoading && !gh} /></div>
-        <div class="a-recent"><RecentDays activity={data.daily_activity} /></div>
-        <div class="a-wday"><WeekdayBars activity={data.daily_activity} /></div>
+      <div class="ad-grid g-github">
+        <div class="a-gh-chart">
+          <GithubActivity github={gh ?? data.github} loading={ghLoading && !gh} />
+        </div>
+        <div class="a-gh-repos"><GithubRepos summary={ghSummary} loading={ghLoading && !gh} /></div>
+        <div class="a-gh-langs"><GithubLanguages summary={ghSummary} loading={ghLoading && !gh} /></div>
+        <div class="a-gh-pulse"><GithubPulse summary={ghSummary} loading={ghLoading && !gh} /></div>
       </div>
     {/if}
   {/if}
@@ -875,6 +883,14 @@
       'main main'
       'states streak';
   }
+  .g-github {
+    grid-template-columns: 1.5fr 1fr;
+    grid-template-rows: minmax(0, 1.15fr) minmax(0, 0.95fr) minmax(0, 1fr);
+    grid-template-areas:
+      'chart repos'
+      'chart langs'
+      'chart pulse';
+  }
   .a-heat {
     grid-area: heat;
   }
@@ -910,6 +926,18 @@
   }
   .a-states {
     grid-area: states;
+  }
+  .a-gh-chart {
+    grid-area: chart;
+  }
+  .a-gh-repos {
+    grid-area: repos;
+  }
+  .a-gh-langs {
+    grid-area: langs;
+  }
+  .a-gh-pulse {
+    grid-area: pulse;
   }
   .ad-grid > :nth-child(2) :global(.ac-card) {
     animation-delay: 60ms;

@@ -10,7 +10,7 @@
  * statistics jargon (z-scores and regressions stay inside the charts).
  */
 
-import type { AnalyticsOverview } from '$lib/api';
+import type { AnalyticsOverview, GithubSummary } from '$lib/api';
 
 export type InsightTone = 'good' | 'warn' | 'bad' | 'info';
 
@@ -457,10 +457,13 @@ export function githubInsights(data: Overview): Insight[] {
     totals.comments += w.comments;
   }
 
+  const summary =
+    (data.github as { summary?: GithubSummary | null } | undefined)?.summary ?? null;
+
   const dominant = (Object.entries(totals) as [keyof typeof totals, number][]).sort(
     (a, b) => b[1] - a[1]
   )[0];
-  if (dominant && dominant[1] > 0) {
+  if (!summary && dominant && dominant[1] > 0) {
     out.push({
       icon: 'git-commit-horizontal',
       key: `github.top_${dominant[0]}`,
@@ -470,6 +473,60 @@ export function githubInsights(data: Overview): Insight[] {
   }
   const total = weekly.reduce((a, w) => a + w.pushes + w.pull_requests + w.issues + w.comments, 0);
   const activeWeeks = weekly.filter((w) => w.pushes + w.pull_requests + w.issues + w.comments > 0).length;
+
+  if (summary) {
+    // Rich GraphQL summary: surface the most interesting derived metrics.
+    const topRepo = summary.repos[0];
+    if (topRepo) {
+      out.push({
+        icon: 'git-commit-horizontal',
+        key: 'github.topRepo',
+        values: { repo: topRepo.name.split('/').pop() ?? topRepo.name, count: topRepo.commits },
+        stat: num(topRepo.commits),
+      });
+    }
+    const topLang = summary.languages[0];
+    if (topLang) {
+      out.push({
+        icon: 'code-xml',
+        key: 'github.topLang',
+        values: { lang: topLang.name ?? '—', share: topLang.share },
+        stat: `${topLang.share}%`,
+      });
+    }
+    const med = summary.prs.median_merge_hours;
+    if (med != null) {
+      out.push({
+        icon: 'git-merge',
+        key: 'github.mergeMedian',
+        values: {},
+        stat:
+          med < 1
+            ? `${Math.max(1, Math.round(med * 60))} min`
+            : med < 48
+              ? `${med.toFixed(1)} h`
+              : `${(med / 24).toFixed(1)} d`,
+      });
+    }
+    out.push({
+      icon: 'flame',
+      key: 'github.contribStreak',
+      values: { current: summary.calendar.current_streak, best: summary.calendar.longest_streak },
+      stat: `${summary.calendar.current_streak}d`,
+    });
+    if (total > 0) {
+      out.push({
+        icon: 'git-pull-request',
+        key: 'github.activeWeeks',
+        values: { count: activeWeeks, total: weekly.length },
+        stat: `${activeWeeks}/${weekly.length}`,
+        meter: Math.round((activeWeeks / weekly.length) * 100),
+        tone: activeWeeks >= weekly.length * 0.7 ? 'good' : undefined,
+      });
+    }
+    return out.slice(0, 5);
+  }
+
   if (total > 0) {
     out.push({
       icon: 'git-pull-request',

@@ -209,3 +209,22 @@ describe('githubInsights', () => {
     expect(items.find((i) => i.key === 'github.total')?.stat).toBe('4');
   });
 });
+
+describe('githubInsights with summary', () => {
+  const summary = {
+    repos: [{ name: 'me/app', private: false, language: 'Python', color: '#x', commits: 42 }],
+    languages: [{ name: 'Python', color: '#x', commits: 40, share: 47.5 }],
+    prs: { merged: 10, median_merge_hours: 0.4, additions: 100, deletions: 20, sampled: false },
+    threads: { commented: 5, issues_closed: 3, discussions: 0 },
+    calendar: { total: 50, active_days: 20, best_day: null, current_streak: 6, longest_streak: 29 },
+  };
+  it('surfaces repo, language, merge time and streak', () => {
+    const data = base({
+      github: { available: true, weekly: [{ week_start: '2026-11-16', pushes: 1, pull_requests: 0, issues: 0, comments: 0 }], summary } as never,
+    });
+    const keys = githubInsights(data).map((i) => i.key);
+    expect(keys).toEqual(['github.topRepo', 'github.topLang', 'github.mergeMedian', 'github.contribStreak', 'github.activeWeeks']);
+    const streak = githubInsights(data).find((i) => i.key === 'github.contribStreak');
+    expect(streak?.stat).toBe('6d');
+  });
+});

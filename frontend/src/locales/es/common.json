@@ -663,7 +663,29 @@
       "errorTitle_bad_credentials": "GitHub rechazó las credenciales",
       "errorBody_bad_credentials": "El token configurado no es válido o expiró. Revísalo en Ajustes.",
       "errorTitle_unavailable": "No se pudo consultar GitHub",
-      "errorBody_unavailable": "Hubo un problema al contactar la API de GitHub. Inténtalo de nuevo en unos minutos."
+      "errorBody_unavailable": "Hubo un problema al contactar la API de GitHub. Inténtalo de nuevo en unos minutos.",
+      "reposTitle": "Repos activos",
+      "langsTitle": "Lenguajes",
+      "pulseTitle": "Actividad",
+      "loadingShort": "Cargando…",
+      "summaryNeedToken": "Conecta un token de GitHub para ver repos, lenguajes y métricas.",
+      "noLanguage": "Sin lenguaje",
+      "prsSampled": "PRs: últimos {count} mergeados",
+      "p": {
+        "contributions": "contribuciones",
+        "activeDays": "días activos",
+        "bestDay": "mejor día",
+        "currentStreak": "racha actual",
+        "longestStreak": "mejor racha",
+        "prsMerged": "PRs mergeados",
+        "medianMerge": "merge mediano",
+        "additions": "líneas añadidas",
+        "deletions": "líneas eliminadas",
+        "commented": "hilos comentados",
+        "issuesClosed": "issues cerradas",
+        "discussions": "discusiones"
+      },
+      "other": "Otros"
     },
     "insightsTitle": "Insights",
     "insightsEmpty": "Sigue usando Joidy — los insights aparecen con suficientes datos.",
@@ -720,7 +742,11 @@
       "github.error_rate_limited": "GitHub limitó las peticiones",
       "github.error_bad_credentials": "GitHub rechazó tu token",
       "github.error_unavailable": "No se pudo consultar GitHub",
-      "github.howToToken": "Agrega un token en Ajustes → GitHub (límite 5.000/h)"
+      "github.howToToken": "Agrega un token en Ajustes → GitHub (límite 5.000/h)",
+      "github.topRepo": "más commits: {repo}",
+      "github.topLang": "lenguaje principal: {lang}",
+      "github.mergeMedian": "mediana hasta merge",
+      "github.contribStreak": "días seguidos · mejor {best}d"
     },
     "clock": {
       "all": "Todos",
@@ -800,7 +826,7 @@
       },
       "github": {
         "title": "Cómo se calcula",
-        "body": "Con token se consultan tus contribuciones por semana ISO (commits, PRs e issues abiertos y reviews) en las últimas 12 semanas. Con solo usuario se usan tus eventos públicos recientes (máx. 300). Sin cuenta, los webhooks."
+        "body": "Con token se consultan tus contribuciones por semana ISO (commits, PRs e issues abiertos y reviews) en las últimas 12 semanas, más repos, lenguajes y PRs mergeados. Con solo usuario se usan tus eventos públicos recientes (máx. 300). Sin cuenta, los webhooks."
       },
       "hide": "Ocultar",
       "show": "Mostrar"

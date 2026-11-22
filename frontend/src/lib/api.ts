@@ -878,8 +878,47 @@ export interface AnalyticsOverview {
   };
 }
 
+export interface GithubRepoStat {
+  name: string;
+  private: boolean;
+  language: string | null;
+  color: string | null;
+  commits: number;
+}
+
+export interface GithubLanguageStat {
+  name: string | null;
+  color: string | null;
+  commits: number;
+  /** Percentage of commits in the window (0–100, one decimal). */
+  share: number;
+}
+
+/** Rich GitHub metrics (repos, languages, PRs, calendar) — token/GraphQL only. */
+export interface GithubSummary {
+  repos: GithubRepoStat[];
+  languages: GithubLanguageStat[];
+  prs: {
+    merged: number;
+    median_merge_hours: number | null;
+    additions: number;
+    deletions: number;
+    /** True when only the latest 100 merged PRs were sampled. */
+    sampled: boolean;
+  };
+  threads: { commented: number; issues_closed: number; discussions: number };
+  calendar: {
+    total: number;
+    active_days: number;
+    best_day: { date: string; count: number } | null;
+    current_streak: number;
+    longest_streak: number;
+  };
+}
+
 /** GET /analytics/github — API-first weekly activity (webhook events as fallback). */
 export type GithubActivityPayload = AnalyticsOverview['github'] & {
+  summary?: GithubSummary | null;
   source?: 'graphql' | 'events' | 'webhook' | null;
   login?: string | null;
   /** The Events API cap (300) was hit inside the window — older weeks may be undercounted. */

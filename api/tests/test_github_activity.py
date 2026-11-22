@@ -267,3 +267,124 @@ def test_endpoint_reports_error_reason_with_webhook_fallback(
     data = client.get("/analytics/github").json()
     assert data["error"] == "rate_limited"
     assert data["source"] == "webhook"
+
+
+def test_contribution_streaks_current_survives_empty_today():
+    days = [
+        {"date": "2026-11-19", "count": 5},
+        {"date": "2026-11-20", "count": 3},
+        {"date": "2026-11-21", "count": 2},
+        {"date": "2026-11-22", "count": 0},  # today, still in progress
+    ]
+    out = gh.contribution_streaks(days, TODAY)
+    assert out["current"] == 3  # 19+20+21; an empty today does not break it
+    assert out["longest"] == 3
+
+
+def test_contribution_streaks_dead_when_yesterday_empty():
+    days = [
+        {"date": "2026-11-20", "count": 5},
+        {"date": "2026-11-21", "count": 0},
+        {"date": "2026-11-22", "count": 0},
+    ]
+    out = gh.contribution_streaks(days, TODAY)
+    assert out["current"] == 0  # yesterday had no contributions: streak already dead
+    assert out["longest"] == 1
+
+
+def test_contribution_streaks_gap_breaks_current():
+    days = [
+        {"date": "2026-11-21", "count": 1},
+        {"date": "2026-11-22", "count": 4},
+    ]
+    out = gh.contribution_streaks(days, TODAY)
+    assert out["current"] == 2
+
+
+def test_parse_extras_maps_repos_languages_prs_calendar():
+    mondays = gh.week_starts(TODAY)
+    data = {
+        "win": {
+            "contributionsCollection": {
+                "commitContributionsByRepository": [
+                    {
+                        "repository": {
+                            "nameWithOwner": "u/a",
+                            "isPrivate": True,
+                            "primaryLanguage": {"name": "Python", "color": "#3572A5"},
+                        },
+                        "contributions": {"totalCount": 8},
+                    },
+                    {
+                        "repository": {
+                            "nameWithOwner": "u/b",
+                            "isPrivate": False,
+                            "primaryLanguage": None,
+                        },
+                        "contributions": {"totalCount": 2},
+                    },
+                ],
+                "contributionCalendar": {
+                    "totalContributions": 42,
+                    "weeks": [
+                        {
+                            "contributionDays": [
+                                {"date": "2026-11-21", "contributionCount": 10},
+                                {"date": "2026-11-22", "contributionCount": 3},
+                            ]
+                        }
+                    ],
+                },
+            }
+        },
+        "disc": {"discussionCount": 2},
+        "commented": {"issueCount": 9},
+        "closedIssues": {"issueCount": 4},
+        "merged": {
+            "issueCount": 3,
+            "nodes": [
+                {
+                    "additions": 10,
+                    "deletions": 2,
+                    "createdAt": "2026-11-20T10:00:00Z",
+                    "mergedAt": "2026-11-20T12:00:00Z",
+                }
+            ],
+        },
+    }
+    out = gh.parse_extras(data, TODAY)
+    assert out["repos"][0] == {
+        "name": "u/a",
+        "private": True,
+        "language": "Python",
+        "color": "#3572A5",
+        "commits": 8,
+    }
+    assert out["languages"][0]["share"] == 80.0  # Python: 8 of 10
+    assert out["languages"][1]["name"] is None
+    assert out["prs"]["merged"] == 3
+    assert out["prs"]["median_merge_hours"] == 2.0
+    assert out["prs"]["additions"] == 10 and out["prs"]["deletions"] == 2
+    assert out["prs"]["sampled"] is True
+    assert out["threads"] == {"commented": 9, "issues_closed": 4, "discussions": 2}
+    assert out["calendar"]["active_days"] == 2
+    assert out["calendar"]["current_streak"] == 2  # 21+22 consecutive
+    assert out["calendar"]["best_day"]["count"] == 10
+
+
+def test_fetch_weekly_activity_includes_summary_when_graphql_ok(monkeypatch):
+    gh.clear_cache()
+    monkeypatch.setattr(gh.settings, "github_token", "t0ken")
+    monkeypatch.setattr(gh.settings, "github_username", "")
+
+    async def fake_weekly(today, now):
+        return "octo", []
+
+    async def fake_extras(login, today, now):
+        return {"marker": login}
+
+    monkeypatch.setattr(gh, "fetch_graphql_weekly", fake_weekly)
+    monkeypatch.setattr(gh, "fetch_graphql_extras", fake_extras)
+    out = asyncio.run(gh.fetch_weekly_activity(TODAY))
+    assert out["summary"] == {"marker": "octo"}
+    gh.clear_cache()

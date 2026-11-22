@@ -12,6 +12,8 @@ import Flame from 'lucide-svelte/icons/flame';
 import Focus from 'lucide-svelte/icons/focus';
 import GitCommitHorizontal from 'lucide-svelte/icons/git-commit-horizontal';
 import GitPullRequest from 'lucide-svelte/icons/git-pull-request';
+import GitMerge from 'lucide-svelte/icons/git-merge';
+import CodeXml from 'lucide-svelte/icons/code-xml';
 import Heart from 'lucide-svelte/icons/heart';
 import Lightbulb from 'lucide-svelte/icons/lightbulb';
 import Medal from 'lucide-svelte/icons/medal';
@@ -54,6 +56,8 @@ export const INSIGHT_ICONS: Record<string, IconComponent> = {
   focus: Focus,
   'git-commit-horizontal': GitCommitHorizontal,
   'git-pull-request': GitPullRequest,
+  'git-merge': GitMerge,
+  'code-xml': CodeXml,
   heart: Heart,
   lightbulb: Lightbulb,
   medal: Medal,
