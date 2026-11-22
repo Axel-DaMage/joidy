@@ -814,6 +814,62 @@ export interface AnalyticsDashboard {
   usage: UsageSummary;
 }
 
+// ── Holistic analytics overview (#1499) ─────────────────────────────────────
+// Shape mirrors GET /analytics/overview?days=N (api/services/analytics_service.py).
+// `seasonality.cells[].weekday` uses Mon=0..Sun=6; `hour` 0-23.
+export interface AnalyticsOverview {
+  days: number;
+  daily_activity: {
+    date: string;
+    xp: number;
+    events: number;
+    goals_completed: number;
+    pomodoros: number;
+    notes: number;
+  }[];
+  xp_by_type: { type: string; xp: number; count: number }[];
+  seasonality: { cells: { weekday: number; hour: number; count: number }[]; max: number };
+  mood_activity: {
+    points: { date: string; mood: number; xp: number }[];
+    pearson_r: number | null;
+    sample_size: number;
+  };
+  goals: {
+    by_state: Record<string, number>;
+    by_temporality: {
+      temporality: string;
+      total: number;
+      completed: number;
+      failed: number;
+      avg_progress: number;
+    }[];
+    funnel: { stage: string; count: number }[];
+  };
+  streaks: {
+    current_streak: number;
+    longest_streak: number;
+    active_streaks: number;
+    total_checkins: number;
+    checkin_rate_30d: number;
+  };
+  github: {
+    available: boolean;
+    weekly: {
+      week_start: string;
+      pushes: number;
+      pull_requests: number;
+      issues: number;
+      comments: number;
+    }[];
+  };
+  summary: {
+    total_xp: number;
+    active_days: number;
+    avg_daily_xp: number;
+    best_day: { date: string; xp: number } | null;
+  };
+}
+
 // ── Notes ─────────────────────────────────────────────────────────────────────
 
 export interface SyncConflict {
@@ -1785,6 +1841,8 @@ export const api = {
   },
   analytics: {
     dashboard: (days = 30) => req<AnalyticsDashboard>('GET', `/analytics/dashboard?days=${days}`),
+    overview: (days = 180) =>
+      req<AnalyticsOverview>('GET', `/analytics/overview?days=${days}`),
     track: (event_type: string, event_data?: Record<string, unknown>) =>
       req<{ status: string; id: number }>(
         'POST',

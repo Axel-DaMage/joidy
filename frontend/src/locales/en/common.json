@@ -542,6 +542,112 @@
     "goalColor": "Goal color",
     "goalColorHex": "Goal color (hex)"
   },
+  "goalsAnalytics": {
+    "loading": "Loading analytics…",
+    "loadError": "Could not load analytics.",
+    "empty": "Not enough data yet — keep using Joidy to unlock analytics.",
+    "statTotalXp": "Total XP",
+    "statStreak": "Current streak",
+    "statActiveDays": "Active days",
+    "statAvgXp": "Avg daily XP",
+    "statBestDay": "Best day",
+    "statBestStreak": "Best streak",
+    "rangeLabel": "Window",
+    "slides": {
+      "consistency": "Consistency",
+      "trend": "Productivity trend",
+      "seasonality": "Seasonality",
+      "mood": "Mood × XP",
+      "sources": "XP sources",
+      "goals": "Goals",
+      "github": "GitHub"
+    },
+    "heatmap": {
+      "less": "Less",
+      "more": "More",
+      "xpOn": "{xp} XP",
+      "events": "{count} events",
+      "goals": "{count} goals",
+      "pomodoros": "{count} pomodoros",
+      "notes": "{count} notes",
+      "noData": "no activity"
+    },
+    "trend": {
+      "dailyXp": "Daily XP",
+      "movingAvg": "7-day avg",
+      "regression": "Trend",
+      "empty": "No XP recorded in this period."
+    },
+    "seasonality": {
+      "peak": "Peak: {day} {hour}",
+      "empty": "No activity recorded yet."
+    },
+    "mood": {
+      "correlation": "r = {value}",
+      "samples": "{count} samples",
+      "empty": "Log your mood to unlock this insight.",
+      "moodAxis": "Mood",
+      "xpAxis": "XP"
+    },
+    "sources": {
+      "empty": "No XP events yet.",
+      "total": "{xp} XP total"
+    },
+    "xpTypes": {
+      "goal_completed": "Goals",
+      "pomodoro_completed": "Pomodoros",
+      "note_created": "Notes",
+      "note_edited": "Edits",
+      "daily_activity": "Daily activity",
+      "streak_milestone": "Streak milestone",
+      "calendar_task": "Calendar",
+      "strava": "Strava",
+      "tag": "Tags",
+      "topic_connected": "Connections",
+      "note_imported_obsidian": "Obsidian",
+      "day_fully_planned": "Planning"
+    },
+    "goals": {
+      "funnelTitle": "Conversion funnel",
+      "temporalityTitle": "Effectiveness by period",
+      "conversion": "{pct}%",
+      "avgProgress": "avg {pct}%",
+      "empty": "No goals yet.",
+      "stages": {
+        "created": "Created",
+        "activated": "Activated",
+        "completed": "Completed",
+        "abandoned": "Abandoned"
+      },
+      "temporalities": {
+        "DAILY": "Daily",
+        "WEEKLY": "Weekly",
+        "MONTHLY": "Monthly",
+        "ANNUAL": "Annual",
+        "ONEOFF": "One-off"
+      },
+      "statesTitle": "By state",
+      "states": {
+        "ACTIVE": "Active",
+        "INBOX": "Inbox",
+        "COMPLETED": "Completed",
+        "FAILED": "Failed",
+        "PAUSED": "Paused",
+        "CANCELLED": "Cancelled"
+      },
+      "habitsTitle": "Habits",
+      "checkinRate": "{pct}% check-ins (30d)",
+      "activeStreaks": "{count} active",
+      "totalCheckins": "{count} check-ins"
+    },
+    "github": {
+      "pushes": "Pushes",
+      "prs": "PRs",
+      "issues": "Issues",
+      "comments": "Comments",
+      "empty": "No GitHub activity in this period."
+    }
+  },
   "notesPage": {
     "createNote": "Create note",
     "createFolder": "Create folder",

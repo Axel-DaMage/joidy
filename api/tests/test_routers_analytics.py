@@ -12,6 +12,9 @@ from datetime import UTC, datetime, timedelta
 
 from fastapi.testclient import TestClient
 from models.gamification import UserStats, XPEvent
+from models.github import GitHubEvent, GitHubEventType, GitHubRepo
+from models.goal import Goal, GoalState, GoalTemporality
+from models.mood_entry import MoodEntry
 from models.note import Note
 
 
@@ -138,3 +141,227 @@ def test_usage_old_events_excluded(client: TestClient, db_session):
     # events from today may legitimately be counted.
     data = response.json()
     assert data["total_events"] >= 0
+
+
+# ── GET /analytics/overview (#1499) ─────────────────────────────────────────────
+
+
+def test_overview_shape_empty_db(client: TestClient):
+    response = client.get("/analytics/overview")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["days"] == 180
+    for key in (
+        "daily_activity",
+        "xp_by_type",
+        "seasonality",
+        "mood_activity",
+        "goals",
+        "streaks",
+        "github",
+        "summary",
+    ):
+        assert key in data
+    assert len(data["daily_activity"]) == 180
+    assert data["xp_by_type"] == []
+    assert data["seasonality"] == {"cells": [], "max": 0}
+    assert data["mood_activity"]["points"] == []
+    assert data["mood_activity"]["pearson_r"] is None
+    assert data["mood_activity"]["sample_size"] == 0
+    assert data["github"]["available"] is False
+    assert data["github"]["weekly"] == []
+    assert data["summary"]["best_day"] is None
+
+
+def test_overview_days_param_and_zerofill(client: TestClient):
+    response = client.get("/analytics/overview?days=7")
+    assert response.status_code == 200
+    daily = response.json()["daily_activity"]
+    assert len(daily) == 7
+    today = datetime.now(UTC).date()
+    # Oldest → newest, every day present even with no activity.
+    assert daily[0]["date"] == (today - timedelta(days=6)).isoformat()
+    assert daily[-1]["date"] == today.isoformat()
+    for row in daily:
+        for key in ("xp", "events", "goals_completed", "pomodoros", "notes"):
+            assert row[key] == 0
+
+
+def test_overview_days_out_of_range_rejected(client: TestClient):
+    assert client.get("/analytics/overview?days=0").status_code == 422
+    assert client.get("/analytics/overview?days=500").status_code == 422
+
+
+def test_overview_requires_auth(client_no_auth: TestClient):
+    assert client_no_auth.get("/analytics/overview").status_code == 401
+
+
+def test_overview_daily_aggregation(client: TestClient, db_session):
+    db_session.add_all(
+        [
+            XPEvent(event_type="note_created", xp=10),
+            XPEvent(event_type="goal_completed", xp=50),
+            XPEvent(event_type="goal_completed", xp=50),
+            XPEvent(event_type="pomodoro_completed", xp=15),
+            Note(title=f"n-ov-{uuid.uuid4().hex[:8]}", content="a"),
+        ]
+    )
+    db_session.commit()
+
+    data = client.get("/analytics/overview?days=7").json()
+    today_row = data["daily_activity"][-1]
+    assert today_row["xp"] == 125
+    assert today_row["events"] == 4
+    assert today_row["goals_completed"] == 2
+    assert today_row["pomodoros"] == 1
+    assert today_row["notes"] == 1
+
+    summary = data["summary"]
+    assert summary["active_days"] == 1
+    assert summary["avg_daily_xp"] == round(125 / 7, 1)
+    assert summary["best_day"] == {"date": today_row["date"], "xp": 125}
+
+
+def test_overview_xp_by_type_sorted(client: TestClient, db_session):
+    db_session.add_all(
+        [
+            XPEvent(event_type="note_created", xp=10),
+            XPEvent(event_type="goal_completed", xp=50),
+            XPEvent(event_type="goal_completed", xp=50),
+            XPEvent(event_type="pomodoro_completed", xp=15),
+        ]
+    )
+    db_session.commit()
+
+    xp_by_type = client.get("/analytics/overview?days=7").json()["xp_by_type"]
+    assert [t["xp"] for t in xp_by_type] == sorted((t["xp"] for t in xp_by_type), reverse=True)
+    goal = next(t for t in xp_by_type if t["type"] == "goal_completed")
+    assert goal["xp"] == 100
+    assert goal["count"] == 2
+
+
+def test_overview_seasonality_ranges(client: TestClient, db_session):
+    db_session.add(XPEvent(event_type="note_created", xp=10))
+    db_session.commit()
+
+    seasonality = client.get("/analytics/overview?days=1").json()["seasonality"]
+    cells = seasonality["cells"]
+    assert len(cells) >= 1
+    for cell in cells:
+        assert 0 <= cell["weekday"] <= 6
+        assert 0 <= cell["hour"] <= 23
+        assert cell["count"] >= 1
+    assert seasonality["max"] == max(c["count"] for c in cells)
+
+
+def test_overview_pearson_null_with_few_samples(client: TestClient, db_session):
+    today = datetime.now(UTC).date()
+    db_session.add(MoodEntry(user_id=1, score=4, entry_date=today))
+    db_session.add(XPEvent(event_type="note_created", xp=10))
+    db_session.commit()
+
+    mood = client.get("/analytics/overview?days=7").json()["mood_activity"]
+    assert mood["sample_size"] == 1
+    assert mood["pearson_r"] is None
+    assert mood["points"][0]["mood"] == 4
+    assert mood["points"][0]["xp"] == 10
+
+
+def test_overview_pearson_perfect_correlation(client: TestClient, db_session):
+    now = datetime.now(UTC).replace(tzinfo=None)
+    for i in range(4):
+        moment = now - timedelta(days=3 - i)
+        db_session.add(MoodEntry(user_id=1, score=i + 1, entry_date=moment.date()))
+        db_session.add(XPEvent(event_type="note_created", xp=(i + 1) * 10, created_at=moment))
+    db_session.commit()
+
+    mood = client.get("/analytics/overview?days=7").json()["mood_activity"]
+    assert mood["sample_size"] == 4
+    assert mood["pearson_r"] == 1.0
+
+
+def test_overview_goals_and_streaks(client: TestClient, db_session):
+    db_session.add_all(
+        [
+            Goal(
+                title="g1",
+                state=GoalState.ACTIVE,
+                temporality=GoalTemporality.DAILY,
+                target_value=10,
+                current_value=5,
+            ),
+            Goal(
+                title="g2",
+                state=GoalState.COMPLETED,
+                temporality=GoalTemporality.DAILY,
+                target_value=10,
+                current_value=10,
+            ),
+            Goal(title="g3", state=GoalState.INBOX, temporality=GoalTemporality.WEEKLY),
+        ]
+    )
+    stats = db_session.query(UserStats).filter(UserStats.id == 1).first()
+    if stats is None:
+        stats = UserStats(id=1)
+        db_session.add(stats)
+    stats.total_xp = 321
+    stats.current_streak = 4
+    stats.longest_streak = 9
+    db_session.commit()
+
+    data = client.get("/analytics/overview?days=7").json()
+
+    goals = data["goals"]
+    assert goals["by_state"] == {"ACTIVE": 1, "COMPLETED": 1, "INBOX": 1}
+    funnel = {s["stage"]: s["count"] for s in goals["funnel"]}
+    assert funnel == {"created": 3, "activated": 2, "completed": 1, "abandoned": 0}
+    daily = next(t for t in goals["by_temporality"] if t["temporality"] == "DAILY")
+    assert daily["total"] == 2
+    assert daily["completed"] == 1
+    assert daily["failed"] == 0
+    assert daily["avg_progress"] == 75.0
+
+    streaks = data["streaks"]
+    assert streaks["current_streak"] == 4
+    assert streaks["longest_streak"] == 9
+    assert streaks["active_streaks"] == 0
+    assert streaks["total_checkins"] == 0
+    assert streaks["checkin_rate_30d"] == 0
+
+    assert data["summary"]["total_xp"] == 321
+
+
+def test_overview_github_unavailable(client: TestClient):
+    data = client.get("/analytics/overview?days=7").json()
+    assert data["github"]["available"] is False
+    assert data["github"]["weekly"] == []
+
+
+def test_overview_github_weekly(client: TestClient, db_session):
+    repo = GitHubRepo(
+        name="joidy",
+        full_name=f"u/joidy-{uuid.uuid4().hex[:8]}",
+        url="https://github.com/u/joidy",
+    )
+    db_session.add(repo)
+    db_session.flush()
+    now = datetime.now(UTC).replace(tzinfo=None)
+    db_session.add_all(
+        [
+            GitHubEvent(repo_id=repo.id, event_type=GitHubEventType.PUSH, action="push", sender="u", created_at=now),
+            GitHubEvent(repo_id=repo.id, event_type=GitHubEventType.PUSH, action="push", sender="u", created_at=now),
+            GitHubEvent(
+                repo_id=repo.id, event_type=GitHubEventType.ISSUE_COMMENT, action="created", sender="u", created_at=now
+            ),
+        ]
+    )
+    db_session.commit()
+
+    github = client.get("/analytics/overview?days=7").json()["github"]
+    assert github["available"] is True
+    assert len(github["weekly"]) == 12
+    this_week = github["weekly"][-1]
+    assert this_week["pushes"] == 2
+    assert this_week["comments"] == 1
+    assert this_week["issues"] == 0
+    assert this_week["pull_requests"] == 0

@@ -20,6 +20,7 @@ from models.note import Note
 from models.note import Tag as TagModel
 from models.skill import Skill
 from pydantic import BaseModel, field_validator
+from services.analytics_service import get_overview
 from services.auth_service import get_current_user
 from services.http_client import http_client
 from services.mood_service import get_mood_history, get_mood_stats
@@ -159,6 +160,16 @@ async def get_dashboard(
         "ai_usage": ai_usage,
         "usage": usage,
     }
+
+
+@router.get("/overview")
+def overview(
+    days: int = Query(180, ge=1, le=366),
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user),
+):
+    """Holistic analytics overview for the last ``days`` days (#1499)."""
+    return get_overview(db, user_id, days)
 
 
 @router.post("/track")

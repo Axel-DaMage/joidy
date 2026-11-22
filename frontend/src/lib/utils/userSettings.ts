@@ -45,6 +45,12 @@ export interface UserSettings {
     /** Sacred-calendar picker selection (#1201); null = all calendars. */
     calendarId?: string | null;
   };
+  analyticsUi?: {
+    /** Active slide of the goals-analytics chart carousel (#1499). */
+    slide?: number;
+    /** Global analysis window in days (90 | 180 | 365) — applies to every slide. */
+    rangeDays?: number;
+  };
 }
 
 const KEY = 'joidy-user-settings-v1';
@@ -103,6 +109,7 @@ export function patchUserSettings(patch: Partial<UserSettings>): void {
     goalsUi: { ...current.goalsUi, ...patch.goalsUi },
     statusBarUi: { ...current.statusBarUi, ...patch.statusBarUi },
     executionUi: { ...current.executionUi, ...patch.executionUi },
+    analyticsUi: { ...current.analyticsUi, ...patch.analyticsUi },
   };
   localStorage.setItem(KEY, JSON.stringify(next));
 }

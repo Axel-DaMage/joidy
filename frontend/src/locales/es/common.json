@@ -542,6 +542,112 @@
     "goalColor": "Color del objetivo",
     "goalColorHex": "Color del objetivo (hex)"
   },
+  "goalsAnalytics": {
+    "loading": "Cargando analíticas…",
+    "loadError": "No se pudieron cargar las analíticas.",
+    "empty": "Datos insuficientes — sigue usando Joidy para desbloquear las analíticas.",
+    "statTotalXp": "XP total",
+    "statStreak": "Racha actual",
+    "statActiveDays": "Días activos",
+    "statAvgXp": "XP diario medio",
+    "statBestDay": "Mejor día",
+    "statBestStreak": "Racha récord",
+    "rangeLabel": "Ventana",
+    "slides": {
+      "consistency": "Consistencia",
+      "trend": "Tendencia de productividad",
+      "seasonality": "Estacionalidad",
+      "mood": "Mood × XP",
+      "sources": "Fuentes de XP",
+      "goals": "Objetivos",
+      "github": "GitHub"
+    },
+    "heatmap": {
+      "less": "Menos",
+      "more": "Más",
+      "xpOn": "{xp} XP",
+      "events": "{count} eventos",
+      "goals": "{count} objetivos",
+      "pomodoros": "{count} pomodoros",
+      "notes": "{count} notas",
+      "noData": "sin actividad"
+    },
+    "trend": {
+      "dailyXp": "XP diario",
+      "movingAvg": "Media 7d",
+      "regression": "Tendencia",
+      "empty": "Sin XP registrado en este periodo."
+    },
+    "seasonality": {
+      "peak": "Pico: {day} {hour}",
+      "empty": "Sin actividad registrada aún."
+    },
+    "mood": {
+      "correlation": "r = {value}",
+      "samples": "{count} muestras",
+      "empty": "Registra tu mood para desbloquear este análisis.",
+      "moodAxis": "Mood",
+      "xpAxis": "XP"
+    },
+    "sources": {
+      "empty": "Sin eventos de XP aún.",
+      "total": "{xp} XP en total"
+    },
+    "xpTypes": {
+      "goal_completed": "Objetivos",
+      "pomodoro_completed": "Pomodoros",
+      "note_created": "Notas",
+      "note_edited": "Ediciones",
+      "daily_activity": "Actividad diaria",
+      "streak_milestone": "Hito de racha",
+      "calendar_task": "Calendario",
+      "strava": "Strava",
+      "tag": "Tags",
+      "topic_connected": "Conexiones",
+      "note_imported_obsidian": "Obsidian",
+      "day_fully_planned": "Planificación"
+    },
+    "goals": {
+      "funnelTitle": "Embudo de conversión",
+      "temporalityTitle": "Efectividad por periodo",
+      "conversion": "{pct}%",
+      "avgProgress": "media {pct}%",
+      "empty": "Sin objetivos aún.",
+      "stages": {
+        "created": "Creados",
+        "activated": "Activados",
+        "completed": "Completados",
+        "abandoned": "Abandonados"
+      },
+      "temporalities": {
+        "DAILY": "Diarios",
+        "WEEKLY": "Semanales",
+        "MONTHLY": "Mensuales",
+        "ANNUAL": "Anuales",
+        "ONEOFF": "Puntuales"
+      },
+      "statesTitle": "Por estado",
+      "states": {
+        "ACTIVE": "Activos",
+        "INBOX": "Bandeja",
+        "COMPLETED": "Completados",
+        "FAILED": "Fallidos",
+        "PAUSED": "Pausados",
+        "CANCELLED": "Cancelados"
+      },
+      "habitsTitle": "Hábitos",
+      "checkinRate": "{pct}% check-ins (30d)",
+      "activeStreaks": "{count} activas",
+      "totalCheckins": "{count} check-ins"
+    },
+    "github": {
+      "pushes": "Pushes",
+      "prs": "PRs",
+      "issues": "Issues",
+      "comments": "Comentarios",
+      "empty": "Sin actividad de GitHub en este periodo."
+    }
+  },
   "notesPage": {
     "createNote": "Crear nota",
     "createFolder": "Crear carpeta",
