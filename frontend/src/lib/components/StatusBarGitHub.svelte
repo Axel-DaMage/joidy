@@ -44,6 +44,10 @@
     });
   });
 
+  // #1512 — only the connection check is eager; the issue/PR lists fan out
+  // into upstream GitHub calls, so they load on first popover open.
+  let listsLoaded = $state(false);
+
   async function loadAll() {
     loading = true;
     error = '';
@@ -53,8 +57,20 @@
       if (!connected) {
         issues = [];
         prs = [];
-        return;
       }
+    } catch (e: any) {
+      error = e?.message || 'Failed to load GitHub data';
+    } finally {
+      loading = false;
+    }
+  }
+
+  async function ensureLists() {
+    if (listsLoaded || !connected) return;
+    listsLoaded = true;
+    loading = true;
+    error = '';
+    try {
       const [issuesRes, prsRes] = await Promise.all([
         api.github.issues('assigned'),
         api.github.pulls('assigned'),
@@ -62,10 +78,21 @@
       issues = issuesRes.issues ?? [];
       prs = prsRes.pulls ?? [];
     } catch (e: any) {
+      listsLoaded = false;
       error = e?.message || 'Failed to load GitHub data';
     } finally {
       loading = false;
     }
+  }
+
+  function toggleIssues() {
+    showIssues = !showIssues;
+    if (showIssues) ensureLists();
+  }
+
+  function togglePRs() {
+    showPRs = !showPRs;
+    if (showPRs) ensureLists();
   }
 
   onMount(() => {
@@ -104,7 +131,7 @@
       class="sb-gh-pill"
       class:active={showIssues}
       bind:this={issuesBtn}
-      onclick={() => (showIssues = !showIssues)}
+      onclick={toggleIssues}
       title={$t('widgets.ghAssigned') + ' — ' + $t('widgets.ghIssues')}
       aria-label={$t('widgets.ghAssigned') + ' — ' + $t('widgets.ghIssues')}
       aria-haspopup="dialog"
@@ -112,7 +139,7 @@
       aria-controls="sb-gh-issues-popover"
     >
       <DynamicIcon name="CircleDot" size={12} color="var(--accent)" />
-      <span class="sb-gh-count">{openIssues.length}</span>
+      <span class="sb-gh-count">{listsLoaded ? openIssues.length : '–'}</span>
       <span class="sb-gh-label">{$t('widgets.ghIssues')}</span>
     </button>
     {#if showIssues}
@@ -157,7 +184,7 @@
       class="sb-gh-pill"
       class:active={showPRs}
       bind:this={prsBtn}
-      onclick={() => (showPRs = !showPRs)}
+      onclick={togglePRs}
       title={$t('widgets.ghAssigned') + ' — PRs'}
       aria-label={$t('widgets.ghAssigned') + ' — PRs'}
       aria-haspopup="dialog"
@@ -165,7 +192,7 @@
       aria-controls="sb-gh-prs-popover"
     >
       <DynamicIcon name="GitPullRequest" size={12} color="var(--success)" />
-      <span class="sb-gh-count">{openPRs.length}</span>
+      <span class="sb-gh-count">{listsLoaded ? openPRs.length : '–'}</span>
       <span class="sb-gh-label">PRs</span>
     </button>
     {#if showPRs}

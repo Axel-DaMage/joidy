@@ -4,6 +4,7 @@ import hmac
 import json
 import logging
 import re
+import time
 from datetime import UTC, datetime
 from typing import Any
 
@@ -155,18 +156,103 @@ async def _delete(url: str) -> None:
         r.raise_for_status()
 
 
+# ── Upstream response cache (#1512) ──────────────────────────────────────
+# A dashboard mount used to fan out into ~70 concurrent api.github.com calls
+# (status + repos + per-endpoint gathers over repos[:15], no caching). The
+# Search API below plus this short TTL keep repeat mounts from re-hitting
+# GitHub — the layout status bar and the dashboard widget request different
+# filters, so the client's in-flight GET dedup can't dedup them.
+_CACHE_TTL_S = 120.0
+_CACHE_MAX_ENTRIES = 64
+_cache: dict[str, tuple[float, Any]] = {}
+_cache_lock = asyncio.Lock()
+
+
+def clear_github_cache() -> None:
+    _cache.clear()
+
+
+async def _cached_fetch(
+    key: str,
+    url: str,
+    params: dict | None = None,
+    ttl: float = _CACHE_TTL_S,
+    optional_auth: bool = False,
+) -> Any:
+    now = time.monotonic()
+    async with _cache_lock:
+        hit = _cache.get(key)
+        if hit and now - hit[0] < ttl:
+            return hit[1]
+    data = await _fetch(url, params, optional_auth=optional_auth)
+    async with _cache_lock:
+        _cache[key] = (now, data)
+        if len(_cache) > _CACHE_MAX_ENTRIES:
+            _cache.clear()
+    return data
+
+
+# ── Search-based issue/PR listing (#1512) ────────────────────────────────
+# One /search/issues call replaces the previous per-repo gather (up to 15
+# concurrent calls with state=all&per_page=50 each — tens of MB parsed on the
+# single uvicorn event loop, stalling every other endpoint). `involves:`
+# covers authored/assigned/mentioned items for filter=all.
+
+
+def _search_query(filter_: str, state: str, item_type: str, login: str) -> str:
+    q = f"type:{item_type}"
+    if filter_ == "created":
+        # `author:` — `creator:` resolves differently in the Search API and
+        # returns zero results for this use case (#1512).
+        q += f" author:{login}"
+    elif filter_ == "assigned":
+        q += f" assignee:{login}"
+    else:
+        q += f" involves:{login}"
+    if state in ("open", "closed"):
+        q += f" is:{state}"
+    return q
+
+
+async def _search_issues(query: str, per_page: int) -> dict:
+    return await _cached_fetch(
+        f"search:{query}:{per_page}",
+        "/search/issues",
+        {"q": query, "per_page": per_page, "sort": "created", "order": "desc"},
+        optional_auth=not settings.github_token,
+    )
+
+
+def _item_repo(item: dict) -> str:
+    repo_url = item.get("repository_url", "")
+    return repo_url.split("/repos/")[-1] if "/repos/" in repo_url else ""
+
+
+async def _github_login() -> str | None:
+    """Resolve the login used for search qualifiers, cached for 5 min."""
+    if settings.github_token:
+        user = await _cached_fetch("user", "/user", ttl=300.0)
+        return user.get("login")
+    return settings.github_username or None
+
+
 @router.get("/status")
 async def github_status():
     if settings.github_token:
         try:
-            user = await _fetch("/user")
+            user = await _cached_fetch("user", "/user", ttl=60.0)
             return {"connected": True, "username": user.get("login")}
         except Exception:
             return {"connected": False, "username": None}
 
     if settings.github_username:
         try:
-            user = await _fetch(f"/users/{settings.github_username}", optional_auth=True)
+            user = await _cached_fetch(
+                f"user:{settings.github_username}",
+                f"/users/{settings.github_username}",
+                ttl=60.0,
+                optional_auth=True,
+            )
             return {"connected": True, "username": user.get("login") or settings.github_username}
         except Exception:
             return {"connected": False, "username": None}
@@ -214,9 +300,14 @@ async def list_repos(
     is_dark: bool = Query(True, description="Usar colores claros para tema oscuro"),
 ):
     if settings.github_token:
-        repos = await _fetch("/user/repos", {"page": page, "per_page": per_page, "sort": sort})
+        repos = await _cached_fetch(
+            f"repos:{page}:{per_page}:{sort}",
+            "/user/repos",
+            {"page": page, "per_page": per_page, "sort": sort},
+        )
     elif settings.github_username:
-        repos = await _fetch(
+        repos = await _cached_fetch(
+            f"repos:{settings.github_username}:{page}:{per_page}:{sort}",
             f"/users/{settings.github_username}/repos",
             {"page": page, "per_page": per_page, "sort": sort},
             optional_auth=True,
@@ -317,79 +408,52 @@ async def remove_repo_from_db(repo_id: int, db: Session = Depends(get_db)):
     return {"status": "deleted", "repo_id": repo_id}
 
 
+async def _run_item_searches(
+    filter_: str, item_state: str, item_type: str, login: str, per_page: int
+) -> tuple[dict, dict, dict]:
+    """Fetch the items page plus total/open counts — ≤3 search calls (#1512).
+
+    Duplicate queries (e.g. item_state == 'all' → items query == total query)
+    are fetched once and reused.
+    """
+    item_q = _search_query(filter_, item_state, item_type, login)
+    all_q = _search_query(filter_, "all", item_type, login)
+    open_q = _search_query(filter_, "open", item_type, login)
+    to_fetch = [(q, per_page if q == item_q else 1) for q in dict.fromkeys((item_q, all_q, open_q))]
+    responses = await asyncio.gather(*(_search_issues(q, pp) for q, pp in to_fetch))
+    by_q = dict(zip((q for q, _ in to_fetch), responses, strict=True))
+    return by_q[item_q], by_q[all_q], by_q[open_q]
+
+
 @router.get("/issues")
 async def get_my_issues(
     state: str = Query("open", pattern="^(open|closed|all)$"),
     per_page: int = Query(30, le=100),
     filter: str = Query("created", pattern="^(all|created|assigned)$"),
 ):
+    empty = {
+        "issues": [],
+        "stats": {"total": 0, "open": 0, "closed": 0},
+        "filter": filter,
+    }
     try:
-        username = ""
-        repos = []
-        if settings.github_token:
-            user = await _fetch("/user")
-            username = user.get("login", "")
-            repos = await _fetch("/user/repos", {"per_page": 30, "sort": "updated"})
-        elif settings.github_username:
-            username = settings.github_username
-            repos = await _fetch(
-                f"/users/{username}/repos",
-                {"per_page": 30, "sort": "updated"},
-                optional_auth=True,
-            )
-        else:
-            return {
-                "issues": [],
-                "stats": {"total": 0, "open": 0, "closed": 0},
-                "filter": filter,
-            }
+        login = await _github_login()
+        if not login:
+            return empty
 
-        async def fetch_issues_for_repo(repo: dict) -> list:
-            try:
-                query_state = "all" if filter in ["created", "assigned"] else state
-                params = {"state": query_state, "per_page": 50, "sort": "updated"}
-                if filter == "created":
-                    params["creator"] = username
-                elif filter == "assigned":
-                    params["assignee"] = username
-
-                issues = await _fetch(
-                    f"/repos/{repo['full_name']}/issues",
-                    params,
-                    optional_auth=bool(not settings.github_token),
-                )
-                for i in issues:
-                    if "/pull/" in i.get("html_url", ""):
-                        continue
-                    i["_repo_full_name"] = repo["full_name"]
-                return issues
-            except Exception as e:
-                logger.warning("Error fetching issues for %s: %s", repo.get("full_name"), type(e).__name__)
-                return []
-
-        results = await asyncio.gather(*[fetch_issues_for_repo(repo) for repo in repos[:15]], return_exceptions=True)
-        all_issues = []
-        for r in results:
-            if isinstance(r, Exception):
-                continue
-            for i in r:
-                if "/pull/" not in i.get("html_url", ""):
-                    all_issues.append(i)
-
-        if filter == "all" and username:
-            filtered_by_user = [i for i in all_issues if i.get("user", {}).get("login") == username]
-            if len(filtered_by_user) > 0:
-                all_issues = filtered_by_user
-
-        all_issues.sort(key=lambda x: x.get("created_at", ""), reverse=True)
-
+        # created/assigned historically ignored `state` — the widget filters
+        # client-side. Search makes keeping that contract cheap (#1512).
+        item_state = "all" if filter in ("created", "assigned") else state
+        items_res, total_res, open_res = await _run_item_searches(filter, item_state, "issue", login, per_page)
+        total = total_res.get("total_count", 0)
+        open_count = open_res.get("total_count", 0)
         return {
             "issues": [
                 {
                     "id": i["id"],
                     "number": i["number"],
                     "title": i["title"],
-                    "repo": i.get("_repo_full_name", ""),
+                    "repo": _item_repo(i),
                     "url": i["html_url"],
                     "state": i["state"],
                     "labels": [lbl["name"] for lbl in i.get("labels", [])],
@@ -397,22 +461,18 @@ async def get_my_issues(
                     "created_at": i["created_at"],
                     "updated_at": i["updated_at"],
                 }
-                for i in all_issues[:per_page]
+                for i in items_res.get("items", [])
             ],
             "stats": {
-                "total": len(all_issues),
-                "open": len([i for i in all_issues if i.get("state") == "open"]),
-                "closed": len([i for i in all_issues if i.get("state") == "closed"]),
+                "total": total,
+                "open": open_count,
+                "closed": max(total - open_count, 0),
             },
             "filter": filter,
         }
     except Exception as e:
         logger.warning("Error in get_my_issues: %s", type(e).__name__)
-        return {
-            "issues": [],
-            "stats": {"total": 0, "open": 0, "closed": 0},
-            "filter": filter,
-        }
+        return empty
 
 
 @router.get("/pulls")
@@ -421,95 +481,49 @@ async def get_my_pulls(
     per_page: int = Query(30, le=100),
     filter: str = Query("created", pattern="^(all|created|assigned)$"),
 ):
+    empty = {
+        "pulls": [],
+        "stats": {"total": 0, "open": 0, "closed": 0, "draft": 0},
+        "filter": filter,
+    }
     try:
-        username = ""
-        repos = []
-        if settings.github_token:
-            user = await _fetch("/user")
-            username = user.get("login", "")
-            repos = await _fetch("/user/repos", {"per_page": 30, "sort": "updated"})
-        elif settings.github_username:
-            username = settings.github_username
-            repos = await _fetch(
-                f"/users/{username}/repos",
-                {"per_page": 30, "sort": "updated"},
-                optional_auth=True,
-            )
-        else:
-            return {
-                "pulls": [],
-                "stats": {"total": 0, "open": 0, "closed": 0, "draft": 0},
-                "filter": filter,
-            }
+        login = await _github_login()
+        if not login:
+            return empty
 
-        async def fetch_pulls_for_repo(repo: dict) -> list:
-            if settings.github_token and not repo.get("permissions", {}).get("pull", True):
-                return []
-            try:
-                query_state = "all" if filter in ["created", "assigned"] else state
-                params = {"state": query_state, "per_page": 50}
-                if filter == "created":
-                    params["creator"] = username
-                elif filter == "assigned":
-                    params["assignee"] = username
-
-                pulls = await _fetch(
-                    f"/repos/{repo['full_name']}/pulls",
-                    params,
-                    optional_auth=bool(not settings.github_token),
-                )
-                for p in pulls:
-                    p["_repo_full_name"] = repo["full_name"]
-                return pulls
-            except Exception as e:
-                logger.warning("Error fetching pulls for %s: %s", repo.get("full_name"), type(e).__name__)
-                return []
-
-        results = await asyncio.gather(*[fetch_pulls_for_repo(repo) for repo in repos[:15]], return_exceptions=True)
-        all_pulls = []
-        for r in results:
-            if isinstance(r, Exception):
-                continue
-            all_pulls.extend(r)
-
-        if filter == "all" and username:
-            filtered_by_user = [p for p in all_pulls if p.get("user", {}).get("login") == username]
-            if len(filtered_by_user) > 0:
-                all_pulls = filtered_by_user
-
-        all_pulls.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+        item_state = "all" if filter in ("created", "assigned") else state
+        items_res, total_res, open_res = await _run_item_searches(filter, item_state, "pr", login, per_page)
+        total = total_res.get("total_count", 0)
+        open_count = open_res.get("total_count", 0)
+        items = items_res.get("items", [])
         return {
             "pulls": [
                 {
                     "id": p["id"],
                     "number": p["number"],
                     "title": p["title"],
-                    "repo": p.get("_repo_full_name", ""),
+                    "repo": _item_repo(p),
                     "url": p["html_url"],
                     "state": p["state"],
                     "draft": p.get("draft", False),
-                    "merged_at": p.get("merged_at"),
+                    "merged_at": p.get("pull_request", {}).get("merged_at"),
                     "author": p.get("user", {}).get("login", ""),
                     "created_at": p.get("created_at"),
                     "updated_at": p["updated_at"],
                 }
-                for p in all_pulls[:per_page]
+                for p in items
             ],
             "stats": {
-                "total": len(all_pulls),
-                "open": len([p for p in all_pulls if p.get("state") == "open"]),
-                "closed": len([p for p in all_pulls if p.get("state") == "closed"]),
-                "draft": len([p for p in all_pulls if p.get("draft", False)]),
+                "total": total,
+                "open": open_count,
+                "closed": max(total - open_count, 0),
+                "draft": len([p for p in items if p.get("draft")]),
             },
             "filter": filter,
         }
     except Exception as e:
         logger.warning("Error in get_my_pulls: %s", type(e).__name__)
-        return {
-            "pulls": [],
-            "stats": {"total": 0, "open": 0, "closed": 0, "draft": 0},
-            "filter": filter,
-        }
+        return empty
 
 
 @router.get("/repos/{owner}/{repo}/issues")
@@ -1202,6 +1216,8 @@ async def revoke_token(payload: RevokeTokenRequest | None = None):
         )
         r.raise_for_status()
 
+    # The revoked credential must not keep serving cached upstream data.
+    clear_github_cache()
     return {"status": "revoked"}
 
 
