@@ -56,6 +56,10 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # Bake the released commit into the frontend bundle (__GIT_SHA__) so
+          # dev mode can show exactly which build a tab is running.
+          build-args: |
+            GIT_SHA=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           # Supply-chain attestations (#1297): BuildKit attaches SLSA

@@ -22,6 +22,9 @@ services:
       - NODE_ENV=development
       - FRONTEND_PORT=${FRONTEND_PORT:-3000}
       - VITE_API_URL=http://localhost:${API_PORT:-8000}
+      # Commit sha for the dev-mode status-bar version (.git is not bind-
+      # mounted into /app — the Makefile exports GIT_SHA from the host repo).
+      - VITE_GIT_SHA=${GIT_SHA:-}
       - VITE_INTERNAL_API_URL=http://api:8000
       # esbuild OOM hardening (#860): `vite dev` spawns the Go esbuild service,
       # which scales its parallelism (and peak RSS) with GOMAXPROCS. Capping

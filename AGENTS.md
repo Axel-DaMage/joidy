@@ -251,7 +251,11 @@ joidy down
 
 # 2. Rebuild ALL 4 production images from source (no cache, pull fresh base images)
 #    Frontend MUST use --target production so it runs `node build` (not `vite dev`)
-docker build --no-cache --pull -t d4mag3/joidy-frontend:latest --target production ./frontend
+#    GIT_SHA bakes the commit into the bundle — dev mode shows it in the status
+#    bar, which is the only reliable way to tell a fresh build from a stale
+#    service-worker precache.
+docker build --no-cache --pull -t d4mag3/joidy-frontend:latest --target production \
+  --build-arg GIT_SHA=$(git rev-parse --short HEAD) ./frontend
 docker build --no-cache --pull -t d4mag3/joidy-api:latest        ./api
 docker build --no-cache --pull -t d4mag3/joidy-ai-service:latest ./ai-service
 docker build --no-cache --pull -t d4mag3/joidy-worker:latest     ./worker
