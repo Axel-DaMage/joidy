@@ -1585,7 +1585,12 @@ export const api = {
   github: {
     status: () =>
       req<{ connected: boolean; username: string | null }>('GET', '/integrations/github/status'),
-    issues: (filter: string = 'all', perPage: number = 30, state: string = 'all') =>
+    issues: (
+      filter: string = 'all',
+      perPage: number = 30,
+      state: string = 'all',
+      signal?: AbortSignal
+    ) =>
       req<{
         issues: {
           id: number;
@@ -1599,8 +1604,16 @@ export const api = {
         }[];
         stats: { total: number; open: number; closed: number };
         filter: string;
-      }>('GET', `/integrations/github/issues?filter=${filter}&per_page=${perPage}&state=${state}`),
-    pulls: (filter: string = 'all', perPage: number = 30, state: string = 'all') =>
+      }>('GET', `/integrations/github/issues?filter=${filter}&per_page=${perPage}&state=${state}`,
+        undefined,
+        { signal }
+      ),
+    pulls: (
+      filter: string = 'all',
+      perPage: number = 30,
+      state: string = 'all',
+      signal?: AbortSignal
+    ) =>
       req<{
         pulls: {
           id: number;
@@ -1616,11 +1629,16 @@ export const api = {
         }[];
         stats: { total: number; open: number; closed: number; draft: number };
         filter: string;
-      }>('GET', `/integrations/github/pulls?filter=${filter}&per_page=${perPage}&state=${state}`),
-    repos: () =>
+      }>('GET', `/integrations/github/pulls?filter=${filter}&per_page=${perPage}&state=${state}`,
+        undefined,
+        { signal }
+      ),
+    repos: (signal?: AbortSignal) =>
       req<{ repos: { id: number; name: string; full_name: string; color: string }[] }>(
         'GET',
-        '/integrations/github/repos'
+        '/integrations/github/repos',
+        undefined,
+        { signal }
       ),
     startDeviceAuth: () =>
       req<{

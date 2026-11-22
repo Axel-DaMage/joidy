@@ -138,14 +138,23 @@
     }
   }
 
+  // Generation counter: a stale response must never overwrite the state of
+  // a newer filter selection (rapid clicks race otherwise), and the 15s
+  // abort guarantee keeps githubLoading — and the filters — from sticking
+  // if a request stalls behind a busy API (#1512 follow-up).
+  let ghReqSeq = 0;
+
   async function loadGitHubData(filter: string = 'created') {
     if (!githubConnected) return;
+    const seq = ++ghReqSeq;
+    const signal = AbortSignal.timeout(15_000);
     githubLoading = true;
     try {
       const [issuesRes, pullsRes] = await Promise.all([
-        api.github.issues(filter, GH_FETCH_LIMIT, 'all'),
-        api.github.pulls(filter, GH_FETCH_LIMIT, 'all'),
+        api.github.issues(filter, GH_FETCH_LIMIT, 'all', signal),
+        api.github.pulls(filter, GH_FETCH_LIMIT, 'all', signal),
       ]);
+      if (seq !== ghReqSeq) return;
       githubIssues = issuesRes.issues || [];
       issueStats = issuesRes.stats || { open: 0, total: 0 };
       githubPRs = pullsRes.pulls || [];
@@ -162,11 +171,12 @@
         ts: Date.now(),
       });
     } catch (e) {
+      if (seq !== ghReqSeq) return;
       logger.error('GitHub error:', e);
       githubIssues = [];
       githubPRs = [];
     } finally {
-      githubLoading = false;
+      if (seq === ghReqSeq) githubLoading = false;
     }
   }
 
@@ -176,8 +186,9 @@
   }
 
   function setGhType(t: string) {
+    // Purely presentational: loadGitHubData already fetches issues AND pulls,
+    // so switching type must be instant — no refetch (#1512 follow-up).
     ghType = t;
-    loadGitHubData(ghFilter);
   }
 
   // #1164 — persistir los filtros de GitHub (sin TTL, a diferencia del

@@ -112,6 +112,24 @@ export async function getAllNotes(): Promise<Note[]> {
   }
 }
 
+/** Stores many notes in a single transaction — a per-note transaction loop
+ *  churns the IndexedDB queue for seconds during a vault resync (#1512). */
+export async function putNotes(notes: Note[]): Promise<void> {
+  if (!browser || notes.length === 0) return;
+  try {
+    const db = await openDB();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(NOTES_STORE, 'readwrite');
+      const store = tx.objectStore(NOTES_STORE);
+      for (const note of notes) store.put(note);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch {
+    /* ignore cache write failures */
+  }
+}
+
 /** Stores or updates a note in the IndexedDB cache. */
 export async function putNote(note: Note): Promise<void> {
   if (!browser) return;
