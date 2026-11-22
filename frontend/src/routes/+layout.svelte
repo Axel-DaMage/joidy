@@ -7,7 +7,6 @@
   import { fade } from 'svelte/transition';
   import { isOnline, wasOffline } from '$lib/stores/connection';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
-  import SettingsPanel from '$lib/components/SettingsPanel.svelte';
   import CommandPalette from '$lib/components/CommandPalette.svelte';
   import FocusMode from '$lib/components/FocusMode.svelte';
   import Toast from '$lib/components/Toast.svelte';
@@ -121,6 +120,26 @@
   });
 
   let settingsOpen = false;
+
+  // Lazy-load the settings panel (~19 components across 9 sections) so it
+  // splits out of the layout chunk and only downloads on first open —
+  // mirrors the GoalEditor lazy pattern (#1544). A failed chunk import is
+  // re-thrown so the chunk-error recovery owns the reload (#1459).
+  let SettingsPanelComp: typeof import('$lib/components/SettingsPanel.svelte').default | null =
+    null;
+  let settingsChunkLoading = false;
+  function ensureSettingsPanel() {
+    if (SettingsPanelComp || settingsChunkLoading) return;
+    settingsChunkLoading = true;
+    import('$lib/components/SettingsPanel.svelte')
+      .then((m) => (SettingsPanelComp = m.default))
+      .catch((err) => {
+        settingsOpen = false;
+        throw err;
+      })
+      .finally(() => (settingsChunkLoading = false));
+  }
+
   let now = new Date();
   let pendingTasks = 0;
   let pendingStreaks = 0;
@@ -535,6 +554,7 @@
     };
 
     const handleOpenSettings = () => {
+      ensureSettingsPanel();
       settingsOpen = true;
     };
 
@@ -911,14 +931,17 @@
     </footer>
   </div>
 
-  <SettingsPanel
-    bind:open={settingsOpen}
-    onClose={() => {
-      settingsOpen = false;
-      // Broadcast so mounted pages (e.g. notes) can refetch config after edits
-      window.dispatchEvent(new CustomEvent('joidy:settings-closed'));
-    }}
-  />
+  {#if SettingsPanelComp}
+    <svelte:component
+      this={SettingsPanelComp}
+      bind:open={settingsOpen}
+      onClose={() => {
+        settingsOpen = false;
+        // Broadcast so mounted pages (e.g. notes) can refetch config after edits
+        window.dispatchEvent(new CustomEvent('joidy:settings-closed'));
+      }}
+    />
+  {/if}
   <CommandPalette />
   <FocusMode />
   <Toast />

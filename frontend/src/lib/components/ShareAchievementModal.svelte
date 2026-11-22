@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { toPng } from 'html-to-image';
   import Download from 'lucide-svelte/icons/download';
   import Copy from 'lucide-svelte/icons/copy';
   import X from 'lucide-svelte/icons/x';
@@ -18,6 +17,9 @@
   async function exportPng(): Promise<Blob | null> {
     if (!cardEl) return null;
     try {
+      // html-to-image is only needed on an actual share click — keep it out
+      // of the entry chunk via a lazy import (#1544).
+      const { toPng } = await import('html-to-image');
       const dataUrl = await toPng(cardEl, {
         pixelRatio: 2,
         cacheBust: true,
