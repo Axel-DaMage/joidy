@@ -222,6 +222,18 @@
     let wsReconnectTimeout: any = null;
     let wsRetryDelay = 1000;
 
+    // Coalesce WS-triggered note refetches: a bulk vault sync emits one
+    // `vault_synced` message per file, and each forced loadNotes pays a full
+    // notes.set() subscriber propagation on the main thread (#1494).
+    let notesRefreshTimeout: any = null;
+    const scheduleNotesRefresh = () => {
+      if (notesRefreshTimeout) clearTimeout(notesRefreshTimeout);
+      notesRefreshTimeout = setTimeout(() => {
+        notesRefreshTimeout = null;
+        loadNotes(undefined, true).catch(() => {});
+      }, 1500);
+    };
+
     const connectWS = () => {
       if (typeof window === 'undefined') return;
 
@@ -272,10 +284,10 @@
 
           if (msg.type === 'note_created') {
             queueNotificationIfActive(`Nueva nota creada: "${msg.title}"`, 'success');
-            loadNotes(undefined, true).catch(() => {});
+            scheduleNotesRefresh();
           } else if (msg.type === 'note_updated') {
             queueNotificationIfActive(`Nota actualizada: "${msg.title}"`, 'info');
-            loadNotes(undefined, true).catch(() => {});
+            scheduleNotesRefresh();
           } else if (msg.type === 'xp_gained') {
             queueNotificationIfActive(`¡+${msg.xp} XP!`, 'level');
             loadStats().catch(() => {});
@@ -288,7 +300,7 @@
               $t('sync.syncedFromVault', { values: { title: msg.title } }),
               'info'
             );
-            loadNotes(undefined, true).catch(() => {});
+            scheduleNotesRefresh();
             vaultSyncActive = true;
             if (vaultSyncTimeout) clearTimeout(vaultSyncTimeout);
             vaultSyncTimeout = setTimeout(() => {
@@ -298,7 +310,7 @@
             vaultSyncActive = true;
             if (vaultSyncTimeout) clearTimeout(vaultSyncTimeout);
           } else if (msg.type === 'vault_sync_complete') {
-            loadNotes(undefined, true).catch(() => {});
+            scheduleNotesRefresh();
             vaultSyncActive = false;
             vaultSyncPulse = true;
             if (vaultSyncTimeout) clearTimeout(vaultSyncTimeout);
@@ -558,6 +570,7 @@
         ws.close();
       }
       if (wsReconnectTimeout) clearTimeout(wsReconnectTimeout);
+      if (notesRefreshTimeout) clearTimeout(notesRefreshTimeout);
       if (pillTimeout) clearTimeout(pillTimeout);
       if (vaultSyncTimeout) clearTimeout(vaultSyncTimeout);
       if (cleanupTheme) cleanupTheme();
