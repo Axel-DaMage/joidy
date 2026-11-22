@@ -33,7 +33,28 @@
     comments: 'var(--today)',
   };
 
-  let weeks = $derived(github?.weekly ?? []);
+  // Without GitHub data the chart shows a dimmed preview with a pointer to
+  // Settings instead of disappearing, so the section is always discoverable.
+  const GHOST: [number, number, number, number][] = [
+    [3, 1, 0, 1], [5, 1, 1, 0], [4, 2, 0, 1], [7, 1, 1, 2], [6, 2, 1, 1], [9, 3, 1, 1],
+    [5, 1, 0, 2], [8, 2, 2, 1], [10, 3, 1, 2], [7, 2, 1, 1], [12, 3, 2, 2], [9, 2, 1, 1],
+  ];
+  let real = $derived(github?.weekly ?? []);
+  let showGhost = $derived(!github?.available || real.length === 0);
+  let ghostWeeks = $derived.by<WeekRow[]>(() => {
+    const monday = new Date();
+    monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+    return GHOST.map(([pushes, pull_requests, issues, comments], i) => {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() - (GHOST.length - 1 - i) * 7);
+      return { week_start: d.toISOString().slice(0, 10), pushes, pull_requests, issues, comments };
+    });
+  });
+  let weeks = $derived(showGhost ? ghostWeeks : real);
+
+  function openSettings() {
+    window.dispatchEvent(new CustomEvent('joidy:open-settings'));
+  }
   let series = $derived(stack<WeekRow>().keys(KEYS)(weeks));
 
   let x = $derived(
@@ -99,22 +120,17 @@
     </div>
   {/snippet}
 
-  {#if weeks.length === 0}
-    <div class="chart-empty">
-      <GitPullRequest size={22} style="opacity:0.25" />
-      <span>{$t('analyticsPage.github.empty')}</span>
-    </div>
-  {:else}
-    <div class="gh-wrap" bind:this={wrapEl} bind:clientWidth={W} bind:clientHeight={H}>
+  <div class="gh-wrap" bind:this={wrapEl} bind:clientWidth={W} bind:clientHeight={H}>
       <svg
         width={W}
         height={H}
         role="img"
         aria-label={$t('analyticsPage.slides.github')}
+        class:ghost={showGhost}
       >
         {#each yTicks as tv (tv)}
           <line x1={M.left} x2={W - M.right} y1={y(tv)} y2={y(tv)} class="grid-line" />
-          <text x={M.left - 8} y={y(tv) + 3} class="tick" text-anchor="end">{tv}</text>
+          {#if !showGhost}<text x={M.left - 8} y={y(tv) + 3} class="tick" text-anchor="end">{tv}</text>{/if}
         {/each}
         <line x1={M.left} x2={W - M.right} y1={H - M.bottom} y2={H - M.bottom} class="axis" />
 
@@ -132,8 +148,8 @@
               rx="2"
               fill={KEY_COLORS[key]}
               class="gh-seg"
-              onmouseenter={(e) => onSeg(e, seg.data, key, p[1] - p[0])}
-              onmousemove={(e) => onSeg(e, seg.data, key, p[1] - p[0])}
+              onmouseenter={(e) => !showGhost && onSeg(e, seg.data, key, p[1] - p[0])}
+              onmousemove={(e) => !showGhost && onSeg(e, seg.data, key, p[1] - p[0])}
               onmouseleave={() => (tip = null)}
             />
           {/each}
@@ -150,6 +166,17 @@
           {/if}
         {/each}
       </svg>
+
+      {#if showGhost}
+        <div class="gh-empty">
+          <GitPullRequest size={20} />
+          <span class="gh-empty-title">{$t('analyticsPage.github.emptyTitle')}</span>
+          <span class="gh-empty-body">{$t('analyticsPage.github.empty')}</span>
+          <button type="button" class="gh-cta" onclick={openSettings}
+            >{$t('analyticsPage.github.cta')}</button
+          >
+        </div>
+      {/if}
 
       <ChartTooltip
         x={tip?.x ?? 0}
@@ -178,7 +205,6 @@
         {/if}
       </ChartTooltip>
     </div>
-  {/if}
 </ChartCard>
 
 <style>
@@ -206,6 +232,51 @@
     fill: var(--text-muted);
     font-family: var(--font-mono);
   }
+  svg.ghost {
+    opacity: 0.3;
+  }
+  .gh-empty {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -52%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    max-width: 320px;
+    text-align: center;
+    padding: var(--s4) var(--s5);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    color: var(--text-muted);
+  }
+  .gh-empty-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+  .gh-empty-body {
+    font-size: 11px;
+    line-height: 1.5;
+  }
+  .gh-cta {
+    margin-top: var(--s2);
+    padding: 5px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    background: transparent;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .gh-cta:hover {
+    color: var(--xp);
+    border-color: var(--xp);
+  }
   .gh-seg {
     transition: opacity 0.12s ease;
   }
@@ -231,16 +302,5 @@
     width: 8px;
     height: 8px;
     border-radius: 2px;
-  }
-  .chart-empty {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    color: var(--text-muted);
-    font-size: 12px;
-    text-align: center;
   }
 </style>

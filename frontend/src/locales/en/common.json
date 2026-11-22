@@ -651,7 +651,9 @@
       "prs": "PRs",
       "issues": "Issues",
       "comments": "Comments",
-      "empty": "No GitHub activity in this period."
+      "empty": "Connect your repositories to see pushes, PRs, issues and comments per week.",
+      "emptyTitle": "No GitHub activity yet",
+      "cta": "Open settings"
     },
     "insightsTitle": "Insights",
     "insightsEmpty": "Keep using Joidy — insights appear when there is enough data.",
@@ -701,7 +703,10 @@
       "mood.average": "average mood in this window",
       "mood.bestMood": "avg XP on mood {mood} days",
       "github.activeWeeks": "weeks with activity",
-      "github.total": "events in recent weeks"
+      "github.total": "events in recent weeks",
+      "github.needConnect": "Connect GitHub to unlock this analysis",
+      "github.howTo": "In Settings, link your account and enable the repositories you want to follow",
+      "github.unlock": "You will see your coding rhythm: pushes, PRs, issues and comments per week"
     },
     "clock": {
       "all": "All",
@@ -747,7 +752,8 @@
       "windowXp": "XP in window",
       "record": "record {days}d",
       "perActiveDay": "~{xp} on active days",
-      "accumulated": "accumulated"
+      "accumulated": "accumulated",
+      "vsPrevious": "vs. previous"
     },
     "tabs": {
       "consistency": "Consistency",
@@ -781,7 +787,9 @@
       "github": {
         "title": "How it's calculated",
         "body": "Counts the events GitHub sends to Joidy (pushes, PRs, issues and comments) grouped by ISO week, Monday to Sunday, over the last 12 weeks."
-      }
+      },
+      "hide": "Hide",
+      "show": "Show"
     },
     "matrix": {
       "title": "Day × hour",
@@ -807,8 +815,7 @@
     "description": "Consistency, productivity, habits, mood and goals at a glance.",
     "title": "Analytics",
     "tablistLabel": "Analytics sections",
-    "refresh": "Refresh data",
-    "updatedAt": "updated {time}"
+    "refresh": "Refresh data"
   },
   "notesPage": {
     "createNote": "Create note",

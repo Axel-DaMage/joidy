@@ -50,6 +50,8 @@ export interface UserSettings {
     slide?: number;
     /** Global analysis window in days (90 | 180 | 365) — applies to every slide. */
     rangeDays?: number;
+    /** Whether the "how it's calculated" note is expanded. */
+    methodOpen?: boolean;
   };
 }
 

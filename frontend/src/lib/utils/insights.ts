@@ -434,7 +434,12 @@ export function goalsInsights(data: Overview, ctx: InsightCtx): Insight[] {
 export function githubInsights(data: Overview): Insight[] {
   const out: Insight[] = [];
   const weekly = data.github?.weekly ?? [];
-  if (weekly.length === 0) return out;
+  if (!data.github?.available || weekly.length === 0) {
+    out.push({ icon: 'git-pull-request', key: 'github.needConnect', tone: 'info' });
+    out.push({ icon: 'pencil', key: 'github.howTo' });
+    out.push({ icon: 'lightbulb', key: 'github.unlock' });
+    return out;
+  }
 
   const totals = { pushes: 0, pull_requests: 0, issues: 0, comments: 0 };
   let busiestTotal = 0;

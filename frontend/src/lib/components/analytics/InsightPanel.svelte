@@ -1,6 +1,7 @@
 <script lang="ts">
   import Sparkles from 'lucide-svelte/icons/sparkles';
   import FlaskConical from 'lucide-svelte/icons/flask-conical';
+  import ChevronDown from 'lucide-svelte/icons/chevron-down';
   import { t } from 'svelte-i18n';
   import type { Insight, InsightTone } from '$lib/utils/insights';
   import { insightIcon } from './insightIcons';
@@ -10,7 +11,17 @@
   // sentence and (for percentages) a thin meter. Cards share the column height
   // equally so the panel never scrolls; a "how it's calculated" note sits at
   // the bottom.
-  let { items = [], methodKey }: { items?: Insight[]; methodKey?: string } = $props();
+  let {
+    items = [],
+    methodKey,
+    methodOpen = true,
+    onToggleMethod,
+  }: {
+    items?: Insight[];
+    methodKey?: string;
+    methodOpen?: boolean;
+    onToggleMethod?: () => void;
+  } = $props();
 
   const TONE: Record<InsightTone, string> = {
     good: 'var(--success)',
@@ -30,7 +41,7 @@
   {#if items.length === 0}
     <span class="ip-empty">{$t('analyticsPage.insightsEmpty')}</span>
   {:else}
-    <ul class="ip-list">
+    <ul class="ip-list" class:roomy={!methodOpen}>
       {#each items as item, i (item.key + JSON.stringify(item.values ?? {}))}
         {@const Icon = insightIcon(item.icon)}
         <li class="ip-item" style:--c={toneColor(item.tone)} style:--i={i}>
@@ -52,11 +63,27 @@
   {/if}
 
   {#if methodKey}
-    <div class="ip-method">
-      <span class="ip-method-head"
-        ><FlaskConical size={11} />{$t(`analyticsPage.method.${methodKey}.title`)}</span
+    <div class="ip-method" class:closed={!methodOpen}>
+      <button
+        type="button"
+        class="ip-method-head"
+        aria-expanded={methodOpen}
+        aria-controls="ip-method-body"
+        title={methodOpen ? $t('analyticsPage.method.hide') : $t('analyticsPage.method.show')}
+        onclick={() => onToggleMethod?.()}
       >
-      <span class="ip-method-body">{$t(`analyticsPage.method.${methodKey}.body`)}</span>
+        <FlaskConical size={11} />
+        <span>{$t(`analyticsPage.method.${methodKey}.title`)}</span>
+        <span class="ip-method-toggle">
+          {methodOpen ? $t('analyticsPage.method.hide') : $t('analyticsPage.method.show')}
+          <ChevronDown size={12} />
+        </span>
+      </button>
+      {#if methodOpen}
+        <span class="ip-method-body" id="ip-method-body"
+          >{$t(`analyticsPage.method.${methodKey}.body`)}</span
+        >
+      {/if}
     </div>
   {/if}
 </aside>
@@ -125,6 +152,9 @@
     animation: ip-in 0.4s cubic-bezier(0.2, 0.7, 0.2, 1) both;
     animation-delay: calc(0.12s + var(--i) * 60ms);
   }
+  .roomy .ip-item {
+    max-height: 172px;
+  }
   .ip-item:hover {
     border-color: color-mix(in srgb, var(--c) 45%, var(--border));
     background: color-mix(in srgb, var(--c) 5%, transparent);
@@ -192,16 +222,48 @@
     padding: var(--s2) var(--s1) 0;
     border-top: 1px solid var(--border);
   }
+  .ip-method.closed {
+    padding-top: var(--s1);
+  }
   .ip-method-head {
     display: flex;
     align-items: center;
     gap: 5px;
+    width: 100%;
+    padding: 2px 0;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
     font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--text-muted);
     font-family: var(--font-mono);
+    transition: color 0.15s;
+  }
+  .ip-method-head:hover {
+    color: var(--text-primary);
+  }
+  .ip-method-head:focus-visible {
+    outline: 1px solid var(--xp);
+    outline-offset: 2px;
+  }
+  .ip-method-toggle {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .ip-method-toggle :global(svg) {
+    transition: transform 0.2s;
+  }
+  .ip-method.closed .ip-method-toggle :global(svg) {
+    transform: rotate(-90deg);
   }
   .ip-method-body {
     font-size: 10.5px;

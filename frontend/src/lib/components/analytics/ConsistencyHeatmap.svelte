@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { scaleQuantize } from 'd3';
   import CalendarCheck from 'lucide-svelte/icons/calendar-check';
   import ChartCard from './ChartCard.svelte';
@@ -11,6 +12,13 @@
   // GitHub-style consistency calendar (#1499): weeks as columns, weekday rows
   // (Mon–Sun), intensity by XP quintile. `days` is the parent's global
   // analysis window — it re-fetches /analytics/overview when it changes.
+  // Entry animations play once; later data swaps (window changes) update in place.
+  let settled = $state(false);
+  onMount(() => {
+    const id = setTimeout(() => (settled = true), 1400);
+    return () => clearTimeout(id);
+  });
+
   type DayActivity = AnalyticsOverview['daily_activity'][number];
 
   let {
@@ -132,7 +140,7 @@
 <ChartCard title={$t('analyticsPage.slides.consistency')}>
   {#snippet icon()}<CalendarCheck size={13} />{/snippet}
 
-  <div class="hm-wrap" bind:clientWidth={wrapW} bind:clientHeight={wrapH}>
+  <div class="hm-wrap" class:settled bind:clientWidth={wrapW} bind:clientHeight={wrapH}>
     <!-- Hover tooltip is a pointer enhancement; cells are not focusable on purpose
          (hundreds of tab stops) — the summary label + insights carry the same data. -->
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions, a11y_mouse_events_have_key_events -->
@@ -328,5 +336,8 @@
   }
   .hm-legend .hm-cell {
     pointer-events: none;
+  }
+  .settled .hm-cell {
+    animation: none;
   }
 </style>

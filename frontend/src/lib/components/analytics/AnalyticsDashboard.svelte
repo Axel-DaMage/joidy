@@ -1,8 +1,6 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import { fly } from 'svelte/transition';
-  import ChevronLeft from 'lucide-svelte/icons/chevron-left';
-  import ChevronRight from 'lucide-svelte/icons/chevron-right';
   import ChartColumn from 'lucide-svelte/icons/chart-column';
   import RefreshCw from 'lucide-svelte/icons/refresh-cw';
   import Zap from 'lucide-svelte/icons/zap';
@@ -66,7 +64,8 @@
   let loading = $state(true);
   let refreshing = $state(false);
   let loadError = $state(false);
-  let loadedAt = $state<number | null>(null);
+  // "How it's calculated" note — persisted so the choice sticks.
+  let methodOpen = $state(true);
   // Global analysis window (days) — drives every slide, not just the heatmap.
   let rangeDays = $state(180);
   let slideIdx = $state(0);
@@ -79,12 +78,11 @@
   const reduceMotion = () =>
     typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  // The GitHub slide only exists when the backend reports data for it.
-  let slides = $derived(
-    SLIDES.filter((s) => s.id !== 'github' || (data?.github.available ?? false))
-  );
+  // Every section is always listed (GitHub shows a guided empty state when
+  // no repo/webhook data exists) so tabs never appear or disappear.
+  const slides = SLIDES;
 
-  // Keep the restored index inside the (possibly shorter) visible list.
+  // Keep the restored index inside the list.
   $effect(() => {
     if (slideIdx >= slides.length) slideIdx = Math.max(0, slides.length - 1);
   });
@@ -93,6 +91,11 @@
   $effect(() => {
     if (prefsReady) patchUserSettings({ analyticsUi: { slide: slideIdx } });
   });
+
+  function toggleMethod() {
+    methodOpen = !methodOpen;
+    patchUserSettings({ analyticsUi: { methodOpen } });
+  }
 
   function goToSlide(i: number) {
     const n = slides.length;
@@ -131,7 +134,6 @@
     const cached = readOverview(days);
     if (cached) {
       data = cached.data;
-      loadedAt = cached.at;
       loading = false;
       loadError = false;
       if (cached.fresh && !force) return;
@@ -146,7 +148,6 @@
       if (id !== reqId) return;
       writeOverview(days, fresh);
       data = fresh;
-      loadedAt = Date.now();
     } catch (e) {
       if (id !== reqId) return;
       logger.error('[analytics] overview failed:', e);
@@ -214,24 +215,6 @@
       ? Math.round(data.summary.window_xp / data.summary.active_days)
       : 0
   );
-  let updatedLabel = $derived(
-    loadedAt
-      ? $t('analyticsPage.updatedAt', {
-          values: {
-            time: new Intl.DateTimeFormat($locale, {
-              hour: '2-digit',
-              minute: '2-digit',
-              hour12: !$use24HourClock,
-            }).format(loadedAt),
-          },
-        })
-      : ''
-  );
-
-  let subtitle = $derived(
-    [$t(`analyticsPage.range${rangeDays}`), updatedLabel].filter(Boolean).join(' · ')
-  );
-
   onMount(() => {
     try {
       const saved = loadUserSettings().analyticsUi;
@@ -241,6 +224,7 @@
       if (saved?.rangeDays === 90 || saved?.rangeDays === 180 || saved?.rangeDays === 365) {
         rangeDays = saved.rangeDays;
       }
+      if (typeof saved?.methodOpen === 'boolean') methodOpen = saved.methodOpen;
     } catch {
       // ignore storage errors
     }
@@ -261,7 +245,7 @@
 {#snippet slideBody(id: SlideId | undefined)}
   {#if data}
     {#if id === 'consistency'}
-      <div class="ad-grid g-consistency" class:wide={rangeDays > 180}>
+      <div class="ad-grid g-consistency">
         <div class="a-heat"><ConsistencyHeatmap activity={data.daily_activity} days={rangeDays} /></div>
         <div class="a-streak"><StreakPanel streaks={data.streaks} /></div>
         <div class="a-weekly"><WeeklyRhythm activity={data.daily_activity} /></div>
@@ -306,10 +290,7 @@
   <header class="ad-header">
     <div class="ad-title">
       <ChartColumn size={16} />
-      <div class="ad-title-txt">
-        <h1>{$t('analyticsPage.title')}</h1>
-        <span class="ad-sub">{subtitle}</span>
-      </div>
+      <h1>{$t('analyticsPage.title')}</h1>
     </div>
 
     <div class="ad-tabs" role="tablist" aria-label={$t('analyticsPage.tablistLabel')}>
@@ -400,16 +381,15 @@
       <!-- Vertical KPI rail -->
       <aside class="ad-rail" aria-label={$t('analyticsPage.railTitle')}>
         <div class="ad-hero">
-          <div class="ad-hero-head">
-            <span class="ad-kpi-label">{$t('analyticsPage.kpi.windowXp')}</span>
-            {#if xpDelta !== null}
-              <span class="ad-delta" class:up={xpDelta >= 5} class:down={xpDelta <= -5}>
-                {#if xpDelta <= -5}<TrendingDown size={11} />{:else}<TrendingUp size={11} />{/if}
-                {xpDelta > 0 ? '+' : ''}{xpDelta}%
-              </span>
-            {/if}
-          </div>
+          <span class="ad-kpi-label">{$t('analyticsPage.kpi.windowXp')}</span>
           <span class="ad-hero-val"><CountUp value={data.summary.window_xp} /></span>
+          {#if xpDelta !== null}
+            <span class="ad-delta" class:up={xpDelta >= 5} class:down={xpDelta <= -5}>
+              {#if xpDelta <= -5}<TrendingDown size={11} />{:else}<TrendingUp size={11} />{/if}
+              {xpDelta > 0 ? '+' : ''}{xpDelta}%
+              <span class="ad-delta-cap">{$t('analyticsPage.kpi.vsPrevious')}</span>
+            </span>
+          {/if}
           <div class="ad-spark"><Sparkline values={xpSpark} color="var(--xp)" /></div>
         </div>
 
@@ -472,14 +452,6 @@
       <!-- Carousel -->
       <div class="ad-carousel">
         <div class="ad-viewport">
-          <button
-            type="button"
-            class="ad-arrow"
-            onclick={prevSlide}
-            title={$t('common.previous')}
-            aria-label={$t('common.previous')}><ChevronLeft size={16} /></button
-          >
-
           <div class="ad-stage">
             {#key slideIdx}
               <div
@@ -491,18 +463,15 @@
                 in:fly={{ x: reduceMotion() ? 0 : slideDir * 40, duration: reduceMotion() ? 0 : 240, opacity: 0 }}
               >
                 <div class="ad-slide-charts">{@render slideBody(slides[slideIdx]?.id)}</div>
-                <InsightPanel items={slideInsights} methodKey={slides[slideIdx]?.id} />
+                <InsightPanel
+                  items={slideInsights}
+                  methodKey={slides[slideIdx]?.id}
+                  {methodOpen}
+                  onToggleMethod={toggleMethod}
+                />
               </div>
             {/key}
           </div>
-
-          <button
-            type="button"
-            class="ad-arrow"
-            onclick={nextSlide}
-            title={$t('common.next')}
-            aria-label={$t('common.next')}><ChevronRight size={16} /></button
-          >
         </div>
       </div>
     {:else}
@@ -541,23 +510,12 @@
     gap: var(--s3);
     color: var(--text-muted);
   }
-  .ad-title-txt {
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-  }
   .ad-title h1 {
     margin: 0;
     font-size: 14px;
     font-weight: 600;
     line-height: 1.2;
     color: var(--text-primary);
-  }
-  .ad-sub {
-    font-size: 10px;
-    color: var(--text-muted);
-    font-family: var(--font-mono);
-    white-space: nowrap;
   }
   .ad-tabs {
     display: flex;
@@ -591,7 +549,6 @@
   .ad-tab:focus-visible,
   .ad-range-btn:focus-visible,
   .ad-refresh:focus-visible,
-  .ad-arrow:focus-visible,
   .ad-slide:focus-visible {
     outline: 1px solid var(--xp);
     outline-offset: 2px;
@@ -692,14 +649,10 @@
   .ad-hero {
     display: flex;
     flex-direction: column;
+    align-items: center;
     gap: 4px;
     flex-shrink: 0;
-  }
-  .ad-hero-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--s2);
+    text-align: center;
   }
   .ad-hero-val {
     font-size: 32px;
@@ -709,6 +662,7 @@
     color: var(--text-primary);
   }
   .ad-spark {
+    width: 100%;
     height: 52px;
     margin-top: 2px;
   }
@@ -719,6 +673,10 @@
     font-size: 10px;
     font-weight: 700;
     font-family: var(--font-mono);
+    color: var(--text-muted);
+  }
+  .ad-delta-cap {
+    font-weight: 400;
     color: var(--text-muted);
   }
   .ad-delta.up {
@@ -815,8 +773,7 @@
     flex: 1;
     min-height: 0;
     display: grid;
-    grid-template-columns: 30px minmax(0, 1fr) 30px;
-    gap: var(--s2);
+    grid-template-columns: minmax(0, 1fr);
   }
   .ad-stage {
     position: relative;
@@ -835,25 +792,6 @@
     min-height: 0;
     display: flex;
   }
-  .ad-arrow {
-    align-self: center;
-    display: grid;
-    place-items: center;
-    width: 30px;
-    height: 56px;
-    border: 1px solid var(--border);
-    border-radius: var(--r);
-    background: var(--surface);
-    color: var(--text-muted);
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-  .ad-arrow:hover {
-    color: var(--text-primary);
-    border-color: var(--primary);
-    background: var(--surface-hover);
-  }
-
   /* ── Tile grids (one per slide) ── */
   .ad-grid {
     flex: 1;
@@ -867,16 +805,8 @@
     min-height: 0;
   }
   .g-consistency {
-    grid-template-columns: 1.1fr 1.1fr 0.95fr;
-    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
-    grid-template-areas:
-      'heat heat streak'
-      'weekly weekly wday';
-  }
-  /* Long windows have ~53 week columns: give the calendar the full width. */
-  .g-consistency.wide {
     grid-template-columns: 1fr 1.4fr 1fr;
-    grid-template-rows: minmax(0, 0.62fr) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 0.7fr) minmax(0, 1fr);
     grid-template-areas:
       'heat heat heat'
       'streak weekly wday';
@@ -1109,9 +1039,6 @@
     }
     .ad-viewport {
       grid-template-columns: minmax(0, 1fr);
-    }
-    .ad-arrow {
-      display: none;
     }
     .ad-slide {
       position: relative;

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import CalendarRange from 'lucide-svelte/icons/calendar-range';
   import ChartCard from './ChartCard.svelte';
   import ChartTooltip from './ChartTooltip.svelte';
@@ -10,6 +11,13 @@
   // Weekly rhythm (#1499): XP per ISO week (Monday start). Bar height is the
   // week's XP, bar brightness is how many of its 7 days were active — so a
   // tall-but-dim bar is "one big day", a tall-and-bright bar is steady work.
+  // Entry animations play once; later data swaps (window changes) update in place.
+  let settled = $state(false);
+  onMount(() => {
+    const id = setTimeout(() => (settled = true), 1400);
+    return () => clearTimeout(id);
+  });
+
   type DayRow = AnalyticsOverview['daily_activity'][number];
 
   let { activity }: { activity?: DayRow[] } = $props();
@@ -78,7 +86,7 @@
   {#if !hasData}
     <div class="chart-empty"><span>{$t('analyticsPage.weekday.empty')}</span></div>
   {:else}
-    <div class="wr-wrap" bind:this={wrapEl}>
+    <div class="wr-wrap" class:settled bind:this={wrapEl}>
       <div class="wr-plot">
         <div class="wr-avgline" style:bottom="{(avg / max) * 100}%"></div>
         {#each weeks as w, i (w.start.getTime())}
@@ -210,5 +218,8 @@
     .wr-bar {
       animation: none;
     }
+  }
+  .settled .wr-bar {
+    animation: none;
   }
 </style>

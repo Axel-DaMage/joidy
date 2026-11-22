@@ -651,7 +651,9 @@
       "prs": "PRs",
       "issues": "Issues",
       "comments": "Comentarios",
-      "empty": "Sin actividad de GitHub en este periodo."
+      "empty": "Conecta tus repositorios para ver pushes, PRs, issues y comentarios por semana.",
+      "emptyTitle": "Aún sin actividad de GitHub",
+      "cta": "Abrir ajustes"
     },
     "insightsTitle": "Insights",
     "insightsEmpty": "Sigue usando Joidy — los insights aparecen con suficientes datos.",
@@ -701,7 +703,10 @@
       "mood.average": "ánimo medio en esta ventana",
       "mood.bestMood": "XP medio los días de ánimo {mood}",
       "github.activeWeeks": "semanas con actividad",
-      "github.total": "eventos en las últimas semanas"
+      "github.total": "eventos en las últimas semanas",
+      "github.needConnect": "Conecta GitHub para desbloquear este análisis",
+      "github.howTo": "En Ajustes, vincula tu cuenta y activa los repositorios que quieras seguir",
+      "github.unlock": "Verás tu ritmo de código: pushes, PRs, issues y comentarios por semana"
     },
     "clock": {
       "all": "Todos",
@@ -747,7 +752,8 @@
       "windowXp": "XP en la ventana",
       "record": "récord {days}d",
       "perActiveDay": "~{xp} en días activos",
-      "accumulated": "acumulado"
+      "accumulated": "acumulado",
+      "vsPrevious": "vs. anterior"
     },
     "tabs": {
       "consistency": "Consistencia",
@@ -781,7 +787,9 @@
       "github": {
         "title": "Cómo se calcula",
         "body": "Se cuentan los eventos que GitHub envía a Joidy (pushes, PRs, issues y comentarios) agrupados por semana ISO, de lunes a domingo, durante las últimas 12 semanas."
-      }
+      },
+      "hide": "Ocultar",
+      "show": "Mostrar"
     },
     "matrix": {
       "title": "Día × hora",
@@ -807,8 +815,7 @@
     "description": "Consistencia, productividad, hábitos, ánimo y objetivos en un solo vistazo.",
     "title": "Analítica",
     "tablistLabel": "Secciones de analítica",
-    "refresh": "Actualizar datos",
-    "updatedAt": "actualizado {time}"
+    "refresh": "Actualizar datos"
   },
   "notesPage": {
     "createNote": "Crear nota",
