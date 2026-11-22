@@ -43,7 +43,7 @@ from services.skill_tree import sync_skills_for_tags
 from services.tag_graph import sync_tag_cooccurrences_for_tags
 from services.vault_paths import normalize_source_path, resolve_confined_source_path
 from sqlalchemy import text
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, defer, selectinload
 
 router = APIRouter(prefix="/notes", tags=["notes"])
 
@@ -253,8 +253,6 @@ def list_notes(
     source_path: str | None = None,
     db: Session = Depends(get_db),
 ):
-    from sqlalchemy.orm import defer
-
     query = db.query(Note).options(defer(Note.content), selectinload(Note.tags).selectinload(NoteTag.tag))
     if tag:
         query = query.join(NoteTag).join(Tag).filter(Tag.name == tag.lower())
@@ -322,8 +320,6 @@ async def semantic_search(
     note_ids = [row[0] for row in rows]
     if not note_ids:
         return {"results": []}
-
-    from sqlalchemy.orm import defer
 
     notes = (
         db.query(Note)
@@ -640,8 +636,6 @@ def retry_failed_embeddings(
 @router.get("/embeddings/dead-letters")
 def list_dead_letters(limit: int = 50, db: Session = Depends(get_db)):
     """List embedding failures that exceeded max retry attempts."""
-    from models.note import Note
-
     entries = get_dead_letter_entries(db, limit=limit)
     note_ids = [e["note_id"] for e in entries]
     notes = (

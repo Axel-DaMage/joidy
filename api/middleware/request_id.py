@@ -4,7 +4,7 @@ Request ID middleware for distributed tracing.
 
 import re
 
-from middleware.correlation_id import get_correlation_id, set_correlation_id
+from middleware.correlation_id import set_correlation_id
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
@@ -28,8 +28,3 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
         response: Response = await call_next(request)
         response.headers["X-Request-ID"] = request_id
         return response
-
-
-def get_request_id(request: Request) -> str:
-    """Get request ID from request state, or from context."""
-    return getattr(request.state, "request_id", get_correlation_id())
