@@ -34,7 +34,6 @@
   // timezone (joidy-timezone localStorage) and 24h/12h preference as TimeWidget.
   let clockStr = $state('--:--:--');
   let clockParts = $state<ClockParts>(getClockParts('UTC', true));
-  let clockInterval: ReturnType<typeof setInterval> | null = null;
 
   function updateFocusClock() {
     const tz = getTimezone();
@@ -46,6 +45,17 @@
   $effect(() => {
     $use24HourClock;
     updateFocusClock();
+  });
+
+  // The 1s ticker only runs while the overlay is visible — each tick does
+  // Intl.DateTimeFormat work and writes $state, so an always-on interval
+  // burned ~86k reactive updates/day even when focus mode was never
+  // opened (#1548).
+  $effect(() => {
+    if (!$isActive) return;
+    updateFocusClock();
+    const id = setInterval(updateFocusClock, 1000);
+    return () => clearInterval(id);
   });
 
   let reducedMotion = $state(false);
@@ -125,14 +135,11 @@
 
   onMount(() => {
     window.addEventListener('keydown', handleKeydown, true);
-    updateFocusClock();
-    clockInterval = setInterval(updateFocusClock, 1000);
   });
 
   onDestroy(() => {
     window.removeEventListener('keydown', handleKeydown, true);
     if (autoStopTimeout) clearTimeout(autoStopTimeout);
-    if (clockInterval) clearInterval(clockInterval);
   });
 
   function handleExit() {
