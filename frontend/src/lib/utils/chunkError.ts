@@ -66,6 +66,7 @@ export function handleChunkError(opts?: {
   storage?: StorageLike | null;
   reload?: () => void;
   now?: number;
+  reason?: unknown;
 }): 'reloaded' | 'prompt' {
   const storage = opts?.storage !== undefined ? opts.storage : safeSessionStorage();
   const reload = opts?.reload ?? (() => window.location.reload());
@@ -77,10 +78,14 @@ export function handleChunkError(opts?: {
     } catch (e) {
       logger.warn('[chunkError] could not persist reload guard:', e);
     }
+    logger.warn('[chunkError] chunk load failed — reloading to recover:', opts?.reason);
     reload();
     return 'reloaded';
   }
-  logger.error('[chunkError] chunk load failed and auto-reload was already spent — prompting user');
+  logger.error(
+    '[chunkError] chunk load failed and auto-reload was already spent — prompting user:',
+    opts?.reason
+  );
   chunkUpdateAvailable.set(true);
   return 'prompt';
 }
@@ -95,12 +100,12 @@ export function initChunkErrorRecovery(): () => void {
   const onPreloadError = (event: Event) => {
     // Keep Vite from rethrowing the payload as an unhandled rejection.
     event.preventDefault();
-    handleChunkError();
+    handleChunkError({ reason: (event as Event & { payload?: unknown }).payload });
   };
   const onUnhandledRejection = (event: PromiseRejectionEvent) => {
     if (isChunkLoadError(event.reason)) {
       event.preventDefault();
-      handleChunkError();
+      handleChunkError({ reason: event.reason });
     }
   };
   window.addEventListener('vite:preloadError', onPreloadError);

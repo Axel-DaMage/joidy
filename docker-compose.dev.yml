@@ -4,6 +4,9 @@ services:
   # api/data/logs, etc. — are owned by the host user and never need sudo to
   # clean, even when the host UID is not 1000 (#886).
   frontend:
+    # Tag dev builds joidy-*:dev so `docker compose build` never overwrites
+    # the release :latest tag that `joidy up` runs (#1481).
+    image: joidy-frontend:dev
     build:
       context: ./frontend
       dockerfile: Dockerfile
@@ -49,11 +52,16 @@ services:
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 10s
-      timeout: 3s
+      # Cold Vite dev SSR can take >3s per request during dep re-optimization,
+      # which flipped the healthcheck permanently unhealthy (#1481).
+      timeout: 10s
       retries: 5
-      start_period: 15s
+      start_period: 30s
 
   api:
+    # Tag dev builds joidy-*:dev so `docker compose build` never overwrites
+    # the release :latest tag that `joidy up` runs (#1481).
+    image: joidy-api:dev
     build:
       context: ./api
       dockerfile: Dockerfile
@@ -82,8 +90,12 @@ services:
     command: sh -c "mkdir -p /app/data/logs 2>/dev/null || true; exec uvicorn main:app --host 0.0.0.0 --port 8000 --reload --reload-include '*.py' --reload-exclude '__pycache__/*' --reload-exclude '*.pyc'"
 
   ai-service:
-    # Clear the production profile so the AI service always starts in dev.
-    profiles: []
+    # The production `profiles: ["ai"]` merges across compose files and cannot
+    # be cleared with `profiles: []` — ai-service starts in dev because every
+    # Makefile dev target passes `--profile ai` (#1486).
+    # Tag dev builds joidy-*:dev so `docker compose build` never overwrites
+    # the release :latest tag that `joidy up` runs (#1481).
+    image: joidy-ai-service:dev
     build:
       context: ./ai-service
       dockerfile: Dockerfile
@@ -100,6 +112,9 @@ services:
     command: uvicorn main:app --host 0.0.0.0 --port 8002 --reload
 
   worker:
+    # Tag dev builds joidy-*:dev so `docker compose build` never overwrites
+    # the release :latest tag that `joidy up` runs (#1481).
+    image: joidy-worker:dev
     build:
       context: ./worker
       dockerfile: Dockerfile
