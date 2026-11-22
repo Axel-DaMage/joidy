@@ -1,4 +1,4 @@
-.PHONY: setup dev dev-d dev-reset prod stop restart logs logs-api logs-ai logs-worker build clean backup restore db-backup db-restore backup-verify shell-api shell-worker migrate db-health test-api test-ai test-frontend test-frontend-e2e test lint lint-api fix-permissions install-deps doctor start n8n n8n-down n8n-logs
+.PHONY: help setup dev dev-d dev-reset prod stop restart logs logs-api logs-ai logs-worker build clean backup restore db-backup db-restore backup-verify sbom shell-api shell-worker migrate db-health test-api test-ai test-frontend test-frontend-e2e test-frontend-check test lint lint-api fix-permissions install-deps doctor start n8n n8n-down n8n-logs
 
 COMPOSE_PROJECT ?= joidy
 DOCKER_COMPOSE := $(shell command -v docker-compose >/dev/null 2>&1 && echo "docker-compose" || (command -v docker >/dev/null 2>&1 && echo "docker compose" || (command -v podman-compose >/dev/null 2>&1 && echo "podman-compose" || (command -v podman >/dev/null 2>&1 && echo "podman compose" || echo "docker compose"))))
@@ -125,12 +125,19 @@ dev-reset: ## Recreate all services in development mode from scratch (one comman
 	env UID=$(HOST_UID) GID=$(HOST_GID) $(DOCKER_COMPOSE) -p $(COMPOSE_PROJECT) -f docker-compose.yml -f docker-compose.dev.yml --profile ai up --build -d --force-recreate --remove-orphans --wait
 	@echo "✓ Services recreated. Use 'make logs' to follow output."
 
-prod: ## Start all services in production mode
+# NOTE: `joidy up` (scripts/joidy.sh) remains the full-featured prod path —
+# it also resolves free ports, exports JOIDY_ENV_FILE/JOIDY_DATA_DIR and
+# layers the power-management overlay. This target covers the common clone
+# case: project name + ai/backup profile flags read from .env.
+prod: ## Start all services in production mode (prefer `joidy up` for port fallback + power mgmt)
 	@if [ ! -f .env ]; then echo "Run 'make setup' first"; exit 1; fi
 	@mkdir -p data/db data/uploads data/vault data/backups
 	@OBSIDIAN_VAULT_PATH=$(call env_key,OBSIDIAN_VAULT_PATH); \
 	case "$$OBSIDIAN_VAULT_PATH" in ~/*) export OBSIDIAN_VAULT_PATH="$(HOME)/$${OBSIDIAN_VAULT_PATH#~/}";; ~) export OBSIDIAN_VAULT_PATH="$(HOME)";; esac; \
-	$(DOCKER_COMPOSE) up --build -d
+	PROFILES=""; \
+	if [ "$(call env_key,AI_SERVICE_ENABLED)" = "true" ]; then PROFILES="$$PROFILES --profile ai"; fi; \
+	if [ "$(call env_key,BACKUP_ENABLED)" != "false" ]; then PROFILES="$$PROFILES --profile backup"; fi; \
+	$(DOCKER_COMPOSE) -p $(COMPOSE_PROJECT) $$PROFILES up --build -d
 
 stop: ## Stop all services
 	$(DOCKER_COMPOSE) down
@@ -162,7 +169,7 @@ n8n-logs: ## Tail n8n logs
 build: ## Rebuild all Docker images
 	$(DOCKER_COMPOSE) build --no-cache
 
-clean: ## Stop services and remove volumes, __pycache__ and MCP logs (WARNING: deletes nothing in data/)
+clean: ## Stop services and remove containers, __pycache__ and MCP logs (keeps named volumes and data/)
 	$(DOCKER_COMPOSE) down --remove-orphans
 	find . -type d -name __pycache__ -prune -exec rm -rf {} +
 	find . -type d -name .playwright-mcp -prune -exec rm -rf {} +
@@ -230,8 +237,10 @@ test-frontend-check: ## Run frontend typechecking (svelte-check) inside Docker
 
 test: test-api test-ai test-frontend test-frontend-check ## Run all unit/typecheck suites (API + AI service + Frontend). E2E is separate: make test-frontend-e2e (needs make dev running)
 
-lint-api: ## Docker fallback: compileall syntax check only (prefer `make lint`)
-	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml run --rm api python -m compileall -q /app/api /app/ai-service /app/worker || (echo "Syntax errors found"; exit 1)
+lint-api: ## Docker fallback: compileall syntax check in each backend container (prefer `make lint`)
+	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml run --rm api python -m compileall -q /app || (echo "Syntax errors found in api"; exit 1)
+	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml run --rm ai-service python -m compileall -q /app || (echo "Syntax errors found in ai-service"; exit 1)
+	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml run --rm worker python -m compileall -q /app || (echo "Syntax errors found in worker"; exit 1)
 
 lint: ## Lint like CI on the host (no Docker): compileall + ruff + ruff format --check + mypy + bandit + frontend svelte-check
 	bash scripts/lint.sh
