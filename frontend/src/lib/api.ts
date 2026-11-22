@@ -2004,6 +2004,7 @@ export const api = {
         silent: true,
         providerAuth: true,
       }),
+  },
   // ── Google Contacts (#43) — dedicated surface over the People API via
   // /integrations/contacts (JWT-protected, shares the Google OAuth token).
   contacts: {
