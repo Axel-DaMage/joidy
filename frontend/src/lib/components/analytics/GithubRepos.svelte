@@ -26,8 +26,15 @@
             class="gr-dot"
             style="background: {repo.color ?? 'var(--text-muted)'}"
           ></span>
-          <span class="gr-name" title={repo.name}>
-            {repo.name}
+          <span class="gr-name">
+            <a
+              class="gr-link"
+              href="https://github.com/{repo.name}"
+              target="_blank"
+              rel="noopener noreferrer"
+              title="{repo.name}"
+              >{repo.name}</a
+            >
             {#if repo.private}<Lock size={9} style="color: var(--text-muted)" />{/if}
           </span>
           <span class="gr-bar"
@@ -67,15 +74,24 @@
   .gr-name {
     flex: 0 1 auto;
     max-width: 46%;
-    font-size: 11px;
-    font-weight: 500;
-    color: var(--text-secondary);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    min-width: 0;
     display: inline-flex;
     align-items: center;
     gap: 4px;
+  }
+  .gr-link {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    text-decoration: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+  }
+  .gr-link:hover {
+    color: var(--xp);
+    text-decoration: underline;
   }
   .gr-bar {
     flex: 1;
@@ -109,7 +125,7 @@
     .gr-row {
       gap: var(--s1);
     }
-    .gr-name {
+    .gr-link {
       font-size: 10px;
     }
     .gr-count {
