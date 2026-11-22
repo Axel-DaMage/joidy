@@ -383,7 +383,7 @@ def _extract_tags_from_content(content: str, frontmatter: dict) -> list[str]:
     return list({t.lower() for t in tags if t})
 
 
-async def delete_note_by_path(path: str, client: httpx.AsyncClient, token: str):
+async def delete_note_by_path(path: str, client: httpx.AsyncClient, token: str) -> bool:
     """Delete the note matching ``source_path`` via the atomic by-path
     endpoint (#1302).
 
@@ -393,6 +393,11 @@ async def delete_note_by_path(path: str, client: httpx.AsyncClient, token: str):
     ``updated_at`` etag captured at lookup time inside a single locked
     transaction: a note that changed or was recreated in between answers
     409/404 and is left untouched (a later add/modify event resyncs it).
+
+    Returns ``True`` when the delete is resolved (done, already absent, or
+    refused by the API) and ``False`` when every attempt failed — the
+    caller keeps the pending event so the delete is retried on the next
+    startup instead of being silently dropped (#1534).
     """
     for attempt in range(3):
         try:
@@ -408,48 +413,78 @@ async def delete_note_by_path(path: str, client: httpx.AsyncClient, token: str):
                 logger.warning("[vault] Auth expired while deleting %s, refreshing token", _log_name(path))
                 await get_auth_token(client, force=True)
                 continue
-            if r.status_code == 200:
-                target = next((n for n in r.json() if n.get("source_path") == path), None)
-                if target is not None:
-                    del_res = await client.delete(
-                        f"{settings.api_url}/notes/by-path",
-                        params={
-                            "source_path": path,
-                            "expected_updated_at": target.get("updated_at") or "",
-                        },
-                        headers=headers,
-                        timeout=10.0,
-                    )
-                    if del_res.status_code == 401:
-                        await get_auth_token(client, force=True)
-                        continue
-                    if del_res.status_code == 409:
-                        logger.info(
-                            "[vault] Skipping delete of %s — note changed since lookup",
-                            _log_name(path),
-                        )
-                        return
-                    logger.info("[vault] Deleted: %s", _log_name(path))
-                    return
-            break  # Success or not found
+            if r.status_code in (429, 500, 503):
+                await asyncio.sleep(1 * (attempt + 1))
+                continue
+            if r.status_code == 404:
+                return True  # already gone
+            if r.status_code != 200:
+                # 4xx/5xx raise below and retry via the except; odd statuses
+                # (redirects, unexpected 2xx) are failures too — never report
+                # a delete that did not happen (#1534).
+                r.raise_for_status()
+                logger.warning(
+                    "[vault] Unexpected status %s looking up %s for delete",
+                    r.status_code,
+                    _log_name(path),
+                )
+                return False
+            target = next((n for n in r.json() if n.get("source_path") == path), None)
+            if target is None:
+                return True  # nothing to delete
+            del_res = await client.delete(
+                f"{settings.api_url}/notes/by-path",
+                params={
+                    "source_path": path,
+                    "expected_updated_at": target.get("updated_at") or "",
+                },
+                headers=headers,
+                timeout=10.0,
+            )
+            if del_res.status_code == 401:
+                await get_auth_token(client, force=True)
+                continue
+            if del_res.status_code == 409:
+                logger.info(
+                    "[vault] Skipping delete of %s — note changed since lookup",
+                    _log_name(path),
+                )
+                return True
+            if del_res.status_code == 404:
+                return True  # already gone
+            if del_res.status_code in (429, 500, 503):
+                await asyncio.sleep(1 * (attempt + 1))
+                continue
+            del_res.raise_for_status()
+            logger.info("[vault] Deleted: %s", _log_name(path))
+            return True
         except Exception as e:
             if attempt == 2:
                 # Exception type only — str(e) can embed request URLs carrying
                 # source_path params; tracebacks leak the same (#1299, #1301).
                 logger.error("[vault] Error deleting %s: %s", _log_name(path), type(e).__name__)
             await asyncio.sleep(1 * (attempt + 1))
+    logger.error(
+        "[vault] Delete retries exhausted for %s — event kept for next startup",
+        _log_name(path),
+    )
+    return False
 
 
-async def rename_note_path(old_path: str, new_path: Path, client: httpx.AsyncClient, token: str):
+async def rename_note_path(old_path: str, new_path: Path, client: httpx.AsyncClient, token: str) -> bool:
     """Treat a delete+add pair as a rename: update the existing note's
     source_path instead of deleting and recreating it, preserving id/XP/history
-    (#364)."""
+    (#364).
+
+    Returns ``True`` when the rename resolved and ``False`` on failure —
+    the caller keeps both pending events for the next startup (#1534).
+    """
     try:
         if not new_path.exists():
-            return
+            return True
         content = _read_vault_file(new_path)
         if content is None:
-            return
+            return True
         frontmatter, body = _parse_frontmatter(content)
         title = frontmatter.get("title") or new_path.stem.replace("-", " ").replace("_", " ").title()
         tags = _extract_tags_from_content(content, frontmatter)
@@ -477,6 +512,10 @@ async def rename_note_path(old_path: str, new_path: Path, client: httpx.AsyncCli
                         if n.get("source_path") == old_path:
                             existing = n
                             break
+                    break
+                if r.status_code == 404:
+                    break
+                r.raise_for_status()
                 break
             except Exception:
                 if attempt == 2:
@@ -485,8 +524,7 @@ async def rename_note_path(old_path: str, new_path: Path, client: httpx.AsyncCli
 
         if not existing:
             # No note at the old path — fall back to a normal import of the new path.
-            await import_or_update_note(new_path, client, token)
-            return
+            return await import_or_update_note(new_path, client, token)
 
         for attempt in range(5):
             current_token = await get_auth_token(client)
@@ -516,7 +554,13 @@ async def rename_note_path(old_path: str, new_path: Path, client: httpx.AsyncCli
             _record_fingerprint(str(new_path), _fingerprint(content))
             _drop_fingerprint(old_path)
             logger.info("[vault] Renamed: %s -> %s", _log_name(old_path), _log_name(new_path))
-            return
+            return True
+        logger.error(
+            "[vault] Rename retries exhausted for %s -> %s — events kept for next startup",
+            _log_name(old_path),
+            _log_name(new_path),
+        )
+        return False
     except Exception as e:
         # Exception type only — str(e) can embed request URLs carrying
         # source_path params; tracebacks leak the same (#1299, #1301).
@@ -526,15 +570,24 @@ async def rename_note_path(old_path: str, new_path: Path, client: httpx.AsyncCli
             _log_name(new_path),
             type(e).__name__,
         )
+        return False
 
 
-async def import_or_update_note(filepath: Path, client: httpx.AsyncClient, token: str, *, bulk_import: bool = False):
+async def import_or_update_note(
+    filepath: Path, client: httpx.AsyncClient, token: str, *, bulk_import: bool = False
+) -> bool:
+    """Sync one vault file to the API.
+
+    Returns ``True`` when the note was synced (or there was nothing to do)
+    and ``False`` when the sync failed — the caller keeps the pending event
+    so it is retried on the next startup instead of being dropped (#1534).
+    """
     try:
         if not filepath.exists():
-            return
+            return True
         content = _read_vault_file(filepath)
         if content is None:
-            return
+            return True
         frontmatter, body = _parse_frontmatter(content)
         title = frontmatter.get("title") or filepath.stem.replace("-", " ").replace("_", " ").title()
         tags = _extract_tags_from_content(content, frontmatter)
@@ -564,6 +617,13 @@ async def import_or_update_note(filepath: Path, client: httpx.AsyncClient, token
                         if n.get("source_path") == str(filepath):
                             existing = n
                             break
+                    break
+                if r.status_code == 404:
+                    break
+                # 4xx/5xx raise here and retry via the except below — a failed
+                # lookup must not be mistaken for "note does not exist" and
+                # trigger a duplicate create (#1534).
+                r.raise_for_status()
                 break
             except Exception:
                 if attempt == 2:
@@ -572,6 +632,7 @@ async def import_or_update_note(filepath: Path, client: httpx.AsyncClient, token
 
         payload = {"title": title, "content": content, "tags": tags, "source": "obsidian", "source_path": str(filepath)}
 
+        synced = False
         for attempt in range(5):
             current_token = await get_auth_token(client)
             cid = get_correlation_id()
@@ -616,15 +677,28 @@ async def import_or_update_note(filepath: Path, client: httpx.AsyncClient, token
                 continue
 
             res.raise_for_status()
+            synced = True
             break
+
+        if not synced:
+            # Every attempt hit a retryable status or auth failure — do NOT
+            # fingerprint/log as synced; report failure so the caller keeps
+            # the event for the next startup (#1534).
+            logger.error(
+                "[vault] Sync retries exhausted for %s — event kept for next startup",
+                _log_name(filepath),
+            )
+            return False
 
         _record_fingerprint(str(filepath), _fingerprint(content))
         logger.info("[vault] Synced: %s", _log_name(filepath))
+        return True
 
     except Exception as e:
         # Exception type only — str(e) can embed request URLs carrying
         # source_path params; tracebacks leak the same (#1299, #1301).
         logger.error("[vault] Error syncing %s: %s", _log_name(filepath), type(e).__name__)
+        return False
 
 
 async def initial_scan(vault_path: Path, client: httpx.AsyncClient, token: str):
@@ -733,10 +807,19 @@ async def _process_batch(
                 # Shield the critical write so a shutdown cancellation
                 # does not interrupt a mid-flight API call (#371).
                 if change_type == Change.deleted:
-                    await asyncio.shield(delete_note_by_path(path, client, token))
+                    ok = await asyncio.shield(delete_note_by_path(path, client, token))
                 else:
-                    await asyncio.shield(import_or_update_note(Path(path), client, token))
-                event_log.remove(path)
+                    ok = await asyncio.shield(import_or_update_note(Path(path), client, token))
+                if ok:
+                    event_log.remove(path)
+                else:
+                    # Sync failed after retries — keep the event so it is
+                    # retried on the next startup instead of dropped (#1534).
+                    logger.warning(
+                        "[vault] %s %s failed — event kept for next startup",
+                        change_type.name,
+                        _log_name(path),
+                    )
             except asyncio.CancelledError:
                 # Propagate cancellation but keep the event logged so
                 # it is retried on the next startup.
@@ -760,9 +843,18 @@ async def _process_batch(
         lock = await _get_file_lock(old_path)
         async with lock:
             try:
-                await asyncio.shield(rename_note_path(old_path, Path(new_path), client, token))
-                event_log.remove(old_path)
-                event_log.remove(new_path)
+                ok = await asyncio.shield(rename_note_path(old_path, Path(new_path), client, token))
+                if ok:
+                    event_log.remove(old_path)
+                    event_log.remove(new_path)
+                else:
+                    # Rename failed after retries — keep both events so the
+                    # pair is retried on the next startup (#1534).
+                    logger.warning(
+                        "[vault] Rename %s -> %s failed — events kept for next startup",
+                        _log_name(old_path),
+                        _log_name(new_path),
+                    )
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
