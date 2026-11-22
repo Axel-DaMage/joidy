@@ -295,7 +295,7 @@ def _append_message(
     msgs: list[dict] = list(session.messages or [])
     if msgs and msgs[-1].get("role") == role and msgs[-1].get("content") == content:
         return
-    msg: dict = {"role": role, "content": content, "ts": int(datetime.now().timestamp() * 1000)}
+    msg: dict = {"role": role, "content": content, "ts": int(datetime.now(UTC).timestamp() * 1000)}
     if extra:
         msg.update(extra)
     msgs.append(msg)
