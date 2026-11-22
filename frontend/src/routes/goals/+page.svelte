@@ -1273,6 +1273,14 @@
   });
 
   function getGoalColor(goal: Goal): string {
+    // Semantic states win over custom colors so terminal readouts never mix
+    // palettes: completed = green, failed/abandoned = red (#1506).
+    if (goal.state === 'COMPLETED' || goal.is_completed) {
+      return 'var(--target)';
+    }
+    if (goal.state === 'FAILED' || goal.state === 'CANCELLED') {
+      return 'var(--error)';
+    }
     if (goal.color) {
       return goal.color;
     }
@@ -1283,21 +1291,16 @@
       ANNUAL: TEMPORALITY_COLORS['ANNUAL'],
       ONEOFF: TEMPORALITY_COLORS['ONEOFF'],
       ACTIVE: 'var(--today)',
-      COMPLETED: 'var(--target)',
       PAUSED: 'var(--error)',
-      CANCELLED: 'var(--error)',
     };
 
-    if (goal.state === 'ACTIVE' || goal.state === 'PAUSED' || goal.state === 'CANCELLED') {
-      return colorMap[goal.state] || goal.color || 'var(--border)';
-    }
-    if (goal.state === 'COMPLETED' || goal.is_completed) {
-      return colorMap['COMPLETED'];
+    if (goal.state === 'ACTIVE' || goal.state === 'PAUSED') {
+      return colorMap[goal.state] || 'var(--border)';
     }
     if (goal.temporality) {
       return colorMap[goal.temporality];
     }
-    return goal.color || 'var(--border)';
+    return 'var(--border)';
   }
 </script>
 

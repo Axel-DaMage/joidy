@@ -131,6 +131,13 @@
       panelWidth = Number(savedNotesUi.panelWidth);
     }
 
+    // Restore the last viewed streak from durable user settings — the page
+    // snapshot only covers `beforeunload`, so SPA navigation used to drop
+    // the selection and land on "no streak selected" (#1504).
+    const savedStreaksUi = loadUserSettings().streaksUi;
+    if (savedStreaksUi?.selectedId !== undefined) selectedId = savedStreaksUi.selectedId;
+    if (savedStreaksUi?.showArchived !== undefined) showArchived = savedStreaksUi.showArchived;
+
     const snap = getSnapshot('/streaks');
     if (snap) {
       selectedId = snap.state.selectedId ?? null;
@@ -168,6 +175,11 @@
 
     window.addEventListener('beforeunload', handleBeforeUnload);
   });
+
+  // Persist the viewed streak so re-entering the page restores it (#1504).
+  $: if (mounted) {
+    patchUserSettings({ streaksUi: { selectedId, showArchived } });
+  }
 
   onDestroy(() => window.removeEventListener('beforeunload', handleBeforeUnload));
 
