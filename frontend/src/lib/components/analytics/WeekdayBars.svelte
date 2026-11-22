@@ -1,45 +1,23 @@
 <script lang="ts">
-  import { scaleBand, scaleLinear } from 'd3';
   import ChartColumn from 'lucide-svelte/icons/chart-column';
   import ChartCard from './ChartCard.svelte';
   import ChartTooltip from './ChartTooltip.svelte';
   import type { AnalyticsOverview } from '$lib/api';
-  import { xpByWeekday } from '$lib/utils/insights';
+  import { avgXpByWeekday } from '$lib/utils/insights';
   import { locale } from '$lib/stores/locale';
   import { t } from 'svelte-i18n';
 
-  // Compact weekday profile (#1499): average XP per day of week — the
-  // "which days am I productive" complement to the heatmap.
+  // Weekday profile (#1499): average XP per calendar day for each day of the
+  // week. Averaging per occurrence (not summing) keeps weekdays comparable
+  // when the window holds an uneven number of each one.
   type DayRow = AnalyticsOverview['daily_activity'][number];
 
   let { activity }: { activity?: DayRow[] } = $props();
 
-  const W = 320;
-  const H = 120;
-  const M = { top: 8, right: 4, bottom: 20, left: 4 };
-
-  let avgs = $derived.by(() => {
-    const rows = activity ?? [];
-    const sums = xpByWeekday(rows);
-    const counts = Array(7).fill(0) as number[];
-    for (const d of rows) counts[(new Date(d.date + 'T12:00').getDay() + 6) % 7]++;
-    return sums.map((s, i) => (counts[i] > 0 ? Math.round(s / counts[i]) : 0));
-  });
+  let avgs = $derived(avgXpByWeekday(activity ?? []));
   let max = $derived(Math.max(1, ...avgs));
-  let best = $derived(avgs.indexOf(max));
-
-  let x = $derived(
-    scaleBand()
-      .domain(avgs.map((_, i) => String(i)))
-      .range([M.left, W - M.right])
-      .paddingInner(0.28)
-  );
-  let y = $derived(
-    scaleLinear()
-      .domain([0, max])
-      .range([H - M.bottom, M.top])
-      .nice()
-  );
+  let best = $derived(avgs.indexOf(Math.max(...avgs)));
+  let hasData = $derived(avgs.some((v) => v > 0));
   let dayNames = $derived(
     Array.from({ length: 7 }, (_, i) =>
       new Intl.DateTimeFormat($locale, { weekday: 'short' })
@@ -59,37 +37,28 @@
 </script>
 
 <ChartCard title={$t('goalsAnalytics.weekday.title')}>
-  {#snippet icon()}<ChartColumn size={15} />{/snippet}
+  {#snippet icon()}<ChartColumn size={13} />{/snippet}
 
-  {#if max <= 1 && avgs.every((v) => v === 0)}
+  {#if !hasData}
     <div class="chart-empty"><span>{$t('goalsAnalytics.weekday.empty')}</span></div>
   {:else}
     <div class="wd-wrap" bind:this={wrapEl}>
-      <svg
-        viewBox="0 0 {W} {H}"
-        preserveAspectRatio="xMidYMid meet"
-        role="img"
-        aria-label={$t('goalsAnalytics.weekday.title')}
-      >
-        {#each avgs as v, i (i)}
-          <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <rect
-            x={x(String(i))}
-            y={y(v)}
-            width={x.bandwidth()}
-            height={Math.max(2, H - M.bottom - y(v))}
-            rx="4"
-            class="wd-bar"
-            class:peak={i === best}
-            onmouseenter={(e) => onBar(e, i)}
-            onmousemove={(e) => onBar(e, i)}
-            onmouseleave={() => (tip = null)}
-          />
-          <text x={(x(String(i)) ?? 0) + x.bandwidth() / 2} y={H - 6} class="wd-label" text-anchor="middle"
-            >{dayNames[i]}</text
-          >
-        {/each}
-      </svg>
+      {#each avgs as v, i (i)}
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div
+          class="wd-col"
+          class:peak={i === best}
+          onmouseenter={(e) => onBar(e, i)}
+          onmousemove={(e) => onBar(e, i)}
+          onmouseleave={() => (tip = null)}
+        >
+          <span class="wd-val mono">{v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v}</span>
+          <div class="wd-track">
+            <div class="wd-bar" style:height="{Math.max(3, (v / max) * 100)}%" style:--i={i}></div>
+          </div>
+          <span class="wd-label">{dayNames[i]}</span>
+        </div>
+      {/each}
 
       <ChartTooltip x={tip?.x ?? 0} y={tip?.y ?? 0} visible={!!tip}>
         {#if tip}
@@ -108,27 +77,60 @@
     min-height: 0;
     display: flex;
     align-items: stretch;
+    gap: 6px;
   }
-  svg {
+  .wd-col {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+  .wd-val {
+    font-size: 9px;
+    color: var(--text-muted);
+    transition: color 0.2s;
+  }
+  .wd-track {
+    flex: 1;
     width: 100%;
-    height: 100%;
+    min-height: 0;
+    display: flex;
+    align-items: flex-end;
+    border-radius: var(--r-sm);
+    background: color-mix(in srgb, var(--text-primary) 4%, transparent);
   }
   .wd-bar {
-    fill: color-mix(in srgb, var(--xp) 45%, transparent);
-    transition: fill 0.2s;
-    cursor: default;
+    width: 100%;
+    border-radius: var(--r-sm);
+    background: color-mix(in srgb, var(--xp) 45%, transparent);
+    transform-origin: bottom;
+    animation: wd-grow 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+    animation-delay: calc(var(--i) * 45ms);
+    transition: filter 0.2s;
   }
-  .wd-bar:hover {
-    fill: color-mix(in srgb, var(--xp) 70%, transparent);
+  .wd-col:hover .wd-bar {
+    background: color-mix(in srgb, var(--xp) 70%, transparent);
   }
-  .wd-bar.peak {
-    fill: var(--xp);
+  .wd-col:hover .wd-val {
+    color: var(--text-primary);
+  }
+  .wd-col.peak .wd-bar {
+    background: var(--xp);
+  }
+  .wd-col.peak .wd-val {
+    color: var(--xp);
+    font-weight: 700;
   }
   .wd-label {
-    fill: var(--text-muted);
     font-size: 9px;
+    color: var(--text-muted);
     font-family: var(--font-mono);
     text-transform: capitalize;
+  }
+  .wd-col.peak .wd-label {
+    color: var(--text-primary);
   }
   .chart-empty {
     flex: 1;
@@ -137,6 +139,18 @@
     justify-content: center;
     color: var(--text-muted);
     font-size: 12px;
-    min-height: 100px;
+  }
+  @keyframes wd-grow {
+    from {
+      transform: scaleY(0);
+    }
+    to {
+      transform: scaleY(1);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .wd-bar {
+      animation: none;
+    }
   }
 </style>

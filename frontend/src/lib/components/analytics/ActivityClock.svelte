@@ -15,12 +15,18 @@
 
   let { seasonality }: { seasonality?: Seasonality } = $props();
 
-  const SIZE = 380;
-  const C = SIZE / 2;
-  const R0 = 64;
-  const MAX_LEN = 92;
-  const LABEL_R = 174;
   const TICK_HOURS = [0, 3, 6, 9, 12, 15, 18, 21];
+
+  // The dial is sized from its container: the radii are proportional to the
+  // shorter side while text keeps a constant pixel size.
+  let boxW = $state(0);
+  let boxH = $state(0);
+  let SIZE = $derived(Math.max(160, Math.min(boxW, boxH)));
+  let C = $derived(SIZE / 2);
+  let LABEL_R = $derived(C - 12);
+  let R0 = $derived(SIZE * 0.17);
+  let MAX_LEN = $derived(Math.max(20, LABEL_R - 18 - R0));
+  let STROKE = $derived(Math.max(5, Math.min(14, SIZE * 0.034)));
 
   type Scope = 'all' | 'weekday' | 'weekend';
   let scope = $state<Scope>('all');
@@ -49,7 +55,7 @@
   function barLen(count: number): number {
     if (count <= 0) return 0;
     // Minimum visible stub so tiny values still read as "some activity".
-    return Math.max(10, (count / max) * MAX_LEN);
+    return Math.max(STROKE, (count / max) * MAX_LEN);
   }
   function levelOf(count: number): number {
     return count <= 0 ? 0 : levelScale(count);
@@ -71,7 +77,7 @@
 </script>
 
 <ChartCard title={$t('goalsAnalytics.slides.seasonality')}>
-  {#snippet icon()}<Clock size={15} />{/snippet}
+  {#snippet icon()}<Clock size={13} />{/snippet}
   {#snippet actions()}
     <div class="clk-scope">
       {#each SCOPES as s (s)}
@@ -91,18 +97,19 @@
       <span>{$t('goalsAnalytics.seasonality.empty')}</span>
     </div>
   {:else}
-    <div class="clk-wrap" bind:this={wrapEl}>
+    <div class="clk-wrap" bind:this={wrapEl} bind:clientWidth={boxW} bind:clientHeight={boxH}>
       <svg
-        viewBox="0 0 {SIZE} {SIZE}"
-        preserveAspectRatio="xMidYMid meet"
+        width={SIZE}
+        height={SIZE}
         role="img"
         aria-label={$t('goalsAnalytics.slides.seasonality')}
+        style:--stroke="{STROKE}px"
       >
-        <circle cx={C} cy={C} r={R0 - 14} class="clk-face" />
+        <circle cx={C} cy={C} r={R0 - 8} class="clk-face" />
 
         {#each TICK_HOURS as h (h)}
           {@const p = point(h, LABEL_R)}
-          <text x={p.x} y={p.y + 4} class="tick" text-anchor="middle">{fmtHour(h)}</text>
+          <text x={p.x} y={p.y + 3} class="tick" text-anchor="middle">{fmtHour(h)}</text>
         {/each}
 
         {#each hours as count, h (h)}
@@ -138,10 +145,10 @@
           />
         {/each}
 
-        <text x={C} y={C - 8} class="clk-peak" text-anchor="middle"
+        <text x={C} y={C - 2} class="clk-peak" text-anchor="middle"
           >{total > 0 ? fmtHour(peakHour) : '—'}</text
         >
-        <text x={C} y={C + 14} class="clk-peak-label" text-anchor="middle"
+        <text x={C} y={C + 16} class="clk-peak-label" text-anchor="middle"
           >{$t('goalsAnalytics.clock.peakLabel')}</text
         >
       </svg>
@@ -150,7 +157,7 @@
         {#if tip}
           <span class="tt-title">{fmtHour(tip.hour)}</span>
           <span class="tt-row"
-            >{$t('goalsAnalytics.clock.events', { values: { count: tip.count } })}</span
+            >{$t('goalsAnalytics.heatmap.xpOn', { values: { xp: tip.count.toLocaleString() } })}</span
           >
         {/if}
       </ChartTooltip>
@@ -168,10 +175,8 @@
     justify-content: center;
   }
   svg {
-    height: 100%;
-    max-height: 440px;
-    width: auto;
-    max-width: 100%;
+    display: block;
+    flex-shrink: 0;
   }
   .clk-face {
     fill: color-mix(in srgb, var(--text-primary) 4%, transparent);
@@ -185,17 +190,17 @@
   }
   .clk-track {
     stroke: color-mix(in srgb, var(--text-primary) 7%, transparent);
-    stroke-width: 12;
+    stroke-width: var(--stroke);
     stroke-linecap: round;
   }
   .clk-bar {
-    stroke-width: 12;
+    stroke-width: var(--stroke);
     stroke-linecap: round;
     transition: all 0.3s ease;
   }
   .clk-hit {
     stroke: transparent;
-    stroke-width: 14;
+    stroke-width: calc(var(--stroke) + 4px);
     stroke-linecap: round;
   }
   .lv1 {
@@ -215,7 +220,7 @@
   }
   .clk-peak {
     fill: var(--text-primary);
-    font-size: 22px;
+    font-size: 20px;
     font-weight: 700;
     font-family: var(--font-mono);
   }
@@ -233,7 +238,7 @@
   .clk-scope-btn {
     padding: 2px 8px;
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: var(--r);
     background: transparent;
     color: var(--text-muted);
     font-size: 9px;
@@ -247,7 +252,7 @@
     border-color: var(--text-muted);
   }
   .clk-scope-btn.active {
-    background: color-mix(in srgb, var(--xp) 15%, transparent);
+    background: color-mix(in srgb, var(--xp) 12%, transparent);
     color: var(--xp);
     border-color: var(--xp);
   }

@@ -294,7 +294,19 @@ def test_overview_seasonality_ranges(client: TestClient, db_session):
         assert 0 <= cell["weekday"] <= 6
         assert 0 <= cell["hour"] <= 23
         assert cell["count"] >= 1
+        assert cell["xp"] >= 0
+    assert sum(c["xp"] for c in cells) == 10
     assert seasonality["max"] == max(c["count"] for c in cells)
+
+
+def test_overview_seasonality_xp_ignores_penalties(client: TestClient, db_session):
+    db_session.add(XPEvent(event_type="note_created", xp=10))
+    db_session.add(XPEvent(event_type="note_deleted", xp=-5))
+    db_session.commit()
+
+    cells = client.get("/analytics/overview?days=1").json()["seasonality"]["cells"]
+    assert sum(c["xp"] for c in cells) == 10
+    assert sum(c["count"] for c in cells) == 2
 
 
 def test_overview_pearson_null_with_few_samples(client: TestClient, db_session):

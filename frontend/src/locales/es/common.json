@@ -587,11 +587,14 @@
       "samples": "{count} muestras",
       "empty": "Registra tu mood para desbloquear este análisis.",
       "moodAxis": "Mood",
-      "xpAxis": "XP"
+      "xpAxis": "XP",
+      "emptyTitle": "Aún sin datos de ánimo",
+      "cta": "Registrar mi ánimo"
     },
     "sources": {
       "empty": "Sin eventos de XP aún.",
-      "total": "{xp} XP en total"
+      "total": "{xp} XP en total",
+      "other": "Otros"
     },
     "xpTypes": {
       "goal_completed": "Objetivos",
@@ -638,7 +641,9 @@
       "habitsTitle": "Hábitos",
       "checkinRate": "{pct}% check-ins (30d)",
       "activeStreaks": "{count} activas",
-      "totalCheckins": "{count} check-ins"
+      "totalCheckins": "{count} check-ins",
+      "totalGoals": "objetivos",
+      "rateNote": "Porcentaje = completados ÷ decididos (completados + fallidos)."
     },
     "github": {
       "pushes": "Pushes",
@@ -650,46 +655,52 @@
     "insightsTitle": "Insights",
     "insightsEmpty": "Sigue usando Joidy — los insights aparecen con suficientes datos.",
     "insights": {
-      "consistency.activeDays": "{count} de {total} días con actividad",
+      "consistency.activeDays": "días con actividad en esta ventana",
       "consistency.verdictHigh": "Muy consistente — sigue así",
       "consistency.verdictMid": "Bastante regular — se puede mejorar",
       "consistency.verdictLow": "Esporádico — prueba metas diarias más cortas",
-      "consistency.currentStreak": "Racha de {days} días en curso",
-      "consistency.longestStreak": "Tu récord es de {days} días",
-      "consistency.bestDay": "Mejor día: {date} · {xp} XP",
+      "consistency.currentStreak": "días seguidos de racha en curso",
+      "consistency.longestStreak": "tu racha récord",
+      "consistency.bestDay": "tu mejor día · {date}",
       "trend.firstWindow": "Primera ventana con datos — compara más adelante",
-      "trend.deltaUp": "{pct}% más XP que el período anterior",
-      "trend.deltaDown": "{pct}% menos XP que el período anterior",
-      "trend.deltaFlat": "Casi el mismo XP que el período anterior",
-      "trend.bestWeekday": "Tu día más productivo suele ser el {day}",
-      "trend.bestDay": "Pico: {date} con {xp} XP",
-      "trend.avgActiveDay": "En días activos ganas ~{xp} XP",
-      "clock.peakHour": "Tu hora pico es {hour}",
-      "clock.peakDay": "El {day} es tu día más activo",
-      "clock.bandNight": "{pct}% de tu actividad es de madrugada (0–6)",
-      "clock.bandMorning": "{pct}% de tu actividad es de mañana (6–12)",
-      "clock.bandAfternoon": "{pct}% de tu actividad es de tarde (12–18)",
-      "clock.bandEvening": "{pct}% de tu actividad es de noche (18–24)",
-      "clock.moreWeekend": "{pct}% de tu actividad es en fin de semana",
-      "clock.moreWeekdays": "{pct}% de tu actividad es entre semana",
-      "mood.needMore": "Registra tu mood unos días para desbloquear este insight",
-      "mood.samples": "{count} registros de mood analizados",
+      "trend.deltaUp": "más XP que el período anterior",
+      "trend.deltaDown": "menos XP que el período anterior",
+      "trend.deltaFlat": "similar al período anterior",
+      "trend.bestWeekday": "tu día más productivo (XP medio)",
+      "trend.bestDay": "pico de XP · {date}",
+      "trend.avgActiveDay": "XP por día activo",
+      "clock.peakHour": "tu hora con más XP",
+      "clock.peakDay": "tu día con más XP",
+      "clock.bandNight": "de tu XP llega de madrugada (0–6 h)",
+      "clock.bandMorning": "de tu XP llega por la mañana (6–12 h)",
+      "clock.bandAfternoon": "de tu XP llega por la tarde (12–18 h)",
+      "clock.bandEvening": "de tu XP llega por la noche (18–24 h)",
+      "clock.moreWeekend": "de tu XP llega en fin de semana",
+      "clock.moreWeekdays": "de tu XP llega entre semana",
+      "mood.needMore": "Registra tu ánimo unos días para desbloquear este análisis",
+      "mood.samples": "registros de ánimo analizados",
       "mood.positive": "Mejor ánimo suele significar más XP",
       "mood.negative": "Los días de más XP suelen tener peor ánimo",
       "mood.neutral": "Aún no hay relación clara entre ánimo y XP",
-      "sources.topType": "El {pct}% de tu XP viene de {name}",
+      "sources.topType": "de tu XP viene de {name}",
       "sources.concentrated": "Tu XP se concentra en una sola actividad",
       "sources.balanced": "Tu XP está repartido entre actividades",
-      "sources.events": "{count} eventos de XP en este período",
-      "goals.completionRate": "Completas el {pct}% de lo que activas",
-      "goals.abandonRate": "El {pct}% de los objetivos activados se abandonan",
-      "goals.bestPeriod": "Los objetivos {name} son tu fuerte ({pct}%)",
-      "goals.active": "{count} objetivos activos ahora",
-      "github.top_pushes": "{count} pushes — puro código",
-      "github.top_pull_requests": "{count} eventos de PR lideran tu actividad",
-      "github.top_issues": "{count} eventos de issues lideran tu actividad",
-      "github.top_comments": "{count} comentarios — colaboras mucho",
-      "github.busiestWeek": "Tu semana más activa tuvo {count} eventos"
+      "sources.events": "eventos de XP en esta ventana",
+      "goals.completionRate": "de lo que activas, lo completas",
+      "goals.abandonRate": "de lo activado se abandona",
+      "goals.bestPeriod": "Objetivos {name}: tu mejor periodo",
+      "goals.active": "objetivos activos ahora",
+      "github.top_pushes": "pushes — lo que más haces",
+      "github.top_pull_requests": "eventos de PR lideran tu actividad",
+      "github.top_issues": "eventos de issues lideran tu actividad",
+      "github.top_comments": "comentarios — colaboras mucho",
+      "github.busiestWeek": "eventos en tu semana más activa",
+      "mood.howTo": "Marca cómo te sientes desde el inicio, una vez al día",
+      "mood.unlock": "Descubrirás si tu ánimo impulsa (o frena) tu XP",
+      "mood.average": "ánimo medio en esta ventana",
+      "mood.bestMood": "XP medio los días de ánimo {mood}",
+      "github.activeWeeks": "semanas con actividad",
+      "github.total": "eventos en las últimas semanas"
     },
     "clock": {
       "all": "Todos",
@@ -713,7 +724,9 @@
       "record": "récord",
       "active": "activas",
       "checkins": "check-ins",
-      "rate30d": "tasa check-in 30d"
+      "rate30d": "tasa check-in 30d",
+      "toRecord": "de tu récord ({record}d)",
+      "rateHint": "check-ins hechos vs. esperados en tus hábitos activos"
     },
     "bands": {
       "title": "Actividad por franja",
@@ -723,7 +736,70 @@
       "evening": "Noche"
     },
     "recent": {
-      "title": "Días recientes"
+      "title": "Días recientes",
+      "today": "hoy"
+    },
+    "range90Short": "90d",
+    "range180Short": "180d",
+    "range365Short": "1a",
+    "kpi": {
+      "windowXp": "XP en la ventana",
+      "record": "récord {days}d",
+      "perActiveDay": "~{xp} en días activos",
+      "accumulated": "acumulado"
+    },
+    "tabs": {
+      "consistency": "Consistencia",
+      "trend": "Tendencia",
+      "seasonality": "Ritmo",
+      "mood": "Ánimo",
+      "goals": "Objetivos",
+      "github": "GitHub"
+    },
+    "method": {
+      "consistency": {
+        "title": "Cómo se calcula",
+        "body": "Cada celda es un día; su tono depende del XP ganado, repartido en 5 niveles (cuantiles) para que un día enorme no apague al resto. La barra semanal suma el XP por semana ISO; su brillo indica cuántos de sus 7 días tuvieron actividad."
+      },
+      "trend": {
+        "title": "Cómo se calcula",
+        "body": "La media de 7 días suaviza los picos diarios. La línea punteada es una regresión lineal (mínimos cuadrados): si sube, tu ritmo mejora. Se compara con la ventana anterior de igual duración; cambios menores al 5% se consideran estables."
+      },
+      "seasonality": {
+        "title": "Cómo se calcula",
+        "body": "Se agrupa el XP ganado por hora y día de la semana. El reloj suma todas las semanas en 24 horas; la matriz conserva cada día. Las franjas reparten el XP en bloques de 6 horas. Las penalizaciones no cuentan."
+      },
+      "mood": {
+        "title": "Cómo se calcula",
+        "body": "Se cruza tu ánimo diario (1–5) con el XP de ese día. La correlación de Pearson (r) va de −1 a 1: cerca de 0 significa que no hay relación clara. Hacen falta al menos 3 días de registro; con más datos es más fiable."
+      },
+      "goals": {
+        "title": "Cómo se calcula",
+        "body": "El embudo cuenta los objetivos por etapa del ciclo de vida. La efectividad es completados ÷ (completados + fallidos): solo cuentan los objetivos ya decididos. Si no hay ninguno, se muestra el progreso medio."
+      },
+      "github": {
+        "title": "Cómo se calcula",
+        "body": "Se cuentan los eventos que GitHub envía a Joidy (pushes, PRs, issues y comentarios) agrupados por semana ISO, de lunes a domingo, durante las últimas 12 semanas."
+      }
+    },
+    "matrix": {
+      "title": "Día × hora",
+      "peak": "pico {day} {hour}"
+    },
+    "compare": {
+      "title": "Vs. período anterior",
+      "xp": "XP ganado",
+      "days": "Días activos",
+      "perDay": "XP por día activo",
+      "now": "Ahora",
+      "before": "Antes",
+      "noPrev": "sin datos previos"
+    },
+    "weekly": {
+      "title": "XP por semana",
+      "avg": "media {xp}/sem",
+      "weekOf": "Semana del {date}",
+      "activeDays": "{count} de {total} días activos"
     }
   },
   "notesPage": {

@@ -828,7 +828,10 @@ export interface AnalyticsOverview {
     notes: number;
   }[];
   xp_by_type: { type: string; xp: number; count: number }[];
-  seasonality: { cells: { weekday: number; hour: number; count: number }[]; max: number };
+  seasonality: {
+    cells: { weekday: number; hour: number; count: number; xp: number }[];
+    max: number;
+  };
   mood_activity: {
     points: { date: string; mood: number; xp: number }[];
     pearson_r: number | null;

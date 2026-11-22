@@ -5,10 +5,15 @@
   import ChevronRight from 'lucide-svelte/icons/chevron-right';
   import Zap from 'lucide-svelte/icons/zap';
   import Flame from 'lucide-svelte/icons/flame';
-  import Award from 'lucide-svelte/icons/award';
   import CalendarCheck from 'lucide-svelte/icons/calendar-check';
   import TrendingUp from 'lucide-svelte/icons/trending-up';
+  import TrendingDown from 'lucide-svelte/icons/trending-down';
   import Trophy from 'lucide-svelte/icons/trophy';
+  import Clock from 'lucide-svelte/icons/clock';
+  import Smile from 'lucide-svelte/icons/smile';
+  import Target from 'lucide-svelte/icons/target';
+  import GitPullRequest from 'lucide-svelte/icons/git-pull-request';
+  import Sigma from 'lucide-svelte/icons/sigma';
   import TriangleAlert from 'lucide-svelte/icons/triangle-alert';
   import { api, type AnalyticsOverview } from '$lib/api';
   import { loadUserSettings, patchUserSettings } from '$lib/utils/userSettings';
@@ -30,17 +35,23 @@
   import XpSources from './XpSources.svelte';
   import GoalsOverview from './GoalsOverview.svelte';
   import GithubActivity from './GithubActivity.svelte';
+  import SeasonMatrix from './SeasonMatrix.svelte';
+  import PeriodCompare from './PeriodCompare.svelte';
+  import WeeklyRhythm from './WeeklyRhythm.svelte';
+  import GoalStates from './GoalStates.svelte';
+  import CountUp from './CountUp.svelte';
+  import Sparkline from './Sparkline.svelte';
 
   // Holistic analytics dashboard (#1499) — vertical KPI rail + a bento
-  // carousel: every slide composes a hero chart with auxiliary tiles and
-  // a deterministic-insights panel so the viewport is always filled.
+  // carousel: every slide is a CSS-grid of tiles (hero + auxiliary) next to a
+  // deterministic-insights panel, sized to the viewport so nothing scrolls.
   const SLIDES = [
-    { id: 'consistency', label: 'goalsAnalytics.slides.consistency' },
-    { id: 'trend', label: 'goalsAnalytics.slides.trend' },
-    { id: 'seasonality', label: 'goalsAnalytics.slides.seasonality' },
-    { id: 'mood', label: 'goalsAnalytics.slides.mood' },
-    { id: 'goals', label: 'goalsAnalytics.slides.goals' },
-    { id: 'github', label: 'goalsAnalytics.slides.github' },
+    { id: 'consistency', label: 'goalsAnalytics.slides.consistency', icon: CalendarCheck },
+    { id: 'trend', label: 'goalsAnalytics.slides.trend', icon: TrendingUp },
+    { id: 'seasonality', label: 'goalsAnalytics.slides.seasonality', icon: Clock },
+    { id: 'mood', label: 'goalsAnalytics.slides.mood', icon: Smile },
+    { id: 'goals', label: 'goalsAnalytics.slides.goals', icon: Target },
+    { id: 'github', label: 'goalsAnalytics.slides.github', icon: GitPullRequest },
   ] as const;
 
   type SlideId = (typeof SLIDES)[number]['id'];
@@ -137,12 +148,28 @@
     data ? insightsFor(slides[slideIdx]?.id ?? 'consistency', data, insightCtx) : []
   );
 
-  let bestDayLabel = $derived.by(() => {
+  let bestDay = $derived.by(() => {
     const best = data?.summary.best_day;
-    if (!best) return '—';
+    if (!best) return null;
     const d = new Intl.DateTimeFormat(getLocale(), { day: 'numeric', month: 'short' });
-    return `${d.format(parseLocalDate(best.date))} · ${best.xp} XP`;
+    return { xp: best.xp, date: d.format(parseLocalDate(best.date)) };
   });
+
+  // Window XP vs the equally long window before it (null = nothing to compare).
+  let xpDelta = $derived.by(() => {
+    const s = data?.summary;
+    if (!s || s.prev_total_xp <= 0) return null;
+    return Math.round(((s.window_xp - s.prev_total_xp) / s.prev_total_xp) * 100);
+  });
+  let xpSpark = $derived((data?.daily_activity ?? []).map((d) => Math.max(0, d.xp)));
+  let activeShare = $derived(
+    data && data.days > 0 ? Math.round((data.summary.active_days / data.days) * 100) : 0
+  );
+  let perActiveDay = $derived(
+    data && data.summary.active_days > 0
+      ? Math.round(data.summary.window_xp / data.summary.active_days)
+      : 0
+  );
 
   onMount(() => {
     try {
@@ -163,43 +190,45 @@
 
 <svelte:window onkeydown={onKeydown} />
 
-{#snippet heroChart(id: SlideId | undefined)}
+{#snippet slideBody(id: SlideId | undefined)}
   {#if data}
     {#if id === 'consistency'}
-      <ConsistencyHeatmap activity={data.daily_activity} days={rangeDays} />
+      <div class="ad-grid g-consistency">
+        <div class="a-heat"><ConsistencyHeatmap activity={data.daily_activity} days={rangeDays} /></div>
+        <div class="a-streak"><StreakPanel streaks={data.streaks} /></div>
+        <div class="a-weekly"><WeeklyRhythm activity={data.daily_activity} /></div>
+        <div class="a-wday"><WeekdayBars activity={data.daily_activity} /></div>
+      </div>
     {:else if id === 'trend'}
-      <ProductivityTrend activity={data.daily_activity} />
+      <div class="ad-grid g-trend">
+        <div class="a-main"><ProductivityTrend activity={data.daily_activity} /></div>
+        <div class="a-src"><XpSources byType={data.xp_by_type} /></div>
+        <div class="a-cmp"><PeriodCompare summary={data.summary} /></div>
+      </div>
     {:else if id === 'seasonality'}
-      <ActivityClock seasonality={data.seasonality} />
+      <div class="ad-grid g-season">
+        <div class="a-clock"><ActivityClock seasonality={data.seasonality} /></div>
+        <div class="a-matrix"><SeasonMatrix seasonality={data.seasonality} /></div>
+        <div class="a-bands"><ActivityBands seasonality={data.seasonality} /></div>
+        <div class="a-wday"><WeekdayBars activity={data.daily_activity} /></div>
+      </div>
     {:else if id === 'mood'}
-      <MoodProductivity mood={data.mood_activity} />
+      <div class="ad-grid g-wide">
+        <div class="a-main"><MoodProductivity mood={data.mood_activity} /></div>
+        <div class="a-recent"><RecentDays activity={data.daily_activity} /></div>
+        <div class="a-wday"><WeekdayBars activity={data.daily_activity} /></div>
+      </div>
     {:else if id === 'goals'}
-      <GoalsOverview goals={data.goals} streaks={data.streaks} />
+      <div class="ad-grid g-goals">
+        <div class="a-main"><GoalsOverview goals={data.goals} /></div>
+        <div class="a-states"><GoalStates goals={data.goals} /></div>
+        <div class="a-streak"><StreakPanel streaks={data.streaks} /></div>
+      </div>
     {:else if id === 'github'}
-      <GithubActivity github={data.github} />
-    {/if}
-  {/if}
-{/snippet}
-
-{#snippet auxTiles(id: SlideId | undefined)}
-  {#if data}
-    {#if id === 'consistency'}
-      <div class="ad-aux">
-        <StreakPanel streaks={data.streaks} />
-        <WeekdayBars activity={data.daily_activity} />
-      </div>
-    {:else if id === 'trend'}
-      <div class="ad-aux">
-        <XpSources byType={data.xp_by_type} />
-      </div>
-    {:else if id === 'seasonality'}
-      <div class="ad-aux">
-        <ActivityBands seasonality={data.seasonality} />
-        <WeekdayBars activity={data.daily_activity} />
-      </div>
-    {:else if id === 'mood' || id === 'goals'}
-      <div class="ad-aux">
-        <RecentDays activity={data.daily_activity} />
+      <div class="ad-grid g-wide">
+        <div class="a-main"><GithubActivity github={data.github} /></div>
+        <div class="a-recent"><RecentDays activity={data.daily_activity} /></div>
+        <div class="a-wday"><WeekdayBars activity={data.daily_activity} /></div>
       </div>
     {/if}
   {/if}
@@ -215,8 +244,12 @@
         </div>
       {/each}
     </div>
-    <div class="ad-slide-skeleton sk"></div>
-    <span class="ad-loading-label">{$t('goalsAnalytics.loading')}</span>
+    <div class="ad-slide-skeleton">
+      <div class="sk sk-tile sk-big"></div>
+      <div class="sk sk-tile"></div>
+      <div class="sk sk-tile"></div>
+      <span class="ad-loading-label">{$t('goalsAnalytics.loading')}</span>
+    </div>
   {:else if loadError}
     <div class="ad-error">
       <TriangleAlert size={22} style="opacity:0.5" />
@@ -230,109 +263,130 @@
     <aside class="ad-rail">
       <span class="ad-rail-title">{$t('goalsAnalytics.railTitle')}</span>
 
-      <div class="ad-kpi">
-        <span class="ad-kpi-icon" style="color: var(--xp)"><Zap size={15} /></span>
-        <div class="ad-kpi-txt">
-          <span class="ad-kpi-label">{$t('goalsAnalytics.statTotalXp')}</span>
-          <span class="ad-kpi-val">{data.summary.total_xp.toLocaleString()}</span>
+      <div class="ad-hero">
+        <div class="ad-hero-head">
+          <span class="ad-kpi-label">{$t('goalsAnalytics.kpi.windowXp')}</span>
+          {#if xpDelta !== null}
+            <span class="ad-delta" class:up={xpDelta >= 5} class:down={xpDelta <= -5}>
+              {#if xpDelta <= -5}<TrendingDown size={11} />{:else}<TrendingUp size={11} />{/if}
+              {xpDelta > 0 ? '+' : ''}{xpDelta}%
+            </span>
+          {/if}
         </div>
-      </div>
-      <div class="ad-kpi">
-        <span class="ad-kpi-icon" style="color: var(--today)"><Flame size={15} /></span>
-        <div class="ad-kpi-txt">
-          <span class="ad-kpi-label">{$t('goalsAnalytics.statStreak')}</span>
-          <span class="ad-kpi-val">{data.streaks.current_streak}d</span>
-        </div>
-      </div>
-      <div class="ad-kpi">
-        <span class="ad-kpi-icon" style="color: var(--success)"><CalendarCheck size={15} /></span>
-        <div class="ad-kpi-txt">
-          <span class="ad-kpi-label">{$t('goalsAnalytics.statActiveDays')}</span>
-          <span class="ad-kpi-val">{data.summary.active_days}</span>
-        </div>
-      </div>
-      <div class="ad-kpi">
-        <span class="ad-kpi-icon" style="color: var(--link)"><TrendingUp size={15} /></span>
-        <div class="ad-kpi-txt">
-          <span class="ad-kpi-label">{$t('goalsAnalytics.statAvgXp')}</span>
-          <span class="ad-kpi-val">{Math.round(data.summary.avg_daily_xp)}</span>
-        </div>
-      </div>
-      <div class="ad-kpi">
-        <span class="ad-kpi-icon" style="color: var(--today)"><Award size={15} /></span>
-        <div class="ad-kpi-txt">
-          <span class="ad-kpi-label">{$t('goalsAnalytics.statBestStreak')}</span>
-          <span class="ad-kpi-val">{data.streaks.longest_streak}d</span>
-        </div>
-      </div>
-      <div class="ad-kpi">
-        <span class="ad-kpi-icon" style="color: var(--xp)"><Trophy size={15} /></span>
-        <div class="ad-kpi-txt">
-          <span class="ad-kpi-label">{$t('goalsAnalytics.statBestDay')}</span>
-          <span class="ad-kpi-val ad-kpi-best">{bestDayLabel}</span>
-        </div>
+        <span class="ad-hero-val"><CountUp value={data.summary.window_xp} /></span>
+        <div class="ad-spark"><Sparkline values={xpSpark} color="var(--xp)" /></div>
       </div>
 
-      <div class="ad-rail-sep"></div>
+      <div class="ad-kpis">
+        <div class="ad-kpi">
+          <span class="ad-kpi-icon"><Flame size={14} /></span>
+          <div class="ad-kpi-txt">
+            <span class="ad-kpi-label">{$t('goalsAnalytics.statStreak')}</span>
+            <span class="ad-kpi-val"><CountUp value={data.streaks.current_streak} />d</span>
+            <span class="ad-kpi-sub"
+              >{$t('goalsAnalytics.kpi.record', { values: { days: data.streaks.longest_streak } })}</span
+            >
+          </div>
+        </div>
+        <div class="ad-kpi">
+          <span class="ad-kpi-icon"><CalendarCheck size={14} /></span>
+          <div class="ad-kpi-txt">
+            <span class="ad-kpi-label">{$t('goalsAnalytics.statActiveDays')}</span>
+            <span class="ad-kpi-val"
+              ><CountUp value={data.summary.active_days} /><span class="ad-kpi-of">/{data.days}</span></span
+            >
+            <div class="ad-meter"><div class="ad-meter-fill" style:width="{activeShare}%"></div></div>
+          </div>
+        </div>
+        <div class="ad-kpi">
+          <span class="ad-kpi-icon"><Zap size={14} /></span>
+          <div class="ad-kpi-txt">
+            <span class="ad-kpi-label">{$t('goalsAnalytics.statAvgXp')}</span>
+            <span class="ad-kpi-val"><CountUp value={data.summary.avg_daily_xp} /></span>
+            <span class="ad-kpi-sub"
+              >{$t('goalsAnalytics.kpi.perActiveDay', { values: { xp: perActiveDay.toLocaleString() } })}</span
+            >
+          </div>
+        </div>
+        <div class="ad-kpi">
+          <span class="ad-kpi-icon"><Trophy size={14} /></span>
+          <div class="ad-kpi-txt">
+            <span class="ad-kpi-label">{$t('goalsAnalytics.statBestDay')}</span>
+            <span class="ad-kpi-val">{bestDay ? bestDay.xp.toLocaleString() : '—'}</span>
+            <span class="ad-kpi-sub">{bestDay ? bestDay.date : ''}</span>
+          </div>
+        </div>
+        <div class="ad-kpi">
+          <span class="ad-kpi-icon"><Sigma size={14} /></span>
+          <div class="ad-kpi-txt">
+            <span class="ad-kpi-label">{$t('goalsAnalytics.statTotalXp')}</span>
+            <span class="ad-kpi-val"><CountUp value={data.summary.total_xp} /></span>
+            <span class="ad-kpi-sub">{$t('goalsAnalytics.kpi.accumulated')}</span>
+          </div>
+        </div>
+      </div>
 
       <!-- Global analysis window — re-windows every slide (#1499) -->
-      <span class="ad-range-label">{$t('goalsAnalytics.rangeLabel')}</span>
-      <div class="ad-range" role="group" aria-label={$t('goalsAnalytics.rangeLabel')}>
-        {#each RANGES as r (r)}
-          <button
-            type="button"
-            class="ad-range-btn"
-            class:active={rangeDays === r}
-            onclick={() => setRangeDays(r)}
-            >{$t(`goalsAnalytics.range${r}`)}</button
-          >
-        {/each}
+      <div class="ad-range-wrap">
+        <span class="ad-kpi-label">{$t('goalsAnalytics.rangeLabel')}</span>
+        <div class="ad-range" role="group" aria-label={$t('goalsAnalytics.rangeLabel')}>
+          {#each RANGES as r (r)}
+            <button
+              type="button"
+              class="ad-range-btn"
+              class:active={rangeDays === r}
+              title={$t(`goalsAnalytics.range${r}`)}
+              onclick={() => setRangeDays(r)}>{$t(`goalsAnalytics.range${r}Short`)}</button
+            >
+          {/each}
+        </div>
       </div>
     </aside>
 
     <!-- Carousel -->
     <div class="ad-carousel">
       <div class="ad-viewport">
-        {#key slideIdx}
-          <div class="ad-slide" in:fly={{ x: slideDir * 48, duration: 240, opacity: 0 }}>
-            <div class="ad-slide-charts">
-              <div class="ad-hero">{@render heroChart(slides[slideIdx]?.id)}</div>
-              {@render auxTiles(slides[slideIdx]?.id)}
-            </div>
-            <InsightPanel items={slideInsights} />
-          </div>
-        {/key}
-
-        <!-- Floating edge arrows -->
         <button
           type="button"
-          class="ad-arrow-float prev"
+          class="ad-arrow"
           onclick={prevSlide}
           title={$t('common.previous')}
-          aria-label={$t('common.previous')}><ChevronLeft size={18} /></button
+          aria-label={$t('common.previous')}><ChevronLeft size={16} /></button
         >
+
+        <div class="ad-stage">
+          {#key slideIdx}
+            <div class="ad-slide" in:fly={{ x: slideDir * 40, duration: 240, opacity: 0 }}>
+              <div class="ad-slide-charts">{@render slideBody(slides[slideIdx]?.id)}</div>
+              <InsightPanel items={slideInsights} methodKey={slides[slideIdx]?.id} />
+            </div>
+          {/key}
+        </div>
+
         <button
           type="button"
-          class="ad-arrow-float next"
+          class="ad-arrow"
           onclick={nextSlide}
           title={$t('common.next')}
-          aria-label={$t('common.next')}><ChevronRight size={18} /></button
+          aria-label={$t('common.next')}><ChevronRight size={16} /></button
         >
       </div>
 
-      <div class="ad-foot">
-        <div class="ad-dots">
-          {#each slides as s, i (s.id)}
-            <button
-              type="button"
-              class="ad-dot"
-              class:active={i === slideIdx}
-              onclick={() => goToSlide(i)}
-              aria-label={$t(s.label)}
-            ></button>
-          {/each}
-        </div>
-        <span class="ad-counter mono">{slideIdx + 1} / {slides.length}</span>
+      <div class="ad-tabs" role="tablist">
+        {#each slides as s, i (s.id)}
+          {@const Icon = s.icon}
+          <button
+            type="button"
+            role="tab"
+            class="ad-tab"
+            class:active={i === slideIdx}
+            aria-selected={i === slideIdx}
+            onclick={() => goToSlide(i)}
+          >
+            <Icon size={13} />
+            <span>{$t(`goalsAnalytics.tabs.${s.id}`)}</span>
+          </button>
+        {/each}
       </div>
     </div>
   {:else}
@@ -344,6 +398,7 @@
 
 <style>
   .ad-root {
+    position: relative;
     display: flex;
     gap: var(--s3);
     width: 100%;
@@ -356,102 +411,169 @@
     display: flex;
     flex-direction: column;
     gap: var(--s3);
-    width: 208px;
+    width: 212px;
     flex-shrink: 0;
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--r);
-    padding: var(--s4);
+    padding: var(--s3) var(--s4);
     backdrop-filter: blur(10px);
-    overflow-y: auto;
+    overflow: hidden;
+    min-height: 0;
   }
   .ad-rail-title {
-    font-size: 9px;
+    font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.08em;
     color: var(--text-muted);
     font-family: var(--font-mono);
   }
+  .ad-hero {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+  .ad-hero-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s2);
+  }
+  .ad-hero-val {
+    font-size: 30px;
+    font-weight: 700;
+    line-height: 1.05;
+    font-family: var(--font-mono);
+    color: var(--text-primary);
+  }
+  .ad-spark {
+    height: 44px;
+    margin-top: 2px;
+  }
+  .ad-delta {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 10px;
+    font-weight: 700;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+  }
+  .ad-delta.up {
+    color: var(--success);
+  }
+  .ad-delta.down {
+    color: var(--error);
+  }
+  .ad-kpis {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
   .ad-kpi {
+    flex: 1 1 0;
+    min-height: 0;
     display: flex;
     align-items: center;
     gap: 10px;
     min-width: 0;
+    border-top: 1px solid var(--border);
+    animation: ad-fade 0.4s ease both;
   }
   .ad-kpi-icon {
-    display: grid;
-    place-items: center;
-    width: 30px;
-    height: 30px;
-    border-radius: 8px;
-    background: color-mix(in srgb, currentColor 12%, transparent);
+    display: flex;
+    color: var(--text-muted);
     flex-shrink: 0;
   }
   .ad-kpi-txt {
     display: flex;
     flex-direction: column;
-    gap: 1px;
+    gap: 2px;
     min-width: 0;
+    flex: 1;
   }
   .ad-kpi-label {
-    font-size: 8px;
+    font-size: 9px;
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.07em;
+    font-family: var(--font-mono);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
   .ad-kpi-val {
-    font-size: 16px;
+    font-size: 18px;
     font-weight: 700;
     font-family: var(--font-mono);
     line-height: 1.15;
     color: var(--text-primary);
+    white-space: nowrap;
   }
-  .ad-kpi-best {
+  .ad-kpi-of {
     font-size: 11px;
-    line-height: 1.3;
-  }
-  .ad-rail-sep {
-    height: 1px;
-    background: var(--border);
-    margin: var(--s1) 0;
-    flex-shrink: 0;
-  }
-  .ad-range-label {
-    font-size: 8px;
+    font-weight: 400;
     color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.07em;
-    font-family: var(--font-mono);
+  }
+  .ad-kpi-sub {
+    font-size: 10px;
+    color: var(--text-muted);
+    min-height: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .ad-meter {
+    height: 4px;
+    border-radius: 2px;
+    background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+    overflow: hidden;
+    margin-top: 3px;
+  }
+  .ad-meter-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: var(--xp);
+    transition: width 0.6s ease;
+  }
+  .ad-range-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex-shrink: 0;
+    border-top: 1px solid var(--border);
+    padding-top: var(--s3);
   }
   .ad-range {
     display: flex;
-    flex-direction: column;
-    gap: 4px;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    overflow: hidden;
   }
   .ad-range-btn {
-    padding: 6px 10px;
-    border: 1px solid var(--border);
-    border-radius: 8px;
+    flex: 1;
+    padding: 5px 0;
+    border: none;
+    border-left: 1px solid var(--border);
     background: transparent;
     color: var(--text-muted);
     font-size: 10px;
     font-weight: 600;
     font-family: var(--font-mono);
     cursor: pointer;
-    text-align: left;
     transition: all 0.15s;
   }
+  .ad-range-btn:first-child {
+    border-left: none;
+  }
   .ad-range-btn:hover {
-    color: var(--xp);
-    border-color: var(--xp);
+    color: var(--text-secondary);
   }
   .ad-range-btn.active {
     color: var(--xp);
-    border-color: var(--xp);
     background: color-mix(in srgb, var(--xp) 12%, transparent);
   }
 
@@ -465,116 +587,174 @@
     min-height: 0;
   }
   .ad-viewport {
-    position: relative;
     flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: 30px minmax(0, 1fr) 30px;
+    gap: var(--s2);
+  }
+  .ad-stage {
+    position: relative;
+    min-width: 0;
     min-height: 0;
   }
   .ad-slide {
     position: absolute;
     inset: 0;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 292px;
+    grid-template-columns: minmax(0, 1fr) 280px;
     gap: var(--s3);
-    min-height: 320px;
   }
   .ad-slide-charts {
-    display: flex;
-    flex-direction: column;
-    gap: var(--s3);
     min-width: 0;
-    min-height: 0;
-  }
-  .ad-hero {
-    flex: 1;
     min-height: 0;
     display: flex;
   }
-  .ad-hero > :global(*) {
-    flex: 1;
-    min-width: 0;
-  }
-  /* Aux tiles row — present on slides that render it. */
-  .ad-aux {
-    flex: 0 0 clamp(140px, 30%, 200px);
-    min-height: 0;
-    display: flex;
-    gap: var(--s3);
-  }
-  .ad-aux > :global(*) {
-    flex: 1;
-    min-width: 0;
-  }
-
-  /* Floating edge arrows — overlay style (lightbox pattern). */
-  .ad-arrow-float {
-    position: absolute;
-    top: 50%;
-    transform: translateY(-50%);
-    z-index: 5;
+  .ad-arrow {
+    align-self: center;
     display: grid;
     place-items: center;
-    width: 34px;
-    height: 34px;
-    border-radius: 50%;
+    width: 30px;
+    height: 56px;
     border: 1px solid var(--border);
-    background: color-mix(in srgb, var(--surface) 82%, transparent);
-    backdrop-filter: blur(8px);
-    color: var(--text-secondary);
-    cursor: pointer;
-    opacity: 0.55;
-    transition:
-      opacity 0.15s,
-      color 0.15s,
-      border-color 0.15s,
-      transform 0.15s;
-  }
-  .ad-arrow-float.prev {
-    left: 8px;
-  }
-  .ad-arrow-float.next {
-    right: 8px;
-  }
-  .ad-arrow-float:hover {
-    opacity: 1;
-    color: var(--xp);
-    border-color: var(--xp);
-    transform: translateY(-50%) scale(1.06);
-  }
-
-  .ad-foot {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--s3);
-    flex-shrink: 0;
-  }
-  .ad-dots {
-    display: flex;
-    justify-content: center;
-    gap: 6px;
-  }
-  .ad-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    border: none;
-    padding: 0;
-    background: var(--border);
+    border-radius: var(--r);
+    background: var(--surface);
+    color: var(--text-muted);
     cursor: pointer;
     transition: all 0.15s;
   }
-  .ad-dot:hover {
-    background: var(--text-muted);
+  .ad-arrow:hover {
+    color: var(--text-primary);
+    border-color: var(--primary);
+    background: var(--surface-hover);
   }
-  .ad-dot.active {
-    background: var(--xp);
-    transform: scale(1.25);
+  .ad-arrow:focus-visible {
+    outline: 1px solid var(--xp);
+    outline-offset: 2px;
   }
-  .ad-counter {
-    font-size: 9px;
-    font-weight: 700;
+
+  /* ── Tile grids (one per slide) ── */
+  .ad-grid {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    display: grid;
+    gap: var(--s3);
+  }
+  .ad-grid > div {
+    min-width: 0;
+    min-height: 0;
+  }
+  .g-consistency {
+    grid-template-columns: 1.1fr 1.1fr 0.95fr;
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas:
+      'heat heat streak'
+      'weekly weekly wday';
+  }
+  .g-trend {
+    grid-template-columns: 1.4fr 1fr;
+    grid-template-rows: minmax(0, 1.45fr) minmax(0, 1fr);
+    grid-template-areas:
+      'main main'
+      'src cmp';
+  }
+  .g-season {
+    grid-template-columns: 1fr 1.35fr;
+    grid-template-rows: minmax(0, 1.3fr) minmax(0, 1fr);
+    grid-template-areas:
+      'clock matrix'
+      'bands wday';
+  }
+  .g-wide {
+    grid-template-columns: 1.4fr 1fr;
+    grid-template-rows: minmax(0, 1.5fr) minmax(0, 1fr);
+    grid-template-areas:
+      'main main'
+      'recent wday';
+  }
+  .g-goals {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: minmax(0, 1.15fr) minmax(0, 1fr);
+    grid-template-areas:
+      'main main'
+      'states streak';
+  }
+  .a-heat {
+    grid-area: heat;
+  }
+  .a-streak {
+    grid-area: streak;
+  }
+  .a-weekly {
+    grid-area: weekly;
+  }
+  .a-wday {
+    grid-area: wday;
+  }
+  .a-main {
+    grid-area: main;
+  }
+  .a-src {
+    grid-area: src;
+  }
+  .a-cmp {
+    grid-area: cmp;
+  }
+  .a-clock {
+    grid-area: clock;
+  }
+  .a-matrix {
+    grid-area: matrix;
+  }
+  .a-bands {
+    grid-area: bands;
+  }
+  .a-recent {
+    grid-area: recent;
+  }
+  .a-states {
+    grid-area: states;
+  }
+  .ad-grid > :nth-child(2) :global(.ac-card) {
+    animation-delay: 60ms;
+  }
+  .ad-grid > :nth-child(3) :global(.ac-card) {
+    animation-delay: 120ms;
+  }
+  .ad-grid > :nth-child(4) :global(.ac-card) {
+    animation-delay: 180ms;
+  }
+
+  /* ── Tabs ── */
+  .ad-tabs {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: var(--s5);
+    flex-shrink: 0;
+    padding-top: 2px;
+  }
+  .ad-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 3px 0;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
     color: var(--text-muted);
-    letter-spacing: 0.08em;
+    transition: all var(--t-fast, 0.15s);
+  }
+  .ad-tab:hover {
+    color: var(--text-secondary);
+  }
+  .ad-tab.active {
+    color: var(--text-primary);
+    border-bottom-color: var(--accent);
   }
 
   /* ── Skeleton / error ── */
@@ -587,7 +767,7 @@
     );
     background-size: 200% 100%;
     animation: ad-shimmer 1.4s infinite linear;
-    border-radius: 6px;
+    border-radius: var(--r);
   }
   @keyframes ad-shimmer {
     from {
@@ -597,13 +777,22 @@
       background-position: -200% 0;
     }
   }
-  .ad-rail-skeleton {
-    padding: var(--s4);
+  @keyframes ad-fade {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  .ad-rail-skeleton .ad-kpi {
+    border-top: none;
   }
   .sk-icon {
     width: 26px;
     height: 26px;
-    border-radius: 8px;
     flex-shrink: 0;
   }
   .sk-line {
@@ -611,16 +800,26 @@
     height: 14px;
   }
   .ad-slide-skeleton {
+    position: relative;
     flex: 1;
-    border-radius: var(--r);
+    min-width: 0;
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    grid-template-rows: 1.5fr 1fr;
+    gap: var(--s3);
+  }
+  .sk-big {
+    grid-column: 1 / -1;
   }
   .ad-loading-label {
     position: absolute;
-    bottom: 12px;
-    align-self: center;
-    font-size: 10px;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    font-size: 11px;
     color: var(--text-muted);
     font-family: var(--font-mono);
+    pointer-events: none;
   }
   .ad-error {
     flex: 1;
@@ -637,7 +836,7 @@
   .ad-retry {
     padding: 6px 14px;
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: var(--r);
     background: var(--surface);
     color: var(--text-secondary);
     font-size: 11px;
@@ -650,30 +849,51 @@
     border-color: var(--xp);
   }
 
+  /* Short viewports: drop secondary rail lines instead of scrolling. */
+  @media (max-height: 800px) {
+    .ad-kpi-sub,
+    .ad-meter {
+      display: none;
+    }
+    .ad-spark {
+      height: 34px;
+    }
+  }
+  @media (max-width: 1280px) {
+    .ad-slide {
+      grid-template-columns: minmax(0, 1fr) 240px;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .ad-kpi {
+      animation: none;
+    }
+  }
+
   @media (max-width: 900px) {
     .ad-root {
       flex-direction: column;
     }
     .ad-rail {
       width: 100%;
-      flex-direction: row;
-      flex-wrap: wrap;
-      align-items: center;
       overflow-x: auto;
     }
-    .ad-rail-sep {
+    .ad-viewport {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .ad-arrow {
       display: none;
     }
-    .ad-range {
-      flex-direction: row;
-      margin-left: auto;
+    .ad-stage {
+      min-height: 0;
     }
     .ad-slide {
       position: relative;
       grid-template-columns: 1fr;
     }
-    .ad-arrow-float {
-      display: none;
+    .ad-tabs {
+      flex-wrap: wrap;
+      gap: var(--s3);
     }
   }
 </style>

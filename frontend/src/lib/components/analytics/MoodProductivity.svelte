@@ -9,15 +9,17 @@
   import { t } from 'svelte-i18n';
 
   // Mood × productivity scatter (#1499): x = mood score (1–5, jittered so
-  // stacked points stay readable), y = XP earned that day. Pearson r comes
-  // precomputed from /analytics/overview.
+  // stacked points stay readable), y = XP earned that day. The tick on each
+  // mood column is the mean XP of that mood. Pearson r comes precomputed from
+  // /analytics/overview. With no mood entries a ghost preview of the chart is
+  // shown with a pointer to where mood is logged.
   type MoodActivity = AnalyticsOverview['mood_activity'];
 
   let { mood }: { mood?: MoodActivity } = $props();
 
-  const W = 760;
-  const H = 300;
-  const M = { top: 14, right: 16, bottom: 30, left: 44 };
+  let W = $state(0);
+  let H = $state(0);
+  const M = { top: 14, right: 16, bottom: 30, left: 40 };
 
   // Deterministic jitter — stable across re-renders, keyed on index.
   function jitter(i: number): number {
@@ -29,7 +31,7 @@
     date: string;
     mood: number;
     xp: number;
-    mx: number; // jittered mood position
+    mx: number;
   }
 
   let pts = $derived<Pt[]>(
@@ -41,22 +43,36 @@
     }))
   );
 
-  let x = $derived(scaleLinear().domain([0.4, 5.6]).range([M.left, W - M.right]));
+  let x = $derived(scaleLinear().domain([0.4, 5.6]).range([M.left, Math.max(M.left + 1, W - M.right)]));
   let y = $derived(
     scaleLinear()
       .domain([0, Math.max(10, (max(pts, (p) => p.xp) ?? 0) * 1.15)])
       .nice()
-      .range([H - M.bottom, M.top])
+      .range([Math.max(M.top + 1, H - M.bottom), M.top])
   );
-  let yTicks = $derived(y.ticks(5));
+  let yTicks = $derived(y.ticks(Math.max(3, Math.floor((H - M.top - M.bottom) / 48))));
   const X_TICKS = [1, 2, 3, 4, 5];
+  const fmtY = (v: number) => (v >= 1000 ? `${+(v / 1000).toFixed(1)}k` : String(v));
   let dateFmt = $derived(
     new Intl.DateTimeFormat(getLocale(), { day: 'numeric', month: 'short' })
+  );
+
+  let means = $derived(
+    X_TICKS.map((m) => {
+      const xs = pts.filter((p) => p.mood === m);
+      return xs.length ? { m, v: xs.reduce((a, p) => a + p.xp, 0) / xs.length } : null;
+    }).filter((d): d is { m: number; v: number } => d !== null)
   );
 
   let r = $derived(mood?.pearson_r ?? null);
   let sampleSize = $derived(mood?.sample_size ?? 0);
   let hasData = $derived(sampleSize >= 3 && pts.length >= 3);
+
+  // Ghost dataset for the empty state (purely decorative).
+  const GHOST = [
+    [1, 0.18], [1, 0.1], [2, 0.3], [2, 0.22], [2, 0.38], [3, 0.42], [3, 0.5], [3, 0.35],
+    [3, 0.6], [4, 0.58], [4, 0.7], [4, 0.52], [5, 0.78], [5, 0.66], [5, 0.85],
+  ] as const;
 
   // ── Hover ──────────────────────────────────────────────────────────────────
   let wrapEl = $state<HTMLDivElement | null>(null);
@@ -70,16 +86,10 @@
 </script>
 
 <ChartCard title={$t('goalsAnalytics.slides.mood')}>
-  {#snippet icon()}<Smile size={15} />{/snippet}
+  {#snippet icon()}<Smile size={13} />{/snippet}
   {#snippet actions()}
     {#if hasData}
-      <span
-        class="mp-badge"
-        class:pos={(r ?? 0) > 0.15}
-        class:neg={(r ?? 0) < -0.15}
-        title={$t('goalsAnalytics.mood.correlation', {
-          values: { value: r !== null ? r.toFixed(2) : '—' },
-        })}
+      <span class="mp-badge mono"
         >{$t('goalsAnalytics.mood.correlation', {
           values: { value: r !== null ? r.toFixed(2) : '—' },
         })}</span
@@ -90,22 +100,14 @@
     {/if}
   {/snippet}
 
-  {#if !hasData}
-    <div class="chart-empty">
-      <Smile size={22} style="opacity:0.25" />
-      <span>{$t('goalsAnalytics.mood.empty')}</span>
-    </div>
-  {:else}
-    <div class="mp-wrap" bind:this={wrapEl}>
-      <svg
-        viewBox="0 0 {W} {H}"
-        preserveAspectRatio="xMidYMid meet"
-        role="img"
-        aria-label={$t('goalsAnalytics.slides.mood')}
-      >
+  <div class="mp-wrap" bind:this={wrapEl} bind:clientWidth={W} bind:clientHeight={H}>
+    {#if W > 0 && H > 0}
+      <svg width={W} height={H} role="img" aria-label={$t('goalsAnalytics.slides.mood')}>
         {#each yTicks as tv (tv)}
           <line x1={M.left} x2={W - M.right} y1={y(tv)} y2={y(tv)} class="grid-line" />
-          <text x={M.left - 8} y={y(tv) + 3} class="tick" text-anchor="end">{tv}</text>
+          {#if hasData}
+            <text x={M.left - 8} y={y(tv) + 3} class="tick" text-anchor="end">{fmtY(tv)}</text>
+          {/if}
         {/each}
 
         {#each X_TICKS as tv (tv)}
@@ -117,20 +119,59 @@
           >{$t('goalsAnalytics.mood.moodAxis')}</text
         >
 
-        {#each pts as pt (pt.date)}
-          <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <circle
-            cx={x(pt.mx)}
-            cy={y(pt.xp)}
-            r="4"
-            class="mp-dot"
-            class:hovered={tip?.pt === pt}
-            onmouseenter={(e) => onDot(e, pt)}
-            onmousemove={(e) => onDot(e, pt)}
-            onmouseleave={() => (tip = null)}
-          />
-        {/each}
+        {#if hasData}
+          {#each means as d (d.m)}
+            <line
+              x1={x(d.m) - 22}
+              x2={x(d.m) + 22}
+              y1={y(d.v)}
+              y2={y(d.v)}
+              class="mp-mean"
+            />
+          {/each}
+          {#each pts as pt, i (pt.date)}
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <circle
+              cx={x(pt.mx)}
+              cy={y(pt.xp)}
+              r="4"
+              class="mp-dot"
+              class:hovered={tip?.pt === pt}
+              style:--i={i}
+              onmouseenter={(e) => onDot(e, pt)}
+              onmousemove={(e) => onDot(e, pt)}
+              onmouseleave={() => (tip = null)}
+            />
+          {/each}
+        {:else}
+          <g class="mp-ghost" aria-hidden="true">
+            <line
+              x1={x(0.8)}
+              y1={y(y.domain()[1] * 0.12)}
+              x2={x(5.2)}
+              y2={y(y.domain()[1] * 0.8)}
+              class="mp-ghost-trend"
+            />
+            {#each GHOST as [m, v], i (i)}
+              <circle
+                cx={x(m + ((i % 3) - 1) * 0.14)}
+                cy={y(y.domain()[1] * v)}
+                r="4"
+                class="mp-ghost-dot"
+              />
+            {/each}
+          </g>
+        {/if}
       </svg>
+
+      {#if !hasData}
+        <div class="mp-empty">
+          <Smile size={20} />
+          <span class="mp-empty-title">{$t('goalsAnalytics.mood.emptyTitle')}</span>
+          <span class="mp-empty-body">{$t('goalsAnalytics.mood.empty')}</span>
+          <a class="mp-cta" href="/">{$t('goalsAnalytics.mood.cta')}</a>
+        </div>
+      {/if}
 
       <ChartTooltip
         x={tip?.x ?? 0}
@@ -148,8 +189,8 @@
           >
         {/if}
       </ChartTooltip>
-    </div>
-  {/if}
+    {/if}
+  </div>
 </ChartCard>
 
 <style>
@@ -157,18 +198,16 @@
     position: relative;
     flex: 1;
     min-height: 0;
-    display: flex;
   }
   svg {
-    width: 100%;
-    height: 100%;
-    min-height: 220px;
+    position: absolute;
+    inset: 0;
     display: block;
   }
   .grid-line {
     stroke: var(--border);
     stroke-width: 0.5;
-    opacity: 0.5;
+    opacity: 0.6;
   }
   .axis {
     stroke: var(--border);
@@ -180,57 +219,111 @@
     font-family: var(--font-mono);
   }
   .axis-label {
-    font-size: 9px;
     text-transform: uppercase;
     letter-spacing: 0.06em;
   }
   .mp-dot {
-    fill: color-mix(in srgb, var(--xp) 70%, transparent);
+    fill: color-mix(in srgb, var(--xp) 60%, transparent);
     stroke: var(--xp);
     stroke-width: 1;
-    transition: r 0.12s ease;
+    transition: r 0.15s;
+    animation: mp-fade 0.4s ease both;
+    animation-delay: calc(var(--i) * 12ms);
   }
   .mp-dot.hovered {
+    r: 6;
     fill: var(--xp);
-    r: 5.5;
+  }
+  .mp-mean {
+    stroke: var(--text-secondary);
+    stroke-width: 1.5;
+    stroke-linecap: round;
+  }
+  .mp-ghost {
+    opacity: 0.4;
+  }
+  .mp-ghost-dot {
+    fill: none;
+    stroke: var(--text-muted);
+    stroke-width: 1;
+    stroke-dasharray: 2 2;
+  }
+  .mp-ghost-trend {
+    stroke: var(--text-muted);
+    stroke-width: 1;
+    stroke-dasharray: 5 4;
   }
   .mp-badge {
-    font-size: 10px;
+    font-size: 9px;
     font-weight: 700;
-    font-family: var(--font-mono);
-    padding: 2px 8px;
-    border-radius: 6px;
+    color: var(--text-secondary);
     border: 1px solid var(--border);
-    color: var(--text-muted);
+    border-radius: var(--r-sm);
+    padding: 1px 6px;
     text-transform: none;
     letter-spacing: 0;
-  }
-  .mp-badge.pos {
-    color: var(--success);
-    border-color: color-mix(in srgb, var(--success) 50%, transparent);
-    background: color-mix(in srgb, var(--success) 10%, transparent);
-  }
-  .mp-badge.neg {
-    color: var(--error);
-    border-color: color-mix(in srgb, var(--error) 50%, transparent);
-    background: color-mix(in srgb, var(--error) 10%, transparent);
   }
   .mp-samples {
     font-size: 9px;
-    color: var(--text-muted);
+    font-weight: 400;
     text-transform: none;
     letter-spacing: 0;
+    color: var(--text-muted);
   }
-  .chart-empty {
-    flex: 1;
+  .mp-empty {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -52%);
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    gap: 8px;
-    color: var(--text-muted);
-    font-size: 12px;
+    gap: 6px;
+    max-width: 320px;
     text-align: center;
-    min-height: 180px;
+    padding: var(--s4) var(--s5);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    color: var(--text-muted);
+    animation: mp-fade 0.5s ease 0.15s both;
+  }
+  .mp-empty-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+  .mp-empty-body {
+    font-size: 11px;
+    line-height: 1.5;
+  }
+  .mp-cta {
+    margin-top: var(--s2);
+    padding: 5px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-decoration: none;
+    transition: all 0.15s;
+  }
+  .mp-cta:hover {
+    color: var(--xp);
+    border-color: var(--xp);
+  }
+  @keyframes mp-fade {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .mp-dot,
+    .mp-empty {
+      animation: none;
+    }
   }
 </style>

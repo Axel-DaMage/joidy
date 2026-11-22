@@ -58,6 +58,7 @@
     const out: Week[] = [];
     const cursor = new Date(gridStart);
     let prevMonth = -1;
+    let lastLabel = -99;
     while (cursor <= end) {
       const cells: Cell[] = [];
       for (let i = 0; i < 7; i++) {
@@ -71,7 +72,10 @@
         cursor.setDate(cursor.getDate() + 1);
       }
       const month = cells[0].date.getMonth();
-      out.push({ cells, monthLabel: month !== prevMonth ? monthFmt.format(cells[0].date) : '' });
+      // A month label is skipped when it would sit right next to the previous one.
+      const show = month !== prevMonth && out.length - lastLabel >= 3;
+      if (show) lastLabel = out.length;
+      out.push({ cells, monthLabel: show ? monthFmt.format(cells[0].date) : '' });
       prevMonth = month;
     }
     return out;
@@ -91,17 +95,22 @@
     tip = { x: el.offsetLeft + el.offsetWidth / 2, y: el.offsetTop, cell };
   }
 
-  // Responsive cell size: measure the card body and fit the whole grid.
+  // Responsive cell size: fit the grid to the card width. Cells may be wider
+  // than tall (short windows have few columns); the card height follows the
+  // grid so no vertical space is wasted around it.
   let wrapW = $state(0);
-  let wrapH = $state(0);
-  let cell = $derived.by(() => {
+  let cellW = $derived.by(() => {
     const cols = weeks.length;
-    if (!wrapW || !wrapH || cols === 0) return 11;
-    const labelW = 26;
+    if (!wrapW || cols === 0) return 11;
+    const labelW = 30;
     const gap = 3;
-    const wFit = Math.floor((wrapW - labelW - gap * (cols - 1)) / cols);
-    const hFit = Math.floor((wrapH - 14 - gap * 6) / 7);
-    return Math.max(7, Math.min(22, Math.min(wFit, hFit)));
+    return Math.max(7, Math.min(46, Math.floor((wrapW - labelW - gap * (cols - 1)) / cols)));
+  });
+  // Cells grow taller than wide only as far as the card height allows.
+  let wrapH = $state(0);
+  let cellH = $derived.by(() => {
+    const fitH = wrapH > 0 ? Math.floor((wrapH - 43) / 7) : cellW;
+    return Math.max(7, Math.min(fitH, Math.round(cellW * 1.6), 40));
   });
 
   function cellAria(cell: Cell): string {
@@ -117,15 +126,15 @@
   {#snippet icon()}<CalendarCheck size={15} />{/snippet}
 
   <div class="hm-wrap" bind:clientWidth={wrapW} bind:clientHeight={wrapH}>
-    <div class="hm-grid" style:--cell="{cell}px">
+    <div class="hm-grid" style:--cw="{cellW}px" style:--ch="{cellH}px">
       <div class="hm-wd-col">
         <span class="hm-month hm-month-spacer"></span>
         {#each WEEKDAY_ROWS as i (i)}
           <span class="hm-wd">{i % 2 === 0 ? weekdayLabel(i) : ''}</span>
         {/each}
       </div>
-      {#each weeks as week (week.cells[0].key)}
-        <div class="hm-week">
+      {#each weeks as week, wi (week.cells[0].key)}
+        <div class="hm-week" style:--col={wi}>
           <span class="hm-month">{week.monthLabel}</span>
           {#each week.cells as cell (cell.key)}
             <button
@@ -200,7 +209,7 @@
     overflow: hidden;
     flex: 1;
     min-height: 0;
-    padding-bottom: 2px;
+    padding: var(--s1) 0;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -209,8 +218,8 @@
     display: flex;
     gap: 3px;
     width: max-content;
-    min-height: 0;
-    --cell: 11px;
+    --cw: 11px;
+    --ch: 11px;
   }
   .hm-wd-col {
     display: flex;
@@ -226,6 +235,7 @@
     flex-shrink: 0;
   }
   .hm-month {
+    width: var(--cw);
     height: 14px;
     font-size: 9px;
     color: var(--text-muted);
@@ -235,26 +245,26 @@
     white-space: nowrap;
   }
   .hm-wd {
-    height: var(--cell);
+    height: var(--ch);
     font-size: 8px;
     color: var(--text-muted);
     font-family: var(--font-mono);
-    line-height: var(--cell);
+    line-height: var(--ch);
   }
   .hm-cell {
-    width: var(--cell);
-    height: var(--cell);
-    border-radius: 2.5px;
+    width: var(--cw);
+    height: var(--ch);
+    border-radius: var(--r-sm);
     border: none;
     padding: 0;
     cursor: default;
-    transition: transform 0.1s ease;
+    outline: 1px solid transparent;
+    animation: hm-pop 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+    animation-delay: calc(var(--col, 0) * 8ms);
   }
   .hm-cell:hover,
   .hm-cell:focus-visible {
-    transform: scale(1.25);
-    outline: 1px solid var(--text-muted);
-    outline-offset: 0;
+    outline-color: var(--text-secondary);
   }
   .hm-cell.future {
     opacity: 0.35;
@@ -262,10 +272,24 @@
   .hm-cell-legend {
     display: inline-block;
     cursor: default;
+    width: 11px;
+    height: 11px;
+    animation: none;
   }
-  .hm-cell-legend:hover {
-    transform: none;
-    outline: none;
+  @keyframes hm-pop {
+    from {
+      opacity: 0;
+      transform: scale(0.5);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .hm-cell {
+      animation: none;
+    }
   }
   .lv0 {
     background: color-mix(in srgb, var(--text-primary) 7%, transparent);

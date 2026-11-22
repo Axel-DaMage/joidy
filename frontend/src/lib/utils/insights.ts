@@ -12,12 +12,18 @@
 
 import type { AnalyticsOverview } from '$lib/api';
 
+export type InsightTone = 'good' | 'warn' | 'bad' | 'info';
+
 export interface Insight {
   /** Lucide icon name (rendered via DynamicIcon). */
   icon: string;
   /** i18n key under `goalsAnalytics.insights.*`. */
   key: string;
   values?: Record<string, string | number>;
+  /** Headline figure rendered large on the insight card. */
+  stat?: string;
+  /** Semantic colour; omitted = the slide accent. */
+  tone?: InsightTone;
 }
 
 export interface InsightCtx {
@@ -46,6 +52,17 @@ export function xpByWeekday(activity: Day[]): number[] {
   return totals;
 }
 
+/** Average XP per calendar day for each weekday (Mon=0..Sun=6). */
+export function avgXpByWeekday(activity: Day[]): number[] {
+  const sums = xpByWeekday(activity);
+  const counts = [0, 0, 0, 0, 0, 0, 0];
+  for (const d of activity) counts[(new Date(`${d.date}T00:00:00`).getDay() + 6) % 7]++;
+  return sums.map((v, i) => (counts[i] > 0 ? Math.round(v / counts[i]) : 0));
+}
+
+const num = (n: number) => Math.round(n).toLocaleString();
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
 function argmax(arr: number[]): number {
   let best = 0;
   for (let i = 1; i < arr.length; i++) if (arr[i] > arr[best]) best = i;
@@ -73,17 +90,28 @@ export function consistencyInsights(data: Overview, ctx: InsightCtx): Insight[] 
     icon: 'calendar-check',
     key: 'consistency.activeDays',
     values: { count: active_days, total },
+    stat: `${active_days}/${total}`,
   });
 
   const verdict =
-    rate >= 0.7 ? 'consistency.verdictHigh' : rate >= 0.4 ? 'consistency.verdictMid' : 'consistency.verdictLow';
-  out.push({ icon: rate >= 0.4 ? 'thumbs-up' : 'sprout', key: verdict });
+    rate >= 0.7
+      ? 'consistency.verdictHigh'
+      : rate >= 0.4
+        ? 'consistency.verdictMid'
+        : 'consistency.verdictLow';
+  out.push({
+    icon: rate >= 0.4 ? 'thumbs-up' : 'sprout',
+    key: verdict,
+    stat: `${Math.round(rate * 100)}%`,
+    tone: rate >= 0.7 ? 'good' : rate >= 0.4 ? 'info' : 'warn',
+  });
 
   if (data.streaks.current_streak > 1) {
     out.push({
       icon: 'flame',
       key: 'consistency.currentStreak',
       values: { days: data.streaks.current_streak },
+      stat: `${data.streaks.current_streak}d`,
     });
   }
   if (data.streaks.longest_streak > 1) {
@@ -91,6 +119,7 @@ export function consistencyInsights(data: Overview, ctx: InsightCtx): Insight[] 
       icon: 'award',
       key: 'consistency.longestStreak',
       values: { days: data.streaks.longest_streak },
+      stat: `${data.streaks.longest_streak}d`,
     });
   }
   const best = data.summary.best_day;
@@ -99,6 +128,7 @@ export function consistencyInsights(data: Overview, ctx: InsightCtx): Insight[] 
       icon: 'trophy',
       key: 'consistency.bestDay',
       values: { date: ctx.fmtDate(best.date), xp: best.xp },
+      stat: `${num(best.xp)} XP`,
     });
   }
   return out;
@@ -112,22 +142,31 @@ export function trendInsights(data: Overview, ctx: InsightCtx): Insight[] {
 
   const delta = deltaPct(s.window_xp, s.prev_total_xp);
   if (delta === null) {
-    out.push({ icon: 'sparkles', key: 'trend.firstWindow' });
+    out.push({ icon: 'sparkles', key: 'trend.firstWindow', tone: 'info' });
   } else if (delta >= 10) {
-    out.push({ icon: 'trending-up', key: 'trend.deltaUp', values: { pct: delta } });
+    out.push({
+      icon: 'trending-up',
+      key: 'trend.deltaUp',
+      values: { pct: delta },
+      stat: `+${delta}%`,
+      tone: 'good',
+    });
   } else if (delta <= -10) {
-    out.push({ icon: 'trending-down', key: 'trend.deltaDown', values: { pct: Math.abs(delta) } });
+    out.push({
+      icon: 'trending-down',
+      key: 'trend.deltaDown',
+      values: { pct: Math.abs(delta) },
+      stat: `−${Math.abs(delta)}%`,
+      tone: 'bad',
+    });
   } else {
-    out.push({ icon: 'minus', key: 'trend.deltaFlat' });
+    out.push({ icon: 'minus', key: 'trend.deltaFlat', stat: `${delta >= 0 ? '+' : '−'}${Math.abs(delta)}%` });
   }
 
-  const perWeekday = xpByWeekday(data.daily_activity);
+  const perWeekday = avgXpByWeekday(data.daily_activity);
   if (Math.max(...perWeekday) > 0) {
-    out.push({
-      icon: 'calendar',
-      key: 'trend.bestWeekday',
-      values: { day: ctx.fmtWeekday(argmax(perWeekday)) },
-    });
+    const day = ctx.fmtWeekday(argmax(perWeekday));
+    out.push({ icon: 'calendar', key: 'trend.bestWeekday', values: { day }, stat: cap(day) });
   }
 
   if (s.best_day) {
@@ -135,29 +174,32 @@ export function trendInsights(data: Overview, ctx: InsightCtx): Insight[] {
       icon: 'trophy',
       key: 'trend.bestDay',
       values: { date: ctx.fmtDate(s.best_day.date), xp: s.best_day.xp },
+      stat: `${num(s.best_day.xp)} XP`,
     });
   }
 
   if (s.active_days > 0) {
-    out.push({
-      icon: 'zap',
-      key: 'trend.avgActiveDay',
-      values: { xp: Math.round(s.window_xp / s.active_days) },
-    });
+    const xp = Math.round(s.window_xp / s.active_days);
+    out.push({ icon: 'zap', key: 'trend.avgActiveDay', values: { xp }, stat: `~${num(xp)}` });
   }
   return out;
 }
 
 // ── Activity clock (seasonality) ─────────────────────────────────────────────
 
+type SeasonCell = { weekday: number; hour: number; count: number; xp?: number };
+
+/** Value of a cell in the dashboard's common unit (XP; falls back to events). */
+export const cellValue = (c: SeasonCell): number => c.xp ?? c.count;
+
 /** Sum seasonality cells per hour (0-23), optionally filtered by weekday. */
 export function hoursFromCells(
-  cells: { weekday: number; hour: number; count: number }[],
+  cells: SeasonCell[],
   weekdayFilter?: (weekday: number) => boolean
 ): number[] {
   const hours = new Array(24).fill(0);
   for (const c of cells) {
-    if (!weekdayFilter || weekdayFilter(c.weekday)) hours[c.hour] += c.count;
+    if (!weekdayFilter || weekdayFilter(c.weekday)) hours[c.hour] += cellValue(c);
   }
   return hours;
 }
@@ -172,15 +214,19 @@ export function clockInsights(data: Overview, ctx: InsightCtx): Insight[] {
   if (totalEvents === 0) return out;
 
   const peakHour = argmax(perHour);
-  out.push({ icon: 'clock', key: 'clock.peakHour', values: { hour: ctx.fmtHour(peakHour) } });
+  out.push({
+    icon: 'clock',
+    key: 'clock.peakHour',
+    values: { hour: ctx.fmtHour(peakHour) },
+    stat: ctx.fmtHour(peakHour),
+  });
 
   const perWeekday = [0, 0, 0, 0, 0, 0, 0];
-  for (const c of cells) perWeekday[c.weekday] += c.count;
-  out.push({
-    icon: 'calendar',
-    key: 'clock.peakDay',
-    values: { day: ctx.fmtWeekday(argmax(perWeekday)) },
-  });
+  for (const c of cells) perWeekday[c.weekday] += cellValue(c);
+  const avgWeekday = avgXpByWeekday(data.daily_activity);
+  const dayIdx = argmax(Math.max(...avgWeekday) > 0 ? avgWeekday : perWeekday);
+  const dayName = ctx.fmtWeekday(dayIdx);
+  out.push({ icon: 'calendar', key: 'clock.peakDay', values: { day: dayName }, stat: cap(dayName) });
 
   // Time-of-day profile: morning 6-12, afternoon 12-18, evening 18-24, night 0-6.
   const bands = [
@@ -198,16 +244,23 @@ export function clockInsights(data: Overview, ctx: InsightCtx): Insight[] {
       top = b;
     }
   }
-  out.push({ icon: 'sun', key: top.key, values: { pct: pct(topCount, totalEvents) } });
+  out.push({
+    icon: 'sun',
+    key: top.key,
+    values: { pct: pct(topCount, totalEvents) },
+    stat: `${pct(topCount, totalEvents)}%`,
+  });
 
   const weekdayCount = perWeekday.slice(0, 5).reduce((a, b) => a + b, 0);
   const weekendCount = perWeekday[5] + perWeekday[6];
   if (weekdayCount + weekendCount > 0) {
     const weekendShare = pct(weekendCount, weekdayCount + weekendCount);
+    const share = weekendShare >= 40 ? weekendShare : 100 - weekendShare;
     out.push({
-      icon: 'briefcase',
+      icon: weekendShare >= 40 ? 'party-popper' : 'briefcase',
       key: weekendShare >= 40 ? 'clock.moreWeekend' : 'clock.moreWeekdays',
-      values: { pct: weekendShare >= 40 ? weekendShare : 100 - weekendShare },
+      values: { pct: share },
+      stat: `${share}%`,
     });
   }
   return out;
@@ -219,18 +272,46 @@ export function moodInsights(data: Overview): Insight[] {
   const out: Insight[] = [];
   const m = data.mood_activity;
   if (!m || m.sample_size < 3 || m.pearson_r === null) {
-    out.push({ icon: 'smile', key: 'mood.needMore' });
+    out.push({ icon: 'smile', key: 'mood.needMore', tone: 'info' });
+    out.push({ icon: 'pencil', key: 'mood.howTo' });
+    out.push({ icon: 'lightbulb', key: 'mood.unlock' });
     return out;
   }
   out.push({
     icon: 'database',
     key: 'mood.samples',
     values: { count: m.sample_size },
+    stat: String(m.sample_size),
   });
   const r = m.pearson_r;
-  if (r >= 0.25) out.push({ icon: 'heart', key: 'mood.positive' });
-  else if (r <= -0.25) out.push({ icon: 'cloud-rain', key: 'mood.negative' });
+  if (r >= 0.25) out.push({ icon: 'heart', key: 'mood.positive', tone: 'good' });
+  else if (r <= -0.25) out.push({ icon: 'cloud-rain', key: 'mood.negative', tone: 'warn' });
   else out.push({ icon: 'minus', key: 'mood.neutral' });
+
+  const avg = m.points.reduce((a, p) => a + p.mood, 0) / m.points.length;
+  out.push({
+    icon: 'smile',
+    key: 'mood.average',
+    stat: `${avg.toFixed(1)}/5`,
+  });
+
+  // Mood level with the highest mean XP (levels with a single sample are noise).
+  const byMood = new Map<number, number[]>();
+  for (const p of m.points) byMood.set(p.mood, [...(byMood.get(p.mood) ?? []), p.xp]);
+  let best: { mood: number; xp: number } | null = null;
+  for (const [mood, xs] of byMood) {
+    if (xs.length < 2) continue;
+    const mean = xs.reduce((a, x) => a + x, 0) / xs.length;
+    if (!best || mean > best.xp) best = { mood, xp: mean };
+  }
+  if (best) {
+    out.push({
+      icon: 'zap',
+      key: 'mood.bestMood',
+      values: { mood: best.mood },
+      stat: `~${num(best.xp)}`,
+    });
+  }
   return out;
 }
 
@@ -269,12 +350,19 @@ export function sourcesInsights(data: Overview, ctx: InsightCtx): Insight[] {
     icon: 'pie-chart',
     key: 'sources.topType',
     values: { name: xpTypeLabel(top.type, ctx), pct: topShare },
+    stat: `${topShare}%`,
   });
   out.push({
     icon: topShare >= 60 ? 'focus' : 'shuffle',
     key: topShare >= 60 ? 'sources.concentrated' : 'sources.balanced',
+    tone: topShare >= 60 ? 'warn' : 'good',
   });
-  out.push({ icon: 'activity', key: 'sources.events', values: { count: totalEvents } });
+  out.push({
+    icon: 'activity',
+    key: 'sources.events',
+    values: { count: totalEvents },
+    stat: num(totalEvents),
+  });
   return out;
 }
 
@@ -289,16 +377,21 @@ export function goalsInsights(data: Overview, ctx: InsightCtx): Insight[] {
   const abandoned = count('abandoned');
 
   if (activated > 0) {
+    const done = pct(completed, activated);
     out.push({
       icon: 'circle-check',
       key: 'goals.completionRate',
-      values: { pct: pct(completed, activated) },
+      values: { pct: done },
+      stat: `${done}%`,
+      tone: done >= 60 ? 'good' : done >= 30 ? 'info' : 'warn',
     });
     if (abandoned > 0) {
       out.push({
         icon: 'archive',
         key: 'goals.abandonRate',
         values: { pct: pct(abandoned, activated) },
+        stat: `${pct(abandoned, activated)}%`,
+        tone: 'warn',
       });
     }
   }
@@ -315,11 +408,14 @@ export function goalsInsights(data: Overview, ctx: InsightCtx): Insight[] {
         name: ctx.t(`goalsAnalytics.goals.temporalities.${best.temporality}`),
         pct: pct(best.completed, best.completed + best.failed),
       },
+      stat: `${pct(best.completed, best.completed + best.failed)}%`,
+      tone: 'good',
     });
   }
 
   const active = data.goals?.by_state?.ACTIVE ?? 0;
-  if (active > 0) out.push({ icon: 'target', key: 'goals.active', values: { count: active } });
+  if (active > 0)
+    out.push({ icon: 'target', key: 'goals.active', values: { count: active }, stat: String(active) });
   return out;
 }
 
@@ -346,16 +442,30 @@ export function githubInsights(data: Overview): Insight[] {
   )[0];
   if (dominant && dominant[1] > 0) {
     out.push({
-      icon: 'github',
+      icon: 'git-commit-horizontal',
       key: `github.top_${dominant[0]}`,
       values: { count: dominant[1] },
+      stat: num(dominant[1]),
     });
+  }
+  const total = weekly.reduce((a, w) => a + w.pushes + w.pull_requests + w.issues + w.comments, 0);
+  const activeWeeks = weekly.filter((w) => w.pushes + w.pull_requests + w.issues + w.comments > 0).length;
+  if (total > 0) {
+    out.push({
+      icon: 'git-pull-request',
+      key: 'github.activeWeeks',
+      values: { count: activeWeeks, total: weekly.length },
+      stat: `${activeWeeks}/${weekly.length}`,
+      tone: activeWeeks >= weekly.length * 0.7 ? 'good' : undefined,
+    });
+    out.push({ icon: 'activity', key: 'github.total', values: { count: total }, stat: num(total) });
   }
   if (busiestTotal > 0) {
     out.push({
       icon: 'calendar',
       key: 'github.busiestWeek',
       values: { count: busiestTotal },
+      stat: num(busiestTotal),
     });
   }
   return out;

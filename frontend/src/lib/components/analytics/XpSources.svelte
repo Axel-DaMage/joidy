@@ -53,58 +53,90 @@
     color: string;
   }
 
-  let slices = $derived<Slice[]>(
-    byType
+  const ROW_H = 26;
+  let legendH = $state(0);
+  let boxW = $state(0);
+  let boxH = $state(0);
+
+  // Tail types are folded into one "Other" slice when the legend cannot fit
+  // them all — the tile never scrolls.
+  let slices = $derived.by<Slice[]>(() => {
+    const all = byType
       .filter((s) => s.xp > 0)
-      .map((s, i) => ({ ...s, label: typeLabel(s.type), color: PALETTE[i % PALETTE.length] }))
-  );
+      .map((s, i) => ({ ...s, label: typeLabel(s.type), color: PALETTE[i % PALETTE.length] }));
+    const cap = Math.max(3, Math.floor(legendH / ROW_H));
+    if (all.length <= cap) return all;
+    const head = all.slice(0, cap - 1);
+    const tail = all.slice(cap - 1);
+    return [
+      ...head,
+      {
+        type: '__other',
+        label: $t('goalsAnalytics.sources.other'),
+        color: 'var(--text-muted)',
+        xp: tail.reduce((a, s) => a + s.xp, 0),
+        count: tail.reduce((a, s) => a + s.count, 0),
+      },
+    ];
+  });
 
   let arcs = $derived(
     pie<Slice>()
       .value((s) => s.xp)
       .sort(null)
-      .padAngle(0.015)(slices)
+      .padAngle(0.012)(slices)
   );
 
-  const arcGen = arc<PieArcDatum<Slice>>().innerRadius(58).outerRadius(92).cornerRadius(3);
+  // Donut radius follows the container (fits both width share and height).
+  let size = $derived(Math.max(120, Math.min(boxH, boxW * 0.46, 320)));
+  let arcGen = $derived(
+    arc<PieArcDatum<Slice>>()
+      .innerRadius(size * 0.33)
+      .outerRadius(size * 0.48)
+      .cornerRadius(2)
+  );
   let totalXp = $derived(slices.reduce((acc, s) => acc + s.xp, 0));
 
   let hovered = $state<Slice | null>(null);
 </script>
 
 <ChartCard title={$t('goalsAnalytics.slides.sources')}>
-  {#snippet icon()}<ChartPie size={15} />{/snippet}
-  {#if slices.length === 0}
+  {#snippet icon()}<ChartPie size={13} />{/snippet}
+  {#if byType.filter((s) => s.xp > 0).length === 0}
     <div class="chart-empty">
       <ChartPie size={22} style="opacity:0.25" />
       <span>{$t('goalsAnalytics.sources.empty')}</span>
     </div>
   {:else}
-    <div class="xs-layout">
-      <div class="xs-donut-wrap">
-        <svg viewBox="0 0 200 200" role="img" aria-label={$t('goalsAnalytics.slides.sources')}>
-          <g transform="translate(100,100)">
-            {#each arcs as a (a.data.type)}
-              <!-- svelte-ignore a11y_no_static_element_interactions -->
-              <path
-                d={arcGen(a) ?? ''}
-                fill={a.data.color}
-                class="xs-arc"
-                class:dim={hovered !== null && hovered !== a.data}
-                onmouseenter={() => (hovered = a.data)}
-                onmouseleave={() => (hovered = null)}
-              />
-            {/each}
-            <text class="xs-center-val" text-anchor="middle" y="-2"
-              >{(hovered ?? { xp: totalXp }).xp.toLocaleString()}</text
-            >
-            <text class="xs-center-lab" text-anchor="middle" y="14"
-              >{hovered ? hovered.label : 'XP'}</text
-            >
-          </g>
+    <div class="xs-layout" bind:clientWidth={boxW} bind:clientHeight={boxH}>
+      <div class="xs-donut-wrap" style:width="{size}px">
+        <svg
+          width={size}
+          height={size}
+          viewBox="{-size / 2} {-size / 2} {size} {size}"
+          role="img"
+          aria-label={$t('goalsAnalytics.slides.sources')}
+        >
+          {#each arcs as a (a.data.type)}
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <path
+              d={arcGen(a) ?? ''}
+              fill={a.data.color}
+              class="xs-arc"
+              class:dim={hovered !== null && hovered !== a.data}
+              onmouseenter={() => (hovered = a.data)}
+              onmouseleave={() => (hovered = null)}
+            />
+          {/each}
+          <text class="xs-center-val" text-anchor="middle" y="2"
+            >{(hovered ?? { xp: totalXp }).xp.toLocaleString()}</text
+          >
+          <text class="xs-center-lab" text-anchor="middle" y="18"
+            >{hovered ? hovered.label : 'XP'}</text
+          >
         </svg>
       </div>
-      <div class="xs-legend">
+      <div class="xs-legend" bind:clientHeight={legendH}>
         {#each slices as s (s.type)}
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div
@@ -115,8 +147,9 @@
           >
             <span class="xs-dot" style="background: {s.color}"></span>
             <span class="xs-name">{s.label}</span>
-            <span class="xs-count">{s.count}×</span>
-            <span class="xs-xp">{s.xp.toLocaleString()} XP</span>
+            <div class="xs-bar"><div class="xs-bar-fill" style="width: {(s.xp / totalXp) * 100}%; background: {s.color}"></div></div>
+            <span class="xs-count">{s.count.toLocaleString()}×</span>
+            <span class="xs-xp">{s.xp.toLocaleString()}</span>
           </div>
         {/each}
       </div>
@@ -133,12 +166,10 @@
     gap: var(--s5);
   }
   .xs-donut-wrap {
-    flex: 0 0 200px;
-    max-width: 42%;
+    flex-shrink: 0;
+    display: flex;
   }
   svg {
-    width: 100%;
-    height: auto;
     display: block;
   }
   .xs-arc {
@@ -155,7 +186,7 @@
     font-family: var(--font-mono);
   }
   .xs-center-lab {
-    font-size: 8px;
+    font-size: 9px;
     fill: var(--text-muted);
     font-family: var(--font-mono);
     text-transform: uppercase;
@@ -164,11 +195,22 @@
   .xs-legend {
     flex: 1;
     min-width: 0;
+    align-self: stretch;
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    max-height: 100%;
-    overflow-y: auto;
+    justify-content: space-around;
+    overflow: hidden;
+    container-type: inline-size;
+  }
+  @container (max-width: 340px) {
+    .xs-bar {
+      display: none;
+    }
+  }
+  @container (max-width: 260px) {
+    .xs-count {
+      display: none;
+    }
   }
   .xs-leg-row {
     display: flex;
@@ -182,32 +224,47 @@
     opacity: 0.35;
   }
   .xs-dot {
-    width: 9px;
-    height: 9px;
-    border-radius: 2.5px;
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
     flex-shrink: 0;
   }
   .xs-name {
     color: var(--text-secondary);
-    flex: 1;
+    flex: 1 1 70px;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .xs-bar {
+    flex: 0 0 56px;
+    min-width: 0;
+    height: 4px;
+    border-radius: 2px;
+    background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+    overflow: hidden;
+  }
+  .xs-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    opacity: 0.75;
   }
   .xs-count {
     color: var(--text-muted);
     font-family: var(--font-mono);
     font-size: 10px;
     flex-shrink: 0;
+    min-width: 46px;
+    text-align: right;
   }
   .xs-xp {
     color: var(--text-primary);
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 700;
     flex-shrink: 0;
-    min-width: 56px;
+    min-width: 54px;
     text-align: right;
   }
   .chart-empty {
@@ -220,19 +277,5 @@
     color: var(--text-muted);
     font-size: 12px;
     text-align: center;
-    min-height: 180px;
-  }
-  @media (max-width: 700px) {
-    .xs-layout {
-      flex-direction: column;
-      gap: var(--s3);
-    }
-    .xs-donut-wrap {
-      flex: none;
-      max-width: 180px;
-    }
-    .xs-legend {
-      width: 100%;
-    }
   }
 </style>

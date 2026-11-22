@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { consistencyInsights, trendInsights, clockInsights, type InsightCtx } from './insights';
+import {
+  consistencyInsights,
+  trendInsights,
+  clockInsights,
+  moodInsights,
+  avgXpByWeekday,
+  hoursFromCells,
+  type InsightCtx,
+} from './insights';
 import type { AnalyticsOverview } from '$lib/api';
 
 const ctx: InsightCtx = {
@@ -18,7 +26,7 @@ function base(overrides: Partial<AnalyticsOverview> = {}): AnalyticsOverview {
     daily_activity: [],
     xp_by_type: [],
     seasonality: { cells: [] },
-    mood_activity: { points: [], correlation: null, samples: 0 },
+    mood_activity: { points: [], pearson_r: null, sample_size: 0 },
     goals: { by_state: [], funnel: [], temporality: [] },
     streaks: {
       current_streak: 0,
@@ -122,8 +130,8 @@ describe('consistencyInsights', () => {
 describe('clockInsights', () => {
   it('reports peak hour and dominant band from seasonality cells', () => {
     const cells = [
-      { weekday: 2, hour: 15, count: 10 },
-      { weekday: 3, hour: 16, count: 5 },
+      { weekday: 2, hour: 15, count: 10, xp: 100 },
+      { weekday: 3, hour: 16, count: 5, xp: 50 },
     ];
     const items = clockInsights(base({ seasonality: { cells, max: 10 } }), ctx);
     const keys = items.map((i) => i.key);
@@ -131,5 +139,47 @@ describe('clockInsights', () => {
     expect(keys).toContain('clock.peakDay');
     expect(keys).toContain('clock.bandAfternoon');
     expect(keys).toContain('clock.moreWeekdays');
+  });
+});
+
+describe('avgXpByWeekday', () => {
+  it('averages per occurrence so uneven weekday counts stay comparable', () => {
+    // 2024-01-01 is a Monday; two Mondays (10 + 30) and one Tuesday (6).
+    const row = (date: string, xp: number) => ({
+      date,
+      xp,
+      events: 1,
+      goals_completed: 0,
+      pomodoros: 0,
+      notes: 0,
+    });
+    const avgs = avgXpByWeekday([row('2024-01-01', 10), row('2024-01-08', 30), row('2024-01-02', 6)]);
+    expect(avgs[0]).toBe(20);
+    expect(avgs[1]).toBe(6);
+    expect(avgs[2]).toBe(0);
+  });
+});
+
+describe('hoursFromCells', () => {
+  it('uses XP when present and falls back to event count', () => {
+    expect(hoursFromCells([{ weekday: 0, hour: 5, count: 9, xp: 40 }])[5]).toBe(40);
+    expect(hoursFromCells([{ weekday: 0, hour: 5, count: 9 }])[5]).toBe(9);
+  });
+});
+
+describe('insight headline stats', () => {
+  it('consistency exposes the coverage as a stat with a tone', () => {
+    const items = consistencyInsights(
+      base({ days: 10, summary: { ...base().summary, active_days: 9 } }),
+      ctx
+    );
+    expect(items[0].stat).toBe('9/10');
+    expect(items[1].stat).toBe('90%');
+    expect(items[1].tone).toBe('good');
+  });
+
+  it('mood without data explains how to unlock the analysis', () => {
+    const keys = moodInsights(base()).map((i) => i.key);
+    expect(keys).toEqual(['mood.needMore', 'mood.howTo', 'mood.unlock']);
   });
 });

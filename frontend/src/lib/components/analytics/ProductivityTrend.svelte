@@ -6,6 +6,7 @@
     area,
     extent,
     max,
+    min,
     bisector,
     curveMonotoneX,
   } from 'd3';
@@ -19,14 +20,16 @@
   import { t } from 'svelte-i18n';
 
   // Daily XP line+area chart with a client-side 7-day moving-average overlay
-  // and an OLS regression trend line (#1499).
+  // and an OLS regression trend line (#1499). The SVG is sized from its
+  // container (no viewBox scaling) so axis text keeps a constant size and the
+  // plot always fills the card.
   type DayActivity = AnalyticsOverview['daily_activity'][number];
 
   let { activity = [] }: { activity?: DayActivity[] } = $props();
 
-  const W = 760;
-  const H = 300;
-  const M = { top: 14, right: 16, bottom: 26, left: 44 };
+  let W = $state(0);
+  let H = $state(0);
+  const M = { top: 14, right: 14, bottom: 24, left: 40 };
 
   interface Pt {
     i: number;
@@ -43,19 +46,24 @@
   let x = $derived(
     scaleTime()
       .domain((extent(pts, (p) => p.date) as [Date, Date]) ?? [new Date(), new Date()])
-      .range([M.left, W - M.right])
+      .range([M.left, Math.max(M.left + 1, W - M.right)])
   );
+  // Penalty days (e.g. deleted notes) can be negative — keep them inside the plot.
   let y = $derived(
     scaleLinear()
-      .domain([0, Math.max(10, (max(pts, (p) => p.xp) ?? 0) * 1.15)])
+      .domain([
+        Math.min(0, (min(pts, (p) => p.xp) ?? 0) * 1.15),
+        Math.max(10, (max(pts, (p) => p.xp) ?? 0) * 1.12),
+      ])
       .nice()
-      .range([H - M.bottom, M.top])
+      .range([Math.max(M.top + 1, H - M.bottom), M.top])
   );
+  let baseY = $derived(y(0));
 
   let areaPath = $derived(
     area<Pt>()
       .x((p) => x(p.date))
-      .y0(H - M.bottom)
+      .y0(baseY)
       .y1((p) => y(p.xp))
       .curve(curveMonotoneX)(pts) ?? ''
   );
@@ -72,7 +80,6 @@
       .curve(curveMonotoneX)(pts) ?? ''
   );
 
-  // Regression line drawn between the first and last point of the series.
   let regLine = $derived.by(() => {
     if (!reg || pts.length < 2) return null;
     return {
@@ -83,9 +90,18 @@
     };
   });
 
-  let xTicks = $derived(x.ticks(Math.min(8, Math.max(2, Math.floor(pts.length / 20)))));
-  let yTicks = $derived(y.ticks(5));
-  let tickFmt = $derived(new Intl.DateTimeFormat($locale, { day: 'numeric', month: 'short' }));
+  // Highest day — annotated on the chart so the peak is readable at a glance.
+  let peak = $derived(pts.length ? pts.reduce((a, b) => (b.xp > a.xp ? b : a)) : null);
+
+  let xTicks = $derived(
+    x.ticks(Math.min(10, Math.max(2, Math.floor((W - M.left - M.right) / 90))))
+  );
+  let yTicks = $derived(y.ticks(Math.max(3, Math.floor((H - M.top - M.bottom) / 48))));
+  let tickFmt = $derived(
+    new Intl.DateTimeFormat($locale, { day: 'numeric', month: 'short' })
+  );
+  const fmtY = (v: number) =>
+    Math.abs(v) >= 1000 ? `${+(v / 1000).toFixed(1)}k` : String(v);
 
   // ── Hover ──────────────────────────────────────────────────────────────────
   let svgEl = $state<SVGSVGElement | null>(null);
@@ -95,28 +111,32 @@
   function onMove(e: MouseEvent) {
     if (!svgEl || pts.length === 0) return;
     const rect = svgEl.getBoundingClientRect();
-    const mx = ((e.clientX - rect.left) / rect.width) * W;
+    const mx = e.clientX - rect.left;
     const mDate = x.invert(Math.max(M.left, Math.min(W - M.right, mx)));
     const pt = pts[Math.min(pts.length - 1, Math.max(0, bisectDate(pts, mDate)))];
-    // Convert viewBox coords back to CSS px for the HTML tooltip.
-    const px = (x(pt.date) / W) * rect.width;
-    const py = (y(pt.xp) / H) * rect.height;
-    tip = { x: px, y: py, pt };
+    tip = { x: x(pt.date), y: y(pt.xp), pt };
   }
 </script>
 
 <ChartCard title={$t('goalsAnalytics.slides.trend')}>
-  {#snippet icon()}<ChartLine size={15} />{/snippet}
+  {#snippet icon()}<ChartLine size={13} />{/snippet}
   {#snippet actions()}
     <div class="pt-legend">
-      <span class="pt-leg"><span class="pt-dot" style="background: var(--xp)"></span>{$t(
+      <span class="pt-leg"
+        ><span class="pt-dot" style="background: var(--xp)"></span>{$t(
           'goalsAnalytics.trend.dailyXp'
-        )}</span>
-      <span class="pt-leg"><span class="pt-dot" style="background: var(--link)"></span>{$t(
+        )}</span
+      >
+      <span class="pt-leg"
+        ><span class="pt-dot" style="background: var(--link)"></span>{$t(
           'goalsAnalytics.trend.movingAvg'
-        )}</span>
-      <span class="pt-leg"><span class="pt-dot pt-dash" style="background: var(--text-muted)"></span
-        >{$t('goalsAnalytics.trend.regression')}</span>
+        )}</span
+      >
+      <span class="pt-leg"
+        ><span class="pt-dash" style="background: var(--text-muted)"></span>{$t(
+          'goalsAnalytics.trend.regression'
+        )}</span
+      >
     </div>
   {/snippet}
 
@@ -126,80 +146,77 @@
       <span>{$t('goalsAnalytics.trend.empty')}</span>
     </div>
   {:else}
-    <div class="pt-wrap">
-      <svg
-        bind:this={svgEl}
-        viewBox="0 0 {W} {H}"
-        preserveAspectRatio="xMidYMid meet"
-        role="img"
-        aria-label={$t('goalsAnalytics.slides.trend')}
-        onmousemove={onMove}
-        onmouseleave={() => (tip = null)}
-      >
-        <!-- grid -->
-        {#each yTicks as tv (tv)}
-          <line
-            x1={M.left}
-            x2={W - M.right}
-            y1={y(tv)}
-            y2={y(tv)}
-            class="grid-line"
-          />
-          <text x={M.left - 8} y={y(tv) + 3} class="tick" text-anchor="end">{tv}</text>
-        {/each}
+    <div class="pt-wrap" bind:clientWidth={W} bind:clientHeight={H}>
+      {#if W > 0 && H > 0}
+        <svg
+          bind:this={svgEl}
+          width={W}
+          height={H}
+          role="img"
+          aria-label={$t('goalsAnalytics.slides.trend')}
+          onmousemove={onMove}
+          onmouseleave={() => (tip = null)}
+        >
+          {#each yTicks as tv (tv)}
+            <line x1={M.left} x2={W - M.right} y1={y(tv)} y2={y(tv)} class="grid-line" />
+            <text x={M.left - 8} y={y(tv) + 3} class="tick" text-anchor="end">{fmtY(tv)}</text>
+          {/each}
 
-        <!-- area + xp line -->
-        <path d={areaPath} class="area" />
-        <path d={xpPath} class="xp-line" />
-        <path d={maPath} class="ma-line" />
-        {#if regLine}
-          <line
-            x1={regLine.x1}
-            y1={regLine.y1}
-            x2={regLine.x2}
-            y2={regLine.y2}
-            class="reg-line"
-          />
-        {/if}
+          <path d={areaPath} class="area" />
+          <path d={xpPath} class="xp-line" pathLength="1" />
+          <path d={maPath} class="ma-line" pathLength="1" />
+          {#if regLine}
+            <line
+              x1={regLine.x1}
+              y1={regLine.y1}
+              x2={regLine.x2}
+              y2={regLine.y2}
+              class="reg-line"
+            />
+          {/if}
 
-        <!-- x axis -->
-        {#each xTicks as tv (tv.getTime())}
-          <line x1={x(tv)} x2={x(tv)} y1={H - M.bottom} y2={H - M.bottom + 4} class="axis" />
-          <text x={x(tv)} y={H - M.bottom + 16} class="tick" text-anchor="middle"
-            >{tickFmt.format(tv)}</text
-          >
-        {/each}
-        <line x1={M.left} x2={W - M.right} y1={H - M.bottom} y2={H - M.bottom} class="axis" />
+          {#if peak && peak.xp > 0}
+            <circle cx={x(peak.date)} cy={y(peak.xp)} r="3" class="peak-dot" />
+            <text
+              x={Math.min(W - M.right - 4, Math.max(M.left + 4, x(peak.date)))}
+              y={y(peak.xp) - 9}
+              class="peak-label"
+              text-anchor={x(peak.date) > W - 80 ? 'end' : 'middle'}
+              >{peak.xp.toLocaleString()} · {tickFmt.format(peak.date)}</text
+            >
+          {/if}
 
-        <!-- hover crosshair -->
-        {#if tip}
-          <line
-            x1={x(tip.pt.date)}
-            x2={x(tip.pt.date)}
-            y1={M.top}
-            y2={H - M.bottom}
-            class="crosshair"
-          />
-          <circle cx={x(tip.pt.date)} cy={y(tip.pt.xp)} r="3.5" class="hover-dot xp-dot" />
-          <circle cx={x(tip.pt.date)} cy={y(ma[tip.pt.i] ?? 0)} r="3" class="hover-dot ma-dot" />
-        {/if}
-      </svg>
+          {#each xTicks as tv (tv.getTime())}
+            <line x1={x(tv)} x2={x(tv)} y1={H - M.bottom} y2={H - M.bottom + 4} class="axis" />
+            <text x={x(tv)} y={H - M.bottom + 16} class="tick" text-anchor="middle"
+              >{tickFmt.format(tv)}</text
+            >
+          {/each}
+          <line x1={M.left} x2={W - M.right} y1={baseY} y2={baseY} class="axis" />
 
-      <ChartTooltip x={tip?.x ?? 0} y={tip?.y ?? 0} visible={!!tip} placeBelow={(tip?.y ?? 0) < 70}>
-        {#if tip}
-          <span class="tt-title">{tickFmt.format(tip.pt.date)}</span>
-          <span class="tt-row"
-            ><span class="tt-dot" style="background: var(--xp)"></span>{$t(
-              'goalsAnalytics.trend.dailyXp'
-            )}<span class="tt-val">{tip.pt.xp}</span></span
-          >
-          <span class="tt-row"
-            ><span class="tt-dot" style="background: var(--link)"></span>{$t(
-              'goalsAnalytics.trend.movingAvg'
-            )}<span class="tt-val">{Math.round(ma[tip.pt.i] ?? 0)}</span></span
-          >
-        {/if}
-      </ChartTooltip>
+          {#if tip}
+            <line x1={x(tip.pt.date)} x2={x(tip.pt.date)} y1={M.top} y2={H - M.bottom} class="crosshair" />
+            <circle cx={x(tip.pt.date)} cy={y(tip.pt.xp)} r="3.5" class="hover-dot xp-dot" />
+            <circle cx={x(tip.pt.date)} cy={y(ma[tip.pt.i] ?? 0)} r="3" class="hover-dot ma-dot" />
+          {/if}
+        </svg>
+
+        <ChartTooltip x={tip?.x ?? 0} y={tip?.y ?? 0} visible={!!tip} placeBelow={(tip?.y ?? 0) < 70}>
+          {#if tip}
+            <span class="tt-title">{tickFmt.format(tip.pt.date)}</span>
+            <span class="tt-row"
+              ><span class="tt-dot" style="background: var(--xp)"></span>{$t(
+                'goalsAnalytics.trend.dailyXp'
+              )}<span class="tt-val">{tip.pt.xp.toLocaleString()}</span></span
+            >
+            <span class="tt-row"
+              ><span class="tt-dot" style="background: var(--link)"></span>{$t(
+                'goalsAnalytics.trend.movingAvg'
+              )}<span class="tt-val">{Math.round(ma[tip.pt.i] ?? 0).toLocaleString()}</span></span
+            >
+          {/if}
+        </ChartTooltip>
+      {/if}
     </div>
   {/if}
 </ChartCard>
@@ -209,19 +226,17 @@
     position: relative;
     flex: 1;
     min-height: 0;
-    display: flex;
   }
   svg {
-    width: 100%;
-    height: 100%;
-    min-height: 220px;
+    position: absolute;
+    inset: 0;
     display: block;
     cursor: crosshair;
   }
   .grid-line {
     stroke: var(--border);
     stroke-width: 0.5;
-    opacity: 0.5;
+    opacity: 0.6;
   }
   .axis {
     stroke: var(--border);
@@ -233,23 +248,40 @@
     font-family: var(--font-mono);
   }
   .area {
-    fill: color-mix(in srgb, var(--xp) 14%, transparent);
+    fill: color-mix(in srgb, var(--xp) 10%, transparent);
+  }
+  .xp-line,
+  .ma-line {
+    fill: none;
+    stroke-linejoin: round;
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    animation: pt-draw 1.1s ease-out 0.1s forwards;
   }
   .xp-line {
-    fill: none;
     stroke: var(--xp);
     stroke-width: 1.5;
   }
   .ma-line {
-    fill: none;
     stroke: var(--link);
     stroke-width: 2;
+    animation-delay: 0.25s;
   }
   .reg-line {
     stroke: var(--text-muted);
     stroke-width: 1.25;
     stroke-dasharray: 5 4;
     opacity: 0.8;
+  }
+  .peak-dot {
+    fill: var(--xp);
+    stroke: var(--bg);
+    stroke-width: 1.5;
+  }
+  .peak-label {
+    font-size: 9px;
+    font-family: var(--font-mono);
+    fill: var(--text-secondary);
   }
   .crosshair {
     stroke: var(--text-muted);
@@ -287,9 +319,9 @@
     border-radius: 2px;
   }
   .pt-dash {
+    width: 10px;
     height: 2px;
     border-radius: 1px;
-    margin: 3px 0;
   }
   .chart-empty {
     flex: 1;
@@ -301,6 +333,17 @@
     color: var(--text-muted);
     font-size: 12px;
     text-align: center;
-    min-height: 180px;
+  }
+  @keyframes pt-draw {
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .xp-line,
+    .ma-line {
+      animation: none;
+      stroke-dashoffset: 0;
+    }
   }
 </style>

@@ -144,6 +144,9 @@ def _seasonality(db: Session, since: datetime) -> dict:
 
     ``extract('dow', ...)`` is Sunday=0 on both PostgreSQL and SQLite (via
     STRFTIME('%w')); it is shifted to Python ``datetime.weekday()`` (Monday=0).
+    Each cell carries the event ``count`` and the positive ``xp`` earned, so
+    every seasonality view can use the same XP unit as the rest of the page
+    (penalties such as deleted notes never produce negative intensity).
     """
     dow_col = extract("dow", XPEvent.created_at)
     hour_col = extract("hour", XPEvent.created_at)
@@ -152,19 +155,24 @@ def _seasonality(db: Session, since: datetime) -> dict:
             dow_col.label("dow"),
             hour_col.label("hour"),
             func.count(XPEvent.id).label("c"),
+            func.coalesce(
+                func.sum(case((XPEvent.xp > 0, XPEvent.xp), else_=0)), 0
+            ).label("xp"),
         )
         .filter(XPEvent.created_at >= since)
         .group_by(dow_col, hour_col)
         .all()
     )
-    counts: dict[tuple[int, int], int] = {}
+    counts: dict[tuple[int, int], list[int]] = {}
     for r in rows:
         weekday = (int(r.dow) + 6) % 7  # Sunday=0 → Monday=0
         hour = int(r.hour)
-        key = (weekday, hour)
-        counts[key] = counts.get(key, 0) + int(r.c)
+        acc = counts.setdefault((weekday, hour), [0, 0])
+        acc[0] += int(r.c)
+        acc[1] += int(r.xp)
     cells = [
-        {"weekday": w, "hour": h, "count": c} for (w, h), c in sorted(counts.items())
+        {"weekday": w, "hour": h, "count": c, "xp": xp}
+        for (w, h), (c, xp) in sorted(counts.items())
     ]
     return {"cells": cells, "max": max((c["count"] for c in cells), default=0)}
 

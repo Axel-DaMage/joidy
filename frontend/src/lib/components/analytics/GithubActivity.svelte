@@ -15,9 +15,9 @@
 
   let { github }: { github?: GithubStats } = $props();
 
-  const W = 760;
-  const H = 280;
-  const M = { top: 14, right: 16, bottom: 28, left: 36 };
+  let W = $state(0);
+  let H = $state(0);
+  const M = { top: 14, right: 12, bottom: 26, left: 32 };
 
   const KEYS = ['pushes', 'pull_requests', 'issues', 'comments'] as const;
   const KEY_I18N: Record<(typeof KEYS)[number], string> = {
@@ -39,7 +39,7 @@
   let x = $derived(
     scaleBand<number>()
       .domain(weeks.map((_, i) => i))
-      .range([M.left, W - M.right])
+      .range([M.left, Math.max(M.left + 1, W - M.right)])
       .paddingInner(0.35)
       .paddingOuter(0.15)
   );
@@ -50,7 +50,10 @@
     )
   );
   let y = $derived(
-    scaleLinear().domain([0, maxTotal]).nice().range([H - M.bottom, M.top])
+    scaleLinear()
+      .domain([0, maxTotal])
+      .nice()
+      .range([Math.max(M.top + 1, H - M.bottom), M.top])
   );
   let yTicks = $derived(y.ticks(4));
 
@@ -83,7 +86,7 @@
 </script>
 
 <ChartCard title={$t('goalsAnalytics.slides.github')}>
-  {#snippet icon()}<GitPullRequest size={15} />{/snippet}
+  {#snippet icon()}<GitPullRequest size={13} />{/snippet}
   {#snippet actions()}
     <div class="gh-legend">
       {#each KEYS as k (k)}
@@ -102,10 +105,10 @@
       <span>{$t('goalsAnalytics.github.empty')}</span>
     </div>
   {:else}
-    <div class="gh-wrap" bind:this={wrapEl}>
+    <div class="gh-wrap" bind:this={wrapEl} bind:clientWidth={W} bind:clientHeight={H}>
       <svg
-        viewBox="0 0 {W} {H}"
-        preserveAspectRatio="xMidYMid meet"
+        width={W}
+        height={H}
         role="img"
         aria-label={$t('goalsAnalytics.slides.github')}
       >
@@ -183,12 +186,10 @@
     position: relative;
     flex: 1;
     min-height: 0;
-    display: flex;
   }
   svg {
-    width: 100%;
-    height: 100%;
-    min-height: 200px;
+    position: absolute;
+    inset: 0;
     display: block;
   }
   .grid-line {
@@ -241,6 +242,5 @@
     color: var(--text-muted);
     font-size: 12px;
     text-align: center;
-    min-height: 180px;
   }
 </style>
