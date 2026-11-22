@@ -331,14 +331,10 @@ export function githubInsights(data: Overview): Insight[] {
   if (weekly.length === 0) return out;
 
   const totals = { pushes: 0, pull_requests: 0, issues: 0, comments: 0 };
-  let busiest = weekly[0];
   let busiestTotal = 0;
   for (const w of weekly) {
     const sum = w.pushes + w.pull_requests + w.issues + w.comments;
-    if (sum > busiestTotal) {
-      busiestTotal = sum;
-      busiest = w;
-    }
+    if (sum > busiestTotal) busiestTotal = sum;
     totals.pushes += w.pushes;
     totals.pull_requests += w.pull_requests;
     totals.issues += w.issues;

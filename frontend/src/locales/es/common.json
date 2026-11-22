@@ -697,6 +697,33 @@
       "weekend": "Finde",
       "events": "{count} eventos",
       "peakLabel": "hora pico"
+    },
+    "railTitle": "Tu análisis",
+    "range90": "Últimos 90 días",
+    "range180": "Últimos 180 días",
+    "range365": "Último año",
+    "weekday": {
+      "title": "Por día de semana",
+      "avg": "~{xp} XP promedio",
+      "empty": "Sin actividad en esta ventana."
+    },
+    "streakPanel": {
+      "title": "Rachas y hábitos",
+      "current": "racha actual",
+      "record": "récord",
+      "active": "activas",
+      "checkins": "check-ins",
+      "rate30d": "tasa check-in 30d"
+    },
+    "bands": {
+      "title": "Actividad por franja",
+      "night": "Madrugada",
+      "morning": "Mañana",
+      "afternoon": "Tarde",
+      "evening": "Noche"
+    },
+    "recent": {
+      "title": "Días recientes"
     }
   },
   "notesPage": {

@@ -15,11 +15,11 @@
 
   let { seasonality }: { seasonality?: Seasonality } = $props();
 
-  const SIZE = 360;
+  const SIZE = 380;
   const C = SIZE / 2;
   const R0 = 64;
   const MAX_LEN = 92;
-  const LABEL_R = C - 8;
+  const LABEL_R = 174;
   const TICK_HOURS = [0, 3, 6, 9, 12, 15, 18, 21];
 
   type Scope = 'all' | 'weekday' | 'weekend';

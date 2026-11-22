@@ -91,6 +91,19 @@
     tip = { x: el.offsetLeft + el.offsetWidth / 2, y: el.offsetTop, cell };
   }
 
+  // Responsive cell size: measure the card body and fit the whole grid.
+  let wrapW = $state(0);
+  let wrapH = $state(0);
+  let cell = $derived.by(() => {
+    const cols = weeks.length;
+    if (!wrapW || !wrapH || cols === 0) return 11;
+    const labelW = 26;
+    const gap = 3;
+    const wFit = Math.floor((wrapW - labelW - gap * (cols - 1)) / cols);
+    const hFit = Math.floor((wrapH - 14 - gap * 6) / 7);
+    return Math.max(7, Math.min(22, Math.min(wFit, hFit)));
+  });
+
   function cellAria(cell: Cell): string {
     const dateStr = dateFmt.format(cell.date);
     if (cell.future || !cell.day || cell.day.xp <= 0) {
@@ -103,8 +116,8 @@
 <ChartCard title={$t('goalsAnalytics.slides.consistency')}>
   {#snippet icon()}<CalendarCheck size={15} />{/snippet}
 
-  <div class="hm-wrap">
-    <div class="hm-grid">
+  <div class="hm-wrap" bind:clientWidth={wrapW} bind:clientHeight={wrapH}>
+    <div class="hm-grid" style:--cell="{cell}px">
       <div class="hm-wd-col">
         <span class="hm-month hm-month-spacer"></span>
         {#each WEEKDAY_ROWS as i (i)}
@@ -184,16 +197,20 @@
 <style>
   .hm-wrap {
     position: relative;
-    overflow-x: auto;
+    overflow: hidden;
     flex: 1;
     min-height: 0;
     padding-bottom: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
   .hm-grid {
     display: flex;
     gap: 3px;
     width: max-content;
     min-height: 0;
+    --cell: 11px;
   }
   .hm-wd-col {
     display: flex;
@@ -218,15 +235,15 @@
     white-space: nowrap;
   }
   .hm-wd {
-    height: 11px;
+    height: var(--cell);
     font-size: 8px;
     color: var(--text-muted);
     font-family: var(--font-mono);
-    line-height: 11px;
+    line-height: var(--cell);
   }
   .hm-cell {
-    width: 11px;
-    height: 11px;
+    width: var(--cell);
+    height: var(--cell);
     border-radius: 2.5px;
     border: none;
     padding: 0;

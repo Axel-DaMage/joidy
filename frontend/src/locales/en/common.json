@@ -697,6 +697,33 @@
       "weekend": "Weekend",
       "events": "{count} events",
       "peakLabel": "peak hour"
+    },
+    "railTitle": "Your analysis",
+    "range90": "Last 90 days",
+    "range180": "Last 180 days",
+    "range365": "Last year",
+    "weekday": {
+      "title": "By weekday",
+      "avg": "~{xp} XP average",
+      "empty": "No activity in this window."
+    },
+    "streakPanel": {
+      "title": "Streaks & habits",
+      "current": "current streak",
+      "record": "record",
+      "active": "active",
+      "checkins": "check-ins",
+      "rate30d": "30-day check-in rate"
+    },
+    "bands": {
+      "title": "Activity by time of day",
+      "night": "Night",
+      "morning": "Morning",
+      "afternoon": "Afternoon",
+      "evening": "Evening"
+    },
+    "recent": {
+      "title": "Recent days"
     }
   },
   "notesPage": {

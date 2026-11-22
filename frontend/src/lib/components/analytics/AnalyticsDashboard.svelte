@@ -21,21 +21,24 @@
   import ConsistencyHeatmap from './ConsistencyHeatmap.svelte';
   import ProductivityTrend from './ProductivityTrend.svelte';
   import ActivityClock from './ActivityClock.svelte';
+  import WeekdayBars from './WeekdayBars.svelte';
+  import ActivityBands from './ActivityBands.svelte';
+  import StreakPanel from './StreakPanel.svelte';
+  import RecentDays from './RecentDays.svelte';
   import InsightPanel from './InsightPanel.svelte';
   import MoodProductivity from './MoodProductivity.svelte';
   import XpSources from './XpSources.svelte';
   import GoalsOverview from './GoalsOverview.svelte';
   import GithubActivity from './GithubActivity.svelte';
 
-  // Holistic analytics dashboard (#1499) — top stats bar + a full-width
-  // carousel of chart views (replicates the dashboard module-carousel
-  // pattern: {#key} + fly with a direction-aware slide).
+  // Holistic analytics dashboard (#1499) — vertical KPI rail + a bento
+  // carousel: every slide composes a hero chart with auxiliary tiles and
+  // a deterministic-insights panel so the viewport is always filled.
   const SLIDES = [
     { id: 'consistency', label: 'goalsAnalytics.slides.consistency' },
     { id: 'trend', label: 'goalsAnalytics.slides.trend' },
     { id: 'seasonality', label: 'goalsAnalytics.slides.seasonality' },
     { id: 'mood', label: 'goalsAnalytics.slides.mood' },
-    { id: 'sources', label: 'goalsAnalytics.slides.sources' },
     { id: 'goals', label: 'goalsAnalytics.slides.goals' },
     { id: 'github', label: 'goalsAnalytics.slides.github' },
   ] as const;
@@ -77,6 +80,13 @@
   function goToSlide(i: number) {
     slideDir = i > slideIdx ? 1 : -1;
     slideIdx = i;
+  }
+  function onKeydown(e: KeyboardEvent) {
+    // Arrow keys navigate slides unless the user is typing in a field.
+    const el = e.target as HTMLElement;
+    if (el.closest('input, textarea, [contenteditable="true"]')) return;
+    if (e.key === 'ArrowLeft') prevSlide();
+    else if (e.key === 'ArrowRight') nextSlide();
   }
 
   async function load(days: number) {
@@ -151,7 +161,9 @@
   });
 </script>
 
-{#snippet slideContent(id: SlideId | undefined)}
+<svelte:window onkeydown={onKeydown} />
+
+{#snippet heroChart(id: SlideId | undefined)}
   {#if data}
     {#if id === 'consistency'}
       <ConsistencyHeatmap activity={data.daily_activity} days={rangeDays} />
@@ -161,8 +173,6 @@
       <ActivityClock seasonality={data.seasonality} />
     {:else if id === 'mood'}
       <MoodProductivity mood={data.mood_activity} />
-    {:else if id === 'sources'}
-      <XpSources byType={data.xp_by_type} />
     {:else if id === 'goals'}
       <GoalsOverview goals={data.goals} streaks={data.streaks} />
     {:else if id === 'github'}
@@ -171,11 +181,35 @@
   {/if}
 {/snippet}
 
+{#snippet auxTiles(id: SlideId | undefined)}
+  {#if data}
+    {#if id === 'consistency'}
+      <div class="ad-aux">
+        <StreakPanel streaks={data.streaks} />
+        <WeekdayBars activity={data.daily_activity} />
+      </div>
+    {:else if id === 'trend'}
+      <div class="ad-aux">
+        <XpSources byType={data.xp_by_type} />
+      </div>
+    {:else if id === 'seasonality'}
+      <div class="ad-aux">
+        <ActivityBands seasonality={data.seasonality} />
+        <WeekdayBars activity={data.daily_activity} />
+      </div>
+    {:else if id === 'mood' || id === 'goals'}
+      <div class="ad-aux">
+        <RecentDays activity={data.daily_activity} />
+      </div>
+    {/if}
+  {/if}
+{/snippet}
+
 <div class="ad-root">
   {#if loading}
-    <div class="ad-stats ad-stats-skeleton">
-      {#each [0, 1, 2, 3, 4] as i (i)}
-        <div class="ad-stat">
+    <div class="ad-rail ad-rail-skeleton">
+      {#each [0, 1, 2, 3, 4, 5] as i (i)}
+        <div class="ad-kpi">
           <div class="sk sk-icon"></div>
           <div class="sk sk-line"></div>
         </div>
@@ -192,106 +226,113 @@
       >
     </div>
   {:else if data}
-    <!-- Stats top bar -->
-    <div class="ad-stats">
-      <div class="ad-stat">
-        <Zap size={16} style="color: var(--xp)" />
-        <div class="ad-stat-txt">
-          <span class="ad-stat-val">{data.summary.total_xp.toLocaleString()}</span>
-          <span class="ad-stat-label">{$t('goalsAnalytics.statTotalXp')}</span>
+    <!-- Vertical KPI rail -->
+    <aside class="ad-rail">
+      <span class="ad-rail-title">{$t('goalsAnalytics.railTitle')}</span>
+
+      <div class="ad-kpi">
+        <span class="ad-kpi-icon" style="color: var(--xp)"><Zap size={15} /></span>
+        <div class="ad-kpi-txt">
+          <span class="ad-kpi-label">{$t('goalsAnalytics.statTotalXp')}</span>
+          <span class="ad-kpi-val">{data.summary.total_xp.toLocaleString()}</span>
         </div>
       </div>
-      <div class="ad-stat">
-        <Flame size={16} style="color: var(--today)" />
-        <div class="ad-stat-txt">
-          <span class="ad-stat-val">{data.streaks.current_streak}</span>
-          <span class="ad-stat-label">{$t('goalsAnalytics.statStreak')}</span>
+      <div class="ad-kpi">
+        <span class="ad-kpi-icon" style="color: var(--today)"><Flame size={15} /></span>
+        <div class="ad-kpi-txt">
+          <span class="ad-kpi-label">{$t('goalsAnalytics.statStreak')}</span>
+          <span class="ad-kpi-val">{data.streaks.current_streak}d</span>
         </div>
       </div>
-      <div class="ad-stat">
-        <CalendarCheck size={16} style="color: var(--success)" />
-        <div class="ad-stat-txt">
-          <span class="ad-stat-val">{data.summary.active_days}</span>
-          <span class="ad-stat-label">{$t('goalsAnalytics.statActiveDays')}</span>
+      <div class="ad-kpi">
+        <span class="ad-kpi-icon" style="color: var(--success)"><CalendarCheck size={15} /></span>
+        <div class="ad-kpi-txt">
+          <span class="ad-kpi-label">{$t('goalsAnalytics.statActiveDays')}</span>
+          <span class="ad-kpi-val">{data.summary.active_days}</span>
         </div>
       </div>
-      <div class="ad-stat">
-        <TrendingUp size={16} style="color: var(--link)" />
-        <div class="ad-stat-txt">
-          <span class="ad-stat-val">{Math.round(data.summary.avg_daily_xp)}</span>
-          <span class="ad-stat-label">{$t('goalsAnalytics.statAvgXp')}</span>
+      <div class="ad-kpi">
+        <span class="ad-kpi-icon" style="color: var(--link)"><TrendingUp size={15} /></span>
+        <div class="ad-kpi-txt">
+          <span class="ad-kpi-label">{$t('goalsAnalytics.statAvgXp')}</span>
+          <span class="ad-kpi-val">{Math.round(data.summary.avg_daily_xp)}</span>
         </div>
       </div>
-      <div class="ad-stat">
-        <Award size={16} style="color: var(--today)" />
-        <div class="ad-stat-txt">
-          <span class="ad-stat-val">{data.streaks.longest_streak}</span>
-          <span class="ad-stat-label">{$t('goalsAnalytics.statBestStreak')}</span>
+      <div class="ad-kpi">
+        <span class="ad-kpi-icon" style="color: var(--today)"><Award size={15} /></span>
+        <div class="ad-kpi-txt">
+          <span class="ad-kpi-label">{$t('goalsAnalytics.statBestStreak')}</span>
+          <span class="ad-kpi-val">{data.streaks.longest_streak}d</span>
         </div>
       </div>
-      <div class="ad-stat">
-        <Trophy size={16} style="color: var(--xp)" />
-        <div class="ad-stat-txt">
-          <span class="ad-stat-val ad-stat-best">{bestDayLabel}</span>
-          <span class="ad-stat-label">{$t('goalsAnalytics.statBestDay')}</span>
+      <div class="ad-kpi">
+        <span class="ad-kpi-icon" style="color: var(--xp)"><Trophy size={15} /></span>
+        <div class="ad-kpi-txt">
+          <span class="ad-kpi-label">{$t('goalsAnalytics.statBestDay')}</span>
+          <span class="ad-kpi-val ad-kpi-best">{bestDayLabel}</span>
         </div>
       </div>
 
+      <div class="ad-rail-sep"></div>
+
       <!-- Global analysis window — re-windows every slide (#1499) -->
+      <span class="ad-range-label">{$t('goalsAnalytics.rangeLabel')}</span>
       <div class="ad-range" role="group" aria-label={$t('goalsAnalytics.rangeLabel')}>
-        <span class="ad-range-label">{$t('goalsAnalytics.rangeLabel')}</span>
         {#each RANGES as r (r)}
           <button
             type="button"
             class="ad-range-btn"
             class:active={rangeDays === r}
-            onclick={() => setRangeDays(r)}>{r === 365 ? '1y' : `${r}d`}</button
+            onclick={() => setRangeDays(r)}
+            >{$t(`goalsAnalytics.range${r}`)}</button
           >
         {/each}
       </div>
-    </div>
+    </aside>
 
-    <!-- Slide carousel -->
+    <!-- Carousel -->
     <div class="ad-carousel">
-      <div class="ad-nav">
-        <button
-          type="button"
-          class="ad-arrow"
-          onclick={prevSlide}
-          title={$t('common.previous')}
-          aria-label={$t('common.previous')}><ChevronLeft size={16} /></button
-        >
-        <span class="ad-slide-label mono"
-          >{$t(slides[slideIdx]?.label ?? '').toUpperCase()}</span
-        >
-        <button
-          type="button"
-          class="ad-arrow"
-          onclick={nextSlide}
-          title={$t('common.next')}
-          aria-label={$t('common.next')}><ChevronRight size={16} /></button
-        >
-      </div>
-
       <div class="ad-viewport">
         {#key slideIdx}
-          <div class="ad-slide" in:fly={{ x: slideDir * 40, duration: 220, opacity: 0 }}>
-            <div class="ad-slide-chart">{@render slideContent(slides[slideIdx]?.id)}</div>
+          <div class="ad-slide" in:fly={{ x: slideDir * 48, duration: 240, opacity: 0 }}>
+            <div class="ad-slide-charts">
+              <div class="ad-hero">{@render heroChart(slides[slideIdx]?.id)}</div>
+              {@render auxTiles(slides[slideIdx]?.id)}
+            </div>
             <InsightPanel items={slideInsights} />
           </div>
         {/key}
+
+        <!-- Floating edge arrows -->
+        <button
+          type="button"
+          class="ad-arrow-float prev"
+          onclick={prevSlide}
+          title={$t('common.previous')}
+          aria-label={$t('common.previous')}><ChevronLeft size={18} /></button
+        >
+        <button
+          type="button"
+          class="ad-arrow-float next"
+          onclick={nextSlide}
+          title={$t('common.next')}
+          aria-label={$t('common.next')}><ChevronRight size={18} /></button
+        >
       </div>
 
-      <div class="ad-dots">
-        {#each slides as s, i (s.id)}
-          <button
-            type="button"
-            class="ad-dot"
-            class:active={i === slideIdx}
-            onclick={() => goToSlide(i)}
-            aria-label={$t(s.label)}
-          ></button>
-        {/each}
+      <div class="ad-foot">
+        <div class="ad-dots">
+          {#each slides as s, i (s.id)}
+            <button
+              type="button"
+              class="ad-dot"
+              class:active={i === slideIdx}
+              onclick={() => goToSlide(i)}
+              aria-label={$t(s.label)}
+            ></button>
+          {/each}
+        </div>
+        <span class="ad-counter mono">{slideIdx + 1} / {slides.length}</span>
       </div>
     </div>
   {:else}
@@ -304,80 +345,104 @@
 <style>
   .ad-root {
     display: flex;
-    flex-direction: column;
     gap: var(--s3);
     width: 100%;
     flex: 1;
     min-height: 0;
   }
 
-  /* ── Stats top bar ── */
-  .ad-stats {
+  /* ── Vertical KPI rail ── */
+  .ad-rail {
     display: flex;
-    align-items: center;
-    gap: var(--s5);
+    flex-direction: column;
+    gap: var(--s3);
+    width: 208px;
+    flex-shrink: 0;
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--r);
-    padding: var(--s3) var(--s4);
+    padding: var(--s4);
     backdrop-filter: blur(10px);
-    flex-wrap: wrap;
-    flex-shrink: 0;
+    overflow-y: auto;
   }
-  .ad-stat {
+  .ad-rail-title {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+  }
+  .ad-kpi {
     display: flex;
     align-items: center;
     gap: 10px;
-    flex: 1;
-    min-width: 120px;
-  }
-  .ad-stat-txt {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
     min-width: 0;
   }
-  .ad-stat-val {
-    font-size: 18px;
+  .ad-kpi-icon {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    background: color-mix(in srgb, currentColor 12%, transparent);
+    flex-shrink: 0;
+  }
+  .ad-kpi-txt {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+  }
+  .ad-kpi-label {
+    font-size: 8px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .ad-kpi-val {
+    font-size: 16px;
     font-weight: 700;
     font-family: var(--font-mono);
-    line-height: 1;
+    line-height: 1.15;
     color: var(--text-primary);
   }
-  .ad-stat-best {
-    font-size: 13px;
+  .ad-kpi-best {
+    font-size: 11px;
     line-height: 1.3;
   }
-  .ad-stat-label {
-    font-size: 9px;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-  }
-
-  /* ── Global range selector ── */
-  .ad-range {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    margin-left: auto;
+  .ad-rail-sep {
+    height: 1px;
+    background: var(--border);
+    margin: var(--s1) 0;
+    flex-shrink: 0;
   }
   .ad-range-label {
-    font-size: 9px;
+    font-size: 8px;
     color: var(--text-muted);
     text-transform: uppercase;
-    letter-spacing: 0.06em;
-    margin-right: 2px;
+    letter-spacing: 0.07em;
+    font-family: var(--font-mono);
+  }
+  .ad-range {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
   }
   .ad-range-btn {
-    padding: 3px 9px;
+    padding: 6px 10px;
     border: 1px solid var(--border);
-    border-radius: 999px;
+    border-radius: 8px;
     background: transparent;
     color: var(--text-muted);
     font-size: 10px;
+    font-weight: 600;
     font-family: var(--font-mono);
     cursor: pointer;
+    text-align: left;
     transition: all 0.15s;
   }
   .ad-range-btn:hover {
@@ -396,39 +461,8 @@
     flex-direction: column;
     gap: var(--s2);
     flex: 1;
+    min-width: 0;
     min-height: 0;
-  }
-  .ad-nav {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--s4);
-  }
-  .ad-arrow {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 26px;
-    height: 26px;
-    border-radius: 50%;
-    border: 1px solid var(--border);
-    background: var(--surface);
-    color: var(--text-muted);
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-  .ad-arrow:hover {
-    color: var(--xp);
-    border-color: var(--xp);
-    background: color-mix(in srgb, var(--xp) 10%, transparent);
-  }
-  .ad-slide-label {
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.12em;
-    color: var(--text-secondary);
-    min-width: 180px;
-    text-align: center;
   }
   .ad-viewport {
     position: relative;
@@ -438,24 +472,81 @@
   .ad-slide {
     position: absolute;
     inset: 0;
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 292px;
     gap: var(--s3);
     min-height: 320px;
   }
-  .ad-slide-chart {
-    flex: 1;
+  .ad-slide-charts {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s3);
     min-width: 0;
+    min-height: 0;
+  }
+  .ad-hero {
+    flex: 1;
+    min-height: 0;
     display: flex;
   }
-  .ad-slide-chart > :global(*) {
+  .ad-hero > :global(*) {
     flex: 1;
     min-width: 0;
   }
-  @media (max-width: 700px) {
-    .ad-slide {
-      position: relative;
-      flex-direction: column;
-    }
+  /* Aux tiles row — present on slides that render it. */
+  .ad-aux {
+    flex: 0 0 clamp(140px, 30%, 200px);
+    min-height: 0;
+    display: flex;
+    gap: var(--s3);
+  }
+  .ad-aux > :global(*) {
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* Floating edge arrows — overlay style (lightbox pattern). */
+  .ad-arrow-float {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 5;
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--surface) 82%, transparent);
+    backdrop-filter: blur(8px);
+    color: var(--text-secondary);
+    cursor: pointer;
+    opacity: 0.55;
+    transition:
+      opacity 0.15s,
+      color 0.15s,
+      border-color 0.15s,
+      transform 0.15s;
+  }
+  .ad-arrow-float.prev {
+    left: 8px;
+  }
+  .ad-arrow-float.next {
+    right: 8px;
+  }
+  .ad-arrow-float:hover {
+    opacity: 1;
+    color: var(--xp);
+    border-color: var(--xp);
+    transform: translateY(-50%) scale(1.06);
+  }
+
+  .ad-foot {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--s3);
+    flex-shrink: 0;
   }
   .ad-dots {
     display: flex;
@@ -479,6 +570,12 @@
     background: var(--xp);
     transform: scale(1.25);
   }
+  .ad-counter {
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--text-muted);
+    letter-spacing: 0.08em;
+  }
 
   /* ── Skeleton / error ── */
   .sk {
@@ -500,29 +597,33 @@
       background-position: -200% 0;
     }
   }
-  .ad-stats-skeleton {
-    min-height: 62px;
+  .ad-rail-skeleton {
+    padding: var(--s4);
   }
   .sk-icon {
-    width: 22px;
-    height: 22px;
-    border-radius: 50%;
+    width: 26px;
+    height: 26px;
+    border-radius: 8px;
+    flex-shrink: 0;
   }
   .sk-line {
     width: 80px;
     height: 14px;
   }
   .ad-slide-skeleton {
-    min-height: 340px;
+    flex: 1;
     border-radius: var(--r);
   }
   .ad-loading-label {
+    position: absolute;
+    bottom: 12px;
     align-self: center;
     font-size: 10px;
     color: var(--text-muted);
     font-family: var(--font-mono);
   }
   .ad-error {
+    flex: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -547,5 +648,32 @@
   .ad-retry:hover {
     color: var(--xp);
     border-color: var(--xp);
+  }
+
+  @media (max-width: 900px) {
+    .ad-root {
+      flex-direction: column;
+    }
+    .ad-rail {
+      width: 100%;
+      flex-direction: row;
+      flex-wrap: wrap;
+      align-items: center;
+      overflow-x: auto;
+    }
+    .ad-rail-sep {
+      display: none;
+    }
+    .ad-range {
+      flex-direction: row;
+      margin-left: auto;
+    }
+    .ad-slide {
+      position: relative;
+      grid-template-columns: 1fr;
+    }
+    .ad-arrow-float {
+      display: none;
+    }
   }
 </style>
