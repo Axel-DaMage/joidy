@@ -164,11 +164,28 @@ export function escapeHtml(text: string): string {
  */
 const WIKILINK_TOKEN = '@@JOIDY_WIKILINK_';
 
+/**
+ * `[[Contact:Name]]` (case-insensitive prefix) links to a Google contact
+ * instead of a note (#43). The rendered span keeps class `wikilink` plus
+ * `wikilink-contact` so click handlers can route to /contactos; `data-title`
+ * carries the bare contact name (prefix stripped), while the visible text
+ * stays exactly what the author wrote (alias or full title).
+ */
+const CONTACT_LINK_PREFIX = /^contact\s*:\s*/i;
+
 function extractWikilinks(md: string): { md: string; spans: string[] } {
   const spans: string[] = [];
   const out = md.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_match, title, alias) => {
+    const rawTitle = String(title).trim();
     const display = escapeHtml(alias || title);
-    spans.push(`<span class="wikilink" data-title="${escapeHtml(title.trim())}">${display}</span>`);
+    const contactName = rawTitle.replace(CONTACT_LINK_PREFIX, '').trim();
+    if (contactName !== rawTitle && contactName !== '') {
+      spans.push(
+        `<span class="wikilink wikilink-contact" data-title="${escapeHtml(contactName)}">${display}</span>`
+      );
+    } else {
+      spans.push(`<span class="wikilink" data-title="${escapeHtml(rawTitle)}">${display}</span>`);
+    }
     return `${WIKILINK_TOKEN}${spans.length - 1}@@`;
   });
   return { md: out, spans };

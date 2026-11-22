@@ -131,6 +131,34 @@ describe('renderMarkdown — wikilinks (Obsidian)', () => {
     expect(result).not.toContain('<script>');
     expect(result).toContain('&lt;script&gt;');
   });
+
+  it('marks [[Contact:Name]] as a contact wikilink with the bare name (#43)', () => {
+    const result = renderMarkdown('Call [[Contact:Ada Lovelace]] tomorrow');
+    expect(result).toContain('wikilink-contact');
+    // data-title carries the stripped contact name for /contactos?q= routing.
+    expect(result).toContain('data-title="Ada Lovelace"');
+    // Visible text stays exactly what the author wrote.
+    expect(result).toContain('Contact:Ada Lovelace');
+  });
+
+  it('supports alias and case-insensitive prefix on contact links', () => {
+    const result = renderMarkdown('See [[contact:grace|Grace H.]]');
+    expect(result).toContain('wikilink-contact');
+    expect(result).toContain('data-title="grace"');
+    expect(result).toContain('Grace H.');
+  });
+
+  it('keeps [[Contact]] (no colon) as a regular note wikilink', () => {
+    const result = renderMarkdown('See [[Contact]]');
+    expect(result).toContain('class="wikilink"');
+    expect(result).not.toContain('wikilink-contact');
+    expect(result).toContain('data-title="Contact"');
+  });
+
+  it('keeps [[Contact:]] (empty name) as a regular note wikilink', () => {
+    const result = renderMarkdown('See [[Contact:]]');
+    expect(result).not.toContain('wikilink-contact');
+  });
 });
 
 describe('renderMarkdown — sanitization (DOMPurify)', () => {
