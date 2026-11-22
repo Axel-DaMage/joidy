@@ -572,7 +572,7 @@ def debug_info():
     # Recent errors
     try:
         from database import SessionLocal
-        from models.embedding_failures import EmbeddingFailure
+        from models.note import EmbeddingFailure
 
         with SessionLocal() as db:
             recent_failures = db.query(EmbeddingFailure).order_by(EmbeddingFailure.last_error.desc()).limit(5).all()
