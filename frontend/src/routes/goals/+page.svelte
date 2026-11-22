@@ -2500,6 +2500,13 @@
     overflow: hidden;
     min-height: 0;
   }
+  /* The analytics dashboard fills the whole tab height (#1499). */
+  .goals-body.full-width .tab-content {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
 
   .today-layout {
     display: grid;

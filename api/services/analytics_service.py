@@ -11,6 +11,9 @@ as activity timestamps.
 import math
 from datetime import UTC, date, datetime, time, timedelta
 
+from sqlalchemy import case, extract, func
+from sqlalchemy.orm import Session
+
 from models.gamification import UserStats, XPEvent
 from models.github import GitHubEvent, GitHubEventType, GitHubRepo, GitHubRepoStatus
 from models.goal import Goal, GoalState, GoalTemporality
@@ -18,14 +21,16 @@ from models.mood_entry import MoodEntry
 from models.note import Note
 from models.personal_streaks import PersonalStreak, StreakCheckIn
 from services.timezone_utils import get_local_today
-from sqlalchemy import case, extract, func
-from sqlalchemy.orm import Session
 
 GITHUB_WEEKS = 12
 CHECKIN_RATE_WINDOW_DAYS = 30
 
 # Goal states counted as "abandoned" in the goals funnel.
-_ABANDONED_STATES = {GoalState.CANCELLED.value, GoalState.PAUSED.value, GoalState.FAILED.value}
+_ABANDONED_STATES = {
+    GoalState.CANCELLED.value,
+    GoalState.PAUSED.value,
+    GoalState.FAILED.value,
+}
 
 # GitHub webhook event types → output bucket keys (issue_comment → comments).
 _EVENT_KEY = {
@@ -38,10 +43,8 @@ _EVENT_KEY = {
 
 def get_overview(db: Session, user_id: int, days: int = 180) -> dict:
     """Aggregate the holistic analytics overview for the last ``days`` days."""
-    if days < 1:
-        days = 1
-    if days > 366:
-        days = 366
+    days = max(days, 1)
+    days = min(days, 366)
 
     now = datetime.now(UTC)
     since = now - timedelta(days=days)
@@ -51,6 +54,7 @@ def get_overview(db: Session, user_id: int, days: int = 180) -> dict:
 
     stats = db.query(UserStats).filter(UserStats.id == 1).first()
     daily_activity, xp_map = _daily_activity(db, days, now, since)
+    prev = _prev_window(db, since, days)
 
     return {
         "days": days,
@@ -61,11 +65,13 @@ def get_overview(db: Session, user_id: int, days: int = 180) -> dict:
         "goals": _goals(db),
         "streaks": _streaks(db, stats),
         "github": _github(db, today),
-        "summary": _summary(daily_activity, stats, days),
+        "summary": _summary(daily_activity, stats, days, prev),
     }
 
 
-def _daily_activity(db: Session, days: int, now: datetime, since: datetime) -> tuple[list[dict], dict[str, int]]:
+def _daily_activity(
+    db: Session, days: int, now: datetime, since: datetime
+) -> tuple[list[dict], dict[str, int]]:
     """One row per day (oldest → newest), zero-filled for inactive days.
 
     Returns the row list plus a {ISO date: xp} map reused by mood_activity.
@@ -75,12 +81,15 @@ def _daily_activity(db: Session, days: int, now: datetime, since: datetime) -> t
             func.date(XPEvent.created_at).label("d"),
             func.coalesce(func.sum(XPEvent.xp), 0).label("xp"),
             func.count(XPEvent.id).label("events"),
-            func.coalesce(func.sum(case((XPEvent.event_type == "goal_completed", 1), else_=0)), 0).label(
-                "goals_completed"
-            ),
-            func.coalesce(func.sum(case((XPEvent.event_type == "pomodoro_completed", 1), else_=0)), 0).label(
-                "pomodoros"
-            ),
+            func.coalesce(
+                func.sum(case((XPEvent.event_type == "goal_completed", 1), else_=0)), 0
+            ).label("goals_completed"),
+            func.coalesce(
+                func.sum(
+                    case((XPEvent.event_type == "pomodoro_completed", 1), else_=0)
+                ),
+                0,
+            ).label("pomodoros"),
         )
         .filter(XPEvent.created_at >= since)
         .group_by(func.date(XPEvent.created_at))
@@ -154,11 +163,15 @@ def _seasonality(db: Session, since: datetime) -> dict:
         hour = int(r.hour)
         key = (weekday, hour)
         counts[key] = counts.get(key, 0) + int(r.c)
-    cells = [{"weekday": w, "hour": h, "count": c} for (w, h), c in sorted(counts.items())]
+    cells = [
+        {"weekday": w, "hour": h, "count": c} for (w, h), c in sorted(counts.items())
+    ]
     return {"cells": cells, "max": max((c["count"] for c in cells), default=0)}
 
 
-def _mood_activity(db: Session, user_id: int, window_start: date, xp_map: dict[str, int]) -> dict:
+def _mood_activity(
+    db: Session, user_id: int, window_start: date, xp_map: dict[str, int]
+) -> dict:
     """Daily mood joined with same-day XP, plus the Pearson correlation."""
     entries = (
         db.query(MoodEntry)
@@ -200,7 +213,9 @@ def _pearson(xs: list[float], ys: list[float]) -> float | None:
 
 def _goals(db: Session) -> dict:
     """Goal counts by state, per-temporality aggregates, and lifecycle funnel."""
-    rows = db.query(Goal.state, Goal.temporality, Goal.current_value, Goal.target_value).all()
+    rows = db.query(
+        Goal.state, Goal.temporality, Goal.current_value, Goal.target_value
+    ).all()
 
     by_state: dict[str, int] = {}
     temp_groups: dict[str, dict] = {}
@@ -208,7 +223,9 @@ def _goals(db: Session) -> dict:
 
     for state, temporality, current_value, target_value in rows:
         state_val = state.value if hasattr(state, "value") else str(state)
-        temp_val = temporality.value if hasattr(temporality, "value") else str(temporality)
+        temp_val = (
+            temporality.value if hasattr(temporality, "value") else str(temporality)
+        )
 
         by_state[state_val] = by_state.get(state_val, 0) + 1
         if state_val != GoalState.INBOX.value:
@@ -218,7 +235,9 @@ def _goals(db: Session) -> dict:
         if state_val in _ABANDONED_STATES:
             funnel["abandoned"] += 1
 
-        group = temp_groups.setdefault(temp_val, {"total": 0, "completed": 0, "failed": 0, "progress": []})
+        group = temp_groups.setdefault(
+            temp_val, {"total": 0, "completed": 0, "failed": 0, "progress": []}
+        )
         group["total"] += 1
         if state_val == GoalState.COMPLETED.value:
             group["completed"] += 1
@@ -232,7 +251,11 @@ def _goals(db: Session) -> dict:
         group = temp_groups.get(temp.value)
         if not group:
             continue
-        avg = round(sum(group["progress"]) / len(group["progress"]), 1) if group["progress"] else 0.0
+        avg = (
+            round(sum(group["progress"]) / len(group["progress"]), 1)
+            if group["progress"]
+            else 0.0
+        )
         by_temporality.append(
             {
                 "temporality": temp.value,
@@ -247,7 +270,8 @@ def _goals(db: Session) -> dict:
         "by_state": by_state,
         "by_temporality": by_temporality,
         "funnel": [
-            {"stage": stage, "count": funnel[stage]} for stage in ("created", "activated", "completed", "abandoned")
+            {"stage": stage, "count": funnel[stage]}
+            for stage in ("created", "activated", "completed", "abandoned")
         ],
     }
 
@@ -262,7 +286,7 @@ def _streaks(db: Session, stats: UserStats | None) -> dict:
     active_freqs = [
         row[0] or 1
         for row in db.query(PersonalStreak.frequency_days)
-        .filter(PersonalStreak.is_archived == False)  # noqa: E712 -- SQLAlchemy column comparison
+        .filter(PersonalStreak.is_archived == False)
         .all()
     ]
     total_checkins = db.query(func.count(StreakCheckIn.id)).scalar() or 0
@@ -273,7 +297,7 @@ def _streaks(db: Session, stats: UserStats | None) -> dict:
         db.query(func.count(StreakCheckIn.id))
         .join(PersonalStreak, StreakCheckIn.streak_id == PersonalStreak.id)
         .filter(
-            PersonalStreak.is_archived == False,  # noqa: E712 -- SQLAlchemy column comparison
+            PersonalStreak.is_archived == False,
             StreakCheckIn.check_date >= thirty_ago,
         )
         .scalar()
@@ -296,7 +320,12 @@ def _github(db: Session, today: date) -> dict:
     ``available`` is true when any repo is ACTIVE or any event has been
     received; when unavailable the weekly list is empty.
     """
-    has_repo = db.query(GitHubRepo.id).filter(GitHubRepo.status == GitHubRepoStatus.ACTIVE).first() is not None
+    has_repo = (
+        db.query(GitHubRepo.id)
+        .filter(GitHubRepo.status == GitHubRepoStatus.ACTIVE)
+        .first()
+        is not None
+    )
     has_events = db.query(GitHubEvent.id).first() is not None
     if not (has_repo or has_events):
         return {"available": False, "weekly": []}
@@ -320,8 +349,12 @@ def _github(db: Session, today: date) -> dict:
     for r in rows:
         event_day = date.fromisoformat(str(r.d)[:10])
         week_start = (event_day - timedelta(days=event_day.weekday())).isoformat()
-        bucket = buckets.setdefault(week_start, {"pushes": 0, "pull_requests": 0, "issues": 0, "comments": 0})
-        event_type = r.event_type.value if hasattr(r.event_type, "value") else str(r.event_type)
+        bucket = buckets.setdefault(
+            week_start, {"pushes": 0, "pull_requests": 0, "issues": 0, "comments": 0}
+        )
+        event_type = (
+            r.event_type.value if hasattr(r.event_type, "value") else str(r.event_type)
+        )
         key = _EVENT_KEY.get(event_type)
         if key:
             bucket[key] += int(r.c)
@@ -342,13 +375,40 @@ def _github(db: Session, today: date) -> dict:
     return {"available": True, "weekly": weekly}
 
 
-def _summary(daily_activity: list[dict], stats: UserStats | None, days: int) -> dict:
+def _prev_window(db: Session, since: datetime, days: int) -> dict:
+    """Totals for the window of the same length immediately before ``since``.
+
+    Powers plain-language period-over-period insights in the dashboard
+    ("this window vs the previous one").
+    """
+    prev_start = since - timedelta(days=days)
+    rows = (
+        db.query(
+            func.date(XPEvent.created_at).label("d"), func.sum(XPEvent.xp).label("xp")
+        )
+        .filter(XPEvent.created_at >= prev_start, XPEvent.created_at < since)
+        .group_by(func.date(XPEvent.created_at))
+        .all()
+    )
+    return {
+        "prev_total_xp": int(sum(int(r.xp or 0) for r in rows)),
+        "prev_active_days": len(rows),
+    }
+
+
+def _summary(
+    daily_activity: list[dict], stats: UserStats | None, days: int, prev: dict
+) -> dict:
     """Headline figures derived from the daily series + UserStats singleton."""
     total_window_xp = sum(row["xp"] for row in daily_activity)
     best = max(daily_activity, key=lambda row: row["xp"])
     return {
         "total_xp": stats.total_xp if stats else 0,
+        "window_xp": total_window_xp,
         "active_days": sum(1 for row in daily_activity if row["events"] > 0),
         "avg_daily_xp": round(total_window_xp / days, 1),
-        "best_day": {"date": best["date"], "xp": best["xp"]} if best["xp"] > 0 else None,
+        "best_day": {"date": best["date"], "xp": best["xp"]}
+        if best["xp"] > 0
+        else None,
+        **prev,
     }

@@ -13,12 +13,15 @@
   import { api, type AnalyticsOverview } from '$lib/api';
   import { loadUserSettings, patchUserSettings } from '$lib/utils/userSettings';
   import { parseLocalDate } from '$lib/utils/date';
-  import { getLocale } from '$lib/stores/locale';
+  import { locale, getLocale } from '$lib/stores/locale';
+  import { use24HourClock } from '$lib/stores/settings';
+  import { insightsFor, type InsightCtx } from '$lib/utils/insights';
   import { logger } from '$lib/utils/logger';
   import { t } from 'svelte-i18n';
   import ConsistencyHeatmap from './ConsistencyHeatmap.svelte';
   import ProductivityTrend from './ProductivityTrend.svelte';
-  import SeasonalityMatrix from './SeasonalityMatrix.svelte';
+  import ActivityClock from './ActivityClock.svelte';
+  import InsightPanel from './InsightPanel.svelte';
   import MoodProductivity from './MoodProductivity.svelte';
   import XpSources from './XpSources.svelte';
   import GoalsOverview from './GoalsOverview.svelte';
@@ -98,6 +101,32 @@
     void load(days);
   }
 
+  // Locale/format context shared by the deterministic insight rules —
+  // every derived that reads it re-runs on locale/clock-format changes.
+  let insightCtx = $derived<InsightCtx>({
+    t: (key, opts) => $t(key, opts),
+    fmtDate: (iso) =>
+      new Intl.DateTimeFormat($locale, { day: 'numeric', month: 'short' }).format(
+        parseLocalDate(iso)
+      ),
+    fmtWeekday: (i) =>
+      new Intl.DateTimeFormat($locale, { weekday: 'long' }).format(new Date(2024, 0, 1 + i)),
+    fmtHour: (h) =>
+      $use24HourClock
+        ? `${String(h).padStart(2, '0')}:00`
+        : h === 0
+          ? '12am'
+          : h < 12
+            ? `${h}am`
+            : h === 12
+              ? '12pm'
+              : `${h - 12}pm`,
+  });
+
+  let slideInsights = $derived(
+    data ? insightsFor(slides[slideIdx]?.id ?? 'consistency', data, insightCtx) : []
+  );
+
   let bestDayLabel = $derived.by(() => {
     const best = data?.summary.best_day;
     if (!best) return '—';
@@ -129,7 +158,7 @@
     {:else if id === 'trend'}
       <ProductivityTrend activity={data.daily_activity} />
     {:else if id === 'seasonality'}
-      <SeasonalityMatrix seasonality={data.seasonality} />
+      <ActivityClock seasonality={data.seasonality} />
     {:else if id === 'mood'}
       <MoodProductivity mood={data.mood_activity} />
     {:else if id === 'sources'}
@@ -247,7 +276,8 @@
       <div class="ad-viewport">
         {#key slideIdx}
           <div class="ad-slide" in:fly={{ x: slideDir * 40, duration: 220, opacity: 0 }}>
-            {@render slideContent(slides[slideIdx]?.id)}
+            <div class="ad-slide-chart">{@render slideContent(slides[slideIdx]?.id)}</div>
+            <InsightPanel items={slideInsights} />
           </div>
         {/key}
       </div>
@@ -277,6 +307,7 @@
     flex-direction: column;
     gap: var(--s3);
     width: 100%;
+    flex: 1;
     min-height: 0;
   }
 
@@ -364,6 +395,7 @@
     display: flex;
     flex-direction: column;
     gap: var(--s2);
+    flex: 1;
     min-height: 0;
   }
   .ad-nav {
@@ -400,16 +432,30 @@
   }
   .ad-viewport {
     position: relative;
+    flex: 1;
     min-height: 0;
   }
   .ad-slide {
-    width: 100%;
-    min-height: 340px;
+    position: absolute;
+    inset: 0;
     display: flex;
+    gap: var(--s3);
+    min-height: 320px;
   }
-  .ad-slide > :global(*) {
+  .ad-slide-chart {
     flex: 1;
     min-width: 0;
+    display: flex;
+  }
+  .ad-slide-chart > :global(*) {
+    flex: 1;
+    min-width: 0;
+  }
+  @media (max-width: 700px) {
+    .ad-slide {
+      position: relative;
+      flex-direction: column;
+    }
   }
   .ad-dots {
     display: flex;

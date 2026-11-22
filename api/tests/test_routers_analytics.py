@@ -11,6 +11,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 from fastapi.testclient import TestClient
+
 from models.gamification import UserStats, XPEvent
 from models.github import GitHubEvent, GitHubEventType, GitHubRepo
 from models.goal import Goal, GoalState, GoalTemporality
@@ -24,7 +25,15 @@ def test_dashboard_shape_empty_db(client: TestClient):
     data = response.json()
     for key in ("system", "activity", "mood", "ai_usage", "usage"):
         assert key in data
-    for key in ("notes", "tags", "goals", "skills", "total_xp", "current_streak", "xp_events_week"):
+    for key in (
+        "notes",
+        "tags",
+        "goals",
+        "skills",
+        "total_xp",
+        "current_streak",
+        "xp_events_week",
+    ):
         assert key in data["system"]
     assert len(data["activity"]["days"]) == 30
 
@@ -82,7 +91,10 @@ def test_dashboard_ai_usage_degrades_not_500(client: TestClient, monkeypatch):
 
 
 def test_track_event_valid(client: TestClient):
-    response = client.post("/analytics/track", json={"event_type": "page_view", "event_data": {"path": "/notes"}})
+    response = client.post(
+        "/analytics/track",
+        json={"event_type": "page_view", "event_data": {"path": "/notes"}},
+    )
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "ok"
@@ -90,7 +102,9 @@ def test_track_event_valid(client: TestClient):
 
 
 def test_track_event_invalid_type(client: TestClient):
-    response = client.post("/analytics/track", json={"event_type": "definitely_not_valid"})
+    response = client.post(
+        "/analytics/track", json={"event_type": "definitely_not_valid"}
+    )
     assert response.status_code == 422
 
 
@@ -101,12 +115,21 @@ def test_track_event_missing_type(client: TestClient):
 
 def test_usage_summary_aggregates(client: TestClient):
     client.post("/analytics/track", json={"event_type": "session_start"})
-    client.post("/analytics/track", json={"event_type": "feature_use", "event_data": {"feature": "pomodoro"}})
+    client.post(
+        "/analytics/track",
+        json={"event_type": "feature_use", "event_data": {"feature": "pomodoro"}},
+    )
 
     response = client.get("/analytics/usage?days=7")
     assert response.status_code == 200
     data = response.json()
-    for key in ("total_events", "session_count", "active_days", "top_features", "top_pages"):
+    for key in (
+        "total_events",
+        "session_count",
+        "active_days",
+        "top_features",
+        "top_pages",
+    ):
         assert key in data
     assert data["total_events"] >= 2
     assert data["session_count"] >= 1
@@ -222,6 +245,24 @@ def test_overview_daily_aggregation(client: TestClient, db_session):
     assert summary["best_day"] == {"date": today_row["date"], "xp": 125}
 
 
+def test_overview_previous_window_totals(client: TestClient, db_session):
+    """summary carries same-length previous-period totals (#1499)."""
+    prev_day = datetime.now(UTC) - timedelta(days=10)  # inside days=7 prev window
+    db_session.add_all(
+        [
+            XPEvent(event_type="note_created", xp=40, created_at=prev_day),
+            XPEvent(event_type="note_edited", xp=5, created_at=prev_day),
+            XPEvent(event_type="note_created", xp=10),  # current window
+        ]
+    )
+    db_session.commit()
+
+    summary = client.get("/analytics/overview?days=7").json()["summary"]
+    assert summary["window_xp"] == 10
+    assert summary["prev_total_xp"] == 45
+    assert summary["prev_active_days"] == 1
+
+
 def test_overview_xp_by_type_sorted(client: TestClient, db_session):
     db_session.add_all(
         [
@@ -234,7 +275,9 @@ def test_overview_xp_by_type_sorted(client: TestClient, db_session):
     db_session.commit()
 
     xp_by_type = client.get("/analytics/overview?days=7").json()["xp_by_type"]
-    assert [t["xp"] for t in xp_by_type] == sorted((t["xp"] for t in xp_by_type), reverse=True)
+    assert [t["xp"] for t in xp_by_type] == sorted(
+        (t["xp"] for t in xp_by_type), reverse=True
+    )
     goal = next(t for t in xp_by_type if t["type"] == "goal_completed")
     assert goal["xp"] == 100
     assert goal["count"] == 2
@@ -272,7 +315,9 @@ def test_overview_pearson_perfect_correlation(client: TestClient, db_session):
     for i in range(4):
         moment = now - timedelta(days=3 - i)
         db_session.add(MoodEntry(user_id=1, score=i + 1, entry_date=moment.date()))
-        db_session.add(XPEvent(event_type="note_created", xp=(i + 1) * 10, created_at=moment))
+        db_session.add(
+            XPEvent(event_type="note_created", xp=(i + 1) * 10, created_at=moment)
+        )
     db_session.commit()
 
     mood = client.get("/analytics/overview?days=7").json()["mood_activity"]
@@ -348,10 +393,26 @@ def test_overview_github_weekly(client: TestClient, db_session):
     now = datetime.now(UTC).replace(tzinfo=None)
     db_session.add_all(
         [
-            GitHubEvent(repo_id=repo.id, event_type=GitHubEventType.PUSH, action="push", sender="u", created_at=now),
-            GitHubEvent(repo_id=repo.id, event_type=GitHubEventType.PUSH, action="push", sender="u", created_at=now),
             GitHubEvent(
-                repo_id=repo.id, event_type=GitHubEventType.ISSUE_COMMENT, action="created", sender="u", created_at=now
+                repo_id=repo.id,
+                event_type=GitHubEventType.PUSH,
+                action="push",
+                sender="u",
+                created_at=now,
+            ),
+            GitHubEvent(
+                repo_id=repo.id,
+                event_type=GitHubEventType.PUSH,
+                action="push",
+                sender="u",
+                created_at=now,
+            ),
+            GitHubEvent(
+                repo_id=repo.id,
+                event_type=GitHubEventType.ISSUE_COMMENT,
+                action="created",
+                sender="u",
+                created_at=now,
             ),
         ]
     )

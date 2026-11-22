@@ -864,9 +864,14 @@ export interface AnalyticsOverview {
   };
   summary: {
     total_xp: number;
+    /** XP earned inside the requested window. */
+    window_xp: number;
     active_days: number;
     avg_daily_xp: number;
     best_day: { date: string; xp: number } | null;
+    /** Totals for the window of the same length immediately before this one. */
+    prev_total_xp: number;
+    prev_active_days: number;
   };
 }
 
