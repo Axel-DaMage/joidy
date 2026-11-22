@@ -46,9 +46,18 @@ const CACHE_KEY = 'joidy_notes_cache';
 
 function saveNotesCache(data: Note[]) {
   if (!browser) return;
-  try {
-    sessionStorage.setItem(CACHE_KEY, JSON.stringify({ data, ts: Date.now() }));
-  } catch {}
+  // Serializing ~200 notes is synchronous main-thread work; defer it to idle
+  // time so WS-triggered refetches don't stall navigation (#1494).
+  const write = () => {
+    try {
+      sessionStorage.setItem(CACHE_KEY, JSON.stringify({ data, ts: Date.now() }));
+    } catch {}
+  };
+  if ('requestIdleCallback' in window) {
+    window.requestIdleCallback(write, { timeout: 2000 });
+  } else {
+    setTimeout(write, 0);
+  }
 }
 
 function loadNotesCache(): Note[] | null {
