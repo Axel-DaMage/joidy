@@ -654,6 +654,97 @@ class TestSyncRaces(unittest.IsolatedAsyncioTestCase):
             finally:
                 log2.close()
 
+    async def test_failed_sync_keeps_event_pending_for_next_startup(self):
+        """#1534: exhausted retries must not remove the pending event —
+        the note is retried on the next startup instead of silently lost."""
+        with tempfile.TemporaryDirectory() as vault:
+            md = Path(vault) / "flaky.md"
+            _write_md(md, "Flaky", "body that never syncs")
+
+            log = PersistentEventLog(Path(vault) / "events.db")
+            try:
+                log.add(str(md), Change.added)
+                # Every lookup GET answers 503 -> import_or_update_note
+                # exhausts its retries and reports failure.
+                client = _make_client([("GET", FakeResponse(503))] * 3)
+                with (
+                    patch("watchers.vault_watcher.get_auth_token", new=AsyncMock(return_value="token")),
+                    patch.object(vault_watcher.settings, "vault_path", vault),
+                    patch("asyncio.sleep", new=AsyncMock()),
+                ):
+                    await vault_watcher._process_batch({str(md): Change.added}, client, "token", log)
+
+                assert [p for p, _ in log.pending()] == [str(md)]
+                assert str(md) not in vault_watcher._fingerprints
+            finally:
+                log.close()
+
+    async def test_failed_delete_keeps_event_pending_for_next_startup(self):
+        """#1534: a delete whose attempts all fail keeps the event — the
+        note is not reported deleted while it still exists."""
+        with tempfile.TemporaryDirectory() as vault:
+            md = Path(vault) / "doomed.md"  # already gone — pure delete event
+            note = {"id": 9, "source_path": str(md), "updated_at": "t0"}
+
+            log = PersistentEventLog(Path(vault) / "events.db")
+            try:
+                log.add(str(md), Change.deleted)
+                responses = []
+                for _ in range(3):
+                    responses += [("GET", FakeResponse(200, [note])), ("DELETE", FakeResponse(503))]
+                client = _make_client(responses)
+                with (
+                    patch("watchers.vault_watcher.get_auth_token", new=AsyncMock(return_value="token")),
+                    patch.object(vault_watcher.settings, "vault_path", vault),
+                    patch("asyncio.sleep", new=AsyncMock()),
+                ):
+                    await vault_watcher._process_batch({str(md): Change.deleted}, client, "token", log)
+
+                assert [p for p, _ in log.pending()] == [str(md)]
+            finally:
+                log.close()
+
+    async def test_failed_rename_keeps_both_events_pending(self):
+        """#1534: exhausted rename retries keep BOTH events so the pair is
+        reconciled as a rename again on the next startup."""
+        with tempfile.TemporaryDirectory() as vault:
+            root = Path(vault)
+            old_path = root / "old.md"
+            new_path = root / "new.md"
+            content = _write_md(new_path, "Renamed", "same body #move")
+
+            # Seed the rename fingerprint so the batch pairs delete+add.
+            vault_watcher._fingerprints[str(old_path)] = _fingerprint(content)
+
+            log = PersistentEventLog(root / "events.db")
+            try:
+                log.add(str(old_path), Change.deleted)
+                log.add(str(new_path), Change.added)
+                client = _make_client(
+                    [
+                        # rename lookup by OLD source_path finds the note…
+                        ("GET", FakeResponse(200, [{"id": 55, "source_path": str(old_path)}])),
+                        # …but every PUT attempt fails retryably.
+                        *[("PUT", FakeResponse(503))] * 5,
+                    ]
+                )
+                with (
+                    patch("watchers.vault_watcher.get_auth_token", new=AsyncMock(return_value="token")),
+                    patch.object(vault_watcher.settings, "vault_path", vault),
+                    patch("asyncio.sleep", new=AsyncMock()),
+                ):
+                    await vault_watcher._process_batch(
+                        {str(old_path): Change.deleted, str(new_path): Change.added},
+                        client,
+                        "token",
+                        log,
+                    )
+
+                pending_paths = {p for p, _ in log.pending()}
+                assert pending_paths == {str(old_path), str(new_path)}
+            finally:
+                log.close()
+
 
 class TestTokenSingleFlight(unittest.IsolatedAsyncioTestCase):
     """AC: concurrent 401s trigger exactly one token fetch (#1302)."""
