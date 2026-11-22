@@ -75,7 +75,7 @@ def test_fetch_weekly_activity_uses_events_and_caches(monkeypatch):
     second = asyncio.run(gh.fetch_weekly_activity(TODAY))
     assert (
         first["available"] is True
-        and first["source"] == "api"
+        and first["source"] == "events"
         and first["login"] == "octo"
     )
     assert first["weekly"][-1]["pushes"] == 1
@@ -137,6 +137,91 @@ def test_fetch_weekly_activity_serves_stale_cache_on_failure(monkeypatch):
     out = asyncio.run(gh.fetch_weekly_activity(TODAY))
     assert out["available"] is True and out["stale"] is True
     assert out["weekly"][-1]["pushes"] == 1
+    gh.clear_cache()
+
+
+def test_week_starts_are_consecutive_mondays():
+    mondays = gh.week_starts(TODAY)
+    assert len(mondays) == gh.WEEKS
+    assert mondays[-1].isoformat() == CURRENT_MONDAY
+    assert all((b - a).days == 7 for a, b in zip(mondays, mondays[1:], strict=False))
+
+
+def test_graphql_query_has_one_alias_per_week_and_clamps_to_now():
+    from datetime import UTC, datetime
+
+    now = datetime(2026, 11, 22, 12, 0, tzinfo=UTC)
+    q = gh.build_graphql_query(gh.week_starts(TODAY), now)
+    assert q.count("contributionsCollection") == gh.WEEKS
+    assert "w0:" in q and f"w{gh.WEEKS - 1}:" in q
+    assert (
+        'to: "2026-11-22T12:00:00Z"' in q
+    )  # current week ends now, not Sunday 23:59:59
+
+
+def test_parse_graphql_weeks_maps_contribution_fields():
+    mondays = gh.week_starts(TODAY)
+    viewer = {
+        "login": "octo",
+        f"w{gh.WEEKS - 1}": {
+            "totalCommitContributions": 7,
+            "totalPullRequestContributions": 2,
+            "totalIssueContributions": 3,
+            "totalPullRequestReviewContributions": 4,
+        },
+    }
+    weekly = gh.parse_graphql_weeks(viewer, mondays)
+    assert weekly[-1] == {
+        "week_start": CURRENT_MONDAY,
+        "pushes": 7,
+        "pull_requests": 2,
+        "issues": 3,
+        "comments": 4,
+    }
+    assert weekly[0]["pushes"] == 0
+
+
+def test_fetch_weekly_activity_prefers_graphql_with_token(monkeypatch):
+    gh.clear_cache()
+    monkeypatch.setattr(gh.settings, "github_token", "t0ken")
+    monkeypatch.setattr(gh.settings, "github_username", "")
+
+    async def fake_graphql(today, now):
+        return "octo", gh.parse_graphql_weeks({}, gh.week_starts(today))
+
+    async def no_events(login):
+        raise AssertionError("Events API must not be used when GraphQL works")
+
+    monkeypatch.setattr(gh, "fetch_graphql_weekly", fake_graphql)
+    monkeypatch.setattr(gh, "fetch_user_events", no_events)
+    out = asyncio.run(gh.fetch_weekly_activity(TODAY))
+    assert (
+        out["source"] == "graphql"
+        and out["login"] == "octo"
+        and out["truncated"] is False
+    )
+    gh.clear_cache()
+
+
+def test_fetch_weekly_activity_falls_back_to_events_when_graphql_fails(monkeypatch):
+    gh.clear_cache()
+    monkeypatch.setattr(gh.settings, "github_token", "t0ken")
+    monkeypatch.setattr(gh.settings, "github_username", "octo")
+
+    async def bad_graphql(today, now):
+        raise RuntimeError("graphql down")
+
+    async def fake_events(login):
+        return [_ev("PushEvent", "2026-11-20")]
+
+    async def fake_login():
+        return "octo"
+
+    monkeypatch.setattr(gh, "fetch_graphql_weekly", bad_graphql)
+    monkeypatch.setattr(gh, "_resolve_login", fake_login)
+    monkeypatch.setattr(gh, "fetch_user_events", fake_events)
+    out = asyncio.run(gh.fetch_weekly_activity(TODAY))
+    assert out["source"] == "events" and out["weekly"][-1]["pushes"] == 1
     gh.clear_cache()
 
 

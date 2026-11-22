@@ -1,10 +1,14 @@
-"""GitHub activity for the analytics page, read from the GitHub Events API (#1499).
+"""GitHub activity for the analytics page, read from the GitHub API (#1499).
 
-Connecting an account (token or username) is enough to chart weekly activity:
-``GET /users/{login}/events`` returns the user's recent events (up to 300 over
-the last 90 days; private events are included when authenticated as that
-user). Webhook-recorded events (``analytics_service``) remain the fallback for
-setups without a token/username or when the API call fails.
+Connecting an account is enough to chart weekly activity — no webhooks:
+
+1. **Token → GraphQL** (``source: "graphql"``): one request with a
+   ``contributionsCollection`` per ISO week gives commits, PRs opened, issues
+   opened and PR reviews for the full 12 weeks, however active the account is.
+2. **Username only → Events API** (``source: "events"``): ``/users/{login}/events``
+   returns at most 300 recent events, so very active accounts are truncated
+   (flagged via ``truncated``).
+3. Webhook-recorded events (``analytics_service``) remain the last fallback.
 
 Results are cached in-process for ``CACHE_TTL`` seconds so opening the page
 repeatedly does not burn the GitHub rate limit.
@@ -14,6 +18,7 @@ import time
 from datetime import UTC, date, datetime, timedelta
 
 import httpx
+
 from config import settings
 from services.http_client import http_client
 
@@ -33,6 +38,18 @@ EVENT_BUCKET = {
 }
 
 _cache: dict[str, tuple[float, dict]] = {}
+
+_CONTRIB_FIELDS = (
+    "totalCommitContributions totalPullRequestContributions "
+    "totalIssueContributions totalPullRequestReviewContributions"
+)
+# GraphQL contribution field → output bucket (reviews fill the "comments" bucket).
+_GRAPHQL_BUCKET = {
+    "totalCommitContributions": "pushes",
+    "totalPullRequestContributions": "pull_requests",
+    "totalIssueContributions": "issues",
+    "totalPullRequestReviewContributions": "comments",
+}
 
 
 def clear_cache() -> None:
@@ -61,6 +78,58 @@ async def _get(url: str, params: dict | None = None):
         )
         r.raise_for_status()
         return r.json()
+
+
+def week_starts(today: date, weeks: int = WEEKS) -> list[date]:
+    """Mondays of the last ``weeks`` ISO weeks, oldest → newest."""
+    current = today - timedelta(days=today.weekday())
+    return [current - timedelta(weeks=weeks - 1 - i) for i in range(weeks)]
+
+
+def build_graphql_query(mondays: list[date], now: datetime) -> str:
+    """One aliased ``contributionsCollection`` per week (single round trip)."""
+    parts = []
+    for i, monday in enumerate(mondays):
+        start = datetime.combine(monday, datetime.min.time(), tzinfo=UTC)
+        end = min(start + timedelta(weeks=1) - timedelta(seconds=1), now)
+        parts.append(
+            f'w{i}: contributionsCollection(from: "{start:%Y-%m-%dT%H:%M:%SZ}", '
+            f'to: "{end:%Y-%m-%dT%H:%M:%SZ}") {{ {_CONTRIB_FIELDS} }}'
+        )
+    return "query { viewer { login " + " ".join(parts) + " } }"
+
+
+def parse_graphql_weeks(viewer: dict, mondays: list[date]) -> list[dict]:
+    weekly = []
+    for i, monday in enumerate(mondays):
+        block = viewer.get(f"w{i}") or {}
+        row = {
+            "week_start": monday.isoformat(),
+            "pushes": 0,
+            "pull_requests": 0,
+            "issues": 0,
+            "comments": 0,
+        }
+        for field, bucket in _GRAPHQL_BUCKET.items():
+            row[bucket] = int(block.get(field) or 0)
+        weekly.append(row)
+    return weekly
+
+
+async def fetch_graphql_weekly(today: date, now: datetime) -> tuple[str, list[dict]]:
+    mondays = week_starts(today)
+    async with http_client(timeout=30.0) as client:
+        r = await client.post(
+            f"{GITHUB_API}/graphql",
+            headers=_headers(),
+            json={"query": build_graphql_query(mondays, now)},
+        )
+        r.raise_for_status()
+        body = r.json()
+    if body.get("errors") or not body.get("data", {}).get("viewer"):
+        raise RuntimeError(f"GraphQL error: {str(body.get('errors'))[:200]}")
+    viewer = body["data"]["viewer"]
+    return viewer["login"], parse_graphql_weeks(viewer, mondays)
 
 
 async def _resolve_login() -> str:
@@ -150,25 +219,43 @@ async def fetch_weekly_activity(today: date | None = None) -> dict | None:
     now = time.monotonic()
     if cached and now - cached[0] < CACHE_TTL:
         return cached[1]
-    try:
-        login = await _resolve_login()
-        events = await fetch_user_events(login)
-    except Exception as exc:  # network, auth, rate limit — degrade gracefully
-        if cached:
-            return {**cached[1], "stale": True}
-        return {
-            "available": False,
-            "source": None,
-            "weekly": [],
-            "error": classify_failure(exc),
-        }
-    today = today or datetime.now(UTC).date()
-    result = {
-        "available": True,
-        "source": "api",
-        "login": login,
-        "stale": False,
-        **bucket_weekly(events, today),
-    }
+    now_dt = datetime.now(UTC)
+    today = today or now_dt.date()
+    result: dict | None = None
+    failure: Exception | None = None
+    if settings.github_token:
+        try:
+            login, weekly = await fetch_graphql_weekly(today, now_dt)
+            result = {
+                "available": True,
+                "source": "graphql",
+                "login": login,
+                "stale": False,
+                "truncated": False,
+                "weekly": weekly,
+            }
+        except Exception as exc:  # fall through to the Events API
+            failure = exc
+    if result is None:
+        try:
+            login = await _resolve_login()
+            events = await fetch_user_events(login)
+            result = {
+                "available": True,
+                "source": "events",
+                "login": login,
+                "stale": False,
+                **bucket_weekly(events, today),
+            }
+        except Exception as exc:  # network, auth, rate limit — degrade gracefully
+            failure = failure or exc
+            if cached:
+                return {**cached[1], "stale": True}
+            return {
+                "available": False,
+                "source": None,
+                "weekly": [],
+                "error": classify_failure(exc),
+            }
     _cache[login_hint] = (now, result)
     return result

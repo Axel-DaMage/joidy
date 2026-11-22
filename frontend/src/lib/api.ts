@@ -880,7 +880,7 @@ export interface AnalyticsOverview {
 
 /** GET /analytics/github — API-first weekly activity (webhook events as fallback). */
 export type GithubActivityPayload = AnalyticsOverview['github'] & {
-  source?: 'api' | 'webhook' | null;
+  source?: 'graphql' | 'events' | 'webhook' | null;
   login?: string | null;
   /** The Events API cap (300) was hit inside the window — older weeks may be undercounted. */
   truncated?: boolean;

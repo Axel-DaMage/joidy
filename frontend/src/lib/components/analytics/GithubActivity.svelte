@@ -14,7 +14,7 @@
   type WeekRow = GithubStats['weekly'][number];
 
   type Payload = GithubStats & {
-    source?: 'api' | 'webhook' | null;
+    source?: 'graphql' | 'events' | 'webhook' | null;
     login?: string | null;
     truncated?: boolean;
     error?: 'rate_limited' | 'bad_credentials' | 'unavailable';
@@ -122,7 +122,7 @@
         class="gh-source mono"
         title={github.truncated ? $t('analyticsPage.github.truncated') : undefined}
       >
-        {github.source === 'api'
+        {github.source === 'graphql' || github.source === 'events'
           ? $t('analyticsPage.github.viaApi', { values: { login: github.login ?? '' } })
           : $t('analyticsPage.github.viaWebhook')}{#if github.truncated}
           · ⚠{/if}
