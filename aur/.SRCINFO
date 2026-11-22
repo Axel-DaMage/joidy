@@ -10,6 +10,6 @@ pkgbase = joidy
 	source = https://github.com/Axel-DaMage/joidy/archive/v1.1.0-beta.7.tar.gz
 	source = joidy.install
 	sha256sums = c77dee045f15f1ef2ed37d5946c9620e45da4eb54b19b6643739ba6e8b628a70
-	sha256sums = 9a001f380672aa9eea28d0d5acd34ac532d68969fb9e0c0e4d236be2dc3311ce
+	sha256sums = 1e450ad23eb90939a47e1c3e9c97e19fc20f41293843744bfc61ccedb67d049c
 
 pkgname = joidy

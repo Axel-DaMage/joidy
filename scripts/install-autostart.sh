@@ -31,8 +31,8 @@ mkdir -p "$HOME/.config/systemd/user"
 cat > "$SERVICE_FILE" <<EOF
 [Unit]
 Description=Joidy — Personal Growth Dashboard
-After=docker.service
-Requires=docker.service
+# A systemd --user manager cannot see or order on system units like
+# docker.service — scripts/joidy_startup.sh polls the engine itself instead.
 
 [Service]
 Type=oneshot
@@ -73,6 +73,9 @@ RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 # Only bash and the docker/podman clients run — no JIT needs W+X pages.
 MemoryDenyWriteExecute=yes
 
+# default.target starts the unit at login. To start Joidy at power-on —
+# before the first login — the user manager must run headless (linger):
+#   loginctl enable-linger "$USER"
 [Install]
 WantedBy=default.target
 EOF
@@ -81,11 +84,37 @@ EOF
 systemctl --user daemon-reload
 systemctl --user enable "${SERVICE_NAME}.service"
 
+# Linger keeps the user manager alive without a login session, which is what
+# makes WantedBy=default.target fire at power-on instead of first login.
+# Best-effort: enabling linger for oneself is allowed by default polkit
+# policy on most distros, but may need root elsewhere — warn, never fail.
+LINGER_ENABLED=0
+if loginctl enable-linger "$USER" 2>/dev/null; then
+  LINGER_ENABLED=1
+fi
+
 echo ""
 echo "✓ Joidy auto-start service installed."
 echo ""
-echo "The service will start automatically when you log in."
+if [ "$LINGER_ENABLED" -eq 1 ]; then
+  echo "Linger is ENABLED — the service starts at power-on, before login."
+else
+  echo "⚠ Could not enable linger for $USER — the service starts at first"
+  echo "  login only. To start at power-on, run as root or with sudo:"
+  echo "    sudo loginctl enable-linger $USER"
+fi
 echo ""
+
+# Rootful Docker requires membership in the 'docker' group to talk to
+# /var/run/docker.sock — without it the unit fails with permission denied.
+if command -v docker &>/dev/null && ! id -nG | grep -qw docker; then
+  echo "⚠ $USER is NOT in the 'docker' group — the service will fail with"
+  echo "  permission denied on /var/run/docker.sock. Fix with:"
+  echo "    sudo usermod -aG docker $USER"
+  echo "  then log out and back in (group membership applies at login)."
+  echo ""
+fi
+
 echo "Manual commands:"
 echo "  systemctl --user start joidy    # Start now"
 echo "  systemctl --user stop joidy     # Stop now"

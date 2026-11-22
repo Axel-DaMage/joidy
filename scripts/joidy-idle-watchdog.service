@@ -1,6 +1,8 @@
 [Unit]
 Description=Joidy idle watchdog (auto-sleep the Docker stack when unused)
-After=docker.service
+# A systemd --user manager cannot see or order on system units like
+# docker.service (#1480) — Restart=on-failure below covers the engine
+# socket not being up yet at login.
 
 # Optional user unit for `joidy idle` (#860). Runs the watcher in the
 # foreground; state and logs live under <data>/idle/.
