@@ -90,18 +90,18 @@
     { href: '/notes', label: $t('nav.notes'), icon: 'BookOpen', status: 'ready' },
     { href: '/graph', label: $t('nav.graph'), icon: 'Network', status: 'dev' },
     { href: '/skills', label: $t('nav.skills'), icon: 'Zap', status: 'dev' },
-    { href: '/ai', label: $t('nav.ai'), icon: 'Brain', status: 'ready' },
+    { href: '/ai', label: $t('nav.ai'), icon: 'Brain', status: 'dev' },
     { href: '/streaks', label: $t('nav.streaks'), icon: 'Flame', status: 'ready' },
     { href: '/goals', label: $t('nav.goals'), icon: 'Target', status: 'ready' },
     { href: '/emails', label: $t('nav.emails'), icon: 'Mail', status: 'ready' },
     { href: '/gmail', label: $t('nav.gmail'), icon: 'Send', status: 'ready' },
-    { href: '/contactos', label: $t('nav.contacts'), icon: 'Users', status: 'ready' },
+    { href: '/contactos', label: $t('nav.contacts'), icon: 'Users', status: 'dev' },
     { href: '/calendar', label: $t('nav.calendar'), icon: 'Calendar', status: 'ready' },
     { href: '/timers', label: $t('nav.timers'), icon: 'AlarmClock', status: 'ready' },
     // Strava integration page (#44) — appended last to keep merges clean.
-    { href: '/strava', label: $t('nav.strava'), icon: 'Activity', status: 'ready' },
+    { href: '/strava', label: $t('nav.strava'), icon: 'Activity', status: 'dev' },
     // #45 — Spotify integration (backend merged via #1448).
-    { href: '/spotify', label: $t('nav.spotify'), icon: 'Music', status: 'ready' },
+    { href: '/spotify', label: $t('nav.spotify'), icon: 'Music', status: 'dev' },
   ] as { href: string; label: string; icon: string; status: NavItemStatus }[];
 
   // Clock engine (#969): alarms must keep ticking wherever the user is in the

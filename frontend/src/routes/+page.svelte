@@ -28,7 +28,7 @@
   import Share2 from 'lucide-svelte/icons/share-2';
   import { notes, loadNotes, notesLoadedOnce } from '$lib/stores/notes';
   import { dashboardLayout } from '$lib/stores/layout';
-  import { accentColors } from '$lib/stores/settings';
+  import { accentColors, devMode } from '$lib/stores/settings';
   import { api } from '$lib/api';
   import { loadUserSettings, patchUserSettings } from '$lib/utils/userSettings';
   import { captureSnapshot, getSnapshot } from '$lib/stores/pageSnapshots';
@@ -554,9 +554,12 @@
   <!-- ── Right panel ────────────────────────────────────────────────────────── -->
   <section class="activity-section" role="list">
     {#each $dashboardLayout.right as wid, i (wid)}
-      <Widget id={wid}>
-        {@render renderWidget(wid)}
-      </Widget>
+      <!-- spotify-now-playing is dev-gated like the /spotify nav item (#1492) -->
+      {#if wid !== 'spotify-now-playing' || $devMode}
+        <Widget id={wid}>
+          {@render renderWidget(wid)}
+        </Widget>
+      {/if}
     {/each}
   </section>
 </div>
