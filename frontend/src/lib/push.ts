@@ -1,7 +1,16 @@
 import { api } from './api';
+import { getToken } from './stores/session';
 import { logger } from './utils/logger';
 
 export async function initPushNotifications(): Promise<void> {
+  // Every push endpoint requires auth — bail out while logged out so a
+  // previously-granted permission can never 401 into a forced logout +
+  // "Sesión expirada" toast on the login screen (#1546).
+  if (!getToken()) {
+    logger.info('[push] No auth token; skipping push init');
+    return;
+  }
+
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
     logger.warn('[push] Service Worker or Push API not supported');
     return;
