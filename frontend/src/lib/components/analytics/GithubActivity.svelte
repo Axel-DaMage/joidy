@@ -13,7 +13,15 @@
   type GithubStats = AnalyticsOverview['github'];
   type WeekRow = GithubStats['weekly'][number];
 
-  let { github }: { github?: GithubStats } = $props();
+  type Payload = GithubStats & {
+    source?: 'api' | 'webhook' | null;
+    login?: string | null;
+    truncated?: boolean;
+    error?: 'rate_limited' | 'bad_credentials' | 'unavailable';
+    stale?: boolean;
+  };
+
+  let { github, loading = false }: { github?: Payload; loading?: boolean } = $props();
 
   let W = $state(0);
   let H = $state(0);
@@ -109,6 +117,17 @@
 <ChartCard title={$t('analyticsPage.slides.github')}>
   {#snippet icon()}<GitPullRequest size={13} />{/snippet}
   {#snippet actions()}
+    {#if !showGhost && github?.source}
+      <span
+        class="gh-source mono"
+        title={github.truncated ? $t('analyticsPage.github.truncated') : undefined}
+      >
+        {github.source === 'api'
+          ? $t('analyticsPage.github.viaApi', { values: { login: github.login ?? '' } })
+          : $t('analyticsPage.github.viaWebhook')}{#if github.truncated}
+          · ⚠{/if}
+      </span>
+    {/if}
     <div class="gh-legend">
       {#each KEYS as k (k)}
         <span class="gh-leg"
@@ -170,11 +189,27 @@
       {#if showGhost}
         <div class="gh-empty">
           <GitPullRequest size={20} />
-          <span class="gh-empty-title">{$t('analyticsPage.github.emptyTitle')}</span>
-          <span class="gh-empty-body">{$t('analyticsPage.github.empty')}</span>
-          <button type="button" class="gh-cta" onclick={openSettings}
-            >{$t('analyticsPage.github.cta')}</button
-          >
+          {#if loading}
+            <span class="gh-empty-title">{$t('analyticsPage.github.loading')}</span>
+          {:else}
+            <span class="gh-empty-title"
+              >{$t(
+                github?.error
+                  ? `analyticsPage.github.errorTitle_${github.error}`
+                  : 'analyticsPage.github.emptyTitle'
+              )}</span
+            >
+            <span class="gh-empty-body"
+              >{$t(
+                github?.error
+                  ? `analyticsPage.github.errorBody_${github.error}`
+                  : 'analyticsPage.github.empty'
+              )}</span
+            >
+            <button type="button" class="gh-cta" onclick={openSettings}
+              >{$t('analyticsPage.github.cta')}</button
+            >
+          {/if}
         </div>
       {/if}
 
@@ -282,6 +317,14 @@
   }
   .gh-seg:hover {
     opacity: 0.75;
+  }
+  .gh-source {
+    font-size: 10px;
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--text-muted);
+    white-space: nowrap;
   }
   .gh-legend {
     display: flex;

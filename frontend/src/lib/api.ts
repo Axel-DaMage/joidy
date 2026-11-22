@@ -878,6 +878,18 @@ export interface AnalyticsOverview {
   };
 }
 
+/** GET /analytics/github — API-first weekly activity (webhook events as fallback). */
+export type GithubActivityPayload = AnalyticsOverview['github'] & {
+  source?: 'api' | 'webhook' | null;
+  login?: string | null;
+  /** The Events API cap (300) was hit inside the window — older weeks may be undercounted. */
+  truncated?: boolean;
+  /** Why live data is missing although an account is configured. */
+  error?: 'rate_limited' | 'bad_credentials' | 'unavailable';
+  /** Served from cache because the API failed. */
+  stale?: boolean;
+};
+
 // ── Notes ─────────────────────────────────────────────────────────────────────
 
 export interface SyncConflict {
@@ -1859,6 +1871,7 @@ export const api = {
         { silent: true }
       ),
     usage: (days = 30) => req<UsageSummary>('GET', `/analytics/usage?days=${days}`),
+    github: () => req<GithubActivityPayload>('GET', '/analytics/github'),
   },
   export: {
     markdownUrl: () => `${BASE}/export/notes/markdown`,

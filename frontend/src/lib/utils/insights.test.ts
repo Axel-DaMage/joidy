@@ -4,6 +4,7 @@ import {
   trendInsights,
   clockInsights,
   moodInsights,
+  githubInsights,
   avgXpByWeekday,
   hoursFromCells,
   type InsightCtx,
@@ -181,5 +182,30 @@ describe('insight headline stats', () => {
   it('mood without data explains how to unlock the analysis', () => {
     const keys = moodInsights(base()).map((i) => i.key);
     expect(keys).toEqual(['mood.needMore', 'mood.howTo', 'mood.unlock']);
+  });
+});
+
+describe('githubInsights', () => {
+  it('explains how to unlock the section when nothing is connected', () => {
+    const keys = githubInsights(base()).map((i) => i.key);
+    expect(keys).toEqual(['github.needConnect', 'github.howTo', 'github.unlock']);
+  });
+
+  it('points to a token when GitHub rate-limited the requests', () => {
+    const data = base({
+      github: { available: false, weekly: [], error: 'rate_limited' } as never,
+    });
+    const keys = githubInsights(data).map((i) => i.key);
+    expect(keys).toEqual(['github.error_rate_limited', 'github.howToToken', 'github.unlock']);
+  });
+
+  it('summarises active weeks and totals when data exists', () => {
+    const weekly = [
+      { week_start: '2026-11-02', pushes: 3, pull_requests: 1, issues: 0, comments: 0 },
+      { week_start: '2026-11-09', pushes: 0, pull_requests: 0, issues: 0, comments: 0 },
+    ];
+    const items = githubInsights(base({ github: { available: true, weekly } }));
+    expect(items.find((i) => i.key === 'github.activeWeeks')?.stat).toBe('1/2');
+    expect(items.find((i) => i.key === 'github.total')?.stat).toBe('4');
   });
 });

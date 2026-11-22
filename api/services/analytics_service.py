@@ -383,6 +383,11 @@ def _github(db: Session, today: date) -> dict:
     return {"available": True, "weekly": weekly}
 
 
+def webhook_github_activity(db: Session) -> dict:
+    """Webhook-recorded GitHub activity (fallback when the API is unavailable)."""
+    return {**_github(db, datetime.now(UTC).date()), "source": "webhook"}
+
+
 def _prev_window(db: Session, since: datetime, days: int) -> dict:
     """Totals for the window of the same length immediately before ``since``.
 

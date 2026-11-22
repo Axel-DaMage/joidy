@@ -15,9 +15,9 @@
   import GitPullRequest from 'lucide-svelte/icons/git-pull-request';
   import Sigma from 'lucide-svelte/icons/sigma';
   import TriangleAlert from 'lucide-svelte/icons/triangle-alert';
-  import { api, type AnalyticsOverview } from '$lib/api';
+  import { api, type AnalyticsOverview, type GithubActivityPayload } from '$lib/api';
   import { loadUserSettings, patchUserSettings } from '$lib/utils/userSettings';
-  import { readOverview, writeOverview } from '$lib/utils/analyticsCache';
+  import { readGithub, readOverview, writeGithub, writeOverview } from '$lib/utils/analyticsCache';
   import { parseLocalDate } from '$lib/utils/date';
   import { locale, getLocale } from '$lib/stores/locale';
   import { use24HourClock } from '$lib/stores/settings';
@@ -63,6 +63,12 @@
   let data = $state<AnalyticsOverview | null>(null);
   let loading = $state(true);
   let refreshing = $state(false);
+  // GitHub activity comes from its own endpoint (API-first) and is fetched
+  // lazily the first time its section is opened.
+  let gh = $state<GithubActivityPayload | null>(null);
+  let ghLoading = $state(false);
+  // Avoid retry loops when the request fails — retries are manual (refresh).
+  let ghTried = $state(false);
   let loadError = $state(false);
   // "How it's calculated" note — persisted so the choice sticks.
   let methodOpen = $state(true);
@@ -90,6 +96,30 @@
   // Persist the active slide — same pattern as GithubWidget's activityTab.
   $effect(() => {
     if (prefsReady) patchUserSettings({ analyticsUi: { slide: slideIdx } });
+  });
+
+  async function loadGithub(force = false) {
+    const cached = readGithub();
+    if (cached) {
+      gh = cached.data;
+      if (cached.fresh && !force) return;
+    }
+    ghLoading = true;
+    ghTried = true;
+    try {
+      const fresh = await api.analytics.github();
+      writeGithub(fresh);
+      gh = fresh;
+    } catch (e) {
+      logger.error('[analytics] github activity failed:', e);
+    } finally {
+      ghLoading = false;
+    }
+  }
+
+  // Fetch GitHub activity the first time its section becomes active.
+  $effect(() => {
+    if (slides[slideIdx]?.id === 'github' && !ghTried && prefsReady) void loadGithub();
   });
 
   function toggleMethod() {
@@ -189,8 +219,11 @@
               : `${h - 12}pm`,
   });
 
+  // Overview with the API-first GitHub payload swapped in (when loaded).
+  let viewData = $derived(data && gh ? { ...data, github: gh } : data);
+
   let slideInsights = $derived(
-    data ? insightsFor(slides[slideIdx]?.id ?? 'consistency', data, insightCtx) : []
+    viewData ? insightsFor(slides[slideIdx]?.id ?? 'consistency', viewData, insightCtx) : []
   );
 
   let bestDay = $derived.by(() => {
@@ -278,7 +311,7 @@
       </div>
     {:else if id === 'github'}
       <div class="ad-grid g-wide">
-        <div class="a-main"><GithubActivity github={data.github} /></div>
+        <div class="a-main"><GithubActivity github={gh ?? data.github} loading={ghLoading && !gh} /></div>
         <div class="a-recent"><RecentDays activity={data.daily_activity} /></div>
         <div class="a-wday"><WeekdayBars activity={data.daily_activity} /></div>
       </div>
@@ -335,7 +368,10 @@
         title={$t('analyticsPage.refresh')}
         aria-label={$t('analyticsPage.refresh')}
         disabled={refreshing}
-        onclick={() => void load(rangeDays, true)}
+        onclick={() => {
+          void load(rangeDays, true);
+          if (gh || ghTried) void loadGithub(true);
+        }}
       >
         <RefreshCw size={14} />
       </button>

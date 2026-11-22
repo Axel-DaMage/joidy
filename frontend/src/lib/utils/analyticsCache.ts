@@ -1,4 +1,4 @@
-import type { AnalyticsOverview } from '$lib/api';
+import type { AnalyticsOverview, GithubActivityPayload } from '$lib/api';
 
 /**
  * Stale-while-revalidate cache for /analytics/overview (#1499).
@@ -19,6 +19,10 @@ interface Entry {
 
 const store = new Map<number, Entry>();
 
+// GitHub activity is cached client-side too (the server also caches it): it
+// does not depend on the analysis window and is only fetched on demand.
+let github: { at: number; data: GithubActivityPayload } | null = null;
+
 export function readOverview(
   days: number,
   now = Date.now()
@@ -33,4 +37,13 @@ export function writeOverview(days: number, data: AnalyticsOverview, now = Date.
 
 export function clearOverviewCache(): void {
   store.clear();
+  github = null;
+}
+
+export function readGithub(now = Date.now()): { data: GithubActivityPayload; fresh: boolean } | null {
+  return github ? { data: github.data, fresh: now - github.at < FRESH_MS * 5 } : null;
+}
+
+export function writeGithub(data: GithubActivityPayload, now = Date.now()): void {
+  github = { at: now, data };
 }

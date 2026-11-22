@@ -1,0 +1,184 @@
+"""GitHub activity for the analytics page (#1499): Events API bucketing,
+API-first endpoint and webhook fallback."""
+
+import asyncio
+from datetime import date
+
+import httpx
+from fastapi.testclient import TestClient
+
+from services import github_activity as gh
+
+TODAY = date(2026, 11, 22)  # a Sunday
+CURRENT_MONDAY = "2026-11-16"
+
+
+def _ev(kind: str, day: str):
+    return {"type": kind, "created_at": f"{day}T10:00:00Z"}
+
+
+def test_bucket_weekly_groups_by_iso_week_and_type():
+    events = [
+        _ev("PushEvent", "2026-11-22"),
+        _ev("PushEvent", "2026-11-16"),
+        _ev("PullRequestEvent", "2026-11-17"),
+        _ev("IssuesEvent", "2026-11-09"),
+        _ev("IssueCommentEvent", "2026-11-10"),
+        _ev("PullRequestReviewCommentEvent", "2026-11-10"),
+        _ev("WatchEvent", "2026-11-18"),  # ignored type
+    ]
+    out = gh.bucket_weekly(events, TODAY)
+    weekly = {w["week_start"]: w for w in out["weekly"]}
+    assert len(out["weekly"]) == gh.WEEKS
+    assert out["weekly"][-1]["week_start"] == CURRENT_MONDAY
+    assert weekly[CURRENT_MONDAY]["pushes"] == 2
+    assert weekly[CURRENT_MONDAY]["pull_requests"] == 1
+    assert weekly["2026-11-09"]["issues"] == 1
+    assert weekly["2026-11-09"]["comments"] == 2
+    assert out["truncated"] is False
+
+
+def test_bucket_weekly_ignores_events_outside_window_and_bad_dates():
+    events = [
+        _ev("PushEvent", "2025-01-01"),
+        {"type": "PushEvent"},
+        {"created_at": "nope"},
+    ]
+    out = gh.bucket_weekly(events, TODAY)
+    assert sum(w["pushes"] for w in out["weekly"]) == 0
+
+
+def test_bucket_weekly_flags_truncation_at_api_cap():
+    events = [_ev("PushEvent", "2026-11-20")] * (gh.PER_PAGE * gh.MAX_PAGES)
+    assert gh.bucket_weekly(events, TODAY)["truncated"] is True
+
+
+def test_fetch_weekly_activity_none_when_not_configured(monkeypatch):
+    monkeypatch.setattr(gh.settings, "github_token", "")
+    monkeypatch.setattr(gh.settings, "github_username", "")
+    assert asyncio.run(gh.fetch_weekly_activity(TODAY)) is None
+
+
+def test_fetch_weekly_activity_uses_events_and_caches(monkeypatch):
+    gh.clear_cache()
+    monkeypatch.setattr(gh.settings, "github_token", "")
+    monkeypatch.setattr(gh.settings, "github_username", "octo")
+    calls = {"n": 0}
+
+    async def fake_events(login):
+        calls["n"] += 1
+        assert login == "octo"
+        return [_ev("PushEvent", "2026-11-20")]
+
+    monkeypatch.setattr(gh, "fetch_user_events", fake_events)
+    first = asyncio.run(gh.fetch_weekly_activity(TODAY))
+    second = asyncio.run(gh.fetch_weekly_activity(TODAY))
+    assert (
+        first["available"] is True
+        and first["source"] == "api"
+        and first["login"] == "octo"
+    )
+    assert first["weekly"][-1]["pushes"] == 1
+    assert second is first and calls["n"] == 1
+    gh.clear_cache()
+
+
+def _http_error(status: int, headers: dict | None = None, text: str = ""):
+    request = httpx.Request("GET", "https://api.github.com/x")
+    response = httpx.Response(status, headers=headers or {}, text=text, request=request)
+    return httpx.HTTPStatusError("boom", request=request, response=response)
+
+
+def test_classify_failure_reasons():
+    assert (
+        gh.classify_failure(_http_error(403, {"x-ratelimit-remaining": "0"}))
+        == "rate_limited"
+    )
+    assert (
+        gh.classify_failure(_http_error(403, text="API rate limit exceeded"))
+        == "rate_limited"
+    )
+    assert gh.classify_failure(_http_error(429)) == "rate_limited"
+    assert gh.classify_failure(_http_error(401)) == "bad_credentials"
+    assert gh.classify_failure(RuntimeError("net")) == "unavailable"
+
+
+def test_fetch_weekly_activity_reports_error_when_api_fails(monkeypatch):
+    gh.clear_cache()
+    monkeypatch.setattr(gh.settings, "github_token", "")
+    monkeypatch.setattr(gh.settings, "github_username", "octo")
+
+    async def boom(login):
+        raise _http_error(403, {"x-ratelimit-remaining": "0"})
+
+    monkeypatch.setattr(gh, "fetch_user_events", boom)
+    out = asyncio.run(gh.fetch_weekly_activity(TODAY))
+    assert out["available"] is False and out["error"] == "rate_limited"
+
+
+def test_fetch_weekly_activity_serves_stale_cache_on_failure(monkeypatch):
+    gh.clear_cache()
+    monkeypatch.setattr(gh.settings, "github_token", "")
+    monkeypatch.setattr(gh.settings, "github_username", "octo")
+
+    async def ok(login):
+        return [_ev("PushEvent", "2026-11-20")]
+
+    monkeypatch.setattr(gh, "fetch_user_events", ok)
+    first = asyncio.run(gh.fetch_weekly_activity(TODAY))
+    # Expire the cache entry, then make the API fail.
+    key = next(iter(gh._cache))
+    gh._cache[key] = (gh._cache[key][0] - gh.CACHE_TTL - 1, first)
+
+    async def boom(login):
+        raise _http_error(403, {"x-ratelimit-remaining": "0"})
+
+    monkeypatch.setattr(gh, "fetch_user_events", boom)
+    out = asyncio.run(gh.fetch_weekly_activity(TODAY))
+    assert out["available"] is True and out["stale"] is True
+    assert out["weekly"][-1]["pushes"] == 1
+    gh.clear_cache()
+
+
+def test_endpoint_prefers_api_activity(client: TestClient, monkeypatch):
+    payload = {
+        "available": True,
+        "source": "api",
+        "login": "octo",
+        "weekly": [],
+        "truncated": False,
+    }
+
+    async def fake():
+        return payload
+
+    monkeypatch.setattr("routers.analytics.fetch_weekly_activity", fake)
+    assert client.get("/analytics/github").json() == payload
+
+
+def test_endpoint_falls_back_to_webhook_events(client: TestClient, monkeypatch):
+    async def none():
+        return None
+
+    monkeypatch.setattr("routers.analytics.fetch_weekly_activity", none)
+    data = client.get("/analytics/github").json()
+    assert data["source"] == "webhook"
+    assert data["available"] is False
+    assert data["weekly"] == []
+
+
+def test_endpoint_reports_error_reason_with_webhook_fallback(
+    client: TestClient, monkeypatch
+):
+    async def failed():
+        return {
+            "available": False,
+            "source": None,
+            "weekly": [],
+            "error": "rate_limited",
+        }
+
+    monkeypatch.setattr("routers.analytics.fetch_weekly_activity", failed)
+    data = client.get("/analytics/github").json()
+    assert data["error"] == "rate_limited"
+    assert data["source"] == "webhook"

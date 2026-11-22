@@ -435,8 +435,13 @@ export function githubInsights(data: Overview): Insight[] {
   const out: Insight[] = [];
   const weekly = data.github?.weekly ?? [];
   if (!data.github?.available || weekly.length === 0) {
-    out.push({ icon: 'git-pull-request', key: 'github.needConnect', tone: 'info' });
-    out.push({ icon: 'pencil', key: 'github.howTo' });
+    const error = (data.github as { error?: string } | undefined)?.error;
+    out.push({
+      icon: 'git-pull-request',
+      key: error ? `github.error_${error}` : 'github.needConnect',
+      tone: error ? 'warn' : 'info',
+    });
+    out.push({ icon: 'pencil', key: error === 'rate_limited' ? 'github.howToToken' : 'github.howTo' });
     out.push({ icon: 'lightbulb', key: 'github.unlock' });
     return out;
   }

@@ -651,9 +651,19 @@
       "prs": "PRs",
       "issues": "Issues",
       "comments": "Comentarios",
-      "empty": "Conecta tus repositorios para ver pushes, PRs, issues y comentarios por semana.",
+      "empty": "Conecta tu cuenta de GitHub (token o usuario) para ver pushes, PRs, issues y comentarios por semana.",
       "emptyTitle": "Aún sin actividad de GitHub",
-      "cta": "Abrir ajustes"
+      "cta": "Abrir ajustes",
+      "viaApi": "vía API · @{login}",
+      "viaWebhook": "vía webhooks",
+      "loading": "Cargando actividad de GitHub…",
+      "truncated": "GitHub devuelve como máximo 300 eventos recientes: las semanas más antiguas pueden estar subcontadas.",
+      "errorTitle_rate_limited": "GitHub limitó las peticiones",
+      "errorBody_rate_limited": "Sin token, GitHub permite solo 60 peticiones por hora. Agrega un token en Ajustes para ver tu actividad de forma estable (y repos privados).",
+      "errorTitle_bad_credentials": "GitHub rechazó las credenciales",
+      "errorBody_bad_credentials": "El token configurado no es válido o expiró. Revísalo en Ajustes.",
+      "errorTitle_unavailable": "No se pudo consultar GitHub",
+      "errorBody_unavailable": "Hubo un problema al contactar la API de GitHub. Inténtalo de nuevo en unos minutos."
     },
     "insightsTitle": "Insights",
     "insightsEmpty": "Sigue usando Joidy — los insights aparecen con suficientes datos.",
@@ -705,8 +715,12 @@
       "github.activeWeeks": "semanas con actividad",
       "github.total": "eventos en las últimas semanas",
       "github.needConnect": "Conecta GitHub para desbloquear este análisis",
-      "github.howTo": "En Ajustes, vincula tu cuenta y activa los repositorios que quieras seguir",
-      "github.unlock": "Verás tu ritmo de código: pushes, PRs, issues y comentarios por semana"
+      "github.howTo": "En Ajustes → GitHub, agrega tu usuario o tu token: no hace falta configurar webhooks",
+      "github.unlock": "Verás tu ritmo de código: pushes, PRs, issues y comentarios por semana",
+      "github.error_rate_limited": "GitHub limitó las peticiones sin token",
+      "github.error_bad_credentials": "GitHub rechazó tu token",
+      "github.error_unavailable": "No se pudo consultar GitHub ahora mismo",
+      "github.howToToken": "Agrega un token en Ajustes → GitHub: sube el límite de 60 a 5.000 peticiones por hora"
     },
     "clock": {
       "all": "Todos",
@@ -786,7 +800,7 @@
       },
       "github": {
         "title": "Cómo se calcula",
-        "body": "Se cuentan los eventos que GitHub envía a Joidy (pushes, PRs, issues y comentarios) agrupados por semana ISO, de lunes a domingo, durante las últimas 12 semanas."
+        "body": "Se leen tus eventos recientes de la API de GitHub (hasta 300 en 90 días; con token incluye repos privados) y se agrupan por semana ISO, de lunes a domingo, durante las últimas 12 semanas. Sin cuenta conectada se usan los webhooks."
       },
       "hide": "Ocultar",
       "show": "Mostrar"

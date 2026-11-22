@@ -651,9 +651,19 @@
       "prs": "PRs",
       "issues": "Issues",
       "comments": "Comments",
-      "empty": "Connect your repositories to see pushes, PRs, issues and comments per week.",
+      "empty": "Connect your GitHub account (token or username) to see pushes, PRs, issues and comments per week.",
       "emptyTitle": "No GitHub activity yet",
-      "cta": "Open settings"
+      "cta": "Open settings",
+      "viaApi": "via API · @{login}",
+      "viaWebhook": "via webhooks",
+      "loading": "Loading GitHub activity…",
+      "truncated": "GitHub returns at most 300 recent events: older weeks may be undercounted.",
+      "errorTitle_rate_limited": "GitHub rate-limited the requests",
+      "errorBody_rate_limited": "Without a token GitHub allows only 60 requests per hour. Add a token in Settings for stable data (and private repos).",
+      "errorTitle_bad_credentials": "GitHub rejected the credentials",
+      "errorBody_bad_credentials": "The configured token is invalid or expired. Check it in Settings.",
+      "errorTitle_unavailable": "Could not reach GitHub",
+      "errorBody_unavailable": "There was a problem contacting the GitHub API. Try again in a few minutes."
     },
     "insightsTitle": "Insights",
     "insightsEmpty": "Keep using Joidy — insights appear when there is enough data.",
@@ -705,8 +715,12 @@
       "github.activeWeeks": "weeks with activity",
       "github.total": "events in recent weeks",
       "github.needConnect": "Connect GitHub to unlock this analysis",
-      "github.howTo": "In Settings, link your account and enable the repositories you want to follow",
-      "github.unlock": "You will see your coding rhythm: pushes, PRs, issues and comments per week"
+      "github.howTo": "In Settings → GitHub, add your username or token — no webhooks needed",
+      "github.unlock": "You will see your coding rhythm: pushes, PRs, issues and comments per week",
+      "github.error_rate_limited": "GitHub rate-limited requests without a token",
+      "github.error_bad_credentials": "GitHub rejected your token",
+      "github.error_unavailable": "GitHub could not be reached right now",
+      "github.howToToken": "Add a token in Settings → GitHub: raises the limit from 60 to 5,000 requests per hour"
     },
     "clock": {
       "all": "All",
@@ -786,7 +800,7 @@
       },
       "github": {
         "title": "How it's calculated",
-        "body": "Counts the events GitHub sends to Joidy (pushes, PRs, issues and comments) grouped by ISO week, Monday to Sunday, over the last 12 weeks."
+        "body": "Your recent events are read from the GitHub API (up to 300 over 90 days; a token includes private repos) and grouped by ISO week, Monday to Sunday, over the last 12 weeks. Without a connected account, webhooks are used."
       },
       "hide": "Hide",
       "show": "Show"
