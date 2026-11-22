@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 post_install() {
   echo ""
   echo "  Joidy installed to /usr/share/joidy/"
@@ -10,6 +11,11 @@ post_install() {
   echo "    - OBSIDIAN_VAULT_PATH: path to your Obsidian vault (supports ~, e.g. ~/Documentos/notas/mi-vault)"
   echo ""
   echo "  Then run: joidy up"
+  echo ""
+  echo "  Optional — start Joidy automatically at login (opt-in):"
+  echo "    systemctl --user enable --now joidy"
+  echo "  To also start at power-on, before the first login:"
+  echo "    loginctl enable-linger \$USER"
   echo ""
 }
 

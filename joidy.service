@@ -1,7 +1,7 @@
 [Unit]
 Description=Joidy Docker Services
-After=docker.service
-Requires=docker.service
+# A systemd --user manager cannot see or order on system units like
+# docker.service — scripts/joidy_startup.sh polls the engine itself instead.
 
 # The Joidy install path is read from /etc/joidy/path (written by the AUR
 # package). If the file is missing, the
@@ -50,5 +50,8 @@ RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 # Only bash and the docker/podman clients run — no JIT needs W+X pages.
 MemoryDenyWriteExecute=yes
 
+# default.target starts the unit at login. To start Joidy at power-on —
+# before the first login — the user manager must run headless:
+#   loginctl enable-linger "$USER"
 [Install]
 WantedBy=default.target
