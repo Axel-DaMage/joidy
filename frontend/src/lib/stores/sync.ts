@@ -36,6 +36,10 @@ function createSyncStore() {
 
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   let checking = false;
+  // Conflicts already notified about — a fresh toast every 30s poll while
+  // unresolved conflicts lingered was toast spam; the modal already
+  // surfaces the state (#1548).
+  let notifiedConflictIds = new Set<number>();
 
   async function checkConflicts(): Promise<void> {
     // Skip while hidden (no point polling a background tab) and never stack
@@ -53,12 +57,17 @@ function createSyncStore() {
         lastChecked: Date.now(),
       }));
 
-      if (data.conflicts.length > 0) {
+      // Notify only when new conflicts appear — re-polling the same set
+      // must not re-toast every interval.
+      const currentIds = new Set(data.conflicts.map((c) => c.note_id));
+      const newConflicts = data.conflicts.filter((c) => !notifiedConflictIds.has(c.note_id));
+      if (newConflicts.length > 0) {
         showNotification(
-          `${data.conflicts.length} conflicto(s) de sincronización pendiente(s)`,
+          `${newConflicts.length} conflicto(s) de sincronización pendiente(s)`,
           'info'
         );
       }
+      notifiedConflictIds = currentIds;
     } catch {
       update(s => ({ ...s, loading: false }));
     } finally {
@@ -100,6 +109,7 @@ function createSyncStore() {
 
   function reset(): void {
     set({ conflicts: [], loading: false, lastChecked: null, dismissed: new Set() });
+    notifiedConflictIds = new Set();
   }
 
   // Start/stop polling with the session lifecycle so in-session logins start

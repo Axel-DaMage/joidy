@@ -120,11 +120,12 @@ function createAchievementsStore() {
       }
       // Local unlocks absent from the server (offline unlocks or legacy
       // localStorage data) are pushed so the DB becomes authoritative.
+      // Pushed in parallel — pushUnlock already degrades per-call on
+      // failure, so a serial loop only added N round-trips (#1548).
       const local = loadLocalUnlocked();
+      const pending = Object.entries(local).filter(([key]) => !(key in merged));
+      await Promise.all(pending.map(([key, at]) => pushUnlock(key, at)));
       for (const [key, at] of Object.entries(local)) {
-        if (!(key in merged)) {
-          await pushUnlock(key, at);
-        }
         merged[key] = merged[key] ?? at;
       }
       saveLocalUnlocked(merged);
