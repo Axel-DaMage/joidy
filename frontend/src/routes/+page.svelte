@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { goto } from '$app/navigation';
   import { dev } from '$app/env';
   import { fly } from 'svelte/transition';
@@ -22,10 +22,7 @@
     currentStreak,
     lastActivity,
     nextStageXP,
-    globalLevel,
   } from '$lib/stores/gamification';
-  import { openShare } from '$lib/stores/shareAchievement';
-  import Share2 from 'lucide-svelte/icons/share-2';
   import { notes, loadNotes, notesLoadedOnce } from '$lib/stores/notes';
   import { dashboardLayout } from '$lib/stores/layout';
   import { accentColors, devMode } from '$lib/stores/settings';
@@ -329,6 +326,13 @@
     window.addEventListener('joidy:github-disconnected', refreshGithubFromEvent);
   });
 
+  // #1512 — without this, every SPA navigation back to `/` stacked another
+  // listener pair and connect events re-fetched the GitHub fan-out N times.
+  onDestroy(() => {
+    window.removeEventListener('joidy:github-connected', refreshGithubFromEvent);
+    window.removeEventListener('joidy:github-disconnected', refreshGithubFromEvent);
+  });
+
   function handleBeforeUnload() {
     const scrollEls = document.querySelectorAll('[id^="panel-"]');
     captureSnapshot(
@@ -397,19 +401,8 @@
     return () => window.removeEventListener('resize', updateModuleSize);
   });
 
-  // Level milestones that warrant a shareable achievement card.
-  const LEVEL_MILESTONES = [10, 25, 50, 75, 100];
-  let isLevelMilestone = $derived(LEVEL_MILESTONES.includes($globalLevel));
-
-  function shareLevel() {
-    openShare({
-      title: $t('home.levelReached'),
-      icon: 'TrendingUp',
-      value: `NVL ${$globalLevel}`,
-      subtitle: `${$totalXP.toLocaleString()} XP`,
-      color: 'var(--xp)',
-    });
-  }
+  // Share-level button removed per user request — TODO(#1513) re-enable.
+  // The share infrastructure lives in lib/stores/shareAchievement.ts.
 </script>
 
 {#snippet renderWidget(wid: string)}
@@ -486,17 +479,7 @@
           <span class="stat-label label">{$t('home.notes')}</span>
         </div>
       </div>
-      {#if isLevelMilestone}
-        <button
-          class="level-share-btn"
-          onclick={shareLevel}
-          title={$t('home.shareLevel')}
-          aria-label="{$t('home.shareLevel')} {$globalLevel}"
-        >
-          <Share2 size={11} />
-          <span>{$t('home.shareLevel')}</span>
-        </button>
-      {/if}
+      <!-- share-level button removed per user request — TODO(#1513) re-enable -->
     </div>
   {:else if wid === 'time-widget'}
     <TimeWidget />
@@ -691,26 +674,6 @@
     gap: var(--s4);
     width: 100%;
     max-width: 240px;
-  }
-
-  .level-share-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    padding: 3px 8px;
-    border: 1px solid var(--border);
-    border-radius: var(--r);
-    background: transparent;
-    color: var(--text-muted);
-    font-size: 10px;
-    font-family: var(--font-sans);
-    cursor: pointer;
-    transition: all var(--t-fast);
-  }
-
-  .level-share-btn:hover {
-    border-color: var(--xp);
-    color: var(--xp);
   }
 
   .stat {

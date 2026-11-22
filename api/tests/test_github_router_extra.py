@@ -9,6 +9,7 @@ and the OAuth device/web error branches. All GitHub HTTP is mocked.
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
+import pytest
 from models.github import (
     GitHubEvent,
     GitHubEventType,
@@ -20,6 +21,16 @@ from models.goal import Goal
 from services import oauth_state
 
 GH = "/integrations/github"
+
+
+@pytest.fixture(autouse=True)
+def _clear_github_cache():
+    """The router caches upstream responses (#1512) — isolate each test."""
+    from routers.integrations import github as gh_router
+
+    gh_router.clear_github_cache()
+    yield
+    gh_router.clear_github_cache()
 
 
 def _resp(json_data):
@@ -255,7 +266,12 @@ def test_list_and_remove_repos_in_db(client, db_session):
     assert db_session.get(GitHubItem, item.id) is None
 
 
-# ─── aggregated issues / pulls ────────────────────────────────────────────────
+# ─── aggregated issues / pulls (Search API, #1512) ────────────────────────────
+#
+# /issues and /pulls resolve through GET /search/issues — one call for the
+# items page plus lightweight total/open count queries — instead of the old
+# per-repo gather. Search results carry `repository_url` instead of the
+# `_repo_full_name` the fan-out injected.
 
 
 def _token_mode(monkeypatch, username="octocat"):
@@ -263,84 +279,120 @@ def _token_mode(monkeypatch, username="octocat"):
     monkeypatch.setattr("routers.integrations.github.settings.github_username", "")
 
 
-def test_my_issues_token_mode_filters_pulls(client, monkeypatch):
+def _search_item(number=1, repo="octocat/Repo-One", **kw):
+    item = _issue(number, **kw)
+    item["repository_url"] = f"https://api.github.com/repos/{repo}"
+    return item
+
+
+def _search_resp(items, total=None):
+    return {"total_count": len(items) if total is None else total, "items": items}
+
+
+def _search_dispatch(seen_calls, items=None, total=None, open_total=0):
+    """Dispatch the search flow: /user → login, /search/issues → routed on q."""
+
+    def _get(url, **kwargs):
+        seen_calls.append(url)
+        params = kwargs.get("params") or {}
+        if "/search/issues" in url:
+            # Items page uses the caller's per_page; count queries use 1.
+            if params.get("per_page", 1) == 1:
+                return _resp({"total_count": open_total, "items": []})
+            return _resp(_search_resp(items or [], total))
+        if url.endswith("/user"):
+            return _resp({"login": "octocat"})
+        raise AssertionError(f"unexpected GET {url}")
+
+    return _get
+
+
+def test_my_issues_created_uses_search_no_fanout(client, monkeypatch):
     _token_mode(monkeypatch)
-    routes = [
-        ("/user/repos", [{"full_name": "octocat/R1", "permissions": {"pull": True}}]),
-        ("/issues", [_issue(1), _issue(2, html_url="https://github.com/octocat/R1/pull/2")]),
-        ("/user", {"login": "octocat"}),
-    ]
-    get = AsyncMock(side_effect=_get_dispatch(routes))
+    item = _search_item(1, state="open")
+    calls: list[str] = []
+    get = AsyncMock(side_effect=_search_dispatch(calls, items=[item], total=1, open_total=1))
     with patch("httpx.AsyncClient.get", new=get):
         resp = client.get(f"{GH}/issues", params={"filter": "created"})
     assert resp.status_code == 200
     data = resp.json()
-    # The /pull/ URL entry is dropped both inside the per-repo fetch and again
-    # in the aggregate loop.
     assert [i["number"] for i in data["issues"]] == [1]
-    assert data["issues"][0]["repo"] == "octocat/R1"
+    assert data["issues"][0]["repo"] == "octocat/Repo-One"
     assert data["stats"] == {"total": 1, "open": 1, "closed": 0}
     assert data["filter"] == "created"
+    # #1512 — no per-repo fan-out: /user + ≤2 search calls, nothing else.
+    assert len(calls) <= 3
+    assert not any("/repos/" in c for c in calls)
 
 
-def test_my_issues_assigned_and_all_filters(client, monkeypatch):
+def test_my_issues_filter_and_state_qualifiers(client, monkeypatch):
     _token_mode(monkeypatch)
-    issue_mine = _issue(1, login="octocat")
-    issue_other = _issue(2, login="someone-else")
-    routes = [
-        ("/user/repos", [{"full_name": "octocat/R1"}]),
-        ("/issues", [issue_mine, issue_other]),
-        ("/user", {"login": "octocat"}),
-    ]
-    get = AsyncMock(side_effect=_get_dispatch(routes))
+    queries: list[str] = []
+
+    def _get(url, **kwargs):
+        params = kwargs.get("params") or {}
+        if "/search/issues" in url:
+            queries.append(params.get("q", ""))
+            return _resp({"total_count": 0, "items": []})
+        if url.endswith("/user"):
+            return _resp({"login": "octocat"})
+        raise AssertionError(f"unexpected GET {url}")
+
+    get = AsyncMock(side_effect=_get)
     with patch("httpx.AsyncClient.get", new=get):
+        client.get(f"{GH}/issues", params={"filter": "created"})
+    assert any(q == "type:issue author:octocat" for q in queries)
+
+    queries.clear()
+    get1 = AsyncMock(side_effect=_get)
+    with patch("httpx.AsyncClient.get", new=get1):
         resp = client.get(f"{GH}/issues", params={"filter": "assigned"})
     assert resp.status_code == 200
     assert resp.json()["filter"] == "assigned"
+    assert any(q == "type:issue assignee:octocat" for q in queries)
+    assert any(q == "type:issue assignee:octocat is:open" for q in queries)
 
-    # filter=all keeps only issues authored by the token user
-    get2 = AsyncMock(side_effect=_get_dispatch(routes))
+    # filter=all + state=closed → involves: + is:closed on the items query
+    queries.clear()
+    get2 = AsyncMock(side_effect=_get)
     with patch("httpx.AsyncClient.get", new=get2):
-        resp = client.get(f"{GH}/issues", params={"filter": "all"})
-    data = resp.json()
-    assert [i["number"] for i in data["issues"]] == [1]
+        client.get(f"{GH}/issues", params={"filter": "all", "state": "closed"})
+    assert any("type:issue involves:octocat is:closed" in q for q in queries)
 
 
-def test_my_issues_repo_error_and_username_mode(client, monkeypatch):
+def test_my_issues_username_mode_and_search_error(client, monkeypatch):
     _token_mode(monkeypatch)
-    routes = [
-        ("/user/repos", [{"full_name": "octocat/Bad"}, {"full_name": "octocat/Good"}]),
-        ("/repos/octocat/Bad/issues", RuntimeError("api down")),
-        ("/repos/octocat/Good/issues", [_issue(5)]),
-        ("/user", {"login": "octocat"}),
-    ]
-    get = AsyncMock(side_effect=_get_dispatch(routes))
+
+    # Search failure degrades to the empty payload, not a 500
+    get = AsyncMock(side_effect=RuntimeError("api down"))
     with patch("httpx.AsyncClient.get", new=get):
         resp = client.get(f"{GH}/issues")
     assert resp.status_code == 200
-    assert [i["number"] for i in resp.json()["issues"]] == [5]
+    assert resp.json()["issues"] == []
 
-    # Username-only mode uses the public repos endpoint
+    # Username-only mode: no /user lookup, unauthenticated search
     monkeypatch.setattr("routers.integrations.github.settings.github_token", "")
     monkeypatch.setattr("routers.integrations.github.settings.github_username", "octocat")
-    routes2 = [
-        ("/users/octocat/repos", [{"full_name": "octocat/R9"}]),
-        ("/issues", [_issue(9)]),
-    ]
-    get2 = AsyncMock(side_effect=_get_dispatch(routes2))
+    calls: list[str] = []
+    get2 = AsyncMock(side_effect=_search_dispatch(calls, items=[_search_item(9, repo="octocat/R9")]))
     with patch("httpx.AsyncClient.get", new=get2):
         resp = client.get(f"{GH}/issues")
     assert resp.status_code == 200
     assert resp.json()["issues"][0]["repo"] == "octocat/R9"
+    assert not any(c.endswith("/user") for c in calls)
 
     # No config at all → empty payload, no HTTP
     monkeypatch.setattr("routers.integrations.github.settings.github_username", "")
-    resp = client.get(f"{GH}/issues")
+    calls.clear()
+    get3 = AsyncMock(side_effect=_search_dispatch(calls))
+    with patch("httpx.AsyncClient.get", new=get3):
+        resp = client.get(f"{GH}/issues")
     assert resp.json()["issues"] == []
     assert resp.json()["stats"]["total"] == 0
+    assert calls == []
 
 
-def test_my_pulls_token_mode_and_permission_gate(client, monkeypatch):
+def test_my_pulls_search_maps_draft_and_merged(client, monkeypatch):
     _token_mode(monkeypatch)
     pull = {
         "id": 50,
@@ -348,35 +400,23 @@ def test_my_pulls_token_mode_and_permission_gate(client, monkeypatch):
         "title": "pr seven",
         "state": "open",
         "draft": True,
-        "merged_at": None,
         "html_url": "https://github.com/octocat/R1/pull/7",
+        "repository_url": "https://api.github.com/repos/octocat/R1",
+        "pull_request": {"merged_at": None},
         "user": {"login": "octocat"},
         "created_at": "2026-01-01T00:00:00Z",
         "updated_at": "2026-01-02T00:00:00Z",
     }
-    routes = [
-        ("/user/repos", [{"full_name": "octocat/R1", "permissions": {"pull": True}}]),
-        ("/pulls", [pull]),
-        ("/user", {"login": "octocat"}),
-    ]
-    get = AsyncMock(side_effect=_get_dispatch(routes))
+    calls: list[str] = []
+    get = AsyncMock(side_effect=_search_dispatch(calls, items=[pull], total=1, open_total=1))
     with patch("httpx.AsyncClient.get", new=get):
         resp = client.get(f"{GH}/pulls", params={"filter": "all"})
     data = resp.json()
     assert data["pulls"][0]["number"] == 7
     assert data["pulls"][0]["draft"] is True
+    assert data["pulls"][0]["repo"] == "octocat/R1"
     assert data["stats"]["draft"] == 1
-
-    # Repo without pull permission is skipped before fetching
-    routes2 = [
-        ("/user/repos", [{"full_name": "octocat/NoPull", "permissions": {"pull": False}}]),
-        ("/user", {"login": "octocat"}),
-    ]
-    get2 = AsyncMock(side_effect=_get_dispatch(routes2))
-    with patch("httpx.AsyncClient.get", new=get2):
-        resp = client.get(f"{GH}/pulls")
-    assert resp.json()["pulls"] == []
-    assert resp.json()["stats"]["total"] == 0
+    assert len(calls) <= 4  # /user + ≤3 search queries
 
 
 def test_my_pulls_username_mode_and_empty(client, monkeypatch):
@@ -388,19 +428,20 @@ def test_my_pulls_username_mode_and_empty(client, monkeypatch):
         "title": "t",
         "state": "closed",
         "html_url": "u",
+        "repository_url": "https://api.github.com/repos/octocat/R2",
+        "pull_request": {"merged_at": "2026-01-03T00:00:00Z"},
         "user": {"login": "x"},
         "created_at": "c",
         "updated_at": "u",
     }
-    routes = [
-        ("/users/octocat/repos", [{"full_name": "octocat/R2"}]),
-        ("/pulls", [pull_min]),
-    ]
-    get = AsyncMock(side_effect=_get_dispatch(routes))
+    calls: list[str] = []
+    get = AsyncMock(side_effect=_search_dispatch(calls, items=[pull_min]))
     with patch("httpx.AsyncClient.get", new=get):
         resp = client.get(f"{GH}/pulls")
     assert resp.status_code == 200
-    assert resp.json()["pulls"][0]["number"] == 2
+    data = resp.json()
+    assert data["pulls"][0]["number"] == 2
+    assert data["pulls"][0]["merged_at"] == "2026-01-03T00:00:00Z"
 
     monkeypatch.setattr("routers.integrations.github.settings.github_username", "")
     resp = client.get(f"{GH}/pulls")
