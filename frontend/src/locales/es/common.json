@@ -394,6 +394,7 @@
   },
   "sync": {
     "syncedFromVault": "Sincronizado desde la bóveda: \"{title}\"",
+    "syncedManyFromVault": "Se sincronizaron {count} notas desde la bóveda",
     "syncingVault": "Sincronizando bóveda...",
     "syncedVault": "Bóveda sincronizada",
     "lastSync": "Última sincronización",

@@ -394,6 +394,7 @@
   },
   "sync": {
     "syncedFromVault": "Synced from vault: \"{title}\"",
+    "syncedManyFromVault": "Synced {count} notes from vault",
     "syncingVault": "Syncing vault...",
     "syncedVault": "Vault synced",
     "lastSync": "Last sync",
