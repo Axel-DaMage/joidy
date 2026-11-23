@@ -2,7 +2,7 @@
   /**
    * Shared progress bar component (#255).
    * Replaces duplicated progress-track/progress-fill markup across XPBar,
-   * GoalCard, goals/+page, OnboardingTour, etc.
+   * GoalRow, goals/+page, OnboardingTour, etc.
    */
   export let value = 0;
   export let max = 100;

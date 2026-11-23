@@ -541,7 +541,21 @@
     "discardConfirm": "Confirm?",
     "sortBy": "Sort goals",
     "goalColor": "Goal color",
-    "goalColorHex": "Goal color (hex)"
+    "goalColorHex": "Goal color (hex)",
+    "editorEmptyTitle": "No goals yet",
+    "editorEmptyHint": "Create your first goal to start tracking.",
+    "editorNoMatches": "No goals match the current filters.",
+    "editorRail": {
+      "title": "Goal summary",
+      "active": "Active goals",
+      "managed": "{count} managed",
+      "completed": "Completed",
+      "doneShare": "{pct}% of total",
+      "paused": "Paused",
+      "pinned": "Pinned",
+      "today": "Due today",
+      "todayHint": "assigned today"
+    }
   },
   "analyticsPage": {
     "loading": "Loading analytics…",
@@ -1129,14 +1143,15 @@
     "propertiesPaneLabel": "Goal properties"
   },
   "goalFilters": {
-    "editorTitle": "Goal Editor",
     "searchPlaceholder": "Search goals...",
     "all": "All",
     "pinned": "Pinned",
     "active": "Active",
     "completed": "Completed",
     "archived": "Archived",
-    "failed": "Failed"
+    "failed": "Failed",
+    "stateGroup": "State",
+    "clearFilter": "Clear filter"
   },
   "chat": {
     "assistantName": "Joidy Assistant",

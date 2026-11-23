@@ -1,9 +1,11 @@
 <script lang="ts">
-  import GoalCard from './GoalCard.svelte';
+  import GoalRow from './GoalRow.svelte';
   import EmptyState from './EmptyState.svelte';
+  import Target from 'lucide-svelte/icons/target';
   import type { Goal, GoalContext, Note } from '$lib/api';
   import type { Tag as TagType } from '$lib/api';
   import { setGoalContext } from '$lib/stores/goalContext';
+  import { t } from 'svelte-i18n';
 
   interface Props {
     goals: Goal[];
@@ -23,6 +25,8 @@
     onFail?: (id: number) => void;
     onDelete?: (goal: Goal) => void;
     onArchive?: (id: number) => void;
+    /** Opens the create-goal form — used by the empty state CTA. */
+    onNew?: () => void;
   }
 
   let {
@@ -43,9 +47,10 @@
     onFail,
     onDelete,
     onArchive,
+    onNew,
   }: Props = $props();
 
-  // Set the shared context once so GoalCard can consume tags, notes, callbacks,
+  // Set the shared context once so GoalRow can consume tags, notes, callbacks,
   // and label maps without each intermediate level re-forwarding them as props (#351).
   setGoalContext({
     get tags() { return tags; },
@@ -105,50 +110,43 @@
   }
 
   let visibleGoals = $derived(filteredGoals(goals, query, filter, contextFilter, pinned));
+  // "No goals at all" gets the create CTA; "filters match nothing" gets a
+  // plain message (the toolbar owns clearing them).
+  let hasAnyGoal = $derived(goals.length > 0);
 </script>
 
-<div class="editor-grid-container">
+<div class="goal-list">
   {#if visibleGoals.length === 0}
-    <EmptyState message="No hay objetivos que coincidan con los filtros." />
+    {#if !hasAnyGoal && onNew}
+      <EmptyState
+        title={$t('goalsPage.editorEmptyTitle')}
+        message={$t('goalsPage.editorEmptyHint')}
+        actionLabel={$t('goalsPage.newGoal')}
+        onAction={onNew}
+      >
+        {#snippet icon()}<Target size={36} />{/snippet}
+      </EmptyState>
+    {:else}
+      <EmptyState message={$t('goalsPage.editorNoMatches')} />
+    {/if}
   {:else}
-    <div class="editor-grid">
-      {#each visibleGoals as goal (goal.id)}
-        <GoalCard
-          {goal}
-          pinned={pinned.has(goal.id)}
-        />
-      {/each}
-    </div>
+    {#each visibleGoals as goal (goal.id)}
+      <GoalRow {goal} pinned={pinned.has(goal.id)} />
+    {/each}
   {/if}
 </div>
 
 <style>
-  .editor-grid-container {
-    flex: 1;
+  .goal-list {
+    min-height: 0;
+    min-width: 0;
     overflow-y: auto;
-    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--s2);
+    padding: var(--s1);
   }
-
-  .editor-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-    gap: 20px;
-    width: 100%;
-  }
-
-  @media (max-width: 768px) {
-    .editor-grid {
-      grid-template-columns: 1fr;
-    }
-    .editor-grid-container {
-      padding: var(--s3);
-    }
-  }
-
-  @media (max-width: 480px) {
-    .editor-grid {
-      grid-template-columns: 1fr;
-      gap: var(--s3);
-    }
+  .goal-list > :global(.empty-state) {
+    margin: auto;
   }
 </style>

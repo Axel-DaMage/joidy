@@ -1,16 +1,35 @@
 <script lang="ts">
+  // GoalFilters — slim toolbar for the goals editor tab: search, state filter
+  // chips and energy-context chips. No page title (the tab already labels the
+  // view) and no Inbox state chip (the dedicated Inbox tab owns triage).
   import Search from 'lucide-svelte/icons/search';
   import Sun from 'lucide-svelte/icons/sun';
   import Moon from 'lucide-svelte/icons/moon';
   import Zap from 'lucide-svelte/icons/zap';
+  import X from 'lucide-svelte/icons/x';
   import { t } from 'svelte-i18n';
   import type { GoalContext } from '$lib/api';
+
+  interface Props {
+    query?: string;
+    filter?: string | null;
+    contextFilter?: GoalContext | null;
+  }
 
   let {
     query = $bindable(''),
     filter = $bindable<string | null>(null),
-    contextFilter = $bindable<GoalContext | null>(null)
-  } = $props();
+    contextFilter = $bindable<GoalContext | null>(null),
+  }: Props = $props();
+
+  const STATE_FILTERS = [
+    { value: null, key: 'all' },
+    { value: 'PINNED', key: 'pinned' },
+    { value: 'ACTIVE', key: 'active' },
+    { value: 'COMPLETED', key: 'completed' },
+    { value: 'CANCELLED', key: 'archived' },
+    { value: 'FAILED', key: 'failed' },
+  ] as const;
 
   const CONTEXT_CHIPS: { value: GoalContext; key: string }[] = [
     { value: 'MORNING', key: 'contextMorning' },
@@ -23,219 +42,155 @@
   }
 </script>
 
-<div class="editor-header">
-  <h3 class="editor-title">{$t('goalFilters.editorTitle')}</h3>
-  <div class="editor-controls">
-    <div class="search-box">
-      <Search size={16} />
-      <input
-        type="text"
-        placeholder={$t('goalFilters.searchPlaceholder')}
-        aria-label={$t('goalFilters.searchPlaceholder')}
-        bind:value={query}
-      />
-    </div>
-    <div class="filter-buttons">
+<div class="gf">
+  <label class="gf-search">
+    <Search size={13} />
+    <input
+      type="text"
+      placeholder={$t('goalFilters.searchPlaceholder')}
+      aria-label={$t('goalFilters.searchPlaceholder')}
+      bind:value={query}
+    />
+  </label>
+
+  <div class="gf-group" role="group" aria-label={$t('goalFilters.stateGroup')}>
+    {#each STATE_FILTERS as f (f.key)}
       <button
-        class="filter-btn"
-        class:active={filter === null}
-        aria-pressed={filter === null}
-        onclick={() => filter = null}
-      >{$t('goalFilters.all')}</button>
+        type="button"
+        class="gf-chip"
+        class:active={filter === f.value}
+        aria-pressed={filter === f.value}
+        onclick={() => (filter = f.value)}
+      >
+        {$t(`goalFilters.${f.key}`)}
+      </button>
+    {/each}
+    {#if filter === 'INBOX'}
+      <!-- Persisted legacy value: keep it visible and clearable even though
+           the dedicated chip was removed. -->
       <button
-        class="filter-btn"
-        class:active={filter === 'PINNED'}
-        aria-pressed={filter === 'PINNED'}
-        onclick={() => filter = 'PINNED'}
-      >{$t('goalFilters.pinned')}</button>
+        type="button"
+        class="gf-chip active"
+        title={$t('goalFilters.clearFilter')}
+        onclick={() => (filter = null)}
+      >
+        {$t('goalsPage.inboxTab')}
+        <X size={10} />
+      </button>
+    {/if}
+  </div>
+
+  <div class="gf-group gf-ctx" role="group" aria-label={$t('goalsPage.contextLabel')}>
+    {#each CONTEXT_CHIPS as chip (chip.value)}
       <button
-        class="filter-btn"
-        class:active={filter === 'ACTIVE'}
-        aria-pressed={filter === 'ACTIVE'}
-        onclick={() => filter = 'ACTIVE'}
-      >{$t('goalFilters.active')}</button>
-      <button
-        class="filter-btn"
-        class:active={filter === 'COMPLETED'}
-        aria-pressed={filter === 'COMPLETED'}
-        onclick={() => filter = 'COMPLETED'}
-      >{$t('goalFilters.completed')}</button>
-      <button
-        class="filter-btn"
-        class:active={filter === 'CANCELLED'}
-        aria-pressed={filter === 'CANCELLED'}
-        onclick={() => filter = 'CANCELLED'}
-      >{$t('goalFilters.archived')}</button>
-      <button
-        class="filter-btn"
-        class:active={filter === 'FAILED'}
-        aria-pressed={filter === 'FAILED'}
-        onclick={() => filter = 'FAILED'}
-      >{$t('goalFilters.failed')}</button>
-      <button
-        class="filter-btn inbox-filter"
-        class:active={filter === 'INBOX'}
-        aria-pressed={filter === 'INBOX'}
-        onclick={() => filter = 'INBOX'}
-      >{$t('goalsPage.inboxTab')}</button>
-    </div>
-    <div class="context-filter" role="group" aria-label={$t('goalsPage.contextLabel')}>
-      {#each CONTEXT_CHIPS as chip}
-        <button
-          class="filter-btn context-chip"
-          class:active={contextFilter === chip.value}
-          onclick={() => toggleContext(chip.value)}
-          title={$t(`goalsPage.${chip.key}Hint`)}
-          aria-pressed={contextFilter === chip.value}
-        >
-          {#if chip.value === 'MORNING'}<Sun size={11} />{:else if chip.value === 'NIGHT'}<Moon size={11} />{:else}<Zap size={11} />{/if}
-          {$t(`goalsPage.${chip.key}`)}
-        </button>
-      {/each}
-    </div>
+        type="button"
+        class="gf-chip gf-ctx-chip"
+        class:active={contextFilter === chip.value}
+        onclick={() => toggleContext(chip.value)}
+        title={$t(`goalsPage.${chip.key}Hint`)}
+        aria-pressed={contextFilter === chip.value}
+      >
+        {#if chip.value === 'MORNING'}<Sun size={11} />{:else if chip.value === 'NIGHT'}<Moon
+            size={11}
+          />{:else}<Zap size={11} />{/if}
+        {$t(`goalsPage.${chip.key}`)}
+      </button>
+    {/each}
   </div>
 </div>
 
 <style>
-  .editor-header {
+  .gf {
+    flex: 1;
+    min-width: 0;
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    padding: 16px 24px;
-    border-bottom: 1px solid var(--border);
-    background: var(--surface);
-    flex-shrink: 0;
-    gap: 20px;
+    gap: var(--s2);
     flex-wrap: wrap;
   }
 
-  .editor-title {
-    font-size: 20px;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin: 0;
-  }
-
-  .editor-controls {
+  .gf-search {
     display: flex;
     align-items: center;
-    gap: 16px;
-    flex-wrap: wrap;
-  }
-
-  .search-box {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 14px;
+    gap: 6px;
+    padding: 5px 10px;
     background: var(--surface-hover);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: var(--r);
     color: var(--text-muted);
+    width: 200px;
+    flex-shrink: 0;
   }
-
-  .search-box input {
+  .gf-search:focus-within {
+    border-color: var(--xp);
+  }
+  .gf-search input {
     background: transparent;
     border: none;
     color: var(--text-primary);
-    font-size: 13px;
+    font-size: 12px;
     outline: none;
-    width: 180px;
+    width: 100%;
+    min-width: 0;
   }
-  .search-box input:focus-visible {
-    outline: 2px solid var(--xp);
-    outline-offset: 2px;
-    border-radius: var(--r-sm);
-  }
-
-  .search-box input::placeholder {
+  .gf-search input::placeholder {
     color: var(--text-muted);
   }
 
-  .filter-buttons {
+  .gf-group {
     display: flex;
-    gap: 6px;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+    min-width: 0;
   }
 
-  .filter-btn {
-    padding: 6px 12px;
+  .gf-ctx {
+    padding-left: var(--s2);
+    border-left: 1px solid var(--border);
+  }
+
+  .gf-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 9px;
     border-radius: 6px;
-    font-size: 12px;
+    font-size: 11px;
+    font-family: var(--font-sans);
     background: transparent;
     border: 1px solid var(--border);
     color: var(--text-muted);
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all var(--t-fast);
+    white-space: nowrap;
   }
-
-  .filter-btn:hover {
+  .gf-chip:hover {
     background: var(--surface-hover);
     color: var(--text-primary);
   }
-
-  .filter-btn.active {
+  .gf-chip.active {
     background: var(--accent);
     border-color: var(--accent);
-    color: var(--bg);
-    font-weight: 500;
+    color: var(--accent-contrast-text, var(--bg));
+    font-weight: 600;
+  }
+  .gf-chip:focus-visible {
+    outline: 1px solid var(--xp);
+    outline-offset: 2px;
   }
 
-  .context-filter {
-    display: flex;
-    gap: 6px;
-    align-items: center;
-    padding-left: 8px;
-    border-left: 1px solid var(--border);
-  }
-
-  .context-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-  }
-
-  @media (max-width: 768px) {
-    .editor-header {
-      flex-direction: column;
-      gap: var(--s3);
-      align-items: flex-start;
-      padding: var(--s3) var(--s3);
-      width: 100%;
-      max-width: 100%;
-      box-sizing: border-box;
-      overflow: hidden;
-    }
-    .search-box input {
-      width: 100%;
-      min-width: 0;
-    }
-    .search-box {
-      flex: 1;
-      width: 100%;
-      max-width: 100%;
-      box-sizing: border-box;
-    }
-    .editor-controls {
-      width: 100%;
-      max-width: 100%;
-      box-sizing: border-box;
+  @media (max-width: 640px) {
+    .gf {
       flex-direction: column;
       align-items: stretch;
-      gap: var(--s2_5);
-      overflow: hidden;
     }
-    .filter-buttons {
-      flex-wrap: wrap;
-      gap: var(--s1);
+    .gf-search {
+      width: 100%;
     }
-    .context-filter {
+    .gf-ctx {
       border-left: none;
       padding-left: 0;
-      flex-wrap: wrap;
-    }
-    .filter-btn {
-      padding: var(--s2) var(--s2_5);
-      font-size: 11px;
     }
   }
 </style>

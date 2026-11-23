@@ -30,6 +30,7 @@
   import GoalFilters from '$lib/components/GoalFilters.svelte';
   import GoalInbox from '$lib/components/GoalInbox.svelte';
   import GoalList from '$lib/components/GoalList.svelte';
+  import GoalStatsRail from '$lib/components/GoalStatsRail.svelte';
   import { inboxCount } from '$lib/utils/goalTriage';
   import { localDayKey } from '$lib/utils/date';
   import { applyGamificationResult, showXPGain } from '$lib/stores/gamification';
@@ -51,7 +52,6 @@
     suggestIconKey,
   } from '$lib/utils/iconSuggest';
   import StreakIcon from '$lib/components/StreakIcon.svelte';
-  import GoalCard from '$lib/components/GoalCard.svelte';
   import LazyIconPicker from '$lib/components/LazyIconPicker.svelte';
   import ModalDialog from '$lib/components/ModalDialog.svelte';
   import NoteLinkPicker from '$lib/components/NoteLinkPicker.svelte';
@@ -961,6 +961,32 @@
     goto(`/goals/${goal.id}`);
   }
 
+  // Shared toggle for every "Nuevo Objetivo" entry point (editor toolbar,
+  // today header, empty state). Re-enables the fail icon/emoji suggestion
+  // each time the form opens (#1092).
+  function toggleNewGoalForm() {
+    if (!showAddForm) {
+      newFailEmojiManual = false;
+      newFailIconManual = false;
+    }
+    showAddForm = !showAddForm;
+  }
+
+  // KPI rail stats for the editor tab — derived from the already-loaded goals
+  // list; "today" reuses the planning assignments map (today + next 6 days
+  // are prefetched on mount).
+  let editorRailStats = $derived.by(() => {
+    const managed = goals.filter(isListGoal);
+    return {
+      active: managed.filter((g) => g.state === 'ACTIVE').length,
+      completed: managed.filter((g) => g.state === 'COMPLETED' || g.is_completed).length,
+      paused: managed.filter((g) => g.state === 'PAUSED').length,
+      pinned: managed.filter((g) => pinnedGoals.has(g.id)).length,
+      today: dailyGoals.filter((g) => g.state === 'ACTIVE' || g.state === 'PAUSED').length,
+      total: managed.length,
+    };
+  });
+
   function getGoalColor(goal: Goal): string {
     // Semantic states win over custom colors so terminal readouts never mix
     // palettes: completed = green, failed/abandoned = red (#1506).
@@ -1084,14 +1110,7 @@
             <h3 class="section-title" style="margin: 0;">{$t('goalsPage.dayGoals')}</h3>
             <button
               class="btn btn-primary new-goal-cta new-goal-cta-inline"
-              onclick={() => {
-                if (!showAddForm) {
-                  // #1092 — reactivar la sugerencia al abrir el formulario
-                  newFailEmojiManual = false;
-                  newFailIconManual = false;
-                }
-                showAddForm = !showAddForm;
-              }}
+              onclick={toggleNewGoalForm}
             >
               <Plus size={16} /> Nuevo Objetivo
             </button>
@@ -2235,51 +2254,52 @@
 
   {#if currentTab === 'editor'}
     <div class="tab-content fade-in editor-tab">
-      <div class="editor-header-row">
+      <div class="editor-toolbar">
         <GoalFilters
           bind:query={goalSearchQuery}
           bind:filter={goalFilterState}
           bind:contextFilter={goalContextFilter}
         />
-        <button
-          class="btn btn-primary new-goal-cta-inline"
-          onclick={() => {
-            if (!showAddForm) {
-              // #1092 — reactivar la sugerencia al abrir el formulario
-              newFailEmojiManual = false;
-              newFailIconManual = false;
-            }
-            showAddForm = !showAddForm;
-          }}
-        >
+        <button class="btn btn-primary new-goal-cta-inline" onclick={toggleNewGoalForm}>
           <Plus size={16} />
           {$t('goalsPage.newGoal')}
         </button>
       </div>
-      <GoalList
-        {goals}
-        query={goalSearchQuery}
-        filter={goalFilterState}
-        contextFilter={goalContextFilter}
-        pinned={pinnedGoals}
-        {tags}
-        {notes}
-        {getGoalColor}
-        {TEMPORALITY_LABELS}
-        {STATE_LABELS}
-        {formatFailConfig}
-        onTogglePin={togglePinned}
-        onClick={openGoalEditor}
-        onComplete={completeGoal}
-        onFail={failGoal}
-        onDelete={confirmDeleteGoal}
-        onArchive={(id) => {
-          const target = goals.find((g) => g.id === id);
-          if (target) {
-            updateGoalState(id, target.state === 'CANCELLED' ? 'ACTIVE' : 'CANCELLED');
-          }
-        }}
-      />
+      <div class="editor-body">
+        <GoalStatsRail
+          active={editorRailStats.active}
+          completed={editorRailStats.completed}
+          paused={editorRailStats.paused}
+          pinned={editorRailStats.pinned}
+          today={editorRailStats.today}
+          total={editorRailStats.total}
+        />
+        <GoalList
+          {goals}
+          query={goalSearchQuery}
+          filter={goalFilterState}
+          contextFilter={goalContextFilter}
+          pinned={pinnedGoals}
+          {tags}
+          {notes}
+          {getGoalColor}
+          {TEMPORALITY_LABELS}
+          {STATE_LABELS}
+          {formatFailConfig}
+          onTogglePin={togglePinned}
+          onClick={openGoalEditor}
+          onComplete={completeGoal}
+          onFail={failGoal}
+          onDelete={confirmDeleteGoal}
+          onArchive={(id) => {
+            const target = goals.find((g) => g.id === id);
+            if (target) {
+              updateGoalState(id, target.state === 'CANCELLED' ? 'ACTIVE' : 'CANCELLED');
+            }
+          }}
+          onNew={toggleNewGoalForm}
+        />
+      </div>
     </div>
   {/if}
 
@@ -2677,19 +2697,45 @@
     justify-content: center;
     padding: 12px;
   }
+  /* Editor tab — slim toolbar + KPI rail + dense goal rows (metrics-view
+     layout). The tab keeps its framed container; the body splits into a
+     fixed rail and a scrolling list. */
   .editor-tab {
-    padding: var(--s3);
-    height: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    overflow: hidden;
     box-sizing: border-box;
     border: 1px solid var(--border-light);
     border-radius: var(--r);
   }
-  .editor-header-row {
+  .editor-toolbar {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 12px;
+    gap: var(--s3);
+    padding: var(--s3) var(--s3) var(--s2);
+    border-bottom: 1px solid var(--border-light);
+    flex-shrink: 0;
+    flex-wrap: wrap;
+  }
+  .editor-toolbar .new-goal-cta-inline {
+    margin-left: auto;
+  }
+  .editor-body {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    gap: var(--s3);
+    padding: var(--s2) var(--s3) var(--s3);
+    align-items: stretch;
+  }
+  @media (max-width: 900px) {
+    .editor-body {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: none;
+    }
   }
   /* ── New Goal Centered Modal ── */
   .new-goal-backdrop {
@@ -3863,23 +3909,7 @@
     text-align: right;
   }
 
-  /* Editor de Objetivos - Nuevo Diseño */
-  .editor-tab {
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    padding: 0;
-    overflow: hidden;
-  }
-
-  .goal-date {
-    font-size: 10px;
-  }
-
   @media (max-width: 768px) {
-    .editor-stats {
-      flex-wrap: wrap;
-    }
     .tabs {
       overflow-x: auto;
       -webkit-overflow-scrolling: touch;
@@ -3908,20 +3938,11 @@
       flex: none;
       min-height: auto !important;
     }
-    .editor-header,
-    .editor-controls,
-    .search-box,
-    .filter-buttons {
-      width: 100%;
-      max-width: 100%;
-      box-sizing: border-box;
-      overflow-x: hidden;
-    }
     .tab-content {
       overflow-x: hidden;
       max-width: 100%;
     }
-    .editor-header-row {
+    .editor-toolbar {
       flex-direction: column;
       align-items: stretch;
       gap: var(--s2);

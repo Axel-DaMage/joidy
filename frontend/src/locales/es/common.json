@@ -541,7 +541,21 @@
     "discardConfirm": "¿Confirmar?",
     "sortBy": "Ordenar objetivos",
     "goalColor": "Color del objetivo",
-    "goalColorHex": "Color del objetivo (hex)"
+    "goalColorHex": "Color del objetivo (hex)",
+    "editorEmptyTitle": "Sin objetivos todavía",
+    "editorEmptyHint": "Crea tu primer objetivo para empezar a hacer seguimiento.",
+    "editorNoMatches": "No hay objetivos que coincidan con los filtros.",
+    "editorRail": {
+      "title": "Resumen de objetivos",
+      "active": "Objetivos activos",
+      "managed": "{count} en gestión",
+      "completed": "Completados",
+      "doneShare": "{pct}% del total",
+      "paused": "Pausados",
+      "pinned": "Fijados",
+      "today": "Para hoy",
+      "todayHint": "asignados hoy"
+    }
   },
   "analyticsPage": {
     "loading": "Cargando analíticas…",
@@ -1129,14 +1143,15 @@
     "propertiesPaneLabel": "Propiedades del objetivo"
   },
   "goalFilters": {
-    "editorTitle": "Editor de Objetivos",
     "searchPlaceholder": "Buscar objetivos...",
     "all": "Todos",
     "pinned": "Fijados",
     "active": "Activos",
     "completed": "Completados",
     "archived": "Archivados",
-    "failed": "Fallidos"
+    "failed": "Fallidos",
+    "stateGroup": "Estado",
+    "clearFilter": "Quitar filtro"
   },
   "chat": {
     "assistantName": "Asistente Joidy",
