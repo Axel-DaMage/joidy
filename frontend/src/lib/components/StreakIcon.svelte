@@ -16,19 +16,23 @@
   // until it lands.
   let lucideComp: any = Circle;
   $: {
-    if (!name) {
-      lucideComp = Circle;
-    } else {
-      lucideComp = getLucideIcon(name) ?? Circle;
-      if (!isEmoji && lucideComp === Circle) {
-        const requested = name;
-        loadLucideIcon(requested)
-          .then((loaded) => {
-            if (loaded && name === requested) lucideComp = loaded;
-          })
-          // Failed lazy chunk: keep the Circle fallback (#1459).
-          .catch((err) => logger.warn('[StreakIcon] lazy icon load failed:', err));
-      }
+    let resolved: any = Circle;
+    if (name) {
+      resolved = getLucideIcon(name) ?? Circle;
+    }
+    lucideComp = resolved;
+    // NB: test the local `resolved`, never `lucideComp` — reading the state
+    // var inside its own reactive block makes it a self-dependency, and since
+    // components are objects every assignment re-triggers the block →
+    // infinite render loop.
+    if (name && !isEmoji && resolved === Circle) {
+      const requested = name;
+      loadLucideIcon(requested)
+        .then((loaded) => {
+          if (loaded && name === requested) lucideComp = loaded;
+        })
+        // Failed lazy chunk: keep the Circle fallback (#1459).
+        .catch((err) => logger.warn('[StreakIcon] lazy icon load failed:', err));
     }
   }
 </script>
