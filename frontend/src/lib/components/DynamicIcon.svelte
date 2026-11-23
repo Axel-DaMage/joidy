@@ -70,16 +70,22 @@
   let comp: any = Circle;
   $: {
     const packName = pack || $activeIconPack;
+    let resolved: any;
     if (packName === 'phosphor' || packName === 'material') {
       // Phosphor/Material only ship a curated subset. When the requested
       // name isn't in the map, degrade gracefully to the matching lucide
       // icon instead of a generic Circle so the UI never shows a blank
       // circle (#783).
-      comp = phosphorMap[name] || (getLucideIcon(name) ?? Circle);
+      resolved = phosphorMap[name] || (getLucideIcon(name) ?? Circle);
     } else {
-      comp = getLucideIcon(name) ?? Circle;
+      resolved = getLucideIcon(name) ?? Circle;
     }
-    if (!isEmoji && (!comp || comp === Circle)) {
+    comp = resolved;
+    // NB: test the local `resolved`, never `comp` — reading `comp` inside
+    // this block makes it a dependency of its own reactive statement, and
+    // since component values are objects Svelte treats every assignment as
+    // a change → infinite render loop (#freeze).
+    if (!isEmoji && (!resolved || resolved === Circle)) {
       const requested = name;
       loadLucideIcon(requested)
         .then((loaded) => {
