@@ -427,3 +427,73 @@ def test_resolve_removal_actions(client, db_session):
     assert resp.json() == {"status": "deleted"}
     assert client.post("/goals/999999/resolve-removal", json={"action": "manual"}).status_code == 404
     assert client.post("/goals/999999/resolve-removal", json={"action": "cancel"}).status_code == 404
+
+
+# ─── unwritable vault (#1478) ─────────────────────────────────────────────────
+
+
+def _raise_permission(*_args, **_kwargs):
+    raise PermissionError("vault is read-only")
+
+
+def test_create_goal_vault_unwritable_still_creates(client, db_session, monkeypatch):
+    """#1478 — get_objectives_dir() raising PermissionError must not 500:
+    the goal is created anyway and ``source_path`` stays null."""
+    monkeypatch.setattr("routers.goals.get_objectives_dir", _raise_permission)
+
+    resp = client.post("/goals/", json=_goal_payload(title="unwritable-vault"))
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["source_path"] is None
+
+    db_session.expire_all()
+    goal = db_session.query(Goal).filter(Goal.title == "unwritable-vault").one()
+    assert goal.source_path is None
+
+
+def test_create_goal_file_write_failure_still_creates(client, db_session, monkeypatch, tmp_path):
+    """#1478 — the same guard covers a failure inside ``_write_goal_file``
+    (e.g. ``Objetivos/`` exists but is read-only, so mkdir succeeds and
+    ``write_text`` raises)."""
+    monkeypatch.setattr("routers.goals._write_goal_file", _raise_permission)
+
+    resp = client.post("/goals/", json=_goal_payload(title="half-writable"))
+    assert resp.status_code == 201, resp.text
+    data = resp.json()
+    assert data["source_path"] is None
+    # The file must not exist either — no bogus source_path for an unwritten file.
+    assert not list((tmp_path / "isolated-vault" / "Objetivos").glob(f"{data['id']}_*.md"))
+
+    db_session.expire_all()
+    assert db_session.get(Goal, data["id"]).source_path is None
+
+
+def test_create_goal_writes_vault_file(client, tmp_path):
+    """Control: with a writable vault (autouse ``_isolated_vault``) the goal
+    file is written and ``source_path`` points at it."""
+    resp = client.post("/goals/", json=_goal_payload(title="vault-goal"))
+    assert resp.status_code == 201, resp.text
+    data = resp.json()
+    assert data["source_path"] == f"Objetivos/{data['id']}_vault-goal.md"
+
+    files = list((tmp_path / "isolated-vault" / "Objetivos").glob(f"{data['id']}_*.md"))
+    assert len(files) == 1
+    body = files[0].read_text(encoding="utf-8")
+    assert "joidy_managed: True" in body
+    assert "# vault-goal" in body
+
+
+def test_fail_and_delete_goal_vault_unwritable(client, db_session, monkeypatch):
+    """#1478 — the same audit applies to the other vault-write call sites:
+    /fail and DELETE must succeed even when the vault write blows up."""
+    monkeypatch.setattr("routers.goals.get_objectives_dir", _raise_permission)
+    # delete_goal_file resolves the objectives dir inside joidy_vault_writer.
+    monkeypatch.setattr("services.joidy_vault_writer.get_objectives_dir", _raise_permission)
+    goal = _goal(db_session, title="fail-anyway")
+    db_session.commit()
+
+    resp = client.post(f"/goals/{goal.id}/fail")
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["state"] == "FAILED"
+
+    assert client.delete(f"/goals/{goal.id}").status_code == 204
+    assert client.get(f"/goals/{goal.id}").status_code == 404
