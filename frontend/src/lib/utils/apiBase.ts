@@ -47,3 +47,33 @@ export function resolveBrowserApiBase(
   if (viteApiUrl) return viteApiUrl;
   return `${location.protocol}//${location.hostname}:${DEFAULT_API_PORT}`;
 }
+
+/**
+ * Augment a serialized Content-Security-Policy with the runtime API port
+ * (#1487). The static `*:<port>` wildcards in kit.options.ts only cover the
+ * default fallback range (8000-8005) because they are frozen at image build
+ * time — a custom `API_PORT` (e.g. 9000, scanned 9000-9005 by `joidy up`)
+ * would still be blocked. The server process knows the real port at runtime
+ * via PUBLIC_API_PORT, so hooks.server.ts patches it into `connect-src`
+ * (REST + WebSocket) and `img-src` (/uploads) per response. Directives not
+ * listed here — including the script-src nonce — pass through untouched.
+ */
+export function augmentCspWithApiPort(csp: string, port: string | undefined): string {
+  if (!port || !isValidPort(port)) return csp;
+  const additions: Record<string, string[]> = {
+    'connect-src': [`http://*:${port}`, `https://*:${port}`, `ws://*:${port}`, `wss://*:${port}`],
+    'img-src': [`http://*:${port}`, `https://*:${port}`],
+  };
+  return csp
+    .split(';')
+    .map((directive) => {
+      const trimmed = directive.trim();
+      if (!trimmed) return trimmed;
+      const [name, ...values] = trimmed.split(/\s+/);
+      const extra = additions[name];
+      if (!extra) return trimmed;
+      const merged = [...values, ...extra.filter((s) => !values.includes(s))];
+      return `${name} ${merged.join(' ')}`;
+    })
+    .join('; ');
+}

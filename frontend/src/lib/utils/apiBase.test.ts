@@ -3,6 +3,7 @@ import {
   API_PORT_FALLBACK_SPAN,
   API_PORT_RANGE,
   DEFAULT_API_PORT,
+  augmentCspWithApiPort,
   resolveBrowserApiBase,
 } from './apiBase';
 
@@ -54,5 +55,34 @@ describe('API port fallback range', () => {
     expect(API_PORT_RANGE).toEqual([8000, 8001, 8002, 8003, 8004, 8005]);
     expect(API_PORT_RANGE[0]).toBe(DEFAULT_API_PORT);
     expect(API_PORT_RANGE.length).toBe(API_PORT_FALLBACK_SPAN + 1);
+  });
+});
+
+describe('augmentCspWithApiPort (#1487)', () => {
+  const csp =
+    "default-src 'self'; script-src 'self' 'nonce-abc'; connect-src 'self' data: http://*:8000 ws://*:8000; img-src 'self' data: http://*:8000";
+
+  it('adds the runtime port to connect-src (http/https/ws/wss) and img-src', () => {
+    const out = augmentCspWithApiPort(csp, '9002');
+    expect(out).toContain('connect-src \'self\' data: http://*:8000 ws://*:8000 http://*:9002 https://*:9002 ws://*:9002 wss://*:9002');
+    expect(out).toContain("img-src 'self' data: http://*:8000 http://*:9002 https://*:9002");
+  });
+
+  it('leaves other directives — including the script nonce — untouched', () => {
+    const out = augmentCspWithApiPort(csp, '9002');
+    expect(out).toContain("script-src 'self' 'nonce-abc'");
+    expect(out).toContain("default-src 'self'");
+  });
+
+  it('does not duplicate sources already in the static range', () => {
+    const out = augmentCspWithApiPort(csp, '8000');
+    expect(out.match(/http:\/\/\*:8000/g)?.length).toBe(2); // one in connect-src, one in img-src
+  });
+
+  it('returns the policy unchanged for missing/invalid ports', () => {
+    expect(augmentCspWithApiPort(csp, undefined)).toBe(csp);
+    expect(augmentCspWithApiPort(csp, '')).toBe(csp);
+    expect(augmentCspWithApiPort(csp, 'abc')).toBe(csp);
+    expect(augmentCspWithApiPort(csp, '99999')).toBe(csp);
   });
 });
