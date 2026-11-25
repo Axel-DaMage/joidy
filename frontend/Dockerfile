@@ -24,6 +24,9 @@ EXPOSE 3000
 CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
 
 FROM deps AS build
+# Build-time fallback only — the SPA resolves the API port at runtime from
+# PUBLIC_API_PORT (compose env → $app/env/public), so `joidy up` port-fallback
+# works without rebuilding the image (#1487).
 ARG VITE_API_URL=http://localhost:8000
 ENV VITE_API_URL=$VITE_API_URL
 # Baked into the bundle as __GIT_SHA__ so dev mode can show which commit the

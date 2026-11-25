@@ -1,6 +1,8 @@
 import { version } from '$app/env';
+import { PUBLIC_API_PORT } from '$app/env/public';
 import { assets, immutable } from '$app/manifest';
 import { resolve } from '$app/paths';
+import { resolveBrowserApiBase } from '../lib/utils/apiBase';
 
 // Two caches with different lifecycles:
 // - PRECACHE holds the hashed build assets + offline fallback. It is wiped and
@@ -21,19 +23,19 @@ const RUNTIME_CACHE_LIMIT = 60;
 const ASSETS = [...immutable, ...assets].map((asset) => resolve(asset.path));
 
 // The API lives on a different origin (default http://host:8000), so a
-// pathname check like `/api/` can never match — derive the real origin the
-// same way lib/api.ts does for browser requests.
-const API_ORIGIN = (() => {
-  const envUrl = import.meta.env.VITE_API_URL as string | undefined;
-  if (envUrl) {
-    try {
-      return new URL(envUrl).origin;
-    } catch {
-      /* fall through to the default */
-    }
-  }
-  return `${self.location.protocol}//${self.location.hostname}:8000`;
-})();
+// pathname check like `/api/` can never match — resolve the real origin with
+// the same helper the page uses (lib/utils/apiBase.ts). Kit 3 loads dynamic
+// public env in service workers at runtime via /_app/env.js (see the
+// vite-plugin-sveltekit-service-worker-env prelude), so a port-fallback'd
+// PUBLIC_API_PORT resolves correctly here too (#1487). `self.location` is the
+// SW scope origin — same host the page resolves against.
+const API_ORIGIN = new URL(
+  resolveBrowserApiBase(
+    PUBLIC_API_PORT,
+    import.meta.env.VITE_API_URL as string | undefined,
+    self.location
+  )
+).origin;
 
 self.addEventListener('install', (event) => {
   async function addFilesToCache() {
