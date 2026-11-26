@@ -483,19 +483,14 @@ MAX_CONTEXT_NOTES = 5
 MAX_NOTE_CHARS = 2000
 
 
-async def _retrieve_note_context(question: str, top_k: int = 5) -> list[dict]:
-    """Embed ``question`` and pull the most similar notes from pgvector (#1131).
+def _fetch_note_chunks(similar: list[dict]) -> list[dict]:
+    """Fetch title/snippet for each similar note — synchronous DB I/O.
 
-    Returns ``[{"note_id", "title", "snippet"}]`` ordered by similarity.
-    Raises on provider/DB failure — callers that can degrade gracefully (e.g.
-    /chat) catch the error and continue without note context.
+    Called via ``asyncio.to_thread`` so the psycopg2 round-trips never block
+    the event loop (#1533). The whole connect→query→fetch lives in one helper
+    because the connection context manager spans the loop.
     """
-    emb_client = get_embedding_client()
-    question_vector = await emb_circuit_breaker.call(emb_client.embed, question)
-
-    from database import engine, find_similar_notes
-
-    similar = find_similar_notes(question_vector, limit=top_k)
+    from database import engine
 
     chunks: list[dict] = []
     with engine.connect() as conn:
@@ -513,6 +508,24 @@ async def _retrieve_note_context(question: str, top_k: int = 5) -> list[dict]:
                     }
                 )
     return chunks
+
+
+async def _retrieve_note_context(question: str, top_k: int = 5) -> list[dict]:
+    """Embed ``question`` and pull the most similar notes from pgvector (#1131).
+
+    Returns ``[{"note_id", "title", "snippet"}]`` ordered by similarity.
+    Raises on provider/DB failure — callers that can degrade gracefully (e.g.
+    /chat) catch the error and continue without note context.
+    """
+    emb_client = get_embedding_client()
+    question_vector = await emb_circuit_breaker.call(emb_client.embed, question)
+
+    from database import find_similar_notes
+
+    # psycopg2 is synchronous — every DB round-trip runs in a worker thread
+    # so it never serializes the event loop (#1533).
+    similar = await asyncio.to_thread(find_similar_notes, question_vector, limit=top_k)
+    return await asyncio.to_thread(_fetch_note_chunks, similar)
 
 
 @app.post("/embed")
@@ -537,12 +550,14 @@ async def embed(req: EmbedRequest):
             provider_name = client.provider_name
             get_cache().set(key, vector)
 
-        # Save vector embedding to shared PostgreSQL database
+        # Save vector embedding to shared PostgreSQL database. psycopg2 is
+        # synchronous — keep the write off the event loop (#1533).
         from database import store_embedding
 
-        store_embedding(req.note_id, vector)
+        await asyncio.to_thread(store_embedding, req.note_id, vector)
 
-        record_usage("embed", input_tokens=_estimate_tokens(req.content))
+        # record_usage opens a fresh DB connection per call — also offloaded.
+        await asyncio.to_thread(record_usage, "embed", input_tokens=_estimate_tokens(req.content))
 
         return {
             "status": "success",
@@ -583,7 +598,7 @@ async def classify(req: ClassifyRequest):
             provider_name = client.provider_name
             get_cache().set(key, suggestions)
 
-        record_usage("classify", input_tokens=_estimate_tokens(req.content))
+        await asyncio.to_thread(record_usage, "classify", input_tokens=_estimate_tokens(req.content))
 
         return {
             "status": "success",
@@ -599,8 +614,9 @@ async def classify(req: ClassifyRequest):
 
 
 @app.get("/usage")
-def usage():
-    stats = get_monthly_stats()
+async def usage():
+    # get_monthly_stats queries the DB synchronously — off the loop (#1533).
+    stats = await asyncio.to_thread(get_monthly_stats)
     return {
         "ai_enabled": settings.is_ai_enabled,
         "available_providers": settings.available_providers,
@@ -630,7 +646,8 @@ async def rag(req: RAGRequest):
             temperature=0.2,
             max_tokens=512,
         )
-        record_usage(
+        await asyncio.to_thread(
+            record_usage,
             "rag",
             input_tokens=_estimate_tokens(req.question) + sum(_estimate_tokens(c) for c in context_chunks),
         )
@@ -788,9 +805,31 @@ async def plan_suggest(req: PlanSuggestRequest):
         logger.warning("plan-suggest provider call failed", exc_info=True)
         return {"suggestions": [], "available": False, "reason": "provider_error"}
 
-    record_usage("plan-suggest", input_tokens=_estimate_tokens(prompt))
+    await asyncio.to_thread(record_usage, "plan-suggest", input_tokens=_estimate_tokens(prompt))
     suggestions = parse_plan_response(response, tasks, busy, req.week_start, req.week_end, req.timezone)
     return {"suggestions": suggestions, "available": True, "provider": client.provider_name}
+
+
+def _fetch_cluster_rows(max_notes: int):
+    """Fetch ``(note_id, embedding)`` rows for clustering — synchronous DB I/O.
+
+    Called via ``asyncio.to_thread`` so the psycopg2 round-trip never blocks
+    the event loop (#1533); the whole connect→query→fetch stays inside one
+    helper because the connection context manager spans the query.
+    """
+    from database import engine
+
+    with engine.connect() as conn:
+        return conn.execute(
+            text("""
+                SELECT ne.note_id, ne.embedding
+                FROM note_embeddings ne
+                JOIN notes n ON n.id = ne.note_id
+                ORDER BY n.created_at DESC
+                LIMIT :max_notes
+            """),
+            {"max_notes": max_notes},
+        ).fetchall()
 
 
 def _parse_and_cluster(rows, eps: float, min_samples: int):
@@ -836,6 +875,39 @@ def _parse_and_cluster(rows, eps: float, min_samples: int):
     return note_ids, clustering.labels_.tolist(), malformed
 
 
+def _build_cluster_results(clusters) -> list[dict]:
+    """Fetch note titles per cluster and build result payloads — sync DB I/O.
+
+    Uses a single connection for all cluster lookups to avoid exhausting the
+    pool, and parameterized placeholders to prevent SQL injection (#610).
+    Called via ``asyncio.to_thread`` so the round-trips never block the event
+    loop (#1533).
+    """
+    from database import engine
+
+    cluster_results = []
+    with engine.connect() as conn:
+        for label, ids in clusters.items():
+            params = {f"id_{idx}": i for idx, i in enumerate(ids)}
+            placeholders = ", ".join(f":id_{idx}" for idx in range(len(ids)))
+            title_rows = conn.execute(
+                # Only generated :id_N placeholders are interpolated; values bind via params.
+                text(f"SELECT id, title FROM notes WHERE id IN ({placeholders})"),  # noqa: S608
+                params,
+            ).fetchall()
+            title_map = {r[0]: r[1] for r in title_rows}
+            cluster_results.append(
+                {
+                    "cluster_id": int(label),
+                    "note_ids": ids,
+                    "note_count": len(ids),
+                    "representative_title": title_map.get(ids[0], "Unknown"),
+                    "titles": [title_map.get(i, "Unknown") for i in ids[:5]],
+                }
+            )
+    return cluster_results
+
+
 @app.post("/cluster")
 async def cluster_notes(
     eps: float = Query(default=0.3, gt=0.0, le=2.0),
@@ -854,20 +926,9 @@ async def cluster_notes(
 
     await get_limiter(settings.max_requests_per_minute, name="cluster").acquire()
 
-    from database import engine
-    from sqlalchemy import text as sql_text
-
-    with engine.connect() as conn:
-        rows = conn.execute(
-            sql_text("""
-                SELECT ne.note_id, ne.embedding
-                FROM note_embeddings ne
-                JOIN notes n ON n.id = ne.note_id
-                ORDER BY n.created_at DESC
-                LIMIT :max_notes
-            """),
-            {"max_notes": max_notes},
-        ).fetchall()
+    # psycopg2 is synchronous — the row fetch runs in a worker thread so it
+    # never blocks the event loop (#1533).
+    rows = await asyncio.to_thread(_fetch_cluster_rows, max_notes)
 
     if len(rows) < min_samples:
         return {"clusters": [], "total_notes": len(rows)}
@@ -892,29 +953,10 @@ async def cluster_notes(
         if label != -1:  # -1 = noise
             clusters[label].append(note_ids[idx])
 
-    # Fetch titles for representative notes (closest to centroid).
-    # Use a single connection for all cluster lookups to avoid exhausting the
-    # pool, and use parameterized placeholders to prevent SQL injection (#610).
-    cluster_results = []
-    with engine.connect() as conn:
-        for label, ids in clusters.items():
-            params = {f"id_{idx}": i for idx, i in enumerate(ids)}
-            placeholders = ", ".join(f":id_{idx}" for idx in range(len(ids)))
-            title_rows = conn.execute(
-                # Only generated :id_N placeholders are interpolated; values bind via params.
-                sql_text(f"SELECT id, title FROM notes WHERE id IN ({placeholders})"),  # noqa: S608
-                params,
-            ).fetchall()
-            title_map = {r[0]: r[1] for r in title_rows}
-            cluster_results.append(
-                {
-                    "cluster_id": int(label),
-                    "note_ids": ids,
-                    "note_count": len(ids),
-                    "representative_title": title_map.get(ids[0], "Unknown"),
-                    "titles": [title_map.get(i, "Unknown") for i in ids[:5]],
-                }
-            )
+    # Fetch titles for representative notes (closest to centroid) — sync DB
+    # I/O off the event loop (#1533). Single connection for all lookups, and
+    # parameterized placeholders against SQL injection (#610).
+    cluster_results = await asyncio.to_thread(_build_cluster_results, clusters)
 
     # Sort by cluster size descending
     cluster_results.sort(key=lambda c: c["note_count"], reverse=True)
@@ -980,7 +1022,7 @@ async def _chat_event_stream(client, prompt: str, system_prompt: str, suggestion
             yield _sse_frame("token", {"text": first})
         async for token in agen:
             yield _sse_frame("token", {"text": token})
-        record_usage("chat", input_tokens=_estimate_tokens(prompt))
+        await asyncio.to_thread(record_usage, "chat", input_tokens=_estimate_tokens(prompt))
         yield _sse_frame("done", {"suggestions": suggestions})
     except CircuitBreakerError:
         yield _sse_frame(
@@ -1060,7 +1102,7 @@ async def chat(req: ChatRequest):
             max_tokens=1024,
             system_prompt=system_prompt,
         )
-        record_usage("chat", input_tokens=_estimate_tokens(prompt))
+        await asyncio.to_thread(record_usage, "chat", input_tokens=_estimate_tokens(prompt))
         return {
             "status": "success",
             "response": response.strip(),

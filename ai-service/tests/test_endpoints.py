@@ -6,10 +6,12 @@ Covers success, provider-failure (500) and circuit-open degradation paths
 for /embed, /classify and /rag.
 """
 
+import asyncio
+import threading
 import time
 import unittest
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import database
 import main
@@ -628,6 +630,110 @@ class TestChatStream:
         resp = _client().post("/chat", json={"messages": [{"role": "user", "content": "hi"}]})
         assert resp.headers["content-type"].startswith("application/json")
         assert resp.json()["response"] == "llm answer"
+
+
+# ── sync DB calls offloaded from the event loop (#1533) ──────────────────
+
+
+class TestSyncDbOffloaded(unittest.IsolatedAsyncioTestCase):
+    """#1533: psycopg2 calls inside async handlers must run via
+    ``asyncio.to_thread`` — never on the event-loop thread itself."""
+
+    def _fake_embedding_client(self):
+        return SimpleNamespace(
+            provider_name="fake-emb",
+            embed=AsyncMock(return_value=[0.1, 0.2, 0.3]),
+        )
+
+    async def test_retrieve_note_context_returns_chunks(self):
+        """Refactor correctness: the pgvector lookup + title/snippet fetch
+        still produce the same payload shape."""
+        engine = MagicMock()
+        conn = engine.connect.return_value.__enter__.return_value
+        conn.execute.return_value.fetchone.side_effect = [
+            ("First", "body one"),
+            None,  # a missing row is skipped, as before
+            ("Third", "body three"),
+        ]
+        with (
+            patch.object(main, "get_embedding_client", return_value=self._fake_embedding_client()),
+            patch.object(
+                database,
+                "find_similar_notes",
+                lambda vec, limit=5: [
+                    {"note_id": 1, "distance": 0.1},
+                    {"note_id": 2, "distance": 0.2},
+                    {"note_id": 3, "distance": 0.3},
+                ],
+            ),
+            patch.object(database, "engine", engine),
+        ):
+            chunks = await main._retrieve_note_context("question")
+
+        assert chunks == [
+            {"note_id": 1, "title": "First", "snippet": "body one"},
+            {"note_id": 3, "title": "Third", "snippet": "body three"},
+        ]
+
+    async def test_find_similar_notes_runs_in_worker_thread(self):
+        """The pgvector lookup executes on a thread-pool thread, not on the
+        event-loop thread."""
+        loop_thread = threading.get_ident()
+        db_threads: list[int] = []
+
+        def fake_find(vec, limit=5):
+            db_threads.append(threading.get_ident())
+            return []
+
+        with (
+            patch.object(main, "get_embedding_client", return_value=self._fake_embedding_client()),
+            patch.object(database, "find_similar_notes", fake_find),
+            patch.object(main, "_fetch_note_chunks", MagicMock(return_value=[])),
+        ):
+            chunks = await main._retrieve_note_context("q")
+
+        assert chunks == []
+        assert db_threads and all(t != loop_thread for t in db_threads)
+
+    async def test_blocking_db_call_does_not_stall_event_loop(self):
+        """A blocking psycopg2 call must not freeze the event loop — other
+        coroutines keep ticking while it waits (#1533)."""
+        entered = threading.Event()
+        release = threading.Event()
+        heartbeats = 0
+
+        def slow_find(vec, limit=5):
+            entered.set()
+            release.wait(timeout=10)
+            return []
+
+        async def heartbeat():
+            nonlocal heartbeats
+            while not release.is_set():
+                heartbeats += 1
+                await asyncio.sleep(0.01)
+
+        async def scenario():
+            task = asyncio.create_task(main._retrieve_note_context("q"))
+            hb = asyncio.create_task(heartbeat())
+            # Wait until the DB call is genuinely in flight, then let
+            # heartbeats accumulate while it stays blocked.
+            while not entered.is_set():
+                await asyncio.sleep(0.005)
+            await asyncio.sleep(0.05)
+            release.set()
+            await asyncio.gather(task, hb)
+
+        with (
+            patch.object(main, "get_embedding_client", return_value=self._fake_embedding_client()),
+            patch.object(database, "find_similar_notes", slow_find),
+            patch.object(main, "_fetch_note_chunks", MagicMock(return_value=[])),
+        ):
+            # Bounded: if the sync call ran on the loop, the loop would freeze
+            # inside release.wait() and this would time out instead.
+            await asyncio.wait_for(scenario(), timeout=10)
+
+        assert heartbeats >= 3
 
 
 if __name__ == "__main__":
