@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, datetime
 from typing import Literal
 
@@ -34,6 +35,8 @@ from services.sanitizer import sanitize_color, sanitize_content, sanitize_emoji,
 from services.sync_service import update_local_mtime
 from services.timezone_utils import get_local_now
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/goals", tags=["goals"])
 
@@ -406,9 +409,15 @@ def create_goal(data: GoalCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(goal)
 
-    obj_dir = get_objectives_dir()
-    if obj_dir:
-        _write_goal_file(db, goal, obj_dir)
+    # Vault write is a side effect only — a missing or unwritable Obsidian
+    # vault must not 500 the request; the goal row stands on its own and
+    # ``source_path`` simply stays unset (#1478).
+    try:
+        obj_dir = get_objectives_dir()
+        if obj_dir:
+            _write_goal_file(db, goal, obj_dir)
+    except Exception as e:
+        logger.warning("Failed to write goal file: %s", e)
 
     return _serialize_goal(goal, db)
 
@@ -456,7 +465,11 @@ def update_goal(goal_id: int, data: GoalUpdate, db: Session = Depends(get_db)):
             "is_completed": goal.is_completed,
             "completed_at": goal.completed_at.isoformat() if goal.completed_at else None,
         }
-        update_goal_file(goal_id, goal.title, content, metadata)
+        # #1478 — goal-file sync is best-effort (same guard as create_goal).
+        try:
+            update_goal_file(goal_id, goal.title, content, metadata)
+        except Exception as e:
+            logger.warning("Failed to write goal file: %s", e)
 
         # #1141 — mirror into the linked real note (same as /content save).
         if goal.note_id is not None:
@@ -589,7 +602,14 @@ def get_goal_content(goal_id: int, db: Session = Depends(get_db)):
                 "max_assignment_days": goal.max_assignment_days,
             }
 
-    file_data = read_goal_file(goal_id)
+    # ``read_goal_file`` reaches the vault via ``get_objectives_dir``'s
+    # mkdir — an unwritable vault must not 500 a read that has a DB
+    # fallback (#1478).
+    try:
+        file_data = read_goal_file(goal_id)
+    except Exception as e:
+        logger.warning("Failed to read goal file: %s", e)
+        file_data = None
     if file_data:
         return file_data
 
@@ -655,27 +675,31 @@ def save_goal_content(goal_id: int, data: GoalContent, db: Session = Depends(get
 
     db.commit()
 
-    obj_dir = get_objectives_dir()
-    if obj_dir:
-        metadata = {
-            "temporality": goal.temporality,
-            "context": goal.context,
-            "measurement_type": goal.measurement_type,
-            "target_value": goal.target_value,
-            "current_value": goal.current_value,
-            "state": goal.state,
-            "fail_config": goal.fail_config,
-            "fail_emoji": goal.fail_emoji,
-            "color": goal.color,
-            "theme": goal.theme,
-            "note_id": goal.note_id,
-            "tag_id": goal.tag_id,
-            "parent_id": goal.parent_id,
-            "max_assignment_days": goal.max_assignment_days,
-            "is_completed": goal.is_completed,
-            "completed_at": goal.completed_at.isoformat() if goal.completed_at else None,
-        }
-        update_goal_file(goal_id, data.title, data.content, metadata)
+    # #1478 — goal-file sync is best-effort (same guard as create_goal).
+    try:
+        obj_dir = get_objectives_dir()
+        if obj_dir:
+            metadata = {
+                "temporality": goal.temporality,
+                "context": goal.context,
+                "measurement_type": goal.measurement_type,
+                "target_value": goal.target_value,
+                "current_value": goal.current_value,
+                "state": goal.state,
+                "fail_config": goal.fail_config,
+                "fail_emoji": goal.fail_emoji,
+                "color": goal.color,
+                "theme": goal.theme,
+                "note_id": goal.note_id,
+                "tag_id": goal.tag_id,
+                "parent_id": goal.parent_id,
+                "max_assignment_days": goal.max_assignment_days,
+                "is_completed": goal.is_completed,
+                "completed_at": goal.completed_at.isoformat() if goal.completed_at else None,
+            }
+            update_goal_file(goal_id, data.title, data.content, metadata)
+    except Exception as e:
+        logger.warning("Failed to write goal file: %s", e)
 
     if linked_note is not None:
         write_to_vault(linked_note)
@@ -734,12 +758,15 @@ def complete_goal(
     if child:
         db.refresh(child)
 
-    # Sync updates back to the vault
-    obj_dir = get_objectives_dir()
-    if obj_dir:
-        _write_goal_file(db, goal, obj_dir)
-        if child:
-            _write_goal_file(db, child, obj_dir)
+    # Sync updates back to the vault — best-effort (#1478).
+    try:
+        obj_dir = get_objectives_dir()
+        if obj_dir:
+            _write_goal_file(db, goal, obj_dir)
+            if child:
+                _write_goal_file(db, child, obj_dir)
+    except Exception as e:
+        logger.warning("Failed to write goal file: %s", e)
 
     return {"goal": _serialize_goal(goal, db), "gamification": vars(gami)}
 
@@ -758,9 +785,13 @@ def fail_goal(
     db.commit()
     db.refresh(goal)
 
-    obj_dir = get_objectives_dir()
-    if obj_dir:
-        _write_goal_file(db, goal, obj_dir)
+    # #1478 — goal-file sync is best-effort (same guard as create_goal).
+    try:
+        obj_dir = get_objectives_dir()
+        if obj_dir:
+            _write_goal_file(db, goal, obj_dir)
+    except Exception as e:
+        logger.warning("Failed to write goal file: %s", e)
 
     return _serialize_goal(goal, db)
 
@@ -771,7 +802,12 @@ def delete_goal(goal_id: int, db: Session = Depends(get_db)):
     if not goal:
         raise HTTPException(status_code=404, detail="Goal not found")
 
-    delete_goal_file(goal_id)
+    # Removing the vault file is best-effort too — the DB row must go away
+    # even when the vault is unwritable (#1478).
+    try:
+        delete_goal_file(goal_id)
+    except Exception as e:
+        logger.warning("Failed to delete goal file: %s", e)
     db.delete(goal)
     db.commit()
 
