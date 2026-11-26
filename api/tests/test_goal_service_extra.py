@@ -173,7 +173,11 @@ def test_goal_progress_count_with_tag(db_session):
     tag = Tag(name="count-tag")
     db_session.add(tag)
     db_session.flush()
-    note = _note(db_session)
+    # Pin one shared created_at — server_default func.now() is the transaction
+    # time on PostgreSQL but per-statement wall clock on SQLite, so relying on
+    # insertion order makes this test timing-flaky off-CI (#1595).
+    ts = datetime.now(UTC)
+    note = _note(db_session, created_at=ts)
     db_session.add(NoteTag(note_id=note.id, tag_id=tag.id))
     goal = _goal(
         db_session,
@@ -181,6 +185,7 @@ def test_goal_progress_count_with_tag(db_session):
         measurement_type=GoalMeasurement.COUNT,
         target_value=10,
         current_value=3,
+        created_at=ts,
     )
     db_session.flush()
 
@@ -196,9 +201,11 @@ def test_bulk_goal_progress(db_session):
     tag = Tag(name="bulk-tag")
     db_session.add(tag)
     db_session.flush()
-    note = _note(db_session)
+    # Same shared-timestamp pinning as test_goal_progress_count_with_tag (#1595).
+    ts = datetime.now(UTC)
+    note = _note(db_session, created_at=ts)
     db_session.add(NoteTag(note_id=note.id, tag_id=tag.id))
-    count_goal = _goal(db_session, tag_id=tag.id, measurement_type=GoalMeasurement.COUNT)
+    count_goal = _goal(db_session, tag_id=tag.id, measurement_type=GoalMeasurement.COUNT, created_at=ts)
     plain = _goal(db_session, title="plain", current_value=7.0)
     db_session.flush()
 
