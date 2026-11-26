@@ -7,6 +7,7 @@
   import { GithubLogoIcon } from 'phosphor-svelte';
   import SettingsGithubAdvanced from './SettingsGithubAdvanced.svelte';
   import { api } from '$lib/api';
+  import { getGithubStatus } from '$lib/stores/github';
   import { showNotification } from '$lib/stores/notifications';
   import type { SystemConfig } from '$lib/utils/settingsTypes';
 
@@ -48,7 +49,10 @@
 
   async function checkGithubStatus() {
     try {
-      const status = await api.github.status();
+      // force: this runs right after connect/disconnect mutations and must
+      // observe the fresh state — it also re-seeds the shared cache before
+      // joidy:github-* events wake the other consumers (#1545).
+      const status = await getGithubStatus(true);
       githubConnected = status.connected;
       githubUsername = status.username || '';
       if (githubUsername && !githubUsernameInput) {
