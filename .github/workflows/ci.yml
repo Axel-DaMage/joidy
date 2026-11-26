@@ -76,6 +76,13 @@ jobs:
           ruff check api ai-service worker cli
           ruff format --check api ai-service worker cli
 
+      # The ruff-pre-commit rev must stay pinned to the same ruff version as
+      # requirements-dev.txt so local pre-commit hooks and this gate agree
+      # (#1586). Shared script with `make lint` (scripts/lint.sh) so the two
+      # call sites can't drift; fails PRs that bump one pin without the other.
+      - name: Pre-commit ruff version sync
+        run: bash scripts/check_ruff_precommit_sync.sh
+
       # Real typecheck gate (#994). One invocation per service so
       # cwd-relative module names (models, services, ...) stay unambiguous;
       # pre-existing debt is baselined in pyproject.toml

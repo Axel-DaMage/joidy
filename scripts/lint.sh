@@ -4,9 +4,11 @@
 # Runs the same cheap gates the api-lint / security / frontend-check jobs use:
 #   1. python -m compileall api ai-service worker          (syntax)
 #   2. ruff check + ruff format --check                    (lint + format)
-#   3. mypy — one invocation per service                   (typecheck)
-#   4. bandit -lll -iii (tests excluded, like CI)          (security)
-#   5. npm run check (svelte-check) if frontend deps exist (typecheck)
+#   3. ruff version sync — .pre-commit-config.yaml rev must match the ruff
+#      pin in api/requirements-dev.txt (#1586; always runs, no tools needed)
+#   4. mypy — one invocation per service                   (typecheck)
+#   5. bandit -lll -iii (tests excluded, like CI)          (security)
+#   6. npm run check (svelte-check) if frontend deps exist (typecheck)
 #
 # Versions are pinned in api/requirements-dev.txt so local output matches CI:
 #   pip install -r api/requirements-dev.txt
@@ -97,7 +99,15 @@ else
     skip "ruff not installed (pip install -r api/requirements-dev.txt)"
 fi
 
-# ── 3. Mypy (one invocation per service, same as CI) ────────────────────────
+# ── 3. Pre-commit ruff version parity (always runs — pure text check) ──────
+# The ruff-pre-commit rev must match the ruff pin in api/requirements-dev.txt
+# (canonical parity source) so local hooks and CI run the same ruff (#1586).
+# Shared with the api-lint CI job via check_ruff_precommit_sync.sh.
+gate "ruff version sync — .pre-commit-config.yaml vs api/requirements-dev.txt"
+run bash scripts/check_ruff_precommit_sync.sh \
+    && echo -e "${GREEN}✓${NC} ruff version sync passed"
+
+# ── 4. Mypy (one invocation per service, same as CI) ────────────────────────
 gate "mypy — per-service typecheck"
 if [ -n "$MYPY" ]; then
     for svc in api ai-service worker; do
@@ -112,7 +122,7 @@ else
     skip "mypy not installed (pip install -r api/requirements-dev.txt)"
 fi
 
-# ── 4. Bandit (same flags as the security CI job) ───────────────────────────
+# ── 5. Bandit (same flags as the security CI job) ───────────────────────────
 gate "bandit — security scan (-lll -iii, tests excluded)"
 if [ -n "$BANDIT" ]; then
     run "$BANDIT" -r api/ ai-service/ worker/ -lll -iii -x api/tests,ai-service/tests,worker/tests -q \
@@ -121,7 +131,7 @@ else
     skip "bandit not installed (pip install -r api/requirements-dev.txt)"
 fi
 
-# ── 5. Frontend typecheck (same as the frontend-check CI job) ───────────────
+# ── 6. Frontend typecheck (same as the frontend-check CI job) ───────────────
 gate "frontend — npm run check (svelte-check)"
 if [ -d "$PROJECT_ROOT/frontend/node_modules" ] && command -v npm >/dev/null 2>&1; then
     (cd frontend && npm run check)
