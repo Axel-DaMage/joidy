@@ -1,5 +1,5 @@
 <script lang="ts">
-  import DynamicIcon from './DynamicIcon.svelte';
+  import { AtSign, LogOut, UserRound } from 'lucide-svelte';
   import { session } from '$lib/stores/session';
   import { showNotification } from '$lib/stores/notifications';
   import { t } from 'svelte-i18n';
@@ -16,16 +16,16 @@
 <!-- Sesión -->
 <section class="section">
   <div class="section-title" style="color: var(--xp, var(--accent));">
-    <DynamicIcon name="UserRound" size={12} />
+    <UserRound size={12} />
     {$t('settings.session.title')}
   </div>
   <div class="row">
     <div class="row-label">
-      <DynamicIcon name="AtSign" size={13} />
+      <AtSign size={13} />
       <span>{$session?.username || $t('settings.session.noUser')}</span>
     </div>
     <button class="power-btn logout" onclick={logout}>
-      <DynamicIcon name="LogOut" size={12} />
+      <LogOut size={12} />
       {$t('settings.session.logout')}
     </button>
   </div>

@@ -5,7 +5,7 @@
   import { api } from '$lib/api';
   import { getGithubStatus } from '$lib/stores/github';
   import { loadUserSettings, patchUserSettings } from '$lib/utils/userSettings';
-  import DynamicIcon from './DynamicIcon.svelte';
+  import { CircleDot, GitPullRequest } from 'lucide-svelte';
 
   type Issue = {
     id: number;
@@ -139,7 +139,7 @@
       aria-expanded={showIssues}
       aria-controls="sb-gh-issues-popover"
     >
-      <DynamicIcon name="CircleDot" size={12} color="var(--accent)" />
+      <CircleDot size={12} color="var(--accent)" />
       <span class="sb-gh-count">{listsLoaded ? openIssues.length : '–'}</span>
       <span class="sb-gh-label">{$t('widgets.ghIssues')}</span>
     </button>
@@ -192,7 +192,7 @@
       aria-expanded={showPRs}
       aria-controls="sb-gh-prs-popover"
     >
-      <DynamicIcon name="GitPullRequest" size={12} color="var(--success)" />
+      <GitPullRequest size={12} color="var(--success)" />
       <span class="sb-gh-count">{listsLoaded ? openPRs.length : '–'}</span>
       <span class="sb-gh-label">PRs</span>
     </button>

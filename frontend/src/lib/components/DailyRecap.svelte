@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { api } from '$lib/api';
-  import DynamicIcon from './DynamicIcon.svelte';
+  import { Sparkles } from 'lucide-svelte';
   import AiDisclosure from './AiDisclosure.svelte';
   import { t } from 'svelte-i18n';
 
@@ -47,7 +47,7 @@
 {#if !dismissed && !loading && recap && recap.status === 'success' && recap.recap}
   <div class="daily-recap-card">
     <div class="recap-header">
-      <DynamicIcon name="Sparkles" size={16} />
+      <Sparkles size={16} />
       <span class="recap-title">{$t('widgets.dailyRecap')}</span>
       <button class="recap-dismiss" onclick={dismiss} title={$t('widgets.close')} aria-label={$t('widgets.closeSummary')}>✕</button>
     </div>

@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { api } from '$lib/api';
   import { goto } from '$app/navigation';
-  import DynamicIcon from './DynamicIcon.svelte';
+  import { Layers } from 'lucide-svelte';
   import AiDisclosure from './AiDisclosure.svelte';
   import { t } from 'svelte-i18n';
 
@@ -36,7 +36,7 @@
 
 <div class="topic-clusters">
   <div class="clusters-header">
-    <h4><DynamicIcon name="Layers" size={16} /> Temas detectados</h4>
+    <h4><Layers size={16} /> Temas detectados</h4>
     {#if loading}<span class="caption">{$t('topicClusters.analyzing')}</span>{/if}
     <AiDisclosure compact />
   </div>

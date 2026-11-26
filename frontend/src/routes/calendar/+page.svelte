@@ -9,6 +9,7 @@
     type PlanSuggestion,
   } from '$lib/api';
   import { logger } from '$lib/utils/logger';
+  import { locale } from '$lib/stores/locale';
   import { parseLocalDate } from '$lib/utils/date';
   import { showNotification } from '$lib/stores/notifications';
   import {
@@ -882,7 +883,7 @@
       <span class="caption">
         {#if status?.last_synced_at}
           {$t('calendar.lastSync', {
-            values: { when: new Date(status.last_synced_at).toLocaleString() },
+            values: { when: new Date(status.last_synced_at).toLocaleString($locale) },
           })}
         {:else if status?.connected}
           {$t('calendar.neverSynced')}
@@ -1164,7 +1165,7 @@
                 <div class="agenda-date-badge">
                   <span class="day-num">{day.date.getDate()}</span>
                   <span class="caption"
-                    >{day.date.toLocaleDateString(undefined, {
+                    >{day.date.toLocaleDateString($locale, {
                       weekday: 'short',
                       month: 'short',
                     })}</span
@@ -1242,7 +1243,7 @@
         {/if}
         {#if selectedDay}
           <h4>
-            {new Date(`${selectedDay}T12:00:00`).toLocaleDateString(undefined, {
+            {new Date(`${selectedDay}T12:00:00`).toLocaleDateString($locale, {
               weekday: 'long',
               day: 'numeric',
               month: 'long',

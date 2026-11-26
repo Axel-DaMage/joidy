@@ -1,17 +1,17 @@
 <script lang="ts">
-  import DynamicIcon from './DynamicIcon.svelte';
+  import { Code, EyeOff, Settings, Tag, Trash2 } from 'lucide-svelte';
   import { showFrontmatter, showTrash, showHiddenFiles, hideTagsLine } from '$lib/stores/settings';
 </script>
 
 <!-- Avanzado -->
 <section class="section">
   <div class="section-title" style="color: var(--xp, var(--accent));">
-    <DynamicIcon name="Settings" size={12} /> Avanzado
+    <Settings size={12} /> Avanzado
   </div>
 
   <div class="row">
     <div class="row-label">
-      <DynamicIcon name="Code" size={13} />
+      <Code size={13} />
       <span>Metadatos (YAML)</span>
     </div>
     <button class="toggle" onclick={() => showFrontmatter.toggle()}>
@@ -23,7 +23,7 @@
 
   <div class="row">
     <div class="row-label">
-      <DynamicIcon name="EyeOff" size={13} />
+      <EyeOff size={13} />
       <span>Carpetas Ocultas</span>
     </div>
     <button class="toggle" onclick={() => showHiddenFiles.toggle()}>
@@ -35,7 +35,7 @@
 
   <div class="row">
     <div class="row-label">
-      <DynamicIcon name="Trash2" size={13} />
+      <Trash2 size={13} />
       <span>Mostrar Papelera</span>
     </div>
     <button class="toggle" onclick={() => showTrash.toggle()}>
@@ -47,7 +47,7 @@
 
   <div class="row">
     <div class="row-label">
-      <DynamicIcon name="Tag" size={13} />
+      <Tag size={13} />
       <span>Línea de Etiquetas</span>
     </div>
     <button class="toggle" onclick={() => hideTagsLine.toggle()}>

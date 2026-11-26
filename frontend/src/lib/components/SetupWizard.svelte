@@ -1,7 +1,7 @@
 <script lang="ts">
   import { api } from '$lib/api';
   import { showNotification } from '$lib/stores/notifications';
-  import DynamicIcon from './DynamicIcon.svelte';
+  import { CircleCheckBig, Sparkles } from 'lucide-svelte';
   import { t } from 'svelte-i18n';
 
   let password = '';
@@ -89,7 +89,7 @@
     {#if step === 1}
       <div class="step-content slide-in">
         <div class="icon-wrap">
-          <DynamicIcon name="Sparkles" size={32} color="var(--xp)" />
+          <Sparkles size={32} color="var(--xp)" />
         </div>
         <h2 class="title">¡Bienvenido a Joidy!</h2>
         <p class="desc">{$t('setupWizard.introDesc')}</p>
@@ -223,7 +223,7 @@
     {:else if step === 4}
       <div class="step-content slide-in">
         <div class="icon-wrap">
-          <DynamicIcon name="CircleCheckBig" size={40} color="var(--success)" />
+          <CircleCheckBig size={40} color="var(--success)" />
         </div>
         <h2 class="title" style="color: var(--success);">¡Todo Listo!</h2>
         <p class="desc">{$t('setupWizard.doneDesc')}</p>

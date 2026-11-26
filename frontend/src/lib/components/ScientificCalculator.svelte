@@ -1,5 +1,5 @@
 <script lang="ts">
-  import DynamicIcon from './DynamicIcon.svelte';
+  import { History } from 'lucide-svelte';
   import { evaluateExpression } from '$lib/utils/mathEval';
 
   let calcInput = $state('');
@@ -86,7 +86,7 @@
 
 <div class="scientific-calc">
   <div class="calc-display">
-    <div class="calc-history"><DynamicIcon name="History" size={10} /></div>
+    <div class="calc-history"><History size={10} /></div>
     <input class="calc-input" bind:value={calcInput} oninput={evaluateCalc} placeholder="0" aria-label="Calculator" />
     <div class="calc-res">{calcResult}</div>
   </div>

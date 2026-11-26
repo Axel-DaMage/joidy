@@ -1,5 +1,6 @@
 <script lang="ts">
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
+  import { Map, TriangleAlert } from 'lucide-svelte';
   import EmptyState from '$lib/components/EmptyState.svelte';
   import {
     formatActivityDate,
@@ -61,11 +62,11 @@
       actionLabel={onretry ? $t('common.retry') : ''}
       onAction={onretry ?? null}
     >
-      {#snippet icon()}<DynamicIcon name="TriangleAlert" size={40} />{/snippet}
+      {#snippet icon()}<TriangleAlert size={40} />{/snippet}
     </EmptyState>
   {:else if routes.length === 0}
     <EmptyState title={$t('strava.routes.empty')} message={$t('strava.routes.emptyHint')}>
-      {#snippet icon()}<DynamicIcon name="Map" size={40} />{/snippet}
+      {#snippet icon()}<Map size={40} />{/snippet}
     </EmptyState>
   {:else}
     <div class="routes-grid">
@@ -78,7 +79,7 @@
                 <path d={d} fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" />
               </svg>
             {:else}
-              <div class="route-map-empty"><DynamicIcon name="Map" size={20} /></div>
+              <div class="route-map-empty"><Map size={20} /></div>
             {/if}
           </div>
           <div class="route-info">

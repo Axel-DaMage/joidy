@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import DynamicIcon from './DynamicIcon.svelte';
+  import { SlidersHorizontal } from 'lucide-svelte';
   // Lucide dropped brand icons, so DynamicIcon name="Github" never resolved —
   // it pulled the full ~855 kB lucide chunk just to render a Circle fallback
   // (#1543). Phosphor ships the real GitHub mark; import it directly (#257).
@@ -257,7 +257,7 @@
     aria-expanded={showAdvancedGithub}
     onclick={() => (showAdvancedGithub = !showAdvancedGithub)}
   >
-    <DynamicIcon name="SlidersHorizontal" size={11} />
+    <SlidersHorizontal size={11} />
     <span
       >{showAdvancedGithub
         ? 'Ocultar configuración avanzada'

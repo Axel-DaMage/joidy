@@ -1,5 +1,5 @@
 <script lang="ts">
-  import DynamicIcon from './DynamicIcon.svelte';
+  import { Code, Wrench } from 'lucide-svelte';
   import { devMode } from '$lib/stores/settings';
 </script>
 
@@ -20,11 +20,11 @@
 <!-- Desarrollador -->
 <section class="section">
   <div class="section-title" style="color: var(--xp, var(--accent));">
-    <DynamicIcon name="Code" size={12} /> Desarrollador
+    <Code size={12} /> Desarrollador
   </div>
   <div class="row">
     <div class="row-label">
-      <DynamicIcon name="Wrench" size={13} />
+      <Wrench size={13} />
       <span>Modo Desarrollo</span>
     </div>
     <button class="toggle" onclick={() => devMode.toggle()}>

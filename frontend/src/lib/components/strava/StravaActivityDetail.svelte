@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
+  import { TriangleAlert } from 'lucide-svelte';
   import EmptyState from '$lib/components/EmptyState.svelte';
   import {
     formatActivityDateTime,
@@ -111,7 +112,7 @@
     <div class="loading caption">{$t('strava.detail.loading')}</div>
   {:else if loadError || !activity}
     <EmptyState title={$t('strava.detail.loadFailed')} message={loadError}>
-      {#snippet icon()}<DynamicIcon name="TriangleAlert" size={40} />{/snippet}
+      {#snippet icon()}<TriangleAlert size={40} />{/snippet}
     </EmptyState>
   {:else}
     <!-- Header -->

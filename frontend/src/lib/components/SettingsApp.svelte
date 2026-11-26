@@ -1,5 +1,5 @@
 <script lang="ts">
-  import DynamicIcon from './DynamicIcon.svelte';
+  import { CloudDownload, Download } from 'lucide-svelte';
   import { deferredPrompt, isAppInstalled, showInstallBanner } from '$lib/stores/pwa';
 </script>
 
@@ -7,7 +7,7 @@
 {#if $deferredPrompt && !$isAppInstalled}
   <section class="section">
     <div class="section-title" style="color: var(--xp, var(--accent));">
-      <DynamicIcon name="CloudDownload" size={12} /> Aplicación
+      <CloudDownload size={12} /> Aplicación
     </div>
     <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
       <p class="hint" style="margin-top: 0;">
@@ -25,7 +25,7 @@
           deferredPrompt.set(null);
         }}
       >
-        <DynamicIcon name="Download" size={12} /> Instalar Joidy
+        <Download size={12} /> Instalar Joidy
       </button>
     </div>
   </section>

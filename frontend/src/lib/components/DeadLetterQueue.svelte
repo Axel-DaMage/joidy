@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { api, type EmbeddingFailure } from '$lib/api';
   import Card from './Card.svelte';
-  import DynamicIcon from './DynamicIcon.svelte';
+  import { TriangleAlert } from 'lucide-svelte';
   import { getLocale } from '$lib/stores/locale';
   import { t } from 'svelte-i18n';
 
@@ -61,7 +61,7 @@
 
 <Card padding="md">
   <div class="dlq-header">
-    <h3><DynamicIcon name="TriangleAlert" /> Embeddings fallidos</h3>
+    <h3><TriangleAlert size={18} /> Embeddings fallidos</h3>
     {#if failures.length > 0}
       <button class="btn-sm btn-danger" onclick={purgeAll} disabled={purging}>
         {purging ? 'Purgando...' : 'Purgar todos'}
