@@ -467,23 +467,6 @@ def write_skills(db: Session) -> bool:
     return True
 
 
-def write_readme(vault_path: Path) -> None:
-    """Write the warning note in _joidy/ for Obsidian users."""
-    joidy_dir = vault_path / JOIDY_DIR
-    joidy_dir.mkdir(parents=True, exist_ok=True)
-    readme = joidy_dir / "README.md"
-    if not readme.exists():
-        readme.write_text(
-            "# ⚠️ Carpeta administrada por Joidy\n\n"
-            "No edites estos archivos manualmente — Joidy los sobreescribirá.\n\n"
-            "Puedes **leer** estos archivos y enlazarlos desde tus notas con:\n"
-            "- `[[_joidy/objectives]]`\n"
-            "- `[[_joidy/skills]]`\n"
-            "- `[[_joidy/daily/2026-03-22]]`\n",
-            encoding="utf-8",
-        )
-
-
 def _get_notes_created_today(db: Session, today: date) -> list:
     from datetime import datetime
 

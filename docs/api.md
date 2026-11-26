@@ -210,6 +210,7 @@ interactive OpenAPI docs at `/docs` for full schemas.
 | POST | `/vault/write-daily` | Yes | Trigger daily notes file write | — | `{status, file}` |
 | POST | `/vault/write-objectives` | Yes | Trigger objectives file write | — | `{status}` |
 | POST | `/vault/write-skills` | Yes | Trigger skills file write | — | `{status}` |
+| POST | `/vault/restore-goals` | Yes | Ops: restore goals into the DB from `joidy_managed` files in `Objetivos/` (also runs at startup) | — | `{status, restored, skipped}` |
 
 ### 2.18 AI (`ai.py`)
 
@@ -425,6 +426,21 @@ Errores: `401` token ausente/inválido o Google rechazó el token,
 `403` scope insuficiente (reconectar), `404` mensaje/adjunto inexistente,
 `413` adjunto sobre el límite de tamaño, `429` rate limit de Google,
 `502` fallo upstream de Gmail.
+
+### 2.28 Telegram (`telegram.py`)
+
+Ops/admin endpoints for the Telegram bot integration (#1132). The
+management routes require the app JWT and are intended for manual ops
+(curl); the inbound webhook is unauthenticated by design — Telegram
+servers call it — and is guarded by the `TELEGRAM_WEBHOOK_SECRET` header
+check plus the `TELEGRAM_ALLOWED_USER_ID` allow-list instead.
+
+| Method | Path | Auth | Description | Request Body | Response |
+|--------|------|------|-------------|--------------|----------|
+| POST | `/telegram/webhook` | Telegram secret header (`X-Telegram-Bot-Api-Secret-Token`) | Receive a Telegram Bot API update | update JSON | `{ok, ...}` |
+| GET | `/telegram/status` | Yes | Ops: bot configuration status (no secrets disclosed) | — | `{configured, allowed_user_restricted, webhook_secret_set}` |
+| PUT | `/telegram/webhook` | Yes | Ops: register the webhook URL with Telegram (`setWebhook`; https only) | `{url}` | Telegram API result |
+| DELETE | `/telegram/webhook` | Yes | Ops: remove the registered Telegram webhook | — | Telegram API result |
 
 ---
 

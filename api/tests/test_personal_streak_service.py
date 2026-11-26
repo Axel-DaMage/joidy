@@ -2,7 +2,7 @@
 streak breaking (missed days), and grace period / every_n frequency logic.
 
 Uses in-memory SQLite and the real repository layer to exercise
-compute_streak and calculate_streak_stats.
+compute_streak and backfill_streak_history.
 """
 
 import sys
@@ -22,7 +22,6 @@ from repositories import StreakCheckInRepository
 from services.personal_streak_service import (
     MAX_BACKFILL_DAYS,
     backfill_streak_history,
-    calculate_streak_stats,
     compute_streak,
 )
 from sqlalchemy import create_engine, text
@@ -141,41 +140,6 @@ class ComputeStreakEveryNTest(PersonalStreakTestBase):
         current, longest = compute_streak(dates, snowball_mode=True)
         self.assertEqual(current, 3)
         self.assertEqual(longest, 3)
-
-
-class CalculateStreakStatsTest(PersonalStreakTestBase):
-    def test_snowball_mode_streak_stats(self):
-        db = self.Session()
-        streak = self._create_streak(db, snowball_mode=True)
-        today = self._today()
-        self._add_checkin(db, streak, today - timedelta(days=10))
-        self._add_checkin(db, streak, today - timedelta(days=2))
-        db.refresh(streak)
-        stats = calculate_streak_stats(streak)
-        self.assertEqual(stats["current_streak"], 2)
-        self.assertEqual(stats["longest_streak"], 2)
-        db.close()
-
-    def test_stats_reflect_checkins(self):
-        db = self.Session()
-        streak = self._create_streak(db)
-        today = self._today()
-        for i in range(3):
-            self._add_checkin(db, streak, today - timedelta(days=i))
-
-        db.refresh(streak)
-        stats = calculate_streak_stats(streak)
-        self.assertEqual(stats["current_streak"], 3)
-        self.assertEqual(stats["longest_streak"], 3)
-        db.close()
-
-    def test_stats_with_no_checkins(self):
-        db = self.Session()
-        streak = self._create_streak(db)
-        stats = calculate_streak_stats(streak)
-        self.assertEqual(stats["current_streak"], 0)
-        self.assertEqual(stats["longest_streak"], 0)
-        db.close()
 
 
 class BackfillStreakHistoryTest(PersonalStreakTestBase):

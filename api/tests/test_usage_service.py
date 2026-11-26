@@ -1,4 +1,4 @@
-"""Unit tests for usage_service — track_event, get_usage_summary, get_feature_usage.
+"""Unit tests for usage_service — track_event, get_usage_summary.
 
 Uses in-memory SQLite and stubs sqlite_vec (matches conftest pattern).
 """
@@ -21,7 +21,6 @@ from services.usage_service import (
     EVENT_PAGE_VIEW,
     EVENT_SESSION_END,
     EVENT_SESSION_START,
-    get_feature_usage,
     get_usage_summary,
     track_event,
 )
@@ -264,41 +263,6 @@ class GetUsageSummaryTest(UsageServiceTestBase):
         self.assertLess(summary["avg_session_duration_min"], 11.5)
         top_pages = {p["path"]: p["count"] for p in summary["top_pages"]}
         self.assertEqual(top_pages, {f"/p{i}": 50 for i in range(5)})
-        db.close()
-
-
-class GetFeatureUsageTest(UsageServiceTestBase):
-    def test_empty(self):
-        db = self.Session()
-        self.assertEqual(get_feature_usage(db, user_id=1, days=30), [])
-        db.close()
-
-    def test_ranked_by_count(self):
-        db = self.Session()
-        track_event(db, 1, EVENT_FEATURE_USE, {"feature": "a"})
-        track_event(db, 1, EVENT_FEATURE_USE, {"feature": "b"})
-        track_event(db, 1, EVENT_FEATURE_USE, {"feature": "b"})
-        track_event(db, 1, EVENT_FEATURE_USE, {"feature": "b"})
-        result = get_feature_usage(db, user_id=1, days=30)
-        self.assertEqual(result[0], {"feature": "b", "count": 3})
-        self.assertEqual(result[1], {"feature": "a", "count": 1})
-        db.close()
-
-    def test_ignores_other_event_types(self):
-        db = self.Session()
-        track_event(db, 1, EVENT_PAGE_VIEW, {"path": "/notes"})
-        track_event(db, 1, EVENT_FEATURE_USE, {"feature": "search"})
-        result = get_feature_usage(db, user_id=1, days=30)
-        self.assertEqual(len(result), 1)
-        self.assertEqual(result[0], {"feature": "search", "count": 1})
-        db.close()
-
-    def test_excludes_outside_window(self):
-        db = self.Session()
-        old = self._now() - timedelta(days=40)
-        db.add(UsageEvent(user_id=1, event_type=EVENT_FEATURE_USE, event_data={"feature": "old"}, created_at=old))
-        db.commit()
-        self.assertEqual(get_feature_usage(db, user_id=1, days=30), [])
         db.close()
 
 
