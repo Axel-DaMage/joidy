@@ -246,8 +246,13 @@ services:
       # precedence over PUBLIC_API_PORT. Empty = unset.
       - PUBLIC_API_URL=${PUBLIC_API_URL:-}
     depends_on:
+      # service_started, not service_healthy (#1556): the node server doesn't
+      # call the API at boot — the SPA reaches it from the browser and
+      # tolerates a temporarily-down API, and api's /health/ready gate includes
+      # migrations + the ai-service probe. The healthcheck below still gates
+      # frontend's own readiness.
       api:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 10s

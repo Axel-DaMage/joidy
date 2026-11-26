@@ -119,30 +119,51 @@ case "${1:-help}" in
 esac
 
 # ─── .env bootstrap ───────────────────────────────────────────────
+# Bootstrap tiers (#1556): commands that drive the stack get the full
+# bootstrap, which may create .env from .env.example, generate missing
+# secrets, mkdir the data dirs, enforce 600 perms and persist the engine
+# socket path. Read-only commands (`status`, `logs`) only *resolve* an
+# existing .env — needed for `--env-file` and compose interpolation — and
+# never write files or create directories. `help`/unknown commands skip the
+# bootstrap entirely (install.sh supports installing Docker after the CLI).
+BOOTSTRAP_MODE=none
+case "${1:-help}" in
+  up|down|sleep|wake|restart|pull|idle|backup|restore)
+    BOOTSTRAP_MODE=full ;;
+  status|logs)
+    BOOTSTRAP_MODE=ro ;;
+esac
+
 # Resolve which .env file to use:
 # 1. $PROJECT_DIR/.env          (git-clone install — writable)
 # 2. ~/.config/joidy/.env        (AUR/system install — project dir is read-only)
-# 3. Auto-create from .env.example with generated secrets
+# 3. Auto-create from .env.example with generated secrets (full tier only)
 ENV_FILE=""
 ENV_FILE_ARG=()
 CONFIG_DIR_JOIDY="$HOME/.config/joidy"
 
-if [ -f "$PROJECT_DIR/.env" ]; then
-  ENV_FILE="$PROJECT_DIR/.env"
-elif [ -w "$PROJECT_DIR" ] && [ -f "$PROJECT_DIR/.env.example" ]; then
-  # Project dir is writable (git clone) — create .env there
-  cp -- "$PROJECT_DIR/.env.example" "$PROJECT_DIR/.env"
-  ENV_FILE="$PROJECT_DIR/.env"
-  print_status "Created .env from .env.example"
-elif [ -f "$PROJECT_DIR/.env.example" ]; then
-  # Project dir is read-only (AUR install) — use user config dir
-  mkdir -p -- "$CONFIG_DIR_JOIDY"
-  ENV_FILE="$CONFIG_DIR_JOIDY/.env"
-  if [ ! -f "$ENV_FILE" ]; then
-    cp -- "$PROJECT_DIR/.env.example" "$ENV_FILE"
-    print_status "Created .env in $CONFIG_DIR_JOIDY (project dir is read-only)"
+if [ "$BOOTSTRAP_MODE" != "none" ]; then
+  if [ -f "$PROJECT_DIR/.env" ]; then
+    ENV_FILE="$PROJECT_DIR/.env"
+  elif [ -f "$CONFIG_DIR_JOIDY/.env" ]; then
+    # User-config env already exists (AUR/system install) — adopt it.
+    ENV_FILE="$CONFIG_DIR_JOIDY/.env"
+    ENV_FILE_ARG=(--env-file "$ENV_FILE")
+  elif [ "$BOOTSTRAP_MODE" = "full" ] && [ -f "$PROJECT_DIR/.env.example" ]; then
+    if [ -w "$PROJECT_DIR" ]; then
+      # Project dir is writable (git clone) — create .env there
+      cp -- "$PROJECT_DIR/.env.example" "$PROJECT_DIR/.env"
+      ENV_FILE="$PROJECT_DIR/.env"
+      print_status "Created .env from .env.example"
+    else
+      # Project dir is read-only (AUR install) — use user config dir
+      mkdir -p -- "$CONFIG_DIR_JOIDY"
+      ENV_FILE="$CONFIG_DIR_JOIDY/.env"
+      cp -- "$PROJECT_DIR/.env.example" "$ENV_FILE"
+      print_status "Created .env in $CONFIG_DIR_JOIDY (project dir is read-only)"
+      ENV_FILE_ARG=(--env-file "$ENV_FILE")
+    fi
   fi
-  ENV_FILE_ARG=(--env-file "$ENV_FILE")
 fi
 
 # Invoke the compose engine with the resolved env-file args. Quoting the
@@ -182,7 +203,7 @@ envfile_set_secret() {
   printf 's|^#\\?%s=.*|%s=%s|\n' "$key" "$key" "$value" | sed -i -f - "$file"
 }
 
-if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
+if [ "$BOOTSTRAP_MODE" = "full" ] && [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
   CHANGED=0
   # POSTGRES_PASSWORD
   PG_PW=$(grep -E '^POSTGRES_PASSWORD=' "$ENV_FILE" | cut -d'=' -f2-)
@@ -306,7 +327,9 @@ if [ -w "$PROJECT_DIR" ]; then
 else
   export JOIDY_DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/joidy/data"
 fi
-mkdir -p -- "$JOIDY_DATA_DIR/db" "$JOIDY_DATA_DIR/uploads" "$JOIDY_DATA_DIR/vault" "$JOIDY_DATA_DIR/backups"
+if [ "$BOOTSTRAP_MODE" = "full" ]; then
+  mkdir -p -- "$JOIDY_DATA_DIR/db" "$JOIDY_DATA_DIR/uploads" "$JOIDY_DATA_DIR/vault" "$JOIDY_DATA_DIR/backups"
+fi
 
 # Compose interpolates ${UID}/${GID} for the `backup` service so its dumps land
 # on the bind mount owned by the host user instead of root. Export them here;
@@ -328,7 +351,8 @@ IDLE_STATE_DIR="${JOIDY_DATA_DIR}/idle"
 # We set DOCKER_SOCK_PATH so the opt-in power overlay mounts the right socket
 # (only applied when POWER_MANAGEMENT_ENABLED=true, #1278), and skip DOCKER_GID
 # detection for Podman since rootless containers already have socket access.
-if [ "$CONTAINER_ENGINE" = "podman" ]; then
+# Full tier only: probing can persist DOCKER_SOCK_PATH into .env (#1556).
+if [ "$BOOTSTRAP_MODE" = "full" ] && [ "$CONTAINER_ENGINE" = "podman" ]; then
   PODMAN_SOCK="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/podman/podman.sock"
   if [ -S "$PODMAN_SOCK" ]; then
     export DOCKER_SOCK_PATH="$PODMAN_SOCK"
@@ -362,10 +386,11 @@ fi
 # ─── .env permissions (#1281) ─────────────────────────────────
 # .env holds every deployment secret (SECRET_KEY, POSTGRES_PASSWORD, OAuth
 # client secrets, AUTH_PASSWORD hash, INTERNAL_API_TOKEN). Enforce owner-only
-# read/write on every invocation — this covers files created above via `cp`,
+# read/write on each mutating invocation — this covers files created above via `cp`,
 # written by sed -i/appends, created by hand, or left loose by an older
-# release (0644 under a default umask).
-if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
+# release (0644 under a default umask). Full tier only: chmod is a metadata
+# write, so read-only commands leave file permissions untouched (#1556).
+if [ "$BOOTSTRAP_MODE" = "full" ] && [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
   ENV_PERMS=$(stat -c '%a' -- "$ENV_FILE" 2>/dev/null || stat -f '%Lp' "$ENV_FILE" 2>/dev/null || true)
   if [ -n "$ENV_PERMS" ] && [ "$ENV_PERMS" != "600" ]; then
     if chmod 600 -- "$ENV_FILE"; then

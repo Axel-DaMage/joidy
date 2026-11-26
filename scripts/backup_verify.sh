@@ -140,21 +140,40 @@ fi
 echo "      required tables present"
 
 # 3c. Row-count sanity: every public table must have the same row count.
-MISMATCHES=0
-CHECKED=0
+# Batched (#1556): build one UNION ALL over the restored catalog — one
+# `compose exec psql` per database instead of two per table (~80 execs for
+# ~40 tables). A synthetic ordinal keeps both outputs in identical row order;
+# each row is emitted as `tablename|count`.
+TABLES=$(dc_exec psql -U "$PGUSER" -d "$TEST_DB" -tAc \
+  "SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY 1" </dev/null)
+COUNTS_SQL=""
+i=0
 while IFS= read -r table; do
   [ -z "$table" ] && continue
-  # </dev/null: `compose exec` forwards stdin and would consume the while-read
-  # table list, silently skipping every table after the first.
-  SRC=$(dc_exec psql -U "$PGUSER" -d "$PGDATABASE" -tAc "SELECT count(*) FROM \"$table\"" </dev/null)
-  DST=$(dc_exec psql -U "$PGUSER" -d "$TEST_DB" -tAc "SELECT count(*) FROM \"$table\"" </dev/null)
-  CHECKED=$((CHECKED + 1))
-  if [ "$SRC" != "$DST" ]; then
-    echo "      MISMATCH: $table source=$SRC restored=$DST"
-    MISMATCHES=$((MISMATCHES + 1))
-  fi
-done < <(dc_exec psql -U "$PGUSER" -d "$TEST_DB" -tAc \
-  "SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY 1")
+  i=$((i + 1))
+  # Quote for both contexts: double-quote doubling for the identifier,
+  # single-quote doubling for the literal echoed back as the row key.
+  esc_ident=${table//\"/\"\"}
+  esc_lit=${table//\'/\'\'}
+  [ -n "$COUNTS_SQL" ] && COUNTS_SQL="${COUNTS_SQL} UNION ALL "
+  COUNTS_SQL="${COUNTS_SQL}SELECT ${i} AS ord, '${esc_lit}' AS tablename, count(*) AS cnt FROM \"${esc_ident}\""
+done <<< "$TABLES"
+MISMATCHES=0
+CHECKED=0
+if [ -n "$COUNTS_SQL" ]; then
+  COUNTS_SQL="SELECT tablename || '|' || cnt FROM (${COUNTS_SQL}) counts ORDER BY ord"
+  SRC_COUNTS=$(dc_exec psql -U "$PGUSER" -d "$PGDATABASE" -tAc "$COUNTS_SQL" </dev/null)
+  DST_COUNTS=$(dc_exec psql -U "$PGUSER" -d "$TEST_DB" -tAc "$COUNTS_SQL" </dev/null)
+  # paste zips the identically-ordered streams: `name|src` ⇆ `name|dst`.
+  # `%|*`/`##*|` split on the LAST `|` so names containing `|` still parse.
+  while IFS=$'\t' read -r srow drow; do
+    CHECKED=$((CHECKED + 1))
+    if [ "${srow##*|}" != "${drow##*|}" ]; then
+      echo "      MISMATCH: ${srow%|*} source=${srow##*|} restored=${drow##*|}"
+      MISMATCHES=$((MISMATCHES + 1))
+    fi
+  done < <(paste <(printf '%s\n' "$SRC_COUNTS") <(printf '%s\n' "$DST_COUNTS"))
+fi
 if [ "$MISMATCHES" -gt 0 ]; then
   echo "ERROR: $MISMATCHES table(s) have different row counts after restore" >&2
   exit 1
