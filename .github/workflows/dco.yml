@@ -7,7 +7,7 @@
 # Exemptions (same class of commits the probot/dco app skips): merge
 # commits and commits authored by repository automation accounts
 # (`*[bot]` such as dependabot[bot], and github-actions). Per project
-# policy, AI-agent-generated commits (Hermes/Devin) are NOT exempt: the
+# policy, AI-agent-generated commits (Devin, etc.) are NOT exempt: the
 # human operator signs them off.
 name: DCO
 

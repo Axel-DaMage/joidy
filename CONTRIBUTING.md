@@ -54,7 +54,7 @@ El job `DCO` de CI (`.github/workflows/dco.yml`) verifica los trailers `Signed-o
 
 ### Contribuciones generadas por agentes de IA
 
-Para código generado por agentes de IA (Hermes, Devin, etc.) la política del proyecto es: el **operador humano** añade el `Signed-off-by:` al commit y asume la responsabilidad del DCO sobre el código generado.
+Para código generado por agentes de IA (Devin, etc.) la política del proyecto es: el **operador humano** añade el `Signed-off-by:` al commit y asume la responsabilidad del DCO sobre el código generado.
 
 ### Texto del DCO
 
@@ -335,7 +335,7 @@ make test
 
 ## Contribuciones con Asistencia de IA
 
-El uso de herramientas de IA (agentes de código como Hermes o Devin, asistentes de autocompletado, etc.) está permitido, pero **la persona que envía la contribución es responsable de todo su contenido**. Reglas:
+El uso de herramientas de IA (agentes de código como Devin, asistentes de autocompletado, etc.) está permitido, pero **la persona que envía la contribución es responsable de todo su contenido**. Reglas:
 
 - **Revisión humana obligatoria:** lee y verifica todo el código generado por IA antes de enviarlo — comprueba que es correcto, seguro y que realmente resuelve el problema. Nunca pegues salida de una herramienta sin revisarla.
 - **Firma DCO humana:** los commits llevan el trailer `Signed-off-by:` de la persona responsable (`git commit -s`), que certifica el DCO sobre todo el contenido del commit, incluido lo generado por IA. La firma la pone siempre la persona humana tras revisar; un agente nunca firma de forma autónoma.
