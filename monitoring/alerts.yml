@@ -33,22 +33,12 @@ groups:
 
   - name: joidy-ai-errors
     rules:
-      - alert: JoidyAiEmbedErrorRateHigh
+      - alert: JoidyAiDailyRecapErrorRateHigh
         expr: |
-          rate(ai_embed_errors_total[5m]) / rate(ai_embed_requests_total[5m]) > 0.1
+          rate(ai_daily_recap_errors_total[5m]) / rate(ai_daily_recap_requests_total[5m]) > 0.1
         for: 10m
         labels:
           severity: warning
         annotations:
-          summary: "AI embedding error rate > 10%"
-          description: "More than 10% of embedding requests are failing over the last 5 minutes."
-
-      - alert: JoidyAiClassifyErrorRateHigh
-        expr: |
-          rate(ai_classify_errors_total[5m]) / rate(ai_classify_requests_total[5m]) > 0.1
-        for: 10m
-        labels:
-          severity: warning
-        annotations:
-          summary: "AI classification error rate > 10%"
-          description: "More than 10% of classification requests are failing over the last 5 minutes."
+          summary: "AI daily-recap error rate > 10%"
+          description: "More than 10% of daily-recap requests are failing over the last 5 minutes."

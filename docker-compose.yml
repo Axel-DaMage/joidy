@@ -128,7 +128,9 @@ services:
       # writes go through the API's joidy_vault_writer (#1300).
       - ${OBSIDIAN_VAULT_PATH:-./data/vault}:/vault:ro
     environment:
-      - DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER:-joidy}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-joidy}
+      # No DATABASE_URL: the worker never touches Postgres — it talks to the
+      # API over HTTP (#1542). depends_on postgres stays so events are not
+      # pushed to an API whose DB is not up yet.
       - API_URL=http://api:8000
       - VAULT_PATH=/vault
       - APP_ENV=${APP_ENV:-production}

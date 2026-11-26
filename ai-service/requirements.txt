@@ -15,7 +15,6 @@ cohere==7.3.2
 aiohttp==3.14.5
 sqlalchemy==2.1.9
 psycopg2-binary==2.9.13
-pgvector==0.5.1
 prometheus-client==0.26.0
 numpy==2.5.5
 scikit-learn==1.9.1

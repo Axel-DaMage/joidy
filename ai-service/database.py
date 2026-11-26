@@ -3,7 +3,6 @@ import json
 from config import settings
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
-from sqlalchemy.orm import sessionmaker
 
 # Pool sizing (#1584): since #1533 every psycopg2 call runs on a worker
 # thread via ``asyncio.to_thread``, so the pool — not the event loop — is
@@ -28,15 +27,6 @@ engine = create_engine(
     pool_recycle=3600,
     **_pool_kwargs,
 )
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 def _vector_literal(embedding: list[float]) -> str:

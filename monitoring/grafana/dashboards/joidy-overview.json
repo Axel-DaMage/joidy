@@ -30,13 +30,13 @@
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
       "targets": [
         {
-          "expr": "rate(ai_embed_requests_total[5m])",
-          "legendFormat": "embed ({{provider}})",
+          "expr": "rate(ai_daily_recap_requests_total[5m])",
+          "legendFormat": "daily-recap ({{provider}})",
           "refId": "A"
         },
         {
-          "expr": "rate(ai_classify_requests_total[5m])",
-          "legendFormat": "classify ({{provider}})",
+          "expr": "rate(ai_plan_requests_total[5m])",
+          "legendFormat": "plan-suggest ({{provider}})",
           "refId": "B"
         }
       ],
@@ -57,22 +57,6 @@
         }
       ],
       "title": "Service Health (up)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": { "defaults": {}, "overrides": [] },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
-      "id": 4,
-      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
-      "targets": [
-        {
-          "expr": "rate(worker_vault_events_processed_total[5m])",
-          "legendFormat": "{{change_type}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Worker Vault Events",
       "type": "timeseries"
     }
   ],

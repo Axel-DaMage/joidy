@@ -39,7 +39,6 @@ for the full list — do not duplicate here):
 
 - `OBSIDIAN_VAULT_PATH` — host path to the Obsidian vault (supports `~`, expanded by `joidy up`)
   (mounted read-only at `/vault` inside the container)
-- `DATABASE_URL` — shared PostgreSQL connection
 - `WORKER_BIND_ADDR` — bind address for the `/metrics` + `/health` HTTP server
   (default `127.0.0.1`; docker-compose sets `0.0.0.0` so compose-network peers
   like Prometheus can reach it — the port is not published to the host)
