@@ -211,6 +211,18 @@ _BoundedRecapTitle = Annotated[str, Field(max_length=settings.max_recap_title_ch
 class EmbedRequest(BaseModel):
     note_id: int
     content: str = Field(max_length=settings.max_embed_content_chars)
+    # The vector is persisted via store_embedding — the primary caller only
+    # needs status. Callers that actually consume the vector (e.g. semantic
+    # search) opt in with include_vector=true to avoid serializing ~3K floats
+    # per request (#1541).
+    include_vector: bool = False
+    # persist=false embeds without writing note_embeddings — for callers that
+    # only need the vector, like api semantic search, which sends a synthetic
+    # note_id=0. note_embeddings.note_id is a real FK to notes.id, so writing
+    # a synthetic id raises IntegrityError -> 500 (pre-existing bug surfaced
+    # by #1541). persist=true with note_id<=0 is rejected with 422 up front:
+    # silently skipping would mask a caller bug.
+    persist: bool = True
 
 
 class ClassifyRequest(BaseModel):
@@ -481,33 +493,6 @@ MAX_CONTEXT_NOTES = 5
 MAX_NOTE_CHARS = 2000
 
 
-def _fetch_note_chunks(similar: list[dict]) -> list[dict]:
-    """Fetch title/snippet for each similar note — synchronous DB I/O.
-
-    Called via ``asyncio.to_thread`` so the psycopg2 round-trips never block
-    the event loop (#1533). The whole connect→query→fetch lives in one helper
-    because the connection context manager spans the loop.
-    """
-    from database import engine
-
-    chunks: list[dict] = []
-    with engine.connect() as conn:
-        for item in similar[:MAX_CONTEXT_NOTES]:
-            row = conn.execute(
-                text("SELECT title, content FROM notes WHERE id = :nid"),
-                {"nid": item["note_id"]},
-            ).fetchone()
-            if row:
-                chunks.append(
-                    {
-                        "note_id": item["note_id"],
-                        "title": row[0],
-                        "snippet": (row[1] or "")[:MAX_NOTE_CHARS],
-                    }
-                )
-    return chunks
-
-
 async def _retrieve_note_context(question: str, top_k: int = 5) -> list[dict]:
     """Embed ``question`` and pull the most similar notes from pgvector (#1131).
 
@@ -518,18 +503,29 @@ async def _retrieve_note_context(question: str, top_k: int = 5) -> list[dict]:
     emb_client = get_embedding_client()
     question_vector = await emb_circuit_breaker.call(emb_client.embed, question)
 
-    from database import find_similar_notes
+    from database import find_similar_note_chunks
 
-    # psycopg2 is synchronous — every DB round-trip runs in a worker thread
-    # so it never serializes the event loop (#1533).
-    similar = await asyncio.to_thread(find_similar_notes, question_vector, limit=top_k)
-    return await asyncio.to_thread(_fetch_note_chunks, similar)
+    # One round-trip: the JOIN fetches title+snippet inside the similarity
+    # query itself — previously a second connection ran one SELECT per note
+    # (#1541 N+1). psycopg2 is synchronous — it runs in a worker thread so it
+    # never serializes the event loop (#1533).
+    return await asyncio.to_thread(
+        find_similar_note_chunks,
+        question_vector,
+        limit=min(top_k, MAX_CONTEXT_NOTES),
+        snippet_chars=MAX_NOTE_CHARS,
+    )
 
 
 @app.post("/embed")
 async def embed(req: EmbedRequest):
     if not settings.is_ai_enabled:
         return {"status": "disabled", "note_id": req.note_id, "error": "No AI provider configured"}
+
+    # Reject contract violations before burning a rate-limit slot or a
+    # provider call: persisting note_id<=0 can only hit the notes FK.
+    if req.persist and req.note_id <= 0:
+        raise HTTPException(status_code=422, detail="persist=true requires a positive note_id of an existing note")
 
     await get_limiter(settings.max_requests_per_minute, name="embed").acquire()
 
@@ -548,21 +544,27 @@ async def embed(req: EmbedRequest):
             provider_name = client.provider_name
             get_cache().set(key, vector)
 
-        # Save vector embedding to shared PostgreSQL database. psycopg2 is
-        # synchronous — keep the write off the event loop (#1533).
-        from database import store_embedding
+        # Save vector embedding to shared PostgreSQL database — only when the
+        # caller asked for it (persist=true, the default). Query-embedding
+        # callers (api semantic search) send persist=false with a synthetic
+        # note_id, and note_embeddings.note_id is a real FK to notes.id.
+        # psycopg2 is synchronous — keep the write off the event loop (#1533).
+        if req.persist:
+            from database import store_embedding
 
-        await asyncio.to_thread(store_embedding, req.note_id, vector)
+            await asyncio.to_thread(store_embedding, req.note_id, vector)
 
         # record_usage opens a fresh DB connection per call — also offloaded.
         await asyncio.to_thread(record_usage, "embed", input_tokens=_estimate_tokens(req.content))
 
-        return {
+        response = {
             "status": "success",
             "note_id": req.note_id,
-            "embedding": vector,
             "provider": provider_name,
         }
+        if req.include_vector:
+            response["embedding"] = vector
+        return response
     except CircuitBreakerError:
         return {"status": "circuit_open", "note_id": req.note_id, "error": "Circuit breaker open"}
     except Exception:
@@ -874,34 +876,37 @@ def _parse_and_cluster(rows, eps: float, min_samples: int):
 def _build_cluster_results(clusters) -> list[dict]:
     """Fetch note titles per cluster and build result payloads — sync DB I/O.
 
-    Uses a single connection for all cluster lookups to avoid exhausting the
-    pool, and parameterized placeholders to prevent SQL injection (#610).
+    A single ``IN`` query fetches titles for every note across all clusters —
+    previously each cluster issued its own round-trip on one connection
+    (#1541 N+1). Parameterized placeholders prevent SQL injection (#610).
     Called via ``asyncio.to_thread`` so the round-trips never block the event
     loop (#1533).
     """
     from database import engine
 
-    cluster_results = []
-    with engine.connect() as conn:
-        for label, ids in clusters.items():
-            params = {f"id_{idx}": i for idx, i in enumerate(ids)}
-            placeholders = ", ".join(f":id_{idx}" for idx in range(len(ids)))
+    all_ids = [i for ids in clusters.values() for i in ids]
+    title_map: dict[int, str] = {}
+    if all_ids:
+        params = {f"id_{idx}": i for idx, i in enumerate(all_ids)}
+        placeholders = ", ".join(f":id_{idx}" for idx in range(len(all_ids)))
+        with engine.connect() as conn:
             title_rows = conn.execute(
                 # Only generated :id_N placeholders are interpolated; values bind via params.
                 text(f"SELECT id, title FROM notes WHERE id IN ({placeholders})"),  # noqa: S608
                 params,
             ).fetchall()
-            title_map = {r[0]: r[1] for r in title_rows}
-            cluster_results.append(
-                {
-                    "cluster_id": int(label),
-                    "note_ids": ids,
-                    "note_count": len(ids),
-                    "representative_title": title_map.get(ids[0], "Unknown"),
-                    "titles": [title_map.get(i, "Unknown") for i in ids[:5]],
-                }
-            )
-    return cluster_results
+        title_map = {r[0]: r[1] for r in title_rows}
+
+    return [
+        {
+            "cluster_id": int(label),
+            "note_ids": ids,
+            "note_count": len(ids),
+            "representative_title": title_map.get(ids[0], "Unknown"),
+            "titles": [title_map.get(i, "Unknown") for i in ids[:5]],
+        }
+        for label, ids in clusters.items()
+    ]
 
 
 @app.post("/cluster")

@@ -221,16 +221,52 @@ class TestEmbedEndpoint:
         assert resp.status_code == 200
         assert resp.json()["status"] == "disabled"
 
-    def test_success_returns_embedding_and_stores_it(self, ai_enabled):
+    def test_success_stores_embedding_without_returning_it(self, ai_enabled):
+        """#1541: the vector is persisted but not serialized back unless the
+        caller opts in — the only embed-and-store caller never reads it."""
         resp = _client().post("/embed", json={"note_id": 7, "content": "hello"})
         assert resp.status_code == 200
         body = resp.json()
         assert body["status"] == "success"
         assert body["note_id"] == 7
-        assert body["embedding"] == [0.1, 0.2, 0.3]
+        assert "embedding" not in body
         assert body["provider"] == "fake-emb"
         ai_enabled.store_embedding.assert_called_once_with(7, [0.1, 0.2, 0.3])
         ai_enabled.emb.embed.assert_awaited_once_with("hello")
+
+    def test_include_vector_returns_embedding(self, ai_enabled):
+        """#1541: include_vector=true keeps the vector available for callers
+        that consume it (api semantic search)."""
+        resp = _client().post("/embed", json={"note_id": 7, "content": "hello", "include_vector": True})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["status"] == "success"
+        assert body["embedding"] == [0.1, 0.2, 0.3]
+        ai_enabled.store_embedding.assert_called_once_with(7, [0.1, 0.2, 0.3])
+
+    def test_persist_false_embeds_without_touching_db(self, ai_enabled):
+        """persist=false returns the vector but never writes note_embeddings —
+        the contract api semantic search relies on (its synthetic note_id=0
+        would violate the notes FK)."""
+        resp = _client().post(
+            "/embed",
+            json={"note_id": 0, "content": "search query", "include_vector": True, "persist": False},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["status"] == "success"
+        assert body["embedding"] == [0.1, 0.2, 0.3]
+        ai_enabled.store_embedding.assert_not_called()
+        ai_enabled.emb.embed.assert_awaited_once_with("search query")
+
+    def test_persist_true_with_invalid_note_id_rejected(self, ai_enabled):
+        """persist=true with the synthetic note_id=0 fails fast with 422 —
+        before the provider call — instead of an IntegrityError 500 from the
+        notes FK. Silently skipping persistence would mask a caller bug."""
+        resp = _client().post("/embed", json={"note_id": 0, "content": "x"})
+        assert resp.status_code == 422
+        ai_enabled.store_embedding.assert_not_called()
+        ai_enabled.emb.embed.assert_not_awaited()
 
     def test_provider_failure_returns_500(self, ai_enabled):
         ai_enabled.emb.embed = AsyncMock(side_effect=RuntimeError("provider down"))
@@ -306,11 +342,11 @@ class TestRagEndpoint:
         assert resp.json()["status"] == "disabled"
 
     def test_success_returns_answer(self, ai_enabled, monkeypatch):
-        monkeypatch.setattr(database, "find_similar_notes", lambda vec, limit=5: [{"note_id": 7, "distance": 0.2}])
-        engine = MagicMock()
-        conn = engine.connect.return_value.__enter__.return_value
-        conn.execute.return_value.fetchone.return_value = ("Note title", "note body")
-        monkeypatch.setattr(database, "engine", engine)
+        monkeypatch.setattr(
+            database,
+            "find_similar_note_chunks",
+            lambda vec, limit, snippet_chars: [{"note_id": 7, "title": "Note title", "snippet": "note body"}],
+        )
 
         resp = _client().post("/rag", json={"question": "what did I learn?", "top_k": 3})
         assert resp.status_code == 200
@@ -545,13 +581,11 @@ def _mock_rag_db(monkeypatch, rows: list[tuple[str, str]]):
     ``(title, content)`` — one per matched embedding."""
     monkeypatch.setattr(
         database,
-        "find_similar_notes",
-        lambda vec, limit=5: [{"note_id": i + 1, "distance": 0.1} for i in range(len(rows))],
+        "find_similar_note_chunks",
+        lambda vec, limit, snippet_chars: [
+            {"note_id": i + 1, "title": t, "snippet": c} for i, (t, c) in enumerate(rows)
+        ],
     )
-    engine = MagicMock()
-    conn = engine.connect.return_value.__enter__.return_value
-    conn.execute.return_value.fetchone.side_effect = list(rows)
-    monkeypatch.setattr(database, "engine", engine)
 
 
 class TestChatRag:
@@ -572,8 +606,8 @@ class TestChatRag:
     def test_chat_retrieval_failure_degrades_gracefully(self, ai_enabled):
         """When the embeddings store is unreachable the chat still answers
         with personal-context only — never a 500 (#1131)."""
-        # No DB mocks: find_similar_notes hits the SQLite fallback engine and
-        # fails on the pgvector operator → retrieval degrades to no context.
+        # No DB mocks: find_similar_note_chunks hits the SQLite fallback engine
+        # and fails on the pgvector operator → retrieval degrades to no context.
         resp = _client().post("/chat", json={"messages": [{"role": "user", "content": "hi"}]})
         assert resp.status_code == 200
         body = resp.json()
@@ -646,34 +680,47 @@ class TestSyncDbOffloaded(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_retrieve_note_context_returns_chunks(self):
-        """Refactor correctness: the pgvector lookup + title/snippet fetch
-        still produce the same payload shape."""
-        engine = MagicMock()
-        conn = engine.connect.return_value.__enter__.return_value
-        conn.execute.return_value.fetchone.side_effect = [
-            ("First", "body one"),
-            None,  # a missing row is skipped, as before
-            ("Third", "body three"),
-        ]
+        """Refactor correctness (#1541): the single JOINed similarity query
+        still yields the same ``note_id``/``title``/``snippet`` payload, and
+        the caller caps it at MAX_CONTEXT_NOTES with the snippet length."""
+        captured: dict = {}
+
+        def fake_find(vec, limit, snippet_chars):
+            captured["limit"] = limit
+            captured["snippet_chars"] = snippet_chars
+            return [
+                {"note_id": 1, "title": "First", "snippet": "body one"},
+                {"note_id": 3, "title": "Third", "snippet": "body three"},
+            ]
+
         with (
             patch.object(main, "get_embedding_client", return_value=self._fake_embedding_client()),
-            patch.object(
-                database,
-                "find_similar_notes",
-                lambda vec, limit=5: [
-                    {"note_id": 1, "distance": 0.1},
-                    {"note_id": 2, "distance": 0.2},
-                    {"note_id": 3, "distance": 0.3},
-                ],
-            ),
-            patch.object(database, "engine", engine),
+            patch.object(database, "find_similar_note_chunks", fake_find),
         ):
-            chunks = await main._retrieve_note_context("question")
+            chunks = await main._retrieve_note_context("question", top_k=10)
 
         assert chunks == [
             {"note_id": 1, "title": "First", "snippet": "body one"},
             {"note_id": 3, "title": "Third", "snippet": "body three"},
         ]
+        assert captured["limit"] == main.MAX_CONTEXT_NOTES
+        assert captured["snippet_chars"] == main.MAX_NOTE_CHARS
+
+    async def test_retrieve_note_context_top_k_below_cap_passes_through(self):
+        """top_k below MAX_CONTEXT_NOTES is forwarded as the query limit."""
+        captured: dict = {}
+
+        def fake_find(vec, limit, snippet_chars):
+            captured["limit"] = limit
+            return []
+
+        with (
+            patch.object(main, "get_embedding_client", return_value=self._fake_embedding_client()),
+            patch.object(database, "find_similar_note_chunks", fake_find),
+        ):
+            assert await main._retrieve_note_context("q", top_k=3) == []
+
+        assert captured["limit"] == 3
 
     async def test_find_similar_notes_runs_in_worker_thread(self):
         """The pgvector lookup executes on a thread-pool thread, not on the
@@ -681,14 +728,13 @@ class TestSyncDbOffloaded(unittest.IsolatedAsyncioTestCase):
         loop_thread = threading.get_ident()
         db_threads: list[int] = []
 
-        def fake_find(vec, limit=5):
+        def fake_find(vec, limit, snippet_chars):
             db_threads.append(threading.get_ident())
             return []
 
         with (
             patch.object(main, "get_embedding_client", return_value=self._fake_embedding_client()),
-            patch.object(database, "find_similar_notes", fake_find),
-            patch.object(main, "_fetch_note_chunks", MagicMock(return_value=[])),
+            patch.object(database, "find_similar_note_chunks", fake_find),
         ):
             chunks = await main._retrieve_note_context("q")
 
@@ -702,7 +748,7 @@ class TestSyncDbOffloaded(unittest.IsolatedAsyncioTestCase):
         release = threading.Event()
         heartbeats = 0
 
-        def slow_find(vec, limit=5):
+        def slow_find(vec, limit, snippet_chars):
             entered.set()
             release.wait(timeout=10)
             return []
@@ -730,14 +776,93 @@ class TestSyncDbOffloaded(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch.object(main, "get_embedding_client", return_value=self._fake_embedding_client()),
-            patch.object(database, "find_similar_notes", slow_find),
-            patch.object(main, "_fetch_note_chunks", MagicMock(return_value=[])),
+            patch.object(database, "find_similar_note_chunks", slow_find),
         ):
             # Bounded: if the sync call ran on the loop, the loop would freeze
             # inside release.wait() and this would time out instead.
             await asyncio.wait_for(scenario(), timeout=10)
 
         assert heartbeats >= 1
+
+
+# ── batched DB access (#1541) ──────────────────────────────────────────
+
+
+def _mock_engine_fetchall(monkeypatch, rows):
+    """Point ``database.engine`` at a fake connection whose every execute()
+    returns ``rows`` from fetchall(); returns the conn mock for assertions."""
+    engine = MagicMock()
+    conn = engine.connect.return_value.__enter__.return_value
+    conn.execute.return_value.fetchall.return_value = rows
+    monkeypatch.setattr(database, "engine", engine)
+    return conn
+
+
+class TestSimilarNoteChunksQuery:
+    def test_single_joined_query(self, monkeypatch):
+        """#1541: similarity + title/snippet fetch happen in ONE JOINed query —
+        not a similarity lookup plus a per-id SELECT."""
+        conn = _mock_engine_fetchall(
+            monkeypatch,
+            [(7, "My Note", "snippet text"), (9, "Other", "more")],
+        )
+
+        chunks = database.find_similar_note_chunks([0.1, 0.2], limit=5, snippet_chars=2000)
+
+        conn.execute.assert_called_once()
+        sql = str(conn.execute.call_args.args[0])
+        assert "JOIN notes" in sql
+        assert "ORDER BY" in sql
+        params = conn.execute.call_args.args[1]
+        assert params["limit"] == 5
+        assert params["snippet_chars"] == 2000
+        assert chunks == [
+            {"note_id": 7, "title": "My Note", "snippet": "snippet text"},
+            {"note_id": 9, "title": "Other", "snippet": "more"},
+        ]
+
+    def test_null_snippet_becomes_empty_string(self, monkeypatch):
+        """left(content, n) is NULL for NULL content — callers expect ''."""
+        _mock_engine_fetchall(monkeypatch, [(7, "T", None)])
+        assert database.find_similar_note_chunks([0.1], limit=5, snippet_chars=2000) == [
+            {"note_id": 7, "title": "T", "snippet": ""}
+        ]
+
+
+class TestClusterBatching:
+    def test_single_in_query_for_all_clusters(self, monkeypatch):
+        """#1541: titles for every cluster are fetched with one IN query,
+        preserving per-cluster id order and 'Unknown' for missing notes."""
+        conn = _mock_engine_fetchall(
+            monkeypatch,
+            [(1, "Alpha"), (3, "Gamma"), (4, "Delta")],  # note 2 missing
+        )
+        clusters = {0: [1, 2, 3], 5: [4]}
+
+        results = main._build_cluster_results(clusters)
+
+        conn.execute.assert_called_once()
+        assert results == [
+            {
+                "cluster_id": 0,
+                "note_ids": [1, 2, 3],
+                "note_count": 3,
+                "representative_title": "Alpha",
+                "titles": ["Alpha", "Unknown", "Gamma"],
+            },
+            {
+                "cluster_id": 5,
+                "note_ids": [4],
+                "note_count": 1,
+                "representative_title": "Delta",
+                "titles": ["Delta"],
+            },
+        ]
+
+    def test_empty_clusters_skip_query(self, monkeypatch):
+        conn = _mock_engine_fetchall(monkeypatch, [])
+        assert main._build_cluster_results({}) == []
+        conn.execute.assert_not_called()
 
 
 if __name__ == "__main__":
