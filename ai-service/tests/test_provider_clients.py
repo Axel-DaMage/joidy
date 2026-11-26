@@ -66,6 +66,27 @@ class _FakeSession:
         pass
 
 
+class _SeqSession(_FakeSession):
+    """Fake session replaying a scripted sequence of responses/exceptions.
+
+    Each ``post`` consumes the next item: an exception is raised, anything
+    else is returned as the ``async with`` response. Used for retry tests
+    (fail → succeed).
+    """
+
+    def __init__(self, responses):
+        super().__init__()
+        self._responses = list(responses)
+        self.posts: list[tuple] = []
+
+    def post(self, url, **kwargs):
+        self.posts.append((url, kwargs))
+        item = self._responses.pop(0)
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+
 # ── Gemini ─────────────────────────────────────────────────────────────
 
 
@@ -144,7 +165,7 @@ class TestGeminiClient(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(chunks, ["real"])
 
     async def test_retry_on_rate_limit_then_success(self):
-        from clients.gemini import _call_with_retry
+        from clients.retry import call_with_retry
 
         calls = []
 
@@ -155,12 +176,12 @@ class TestGeminiClient(unittest.IsolatedAsyncioTestCase):
             return "recovered"
 
         with _fast_retry():
-            result = await _call_with_retry(flaky)
+            result = await call_with_retry(flaky)
         self.assertEqual(result, "recovered")
         self.assertEqual(len(calls), 2)
 
     async def test_non_retryable_error_raises_immediately(self):
-        from clients.gemini import _call_with_retry
+        from clients.retry import call_with_retry
 
         calls = []
 
@@ -169,30 +190,37 @@ class TestGeminiClient(unittest.IsolatedAsyncioTestCase):
             raise RuntimeError("API key not valid")
 
         with _fast_retry(), self.assertRaises(RuntimeError):
-            await _call_with_retry(bad_key)
+            await call_with_retry(bad_key)
         self.assertEqual(len(calls), 1)
 
     async def test_retry_exhaustion_raises_last_error(self):
-        from clients.gemini import _call_with_retry
+        from clients.retry import call_with_retry
 
         async def always_limited():
             raise Exception("429 rate limit")
 
         with _fast_retry(), self.assertRaises(Exception) as ctx:
-            await _call_with_retry(always_limited)
+            await call_with_retry(always_limited)
         self.assertIn("429", str(ctx.exception))
 
-    async def test_timeout_maps_to_timeout_error(self):
+    async def test_timeout_retried_then_maps_to_timeout_error(self):
+        """Timeouts are retryable now (#1540) — every attempt times out, then
+        a descriptive TimeoutError propagates."""
         import asyncio
 
-        from clients.gemini import _call_with_retry
+        from clients.retry import call_with_retry
+
+        calls = []
 
         async def slow():
+            calls.append(1)
             await asyncio.sleep(0.5)
             return "late"
 
-        with self.assertRaises(TimeoutError):
-            await _call_with_retry(slow, timeout=0.05)
+        with _fast_retry(), self.assertRaises(TimeoutError) as ctx:
+            await call_with_retry(slow, timeout=0.05, provider="Gemini")
+        self.assertIn("Gemini call timed out", str(ctx.exception))
+        self.assertEqual(len(calls), 3)
 
     def test_is_retryable_error_matching(self):
         from clients.gemini import _is_retryable_error
@@ -429,9 +457,38 @@ class TestOllamaClient(unittest.IsolatedAsyncioTestCase):
         session = _FakeSession(post_resp=_FakeResponse(500, text="model missing"))
         client = self._make_client(session, is_embedding=True)
 
-        with self.assertRaises(Exception) as ctx:
+        # 5xx is retryable (#1540): all attempts fail, then the error raises.
+        with _fast_retry(), self.assertRaises(Exception) as ctx:
             await client.embed("text")
         self.assertIn("Ollama embedding failed", str(ctx.exception))
+        self.assertEqual(len(session.posts), 3)
+
+    async def test_embed_retries_on_5xx_then_succeeds(self):
+        session = _SeqSession([_FakeResponse(500, text="boom"), _FakeResponse(200, {"embedding": [1.0, 2.0]})])
+        client = self._make_client(session, is_embedding=True)
+
+        with _fast_retry():
+            result = await client.embed("text")
+        self.assertEqual(result, [1.0, 2.0])
+        self.assertEqual(len(session.posts), 2)
+
+    async def test_embed_non_retryable_4xx_raises_immediately(self):
+        session = _FakeSession(post_resp=_FakeResponse(404, text="no model"))
+        client = self._make_client(session, is_embedding=True)
+
+        with _fast_retry(), self.assertRaises(Exception) as ctx:
+            await client.embed("text")
+        self.assertIn("Ollama embedding failed", str(ctx.exception))
+        self.assertEqual(len(session.posts), 1)
+
+    async def test_embed_retries_on_connection_error(self):
+        session = _SeqSession([ConnectionError("refused"), _FakeResponse(200, {"embedding": [0.3]})])
+        client = self._make_client(session, is_embedding=True)
+
+        with _fast_retry():
+            result = await client.embed("text")
+        self.assertEqual(result, [0.3])
+        self.assertEqual(len(session.posts), 2)
 
     async def test_generate_success_and_payload_shape(self):
         session = _FakeSession(post_resp=_FakeResponse(200, {"response": "ollama says"}))
@@ -452,9 +509,20 @@ class TestOllamaClient(unittest.IsolatedAsyncioTestCase):
         session = _FakeSession(post_resp=_FakeResponse(404, text="no model"))
         client = self._make_client(session)
 
-        with self.assertRaises(Exception) as ctx:
+        # 404 is permanent — fails fast, no retries (#1540).
+        with _fast_retry(), self.assertRaises(Exception) as ctx:
             await client.generate("hi")
         self.assertIn("Ollama generate failed", str(ctx.exception))
+        self.assertEqual(len(session.posts), 1)
+
+    async def test_generate_retries_on_5xx_then_succeeds(self):
+        session = _SeqSession([_FakeResponse(503, text="loading"), _FakeResponse(200, {"response": "ok"})])
+        client = self._make_client(session)
+
+        with _fast_retry():
+            result = await client.generate("hi")
+        self.assertEqual(result, "ok")
+        self.assertEqual(len(session.posts), 2)
 
     async def test_health_check_true_on_200(self):
         session = _FakeSession(get_resp=_FakeResponse(200, {}))
@@ -514,9 +582,40 @@ class TestOpenRouterClient(unittest.IsolatedAsyncioTestCase):
         session = _FakeSession(post_resp=_FakeResponse(429, text="limited"))
         client = self._make_client(session)
 
-        with self.assertRaises(Exception) as ctx:
+        # 429 is retryable (#1540): all attempts fail, then the error raises.
+        with _fast_retry(), self.assertRaises(Exception) as ctx:
             await client.generate("hi")
         self.assertIn("OpenRouter failed", str(ctx.exception))
+        self.assertEqual(len(session.posts), 3)
+
+    async def test_generate_retries_on_429_then_succeeds(self):
+        payload = {"choices": [{"message": {"content": "router answer"}}]}
+        session = _SeqSession([_FakeResponse(429, text="limited"), _FakeResponse(200, payload)])
+        client = self._make_client(session)
+
+        with _fast_retry():
+            result = await client.generate("hi")
+        self.assertEqual(result, "router answer")
+        self.assertEqual(len(session.posts), 2)
+
+    async def test_generate_retries_on_5xx_then_succeeds(self):
+        payload = {"choices": [{"message": {"content": "recovered"}}]}
+        session = _SeqSession([_FakeResponse(502, text="bad gateway"), _FakeResponse(200, payload)])
+        client = self._make_client(session)
+
+        with _fast_retry():
+            result = await client.generate("hi")
+        self.assertEqual(result, "recovered")
+        self.assertEqual(len(session.posts), 2)
+
+    async def test_generate_non_retryable_4xx_raises_immediately(self):
+        session = _FakeSession(post_resp=_FakeResponse(401, text="bad key"))
+        client = self._make_client(session)
+
+        with _fast_retry(), self.assertRaises(Exception) as ctx:
+            await client.generate("hi")
+        self.assertIn("OpenRouter failed", str(ctx.exception))
+        self.assertEqual(len(session.posts), 1)
 
     async def test_embed_raises_not_implemented(self):
         client = self._make_client(_FakeSession())

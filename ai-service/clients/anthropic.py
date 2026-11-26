@@ -1,4 +1,3 @@
-import asyncio
 import logging
 from typing import cast
 
@@ -8,6 +7,7 @@ from config import settings
 
 from .base import BaseLLMClient
 from .httpx_utils import build_async_http_client
+from .retry import call_with_retry, is_transient_error
 
 logger = logging.getLogger(__name__)
 
@@ -44,13 +44,15 @@ class AnthropicClient(BaseLLMClient):
         max_tokens: int = 256,
         system_prompt: str | None = None,
     ) -> str:
-        response = await _call_with_retry(
+        response = await call_with_retry(
             self._client.messages.create,
             model=self._model,
             max_tokens=max_tokens,
             temperature=temperature,
             system=system_prompt,
             messages=[{"role": "user", "content": prompt}],
+            is_retryable=_is_retryable_error,
+            provider="Anthropic",
         )
         return cast("str", response.content[0].text)
 
@@ -60,21 +62,5 @@ class AnthropicClient(BaseLLMClient):
 
 
 def _is_retryable_error(exc: Exception) -> bool:
-    msg = str(exc).lower()
-    return "429" in msg or "rate_limit" in msg or "overloaded" in msg
-
-
-async def _call_with_retry(func, *args, **kwargs):
-    attempts = max(1, settings.ai_retry_max_attempts)
-    base = max(0.1, settings.ai_retry_base_delay_seconds)
-    cap = max(base, settings.ai_retry_max_delay_seconds)
-
-    for attempt in range(1, attempts + 1):
-        try:
-            return await func(*args, **kwargs)
-        except Exception as exc:
-            if not _is_retryable_error(exc) or attempt >= attempts:
-                raise
-            delay = min(cap, base * (2 ** (attempt - 1)))
-            logger.warning(f"Anthropic call failed. attempt={attempt}/{attempts} delay={delay:.2f}s error={exc}")
-            await asyncio.sleep(delay)
+    """Shared transient coverage plus Anthropic's "overloaded" marker (#1540)."""
+    return is_transient_error(exc) or "overloaded" in str(exc).lower()

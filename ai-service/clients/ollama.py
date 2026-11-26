@@ -5,6 +5,7 @@ import aiohttp
 from config import settings, validate_base_url
 
 from .base import BaseLLMClient, EmbeddingClient
+from .retry import call_with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -40,13 +41,18 @@ class OllamaClient(BaseLLMClient, EmbeddingClient):
         return await self.embed(text)
 
     async def embed(self, text: str) -> list[float]:
+        return cast("list[float]", await call_with_retry(self._embed_once, text, provider="Ollama"))
+
+    async def _embed_once(self, text: str) -> list[float]:
         session = await self._get_session()
         async with session.post(
             f"{self._base_url}/api/embeddings",
             json={"model": self._model, "prompt": text},
         ) as resp:
             if resp.status != 200:
-                raise Exception(f"Ollama embedding failed: {await resp.text()}")
+                # The status rides in the message so the retryable predicate
+                # can tell a transient 5xx/429 from a permanent 4xx (#1540).
+                raise Exception(f"Ollama embedding failed (HTTP {resp.status}): {await resp.text()}")
             data = await resp.json()
             return cast("list[float]", data["embedding"])
 
@@ -67,13 +73,16 @@ class OllamaClient(BaseLLMClient, EmbeddingClient):
             # Send the system prompt in its own field instead of smashing it
             # together with user content — keeps roles separated (#1330).
             payload["system"] = system_prompt
+        return cast("str", await call_with_retry(self._generate_once, payload, provider="Ollama"))
+
+    async def _generate_once(self, payload: dict) -> str:
         session = await self._get_session()
         async with session.post(
             f"{self._base_url}/api/generate",
             json=payload,
         ) as resp:
             if resp.status != 200:
-                raise Exception(f"Ollama generate failed: {await resp.text()}")
+                raise Exception(f"Ollama generate failed (HTTP {resp.status}): {await resp.text()}")
             data = await resp.json()
             return cast("str", data["response"])
 

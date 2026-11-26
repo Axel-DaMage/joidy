@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import struct
 from collections.abc import AsyncIterator
@@ -9,6 +8,7 @@ from google import genai
 from google.genai import types
 
 from .base import BaseLLMClient, EmbeddingClient
+from .retry import call_with_retry, is_transient_error
 
 logger = logging.getLogger(__name__)
 
@@ -19,13 +19,13 @@ class GeminiClient(BaseLLMClient, EmbeddingClient):
     The legacy ``google.generativeai`` package is EOL upstream. ``google.genai``
     exposes a native async API (``client.aio.models``), so calls are awaited
     directly — no executor bridge — and ``asyncio.wait_for`` cancellation in
-    ``_call_with_retry`` now actually aborts the in-flight HTTP request
-    instead of orphaning a worker thread.
+    the shared ``call_with_retry`` now actually aborts the in-flight HTTP
+    request instead of orphaning a worker thread.
     """
 
     def __init__(self, api_key: str, model: str):
         # HttpOptions.timeout is in milliseconds; the asyncio.wait_for in
-        # _call_with_retry stays as a per-call backstop with its own budget.
+        # call_with_retry stays as a per-call backstop with its own budget.
         self._client = genai.Client(
             api_key=api_key,
             http_options=types.HttpOptions(timeout=int(max(settings.embed_timeout, settings.llm_timeout) * 1000)),
@@ -40,13 +40,14 @@ class GeminiClient(BaseLLMClient, EmbeddingClient):
         return await self.embed(text)
 
     async def embed(self, text: str) -> list[float]:
-        response = await _call_with_retry(
-            lambda: self._client.aio.models.embed_content(
-                model=self._model,
-                contents=text,
-                config=types.EmbedContentConfig(task_type="RETRIEVAL_DOCUMENT"),
-            ),
+        response = await call_with_retry(
+            self._client.aio.models.embed_content,
+            model=self._model,
+            contents=text,
+            config=types.EmbedContentConfig(task_type="RETRIEVAL_DOCUMENT"),
+            is_retryable=_is_retryable_error,
             timeout=settings.embed_timeout,
+            provider="Gemini",
         )
         return cast("list[float]", list(response.embeddings[0].values))
 
@@ -75,13 +76,14 @@ class GeminiClient(BaseLLMClient, EmbeddingClient):
         max_tokens: int = 256,
         system_prompt: str | None = None,
     ) -> str:
-        response = await _call_with_retry(
-            lambda: self._client.aio.models.generate_content(
-                model=self._model,
-                contents=prompt,
-                config=self._generation_config(temperature, max_tokens, system_prompt),
-            ),
+        response = await call_with_retry(
+            self._client.aio.models.generate_content,
+            model=self._model,
+            contents=prompt,
+            config=self._generation_config(temperature, max_tokens, system_prompt),
+            is_retryable=_is_retryable_error,
             timeout=settings.llm_timeout,
+            provider="Gemini",
         )
         return cast("str", response.text or "")
 
@@ -94,18 +96,19 @@ class GeminiClient(BaseLLMClient, EmbeddingClient):
     ) -> AsyncIterator[str]:
         """Native async streaming via ``generate_content_stream`` (#1131/#1462).
 
-        Stream *initiation* goes through ``_call_with_retry`` so a dead or
+        Stream *initiation* goes through ``call_with_retry`` so a dead or
         rate-limited provider fails fast and through the circuit breaker;
         mid-stream errors propagate to the consumer, which surfaces them as
         an SSE error frame.
         """
-        stream = await _call_with_retry(
-            lambda: self._client.aio.models.generate_content_stream(
-                model=self._model,
-                contents=prompt,
-                config=self._generation_config(temperature, max_tokens, system_prompt),
-            ),
+        stream = await call_with_retry(
+            self._client.aio.models.generate_content_stream,
+            model=self._model,
+            contents=prompt,
+            config=self._generation_config(temperature, max_tokens, system_prompt),
+            is_retryable=_is_retryable_error,
             timeout=settings.llm_timeout,
+            provider="Gemini",
         )
         async for chunk in stream:
             # chunk.text may raise on safety-blocked chunks.
@@ -125,35 +128,8 @@ class GeminiClient(BaseLLMClient, EmbeddingClient):
 
 
 def _is_retryable_error(exc: Exception) -> bool:
-    msg = str(exc).lower()
-    return "429" in msg or "resource exhausted" in msg or "rate limit" in msg
-
-
-async def _call_with_retry(func, timeout: float | None = None):
-    """Await ``func()`` with exponential-backoff retries on rate limits.
-
-    ``func`` is a zero-arg callable returning a *coroutine* (a
-    ``client.aio.models.*`` call). A fresh coroutine is built per attempt —
-    coroutines cannot be re-awaited once cancelled by ``wait_for``.
-    """
-    attempts = max(1, settings.ai_retry_max_attempts)
-    base = max(0.1, settings.ai_retry_base_delay_seconds)
-    cap = max(base, settings.ai_retry_max_delay_seconds)
-
-    for attempt in range(1, attempts + 1):
-        try:
-            coro = func()
-            if timeout is not None:
-                return await asyncio.wait_for(coro, timeout=timeout)
-            return await coro
-        except TimeoutError:
-            raise TimeoutError(f"Gemini call timed out after {timeout}s")
-        except Exception as exc:
-            if not _is_retryable_error(exc) or attempt >= attempts:
-                raise
-            delay = min(cap, base * (2 ** (attempt - 1)))
-            logger.warning(f"Gemini call rate-limited. attempt={attempt}/{attempts} delay={delay:.2f}s")
-            await asyncio.sleep(delay)
+    """Shared transient coverage plus Gemini's RESOURCE_EXHAUSTED marker (#1540)."""
+    return is_transient_error(exc) or "resource exhausted" in str(exc).lower()
 
 
 def embedding_to_bytes(embedding: list[float]) -> bytes:
