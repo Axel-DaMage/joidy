@@ -42,6 +42,20 @@ class VaultEvent:
     change_type: Change
 
 
+@dataclass(frozen=True)
+class _Fingerprint:
+    """Last-synced state of a vault file: sha256 of its content plus the
+    file's byte size at sync time (#1537).
+
+    ``size=None`` marks entries persisted before the size column existed
+    (or whose stat failed): they still match renames on hash but cannot
+    gate candidates by size.
+    """
+
+    hash: str
+    size: int | None = None
+
+
 # Per-file locks so rapid successive edits to the same file cannot start
 # concurrent imports for that file (#364).
 _file_locks: dict[str, asyncio.Lock] = {}
@@ -51,8 +65,10 @@ _file_locks_guard = asyncio.Lock()
 # file whose hash matches an added file in the same batch is a move, not a
 # delete+create (#364). Fingerprints are also written through to the
 # persistent event log (see _record_fingerprint) so rename detection still
-# works when a delete+add pair spans a worker restart (#1302).
-_fingerprints: dict[str, str] = {}
+# works when a delete+add pair spans a worker restart (#1302). Each entry
+# also records the file's byte size so rename candidates can be rejected on
+# a cheap stat() instead of a full read (#1537).
+_fingerprints: dict[str, _Fingerprint] = {}
 
 # Set by the worker's signal handler to trigger a graceful two-phase shutdown:
 # stop accepting new filesystem events, then let in-flight writes finish (#371).
@@ -81,8 +97,9 @@ class PersistentEventLog:
     in-memory batch dedup.
 
     The same DB also persists content fingerprints (path → sha256 of the
-    last-synced content), so a delete+add pair spanning a restart can still
-    be recognised as a rename and keep the note id/XP/history (#1302).
+    last-synced content plus the file's byte size, #1537), so a delete+add
+    pair spanning a restart can still be recognised as a rename and keep
+    the note id/XP/history (#1302).
     """
 
     def __init__(self, path: str):
@@ -117,8 +134,15 @@ class PersistentEventLog:
                 "CREATE TABLE IF NOT EXISTS pending_events (path TEXT PRIMARY KEY, change_type TEXT NOT NULL)"
             )
             self._conn.execute(
-                "CREATE TABLE IF NOT EXISTS fingerprints (path TEXT PRIMARY KEY, fingerprint TEXT NOT NULL)"
+                "CREATE TABLE IF NOT EXISTS fingerprints "
+                "(path TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, size INTEGER)"
             )
+            # Databases written before the size column existed (#1537) get it
+            # added in place — their rows keep NULL and still match renames on
+            # hash alone, just without the stat() pre-filter.
+            fp_columns = {row[1] for row in self._conn.execute("PRAGMA table_info(fingerprints)")}
+            if "size" not in fp_columns:
+                self._conn.execute("ALTER TABLE fingerprints ADD COLUMN size INTEGER")
             self._conn.commit()
         except Exception as exc:
             # Exception type only — str(exc) can embed filesystem paths (#1299).
@@ -217,14 +241,15 @@ class PersistentEventLog:
             logger.warning("[vault] Failed to read pending events: %s", type(exc).__name__)
             return []
 
-    def set_fingerprint(self, path: str, fingerprint: str) -> None:
-        """Persist the last-synced content fingerprint for ``path`` (#1302)."""
+    def set_fingerprint(self, path: str, fingerprint: str, size: int | None = None) -> None:
+        """Persist the last-synced content fingerprint for ``path`` (#1302)
+        along with the file's byte size for rename-detection gating (#1537)."""
         if self._conn is None:
             return
         try:
             self._write_durable(
-                "INSERT OR REPLACE INTO fingerprints (path, fingerprint) VALUES (?, ?)",
-                (path, fingerprint),
+                "INSERT OR REPLACE INTO fingerprints (path, fingerprint, size) VALUES (?, ?, ?)",
+                (path, fingerprint, size),
             )
         except Exception as exc:
             logger.warning("[vault] Failed to persist fingerprint for %s: %s", _log_name(path), type(exc).__name__)
@@ -238,13 +263,13 @@ class PersistentEventLog:
         except Exception as exc:
             logger.warning("[vault] Failed to remove fingerprint for %s: %s", _log_name(path), type(exc).__name__)
 
-    def fingerprints(self) -> dict[str, str]:
+    def fingerprints(self) -> dict[str, _Fingerprint]:
         """All persisted fingerprints, used to seed rename detection (#1302)."""
         if self._conn is None:
             return {}
         try:
-            rows = self._conn.execute("SELECT path, fingerprint FROM fingerprints").fetchall()
-            return dict(rows)
+            rows = self._conn.execute("SELECT path, fingerprint, size FROM fingerprints").fetchall()
+            return {path: _Fingerprint(fp, size) for path, fp, size in rows}
         except Exception as exc:
             logger.warning("[vault] Failed to read fingerprints: %s", type(exc).__name__)
             return {}
@@ -285,10 +310,20 @@ def _unbind_event_log() -> None:
 
 
 def _record_fingerprint(path: str, fingerprint: str) -> None:
-    """Store a content fingerprint in memory AND in the bound event log."""
-    _fingerprints[path] = fingerprint
+    """Store a content fingerprint in memory AND in the bound event log.
+
+    The file's ``st_size`` is recorded alongside (#1537) so rename detection
+    can reject candidates on a cheap ``stat()`` instead of a full read.
+    ``None`` when the stat fails — the fingerprint still matches on hash,
+    just without the size pre-filter.
+    """
+    try:
+        size = Path(path).stat().st_size
+    except OSError:
+        size = None
+    _fingerprints[path] = _Fingerprint(fingerprint, size)
     if _event_log is not None:
-        _event_log.set_fingerprint(path, fingerprint)
+        _event_log.set_fingerprint(path, fingerprint, size)
 
 
 def _drop_fingerprint(path: str) -> None:
@@ -565,7 +600,9 @@ async def rename_note_path(old_path: str, new_path: Path, client: httpx.AsyncCli
     try:
         if not new_path.exists():
             return True
-        content = _read_vault_file(new_path)
+        # Offloaded read (#1537): files up to max_note_file_size (5 MiB) must
+        # not be slurped on the event loop.
+        content = await asyncio.to_thread(_read_vault_file, new_path)
         if content is None:
             return True
         frontmatter, body = _parse_frontmatter(content)
@@ -668,7 +705,9 @@ async def import_or_update_note(
     try:
         if not filepath.exists():
             return True
-        content = _read_vault_file(filepath)
+        # Offloaded read (#1537): files up to max_note_file_size (5 MiB) must
+        # not be slurped on the event loop.
+        content = await asyncio.to_thread(_read_vault_file, filepath)
         if content is None:
             return True
         frontmatter, body = _parse_frontmatter(content)
@@ -857,8 +896,9 @@ async def initial_scan(vault_path: Path, client: httpx.AsyncClient, token: str):
             and str(filepath) in known_paths
             and str(filepath) not in pending_paths
         ):
-            content = _read_vault_file(filepath)
-            if content is not None and _fingerprint(content) == stored:
+            # Offloaded read (#1537) — see import_or_update_note.
+            content = await asyncio.to_thread(_read_vault_file, filepath)
+            if content is not None and _fingerprint(content) == stored.hash:
                 skipped += 1
                 continue
         to_sync.append(filepath)
@@ -927,12 +967,25 @@ async def _process_batch(
             if new_path in consumed_adds:
                 continue
             try:
-                if Path(new_path).exists() and _is_valid_vault_path(new_path, Change.added, _vault_root()):
-                    content = _read_vault_file(Path(new_path))
-                    if content is not None and _fingerprint(content) == old_fp:
-                        renames.append((old_path, new_path))
-                        consumed_adds.add(new_path)
-                        break
+                candidate = Path(new_path)
+                if not candidate.exists():
+                    continue
+                # Size gate (#1537): identical files have identical st_size, so
+                # a candidate whose byte size differs from the deleted file's
+                # recorded size can never match its hash — skipping it on a
+                # cheap stat() turns the D×A full-read scan into D×A stats.
+                # Entries without a recorded size (pre-#1537 rows, failed
+                # stats) fall through to the hash comparison as before.
+                if old_fp.size is not None and candidate.stat().st_size != old_fp.size:
+                    continue
+                if not _is_valid_vault_path(new_path, Change.added, _vault_root()):
+                    continue
+                # Offloaded read (#1537) — see import_or_update_note.
+                content = await asyncio.to_thread(_read_vault_file, candidate)
+                if content is not None and _fingerprint(content) == old_fp.hash:
+                    renames.append((old_path, new_path))
+                    consumed_adds.add(new_path)
+                    break
             except Exception:  # noqa: S112 — unreadable candidate file; try the next one
                 continue
 
