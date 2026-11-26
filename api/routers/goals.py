@@ -24,6 +24,7 @@ from services.goal_service import (
     validate_goal_parent,
 )
 from services.joidy_vault_writer import (
+    _goal_file_source_path,
     _write_goal_file,
     delete_goal_file,
     get_objectives_dir,
@@ -416,7 +417,14 @@ def create_goal(data: GoalCreate, db: Session = Depends(get_db)):
         obj_dir = get_objectives_dir()
         if obj_dir:
             _write_goal_file(db, goal, obj_dir)
+            # #1583 — ``_write_goal_file`` only assigns ``source_path``
+            # in-memory, after the operation's last commit; persist it in
+            # the same request or the value reached the response but never
+            # the DB. Still inside the best-effort guard: a failure here
+            # rolls back only the pending ``source_path``, the goal stands.
+            db.commit()
     except Exception as e:
+        db.rollback()
         logger.warning("Failed to write goal file: %s", e)
 
     return _serialize_goal(goal, db)
@@ -467,8 +475,14 @@ def update_goal(goal_id: int, data: GoalUpdate, db: Session = Depends(get_db)):
         }
         # #1478 — goal-file sync is best-effort (same guard as create_goal).
         try:
-            update_goal_file(goal_id, goal.title, content, metadata)
+            written = update_goal_file(goal_id, goal.title, content, metadata)
+            # #1583 — persist the path of the file actually written (it may
+            # have just been created if the create-time write failed).
+            if written is not None:
+                goal.source_path = _goal_file_source_path(written)
+                db.commit()
         except Exception as e:
+            db.rollback()
             logger.warning("Failed to write goal file: %s", e)
 
         # #1141 — mirror into the linked real note (same as /content save).
@@ -697,8 +711,13 @@ def save_goal_content(goal_id: int, data: GoalContent, db: Session = Depends(get
                 "is_completed": goal.is_completed,
                 "completed_at": goal.completed_at.isoformat() if goal.completed_at else None,
             }
-            update_goal_file(goal_id, data.title, data.content, metadata)
+            written = update_goal_file(goal_id, data.title, data.content, metadata)
+            # #1583 — same in-request source_path persistence as update_goal.
+            if written is not None:
+                goal.source_path = _goal_file_source_path(written)
+                db.commit()
     except Exception as e:
+        db.rollback()
         logger.warning("Failed to write goal file: %s", e)
 
     if linked_note is not None:
@@ -765,7 +784,11 @@ def complete_goal(
             _write_goal_file(db, goal, obj_dir)
             if child:
                 _write_goal_file(db, child, obj_dir)
+            # #1583 — persist the source_path assignments in-request (see
+            # create_goal); the snowball child's path is committed too.
+            db.commit()
     except Exception as e:
+        db.rollback()
         logger.warning("Failed to write goal file: %s", e)
 
     return {"goal": _serialize_goal(goal, db), "gamification": vars(gami)}
@@ -790,7 +813,10 @@ def fail_goal(
         obj_dir = get_objectives_dir()
         if obj_dir:
             _write_goal_file(db, goal, obj_dir)
+            # #1583 — persist source_path in-request (see create_goal).
+            db.commit()
     except Exception as e:
+        db.rollback()
         logger.warning("Failed to write goal file: %s", e)
 
     return _serialize_goal(goal, db)

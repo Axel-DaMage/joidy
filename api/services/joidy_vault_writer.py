@@ -137,10 +137,21 @@ def _parse_goal_content(content: str) -> dict:
     }
 
 
-def update_goal_file(goal_id: int, title: str, content: str, metadata: dict) -> bool:
+def _goal_file_source_path(filepath: Path) -> str:
+    """Vault-relative ``source_path`` for a goal file under ``Objetivos/`` (#1583).
+
+    ``filepath.parents[0]`` is ``Objetivos/`` and ``parents[1]`` the vault
+    root, so the stored domain is ``Objetivos/<id>_<slug>.md``. Shared by
+    ``_write_goal_file``, ``restore_goals_from_vault`` and routers persisting
+    the path of a file written via ``update_goal_file``.
+    """
+    return str(filepath.relative_to(filepath.parents[1]))
+
+
+def update_goal_file(goal_id: int, title: str, content: str, metadata: dict) -> Path | None:
     obj_dir = get_objectives_dir()
     if not obj_dir:
-        return False
+        return None
 
     filepath = None
     for f in obj_dir.glob(f"{goal_id}_*.md"):
@@ -166,7 +177,7 @@ def update_goal_file(goal_id: int, title: str, content: str, metadata: dict) -> 
         content_lines.append(f"\n{content}\n")
 
     filepath.write_text("\n".join(content_lines), encoding="utf-8")
-    return True
+    return filepath
 
 
 def delete_goal_file(goal_id: int) -> bool:
@@ -250,7 +261,7 @@ def restore_goals_from_vault(db: Session) -> dict:
                     completed_at=datetime.fromisoformat(parsed["completed_at"])
                     if parsed.get("completed_at") and parsed["completed_at"] != "None"
                     else None,
-                    source_path=str(f.relative_to(f.parents[1])),
+                    source_path=_goal_file_source_path(f),
                 )
                 db.add(goal)
                 db.flush()
@@ -362,6 +373,10 @@ def write_objectives(db: Session) -> bool:
     goals = db.query(Goal).order_by(Goal.created_at.desc()).all()
     for goal in goals:
         _write_goal_file(db, goal, obj_dir)
+    # #1583 — ``_write_goal_file`` only assigns ``source_path`` in-memory;
+    # without this commit the /vault/write-objectives pass wrote the files
+    # but its ``source_path`` updates were discarded at session close.
+    db.commit()
     return True
 
 
@@ -404,7 +419,7 @@ def _write_goal_file(db: Session, goal: Goal, obj_dir: Path) -> Path | None:
 
     filepath.write_text("\n".join(content_lines), encoding="utf-8")
 
-    goal.source_path = str(filepath.relative_to(filepath.parents[1]))
+    goal.source_path = _goal_file_source_path(filepath)
     return filepath
 
 

@@ -467,9 +467,10 @@ def test_create_goal_file_write_failure_still_creates(client, db_session, monkey
     assert db_session.get(Goal, data["id"]).source_path is None
 
 
-def test_create_goal_writes_vault_file(client, tmp_path):
+def test_create_goal_writes_vault_file(client, db_session, tmp_path):
     """Control: with a writable vault (autouse ``_isolated_vault``) the goal
-    file is written and ``source_path`` points at it."""
+    file is written and ``source_path`` points at it — and (#1583) is
+    committed to the DB within the same request, not left to a later pass."""
     resp = client.post("/goals/", json=_goal_payload(title="vault-goal"))
     assert resp.status_code == 201, resp.text
     data = resp.json()
@@ -480,6 +481,73 @@ def test_create_goal_writes_vault_file(client, tmp_path):
     body = files[0].read_text(encoding="utf-8")
     assert "joidy_managed: True" in body
     assert "# vault-goal" in body
+
+    # #1583 — the value is persisted on the row, not just in the response.
+    db_session.expire_all()
+    assert db_session.get(Goal, data["id"]).source_path == data["source_path"]
+
+
+# ─── source_path persistence (#1583) ──────────────────────────────────────────
+
+
+def test_complete_goal_persists_source_path(client, db_session, tmp_path):
+    """#1583 — /complete assigns ``source_path`` after its last commit; the
+    follow-up commit must land it on the row within the same request."""
+    goal = _goal(db_session, title="complete-persist", target_value=1.0, current_value=1.0)
+    db_session.commit()
+
+    resp = client.post(f"/goals/{goal.id}/complete")
+    assert resp.status_code == 200, resp.text
+    expected = f"Objetivos/{goal.id}_complete-persist.md"
+    assert resp.json()["goal"]["source_path"] == expected
+
+    db_session.expire_all()
+    assert db_session.get(Goal, goal.id).source_path == expected
+    assert list((tmp_path / "isolated-vault" / "Objetivos").glob(f"{goal.id}_*.md"))
+
+
+def test_fail_goal_persists_source_path(client, db_session):
+    """#1583 — same in-request persistence for /fail."""
+    goal = _goal(db_session, title="fail-persist")
+    db_session.commit()
+
+    resp = client.post(f"/goals/{goal.id}/fail")
+    assert resp.status_code == 200, resp.text
+    expected = f"Objetivos/{goal.id}_fail-persist.md"
+    assert resp.json()["source_path"] == expected
+
+    db_session.expire_all()
+    assert db_session.get(Goal, goal.id).source_path == expected
+
+
+def test_update_goal_persists_source_path(client, db_session):
+    """#1583 — PUT with ``content`` writes the goal file via
+    ``update_goal_file``; when the file did not exist yet (e.g. the
+    create-time write failed) its path must be persisted in-request."""
+    goal = _goal(db_session, title="put-persist")
+    db_session.commit()
+
+    resp = client.put(f"/goals/{goal.id}", json={"content": "new body"})
+    assert resp.status_code == 200, resp.text
+    expected = f"Objetivos/{goal.id}_put-persist.md"
+    assert resp.json()["source_path"] == expected
+
+    db_session.expire_all()
+    assert db_session.get(Goal, goal.id).source_path == expected
+
+
+def test_save_goal_content_persists_source_path(client, db_session):
+    """#1583 — same in-request persistence for POST /{id}/content."""
+    goal = _goal(db_session, title="save-persist")
+    db_session.commit()
+
+    resp = client.post(f"/goals/{goal.id}/content", json=_content_payload(goal))
+    assert resp.status_code == 200, resp.text
+    expected = f"Objetivos/{goal.id}_save-persist.md"
+    assert resp.json()["source_path"] == expected
+
+    db_session.expire_all()
+    assert db_session.get(Goal, goal.id).source_path == expected
 
 
 def test_fail_and_delete_goal_vault_unwritable(client, db_session, monkeypatch):
