@@ -164,18 +164,77 @@ class TestHealthAndMetadata:
         assert body["embedding_available"] is True
 
 
-class TestHealthReachability:
-    """/health reports REAL provider reachability, not just config (#1460)."""
+class TestHealthObservedState:
+    """Default /health never touches providers (#1538) — it reports the
+    last *observed* state: circuit breakers (chain-wide outages) and the
+    failover wrapper's active provider (primary-down detection)."""
 
-    def test_health_unavailable_when_no_llm_provider_reachable(self, ai_enabled):
-        ai_enabled.llm.health_check = AsyncMock(return_value=False)
+    def test_health_public_request_does_not_probe_providers(self, ai_enabled):
+        resp = _client().get("/health")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "ok"
+        ai_enabled.llm.health_check.assert_not_awaited()
+        ai_enabled.emb.health_check.assert_not_awaited()
+
+    def test_health_probe_param_ignored_without_secret(self, ai_enabled):
+        """A public caller cannot trigger billable probes with ?probe=1."""
+        resp = _client().get("/health?probe=1")
+        assert resp.status_code == 200
+        ai_enabled.llm.health_check.assert_not_awaited()
+        ai_enabled.emb.health_check.assert_not_awaited()
+
+    def test_health_unavailable_when_llm_breaker_open(self, ai_enabled):
+        """An OPEN LLM breaker means the whole chain just failed repeatedly —
+        reported as unavailable without a single provider ping."""
+        main.llm_circuit_breaker.state = CircuitState.OPEN
+        main.llm_circuit_breaker.last_failure_time = time.time()
         body = _client().get("/health").json()
+        assert body["status"] == "unavailable"
+        assert body["llm_available"] is False
+        assert body["embedding_available"] is True
+        ai_enabled.llm.health_check.assert_not_awaited()
+
+    def test_health_degraded_when_embedding_breaker_open(self, ai_enabled):
+        main.emb_circuit_breaker.state = CircuitState.OPEN
+        main.emb_circuit_breaker.last_failure_time = time.time()
+        body = _client().get("/health").json()
+        assert body["status"] == "degraded"
+        assert body["embedding_available"] is False
+        assert body["llm_available"] is True
+        ai_enabled.emb.health_check.assert_not_awaited()
+
+    def test_health_degraded_when_llm_fallback_serving(self, ai_enabled, monkeypatch):
+        """The failover wrapper's provider_name reports who served last — a
+        fallback in use reads as primary-down without probing (#1538)."""
+        chain_client = SimpleNamespace(
+            provider_name="fallback",  # active provider is not the chain head
+            chain=[
+                SimpleNamespace(provider_name="primary"),
+                SimpleNamespace(provider_name="fallback"),
+            ],
+        )
+        monkeypatch.setattr(main, "get_llm_client", lambda: chain_client)
+        body = _client().get("/health").json()
+        assert body["status"] == "degraded"
+        assert body["llm_available"] is True
+
+
+class TestHealthDeepProbe:
+    """Real provider reachability probes are opt-in (#1538): they only run
+    for internal callers requesting ``GET /health?probe=1`` with a valid
+    X-Internal-Secret. Results feed the reported status while fresh."""
+
+    def test_health_unavailable_when_no_llm_provider_reachable(self, ai_enabled, monkeypatch):
+        monkeypatch.setattr(settings, "internal_secret", "s3cr3t")
+        ai_enabled.llm.health_check = AsyncMock(return_value=False)
+        body = _client().get("/health?probe=1", headers={"X-Internal-Secret": "s3cr3t"}).json()
         assert body["status"] == "unavailable"
         assert body["llm_available"] is False
         # Embeddings up but chat can't be served → still unavailable.
         assert body["embedding_available"] is True
 
     def test_health_degraded_when_llm_primary_down_but_fallback_up(self, ai_enabled, monkeypatch):
+        monkeypatch.setattr(settings, "internal_secret", "s3cr3t")
         chain_client = SimpleNamespace(
             provider_name="primary",
             chain=[
@@ -184,21 +243,24 @@ class TestHealthReachability:
             ],
         )
         monkeypatch.setattr(main, "get_llm_client", lambda: chain_client)
-        body = _client().get("/health").json()
+        body = _client().get("/health?probe=1", headers={"X-Internal-Secret": "s3cr3t"}).json()
         assert body["status"] == "degraded"
         assert body["llm_available"] is True
 
-    def test_health_degraded_when_embedding_unreachable(self, ai_enabled):
+    def test_health_degraded_when_embedding_unreachable(self, ai_enabled, monkeypatch):
+        monkeypatch.setattr(settings, "internal_secret", "s3cr3t")
         ai_enabled.emb.health_check = AsyncMock(return_value=False)
-        body = _client().get("/health").json()
+        body = _client().get("/health?probe=1", headers={"X-Internal-Secret": "s3cr3t"}).json()
         assert body["status"] == "degraded"
         assert body["embedding_available"] is False
         assert body["llm_available"] is True
 
-    def test_health_probe_result_cached_within_ttl(self, ai_enabled):
+    def test_health_probe_result_cached_within_ttl(self, ai_enabled, monkeypatch):
+        monkeypatch.setattr(settings, "internal_secret", "s3cr3t")
         client = _client()
-        assert client.get("/health").status_code == 200
-        assert client.get("/health").status_code == 200
+        headers = {"X-Internal-Secret": "s3cr3t"}
+        assert client.get("/health?probe=1", headers=headers).status_code == 200
+        assert client.get("/health?probe=1", headers=headers).status_code == 200
         # Second request served from the probe cache — no extra provider pings.
         ai_enabled.llm.health_check.assert_awaited_once()
         ai_enabled.emb.health_check.assert_awaited_once()
@@ -209,11 +271,26 @@ class TestHealthReachability:
         public_body = _client().get("/health").json()
         assert "reachability" not in public_body
 
-        body = _client().get("/health", headers={"X-Internal-Secret": "s3cr3t"}).json()
+        body = _client().get("/health?probe=1", headers={"X-Internal-Secret": "s3cr3t"}).json()
         reach = body["reachability"]
         assert reach["llm"]["providers"] == {"fake-llm": True}
         assert reach["llm"]["active"] == "fake-llm"
         assert reach["llm"]["primary_ok"] is True
+        assert "probe_age_seconds" in body
+
+    def test_health_fresh_probe_feeds_public_status(self, ai_enabled, monkeypatch):
+        """A fresh cached probe is also used for public /health answers —
+        public callers still never *trigger* a probe (#1538)."""
+        monkeypatch.setattr(settings, "internal_secret", "s3cr3t")
+        ai_enabled.llm.health_check = AsyncMock(return_value=False)
+        client = _client()
+        client.get("/health?probe=1", headers={"X-Internal-Secret": "s3cr3t"})
+
+        public_body = client.get("/health").json()
+        assert public_body["status"] == "unavailable"
+        assert public_body["llm_available"] is False
+        # The public read used the cache — no new provider calls.
+        ai_enabled.llm.health_check.assert_awaited_once()
 
 
 # ── /embed ─────────────────────────────────────────────────────────────

@@ -60,7 +60,11 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm ai-servi
 - `POST /embed` — generate a vector embedding for text
 - `POST /classify` — suggest tags / classify a note
 - `POST /rag` — semantic search over stored embeddings
-- `GET /health` — liveness check
+- `GET /health` — liveness check (cheap: reports last *observed* provider
+  state — circuit breakers + active failover provider — never billable
+  provider calls, safe for the Docker HEALTHCHECK). Append `?probe=1` with a
+  valid `X-Internal-Secret` for a deep probe that pings every provider
+  (billable, cached ~45s).
 
 ## Project Structure
 

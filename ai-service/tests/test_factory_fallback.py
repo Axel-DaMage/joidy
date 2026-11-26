@@ -9,6 +9,7 @@ Verifies that:
 6. health_check() returns False if every provider is unreachable
 """
 
+import time
 import unittest
 from unittest.mock import patch
 
@@ -24,12 +25,16 @@ class FakeLLMClient(BaseLLMClient):
         self._name = name
         self._fail = fail
         self._embed_fail = embed_fail or fail
+        self.generate_calls = 0
+        self.embed_calls = 0
+        self.health_check_calls = 0
 
     @property
     def provider_name(self) -> str:
         return self._name
 
     async def embed_text(self, text: str) -> list[float]:
+        self.embed_calls += 1
         if self._embed_fail:
             raise Exception(f"{self._name} embed_text failed")
         return [0.1, 0.2, 0.3]
@@ -41,11 +46,13 @@ class FakeLLMClient(BaseLLMClient):
         max_tokens: int = 256,
         system_prompt: str | None = None,
     ) -> str:
+        self.generate_calls += 1
         if self._fail:
             raise Exception(f"{self._name} generate failed")
         return f"{self._name}:response"
 
     async def health_check(self) -> bool:
+        self.health_check_calls += 1
         return not self._fail
 
 
@@ -55,17 +62,21 @@ class FakeEmbeddingClient(EmbeddingClient):
     def __init__(self, name: str, fail: bool = False):
         self._name = name
         self._fail = fail
+        self.embed_calls = 0
+        self.health_check_calls = 0
 
     @property
     def provider_name(self) -> str:
         return self._name
 
     async def embed(self, text: str) -> list[float]:
+        self.embed_calls += 1
         if self._fail:
             raise Exception(f"{self._name} embed failed")
         return [0.4, 0.5, 0.6]
 
     async def health_check(self) -> bool:
+        self.health_check_calls += 1
         return not self._fail
 
 
@@ -248,6 +259,134 @@ class TestFallbackEmbeddingClient(unittest.IsolatedAsyncioTestCase):
 
         result = await client.health_check()
         self.assertFalse(result)
+
+
+class TestFallbackLLMStickiness(unittest.IsolatedAsyncioTestCase):
+    """Sticky failover (#1538): a failed provider is skipped during its
+    cooldown so traffic goes straight to the healthy fallback, then retried
+    (half-open) once the cooldown expires."""
+
+    async def test_failed_primary_skipped_during_cooldown(self):
+        primary = FakeLLMClient("gemini", fail=True)
+        secondary = FakeLLMClient("ollama", fail=False)
+        client = FallbackLLMClient(primary=primary, fallbacks=[secondary])
+
+        self.assertEqual(await client.generate("one"), "ollama:response")
+        self.assertEqual(await client.generate("two"), "ollama:response")
+        self.assertEqual(await client.generate("three"), "ollama:response")
+        # The dead primary paid its failure latency exactly ONCE; subsequent
+        # requests went straight to the fallback.
+        self.assertEqual(primary.generate_calls, 1)
+        self.assertEqual(secondary.generate_calls, 3)
+        self.assertEqual(client.provider_name, "ollama")
+
+    async def test_failed_primary_skipped_for_embed_text(self):
+        primary = FakeLLMClient("gemini", embed_fail=True)
+        secondary = FakeLLMClient("ollama")
+        client = FallbackLLMClient(primary=primary, fallbacks=[secondary])
+
+        await client.embed_text("one")
+        await client.embed_text("two")
+        self.assertEqual(primary.embed_calls, 1)
+        self.assertEqual(secondary.embed_calls, 2)
+
+    async def test_primary_retried_after_cooldown_expires(self):
+        """Half-open probe: once the cooldown expires the primary is tried
+        again in its normal position; a success clears the cooldown."""
+        primary = FakeLLMClient("gemini", fail=True)
+        secondary = FakeLLMClient("ollama")
+        client = FallbackLLMClient(primary=primary, fallbacks=[secondary])
+
+        await client.generate("one")
+        self.assertEqual(primary.generate_calls, 1)
+
+        # Cooldown expires → next request probes the primary again.
+        client._down_until[0] = 0.0
+        primary._fail = False
+        self.assertEqual(await client.generate("two"), "gemini:response")
+        self.assertEqual(primary.generate_calls, 2)
+        self.assertEqual(client.provider_name, "gemini")
+        self.assertEqual(client._down_until, {})
+
+    async def test_still_failing_primary_rearms_cooldown(self):
+        primary = FakeLLMClient("gemini", fail=True)
+        secondary = FakeLLMClient("ollama")
+        client = FallbackLLMClient(primary=primary, fallbacks=[secondary])
+
+        await client.generate("one")
+        self.assertEqual(primary.generate_calls, 1)
+
+        # Cooldown expires but the primary still fails → re-cooled and
+        # skipped again on the following request.
+        client._down_until[0] = 0.0
+        await client.generate("two")
+        self.assertEqual(primary.generate_calls, 2)
+        await client.generate("three")
+        self.assertEqual(primary.generate_calls, 2)
+        self.assertEqual(secondary.generate_calls, 3)
+
+    async def test_all_providers_cooling_still_tries_chain(self):
+        """When every provider is in cooldown the full chain is still tried —
+        degraded latency beats a certain error."""
+        primary = FakeLLMClient("gemini")
+        secondary = FakeLLMClient("ollama")
+        client = FallbackLLMClient(primary=primary, fallbacks=[secondary])
+        future = time.monotonic() + 3600
+        client._down_until = {0: future, 1: future}
+
+        self.assertEqual(await client.generate("x"), "gemini:response")
+        self.assertEqual(primary.generate_calls, 1)
+        # Success cleared the primary's cooldown entry.
+        self.assertNotIn(0, client._down_until)
+
+    async def test_health_check_skips_cooling_provider(self):
+        primary = FakeLLMClient("gemini", fail=True)
+        secondary = FakeLLMClient("ollama")
+        client = FallbackLLMClient(primary=primary, fallbacks=[secondary])
+        client._down_until = {0: time.monotonic() + 3600}
+
+        self.assertTrue(await client.health_check())
+        # Known-down primary was not pinged — no wasted billable probe.
+        self.assertEqual(primary.health_check_calls, 0)
+        self.assertEqual(client.provider_name, "ollama")
+
+
+class TestFallbackEmbeddingStickiness(unittest.IsolatedAsyncioTestCase):
+    """Same cooldown stickiness for the two-provider embedding chain (#1538)."""
+
+    async def test_failed_primary_skipped_during_cooldown(self):
+        primary = FakeEmbeddingClient("gemini", fail=True)
+        secondary = FakeEmbeddingClient("ollama")
+        client = FallbackEmbeddingClient(primary=primary, secondary=secondary)
+
+        await client.embed("one")
+        await client.embed("two")
+        self.assertEqual(primary.embed_calls, 1)
+        self.assertEqual(secondary.embed_calls, 2)
+        self.assertEqual(client.provider_name, "ollama")
+
+    async def test_primary_retried_after_cooldown_expires(self):
+        primary = FakeEmbeddingClient("gemini", fail=True)
+        secondary = FakeEmbeddingClient("ollama")
+        client = FallbackEmbeddingClient(primary=primary, secondary=secondary)
+
+        await client.embed("one")
+        self.assertEqual(primary.embed_calls, 1)
+
+        client._primary_down_until = 0.0
+        primary._fail = False
+        await client.embed("two")
+        self.assertEqual(primary.embed_calls, 2)
+        self.assertEqual(client.provider_name, "gemini")
+
+    async def test_health_check_skips_cooling_primary(self):
+        primary = FakeEmbeddingClient("gemini", fail=True)
+        secondary = FakeEmbeddingClient("ollama")
+        client = FallbackEmbeddingClient(primary=primary, secondary=secondary)
+        client._primary_down_until = time.monotonic() + 3600
+
+        self.assertTrue(await client.health_check())
+        self.assertEqual(primary.health_check_calls, 0)
 
 
 class TestClientFactoryFallback(unittest.IsolatedAsyncioTestCase):
