@@ -6,9 +6,11 @@ repos:
       - id: trailing-whitespace
       - id: end-of-file-fixer
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.0
+    # Must match the ruff pin in api/requirements-dev.txt (canonical parity
+    # source) — enforced by the version-sync gate in scripts/lint.sh (#1586).
+    rev: v0.17.6
     hooks:
-      - id: ruff
+      - id: ruff-check
         args: [ --fix ]
       - id: ruff-format
   - repo: https://github.com/shellcheck-py/shellcheck-py
