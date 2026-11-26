@@ -311,7 +311,9 @@ async def semantic_search(
                 headers["X-Internal-Secret"] = settings.internal_secret
             resp = await client.post(
                 f"{settings.ai_service_url}/embed",
-                json={"note_id": 0, "content": req.query},
+                # include_vector: /embed only returns the vector on request
+                # since #1541 — semantic search is the one caller that uses it.
+                json={"note_id": 0, "content": req.query, "include_vector": True},
                 headers=headers,
             )
             resp.raise_for_status()

@@ -64,16 +64,29 @@ def store_embedding(note_id: int, embedding: list[float]):
         conn.commit()
 
 
-def find_similar_notes(embedding: list[float], limit: int = 5) -> list[dict]:
-    """Find notes with similar embeddings using cosine similarity via pgvector."""
+def find_similar_note_chunks(embedding: list[float], limit: int, snippet_chars: int) -> list[dict]:
+    """Return ``note_id``/``title``/``snippet`` for the closest embeddings — one query.
+
+    The JOIN against ``notes`` fetches the display payload in the same
+    round-trip instead of a second per-id lookup (#1541 N+1), and
+    ``left(content, :snippet_chars)`` truncates server-side so full note
+    bodies never cross the wire. The distance is computed once in ORDER BY —
+    the previous version also SELECTed it although no caller used it.
+    Embeddings pointing at deleted notes are excluded by the JOIN.
+    """
     with engine.connect() as conn:
         rows = conn.execute(
             text("""
-            SELECT note_id, embedding <=> :embedding as distance
-            FROM note_embeddings
-            ORDER BY embedding <=> :embedding ASC
+            SELECT n.id, n.title, left(n.content, :snippet_chars) AS snippet
+            FROM note_embeddings ne
+            JOIN notes n ON n.id = ne.note_id
+            ORDER BY ne.embedding <=> :embedding ASC
             LIMIT :limit
             """),
-            {"embedding": _vector_literal(embedding), "limit": limit},
+            {
+                "embedding": _vector_literal(embedding),
+                "snippet_chars": snippet_chars,
+                "limit": limit,
+            },
         ).fetchall()
-        return [{"note_id": row[0], "distance": row[1]} for row in rows]
+        return [{"note_id": row[0], "title": row[1], "snippet": row[2] or ""} for row in rows]
