@@ -2,12 +2,31 @@ import json
 
 from config import settings
 from sqlalchemy import create_engine, text
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker
 
+# Pool sizing (#1584): since #1533 every psycopg2 call runs on a worker
+# thread via ``asyncio.to_thread``, so the pool — not the event loop — is
+# the concurrency ceiling. Each DB call site holds a single connection and
+# the calls are sequential within a request, so demand ≈ concurrent
+# in-flight requests: 10 steady-state connections cover normal load and 10
+# overflow absorb /embed bursts during vault sync. A dedicated
+# ThreadPoolExecutor sized to the pool was rejected: ``to_thread`` always
+# uses the default executor (extra workers simply queue on pool checkout,
+# which degrades gracefully) so it would add ``run_in_executor`` plumbing
+# at every call site for no throughput gain in a single-user app.
+#
+# The sizing kwargs are QueuePool-specific — the SQLite engines used by the
+# test suite (SingletonThreadPool/StaticPool) reject them, so they only
+# apply to real Postgres URLs.
+_pool_kwargs = (
+    {"pool_size": 10, "max_overflow": 10} if make_url(settings.database_url).get_backend_name() != "sqlite" else {}
+)
 engine = create_engine(
     settings.database_url,
     pool_pre_ping=True,
     pool_recycle=3600,
+    **_pool_kwargs,
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
