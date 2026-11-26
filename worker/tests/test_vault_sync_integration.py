@@ -543,10 +543,11 @@ class TestSyncRaces(unittest.IsolatedAsyncioTestCase):
                         # rename_note_path lookup by OLD source_path.
                         ("GET", FakeResponse(200, [{"id": 55, "source_path": str(old_path)}])),
                         ("PUT", FakeResponse(200)),
-                        # initial_scan lookup for new_name.md finds the
-                        # renamed note — update in place, not a create.
-                        ("GET", FakeResponse(200, [{"id": 55, "source_path": str(new_path)}])),
-                        ("PUT", FakeResponse(200)),
+                        # initial_scan's bulk source-paths check confirms the
+                        # API holds the renamed note — with the fingerprint
+                        # recorded during the rename the unchanged file is
+                        # skipped outright, no lookup or create.
+                        ("GET", FakeResponse(200, [str(new_path)])),
                         ("POST", FakeResponse(200)),  # rebuild-derived
                     ]
                 )

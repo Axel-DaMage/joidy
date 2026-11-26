@@ -248,6 +248,7 @@ class TestVaultSync(unittest.IsolatedAsyncioTestCase):
             link.symlink_to(secret)
 
             responses = [
+                FakeResponse(200, []),  # source-paths bulk lookup: API holds nothing
                 FakeResponse(200, []),  # no existing note for real.md
                 FakeResponse(201),  # create real.md
                 FakeResponse(200),  # rebuild-derived
@@ -311,10 +312,17 @@ class TestInitialScanShortCircuit(unittest.IsolatedAsyncioTestCase):
         vault_watcher._unbind_event_log()
         vault_watcher._fingerprints.clear()
 
-    def _client(self, responses):
+    def _client(self, responses, source_paths=None):
         """AsyncMock httpx client; ``responses`` is a list of
         (method, FakeResponse) tuples popped in order. Any call whose method
-        has no queued response falls back to a 200 default (``[]`` for GET)."""
+        has no queued response falls back to a 200 default (``[]`` for GET).
+
+        ``source_paths`` controls the GET /notes/source-paths bulk lookup:
+        a list/str iterable is returned as the JSON body, a FakeResponse is
+        returned as-is (e.g. a failing one), an exception is raised. None
+        returns an empty list — the API holds no paths, so nothing is
+        skipped on fingerprints alone.
+        """
         client = AsyncMock()
         queue = list(responses)
 
@@ -324,7 +332,13 @@ class TestInitialScanShortCircuit(unittest.IsolatedAsyncioTestCase):
                     return queue.pop(i)[1]
             return FakeResponse(200, [] if method == "GET" else {})
 
-        async def _get(*args, **kwargs):
+        async def _get(url, *args, **kwargs):
+            if str(url).endswith("/notes/source-paths"):
+                if isinstance(source_paths, BaseException):
+                    raise source_paths
+                if isinstance(source_paths, FakeResponse):
+                    return source_paths
+                return FakeResponse(200, list(source_paths or []))
             return _next("GET")
 
         async def _post(*args, **kwargs):
@@ -359,16 +373,19 @@ class TestInitialScanShortCircuit(unittest.IsolatedAsyncioTestCase):
             content_a = self._write(md_a, "content A")
             content_b = self._write(md_b, "content B")
 
-            # Simulate fingerprints recorded by the previous run's syncs.
+            # Simulate fingerprints recorded by the previous run's syncs —
+            # and the API still holding both source_paths.
             vault_watcher._fingerprints[str(md_a)] = _fingerprint(content_a)
             vault_watcher._fingerprints[str(md_b)] = _fingerprint(content_b)
 
-            client = self._client([])
+            client = self._client([], source_paths=[str(md_a), str(md_b)])
             with patch.object(vault_watcher.settings, "vault_path", vault):
                 await vault_watcher.initial_scan(root, client, "token")
 
-            # No per-note lookup/create/update — only the rebuild-derived POST.
-            assert client.get.call_count == 0
+            # No per-note lookup/create/update — only the one bulk
+            # source-paths GET and the rebuild-derived POST.
+            assert client.get.call_count == 1
+            assert client.get.call_args.args[0].endswith("/notes/source-paths")
             assert client.put.call_count == 0
             assert client.post.call_count == 1
             assert "json" not in client.post.call_args.kwargs  # rebuild-derived, no payload
@@ -390,17 +407,21 @@ class TestInitialScanShortCircuit(unittest.IsolatedAsyncioTestCase):
             vault_watcher._fingerprints[str(unchanged)] = _fingerprint(same_content)
             vault_watcher._fingerprints[str(changed)] = _fingerprint("stale content")
 
+            # The API holds both fingerprinted paths — but a matching
+            # fingerprint only skips when the content still matches.
             client = self._client(
                 [
                     ("GET", FakeResponse(200, [])),  # edited.md: no existing note
                     ("GET", FakeResponse(200, [])),  # new.md: no existing note
-                ]
+                ],
+                source_paths=[str(unchanged), str(changed)],
             )
             with patch.object(vault_watcher.settings, "vault_path", vault):
                 await vault_watcher.initial_scan(root, client, "token")
 
-            # The unchanged file was never looked up.
-            looked_up = {c.kwargs["params"]["source_path"] for c in client.get.call_args_list}
+            # The unchanged file was never looked up (per-file GETs carry a
+            # ``source_path`` param; the bulk lookup does not).
+            looked_up = {c.kwargs["params"]["source_path"] for c in client.get.call_args_list if "params" in c.kwargs}
             assert str(unchanged) not in looked_up
             assert looked_up == {str(changed), str(new)}
 
@@ -426,12 +447,15 @@ class TestInitialScanShortCircuit(unittest.IsolatedAsyncioTestCase):
                     [
                         ("GET", FakeResponse(200, [{"id": 7, "source_path": str(md)}])),
                         ("PUT", FakeResponse(200)),
-                    ]
+                    ],
+                    source_paths=[str(md)],
                 )
                 with patch.object(vault_watcher.settings, "vault_path", vault):
                     await vault_watcher.initial_scan(root, client, "token")
 
-                assert client.get.call_count == 1
+                # One per-file lookup (the bulk source-paths GET has no params).
+                per_file = [c for c in client.get.call_args_list if "params" in c.kwargs]
+                assert len(per_file) == 1
                 assert client.put.call_count == 1
                 assert client.put.call_args.args[0].endswith("/notes/7")
             finally:
@@ -466,7 +490,7 @@ class TestInitialScanShortCircuit(unittest.IsolatedAsyncioTestCase):
 
                 # File recreated with identical content → scan resyncs it.
                 self._write(md, content)
-                client = self._client([("GET", FakeResponse(200, []))])
+                client = self._client([("GET", FakeResponse(200, []))], source_paths=[str(md)])
                 with patch.object(vault_watcher.settings, "vault_path", vault):
                     await vault_watcher.initial_scan(root, client, "token")
 
@@ -474,3 +498,67 @@ class TestInitialScanShortCircuit(unittest.IsolatedAsyncioTestCase):
                 assert str(md) in created
             finally:
                 log.close()
+
+    @patch("watchers.vault_watcher.get_auth_token", new=AsyncMock(return_value="token"))
+    async def test_api_missing_path_resyncs_despite_matching_fingerprint(self):
+        """Dev-reset scenario: the sqlite fingerprint store survives a
+        Postgres wipe, so a matching fingerprint alone must NOT skip a file
+        whose source_path the API no longer holds."""
+        with tempfile.TemporaryDirectory() as vault:
+            root = Path(vault)
+            md = root / "ghost.md"
+            content = self._write(md, "survived the reset")
+
+            vault_watcher._fingerprints[str(md)] = _fingerprint(content)
+
+            # API holds no source_paths (wiped DB) — the matching fingerprint
+            # is stale state, not proof of sync.
+            client = self._client(
+                [
+                    ("GET", FakeResponse(200, [])),  # per-file lookup: absent
+                    ("POST", FakeResponse(201)),  # create
+                ],
+                source_paths=[],
+            )
+            with patch.object(vault_watcher.settings, "vault_path", vault):
+                await vault_watcher.initial_scan(root, client, "token")
+
+            per_file = [c for c in client.get.call_args_list if "params" in c.kwargs]
+            assert [c.kwargs["params"]["source_path"] for c in per_file] == [str(md)]
+            created = {c.kwargs["json"]["source_path"] for c in client.post.call_args_list if "json" in c.kwargs}
+            assert created == {str(md)}
+
+    @patch("watchers.vault_watcher.get_auth_token", new=AsyncMock(return_value="token"))
+    async def test_source_paths_lookup_failure_resyncs_everything(self):
+        """If the bulk existence check fails, the scan must not skip on
+        unverified fingerprints — fall back to a conservative full resync."""
+        with tempfile.TemporaryDirectory() as vault:
+            root = Path(vault)
+            md_a = root / "a.md"
+            md_b = root / "b.md"
+            vault_watcher._fingerprints[str(md_a)] = _fingerprint(self._write(md_a, "content A"))
+            vault_watcher._fingerprints[str(md_b)] = _fingerprint(self._write(md_b, "content B"))
+
+            # Every source-paths attempt answers 500 → lookup returns None.
+            client = self._client(
+                [
+                    ("GET", FakeResponse(200, [{"id": 1, "source_path": str(md_a)}])),
+                    ("GET", FakeResponse(200, [])),
+                ],
+                source_paths=FakeResponse(500, raise_error=True),
+            )
+            with (
+                patch.object(vault_watcher.settings, "vault_path", vault),
+                patch("asyncio.sleep", new=AsyncMock()),
+            ):
+                await vault_watcher.initial_scan(root, client, "token")
+
+            # Both files were resynced despite matching fingerprints.
+            looked_up = {c.kwargs["params"]["source_path"] for c in client.get.call_args_list if "params" in c.kwargs}
+            assert looked_up == {str(md_a), str(md_b)}
+            synced = {
+                c.kwargs["json"]["source_path"]
+                for c in client.put.call_args_list + client.post.call_args_list
+                if "json" in c.kwargs
+            }
+            assert synced == {str(md_a), str(md_b)}

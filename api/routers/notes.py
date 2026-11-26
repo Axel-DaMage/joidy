@@ -280,6 +280,23 @@ def list_notes(
     return [note_to_response(n) for n in notes]
 
 
+@router.get("/source-paths")
+def list_source_paths(db: Session = Depends(get_db)):
+    """Every non-null ``source_path`` currently stored in the notes table.
+
+    The vault worker's initial scan calls this once per (re)start to learn
+    which vault files the API actually holds before trusting its persisted
+    fingerprints — that store lives in host-mounted sqlite which survives
+    ``dev-reset``/backup restores, so a fingerprint match alone cannot
+    prove the note still exists (#1535). Mounted under
+    ``get_current_user_or_internal`` like the rest of the router, so both
+    user JWTs and the worker's service token can read it. Registered
+    before ``/{note_id}`` so the literal segment is not parsed as an id.
+    """
+    rows = db.query(Note.source_path).filter(Note.source_path.isnot(None)).all()
+    return [row[0] for row in rows]
+
+
 class SemanticSearchRequest(BaseModel):
     """Schema for semantic search queries (#353)."""
 
