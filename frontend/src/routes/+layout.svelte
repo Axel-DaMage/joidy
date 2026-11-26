@@ -434,12 +434,20 @@
     };
     window.addEventListener('appinstalled', handleAppInstalled);
 
-    const loadFooterStats = async (force = false) => {
-      if (document.visibilityState !== 'visible') return;
+    // #1545 — the goals/streaks fetches are independent, so they run in
+    // parallel, and concurrent triggers (focus + visibilitychange + the 60s
+    // interval + joidy:streaks-updated can fire together) share one
+    // in-flight run instead of stacking duplicate requests. Silent: this is
+    // a background poll — failures are logged, not toasted.
+    let footerStatsInflight: Promise<void> | null = null;
+
+    const loadFooterStats = (force = false): Promise<void> => {
+      if (document.visibilityState !== 'visible') return Promise.resolve();
 
       const now = Date.now();
-      if (!force && now - lastFooterStatsFetch < 30000) return;
+      if (!force && now - lastFooterStatsFetch < 30000) return Promise.resolve();
       lastFooterStatsFetch = now;
+      if (footerStatsInflight) return footerStatsInflight;
 
       const cachedGoals = getCachedData<Goal[]>('goals');
       const cachedStreaks = getCachedData<PersonalStreak[]>('streaks');
@@ -455,29 +463,37 @@
         ).length;
       }
 
-      try {
-        const goals = await api.goals.list();
-        pendingTasks = goals.filter((goal) => !goal.is_completed && goal.state !== 'INBOX').length;
-        setCachedData('goals', goals);
-      } catch (e) {
-        logger.error('[layout] goals list failed:', e);
-      }
+      footerStatsInflight = Promise.all([
+        api.goals
+          .list(undefined, undefined, undefined, { silent: true })
+          .then((goals) => {
+            pendingTasks = goals.filter(
+              (goal) => !goal.is_completed && goal.state !== 'INBOX'
+            ).length;
+            setCachedData('goals', goals);
+          })
+          .catch((e) => logger.error('[layout] goals list failed:', e)),
+        api.personalStreaks
+          .list({ include_archived: false }, { silent: true })
+          .then((streaks) => {
+            const newPendingStreaks = streaks.filter(
+              (streak) => !streak.today_checked && !streak.is_archived
+            ).length;
+            pendingStreaks = newPendingStreaks;
+            setCachedData('streaks', streaks);
 
-      try {
-        const streaks = await api.personalStreaks.list({ include_archived: false });
-        const newPendingStreaks = streaks.filter(
-          (streak) => !streak.today_checked && !streak.is_archived
-        ).length;
-        pendingStreaks = newPendingStreaks;
-        setCachedData('streaks', streaks);
-
-        if (newPendingStreaks > 0 && !streaksNotified) {
-          streaksNotified = true;
-          showNotification(`Tienes ${newPendingStreaks} rachas pendientes hoy!`, 'info');
-        }
-      } catch (e) {
-        logger.error('[layout] personal streaks list failed:', e);
-      }
+            if (newPendingStreaks > 0 && !streaksNotified) {
+              streaksNotified = true;
+              showNotification(`Tienes ${newPendingStreaks} rachas pendientes hoy!`, 'info');
+            }
+          })
+          .catch((e) => logger.error('[layout] personal streaks list failed:', e)),
+      ])
+        .then(() => {})
+        .finally(() => {
+          footerStatsInflight = null;
+        });
+      return footerStatsInflight;
     };
 
     const throttledPing = async () => {

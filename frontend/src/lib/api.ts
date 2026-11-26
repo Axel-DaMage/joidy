@@ -1237,7 +1237,8 @@ export const api = {
     list: (
       skip?: number,
       limit?: number,
-      filters?: { state?: GoalState; context?: GoalContext }
+      filters?: { state?: GoalState; context?: GoalContext },
+      opts?: RequestOptions
     ) => {
       const params = new URLSearchParams();
       if (skip !== undefined) params.set('skip', String(skip));
@@ -1245,7 +1246,7 @@ export const api = {
       if (filters?.state) params.set('state', filters.state);
       if (filters?.context) params.set('context', filters.context);
       const qs = params.toString();
-      return req<Goal[]>('GET', `/goals/${qs ? `?${qs}` : ''}`);
+      return req<Goal[]>('GET', `/goals/${qs ? `?${qs}` : ''}`, undefined, opts);
     },
     get: (id: number) => req<Goal>('GET', `/goals/${id}`),
     create: (data: {
@@ -1330,12 +1331,15 @@ export const api = {
   },
 
   personalStreaks: {
-    list: (opts?: { include_archived?: boolean; category?: string }) => {
+    list: (
+      opts?: { include_archived?: boolean; category?: string },
+      reqOpts?: RequestOptions
+    ) => {
       const params = new URLSearchParams();
       if (opts?.include_archived) params.set('include_archived', 'true');
       if (opts?.category) params.set('category', opts.category);
       const qs = params.toString();
-      return req<PersonalStreak[]>('GET', `/personal-streaks/${qs ? '?' + qs : ''}`);
+      return req<PersonalStreak[]>('GET', `/personal-streaks/${qs ? '?' + qs : ''}`, undefined, reqOpts);
     },
     create: (data: {
       name: string;
@@ -1599,13 +1603,18 @@ export const api = {
   },
 
   github: {
-    status: () =>
-      req<{ connected: boolean; username: string | null }>('GET', '/integrations/github/status'),
+    status: (opts?: RequestOptions) =>
+      req<{ connected: boolean; username: string | null }>(
+        'GET',
+        '/integrations/github/status',
+        undefined,
+        opts
+      ),
     issues: (
       filter: string = 'all',
       perPage: number = 30,
       state: string = 'all',
-      signal?: AbortSignal
+      opts?: RequestOptions
     ) =>
       req<{
         issues: {
@@ -1622,13 +1631,13 @@ export const api = {
         filter: string;
       }>('GET', `/integrations/github/issues?filter=${filter}&per_page=${perPage}&state=${state}`,
         undefined,
-        { signal }
+        opts
       ),
     pulls: (
       filter: string = 'all',
       perPage: number = 30,
       state: string = 'all',
-      signal?: AbortSignal
+      opts?: RequestOptions
     ) =>
       req<{
         pulls: {
@@ -1647,14 +1656,14 @@ export const api = {
         filter: string;
       }>('GET', `/integrations/github/pulls?filter=${filter}&per_page=${perPage}&state=${state}`,
         undefined,
-        { signal }
+        opts
       ),
-    repos: (signal?: AbortSignal) =>
+    repos: (opts?: RequestOptions) =>
       req<{ repos: { id: number; name: string; full_name: string; color: string }[] }>(
         'GET',
         '/integrations/github/repos',
         undefined,
-        { signal }
+        opts
       ),
     startDeviceAuth: () =>
       req<{

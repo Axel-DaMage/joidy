@@ -3,6 +3,7 @@
   import { t } from 'svelte-i18n';
   import { fade, slide } from 'svelte/transition';
   import { api } from '$lib/api';
+  import { getGithubStatus } from '$lib/stores/github';
   import { loadUserSettings, patchUserSettings } from '$lib/utils/userSettings';
   import DynamicIcon from './DynamicIcon.svelte';
 
@@ -52,7 +53,7 @@
     loading = true;
     error = '';
     try {
-      const status = await api.github.status();
+      const status = await getGithubStatus();
       connected = status.connected;
       if (!connected) {
         issues = [];
@@ -72,8 +73,8 @@
     error = '';
     try {
       const [issuesRes, prsRes] = await Promise.all([
-        api.github.issues('assigned'),
-        api.github.pulls('assigned'),
+        api.github.issues('assigned', 30, 'all', { silent: true }),
+        api.github.pulls('assigned', 30, 'all', { silent: true }),
       ]);
       issues = issuesRes.issues ?? [];
       prs = prsRes.pulls ?? [];

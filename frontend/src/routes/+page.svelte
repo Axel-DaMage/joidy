@@ -27,6 +27,7 @@
   import { dashboardLayout } from '$lib/stores/layout';
   import { accentColors, devMode } from '$lib/stores/settings';
   import { api } from '$lib/api';
+  import { getGithubStatus } from '$lib/stores/github';
   import { loadUserSettings, patchUserSettings } from '$lib/utils/userSettings';
   import { captureSnapshot, getSnapshot } from '$lib/stores/pageSnapshots';
   import { routeCache } from '$lib/stores/routeCache';
@@ -151,8 +152,8 @@
     githubLoading = true;
     try {
       const [issuesRes, pullsRes] = await Promise.all([
-        api.github.issues(filter, GH_FETCH_LIMIT, 'all', signal),
-        api.github.pulls(filter, GH_FETCH_LIMIT, 'all', signal),
+        api.github.issues(filter, GH_FETCH_LIMIT, 'all', { signal, silent: true }),
+        api.github.pulls(filter, GH_FETCH_LIMIT, 'all', { signal, silent: true }),
       ]);
       if (seq !== ghReqSeq) return;
       githubIssues = issuesRes.issues || [];
@@ -230,10 +231,16 @@
    *  connects/disconnects GitHub from the Settings panel). */
   async function refreshGithubFromEvent() {
     try {
-      const status = await api.github.status();
+      // The dispatcher (Settings panel) always force-refreshes the shared
+      // status cache before emitting joidy:github-*, so this is a cache hit
+      // with the fresh state — no extra request (#1545).
+      const status = await getGithubStatus();
       githubConnected = status.connected;
       if (githubConnected) {
-        const [reposRes] = await Promise.all([api.github.repos(), loadGitHubData(ghFilter)]);
+        const [reposRes] = await Promise.all([
+          api.github.repos({ silent: true }),
+          loadGitHubData(ghFilter),
+        ]);
         repoColors = Object.fromEntries(
           (reposRes.repos || []).map((r: any) => [r.full_name, r.color || 'var(--accent)'])
         );
@@ -297,11 +304,14 @@
 
     requestAnimationFrame(async () => {
       try {
-        const status = await api.github.status();
+        // Shared cached status — the always-mounted status bar probes the
+        // same endpoint on load; this rides its result instead of firing a
+        // second request (#1545).
+        const status = await getGithubStatus();
         githubConnected = status.connected;
         if (githubConnected) {
           const [reposRes] = await Promise.all([
-            api.github.repos(),
+            api.github.repos({ silent: true }),
             !cached || !isGithubCacheFresh(cached) ? loadGitHubData(ghFilter) : Promise.resolve(),
           ]);
           repoColors = Object.fromEntries(
