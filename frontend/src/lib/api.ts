@@ -1,8 +1,12 @@
-// API base URL — browser uses VITE_API_URL (public), SSR uses INTERNAL_API_URL
-// (Docker internal network). This prevents network failures when SvelteKit
-// server-renders pages inside the container where localhost:PORT isn't mapped.
+// API base URL — the browser resolves it at runtime (PUBLIC_API_PORT →
+// VITE_API_URL → hostname:8000, see utils/apiBase.ts, #1487); SSR uses
+// INTERNAL_API_URL (Docker internal network). This prevents network failures
+// when SvelteKit server-renders pages inside the container where
+// localhost:PORT isn't mapped.
 import { browser } from '$app/env';
+import { PUBLIC_API_PORT } from '$app/env/public';
 import { showNotification } from './stores/notifications';
+import { resolveBrowserApiBase } from './utils/apiBase';
 import { session, getToken, getRefreshToken } from './stores/session';
 import type {
   StravaActivity,
@@ -16,9 +20,21 @@ import type {
 } from './strava/types';
 
 export const BASE = browser
-  ? (import.meta.env.VITE_API_URL as string) ||
-    `${window.location.protocol}//${window.location.hostname}:8000`
+  ? resolveBrowserApiBase(
+      PUBLIC_API_PORT,
+      import.meta.env.VITE_API_URL as string | undefined,
+      window.location
+    )
   : (import.meta.env.VITE_INTERNAL_API_URL as string) || 'http://api:8000';
+
+/** WebSocket URL for live updates — derived from the same resolved BASE so a
+ * port-fallback'd API_PORT applies to the socket too (#1487). Browser-only:
+ * call it where `browser` is guaranteed (e.g. inside onMount). */
+export function apiWsUrl(): string {
+  const parsed = new URL(BASE);
+  const wsProto = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${wsProto}//${parsed.host}/ws`;
+}
 
 let isHandlingLogout = false;
 

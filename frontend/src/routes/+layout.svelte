@@ -13,7 +13,7 @@
   import StatusBarGitHub from '$lib/components/StatusBarGitHub.svelte';
   import Login from '$lib/components/Login.svelte';
   import SetupWizard from '$lib/components/SetupWizard.svelte';
-  import { api, refreshAccessToken, type Goal, type PersonalStreak } from '$lib/api';
+  import { api, apiWsUrl, refreshAccessToken, type Goal, type PersonalStreak } from '$lib/api';
   import { session, isAuthenticated, getToken } from '$lib/stores/session';
   import {
     totalXP,
@@ -305,22 +305,10 @@
         return;
       }
 
-      const host = window.location.hostname;
-      const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      // Derive the WebSocket URL from VITE_API_URL (which already reflects the
-      // configured API_PORT) so the app works on non-default ports. Fall back
-      // to the previous hostname:8000 behaviour when VITE_API_URL is unset.
-      let wsHost = `${host}:8000`;
-      const apiUrl = import.meta.env.VITE_API_URL as string | undefined;
-      if (apiUrl) {
-        try {
-          const parsed = new URL(apiUrl);
-          wsHost = `${parsed.hostname}:${parsed.port || (parsed.protocol === 'https:' ? '443' : '80')}`;
-        } catch {
-          wsHost = `${host}:8000`;
-        }
-      }
-      const wsUrl = `${wsProto}//${wsHost}/ws`;
+      // The WebSocket URL derives from the same resolved API base the REST
+      // client uses (lib/api.ts → utils/apiBase.ts), so a port-fallback'd
+      // API_PORT applies to the socket too (#1487).
+      const wsUrl = apiWsUrl();
 
       // WS auth rides the Sec-WebSocket-Protocol handshake header instead of
       // a ?token= query param, which used to leak the JWT into proxy access

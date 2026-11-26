@@ -48,6 +48,12 @@ if (isMissingOrNodeStub('sessionStorage')) {
 	});
 }
 
+// Kit 3's generated dev env module reads `globalThis.__sveltekit_dev.env` — a
+// global the dev server installs but vitest never does. Seed it so modules
+// importing `$app/env/public` (e.g. lib/api.ts → PUBLIC_API_PORT, #1487) get
+// `undefined` and fall back to the VITE_API_URL/host:8000 resolution order.
+(globalThis as Record<string, unknown>).__sveltekit_dev ??= { env: {} };
+
 // Initialize svelte-i18n for component tests. `initI18n()` is normally called
 // from the root layout, but component tests render components directly without
 // mounting it, so any component using `$t()` would throw "Cannot format a

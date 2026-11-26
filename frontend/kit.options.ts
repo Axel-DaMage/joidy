@@ -1,16 +1,18 @@
 import adapter from '@sveltejs/adapter-node';
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 import type { Config } from '@sveltejs/kit/vite';
+import { API_PORT_RANGE } from './src/lib/utils/apiBase';
 
 // Kit 3 no longer reads `svelte.config.js`: the SvelteKit configuration must be
 // passed to every `sveltekit()` plugin invocation (vite.config.ts and
 // vitest.config.ts both import this object).
 
 // ── CSP sources for the API origin (#1283) ────────────────────────────────────
-// The browser talks to the API on VITE_API_URL when set (baked by the
-// Dockerfile build ARG / compose env) and falls back to <page-host>:8000
-// otherwise — see src/lib/api.ts and the WebSocket code in +layout.svelte.
-// The `*:8000` host-wildcard sources cover the fallback case on any host.
+// The browser resolves the API base at runtime (PUBLIC_API_PORT → VITE_API_URL
+// → <page-host>:8000 — see src/lib/utils/apiBase.ts, #1487). `joidy up`
+// port-fallback can move the published API port anywhere inside
+// default..default+5, so the `*:<port>` host-wildcard sources must cover the
+// whole API_PORT_RANGE (8000-8005 by default), not just :8000.
 type CspSource = NonNullable<
   NonNullable<NonNullable<Config['csp']>['directives']>['connect-src']
 >[number];
@@ -21,12 +23,15 @@ type CspSource = NonNullable<
 // bridges both without touching the rest of the (fully checked) directives.
 const src = (s: string): CspSource => s as unknown as CspSource;
 
-const apiConnectSources = new Set<CspSource>([
-  src('http://*:8000'),
-  src('https://*:8000'),
-  src('ws://*:8000'),
-  src('wss://*:8000'),
-]);
+const apiConnectSources = new Set<CspSource>();
+const apiImageSources: CspSource[] = [];
+for (const port of API_PORT_RANGE) {
+  apiConnectSources.add(src(`http://*:${port}`));
+  apiConnectSources.add(src(`https://*:${port}`));
+  apiConnectSources.add(src(`ws://*:${port}`));
+  apiConnectSources.add(src(`wss://*:${port}`));
+  apiImageSources.push(src(`http://*:${port}`), src(`https://*:${port}`));
+}
 
 const apiUrl = process.env.VITE_API_URL;
 if (apiUrl) {
@@ -36,7 +41,7 @@ if (apiUrl) {
     // The live-updates WebSocket uses the same host/port over ws(s).
     apiConnectSources.add(src(`${parsed.protocol === 'https:' ? 'wss' : 'ws'}://${parsed.host}`));
   } catch {
-    // Malformed VITE_API_URL — the :8000 wildcards still cover the fallback.
+    // Malformed VITE_API_URL — the port-range wildcards still cover the fallback.
   }
 }
 
@@ -87,9 +92,10 @@ export const kitOptions: Config = {
       // Svelte component styles, TipTap marks and rendered markdown all
       // rely on style attributes; dev adds 'unsafe-inline' anyway.
       'style-src': ['self', 'unsafe-inline'],
-      // /uploads images are served by the API origin (:8000); data:/blob:
-      // cover TipTap previews and generated share images.
-      'img-src': ['self', 'data:', 'blob:', src('http://*:8000'), src('https://*:8000')],
+      // /uploads images are served by the API origin (any port inside the
+      // fallback range, #1487); data:/blob: cover TipTap previews and
+      // generated share images.
+      'img-src': ['self', 'data:', 'blob:', ...apiImageSources],
       // Self-hosted Geist fonts in static/fonts.
       'font-src': ['self'],
       // 'self' (same-origin fetches + service worker) + the API origin +
