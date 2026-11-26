@@ -17,7 +17,10 @@ if [ "$1" = "--remove" ]; then
   systemctl --user stop "${SERVICE_NAME}.service" 2>/dev/null || true
   systemctl --user disable "${SERVICE_NAME}.service" 2>/dev/null || true
   rm -f "$SERVICE_FILE"
-  rm -rf "$HOME/.config/systemd/user/${SERVICE_NAME}.service.d"
+  # Remove only the drop-in this script generated; a user may have added
+  # their own *.conf files to the same directory.
+  rm -f "$HOME/.config/systemd/user/${SERVICE_NAME}.service.d/10-checkout-paths.conf"
+  rmdir "$HOME/.config/systemd/user/${SERVICE_NAME}.service.d" 2>/dev/null || true
   systemctl --user daemon-reload
   echo "✓ Joidy auto-start removed."
   exit 0
@@ -29,15 +32,26 @@ echo "Setting up Joidy auto-start via systemd user service..."
 mkdir -p "$HOME/.config/systemd/user/${SERVICE_NAME}.service.d"
 
 # Install the shipped unit file — the single source of truth shared with the
-# AUR package (#1555). It resolves the install dir from /etc/joidy/path, then
-# ~/.config/joidy/path, then a ~/joidy fallback, and brings the stack down on
-# `systemctl --user stop joidy` via ExecStop.
+# AUR package (#1555). It resolves the install dir from ~/.config/joidy/path,
+# then /etc/joidy/path, then a ~/joidy fallback (same precedence as
+# scripts/joidy.sh), and brings the stack down on `systemctl --user stop joidy`
+# via ExecStop.
 install -m 0644 "$PROJECT_DIR/joidy.service" "$SERVICE_FILE"
 
 # Point the unit (and scripts/joidy.sh, which reads the same file) at this
 # checkout. Don't clobber an existing file — it may belong to a deliberate
-# user setting or a system (AUR) install.
-if [ ! -f "$HOME/.config/joidy/path" ]; then
+# user setting or a system (AUR) install — but warn loudly when it points at
+# a different checkout, because the unit just installed would start THAT
+# installation, not this one.
+if [ -f "$HOME/.config/joidy/path" ]; then
+  existing_path="$(cat -- "$HOME/.config/joidy/path")"
+  if [ "$existing_path" != "$PROJECT_DIR" ]; then
+    echo "⚠ ~/.config/joidy/path already points at a different install:" >&2
+    echo "    $existing_path" >&2
+    echo "  The installed service will start THAT checkout. To retarget it:" >&2
+    echo "    echo \"$PROJECT_DIR\" > ~/.config/joidy/path" >&2
+  fi
+else
   mkdir -p "$HOME/.config/joidy"
   printf '%s\n' "$PROJECT_DIR" > "$HOME/.config/joidy/path"
 fi

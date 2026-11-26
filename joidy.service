@@ -4,9 +4,9 @@ Description=Joidy Docker Services
 # docker.service — scripts/joidy_startup.sh polls the engine itself instead.
 
 # Install path resolution mirrors scripts/joidy.sh and the idle watchdog
-# unit (#1555): /etc/joidy/path (written by the AUR package) →
-# ~/.config/joidy/path (written by scripts/install-autostart.sh for
-# git-checkout installs) → a git checkout at ~/joidy. To install manually:
+# unit (#1555): ~/.config/joidy/path (written by scripts/install-autostart.sh
+# for git-checkout installs) → /etc/joidy/path (written by the AUR package)
+# → a git checkout at ~/joidy. To install manually:
 #   cp joidy.service ~/.config/systemd/user/
 #   echo "/path/to/checkout" > ~/.config/joidy/path   # if not ~/joidy
 #   systemctl --user daemon-reload
@@ -15,8 +15,8 @@ Description=Joidy Docker Services
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/bin/bash -c 'dir=$(cat /etc/joidy/path 2>/dev/null || cat %h/.config/joidy/path 2>/dev/null || echo "%h/joidy"); cd "$dir" && exec "$dir/scripts/joidy_startup.sh"'
-ExecStop=/bin/bash -c 'dir=$(cat /etc/joidy/path 2>/dev/null || cat %h/.config/joidy/path 2>/dev/null || echo "%h/joidy"); cd "$dir" && exec "$dir/scripts/joidy.sh" down'
+ExecStart=/bin/bash -c 'dir=$(cat %h/.config/joidy/path 2>/dev/null || cat /etc/joidy/path 2>/dev/null || echo "%h/joidy"); cd "$dir" && exec "$dir/scripts/joidy_startup.sh"'
+ExecStop=/bin/bash -c 'dir=$(cat %h/.config/joidy/path 2>/dev/null || cat /etc/joidy/path 2>/dev/null || echo "%h/joidy"); cd "$dir" && exec "$dir/scripts/joidy.sh" down'
 StandardOutput=journal
 StandardError=journal
 
