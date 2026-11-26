@@ -488,7 +488,11 @@ class TestRagEndpoint:
         """#1539: /rag fans out into two provider calls (embed + generate), so
         it must reserve weight=2 of the shared budget — one slot per request
         would let the real outbound rate reach ~2x the configured RPM."""
-        monkeypatch.setattr(database, "find_similar_notes", lambda vec, limit=5: [])
+        monkeypatch.setattr(
+            database,
+            "find_similar_note_chunks",
+            lambda vec, limit, snippet_chars: [],
+        )
         resp = _client().post("/rag", json={"question": "q?"})
         assert resp.status_code == 200
         ai_enabled.limiter.acquire.assert_awaited_once_with(weight=2)
