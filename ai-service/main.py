@@ -16,7 +16,7 @@ from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from logging_config import get_correlation_id, set_correlation_id, setup_logging
 from plan_suggest import build_plan_prompt, parse_plan_response
-from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, generate_latest
 from pydantic import BaseModel, Field
 from rate_limiter import get_limiter
 from response_cache import cache_key, get_cache
@@ -24,14 +24,12 @@ from sqlalchemy import text
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, StreamingResponse
 
-# Prometheus metrics — exposed at /metrics for scraping (#406)
-ai_embed_requests = Counter("ai_embed_requests_total", "Embedding requests", ["provider"])
-ai_embed_errors = Counter("ai_embed_errors_total", "Embedding errors", ["provider"])
-ai_embed_latency = Histogram("ai_embed_latency_seconds", "Embedding latency", ["provider"])
-ai_classify_requests = Counter("ai_classify_requests_total", "Classification requests", ["provider"])
-ai_classify_errors = Counter("ai_classify_errors_total", "Classification errors", ["provider"])
-ai_rag_requests = Counter("ai_rag_requests_total", "RAG requests", ["provider"])
-ai_rag_errors = Counter("ai_rag_errors_total", "RAG errors", ["provider"])
+# Prometheus metrics — exposed at /metrics for scraping (#406). Only counters
+# with real .inc() call sites are declared; daily-recap gets its own names
+# (#1542 — it previously incremented the classify counters, which /classify
+# itself never touched).
+ai_daily_recap_requests = Counter("ai_daily_recap_requests_total", "Daily-recap requests", ["provider"])
+ai_daily_recap_errors = Counter("ai_daily_recap_errors_total", "Daily-recap errors", ["provider"])
 ai_plan_requests = Counter("ai_plan_requests_total", "Plan-suggest requests", ["provider"])
 ai_plan_errors = Counter("ai_plan_errors_total", "Plan-suggest errors", ["provider"])
 
@@ -688,7 +686,7 @@ async def daily_recap(req: DailyRecapRequest):
     if not settings.is_ai_enabled:
         return {"status": "disabled", "recap": "", "suggestions": []}
 
-    ai_classify_requests.labels(provider=settings.llm_model or "unknown").inc()
+    ai_daily_recap_requests.labels(provider=settings.llm_model or "unknown").inc()
     try:
         client = get_llm_client()
         titles_str = "\n".join(f"- {t}" for t in req.note_titles[:10]) or "(sin notas)"
@@ -720,8 +718,6 @@ Responde en formato JSON: {{"recap": "...", "suggestions": ["...", "..."]}}"""
         )
 
         # Try to parse JSON from the response; fall back to raw text
-        import json
-
         try:
             parsed = json.loads(response)
             return {
@@ -740,7 +736,7 @@ Responde en formato JSON: {{"recap": "...", "suggestions": ["...", "..."]}}"""
     except CircuitBreakerError:
         return {"status": "circuit_open", "recap": "El proveedor de IA no está disponible.", "suggestions": []}
     except Exception:
-        ai_classify_errors.labels(provider=settings.llm_model or "unknown").inc()
+        ai_daily_recap_errors.labels(provider=settings.llm_model or "unknown").inc()
         logger.exception("Daily recap request failed")
         raise HTTPException(status_code=500, detail="Daily recap failed")
 

@@ -19,29 +19,9 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import task_status
 from config import settings
-from prometheus_client import Counter, Histogram, generate_latest
+from prometheus_client import generate_latest
 
 logger = logging.getLogger(__name__)
-
-# Worker-specific metrics
-vault_events_processed = Counter(
-    "worker_vault_events_processed_total",
-    "Vault events processed",
-    ["change_type"],
-)
-vault_event_errors = Counter(
-    "worker_vault_event_errors_total",
-    "Vault events that failed processing",
-    ["change_type"],
-)
-vault_event_latency = Histogram(
-    "worker_vault_event_latency_seconds",
-    "Time to process a vault event",
-)
-vault_events_pending = Counter(
-    "worker_vault_events_pending_recovered_total",
-    "Events recovered from the persistent log after a crash",
-)
 
 _metrics_server: HTTPServer | None = None
 
