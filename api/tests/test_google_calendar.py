@@ -24,7 +24,7 @@ from database import Base
 from models.google_calendar_event import GoogleCalendarEvent
 from models.google_calendar_sync import GoogleCalendarSyncState
 from services import google_calendar_service as gcs
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 
 
@@ -183,6 +183,145 @@ class SyncCalendarTest(CalendarTestBase):
             result = self._run_sync(db, items=[item])
             self.assertEqual(result["synced"], 0)
             self.assertEqual(db.query(GoogleCalendarEvent).count(), 0)
+
+
+class BatchUpsertTest(CalendarTestBase):
+    """#1521: sync_calendar batch-loads existing rows once and diffs in
+    memory — semantics identical to the old per-item SELECT loop."""
+
+    def _run_sync(self, db, token="tok", calendar_id="primary", items=None, sync_token="SYNC1"):
+        with patch.object(
+            gcs.gs, "list_events_raw", new=AsyncMock(return_value={"items": items, "nextSyncToken": sync_token})
+        ):
+            return asyncio.new_event_loop().run_until_complete(gcs.sync_calendar(db, token, calendar_id))
+
+    def test_full_sync_create_update_cancel_skip_prune_matrix(self) -> None:
+        with self.Session() as db:
+            now = datetime.now(UTC)
+            db.add(
+                GoogleCalendarEvent(user_id=1, calendar_id="primary", google_id="ev-upd", summary="Old", start_at=now)
+            )
+            db.add(
+                GoogleCalendarEvent(
+                    user_id=1, calendar_id="primary", google_id="ev-orphan", summary="Stale", start_at=now
+                )
+            )
+            db.add(
+                GoogleCalendarEvent(
+                    user_id=1, calendar_id="primary", google_id="ev-cancel", summary="Gone", start_at=now
+                )
+            )
+            # An event from another calendar must never be touched.
+            db.add(GoogleCalendarEvent(user_id=1, calendar_id="work", google_id="ev-other", start_at=now))
+            db.commit()
+
+            items = [
+                _event_item("ev-upd", summary="Renamed"),
+                _event_item("ev-new", summary="Fresh"),
+                {"id": "ev-cancel", "status": "cancelled"},
+                {"id": "ev-nostart", "status": "confirmed"},  # skipped: no start
+                {"status": "confirmed", "start": {"dateTime": "2026-11-05T10:00:00Z"}},  # skipped: no id
+            ]
+            result = self._run_sync(db, items=items)
+
+            self.assertEqual(result["synced"], 2)
+            self.assertEqual(result["deleted"], 3)
+            rows = {e.google_id: e for e in db.query(GoogleCalendarEvent).filter_by(calendar_id="primary")}
+            self.assertEqual(set(rows), {"ev-upd", "ev-new"})
+            self.assertEqual(rows["ev-upd"].summary, "Renamed")
+            self.assertEqual(rows["ev-new"].summary, "Fresh")
+            # Other calendar untouched.
+            self.assertEqual(db.query(GoogleCalendarEvent).filter_by(calendar_id="work").count(), 1)
+
+    def test_duplicate_google_id_in_one_batch_converges(self) -> None:
+        with self.Session() as db:
+            items = [_event_item("ev-dup", summary="First"), _event_item("ev-dup", summary="Second")]
+            result = self._run_sync(db, items=items)
+            self.assertEqual(result["synced"], 2)
+            self.assertEqual(db.query(GoogleCalendarEvent).count(), 1)
+            self.assertEqual(db.query(GoogleCalendarEvent).one().summary, "Second")
+
+    def test_cancelled_item_removes_row_added_earlier_in_batch(self) -> None:
+        with self.Session() as db:
+            items = [_event_item("ev-x"), {"id": "ev-x", "status": "cancelled"}]
+            result = self._run_sync(db, items=items)
+            self.assertEqual(result["synced"], 1)
+            self.assertEqual(db.query(GoogleCalendarEvent).count(), 0)
+
+    def test_incremental_sync_updates_without_pruning(self) -> None:
+        with self.Session() as db:
+            self._run_sync(db, items=[_event_item("ev-1")])
+            # Seed a row Google won't mention — incremental must keep it.
+            db.add(
+                GoogleCalendarEvent(user_id=1, calendar_id="primary", google_id="ev-kept", start_at=datetime.now(UTC))
+            )
+            db.commit()
+            result = self._run_sync(db, items=[_event_item("ev-1", summary="Renamed")], sync_token="SYNC2")
+            self.assertTrue(result["incremental"])
+            rows = {e.google_id for e in db.query(GoogleCalendarEvent)}
+            self.assertEqual(rows, {"ev-1", "ev-kept"})
+
+
+class SyncQueryCountTest(CalendarTestBase):
+    """#1521: the sync loop must not issue one SELECT per event item."""
+
+    def _selects_during(self, db, fn) -> int:
+        selects = 0
+
+        def count_selects(conn, cursor, statement, parameters, context, executemany):
+            nonlocal selects
+            if statement.lstrip().upper().startswith("SELECT"):
+                selects += 1
+
+        event.listen(self.engine, "before_cursor_execute", count_selects)
+        try:
+            fn()
+        finally:
+            event.remove(self.engine, "before_cursor_execute", count_selects)
+        return selects
+
+    def test_selects_are_constant_regardless_of_item_count(self) -> None:
+        items = [_event_item(f"ev-{i}") for i in range(150)]
+        with self.Session() as db:
+
+            def do_sync():
+                with patch.object(
+                    gcs.gs,
+                    "list_events_raw",
+                    new=AsyncMock(return_value={"items": items, "nextSyncToken": "SYNC1"}),
+                ):
+                    asyncio.new_event_loop().run_until_complete(gcs.sync_calendar(db, "tok", "primary"))
+
+            selects = self._selects_during(db, do_sync)
+
+            # One SELECT for the sync state + one batch-load of existing
+            # events — independent of the 150 items in the page.
+            self.assertLessEqual(selects, 3)
+            self.assertEqual(db.query(GoogleCalendarEvent).count(), 150)
+
+    def test_incremental_sync_selects_stay_constant(self) -> None:
+        with self.Session() as db:
+            seed_items = [_event_item(f"ev-{i}") for i in range(150)]
+            with patch.object(
+                gcs.gs,
+                "list_events_raw",
+                new=AsyncMock(return_value={"items": seed_items, "nextSyncToken": "S1"}),
+            ):
+                asyncio.new_event_loop().run_until_complete(gcs.sync_calendar(db, "tok", "primary"))
+
+            items = [_event_item(f"ev-{i}", summary=f"Renamed {i}") for i in range(150)]
+
+            def do_sync():
+                with patch.object(
+                    gcs.gs,
+                    "list_events_raw",
+                    new=AsyncMock(return_value={"items": items, "nextSyncToken": "S2"}),
+                ):
+                    asyncio.new_event_loop().run_until_complete(gcs.sync_calendar(db, "tok", "primary"))
+
+            selects = self._selects_during(db, do_sync)
+            self.assertLessEqual(selects, 3)
+            self.assertEqual(db.query(GoogleCalendarEvent).count(), 150)
 
 
 class SelectableCalendarsTest(CalendarTestBase):

@@ -55,14 +55,29 @@ def _parse_gcal_datetime(value: dict[str, Any] | None) -> tuple[datetime | None,
     return None, False
 
 
-def _upsert_event(db: Session, calendar_id: str, item: dict[str, Any]) -> bool:
-    """Upsert one event item. Returns False if the item must be deleted."""
+def _upsert_event(
+    db: Session,
+    calendar_id: str,
+    item: dict[str, Any],
+    existing: dict[str, GoogleCalendarEvent] | None = None,
+) -> bool:
+    """Upsert one event item. Returns False if the item must be deleted.
+
+    ``existing`` is an optional ``{google_id: row}`` map pre-loaded by the
+    caller (``sync_calendar`` batch-loads the whole calendar in one SELECT —
+    see #1521). When omitted (single-event write-back path), the row is
+    looked up with one query as before. Rows added/deleted through this
+    function keep the map in sync so duplicate ``google_id`` items in one
+    batch behave exactly like repeated lookups did.
+    """
     google_id = item.get("id")
     if not google_id:
         return False
 
-    if item.get("status") == "cancelled":
-        deleted = (
+    def _lookup() -> GoogleCalendarEvent | None:
+        if existing is not None:
+            return existing.get(google_id)
+        return (
             db.query(GoogleCalendarEvent)
             .filter(
                 GoogleCalendarEvent.user_id == 1,
@@ -71,8 +86,18 @@ def _upsert_event(db: Session, calendar_id: str, item: dict[str, Any]) -> bool:
             )
             .first()
         )
+
+    if item.get("status") == "cancelled":
+        deleted = _lookup()
         if deleted:
+            if deleted in db.new:
+                # Added earlier in this batch and still pending — delete()
+                # rejects unpersisted instances, so flush first (write-only,
+                # same net effect as the old autoflush-then-delete path).
+                db.flush()
             db.delete(deleted)
+            if existing is not None:
+                existing.pop(google_id, None)
         return False
 
     start_at, all_day = _parse_gcal_datetime(item.get("start"))
@@ -81,18 +106,12 @@ def _upsert_event(db: Session, calendar_id: str, item: dict[str, Any]) -> bool:
         logger.debug("[google] Skipping event %s without parsable start", google_id)
         return False
 
-    row = (
-        db.query(GoogleCalendarEvent)
-        .filter(
-            GoogleCalendarEvent.user_id == 1,
-            GoogleCalendarEvent.calendar_id == calendar_id,
-            GoogleCalendarEvent.google_id == google_id,
-        )
-        .first()
-    )
+    row = _lookup()
     if not row:
         row = GoogleCalendarEvent(user_id=1, calendar_id=calendar_id, google_id=google_id)
         db.add(row)
+        if existing is not None:
+            existing[google_id] = row
 
     row.summary = item.get("summary")
     row.description = item.get("description")
@@ -157,9 +176,19 @@ async def sync_calendar(db: Session, token: str, calendar_id: str) -> dict[str, 
             return await sync_calendar(db, token, calendar_id)
         raise
 
+    # Batch-load the calendar's cached rows once (#1521): a full sync returns
+    # up to INITIAL_MAX_RESULTS items and per-item SELECTs were an N+1.
+    existing: dict[str, GoogleCalendarEvent] = {
+        row.google_id: row
+        for row in db.query(GoogleCalendarEvent).filter(
+            GoogleCalendarEvent.user_id == 1,
+            GoogleCalendarEvent.calendar_id == calendar_id,
+        )
+    }
+
     synced = 0
     for item in items:
-        if _upsert_event(db, calendar_id, item):
+        if _upsert_event(db, calendar_id, item, existing):
             synced += 1
 
     if not state:
@@ -174,12 +203,11 @@ async def sync_calendar(db: Session, token: str, calendar_id: str) -> dict[str, 
     # Incremental syncs never prune — Google reports deletions explicitly.
     if not incremental and sync_token:
         returned_ids = {item.get("id") for item in items}
-        for orphan in db.query(GoogleCalendarEvent).filter(
-            GoogleCalendarEvent.user_id == 1,
-            GoogleCalendarEvent.calendar_id == calendar_id,
-            ~GoogleCalendarEvent.google_id.in_(returned_ids),
-        ):
-            db.delete(orphan)
+        # ``existing`` already mirrors every live row for this calendar after
+        # the upsert loop, so orphan detection needs no extra query.
+        for google_id, orphan in list(existing.items()):
+            if google_id not in returned_ids:
+                db.delete(orphan)
 
     db.commit()
 
