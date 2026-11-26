@@ -52,6 +52,12 @@ def _schedule_broadcast(coro):
 class ConnectionManager:
     """Manages active WebSocket connections."""
 
+    # Seconds a single connection may take to flush a broadcast frame before
+    # it is dropped. Sends are buffered writes, so a legit send takes
+    # microseconds — a hung or dead peer must not stall the fan-out for
+    # everyone else (#1525).
+    _SEND_TIMEOUT = 10.0
+
     def __init__(self):
         self.active_connections: set[WebSocket] = set()
 
@@ -65,17 +71,31 @@ class ConnectionManager:
         logger.info(f"WebSocket disconnected. Active: {len(self.active_connections)}")
 
     async def broadcast(self, message: dict):
-        """Broadcast a message to all connected clients."""
+        """Broadcast a message to all connected clients.
+
+        The payload is serialized to JSON once and the same text frame is
+        pushed to every connection concurrently — previously ``send_json``
+        re-encoded the dict per client and sequential awaits let one slow
+        socket stall every send behind it (#1525). The ``json.dumps`` call
+        mirrors Starlette's ``send_json`` (compact separators,
+        ``ensure_ascii=False``) so the bytes on the wire are identical.
+        """
         if not self.active_connections:
             return
-        disconnected = set()
-        for connection in self.active_connections:
+        payload = json.dumps(message, separators=(",", ":"), ensure_ascii=False)
+
+        async def _send_one(connection: WebSocket) -> WebSocket | None:
+            """Return the connection if its send failed or timed out."""
             try:
-                await connection.send_json(message)
+                await asyncio.wait_for(connection.send_text(payload), timeout=self._SEND_TIMEOUT)
             except Exception:
-                disconnected.add(connection)
-        for ws in disconnected:
-            self.disconnect(ws)
+                return connection
+            return None
+
+        results = await asyncio.gather(*(_send_one(c) for c in self.active_connections))
+        for ws in results:
+            if ws is not None:
+                self.disconnect(ws)
 
 
 manager = ConnectionManager()

@@ -12,7 +12,8 @@ import asyncio
 import json
 import logging
 import threading
-from unittest.mock import AsyncMock, MagicMock
+import time
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from config import settings
@@ -181,20 +182,113 @@ def test_ws_non_loopback_dev_accepts_valid_token(monkeypatch):
 
 
 def test_manager_broadcast_delivers_to_all():
-    """broadcast() sends the message to every active connection."""
+    """broadcast() sends the message to every active connection.
+
+    The payload is serialized once with the same encoding Starlette's
+    ``send_json`` uses, so the text frame on the wire is byte-identical to
+    before (#1525).
+    """
 
     async def _run():
         manager = ConnectionManager()
         ws_a = MagicMock()
-        ws_a.send_json = AsyncMock()
+        ws_a.send_text = AsyncMock()
         ws_b = MagicMock()
-        ws_b.send_json = AsyncMock()
+        ws_b.send_text = AsyncMock()
         manager.active_connections = {ws_a, ws_b}
 
         await manager.broadcast({"type": "note_created", "note_id": 1, "title": "Hi"})
 
-        ws_a.send_json.assert_awaited_once_with({"type": "note_created", "note_id": 1, "title": "Hi"})
-        ws_b.send_json.assert_awaited_once_with({"type": "note_created", "note_id": 1, "title": "Hi"})
+        payload = json.dumps(
+            {"type": "note_created", "note_id": 1, "title": "Hi"},
+            separators=(",", ":"),
+            ensure_ascii=False,
+        )
+        ws_a.send_text.assert_awaited_once_with(payload)
+        ws_b.send_text.assert_awaited_once_with(payload)
+
+    asyncio.run(_run())
+
+
+def test_manager_broadcast_serializes_once():
+    """json.dumps runs a single time per broadcast regardless of connection
+    count, and every client receives the same payload (#1525)."""
+
+    async def _run():
+        manager = ConnectionManager()
+        conns = []
+        for _ in range(5):
+            ws = MagicMock()
+            ws.send_text = AsyncMock()
+            conns.append(ws)
+        manager.active_connections = set(conns)
+
+        message = {"type": "xp_gained", "xp": 10, "total_xp": 250}
+        real_dumps = json.dumps
+        calls = []
+
+        def counting_dumps(*args, **kwargs):
+            calls.append(1)
+            return real_dumps(*args, **kwargs)
+
+        with patch("routers.websocket.json.dumps", side_effect=counting_dumps):
+            await manager.broadcast(message)
+
+        assert len(calls) == 1
+        expected = real_dumps(message, separators=(",", ":"), ensure_ascii=False)
+        for ws in conns:
+            ws.send_text.assert_awaited_once_with(expected)
+
+    asyncio.run(_run())
+
+
+def test_manager_broadcast_sends_concurrently():
+    """Slow sends overlap instead of summing — two 0.2s sends finish in ~0.2s
+    total, not 0.4s (#1525)."""
+
+    async def _run():
+        manager = ConnectionManager()
+        conns = []
+        for _ in range(2):
+            ws = MagicMock()
+
+            async def _slow_send(_payload):
+                await asyncio.sleep(0.2)
+
+            ws.send_text = _slow_send
+            conns.append(ws)
+        manager.active_connections = set(conns)
+
+        start = time.monotonic()
+        await manager.broadcast({"type": "test"})
+        elapsed = time.monotonic() - start
+
+        assert elapsed < 0.35  # sequential sends would take >= 0.4s
+
+    asyncio.run(_run())
+
+
+def test_manager_broadcast_times_out_hung_connection():
+    """A connection whose send never flushes is dropped after _SEND_TIMEOUT
+    instead of stalling the whole broadcast (#1525)."""
+
+    async def _run():
+        manager = ConnectionManager()
+        manager._SEND_TIMEOUT = 0.05
+        good_ws = MagicMock()
+        good_ws.send_text = AsyncMock()
+        hung_ws = MagicMock()
+
+        async def _hang(_payload):
+            await asyncio.sleep(60)
+
+        hung_ws.send_text = _hang
+        manager.active_connections = {good_ws, hung_ws}
+
+        await manager.broadcast({"type": "test"})
+
+        assert good_ws in manager.active_connections
+        assert hung_ws not in manager.active_connections
 
     asyncio.run(_run())
 
@@ -215,9 +309,9 @@ def test_manager_broadcast_removes_failed_connections():
     async def _run():
         manager = ConnectionManager()
         good_ws = MagicMock()
-        good_ws.send_json = AsyncMock()
+        good_ws.send_text = AsyncMock()
         bad_ws = MagicMock()
-        bad_ws.send_json = AsyncMock(side_effect=RuntimeError("disconnected"))
+        bad_ws.send_text = AsyncMock(side_effect=RuntimeError("disconnected"))
         manager.active_connections = {good_ws, bad_ws}
 
         await manager.broadcast({"type": "test"})
