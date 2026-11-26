@@ -49,7 +49,7 @@ class GoogleConnectCallback(BaseModel):
 
 
 @router.get("/auth", response_model=GoogleAuthUrl, dependencies=[Depends(get_current_user)])
-async def get_google_auth_url():
+def get_google_auth_url():
     """Return the Google OAuth consent URL with a signed CSRF ``state`` (#1280)."""
     try:
         state = oauth_state.generate_state("google")
@@ -150,14 +150,14 @@ async def google_connect(
 
 
 @router.get("/status", dependencies=[Depends(get_current_user)])
-async def google_status(db: Session = Depends(get_db)):
+def google_status(db: Session = Depends(get_db)):
     """Check if Google integration is connected."""
     connected = gts.is_connected(db)
     return {"connected": connected}
 
 
 @router.post("/disconnect")
-async def google_disconnect(
+def google_disconnect(
     db: Session = Depends(get_db),
     user: dict = Depends(get_current_user),
 ):
@@ -262,7 +262,7 @@ class GoogleCalendarSyncResult(BaseModel):
 
 
 @router.get("/calendar/status")
-async def google_calendar_status(
+def google_calendar_status(
     db: Session = Depends(get_db),
     user: dict = Depends(get_current_user),
 ):
@@ -287,7 +287,7 @@ async def google_calendar_sync(
 
 
 @router.get("/calendar/events", response_model=list[GoogleCalendarEventOut])
-async def google_calendar_events(
+def google_calendar_events(
     start: datetime | None = Query(default=None, description="ISO lower bound (inclusive)"),
     end: datetime | None = Query(default=None, description="ISO upper bound (inclusive)"),
     calendar_id: str | None = Query(default=None),

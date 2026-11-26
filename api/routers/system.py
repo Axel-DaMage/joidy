@@ -365,7 +365,7 @@ async def shutdown_services(_=Depends(get_current_user)):
 
 
 @disabled_router.get("/status", response_model=PowerStatusResponse)
-async def get_power_status_disabled():
+def get_power_status_disabled():
     """Status stub served when power management is disabled (#1278).
 
     The engine socket is not mounted in this mode, so there is nothing to

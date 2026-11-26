@@ -233,7 +233,7 @@ def _google_http_error(exc: httpx.HTTPStatusError) -> HTTPException:
 
 
 @router.get("/status", response_model=GmailStatusOut)
-async def gmail_status(
+def gmail_status(
     db: Session = Depends(get_db),
     user: dict = Depends(get_current_user),
 ):
@@ -434,7 +434,7 @@ async def register_gmail_watch(
 
 
 @router.get("/watch", response_model=GmailWatchStatusOut)
-async def gmail_watch_status(
+def gmail_watch_status(
     db: Session = Depends(get_db),
     user: dict = Depends(get_current_user),
 ):

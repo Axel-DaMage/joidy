@@ -285,7 +285,7 @@ def _payload(body: ContactWriteIn) -> dict:
 
 
 @router.get("/status", response_model=ContactsStatusOut)
-async def contacts_status(
+def contacts_status(
     db: Session = Depends(get_db),
     user: dict = Depends(get_current_user),
 ):

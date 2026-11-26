@@ -99,7 +99,7 @@ def _map_strava_error(exc: httpx.HTTPStatusError) -> HTTPException:
 
 
 @router.get("/auth", response_model=StravaAuthUrl, dependencies=[Depends(get_current_user)])
-async def get_strava_auth_url():
+def get_strava_auth_url():
     """Return the Strava OAuth consent URL with a signed CSRF ``state`` (#1328)."""
     try:
         state = oauth_state.generate_state("strava")
@@ -353,7 +353,7 @@ def _webhook_enabled() -> bool:
 
 
 @router.get("/webhook")
-async def strava_webhook_verify(request: Request):
+def strava_webhook_verify(request: Request):
     """Strava subscription handshake: echo ``hub.challenge`` only when
     ``hub.verify_token`` matches the configured secret (constant-time)."""
     if not _webhook_enabled():
