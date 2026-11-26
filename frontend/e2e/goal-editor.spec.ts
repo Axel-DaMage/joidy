@@ -9,7 +9,7 @@ test.describe('Goal Editor — open detail page', () => {
   test('can open goal detail from Editor tab', async ({ page }) => {
     await authGoto(page, '/goals');
     await page.waitForTimeout(1500);
-    const firstGoal = page.locator('.goal-card-main').first();
+    const firstGoal = page.locator('.grow-main').first();
     await expect(firstGoal).toBeVisible({ timeout: 5000 });
     await firstGoal.click();
     await page.waitForTimeout(1000);
@@ -22,7 +22,7 @@ test.describe('Goal Editor — open detail page', () => {
   test('can close goal detail and return to list', async ({ page }) => {
     await authGoto(page, '/goals');
     await page.waitForTimeout(1500);
-    const firstGoal = page.locator('.goal-card-main').first();
+    const firstGoal = page.locator('.grow-main').first();
     await firstGoal.click();
     await page.waitForTimeout(1000);
     await expect(page.locator('.editor-shell')).toBeVisible({ timeout: 5000 });
@@ -40,7 +40,7 @@ test.describe('Goal Editor — open detail page', () => {
   test('opens goal detail on direct URL load', async ({ page }) => {
     await authGoto(page, '/goals');
     await page.waitForTimeout(1500);
-    await page.locator('.goal-card-main').first().click();
+    await page.locator('.grow-main').first().click();
     await expect(page.locator('.editor-shell')).toBeVisible({ timeout: 5000 });
     const detailUrl = page.url();
     expect(detailUrl).toMatch(/\/goals\/\d+/);
@@ -56,7 +56,7 @@ test.describe('Goal Editor — structure', () => {
   test.beforeEach(async ({ page }) => {
     await authGoto(page, '/goals');
     await page.waitForTimeout(1500);
-    await page.locator('.goal-card-main').first().click();
+    await page.locator('.grow-main').first().click();
     await page.waitForTimeout(1000);
     await expect(page.locator('.editor-shell')).toBeVisible({ timeout: 5000 });
   });
@@ -98,7 +98,7 @@ test.describe('Goal Editor — title editing', () => {
   test('can edit goal title', async ({ page }) => {
     await authGoto(page, '/goals');
     await page.waitForTimeout(1500);
-    await page.locator('.goal-card-main').first().click();
+    await page.locator('.grow-main').first().click();
     await page.waitForTimeout(1000);
     const titleInput = page.locator('.title-input');
     await expect(titleInput).toBeVisible({ timeout: 5000 });
@@ -113,7 +113,7 @@ test.describe('Goal Editor — settings modal', () => {
   test.beforeEach(async ({ page }) => {
     await authGoto(page, '/goals');
     await page.waitForTimeout(1500);
-    await page.locator('.goal-card-main').first().click();
+    await page.locator('.grow-main').first().click();
     await page.waitForTimeout(1000);
     await expect(page.locator('.editor-shell')).toBeVisible({ timeout: 5000 });
   });
@@ -185,7 +185,7 @@ test.describe('Goal Editor — zen mode', () => {
   test('can toggle zen mode', async ({ page }) => {
     await authGoto(page, '/goals');
     await page.waitForTimeout(1500);
-    await page.locator('.goal-card-main').first().click();
+    await page.locator('.grow-main').first().click();
     await page.waitForTimeout(1000);
     const zenBtn = page.locator('.toolbar-btn[aria-label="Modo Zen"]');
     await expect(zenBtn).toBeVisible({ timeout: 5000 });
@@ -205,11 +205,11 @@ test.describe('Goal Editor — Editor tab actions', () => {
     await page.locator('button.header-tab:has-text("Editor")').click();
     await page.waitForTimeout(1000);
     // Goal cards should be visible
-    const goalCards = page.locator('.goal-card');
+    const goalCards = page.locator('.grow');
     const count = await goalCards.count();
     if (count > 0) {
       // Check for action buttons
-      const actions = goalCards.first().locator('.goal-actions');
+      const actions = goalCards.first().locator('.grow-actions');
       if (await actions.isVisible({ timeout: 2000 }).catch(() => false)) {
         // Should have edit, delete buttons at minimum
         await expect(actions.locator('button[aria-label="Editar objetivo"]').or(actions.locator('button[aria-label="Eliminar objetivo"]'))).toBeVisible({ timeout: 3000 });

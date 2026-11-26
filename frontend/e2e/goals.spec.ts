@@ -109,7 +109,7 @@ test.describe('Goals — filters', () => {
     await search.fill('G1');
     await page.waitForTimeout(500);
     // Should show goals with "G1" in the title
-    const goalCards = page.locator('.goal-card-main, [class*="goal-card"]');
+    const goalCards = page.locator('.grow-main, [class*="goal-card"]');
     const count = await goalCards.count();
     expect(count).toBeGreaterThan(0);
   });
@@ -119,12 +119,12 @@ test.describe('Goals — goal cards', () => {
   test('goal cards are visible and have pin buttons', async ({ page }) => {
     await authGoto(page, '/goals');
     await page.waitForTimeout(2000);
-    const goalCards = page.locator('.goal-card-main');
+    const goalCards = page.locator('.grow-main');
     const count = await goalCards.count();
     if (count > 0) {
       // Pin button is a sibling within the goal-editor-card container
       // (aria-labels are "Fijar"/"Desfijar" — goalCard.pin/unpin).
-      const pinBtn = page.locator('.goal-editor-card button[aria-label="Fijar"], .goal-editor-card button[aria-label="Desfijar"]').first();
+      const pinBtn = page.locator('.grow button[aria-label="Fijar"], .grow button[aria-label="Desfijar"]').first();
       await expect(pinBtn).toBeVisible({ timeout: 3000 });
     }
   });
@@ -132,7 +132,7 @@ test.describe('Goals — goal cards', () => {
   test('clicking a goal card opens it', async ({ page }) => {
     await authGoto(page, '/goals');
     await page.waitForTimeout(1000);
-    const firstGoal = page.locator('.goal-card-main').first();
+    const firstGoal = page.locator('.grow-main').first();
     if (await firstGoal.isVisible({ timeout: 2000 }).catch(() => false)) {
       await firstGoal.click();
       await page.waitForTimeout(1000);
@@ -144,7 +144,7 @@ test.describe('Goals — goal cards', () => {
   test('pin button toggles goal pin state', async ({ page }) => {
     await authGoto(page, '/goals');
     await page.waitForTimeout(1000);
-    const firstGoalCard = page.locator('.goal-editor-card').first();
+    const firstGoalCard = page.locator('.grow').first();
     if (await firstGoalCard.isVisible({ timeout: 2000 }).catch(() => false)) {
       // The pin button lives in .card-top-left-actions, which is
       // pointer-events:none until the card is hovered (GoalCard.svelte) —
