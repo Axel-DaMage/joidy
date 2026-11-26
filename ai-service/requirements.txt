@@ -5,8 +5,8 @@ pydantic-settings==2.16.3
 # google-generativeai is EOL upstream; google-genai is the replacement SDK
 # (client.aio native async API — #1462). Pin released 2026-11-12.
 google-genai==3.6.1
-openai==3.57.0
-anthropic==2.12.0
+openai==3.58.0
+anthropic==2.13.0
 # httpx fork vendored by the openai/anthropic SDKs — imported directly to
 # build provider transports with trust_env=False (#1330). Keep in sync with
 # the version range those SDKs require.
