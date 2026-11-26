@@ -18,7 +18,7 @@ if "sqlite_vec" not in sys.modules:
 
 from database import Base
 from models.personal_streaks import PersonalStreak, StreakCheckIn
-from repositories import PersonalStreakRepository, StreakCheckInRepository
+from repositories import StreakCheckInRepository
 from services.personal_streak_service import (
     MAX_BACKFILL_DAYS,
     backfill_streak_history,
@@ -59,7 +59,8 @@ class PersonalStreakTestBase(unittest.TestCase):
             "frequency_days": 1,
         }
         defaults.update(kwargs)
-        streak = PersonalStreakRepository(db).add(PersonalStreak(**defaults))
+        streak = PersonalStreak(**defaults)
+        db.add(streak)
         db.commit()
         return streak
 

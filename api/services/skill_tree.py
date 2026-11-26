@@ -23,9 +23,7 @@ def sync_skills_for_tags(db: Session, tag_ids: set[int]) -> list[dict]:
         .group_by(NoteTag.tag_id)
         .all()
     )
-    skills_by_tag = {
-        skill.tag_id: skill for skill in SkillRepository(db)._db.query(Skill).filter(Skill.tag_id.in_(tag_ids)).all()
-    }
+    skills_by_tag = {skill.tag_id: skill for skill in SkillRepository(db).list_by_tag_ids(tag_ids)}
 
     updated = []
     for tag_id in tag_ids:
@@ -108,7 +106,7 @@ def get_skill_tree(db: Session) -> dict:
         return {"nodes": [], "edges": []}
 
     # Fetch only the tags referenced by skills (and their parent tags) instead
-    # of TagRepository(db).list(), which caps at 100 rows. When a user has
+    # of a capped Tag list() query (100 rows). When a user has
     # 100+ tags from notes, skill tags with IDs > 100 were missing from the
     # dict and the corresponding nodes were silently skipped, so the tree
     # rendered fewer nodes than the sidebar (#206).
