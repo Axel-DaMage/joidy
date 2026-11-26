@@ -208,40 +208,61 @@ def _pearson(xs: list[float], ys: list[float]) -> float | None:
 
 
 def _goals(db: Session) -> dict:
-    """Goal counts by state, per-temporality aggregates, and lifecycle funnel."""
-    rows = db.query(Goal.state, Goal.temporality, Goal.current_value, Goal.target_value).all()
+    """Goal counts by state, per-temporality aggregates, and lifecycle funnel.
+
+    Aggregated in SQL (``GROUP BY`` state / temporality) instead of scanning
+    every goal row in Python (#1523). Averages are rounded in Python to keep
+    half-even rounding identical across PostgreSQL/SQLite backends.
+    """
+    state_rows = db.query(Goal.state, func.count(Goal.id)).group_by(Goal.state).all()
 
     by_state: dict[str, int] = {}
-    temp_groups: dict[str, dict] = {}
-    funnel = {"created": len(rows), "activated": 0, "completed": 0, "abandoned": 0}
+    funnel = {"created": 0, "activated": 0, "completed": 0, "abandoned": 0}
 
-    for state, temporality, current_value, target_value in rows:
+    for state, count in state_rows:
         state_val = state.value if hasattr(state, "value") else str(state)
-        temp_val = temporality.value if hasattr(temporality, "value") else str(temporality)
-
-        by_state[state_val] = by_state.get(state_val, 0) + 1
+        count = int(count)
+        by_state[state_val] = by_state.get(state_val, 0) + count
+        funnel["created"] += count
         if state_val != GoalState.INBOX.value:
-            funnel["activated"] += 1
+            funnel["activated"] += count
         if state_val == GoalState.COMPLETED.value:
-            funnel["completed"] += 1
+            funnel["completed"] += count
         if state_val in _ABANDONED_STATES:
-            funnel["abandoned"] += 1
+            funnel["abandoned"] += count
 
-        group = temp_groups.setdefault(temp_val, {"total": 0, "completed": 0, "failed": 0, "progress": []})
-        group["total"] += 1
-        if state_val == GoalState.COMPLETED.value:
-            group["completed"] += 1
-        if state_val == GoalState.FAILED.value:
-            group["failed"] += 1
-        if target_value and target_value > 0:
-            group["progress"].append(current_value / target_value * 100)
+    temp_rows = (
+        db.query(
+            Goal.temporality.label("temporality"),
+            func.count(Goal.id).label("total"),
+            func.coalesce(func.sum(case((Goal.state == GoalState.COMPLETED, 1), else_=0)), 0).label("completed"),
+            func.coalesce(func.sum(case((Goal.state == GoalState.FAILED, 1), else_=0)), 0).label("failed"),
+            # AVG ignores NULLs — matches the Python version which only
+            # collected progress for rows with a positive target_value.
+            func.avg(case((Goal.target_value > 0, Goal.current_value / Goal.target_value * 100), else_=None)).label(
+                "avg_progress"
+            ),
+        )
+        .group_by(Goal.temporality)
+        .all()
+    )
+
+    temp_groups: dict[str, dict] = {}
+    for r in temp_rows:
+        temp_val = r.temporality.value if hasattr(r.temporality, "value") else str(r.temporality)
+        temp_groups[temp_val] = {
+            "total": int(r.total),
+            "completed": int(r.completed),
+            "failed": int(r.failed),
+            "avg_progress": float(r.avg_progress) if r.avg_progress is not None else None,
+        }
 
     by_temporality = []
     for temp in GoalTemporality:
         tgroup = temp_groups.get(temp.value)
         if not tgroup:
             continue
-        avg = round(sum(tgroup["progress"]) / len(tgroup["progress"]), 1) if tgroup["progress"] else 0.0
+        avg = round(tgroup["avg_progress"], 1) if tgroup["avg_progress"] is not None else 0.0
         by_temporality.append(
             {
                 "temporality": temp.value,

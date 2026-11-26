@@ -261,10 +261,28 @@ def list_categories():
 
 @router.get("/stats")
 def global_stats(db: Session = Depends(get_db)):
-    """Global streak statistics."""
-    all_streaks = db.query(PersonalStreak).options(selectinload(PersonalStreak.checkins)).all()
-    active = [s for s in all_streaks if not s.is_archived]
-    archived = [s for s in all_streaks if s.is_archived]
+    """Global streak statistics.
+
+    Uses column projections instead of hydrating every ``PersonalStreak`` ORM
+    object plus all of its ``StreakCheckIn`` rows via ``selectinload`` (#1523):
+    a 20-streak × ~1,800-check-in account used to materialize ~36k ORM objects
+    (notes, moods, timestamps) per call to compute a handful of integers. Only
+    the fields the math actually needs are fetched; streak-run detection stays
+    in ``compute_streak`` (identical semantics) fed with ``check_date`` tuples.
+    """
+    all_streaks = db.query(
+        PersonalStreak.id,
+        PersonalStreak.name,
+        PersonalStreak.is_archived,
+        PersonalStreak.offset,
+        PersonalStreak.frequency,
+        PersonalStreak.frequency_days,
+        PersonalStreak.start_date,
+        PersonalStreak.created_at,
+    ).all()
+    checkin_dates_by_streak: dict[int, list[date]] = {}
+    for streak_id, check_date in db.query(StreakCheckIn.streak_id, StreakCheckIn.check_date).all():
+        checkin_dates_by_streak.setdefault(streak_id, []).append(check_date)
 
     # Compute stats
     longest_ever = 0
@@ -272,7 +290,7 @@ def global_stats(db: Session = Depends(get_db)):
     total_checkins = 0
 
     for s in all_streaks:
-        checkin_dates = [c.check_date for c in s.checkins]
+        checkin_dates = checkin_dates_by_streak.get(s.id, [])
         _, longest = compute_streak(checkin_dates, s.frequency or "daily", s.frequency_days or 1)
         effective = longest + s.offset
         if effective > longest_ever:
@@ -285,10 +303,12 @@ def global_stats(db: Session = Depends(get_db)):
     thirty_ago = today - timedelta(days=30)
     possible_checkins = 0
     actual_checkins = 0
-    for s in active:
+    for s in all_streaks:
+        if s.is_archived:
+            continue
         freq_days = s.frequency_days or 1
         possible_checkins += 30 // freq_days
-        actual_checkins += sum(1 for c in s.checkins if c.check_date >= thirty_ago)
+        actual_checkins += sum(1 for d in checkin_dates_by_streak.get(s.id, []) if d >= thirty_ago)
 
     checkin_rate = round((actual_checkins / possible_checkins) * 100) if possible_checkins > 0 else 0
 
@@ -302,8 +322,8 @@ def global_stats(db: Session = Depends(get_db)):
     days_tracked = (today - earliest).days if all_streaks else 0
 
     return {
-        "total_active": len(active),
-        "total_archived": len(archived),
+        "total_active": sum(1 for s in all_streaks if not s.is_archived),
+        "total_archived": sum(1 for s in all_streaks if s.is_archived),
         "longest_ever": longest_ever,
         "longest_name": longest_name,
         "total_checkins": total_checkins,

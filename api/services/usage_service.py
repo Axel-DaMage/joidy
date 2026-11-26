@@ -10,6 +10,7 @@ from datetime import UTC, datetime, timedelta
 
 from models.usage_event import UsageEvent
 from sqlalchemy import func
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 # Event types tracked by the frontend usage store.
@@ -80,13 +81,13 @@ def get_usage_summary(db: Session, user_id: int, days: int = 30) -> dict:
     session_count = base.filter(UsageEvent.event_type == EVENT_SESSION_START).count()
 
     active_days = (
-        db.query(func.date(UsageEvent.created_at))
+        db.query(func.count(func.distinct(func.date(UsageEvent.created_at))))
         .filter(
             UsageEvent.user_id == user_id,
             UsageEvent.created_at >= since,
         )
-        .group_by(func.date(UsageEvent.created_at))
-        .count()
+        .scalar()
+        or 0
     )
 
     # Average session duration: pair each session_start with the next
@@ -97,8 +98,20 @@ def get_usage_summary(db: Session, user_id: int, days: int = 30) -> dict:
     # typically result from missing session_end events (e.g. tab closed
     # without firing pagehide) rather than genuine usage (#563).
     MAX_SESSION_MIN = 480  # 8 hours
-    starts = base.filter(UsageEvent.event_type == EVENT_SESSION_START).order_by(UsageEvent.created_at.asc()).all()
-    ends = base.filter(UsageEvent.event_type == EVENT_SESSION_END).order_by(UsageEvent.created_at.asc()).all()
+    # Only the timestamp is needed to pair starts with ends — project the
+    # single column instead of hydrating full UsageEvent ORM rows (#1523).
+    starts = (
+        base.with_entities(UsageEvent.created_at)
+        .filter(UsageEvent.event_type == EVENT_SESSION_START)
+        .order_by(UsageEvent.created_at.asc())
+        .all()
+    )
+    ends = (
+        base.with_entities(UsageEvent.created_at)
+        .filter(UsageEvent.event_type == EVENT_SESSION_END)
+        .order_by(UsageEvent.created_at.asc())
+        .all()
+    )
     durations: list[float] = []
     end_idx = 0
     for s in starts:
@@ -137,13 +150,47 @@ def _top_event_values(
 ) -> list[dict]:
     """Aggregate the most common ``event_data[data_key]`` values for an event type.
 
-    SQLite/PostgreSQL both support ``->``/``->>`` JSON access via SQLAlchemy's
-    ``UsageEvent.event_data[key]`` indexing. We fall back to a Python-side
-    aggregation when the JSON access isn't available (e.g. very old SQLite),
-    keeping the service robust across test and production backends.
+    The counting runs in SQL (``GROUP BY`` on the extracted JSON value +
+    ``LIMIT``) so ``usage_events`` — which grows with every navigation — is
+    never hydrated into ORM objects (#1523). ``data_key`` is always a
+    server-side literal ("feature"/"path"), never user input, so the JSON key
+    lookup is safe. Falls back to a Python-side aggregation when the backend
+    doesn't support JSON extraction, keeping the service robust across test
+    and production backends.
     """
+    value_col = UsageEvent.event_data[data_key].as_string()
+    try:
+        rows = (
+            db.query(value_col.label("v"), func.count(UsageEvent.id).label("c"))
+            .filter(
+                UsageEvent.user_id == user_id,
+                UsageEvent.created_at >= since,
+                UsageEvent.event_type == event_type,
+                # Missing key / JSON null both extract to NULL — excluded, same
+                # as the Python path's ``value is None: continue``.
+                value_col.isnot(None),
+            )
+            .group_by(value_col)
+            .order_by(func.count(UsageEvent.id).desc(), value_col.asc())
+            .limit(limit)
+            .all()
+        )
+    except SQLAlchemyError:
+        return _top_event_values_python(db, user_id, since, event_type, data_key, limit)
+    return [{data_key: str(r.v), "count": int(r.c)} for r in rows]
+
+
+def _top_event_values_python(
+    db: Session,
+    user_id: int,
+    since: datetime,
+    event_type: str,
+    data_key: str,
+    limit: int,
+) -> list[dict]:
+    """Python-side fallback for backends without JSON extraction support."""
     events = (
-        db.query(UsageEvent)
+        db.query(UsageEvent.event_data)
         .filter(
             UsageEvent.user_id == user_id,
             UsageEvent.created_at >= since,
@@ -152,10 +199,10 @@ def _top_event_values(
         .all()
     )
     counts: dict[str, int] = {}
-    for e in events:
-        if not e.event_data:
+    for (event_data,) in events:
+        if not event_data:
             continue
-        value = e.event_data.get(data_key)
+        value = event_data.get(data_key)
         if value is None:
             continue
         key = str(value)

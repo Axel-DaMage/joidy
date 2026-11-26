@@ -167,6 +167,55 @@ def test_global_stats_with_streaks(client: TestClient):
     assert data["total_active"] == before["total_active"] + 1
 
 
+def test_global_stats_aggregation_correct(client: TestClient, db_session):
+    """Seeded check-ins must aggregate identically via column projections (#1523).
+
+    The tables are empty at test start (SAVEPOINT isolation), so the seeded
+    streaks fully determine the expected values.
+    """
+    today = date.today()
+
+    create = client.post("/personal-streaks/", json={"name": "Stats Active"})
+    assert create.status_code == 201
+    active_id = create.json()["id"]
+    # 5 consecutive days ending today → longest run 5; all inside the 30d window.
+    for i in range(5):
+        db_session.add(StreakCheckIn(streak_id=active_id, check_date=today - timedelta(days=i)))
+
+    create = client.post("/personal-streaks/", json={"name": "Stats Archived"})
+    assert create.status_code == 201
+    archived_id = create.json()["id"]
+    # 2 consecutive days — contributes to totals but not the 30d active rate.
+    for i in range(2):
+        db_session.add(StreakCheckIn(streak_id=archived_id, check_date=today - timedelta(days=i)))
+    db_session.commit()
+    resp = client.put(f"/personal-streaks/{archived_id}", json={"is_archived": True})
+    assert resp.status_code == 200
+
+    data = client.get("/personal-streaks/stats").json()
+    assert data["total_active"] == 1
+    assert data["total_archived"] == 1
+    assert data["total_checkins"] == 7
+    assert data["longest_ever"] == 5
+    assert data["longest_name"] == "Stats Active"
+    # Active daily streak: 30 possible check-ins, 5 actual → 17%.
+    assert data["checkin_rate"] == 17
+    # Both streaks were created today → 0 days tracked (1 tolerated when the
+    # configured user timezone sits ahead of UTC).
+    assert data["days_tracked"] in (0, 1)
+
+
+def test_global_stats_empty(client: TestClient):
+    data = client.get("/personal-streaks/stats").json()
+    assert data["total_active"] == 0
+    assert data["total_archived"] == 0
+    assert data["longest_ever"] == 0
+    assert data["longest_name"] == ""
+    assert data["total_checkins"] == 0
+    assert data["checkin_rate"] == 0
+    assert data["days_tracked"] == 0
+
+
 def test_freeze_no_freezes_available(client: TestClient):
     create = client.post("/personal-streaks/", json={"name": "Freeze Streak", "freeze_count": 0})
     streak_id = create.json()["id"]
