@@ -636,3 +636,26 @@ jobs:
           name: sbom-source-preview
           path: sbom/
           retention-days: 30
+
+  # Version single-source gate (#1554): the root VERSION file is canonical
+  # (#1258) and `release_bump.sh --check` asserts every dependent agrees —
+  # pyproject.toml, frontend package.json + lockfile, aur/PKGBUILD +
+  # .SRCINFO, docker-compose.release.yml image pins, README badge, pinned
+  # installer URLs, docs metadata, CHANGELOG compare link. release.yml runs
+  # the identical assertion at tag time; running it here catches drift on
+  # regular commits instead of on release night. Pure bash/grep — no deps.
+  # Deliberately not duplicated: dist-smoke.yml already asserts
+  # aur/.SRCINFO matches `makepkg --printsrcinfo`.
+  # Legitimate exception: cli/pyproject.toml + joidy_cli.__version__ are the
+  # independently-versioned `joidy-cli` package — the release flow does not
+  # own them.
+  version-consistency:
+    name: Version Consistency
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Assert all version strings match VERSION
+        run: bash scripts/release_bump.sh --check "$(cat VERSION)"

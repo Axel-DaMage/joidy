@@ -1,6 +1,6 @@
 [project]
 name = "joidy"
-version = "0.2.0"
+version = "1.1.0-beta.8"
 description = "Joidy backend services"
 license = { text = "GPL-3.0-or-later" }
 requires-python = ">=3.12"
