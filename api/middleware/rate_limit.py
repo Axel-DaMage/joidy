@@ -213,6 +213,15 @@ class UserRateLimiter:
     def check_rate_limit(self, request: Request) -> tuple[bool, int]:
         """Returns (allowed, limit)."""
         identifier, limit = self._get_limit_for_request(request)
+        return self._register_hit(identifier, limit), limit
+
+    def _register_hit(self, identifier: str, limit: int) -> bool:
+        """Sliding-window check for an already-resolved identifier.
+
+        Split out so the middleware can resolve the (identifier, limit) pair
+        once per request instead of re-deriving it — and re-decoding the
+        Bearer JWT — for every ``get_remaining`` call (#1518).
+        """
         now = time.time()
 
         if now - self._last_sweep >= self._sweep_interval:
@@ -224,14 +233,20 @@ class UserRateLimiter:
 
         if len(user_limit.requests) >= limit:
             # Window is non-empty (at capacity), so keep the entry.
-            return False, limit
+            return False
 
         user_limit.requests.append(now)
-        return True, limit
+        return True
 
-    def get_remaining(self, request: Request, limit: int) -> int:
-        """Get remaining requests for identifier in current window."""
-        identifier, _ = self._get_limit_for_request(request)
+    def get_remaining(self, request: Request, limit: int, identifier: str | None = None) -> int:
+        """Get remaining requests for identifier in current window.
+
+        ``identifier`` may be supplied by a caller that already resolved the
+        request identity (``RateLimitMiddleware.dispatch``), avoiding a
+        second ``_get_limit_for_request`` pass per request (#1518).
+        """
+        if identifier is None:
+            identifier, _ = self._get_limit_for_request(request)
         now = time.time()
         user_limit = self._user_windows.get(identifier)
         if user_limit is None:
@@ -321,9 +336,13 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 },
             )
 
-        allowed, limit = self.limiter.check_rate_limit(request)
+        # Resolve the request identity once: _get_limit_for_request decodes
+        # (and reads .env for) the Bearer token, so reusing the identifier
+        # for the remaining-quota lookups saves one JWT decode per request.
+        identifier, limit = self.limiter._get_limit_for_request(request)
+        allowed = self.limiter._register_hit(identifier, limit)
         if not allowed:
-            remaining = self.limiter.get_remaining(request, limit)
+            remaining = self.limiter.get_remaining(request, limit, identifier)
             return JSONResponse(
                 status_code=429,
                 content={
@@ -338,7 +357,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         response = await call_next(request)
         self.limiter.record_login_result(request, response.status_code)
-        remaining = self.limiter.get_remaining(request, limit)
+        remaining = self.limiter.get_remaining(request, limit, identifier)
         response.headers["X-RateLimit-Limit"] = str(limit)
         response.headers["X-RateLimit-Remaining"] = str(remaining)
         return response
