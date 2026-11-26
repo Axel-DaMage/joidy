@@ -244,6 +244,30 @@ class TestEmbedEndpoint:
         assert body["embedding"] == [0.1, 0.2, 0.3]
         ai_enabled.store_embedding.assert_called_once_with(7, [0.1, 0.2, 0.3])
 
+    def test_persist_false_embeds_without_touching_db(self, ai_enabled):
+        """persist=false returns the vector but never writes note_embeddings —
+        the contract api semantic search relies on (its synthetic note_id=0
+        would violate the notes FK)."""
+        resp = _client().post(
+            "/embed",
+            json={"note_id": 0, "content": "search query", "include_vector": True, "persist": False},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["status"] == "success"
+        assert body["embedding"] == [0.1, 0.2, 0.3]
+        ai_enabled.store_embedding.assert_not_called()
+        ai_enabled.emb.embed.assert_awaited_once_with("search query")
+
+    def test_persist_true_with_invalid_note_id_rejected(self, ai_enabled):
+        """persist=true with the synthetic note_id=0 fails fast with 422 —
+        before the provider call — instead of an IntegrityError 500 from the
+        notes FK. Silently skipping persistence would mask a caller bug."""
+        resp = _client().post("/embed", json={"note_id": 0, "content": "x"})
+        assert resp.status_code == 422
+        ai_enabled.store_embedding.assert_not_called()
+        ai_enabled.emb.embed.assert_not_awaited()
+
     def test_provider_failure_returns_500(self, ai_enabled):
         ai_enabled.emb.embed = AsyncMock(side_effect=RuntimeError("provider down"))
         resp = _client().post("/embed", json={"note_id": 1, "content": "x"})

@@ -226,6 +226,19 @@ def test_semantic_search_empty_embedding(client):
     assert resp.json() == {"results": []}
 
 
+def test_semantic_search_embeds_query_without_persisting(client):
+    """The query-embedding call must send persist=false — note_embeddings.
+    note_id is a real FK to notes.id, so the synthetic note_id=0 this
+    endpoint sends would otherwise raise IntegrityError -> 500 on the
+    ai-service side and break semantic search end-to-end (#1541 follow-up)."""
+    mock = _mock_embed_client({"embedding": None})
+    with patch("routers.notes.http_client", return_value=mock):
+        resp = client.post("/notes/search/semantic", json={"query": "hello"})
+    assert resp.status_code == 200
+    payload = mock.post.await_args.kwargs["json"]
+    assert payload["persist"] is False
+
+
 @_pg_only
 def test_semantic_search_no_matching_embeddings(client, monkeypatch):
     """Embed succeeds but the note_embeddings table is empty → empty results."""

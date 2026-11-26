@@ -218,6 +218,13 @@ class EmbedRequest(BaseModel):
     # search) opt in with include_vector=true to avoid serializing ~3K floats
     # per request (#1541).
     include_vector: bool = False
+    # persist=false embeds without writing note_embeddings — for callers that
+    # only need the vector, like api semantic search, which sends a synthetic
+    # note_id=0. note_embeddings.note_id is a real FK to notes.id, so writing
+    # a synthetic id raises IntegrityError -> 500 (pre-existing bug surfaced
+    # by #1541). persist=true with note_id<=0 is rejected with 422 up front:
+    # silently skipping would mask a caller bug.
+    persist: bool = True
 
 
 class ClassifyRequest(BaseModel):
@@ -517,6 +524,11 @@ async def embed(req: EmbedRequest):
     if not settings.is_ai_enabled:
         return {"status": "disabled", "note_id": req.note_id, "error": "No AI provider configured"}
 
+    # Reject contract violations before burning a rate-limit slot or a
+    # provider call: persisting note_id<=0 can only hit the notes FK.
+    if req.persist and req.note_id <= 0:
+        raise HTTPException(status_code=422, detail="persist=true requires a positive note_id of an existing note")
+
     await get_limiter(settings.max_requests_per_minute, name="embed").acquire()
 
     # Cache: identical content + model always yields the same vector, so skip
@@ -534,11 +546,15 @@ async def embed(req: EmbedRequest):
             provider_name = client.provider_name
             get_cache().set(key, vector)
 
-        # Save vector embedding to shared PostgreSQL database. psycopg2 is
-        # synchronous — keep the write off the event loop (#1533).
-        from database import store_embedding
+        # Save vector embedding to shared PostgreSQL database — only when the
+        # caller asked for it (persist=true, the default). Query-embedding
+        # callers (api semantic search) send persist=false with a synthetic
+        # note_id, and note_embeddings.note_id is a real FK to notes.id.
+        # psycopg2 is synchronous — keep the write off the event loop (#1533).
+        if req.persist:
+            from database import store_embedding
 
-        await asyncio.to_thread(store_embedding, req.note_id, vector)
+            await asyncio.to_thread(store_embedding, req.note_id, vector)
 
         # record_usage opens a fresh DB connection per call — also offloaded.
         await asyncio.to_thread(record_usage, "embed", input_tokens=_estimate_tokens(req.content))
