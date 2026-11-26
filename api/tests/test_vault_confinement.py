@@ -515,6 +515,102 @@ def test_put_note_obsidian_path_rejected(client: TestClient, db_session, vault):
     assert resp.status_code == 400
 
 
+# ── Ownership fast path (#1516) — exact match skips the per-row realpath scan ──
+
+
+def test_put_note_ownership_exact_match_skips_realpath_scan(client: TestClient, db_session, vault, monkeypatch):
+    """#1516: when the target's owner is found by the indexed exact-match
+    query, the O(N) per-row realpath scan must not run at all."""
+    # Noise rows whose stored paths only resolve through the scan — if the
+    # fallback loop runs, each of them gets a realpath call.
+    for i in range(25):
+        db_session.add(Note(title=f"noise-{i}", content="", source="obsidian", source_path=f"/vault/noise-{i}.md"))
+    db_session.commit()
+
+    target = vault / "mine.md"
+    create = client.post(
+        "/notes/",
+        json={"title": "mine", "content": "c", "source_path": str(target)},
+    )
+    assert create.status_code == 201
+    note_id = create.json()["id"]
+    assert target.exists()
+
+    import routers.notes as notes_router
+
+    seen: list[str] = []
+    delegate = notes_router.resolve_confined_source_path
+
+    def _spy(path, **kwargs):
+        seen.append(str(path))
+        return delegate(path, **kwargs)
+
+    monkeypatch.setattr(notes_router, "resolve_confined_source_path", _spy)
+
+    resp = client.put(f"/notes/{note_id}", json={"source_path": str(target)})
+
+    assert resp.status_code == 200
+    # Only the request path itself plus the single exact-match candidate row
+    # are resolved — the O(N) fallback would have resolved every stored row.
+    assert len(seen) <= 3
+    assert not any(s.startswith("/vault/noise-") for s in seen)
+
+
+def _aliased_owner_note(db_session):
+    """A note whose stored ``source_path`` only matches after realpath — it
+    keeps the ``/vault`` domain spelling the watcher writes, so the #1516
+    exact-match fast path misses it and the fallback scan must find it."""
+    note = Note(title="owner", content="real", source="obsidian", source_path="/vault/real.md")
+    db_session.add(note)
+    db_session.commit()
+    return note
+
+
+def test_put_note_symlink_alias_of_own_file_allowed(client: TestClient, db_session, vault, monkeypatch):
+    """#1516 fallback: a symlink alias pointing at the note's own file still
+    resolves to that note through the per-row realpath scan — a spy proves
+    the fallback actually ran (the stored ``/vault`` spelling misses the
+    exact-match candidates)."""
+    real = vault / "real.md"
+    real.write_text("real content")
+    owner = _aliased_owner_note(db_session)
+    alias = vault / "alias.md"
+    alias.symlink_to(real)
+
+    import routers.notes as notes_router
+
+    seen: list[str] = []
+    delegate = notes_router.resolve_confined_source_path
+
+    def _spy(path, **kwargs):
+        seen.append(str(path))
+        return delegate(path, **kwargs)
+
+    monkeypatch.setattr(notes_router, "resolve_confined_source_path", _spy)
+
+    resp = client.put(f"/notes/{owner.id}", json={"source_path": str(alias)})
+
+    assert resp.status_code == 200
+    assert "/vault/real.md" in seen
+
+
+def test_put_note_symlink_alias_of_other_notes_file_rejected(client: TestClient, db_session, vault):
+    """#1516 fallback: the same alias indirection aimed at *another* note's
+    file must still 400 — ownership is by resolved path, not string."""
+    real = vault / "real.md"
+    real.write_text("precious")
+    _aliased_owner_note(db_session)
+    create = client.post("/notes/", json={"title": "mine", "content": "c"})
+    note_id = create.json()["id"]
+    alias = vault / "alias.md"
+    alias.symlink_to(real)
+
+    resp = client.put(f"/notes/{note_id}", json={"source_path": str(alias)})
+
+    assert resp.status_code == 400
+    assert real.read_text() == "precious"
+
+
 # ── Obsidian webhooks — conflict-flag writes fail closed (#1314) ──────────────
 
 

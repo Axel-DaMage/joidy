@@ -194,12 +194,28 @@ def _internal_service_request(request: Request) -> bool:
     return scheme.lower() == "bearer" and verify_internal_token(token)
 
 
-def _note_id_owning_resolved(db: Session, resolved: str) -> int | None:
+def _note_id_owning_resolved(db: Session, resolved: str, normalized: str | None = None) -> int | None:
     """Id of the note whose stored ``source_path`` resolves to ``resolved``.
 
     Compares realpaths, not strings, so symlink aliases of the same file can
     never belong to two different notes.
+
+    Fast path (#1516): stored paths almost always keep the exact string form
+    ``normalize_source_path`` returned at write time, so a single indexed
+    equality query over the two plausible spellings — the resolved canonical
+    path and the pre-resolution normalized form — finds the owner without a
+    filesystem syscall per row. Candidate rows are re-checked with the same
+    realpath predicate, so a string match can never crown a false owner.
+    Only on a miss does the O(N) per-row realpath scan run — it still catches
+    symlink aliases and non-canonical stored spellings.
     """
+    candidates = [resolved]
+    if normalized and normalized != resolved:
+        candidates.append(normalized)
+    candidate_rows = db.query(Note.id, Note.source_path).filter(Note.source_path.in_(candidates)).order_by(Note.id)
+    for note_id, stored in candidate_rows:
+        if stored and resolve_confined_source_path(stored) == resolved:
+            return note_id
     for note_id, stored in db.query(Note.id, Note.source_path).filter(Note.source_path.isnot(None)):
         if stored and resolve_confined_source_path(stored) == resolved:
             return note_id
@@ -239,7 +255,7 @@ def _validated_source_path(
     if resolved is None:
         raise HTTPException(status_code=400, detail="Invalid source_path")
     if writes_file and os.path.exists(resolved):
-        owner_id = _note_id_owning_resolved(db, resolved)
+        owner_id = _note_id_owning_resolved(db, resolved, normalized)
         if owner_id is None or (note_id is not None and owner_id != note_id):
             raise HTTPException(status_code=400, detail="Invalid source_path")
 
