@@ -241,36 +241,63 @@
 
 <style>
   .grow {
+    position: relative;
     display: flex;
     align-items: stretch;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-left: 3px solid var(--goal-color);
+    background: linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--goal-color) 12%, transparent) 0%,
+      color-mix(in srgb, var(--goal-color) 5%, var(--surface)) 34%,
+      var(--surface) 72%
+    );
+    border: 1px solid color-mix(in srgb, var(--goal-color) 38%, var(--border));
+    border-left: 4px solid var(--goal-color);
     border-radius: var(--r);
     overflow: hidden;
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, var(--goal-color) 9%, transparent),
+      0 4px 16px color-mix(in srgb, var(--goal-color) 5%, transparent);
     transition:
+      transform var(--t-fast),
       border-color var(--t-fast),
+      box-shadow var(--t-fast),
       background var(--t-fast);
     min-width: 0;
   }
 
   .grow:hover {
-    border-color: color-mix(in srgb, var(--goal-color) 45%, var(--border));
-    background: var(--surface-hover);
+    transform: translateY(-1px);
+    border-color: color-mix(in srgb, var(--goal-color) 62%, var(--border));
+    background: linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--goal-color) 16%, transparent) 0%,
+      color-mix(in srgb, var(--goal-color) 7%, var(--surface-hover)) 38%,
+      var(--surface-hover) 76%
+    );
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, var(--goal-color) 12%, transparent),
+      0 8px 24px color-mix(in srgb, var(--goal-color) 13%, transparent);
   }
 
   .grow.completed {
-    opacity: 0.75;
+    opacity: 0.82;
   }
   .grow.failed {
-    background: color-mix(in srgb, var(--error) 4%, transparent);
+    background: linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--error) 13%, transparent),
+      color-mix(in srgb, var(--error) 5%, var(--surface)) 42%,
+      var(--surface) 78%
+    );
   }
   .grow.paused {
-    opacity: 0.65;
+    border-left-style: dashed;
+    opacity: 0.72;
   }
   .grow.archived {
-    opacity: 0.55;
-    filter: grayscale(0.3);
+    border-left-style: dotted;
+    opacity: 0.6;
+    filter: grayscale(0.25);
   }
 
   .grow-main {
@@ -293,7 +320,9 @@
     width: 34px;
     height: 34px;
     border-radius: 8px;
-    background: color-mix(in srgb, var(--goal-color) 14%, transparent);
+    background: color-mix(in srgb, var(--goal-color) 18%, transparent);
+    border: 1px solid color-mix(in srgb, var(--goal-color) 30%, transparent);
+    box-shadow: inset 0 0 12px color-mix(in srgb, var(--goal-color) 8%, transparent);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -383,9 +412,15 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
+  .gm-temp {
+    color: var(--goal-color);
+    border-color: color-mix(in srgb, var(--goal-color) 24%, transparent);
+    background: color-mix(in srgb, var(--goal-color) 8%, transparent);
+  }
   .gm-prio {
     color: var(--goal-color);
-    border-color: color-mix(in srgb, var(--goal-color) 35%, transparent);
+    border-color: color-mix(in srgb, var(--goal-color) 42%, transparent);
+    background: color-mix(in srgb, var(--goal-color) 10%, transparent);
     font-weight: 700;
   }
   .gm-ctx {

@@ -93,7 +93,7 @@
         {#if chip.value === 'MORNING'}<Sun size={11} />{:else if chip.value === 'NIGHT'}<Moon
             size={11}
           />{:else}<Zap size={11} />{/if}
-        {$t(`goalsPage.${chip.key}`)}
+        <span>{$t(`goalsPage.${chip.key}`)}</span>
       </button>
     {/each}
   </div>
@@ -101,28 +101,35 @@
 
 <style>
   .gf {
-    flex: 1;
+    flex: 1 1 auto;
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: var(--s2);
-    flex-wrap: wrap;
+    gap: 8px;
   }
 
   .gf-search {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 5px 10px;
-    background: var(--surface-hover);
+    gap: 7px;
+    height: 32px;
+    padding: 0 11px;
+    background: color-mix(in srgb, var(--surface-hover) 78%, transparent);
     border: 1px solid var(--border);
-    border-radius: var(--r);
+    border-radius: 8px;
     color: var(--text-muted);
-    width: 200px;
-    flex-shrink: 0;
+    width: min(240px, 24vw);
+    flex: 0 0 auto;
+    transition:
+      border-color var(--t-fast),
+      box-shadow var(--t-fast),
+      background var(--t-fast);
   }
   .gf-search:focus-within {
-    border-color: var(--xp);
+    border-color: color-mix(in srgb, var(--xp) 62%, var(--border));
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--xp) 10%, transparent);
+    background: var(--surface);
+    color: var(--xp);
   }
   .gf-search input {
     background: transparent;
@@ -140,44 +147,74 @@
   .gf-group {
     display: flex;
     align-items: center;
-    gap: 4px;
-    flex-wrap: wrap;
+    gap: 2px;
+    height: 32px;
+    padding: 2px;
+    flex: 0 1 auto;
     min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+    background: color-mix(in srgb, var(--surface-hover) 56%, transparent);
+    border: 1px solid var(--border);
+    border-radius: 8px;
   }
-
-  .gf-ctx {
-    padding-left: var(--s2);
-    border-left: 1px solid var(--border);
+  .gf-group::-webkit-scrollbar {
+    display: none;
   }
 
   .gf-chip {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 4px;
-    padding: 4px 9px;
+    height: 26px;
+    padding: 0 9px;
     border-radius: 6px;
     font-size: 11px;
+    line-height: 1;
     font-family: var(--font-sans);
     background: transparent;
-    border: 1px solid var(--border);
+    border: 1px solid transparent;
     color: var(--text-muted);
     cursor: pointer;
-    transition: all var(--t-fast);
+    transition:
+      color var(--t-fast),
+      background var(--t-fast),
+      border-color var(--t-fast);
     white-space: nowrap;
+    flex: 0 0 auto;
   }
   .gf-chip:hover {
-    background: var(--surface-hover);
+    background: color-mix(in srgb, var(--text-primary) 5%, transparent);
     color: var(--text-primary);
   }
   .gf-chip.active {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: var(--accent-contrast-text, var(--bg));
-    font-weight: 600;
+    background: color-mix(in srgb, var(--accent) 15%, var(--surface));
+    border-color: color-mix(in srgb, var(--accent) 38%, transparent);
+    color: var(--accent);
+    font-weight: 650;
   }
   .gf-chip:focus-visible {
     outline: 1px solid var(--xp);
     outline-offset: 2px;
+  }
+
+  .gf-ctx-chip {
+    padding-inline: 8px;
+  }
+  .gf-ctx-chip span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  @media (max-width: 1100px) {
+    .gf {
+      flex-wrap: wrap;
+    }
+    .gf-search {
+      flex: 1 1 180px;
+      width: auto;
+    }
   }
 
   @media (max-width: 640px) {
@@ -185,12 +222,13 @@
       flex-direction: column;
       align-items: stretch;
     }
-    .gf-search {
+    .gf-search,
+    .gf-group {
       width: 100%;
+      flex-basis: auto;
     }
-    .gf-ctx {
-      border-left: none;
-      padding-left: 0;
+    .gf-chip {
+      flex: 1 0 auto;
     }
   }
 </style>

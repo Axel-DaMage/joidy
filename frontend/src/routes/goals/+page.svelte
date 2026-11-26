@@ -7,10 +7,6 @@
   import ChevronDown from 'lucide-svelte/icons/chevron-down';
   import Calendar from 'lucide-svelte/icons/calendar';
   import Clock from 'lucide-svelte/icons/clock';
-  import LayoutDashboard from 'lucide-svelte/icons/layout-dashboard';
-  import Pause from 'lucide-svelte/icons/pause';
-  import Play from 'lucide-svelte/icons/play';
-  import Ban from 'lucide-svelte/icons/ban';
   import Pencil from 'lucide-svelte/icons/pencil';
   import X from 'lucide-svelte/icons/x';
   import ChevronRight from 'lucide-svelte/icons/chevron-right';
@@ -92,7 +88,7 @@
   let goals = $state<Goal[]>([]);
   let tags = $state<TagType[]>([]);
   let notes = $state<Note[]>([]);
-  const VALID_TABS = ['editor', 'today', 'inbox', 'planning', 'history'] as const;
+  const VALID_TABS = ['editor', 'inbox', 'planning', 'history'] as const;
   let currentTab = $state<(typeof VALID_TABS)[number]>('editor');
   let currentPlanningTab = $state<'WEEKLY' | 'MONTHLY' | 'ANNUAL'>('ANNUAL');
   let showAddForm = $state(false);
@@ -347,9 +343,6 @@
   // Untriaged inbox captures (#1200) live in their own tab — they must not
   // leak into dashboards, planning lists or statistics.
   const isListGoal = (g: Goal) => g.state !== 'INBOX' && g.state !== 'CANCELLED';
-  let dailyGoals = $derived(
-    goals.filter((g) => isListGoal(g) && isAssigned(g.id, todayIso))
-  );
   let planningGoals = $derived(goals.filter(isListGoal));
   let pendingGoals = $derived(goals.filter((g) => g.pending_removal));
 
@@ -657,15 +650,14 @@
   // ── Dashboard State ──
   let upcomingTasks = $derived.by(() => {
     const futureAssignments: { date: string; goal: Goal }[] = [];
-    const sortedDates = Object.keys(assignments)
-      .filter((d) => d >= todayIso)
-      .sort();
+    const sortedDates = Object.keys(assignments).sort();
 
     for (const date of sortedDates) {
       for (const id of assignments[date]) {
         const goal = goals.find((g) => g.id === id);
         if (goal && isListGoal(goal) && goal.state !== 'COMPLETED' && goal.state !== 'FAILED') {
-          if (!futureAssignments.some((a) => a.goal.id === id && a.date === date)) {
+          const currentPeriodKey = getNormalizedDate(todayIso, goal.temporality);
+          if (date >= currentPeriodKey && !futureAssignments.some((a) => a.goal.id === id && a.date === date)) {
             futureAssignments.push({ date, goal });
           }
         }
@@ -674,71 +666,13 @@
     return futureAssignments.slice(0, 5);
   });
 
-  let currentWeekDates = $derived.by(() => {
-    const dates = [];
-    const today = new Date();
-    const day = today.getDay();
-    const diff = today.getDate() - day + (day === 0 ? -6 : 1);
-    const monday = new Date(new Date().setDate(diff));
-
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(monday);
-      d.setDate(monday.getDate() + i);
-      // localDayKey, not toISOString — the UTC key shifts a day off in
-      // non-UTC zones (#1306).
-      const dateStr = localDayKey(d);
-      const isToday = dateStr === todayIso;
-      const hData = historyData.find((h) => h.date === dateStr);
-      dates.push({
-        dateStr,
-        isToday,
-        dayName: ['L', 'M', 'X', 'J', 'V', 'S', 'D'][i],
-        hasActivity: hData?.checked || false,
-      });
-    }
-    return dates;
-  });
-
-  // ── Monthly map state (#790) ──
-  let monthMapDate = $state(new Date());
-
-  let monthMapCells = $derived.by(() => {
-    const year = monthMapDate.getFullYear();
-    const month = monthMapDate.getMonth();
-    const firstDay = new Date(year, month, 1);
-    const lastDay = new Date(year, month + 1, 0);
-    // Leading blanks: Mon=0 .. Sun=6
-    let startWeekday = firstDay.getDay() - 1;
-    if (startWeekday < 0) startWeekday = 6;
-    const cells: {
-      dateStr: string | null;
-      day: number | null;
-      isToday: boolean;
-      status: 'none' | 'assigned' | 'completed' | 'failed';
-    }[] = [];
-    for (let i = 0; i < startWeekday; i++) {
-      cells.push({ dateStr: null, day: null, isToday: false, status: 'none' });
-    }
-    for (let d = 1; d <= lastDay.getDate(); d++) {
-      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-      const isToday = dateStr === todayIso;
-      const hData = historyData.find((h) => h.date === dateStr);
-      const hasAssignment = !!(assignments[dateStr] && assignments[dateStr].length > 0);
-      let status: 'none' | 'assigned' | 'completed' | 'failed' = hasAssignment
-        ? 'assigned'
-        : 'none';
-      if (hData?.checked) status = 'completed';
-      else if (hData?.failed) status = 'failed';
-      cells.push({ dateStr, day: d, isToday, status });
-    }
-    return cells;
-  });
-
-  function prevMonth() {
-    monthMapDate = new Date(monthMapDate.getFullYear(), monthMapDate.getMonth() - 1, 1);
-  }
-  function nextMonth() {
-    monthMapDate = new Date(monthMapDate.getFullYear(), monthMapDate.getMonth() + 1, 1);
+  function formatAssignmentDate(dateStr: string): string {
+    const [year, month, day] = dateStr.split('-').map(Number);
+    return new Date(year, month - 1, day).toLocaleDateString(undefined, {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+    });
   }
 
   // ── Hierarchical planning helpers ──
@@ -982,7 +916,9 @@
       completed: managed.filter((g) => g.state === 'COMPLETED' || g.is_completed).length,
       paused: managed.filter((g) => g.state === 'PAUSED').length,
       pinned: managed.filter((g) => pinnedGoals.has(g.id)).length,
-      today: dailyGoals.filter((g) => g.state === 'ACTIVE' || g.state === 'PAUSED').length,
+      today: managed.filter(
+        (g) => (g.state === 'ACTIVE' || g.state === 'PAUSED') && isAssigned(g.id, todayIso)
+      ).length,
       total: managed.length,
     };
   });
@@ -1051,15 +987,6 @@
       <button
         class="tab"
         role="tab"
-        class:active={currentTab === 'today'}
-        aria-selected={currentTab === 'today'}
-        onclick={() => (currentTab = 'today')}
-      >
-        <LayoutDashboard size={14} /> Inicio
-      </button>
-      <button
-        class="tab"
-        role="tab"
         class:active={currentTab === 'inbox'}
         aria-selected={currentTab === 'inbox'}
         onclick={() => (currentTab = 'inbox')}
@@ -1094,7 +1021,6 @@
     class="goals-body"
     class:full-width={currentTab === 'history' ||
       currentTab === 'planning' ||
-      currentTab === 'today' ||
       currentTab === 'inbox' ||
       currentTab === 'editor'}
   >
@@ -1103,393 +1029,6 @@
         <GoalInbox bind:goals onOpen={openGoalEditor} />
       </div>
     {/if}
-    {#if currentTab === 'today'}
-      <div class="tab-content fade-in today-layout">
-        <div class="dashboard-main-col">
-          <div class="today-header">
-            <h3 class="section-title" style="margin: 0;">{$t('goalsPage.dayGoals')}</h3>
-            <button
-              class="btn btn-primary new-goal-cta new-goal-cta-inline"
-              onclick={toggleNewGoalForm}
-            >
-              <Plus size={16} /> Nuevo Objetivo
-            </button>
-          </div>
-          {#if dailyGoals.length === 0}
-            <div class="empty-state">{$t('goalsPage.noActiveGoals')}</div>
-          {/if}
-          {#each dailyGoals as goal (goal.id)}
-            <div
-              class="goal-card"
-              class:completed={goal.state === 'COMPLETED' || goal.is_completed}
-              class:failed={goal.state === 'FAILED'}
-              class:paused={goal.state === 'PAUSED'}
-              style="border-left: 3px solid {getGoalColor(goal)}"
-            >
-              <div class="goal-main">
-                <div class="goal-title">
-                  <button
-                    class="btn btn-ghost"
-                    style="font-size: inherit; font-weight: inherit; padding: 0; margin: 0; height: auto; color: inherit;"
-                    title={$t('goalsPage.editInEditor')}
-                    onclick={(e) => {
-                      e.stopPropagation();
-                      goto(`/goals/${goal.id}`);
-                    }}
-                  >
-                    {#if goal.fail_emoji}
-                      <span
-                        class="emoji-badge"
-                        style="display:flex; align-items:center; margin-right:8px;"
-                      >
-                        <StreakIcon name={goal.fail_emoji} size={16} color={getGoalColor(goal)} />
-                      </span>
-                    {/if}
-                    {goal.title}
-                  </button>
-                  {#if goal.state === 'PAUSED'}
-                    <span class="state-badge paused-badge">PAUSADO</span>
-                  {/if}
-                </div>
-                <div class="goal-meta">
-                  <span
-                    class="tag-chip"
-                    style="background: color-mix(in srgb, {getGoalColor(
-                      goal
-                    )} 12%, transparent); border: 1px solid {getGoalColor(
-                      goal
-                    )}; color: {getGoalColor(goal)};"
-                    >{TEMPORALITY_LABELS[goal.temporality] || goal.temporality}</span
-                  >
-                  {#if goal.state === 'COMPLETED' || goal.is_completed}
-                    <span
-                      class="status-badge success"
-                      style="background: color-mix(in srgb, var(--success) 10%, transparent); color: var(--success); border: 1px solid color-mix(in srgb, var(--success) 20%, transparent);"
-                      >{$t('goalsPage.completed')}</span
-                    >
-                  {:else if goal.state === 'FAILED'}
-                    <span
-                      class="status-badge error"
-                      style="background: color-mix(in srgb, var(--error) 10%, transparent); color: var(--error); border: 1px solid color-mix(in srgb, var(--error) 20%, transparent);"
-                      >{$t('goalsPage.failed')}</span
-                    >
-                  {/if}
-                  {#if goal.note_id}
-                    <span
-                      class="tag-chip"
-                      style="background: color-mix(in srgb, {getGoalColor(
-                        goal
-                      )} 12%, transparent); border: 1px solid {getGoalColor(
-                        goal
-                      )}; color: {getGoalColor(goal)};"
-                      >{notes.find((n) => n.id === goal.note_id)?.title || 'Nota vinculada'}</span
-                    >
-                  {:else if goal.tag_id}
-                    <span
-                      class="tag-chip"
-                      style="background: color-mix(in srgb, {getGoalColor(
-                        goal
-                      )} 12%, transparent); border: 1px solid {getGoalColor(
-                        goal
-                      )}; color: {getGoalColor(goal)};"
-                      >{tags.find((t) => t.id === goal.tag_id)?.name}</span
-                    >
-                  {/if}
-                  {#if goal.fail_config !== 'STATIC'}
-                    <span class="config-badge">{formatFailConfig(goal.fail_config)}</span>
-                  {/if}
-                  {#if goal.measurement_type !== 'COUNT'}
-                    <span
-                      class="config-badge"
-                      style="background:transparent; border: 1px solid var(--border);"
-                      >{goal.measurement_type}</span
-                    >
-                  {/if}
-                  {#if goal.max_assignment_days}
-                    <span
-                      class="config-badge"
-                      style="background: color-mix(in srgb, var(--link) 10%, transparent); color: var(--text-muted); border: 1px solid color-mix(in srgb, var(--link) 20%, transparent);"
-                      >{$t('goalsPage.limit', { values: { days: goal.max_assignment_days } })}</span
-                    >
-                  {/if}
-                </div>
-                {#if goal.note_id}
-                  <div style="margin-top: 8px;">
-                    <button
-                      class="dash-btn secondary-dash-btn"
-                      style="font-size: 11px; padding: 4px 8px; width: fit-content; display: inline-flex; align-items: center; gap: 4px;"
-                      onclick={() => goto(`/notes?id=${goal.note_id}`)}
-                    >
-                      <span class="icon">📝</span>
-                      <span>Ver/Editar Nota del Objetivo</span>
-                    </button>
-                  </div>
-                {/if}
-              </div>
-              <div class="goal-progress">
-                <div class="progress-meta">
-                  <span class="mono caption">
-                    {#if goal.state === 'COMPLETED' || goal.is_completed}
-                      {goal.target_value}/{goal.target_value}
-                    {:else if goal.measurement_type === 'BOOLEAN'}
-                      {goal.current_value >= 1 ? 'Sí' : 'No'}
-                    {:else if goal.measurement_type === 'PERCENT'}
-                      {goal.current_value}%
-                    {:else}
-                      {goal.current_value}/{goal.target_value}
-                    {/if}
-                  </span>
-                  <span class="caption"
-                    >{goal.state === 'COMPLETED' || goal.is_completed
-                      ? 100
-                      : goal.progress_pct}%</span
-                  >
-                </div>
-                <div class="progress-track" style="height: 4px;">
-                  <div
-                    class="progress-fill"
-                    style="width:{goal.state === 'COMPLETED' || goal.is_completed
-                      ? 100
-                      : goal.progress_pct}%"
-                  ></div>
-                </div>
-              </div>
-              <div class="goal-actions">
-                {#if goal.state === 'ACTIVE'}
-                  <button
-                    class="btn btn-ghost text-muted"
-                    title={$t('goalsPage.pause')}
-                    aria-label={$t('goalsPage.pauseGoal')}
-                    onclick={() => updateGoalState(goal.id, 'PAUSED')}
-                  >
-                    <Pause size={14} />
-                  </button>
-                  <button
-                    class="btn btn-ghost text-success"
-                    title={$t('goalsPage.complete')}
-                    aria-label={$t('goalsPage.completeGoal')}
-                    onclick={() => completeGoal(goal.id)}
-                  >
-                    <Check size={14} />
-                  </button>
-                {:else if goal.state === 'FAILED'}
-                  <button
-                    class="btn btn-ghost text-success"
-                    title={$t('goalsPage.complete')}
-                    aria-label={$t('goalsPage.completeGoal')}
-                    onclick={() => completeGoal(goal.id)}
-                  >
-                    <Check size={14} />
-                  </button>
-                {:else if goal.state === 'PAUSED'}
-                  <button
-                    class="btn btn-ghost text-muted"
-                    title={$t('goalsPage.resume')}
-                    aria-label={$t('goalsPage.resumeGoal')}
-                    onclick={() => updateGoalState(goal.id, 'ACTIVE')}
-                  >
-                    <Play size={14} />
-                  </button>
-                {/if}
-                {#if goal.state !== 'COMPLETED' && goal.state !== 'FAILED'}
-                  <button
-                    class="btn btn-ghost text-muted"
-                    title={$t('goalsPage.cancel')}
-                    aria-label={$t('goalsPage.cancelGoal')}
-                    onclick={() => updateGoalState(goal.id, 'CANCELLED')}
-                  >
-                    <Ban size={14} />
-                  </button>
-                {/if}
-                {#if deleteConfirm === goal.id}
-                  <button class="btn btn-ghost text-danger" onclick={() => deleteGoal(goal.id)}
-                    >¿Eliminar?</button
-                  >
-                  <button class="btn btn-ghost text-muted" onclick={() => (deleteConfirm = null)}
-                    >{$t('goalsPage.cancel')}</button
-                  >
-                {:else}
-                  <button
-                    class="btn btn-ghost text-muted"
-                    title={$t('goalsPage.delete')}
-                    aria-label={$t('goalsPage.deleteGoal')}
-                    onclick={() => deleteGoal(goal.id)}>×</button
-                  >
-                {/if}
-                <button
-                  class="btn btn-ghost text-muted"
-                  title={$t('goalsPage.edit')}
-                  aria-label={$t('goalsPage.editGoal')}
-                  onclick={() => openGoalEditor(goal)}
-                >
-                  <Pencil size={13} />
-                </button>
-              </div>
-            </div>
-          {/each}
-
-          <!-- Next Assigned Tasks -->
-          <h3 class="section-title" style="margin-top: 24px;">
-            {$t('goalsPage.upcomingAssigned')}
-          </h3>
-          <div class="history-goal-list" style="width:100%">
-            {#if upcomingTasks.length === 0}
-              <div class="empty-state">{$t('goalsPage.noUpcomingTasks')}</div>
-            {/if}
-            {#each upcomingTasks as task}
-              {@const g = task.goal}
-              <div
-                class="goal-card"
-                style="text-align: left; height: fit-content; border-left: 3px solid {getGoalColor(
-                  g
-                )}; display:flex; align-items:center; width: 100%;"
-              >
-                <div
-                  class="goal-main"
-                  style="flex: 1; cursor: pointer;"
-                  onclick={() => goto(`/goals/${g.id}`)}
-                  role="button"
-                  tabindex="0"
-                  onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && goto(`/goals/${g.id}`)}
-                >
-                  <div class="goal-title">
-                    {#if g.fail_emoji}
-                      <span
-                        class="emoji-badge"
-                        style="display:flex; align-items:center; margin-right:8px;"
-                      >
-                        <StreakIcon name={g.fail_emoji} size={16} color={getGoalColor(g)} />
-                      </span>
-                    {/if}
-                    {g.title}
-                  </div>
-                  <div class="goal-meta">
-                    <span class="config-badge">{task.date}</span>
-                    <span
-                      class="tag-chip"
-                      style="background: color-mix(in srgb, {getGoalColor(
-                        g
-                      )} 12%, transparent); border: 1px solid {getGoalColor(
-                        g
-                      )}; color: {getGoalColor(g)};"
-                      >{TEMPORALITY_LABELS[g.temporality] || g.temporality}</span
-                    >
-                  </div>
-                </div>
-                <div class="goal-actions">
-                  <button
-                    class="btn btn-ghost text-success"
-                    title={$t('goalsPage.complete')}
-                    aria-label={$t('goalsPage.completeGoal')}
-                    onclick={() => completeGoal(g.id)}
-                  >
-                    <Check size={14} />
-                  </button>
-                  <button
-                    class="btn btn-ghost text-muted"
-                    title={$t('goalsPage.cancel')}
-                    aria-label={$t('goalsPage.cancelGoal')}
-                    onclick={() => updateGoalState(g.id, 'CANCELLED')}
-                  >
-                    <Ban size={14} />
-                  </button>
-                </div>
-              </div>
-            {/each}
-          </div>
-        </div>
-
-        <!-- Dashboard Right Column -->
-        <div class="dashboard-side-col">
-          <div class="dash-card week-map-card">
-            <div class="dash-card-header">
-              <Calendar size={14} />
-              <span>{$t('goalsPage.weekMap')}</span>
-            </div>
-            <div style="display: flex; gap: 6px; justify-content: space-between; margin-top: 12px;">
-              {#each currentWeekDates as day}
-                <button
-                  class="week-day-box"
-                  title={day.dateStr}
-                  onclick={() => {
-                    currentTab = 'history';
-                    selectedHistoryDate = day.dateStr;
-                  }}
-                  style="flex: 1; aspect-ratio: 1; border-radius: 4px; border: 1px solid {day.isToday
-                    ? 'var(--today)'
-                    : 'var(--border)'}; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; background: {day.isToday
-                    ? 'var(--today)'
-                    : day.hasActivity
-                      ? 'var(--success)'
-                      : 'var(--surface)'}; color: {day.isToday
-                    ? '#000'
-                    : day.hasActivity
-                      ? 'var(--bg)'
-                      : 'var(--text-muted)'}; opacity: 1; {day.isToday
-                    ? 'box-shadow: 0 0 0 2px var(--today);'
-                    : ''}"
-                >
-                  <span style="font-size: 10px; font-weight: bold; margin-bottom: 2px;"
-                    >{day.dayName}</span
-                  >
-                  <span style="font-size: 12px; font-weight: {day.isToday ? 'bold' : 'normal'};"
-                    >{day.dateStr.split('-')[2]}</span
-                  >
-                </button>
-              {/each}
-            </div>
-          </div>
-
-          <!-- Monthly map (#790) -->
-          <div class="dash-card month-map-card">
-            <div class="dash-card-header month-map-header">
-              <Calendar size={14} />
-              <span
-                >{monthMapDate.toLocaleDateString(undefined, {
-                  month: 'long',
-                  year: 'numeric',
-                })}</span
-              >
-              <div class="month-map-nav">
-                <button
-                  class="month-nav-btn"
-                  onclick={prevMonth}
-                  aria-label={$t('goalsPage.prevDay')}>‹</button
-                >
-                <button
-                  class="month-nav-btn"
-                  onclick={nextMonth}
-                  aria-label={$t('goalsPage.nextDay')}>›</button
-                >
-              </div>
-            </div>
-            <div class="month-map-grid">
-              {#each ['L', 'M', 'X', 'J', 'V', 'S', 'D'] as dn}
-                <span class="month-map-dow">{dn}</span>
-              {/each}
-              {#each monthMapCells as cell}
-                {#if cell.dateStr}
-                  <button
-                    class="month-map-cell month-{cell.status}"
-                    class:month-today={cell.isToday}
-                    onclick={() => {
-                      currentTab = 'planning';
-                      selectedPlanningDate = cell.dateStr!;
-                    }}
-                    title={cell.dateStr}
-                  >
-                    {cell.day}
-                  </button>
-                {:else}
-                  <span class="month-map-cell month-empty"></span>
-                {/if}
-              {/each}
-            </div>
-          </div>
-        </div>
-      </div>
-    {/if}
-
     {#if currentTab === 'planning'}
       <div class="tab-content fade-in planning-3col">
         <!-- Left: All Goals List (click => assign to selectedPlanningDate) -->
@@ -1591,6 +1130,31 @@
                 <button class="btn btn-ghost" onclick={loadStreakHeatmap}
                   >{$t('common.retry')}</button
                 >
+              </div>
+            {/if}
+          </div>
+
+          <div class="upcoming-assignments">
+            <div class="upcoming-header">
+              <span>{$t('goalsPage.upcomingAssigned')}</span>
+            </div>
+            {#if upcomingTasks.length === 0}
+              <div class="upcoming-empty caption">{$t('goalsPage.noUpcomingTasks')}</div>
+            {:else}
+              <div class="upcoming-list">
+                {#each upcomingTasks as task (`${task.date}-${task.goal.id}`)}
+                  <button
+                    class="upcoming-row"
+                    style="--goal-color: {getGoalColor(task.goal)}"
+                    onclick={() => (selectedPlanningDate = task.date)}
+                    title={task.goal.title}
+                  >
+                    <span class="upcoming-date mono">{formatAssignmentDate(task.date)}</span>
+                    <span class="upcoming-dot"></span>
+                    <span class="upcoming-title">{task.goal.title}</span>
+                    <span class="upcoming-temp">{TEMPORALITY_LABELS[task.goal.temporality] || task.goal.temporality}</span>
+                  </button>
+                {/each}
               </div>
             {/if}
           </div>
@@ -1867,6 +1431,56 @@
               </div>
             {/if}
           {/if}
+        </div>
+      </div>
+    {/if}
+    {#if currentTab === 'editor'}
+      <div class="tab-content fade-in editor-tab">
+        <div class="editor-toolbar">
+          <GoalFilters
+            bind:query={goalSearchQuery}
+            bind:filter={goalFilterState}
+            bind:contextFilter={goalContextFilter}
+          />
+          <button class="btn btn-primary new-goal-cta-inline" onclick={toggleNewGoalForm}>
+            <Plus size={16} />
+            {$t('goalsPage.newGoal')}
+          </button>
+        </div>
+        <div class="editor-body">
+          <GoalStatsRail
+            active={editorRailStats.active}
+            completed={editorRailStats.completed}
+            paused={editorRailStats.paused}
+            pinned={editorRailStats.pinned}
+            today={editorRailStats.today}
+            total={editorRailStats.total}
+          />
+          <GoalList
+            {goals}
+            query={goalSearchQuery}
+            filter={goalFilterState}
+            contextFilter={goalContextFilter}
+            pinned={pinnedGoals}
+            {tags}
+            {notes}
+            {getGoalColor}
+            {TEMPORALITY_LABELS}
+            {STATE_LABELS}
+            {formatFailConfig}
+            onTogglePin={togglePinned}
+            onClick={openGoalEditor}
+            onComplete={completeGoal}
+            onFail={failGoal}
+            onDelete={confirmDeleteGoal}
+            onArchive={(id) => {
+              const target = goals.find((g) => g.id === id);
+              if (target) {
+                updateGoalState(id, target.state === 'CANCELLED' ? 'ACTIVE' : 'CANCELLED');
+              }
+            }}
+            onNew={toggleNewGoalForm}
+          />
         </div>
       </div>
     {/if}
@@ -2252,57 +1866,6 @@
     </ModalDialog>
   {/if}
 
-  {#if currentTab === 'editor'}
-    <div class="tab-content fade-in editor-tab">
-      <div class="editor-toolbar">
-        <GoalFilters
-          bind:query={goalSearchQuery}
-          bind:filter={goalFilterState}
-          bind:contextFilter={goalContextFilter}
-        />
-        <button class="btn btn-primary new-goal-cta-inline" onclick={toggleNewGoalForm}>
-          <Plus size={16} />
-          {$t('goalsPage.newGoal')}
-        </button>
-      </div>
-      <div class="editor-body">
-        <GoalStatsRail
-          active={editorRailStats.active}
-          completed={editorRailStats.completed}
-          paused={editorRailStats.paused}
-          pinned={editorRailStats.pinned}
-          today={editorRailStats.today}
-          total={editorRailStats.total}
-        />
-        <GoalList
-          {goals}
-          query={goalSearchQuery}
-          filter={goalFilterState}
-          contextFilter={goalContextFilter}
-          pinned={pinnedGoals}
-          {tags}
-          {notes}
-          {getGoalColor}
-          {TEMPORALITY_LABELS}
-          {STATE_LABELS}
-          {formatFailConfig}
-          onTogglePin={togglePinned}
-          onClick={openGoalEditor}
-          onComplete={completeGoal}
-          onFail={failGoal}
-          onDelete={confirmDeleteGoal}
-          onArchive={(id) => {
-            const target = goals.find((g) => g.id === id);
-            if (target) {
-              updateGoalState(id, target.state === 'CANCELLED' ? 'ACTIVE' : 'CANCELLED');
-            }
-          }}
-          onNew={toggleNewGoalForm}
-        />
-      </div>
-    </div>
-  {/if}
-
   {#if goalToDelete}
     <ModalDialog
       open={true}
@@ -2447,6 +2010,102 @@
     padding-top: var(--s5);
   }
 
+  .upcoming-assignments {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    min-height: 0;
+    padding: var(--s2) var(--s3) var(--s3);
+    border-top: 1px solid var(--border-light);
+    background: color-mix(in srgb, var(--surface-hover) 55%, transparent);
+  }
+  .upcoming-header {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+  }
+  .upcoming-empty {
+    padding: 6px 0;
+    text-align: center;
+  }
+  .upcoming-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    overflow-y: auto;
+    max-height: 132px;
+    min-height: 0;
+  }
+  .upcoming-row {
+    display: grid;
+    grid-template-columns: 78px 7px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 7px;
+    width: 100%;
+    padding: 5px 8px;
+    border: 1px solid color-mix(in srgb, var(--goal-color) 28%, var(--border));
+    border-left: 3px solid var(--goal-color);
+    border-radius: 6px;
+    background: linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--goal-color) 10%, transparent),
+      color-mix(in srgb, var(--goal-color) 4%, var(--surface)) 42%,
+      var(--surface)
+    );
+    color: var(--text-primary);
+    cursor: pointer;
+    text-align: left;
+    transition:
+      border-color var(--t-fast),
+      background var(--t-fast),
+      transform var(--t-fast);
+  }
+  .upcoming-row:hover {
+    transform: translateY(-1px);
+    border-color: color-mix(in srgb, var(--goal-color) 55%, var(--border));
+    background: linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--goal-color) 14%, transparent),
+      color-mix(in srgb, var(--goal-color) 6%, var(--surface-hover)) 46%,
+      var(--surface-hover)
+    );
+  }
+  .upcoming-date {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: capitalize;
+    white-space: nowrap;
+  }
+  .upcoming-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background: var(--goal-color);
+    box-shadow: 0 0 8px color-mix(in srgb, var(--goal-color) 42%, transparent);
+  }
+  .upcoming-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .upcoming-temp {
+    padding: 1px 6px;
+    border: 1px solid color-mix(in srgb, var(--goal-color) 28%, transparent);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--goal-color) 8%, transparent);
+    color: var(--goal-color);
+    font-size: 9px;
+    font-family: var(--font-mono);
+    white-space: nowrap;
+  }
+
   @media (max-width: 1100px) {
     .planning-3col {
       grid-template-columns: 300px minmax(420px, 1fr) 300px;
@@ -2515,56 +2174,16 @@
   .goals-body.full-width .tab-content {
     flex: 1;
     min-height: 0;
+  }
+  .goals-body.full-width .tab-content:not(.planning-3col):not(.history-layout) {
     display: flex;
     flex-direction: column;
-  }
-
-  .today-layout {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 320px;
-    gap: 24px;
-    max-width: 1200px;
-    margin: 0 auto;
-    width: 100%;
-    align-items: start;
-  }
-
-  .dashboard-main-col {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    min-width: 0;
-  }
-
-  .today-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding-top: 12px;
-    margin-bottom: 4px;
-    border-top: 1px solid var(--border);
   }
 
   .new-goal-cta-inline {
     height: 36px;
     padding: 0 14px;
     white-space: nowrap;
-  }
-
-  .week-map-card {
-    margin-top: 12px;
-  }
-
-  .dashboard-side-col {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    width: 320px;
-  }
-
-  .dashboard-side-col > .dash-card {
-    width: 100%;
   }
 
   .sort-control-centered {
@@ -2594,109 +2213,6 @@
     text-align: center;
   }
 
-  /* ── Monthly map (#790) ── */
-  .month-map-card {
-    padding: 12px;
-  }
-  .month-map-header {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    position: relative;
-  }
-  .month-map-header > span {
-    flex: 1;
-    font-size: 12px;
-    text-transform: capitalize;
-  }
-  .month-map-nav {
-    display: flex;
-    gap: 4px;
-  }
-  .month-nav-btn {
-    width: 22px;
-    height: 22px;
-    border: 1px solid var(--border);
-    background: var(--surface);
-    color: var(--text-secondary);
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 14px;
-    line-height: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.15s;
-  }
-  .month-nav-btn:hover {
-    background: var(--surface-hover);
-    color: var(--text-primary);
-  }
-  .month-map-grid {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    gap: 3px;
-    margin-top: 10px;
-  }
-  .month-map-dow {
-    text-align: center;
-    font-size: 9px;
-    font-family: var(--font-mono);
-    color: var(--text-muted);
-    padding: 2px 0;
-  }
-  .month-map-cell {
-    aspect-ratio: 1;
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    font-size: 10px;
-    font-family: var(--font-mono);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: all 0.15s;
-    background: var(--surface);
-    color: var(--text-muted);
-  }
-  .month-map-cell:hover {
-    border-color: var(--text-muted);
-  }
-  .month-empty {
-    background: transparent;
-    border: none;
-    cursor: default;
-  }
-  .month-empty:hover {
-    border: none;
-  }
-  .month-assigned {
-    background: color-mix(in srgb, var(--today) 25%, var(--surface));
-    border-color: var(--today);
-    color: var(--warning);
-  }
-  .month-completed {
-    background: var(--success);
-    border-color: var(--success);
-    color: var(--bg);
-  }
-  .month-failed {
-    background: var(--error);
-    border-color: var(--error);
-    color: var(--bg);
-  }
-  .month-today {
-    background: var(--accent) !important;
-    border-color: var(--accent) !important;
-    color: var(--bg) !important;
-    font-weight: 700;
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 40%, transparent);
-  }
-
-  .new-goal-cta {
-    justify-content: center;
-    padding: 12px;
-  }
   /* Editor tab — slim toolbar + KPI rail + dense goal rows (metrics-view
      layout). The tab keeps its framed container; the body splits into a
      fixed rail and a scrolling list. */
@@ -2712,14 +2228,21 @@
   .editor-toolbar {
     display: flex;
     align-items: center;
-    gap: var(--s3);
-    padding: var(--s3) var(--s3) var(--s2);
+    gap: 10px;
+    min-height: 52px;
+    box-sizing: border-box;
+    padding: 10px var(--s3);
     border-bottom: 1px solid var(--border-light);
+    background: color-mix(in srgb, var(--surface) 72%, transparent);
     flex-shrink: 0;
     flex-wrap: wrap;
   }
   .editor-toolbar .new-goal-cta-inline {
     margin-left: auto;
+    flex-shrink: 0;
+    height: 32px;
+    box-sizing: border-box;
+    padding-block: 0;
   }
   .editor-body {
     flex: 1;
@@ -3129,11 +2652,6 @@
     }
   }
 
-  .form-row {
-    display: flex;
-    gap: var(--s3);
-    align-items: flex-start;
-  }
   .form-field {
     display: flex;
     flex-direction: column;
@@ -3220,129 +2738,6 @@
     background: var(--elevated);
   }
 
-  .icon-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
-    gap: 4px;
-    background: var(--surface-hover);
-    padding: 8px;
-    border-radius: var(--r);
-    border: 1px solid var(--border);
-    max-height: 200px;
-    overflow-y: auto;
-  }
-  .lucide-btn {
-    width: 32px;
-    height: 32px;
-    background: none;
-    border: 1px solid transparent;
-    cursor: pointer;
-    border-radius: 4px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--text-muted);
-    transition: all 0.15s;
-  }
-  .lucide-btn:hover {
-    background: var(--elevated);
-    color: var(--text-secondary);
-  }
-  .lucide-btn.selected {
-    border-color: var(--text-primary);
-    color: var(--text-primary);
-    background: var(--elevated);
-  }
-
-  .color-presets {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    padding: 6px 0;
-    align-items: center;
-  }
-  .color-dot {
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
-    border: 2px solid transparent;
-    cursor: pointer;
-    transition: all 0.15s;
-    flex-shrink: 0;
-    /* Raise above the non-interactive preview so clicks always land on the dot (#203). */
-    position: relative;
-    z-index: 2;
-  }
-  .color-dot:hover {
-    transform: scale(1.15);
-  }
-  .color-dot.selected {
-    border-color: var(--text-primary);
-    box-shadow:
-      0 0 0 2px var(--bg),
-      0 0 0 4px currentColor;
-  }
-
-  .color-custom {
-    width: 24px;
-    height: 24px;
-    border-radius: 4px;
-    overflow: hidden;
-    border: 1px solid var(--border);
-    position: relative;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-  .color-custom:hover {
-    transform: scale(1.1);
-    border-color: var(--text-muted);
-  }
-  .color-picker {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    opacity: 0;
-    cursor: pointer;
-    border: none;
-    padding: 0;
-  }
-
-  .theme-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    padding: 4px 0;
-  }
-  .theme-btn {
-    padding: 4px 12px;
-    font-size: 11px;
-    font-family: var(--font-mono);
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    color: var(--text-muted);
-    cursor: pointer;
-    transition: all 0.15s;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-  .theme-btn:hover {
-    border-color: var(--text-muted);
-    color: var(--text-secondary);
-  }
-  .theme-btn.selected {
-    border-color: var(--text-primary);
-    color: var(--text-primary);
-    background: var(--elevated);
-  }
-
-  .form-actions {
-    display: flex;
-    gap: var(--s2);
-    margin-top: var(--s2);
-  }
   .section-title {
     font-size: 14px;
     font-weight: 600;
@@ -3364,31 +2759,9 @@
     opacity: 0.6;
     border-color: var(--success);
   }
-  .today-layout .goal-card.completed {
-    opacity: 1;
-  }
   .goal-card.failed {
     border-color: var(--error);
     background: color-mix(in srgb, var(--error) 2%, transparent);
-  }
-  .goal-card.paused {
-    opacity: 0.55;
-    border-color: var(--warning, #f59e0b);
-    border-style: dashed;
-  }
-  .state-badge {
-    font-size: 9px;
-    font-family: var(--font-mono);
-    padding: 1px 6px;
-    border-radius: 4px;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    line-height: 1.4;
-  }
-  .paused-badge {
-    background: color-mix(in srgb, var(--warning) 15%, transparent);
-    color: var(--warning, #f59e0b);
-    border: 1px solid color-mix(in srgb, var(--warning) 30%, transparent);
   }
   .goal-main {
     flex: 1;
@@ -3445,15 +2818,6 @@
   .goal-card.failed .progress-fill {
     background: var(--error);
   }
-  .goal-actions {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    flex-shrink: 0;
-  }
-  .text-success {
-    color: var(--success);
-  }
   .text-muted {
     color: var(--text-muted);
   }
@@ -3466,162 +2830,8 @@
     border-radius: var(--r);
     border: 1px dashed var(--border);
   }
-  .metrics-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: var(--s3);
-    margin-bottom: var(--s2);
-  }
-  .metric-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--r);
-    padding: var(--s4);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-  }
-  .metric-value {
-    font-size: 28px;
-    font-weight: 700;
-    color: var(--text-primary);
-    line-height: 1.2;
-    font-family: var(--font-mono);
-  }
-  .metric-label {
-    font-size: 11px;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-top: 4px;
-  }
-
   /* Planning Tabs */
-  .planning-tabs {
-    display: flex;
-    gap: var(--s2);
-    margin-bottom: var(--s3);
-    border-bottom: 1px solid var(--border);
-    padding-bottom: var(--s2);
-  }
-  .planning-tab {
-    background: transparent;
-    border: none;
-    color: var(--text-muted);
-    font-size: 13px;
-    cursor: pointer;
-    padding: 4px 8px;
-    border-radius: var(--r);
-    transition: all 0.2s;
-  }
-  .planning-tab:hover {
-    color: var(--text-primary);
-    background: var(--surface-hover);
-  }
-  .planning-tab.active {
-    color: var(--text-primary);
-    background: var(--surface-active);
-    font-weight: 500;
-  }
-
-  .planning-nav-section {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--s4);
-  }
-
-  .planning-nav-controls {
-    display: flex;
-    justify-content: center;
-    width: 100%;
-  }
-
-  .nav-sep {
-    opacity: 0.3;
-    font-weight: 200;
-  }
-
-  .planning-calendar-wrap {
-    width: 100%;
-    max-width: 600px;
-    margin: 0 auto;
-    background: var(--surface-hover);
-    padding: var(--s4);
-    border-radius: 12px;
-    border: 1px solid var(--border);
-  }
-
-  .planning-goals-list {
-    display: flex;
-    flex-direction: column;
-    gap: var(--s3);
-    width: 100%;
-  }
-
   /* Hierarchical Planning */
-  .goal-group {
-    margin-bottom: var(--s3);
-  }
-  .goal-children {
-    margin-left: 20px;
-    padding-left: 12px;
-    border-left: 2px solid var(--border);
-  }
-  .child-card {
-    padding: var(--s2) var(--s3);
-    font-size: 13px;
-    margin-bottom: 4px;
-    background: var(--surface-hover);
-  }
-  .child-indent {
-    color: var(--text-muted);
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-  }
-
-  .dash-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--r);
-    padding: var(--s2) var(--s3);
-    display: flex;
-    flex-direction: column;
-    gap: var(--s1);
-    backdrop-filter: blur(10px);
-    transition:
-      transform 0.2s,
-      border-color 0.2s;
-    min-height: 0;
-    overflow: hidden;
-  }
-  .dash-card:hover {
-    border-color: var(--primary);
-    background: var(--surface-hover);
-  }
-  .dash-card-header {
-    display: flex;
-    align-items: center;
-    gap: var(--s2);
-    font-size: 10px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--text-muted);
-    font-family: var(--font-mono);
-  }
-
-  @media (max-width: 900px) {
-    /* Today tab: stack sidebar below main content */
-    .today-layout {
-      grid-template-columns: 1fr;
-      gap: var(--s4);
-    }
-  }
-
   /* Modal de Consistencia */
   .removal-desc {
     font-size: 13px;
@@ -3833,80 +3043,6 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
-  }
-
-  .history-goal-item {
-    display: flex;
-    align-items: flex-start;
-    gap: 10px;
-    padding: 10px 12px;
-    border-radius: var(--r);
-    border: 1px solid var(--border);
-    background: var(--elevated);
-    transition: border-color 0.15s;
-  }
-
-  .history-goal-item.completed {
-    border-left: 3px solid var(--success);
-  }
-  .history-goal-item.failed {
-    border-left: 3px solid var(--error);
-  }
-
-  .hgi-icon-left {
-    width: 24px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    flex-shrink: 0;
-  }
-
-  .hgi-info {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .hgi-title {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text-primary);
-    line-height: 1.2;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .hgi-meta {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    width: 100%;
-    margin-top: 2px;
-  }
-
-  .hgi-bar {
-    flex: 1;
-    height: 4px;
-    background: var(--surface-active);
-    border-radius: 4px;
-    overflow: hidden;
-  }
-
-  .hgi-bar-fill {
-    height: 100%;
-    transition: width 0.3s ease;
-  }
-
-  .hgi-pct {
-    font-size: 10px;
-    font-family: var(--font-mono);
-    font-weight: 700;
-    flex-shrink: 0;
-    min-width: 32px;
-    text-align: right;
   }
 
   @media (max-width: 768px) {
