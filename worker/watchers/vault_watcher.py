@@ -144,17 +144,22 @@ class PersistentEventLog:
         applied, and the write's own commit fsyncs the WAL frame before
         NORMAL is restored.
         """
+        conn = self._conn
+        if conn is None:
+            # Callers guard before invoking, but the type system cannot see
+            # that invariant — keep the no-op fallback behavior explicit.
+            return
         if self._wal:
-            self._conn.commit()  # flush any staged removals; no-op when none
-            self._conn.execute("PRAGMA synchronous=FULL")
+            conn.commit()  # flush any staged removals; no-op when none
+            conn.execute("PRAGMA synchronous=FULL")
         # Non-WAL (rollback-journal fallback) never lowered synchronous — the
         # default FULL already applies; nothing to toggle.
         try:
-            self._conn.execute(sql, params)
-            self._conn.commit()
+            conn.execute(sql, params)
+            conn.commit()
         finally:
             if self._wal:
-                self._conn.execute("PRAGMA synchronous=NORMAL")
+                conn.execute("PRAGMA synchronous=NORMAL")
 
     def add(self, path: str, change_type: Change) -> None:
         if self._conn is None:

@@ -429,7 +429,7 @@ def _observed_chain_state(kind: str) -> tuple[dict, float]:
     }, observed_at
 
 
-def _pick_health_state(fresh_probe: dict | None, observed: dict, observed_at: float, kind: str) -> dict:
+def _pick_health_state(fresh_probe: dict[str, dict] | None, observed: dict, observed_at: float, kind: str) -> dict:
     """Probe vs. traffic-observed state — whichever signal is NEWER (#1628).
 
     A cached probe can be up to ``_HEALTH_PROBE_TTL_SECONDS`` old; traffic
