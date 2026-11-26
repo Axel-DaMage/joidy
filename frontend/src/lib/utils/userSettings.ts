@@ -48,6 +48,12 @@ export interface UserSettings {
   executionUi?: {
     /** Sacred-calendar picker selection (#1201); null = all calendars. */
     calendarId?: string | null;
+    /** Visibility toggles for the execution-mode detail rail (undefined = on). */
+    showQueue?: boolean;
+    showCalendar?: boolean;
+    showNotes?: boolean;
+    /** Whether the linked-note editor body is expanded (undefined = open). */
+    notesExpanded?: boolean;
   };
   analyticsUi?: {
     /** Active slide of the analytics page carousel (#1499). */
