@@ -46,6 +46,7 @@ from services.note_service import (
     update_note as update_note_service,
 )
 from services.pagination import add_pagination_headers
+from services.response_cache import invalidate_cache_groups
 from services.sanitizer import MAX_TAG_LENGTH, sanitize_content, sanitize_tag, sanitize_title
 from services.vault_paths import normalize_source_path, resolve_confined_source_path
 from sqlalchemy import text
@@ -450,6 +451,9 @@ def update_note(
 @router.post("/rebuild-derived", status_code=202)
 def rebuild_derived(db: Session = Depends(get_db)):
     rebuild_note_derived_data(db)
+    # Rebuild mutates tag_cooccurrences + skills; the tag graph and skills
+    # caches must not serve the pre-rebuild snapshot (#1522).
+    invalidate_cache_groups("notes")
     return {"status": "ok"}
 
 
@@ -463,12 +467,15 @@ def bulk_delete(data: BulkIds, db: Session = Depends(get_db)):
 
 @router.post("/bulk-tag", status_code=200)
 def bulk_tag(data: BulkTagRequest, db: Session = Depends(get_db)):
+    # Invalidation lives inside bulk_tag_notes_service (#1522) — same as the
+    # single-note paths whose writes self-invalidate in note_service.
     added = bulk_tag_notes_service(db, data.ids, data.tags)
     return {"added": added, "notes": len(data.ids), "tags": data.tags}
 
 
 @router.post("/bulk-untag", status_code=200)
 def bulk_untag(data: BulkTagRequest, db: Session = Depends(get_db)):
+    # Same as bulk_tag: invalidation lives inside the service (#1522).
     removed = bulk_untag_notes_service(db, data.ids, data.tags)
     return {"removed": removed, "notes": len(data.ids), "tags": data.tags}
 

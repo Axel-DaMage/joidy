@@ -19,6 +19,7 @@ from services.response_cache import (
     _TTLCache,
     clear_api_caches,
     get_cache_stats,
+    invalidate_cache_groups,
     register_cache_clearer,
     ttl_cache,
 )
@@ -198,6 +199,121 @@ class TTLCacheIgnoreParamsTest(unittest.TestCase):
         self.assertEqual(func(1, db="session1"), 1)
         self.assertEqual(func(1, db="session2"), 1)  # db ignored → hit
         self.assertEqual(len(calls), 1)
+
+
+class CacheGroupInvalidationTest(unittest.TestCase):
+    """Scoped invalidation (#1522): writes clear only the cache groups they
+    affect instead of blanket-clearing every cached endpoint."""
+
+    def setUp(self):
+        self._orig_clearers = list(response_cache_module._REGISTERED_CLEARERS)
+        response_cache_module._REGISTERED_CLEARERS.clear()
+
+    def tearDown(self):
+        response_cache_module._REGISTERED_CLEARERS.clear()
+        response_cache_module._REGISTERED_CLEARERS.extend(self._orig_clearers)
+
+    def test_invalidate_groups_clears_only_matching_group(self):
+        cache = _TTLCache(ttl_seconds=60.0)
+        calls = []
+
+        @cache.decorator()
+        def notes_cache(x):
+            calls.append(("notes", x))
+            return x
+
+        @cache.decorator()
+        def planning_cache(x):
+            calls.append(("planning", x))
+            return x
+
+        register_cache_clearer(notes_cache.cache_clear, groups={"notes", "tags"})
+        register_cache_clearer(planning_cache.cache_clear, groups={"planning"})
+
+        notes_cache(1)
+        planning_cache(1)
+        self.assertEqual(len(calls), 2)
+
+        invalidate_cache_groups("notes")
+        notes_cache(1)  # evicted → re-executes
+        planning_cache(1)  # untouched → still a hit
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(calls[-1], ("notes", 1))
+
+    def test_invalidate_groups_supports_multiple_groups(self):
+        cache = _TTLCache(ttl_seconds=60.0)
+        calls = []
+
+        @cache.decorator()
+        def func(x):
+            calls.append(x)
+            return x
+
+        register_cache_clearer(func.cache_clear, groups={"notes", "tags"})
+        func(1)
+        func(1)
+        self.assertEqual(len(calls), 1)
+
+        invalidate_cache_groups("notes", "planning")
+        func(1)
+        self.assertEqual(len(calls), 2)
+
+    def test_invalidate_unknown_group_clears_nothing(self):
+        cache = _TTLCache(ttl_seconds=60.0)
+        calls = []
+
+        @cache.decorator()
+        def func(x):
+            calls.append(x)
+            return x
+
+        register_cache_clearer(func.cache_clear, groups={"notes"})
+        func(1)
+
+        invalidate_cache_groups("nonexistent")
+        func(1)  # still cached
+        self.assertEqual(len(calls), 1)
+
+    def test_clearer_without_groups_only_cleared_by_full_clear(self):
+        cache = _TTLCache(ttl_seconds=60.0)
+        calls = []
+
+        @cache.decorator()
+        def func(x):
+            calls.append(x)
+            return x
+
+        register_cache_clearer(func.cache_clear)  # no groups
+        func(1)
+
+        invalidate_cache_groups("notes", "tags", "planning", "gamification")
+        func(1)  # group invalidation must not touch it
+        self.assertEqual(len(calls), 1)
+
+        clear_api_caches()
+        func(1)  # full clear still evicts it
+        self.assertEqual(len(calls), 2)
+
+    def test_clear_api_caches_clears_grouped_clearers_too(self):
+        cache = _TTLCache(ttl_seconds=60.0)
+        calls = []
+
+        @cache.decorator()
+        def func(x):
+            calls.append(x)
+            return x
+
+        register_cache_clearer(func.cache_clear, groups={"notes"})
+        func(1)
+        clear_api_caches()
+        func(1)
+        self.assertEqual(len(calls), 2)
+
+    def test_default_module_ttl_is_raised(self):
+        # #1522 — the shared cache TTL was raised from 5s (which, combined
+        # with blanket invalidation on every write, meant the tag graph /
+        # skills / planning caches effectively never hit).
+        self.assertGreaterEqual(response_cache_module._cache.ttl_seconds, 30.0)
 
 
 class TTLCacheEvictionTest(unittest.TestCase):

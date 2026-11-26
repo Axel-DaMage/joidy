@@ -9,7 +9,7 @@ from services.gamification_engine import (
     xp_for,
 )
 from services.goal_service import sync_goals_from_note
-from services.response_cache import clear_api_caches
+from services.response_cache import invalidate_cache_groups
 from services.sanitizer import sanitize_content, sanitize_tag, sanitize_title
 from services.skill_tree import sync_skills, sync_skills_for_tags
 from services.tag_graph import (
@@ -188,7 +188,7 @@ def create_note(
 
         update_local_mtime(db, note.id)
         db.commit()
-    clear_api_caches()
+    invalidate_cache_groups("notes")
 
     # Broadcast a vault_synced event when the note came from Obsidian so the
     # frontend can distinguish vault syncs from manual creations (#73). Its
@@ -277,7 +277,7 @@ def update_note(
 
         update_local_mtime(db, note.id)
         db.commit()
-    clear_api_caches()
+    invalidate_cache_groups("notes")
 
     # Broadcast a vault_synced event when the update came from Obsidian so the
     # frontend can distinguish vault syncs from manual edits (#73). As in
@@ -321,7 +321,9 @@ def delete_note(db: Session, note_id: int) -> bool:
     sync_tag_cooccurrences_for_tags(db, touched_tag_ids)
     db.commit()
     sync_skills_for_tags(db, touched_tag_ids)
-    clear_api_caches()
+    # "gamification" too: delete_note writes UserStats/XPEvent directly
+    # (note_deleted XP revert) instead of going through process_event.
+    invalidate_cache_groups("notes", "gamification")
     return True
 
 
@@ -391,6 +393,9 @@ def bulk_tag_notes(db: Session, note_ids: list[int], tag_names: list[str]) -> in
         sync_tag_cooccurrences_for_tags(db, touched_tag_ids)
         sync_skills_for_tags(db, touched_tag_ids)
     db.commit()
+    # Same domain as a single-note tag write: NoteTag/cooccurrences/skills
+    # feed the tag graph, note-count and skills caches (#1522).
+    invalidate_cache_groups("notes")
     return len(rows)
 
 
@@ -423,6 +428,8 @@ def bulk_untag_notes(db: Session, note_ids: list[int], tag_names: list[str]) -> 
         sync_tag_cooccurrences_for_tags(db, touched_tag_ids)
         sync_skills_for_tags(db, touched_tag_ids)
     db.commit()
+    # Same domain as bulk_tag_notes (#1522).
+    invalidate_cache_groups("notes")
     return removed
 
 
@@ -485,7 +492,9 @@ def bulk_delete_notes(db: Session, note_ids: list[int]) -> int:
     sync_tag_cooccurrences_for_tags(db, touched_tag_ids)
     db.commit()
     sync_skills_for_tags(db, touched_tag_ids)
-    clear_api_caches()
+    # Same domains as delete_note: note rows + a direct UserStats/XPEvent
+    # write (the aggregated XP revert) instead of process_event (#1522).
+    invalidate_cache_groups("notes", "gamification")
     return len(deleted_ids)
 
 
@@ -503,7 +512,7 @@ def accept_ai_tag(db: Session, note_id: int, tag_name: str):
     gami = process_event(db, "tag_accepted_ai", {"note_id": note_id, "tag": tag_name})
     db.commit()
     sync_skills_for_tags(db, {tag.id})
-    clear_api_caches()
+    invalidate_cache_groups("notes")
     return tag, gami
 
 

@@ -9,7 +9,7 @@ from services.gamification_engine import (
     no_award_result,
     process_event,
 )
-from services.response_cache import clear_api_caches, register_cache_clearer, ttl_cache
+from services.response_cache import invalidate_cache_groups, register_cache_clearer, ttl_cache
 from services.timezone_utils import get_local_today
 from sqlalchemy.orm import Session
 
@@ -51,7 +51,7 @@ def _cached_stats(db: Session):
     }
 
 
-register_cache_clearer(_cached_stats.cache_clear)
+register_cache_clearer(_cached_stats.cache_clear, groups={"gamification"})
 
 
 @router.get("/stats")
@@ -82,7 +82,7 @@ def get_recent_events(limit: int = 20, db: Session = Depends(get_db)):
     return _cached_recent_events(limit=limit, db=db)
 
 
-register_cache_clearer(_cached_recent_events.cache_clear)
+register_cache_clearer(_cached_recent_events.cache_clear, groups={"gamification"})
 
 
 @router.get("/recent-events")
@@ -101,7 +101,7 @@ def ping_activity(
 ):
     """Called when user opens the app — awards daily XP if not already done today."""
     gami = process_event(db, "daily_activity")
-    clear_api_caches()
+    invalidate_cache_groups("gamification")
 
     # Reload full stats so the response includes next_stage_xp, xp_to_next_stage, etc.
     stats = db.query(UserStats).filter_by(id=1).first()
@@ -162,7 +162,7 @@ def complete_pomodoro(data: PomodoroCompleteRequest, db: Session = Depends(get_d
             dedup_key=dedup_key,
         )
         status = "awarded" if gami.xp_awarded > 0 else "duplicate"
-    clear_api_caches()
+    invalidate_cache_groups("gamification")
 
     stats = db.query(UserStats).filter_by(id=1).first()
     return {"status": status, **_enriched_stats_response(gami, stats)}
