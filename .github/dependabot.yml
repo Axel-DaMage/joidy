@@ -8,46 +8,21 @@ version: 2
 # - docker/docker-compose run monthly — base image tags change rarely.
 # - Every ecosystem applies the `dependencies` label for filtering.
 updates:
-  # Python — API
+  # Python — all services + root in ONE multi-directory entry (#1557):
+  # requirements-dev.txt is canonical at repo root with per-service copies
+  # enforced by scripts/check_requirements_dev_sync.sh. A single-directory
+  # Dependabot PR bumping a dev tool in only one service file would fail
+  # that sync gate, so all four manifests must update atomically — one
+  # multi-directory PR per week instead of three staggered ones.
   - package-ecosystem: pip
-    directory: /api
+    directories:
+      - "/"
+      - "/api"
+      - "/ai-service"
+      - "/worker"
     schedule:
       interval: weekly
       day: monday
-    open-pull-requests-limit: 5
-    labels:
-      - "dependencies"
-    groups:
-      python-deps:
-        patterns:
-          - "*"
-        update-types:
-          - "minor"
-          - "patch"
-
-  # Python — AI service
-  - package-ecosystem: pip
-    directory: /ai-service
-    schedule:
-      interval: weekly
-      day: tuesday
-    open-pull-requests-limit: 5
-    labels:
-      - "dependencies"
-    groups:
-      python-deps:
-        patterns:
-          - "*"
-        update-types:
-          - "minor"
-          - "patch"
-
-  # Python — Worker
-  - package-ecosystem: pip
-    directory: /worker
-    schedule:
-      interval: weekly
-      day: wednesday
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
