@@ -24,7 +24,6 @@ test.describe('Notes — list view', () => {
     await authGoto(page, '/notes');
     const search = page.locator('input[placeholder="Buscar..."]');
     await search.fill('Track Aws');
-    await page.waitForTimeout(500);
     // Should show at least one matching note
     await expect(page.locator('text=Track Aws').first()).toBeVisible({ timeout: 3000 });
   });
@@ -33,22 +32,18 @@ test.describe('Notes — list view', () => {
     await authGoto(page, '/notes');
     const search = page.locator('input[placeholder="Buscar..."]');
     await search.fill('zzz_no_match_xyz_12345');
-    await page.waitForTimeout(500);
     // The note list should be empty (no note entries visible in either the
     // tree view — .file-row — or the legacy card/list views)
     const noteCards = page.locator('.file-row, .note-item, .note-card');
     // Wait for filtering to complete
-    await page.waitForTimeout(1000);
-    expect(await noteCards.count()).toBe(0);
+    await expect(noteCards).toHaveCount(0);
   });
 
   test('search can be cleared', async ({ page }) => {
     await authGoto(page, '/notes');
     const search = page.locator('input[placeholder="Buscar..."]');
     await search.fill('Track');
-    await page.waitForTimeout(300);
     await search.clear();
-    await page.waitForTimeout(500);
     // Notes should reappear
     await expect(page.locator('text=/\\d+\\s+notas/i')).toBeVisible({ timeout: 3000 });
   });
@@ -66,7 +61,6 @@ test.describe('Notes — create flow', () => {
     const createBtn = page.locator('button[aria-label="Crear nota"]');
     await createBtn.click();
     // Should navigate to the new note or open an editor
-    await page.waitForTimeout(1000);
     // The editor should be visible
     await expect(page.locator('main.app-main')).not.toBeEmpty();
   });
@@ -86,7 +80,8 @@ test.describe('Notes — toolbar actions', () => {
     await authGoto(page, '/notes');
     const sortBtn = page.locator('button[aria-label="Cambiar orden"]');
     await sortBtn.click();
-    // A dropdown or menu should appear
+    // A dropdown or menu should appear — short semantic wait for the menu
+    // animation before dismissing with Escape (no assertion can express it)
     await page.waitForTimeout(300);
     // Click again or press Escape to close
     await page.keyboard.press('Escape');
@@ -96,6 +91,7 @@ test.describe('Notes — toolbar actions', () => {
     await authGoto(page, '/notes');
     const bulkBtn = page.locator('button[aria-label="Modo selección múltiple"]');
     await bulkBtn.click();
+    // Short semantic wait for the mode transition before toggling back off
     await page.waitForTimeout(500);
     // Toggle off
     await bulkBtn.click();
@@ -105,17 +101,12 @@ test.describe('Notes — toolbar actions', () => {
 test.describe('Notes — note selection', () => {
   test('clicking a note opens the editor', async ({ page }) => {
     await authGoto(page, '/notes');
-    // Wait for notes to load
-    await page.waitForTimeout(1000);
     // Click the first note item — the default list view is the file tree
     // (NotesListBody), where notes are .file-row tree items (#1476)
     const firstNote = page.locator('.file-row, .note-item, .note-card, [class*="note-item"]').first();
     if (await firstNote.isVisible({ timeout: 2000 }).catch(() => false)) {
       await firstNote.click();
-      await page.waitForTimeout(1000);
-      // Editor should appear
-      const editor = page.locator('.note-editor, [class*="editor"], textarea');
-      // At minimum, the page should still be functional
+      // Editor should appear — at minimum, the page should still be functional
       await expect(page.locator('main.app-main')).toBeVisible();
     }
   });
@@ -135,7 +126,6 @@ test.describe('Notes — note selection', () => {
     const notes = await res.json();
     test.skip(!Array.isArray(notes) || notes.length === 0, 'no notes in DB');
     await authGoto(page, `/notes?id=${notes[0].id}`);
-    await page.waitForTimeout(2500);
     await expect(page.locator('main.app-main textarea, main.app-main [contenteditable="true"], .note-editor').first()).toBeVisible({ timeout: 5000 });
   });
 });

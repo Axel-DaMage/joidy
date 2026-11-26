@@ -41,9 +41,16 @@ async function seedEmail(page: Page, runId: string, input: SeedEmailInput): Prom
 
 /** Search for a unique run token so only this test's mail is listed. */
 async function searchRun(page: Page, runId: string): Promise<void> {
+  // The input debounces 300ms, then issues GET /emails/?…q=<runId> —
+  // wait for that exact response instead of a fixed sleep.
+  const results = page.waitForResponse(
+    (r) =>
+      r.request().method() === 'GET' &&
+      r.url().includes('/emails/') &&
+      r.url().includes(`q=${encodeURIComponent(runId)}`)
+  );
   await page.locator('.search-input').fill(runId);
-  // 300ms search debounce + round-trip
-  await page.waitForTimeout(800);
+  await results;
 }
 
 test.describe('Emails — page structure', () => {
@@ -86,7 +93,6 @@ test.describe('Emails — empty states', () => {
     );
     // With the unread filter off, the generic no-results state shows
     await page.locator('.filter-chip:has-text("No leídos")').click();
-    await page.waitForTimeout(800);
     await expect(page.locator('.empty-state-title')).toHaveText(
       'Sin resultados para esa búsqueda'
     );
@@ -114,7 +120,6 @@ test.describe('Emails — list and interactions', () => {
     // Read mail is filtered out by the default "No leídos" filter
     await expect(page.locator('.email-item', { hasText: runId })).toHaveCount(0);
     await page.locator('.filter-chip:has-text("No leídos")').click();
-    await page.waitForTimeout(800);
     await expect(page.locator('.email-item', { hasText: runId })).toHaveCount(1);
   });
 
@@ -165,7 +170,6 @@ test.describe('Emails — list and interactions', () => {
     const chip = page.locator('.account-chips .filter-chip:has-text("e2e@joidy.test")');
     await expect(chip).toBeVisible();
     await chip.click();
-    await page.waitForTimeout(800);
     await expect(chip).toHaveClass(/active/);
     await expect(page.locator('.email-item', { hasText: runId })).toHaveCount(1);
   });

@@ -60,13 +60,12 @@ runs:
         # and declares build: sections, so without the :dev tag each `up`
         # would run a full uncached local rebuild. --no-build turns that
         # silent rebuild into a loud failure if the tag is ever missing.
-        # Start backend services first (frontend depends on API health,
-        # which may take time on first run due to migrations); frontend
-        # starts without waiting (--no-deps) so the health check below
-        # gates on the API only.
-        docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --no-build postgres
-        docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --no-build api ai-service worker
-        docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --no-build --no-deps frontend
+        # ONE `up` for everything: compose resolves the depends_on order
+        # itself (api/ai-service wait for postgres healthy, frontend for
+        # api started) and the frontend's ~30s vite startup then overlaps
+        # the api health wait + the job's npm/playwright steps — the old
+        # 3-command sequence serialized the frontend start to dead last.
+        docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --no-build postgres api ai-service worker frontend
 
     - name: Verify API health
       shell: bash

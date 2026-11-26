@@ -5,27 +5,15 @@ import { test, expect, authGoto, dismissConflictModal } from './helpers/auth';
  * If these fail, all other E2E tests will also fail.
  */
 test.describe('Smoke — app shell', () => {
-  test('homepage renders with title and nav', async ({ page }) => {
+  test('homepage renders with title, logo, XP counter and nav', async ({ page }) => {
     await authGoto(page, '/');
     // App shell elements
     await expect(page.locator('header.app-header')).toBeVisible();
     await expect(page.locator('nav.app-sidebar')).toBeVisible();
     await expect(page.locator('main.app-main')).toBeVisible();
-  });
-
-  test('logo is visible', async ({ page }) => {
-    await authGoto(page, '/');
     await expect(page.locator('.logo')).toContainText(/joidy/i);
-  });
-
-  test('XP counter is visible in header', async ({ page }) => {
-    await authGoto(page, '/');
     const xp = page.locator('header.app-header').locator('text=/\\d+.*xp/i');
     await expect(xp).toBeVisible({ timeout: 5000 });
-  });
-
-  test('all 11 nav items are present and clickable', async ({ page }) => {
-    await authGoto(page, '/');
     const nav = page.locator('nav.app-sidebar');
     // /graph and /skills are dev-status items — visible because the auth
     // helper enables Dev Mode (joidy-dev-mode localStorage key).
@@ -57,13 +45,11 @@ test.describe('Smoke — app shell', () => {
 
   test('settings button opens settings modal', async ({ page }) => {
     await authGoto(page, '/');
-    // Wait a bit more for any late modals to appear and be dismissed
-    await page.waitForTimeout(500);
+    // Re-check for a late-mounting conflict modal — the isVisible timeout
+    // inside dismissConflictModal is itself the settle wait.
     await dismissConflictModal(page);
     // Settings button aria-label is i18n-translated, use custom event instead
     await page.evaluate(() => window.dispatchEvent(new CustomEvent('joidy:open-settings')));
-    // Settings modal or panel should appear
-    await page.waitForTimeout(500);
     // Check for either a modal overlay or a settings panel
     const modal = page.locator('.modal-overlay, .backdrop, .settings-panel, [class*="settings"]');
     await expect(modal.first()).toBeVisible({ timeout: 5000 });
@@ -89,7 +75,8 @@ test.describe('Smoke — navigation between pages', () => {
       await authGoto(page, '/');
       const navLink = page.locator(`nav.app-sidebar a[href="${p.path}"]`);
       await navLink.click();
-      await page.waitForLoadState('networkidle');
+      // No networkidle: the app keeps a WebSocket open, so it would burn its
+      // full timeout — the retrying toHaveURL below expresses the wait.
       await dismissConflictModal(page);
       // Verify URL changed (for Home, check we're at root)
       if (p.path === '/') {

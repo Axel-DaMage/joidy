@@ -494,11 +494,14 @@ jobs:
               echo "shards=[$SHARDS]"
             } >> "$GITHUB_OUTPUT"
           else
-            echo "Route-scoped specs on one shard: $SPECS"
+            # Scoped sets run on 2 legs: smoke+route specs can still mean
+            # several minutes of tests, and --shard splits by test count —
+            # a tiny set just leaves the second leg near-empty (setup only).
+            echo "Route-scoped specs on two shards: $SPECS"
             {
               echo "run=true"
               echo "specs=$SPECS"
-              echo "shards=[1]"
+              echo "shards=[1,2]"
             } >> "$GITHUB_OUTPUT"
           fi
 
@@ -509,8 +512,9 @@ jobs:
     runs-on: ubuntu-latest
     # Bounded per shard: image build + stack boot + the shard's share of
     # the suite must finish well under this or the leg is killed and
-    # reported red.
-    timeout-minutes: 30
+    # reported red. Legs measure ~4 min healthy; 15 keeps >3x headroom
+    # for retry inflation while killing hung legs earlier.
+    timeout-minutes: 15
     strategy:
       # fail-fast off: a red shard must not hide the other shards' results
       # — partial signal is what makes shard flakes diagnosable.
