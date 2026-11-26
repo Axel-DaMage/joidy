@@ -24,6 +24,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 from services import gmail_service as gms
 from services import google_token_service as gts
+from services import oauth_flow
 from services.auth_service import get_current_user
 from sqlalchemy.orm import Session
 
@@ -156,34 +157,43 @@ class GmailStatusOut(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+def _require_capability(capability: str) -> oauth_flow.CapabilityCheck:
+    """Build the stored-token gate that 403s when the Google grant lacks
+    ``capability`` — the client can then prompt a reconnect."""
+
+    def check(db: Session) -> None:
+        try:
+            gms.require_capability(db, capability)
+        except gms.GmailReconsentRequired as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+    return check
+
+
 async def _read_token(token: str | None, db: Session) -> str:
     """Resolve the access token for read calls: an explicit ``X-Google-Token``
     header wins, else the stored/auto-refreshed Google token (same semantics
     as google.py). The override arrives by header only — credentials never
     travel in the query string (#1461)."""
-    if token:
-        return token
-    stored = await gts.get_valid_access_token(db)
-    if not stored:
-        raise HTTPException(status_code=401, detail="Google no está conectado")
-    try:
-        gms.require_capability(db, "read")
-    except gms.GmailReconsentRequired as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
-    return stored
+    return await oauth_flow.resolve_access_token(
+        db,
+        header_token=token,
+        get_stored=gts.get_valid_access_token,
+        not_connected_detail="Google no está conectado",
+        check_capability=_require_capability("read"),
+    )
 
 
 async def _scoped_token(db: Session, capability: str) -> str:
     """Resolve the token for mutating calls — stored token only, plus a
     proactive scope check so under-scoped grants fail before hitting Google."""
-    stored = await gts.get_valid_access_token(db)
-    if not stored:
-        raise HTTPException(status_code=401, detail="Google no está conectado")
-    try:
-        gms.require_capability(db, capability)
-    except gms.GmailReconsentRequired as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
-    return stored
+    return await oauth_flow.resolve_access_token(
+        db,
+        header_token=None,
+        get_stored=gts.get_valid_access_token,
+        not_connected_detail="Google no está conectado",
+        check_capability=_require_capability(capability),
+    )
 
 
 def _parse_label_ids(value: str | None) -> list[str] | None:
