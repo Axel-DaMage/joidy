@@ -2,7 +2,7 @@ import { test, expect, authGoto } from './helpers/auth';
 
 /**
  * Goals feature — comprehensive E2E tests.
- * Covers: tabs (Editor/Inicio/Planificación/Historial),
+ * Covers: tabs (Editor/Inbox/Planificación/Historial),
  * filters, goal cards, pin, search, goal detail view.
  */
 test.describe('Goals — page structure', () => {
@@ -10,7 +10,7 @@ test.describe('Goals — page structure', () => {
     await authGoto(page, '/goals');
     // All tabs should be visible (Análisis lives on its own /analytics page)
     await expect(page.locator('button:has-text("Editor")')).toBeVisible();
-    await expect(page.locator('button:has-text("Inicio")')).toBeVisible();
+    await expect(page.locator('button:has-text("Inbox")')).toBeVisible();
     await expect(page.locator('button:has-text("Planificación")')).toBeVisible();
     await expect(page.locator('button:has-text("Historial")')).toBeVisible();
     await expect(page.locator('button:has-text("Análisis")')).toHaveCount(0);
@@ -33,26 +33,26 @@ test.describe('Goals — page structure', () => {
 });
 
 test.describe('Goals — tabs navigation', () => {
-  test('can switch to Inicio tab', async ({ page }) => {
+  test('can switch to Inbox tab', async ({ page }) => {
     await authGoto(page, '/goals');
-    await page.locator('button:has-text("Inicio")').click();
+    await page.locator('button:has-text("Inbox")').click();
     await page.waitForTimeout(500);
     // The tab should become active
-    await expect(page.locator('button.tab:has-text("Inicio")')).toHaveClass(/active/);
+    await expect(page.locator('button.header-tab:has-text("Inbox")')).toHaveClass(/active/);
   });
 
   test('can switch to Planificación tab', async ({ page }) => {
     await authGoto(page, '/goals');
     await page.locator('button:has-text("Planificación")').click();
     await page.waitForTimeout(500);
-    await expect(page.locator('button.tab:has-text("Planificación")')).toHaveClass(/active/);
+    await expect(page.locator('button.header-tab:has-text("Planificación")')).toHaveClass(/active/);
   });
 
   test('can switch to Historial tab', async ({ page }) => {
     await authGoto(page, '/goals');
     await page.locator('button:has-text("Historial")').click();
     await page.waitForTimeout(500);
-    await expect(page.locator('button.tab:has-text("Historial")')).toHaveClass(/active/);
+    await expect(page.locator('button.header-tab:has-text("Historial")')).toHaveClass(/active/);
   });
 
   test('can switch back to Editor tab', async ({ page }) => {
@@ -63,7 +63,7 @@ test.describe('Goals — tabs navigation', () => {
     // Then back to Editor
     await page.locator('button:has-text("Editor")').click();
     await page.waitForTimeout(300);
-    await expect(page.locator('button.tab:has-text("Editor")')).toHaveClass(/active/);
+    await expect(page.locator('button.header-tab:has-text("Editor")')).toHaveClass(/active/);
   });
 });
 

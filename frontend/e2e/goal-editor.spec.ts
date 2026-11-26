@@ -198,11 +198,11 @@ test.describe('Goal Editor — zen mode', () => {
   });
 });
 
-test.describe('Goal Editor — Inicio tab actions', () => {
-  test('Inicio tab shows goal cards with action buttons', async ({ page }) => {
+test.describe('Goal Editor — Editor tab actions', () => {
+  test('Editor tab shows goal cards with action buttons', async ({ page }) => {
     await authGoto(page, '/goals');
-    // Switch to Inicio tab
-    await page.locator('button.tab:has-text("Inicio")').click();
+    // Switch to Editor tab
+    await page.locator('button.header-tab:has-text("Editor")').click();
     await page.waitForTimeout(1000);
     // Goal cards should be visible
     const goalCards = page.locator('.goal-card');
@@ -217,9 +217,9 @@ test.describe('Goal Editor — Inicio tab actions', () => {
     }
   });
 
-  test('Inicio tab has Nuevo Objetivo button', async ({ page }) => {
+  test('Editor tab has Nuevo Objetivo button', async ({ page }) => {
     await authGoto(page, '/goals');
-    await page.locator('button.tab:has-text("Inicio")').click();
+    await page.locator('button.header-tab:has-text("Editor")').click();
     await page.waitForTimeout(1000);
     const newGoalBtn = page.locator('button:has-text("Nuevo Objetivo")');
     if (await newGoalBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
@@ -231,7 +231,7 @@ test.describe('Goal Editor — Inicio tab actions', () => {
 test.describe('Goal Editor — new goal creation', () => {
   test('can open new goal modal', async ({ page }) => {
     await authGoto(page, '/goals');
-    await page.locator('button.tab:has-text("Inicio")').click();
+    await page.locator('button.header-tab:has-text("Editor")').click();
     await page.waitForTimeout(1000);
     const newGoalBtn = page.locator('button:has-text("Nuevo Objetivo")');
     if (await newGoalBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
@@ -245,7 +245,7 @@ test.describe('Goal Editor — new goal creation', () => {
 
   test('new goal modal has 3 columns', async ({ page }) => {
     await authGoto(page, '/goals');
-    await page.locator('button.tab:has-text("Inicio")').click();
+    await page.locator('button.header-tab:has-text("Editor")').click();
     await page.waitForTimeout(1000);
     const newGoalBtn = page.locator('button:has-text("Nuevo Objetivo")');
     if (await newGoalBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
@@ -259,7 +259,7 @@ test.describe('Goal Editor — new goal creation', () => {
 
   test('new goal modal has title input and frequency buttons', async ({ page }) => {
     await authGoto(page, '/goals');
-    await page.locator('button.tab:has-text("Inicio")').click();
+    await page.locator('button.header-tab:has-text("Editor")').click();
     await page.waitForTimeout(1000);
     const newGoalBtn = page.locator('button:has-text("Nuevo Objetivo")');
     if (await newGoalBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
@@ -278,7 +278,7 @@ test.describe('Goal Editor — new goal creation', () => {
 
   test('new goal modal can be cancelled', async ({ page }) => {
     await authGoto(page, '/goals');
-    await page.locator('button.tab:has-text("Inicio")').click();
+    await page.locator('button.header-tab:has-text("Editor")').click();
     await page.waitForTimeout(1000);
     const newGoalBtn = page.locator('button:has-text("Nuevo Objetivo")');
     if (await newGoalBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
