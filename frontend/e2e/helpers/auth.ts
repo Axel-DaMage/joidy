@@ -105,6 +105,14 @@ export async function authGoto(page: Page, path: string): Promise<void> {
   // (networkidle may never fire due to WebSocket connections)
   await page.waitForLoadState('domcontentloaded');
   await page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => {});
+  // Wait for the app shell: the layout renders a `.boot-screen`
+  // ("Cargando Joidy…") until the setup-status request resolves, and on
+  // cold boot that latency can exceed the per-spec locator timeouts,
+  // flaking tests like the GitHub widget check (#1599). Absorbing boot
+  // time here keeps each spec's timeout scoped to the element under test;
+  // a failure waiting on this locator means the app never booted, which
+  // stays distinguishable in the output from a missing widget.
+  await page.locator('main.app-main').waitFor({ state: 'visible', timeout: 30_000 });
   await page.waitForTimeout(500);
   await dismissConflictModal(page);
 }
