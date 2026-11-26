@@ -5,7 +5,7 @@ import time
 import unittest
 
 import rate_limiter
-from rate_limiter import RateLimiter, get_limiter
+from rate_limiter import RateLimiter, get_limiter, get_local_limiter
 
 
 class TestRateLimiter(unittest.IsolatedAsyncioTestCase):
@@ -62,6 +62,37 @@ class TestRateLimiter(unittest.IsolatedAsyncioTestCase):
         start = time.monotonic()
         await limiter.acquire()
         self.assertLess(time.monotonic() - start, 0.05)
+
+    async def test_acquire_weight_reserves_multiple_slots(self):
+        # #1539: /rag and /chat each spend two provider calls per incoming
+        # request (embed + generate). weight=2 must consume two consecutive
+        # slots so the next caller waits ~2 intervals, not ~1 — otherwise the
+        # real outbound rate reaches ~2x the configured budget.
+        limiter = RateLimiter(max_per_minute=6000)  # 10 ms slots
+        await limiter.acquire(weight=2)
+        start = time.monotonic()
+        await limiter.acquire()
+        elapsed = time.monotonic() - start
+        self.assertGreaterEqual(elapsed, limiter.interval * 2 * 0.8)
+        self.assertLess(elapsed, limiter.interval * 2 + 0.5)
+
+    async def test_acquire_weight_defaults_to_one(self):
+        limiter = RateLimiter(max_per_minute=6000)
+        await limiter.acquire(weight=1)
+        start = time.monotonic()
+        await limiter.acquire()
+        elapsed = time.monotonic() - start
+        self.assertGreaterEqual(elapsed, limiter.interval * 0.8)
+        self.assertLess(elapsed, limiter.interval + 0.5)
+
+    async def test_acquire_weight_clamped_to_minimum_one(self):
+        limiter = RateLimiter(max_per_minute=6000)
+        await limiter.acquire(weight=0)
+        start = time.monotonic()
+        await limiter.acquire()
+        elapsed = time.monotonic() - start
+        self.assertGreaterEqual(elapsed, limiter.interval * 0.8)
+        self.assertLess(elapsed, limiter.interval + 0.5)
 
 
 class TestGetLimiter(unittest.TestCase):
@@ -137,6 +168,61 @@ class TestSharedBudgetEnforcement(unittest.IsolatedAsyncioTestCase):
         await chat.acquire()
         elapsed = time.monotonic() - start
         self.assertGreaterEqual(elapsed, embed.interval * 0.8)
+
+
+class TestGetLocalLimiter(unittest.IsolatedAsyncioTestCase):
+    """Local buckets pace non-provider work off the shared schedule (#1539)."""
+
+    def setUp(self):
+        rate_limiter._limiters.clear()
+        rate_limiter._local_limiters.clear()
+
+    def tearDown(self):
+        rate_limiter._limiters.clear()
+        rate_limiter._local_limiters.clear()
+
+    def test_local_limiter_is_not_the_shared_instance(self):
+        shared = get_limiter(600, name="embed")
+        local = get_local_limiter(600, name="cluster")
+        self.assertIsNot(shared, local)
+
+    def test_same_name_reuses_local_limiter(self):
+        first = get_local_limiter(600, name="cluster")
+        again = get_local_limiter(600, name="cluster")
+        self.assertIs(first, again)
+
+    def test_local_limiter_honors_new_rpm(self):
+        get_local_limiter(12, name="cluster")
+        local = get_local_limiter(60, name="cluster")
+        self.assertEqual(local.max_per_minute, 60)
+
+    async def test_local_acquire_does_not_delay_shared_schedule(self):
+        # A busy local bucket (/cluster fan-out) must not push back the next
+        # shared provider slot — convoying interactive traffic behind local
+        # CPU work is exactly what the exemption removes.
+        local = get_local_limiter(600, name="cluster")  # 100 ms slots
+        shared = get_limiter(600, name="chat")
+        await local.acquire()
+        await local.acquire()
+        start = time.monotonic()
+        await shared.acquire()
+        self.assertLess(time.monotonic() - start, 0.05)
+
+    async def test_shared_acquire_does_not_delay_local_schedule(self):
+        shared = get_limiter(600, name="chat")
+        local = get_local_limiter(600, name="cluster")
+        await shared.acquire()
+        start = time.monotonic()
+        await local.acquire()
+        self.assertLess(time.monotonic() - start, 0.05)
+
+    async def test_local_limiter_still_paces_within_its_bucket(self):
+        # Overload protection is preserved: same-name callers are spaced.
+        local = get_local_limiter(600, name="cluster")  # 100 ms slots
+        await local.acquire()
+        start = time.monotonic()
+        await local.acquire()
+        self.assertGreaterEqual(time.monotonic() - start, local.interval * 0.8)
 
 
 if __name__ == "__main__":

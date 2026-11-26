@@ -65,6 +65,8 @@ def ai_enabled(monkeypatch):
 
     limiter = SimpleNamespace(acquire=AsyncMock())
     monkeypatch.setattr(main, "get_limiter", lambda *a, **k: limiter)
+    local_limiter = SimpleNamespace(acquire=AsyncMock())
+    monkeypatch.setattr(main, "get_local_limiter", lambda *a, **k: local_limiter)
     monkeypatch.setattr(main, "record_usage", MagicMock())
 
     llm = SimpleNamespace(
@@ -83,7 +85,9 @@ def ai_enabled(monkeypatch):
 
     store_embedding = MagicMock()
     monkeypatch.setattr(database, "store_embedding", store_embedding)
-    return SimpleNamespace(llm=llm, emb=emb, limiter=limiter, store_embedding=store_embedding)
+    return SimpleNamespace(
+        llm=llm, emb=emb, limiter=limiter, local_limiter=local_limiter, store_embedding=store_embedding
+    )
 
 
 def _client() -> TestClient:
@@ -321,6 +325,15 @@ class TestRagEndpoint:
         ai_enabled.emb.embed.assert_awaited_once_with("what did I learn?")
         ai_enabled.llm.generate.assert_awaited_once()
 
+    def test_reserves_two_shared_budget_slots(self, ai_enabled, monkeypatch):
+        """#1539: /rag fans out into two provider calls (embed + generate), so
+        it must reserve weight=2 of the shared budget — one slot per request
+        would let the real outbound rate reach ~2x the configured RPM."""
+        monkeypatch.setattr(database, "find_similar_notes", lambda vec, limit=5: [])
+        resp = _client().post("/rag", json={"question": "q?"})
+        assert resp.status_code == 200
+        ai_enabled.limiter.acquire.assert_awaited_once_with(weight=2)
+
     def test_provider_failure_returns_500(self, ai_enabled):
         ai_enabled.emb.embed = AsyncMock(side_effect=RuntimeError("embed down"))
         resp = _client().post("/rag", json={"question": "q?"})
@@ -352,6 +365,13 @@ class TestChatEndpoint:
         body = resp.json()
         assert body["status"] == "success"
         assert body["response"] == "llm answer"
+
+    def test_reserves_two_shared_budget_slots(self, ai_enabled):
+        """#1539: /chat makes up to two provider calls (RAG embed + generate),
+        so it reserves weight=2 of the shared budget."""
+        resp = _client().post("/chat", json={"messages": [{"role": "user", "content": "hi"}]})
+        assert resp.status_code == 200
+        ai_enabled.limiter.acquire.assert_awaited_once_with(weight=2)
 
     def test_empty_messages_returns_422(self, ai_enabled):
         resp = _client().post("/chat", json={"messages": []})
@@ -457,6 +477,16 @@ class TestClusterEndpoint:
         resp = _client().post("/cluster?min_samples=5")
         assert resp.status_code == 200
         assert resp.json()["clusters"] == []
+
+    def test_uses_local_limiter_not_shared_budget(self, ai_enabled, monkeypatch):
+        """#1539: /cluster makes no provider calls — it paces on its own local
+        bucket so it neither consumes shared provider slots nor waits behind
+        provider-bound traffic."""
+        _mock_cluster_db(monkeypatch, [])
+        resp = _client().post("/cluster")
+        assert resp.status_code == 200
+        ai_enabled.local_limiter.acquire.assert_awaited_once()
+        ai_enabled.limiter.acquire.assert_not_awaited()
 
 
 # ── /chat prompt delimiters (#1330) ────────────────────────────────────

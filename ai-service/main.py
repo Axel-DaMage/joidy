@@ -18,7 +18,7 @@ from logging_config import get_correlation_id, set_correlation_id, setup_logging
 from plan_suggest import build_plan_prompt, parse_plan_response
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
 from pydantic import BaseModel, Field
-from rate_limiter import get_limiter
+from rate_limiter import get_limiter, get_local_limiter
 from response_cache import cache_key, get_cache
 from sqlalchemy import text
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -629,7 +629,10 @@ async def rag(req: RAGRequest):
     if not settings.is_ai_enabled:
         return {"status": "disabled", "answer": "No AI provider configured"}
 
-    await get_limiter(settings.max_requests_per_minute, name="rag").acquire()
+    # weight=2: /rag makes two provider calls per request — embed the
+    # question (_retrieve_note_context) plus generate the answer — so it
+    # reserves two slots of the shared budget up front (#1539).
+    await get_limiter(settings.max_requests_per_minute, name="rag").acquire(weight=2)
 
     try:
         # 1. Embed the question and find similar notes via pgvector cosine
@@ -920,11 +923,14 @@ async def cluster_notes(
     representative title for each cluster (the note closest to the centroid).
     """
     # Clustering is an AI feature — same gate as the other endpoints, plus a
-    # rate-limit slot since the DBSCAN fit is CPU-heavy (#1324).
+    # rate-limit slot since the DBSCAN fit is CPU-heavy (#1324). It makes NO
+    # provider calls (local work over stored embeddings), so it draws on its
+    # own local bucket: consuming the shared provider budget here would
+    # convoy-delay interactive traffic under strict pacing (#1539).
     if not settings.is_ai_enabled:
         return {"status": "disabled", "clusters": [], "total_notes": 0, "error": "No AI provider configured"}
 
-    await get_limiter(settings.max_requests_per_minute, name="cluster").acquire()
+    await get_local_limiter(settings.max_requests_per_minute, name="cluster").acquire()
 
     # psycopg2 is synchronous — the row fetch runs in a worker thread so it
     # never blocks the event loop (#1533).
@@ -1058,8 +1064,11 @@ async def chat(req: ChatRequest):
         }
     if not req.messages:
         raise HTTPException(status_code=422, detail="messages must not be empty")
+    # weight=2: /chat makes up to two provider calls per request — RAG
+    # retrieval embeds the last message (best-effort) plus generate the
+    # answer — so it reserves two slots of the shared budget up front (#1539).
     limiter = get_limiter(settings.max_requests_per_minute, name="chat")
-    await limiter.acquire()
+    await limiter.acquire(weight=2)
     client = None
     try:
         last = req.messages[-1]
