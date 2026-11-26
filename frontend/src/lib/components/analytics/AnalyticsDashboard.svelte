@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
+  import { appHeaderTabs } from '$lib/stores/appHeader';
   import { fly } from 'svelte/transition';
-  import ChartColumn from 'lucide-svelte/icons/chart-column';
   import RefreshCw from 'lucide-svelte/icons/refresh-cw';
   import Zap from 'lucide-svelte/icons/zap';
   import Flame from 'lucide-svelte/icons/flame';
@@ -82,7 +82,6 @@
   let slideIdx = $state(0);
   let slideDir = $state(1);
   let prefsReady = $state(false);
-  let tabEls = $state<(HTMLButtonElement | null)[]>([]);
   // Monotonic request id: late responses from a previous window are dropped.
   let reqId = 0;
 
@@ -92,6 +91,49 @@
   // Every section is always listed (GitHub shows a guided empty state when
   // no repo/webhook data exists) so tabs never appear or disappear.
   const slides = SLIDES;
+
+  // Page header lives in the global app header: slide tabs centered, window
+  // selector + refresh as trailing controls. Cleared when the page unmounts.
+  $effect(() => {
+    appHeaderTabs.set({
+      label: $t('analyticsPage.tablistLabel'),
+      activeId: slides[slideIdx]?.id ?? 'consistency',
+      onselect: (id) => {
+        const i = slides.findIndex((s) => s.id === id);
+        if (i >= 0) goToSlide(i);
+      },
+      tabs: slides.map((s) => ({
+        id: s.id,
+        label: $t(`analyticsPage.tabs.${s.id}`),
+        icon: s.icon,
+      })),
+      trailing: [
+        {
+          type: 'segmented',
+          label: $t('analyticsPage.rangeLabel'),
+          options: RANGES.map((r) => ({
+            id: String(r),
+            label: $t(`analyticsPage.range${r}Short`),
+            title: $t(`analyticsPage.range${r}`),
+          })),
+          activeId: String(rangeDays),
+          onselect: (id) => setRangeDays(Number(id)),
+        },
+        {
+          type: 'action',
+          icon: RefreshCw,
+          title: $t('analyticsPage.refresh'),
+          disabled: refreshing,
+          spinning: refreshing,
+          onclick: () => {
+            void load(rangeDays, true);
+            if (gh || ghTried) void loadGithub(true);
+          },
+        },
+      ],
+    });
+  });
+  onDestroy(() => appHeaderTabs.set(null));
 
   // Keep the restored index inside the list.
   $effect(() => {
@@ -140,22 +182,6 @@
   }
   const prevSlide = () => goToSlide(slideIdx - 1);
   const nextSlide = () => goToSlide(slideIdx + 1);
-
-  // Tab list keyboard support (WAI-ARIA tabs pattern): arrows/Home/End move
-  // both selection and focus; only the active tab is in the tab order.
-  async function onTabKeydown(e: KeyboardEvent) {
-    let next: number | null = null;
-    if (e.key === 'ArrowRight') next = slideIdx + 1;
-    else if (e.key === 'ArrowLeft') next = slideIdx - 1;
-    else if (e.key === 'Home') next = 0;
-    else if (e.key === 'End') next = slides.length - 1;
-    if (next === null) return;
-    e.preventDefault();
-    e.stopPropagation();
-    goToSlide(next);
-    await tick();
-    tabEls[slideIdx]?.focus();
-  }
 
   function onKeydown(e: KeyboardEvent) {
     if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
@@ -328,63 +354,6 @@
 {/snippet}
 
 <div class="ad-root">
-  <header class="ad-header">
-    <div class="ad-title">
-      <ChartColumn size={16} />
-      <h1>{$t('analyticsPage.title')}</h1>
-    </div>
-
-    <div class="ad-tabs" role="tablist" aria-label={$t('analyticsPage.tablistLabel')}>
-      {#each slides as s, i (s.id)}
-        {@const Icon = s.icon}
-        <button
-          bind:this={tabEls[i]}
-          type="button"
-          role="tab"
-          id="ad-tab-{s.id}"
-          class="ad-tab"
-          class:active={i === slideIdx}
-          aria-selected={i === slideIdx}
-          aria-controls="ad-panel"
-          tabindex={i === slideIdx ? 0 : -1}
-          onclick={() => goToSlide(i)}
-          onkeydown={onTabKeydown}
-        >
-          <Icon size={14} />
-          <span>{$t(`analyticsPage.tabs.${s.id}`)}</span>
-        </button>
-      {/each}
-    </div>
-
-    <div class="ad-tools">
-      <div class="ad-range" role="group" aria-label={$t('analyticsPage.rangeLabel')}>
-        {#each RANGES as r (r)}
-          <button
-            type="button"
-            class="ad-range-btn"
-            class:active={rangeDays === r}
-            aria-pressed={rangeDays === r}
-            title={$t(`analyticsPage.range${r}`)}
-            onclick={() => setRangeDays(r)}>{$t(`analyticsPage.range${r}Short`)}</button
-          >
-        {/each}
-      </div>
-      <button
-        type="button"
-        class="ad-refresh"
-        class:spinning={refreshing}
-        title={$t('analyticsPage.refresh')}
-        aria-label={$t('analyticsPage.refresh')}
-        disabled={refreshing}
-        onclick={() => {
-          void load(rangeDays, true);
-          if (gh || ghTried) void loadGithub(true);
-        }}
-      >
-        <RefreshCw size={14} />
-      </button>
-    </div>
-  </header>
 
   <span class="ad-sr" aria-live="polite" aria-atomic="true"
     >{#if data && slides[slideIdx]}{$t(slides[slideIdx].label)}{/if}</span
@@ -503,7 +472,6 @@
                 id="ad-panel"
                 role="tabpanel"
                 tabindex="0"
-                aria-labelledby="ad-tab-{slides[slideIdx]?.id}"
                 in:fly={{ x: reduceMotion() ? 0 : slideDir * 40, duration: reduceMotion() ? 0 : 240, opacity: 0 }}
               >
                 <div class="ad-slide-charts">{@render slideBody(slides[slideIdx]?.id)}</div>
@@ -537,122 +505,9 @@
     overflow: hidden;
   }
 
-  /* ── Page header (same treatment as the Goals header) ── */
-  .ad-header {
-    display: flex;
-    align-items: center;
-    gap: var(--s5);
-    padding: var(--s2) var(--s5);
-    border-bottom: 1px solid var(--border);
-    background: var(--surface);
-    flex-shrink: 0;
-    flex-wrap: wrap;
-  }
-  .ad-title {
-    display: flex;
-    align-items: center;
-    gap: var(--s3);
-    color: var(--text-muted);
-  }
-  .ad-title h1 {
-    margin: 0;
-    font-size: 14px;
-    font-weight: 600;
-    line-height: 1.2;
-    color: var(--text-primary);
-  }
-  .ad-tabs {
-    display: flex;
-    gap: var(--s1);
-    margin: 0 auto;
-    flex-wrap: wrap;
-  }
-  .ad-tab {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    min-height: 32px;
-    padding: 6px 12px;
-    background: transparent;
-    border: none;
-    color: var(--text-muted);
-    font-size: 13px;
-    cursor: pointer;
-    border-radius: var(--r);
-    transition: all 0.2s ease;
-  }
-  .ad-tab:hover {
-    background: var(--surface-hover);
-    color: var(--text-primary);
-  }
-  .ad-tab.active {
-    background: var(--surface-active);
-    color: var(--text-primary);
-    font-weight: 500;
-  }
-  .ad-tab:focus-visible,
-  .ad-range-btn:focus-visible,
-  .ad-refresh:focus-visible,
   .ad-slide:focus-visible {
     outline: 1px solid var(--xp);
     outline-offset: 2px;
-  }
-  .ad-tools {
-    display: flex;
-    align-items: center;
-    gap: var(--s2);
-  }
-  .ad-range {
-    display: flex;
-    border: 1px solid var(--border);
-    border-radius: var(--r);
-    overflow: hidden;
-  }
-  .ad-range-btn {
-    min-width: 40px;
-    min-height: 28px;
-    padding: 0 10px;
-    border: none;
-    border-left: 1px solid var(--border);
-    background: transparent;
-    color: var(--text-muted);
-    font-size: 11px;
-    font-weight: 600;
-    font-family: var(--font-mono);
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-  .ad-range-btn:first-child {
-    border-left: none;
-  }
-  .ad-range-btn:hover {
-    color: var(--text-secondary);
-  }
-  .ad-range-btn.active {
-    color: var(--xp);
-    background: color-mix(in srgb, var(--xp) 12%, transparent);
-  }
-  .ad-refresh {
-    display: grid;
-    place-items: center;
-    width: 28px;
-    height: 28px;
-    border: 1px solid var(--border);
-    border-radius: var(--r);
-    background: transparent;
-    color: var(--text-muted);
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-  .ad-refresh:hover:not(:disabled) {
-    color: var(--text-primary);
-    border-color: var(--primary);
-  }
-  .ad-refresh:disabled {
-    cursor: progress;
-  }
-  .ad-refresh.spinning :global(svg) {
-    animation: ad-spin 0.9s linear infinite;
   }
   .ad-sr {
     position: absolute;
@@ -1038,12 +893,6 @@
       transform: none;
     }
   }
-  @keyframes ad-spin {
-    to {
-      transform: rotate(360deg);
-    }
-  }
-
   /* Short viewports: drop secondary rail lines instead of scrolling. */
   @media (max-height: 820px) {
     .g-trend {
@@ -1063,20 +912,11 @@
     .ad-slide {
       grid-template-columns: minmax(0, 1fr) 248px;
     }
-    .ad-tab span {
-      display: none;
-    }
-    .ad-tab.active span {
-      display: inline;
-    }
   }
   @media (prefers-reduced-motion: reduce) {
     .ad-kpi,
     .sk {
       animation: none;
-    }
-    .ad-refresh.spinning :global(svg) {
-      animation-duration: 2.4s;
     }
   }
 
@@ -1084,15 +924,6 @@
     .ad-root {
       height: auto;
       overflow: visible;
-    }
-    .ad-header {
-      padding: var(--s2) var(--s3);
-      gap: var(--s3);
-    }
-    .ad-tabs {
-      margin: 0;
-      order: 3;
-      width: 100%;
     }
     .ad-body {
       flex-direction: column;

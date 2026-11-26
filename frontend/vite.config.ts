@@ -36,6 +36,25 @@ export default defineConfig({
     port: 3000,
     host: '0.0.0.0',
     allowedHosts: true,
+    // Opt-in same-origin proxy for host-local dev against a remote/container
+    // API (avoids CORS without touching the backend). Inert unless
+    // JOIDY_API_PROXY is set — Docker dev never sets it.
+    ...(process.env.JOIDY_API_PROXY
+      ? {
+          proxy: {
+            '/api-proxy': {
+              target: process.env.JOIDY_API_PROXY,
+              changeOrigin: true,
+              rewrite: (p: string) => p.replace(/^\/api-proxy/, ''),
+            },
+            '/ws': {
+              target: process.env.JOIDY_API_PROXY,
+              ws: true,
+              changeOrigin: true,
+            },
+          },
+        }
+      : {}),
     hmr: {
       // When running inside Docker, the browser connects to the host-mapped
       // port. Without this, Vite tries to connect the WS to the container's

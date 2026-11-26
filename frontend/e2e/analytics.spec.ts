@@ -9,12 +9,12 @@ test.describe('Analytics — dedicated page', () => {
     await authGoto(page, '/');
     await page.locator('nav.app-sidebar a[href="/analytics"]').click();
     await expect(page).toHaveURL(/\/analytics$/);
-    await expect(page.locator('.ad-tab').first()).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('.header-tab').first()).toBeVisible({ timeout: 10000 });
   });
 
   test('renders every slide without any scroll container', async ({ page }) => {
     await authGoto(page, '/analytics');
-    const tabs = page.locator('[role="tab"].ad-tab');
+    const tabs = page.locator('[role="tab"].header-tab');
     await expect(tabs.first()).toBeVisible({ timeout: 10000 });
     const count = await tabs.count();
     expect(count).toBeGreaterThanOrEqual(5);
@@ -37,7 +37,7 @@ test.describe('Analytics — dedicated page', () => {
 
   test('arrow keys move between slides and tabs expose ARIA state', async ({ page }) => {
     await authGoto(page, '/analytics');
-    const tabs = page.locator('[role="tab"].ad-tab');
+    const tabs = page.locator('[role="tab"].header-tab');
     await expect(tabs.first()).toBeVisible({ timeout: 10000 });
     await tabs.first().click();
     await expect(tabs.first()).toHaveAttribute('aria-selected', 'true');
@@ -48,7 +48,7 @@ test.describe('Analytics — dedicated page', () => {
 
   test('window selector re-windows the dashboard', async ({ page }) => {
     await authGoto(page, '/analytics');
-    const btn = page.locator('.ad-range-btn').first();
+    const btn = page.locator('.header-segmented-btn').first();
     await expect(btn).toBeVisible({ timeout: 10000 });
     await btn.click();
     await expect(btn).toHaveClass(/active/);

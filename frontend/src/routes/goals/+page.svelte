@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
+  import { appHeaderTabs } from '$lib/stores/appHeader';
   import { page } from '$app/state';
   import { goto, replaceState } from '$app/navigation';
   import Plus from 'lucide-svelte/icons/plus';
@@ -7,10 +8,6 @@
   import ChevronDown from 'lucide-svelte/icons/chevron-down';
   import Calendar from 'lucide-svelte/icons/calendar';
   import Clock from 'lucide-svelte/icons/clock';
-  import LayoutDashboard from 'lucide-svelte/icons/layout-dashboard';
-  import Pause from 'lucide-svelte/icons/pause';
-  import Play from 'lucide-svelte/icons/play';
-  import Ban from 'lucide-svelte/icons/ban';
   import Pencil from 'lucide-svelte/icons/pencil';
   import X from 'lucide-svelte/icons/x';
   import ChevronRight from 'lucide-svelte/icons/chevron-right';
@@ -26,10 +23,13 @@
   import Pin from 'lucide-svelte/icons/pin';
   import PinOff from 'lucide-svelte/icons/pin-off';
   import Zap from 'lucide-svelte/icons/zap';
+  import List from 'lucide-svelte/icons/list';
   import { api, type Goal, type GoalContext, type Tag as TagType, type Note } from '$lib/api';
   import GoalFilters from '$lib/components/GoalFilters.svelte';
   import GoalInbox from '$lib/components/GoalInbox.svelte';
   import GoalList from '$lib/components/GoalList.svelte';
+  import GoalStatsRail from '$lib/components/GoalStatsRail.svelte';
+  import GoalUpcoming from '$lib/components/GoalUpcoming.svelte';
   import { inboxCount } from '$lib/utils/goalTriage';
   import { localDayKey } from '$lib/utils/date';
   import { applyGamificationResult, showXPGain } from '$lib/stores/gamification';
@@ -51,16 +51,16 @@
     suggestIconKey,
   } from '$lib/utils/iconSuggest';
   import StreakIcon from '$lib/components/StreakIcon.svelte';
-  import GoalCard from '$lib/components/GoalCard.svelte';
   import LazyIconPicker from '$lib/components/LazyIconPicker.svelte';
   import ModalDialog from '$lib/components/ModalDialog.svelte';
   import NoteLinkPicker from '$lib/components/NoteLinkPicker.svelte';
   import { focusTrap } from '$lib/actions/focusTrap';
+  import { marquee } from '$lib/actions/marquee';
   import { t } from 'svelte-i18n';
 
   // Lazy-load the heavy StreakHeatmap (561 lines) so it is split into a
-  // separate chunk and only downloaded when the planning or history tab is
-  // active — the only tabs that render it (#347). A failed chunk surfaces an
+  // separate chunk and only downloaded when the history tab is active — the
+  // only tab that renders it (#347). A failed chunk surfaces an
   // error + retry instead of leaving the slot empty forever (#1459).
   let StreakHeatmap = $state<typeof import('$lib/components/StreakHeatmap.svelte').default | null>(
     null
@@ -80,11 +80,7 @@
       .finally(() => (heatmapChunkLoading = false));
   }
   $effect(() => {
-    if (
-      (currentTab === 'planning' || currentTab === 'history') &&
-      !StreakHeatmap &&
-      !heatmapChunkError
-    ) {
+    if (currentTab === 'history' && !StreakHeatmap && !heatmapChunkError) {
       loadStreakHeatmap();
     }
   });
@@ -92,8 +88,34 @@
   let goals = $state<Goal[]>([]);
   let tags = $state<TagType[]>([]);
   let notes = $state<Note[]>([]);
-  const VALID_TABS = ['editor', 'today', 'inbox', 'planning', 'history'] as const;
+  const VALID_TABS = ['editor', 'inbox', 'planning', 'history'] as const;
   let currentTab = $state<(typeof VALID_TABS)[number]>('editor');
+
+  // Page tabs live in the global app header (shared store, cleared on unmount).
+  $effect(() => {
+    appHeaderTabs.set({
+      label: 'Goals sections',
+      activeId: currentTab,
+      onselect: (id) => {
+        if (id === 'editor' || id === 'inbox' || id === 'planning' || id === 'history') {
+          currentTab = id;
+        }
+      },
+      tabs: [
+        { id: 'exec', label: $t('executionPage.tabLabel'), icon: Zap, href: '/goals/ejecucion' },
+        { id: 'editor', label: 'Editor', icon: Pencil },
+        {
+          id: 'inbox',
+          label: $t('goalsPage.inboxTab'),
+          icon: Inbox,
+          badge: inboxBadgeCount,
+        },
+        { id: 'planning', label: 'Planificación', icon: Clock },
+        { id: 'history', label: 'Historial', icon: Calendar },
+      ],
+    });
+  });
+  onDestroy(() => appHeaderTabs.set(null));
   let currentPlanningTab = $state<'WEEKLY' | 'MONTHLY' | 'ANNUAL'>('ANNUAL');
   let showAddForm = $state(false);
   let goalSearchQuery = $state('');
@@ -347,9 +369,6 @@
   // Untriaged inbox captures (#1200) live in their own tab — they must not
   // leak into dashboards, planning lists or statistics.
   const isListGoal = (g: Goal) => g.state !== 'INBOX' && g.state !== 'CANCELLED';
-  let dailyGoals = $derived(
-    goals.filter((g) => isListGoal(g) && isAssigned(g.id, todayIso))
-  );
   let planningGoals = $derived(goals.filter(isListGoal));
   let pendingGoals = $derived(goals.filter((g) => g.pending_removal));
 
@@ -453,6 +472,8 @@
       }
       const savedDate = localStorage.getItem('goals.selectedPlanningDate');
       if (savedDate) selectedPlanningDate = savedDate;
+      const savedView = localStorage.getItem('goals.planningView');
+      if (savedView === 'month' || savedView === 'week') planningView = savedView;
       const savedHistoryDate = localStorage.getItem('goals.selectedHistoryDate');
       if (savedHistoryDate) selectedHistoryDate = savedHistoryDate;
       // if we are on planning, pre-load assignments for the selected date
@@ -654,93 +675,6 @@
     }
   }
 
-  // ── Dashboard State ──
-  let upcomingTasks = $derived.by(() => {
-    const futureAssignments: { date: string; goal: Goal }[] = [];
-    const sortedDates = Object.keys(assignments)
-      .filter((d) => d >= todayIso)
-      .sort();
-
-    for (const date of sortedDates) {
-      for (const id of assignments[date]) {
-        const goal = goals.find((g) => g.id === id);
-        if (goal && isListGoal(goal) && goal.state !== 'COMPLETED' && goal.state !== 'FAILED') {
-          if (!futureAssignments.some((a) => a.goal.id === id && a.date === date)) {
-            futureAssignments.push({ date, goal });
-          }
-        }
-      }
-    }
-    return futureAssignments.slice(0, 5);
-  });
-
-  let currentWeekDates = $derived.by(() => {
-    const dates = [];
-    const today = new Date();
-    const day = today.getDay();
-    const diff = today.getDate() - day + (day === 0 ? -6 : 1);
-    const monday = new Date(new Date().setDate(diff));
-
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(monday);
-      d.setDate(monday.getDate() + i);
-      // localDayKey, not toISOString — the UTC key shifts a day off in
-      // non-UTC zones (#1306).
-      const dateStr = localDayKey(d);
-      const isToday = dateStr === todayIso;
-      const hData = historyData.find((h) => h.date === dateStr);
-      dates.push({
-        dateStr,
-        isToday,
-        dayName: ['L', 'M', 'X', 'J', 'V', 'S', 'D'][i],
-        hasActivity: hData?.checked || false,
-      });
-    }
-    return dates;
-  });
-
-  // ── Monthly map state (#790) ──
-  let monthMapDate = $state(new Date());
-
-  let monthMapCells = $derived.by(() => {
-    const year = monthMapDate.getFullYear();
-    const month = monthMapDate.getMonth();
-    const firstDay = new Date(year, month, 1);
-    const lastDay = new Date(year, month + 1, 0);
-    // Leading blanks: Mon=0 .. Sun=6
-    let startWeekday = firstDay.getDay() - 1;
-    if (startWeekday < 0) startWeekday = 6;
-    const cells: {
-      dateStr: string | null;
-      day: number | null;
-      isToday: boolean;
-      status: 'none' | 'assigned' | 'completed' | 'failed';
-    }[] = [];
-    for (let i = 0; i < startWeekday; i++) {
-      cells.push({ dateStr: null, day: null, isToday: false, status: 'none' });
-    }
-    for (let d = 1; d <= lastDay.getDate(); d++) {
-      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-      const isToday = dateStr === todayIso;
-      const hData = historyData.find((h) => h.date === dateStr);
-      const hasAssignment = !!(assignments[dateStr] && assignments[dateStr].length > 0);
-      let status: 'none' | 'assigned' | 'completed' | 'failed' = hasAssignment
-        ? 'assigned'
-        : 'none';
-      if (hData?.checked) status = 'completed';
-      else if (hData?.failed) status = 'failed';
-      cells.push({ dateStr, day: d, isToday, status });
-    }
-    return cells;
-  });
-
-  function prevMonth() {
-    monthMapDate = new Date(monthMapDate.getFullYear(), monthMapDate.getMonth() - 1, 1);
-  }
-  function nextMonth() {
-    monthMapDate = new Date(monthMapDate.getFullYear(), monthMapDate.getMonth() + 1, 1);
-  }
-
   // ── Hierarchical planning helpers ──
   function getParentGoals(goalList: Goal[]) {
     return goalList.filter((g) => !g.parent_id || !goalList.some((p) => p.id === g.parent_id));
@@ -782,7 +716,7 @@
     return date;
   }
 
-  let listSortBy = $state<'recent' | 'alpha' | 'state'>('recent');
+  let poolFilter = $state<'recent' | 'active' | 'completed' | 'failed'>('recent');
   // When on, assigning a goal to a day also creates a calendar_task (#1234).
   let mirrorToCalendar = $state(false);
 
@@ -790,18 +724,18 @@
     let unassigned = goals.filter(
       (g) => isListGoal(g) && !isAssigned(g.id, selectedPlanningDate)
     );
-    if (listSortBy === 'alpha') {
-      unassigned.sort((a, b) => a.title.localeCompare(b.title));
-    } else if (listSortBy === 'state') {
-      const stateOrder: Record<string, number> = { ACTIVE: 1, PAUSED: 2, COMPLETED: 3, FAILED: 4 };
-      unassigned.sort((a, b) => (stateOrder[a.state] || 9) - (stateOrder[b.state] || 9));
-    } else {
-      unassigned.sort((a, b) => b.id - a.id);
+    if (poolFilter === 'active') {
+      unassigned = unassigned.filter((g) => g.state === 'ACTIVE');
+    } else if (poolFilter === 'completed') {
+      unassigned = unassigned.filter((g) => g.state === 'COMPLETED' || g.is_completed);
+    } else if (poolFilter === 'failed') {
+      unassigned = unassigned.filter((g) => g.state === 'FAILED');
     }
+    unassigned.sort((a, b) => b.id - a.id);
     return unassigned;
   });
 
-  function getGoalStatusOnDate(goal: Goal, dateStr: string) {
+  function getGoalStatusOnDate(goal: Goal, dateStr: string): 'COMPLETED' | 'FAILED' | 'PENDING' {
     const normDate = getNormalizedDate(dateStr, goal.temporality);
 
     if (goal.completed_at) {
@@ -943,6 +877,124 @@
     }
   }
 
+  // ── Planning v2 — month calendar + week board ──
+  type PlanningView = 'month' | 'week';
+  let planningView = $state<PlanningView>('month');
+  // Cursor date inside the visible month/week; selecting a day moves it.
+  let planningCursor = $state(localDayKey(new Date()));
+  let poolOpen = $state(true);
+  let dragGoalId = $state<number | null>(null);
+
+  const PLAN_TEMPS = ['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL', 'ONEOFF'] as const;
+  // 2024-01-01 was a Monday — locale-aware Mon→Sun weekday labels.
+  const WEEKDAYS_SHORT = Array.from({ length: 7 }, (_, i) =>
+    new Date(2024, 0, 1 + i).toLocaleDateString(undefined, { weekday: 'short' })
+  );
+
+  // Union of goal ids assigned to any period a date belongs to (its day,
+  // week, month and year) — deduplicated.
+  function assignedIdsForDate(date: string): number[] {
+    const ids = new Set<number>();
+    for (const temp of PLAN_TEMPS) {
+      for (const id of assignments[getNormalizedDate(date, temp)] || []) ids.add(id);
+    }
+    return [...ids];
+  }
+
+  let monthCells = $derived.by(() => {
+    const d = new Date(planningCursor + 'T12:00:00');
+    const y = d.getFullYear();
+    const m = d.getMonth();
+    const offset = (new Date(y, m, 1).getDay() + 6) % 7; // Monday start
+    const start = new Date(y, m, 1 - offset);
+    return Array.from({ length: 42 }, (_, i) => {
+      const cell = new Date(start);
+      cell.setDate(start.getDate() + i);
+      return { iso: localDayKey(cell), day: cell.getDate(), inMonth: cell.getMonth() === m };
+    });
+  });
+
+  let weekDays = $derived.by(() => {
+    const monday = new Date(getNormalizedDate(planningCursor, 'WEEKLY') + 'T12:00:00');
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      return localDayKey(d);
+    });
+  });
+
+  let planningPeriodLabel = $derived.by(() => {
+    if (planningView === 'month') {
+      const d = new Date(planningCursor + 'T12:00:00');
+      const label = d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+      return label.charAt(0).toUpperCase() + label.slice(1);
+    }
+    const first = new Date(weekDays[0] + 'T12:00:00');
+    const last = new Date(weekDays[6] + 'T12:00:00');
+    return `${first.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} – ${last.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`;
+  });
+
+  function shiftPlanningPeriod(dir: 1 | -1) {
+    const d = new Date(planningCursor + 'T12:00:00');
+    if (planningView === 'month') d.setMonth(d.getMonth() + dir);
+    else d.setDate(d.getDate() + 7 * dir);
+    planningCursor = localDayKey(d);
+  }
+
+  function selectPlanningDay(iso: string) {
+    selectedPlanningDate = iso;
+    planningCursor = iso;
+  }
+
+  function goPlanningToday() {
+    selectPlanningDay(todayIso);
+  }
+
+  // Bulk-prefetch every normalized key visible in the current calendar view
+  // so per-day assignment dots render without waiting for a selection.
+  async function loadAssignmentsForRange(dates: string[]) {
+    const keys = new Set<string>();
+    for (const date of dates) {
+      for (const temp of PLAN_TEMPS) keys.add(getNormalizedDate(date, temp));
+    }
+    const missing = [...keys].filter((k) => !(k in assignments));
+    if (missing.length === 0) return;
+    const results = await Promise.all(
+      missing.map(async (d) => {
+        try {
+          const res = await api.planning.getAssignments(d);
+          return { date: d, ids: res.goal_ids };
+        } catch {
+          return { date: d, ids: [] };
+        }
+      })
+    );
+    assignments = { ...assignments, ...Object.fromEntries(results.map((r) => [r.date, r.ids])) };
+  }
+
+  $effect(() => {
+    const dates = planningView === 'month' ? monthCells.map((c) => c.iso) : weekDays;
+    loadAssignmentsForRange(dates).catch(logger.error);
+  });
+
+  $effect(() => {
+    if (typeof localStorage !== 'undefined')
+      localStorage.setItem('goals.planningView', planningView);
+  });
+
+  function onPoolDragStart(e: DragEvent, goalId: number) {
+    dragGoalId = goalId;
+    e.dataTransfer?.setData('text/plain', String(goalId));
+    if (e.dataTransfer) e.dataTransfer.effectAllowed = 'copy';
+  }
+
+  function onCellDrop(e: DragEvent, iso: string) {
+    e.preventDefault();
+    const id = Number(e.dataTransfer?.getData('text/plain')) || dragGoalId;
+    if (id) assignGoalToDate(id, iso);
+    dragGoalId = null;
+  }
+
   // ── Modal de Consistencia (pending removal resolver) ──
   async function resolveRemoval(goalId: number, action: 'delete' | 'manual' | 'cancel') {
     try {
@@ -959,6 +1011,56 @@
 
   function openGoalEditor(goal: Goal) {
     goto(`/goals/${goal.id}`);
+  }
+
+  // Shared toggle for every "Nuevo Objetivo" entry point (editor toolbar,
+  // today header, empty state). Re-enables the fail icon/emoji suggestion
+  // each time the form opens (#1092).
+  function toggleNewGoalForm() {
+    if (!showAddForm) {
+      newFailEmojiManual = false;
+      newFailIconManual = false;
+    }
+    showAddForm = !showAddForm;
+  }
+
+  // KPI rail stats for the editor tab — derived from the already-loaded goals
+  // list; "today" reuses the planning assignments map (today + next 6 days
+  // are prefetched on mount).
+  let editorRailStats = $derived.by(() => {
+    const managed = goals.filter(isListGoal);
+    const todayAssigned = managed.filter((g) => isAssigned(g.id, todayIso));
+    return {
+      active: managed.filter((g) => g.state === 'ACTIVE').length,
+      completed: managed.filter((g) => g.state === 'COMPLETED' || g.is_completed).length,
+      paused: managed.filter((g) => g.state === 'PAUSED').length,
+      todayTotal: todayAssigned.length,
+      todayDone: todayAssigned.filter(
+        (g) => getGoalStatusOnDate(g, todayIso) === 'COMPLETED'
+      ).length,
+      total: managed.length,
+    };
+  });
+
+  // 7-day agenda for the editor rail column — reuses the same normalized
+  // assignment keys the planning calendar prefetches.
+  let upcomingWeek = $derived.by(() => {
+    const managed = goals.filter(isListGoal);
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(todayIso + 'T12:00:00');
+      d.setDate(d.getDate() + i);
+      const iso = localDayKey(d);
+      const entries = assignedIdsForDate(iso)
+        .map((id) => managed.find((g) => g.id === id))
+        .filter((g): g is Goal => Boolean(g))
+        .map((goal) => ({ goal, status: getGoalStatusOnDate(goal, iso) }));
+      return { iso, entries };
+    });
+  });
+
+  function jumpToPlanningDay(iso: string) {
+    selectPlanningDay(iso);
+    currentTab = 'planning';
   }
 
   function getGoalColor(goal: Goal): string {
@@ -1008,691 +1110,323 @@
     <div class="error-banner">{loadError}</div>
   {/if}
 
-  <div class="goals-header">
-    <div class="tabs" role="tablist">
-      <a class="tab exec-link" href="/goals/ejecucion">
-        <Zap size={14} /> {$t('executionPage.tabLabel')}
-      </a>
-      <button
-        class="tab"
-        role="tab"
-        class:active={currentTab === 'editor'}
-        aria-selected={currentTab === 'editor'}
-        onclick={() => (currentTab = 'editor')}
-      >
-        <Pencil size={14} /> Editor
-      </button>
-      <button
-        class="tab"
-        role="tab"
-        class:active={currentTab === 'today'}
-        aria-selected={currentTab === 'today'}
-        onclick={() => (currentTab = 'today')}
-      >
-        <LayoutDashboard size={14} /> Inicio
-      </button>
-      <button
-        class="tab"
-        role="tab"
-        class:active={currentTab === 'inbox'}
-        aria-selected={currentTab === 'inbox'}
-        onclick={() => (currentTab = 'inbox')}
-      >
-        <Inbox size={14} /> {$t('goalsPage.inboxTab')}
-        {#if inboxBadgeCount > 0}
-          <span class="tab-badge">{inboxBadgeCount}</span>
-        {/if}
-      </button>
-      <button
-        class="tab"
-        role="tab"
-        class:active={currentTab === 'planning'}
-        aria-selected={currentTab === 'planning'}
-        onclick={() => (currentTab = 'planning')}
-      >
-        <Clock size={14} /> Planificación
-      </button>
-      <button
-        class="tab"
-        role="tab"
-        class:active={currentTab === 'history'}
-        aria-selected={currentTab === 'history'}
-        onclick={() => (currentTab = 'history')}
-      >
-        <Calendar size={14} /> Historial
-      </button>
-    </div>
-  </div>
 
   <div
-    class="goals-body"
+    class="goals-body framed"
     class:full-width={currentTab === 'history' ||
       currentTab === 'planning' ||
-      currentTab === 'today' ||
       currentTab === 'inbox' ||
       currentTab === 'editor'}
   >
     {#if currentTab === 'inbox'}
       <div class="tab-content fade-in">
-        <GoalInbox bind:goals onOpen={openGoalEditor} />
+        <GoalInbox bind:goals onOpen={openGoalEditor} {getGoalColor} />
       </div>
     {/if}
-    {#if currentTab === 'today'}
-      <div class="tab-content fade-in today-layout">
-        <div class="dashboard-main-col">
-          <div class="today-header">
-            <h3 class="section-title" style="margin: 0;">{$t('goalsPage.dayGoals')}</h3>
-            <button
-              class="btn btn-primary new-goal-cta new-goal-cta-inline"
-              onclick={() => {
-                if (!showAddForm) {
-                  // #1092 — reactivar la sugerencia al abrir el formulario
-                  newFailEmojiManual = false;
-                  newFailIconManual = false;
-                }
-                showAddForm = !showAddForm;
-              }}
-            >
-              <Plus size={16} /> Nuevo Objetivo
-            </button>
-          </div>
-          {#if dailyGoals.length === 0}
-            <div class="empty-state">{$t('goalsPage.noActiveGoals')}</div>
-          {/if}
-          {#each dailyGoals as goal (goal.id)}
-            <div
-              class="goal-card"
-              class:completed={goal.state === 'COMPLETED' || goal.is_completed}
-              class:failed={goal.state === 'FAILED'}
-              class:paused={goal.state === 'PAUSED'}
-              style="border-left: 3px solid {getGoalColor(goal)}"
-            >
-              <div class="goal-main">
-                <div class="goal-title">
-                  <button
-                    class="btn btn-ghost"
-                    style="font-size: inherit; font-weight: inherit; padding: 0; margin: 0; height: auto; color: inherit;"
-                    title={$t('goalsPage.editInEditor')}
-                    onclick={(e) => {
-                      e.stopPropagation();
-                      goto(`/goals/${goal.id}`);
-                    }}
-                  >
-                    {#if goal.fail_emoji}
-                      <span
-                        class="emoji-badge"
-                        style="display:flex; align-items:center; margin-right:8px;"
-                      >
-                        <StreakIcon name={goal.fail_emoji} size={16} color={getGoalColor(goal)} />
-                      </span>
-                    {/if}
-                    {goal.title}
-                  </button>
-                  {#if goal.state === 'PAUSED'}
-                    <span class="state-badge paused-badge">PAUSADO</span>
-                  {/if}
-                </div>
-                <div class="goal-meta">
-                  <span
-                    class="tag-chip"
-                    style="background: color-mix(in srgb, {getGoalColor(
-                      goal
-                    )} 12%, transparent); border: 1px solid {getGoalColor(
-                      goal
-                    )}; color: {getGoalColor(goal)};"
-                    >{TEMPORALITY_LABELS[goal.temporality] || goal.temporality}</span
-                  >
-                  {#if goal.state === 'COMPLETED' || goal.is_completed}
-                    <span
-                      class="status-badge success"
-                      style="background: color-mix(in srgb, var(--success) 10%, transparent); color: var(--success); border: 1px solid color-mix(in srgb, var(--success) 20%, transparent);"
-                      >{$t('goalsPage.completed')}</span
-                    >
-                  {:else if goal.state === 'FAILED'}
-                    <span
-                      class="status-badge error"
-                      style="background: color-mix(in srgb, var(--error) 10%, transparent); color: var(--error); border: 1px solid color-mix(in srgb, var(--error) 20%, transparent);"
-                      >{$t('goalsPage.failed')}</span
-                    >
-                  {/if}
-                  {#if goal.note_id}
-                    <span
-                      class="tag-chip"
-                      style="background: color-mix(in srgb, {getGoalColor(
-                        goal
-                      )} 12%, transparent); border: 1px solid {getGoalColor(
-                        goal
-                      )}; color: {getGoalColor(goal)};"
-                      >{notes.find((n) => n.id === goal.note_id)?.title || 'Nota vinculada'}</span
-                    >
-                  {:else if goal.tag_id}
-                    <span
-                      class="tag-chip"
-                      style="background: color-mix(in srgb, {getGoalColor(
-                        goal
-                      )} 12%, transparent); border: 1px solid {getGoalColor(
-                        goal
-                      )}; color: {getGoalColor(goal)};"
-                      >{tags.find((t) => t.id === goal.tag_id)?.name}</span
-                    >
-                  {/if}
-                  {#if goal.fail_config !== 'STATIC'}
-                    <span class="config-badge">{formatFailConfig(goal.fail_config)}</span>
-                  {/if}
-                  {#if goal.measurement_type !== 'COUNT'}
-                    <span
-                      class="config-badge"
-                      style="background:transparent; border: 1px solid var(--border);"
-                      >{goal.measurement_type}</span
-                    >
-                  {/if}
-                  {#if goal.max_assignment_days}
-                    <span
-                      class="config-badge"
-                      style="background: color-mix(in srgb, var(--link) 10%, transparent); color: var(--text-muted); border: 1px solid color-mix(in srgb, var(--link) 20%, transparent);"
-                      >{$t('goalsPage.limit', { values: { days: goal.max_assignment_days } })}</span
-                    >
-                  {/if}
-                </div>
-                {#if goal.note_id}
-                  <div style="margin-top: 8px;">
-                    <button
-                      class="dash-btn secondary-dash-btn"
-                      style="font-size: 11px; padding: 4px 8px; width: fit-content; display: inline-flex; align-items: center; gap: 4px;"
-                      onclick={() => goto(`/notes?id=${goal.note_id}`)}
-                    >
-                      <span class="icon">📝</span>
-                      <span>Ver/Editar Nota del Objetivo</span>
-                    </button>
-                  </div>
-                {/if}
-              </div>
-              <div class="goal-progress">
-                <div class="progress-meta">
-                  <span class="mono caption">
-                    {#if goal.state === 'COMPLETED' || goal.is_completed}
-                      {goal.target_value}/{goal.target_value}
-                    {:else if goal.measurement_type === 'BOOLEAN'}
-                      {goal.current_value >= 1 ? 'Sí' : 'No'}
-                    {:else if goal.measurement_type === 'PERCENT'}
-                      {goal.current_value}%
-                    {:else}
-                      {goal.current_value}/{goal.target_value}
-                    {/if}
-                  </span>
-                  <span class="caption"
-                    >{goal.state === 'COMPLETED' || goal.is_completed
-                      ? 100
-                      : goal.progress_pct}%</span
-                  >
-                </div>
-                <div class="progress-track" style="height: 4px;">
-                  <div
-                    class="progress-fill"
-                    style="width:{goal.state === 'COMPLETED' || goal.is_completed
-                      ? 100
-                      : goal.progress_pct}%"
-                  ></div>
-                </div>
-              </div>
-              <div class="goal-actions">
-                {#if goal.state === 'ACTIVE'}
-                  <button
-                    class="btn btn-ghost text-muted"
-                    title={$t('goalsPage.pause')}
-                    aria-label={$t('goalsPage.pauseGoal')}
-                    onclick={() => updateGoalState(goal.id, 'PAUSED')}
-                  >
-                    <Pause size={14} />
-                  </button>
-                  <button
-                    class="btn btn-ghost text-success"
-                    title={$t('goalsPage.complete')}
-                    aria-label={$t('goalsPage.completeGoal')}
-                    onclick={() => completeGoal(goal.id)}
-                  >
-                    <Check size={14} />
-                  </button>
-                {:else if goal.state === 'FAILED'}
-                  <button
-                    class="btn btn-ghost text-success"
-                    title={$t('goalsPage.complete')}
-                    aria-label={$t('goalsPage.completeGoal')}
-                    onclick={() => completeGoal(goal.id)}
-                  >
-                    <Check size={14} />
-                  </button>
-                {:else if goal.state === 'PAUSED'}
-                  <button
-                    class="btn btn-ghost text-muted"
-                    title={$t('goalsPage.resume')}
-                    aria-label={$t('goalsPage.resumeGoal')}
-                    onclick={() => updateGoalState(goal.id, 'ACTIVE')}
-                  >
-                    <Play size={14} />
-                  </button>
-                {/if}
-                {#if goal.state !== 'COMPLETED' && goal.state !== 'FAILED'}
-                  <button
-                    class="btn btn-ghost text-muted"
-                    title={$t('goalsPage.cancel')}
-                    aria-label={$t('goalsPage.cancelGoal')}
-                    onclick={() => updateGoalState(goal.id, 'CANCELLED')}
-                  >
-                    <Ban size={14} />
-                  </button>
-                {/if}
-                {#if deleteConfirm === goal.id}
-                  <button class="btn btn-ghost text-danger" onclick={() => deleteGoal(goal.id)}
-                    >¿Eliminar?</button
-                  >
-                  <button class="btn btn-ghost text-muted" onclick={() => (deleteConfirm = null)}
-                    >{$t('goalsPage.cancel')}</button
-                  >
-                {:else}
-                  <button
-                    class="btn btn-ghost text-muted"
-                    title={$t('goalsPage.delete')}
-                    aria-label={$t('goalsPage.deleteGoal')}
-                    onclick={() => deleteGoal(goal.id)}>×</button
-                  >
-                {/if}
-                <button
-                  class="btn btn-ghost text-muted"
-                  title={$t('goalsPage.edit')}
-                  aria-label={$t('goalsPage.editGoal')}
-                  onclick={() => openGoalEditor(goal)}
-                >
-                  <Pencil size={13} />
-                </button>
-              </div>
-            </div>
-          {/each}
-
-          <!-- Next Assigned Tasks -->
-          <h3 class="section-title" style="margin-top: 24px;">
-            {$t('goalsPage.upcomingAssigned')}
-          </h3>
-          <div class="history-goal-list" style="width:100%">
-            {#if upcomingTasks.length === 0}
-              <div class="empty-state">{$t('goalsPage.noUpcomingTasks')}</div>
-            {/if}
-            {#each upcomingTasks as task}
-              {@const g = task.goal}
-              <div
-                class="goal-card"
-                style="text-align: left; height: fit-content; border-left: 3px solid {getGoalColor(
-                  g
-                )}; display:flex; align-items:center; width: 100%;"
-              >
-                <div
-                  class="goal-main"
-                  style="flex: 1; cursor: pointer;"
-                  onclick={() => goto(`/goals/${g.id}`)}
-                  role="button"
-                  tabindex="0"
-                  onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && goto(`/goals/${g.id}`)}
-                >
-                  <div class="goal-title">
-                    {#if g.fail_emoji}
-                      <span
-                        class="emoji-badge"
-                        style="display:flex; align-items:center; margin-right:8px;"
-                      >
-                        <StreakIcon name={g.fail_emoji} size={16} color={getGoalColor(g)} />
-                      </span>
-                    {/if}
-                    {g.title}
-                  </div>
-                  <div class="goal-meta">
-                    <span class="config-badge">{task.date}</span>
-                    <span
-                      class="tag-chip"
-                      style="background: color-mix(in srgb, {getGoalColor(
-                        g
-                      )} 12%, transparent); border: 1px solid {getGoalColor(
-                        g
-                      )}; color: {getGoalColor(g)};"
-                      >{TEMPORALITY_LABELS[g.temporality] || g.temporality}</span
-                    >
-                  </div>
-                </div>
-                <div class="goal-actions">
-                  <button
-                    class="btn btn-ghost text-success"
-                    title={$t('goalsPage.complete')}
-                    aria-label={$t('goalsPage.completeGoal')}
-                    onclick={() => completeGoal(g.id)}
-                  >
-                    <Check size={14} />
-                  </button>
-                  <button
-                    class="btn btn-ghost text-muted"
-                    title={$t('goalsPage.cancel')}
-                    aria-label={$t('goalsPage.cancelGoal')}
-                    onclick={() => updateGoalState(g.id, 'CANCELLED')}
-                  >
-                    <Ban size={14} />
-                  </button>
-                </div>
-              </div>
-            {/each}
-          </div>
-        </div>
-
-        <!-- Dashboard Right Column -->
-        <div class="dashboard-side-col">
-          <div class="dash-card week-map-card">
-            <div class="dash-card-header">
-              <Calendar size={14} />
-              <span>{$t('goalsPage.weekMap')}</span>
-            </div>
-            <div style="display: flex; gap: 6px; justify-content: space-between; margin-top: 12px;">
-              {#each currentWeekDates as day}
-                <button
-                  class="week-day-box"
-                  title={day.dateStr}
-                  onclick={() => {
-                    currentTab = 'history';
-                    selectedHistoryDate = day.dateStr;
-                  }}
-                  style="flex: 1; aspect-ratio: 1; border-radius: 4px; border: 1px solid {day.isToday
-                    ? 'var(--today)'
-                    : 'var(--border)'}; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; background: {day.isToday
-                    ? 'var(--today)'
-                    : day.hasActivity
-                      ? 'var(--success)'
-                      : 'var(--surface)'}; color: {day.isToday
-                    ? '#000'
-                    : day.hasActivity
-                      ? 'var(--bg)'
-                      : 'var(--text-muted)'}; opacity: 1; {day.isToday
-                    ? 'box-shadow: 0 0 0 2px var(--today);'
-                    : ''}"
-                >
-                  <span style="font-size: 10px; font-weight: bold; margin-bottom: 2px;"
-                    >{day.dayName}</span
-                  >
-                  <span style="font-size: 12px; font-weight: {day.isToday ? 'bold' : 'normal'};"
-                    >{day.dateStr.split('-')[2]}</span
-                  >
-                </button>
-              {/each}
-            </div>
-          </div>
-
-          <!-- Monthly map (#790) -->
-          <div class="dash-card month-map-card">
-            <div class="dash-card-header month-map-header">
-              <Calendar size={14} />
-              <span
-                >{monthMapDate.toLocaleDateString(undefined, {
-                  month: 'long',
-                  year: 'numeric',
-                })}</span
-              >
-              <div class="month-map-nav">
-                <button
-                  class="month-nav-btn"
-                  onclick={prevMonth}
-                  aria-label={$t('goalsPage.prevDay')}>‹</button
-                >
-                <button
-                  class="month-nav-btn"
-                  onclick={nextMonth}
-                  aria-label={$t('goalsPage.nextDay')}>›</button
-                >
-              </div>
-            </div>
-            <div class="month-map-grid">
-              {#each ['L', 'M', 'X', 'J', 'V', 'S', 'D'] as dn}
-                <span class="month-map-dow">{dn}</span>
-              {/each}
-              {#each monthMapCells as cell}
-                {#if cell.dateStr}
-                  <button
-                    class="month-map-cell month-{cell.status}"
-                    class:month-today={cell.isToday}
-                    onclick={() => {
-                      currentTab = 'planning';
-                      selectedPlanningDate = cell.dateStr!;
-                    }}
-                    title={cell.dateStr}
-                  >
-                    {cell.day}
-                  </button>
-                {:else}
-                  <span class="month-map-cell month-empty"></span>
-                {/if}
-              {/each}
-            </div>
-          </div>
-        </div>
-      </div>
-    {/if}
-
     {#if currentTab === 'planning'}
-      <div class="tab-content fade-in planning-3col">
-        <!-- Left: All Goals List (click => assign to selectedPlanningDate) -->
-        <div class="planning-left-col history-detail-col">
-          <div class="history-detail-header">
-            <div class="history-detail-date" style="text-transform:none;">
-              {$t('goalsPage.goalList')}
+      <div class="tab-content fade-in pln">
+        <div class="pln-toolbar">
+          <button
+            class="pln-pool-toggle"
+            class:active={poolOpen}
+            onclick={() => (poolOpen = !poolOpen)}
+            title={$t('goalsPage.togglePool')}
+            aria-label={$t('goalsPage.togglePool')}
+            aria-pressed={poolOpen}
+          >
+            <List size={14} />
+            {$t('goalsPage.poolTitle')}
+            <span class="pln-pool-count">{filteredUnassignedGoals.length}</span>
+          </button>
+
+          <div class="pln-center">
+            <div class="pln-nav">
+              <button
+                class="pln-nav-btn"
+                onclick={() => shiftPlanningPeriod(-1)}
+                title={$t('goalsPage.prevPeriod')}
+                aria-label={$t('goalsPage.prevPeriod')}><ChevronLeft size={15} /></button
+              >
+              <span class="pln-period">{planningPeriodLabel}</span>
+              <button
+                class="pln-nav-btn"
+                onclick={() => shiftPlanningPeriod(1)}
+                title={$t('goalsPage.nextPeriod')}
+                aria-label={$t('goalsPage.nextPeriod')}><ChevronRight size={15} /></button
+              >
+              <button class="pln-today-btn" onclick={goPlanningToday}
+                >{$t('goalsPage.todayBtn')}</button
+              >
             </div>
           </div>
-          <div class="sort-control-centered">
-            <select class="input sort-select-square" bind:value={listSortBy} aria-label={$t('goalsPage.sortBy')}>
-              <option value="recent">{$t('goalsPage.sortRecent')}</option>
-              <option value="alpha">{$t('goalsPage.sortAlpha')}</option>
-              <option value="state">{$t('goalsPage.sortState')}</option>
-            </select>
+
+          <div class="pln-right">
             <label class="mirror-to-calendar" title={$t('goalsPage.assignToDay')}>
               <input type="checkbox" bind:checked={mirrorToCalendar} />
               <span>{$t('goalsPage.mirrorToCalendar')}</span>
             </label>
-          </div>
 
-          <div class="history-goal-list" style="width: 100%;">
-            {#each filteredUnassignedGoals as goal (goal.id)}
+            <div class="pln-view-toggle" role="group" aria-label={$t('goalsPage.calendar')}>
               <button
-                class="goal-card"
-                style="text-align: left; cursor: pointer; height: fit-content; border-left: 3px solid {getGoalColor(
-                  goal
-                )}; display: flex; align-items:center; justify-content:space-between; width: 100%;"
-                onclick={() => assignGoalToDate(goal.id, selectedPlanningDate)}
-                title={$t('goalsPage.assignToDay')}
+                class:active={planningView === 'month'}
+                aria-pressed={planningView === 'month'}
+                onclick={() => (planningView = 'month')}>{$t('goalsPage.viewMonth')}</button
               >
-                <div class="goal-main" style="flex:1;">
-                  <div class="goal-title">
-                    {#if goal.fail_emoji}
-                      <span
-                        class="emoji-badge"
-                        style="display:flex; align-items:center; margin-right:8px;"
-                      >
-                        <StreakIcon name={goal.fail_emoji} size={16} color={getGoalColor(goal)} />
-                      </span>
-                    {/if}
-                    {goal.title}
-                  </div>
-                  <div class="goal-meta">
-                    <span
-                      class="tag-chip"
-                      style="background: color-mix(in srgb, {getGoalColor(
-                        goal
-                      )} 12%, transparent); border: 1px solid {getGoalColor(
-                        goal
-                      )}; color: {getGoalColor(goal)};"
-                      >{TEMPORALITY_LABELS[goal.temporality] || goal.temporality}</span
-                    >
-                    {#if goal.state === 'PAUSED'}
-                      <span
-                        class="status-badge"
-                        style="background: color-mix(in srgb, var(--text-primary) 5%, transparent); color: var(--text-muted); border: 1px solid color-mix(in srgb, var(--text-primary) 10%, transparent);"
-                        >{$t('goalsPage.paused')}</span
-                      >
-                    {/if}
-                    {#if goal.max_assignment_days}
-                      <span
-                        class="config-badge"
-                        style="margin-left: 8px; background: color-mix(in srgb, var(--link) 10%, transparent); color: var(--text-muted); border: 1px solid color-mix(in srgb, var(--link) 20%, transparent);"
-                        >{$t('goalsPage.limit', {
-                          values: { days: goal.max_assignment_days },
-                        })}</span
-                      >
-                    {/if}
-                  </div>
-                </div>
-                <div style="display:flex; gap:6px;">
-                  <span class="btn btn-ghost text-muted" title={$t('goalsPage.assign')}
-                    ><ChevronRight size={14} /></span
-                  >
-                </div>
-              </button>
-            {/each}
-          </div>
-        </div>
-
-        <!-- Center: Calendar (fixed year view, allow future months) -->
-        <div class="planning-center-col history-detail-col">
-          <div class="history-detail-header">
-            <span class="section-title" style="margin:0;">{$t('goalsPage.calendar')}</span>
-          </div>
-          <div class="history-heatmap-wrap">
-            {#if StreakHeatmap}
-              <StreakHeatmap
-                history={historyData}
-                color="var(--success)"
-                selectedDate={selectedPlanningDate}
-                onselect={(date) => (selectedPlanningDate = date)}
-                maxFutureMonths={1200}
-              />
-            {:else if heatmapChunkError}
-              <div class="heatmap-chunk-error caption">
-                <span>{$t('common.loadFailed')}</span>
-                <button class="btn btn-ghost" onclick={loadStreakHeatmap}
-                  >{$t('common.retry')}</button
-                >
-              </div>
-            {/if}
-          </div>
-        </div>
-
-        <!-- Right: Assigned for selected date -->
-        <div class="planning-right-col history-detail-col">
-          <div class="history-detail-header">
-            <div class="history-detail-date" style="text-transform:none;">
-              {$t('goalsPage.assignedOn', { values: { date: selectedPlanningDate } })}
+              <button
+                class:active={planningView === 'week'}
+                aria-pressed={planningView === 'week'}
+                onclick={() => (planningView = 'week')}>{$t('goalsPage.viewWeek')}</button
+              >
             </div>
           </div>
+        </div>
 
-          <div class="history-goal-list" style="width:100%">
-            {#each ['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL', 'ONEOFF'] as temp}
-              {@const normDate = getNormalizedDate(
-                selectedPlanningDate,
-                temp as 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'ANNUAL' | 'ONEOFF'
-              )}
-              {@const assignedIds = Array.from(new Set(assignments[normDate] || []))}
-              {@const filteredGoals = assignedIds
-                .map((id) => goals.find((g) => g.id === id))
-                .filter((g): g is Goal => g !== undefined && Boolean(g) && g.temporality === temp)}
-
-              {#if filteredGoals.length > 0}
-                <div class="planning-section-header">
-                  {temp === 'DAILY'
-                    ? 'Día'
-                    : temp === 'WEEKLY'
-                      ? 'Semana'
-                      : temp === 'MONTHLY'
-                        ? 'Mes'
-                        : temp === 'ANNUAL'
-                          ? 'Año'
-                          : 'Único'}
-                </div>
-                {#each filteredGoals as g (g.id)}
-                  {@const status = getGoalStatusOnDate(g, selectedPlanningDate)}
-                  <div
-                    class="goal-card"
-                    class:completed={status === 'COMPLETED'}
-                    class:failed={status === 'FAILED'}
-                    style="border-left: 3px solid {status === 'FAILED'
-                      ? 'var(--error)'
-                      : status === 'COMPLETED'
-                        ? 'var(--success)'
-                        : getGoalColor(g)}; display:flex; align-items:center;"
+        <div class="pln-main">
+          {#if poolOpen}
+            <aside class="pln-pool">
+              <div class="pln-pool-head">
+                <div class="pln-pool-filter" role="group" aria-label={$t('goalsPage.sortBy')}>
+                  <button
+                    class:active={poolFilter === 'recent'}
+                    aria-pressed={poolFilter === 'recent'}
+                    onclick={() => (poolFilter = 'recent')}>{$t('goalsPage.poolRecent')}</button
                   >
-                    <div style="display:flex; gap:6px; margin-right: 8px;">
-                      <button
-                        class="btn btn-ghost text-muted"
-                        style="padding: 4px;"
-                        onclick={() => unassignGoalFromDate(g.id, selectedPlanningDate)}
-                        title={$t('goalsPage.remove')}
-                        aria-label={$t('goalsPage.remove')}><ChevronLeft size={14} /></button
-                      >
+                  <button
+                    class:active={poolFilter === 'active'}
+                    aria-pressed={poolFilter === 'active'}
+                    onclick={() => (poolFilter = 'active')}>{$t('goalsPage.poolActive')}</button
+                  >
+                  <button
+                    class:active={poolFilter === 'completed'}
+                    aria-pressed={poolFilter === 'completed'}
+                    onclick={() => (poolFilter = 'completed')}>{$t('goalsPage.poolCompleted')}</button
+                  >
+                  <button
+                    class:active={poolFilter === 'failed'}
+                    aria-pressed={poolFilter === 'failed'}
+                    onclick={() => (poolFilter = 'failed')}>{$t('goalsPage.poolFailed')}</button
+                  >
+                </div>
+              </div>
+              <div class="pln-pool-list">
+                {#each filteredUnassignedGoals as goal (goal.id)}
+                  <button
+                    class="pln-pool-item"
+                    style="border-left: 3px solid {getGoalColor(goal)}"
+                    draggable="true"
+                    ondragstart={(e) => onPoolDragStart(e, goal.id)}
+                    onclick={() => assignGoalToDate(goal.id, selectedPlanningDate)}
+                    title={$t('goalsPage.assignToDay')}
+                  >
+                    {#if goal.fail_emoji}
+                      <span class="pln-item-icon">
+                        <StreakIcon name={goal.fail_emoji} size={14} color={getGoalColor(goal)} />
+                      </span>
+                    {/if}
+                    <span class="pln-item-title pln-mq" use:marquee>
+                      <span class="pln-mq-track">
+                        <span class="pln-mq-text">{goal.title}</span>
+                        <span class="pln-mq-text pln-mq-dup" aria-hidden="true">{goal.title}</span>
+                      </span>
+                    </span>
+                    <span class="pln-item-temp" style="color: {getGoalColor(goal)}"
+                      >{TEMPORALITY_LABELS[goal.temporality] || goal.temporality}</span
+                    >
+                  </button>
+                {:else}
+                  <div class="pln-pool-empty caption">{$t('goalsPage.unassignedEmpty')}</div>
+                {/each}
+              </div>
+            </aside>
+          {/if}
+
+          {#if planningView === 'month'}
+            <div class="pln-cal-wrap">
+              <div class="pln-cal">
+                {#each WEEKDAYS_SHORT as wd (wd)}
+                  <span class="pln-dow">{wd}</span>
+                {/each}
+                {#each monthCells as cell (cell.iso)}
+                  {@const ids = assignedIdsForDate(cell.iso)}
+                  <button
+                    class="pln-cell"
+                    class:other-month={!cell.inMonth}
+                    class:today={cell.iso === todayIso}
+                    class:selected={cell.iso === selectedPlanningDate}
+                    onclick={() => selectPlanningDay(cell.iso)}
+                    ondragover={(e) => e.preventDefault()}
+                    ondrop={(e) => onCellDrop(e, cell.iso)}
+                  >
+                    <span class="pln-cell-num">{cell.day}</span>
+                    {#if ids.length > 0}
+                      <span class="pln-cell-dots">
+                        {#each ids.slice(0, 4) as id (id)}
+                          {@const g = goals.find((x) => x.id === id)}
+                          {#if g}<i style="background: {getGoalColor(g)}"></i>{/if}
+                        {/each}
+                        {#if ids.length > 4}<em>+{ids.length - 4}</em>{/if}
+                      </span>
+                    {/if}
+                  </button>
+                {/each}
+              </div>
+            </div>
+
+            <aside class="pln-detail">
+              <div class="history-detail-header">
+                <div class="history-detail-date" style="text-transform:none;">
+                  {$t('goalsPage.assignedOn', {
+                    values: {
+                      date: new Date(selectedPlanningDate + 'T12:00:00').toLocaleDateString(
+                        undefined,
+                        { day: 'numeric' }
+                      ),
+                    },
+                  })}
+                </div>
+              </div>
+
+              <div class="history-goal-list" style="width:100%">
+                {#each PLAN_TEMPS as temp (temp)}
+                  {@const normDate = getNormalizedDate(selectedPlanningDate, temp)}
+                  {@const assignedIds = Array.from(new Set(assignments[normDate] || []))}
+                  {@const filteredGoals = assignedIds
+                    .map((id) => goals.find((g) => g.id === id))
+                    .filter((g): g is Goal => g !== undefined && Boolean(g) && g.temporality === temp)}
+
+                  {#if filteredGoals.length > 0}
+                    <div class="planning-section-header">
+                      {temp === 'DAILY'
+                        ? 'Día'
+                        : temp === 'WEEKLY'
+                          ? 'Semana'
+                          : temp === 'MONTHLY'
+                            ? 'Mes'
+                            : temp === 'ANNUAL'
+                              ? 'Año'
+                              : 'Único'}
                     </div>
-                    <div class="goal-main" style="flex: 1;">
-                      <div class="goal-title">
+                    {#each filteredGoals as g (g.id)}
+                      {@const status = getGoalStatusOnDate(g, selectedPlanningDate)}
+                      {@const rowColor =
+                        status === 'FAILED'
+                          ? 'var(--error)'
+                          : status === 'COMPLETED'
+                            ? 'var(--success)'
+                            : getGoalColor(g)}
+                      <div class="pln-detail-item" style="border-left: 3px solid {rowColor}">
+                        <button
+                          class="pln-day-unassign"
+                          onclick={() => unassignGoalFromDate(g.id, selectedPlanningDate)}
+                          title={$t('goalsPage.remove')}
+                          aria-label={$t('goalsPage.remove')}><X size={12} /></button
+                        >
                         {#if g.fail_emoji}
-                          <span
-                            class="emoji-badge"
-                            style="display:flex; align-items:center; margin-right:8px;"
-                          >
-                            <StreakIcon
-                              name={g.fail_emoji}
-                              size={16}
-                              color={status === 'FAILED'
-                                ? 'var(--error)'
-                                : status === 'COMPLETED'
-                                  ? 'var(--success)'
-                                  : getGoalColor(g)}
-                            />
+                          <span class="pln-item-icon">
+                            <StreakIcon name={g.fail_emoji} size={13} color={rowColor} />
                           </span>
                         {/if}
-                        {g.title}
-                      </div>
-                      <div class="goal-meta">
-                        <span
-                          class="tag-chip"
-                          style="background: color-mix(in srgb, {getGoalColor(
-                            g
-                          )} 12%, transparent); border: 1px solid {getGoalColor(
-                            g
-                          )}; color: {getGoalColor(g)};"
-                          >{TEMPORALITY_LABELS[g.temporality] || g.temporality}</span
+                        <button
+                          class="pln-day-name"
+                          class:line-through={status === 'COMPLETED'}
+                          onclick={() => openGoalEditor(g)}
                         >
+                          <span class="pln-mq" use:marquee>
+                            <span class="pln-mq-track">
+                              <span class="pln-mq-text">{g.title}</span>
+                              <span class="pln-mq-text pln-mq-dup" aria-hidden="true">{g.title}</span>
+                            </span>
+                          </span>
+                        </button>
                         {#if status === 'COMPLETED'}
                           <span class="status-badge success">{$t('goalsPage.completed')}</span>
                         {:else if status === 'FAILED'}
                           <span class="status-badge error">{$t('goalsPage.failed')}</span>
                         {/if}
                         {#if g.max_assignment_days}
-                          <span
-                            class="config-badge"
-                            style="margin-left: 8px; background: color-mix(in srgb, var(--link) 10%, transparent); color: var(--text-muted); border: 1px solid color-mix(in srgb, var(--link) 20%, transparent);"
+                          <span class="pln-item-temp" style="color: var(--text-muted)"
                             >{$t('goalsPage.limit', {
                               values: { days: g.max_assignment_days },
                             })}</span
                           >
                         {/if}
                       </div>
-                    </div>
-                  </div>
+                    {/each}
+                  {/if}
                 {/each}
-              {/if}
-            {/each}
 
-            {#if !(['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL', 'ONEOFF'] as const).some( (temp) => (assignments[getNormalizedDate(selectedPlanningDate, temp as 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'ANNUAL' | 'ONEOFF')] || []).some((id) => goals.find((g) => g.id === id)?.temporality === temp) )}
-              <div
-                class="history-detail-empty"
-                style="padding: 2rem; border: 1px dashed var(--border); border-radius: var(--r); margin: 1rem;"
-              >
-                <span
-                  class="history-detail-msg"
-                  style="font-size: 12px; text-align: center; display: block;"
-                  >{$t('goalsPage.noGoalsForPeriod')}</span
-                >
+                {#if !PLAN_TEMPS.some( (temp) => (assignments[getNormalizedDate(selectedPlanningDate, temp)] || []).some((id) => goals.find((g) => g.id === id)?.temporality === temp) )}
+                  <div
+                    class="history-detail-empty"
+                    style="padding: 2rem; border: 1px dashed var(--border); border-radius: var(--r); margin: 1rem;"
+                  >
+                    <span
+                      class="history-detail-msg"
+                      style="font-size: 12px; text-align: center; display: block;"
+                      >{$t('goalsPage.noGoalsForPeriod')}</span
+                    >
+                  </div>
+                {/if}
               </div>
-            {/if}
-          </div>
+            </aside>
+          {:else}
+            <div class="pln-week">
+              {#each weekDays as iso (iso)}
+                {@const ids = assignedIdsForDate(iso)}
+                <!-- svelte-ignore a11y_no_static_element_interactions -->
+                <div
+                  class="pln-day"
+                  class:today={iso === todayIso}
+                  class:selected={iso === selectedPlanningDate}
+                  ondragover={(e) => e.preventDefault()}
+                  ondrop={(e) => onCellDrop(e, iso)}
+                >
+                  <button class="pln-day-head" onclick={() => selectPlanningDay(iso)}>
+                    <span class="pln-day-dow"
+                      >{new Date(iso + 'T12:00:00').toLocaleDateString(undefined, {
+                        weekday: 'short',
+                      })}</span
+                    >
+                    <span class="pln-day-num">{Number(iso.slice(8))}</span>
+                    {#if ids.length > 0}<span class="pln-day-count">{ids.length}</span>{/if}
+                  </button>
+                  <div class="pln-day-list">
+                    {#each ids .map((id) => goals.find((x) => x.id === id)) .filter((g): g is Goal => Boolean(g)) as g (g.id)}
+                      {@const status = getGoalStatusOnDate(g, iso)}
+                      <div
+                        class="pln-day-item"
+                        style="border-left: 3px solid {status === 'FAILED'
+                          ? 'var(--error)'
+                          : status === 'COMPLETED'
+                            ? 'var(--success)'
+                            : getGoalColor(g)}"
+                      >
+                        <button
+                          class="pln-day-unassign"
+                          onclick={() => unassignGoalFromDate(g.id, iso)}
+                          title={$t('goalsPage.remove')}
+                          aria-label={$t('goalsPage.remove')}><X size={12} /></button
+                        >
+                        <button class="pln-day-name" onclick={() => openGoalEditor(g)}>
+                          <span class="pln-mq" use:marquee>
+                            <span class="pln-mq-track">
+                              <span class="pln-mq-text">{g.title}</span>
+                              <span class="pln-mq-text pln-mq-dup" aria-hidden="true">{g.title}</span>
+                            </span>
+                          </span>
+                        </button>
+                        <span class="pln-item-temp" style="color: {getGoalColor(g)}"
+                          >{TEMPORALITY_LABELS[g.temporality] || g.temporality}</span
+                        >
+                      </div>
+                    {:else}
+                      <span class="pln-day-empty">—</span>
+                    {/each}
+                  </div>
+                </div>
+              {/each}
+            </div>
+          {/if}
         </div>
       </div>
     {/if}
@@ -1848,6 +1582,64 @@
               </div>
             {/if}
           {/if}
+        </div>
+      </div>
+    {/if}
+    {#if currentTab === 'editor'}
+      <div class="tab-content fade-in editor-tab">
+        <div class="editor-toolbar">
+          <GoalFilters
+            bind:query={goalSearchQuery}
+            bind:filter={goalFilterState}
+            bind:contextFilter={goalContextFilter}
+          />
+          <button class="btn btn-primary new-goal-cta-inline" onclick={toggleNewGoalForm}>
+            <Plus size={16} />
+            {$t('goalsPage.newGoal')}
+          </button>
+        </div>
+        <div class="editor-body">
+          <div class="editor-rail-col">
+            <GoalStatsRail
+              active={editorRailStats.active}
+              completed={editorRailStats.completed}
+              paused={editorRailStats.paused}
+              todayTotal={editorRailStats.todayTotal}
+              todayDone={editorRailStats.todayDone}
+              total={editorRailStats.total}
+            />
+            <GoalUpcoming
+              days={upcomingWeek}
+              {todayIso}
+              {getGoalColor}
+              onSelectDay={jumpToPlanningDay}
+            />
+          </div>
+          <GoalList
+            {goals}
+            query={goalSearchQuery}
+            filter={goalFilterState}
+            contextFilter={goalContextFilter}
+            pinned={pinnedGoals}
+            {tags}
+            {notes}
+            {getGoalColor}
+            {TEMPORALITY_LABELS}
+            {STATE_LABELS}
+            {formatFailConfig}
+            onTogglePin={togglePinned}
+            onClick={openGoalEditor}
+            onComplete={completeGoal}
+            onFail={failGoal}
+            onDelete={confirmDeleteGoal}
+            onArchive={(id) => {
+              const target = goals.find((g) => g.id === id);
+              if (target) {
+                updateGoalState(id, target.state === 'CANCELLED' ? 'ACTIVE' : 'CANCELLED');
+              }
+            }}
+            onNew={toggleNewGoalForm}
+          />
         </div>
       </div>
     {/if}
@@ -2233,56 +2025,6 @@
     </ModalDialog>
   {/if}
 
-  {#if currentTab === 'editor'}
-    <div class="tab-content fade-in editor-tab">
-      <div class="editor-header-row">
-        <GoalFilters
-          bind:query={goalSearchQuery}
-          bind:filter={goalFilterState}
-          bind:contextFilter={goalContextFilter}
-        />
-        <button
-          class="btn btn-primary new-goal-cta-inline"
-          onclick={() => {
-            if (!showAddForm) {
-              // #1092 — reactivar la sugerencia al abrir el formulario
-              newFailEmojiManual = false;
-              newFailIconManual = false;
-            }
-            showAddForm = !showAddForm;
-          }}
-        >
-          <Plus size={16} />
-          {$t('goalsPage.newGoal')}
-        </button>
-      </div>
-      <GoalList
-        {goals}
-        query={goalSearchQuery}
-        filter={goalFilterState}
-        contextFilter={goalContextFilter}
-        pinned={pinnedGoals}
-        {tags}
-        {notes}
-        {getGoalColor}
-        {TEMPORALITY_LABELS}
-        {STATE_LABELS}
-        {formatFailConfig}
-        onTogglePin={togglePinned}
-        onClick={openGoalEditor}
-        onComplete={completeGoal}
-        onFail={failGoal}
-        onDelete={confirmDeleteGoal}
-        onArchive={(id) => {
-          const target = goals.find((g) => g.id === id);
-          if (target) {
-            updateGoalState(id, target.state === 'CANCELLED' ? 'ACTIVE' : 'CANCELLED');
-          }
-        }}
-      />
-    </div>
-  {/if}
-
   {#if goalToDelete}
     <ModalDialog
       open={true}
@@ -2326,59 +2068,6 @@
     font-family: var(--font-mono);
     font-size: 12px;
   }
-  .goals-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: var(--s3) var(--s5);
-    border-bottom: 1px solid var(--border);
-    background: var(--surface);
-  }
-  .tabs {
-    display: flex;
-    gap: var(--s2);
-  }
-  .tab {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 8px 12px;
-    background: transparent;
-    border: none;
-    color: var(--text-muted);
-    font-size: 13px;
-    cursor: pointer;
-    border-radius: var(--r);
-    transition: all 0.2s ease;
-  }
-  .tab:hover {
-    background: var(--surface-hover);
-    color: var(--text-primary);
-  }
-  .tab.active {
-    background: var(--surface-active);
-    color: var(--text-primary);
-    font-weight: 500;
-  }
-  .exec-link {
-    text-decoration: none;
-    color: var(--xp);
-  }
-  .exec-link:hover {
-    color: var(--xp-2);
-  }
-  .tab-badge {
-    min-width: 18px;
-    padding: 0 5px;
-    border-radius: 999px;
-    background: var(--accent);
-    color: var(--accent-contrast-text, var(--bg));
-    font-size: 10px;
-    font-weight: 600;
-    line-height: 16px;
-    text-align: center;
-    font-family: var(--font-mono);
-  }
   .goals-body {
     flex: 1;
     overflow-y: auto;
@@ -2391,52 +2080,643 @@
     width: 100%;
     transition: max-width 0.3s ease;
   }
-  /* Planning 3-col layout - One Page Style */
-  .planning-3col {
-    display: grid;
-    grid-template-columns: 1fr 1.4fr 1fr;
-    gap: var(--s4);
-    height: calc(100vh - 160px);
+  /* ── Planning v2 — toolbar + calendar/week board + detail + pool ── */
+  .pln {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
     width: 100%;
     max-width: none;
+    gap: var(--s3);
+    min-height: 0;
+  }
+
+  .pln-toolbar {
+    display: flex;
+    align-items: center;
+    gap: var(--s3);
+    flex-wrap: wrap;
+    flex-shrink: 0;
+  }
+  .pln-pool-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: calc(290px - var(--s3) * 2);
+    margin-left: var(--s3);
+    height: 28px;
+    box-sizing: border-box;
+    gap: 6px;
+    padding: 0 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    background: var(--surface);
+    color: var(--text-muted);
+    font-size: 11px;
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    transition:
+      color var(--t-fast),
+      border-color var(--t-fast);
+  }
+  .pln-pool-toggle:hover {
+    color: var(--text-primary);
+  }
+  .pln-pool-toggle.active {
+    color: var(--text-primary);
+    border-color: color-mix(in srgb, var(--link) 45%, var(--border));
+  }
+  .pln-pool-count {
+    padding: 0 6px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--link) 15%, transparent);
+    color: var(--link);
+    font-size: 10px;
+  }
+
+  .pln-nav {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: 28px;
+  }
+  .pln-nav-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    box-sizing: border-box;
+    border-radius: var(--r);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition:
+      color var(--t-fast),
+      border-color var(--t-fast);
+  }
+  .pln-nav-btn:hover {
+    color: var(--text-primary);
+    border-color: var(--text-muted);
+  }
+  .pln-period {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 28px;
+    min-width: 170px;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    line-height: 1;
+    color: var(--text-primary);
+    white-space: nowrap;
+  }
+  .pln-today-btn {
+    display: inline-flex;
+    align-items: center;
+    height: 28px;
+    box-sizing: border-box;
+    margin-left: 6px;
+    padding: 0 10px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    background: var(--surface);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition:
+      color var(--t-fast),
+      border-color var(--t-fast);
+  }
+  .pln-today-btn:hover {
+    color: var(--xp);
+    border-color: color-mix(in srgb, var(--xp) 45%, var(--border));
+  }
+  .pln-center {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .pln-right {
+    width: 370px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--s3);
+  }
+
+  .pln-view-toggle {
+    display: flex;
+    align-items: center;
+    height: 28px;
+    box-sizing: border-box;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    overflow: hidden;
+  }
+  .pln-view-toggle button {
+    display: inline-flex;
+    align-items: center;
+    height: 28px;
+    box-sizing: border-box;
+    padding: 0 12px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    background: var(--surface);
+    color: var(--text-muted);
+    border: none;
+    cursor: pointer;
+    transition:
+      color var(--t-fast),
+      background var(--t-fast);
+  }
+  .pln-view-toggle button + button {
+    border-left: 1px solid var(--border);
+  }
+  .pln-view-toggle button.active {
+    color: var(--xp);
+    background: color-mix(in srgb, var(--xp) 10%, transparent);
+  }
+
+  .pln-main {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    gap: var(--s3);
     align-items: stretch;
   }
 
-  .planning-left-col,
-  .planning-center-col,
-  .planning-right-col {
+  /* Goal pool (unassigned, draggable) */
+  .pln-pool {
+    width: 290px;
+    flex-shrink: 0;
     display: flex;
     flex-direction: column;
-    height: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
     min-height: 0;
-    overflow: hidden; /* Header stays fixed, list scrolls */
+    overflow: hidden;
+  }
+  .pln-pool-head {
+    padding: var(--s2);
+    border-bottom: 1px solid var(--border-light);
+    display: flex;
+  }
+  .pln-pool-filter {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    overflow: hidden;
+  }
+  .pln-pool-filter button {
+    flex: 8;
+    min-width: 0;
+    padding: 5px 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 10.5px;
+    font-family: inherit;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: all 0.15s;
+  }
+  .pln-pool-filter button + button {
+    border-left: 1px solid var(--border);
+  }
+  .pln-pool-filter button:nth-child(1) {
+    flex-grow: 9;
+  }
+  .pln-pool-filter button:nth-child(2) {
+    flex-grow: 8;
+  }
+  .pln-pool-filter button:nth-child(3) {
+    flex-grow: 10;
+  }
+  .pln-pool-filter button:hover {
+    color: var(--text-secondary);
+  }
+  .pln-pool-filter button.active {
+    color: var(--xp);
+    background: color-mix(in srgb, var(--xp) 12%, transparent);
+    font-weight: 600;
+  }
+  .pln-pool-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--s2) var(--s3) var(--s3);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-height: 0;
+  }
+  .pln-pool-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    text-align: left;
+    padding: 11px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    background: var(--surface);
+    color: var(--text-primary);
+    font-size: 13px;
+    cursor: grab;
+    transition:
+      background var(--t-fast),
+      border-color var(--t-fast);
+  }
+  .pln-pool-item:hover {
+    background: var(--surface-hover);
+    border-color: var(--text-muted);
+  }
+  .pln-pool-item:active {
+    cursor: grabbing;
+  }
+  .pln-item-icon {
+    display: flex;
+    flex-shrink: 0;
+  }
+  .pln-item-title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 600;
+  }
+  .pln-item-temp {
+    font-size: 9px;
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+    opacity: 0.85;
   }
 
-  .planning-left-col .history-goal-list,
-  .planning-right-col .history-goal-list,
-  .planning-center-col .history-heatmap-wrap {
+  /* Infinite horizontal auto-scroll for overflowing goal titles. The track
+     holds two copies; translating -50% loops seamlessly because the copy's
+     trailing padding is the loop gap. Activated only when the text overflows
+     (marquee action toggles the class). */
+  .pln-mq {
+    display: block;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  .pln-mq:global(.marquee-on) {
+    mask-image: linear-gradient(
+      90deg,
+      transparent,
+      #000 10px,
+      #000 calc(100% - 10px),
+      transparent
+    );
+    -webkit-mask-image: linear-gradient(
+      90deg,
+      transparent,
+      #000 10px,
+      #000 calc(100% - 10px),
+      transparent
+    );
+  }
+  .pln-mq-track {
+    display: inline-flex;
+    white-space: nowrap;
+    will-change: transform;
+  }
+  .pln-mq-text {
+    padding-right: 28px;
+  }
+  .pln-mq-dup {
+    display: none;
+  }
+  .pln-mq:global(.marquee-on) .pln-mq-dup {
+    display: inline;
+  }
+  .pln-mq:global(.marquee-on) .pln-mq-track {
+    animation: pln-marquee linear infinite;
+  }
+  @keyframes pln-marquee {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-50%);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .pln-mq:global(.marquee-on) .pln-mq-track {
+      animation: none;
+    }
+  }
+  .pln-pool-empty {
+    text-align: center;
+    padding: 12px 4px;
+  }
+
+  /* Month calendar */
+  .pln-cal-wrap {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    min-height: 0;
+  }
+  .pln-cal {
+    flex: 1;
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    grid-template-rows: auto repeat(6, minmax(0, 1fr));
+    gap: 4px;
+    min-height: 0;
+  }
+  .pln-dow {
+    text-align: center;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    padding-bottom: 2px;
+  }
+  .pln-cell {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text-primary);
+    cursor: pointer;
+    min-height: 0;
+    overflow: hidden;
+    transition:
+      border-color var(--t-fast),
+      background var(--t-fast);
+  }
+  .pln-cell:hover {
+    border-color: var(--text-muted);
+    background: var(--surface-hover);
+  }
+  .pln-cell.other-month {
+    opacity: 0.38;
+  }
+  .pln-cell.today {
+    border-color: color-mix(in srgb, var(--xp) 45%, var(--border));
+  }
+  .pln-cell.today .pln-cell-num {
+    color: var(--xp);
+  }
+  .pln-cell.selected {
+    outline: 2px solid var(--link);
+    outline-offset: -1px;
+  }
+  .pln-cell-num {
+    font-size: 12px;
+    font-weight: 700;
+    font-family: var(--font-mono);
+  }
+  .pln-cell-dots {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    margin-top: auto;
+  }
+  .pln-cell-dots i {
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    display: block;
+  }
+  .pln-cell-dots em {
+    font-style: normal;
+    font-size: 9px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+  }
+
+  /* Detail panel (selected day, grouped by temporality) */
+  .pln-detail {
+    width: 370px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    overflow: hidden;
+    min-height: 0;
+  }
+  .pln-detail .history-goal-list {
     flex: 1;
     overflow-y: auto;
     padding: var(--s3);
+    min-height: 0;
+  }
+  .pln-detail-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    margin-bottom: 6px;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    font-size: 13px;
+  }
+  .pln-day-name.line-through {
+    text-decoration: line-through;
+    color: var(--text-muted);
+  }
+  .pln-detail-item .status-badge {
+    margin-left: 0;
+    flex-shrink: 0;
   }
 
-  .planning-center-col .history-heatmap-wrap {
+  /* Week board */
+  .pln-week {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 6px;
+  }
+  .pln-day {
     display: flex;
-    justify-content: center;
-    align-items: flex-start;
-    padding-top: var(--s5);
+    flex-direction: column;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    min-height: 0;
+    overflow: hidden;
+    transition:
+      border-color var(--t-fast),
+      background var(--t-fast);
+  }
+  .pln-day:hover {
+    border-color: var(--text-muted);
+  }
+  .pln-day.today {
+    border-color: color-mix(in srgb, var(--xp) 45%, var(--border));
+  }
+  .pln-day.selected {
+    outline: 2px solid var(--link);
+    outline-offset: -1px;
+  }
+  .pln-day-head {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+    padding: 8px 4px;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--border-light);
+    cursor: pointer;
+    color: var(--text-primary);
+  }
+  .pln-day-dow {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+  }
+  .pln-day-num {
+    font-size: 15px;
+    font-weight: 700;
+    font-family: var(--font-mono);
+  }
+  .pln-day.today .pln-day-num {
+    color: var(--xp);
+  }
+  .pln-day-count {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    font-size: 9px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--link) 15%, transparent);
+    color: var(--link);
+    font-family: var(--font-mono);
+  }
+  .pln-day-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-height: 0;
+  }
+  .pln-day-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 9px;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    font-size: 12px;
+  }
+  .pln-day-unassign {
+    display: flex;
+    padding: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .pln-day-unassign:hover {
+    color: var(--error);
+  }
+  .pln-day-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    background: none;
+    border: none;
+    color: var(--text-primary);
+    font-size: 12px;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+    padding: 0;
+    display: flex;
+    min-width: 0;
+  }
+  .pln-day-name:hover {
+    color: var(--link);
+  }
+  .pln-day-empty {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 10px;
+    padding: 6px 0;
   }
 
   @media (max-width: 1100px) {
-    .planning-3col {
-      grid-template-columns: 300px minmax(420px, 1fr) 300px;
+    .pln-detail {
+      width: 320px;
+    }
+    .pln-right {
+      width: 320px;
+    }
+    .pln-pool {
+      width: 250px;
+    }
+    .pln-pool-toggle {
+      width: 250px;
     }
   }
 
   @media (max-width: 900px) {
-    .planning-3col {
-      display: flex;
+    .pln {
+      height: auto;
+      overflow: visible;
+    }
+    .pln-main {
       flex-direction: column;
+      overflow-y: auto;
+    }
+    .pln-pool,
+    .pln-detail {
+      width: 100%;
+      flex-shrink: 0;
+    }
+    .pln-cal-wrap {
+      min-height: 380px;
+    }
+    .pln-week {
+      grid-template-columns: repeat(7, minmax(120px, 1fr));
+      overflow-x: auto;
     }
   }
 
@@ -2491,39 +2771,20 @@
     overflow: hidden;
     min-height: 0;
   }
+  /* Framed canvas: the view area gets a mandatory border so inner components
+     never visually collide with the app chrome. Testing in planning first. */
+  .goals-body.framed {
+    padding: var(--s3);
+    width: auto;
+  }
   /* Full-width tabs fill the whole tab height. */
   .goals-body.full-width .tab-content {
     flex: 1;
     min-height: 0;
+  }
+  .goals-body.full-width .tab-content:not(.pln):not(.history-layout) {
     display: flex;
     flex-direction: column;
-  }
-
-  .today-layout {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 320px;
-    gap: 24px;
-    max-width: 1200px;
-    margin: 0 auto;
-    width: 100%;
-    align-items: start;
-  }
-
-  .dashboard-main-col {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    min-width: 0;
-  }
-
-  .today-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding-top: 12px;
-    margin-bottom: 4px;
-    border-top: 1px solid var(--border);
   }
 
   .new-goal-cta-inline {
@@ -2532,30 +2793,6 @@
     white-space: nowrap;
   }
 
-  .week-map-card {
-    margin-top: 12px;
-  }
-
-  .dashboard-side-col {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    width: 320px;
-  }
-
-  .dashboard-side-col > .dash-card {
-    width: 100%;
-  }
-
-  .sort-control-centered {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 10px;
-    padding: 0 0 8px 0;
-    border-bottom: 1px solid var(--border-light);
-    margin-bottom: 8px;
-  }
   .mirror-to-calendar {
     display: inline-flex;
     align-items: center;
@@ -2565,131 +2802,57 @@
     cursor: pointer;
     user-select: none;
   }
-  .sort-select-square {
-    padding: 6px 10px;
-    font-size: 11px;
-    height: auto;
-    width: auto;
-    min-width: 140px;
-    text-align: center;
-  }
-
-  /* ── Monthly map (#790) ── */
-  .month-map-card {
-    padding: 12px;
-  }
-  .month-map-header {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    position: relative;
-  }
-  .month-map-header > span {
-    flex: 1;
-    font-size: 12px;
-    text-transform: capitalize;
-  }
-  .month-map-nav {
-    display: flex;
-    gap: 4px;
-  }
-  .month-nav-btn {
-    width: 22px;
-    height: 22px;
-    border: 1px solid var(--border);
-    background: var(--surface);
-    color: var(--text-secondary);
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 14px;
-    line-height: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.15s;
-  }
-  .month-nav-btn:hover {
-    background: var(--surface-hover);
-    color: var(--text-primary);
-  }
-  .month-map-grid {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    gap: 3px;
-    margin-top: 10px;
-  }
-  .month-map-dow {
-    text-align: center;
-    font-size: 9px;
-    font-family: var(--font-mono);
-    color: var(--text-muted);
-    padding: 2px 0;
-  }
-  .month-map-cell {
-    aspect-ratio: 1;
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    font-size: 10px;
-    font-family: var(--font-mono);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: all 0.15s;
-    background: var(--surface);
-    color: var(--text-muted);
-  }
-  .month-map-cell:hover {
-    border-color: var(--text-muted);
-  }
-  .month-empty {
-    background: transparent;
-    border: none;
-    cursor: default;
-  }
-  .month-empty:hover {
-    border: none;
-  }
-  .month-assigned {
-    background: color-mix(in srgb, var(--today) 25%, var(--surface));
-    border-color: var(--today);
-    color: var(--warning);
-  }
-  .month-completed {
-    background: var(--success);
-    border-color: var(--success);
-    color: var(--bg);
-  }
-  .month-failed {
-    background: var(--error);
-    border-color: var(--error);
-    color: var(--bg);
-  }
-  .month-today {
-    background: var(--accent) !important;
-    border-color: var(--accent) !important;
-    color: var(--bg) !important;
-    font-weight: 700;
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 40%, transparent);
-  }
-
-  .new-goal-cta {
-    justify-content: center;
-    padding: 12px;
-  }
+  /* Editor tab — slim toolbar + KPI rail + dense goal rows (metrics-view
+     layout). The tab keeps its framed container; the body splits into a
+     fixed rail and a scrolling list. */
   .editor-tab {
-    padding: var(--s3);
-    height: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    overflow: hidden;
     box-sizing: border-box;
-    border: 1px solid var(--border-light);
-    border-radius: var(--r);
   }
-  .editor-header-row {
+  .editor-toolbar {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 12px;
+    gap: 10px;
+    min-height: 52px;
+    box-sizing: border-box;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border-light);
+    background: color-mix(in srgb, var(--surface) 72%, transparent);
+    flex-shrink: 0;
+    flex-wrap: wrap;
+  }
+  .editor-toolbar .new-goal-cta-inline {
+    margin-left: auto;
+    flex-shrink: 0;
+    height: 32px;
+    box-sizing: border-box;
+    padding-block: 0;
+  }
+  .editor-body {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    gap: var(--s3);
+    padding: var(--s2) 0 var(--s3);
+    align-items: stretch;
+  }
+  .editor-rail-col {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s3);
+    min-height: 0;
+    overflow: hidden;
+  }
+  @media (max-width: 900px) {
+    .editor-body {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: none;
+    }
   }
   /* ── New Goal Centered Modal ── */
   .new-goal-backdrop {
@@ -2709,7 +2872,7 @@
     display: flex;
     flex-direction: column;
     max-height: calc(100vh - 24px);
-    width: min(1100px, calc(100vw - 24px));
+    width: min(1280px, calc(100vw - 24px));
     border-radius: 12px;
     overflow: hidden;
   }
@@ -2859,7 +3022,7 @@
     font-family: var(--font-mono);
     background: var(--surface-hover);
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: var(--r);
     color: var(--text-muted);
     cursor: pointer;
     transition: all 0.2s;
@@ -2877,7 +3040,7 @@
     font-size: 12px;
     background: var(--surface-hover);
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: var(--r);
     color: var(--text-muted);
     cursor: pointer;
     transition: all 0.2s;
@@ -2981,7 +3144,7 @@
     width: 32px;
     height: 32px;
     border: 2px solid transparent;
-    border-radius: 6px;
+    border-radius: var(--r);
     cursor: pointer;
     transition: all 0.15s;
     padding: 0;
@@ -3007,7 +3170,7 @@
     width: 36px;
     height: 36px;
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: var(--r);
     flex-shrink: 0;
     overflow: hidden;
     position: relative;
@@ -3083,11 +3246,6 @@
     }
   }
 
-  .form-row {
-    display: flex;
-    gap: var(--s3);
-    align-items: flex-start;
-  }
   .form-field {
     display: flex;
     flex-direction: column;
@@ -3104,6 +3262,7 @@
     letter-spacing: 0.1em;
     margin-bottom: 6px;
     text-align: center;
+    white-space: nowrap;
   }
   .w-full {
     width: 100%;
@@ -3174,129 +3333,6 @@
     background: var(--elevated);
   }
 
-  .icon-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
-    gap: 4px;
-    background: var(--surface-hover);
-    padding: 8px;
-    border-radius: var(--r);
-    border: 1px solid var(--border);
-    max-height: 200px;
-    overflow-y: auto;
-  }
-  .lucide-btn {
-    width: 32px;
-    height: 32px;
-    background: none;
-    border: 1px solid transparent;
-    cursor: pointer;
-    border-radius: 4px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--text-muted);
-    transition: all 0.15s;
-  }
-  .lucide-btn:hover {
-    background: var(--elevated);
-    color: var(--text-secondary);
-  }
-  .lucide-btn.selected {
-    border-color: var(--text-primary);
-    color: var(--text-primary);
-    background: var(--elevated);
-  }
-
-  .color-presets {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    padding: 6px 0;
-    align-items: center;
-  }
-  .color-dot {
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
-    border: 2px solid transparent;
-    cursor: pointer;
-    transition: all 0.15s;
-    flex-shrink: 0;
-    /* Raise above the non-interactive preview so clicks always land on the dot (#203). */
-    position: relative;
-    z-index: 2;
-  }
-  .color-dot:hover {
-    transform: scale(1.15);
-  }
-  .color-dot.selected {
-    border-color: var(--text-primary);
-    box-shadow:
-      0 0 0 2px var(--bg),
-      0 0 0 4px currentColor;
-  }
-
-  .color-custom {
-    width: 24px;
-    height: 24px;
-    border-radius: 4px;
-    overflow: hidden;
-    border: 1px solid var(--border);
-    position: relative;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-  .color-custom:hover {
-    transform: scale(1.1);
-    border-color: var(--text-muted);
-  }
-  .color-picker {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    opacity: 0;
-    cursor: pointer;
-    border: none;
-    padding: 0;
-  }
-
-  .theme-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    padding: 4px 0;
-  }
-  .theme-btn {
-    padding: 4px 12px;
-    font-size: 11px;
-    font-family: var(--font-mono);
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    color: var(--text-muted);
-    cursor: pointer;
-    transition: all 0.15s;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-  .theme-btn:hover {
-    border-color: var(--text-muted);
-    color: var(--text-secondary);
-  }
-  .theme-btn.selected {
-    border-color: var(--text-primary);
-    color: var(--text-primary);
-    background: var(--elevated);
-  }
-
-  .form-actions {
-    display: flex;
-    gap: var(--s2);
-    margin-top: var(--s2);
-  }
   .section-title {
     font-size: 14px;
     font-weight: 600;
@@ -3318,31 +3354,9 @@
     opacity: 0.6;
     border-color: var(--success);
   }
-  .today-layout .goal-card.completed {
-    opacity: 1;
-  }
   .goal-card.failed {
     border-color: var(--error);
     background: color-mix(in srgb, var(--error) 2%, transparent);
-  }
-  .goal-card.paused {
-    opacity: 0.55;
-    border-color: var(--warning, #f59e0b);
-    border-style: dashed;
-  }
-  .state-badge {
-    font-size: 9px;
-    font-family: var(--font-mono);
-    padding: 1px 6px;
-    border-radius: 4px;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    line-height: 1.4;
-  }
-  .paused-badge {
-    background: color-mix(in srgb, var(--warning) 15%, transparent);
-    color: var(--warning, #f59e0b);
-    border: 1px solid color-mix(in srgb, var(--warning) 30%, transparent);
   }
   .goal-main {
     flex: 1;
@@ -3364,15 +3378,6 @@
     gap: 8px;
     margin-top: 6px;
     align-items: center;
-  }
-  .config-badge {
-    font-size: 10px;
-    padding: 2px 6px;
-    border-radius: 4px;
-    background: var(--surface-active);
-    color: var(--text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
   }
   .goal-progress {
     width: 140px;
@@ -3399,18 +3404,6 @@
   .goal-card.failed .progress-fill {
     background: var(--error);
   }
-  .goal-actions {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    flex-shrink: 0;
-  }
-  .text-success {
-    color: var(--success);
-  }
-  .text-muted {
-    color: var(--text-muted);
-  }
   .empty-state {
     padding: 32px;
     text-align: center;
@@ -3420,162 +3413,8 @@
     border-radius: var(--r);
     border: 1px dashed var(--border);
   }
-  .metrics-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: var(--s3);
-    margin-bottom: var(--s2);
-  }
-  .metric-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--r);
-    padding: var(--s4);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-  }
-  .metric-value {
-    font-size: 28px;
-    font-weight: 700;
-    color: var(--text-primary);
-    line-height: 1.2;
-    font-family: var(--font-mono);
-  }
-  .metric-label {
-    font-size: 11px;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-top: 4px;
-  }
-
   /* Planning Tabs */
-  .planning-tabs {
-    display: flex;
-    gap: var(--s2);
-    margin-bottom: var(--s3);
-    border-bottom: 1px solid var(--border);
-    padding-bottom: var(--s2);
-  }
-  .planning-tab {
-    background: transparent;
-    border: none;
-    color: var(--text-muted);
-    font-size: 13px;
-    cursor: pointer;
-    padding: 4px 8px;
-    border-radius: var(--r);
-    transition: all 0.2s;
-  }
-  .planning-tab:hover {
-    color: var(--text-primary);
-    background: var(--surface-hover);
-  }
-  .planning-tab.active {
-    color: var(--text-primary);
-    background: var(--surface-active);
-    font-weight: 500;
-  }
-
-  .planning-nav-section {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--s4);
-  }
-
-  .planning-nav-controls {
-    display: flex;
-    justify-content: center;
-    width: 100%;
-  }
-
-  .nav-sep {
-    opacity: 0.3;
-    font-weight: 200;
-  }
-
-  .planning-calendar-wrap {
-    width: 100%;
-    max-width: 600px;
-    margin: 0 auto;
-    background: var(--surface-hover);
-    padding: var(--s4);
-    border-radius: 12px;
-    border: 1px solid var(--border);
-  }
-
-  .planning-goals-list {
-    display: flex;
-    flex-direction: column;
-    gap: var(--s3);
-    width: 100%;
-  }
-
   /* Hierarchical Planning */
-  .goal-group {
-    margin-bottom: var(--s3);
-  }
-  .goal-children {
-    margin-left: 20px;
-    padding-left: 12px;
-    border-left: 2px solid var(--border);
-  }
-  .child-card {
-    padding: var(--s2) var(--s3);
-    font-size: 13px;
-    margin-bottom: 4px;
-    background: var(--surface-hover);
-  }
-  .child-indent {
-    color: var(--text-muted);
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-  }
-
-  .dash-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--r);
-    padding: var(--s2) var(--s3);
-    display: flex;
-    flex-direction: column;
-    gap: var(--s1);
-    backdrop-filter: blur(10px);
-    transition:
-      transform 0.2s,
-      border-color 0.2s;
-    min-height: 0;
-    overflow: hidden;
-  }
-  .dash-card:hover {
-    border-color: var(--primary);
-    background: var(--surface-hover);
-  }
-  .dash-card-header {
-    display: flex;
-    align-items: center;
-    gap: var(--s2);
-    font-size: 10px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--text-muted);
-    font-family: var(--font-mono);
-  }
-
-  @media (max-width: 900px) {
-    /* Today tab: stack sidebar below main content */
-    .today-layout {
-      grid-template-columns: 1fr;
-      gap: var(--s4);
-    }
-  }
-
   /* Modal de Consistencia */
   .removal-desc {
     font-size: 13px;
@@ -3789,118 +3628,7 @@
     gap: 8px;
   }
 
-  .history-goal-item {
-    display: flex;
-    align-items: flex-start;
-    gap: 10px;
-    padding: 10px 12px;
-    border-radius: var(--r);
-    border: 1px solid var(--border);
-    background: var(--elevated);
-    transition: border-color 0.15s;
-  }
-
-  .history-goal-item.completed {
-    border-left: 3px solid var(--success);
-  }
-  .history-goal-item.failed {
-    border-left: 3px solid var(--error);
-  }
-
-  .hgi-icon-left {
-    width: 24px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    flex-shrink: 0;
-  }
-
-  .hgi-info {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .hgi-title {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text-primary);
-    line-height: 1.2;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .hgi-meta {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    width: 100%;
-    margin-top: 2px;
-  }
-
-  .hgi-bar {
-    flex: 1;
-    height: 4px;
-    background: var(--surface-active);
-    border-radius: 4px;
-    overflow: hidden;
-  }
-
-  .hgi-bar-fill {
-    height: 100%;
-    transition: width 0.3s ease;
-  }
-
-  .hgi-pct {
-    font-size: 10px;
-    font-family: var(--font-mono);
-    font-weight: 700;
-    flex-shrink: 0;
-    min-width: 32px;
-    text-align: right;
-  }
-
-  /* Editor de Objetivos - Nuevo Diseño */
-  .editor-tab {
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    padding: 0;
-    overflow: hidden;
-  }
-
-  .goal-date {
-    font-size: 10px;
-  }
-
   @media (max-width: 768px) {
-    .editor-stats {
-      flex-wrap: wrap;
-    }
-    .tabs {
-      overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
-      scrollbar-width: none;
-      gap: var(--s1);
-    }
-    .tabs::-webkit-scrollbar {
-      display: none;
-    }
-    .tab {
-      padding: var(--s1) var(--s2);
-      font-size: 12px;
-      white-space: nowrap;
-      flex-shrink: 0;
-    }
-    .goals-header {
-      flex-direction: column;
-      align-items: stretch;
-      gap: var(--s2);
-      padding: var(--s2) var(--s3);
-    }
     .goals-body,
     .goals-body.full-width {
       padding: var(--s3);
@@ -3908,20 +3636,11 @@
       flex: none;
       min-height: auto !important;
     }
-    .editor-header,
-    .editor-controls,
-    .search-box,
-    .filter-buttons {
-      width: 100%;
-      max-width: 100%;
-      box-sizing: border-box;
-      overflow-x: hidden;
-    }
     .tab-content {
       overflow-x: hidden;
       max-width: 100%;
     }
-    .editor-header-row {
+    .editor-toolbar {
       flex-direction: column;
       align-items: stretch;
       gap: var(--s2);

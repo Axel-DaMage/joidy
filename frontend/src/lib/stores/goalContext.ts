@@ -3,8 +3,8 @@ import type { Goal, Note, Tag } from '$lib/api';
 
 /**
  * Shared context for goal-related components, eliminating prop drilling
- * through GoalList → GoalCard (#351). The parent page sets this once and
- * GoalCard reads whatever it needs via getContext.
+ * through GoalList → GoalRow (#351). The parent page sets this once and
+ * GoalRow reads whatever it needs via getContext.
  */
 export interface GoalContextValue {
   tags: Tag[];

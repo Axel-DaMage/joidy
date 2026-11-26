@@ -2,7 +2,7 @@ import { test, expect, authGoto } from './helpers/auth';
 
 /**
  * Goals feature — comprehensive E2E tests.
- * Covers: tabs (Editor/Inicio/Planificación/Historial),
+ * Covers: tabs (Editor/Inbox/Planificación/Historial),
  * filters, goal cards, pin, search, goal detail view.
  */
 test.describe('Goals — page structure', () => {
@@ -10,7 +10,7 @@ test.describe('Goals — page structure', () => {
     await authGoto(page, '/goals');
     // All tabs should be visible (Análisis lives on its own /analytics page)
     await expect(page.locator('button:has-text("Editor")')).toBeVisible();
-    await expect(page.locator('button:has-text("Inicio")')).toBeVisible();
+    await expect(page.locator('button:has-text("Inbox")')).toBeVisible();
     await expect(page.locator('button:has-text("Planificación")')).toBeVisible();
     await expect(page.locator('button:has-text("Historial")')).toBeVisible();
     await expect(page.locator('button:has-text("Análisis")')).toHaveCount(0);
@@ -33,26 +33,26 @@ test.describe('Goals — page structure', () => {
 });
 
 test.describe('Goals — tabs navigation', () => {
-  test('can switch to Inicio tab', async ({ page }) => {
+  test('can switch to Inbox tab', async ({ page }) => {
     await authGoto(page, '/goals');
-    await page.locator('button:has-text("Inicio")').click();
+    await page.locator('button:has-text("Inbox")').click();
     await page.waitForTimeout(500);
     // The tab should become active
-    await expect(page.locator('button.tab:has-text("Inicio")')).toHaveClass(/active/);
+    await expect(page.locator('button.header-tab:has-text("Inbox")')).toHaveClass(/active/);
   });
 
   test('can switch to Planificación tab', async ({ page }) => {
     await authGoto(page, '/goals');
     await page.locator('button:has-text("Planificación")').click();
     await page.waitForTimeout(500);
-    await expect(page.locator('button.tab:has-text("Planificación")')).toHaveClass(/active/);
+    await expect(page.locator('button.header-tab:has-text("Planificación")')).toHaveClass(/active/);
   });
 
   test('can switch to Historial tab', async ({ page }) => {
     await authGoto(page, '/goals');
     await page.locator('button:has-text("Historial")').click();
     await page.waitForTimeout(500);
-    await expect(page.locator('button.tab:has-text("Historial")')).toHaveClass(/active/);
+    await expect(page.locator('button.header-tab:has-text("Historial")')).toHaveClass(/active/);
   });
 
   test('can switch back to Editor tab', async ({ page }) => {
@@ -63,7 +63,7 @@ test.describe('Goals — tabs navigation', () => {
     // Then back to Editor
     await page.locator('button:has-text("Editor")').click();
     await page.waitForTimeout(300);
-    await expect(page.locator('button.tab:has-text("Editor")')).toHaveClass(/active/);
+    await expect(page.locator('button.header-tab:has-text("Editor")')).toHaveClass(/active/);
   });
 });
 
@@ -77,7 +77,7 @@ test.describe('Goals — legacy analytics deep links', () => {
 test.describe('Goals — filters', () => {
   test('can filter by Fallidos', async ({ page }) => {
     await authGoto(page, '/goals');
-    const filterBtn = page.locator('button.filter-btn:has-text("Fallidos")');
+    const filterBtn = page.locator('button.gf-chip:has-text("Fallidos")');
     await filterBtn.click();
     await page.waitForTimeout(500);
     await expect(filterBtn).toHaveClass(/active/);
@@ -85,7 +85,7 @@ test.describe('Goals — filters', () => {
 
   test('can filter by Completados', async ({ page }) => {
     await authGoto(page, '/goals');
-    const filterBtn = page.locator('button.filter-btn:has-text("Completados")');
+    const filterBtn = page.locator('button.gf-chip:has-text("Completados")');
     await filterBtn.click();
     await page.waitForTimeout(500);
     await expect(filterBtn).toHaveClass(/active/);
@@ -94,10 +94,10 @@ test.describe('Goals — filters', () => {
   test('can reset to Todos filter', async ({ page }) => {
     await authGoto(page, '/goals');
     // Apply a filter
-    await page.locator('button.filter-btn:has-text("Fallidos")').click();
+    await page.locator('button.gf-chip:has-text("Fallidos")').click();
     await page.waitForTimeout(300);
     // Reset to Todos
-    const todosBtn = page.locator('button.filter-btn:has-text("Todos")');
+    const todosBtn = page.locator('button.gf-chip:has-text("Todos")');
     await todosBtn.click();
     await page.waitForTimeout(500);
     await expect(todosBtn).toHaveClass(/active/);
@@ -109,7 +109,7 @@ test.describe('Goals — filters', () => {
     await search.fill('G1');
     await page.waitForTimeout(500);
     // Should show goals with "G1" in the title
-    const goalCards = page.locator('.goal-card-main, [class*="goal-card"]');
+    const goalCards = page.locator('.grow-main, [class*="goal-card"]');
     const count = await goalCards.count();
     expect(count).toBeGreaterThan(0);
   });
@@ -119,12 +119,12 @@ test.describe('Goals — goal cards', () => {
   test('goal cards are visible and have pin buttons', async ({ page }) => {
     await authGoto(page, '/goals');
     await page.waitForTimeout(2000);
-    const goalCards = page.locator('.goal-card-main');
+    const goalCards = page.locator('.grow-main');
     const count = await goalCards.count();
     if (count > 0) {
       // Pin button is a sibling within the goal-editor-card container
       // (aria-labels are "Fijar"/"Desfijar" — goalCard.pin/unpin).
-      const pinBtn = page.locator('.goal-editor-card button[aria-label="Fijar"], .goal-editor-card button[aria-label="Desfijar"]').first();
+      const pinBtn = page.locator('.grow button[aria-label="Fijar"], .grow button[aria-label="Desfijar"]').first();
       await expect(pinBtn).toBeVisible({ timeout: 3000 });
     }
   });
@@ -132,7 +132,7 @@ test.describe('Goals — goal cards', () => {
   test('clicking a goal card opens it', async ({ page }) => {
     await authGoto(page, '/goals');
     await page.waitForTimeout(1000);
-    const firstGoal = page.locator('.goal-card-main').first();
+    const firstGoal = page.locator('.grow-main').first();
     if (await firstGoal.isVisible({ timeout: 2000 }).catch(() => false)) {
       await firstGoal.click();
       await page.waitForTimeout(1000);
@@ -144,7 +144,7 @@ test.describe('Goals — goal cards', () => {
   test('pin button toggles goal pin state', async ({ page }) => {
     await authGoto(page, '/goals');
     await page.waitForTimeout(1000);
-    const firstGoalCard = page.locator('.goal-editor-card').first();
+    const firstGoalCard = page.locator('.grow').first();
     if (await firstGoalCard.isVisible({ timeout: 2000 }).catch(() => false)) {
       // The pin button lives in .card-top-left-actions, which is
       // pointer-events:none until the card is hovered (GoalCard.svelte) —
