@@ -12,7 +12,7 @@
  *    component teardown.
  * 3. Module-level stores live for the whole app session, so their timers are
  *    not bound to a component. They are either cleared by an explicit store
- *    teardown (`stopPolling`, `stopBackgroundSync`, `clearAllToastTimers`, …)
+ *    teardown (`stopPolling`, `stopBackgroundSync`, …)
  *    or marked inline with `// intentional: <reason>`.
  * 4. A component timer that must outlive the component — e.g. triggering
  *    `window.location.reload()`, or dispatching a `window` event after
