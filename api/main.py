@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from datetime import UTC
 from pathlib import Path
 from time import perf_counter
@@ -62,6 +62,39 @@ from starlette.responses import JSONResponse, Response
 from starlette.staticfiles import StaticFiles
 
 logger = logging.getLogger(__name__)
+
+# Goal state evaluation cadence (#1519). The evaluator used to run inline
+# inside GET /goals and /goals/execution-queue, so every read paid for the
+# full pass — active-goal scan, bulk progress join, per-expired-goal vault
+# writes and a commit. It now runs on this periodic task; reads serve
+# persisted state only. 60s bounds state-transition staleness (expiry,
+# rollover/snowball, ONEOFF auto-complete) while staying cheap: an idle
+# pass is one indexed query plus a no-op commit. Single-worker uvicorn
+# (WEB_CONCURRENCY=1, see Dockerfile) keeps this a single scheduler.
+GOAL_EVALUATION_INTERVAL_SECONDS = 60.0
+
+
+async def _goal_evaluation_loop() -> None:
+    """Periodically evaluate active goals off the request path (#1519).
+
+    Runs one pass immediately at startup — covering expirations that
+    accrued while the API was down — then sleeps between passes. The
+    sync DB + vault-write work happens in a worker thread so the event
+    loop is never blocked; a failed pass is logged and retried next tick.
+    """
+    from services.goal_service import run_goal_evaluation_pass
+
+    while True:
+        try:
+            await asyncio.to_thread(run_goal_evaluation_pass)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception(
+                "Scheduled goal evaluation failed; retrying in %.0fs",
+                GOAL_EVALUATION_INTERVAL_SECONDS,
+            )
+        await asyncio.sleep(GOAL_EVALUATION_INTERVAL_SECONDS)
 
 
 class RequestTimingMiddleware(BaseHTTPMiddleware):
@@ -176,7 +209,20 @@ async def lifespan(app: FastAPI):
         except Exception:
             logger.exception("Failed to auto-restore goals from vault")
 
+    # Periodic goal evaluation (#1519): expirations, rollovers, snowball
+    # spawns and the vault-file sync they trigger happen here instead of
+    # inside GET /goals. Skipped under APP_ENV=test like the vault
+    # auto-restore above — tests drive evaluate_active_goals directly.
+    eval_task: asyncio.Task | None = None
+    if settings.app_env != "test":
+        eval_task = asyncio.create_task(_goal_evaluation_loop())
+
     yield
+
+    if eval_task is not None:
+        eval_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await eval_task
     await aclose_http_clients()
 
 

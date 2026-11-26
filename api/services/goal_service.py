@@ -226,6 +226,14 @@ def get_bulk_goal_progress(goals: list[Goal], db: Session) -> dict[int, float]:
 
 
 def evaluate_active_goals(db: Session):
+    """Apply time-based goal state transitions for every active goal.
+
+    Side effects: marks expired goals COMPLETED/FAILED, rolls ROLLOVER
+    goals into a new period, spawns SNOWBALL successors, syncs goal files
+    into the vault and commits the session. It therefore runs on the
+    periodic background pass (``run_goal_evaluation_pass``, #1519) —
+    never inside a GET endpoint.
+    """
     now = datetime.now(UTC)
     today = get_local_today()
     active_goals = GoalRepository(db).get_active()
@@ -265,6 +273,19 @@ def evaluate_active_goals(db: Session):
             _process_goal_failure(db, goal, now, progress_by_goal.get(goal.id))
 
     db.commit()
+
+
+def run_goal_evaluation_pass() -> None:
+    """Run one ``evaluate_active_goals`` pass on its own session.
+
+    Called by the API's periodic evaluator task (#1519). Keeping session
+    ownership here lets the async loop stay a dumb scheduler: a failure
+    mid-pass rolls back on session close and is retried on the next tick.
+    """
+    from database import SessionLocal
+
+    with SessionLocal() as db:
+        evaluate_active_goals(db)
 
 
 def _process_goal_failure(db: Session, goal: Goal, now: datetime, progress: float | None = None):

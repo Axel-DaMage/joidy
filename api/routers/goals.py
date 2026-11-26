@@ -16,7 +16,6 @@ from models.note import Note
 from pydantic import BaseModel, field_validator
 from services.gamification_engine import no_award_result, process_event
 from services.goal_service import (
-    evaluate_active_goals,
     get_bulk_goal_progress,
     get_goal_progress,
     get_goal_streak,
@@ -352,7 +351,8 @@ def list_goals(
     context: GoalContext | None = Query(None),
     db: Session = Depends(get_db),
 ):
-    evaluate_active_goals(db)
+    # #1519 — goal evaluation (expiry, rollover/snowball, vault writes)
+    # runs on the periodic background pass; reads serve persisted state.
     query = db.query(Goal)
     if state is not None:
         query = query.filter(Goal.state == state)
@@ -546,7 +546,8 @@ def get_execution_queue(
     Resolves active, uncompleted goals ordered by priority DESC, created_at DESC.
     Includes tasks matching the resolved context plus ANY tasks.
     """
-    evaluate_active_goals(db)
+    # #1519 — same as list_goals: no evaluator (and no vault writes) on a
+    # read; the periodic pass keeps states fresh.
     now_local = get_local_now()
 
     if context == "auto":
