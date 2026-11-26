@@ -1,5 +1,5 @@
 import { version } from '$app/env';
-import { PUBLIC_API_PORT } from '$app/env/public';
+import { PUBLIC_API_PORT, PUBLIC_API_URL } from '$app/env/public';
 import { assets, immutable } from '$app/manifest';
 import { resolve } from '$app/paths';
 import { resolveBrowserApiBase } from '../lib/utils/apiBase';
@@ -22,20 +22,24 @@ const RUNTIME_CACHE_LIMIT = 60;
 // be matched against `url.pathname` in the fetch handler.
 const ASSETS = [...immutable, ...assets].map((asset) => resolve(asset.path));
 
-// The API lives on a different origin (default http://host:8000), so a
-// pathname check like `/api/` can never match — resolve the real origin with
+// The API lives on a different base URL (default http://host:8000), so a
+// pathname check like `/api/` can never match — resolve the real base with
 // the same helper the page uses (lib/utils/apiBase.ts). Kit 3 loads dynamic
 // public env in service workers at runtime via /_app/env.js (see the
 // vite-plugin-sveltekit-service-worker-env prelude), so a port-fallback'd
-// PUBLIC_API_PORT resolves correctly here too (#1487). `self.location` is the
-// SW scope origin — same host the page resolves against.
-const API_ORIGIN = new URL(
-  resolveBrowserApiBase(
-    PUBLIC_API_PORT,
-    import.meta.env.VITE_API_URL as string | undefined,
-    self.location
-  )
-).origin;
+// PUBLIC_API_PORT or a full PUBLIC_API_URL resolves correctly here too
+// (#1487, #1582). `self.location` is the SW scope origin — same host the
+// page resolves against. The match must be on the whole base, not just the
+// origin: a subpath PUBLIC_API_URL (https://example.com/api) shares the page
+// origin, and origin-only matching would swallow every navigation. The
+// trailing-slash strip keeps the `${API_BASE}/` prefix match working for a
+// verbatim VITE_API_URL like `http://localhost:8000/`.
+const API_BASE = resolveBrowserApiBase(
+  PUBLIC_API_URL,
+  PUBLIC_API_PORT,
+  import.meta.env.VITE_API_URL as string | undefined,
+  self.location
+).replace(/\/+$/, '');
 
 self.addEventListener('install', (event) => {
   async function addFilesToCache() {
@@ -86,7 +90,7 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
   const url = new URL(event.request.url);
-  const isApiRequest = url.origin === API_ORIGIN;
+  const isApiRequest = url.href === API_BASE || url.href.startsWith(`${API_BASE}/`);
 
   // Only intercept same-origin requests and calls to the API origin.
   // Everything else (cross-origin APIs, websockets, dev paths) is left to

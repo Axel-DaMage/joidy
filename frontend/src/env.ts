@@ -16,4 +16,16 @@ export const variables = defineEnvVars({
     description:
       'Host port the API is published on (compose API_PORT, after joidy up port-fallback).',
   },
+  // Reverse-proxy/TLS escape hatch (#1582): a full API URL
+  // (https://api.example.com, https://example.com/api) wins over every other
+  // branch of resolveBrowserApiBase. Compose injects it as empty unless the
+  // user sets PUBLIC_API_URL in .env.
+  PUBLIC_API_URL: {
+    public: true,
+    // Optional — unset/empty (or malformed) yields undefined and the browser
+    // falls back to PUBLIC_API_PORT (see lib/utils/apiBase.ts).
+    schema: (value) => value || undefined,
+    description:
+      'Full public URL of the API for reverse-proxy/TLS deployments (overrides PUBLIC_API_PORT).',
+  },
 });

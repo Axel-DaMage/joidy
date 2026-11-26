@@ -8,8 +8,9 @@ import { API_PORT_RANGE } from './src/lib/utils/apiBase';
 // vitest.config.ts both import this object).
 
 // ── CSP sources for the API origin (#1283) ────────────────────────────────────
-// The browser resolves the API base at runtime (PUBLIC_API_PORT → VITE_API_URL
-// → <page-host>:8000 — see src/lib/utils/apiBase.ts, #1487). `joidy up`
+// The browser resolves the API base at runtime (PUBLIC_API_URL →
+// PUBLIC_API_PORT → VITE_API_URL → <page-host>:8000 — see
+// src/lib/utils/apiBase.ts, #1487/#1582). `joidy up`
 // port-fallback can move the published API port anywhere inside
 // default..default+5, so the `*:<port>` host-wildcard sources must cover the
 // whole API_PORT_RANGE (8000-8005 by default), not just :8000.

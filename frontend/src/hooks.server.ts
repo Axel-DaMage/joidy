@@ -1,5 +1,5 @@
 import type { Handle } from '@sveltejs/kit/hooks';
-import { augmentCspWithApiPort } from '$lib/utils/apiBase';
+import { augmentCspWithApiPort, augmentCspWithApiUrl } from '$lib/utils/apiBase';
 
 /**
  * HTTP security headers for the frontend (issue #1283, audit F-11).
@@ -24,11 +24,16 @@ export const handle: Handle = async ({ event, resolve }) => {
     response.headers.set('Content-Security-Policy', "default-src 'self'; frame-ancestors 'none'");
   } else {
     // Kit's CSP wildcards are frozen at image build time and only cover the
-    // default 8000-8005 fallback span — a custom API_PORT is only known at
-    // runtime, so patch it into connect-src/img-src here (#1487).
+    // default 8000-8005 fallback span — a custom API_PORT or a full
+    // PUBLIC_API_URL origin (reverse proxy / TLS / subpath) is only known at
+    // runtime, so patch it into connect-src/img-src here (#1487, #1582).
     const csp = response.headers.get('Content-Security-Policy');
     if (csp) {
-      response.headers.set('Content-Security-Policy', augmentCspWithApiPort(csp, process.env.PUBLIC_API_PORT));
+      const augmented = augmentCspWithApiPort(
+        augmentCspWithApiUrl(csp, process.env.PUBLIC_API_URL),
+        process.env.PUBLIC_API_PORT
+      );
+      response.headers.set('Content-Security-Policy', augmented);
     }
   }
 
