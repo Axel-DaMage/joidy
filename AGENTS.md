@@ -227,7 +227,7 @@ on. With the flag off, `/system/power` mutation routes are not registered and
 
 ## Constraints
 - Never commit `.env` or `data/` (in `.gitignore`)
-- API must be healthy before other services start (`depends_on: condition: service_healthy`)
+- API must be healthy before backend services start (`depends_on: condition: service_healthy`); frontend only waits for `service_started` (#1556) — the node server doesn't call the API at boot and the SPA tolerates a temporarily-down API
 - AI features disabled without `GEMINI_API_KEY`; API still works
 - Database is shared across all services (single PostgreSQL database via `DATABASE_URL`)
 - Config via Pydantic `Settings` from `.env`; no hardcoded values

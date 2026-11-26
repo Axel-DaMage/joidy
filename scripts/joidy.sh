@@ -128,8 +128,12 @@ esac
 # bootstrap entirely (install.sh supports installing Docker after the CLI).
 BOOTSTRAP_MODE=none
 case "${1:-help}" in
-  up|down|sleep|wake|restart|pull|idle|backup|restore)
+  up|down|sleep|wake|restart|pull|backup|restore)
     BOOTSTRAP_MODE=full ;;
+  idle)
+    # `joidy idle status` only reads watcher state — the other subcommands
+    # (enable/disable/run) need the full bootstrap.
+    if [ "${2:-}" = "status" ]; then BOOTSTRAP_MODE=ro; else BOOTSTRAP_MODE=full; fi ;;
   status|logs)
     BOOTSTRAP_MODE=ro ;;
 esac
