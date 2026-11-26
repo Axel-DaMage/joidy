@@ -122,6 +122,13 @@ Two concurrent asyncio tasks: `watch_vault()` (watches `/vault/*.md`, 2s debounc
 - `lib/components/`: Reusable Svelte components (`Modal`, `DynamicIcon`, `GoalCard`, `StreakListItem`, etc.)
 - `lib/utils/logger.ts`: `logger.info()` / `logger.log()` / `logger.debug()` / `logger.warn()` / `logger.error()` — the logging convention used across the codebase. Dev Mode is stored in localStorage key `joidy-dev-mode`, toggled in Settings. Pages under development show "En Construcción" unless dev mode is ON.
 
+#### Panel Border Standard
+- Internal panels/cards across ALL views use exactly: `border: 1px solid var(--border); border-radius: var(--r);` on `background: var(--surface)` — the analytics `.ac-card` / `.ad-rail` treatment is the reference.
+- Never hardcode radius values (`6px`, `10px`) on bordered elements; use `var(--r)`.
+- Outer view spacing standard: the view body uses `padding: var(--s3)` and nothing else — no margins, and inner layout containers must not add their own horizontal padding (analytics `.ad-body` is the reference).
+- Flat divider lines (`border-right`/`border-bottom` on one edge) are only for the app shell chrome; interior panels are always boxed.
+- Page tabs belong in the global app header via `$lib/stores/appHeader.ts` (tabs + trailing controls), not in in-page header bars.
+
 #### Icon Usage Convention (#257)
 - **Static UI icons** (always the same icon, e.g. close button, search): Import directly from `lucide-svelte` — `import { Search, X } from 'lucide-svelte'`. This is tree-shakeable and more efficient.
 - **Dynamic icons** (icon name comes from data/config, e.g. streak icon, folder icon, nav item icon): Use `<DynamicIcon name={iconName} />` — supports runtime lookup, kebab-to-PascalCase conversion, and icon pack switching (Lucide/Phosphor/Material).

@@ -15,6 +15,28 @@
   import SetupWizard from '$lib/components/SetupWizard.svelte';
   import { api, apiWsUrl, refreshAccessToken, type Goal, type PersonalStreak } from '$lib/api';
   import { session, isAuthenticated, getToken } from '$lib/stores/session';
+  import { appHeaderTabs } from '$lib/stores/appHeader';
+
+  // WAI-ARIA tabs pattern for the header tab strip: arrows/Home/End move
+  // selection and focus together, regardless of which page owns the tabs.
+  function onHeaderTabKeydown(e: KeyboardEvent) {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+    const list = (e.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>(
+      'button[role="tab"]'
+    );
+    if (!list.length) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const idx = Array.from(list).findIndex((b) => b === document.activeElement);
+    const cur = idx >= 0 ? idx : list.length - 1;
+    let next = cur;
+    if (e.key === 'ArrowRight') next = (cur + 1) % list.length;
+    else if (e.key === 'ArrowLeft') next = (cur - 1 + list.length) % list.length;
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = list.length - 1;
+    list[next]?.click();
+    list[next]?.focus();
+  }
   import {
     totalXP,
     loadStats,
@@ -708,6 +730,40 @@
     <header class="app-header">
       <span class="logo mono">JOIDY</span>
 
+      {#if $appHeaderTabs}
+        <div
+          class="header-tabs"
+          role="tablist"
+          aria-label={$appHeaderTabs.label}
+          tabindex={-1}
+          onkeydown={onHeaderTabKeydown}
+        >
+          {#each $appHeaderTabs.tabs as tab (tab.id)}
+            {@const Icon = tab.icon}
+            {#if tab.href}
+              <a class="header-tab" href={tab.href}>
+                <Icon size={14} /><span class="header-tab-label">{tab.label}</span>
+              </a>
+            {:else}
+              <button
+                type="button"
+                class="header-tab"
+                role="tab"
+                class:active={$appHeaderTabs.activeId === tab.id}
+                aria-selected={$appHeaderTabs.activeId === tab.id}
+                tabindex={$appHeaderTabs.activeId === tab.id ? 0 : -1}
+                onclick={() => $appHeaderTabs?.onselect(tab.id)}
+              >
+                <Icon size={14} /><span class="header-tab-label">{tab.label}</span>
+                {#if tab.badge && tab.badge > 0}
+                  <span class="header-tab-badge">{tab.badge}</span>
+                {/if}
+              </button>
+            {/if}
+          {/each}
+        </div>
+      {/if}
+
       {#if $showInstallBanner}
         <div class="pwa-banner" transition:fade={{ duration: 150 }}>
           <DynamicIcon name="CloudDownload" size={13} />
@@ -760,6 +816,41 @@
       {/if}
 
       <div style="flex:1;"></div>
+
+      {#if $appHeaderTabs?.trailing}
+        <div class="header-trailing">
+          {#each $appHeaderTabs.trailing as control, ci (ci)}
+            {#if control.type === 'segmented'}
+              <div class="header-segmented" role="group" aria-label={control.label}>
+                {#each control.options as opt (opt.id)}
+                  <button
+                    type="button"
+                    class="header-segmented-btn"
+                    class:active={control.activeId === opt.id}
+                    aria-pressed={control.activeId === opt.id}
+                    title={opt.title}
+                    onclick={() => control.onselect(opt.id)}>{opt.label}</button
+                  >
+                {/each}
+              </div>
+            {:else}
+              {@const ActionIcon = control.icon}
+              <button
+                type="button"
+                class="header-action"
+                class:spinning={control.spinning}
+                title={control.title}
+                aria-label={control.title}
+                disabled={control.disabled}
+                onclick={control.onclick}
+              >
+                <ActionIcon size={14} />
+              </button>
+            {/if}
+          {/each}
+        </div>
+      {/if}
+
 
       <!-- Vault sync indicator (#73) -->
       {#if vaultSyncActive || vaultSyncPulse}
@@ -1089,6 +1180,132 @@
   }
   .pwa-dismiss {
     padding: 2px;
+  }
+
+  .header-tabs {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: var(--s1);
+    max-width: min(60vw, calc(100vw - 620px));
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .header-tabs::-webkit-scrollbar {
+    display: none;
+  }
+  .header-tab {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    min-height: 30px;
+    padding: 5px 12px;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 13px;
+    font-family: inherit;
+    text-decoration: none;
+    cursor: pointer;
+    border-radius: var(--r);
+    transition: all 0.2s ease;
+    white-space: nowrap;
+  }
+  .header-tab:hover {
+    background: var(--surface-hover);
+    color: var(--text-primary);
+  }
+  .header-tab.active {
+    background: var(--surface-active);
+    color: var(--text-primary);
+    font-weight: 500;
+  }
+  .header-tab:focus-visible {
+    outline: 1px solid var(--xp);
+    outline-offset: 2px;
+  }
+  .header-tab-badge {
+    min-width: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: var(--accent-contrast-text, var(--bg));
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 16px;
+    text-align: center;
+    font-family: var(--font-mono);
+  }
+  .header-trailing {
+    display: flex;
+    align-items: center;
+    gap: var(--s2);
+  }
+  .header-segmented {
+    display: flex;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    overflow: hidden;
+  }
+  .header-segmented-btn {
+    min-width: 40px;
+    min-height: 26px;
+    padding: 0 10px;
+    border: none;
+    border-left: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .header-segmented-btn:first-child {
+    border-left: none;
+  }
+  .header-segmented-btn:hover {
+    color: var(--text-secondary);
+  }
+  .header-segmented-btn.active {
+    color: var(--xp);
+    background: color-mix(in srgb, var(--xp) 12%, transparent);
+  }
+  .header-action {
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .header-action:hover {
+    color: var(--text-primary);
+    background: var(--surface-hover);
+  }
+  .header-action.spinning :global(svg) {
+    animation: header-spin 0.9s linear infinite;
+  }
+  @keyframes header-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  @media (max-width: 768px) {
+    .header-tabs {
+      position: static;
+      transform: none;
+      flex: 1 1 auto;
+      min-width: 0;
+      max-width: none;
+    }
   }
 
   .logo {

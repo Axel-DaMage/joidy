@@ -1,12 +1,12 @@
 <script lang="ts">
-  // GoalStatsRail — vertical KPI rail for the goals editor tab. Mirrors the
-  // analytics dashboard rail (.ad-rail): a hero number with a completion meter
-  // plus compact KPI rows. All values are derived client-side from the goals
-  // list — no extra requests.
+  // GoalStatsRail — compact KPI rail for the goals editor tab, mirroring the
+  // analytics dashboard rail (.ad-rail): an actionable hero (today's progress
+  // X/Y with a real completion meter) plus slim horizontal KPI rows for the
+  // state inventory. All values are derived client-side from the goals list —
+  // no extra requests.
   import Target from 'lucide-svelte/icons/target';
   import CheckCircle2 from 'lucide-svelte/icons/check-circle-2';
   import Pause from 'lucide-svelte/icons/pause';
-  import Pin from 'lucide-svelte/icons/pin';
   import CalendarCheck from 'lucide-svelte/icons/calendar-check';
   import { t } from 'svelte-i18n';
 
@@ -17,17 +17,17 @@
     completed: number;
     /** Goals in state PAUSED. */
     paused: number;
-    /** Pinned goal count. */
-    pinned: number;
-    /** Actionable goals assigned for today. */
-    today: number;
+    /** Managed goals assigned for today. */
+    todayTotal: number;
+    /** Of those, already completed today. */
+    todayDone: number;
     /** Managed goals total (excludes INBOX and CANCELLED). */
     total: number;
   }
 
-  let { active, completed, paused, pinned, today, total }: Props = $props();
+  let { active, completed, paused, todayTotal, todayDone, total }: Props = $props();
 
-  let doneShare = $derived(total > 0 ? Math.round((completed / total) * 100) : 0);
+  let todayShare = $derived(todayTotal > 0 ? todayDone / todayTotal : 0);
 </script>
 
 <aside class="gsr" aria-label={$t('goalsPage.editorRail.title')}>
@@ -39,52 +39,51 @@
   </div>
 
   <div class="gsr-hero">
-    <span class="gsr-hero-label">{$t('goalFilters.active')}</span>
-    <span class="gsr-hero-val">{active}</span>
-    <div class="gsr-meter"><i style:--p={doneShare / 100}></i></div>
-    <span class="gsr-hero-sub"
-      >{$t('goalsPage.editorRail.managed', { values: { count: total } })}</span
-    >
+    <span class="gsr-hero-label">{$t('goalsPage.editorRail.today')}</span>
+    <span class="gsr-hero-val">
+      {todayDone}<span class="gsr-hero-of">/{todayTotal}</span>
+    </span>
+    <div class="gsr-meter"><i style:--p={todayShare}></i></div>
+    <span class="gsr-hero-sub">
+      {#if todayTotal === 0}
+        {$t('goalsPage.editorRail.noneToday')}
+      {:else if todayDone === todayTotal}
+        {$t('goalsPage.editorRail.dayComplete')}
+      {:else}
+        {$t('goalsPage.editorRail.pendingToday', { values: { count: todayTotal - todayDone } })}
+      {/if}
+    </span>
   </div>
 
   <div class="gsr-kpis">
-    <div class="gsr-kpi today">
-      <div class="gsr-kpi-main">
-        <span class="gsr-kpi-icon"><CalendarCheck size={14} /></span>
-        <span class="gsr-kpi-val">{today}</span>
+    <div class="gsr-kpi active">
+      <span class="gsr-kpi-icon"><Target size={14} /></span>
+      <div class="gsr-kpi-txt">
+        <span class="gsr-kpi-label">{$t('goalsPage.editorRail.active')}</span>
+        <span class="gsr-kpi-val">{active}</span>
       </div>
-      <span class="gsr-kpi-label">{$t('goalsPage.editorRail.today')}</span>
-      <span class="gsr-kpi-sub">{$t('goalsPage.editorRail.todayHint')}</span>
     </div>
 
     <div class="gsr-kpi completed">
-      <div class="gsr-kpi-main">
-        <span class="gsr-kpi-icon"><CheckCircle2 size={14} /></span>
+      <span class="gsr-kpi-icon"><CheckCircle2 size={14} /></span>
+      <div class="gsr-kpi-txt">
+        <span class="gsr-kpi-label">{$t('goalsPage.editorRail.completed')}</span>
         <span class="gsr-kpi-val">{completed}</span>
       </div>
-      <span class="gsr-kpi-label">{$t('goalsPage.editorRail.completed')}</span>
-      <span class="gsr-kpi-sub"
-        >{$t('goalsPage.editorRail.doneShare', { values: { pct: doneShare } })}</span
-      >
     </div>
 
     <div class="gsr-kpi paused">
-      <div class="gsr-kpi-main">
-        <span class="gsr-kpi-icon"><Pause size={14} /></span>
+      <span class="gsr-kpi-icon"><Pause size={14} /></span>
+      <div class="gsr-kpi-txt">
+        <span class="gsr-kpi-label">{$t('goalsPage.editorRail.paused')}</span>
         <span class="gsr-kpi-val">{paused}</span>
       </div>
-      <span class="gsr-kpi-label">{$t('goalsPage.editorRail.paused')}</span>
-      <span class="gsr-kpi-sub"></span>
     </div>
+  </div>
 
-    <div class="gsr-kpi pinned">
-      <div class="gsr-kpi-main">
-        <span class="gsr-kpi-icon"><Pin size={14} /></span>
-        <span class="gsr-kpi-val">{pinned}</span>
-      </div>
-      <span class="gsr-kpi-label">{$t('goalsPage.editorRail.pinned')}</span>
-      <span class="gsr-kpi-sub"></span>
-    </div>
+  <div class="gsr-foot">
+    <CalendarCheck size={10} />
+    {$t('goalsPage.editorRail.managed', { values: { count: total } })}
   </div>
 </aside>
 
@@ -99,7 +98,7 @@
     border-radius: var(--r);
     padding: var(--s3);
     overflow: hidden;
-    min-height: 0;
+    align-self: flex-start;
   }
 
   .gsr-header {
@@ -152,6 +151,10 @@
     font-family: var(--font-mono);
     color: var(--text-primary);
   }
+  .gsr-hero-of {
+    font-size: 18px;
+    color: var(--text-muted);
+  }
   .gsr-meter {
     width: 100%;
     max-width: 132px;
@@ -181,38 +184,25 @@
   }
 
   .gsr-kpis {
-    flex: 1;
-    min-height: 0;
     display: flex;
     flex-direction: column;
   }
   .gsr-kpi {
-    flex: 1 1 0;
-    min-height: 0;
     display: flex;
-    flex-direction: column;
     align-items: center;
-    justify-content: center;
-    gap: 3px;
+    gap: 10px;
+    padding: 9px 2px;
     min-width: 0;
-    text-align: center;
   }
   .gsr-kpi + .gsr-kpi {
     border-top: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
-  }
-  .gsr-kpi-main {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 7px;
-    min-width: 0;
   }
   .gsr-kpi-icon {
     display: flex;
     color: var(--text-muted);
     flex-shrink: 0;
   }
-  .gsr-kpi.today .gsr-kpi-icon {
+  .gsr-kpi.active .gsr-kpi-icon {
     color: var(--xp);
   }
   .gsr-kpi.completed .gsr-kpi-icon {
@@ -221,8 +211,12 @@
   .gsr-kpi.paused .gsr-kpi-icon {
     color: var(--warning, #f59e0b);
   }
-  .gsr-kpi.pinned .gsr-kpi-icon {
-    color: var(--link);
+  .gsr-kpi-txt {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    min-width: 0;
+    flex: 1;
   }
   .gsr-kpi-label {
     font-size: 10px;
@@ -233,31 +227,30 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 100%;
+    flex: 1;
+    min-width: 0;
   }
   .gsr-kpi-val {
-    font-size: 20px;
+    font-size: 16px;
     font-weight: 700;
     font-family: var(--font-mono);
     line-height: 1.1;
     color: var(--text-primary);
     white-space: nowrap;
   }
-  .gsr-kpi-sub {
-    font-size: 10px;
+  .gsr-foot {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    padding-top: 9px;
+    border-top: 1px solid var(--border);
+    font-size: 9px;
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
     color: var(--text-muted);
-    min-height: 12px;
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 100%;
-  }
-
-  /* Short viewports: drop secondary lines instead of scrolling (ad-rail parity). */
-  @media (max-height: 800px) {
-    .gsr-kpi-sub {
-      display: none;
-    }
   }
 
   /* Mobile: collapse to a horizontal strip above the list. */
@@ -270,7 +263,8 @@
       overflow-x: auto;
       padding: var(--s2) var(--s3);
     }
-    .gsr-header {
+    .gsr-header,
+    .gsr-foot {
       display: none;
     }
     .gsr-hero {
@@ -284,6 +278,9 @@
     .gsr-hero-val {
       font-size: 22px;
     }
+    .gsr-hero-of {
+      font-size: 13px;
+    }
     .gsr-meter {
       width: 56px;
       margin-top: 0;
@@ -296,20 +293,12 @@
       flex: 0 0 auto;
     }
     .gsr-kpi {
-      flex: 0 0 auto;
       border-top: none;
       border-left: 1px solid var(--border);
-      padding-left: var(--s3);
-      min-width: 64px;
-    }
-    .gsr-kpi + .gsr-kpi {
-      border-top: none;
+      padding: 0 0 0 var(--s3);
     }
     .gsr-kpi-val {
-      font-size: 15px;
-    }
-    .gsr-kpi-sub {
-      display: none;
+      font-size: 14px;
     }
   }
 </style>

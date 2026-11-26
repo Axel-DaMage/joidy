@@ -252,8 +252,8 @@
     min-height: 0;
     margin: 0;
     background: var(--surface);
-    border: 1px solid var(--border-light);
-    border-radius: var(--r, 10px);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
     overflow: hidden;
   }
 

@@ -263,6 +263,9 @@
       box-shadow var(--t-fast),
       background var(--t-fast);
     min-width: 0;
+    /* Rows are direct flex children of .goal-list — without this they shrink
+       to fit the container instead of overflowing into its scroll. */
+    flex-shrink: 0;
   }
 
   .grow:hover {

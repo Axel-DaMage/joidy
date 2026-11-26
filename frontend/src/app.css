@@ -226,6 +226,7 @@ h4 {
 
 /* ── App Shell ───────────────────────────────────────────────────────────────── */
 .app-shell {
+  position: relative;
   display: grid;
   grid-template-columns: var(--sidebar-w) 1fr;
   grid-template-rows: var(--header-h) 1fr var(--statusbar-h);
@@ -239,10 +240,32 @@ h4 {
   border: none;
 }
 
+/* Continuous divider stroke: a single element outlines the main-content area
+   (top, left and bottom edges), so the header/statusbar horizontal borders
+   and the sidebar vertical border read as one unbroken line. The elbows are
+   rounded with the same radius used across components. */
+.app-shell::before {
+  content: '';
+  position: absolute;
+  top: var(--header-h);
+  bottom: var(--statusbar-h);
+  left: var(--sidebar-w);
+  right: 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  border-left: 1px solid var(--border);
+  border-top-left-radius: var(--r);
+  border-bottom-left-radius: var(--r);
+  pointer-events: none;
+  z-index: var(--z-sticky);
+}
+
+
 /* Zen Mode: hide nav, header, footer, and expand main to full viewport (#270) */
 body.zen-mode-active .app-header,
 body.zen-mode-active .app-sidebar,
-body.zen-mode-active .app-statusbar {
+body.zen-mode-active .app-statusbar,
+body.zen-mode-active .app-shell::before {
   display: none !important;
 }
 body.zen-mode-active .app-shell {
@@ -256,15 +279,15 @@ body.zen-mode-active .app-shell {
   display: flex;
   align-items: center;
   padding: 0 var(--s4);
-  border-bottom: 1px solid var(--border);
   background: var(--surface);
   gap: var(--s4);
   z-index: var(--z-sticky);
+  position: relative;
 }
+
 
 .app-sidebar {
   grid-area: sidebar;
-  border-right: 1px solid var(--border);
   background: var(--surface);
   display: flex;
   flex-direction: column;
@@ -286,16 +309,17 @@ body.zen-mode-active .app-shell {
 
 .app-statusbar {
   grid-area: statusbar;
+  position: relative;
   display: flex;
   align-items: center;
   padding: 0 var(--s4);
-  border-top: 1px solid var(--border);
   background: var(--surface);
   gap: var(--s5);
   font-size: 11px;
   font-family: var(--font-mono);
   color: var(--text-muted);
 }
+
 
 /* ── Sidebar Nav ─────────────────────────────────────────────────────────────── */
 .nav-item {
@@ -753,6 +777,12 @@ textarea.input {
 
 /* ── Responsive (mobile) ─────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
+  .app-shell::before {
+    display: none;
+  }
+  .app-header {
+    border-bottom: 1px solid var(--border);
+  }
   .app-shell {
     grid-template-columns: 1fr;
     grid-template-rows: var(--header-h) 1fr auto;
@@ -872,6 +902,15 @@ textarea.input {
 
 /* ── Landscape phone: keep sidebar on left ──────────────────────────────────── */
 @media (max-height: 500px) and (orientation: landscape) {
+  .app-shell::before {
+    display: none;
+  }
+  .app-header {
+    border-bottom: 1px solid var(--border);
+  }
+  .app-sidebar {
+    border-right: 1px solid var(--border);
+  }
   .app-shell {
     grid-template-columns: var(--sidebar-w) 1fr;
     grid-template-rows: var(--header-h) 1fr;
@@ -881,7 +920,6 @@ textarea.input {
   }
   .app-sidebar {
     flex-direction: column;
-    border-right: 1px solid var(--border);
     border-top: none;
   }
   .app-statusbar {
