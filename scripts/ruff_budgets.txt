@@ -11,5 +11,5 @@
 # number or regenerate:
 #     python scripts/check_quality_baselines.py --update
 
-B904 = 42   # raise-without-from-inside-except
-UP042 = 12  # replace-str-enum
+B904 = 41   # raise-without-from-inside-except
+UP042 = 12   # replace-str-enum

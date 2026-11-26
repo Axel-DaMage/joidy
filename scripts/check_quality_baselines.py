@@ -170,7 +170,7 @@ def update() -> None:
     counts = ruff_site_counts(list(old))
     # Preserve any per-rule trailing comments already in the file.
     comments = {
-        m.group(1): m.group(3)
+        m.group(1): m.group(2)
         for line in RUFF_BUDGETS.read_text(encoding="utf-8").splitlines()
         if (m := re.match(r"^\s*([A-Z]+\d+)\s*=\s*\d+\s*(#.*)$", line))
     }
