@@ -13,6 +13,13 @@ inputs:
       login the Playwright helpers authenticate with).
     required: false
     default: ""
+  extra-compose-file:
+    description: >-
+      Optional additional -f compose override appended to every `docker
+      compose` invocation (frontend-e2e passes docker-compose.e2e-ci.yml to
+      bind-mount the runner's pre-warmed node_modules).
+    required: false
+    default: ""
 runs:
   using: composite
   steps:
@@ -65,7 +72,11 @@ runs:
         # api started) and the frontend's ~30s vite startup then overlaps
         # the api health wait + the job's npm/playwright steps — the old
         # 3-command sequence serialized the frontend start to dead last.
-        docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --no-build postgres api ai-service worker frontend
+        EXTRA_F=""
+        if [ -n "${{ inputs.extra-compose-file }}" ]; then
+          EXTRA_F="-f ${{ inputs.extra-compose-file }}"
+        fi
+        docker compose -f docker-compose.yml -f docker-compose.dev.yml $EXTRA_F up -d --no-build postgres api ai-service worker frontend
 
     - name: Verify API health
       shell: bash

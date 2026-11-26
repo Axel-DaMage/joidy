@@ -531,6 +531,26 @@ jobs:
       # BuildKit GHA cache hit (~1 min for all 4 images), so this costs
       # little and the definitions can never drift. extra-env adds the
       # deterministic AUTH_PASSWORD the e2e login helper needs.
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      # node_modules + vite pre-bundle BEFORE the stack boots: the e2e-ci
+      # compose override bind-mounts ./frontend/node_modules into the
+      # container, so these must be populated before `compose up`. The
+      # pre-warmed .vite/deps cache then skips the dev server's cold
+      # optimize pass (the dominant chunk of the old ~30s frontend wait).
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Pre-warm vite dependency bundle
+        working-directory: frontend
+        run: npx vite optimize || echo "::warning::vite optimize failed — the dev server will optimize on boot"
+
       - name: Build images (BuildKit GHA cache)
         uses: ./.github/actions/build-joidy-images
 
@@ -539,17 +559,7 @@ jobs:
         with:
           extra-env: |
             AUTH_PASSWORD=joidy-e2e-ci
-
-      - name: Set up Node
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: '22'
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install frontend dependencies
-        working-directory: frontend
-        run: npm ci
+          extra-compose-file: docker-compose.e2e-ci.yml
 
       # Browsers are version-pinned by package-lock — caching the browser
       # binaries skips the download on every shard; install --with-deps
@@ -610,7 +620,7 @@ jobs:
         if: always()
         # -v drops the postgres volume so the seeded test DB never leaks
         # between runs (each shard gets a pristine stack anyway).
-        run: docker compose -f docker-compose.yml -f docker-compose.dev.yml down -v --remove-orphans
+        run: docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.e2e-ci.yml down -v --remove-orphans
 
   security:
     name: Security Scanning
