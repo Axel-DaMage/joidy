@@ -223,8 +223,8 @@ db-health: ## Verify migration head and required core tables
 test-api: ## Run all API unit tests via pytest (parallel: one joidy_test_gwN DB per worker, #996)
 	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml run --rm api sh -c "cd /app && pytest -n auto --durations=20 --cov --cov-report=term-missing"
 
-test-ai: ## Run all AI service unit tests via pytest
-	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml run --rm ai-service sh -c "cd /app && python -m pytest tests/ -v"
+test-ai: ## Run all AI service unit tests via pytest (parallel: -n auto, matches CI; suite is xdist-safe — no shared state/ports/files)
+	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml run --rm ai-service sh -c "cd /app && python -m pytest tests/ -v -n auto"
 
 test-frontend: ## Run frontend unit tests (vitest) inside Docker
 	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml run --rm frontend npm run test:run
