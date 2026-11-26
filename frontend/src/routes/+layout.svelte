@@ -815,7 +815,9 @@
         </div>
       {/if}
 
-      <div style="flex:1;"></div>
+      {#if !$appHeaderTabs}
+        <div style="flex:1;"></div>
+      {/if}
 
       {#if $appHeaderTabs?.trailing}
         <div class="header-trailing">
@@ -982,7 +984,9 @@
         {/if}
       </div>
 
-      <div style="flex:1;"></div>
+      {#if !$appHeaderTabs}
+        <div style="flex:1;"></div>
+      {/if}
 
       <!-- Assigned GitHub PRs / Issues (#792) -->
       <StatusBarGitHub />
@@ -1183,13 +1187,12 @@
   }
 
   .header-tabs {
-    position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
+    flex: 1 1 auto;
+    min-width: 0;
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: var(--s1);
-    max-width: min(60vw, calc(100vw - 620px));
     overflow-x: auto;
     scrollbar-width: none;
   }
@@ -1298,16 +1301,6 @@
       transform: rotate(360deg);
     }
   }
-  @media (max-width: 768px) {
-    .header-tabs {
-      position: static;
-      transform: none;
-      flex: 1 1 auto;
-      min-width: 0;
-      max-width: none;
-    }
-  }
-
   .logo {
     user-select: none;
     font-size: 15px;
