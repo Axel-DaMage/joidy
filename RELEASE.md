@@ -79,8 +79,13 @@ scripts/release_bump.sh --dry-run <version>  # exercise the bump on a scratch co
 local non-root `makepkg` and falls back to a throwaway `archlinux:latest`
 container (the same approach `dist-smoke.yml` uses for its AUR job).
 `dist-smoke.yml` exercises the script on every PR that touches `scripts/`,
-`aur/` or the release workflows, and `release.yml` runs `--check` as a
-post-bump assertion.
+`aur/` or the release workflows, `release.yml` runs `--check` as a
+post-bump assertion, and `ci.yml`'s `version-consistency` job runs
+`release_bump.sh --check "$(cat VERSION)"` on every push/PR so drift fails
+fast on regular commits instead of on release night (#1554). The
+independently-versioned `joidy-cli` package (`cli/pyproject.toml`,
+`joidy_cli.__version__`) is intentionally not part of the check — the
+release flow does not own it.
 
 For minor/major releases, `CHANGELOG.md` section management (moving `[Unreleased]` to a versioned section) should still be done manually before triggering the release.
 

@@ -5,7 +5,7 @@
 ```yaml
 project: Joidy
 type: Sistema de Gestión del Conocimiento con Gamificación
-version: 1.1.0-beta.7
+version: 1.1.0-beta.8
 framework: Monorepo Docker
 services: 4
 database: PostgreSQL 16 + pgvector
