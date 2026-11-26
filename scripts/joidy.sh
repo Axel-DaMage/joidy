@@ -238,6 +238,46 @@ if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
     print_warn "Auto-generated required secrets in $ENV_FILE"
     print_warn "Edit $ENV_FILE to add: GEMINI_API_KEY, OBSIDIAN_VAULT_PATH, etc."
   fi
+
+  # ─── Escape literal $ in secrets for compose interpolation (#1490) ────
+  # docker compose interpolates the env file itself: a verbatim bcrypt hash
+  # (AUTH_PASSWORD=$2b$12$… — three literal $) makes every `joidy`/`compose`
+  # invocation print 'The "X" variable is not set. Defaulting to a blank
+  # string.', and would silently mangle the value if it were ever referenced
+  # through ${VAR} substitution. The fix is compose's own escape — write
+  # every literal $ as $$:
+  #   * compose renders $$ as a literal $ inside environment:/volumes;
+  #   * the API reads AUTH_PASSWORD from the file raw via get_persisted(),
+  #     which collapses $$ back to $ (unescape_env_value, #1456), and the
+  #     pydantic-settings fallback is normalized by _normalize_stored_password.
+  # Only keys whose consumers are all escape-aware belong in this list —
+  # most .env values are read RAW somewhere (settings UI, read_setting
+  # greps, the OBSIDIAN_VAULT_PATH expansion below), so blanket-escaping the
+  # file would corrupt them. AUTH_PASSWORD is the canonical offender:
+  # bcrypt hashes always carry three literal $.
+  ENV_DOLLAR_ESCAPE_KEYS=(AUTH_PASSWORD)
+  for _escape_key in "${ENV_DOLLAR_ESCAPE_KEYS[@]}"; do
+    # Effective value = last uncommented KEY= line (read_env is last-wins).
+    _escape_val=$(grep -E "^${_escape_key}=" "$ENV_FILE" | tail -1 | cut -d'=' -f2-)
+    [ -n "$_escape_val" ] || continue
+    # Canonical escaped form: collapse existing $$ pairs to $, then escape
+    # every $ as $$. Idempotent — a verbatim value is escaped once, an
+    # already-escaped one round-trips unchanged.
+    _escaped="${_escape_val//\$\$/$}"
+    _escaped="${_escaped//\$/\$\$}"
+    if [ "$_escaped" != "$_escape_val" ]; then
+      if [ -w "$ENV_FILE" ]; then
+        # The value enters a sed replacement, so escape its metachars
+        # (& | \) first — the program still travels via stdin (#1332).
+        envfile_set_secret "$_escape_key" \
+          "$(printf '%s' "$_escaped" | sed 's/[&|\]/\\&/g')" "$ENV_FILE"
+        print_warn "Escaped literal \$ as \$\$ in ${_escape_key} (compose env-file interpolation, #1490)"
+      else
+        print_warn "${_escape_key} in $ENV_FILE contains unescaped '\$' (compose will warn 'variable not set') — the file is not writable, escape each \$ as \$\$ by hand"
+      fi
+    fi
+  done
+  unset _escape_key _escape_val _escaped
   # DOCKER_GID — group owning the Docker socket. Only needed when power
   # management is enabled (#1278): the opt-in docker-compose.power.yml overlay
   # requires it for `group_add` and refuses to fall back to group 0 (root).
