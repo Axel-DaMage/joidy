@@ -1,17 +1,17 @@
-fastapi==0.163.2
+fastapi==0.165.0
 uvicorn[standard]==0.54.0
-pydantic==2.14.3
+pydantic==2.14.4
 pydantic-settings==2.16.3
 # google-generativeai is EOL upstream; google-genai is the replacement SDK
 # (client.aio native async API — #1462). Pin released 2026-11-12.
-google-genai==3.3.0
-openai==3.53.0
-anthropic==2.10.0
+google-genai==3.6.1
+openai==3.57.0
+anthropic==2.12.0
 # httpx fork vendored by the openai/anthropic SDKs — imported directly to
 # build provider transports with trust_env=False (#1330). Keep in sync with
 # the version range those SDKs require.
 httpx2==2.16.2
-cohere==7.3.1
+cohere==7.3.2
 aiohttp==3.14.5
 sqlalchemy==2.1.9
 psycopg2-binary==2.9.13
