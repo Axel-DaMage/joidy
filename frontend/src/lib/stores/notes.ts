@@ -1,4 +1,4 @@
-import { writable, get, derived } from 'svelte/store';
+import { writable, get } from 'svelte/store';
 import { browser } from '$app/env';
 import { api, type Note, type AISuggestion } from '$lib/api';
 import { applyGamificationResult } from './gamification';
@@ -337,11 +337,6 @@ export function findNoteByTitle(title: string): Note | undefined {
   return found;
 }
 
-export const noteSearchQuery = writable('');
-export const noteSearchTag = writable<string | null>(null);
-export const noteSortBy = writable<'updated' | 'created' | 'title'>('updated');
-export const noteSortAsc = writable(false);
-
 // Drop all note state when the session resets (logout / 401) so the next
 // user on the same browser profile never sees the previous notes (#1305).
 if (browser) {
@@ -359,24 +354,4 @@ if (browser) {
     lastTag = undefined;
   });
 }
-
-export const filteredNotes = derived(
-  [notes, noteSearchQuery, noteSearchTag, noteSortBy, noteSortAsc],
-  ([$notes, $query, $tag, $sortBy, $sortAsc]) => {
-    const q = $query.toLowerCase().trim();
-    const filtered = $notes.filter(n => {
-      const matchesQuery = !q || n.title.toLowerCase().includes(q) || n.content.toLowerCase().includes(q);
-      const matchesTag = !$tag || n.tags.includes($tag);
-      return matchesQuery && matchesTag;
-    });
-
-    return [...filtered].sort((a, b) => {
-      let cmp = 0;
-      if ($sortBy === 'title') cmp = a.title.localeCompare(b.title);
-      else if ($sortBy === 'created') cmp = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-      else cmp = new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime();
-      return $sortAsc ? cmp : -cmp;
-    });
-  }
-);
 

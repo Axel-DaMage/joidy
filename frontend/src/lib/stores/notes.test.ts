@@ -51,11 +51,6 @@ import {
   untagSelectedNotes,
   fetchAISuggestions,
   findNoteByTitle,
-  filteredNotes,
-  noteSearchQuery,
-  noteSearchTag,
-  noteSortBy,
-  noteSortAsc,
 } from './notes';
 import { applyGamificationResult } from './gamification';
 
@@ -81,10 +76,6 @@ function resetState() {
   notesLoadedOnce.set(false);
   selectedNoteIds.set(new Set());
   bulkMode.set(false);
-  noteSearchQuery.set('');
-  noteSearchTag.set(null);
-  noteSortBy.set('updated');
-  noteSortAsc.set(false);
   sessionStorage.clear();
   vi.clearAllMocks();
   (applyGamificationResult as any).mockReset();
@@ -301,47 +292,5 @@ describe('fetchAISuggestions', () => {
     apiMock.ai.classify.mockRejectedValue(new Error('boom'));
     await fetchAISuggestions(1, 'content', []);
     expect(get(aiSuggestions)).toEqual([]);
-  });
-});
-
-describe('filteredNotes (derived)', () => {
-  beforeEach(() => resetState());
-
-  it('filters by query in title and content', () => {
-    notes.set([
-      makeNote({ id: 1, title: 'Alpha', content: 'body', updated_at: '2024-01-01T00:00:00' }),
-      makeNote({ id: 2, title: 'Beta', content: 'special', updated_at: '2024-01-02T00:00:00' }),
-    ]);
-    noteSearchQuery.set('special');
-    expect(get(filteredNotes).map(n => n.id)).toEqual([2]);
-  });
-
-  it('filters by tag', () => {
-    notes.set([
-      makeNote({ id: 1, tags: ['work'], updated_at: '2024-01-01T00:00:00' }),
-      makeNote({ id: 2, tags: ['personal'], updated_at: '2024-01-02T00:00:00' }),
-    ]);
-    noteSearchTag.set('work');
-    expect(get(filteredNotes).map(n => n.id)).toEqual([1]);
-  });
-
-  it('sorts by updated desc by default', () => {
-    notes.set([
-      makeNote({ id: 1, updated_at: '2024-01-01T00:00:00' }),
-      makeNote({ id: 2, updated_at: '2024-01-05T00:00:00' }),
-    ]);
-    noteSearchQuery.set('');
-    noteSearchTag.set(null);
-    expect(get(filteredNotes).map(n => n.id)).toEqual([2, 1]);
-  });
-
-  it('sorts by title ascending', () => {
-    notes.set([
-      makeNote({ id: 1, title: 'Zebra', updated_at: '2024-01-01T00:00:00' }),
-      makeNote({ id: 2, title: 'Apple', updated_at: '2024-01-02T00:00:00' }),
-    ]);
-    noteSortBy.set('title');
-    noteSortAsc.set(true);
-    expect(get(filteredNotes).map(n => n.id)).toEqual([2, 1]);
   });
 });
