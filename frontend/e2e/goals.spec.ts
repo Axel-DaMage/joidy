@@ -77,7 +77,7 @@ test.describe('Goals — legacy analytics deep links', () => {
 test.describe('Goals — filters', () => {
   test('can filter by Fallidos', async ({ page }) => {
     await authGoto(page, '/goals');
-    const filterBtn = page.locator('button.filter-btn:has-text("Fallidos")');
+    const filterBtn = page.locator('button.gf-chip:has-text("Fallidos")');
     await filterBtn.click();
     await page.waitForTimeout(500);
     await expect(filterBtn).toHaveClass(/active/);
@@ -85,7 +85,7 @@ test.describe('Goals — filters', () => {
 
   test('can filter by Completados', async ({ page }) => {
     await authGoto(page, '/goals');
-    const filterBtn = page.locator('button.filter-btn:has-text("Completados")');
+    const filterBtn = page.locator('button.gf-chip:has-text("Completados")');
     await filterBtn.click();
     await page.waitForTimeout(500);
     await expect(filterBtn).toHaveClass(/active/);
@@ -94,10 +94,10 @@ test.describe('Goals — filters', () => {
   test('can reset to Todos filter', async ({ page }) => {
     await authGoto(page, '/goals');
     // Apply a filter
-    await page.locator('button.filter-btn:has-text("Fallidos")').click();
+    await page.locator('button.gf-chip:has-text("Fallidos")').click();
     await page.waitForTimeout(300);
     // Reset to Todos
-    const todosBtn = page.locator('button.filter-btn:has-text("Todos")');
+    const todosBtn = page.locator('button.gf-chip:has-text("Todos")');
     await todosBtn.click();
     await page.waitForTimeout(500);
     await expect(todosBtn).toHaveClass(/active/);
