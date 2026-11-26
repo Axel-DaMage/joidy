@@ -32,12 +32,29 @@ class _FakeDialect:
         self.name = name
 
 
+class _FakeResult:
+    """Minimal stand-in for a SQLAlchemy ``Result`` (supports ``.first()``)."""
+
+    def __init__(self, row):
+        self._row = row
+
+    def first(self):
+        return self._row
+
+
 class _FakeConnection:
     """Records executed statements in order so tests can assert lock/unlock
-    sequencing around the migration call."""
+    sequencing around the migration call.
 
-    def __init__(self, recorder: list):
+    ``version_num``/``probe_error`` control the ``alembic_version`` probe
+    used by the missing-revision diagnosis (#1585): the former simulates a
+    DB whose recorded revision is ``version_num``, the latter a probe that
+    fails (table missing, DB unreachable)."""
+
+    def __init__(self, recorder: list, version_num: str | None = None, probe_error: Exception | None = None):
         self._recorder = recorder
+        self._version_num = version_num
+        self._probe_error = probe_error
 
     def __enter__(self):
         return self
@@ -47,19 +64,33 @@ class _FakeConnection:
 
     def execute(self, stmt, params=None):
         # Capture the advisory-lock SQL by stringifying the text() clause.
-        self._recorder.append((str(stmt), params))
+        sql = str(stmt)
+        self._recorder.append((sql, params))
+        if "alembic_version" in sql:
+            if self._probe_error is not None:
+                raise self._probe_error
+            return _FakeResult((self._version_num,) if self._version_num is not None else None)
+        return None
 
     def commit(self):
         self._recorder.append(("commit", None))
 
 
 class _FakeEngine:
-    def __init__(self, dialect_name: str, recorder: list):
+    def __init__(
+        self,
+        dialect_name: str,
+        recorder: list,
+        version_num: str | None = None,
+        probe_error: Exception | None = None,
+    ):
         self.dialect = _FakeDialect(dialect_name)
         self._recorder = recorder
+        self._version_num = version_num
+        self._probe_error = probe_error
 
     def connect(self):
-        return _FakeConnection(self._recorder)
+        return _FakeConnection(self._recorder, self._version_num, self._probe_error)
 
 
 class RunMigrationsTest(unittest.TestCase):
@@ -126,7 +157,9 @@ class MissingRevisionDetectionTest(unittest.TestCase):
 
     def test_cant_locate_revision_logs_critical_and_reraises(self):
         recorder: list = []
-        fake_engine = _FakeEngine("sqlite", recorder)
+        # The DB's recorded revision IS the missing one → genuine drift:
+        # the DB was migrated by a newer Joidy version (#1489).
+        fake_engine = _FakeEngine("sqlite", recorder, version_num="b4c5d6e7f8a9")
 
         with (
             mock.patch("database.engine", fake_engine),
@@ -200,6 +233,82 @@ class MissingRevisionDetectionTest(unittest.TestCase):
         output = "\n".join(logs.output)
         self.assertIn("Failed to apply database migrations", output)
         self.assertNotIn("NEWER Joidy version", output)
+
+    def test_missing_revision_not_in_db_takes_generic_path(self):
+        # Broken migration chain (#1585): a migration file in the code
+        # references a deleted down_revision, so alembic fails while loading
+        # the revision map — before ever reading the DB. The DB's recorded
+        # version differs from the missing revision, so the "DB is newer"
+        # verdict would misdiagnose: must fall back to the generic path.
+        recorder: list = []
+        fake_engine = _FakeEngine("sqlite", recorder, version_num="a1b2c3d4e5f6")
+
+        with (
+            mock.patch("database.engine", fake_engine),
+            mock.patch(
+                "database.command.upgrade",
+                side_effect=CommandError("Can't locate revision identified by 'deleted_down_rev'"),
+            ),
+            self.assertLogs("database", level="ERROR") as logs,
+            self.assertRaises(CommandError),
+        ):
+            _run_migrations()
+
+        output = "\n".join(logs.output)
+        self.assertIn("Failed to apply database migrations", output)
+        self.assertNotIn("NEWER Joidy version", output)
+        # No CRITICAL "ahead of code" record was emitted.
+        for record in logs.records:
+            self.assertLess(record.levelno, logging.CRITICAL)
+
+    def test_missing_revision_empty_version_table_takes_generic_path(self):
+        # The probe runs but alembic_version has no row (e.g. fresh DB whose
+        # first migration failed mid-flight): no match → generic path (#1585).
+        recorder: list = []
+        fake_engine = _FakeEngine("sqlite", recorder)
+
+        with (
+            mock.patch("database.engine", fake_engine),
+            mock.patch(
+                "database.command.upgrade",
+                side_effect=CommandError("Can't locate revision identified by 'b4c5d6e7f8a9'"),
+            ),
+            self.assertLogs("database", level="ERROR") as logs,
+            self.assertRaises(CommandError),
+        ):
+            _run_migrations()
+
+        output = "\n".join(logs.output)
+        self.assertIn("Failed to apply database migrations", output)
+        self.assertNotIn("NEWER Joidy version", output)
+
+    def test_missing_revision_probe_failure_takes_generic_path(self):
+        # If the alembic_version probe itself fails (table missing, DB
+        # unreachable), the handler must not crash and must fall back to the
+        # generic path — the probe can never mask the original error (#1585).
+        recorder: list = []
+        fake_engine = _FakeEngine(
+            "sqlite",
+            recorder,
+            probe_error=RuntimeError('relation "alembic_version" does not exist'),
+        )
+
+        with (
+            mock.patch("database.engine", fake_engine),
+            mock.patch(
+                "database.command.upgrade",
+                side_effect=CommandError("Can't locate revision identified by 'b4c5d6e7f8a9'"),
+            ),
+            self.assertLogs("database", level="ERROR") as logs,
+            self.assertRaises(CommandError),
+        ):
+            _run_migrations()
+
+        output = "\n".join(logs.output)
+        self.assertIn("Failed to apply database migrations", output)
+        self.assertNotIn("NEWER Joidy version", output)
+        for record in logs.records:
+            self.assertLess(record.levelno, logging.CRITICAL)
 
 
 if __name__ == "__main__":
