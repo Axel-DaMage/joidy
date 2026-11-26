@@ -40,10 +40,12 @@ make sbom            # SPDX + CycloneDX SBOMs + THIRD-PARTY-NOTICES into ./sbom/
 ```
 
 `make lint` mirrors the cheap CI gates locally (`.github/workflows/ci.yml`:
-`api-lint`, `security`, `frontend-check`). Tool versions are pinned in
-`api/requirements-dev.txt` — install with `pip install -r api/requirements-dev.txt`
-for exact parity. Missing tools are skipped with a warning; `STRICT=1 make lint`
-turns a missing tool into a failure.
+`api-lint`, `security`, `frontend-check`). Tool versions are pinned in the
+repo-root `requirements-dev.txt` (canonical; per-service copies are kept in
+sync by `scripts/check_requirements_dev_sync.sh`, #1557) — install with
+`pip install -r requirements-dev.txt` for exact parity. Missing tools are
+skipped with a warning; `STRICT=1 make lint` turns a missing tool into a
+failure.
 
 Single test:
 ```bash

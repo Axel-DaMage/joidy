@@ -84,6 +84,14 @@ jobs:
       - name: Pre-commit ruff version sync
         run: bash scripts/check_ruff_precommit_sync.sh
 
+      # The per-service requirements-dev.txt files repeat the canonical pins
+      # from the repo-root requirements-dev.txt — the pins must live inside
+      # each Docker build context, so a shared "-r" include is impossible
+      # (#1557). Fails bumps that only edit some copies. Shared with
+      # `make lint` (scripts/lint.sh).
+      - name: requirements-dev pin sync
+        run: bash scripts/check_requirements_dev_sync.sh
+
       # Real typecheck gate (#994). One invocation per service so
       # cwd-relative module names (models, services, ...) stay unambiguous;
       # pre-existing debt is baselined in pyproject.toml
@@ -622,8 +630,10 @@ jobs:
           restore-keys: ${{ runner.os }}-pip-security-
 
       - name: Install security tools
-        # Versions match api/requirements-dev.txt so local runs behave the same.
-        run: pip install bandit==1.9.4 pip-audit==2.10.1
+        # Pins come from the repo-root requirements-dev.txt (canonical
+        # dev-tool pins, #1557) so local runs and CI install identical
+        # versions — no hand-mirrored pins here.
+        run: pip install -c requirements-dev.txt bandit pip-audit
 
       # Blocking since #994. -lll/-iii: only HIGH severity AND HIGH confidence
       # findings fail (verified clean on development; LOW/MEDIUM stay visible

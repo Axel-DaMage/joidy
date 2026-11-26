@@ -216,6 +216,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`joidy.cmd` batch shim**: Updated shim to invoke PowerShell with `-NoProfile -ExecutionPolicy Bypass -File` to prevent opening Notepad when executed from `cmd.exe` (#981)
 - **`.gitattributes`**: Added repository `.gitattributes` to enforce consistent CRLF for Windows scripts and LF for Unix scripts (#981)
 - **Python dependency split**: `requirements.txt` in `api/`, `ai-service/` and `worker/` is now runtime-only; new per-service `requirements-dev.txt` adds pytest, pytest-cov, pytest-asyncio, pytest-xdist, ruff, mypy, bandit and pip-audit. Production images no longer ship pytest/pytest-cov; dev containers opt in via the `INSTALL_DEV=true` build arg (#999)
+- **Dev-tool pin consolidation**: the triplicated `requirements-dev.txt` pins now live in a canonical repo-root `requirements-dev.txt`; per-service copies stay self-contained for Docker build contexts and are kept honest by `scripts/check_requirements_dev_sync.sh` (runs in `make lint` and CI). The security job installs bandit/pip-audit via `-c requirements-dev.txt` instead of hand-mirrored pins (#1557)
 
 ### Fixed
 

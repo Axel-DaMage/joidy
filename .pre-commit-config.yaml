@@ -6,8 +6,9 @@ repos:
       - id: trailing-whitespace
       - id: end-of-file-fixer
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    # Must match the ruff pin in api/requirements-dev.txt (canonical parity
-    # source) — enforced by the version-sync gate in scripts/lint.sh (#1586).
+    # Must match the ruff pin in requirements-dev.txt (canonical parity
+    # source at the repo root) — enforced by the version-sync gate in
+    # scripts/lint.sh (#1586).
     rev: v0.17.6
     hooks:
       - id: ruff-check

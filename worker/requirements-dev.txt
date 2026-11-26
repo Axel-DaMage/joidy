@@ -1,5 +1,10 @@
 # Development/test dependencies — installs runtime deps plus test and lint
 # tooling. Production images install requirements.txt only (#999).
+# The tool pins below mirror the canonical /requirements-dev.txt at the
+# repo root — edit that file first, then sync this copy. The pins must
+# stay inline (not "-r ../requirements-dev.txt") because the Docker build
+# context is this directory. Drift fails check_requirements_dev_sync.sh
+# in `make lint` and the api-lint CI job (#1557).
 -r requirements.txt
 pytest==9.2.0
 pytest-cov==7.1.0
