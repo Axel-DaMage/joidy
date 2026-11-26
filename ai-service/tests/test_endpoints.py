@@ -716,11 +716,15 @@ class TestSyncDbOffloaded(unittest.IsolatedAsyncioTestCase):
         async def scenario():
             task = asyncio.create_task(main._retrieve_note_context("q"))
             hb = asyncio.create_task(heartbeat())
-            # Wait until the DB call is genuinely in flight, then let
-            # heartbeats accumulate while it stays blocked.
+            # Wait until the DB call is genuinely in flight, then wait for
+            # the loop to tick at least once while it stays blocked — no
+            # fixed window or tick threshold, so loaded CI runners cannot
+            # flake this (#1584).
             while not entered.is_set():
                 await asyncio.sleep(0.005)
-            await asyncio.sleep(0.05)
+            observed = heartbeats
+            while heartbeats == observed:
+                await asyncio.sleep(0.01)
             release.set()
             await asyncio.gather(task, hb)
 
@@ -733,7 +737,7 @@ class TestSyncDbOffloaded(unittest.IsolatedAsyncioTestCase):
             # inside release.wait() and this would time out instead.
             await asyncio.wait_for(scenario(), timeout=10)
 
-        assert heartbeats >= 3
+        assert heartbeats >= 1
 
 
 if __name__ == "__main__":
