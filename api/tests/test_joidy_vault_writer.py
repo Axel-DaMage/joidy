@@ -265,7 +265,7 @@ class WriteObjectivesTest(VaultWriterTestBase):
 
     def test_persists_source_path_via_commit(self) -> None:
         """#1597 — write_objectives assigns ``source_path`` in-memory inside
-        ``_write_goal_file``; only its trailing ``db.commit()`` (#1583)
+        ``write_goal_file``; only its trailing ``db.commit()`` (#1583)
         persists the update. Verify through a second session so pending,
         never-committed state on the caller's session cannot satisfy the
         check — the test fails if that commit is removed."""
