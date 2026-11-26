@@ -16,7 +16,7 @@ on:
   workflow_dispatch:
 
 # Fail closed: the single job declares its own permissions explicitly
-# (security-events: read for the alerts API). Nothing else is granted.
+# (vulnerability-alerts: read for the alerts API). Nothing else is granted.
 permissions: {}
 
 jobs:
@@ -24,7 +24,12 @@ jobs:
     name: Open HIGH/CRITICAL dependabot alerts
     runs-on: ubuntu-latest
     permissions:
-      security-events: read # required for GET /repos/{owner}/{repo}/dependabot/alerts
+      # Required for GET /repos/{owner}/{repo}/dependabot/alerts.
+      # security-events covers code scanning alerts only — Dependabot alerts
+      # need the dedicated vulnerability-alerts permission (else HTTP 403
+      # "Resource not accessible by integration"). See #1600 and
+      # docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax
+      vulnerability-alerts: read
     steps:
       - name: Check open dependabot alerts
         env:
