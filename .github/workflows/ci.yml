@@ -129,6 +129,66 @@ jobs:
         # floor after #1401 lifted coverage back above it.
         run: python -m pytest tests/ -v -n auto --durations=20 --cov=. --cov-report=xml --cov-report=term-missing --cov-fail-under=85
 
+      - name: Upload coverage report
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-report
+          path: api/coverage.xml
+          retention-days: 30
+
+  # Hermeticity regression guard (#991), extracted from api-lint (#1553): it
+  # re-runs the full suite against a populated .env (a real dev environment).
+  # It lived inside api-lint and ran serially after the coverage run — ~2×
+  # suite wall-time on one runner — so it is now its own job and executes in
+  # parallel. Same postgres service + pip cache as api-lint; conftest creates
+  # the per-worker joidy_test_gwN databases, enables the vector extension and
+  # builds the schema via Base.metadata.create_all, so no alembic/pgvector
+  # steps are needed here.
+  api-tests-populated-env:
+    name: API Tests (populated .env)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.7-pg16
+        env:
+          POSTGRES_USER: joidy
+          POSTGRES_PASSWORD: joidy
+          POSTGRES_DB: joidy_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENV: test
+      DATABASE_URL: postgresql+psycopg2://joidy:joidy@localhost:5432/joidy_test
+      LOG_DIR: logs
+      SECRET_KEY: ci-secret-not-for-production
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+
+      - name: Cache pip
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('api/requirements.txt', 'api/requirements-dev.txt') }}
+          restore-keys: ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        working-directory: api
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
       # Hermeticity regression guard (#991): reproduce a real dev environment
       # where .env is fully populated. env_file resolves <repo>/.env on the
       # host while Settings reads <cwd>/.env, so populate both. Without the
@@ -145,13 +205,6 @@ jobs:
           } >> ../.env
           cp ../.env .env
           python -m pytest tests/ -q -n auto
-
-      - name: Upload coverage report
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: coverage-report
-          path: api/coverage.xml
-          retention-days: 30
 
   # Canonical ai-service test run (#1254): the standalone
   # ai-service-tests.yml workflow was removed — it ran the identical suite
@@ -259,6 +312,13 @@ jobs:
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
+
+      - name: Cache pip
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-cli-${{ hashFiles('cli/pyproject.toml') }}
+          restore-keys: ${{ runner.os }}-pip-cli-
 
       - name: Install CLI + test deps
         run: pip install -e './cli[test]'
@@ -551,6 +611,15 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Cache pip
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/pip
+          # Keyed on requirements-dev.txt: the tool pins below are required
+          # to match it, so a version bump there busts this cache too.
+          key: ${{ runner.os }}-pip-security-${{ hashFiles('api/requirements-dev.txt') }}
+          restore-keys: ${{ runner.os }}-pip-security-
+
       - name: Install security tools
         # Versions match api/requirements-dev.txt so local runs behave the same.
         run: pip install bandit==1.9.4 pip-audit==2.10.1
@@ -618,11 +687,43 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      # Single source of truth for the pin: scripts/generate_sbom.sh honors
+      # SYFT_VERSION, and the binary cache key below uses the same value, so
+      # a version bump invalidates the cache automatically.
+      SYFT_VERSION: '1.57.2'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # The runners ship a Docker daemon, so generate_sbom.sh used to take
+      # its docker branch and pull the ~200MB anchore/syft image on every
+      # run (#1553). Instead we cache the ~10MB release binary and put it on
+      # PATH — the script's first resolution branch (`command -v syft`)
+      # picks it up, and the docker/image path still works locally.
+      - name: Cache syft binary
+        id: syft
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/syft
+          key: ${{ runner.os }}-syft-v${{ env.SYFT_VERSION }}
+
+      # Same download + sha256-verify flow as generate_sbom.sh install_syft().
+      - name: Install syft binary (sha256-verified)
+        if: steps.syft.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          tarball="syft_${SYFT_VERSION}_linux_amd64.tar.gz"
+          base="https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}"
+          curl -fsSL -o "$tmp/$tarball" "$base/$tarball"
+          curl -fsSL -o "$tmp/checksums.txt" "$base/syft_${SYFT_VERSION}_checksums.txt"
+          (cd "$tmp" && grep " ${tarball}\$" checksums.txt | sha256sum -c -)
+          mkdir -p ~/.cache/syft
+          tar -xzf "$tmp/$tarball" -C ~/.cache/syft syft
+
       - name: Generate source SBOMs (SPDX-JSON + CycloneDX-JSON)
-        run: ./scripts/generate_sbom.sh --mode source --out-dir sbom
+        run: PATH="$HOME/.cache/syft:$PATH" ./scripts/generate_sbom.sh --mode source --out-dir sbom
 
       - name: Enforce license policy
         run: python3 scripts/check_licenses.py --quiet sbom/*.cdx.json
