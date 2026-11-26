@@ -248,6 +248,24 @@ class BatchUpsertTest(CalendarTestBase):
             self.assertEqual(result["synced"], 1)
             self.assertEqual(db.query(GoogleCalendarEvent).count(), 0)
 
+    def test_cancel_then_readd_of_persistent_row_in_one_batch(self) -> None:
+        # Regression: the unit of work orders INSERTs before DELETEs, so a
+        # cancelled-then-readded google_id must flush the delete of the
+        # persistent row eagerly or the re-add hits the unique constraint.
+        with self.Session() as db:
+            db.add(
+                GoogleCalendarEvent(
+                    user_id=1, calendar_id="primary", google_id="ev-y", summary="Old", start_at=datetime.now(UTC)
+                )
+            )
+            db.commit()
+            items = [{"id": "ev-y", "status": "cancelled"}, _event_item("ev-y", summary="Reborn")]
+            result = self._run_sync(db, items=items)
+            self.assertEqual(result["synced"], 1)
+            rows = db.query(GoogleCalendarEvent).all()
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0].summary, "Reborn")
+
     def test_incremental_sync_updates_without_pruning(self) -> None:
         with self.Session() as db:
             self._run_sync(db, items=[_event_item("ev-1")])

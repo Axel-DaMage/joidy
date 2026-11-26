@@ -96,6 +96,10 @@ def _upsert_event(
                 # same net effect as the old autoflush-then-delete path).
                 db.flush()
             db.delete(deleted)
+            # Flush the delete eagerly: the unit of work orders INSERTs
+            # before DELETEs, so a later re-add of the same google_id in
+            # this batch would otherwise hit uq_gcal_event_user_cal_gid.
+            db.flush()
             if existing is not None:
                 existing.pop(google_id, None)
         return False
