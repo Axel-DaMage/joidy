@@ -58,6 +58,7 @@ def _reset_shared_state():
         breaker.state = CircuitState.CLOSED
         breaker.failures = 0
         breaker.last_failure_time = 0.0
+        breaker.last_success_time = 0.0
     get_cache().clear()
     rate_limiter._limiters.clear()
     rate_limiter._local_limiters.clear()
@@ -68,6 +69,7 @@ def _reset_shared_state():
         breaker.state = CircuitState.CLOSED
         breaker.failures = 0
         breaker.last_failure_time = 0.0
+        breaker.last_success_time = 0.0
     get_cache().clear()
     rate_limiter._limiters.clear()
     rate_limiter._local_limiters.clear()

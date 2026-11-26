@@ -7,7 +7,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Annotated, Any
 
-from circuit_breaker import CircuitBreakerError, emb_circuit_breaker, llm_circuit_breaker
+from circuit_breaker import CircuitBreakerError, CircuitState, emb_circuit_breaker, llm_circuit_breaker
 from clients import aclose_clients, get_embedding_client, get_llm_client
 from clients.prompts import CHAT_SYSTEM_PROMPT, CLASSIFY_PROMPT, RAG_PROMPT
 from config import settings
@@ -285,13 +285,19 @@ def _has_fallback() -> bool:
     return any(p != llm_provider for p in available)
 
 
-# ── Provider reachability probe (#1460) ─────────────────────────────────────
+# ── Provider reachability probe (#1460, reworked in #1538) ─────────────────
 #
 # /health used to report configured-ness as availability — it returned
 # ``{"ai_enabled": true, "embedding_available": true}`` while every provider
 # was unreachable. The probe below health-checks every member of the LLM and
-# embedding fallback chains, cached for a short TTL so the endpoint doesn't
-# hammer providers on every scrape.
+# embedding fallback chains, cached for a short TTL.
+#
+# #1538: the probe issues real *billable* provider calls (BaseLLMClient's
+# default health_check() generates a token), and the Docker HEALTHCHECK hits
+# /health every ~10s — so public scrapes must never trigger it. Default
+# /health answers from *observed* state instead (see _observed_chain_state);
+# a real probe only runs for internal callers that explicitly request it via
+# ``GET /health?probe=1`` with a valid X-Internal-Secret.
 
 _HEALTH_PROBE_TTL_SECONDS = 45.0
 _HEALTH_PROBE_TIMEOUT = 8.0
@@ -371,13 +377,89 @@ async def _cached_health_probe() -> dict:
         return _health_probe_cache
 
 
-@app.get("/health")
-async def health(request: Request):
-    provider_info = _get_provider_info()
+def _observed_chain_state(kind: str) -> tuple[dict, float]:
+    """Last-known provider availability WITHOUT probing (#1538).
 
-    probe = await _cached_health_probe()
-    llm_probe = probe["llm"]
-    emb_probe = probe["embedding"]
+    Returns ``(state, observed_at)`` — same state shape as
+    ``_probe_client_chain`` but built only from what real traffic already
+    observed (no provider calls), plus the monotonic timestamp of the
+    *newest* observation feeding it so /health can compare signal freshness
+    against the cached probe (#1628):
+
+    - ``available``   — the circuit breaker has not tripped open. The
+      breaker wraps every provider call in this process, so an OPEN state
+      means the whole chain just failed repeatedly; CLOSED means the last
+      call succeeded or none ran yet (optimistic default: configured ⇒
+      available until traffic proves otherwise — the breaker flips the
+      signal within ``failure_threshold`` failed requests).
+    - ``primary_ok``  — the failover wrapper's *active* provider is still
+      the chain head. ``provider_name`` reports who served last, so a
+      fallback in use (e.g. primary cooling after failures) reads as
+      primary-down without a single probe.
+    """
+    empty: dict[str, Any] = {
+        "configured": False,
+        "available": False,
+        "primary_ok": False,
+        "active": None,
+        "providers": {},
+    }
+    breaker = llm_circuit_breaker if kind == "llm" else emb_circuit_breaker
+    get_client = get_llm_client if kind == "llm" else get_embedding_client
+    # The breaker sees every provider call that reaches it; the failover
+    # wrapper additionally timestamps its inner failover/routing decisions
+    # (``last_observed_at``), which the breaker never sees — take the newer.
+    observed_at = max(breaker.last_failure_time, breaker.last_success_time)
+    try:
+        client = get_client()
+    except Exception:
+        return empty, observed_at
+    members = list(getattr(client, "chain", None) or [client])
+    if not members:
+        return empty, observed_at
+    observed_at = max(observed_at, getattr(client, "last_observed_at", 0.0))
+    available = breaker.state != CircuitState.OPEN
+    active = client.provider_name
+    return {
+        "configured": True,
+        "available": available,
+        "primary_ok": available and active == members[0].provider_name,
+        "active": active,
+        "providers": {},
+    }, observed_at
+
+
+def _pick_health_state(fresh_probe: dict | None, observed: dict, observed_at: float, kind: str) -> dict:
+    """Probe vs. traffic-observed state — whichever signal is NEWER (#1628).
+
+    A cached probe can be up to ``_HEALTH_PROBE_TTL_SECONDS`` old; traffic
+    observed after it ran (e.g. the chain just tripped its breaker, or a
+    fallback just took over) is the fresher truth and wins for that kind.
+    """
+    if fresh_probe is not None and _health_probe_at >= observed_at:
+        return fresh_probe[kind]
+    return observed
+
+
+@app.get("/health")
+async def health(request: Request, probe: bool = Query(default=False)):
+    provider_info = _get_provider_info()
+    privileged = _internal_secret_valid(request)
+
+    # Provider probes issue real billable calls, so they only run on an
+    # explicit privileged request (?probe=1, #1538). Public callers — the
+    # Docker HEALTHCHECK scrapes this endpoint every ~10s — are served the
+    # observed state below, plus the fresh cached probe when one exists.
+    fresh_probe = None
+    if privileged and probe:
+        fresh_probe = await _cached_health_probe()
+    elif _health_probe_cache is not None and (time.monotonic() - _health_probe_at) < _HEALTH_PROBE_TTL_SECONDS:
+        fresh_probe = _health_probe_cache
+
+    llm_observed, llm_observed_at = _observed_chain_state("llm")
+    emb_observed, emb_observed_at = _observed_chain_state("embedding")
+    llm_state = _pick_health_state(fresh_probe, llm_observed, llm_observed_at, "llm")
+    emb_state = _pick_health_state(fresh_probe, emb_observed, emb_observed_at, "embedding")
 
     # Status semantics (#1460):
     # - "ok"          — configured LLM primary reachable; embeddings served
@@ -388,9 +470,9 @@ async def health(request: Request):
     # - "unavailable" — no LLM provider reachable: chat cannot be served.
     if not settings.is_ai_enabled:
         status = "degraded"
-    elif not llm_probe["available"]:
+    elif not llm_state["available"]:
         status = "unavailable"
-    elif not llm_probe["primary_ok"] or not emb_probe["available"] or not emb_probe["primary_ok"]:
+    elif not llm_state["primary_ok"] or not emb_state["available"] or not emb_state["primary_ok"]:
         status = "degraded"
     else:
         status = "ok"
@@ -400,18 +482,28 @@ async def health(request: Request):
         "service": "joidy-ai",
         "ai_enabled": settings.is_ai_enabled,
         # Minimal booleans the API needs for its availability probes — no
-        # provider or model names (#1291). These now reflect REAL
-        # reachability, not just configuration (#1460).
-        "embedding_available": emb_probe["available"],
-        "llm_available": llm_probe["available"],
+        # provider or model names (#1291). They reflect the last *observed*
+        # reachability (or the latest deep probe when fresh), not just
+        # configuration (#1460, #1538).
+        "embedding_available": emb_state["available"],
+        "llm_available": llm_state["available"],
     }
     # The provider/model inventory and per-provider reachability are
     # privileged: only internal callers presenting a valid X-Internal-Secret
     # receive them (#1291).
-    if _internal_secret_valid(request):
+    if privileged:
         body["provider"] = provider_info
         body["fallback_enabled"] = _has_fallback()
-        body["reachability"] = probe
+        # Real probe data when one has run; otherwise the observed snapshot
+        # flagged as such, so internal consumers keep the same shape (#1538).
+        if _health_probe_cache is not None:
+            body["reachability"] = _health_probe_cache
+            body["probe_age_seconds"] = round(time.monotonic() - _health_probe_at, 1)
+        else:
+            body["reachability"] = {
+                "llm": {**llm_observed, "observed": True},
+                "embedding": {**emb_observed, "observed": True},
+            }
     return body
 
 
