@@ -84,28 +84,31 @@ def _missing_revision_id(exc: Exception) -> str | None:
     return None
 
 
-def _current_db_revision() -> str | None:
-    # Best-effort probe of the DB's recorded alembic revision, used to tell
+def _current_db_revisions() -> set[str]:
+    # Best-effort probe of the DB's recorded alembic revisions, used to tell
     # apart the two causes of "Can't locate revision" (#1585):
     #   - the DB's alembic_version names a revision absent from the code
     #     (migrated by a NEWER Joidy version, #1489), or
     #   - a migration file in the code references a deleted down_revision,
     #     so alembic fails loading the revision map before ever reading
     #     the DB (broken chain — updating the code would not help).
-    # Returns None whenever the revision cannot be determined — the
-    # alembic_version table may not exist yet, the DB may be unreachable,
-    # or the probe itself may error. Any failure here must never mask the
-    # original migration error: callers fall back to the generic path.
+    # Reads ALL rows: alembic_version can hold multiple rows in
+    # multi-head/branch states, and the missing revision may be recorded
+    # in any of them (#1598).
+    # Returns an empty set whenever the revisions cannot be determined —
+    # the alembic_version table may not exist yet, the DB may be
+    # unreachable, or the probe itself may error. Any failure here must
+    # never mask the original migration error: callers fall back to the
+    # generic path.
     try:
         with engine.connect() as conn:
-            row = conn.execute(text("SELECT version_num FROM alembic_version")).first()
+            return set(conn.execute(text("SELECT version_num FROM alembic_version")).scalars().all())
     except Exception:
         logger.debug(
             "Could not read alembic_version while diagnosing migration failure",
             exc_info=True,
         )
-        return None
-    return row[0] if row else None
+        return set()
 
 
 def _run_migrations() -> None:
@@ -146,12 +149,14 @@ def _run_migrations() -> None:
         logger.info("Database migrations applied successfully")
     except Exception as exc:
         missing_rev = _missing_revision_id(exc)
-        # Only blame the DB when its recorded alembic_version IS the missing
-        # revision. If the revision map itself is broken (a code migration
-        # references a deleted down_revision) the probe finds a different —
-        # or no — version, and the "DB is newer" verdict would misdiagnose
-        # the failure (#1585). A probe failure also lands here.
-        if missing_rev is not None and missing_rev == _current_db_revision():
+        # Only blame the DB when the missing revision IS recorded in its
+        # alembic_version — which can hold multiple rows in multi-head
+        # states, so membership-test the full set (#1598). If the revision
+        # map itself is broken (a code migration references a deleted
+        # down_revision) the probe finds only other — or no — versions,
+        # and the "DB is newer" verdict would misdiagnose the failure
+        # (#1585). A probe failure also lands here.
+        if missing_rev is not None and missing_rev in _current_db_revisions():
             # Fail loudly: the previous behavior was a generic alembic
             # traceback that crash-looped the container with no hint about
             # the actual cause or the fix (#1489).

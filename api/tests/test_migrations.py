@@ -32,28 +32,44 @@ class _FakeDialect:
         self.name = name
 
 
+class _FakeScalarResult:
+    """Minimal stand-in for a SQLAlchemy ``ScalarResult`` (supports ``.all()``)."""
+
+    def __init__(self, values):
+        self._values = values
+
+    def all(self):
+        return list(self._values)
+
+
 class _FakeResult:
-    """Minimal stand-in for a SQLAlchemy ``Result`` (supports ``.first()``)."""
+    """Minimal stand-in for a SQLAlchemy ``Result`` (supports ``.scalars()``)."""
 
-    def __init__(self, row):
-        self._row = row
+    def __init__(self, values):
+        self._values = values
 
-    def first(self):
-        return self._row
+    def scalars(self):
+        return _FakeScalarResult(self._values)
 
 
 class _FakeConnection:
     """Records executed statements in order so tests can assert lock/unlock
     sequencing around the migration call.
 
-    ``version_num``/``probe_error`` control the ``alembic_version`` probe
+    ``version_nums``/``probe_error`` control the ``alembic_version`` probe
     used by the missing-revision diagnosis (#1585): the former simulates a
-    DB whose recorded revision is ``version_num``, the latter a probe that
-    fails (table missing, DB unreachable)."""
+    DB whose ``alembic_version`` table holds the given rows (alembic can
+    store multiple rows in multi-head states, #1598), the latter a probe
+    that fails (table missing, DB unreachable)."""
 
-    def __init__(self, recorder: list, version_num: str | None = None, probe_error: Exception | None = None):
+    def __init__(
+        self,
+        recorder: list,
+        version_nums: tuple = (),
+        probe_error: Exception | None = None,
+    ):
         self._recorder = recorder
-        self._version_num = version_num
+        self._version_nums = version_nums
         self._probe_error = probe_error
 
     def __enter__(self):
@@ -69,7 +85,7 @@ class _FakeConnection:
         if "alembic_version" in sql:
             if self._probe_error is not None:
                 raise self._probe_error
-            return _FakeResult((self._version_num,) if self._version_num is not None else None)
+            return _FakeResult(self._version_nums)
         return None
 
     def commit(self):
@@ -81,16 +97,16 @@ class _FakeEngine:
         self,
         dialect_name: str,
         recorder: list,
-        version_num: str | None = None,
+        version_nums: tuple = (),
         probe_error: Exception | None = None,
     ):
         self.dialect = _FakeDialect(dialect_name)
         self._recorder = recorder
-        self._version_num = version_num
+        self._version_nums = version_nums
         self._probe_error = probe_error
 
     def connect(self):
-        return _FakeConnection(self._recorder, self._version_num, self._probe_error)
+        return _FakeConnection(self._recorder, self._version_nums, self._probe_error)
 
 
 class RunMigrationsTest(unittest.TestCase):
@@ -159,7 +175,7 @@ class MissingRevisionDetectionTest(unittest.TestCase):
         recorder: list = []
         # The DB's recorded revision IS the missing one → genuine drift:
         # the DB was migrated by a newer Joidy version (#1489).
-        fake_engine = _FakeEngine("sqlite", recorder, version_num="b4c5d6e7f8a9")
+        fake_engine = _FakeEngine("sqlite", recorder, version_nums=("b4c5d6e7f8a9",))
 
         with (
             mock.patch("database.engine", fake_engine),
@@ -241,7 +257,7 @@ class MissingRevisionDetectionTest(unittest.TestCase):
         # version differs from the missing revision, so the "DB is newer"
         # verdict would misdiagnose: must fall back to the generic path.
         recorder: list = []
-        fake_engine = _FakeEngine("sqlite", recorder, version_num="a1b2c3d4e5f6")
+        fake_engine = _FakeEngine("sqlite", recorder, version_nums=("a1b2c3d4e5f6",))
 
         with (
             mock.patch("database.engine", fake_engine),
@@ -298,6 +314,61 @@ class MissingRevisionDetectionTest(unittest.TestCase):
             mock.patch(
                 "database.command.upgrade",
                 side_effect=CommandError("Can't locate revision identified by 'b4c5d6e7f8a9'"),
+            ),
+            self.assertLogs("database", level="ERROR") as logs,
+            self.assertRaises(CommandError),
+        ):
+            _run_migrations()
+
+        output = "\n".join(logs.output)
+        self.assertIn("Failed to apply database migrations", output)
+        self.assertNotIn("NEWER Joidy version", output)
+        for record in logs.records:
+            self.assertLess(record.levelno, logging.CRITICAL)
+
+    def test_multi_row_version_table_match_in_later_row_logs_critical(self):
+        # Multi-row alembic_version (multi-head/branch state, #1598): the
+        # missing revision may be recorded in ANY row, not just the first.
+        # Membership-testing the full set must still detect genuine drift.
+        recorder: list = []
+        fake_engine = _FakeEngine(
+            "sqlite",
+            recorder,
+            version_nums=("a1b2c3d4e5f6", "b4c5d6e7f8a9"),
+        )
+
+        with (
+            mock.patch("database.engine", fake_engine),
+            mock.patch(
+                "database.command.upgrade",
+                side_effect=CommandError("Can't locate revision identified by 'b4c5d6e7f8a9'"),
+            ),
+            self.assertLogs("database", level="CRITICAL") as logs,
+            self.assertRaises(CommandError),
+        ):
+            _run_migrations()
+
+        output = "\n".join(logs.output)
+        self.assertIn("b4c5d6e7f8a9", output)
+        self.assertIn("NEWER Joidy version", output)
+        self.assertIn("update to a newer Joidy image", output)
+
+    def test_multi_row_version_table_no_match_takes_generic_path(self):
+        # Multi-row alembic_version where NO row matches the missing
+        # revision (broken chain, #1585): the "DB is newer" verdict would
+        # still misdiagnose — must fall back to the generic path (#1598).
+        recorder: list = []
+        fake_engine = _FakeEngine(
+            "sqlite",
+            recorder,
+            version_nums=("a1b2c3d4e5f6", "f0e1d2c3b4a5"),
+        )
+
+        with (
+            mock.patch("database.engine", fake_engine),
+            mock.patch(
+                "database.command.upgrade",
+                side_effect=CommandError("Can't locate revision identified by 'deleted_down_rev'"),
             ),
             self.assertLogs("database", level="ERROR") as logs,
             self.assertRaises(CommandError),
