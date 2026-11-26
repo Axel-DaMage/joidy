@@ -9,8 +9,10 @@ Vault writes are redirected to ``tmp_path`` where exercised.
 
 from datetime import datetime
 
+import pytest
 from models.goal import Goal, GoalContext, GoalFailConfig, GoalState, GoalTemporality
 from models.note import Note, Tag
+from sqlalchemy.orm import sessionmaker
 
 
 def _goal(db, **kwargs) -> Goal:
@@ -467,10 +469,12 @@ def test_create_goal_file_write_failure_still_creates(client, db_session, monkey
     assert db_session.get(Goal, data["id"]).source_path is None
 
 
-def test_create_goal_writes_vault_file(client, db_session, tmp_path):
+def test_create_goal_writes_vault_file(client, db_session, tmp_path, monkeypatch):
     """Control: with a writable vault (autouse ``_isolated_vault``) the goal
     file is written and ``source_path`` points at it — and (#1583) is
     committed to the DB within the same request, not left to a later pass."""
+    commit_snapshots = _spy_goal_source_path_commits(db_session, monkeypatch)
+
     resp = client.post("/goals/", json=_goal_payload(title="vault-goal"))
     assert resp.status_code == 201, resp.text
     data = resp.json()
@@ -482,6 +486,10 @@ def test_create_goal_writes_vault_file(client, db_session, tmp_path):
     assert "joidy_managed: True" in body
     assert "# vault-goal" in body
 
+    # #1597 — a commit must have run while the path was already assigned;
+    # the same-session assertions below cannot prove that on their own.
+    assert any(data["source_path"] in snap.values() for snap in commit_snapshots)
+
     # #1583 — the value is persisted on the row, not just in the response.
     db_session.expire_all()
     assert db_session.get(Goal, data["id"]).source_path == data["source_path"]
@@ -490,61 +498,126 @@ def test_create_goal_writes_vault_file(client, db_session, tmp_path):
 # ─── source_path persistence (#1583) ──────────────────────────────────────────
 
 
-def test_complete_goal_persists_source_path(client, db_session, tmp_path):
+def _spy_goal_source_path_commits(db_session, monkeypatch):
+    """Record every ``Goal.source_path`` in the session at each ``commit()``.
+
+    The vault writer assigns ``source_path`` in-memory *after* the
+    operation's last commit; only the follow-up ``db.commit()`` (#1583)
+    persists it. The shared ``db_session`` runs inside a SAVEPOINT, so
+    ``expire_all()`` + ``get()`` can observe flushed-but-never-committed
+    state — the same-session assertions in this file would still pass if
+    the endpoint dropped the follow-up commit. Snapshotting the identity
+    map at commit time instead proves a commit ran while the path was
+    already assigned, so these tests fail if the commit is removed (#1597).
+    """
+    snapshots = []
+    real_commit = db_session.commit
+
+    def spy_commit():
+        snapshots.append(
+            {goal.id: goal.source_path for goal in db_session.identity_map.values() if isinstance(goal, Goal)}
+        )
+        return real_commit()
+
+    monkeypatch.setattr(db_session, "commit", spy_commit)
+    return snapshots
+
+
+@pytest.mark.real_commit
+def test_create_goal_source_path_visible_to_independent_session(client, db_session, _db_engine):
+    """#1597 — real-commit check: verify ``source_path`` through a second,
+    independent session so only a genuine commit satisfies the test.
+
+    With ``real_commit`` the ``db_session`` fixture is bound to the engine
+    directly — the endpoint's commits really commit. If the follow-up
+    commit after the vault write were removed, the in-memory assignment
+    would never reach the DB and the independent session below would see
+    ``NULL``, while ``data["source_path"]`` in the response would still
+    show the value (the original #1583 symptom).
+    """
+    resp = client.post("/goals/", json=_goal_payload(title="committed-goal"))
+    assert resp.status_code == 201, resp.text
+    data = resp.json()
+    expected = f"Objetivos/{data['id']}_committed-goal.md"
+    assert data["source_path"] == expected
+
+    verify = sessionmaker(bind=_db_engine)()
+    try:
+        persisted = verify.get(Goal, data["id"])
+        assert persisted is not None
+        assert persisted.source_path == expected
+    finally:
+        verify.close()
+
+
+def test_complete_goal_persists_source_path(client, db_session, tmp_path, monkeypatch):
     """#1583 — /complete assigns ``source_path`` after its last commit; the
     follow-up commit must land it on the row within the same request."""
     goal = _goal(db_session, title="complete-persist", target_value=1.0, current_value=1.0)
     db_session.commit()
+    commit_snapshots = _spy_goal_source_path_commits(db_session, monkeypatch)
 
     resp = client.post(f"/goals/{goal.id}/complete")
     assert resp.status_code == 200, resp.text
     expected = f"Objetivos/{goal.id}_complete-persist.md"
     assert resp.json()["goal"]["source_path"] == expected
 
+    # #1597 — a commit ran while the assigned path was pending.
+    assert any(snap.get(goal.id) == expected for snap in commit_snapshots)
+
     db_session.expire_all()
     assert db_session.get(Goal, goal.id).source_path == expected
     assert list((tmp_path / "isolated-vault" / "Objetivos").glob(f"{goal.id}_*.md"))
 
 
-def test_fail_goal_persists_source_path(client, db_session):
+def test_fail_goal_persists_source_path(client, db_session, monkeypatch):
     """#1583 — same in-request persistence for /fail."""
     goal = _goal(db_session, title="fail-persist")
     db_session.commit()
+    commit_snapshots = _spy_goal_source_path_commits(db_session, monkeypatch)
 
     resp = client.post(f"/goals/{goal.id}/fail")
     assert resp.status_code == 200, resp.text
     expected = f"Objetivos/{goal.id}_fail-persist.md"
     assert resp.json()["source_path"] == expected
 
+    assert any(snap.get(goal.id) == expected for snap in commit_snapshots)
+
     db_session.expire_all()
     assert db_session.get(Goal, goal.id).source_path == expected
 
 
-def test_update_goal_persists_source_path(client, db_session):
+def test_update_goal_persists_source_path(client, db_session, monkeypatch):
     """#1583 — PUT with ``content`` writes the goal file via
     ``update_goal_file``; when the file did not exist yet (e.g. the
     create-time write failed) its path must be persisted in-request."""
     goal = _goal(db_session, title="put-persist")
     db_session.commit()
+    commit_snapshots = _spy_goal_source_path_commits(db_session, monkeypatch)
 
     resp = client.put(f"/goals/{goal.id}", json={"content": "new body"})
     assert resp.status_code == 200, resp.text
     expected = f"Objetivos/{goal.id}_put-persist.md"
     assert resp.json()["source_path"] == expected
 
+    assert any(snap.get(goal.id) == expected for snap in commit_snapshots)
+
     db_session.expire_all()
     assert db_session.get(Goal, goal.id).source_path == expected
 
 
-def test_save_goal_content_persists_source_path(client, db_session):
+def test_save_goal_content_persists_source_path(client, db_session, monkeypatch):
     """#1583 — same in-request persistence for POST /{id}/content."""
     goal = _goal(db_session, title="save-persist")
     db_session.commit()
+    commit_snapshots = _spy_goal_source_path_commits(db_session, monkeypatch)
 
     resp = client.post(f"/goals/{goal.id}/content", json=_content_payload(goal))
     assert resp.status_code == 200, resp.text
     expected = f"Objetivos/{goal.id}_save-persist.md"
     assert resp.json()["source_path"] == expected
+
+    assert any(snap.get(goal.id) == expected for snap in commit_snapshots)
 
     db_session.expire_all()
     assert db_session.get(Goal, goal.id).source_path == expected
