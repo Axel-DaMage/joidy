@@ -10,6 +10,7 @@ import logging
 import os
 import re
 import stat
+import threading
 from collections.abc import Callable
 from pathlib import Path, PurePosixPath
 from urllib.parse import urlparse
@@ -81,24 +82,75 @@ def _secure_env_file(env_file: Path) -> None:
         logger.warning("could not restrict permissions on %s: %s", env_file, exc)
 
 
+# ── Parsed-.env cache (#1518) ───────────────────────────────────────────────
+# A single authenticated request reaches read_env() ~7-10 times (rate-limit
+# middleware → signing_secret → get_persisted, token verification, vault path
+# normalization...). The parsed dict is cached keyed on
+# ``(path, mtime_ns, ctime_ns, size)``: each call pays one stat() and only
+# re-parses when the file changed. This preserves the cross-worker freshness
+# get_persisted() requires — a write by any process bumps the signature and
+# the next read re-parses — while eliminating the repeated open+parse. The
+# path is part of the signature so tests that repoint JOIDY_ENV_FILE never
+# see a stale entry. The lock only avoids a benign double-parse race; a
+# lost update costs at most one redundant parse.
+_env_cache_lock = threading.Lock()
+_env_cache: tuple[tuple[str, int, int, int], dict[str, str]] | None = None
+
+
+def _drop_env_cache(key: str | None = None) -> None:
+    """Drop the cached parse (unconditionally or only for ``key``'s path)."""
+    global _env_cache
+    with _env_cache_lock:
+        if key is None or (_env_cache is not None and _env_cache[0][0] == key):
+            _env_cache = None
+
+
+def clear_env_cache() -> None:
+    """Public invalidation hook for callers that rewrite the file in place."""
+    _drop_env_cache()
+
+
+def _parse_env_file(env_file: Path) -> dict[str, str]:
+    """Parse ``env_file`` into a dict, ignoring comments and blank lines."""
+    env_vars: dict[str, str] = {}
+    with open(env_file) as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                key, value = line.split("=", 1)
+                env_vars[key.strip()] = value.strip()
+    return env_vars
+
+
 def read_env() -> dict:
     """Parse the env file into a dict, ignoring comments and blank lines.
 
-    Uses ``is_file`` instead of ``exists``: when the bind mount source does not
-    exist on the host, Docker silently creates /app/.env as a *directory* and
-    ``open()`` raised IsADirectoryError, turning every /config request into a
-    500 and breaking the whole settings page.
+    Uses a regular-file check instead of ``exists``: when the bind mount
+    source does not exist on the host, Docker silently creates /app/.env as a
+    *directory* and ``open()`` raised IsADirectoryError, turning every /config
+    request into a 500 and breaking the whole settings page.
+
+    Returns a fresh dict on every call so callers may mutate the result
+    without corrupting the cache.
     """
-    env_vars: dict[str, str] = {}
+    global _env_cache
     env_file = get_env_file()
-    if env_file.is_file():
-        with open(env_file) as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    key, value = line.split("=", 1)
-                    env_vars[key.strip()] = value.strip()
-    return env_vars
+    key = str(env_file)
+    try:
+        st = env_file.stat()
+    except OSError:
+        st = None
+    if st is None or not stat.S_ISREG(st.st_mode):
+        _drop_env_cache(key)
+        return {}
+    signature = (key, st.st_mtime_ns, st.st_ctime_ns, st.st_size)
+    with _env_cache_lock:
+        if _env_cache is not None and _env_cache[0] == signature:
+            return dict(_env_cache[1])
+    parsed = _parse_env_file(env_file)
+    with _env_cache_lock:
+        _env_cache = (signature, parsed)
+    return dict(parsed)
 
 
 # ── .env value validation (#1312) ───────────────────────────────────────────
@@ -345,6 +397,9 @@ def write_env(env_vars: dict) -> None:
     with os.fdopen(fd, "w") as f:
         f.write("\n".join(output).rstrip("\n") + "\n")
     _secure_env_file(env_file)
+    # The signature check already invalidates on the next read; dropping the
+    # entry eagerly also covers the same-mtime/same-size corner (#1518).
+    _drop_env_cache(str(env_file))
 
 
 def unescape_env_value(value: str) -> str:
