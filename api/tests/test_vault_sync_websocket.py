@@ -113,7 +113,7 @@ class TestVaultSyncedBroadcast(VaultSyncBroadcastTestBase):
             try:
                 with (
                     patch("routers.websocket.broadcast_vault_synced") as mock_broadcast,
-                    patch("routers.websocket.broadcast_note_created"),
+                    patch("routers.websocket.broadcast_note_created") as mock_note_created,
                 ):
                     response = client.post(
                         "/notes/",
@@ -130,6 +130,10 @@ class TestVaultSyncedBroadcast(VaultSyncBroadcastTestBase):
                     mock_broadcast.assert_called_once()
                     call_args = mock_broadcast.call_args
                     self.assertEqual(call_args.args[1], "Vault Note")
+                    # vault_synced carries a payload superset of note_created
+                    # and drives the same frontend refetch, so the generic
+                    # frame is deduped away for vault-sourced notes (#1525).
+                    mock_note_created.assert_not_called()
             finally:
                 _teardown_client(client)
 
@@ -139,7 +143,7 @@ class TestVaultSyncedBroadcast(VaultSyncBroadcastTestBase):
             try:
                 with (
                     patch("routers.websocket.broadcast_vault_synced") as mock_broadcast,
-                    patch("routers.websocket.broadcast_note_created"),
+                    patch("routers.websocket.broadcast_note_created") as mock_note_created,
                 ):
                     response = client.post(
                         "/notes/",
@@ -152,6 +156,8 @@ class TestVaultSyncedBroadcast(VaultSyncBroadcastTestBase):
                     )
                     self.assertEqual(response.status_code, 201)
                     mock_broadcast.assert_not_called()
+                    # Non-vault creates keep the generic note_created frame.
+                    mock_note_created.assert_called_once()
             finally:
                 _teardown_client(client)
 
@@ -175,7 +181,7 @@ class TestVaultSyncedBroadcast(VaultSyncBroadcastTestBase):
 
                 with (
                     patch("routers.websocket.broadcast_vault_synced") as mock_broadcast,
-                    patch("routers.websocket.broadcast_note_updated"),
+                    patch("routers.websocket.broadcast_note_updated") as mock_note_updated,
                 ):
                     update_res = client.put(
                         f"/notes/{note_id}",
@@ -190,6 +196,40 @@ class TestVaultSyncedBroadcast(VaultSyncBroadcastTestBase):
                     self.assertEqual(update_res.status_code, 200)
                     mock_broadcast.assert_called_once()
                     self.assertEqual(mock_broadcast.call_args.args[1], "Updated Vault")
+                    # Same dedupe as create: vault_synced supersedes the
+                    # generic note_updated frame on vault writes (#1525).
+                    mock_note_updated.assert_not_called()
+            finally:
+                _teardown_client(client)
+
+    def test_update_non_obsidian_note_broadcasts_note_updated(self) -> None:
+        """Manual edits still emit note_updated and no vault_synced (#1525)."""
+        with self.Session() as db:
+            client = _build_client(db)
+            try:
+                create_res = client.post(
+                    "/notes/",
+                    json={
+                        "title": "Manual Note",
+                        "content": "v1",
+                        "tags": [],
+                        "source": "joidy",
+                    },
+                )
+                note_id = create_res.json()["id"]
+
+                with (
+                    patch("routers.websocket.broadcast_note_updated") as mock_note_updated,
+                    patch("routers.websocket.broadcast_vault_synced") as mock_vault,
+                ):
+                    update_res = client.put(
+                        f"/notes/{note_id}",
+                        json={"title": "Manual Note v2", "content": "v2 with different text"},
+                    )
+                    self.assertEqual(update_res.status_code, 200)
+                    mock_note_updated.assert_called_once()
+                    self.assertEqual(mock_note_updated.call_args.args[1], "Manual Note v2")
+                    mock_vault.assert_not_called()
             finally:
                 _teardown_client(client)
 

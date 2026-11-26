@@ -190,20 +190,24 @@ def create_note(
         db.commit()
     clear_api_caches()
 
-    try:
-        from routers.websocket import broadcast_note_created
-
-        broadcast_note_created(note.id, note.title)
-    except Exception:  # noqa: S110 — best-effort realtime broadcast; websocket must not fail the write
-        pass
-
     # Broadcast a vault_synced event when the note came from Obsidian so the
-    # frontend can distinguish vault syncs from manual creations (#73).
+    # frontend can distinguish vault syncs from manual creations (#73). Its
+    # payload is a strict superset of note_created (same note_id + title plus
+    # source_path) and triggers the same frontend refetch + toast, so the
+    # generic frame is skipped for vault-sourced notes — halving the
+    # per-write fan-out during bulk imports (#1525).
     if source == "obsidian":
         try:
             from routers.websocket import broadcast_vault_synced
 
             broadcast_vault_synced(note.id, note.title, note.source_path)
+        except Exception:  # noqa: S110 — best-effort realtime broadcast; websocket must not fail the write
+            pass
+    else:
+        try:
+            from routers.websocket import broadcast_note_created
+
+            broadcast_note_created(note.id, note.title)
         except Exception:  # noqa: S110 — best-effort realtime broadcast; websocket must not fail the write
             pass
 
@@ -275,20 +279,22 @@ def update_note(
         db.commit()
     clear_api_caches()
 
-    try:
-        from routers.websocket import broadcast_note_updated
-
-        broadcast_note_updated(note.id, note.title)
-    except Exception:  # noqa: S110 — best-effort realtime broadcast; websocket must not fail the write
-        pass
-
     # Broadcast a vault_synced event when the update came from Obsidian so the
-    # frontend can distinguish vault syncs from manual edits (#73).
+    # frontend can distinguish vault syncs from manual edits (#73). As in
+    # create_note, its payload covers note_updated's and drives the same
+    # refetch, so the generic frame is only sent for non-vault writes (#1525).
     if from_vault or note.source == "obsidian":
         try:
             from routers.websocket import broadcast_vault_synced
 
             broadcast_vault_synced(note.id, note.title, note.source_path)
+        except Exception:  # noqa: S110 — best-effort realtime broadcast; websocket must not fail the write
+            pass
+    else:
+        try:
+            from routers.websocket import broadcast_note_updated
+
+            broadcast_note_updated(note.id, note.title)
         except Exception:  # noqa: S110 — best-effort realtime broadcast; websocket must not fail the write
             pass
 
