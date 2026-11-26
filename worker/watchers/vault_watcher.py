@@ -88,6 +88,9 @@ class PersistentEventLog:
     def __init__(self, path: str):
         self._path = path
         self._conn: sqlite3.Connection | None
+        # True when the DB accepted WAL mode; controls whether commits must
+        # explicitly re-raise synchronous (see _commit_durable).
+        self._wal = False
         try:
             Path(path).parent.mkdir(parents=True, exist_ok=True)
             self._conn = sqlite3.connect(path, check_same_thread=False)
@@ -97,11 +100,15 @@ class PersistentEventLog:
             # volumes. Durability trade-off: every commit still survives a
             # worker/application crash — only an OS crash or power loss can
             # drop the last transaction, and even then the database stays
-            # consistent, never corrupt. For this crash-recovery log that
-            # residual window is no worse than the one that already existed
-            # between an API write and the event's removal from the log.
+            # consistent, never corrupt. That residual window is acceptable
+            # for the cheap per-batch flush of staged removals (a lost
+            # removal only replays already-processed idempotent events) but
+            # NOT for add()/set_fingerprint() — those record unprocessed
+            # work whose loss can be unrecoverable, so they go through
+            # _write_durable() which temporarily raises synchronous=FULL.
             journal_mode = self._conn.execute("PRAGMA journal_mode=WAL").fetchone()
-            if journal_mode and str(journal_mode[0]).lower() == "wal":
+            self._wal = bool(journal_mode and str(journal_mode[0]).lower() == "wal")
+            if self._wal:
                 self._conn.execute("PRAGMA synchronous=NORMAL")
             # If the filesystem refuses WAL (some network mounts), the
             # connection keeps the default rollback journal with FULL
@@ -118,15 +125,45 @@ class PersistentEventLog:
             logger.warning("[vault] Persistent event log unavailable (%s); crash recovery disabled", type(exc).__name__)
             self._conn = None
 
+    def _write_durable(self, sql: str, params: tuple) -> None:
+        """Execute ``sql`` and commit it at synchronous=FULL, restoring
+        NORMAL afterwards (#1536).
+
+        Under WAL + synchronous=NORMAL an OS crash or power loss can drop the
+        last committed transaction even though ``commit()`` returned. For
+        ``add()``/``set_fingerprint()`` — records of *unprocessed* work — that
+        gap is fatal in one direction: a lost ``deleted`` event describes a
+        file that no longer exists in the vault, so initial_scan can never
+        rediscover it and the note stays orphaned in the DB forever. Staged
+        removals of already-processed idempotent events stay cheap at NORMAL
+        since losing them only replays work that is safe to redo.
+
+        PRAGMA synchronous cannot be raised inside an open transaction, so
+        any transaction staged removals left open is flushed first (a plain
+        commit — identical durability to the per-batch flush), FULL is
+        applied, and the write's own commit fsyncs the WAL frame before
+        NORMAL is restored.
+        """
+        if self._wal:
+            self._conn.commit()  # flush any staged removals; no-op when none
+            self._conn.execute("PRAGMA synchronous=FULL")
+        # Non-WAL (rollback-journal fallback) never lowered synchronous — the
+        # default FULL already applies; nothing to toggle.
+        try:
+            self._conn.execute(sql, params)
+            self._conn.commit()
+        finally:
+            if self._wal:
+                self._conn.execute("PRAGMA synchronous=NORMAL")
+
     def add(self, path: str, change_type: Change) -> None:
         if self._conn is None:
             return
         try:
-            self._conn.execute(
+            self._write_durable(
                 "INSERT OR REPLACE INTO pending_events (path, change_type) VALUES (?, ?)",
                 (path, change_type.name),
             )
-            self._conn.commit()
         except Exception as exc:
             logger.warning("[vault] Failed to persist event %s: %s", _log_name(path), type(exc).__name__)
 
@@ -180,11 +217,10 @@ class PersistentEventLog:
         if self._conn is None:
             return
         try:
-            self._conn.execute(
+            self._write_durable(
                 "INSERT OR REPLACE INTO fingerprints (path, fingerprint) VALUES (?, ?)",
                 (path, fingerprint),
             )
-            self._conn.commit()
         except Exception as exc:
             logger.warning("[vault] Failed to persist fingerprint for %s: %s", _log_name(path), type(exc).__name__)
 

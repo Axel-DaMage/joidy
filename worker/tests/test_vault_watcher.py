@@ -212,6 +212,75 @@ class TestPersistentEventLog(unittest.TestCase):
             assert log2.pending() == []
             log2.close()
 
+    class _RecordingConn:
+        """sqlite3.Connection delegate that records PRAGMA synchronous
+        statements, used to prove which commits run at FULL (#1536)."""
+
+        def __init__(self, conn):
+            self._conn = conn
+            self.sync_pragmas: list[str] = []
+
+        def execute(self, sql, parameters=()):
+            if sql.strip().upper().startswith("PRAGMA SYNCHRONOUS"):
+                self.sync_pragmas.append(sql)
+            return self._conn.execute(sql, parameters)
+
+        def commit(self):
+            return self._conn.commit()
+
+        def __getattr__(self, name):
+            return getattr(self._conn, name)
+
+    def test_add_commit_toggles_full_synchronous(self):
+        """add() commits at synchronous=FULL — a lost ADD event for a
+        deleted file is unrecoverable (the file no longer exists, so
+        initial_scan cannot rediscover it) — then restores NORMAL (#1536)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            log = PersistentEventLog(Path(tmp) / "events.db")
+            rec = self._RecordingConn(log._conn)
+            log._conn = rec
+
+            log.add("/vault/x.md", Change.deleted)
+
+            assert rec.sync_pragmas == ["PRAGMA synchronous=FULL", "PRAGMA synchronous=NORMAL"]
+            # Resting mode back to NORMAL and the row actually persisted.
+            assert rec.execute("PRAGMA synchronous").fetchone()[0] == 1
+            assert log.pending() == [("/vault/x.md", Change.deleted)]
+            log._conn = rec._conn
+            log.close()
+
+    def test_set_fingerprint_commit_is_durable(self):
+        """set_fingerprint() uses the same durable commit — fingerprints
+        record unprocessed-work state that must survive an OS crash (#1536)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            log = PersistentEventLog(Path(tmp) / "events.db")
+            rec = self._RecordingConn(log._conn)
+            log._conn = rec
+
+            log.set_fingerprint("/vault/x.md", "deadbeef")
+
+            assert rec.sync_pragmas == ["PRAGMA synchronous=FULL", "PRAGMA synchronous=NORMAL"]
+            assert log.fingerprints() == {"/vault/x.md": "deadbeef"}
+            log._conn = rec._conn
+            log.close()
+
+    def test_removal_flush_stays_normal_synchronous(self):
+        """Staged removals of already-processed events flush at NORMAL —
+        losing one only replays idempotent work, so no FULL toggle (#1536)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            log = PersistentEventLog(Path(tmp) / "events.db")
+            log.add("/vault/x.md", Change.added)
+
+            rec = self._RecordingConn(log._conn)
+            log._conn = rec
+            log.remove("/vault/x.md")
+            log.commit()
+
+            assert rec.sync_pragmas == []
+            assert rec.execute("PRAGMA synchronous").fetchone()[0] == 1
+            log._conn = rec._conn
+            log.close()
+
 
 class TestVaultSync(unittest.IsolatedAsyncioTestCase):
     def _client(self, responses):
