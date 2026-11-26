@@ -1,6 +1,13 @@
 # Base image pinned by multi-arch index digest (#1391). Dependabot (docker
 # ecosystem) bumps tag + digest together; both stages must use the same reference.
 
+# This deps/runtime skeleton is intentionally mirrored across api/Dockerfile,
+# ai-service/Dockerfile and worker/Dockerfile — keep the shared stages in sync
+# when editing. A shared base image was rejected (#1555): every build entry
+# point uses a per-service context (`docker build ./<svc>`, the dev overlay,
+# CI and publish.yml), so a common FROM would add a published image plus build
+# ordering for no real size or cache win.
+
 # ── deps: build stage with compilers, kept out of the final image ────────────
 FROM python:3.12-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b AS deps
 
@@ -62,7 +69,9 @@ COPY --chown=app:app . .
 
 USER app
 
-HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=10s \
+# Keep in sync with the docker-compose.yml healthcheck — the compose override
+# wins at runtime; this is only the default for a bare `docker run` (#1555).
+HEALTHCHECK --interval=10s --timeout=5s --retries=5 --start-period=15s \
   CMD curl -f http://localhost:8001/health || exit 1
 
 CMD ["python", "main.py"]

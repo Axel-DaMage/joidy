@@ -28,7 +28,8 @@ jobs:
     # the test DB accepted SQLite-only SQL syntax and lacked pgvector (#409).
     services:
       postgres:
-        image: pgvector/pgvector:pg16
+        # Same pgvector release the compose stack is pinned to (#1555).
+        image: pgvector/pgvector:0.8.7-pg16
         env:
           POSTGRES_USER: joidy
           POSTGRES_PASSWORD: joidy

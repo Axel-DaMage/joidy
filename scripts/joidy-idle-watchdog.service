@@ -7,8 +7,8 @@ Description=Joidy idle watchdog (auto-sleep the Docker stack when unused)
 # Optional user unit for `joidy idle` (#860). Runs the watcher in the
 # foreground; state and logs live under <data>/idle/.
 #
-# Install path resolution mirrors joidy.service: /etc/joidy/path (AUR),
-# then ~/.config/joidy/path, then a git checkout at ~/joidy.
+# Install path resolution mirrors joidy.service: ~/.config/joidy/path,
+# then /etc/joidy/path (AUR), then a git checkout at ~/joidy.
 #
 # Install:
 #   cp scripts/joidy-idle-watchdog.service ~/.config/systemd/user/
@@ -22,7 +22,7 @@ Description=Joidy idle watchdog (auto-sleep the Docker stack when unused)
 
 [Service]
 Type=simple
-ExecStart=/bin/bash -c 'dir=$(cat /etc/joidy/path 2>/dev/null || cat %h/.config/joidy/path 2>/dev/null || echo "%h/joidy"); exec bash "$dir/scripts/joidy.sh" idle run'
+ExecStart=/bin/bash -c 'dir=$(cat %h/.config/joidy/path 2>/dev/null || cat /etc/joidy/path 2>/dev/null || echo "%h/joidy"); exec bash "$dir/scripts/joidy.sh" idle run'
 Restart=on-failure
 RestartSec=30
 StandardOutput=journal
