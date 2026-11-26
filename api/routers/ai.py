@@ -191,23 +191,28 @@ async def daily_recap(
     start = to_utc_datetime(day)
     end = to_utc_datetime(day + timedelta(days=1))
 
-    # Gather the day's activity from the DB
-    notes_created = db.query(Note).filter(Note.created_at >= start, Note.created_at < end).all()
-    notes_edited = db.query(Note).filter(Note.updated_at >= start, Note.updated_at < end, Note.created_at < start).all()
+    # Gather the day's activity from the DB. Only counts + titles are needed —
+    # count() and a title projection avoid hydrating full Note rows (content
+    # bodies can be megabytes) for two integers and ten strings (#1523).
+    notes_filter = (Note.created_at >= start, Note.created_at < end)
+    notes_created = db.query(Note).filter(*notes_filter).count()
+    notes_edited = (
+        db.query(Note).filter(Note.updated_at >= start, Note.updated_at < end, Note.created_at < start).count()
+    )
 
     # XP and goals — query gamification events and goals
     from models.goal import Goal
 
     goals_completed = db.query(Goal).filter(Goal.completed_at >= start, Goal.completed_at < end).count()
 
-    note_titles = [n.title for n in notes_created[:10]]
+    note_titles = [row[0] for row in db.query(Note.title).filter(*notes_filter).order_by(Note.id.asc()).limit(10).all()]
 
     payload = {
         "date": target_date,
-        "notes_created": len(notes_created),
-        "notes_edited": len(notes_edited),
+        "notes_created": notes_created,
+        "notes_edited": notes_edited,
         "xp_gained": 0,  # XP events not tracked per-day in the current schema
-        "streak_maintained": len(notes_created) > 0,
+        "streak_maintained": notes_created > 0,
         "goals_completed": goals_completed,
         "focus_time_minutes": 0,  # Pomodoro time not persisted server-side yet
         "note_titles": note_titles,

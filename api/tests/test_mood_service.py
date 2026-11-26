@@ -205,6 +205,52 @@ class GetMoodStatsTest(MoodServiceTestBase):
         self.assertEqual(stats["notes_correlation"], 0.5)
         db.close()
 
+    def test_whitespace_only_note_not_counted(self):
+        """Blank-after-strip notes behave like missing notes (#1523 SQL parity)."""
+        db = self.Session()
+        today = self._today()
+        db.add(MoodEntry(user_id=1, score=4, entry_date=today, note="   "))
+        db.add(MoodEntry(user_id=1, score=2, entry_date=today - timedelta(days=1), note="Real"))
+        db.commit()
+        stats = get_mood_stats(db, user_id=1)
+        # Only the real note counts → 1/2.
+        self.assertEqual(stats["notes_correlation"], 0.5)
+        db.close()
+
+    def test_stats_large_synthetic_set(self):
+        """SQL aggregation correctness on a larger entry set (#1523)."""
+        db = self.Session()
+        today = self._today()
+        # 120 consecutive days: scores cycle 1..5 (avg exactly 3.0), every
+        # other entry carries a note.
+        for i in range(120):
+            db.add(
+                MoodEntry(
+                    user_id=1,
+                    score=(i % 5) + 1,
+                    entry_date=today - timedelta(days=i),
+                    note=f"note {i}" if i % 2 == 0 else None,
+                )
+            )
+        db.commit()
+        stats = get_mood_stats(db, user_id=1)
+        self.assertEqual(stats["total_entries"], 120)
+        self.assertEqual(stats["average"], 3.0)
+        self.assertEqual(stats["streak"], 120)
+        self.assertEqual(stats["notes_correlation"], 0.5)
+        db.close()
+
+    def test_isolated_per_user(self):
+        db = self.Session()
+        today = self._today()
+        db.add(MoodEntry(user_id=1, score=5, entry_date=today))
+        db.add(MoodEntry(user_id=2, score=1, entry_date=today))
+        db.commit()
+        stats = get_mood_stats(db, user_id=1)
+        self.assertEqual(stats["total_entries"], 1)
+        self.assertEqual(stats["average"], 5.0)
+        db.close()
+
 
 if __name__ == "__main__":
     unittest.main()

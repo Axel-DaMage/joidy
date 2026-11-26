@@ -201,6 +201,71 @@ class GetUsageSummaryTest(UsageServiceTestBase):
         self.assertEqual(s2["total_events"], 2)
         db.close()
 
+    def test_top_values_respects_limit(self):
+        """The SQL GROUP BY aggregation must cap at the top-N limit (#1523)."""
+        db = self.Session()
+        # 15 distinct features with descending counts — top_features caps at 10.
+        for i in range(15):
+            for _ in range(15 - i):
+                track_event(db, 1, EVENT_FEATURE_USE, {"feature": f"f{i:02d}"})
+        summary = get_usage_summary(db, user_id=1, days=30)
+        self.assertEqual(len(summary["top_features"]), 10)
+        self.assertEqual(summary["top_features"][0], {"feature": "f00", "count": 15})
+        counts = [f["count"] for f in summary["top_features"]]
+        self.assertEqual(counts, sorted(counts, reverse=True))
+        db.close()
+
+    def test_top_values_skips_missing_or_null_key(self):
+        """Events without the JSON key (or with a null value) must be excluded."""
+        db = self.Session()
+        track_event(db, 1, EVENT_FEATURE_USE, {"feature": "search"})
+        track_event(db, 1, EVENT_FEATURE_USE, {"other": "x"})  # missing key
+        track_event(db, 1, EVENT_FEATURE_USE, {"feature": None})  # explicit JSON null
+        track_event(db, 1, EVENT_FEATURE_USE)  # no event_data at all
+        summary = get_usage_summary(db, user_id=1, days=30)
+        self.assertEqual(summary["top_features"], [{"feature": "search", "count": 1}])
+        db.close()
+
+    def test_summary_aggregates_large_synthetic_set(self):
+        """Aggregation correctness on a larger event volume (#1523)."""
+        db = self.Session()
+        now = self._now()
+        # 250 page views across 5 paths + 5 ten-minute session pairs.
+        for i in range(250):
+            db.add(
+                UsageEvent(
+                    user_id=1,
+                    event_type=EVENT_PAGE_VIEW,
+                    event_data={"path": f"/p{i % 5}"},
+                    created_at=now,
+                )
+            )
+        for i in range(5):
+            db.add(
+                UsageEvent(
+                    user_id=1,
+                    event_type=EVENT_SESSION_START,
+                    created_at=now - timedelta(minutes=10 * (i + 1)),
+                )
+            )
+            db.add(
+                UsageEvent(
+                    user_id=1,
+                    event_type=EVENT_SESSION_END,
+                    created_at=now - timedelta(minutes=10 * i),
+                )
+            )
+        db.commit()
+        summary = get_usage_summary(db, user_id=1, days=30)
+        self.assertEqual(summary["total_events"], 260)
+        self.assertEqual(summary["session_count"], 5)
+        self.assertEqual(summary["active_days"], 1)
+        self.assertGreater(summary["avg_session_duration_min"], 9.0)
+        self.assertLess(summary["avg_session_duration_min"], 11.5)
+        top_pages = {p["path"]: p["count"] for p in summary["top_pages"]}
+        self.assertEqual(top_pages, {f"/p{i}": 50 for i in range(5)})
+        db.close()
+
 
 class GetFeatureUsageTest(UsageServiceTestBase):
     def test_empty(self):
