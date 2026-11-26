@@ -248,6 +248,7 @@ class TestVaultSync(unittest.IsolatedAsyncioTestCase):
             link.symlink_to(secret)
 
             responses = [
+                FakeResponse(200, []),  # source-paths bulk lookup: API holds nothing
                 FakeResponse(200, []),  # no existing note for real.md
                 FakeResponse(201),  # create real.md
                 FakeResponse(200),  # rebuild-derived
@@ -300,3 +301,264 @@ class TestVaultSync(unittest.IsolatedAsyncioTestCase):
         # Drain queue manually since we are not running the consumer.
         while not queue.empty():
             queue.get_nowait()
+
+
+class TestInitialScanShortCircuit(unittest.IsolatedAsyncioTestCase):
+    """#1535: initial_scan must not re-import files whose stored content
+    fingerprint already matches the current file content."""
+
+    def tearDown(self):
+        # Module-global fingerprint/event-log state must not leak between tests.
+        vault_watcher._unbind_event_log()
+        vault_watcher._fingerprints.clear()
+
+    def _client(self, responses, source_paths=None):
+        """AsyncMock httpx client; ``responses`` is a list of
+        (method, FakeResponse) tuples popped in order. Any call whose method
+        has no queued response falls back to a 200 default (``[]`` for GET).
+
+        ``source_paths`` controls the GET /notes/source-paths bulk lookup:
+        a list/str iterable is returned as the JSON body, a FakeResponse is
+        returned as-is (e.g. a failing one), an exception is raised. None
+        returns an empty list — the API holds no paths, so nothing is
+        skipped on fingerprints alone.
+        """
+        client = AsyncMock()
+        queue = list(responses)
+
+        def _next(method):
+            for i, (m, _resp) in enumerate(queue):
+                if m == method:
+                    return queue.pop(i)[1]
+            return FakeResponse(200, [] if method == "GET" else {})
+
+        async def _get(url, *args, **kwargs):
+            if str(url).endswith("/notes/source-paths"):
+                if isinstance(source_paths, BaseException):
+                    raise source_paths
+                if isinstance(source_paths, FakeResponse):
+                    return source_paths
+                return FakeResponse(200, list(source_paths or []))
+            return _next("GET")
+
+        async def _post(*args, **kwargs):
+            return _next("POST")
+
+        async def _put(*args, **kwargs):
+            return _next("PUT")
+
+        async def _delete(*args, **kwargs):
+            return _next("DELETE")
+
+        client.get.side_effect = _get
+        client.post.side_effect = _post
+        client.put.side_effect = _put
+        client.delete.side_effect = _delete
+        return client
+
+    @staticmethod
+    def _write(path: Path, content: str) -> str:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+        return content
+
+    @patch("watchers.vault_watcher.get_auth_token", new=AsyncMock(return_value="token"))
+    async def test_second_scan_skips_unchanged_files(self):
+        """A restart of a healthy worker is a no-op: files whose stored
+        fingerprint matches their content make zero per-note HTTP calls."""
+        with tempfile.TemporaryDirectory() as vault:
+            root = Path(vault)
+            md_a = root / "a.md"
+            md_b = root / "b.md"
+            content_a = self._write(md_a, "content A")
+            content_b = self._write(md_b, "content B")
+
+            # Simulate fingerprints recorded by the previous run's syncs —
+            # and the API still holding both source_paths.
+            vault_watcher._fingerprints[str(md_a)] = _fingerprint(content_a)
+            vault_watcher._fingerprints[str(md_b)] = _fingerprint(content_b)
+
+            client = self._client([], source_paths=[str(md_a), str(md_b)])
+            with patch.object(vault_watcher.settings, "vault_path", vault):
+                await vault_watcher.initial_scan(root, client, "token")
+
+            # No per-note lookup/create/update — only the one bulk
+            # source-paths GET and the rebuild-derived POST.
+            assert client.get.call_count == 1
+            assert client.get.call_args.args[0].endswith("/notes/source-paths")
+            assert client.put.call_count == 0
+            assert client.post.call_count == 1
+            assert "json" not in client.post.call_args.kwargs  # rebuild-derived, no payload
+
+    @patch("watchers.vault_watcher.get_auth_token", new=AsyncMock(return_value="token"))
+    async def test_changed_and_new_files_are_synced(self):
+        """Only files with a matching fingerprint are skipped: a file whose
+        content changed since the recorded fingerprint, and a file with no
+        fingerprint at all, are both synced."""
+        with tempfile.TemporaryDirectory() as vault:
+            root = Path(vault)
+            unchanged = root / "same.md"
+            changed = root / "edited.md"
+            new = root / "new.md"
+            same_content = self._write(unchanged, "same content")
+            self._write(changed, "edited content")
+            self._write(new, "brand new")
+
+            vault_watcher._fingerprints[str(unchanged)] = _fingerprint(same_content)
+            vault_watcher._fingerprints[str(changed)] = _fingerprint("stale content")
+
+            # The API holds both fingerprinted paths — but a matching
+            # fingerprint only skips when the content still matches.
+            client = self._client(
+                [
+                    ("GET", FakeResponse(200, [])),  # edited.md: no existing note
+                    ("GET", FakeResponse(200, [])),  # new.md: no existing note
+                ],
+                source_paths=[str(unchanged), str(changed)],
+            )
+            with patch.object(vault_watcher.settings, "vault_path", vault):
+                await vault_watcher.initial_scan(root, client, "token")
+
+            # The unchanged file was never looked up (per-file GETs carry a
+            # ``source_path`` param; the bulk lookup does not).
+            looked_up = {c.kwargs["params"]["source_path"] for c in client.get.call_args_list if "params" in c.kwargs}
+            assert str(unchanged) not in looked_up
+            assert looked_up == {str(changed), str(new)}
+
+            # Both out-of-sync files were created (no existing note).
+            created = {c.kwargs["json"]["source_path"] for c in client.post.call_args_list if "json" in c.kwargs}
+            assert created == {str(changed), str(new)}
+
+    @patch("watchers.vault_watcher.get_auth_token", new=AsyncMock(return_value="token"))
+    async def test_pending_event_forces_resync_despite_matching_fingerprint(self):
+        """Crash-recovery conservatism: a path with a pending event in the
+        persistent log is never skipped — its last sync may have failed."""
+        with tempfile.TemporaryDirectory() as vault:
+            root = Path(vault)
+            md = root / "flaky.md"
+            content = self._write(md, "content")
+
+            log = PersistentEventLog(root / "events.db")
+            log.set_fingerprint(str(md), _fingerprint(content))
+            log.add(str(md), Change.modified)
+            vault_watcher._bind_event_log(log)
+            try:
+                client = self._client(
+                    [
+                        ("GET", FakeResponse(200, [{"id": 7, "source_path": str(md)}])),
+                        ("PUT", FakeResponse(200)),
+                    ],
+                    source_paths=[str(md)],
+                )
+                with patch.object(vault_watcher.settings, "vault_path", vault):
+                    await vault_watcher.initial_scan(root, client, "token")
+
+                # One per-file lookup (the bulk source-paths GET has no params).
+                per_file = [c for c in client.get.call_args_list if "params" in c.kwargs]
+                assert len(per_file) == 1
+                assert client.put.call_count == 1
+                assert client.put.call_args.args[0].endswith("/notes/7")
+            finally:
+                log.close()
+
+    @patch("watchers.vault_watcher.get_auth_token", new=AsyncMock(return_value="token"))
+    async def test_recreated_file_after_successful_delete_is_resynced(self):
+        """A file deleted at the API and then recreated with identical
+        content must not be skipped — a successful delete drops the stored
+        fingerprint, so the scan sees it as out-of-sync."""
+        with tempfile.TemporaryDirectory() as vault:
+            root = Path(vault)
+            md = root / "phoenix.md"
+            content = "same body"
+            vault_watcher._fingerprints[str(md)] = _fingerprint(content)
+
+            # Delete event processed while the file is absent.
+            log = PersistentEventLog(root / "events.db")
+            try:
+                log.add(str(md), Change.deleted)
+                client = self._client(
+                    [
+                        ("GET", FakeResponse(200, [{"id": 9, "source_path": str(md), "updated_at": "t0"}])),
+                        ("DELETE", FakeResponse(200)),
+                    ]
+                )
+                with patch.object(vault_watcher.settings, "vault_path", vault):
+                    await vault_watcher._process_batch({str(md): Change.deleted}, client, "token", log)
+
+                assert client.delete.call_count == 1
+                assert str(md) not in vault_watcher._fingerprints
+
+                # File recreated with identical content → scan resyncs it.
+                self._write(md, content)
+                client = self._client([("GET", FakeResponse(200, []))], source_paths=[str(md)])
+                with patch.object(vault_watcher.settings, "vault_path", vault):
+                    await vault_watcher.initial_scan(root, client, "token")
+
+                created = {c.kwargs["json"]["source_path"] for c in client.post.call_args_list if "json" in c.kwargs}
+                assert str(md) in created
+            finally:
+                log.close()
+
+    @patch("watchers.vault_watcher.get_auth_token", new=AsyncMock(return_value="token"))
+    async def test_api_missing_path_resyncs_despite_matching_fingerprint(self):
+        """Dev-reset scenario: the sqlite fingerprint store survives a
+        Postgres wipe, so a matching fingerprint alone must NOT skip a file
+        whose source_path the API no longer holds."""
+        with tempfile.TemporaryDirectory() as vault:
+            root = Path(vault)
+            md = root / "ghost.md"
+            content = self._write(md, "survived the reset")
+
+            vault_watcher._fingerprints[str(md)] = _fingerprint(content)
+
+            # API holds no source_paths (wiped DB) — the matching fingerprint
+            # is stale state, not proof of sync.
+            client = self._client(
+                [
+                    ("GET", FakeResponse(200, [])),  # per-file lookup: absent
+                    ("POST", FakeResponse(201)),  # create
+                ],
+                source_paths=[],
+            )
+            with patch.object(vault_watcher.settings, "vault_path", vault):
+                await vault_watcher.initial_scan(root, client, "token")
+
+            per_file = [c for c in client.get.call_args_list if "params" in c.kwargs]
+            assert [c.kwargs["params"]["source_path"] for c in per_file] == [str(md)]
+            created = {c.kwargs["json"]["source_path"] for c in client.post.call_args_list if "json" in c.kwargs}
+            assert created == {str(md)}
+
+    @patch("watchers.vault_watcher.get_auth_token", new=AsyncMock(return_value="token"))
+    async def test_source_paths_lookup_failure_resyncs_everything(self):
+        """If the bulk existence check fails, the scan must not skip on
+        unverified fingerprints — fall back to a conservative full resync."""
+        with tempfile.TemporaryDirectory() as vault:
+            root = Path(vault)
+            md_a = root / "a.md"
+            md_b = root / "b.md"
+            vault_watcher._fingerprints[str(md_a)] = _fingerprint(self._write(md_a, "content A"))
+            vault_watcher._fingerprints[str(md_b)] = _fingerprint(self._write(md_b, "content B"))
+
+            # Every source-paths attempt answers 500 → lookup returns None.
+            client = self._client(
+                [
+                    ("GET", FakeResponse(200, [{"id": 1, "source_path": str(md_a)}])),
+                    ("GET", FakeResponse(200, [])),
+                ],
+                source_paths=FakeResponse(500, raise_error=True),
+            )
+            with (
+                patch.object(vault_watcher.settings, "vault_path", vault),
+                patch("asyncio.sleep", new=AsyncMock()),
+            ):
+                await vault_watcher.initial_scan(root, client, "token")
+
+            # Both files were resynced despite matching fingerprints.
+            looked_up = {c.kwargs["params"]["source_path"] for c in client.get.call_args_list if "params" in c.kwargs}
+            assert looked_up == {str(md_a), str(md_b)}
+            synced = {
+                c.kwargs["json"]["source_path"]
+                for c in client.put.call_args_list + client.post.call_args_list
+                if "json" in c.kwargs
+            }
+            assert synced == {str(md_a), str(md_b)}

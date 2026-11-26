@@ -701,13 +701,89 @@ async def import_or_update_note(
         return False
 
 
+async def _fetch_known_source_paths(client: httpx.AsyncClient) -> set[str] | None:
+    """Return the set of ``source_path`` values the API currently holds (#1535).
+
+    One bulk GET lets ``initial_scan`` verify a stored fingerprint still
+    corresponds to an existing note — the fingerprint store lives in
+    host-mounted sqlite that survives ``dev-reset``, backup restores and any
+    DB drift, so a matching fingerprint alone cannot prove the API has the
+    note. ``None`` means the lookup failed: the caller must then treat
+    everything as needing sync rather than skip on unverified state.
+    """
+    for attempt in range(3):
+        try:
+            current_token = await get_auth_token(client)
+            headers = {"X-Request-ID": get_correlation_id()}
+            if current_token:
+                headers["Authorization"] = f"Bearer {current_token}"
+            r = await client.get(f"{settings.api_url}/notes/source-paths", headers=headers, timeout=30.0)
+            if r.status_code == 401:
+                await get_auth_token(client, force=True)
+                continue
+            if r.status_code in (429, 500, 503):
+                await asyncio.sleep(1 * (attempt + 1))
+                continue
+            r.raise_for_status()
+            return set(r.json())
+        except Exception as e:
+            # Exception type only — str(e) can embed request URLs carrying
+            # source_path params; tracebacks leak the same (#1299, #1301).
+            logger.warning(
+                "[vault] source-paths lookup failed (attempt %d/3): %s",
+                attempt + 1,
+                type(e).__name__,
+            )
+            if attempt < 2:
+                await asyncio.sleep(1 * (attempt + 1))
+    return None
+
+
 async def initial_scan(vault_path: Path, client: httpx.AsyncClient, token: str):
     """On startup, import all .md files not in _joidy/."""
     # Same validation as live events: skips dirs named *.md and symlinks
     # (Obsidian does not index them either) and anything resolving outside
     # the vault root (#1294).
     md_files = [p for p in vault_path.rglob("*.md") if _is_valid_vault_path(str(p), Change.modified, vault_path)]
-    logger.info("[vault] Initial scan: %s markdown files found", len(md_files))
+
+    # Unchanged-file short-circuit (#1535): _record_fingerprint only writes a
+    # path's content hash AFTER a successful sync (#1534) and _bind_event_log
+    # seeds _fingerprints from the persistent event log, so a match proves the
+    # API already holds exactly this content — a healthy (re)start becomes a
+    # no-op instead of a GET + full-content PUT per note. Safety valves:
+    # - the fingerprint store is host-mounted sqlite that survives
+    #   ``dev-reset``, backup restores and any DB drift, so a file is skipped
+    #   only when ONE bulk lookup confirms the API still holds its
+    #   source_path — otherwise every unchanged note would be silently lost
+    #   after a Postgres wipe;
+    # - if that lookup fails the scan resyncs everything — never skip on
+    #   unverified state;
+    # - a path with a pending event is never skipped (its last sync may have
+    #   failed and the replay before this scan may have failed too, #1534);
+    # - a successful delete drops the fingerprint (see _process_batch), so a
+    #   file recreated with identical content still resyncs.
+    pending_paths = {path for path, _ in _event_log.pending()} if _event_log is not None else set()
+    known_paths = await _fetch_known_source_paths(client)
+    to_sync: list[Path] = []
+    skipped = 0
+    for filepath in md_files:
+        stored = _fingerprints.get(str(filepath))
+        if (
+            stored is not None
+            and known_paths is not None
+            and str(filepath) in known_paths
+            and str(filepath) not in pending_paths
+        ):
+            content = _read_vault_file(filepath)
+            if content is not None and _fingerprint(content) == stored:
+                skipped += 1
+                continue
+        to_sync.append(filepath)
+    logger.info(
+        "[vault] Initial scan: %d markdown files found, %d unchanged skipped",
+        len(md_files),
+        skipped,
+    )
 
     semaphore = asyncio.Semaphore(4)
 
@@ -715,7 +791,7 @@ async def initial_scan(vault_path: Path, client: httpx.AsyncClient, token: str):
         async with semaphore:
             await import_or_update_note(filepath, client, token, bulk_import=True)
 
-    await asyncio.gather(*(process_file(filepath) for filepath in md_files), return_exceptions=True)
+    await asyncio.gather(*(process_file(filepath) for filepath in to_sync), return_exceptions=True)
 
     for _attempt in range(2):
         current_token = await get_auth_token(client)
@@ -812,6 +888,14 @@ async def _process_batch(
                     ok = await asyncio.shield(import_or_update_note(Path(path), client, token))
                 if ok:
                     event_log.remove(path)
+                    if change_type == Change.deleted:
+                        # The note is gone from the API — the stored content
+                        # fingerprint no longer describes synced state, and
+                        # keeping it would let initial_scan skip a file that
+                        # was recreated with identical content (#1535). Safe
+                        # for rename detection: delete+add pairs are matched
+                        # before deletes are processed (see _process_batch).
+                        _drop_fingerprint(path)
                 else:
                     # Sync failed after retries — keep the event so it is
                     # retried on the next startup instead of dropped (#1534).
