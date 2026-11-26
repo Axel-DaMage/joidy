@@ -9,13 +9,14 @@ Verifies that:
 6. health_check() returns False if every provider is unreachable
 """
 
+import asyncio
 import time
 import unittest
 from unittest.mock import patch
 
 from clients.base import BaseLLMClient, EmbeddingClient
 from clients.factory import ClientFactory
-from clients.fallback import FallbackEmbeddingClient, FallbackLLMClient
+from clients.fallback import FallbackEmbeddingClient, FallbackLLMClient, _is_health_error
 
 
 class FakeLLMClient(BaseLLMClient):
@@ -387,6 +388,193 @@ class TestFallbackEmbeddingStickiness(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(await client.health_check())
         self.assertEqual(primary.health_check_calls, 0)
+
+
+class _StatusError(Exception):
+    """Exception carrying a typed HTTP status (OpenAI/Anthropic style)."""
+
+    def __init__(self, status_code: int):
+        super().__init__(f"request failed with status {status_code}")
+        self.status_code = status_code
+
+
+class _StatusInMessageClient(FakeLLMClient):
+    """Provider that only stringifies the status in the error message
+    (Ollama-style: ``... failed (HTTP 503): <body>``)."""
+
+    def __init__(self, name: str, status: int):
+        super().__init__(name)
+        self._status = status
+
+    async def generate(self, prompt, temperature=0.2, max_tokens=256, system_prompt=None) -> str:
+        self.generate_calls += 1
+        raise Exception(f"{self._name} generate failed (HTTP {self._status}): boom")
+
+
+class TestIsHealthError(unittest.TestCase):
+    """#1628: only transient/provider-health errors may arm the cooldown."""
+
+    def test_typed_status_attribute(self):
+        self.assertFalse(_is_health_error(_StatusError(400)))
+        self.assertFalse(_is_health_error(_StatusError(403)))
+        self.assertTrue(_is_health_error(_StatusError(429)))
+        self.assertTrue(_is_health_error(_StatusError(408)))
+        self.assertTrue(_is_health_error(_StatusError(500)))
+        self.assertTrue(_is_health_error(_StatusError(503)))
+
+    def test_response_status_attribute(self):
+        """httpx.HTTPStatusError shape: status lives on ``.response``."""
+        exc = Exception("boom")
+        exc.response = type("Resp", (), {"status_code": 404})()
+        self.assertFalse(_is_health_error(exc))
+        exc.response.status_code = 502
+        self.assertTrue(_is_health_error(exc))
+
+    def test_message_parse(self):
+        self.assertFalse(_is_health_error(Exception("Ollama generate failed (HTTP 400): bad model")))
+        self.assertTrue(_is_health_error(Exception("Ollama generate failed (HTTP 503): overloaded")))
+
+    def test_no_status_defaults_to_transient(self):
+        """A bare timeout/connection error carries no status but IS
+        health-relevant — the conservative default is to cool (#1628)."""
+        self.assertTrue(_is_health_error(TimeoutError("timed out")))
+        self.assertTrue(_is_health_error(ConnectionError("refused")))
+        self.assertTrue(_is_health_error(RuntimeError("unknown provider explosion")))
+
+
+class TestHealthErrorOnlyCooling(unittest.IsolatedAsyncioTestCase):
+    """#1628: request-scoped errors fail over once but never cool the provider."""
+
+    async def test_4xx_does_not_cool_llm_provider(self):
+        class FourHundred(FakeLLMClient):
+            async def generate(self, *a, **k):
+                self.generate_calls += 1
+                raise _StatusError(400)
+
+        primary = FourHundred("gemini")
+        secondary = FakeLLMClient("ollama")
+        client = FallbackLLMClient(primary=primary, fallbacks=[secondary])
+
+        self.assertEqual(await client.generate("one"), "ollama:response")
+        self.assertEqual(await client.generate("two"), "ollama:response")
+        # No cooldown armed — the primary is retried on every request.
+        self.assertEqual(primary.generate_calls, 2)
+        self.assertEqual(client._down_until, {})
+
+    async def test_5xx_cools_llm_provider(self):
+        class FiveHundred(FakeLLMClient):
+            async def generate(self, *a, **k):
+                self.generate_calls += 1
+                raise _StatusError(503)
+
+        primary = FiveHundred("gemini")
+        secondary = FakeLLMClient("ollama")
+        client = FallbackLLMClient(primary=primary, fallbacks=[secondary])
+
+        await client.generate("one")
+        await client.generate("two")
+        self.assertEqual(primary.generate_calls, 1)
+        self.assertIn(0, client._down_until)
+
+    async def test_status_in_message_classifies(self):
+        """Stringified statuses (Ollama-style) classify the same as typed."""
+        primary = _StatusInMessageClient("gemini", status=400)
+        secondary = FakeLLMClient("ollama")
+        client = FallbackLLMClient(primary=primary, fallbacks=[secondary])
+
+        await client.generate("one")
+        await client.generate("two")
+        self.assertEqual(primary.generate_calls, 2)
+        self.assertEqual(client._down_until, {})
+
+    async def test_4xx_does_not_cool_embedding_primary(self):
+        class FourHundred(FakeEmbeddingClient):
+            async def embed(self, text):
+                self.embed_calls += 1
+                raise _StatusError(400)
+
+        primary = FourHundred("gemini")
+        secondary = FakeEmbeddingClient("ollama")
+        client = FallbackEmbeddingClient(primary=primary, secondary=secondary)
+
+        await client.embed("one")
+        await client.embed("two")
+        self.assertEqual(primary.embed_calls, 2)
+        self.assertEqual(client._primary_down_until, 0.0)
+
+
+class TestSingleFlightProbe(unittest.IsolatedAsyncioTestCase):
+    """#1628: an expired cooldown yields ONE half-open probe — concurrent
+    requests skip the recovering provider until the probe resolves."""
+
+    async def test_llm_concurrent_requests_share_one_probe(self):
+        probe_gate = asyncio.Event()
+
+        class SlowPrimary(FakeLLMClient):
+            async def generate(self, *a, **k):
+                self.generate_calls += 1
+                await probe_gate.wait()
+                return "gemini:response"
+
+        primary = SlowPrimary("gemini")
+        secondary = FakeLLMClient("ollama")
+        client = FallbackLLMClient(primary=primary, fallbacks=[secondary])
+        client._down_until[0] = 0.0  # cooldown just expired → next call probes
+
+        probe = asyncio.create_task(client.generate("probe"))
+        # Let the probe start and take the lease before a second request.
+        while primary.generate_calls == 0:
+            await asyncio.sleep(0)
+        second = asyncio.create_task(client.generate("queued"))
+        self.assertEqual(await second, "ollama:response")
+        probe_gate.set()
+        self.assertEqual(await probe, "gemini:response")
+
+        # Exactly one request paid the probe; the other went straight to the
+        # fallback. Success then cleared the cooldown and the lease.
+        self.assertEqual(primary.generate_calls, 1)
+        self.assertEqual(secondary.generate_calls, 1)
+        self.assertEqual(client._down_until, {})
+        self.assertEqual(client._probe_leases, {})
+
+    async def test_llm_lease_released_on_probe_failure(self):
+        """A failed probe re-arms the cooldown AND frees the lease, so the
+        next post-cooldown request can probe again."""
+        primary = FakeLLMClient("gemini", fail=True)
+        secondary = FakeLLMClient("ollama")
+        client = FallbackLLMClient(primary=primary, fallbacks=[secondary])
+        client._down_until[0] = 0.0
+
+        self.assertEqual(await client.generate("one"), "ollama:response")
+        self.assertEqual(client._probe_leases, {})
+        self.assertIn(0, client._down_until)
+
+    async def test_embedding_concurrent_embeds_share_one_probe(self):
+        probe_gate = asyncio.Event()
+
+        class SlowPrimary(FakeEmbeddingClient):
+            async def embed(self, text):
+                self.embed_calls += 1
+                await probe_gate.wait()
+                return [0.9, 0.9]
+
+        primary = SlowPrimary("gemini")
+        secondary = FakeEmbeddingClient("ollama")
+        client = FallbackEmbeddingClient(primary=primary, secondary=secondary)
+        # Expired cooldown → the next embed is the half-open probe.
+        client._primary_down_until = time.monotonic() - 1
+
+        probe = asyncio.create_task(client.embed("probe"))
+        while primary.embed_calls == 0:
+            await asyncio.sleep(0)
+        second = asyncio.create_task(client.embed("queued"))
+        self.assertEqual(await second, [0.4, 0.5, 0.6])
+        probe_gate.set()
+        self.assertEqual(await probe, [0.9, 0.9])
+
+        self.assertEqual(primary.embed_calls, 1)
+        self.assertEqual(secondary.embed_calls, 1)
+        self.assertFalse(client._primary_probing)
 
 
 class TestClientFactoryFallback(unittest.IsolatedAsyncioTestCase):

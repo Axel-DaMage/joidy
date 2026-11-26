@@ -187,7 +187,7 @@ class TestHealthObservedState:
         """An OPEN LLM breaker means the whole chain just failed repeatedly —
         reported as unavailable without a single provider ping."""
         main.llm_circuit_breaker.state = CircuitState.OPEN
-        main.llm_circuit_breaker.last_failure_time = time.time()
+        main.llm_circuit_breaker.last_failure_time = time.monotonic()
         body = _client().get("/health").json()
         assert body["status"] == "unavailable"
         assert body["llm_available"] is False
@@ -196,7 +196,7 @@ class TestHealthObservedState:
 
     def test_health_degraded_when_embedding_breaker_open(self, ai_enabled):
         main.emb_circuit_breaker.state = CircuitState.OPEN
-        main.emb_circuit_breaker.last_failure_time = time.time()
+        main.emb_circuit_breaker.last_failure_time = time.monotonic()
         body = _client().get("/health").json()
         assert body["status"] == "degraded"
         assert body["embedding_available"] is False
@@ -293,6 +293,52 @@ class TestHealthDeepProbe:
         ai_enabled.llm.health_check.assert_awaited_once()
 
 
+class TestHealthSignalFreshness:
+    """#1628: probe and observed signals carry timestamps — the NEWER one
+    wins per kind, so a cached probe can't mask fresher traffic data."""
+
+    def test_newer_observation_beats_stale_cached_probe(self, ai_enabled, monkeypatch):
+        """Cached probe said 'all up' 10s ago; traffic just tripped the LLM
+        breaker — the fresher observation must win."""
+        main._health_probe_cache = {
+            "llm": {
+                "configured": True,
+                "available": True,
+                "primary_ok": True,
+                "active": "fake-llm",
+                "providers": {"fake-llm": True},
+            },
+            "embedding": {
+                "configured": True,
+                "available": True,
+                "primary_ok": True,
+                "active": "fake-emb",
+                "providers": {"fake-emb": True},
+            },
+        }
+        main._health_probe_at = time.monotonic() - 10  # stale but within TTL
+        main.llm_circuit_breaker.state = CircuitState.OPEN
+        main.llm_circuit_breaker.last_failure_time = time.monotonic()
+
+        body = _client().get("/health").json()
+        assert body["status"] == "unavailable"
+        assert body["llm_available"] is False
+        # The embedding half of the probe is still the freshest signal for
+        # its kind — freshness is compared per chain, not globally.
+        assert body["embedding_available"] is True
+
+    def test_newer_probe_beats_older_observation(self, ai_enabled, monkeypatch):
+        """Breaker tripped long ago but a just-run deep probe found the chain
+        healthy — the newer probe signal wins."""
+        monkeypatch.setattr(settings, "internal_secret", "s3cr3t")
+        main.llm_circuit_breaker.state = CircuitState.OPEN
+        main.llm_circuit_breaker.last_failure_time = time.monotonic() - 120
+
+        body = _client().get("/health?probe=1", headers={"X-Internal-Secret": "s3cr3t"}).json()
+        assert body["llm_available"] is True
+        assert body["status"] == "ok"
+
+
 # ── /embed ─────────────────────────────────────────────────────────────
 
 
@@ -357,7 +403,7 @@ class TestEmbedEndpoint:
 
     def test_circuit_open_returns_degraded_not_500(self, ai_enabled):
         main.emb_circuit_breaker.state = CircuitState.OPEN
-        main.emb_circuit_breaker.last_failure_time = time.time()
+        main.emb_circuit_breaker.last_failure_time = time.monotonic()
         resp = _client().post("/embed", json={"note_id": 1, "content": "x"})
         assert resp.status_code == 200
         assert resp.json()["status"] == "circuit_open"
@@ -406,7 +452,7 @@ class TestClassifyEndpoint:
 
     def test_circuit_open_returns_degraded(self, ai_enabled):
         main.llm_circuit_breaker.state = CircuitState.OPEN
-        main.llm_circuit_breaker.last_failure_time = time.time()
+        main.llm_circuit_breaker.last_failure_time = time.monotonic()
         resp = _client().post("/classify", json={"note_id": 1, "content": "c"})
         assert resp.status_code == 200
         assert resp.json()["status"] == "circuit_open"
@@ -455,7 +501,7 @@ class TestRagEndpoint:
 
     def test_circuit_open_returns_degraded(self, ai_enabled):
         main.emb_circuit_breaker.state = CircuitState.OPEN
-        main.emb_circuit_breaker.last_failure_time = time.time()
+        main.emb_circuit_breaker.last_failure_time = time.monotonic()
         resp = _client().post("/rag", json={"question": "q?"})
         assert resp.status_code == 200
         body = resp.json()
@@ -757,7 +803,7 @@ class TestChatStream:
 
     def test_stream_circuit_open_emits_error_frame(self, ai_enabled):
         main.llm_circuit_breaker.state = CircuitState.OPEN
-        main.llm_circuit_breaker.last_failure_time = time.time()
+        main.llm_circuit_breaker.last_failure_time = time.monotonic()
         resp = _client().post(
             "/chat",
             json={"messages": [{"role": "user", "content": "hi"}], "stream": True},

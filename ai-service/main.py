@@ -377,11 +377,14 @@ async def _cached_health_probe() -> dict:
         return _health_probe_cache
 
 
-def _observed_chain_state(kind: str) -> dict:
+def _observed_chain_state(kind: str) -> tuple[dict, float]:
     """Last-known provider availability WITHOUT probing (#1538).
 
-    Same shape as ``_probe_client_chain`` but built only from what real
-    traffic already observed — no provider calls:
+    Returns ``(state, observed_at)`` — same state shape as
+    ``_probe_client_chain`` but built only from what real traffic already
+    observed (no provider calls), plus the monotonic timestamp of the
+    *newest* observation feeding it so /health can compare signal freshness
+    against the cached probe (#1628):
 
     - ``available``   — the circuit breaker has not tripped open. The
       breaker wraps every provider call in this process, so an OPEN state
@@ -403,13 +406,18 @@ def _observed_chain_state(kind: str) -> dict:
     }
     breaker = llm_circuit_breaker if kind == "llm" else emb_circuit_breaker
     get_client = get_llm_client if kind == "llm" else get_embedding_client
+    # The breaker sees every provider call that reaches it; the failover
+    # wrapper additionally timestamps its inner failover/routing decisions
+    # (``last_observed_at``), which the breaker never sees — take the newer.
+    observed_at = max(breaker.last_failure_time, breaker.last_success_time)
     try:
         client = get_client()
     except Exception:
-        return empty
+        return empty, observed_at
     members = list(getattr(client, "chain", None) or [client])
     if not members:
-        return empty
+        return empty, observed_at
+    observed_at = max(observed_at, getattr(client, "last_observed_at", 0.0))
     available = breaker.state != CircuitState.OPEN
     active = client.provider_name
     return {
@@ -418,7 +426,19 @@ def _observed_chain_state(kind: str) -> dict:
         "primary_ok": available and active == members[0].provider_name,
         "active": active,
         "providers": {},
-    }
+    }, observed_at
+
+
+def _pick_health_state(fresh_probe: dict | None, observed: dict, observed_at: float, kind: str) -> dict:
+    """Probe vs. traffic-observed state — whichever signal is NEWER (#1628).
+
+    A cached probe can be up to ``_HEALTH_PROBE_TTL_SECONDS`` old; traffic
+    observed after it ran (e.g. the chain just tripped its breaker, or a
+    fallback just took over) is the fresher truth and wins for that kind.
+    """
+    if fresh_probe is not None and _health_probe_at >= observed_at:
+        return fresh_probe[kind]
+    return observed
 
 
 @app.get("/health")
@@ -436,13 +456,10 @@ async def health(request: Request, probe: bool = Query(default=False)):
     elif _health_probe_cache is not None and (time.monotonic() - _health_probe_at) < _HEALTH_PROBE_TTL_SECONDS:
         fresh_probe = _health_probe_cache
 
-    observed = {
-        "llm": _observed_chain_state("llm"),
-        "embedding": _observed_chain_state("embedding"),
-    }
-    state = fresh_probe or observed
-    llm_state = state["llm"]
-    emb_state = state["embedding"]
+    llm_observed, llm_observed_at = _observed_chain_state("llm")
+    emb_observed, emb_observed_at = _observed_chain_state("embedding")
+    llm_state = _pick_health_state(fresh_probe, llm_observed, llm_observed_at, "llm")
+    emb_state = _pick_health_state(fresh_probe, emb_observed, emb_observed_at, "embedding")
 
     # Status semantics (#1460):
     # - "ok"          — configured LLM primary reachable; embeddings served
@@ -484,8 +501,8 @@ async def health(request: Request, probe: bool = Query(default=False)):
             body["probe_age_seconds"] = round(time.monotonic() - _health_probe_at, 1)
         else:
             body["reachability"] = {
-                "llm": {**observed["llm"], "observed": True},
-                "embedding": {**observed["embedding"], "observed": True},
+                "llm": {**llm_observed, "observed": True},
+                "embedding": {**emb_observed, "observed": True},
             }
     return body
 

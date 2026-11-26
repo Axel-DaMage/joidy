@@ -68,7 +68,7 @@ class TestCircuitBreaker(unittest.IsolatedAsyncioTestCase):
     async def test_half_open_failure_reopens_circuit(self):
         cb = CircuitBreaker(failure_threshold=3, recovery_timeout=0.0)
         cb.state = CircuitState.OPEN
-        cb.last_failure_time = time.time() - 1
+        cb.last_failure_time = time.monotonic() - 1
 
         with self.assertRaises(RuntimeError):
             await cb.call(_boom)
@@ -86,6 +86,26 @@ class TestCircuitBreaker(unittest.IsolatedAsyncioTestCase):
         await cb.call(_ok)
         self.assertEqual(cb.state, CircuitState.CLOSED)
         self.assertEqual(cb.failures, 0)
+
+    async def test_success_in_closed_resets_failure_count(self):
+        """#1628: a success while CLOSED also resets the counter — spaced-out
+        intermittent failures must not accumulate into a spurious OPEN."""
+        cb = CircuitBreaker(failure_threshold=3, recovery_timeout=60.0)
+        for _ in range(2):
+            with self.assertRaises(RuntimeError):
+                await cb.call(_boom)
+        self.assertEqual(cb.failures, 2)
+
+        await cb.call(_ok)
+        self.assertEqual(cb.state, CircuitState.CLOSED)
+        self.assertEqual(cb.failures, 0)
+
+        # Two fresh failures after the success still stay under threshold.
+        for _ in range(2):
+            with self.assertRaises(RuntimeError):
+                await cb.call(_boom)
+        self.assertEqual(cb.state, CircuitState.CLOSED)
+        self.assertEqual(cb.failures, 2)
 
 
 if __name__ == "__main__":

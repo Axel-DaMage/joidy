@@ -50,8 +50,8 @@ class OllamaClient(BaseLLMClient, EmbeddingClient):
             json={"model": self._model, "prompt": text},
         ) as resp:
             if resp.status != 200:
-                # The status rides in the message so the retryable predicate
-                # can tell a transient 5xx/429 from a permanent 4xx (#1540).
+                # The status rides in the message so both the retryable predicate
+                # (#1540) and the failover wrapper (#1628) can classify it.
                 raise Exception(f"Ollama embedding failed (HTTP {resp.status}): {await resp.text()}")
             data = await resp.json()
             return cast("list[float]", data["embedding"])
@@ -82,6 +82,7 @@ class OllamaClient(BaseLLMClient, EmbeddingClient):
             json=payload,
         ) as resp:
             if resp.status != 200:
+                # Same: HTTP status in the message for retry/failover classification.
                 raise Exception(f"Ollama generate failed (HTTP {resp.status}): {await resp.text()}")
             data = await resp.json()
             return cast("str", data["response"])
