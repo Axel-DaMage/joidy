@@ -60,6 +60,7 @@ def _reset_shared_state():
         breaker.last_failure_time = 0.0
     get_cache().clear()
     rate_limiter._limiters.clear()
+    rate_limiter._local_limiters.clear()
     yield
     ClientFactory.reset()
     _reset_health_probe()
@@ -69,3 +70,4 @@ def _reset_shared_state():
         breaker.last_failure_time = 0.0
     get_cache().clear()
     rate_limiter._limiters.clear()
+    rate_limiter._local_limiters.clear()

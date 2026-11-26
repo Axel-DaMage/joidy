@@ -50,7 +50,9 @@ def ai_enabled(safe_settings, monkeypatch):
     monkeypatch.setattr(settings, "gemini_api_key", "test-key")
     limiter = SimpleNamespace(acquire=AsyncMock())
     monkeypatch.setattr(main, "get_limiter", lambda *a, **k: limiter)
-    return SimpleNamespace(limiter=limiter)
+    local_limiter = SimpleNamespace(acquire=AsyncMock())
+    monkeypatch.setattr(main, "get_local_limiter", lambda *a, **k: local_limiter)
+    return SimpleNamespace(limiter=limiter, local_limiter=local_limiter)
 
 
 def _client() -> TestClient:
@@ -268,10 +270,13 @@ class TestClusterBounds:
         assert resp.status_code == 200
 
     def test_acquires_rate_limit_slot(self, ai_enabled, monkeypatch):
+        """The CPU-heavy DBSCAN fit stays rate-limited — on its own local
+        bucket, not the shared provider budget it would convoy (#1539)."""
         _mock_cluster_db(monkeypatch, [])
         resp = _client().post("/cluster")
         assert resp.status_code == 200
-        ai_enabled.limiter.acquire.assert_awaited_once()
+        ai_enabled.local_limiter.acquire.assert_awaited_once()
+        ai_enabled.limiter.acquire.assert_not_awaited()
 
     def test_dbscan_runs_off_event_loop(self, ai_enabled, monkeypatch):
         """The O(n²) DBSCAN fit must not block the event loop (#1324)."""
