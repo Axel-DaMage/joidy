@@ -99,6 +99,18 @@ def test_create_task_unknown_goal_404(client: TestClient):
     assert response.status_code == 404
 
 
+def test_task_out_includes_goal_title(client: TestClient, db_session):
+    """goal_title exposes the planning link without a second fetch."""
+    goal = _make_goal(db_session, title="Ship feature")
+    _make_task(db_session, title="Work on it", goal_id=goal.id)
+
+    response = client.get("/calendar/tasks?date=2099-07-20")
+    assert response.status_code == 200
+    row = next(t for t in response.json() if t["title"] == "Work on it")
+    assert row["goal_id"] == goal.id
+    assert row["goal_title"] == "Ship feature"
+
+
 def test_list_tasks_filters_by_range(client: TestClient, db_session):
     _make_task(db_session, title="In range", date=dt.date(2099, 7, 20))
     _make_task(db_session, title="Out of range", date=dt.date(2098, 1, 1))

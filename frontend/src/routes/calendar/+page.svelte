@@ -32,6 +32,7 @@
   import Check from 'lucide-svelte/icons/check';
   import Repeat from 'lucide-svelte/icons/repeat';
   import Sparkles from 'lucide-svelte/icons/sparkles';
+  import Target from 'lucide-svelte/icons/target';
   import EmptyState from '$lib/components/EmptyState.svelte';
   import { t } from 'svelte-i18n';
 
@@ -386,6 +387,12 @@
   function eventTime(ev: CalendarEvent): string {
     if (ev.all_day) return $t('calendar.allDay');
     return dtFormatter.format(new Date(ev.start_at));
+  }
+
+  // Tooltip for task chips: surfaces the linked goal so the
+  // goals → planning → calendar chain is visible (#goal-planning-calendar).
+  function taskChipTitle(task: CalendarTask): string {
+    return task.goal_title ? `${task.title} · ${task.goal_title}` : task.title;
   }
 
   async function refresh(): Promise<void> {
@@ -1036,6 +1043,7 @@
                         class:dragging={draggedTask?.id === item.task.id}
                         role="button"
                         tabindex="-1"
+                        title={taskChipTitle(item.task)}
                         draggable="true"
                         ondragstart={(e) => onChipDragStart(e, item.task)}
                         ondragend={onChipDragEnd}
@@ -1117,6 +1125,7 @@
                         class:dragging={draggedTask?.id === item.task.id}
                         role="button"
                         tabindex="-1"
+                        title={taskChipTitle(item.task)}
                         draggable="true"
                         ondragstart={(e) => onChipDragStart(e, item.task)}
                         ondragend={onChipDragEnd}
@@ -1179,6 +1188,7 @@
                       <div
                         class="agenda-item-pill"
                         class:done={item.kind === 'task' && item.task.done}
+                        title={item.kind === 'task' ? taskChipTitle(item.task) : item.label}
                       >
                         {#if item.kind === 'google'}
                           <Lock size={9} class="lock-icon" />
@@ -1342,6 +1352,11 @@
                             class="recur-icon"
                           />{/if}{item.task.title}</span
                       >
+                      {#if item.task.goal_title}
+                        <span class="goal-tag" title={item.task.goal_title}
+                          ><Target size={9} />{item.task.goal_title}</span
+                        >
+                      {/if}
                       <span class="task-actions">
                         <button
                           class="btn btn-ghost icon-btn"
@@ -2053,6 +2068,21 @@
     align-items: center;
     gap: 4px;
     min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .goal-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    flex-shrink: 1;
+    min-width: 0;
+    max-width: 40%;
+    color: var(--link);
+    font-size: 11px;
+    font-weight: 400;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

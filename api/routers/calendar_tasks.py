@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 from services.gamification_engine import process_event
 from services.timezone_utils import get_local_today
 from sqlalchemy import case
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 router = APIRouter(prefix="/calendar", tags=["calendar"])
 
@@ -228,6 +228,9 @@ class CalendarTaskOut(BaseModel):
     done: bool
     done_at: datetime | None
     goal_id: int | None
+    # Title of the linked goal, when set — lets UIs show the planning link
+    # without a second fetch (#goal-planning-calendar).
+    goal_title: str | None = None
     source: CalendarTaskSource
     google_event_id: str | None
     color: str | None
@@ -262,6 +265,7 @@ def _task_out(task: CalendarTask) -> CalendarTaskOut:
         done=task.done,
         done_at=task.done_at,
         goal_id=task.goal_id,
+        goal_title=task.goal.title if task.goal is not None else None,
         source=task.source,
         google_event_id=task.google_event_id,
         color=task.color,
@@ -300,7 +304,9 @@ def list_tasks(
     if end:
         query = query.filter(CalendarTask.date <= _parse_date(end))
     query = query.order_by(CalendarTask.date.asc(), CalendarTask.start_time.asc().nullslast(), CalendarTask.id.asc())
-    return [_task_out(t) for t in query.all()]
+    # joinedload: _task_out reads task.goal.title for goal_title — avoids an
+    # N+1 on range listings (#goal-planning-calendar).
+    return [_task_out(t) for t in query.options(joinedload(CalendarTask.goal)).all()]
 
 
 @router.get("/tasks/execution-queue", response_model=list[CalendarTaskOut])
@@ -320,6 +326,7 @@ def execution_queue(date: str | None = None, db: Session = Depends(get_db)):
             CalendarTask.start_time.asc().nullslast(),
             CalendarTask.created_at.asc(),
         )
+        .options(joinedload(CalendarTask.goal))
         .all()
     )
     return [_task_out(t) for t in tasks]

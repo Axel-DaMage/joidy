@@ -2,7 +2,11 @@ from datetime import UTC, date, datetime
 
 from database import get_db
 from fastapi import APIRouter, Depends, HTTPException
-from models.calendar_task import CalendarTask
+from models.calendar_task import (
+    CalendarTask,
+    CalendarTaskPriority,
+    CalendarTaskRecurrence,
+)
 from models.goal import Goal
 from models.planning import PlanningAssignment
 from pydantic import BaseModel
@@ -15,9 +19,9 @@ router = APIRouter(prefix="/planning", tags=["planning"])
 class AssignmentsIn(BaseModel):
     date: str
     goal_ids: list[int]
-    # When true, newly assigned goals also get a calendar_task on that date
-    # (title = goal title, goal_id linked, source=JOIDY; #1234).
-    create_calendar_task: bool = False
+    # Planning assignments mirror into calendar_tasks by default so the real
+    # calendar reflects them (#goal-planning-calendar). Pass false to opt out.
+    create_calendar_task: bool = True
 
 
 class AssignmentsOut(BaseModel):
@@ -56,11 +60,50 @@ def _mirror_new_assignments_to_tasks(db: Session, date_obj: date, new_goal_ids: 
         .filter(CalendarTask.date == date_obj, CalendarTask.goal_id.in_(new_goal_ids))
         .all()
     }
-    for gid in new_goal_ids:
+    for gid in dict.fromkeys(new_goal_ids):
         goal = goals_by_id.get(gid)
         if goal is None or gid in already:
             continue
         db.add(CalendarTask(title=goal.title, date=date_obj, goal_id=goal.id))
+
+
+def _is_pristine_mirror(task: CalendarTask, goal_title: str) -> bool:
+    """True when ``task`` still looks exactly like an auto-created mirror.
+
+    Any user customization (time, priority, recurrence, reminder, color,
+    Google publish, completion) detaches it from the mirror so unassigning
+    the goal never destroys work the user did in the calendar.
+    """
+    return (
+        task.title == goal_title
+        and task.start_time is None
+        and task.end_time is None
+        and task.priority == CalendarTaskPriority.MEDIUM
+        and task.recurrence == CalendarTaskRecurrence.NONE
+        and task.reminder_minutes is None
+        and task.google_event_id is None
+        and task.color is None
+        and not task.done
+    )
+
+
+def _remove_pristine_mirrors(db: Session, date_obj: date, removed_goal_ids: list[int]) -> None:
+    """Delete untouched mirror tasks for goals unassigned from ``date_obj``.
+
+    Keeps the planning ↔ calendar link coherent: unassigning a goal removes
+    the calendar entry the mirror created, unless the user already turned it
+    into a real task (customized fields) — those survive as standalone tasks.
+    """
+    if not removed_goal_ids:
+        return
+    goals_by_id = {g.id: g for g in db.query(Goal).filter(Goal.id.in_(removed_goal_ids)).all()}
+    tasks = (
+        db.query(CalendarTask).filter(CalendarTask.date == date_obj, CalendarTask.goal_id.in_(removed_goal_ids)).all()
+    )
+    for task in tasks:
+        goal = goals_by_id.get(task.goal_id) if task.goal_id is not None else None
+        if goal is not None and _is_pristine_mirror(task, goal.title):
+            db.delete(task)
 
 
 @router.get("/assignments")
@@ -76,6 +119,8 @@ def set_assignments(data: AssignmentsIn, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
 
     previous_ids = {r.goal_id for r in db.query(PlanningAssignment).filter(PlanningAssignment.date == date_obj).all()}
+    new_ids = set(data.goal_ids)
+    removed_ids = [gid for gid in previous_ids if gid not in new_ids]
     # Replace assignments for the given date
     # Delete existing
     db.query(PlanningAssignment).filter(PlanningAssignment.date == date_obj).delete()
@@ -85,6 +130,7 @@ def set_assignments(data: AssignmentsIn, db: Session = Depends(get_db)):
         db.add(pa)
     if data.create_calendar_task:
         _mirror_new_assignments_to_tasks(db, date_obj, [gid for gid in data.goal_ids if gid not in previous_ids])
+    _remove_pristine_mirrors(db, date_obj, removed_ids)
     db.commit()
     invalidate_cache_groups("planning")
     return {"date": data.date, "goal_ids": data.goal_ids}

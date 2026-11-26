@@ -648,6 +648,8 @@ export interface CalendarTask {
   done: boolean;
   done_at: string | null;
   goal_id: number | null;
+  /** Title of the linked goal when `goal_id` is set (backend-resolved). */
+  goal_title: string | null;
   source: 'JOIDY' | 'GOOGLE';
   google_event_id: string | null;
   color: string | null;
@@ -1322,7 +1324,9 @@ export const api = {
         'GET',
         `/planning/assignments?date=${encodeURIComponent(date)}`
       ),
-    setAssignments: (date: string, goal_ids: number[], create_calendar_task = false) =>
+    // Assignments mirror into calendar_tasks by default so the real calendar
+    // reflects planned goals; pass false to opt out.
+    setAssignments: (date: string, goal_ids: number[], create_calendar_task = true) =>
       req<{ date: string; goal_ids: number[] }>('POST', '/planning/assignments', {
         date,
         goal_ids,
