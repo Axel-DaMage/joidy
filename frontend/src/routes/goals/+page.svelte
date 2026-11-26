@@ -1026,7 +1026,7 @@
   >
     {#if currentTab === 'inbox'}
       <div class="tab-content fade-in">
-        <GoalInbox bind:goals onOpen={openGoalEditor} />
+        <GoalInbox bind:goals onOpen={openGoalEditor} {getGoalColor} />
       </div>
     {/if}
     {#if currentTab === 'planning'}
