@@ -26,14 +26,20 @@ runs:
       uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
     # Pre-build each image with a BuildKit GHA cache (same pattern as
-    # publish.yml), tagged exactly as compose expects, then loaded into the
-    # local daemon so `compose up` uses them instead of rebuilding.
+    # publish.yml), then load them into the local daemon so `compose up`
+    # uses them instead of rebuilding. BOTH tags are required: the base
+    # compose references d4mag3/joidy-*:latest while the dev overlay
+    # (docker-compose.dev.yml, used by every CI boot) overrides them to
+    # joidy-*:dev — without the :dev tag the overlay's `build:` sections
+    # trigger a full uncached local rebuild inside `compose up` (#CI-e2e).
     - name: Build api image (BuildKit GHA cache)
       uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
       with:
         context: ./api
         load: true
-        tags: d4mag3/joidy-api:latest
+        tags: |
+          d4mag3/joidy-api:latest
+          joidy-api:dev
         cache-from: type=gha,scope=api
         cache-to: type=gha,mode=max,scope=api
 
@@ -42,7 +48,9 @@ runs:
       with:
         context: ./ai-service
         load: true
-        tags: d4mag3/joidy-ai-service:latest
+        tags: |
+          d4mag3/joidy-ai-service:latest
+          joidy-ai-service:dev
         cache-from: type=gha,scope=ai-service
         cache-to: type=gha,mode=max,scope=ai-service
 
@@ -51,7 +59,9 @@ runs:
       with:
         context: ./worker
         load: true
-        tags: d4mag3/joidy-worker:latest
+        tags: |
+          d4mag3/joidy-worker:latest
+          joidy-worker:dev
         cache-from: type=gha,scope=worker
         cache-to: type=gha,mode=max,scope=worker
 
@@ -61,7 +71,9 @@ runs:
         context: ./frontend
         target: development
         load: true
-        tags: d4mag3/joidy-frontend:latest
+        tags: |
+          d4mag3/joidy-frontend:latest
+          joidy-frontend:dev
         cache-from: type=gha,scope=frontend
         cache-to: type=gha,mode=max,scope=frontend
         # Build the dev image with the runner's ids so the anonymous

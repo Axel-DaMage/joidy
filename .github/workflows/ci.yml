@@ -396,14 +396,15 @@ jobs:
           # Full-suite parallelism: N runners, each booting its own
           # docker stack + DB and running ~1/N of the suite serially
           # (workers:1 stays — see playwright.config.ts). Serial runtime
-          # exceeded the 30-min timeout on 2026-11-20; measured ~55-60 min
-          # across 8 shards on run 44833334196 (~230 tests, 15 specs).
-          # 8 shards target ~7-8 min of tests per leg plus ~2.5 min of
-          # image/stack/browser setup, keeping headroom for retry
-          # inflation when tests fail. If a leg outgrows ~10 min, raise
-          # this — do NOT raise workers instead: tests share the shard's
-          # API/DB and are only serially safe.
-          SHARD_COUNT: '8'
+          # exceeded the 30-min timeout on 2026-11-20; measured ~15-16 min
+          # of tests total across 8 shards on run 45883923669 (~230 tests,
+          # 15 specs) — i.e. only ~2 min of tests per leg, with ~4 min of
+          # fixed setup (image build + stack boot) dominating each leg.
+          # 12 shards keep ~1:15 of tests per leg; raising further adds
+          # fixed-cost legs without shrinking the wall clock much. Do NOT
+          # raise workers instead: tests share the shard's API/DB and are
+          # only serially safe.
+          SHARD_COUNT: '12'
         run: |
           set -euo pipefail
 
@@ -562,13 +563,13 @@ jobs:
 
       - name: Wait for frontend
         run: |
-          for i in $(seq 1 30); do
+          for i in $(seq 1 60); do
             if curl -fsS http://localhost:3000 > /dev/null; then
               echo "Frontend is up"
               exit 0
             fi
-            echo "Attempt $i/30: frontend not ready yet..."
-            sleep 2
+            echo "Attempt $i/60: frontend not ready yet..."
+            sleep 1
           done
           echo "::error::Frontend did not come up within 60 seconds"
           docker compose -f docker-compose.yml -f docker-compose.dev.yml logs --tail=100 frontend

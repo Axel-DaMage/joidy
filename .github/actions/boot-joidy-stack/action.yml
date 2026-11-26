@@ -55,25 +55,29 @@ runs:
     - name: Start services
       shell: bash
       run: |
-        # Images were pre-built by build-joidy-images with the same tags
-        # compose expects. Start backend services first (frontend depends
-        # on API health, which may take time on first run due to
-        # migrations); frontend starts without waiting (--no-deps) so the
-        # health check below gates on the API only.
-        docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres
-        docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d api ai-service worker
-        docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --no-deps frontend
+        # Images were pre-built by build-joidy-images under BOTH the
+        # :latest and :dev tags — the dev overlay tags services joidy-*:dev
+        # and declares build: sections, so without the :dev tag each `up`
+        # would run a full uncached local rebuild. --no-build turns that
+        # silent rebuild into a loud failure if the tag is ever missing.
+        # Start backend services first (frontend depends on API health,
+        # which may take time on first run due to migrations); frontend
+        # starts without waiting (--no-deps) so the health check below
+        # gates on the API only.
+        docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --no-build postgres
+        docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --no-build api ai-service worker
+        docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --no-build --no-deps frontend
 
     - name: Verify API health
       shell: bash
       run: |
-        for i in $(seq 1 30); do
+        for i in $(seq 1 60); do
           if curl -fsS http://localhost:8000/health; then
             echo "API is healthy"
             exit 0
           fi
-          echo "Attempt $i/30: API not ready yet..."
-          sleep 2
+          echo "Attempt $i/60: API not ready yet..."
+          sleep 1
         done
         echo "::error::API did not become healthy within 60 seconds"
         docker compose -f docker-compose.yml -f docker-compose.dev.yml logs --tail=100 api
