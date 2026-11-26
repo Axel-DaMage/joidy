@@ -113,4 +113,6 @@ class Goal(Base):
         Index("ix_goals_note_id", "note_id"),
         Index("ix_goals_tag_id", "tag_id"),
         Index("ix_goals_state", "state"),
+        # get_completed_since filters on completed_at (#1524).
+        Index("ix_goals_completed_at", "completed_at"),
     )

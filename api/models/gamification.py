@@ -16,7 +16,7 @@ class XPEvent(Base):
     # a stable dedup key (e.g. "pomodoro:<uuid>", "goal:<id>"). NULL means the
     # event is not dedup-guarded; the partial unique index ignores NULLs.
     dedup_key: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
 
     __table_args__ = (
         Index(

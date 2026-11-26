@@ -86,6 +86,11 @@ class CalendarTask(Base):
     __table_args__ = (
         Index("ix_calendar_tasks_goal_id", "goal_id"),
         Index("ix_calendar_tasks_date_priority", "date", "priority"),
+        # execution_queue filters on done and orders by start_time/created_at
+        # (#1524).
+        Index("ix_calendar_tasks_done", "done"),
+        Index("ix_calendar_tasks_start_time", "start_time"),
+        Index("ix_calendar_tasks_created_at", "created_at"),
     )
 
     def __repr__(self) -> str:  # pragma: no cover
