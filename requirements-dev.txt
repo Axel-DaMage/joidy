@@ -1,0 +1,17 @@
+# Canonical dev/test tool pins shared by api/, ai-service/ and worker/
+# (#1557). Install from the repo root for local lint/typecheck parity with
+# CI — runtime deps are not needed to lint:
+#   pip install -r requirements-dev.txt
+# Each service's own requirements-dev.txt repeats these pins after a
+# "-r requirements.txt" line because the Docker build context is the
+# service directory and cannot reference files outside it. Keep the pin
+# sets identical — scripts/check_requirements_dev_sync.sh enforces this in
+# `make lint` and the api-lint CI job.
+pytest==9.2.0
+pytest-cov==7.1.0
+pytest-asyncio==1.5.0
+pytest-xdist==3.8.0
+ruff==0.17.6
+mypy==2.4.1
+bandit==1.9.4
+pip-audit==2.10.1

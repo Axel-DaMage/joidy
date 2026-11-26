@@ -5,13 +5,16 @@
 #   1. python -m compileall api ai-service worker          (syntax)
 #   2. ruff check + ruff format --check                    (lint + format)
 #   3. ruff version sync — .pre-commit-config.yaml rev must match the ruff
-#      pin in api/requirements-dev.txt (#1586; always runs, no tools needed)
-#   4. mypy — one invocation per service                   (typecheck)
-#   5. bandit -lll -iii (tests excluded, like CI)          (security)
-#   6. npm run check (svelte-check) if frontend deps exist (typecheck)
+#      pin in requirements-dev.txt (#1586; always runs, no tools needed)
+#   4. requirements-dev sync — per-service copies must match the repo-root
+#      canonical pins (#1557; always runs, no tools needed)
+#   5. mypy — one invocation per service                   (typecheck)
+#   6. bandit -lll -iii (tests excluded, like CI)          (security)
+#   7. npm run check (svelte-check) if frontend deps exist (typecheck)
 #
-# Versions are pinned in api/requirements-dev.txt so local output matches CI:
-#   pip install -r api/requirements-dev.txt
+# Versions are pinned in the repo-root requirements-dev.txt so local output
+# matches CI:
+#   pip install -r requirements-dev.txt
 # The script probes PATH first, then ./.venv/bin and ./venv/bin.
 #
 # A missing tool is skipped with a warning (compileall always runs) so the
@@ -96,18 +99,27 @@ if [ -n "$RUFF" ]; then
     run "$RUFF" format --check api ai-service worker \
         && echo -e "${GREEN}✓${NC} ruff format --check passed"
 else
-    skip "ruff not installed (pip install -r api/requirements-dev.txt)"
+    skip "ruff not installed (pip install -r requirements-dev.txt)"
 fi
 
 # ── 3. Pre-commit ruff version parity (always runs — pure text check) ──────
-# The ruff-pre-commit rev must match the ruff pin in api/requirements-dev.txt
+# The ruff-pre-commit rev must match the ruff pin in requirements-dev.txt
 # (canonical parity source) so local hooks and CI run the same ruff (#1586).
 # Shared with the api-lint CI job via check_ruff_precommit_sync.sh.
-gate "ruff version sync — .pre-commit-config.yaml vs api/requirements-dev.txt"
+gate "ruff version sync — .pre-commit-config.yaml vs requirements-dev.txt"
 run bash scripts/check_ruff_precommit_sync.sh \
     && echo -e "${GREEN}✓${NC} ruff version sync passed"
 
-# ── 4. Mypy (one invocation per service, same as CI) ────────────────────────
+# ── 4. requirements-dev pin sync (always runs — pure text check) ──────────
+# Each service's requirements-dev.txt repeats the canonical pins from the
+# repo-root requirements-dev.txt because Docker build contexts are
+# per-service (#1557). Shared with the api-lint CI job via
+# check_requirements_dev_sync.sh.
+gate "requirements-dev sync — service copies vs root requirements-dev.txt"
+run bash scripts/check_requirements_dev_sync.sh \
+    && echo -e "${GREEN}✓${NC} requirements-dev sync passed"
+
+# ── 5. Mypy (one invocation per service, same as CI) ────────────────────────
 gate "mypy — per-service typecheck"
 if [ -n "$MYPY" ]; then
     for svc in api ai-service worker; do
@@ -119,19 +131,19 @@ if [ -n "$MYPY" ]; then
         RAN=$((RAN + 1))
     done
 else
-    skip "mypy not installed (pip install -r api/requirements-dev.txt)"
+    skip "mypy not installed (pip install -r requirements-dev.txt)"
 fi
 
-# ── 5. Bandit (same flags as the security CI job) ───────────────────────────
+# ── 6. Bandit (same flags as the security CI job) ───────────────────────────
 gate "bandit — security scan (-lll -iii, tests excluded)"
 if [ -n "$BANDIT" ]; then
     run "$BANDIT" -r api/ ai-service/ worker/ -lll -iii -x api/tests,ai-service/tests,worker/tests -q \
         && echo -e "${GREEN}✓${NC} bandit passed"
 else
-    skip "bandit not installed (pip install -r api/requirements-dev.txt)"
+    skip "bandit not installed (pip install -r requirements-dev.txt)"
 fi
 
-# ── 6. Frontend typecheck (same as the frontend-check CI job) ───────────────
+# ── 7. Frontend typecheck (same as the frontend-check CI job) ───────────────
 gate "frontend — npm run check (svelte-check)"
 if [ -d "$PROJECT_ROOT/frontend/node_modules" ] && command -v npm >/dev/null 2>&1; then
     (cd frontend && npm run check)
@@ -151,7 +163,7 @@ if [ "$FAILED" -ne 0 ]; then
 fi
 if [ "$SKIPPED" -gt 0 ]; then
     echo -e "${YELLOW}⚠ Lint passed but $SKIPPED gate(s) were skipped${NC} (tools not installed)."
-    echo "  For full CI parity: pip install -r api/requirements-dev.txt && (cd frontend && npm ci)"
+    echo "  For full CI parity: pip install -r requirements-dev.txt && (cd frontend && npm ci)"
     exit 0
 fi
 echo -e "${GREEN}✓ Lint passed${NC} — $RAN gates ran, same checks as CI."
