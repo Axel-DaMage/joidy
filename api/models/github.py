@@ -73,7 +73,9 @@ class GitHubItem(Base):
     __tablename__ = "github_items"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    repo_id: Mapped[int] = mapped_column(Integer, ForeignKey("github_repos.id", ondelete="CASCADE"), nullable=False)
+    repo_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("github_repos.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     external_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
 
     item_type: Mapped[GitHubItemType] = mapped_column(Enum(GitHubItemType), nullable=False)
@@ -90,8 +92,12 @@ class GitHubItem(Base):
     url: Mapped[str] = mapped_column(String(500), nullable=False)
     html_url: Mapped[str] = mapped_column(String(500), nullable=False)
 
-    goal_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("goals.id", ondelete="SET NULL"), nullable=True)
-    note_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("notes.id", ondelete="SET NULL"), nullable=True)
+    goal_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("goals.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    note_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("notes.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     synced_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
@@ -105,7 +111,9 @@ class GitHubEvent(Base):
     __tablename__ = "github_events"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    repo_id: Mapped[int] = mapped_column(Integer, ForeignKey("github_repos.id", ondelete="CASCADE"), nullable=False)
+    repo_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("github_repos.id", ondelete="CASCADE"), nullable=False, index=True
+    )
 
     event_type: Mapped[GitHubEventType] = mapped_column(Enum(GitHubEventType), nullable=False)
     action: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -118,6 +126,6 @@ class GitHubEvent(Base):
     payload: Mapped[dict] = mapped_column(JSON, default=dict)
     processed: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
 
     repo: Mapped["GitHubRepo"] = relationship("GitHubRepo")
