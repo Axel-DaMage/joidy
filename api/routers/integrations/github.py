@@ -371,7 +371,7 @@ async def add_repo_to_db(
 
 
 @router.get("/repos/db")
-async def list_repos_in_db(
+def list_repos_in_db(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
@@ -392,7 +392,7 @@ async def list_repos_in_db(
 
 
 @router.delete("/repos/db/{repo_id}")
-async def remove_repo_from_db(repo_id: int, db: Session = Depends(get_db)):
+def remove_repo_from_db(repo_id: int, db: Session = Depends(get_db)):
     repo = db.get(GitHubRepo, repo_id)
     if not repo:
         raise HTTPException(status_code=404, detail="Repo not found")
@@ -724,7 +724,7 @@ async def get_commits(
 
 
 @router.get("/db/items")
-async def get_items_in_db(
+def get_items_in_db(
     db: Session = Depends(get_db),
     repo_id: int | None = Query(None),
     goal_id: int | None = Query(None),
@@ -757,7 +757,7 @@ async def get_items_in_db(
 
 
 @router.post("/db/items/{item_id}/link-goal")
-async def link_goal(
+def link_goal(
     item_id: int,
     goal_id: int = Query(...),
     db: Session = Depends(get_db),
@@ -773,7 +773,7 @@ async def link_goal(
 
 
 @router.delete("/db/items/{item_id}/link-goal")
-async def unlink_goal(item_id: int, db: Session = Depends(get_db)):
+def unlink_goal(item_id: int, db: Session = Depends(get_db)):
     item = db.get(GitHubItem, item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Item not found in DB")
@@ -785,7 +785,7 @@ async def unlink_goal(item_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/db/events")
-async def get_events(
+def get_events(
     db: Session = Depends(get_db),
     repo_id: int | None = Query(None),
     limit: int = Query(50, le=100),
@@ -1095,7 +1095,7 @@ async def poll_device_code(payload: DevicePollRequest):
 
 
 @router.get("/oauth/web/start")
-async def start_web_flow():
+def start_web_flow():
     """
     Inicia el Web Flow de OAuth para GitHub.
     Redirige al usuario a la página de autorización de GitHub.
@@ -1222,7 +1222,7 @@ async def revoke_token(payload: RevokeTokenRequest | None = None):
 
 
 @router.get("/oauth/scopes")
-async def list_oauth_scopes():
+def list_oauth_scopes():
     """
     Lista los scopes disponibles para OAuth.
     """

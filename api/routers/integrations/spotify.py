@@ -140,7 +140,7 @@ async def _run[T](coro: Awaitable[T]) -> T:
 
 
 @router.get("/auth", response_model=SpotifyAuthUrl, dependencies=[Depends(get_current_user)])
-async def get_spotify_auth_url():
+def get_spotify_auth_url():
     """Return the Spotify OAuth consent URL with a signed CSRF ``state`` (#1328)."""
     try:
         state = oauth_state.generate_state("spotify")
@@ -243,7 +243,7 @@ async def spotify_status(
 
 
 @router.post("/disconnect", response_model=SpotifyDisconnectResponse)
-async def spotify_disconnect(
+def spotify_disconnect(
     db: Session = Depends(get_db),
     user: dict = Depends(get_current_user),
 ):
