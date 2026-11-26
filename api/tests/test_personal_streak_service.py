@@ -236,6 +236,34 @@ class BackfillStreakHistoryTest(PersonalStreakTestBase):
         self.assertEqual(min(c.check_date for c in streak.checkins), self._today() - timedelta(days=MAX_BACKFILL_DAYS))
         db.close()
 
+    def test_backfill_inserts_in_a_single_batched_flush(self):
+        """Regression guard for #1526: the whole backfill must reach the DB in
+        one batched INSERT, not a flush()+refresh() round trip per day."""
+        from sqlalchemy import event
+
+        db = self.Session()
+        start = self._today() - timedelta(days=30)
+        streak = self._create_streak(db, start_date=start)
+        streak.created_at = datetime.now(UTC)
+        db.commit()
+        db.refresh(streak)
+
+        insert_calls: list[str] = []
+
+        def _count_inserts(conn, cursor, statement, parameters, context, executemany):
+            if "streak_checkins" in statement and statement.lstrip().upper().startswith("INSERT"):
+                insert_calls.append(statement)
+
+        event.listen(self.engine, "before_cursor_execute", _count_inserts)
+        try:
+            backfill_streak_history(db, streak)
+        finally:
+            event.remove(self.engine, "before_cursor_execute", _count_inserts)
+
+        db.refresh(streak)
+        self.assertEqual(len(streak.checkins), 30)
+        self.assertEqual(len(insert_calls), 1)
+
     def test_backfill_short_history_unchanged(self):
         """start_date within the cap behaves exactly as before."""
         db = self.Session()

@@ -23,7 +23,7 @@ from pydantic import BaseModel, Field
 from services import github_service as gh_svc
 from services import oauth_state
 from services.http_client import http_client
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -397,10 +397,10 @@ def remove_repo_from_db(repo_id: int, db: Session = Depends(get_db)):
     if not repo:
         raise HTTPException(status_code=404, detail="Repo not found")
 
-    db.execute(select(GitHubItem).where(GitHubItem.repo_id == repo_id))
-    items = db.execute(select(GitHubItem).where(GitHubItem.repo_id == repo_id)).scalars().all()
-    for item in items:
-        db.delete(item)
+    # One DELETE statement instead of a duplicate SELECT + per-row db.delete()
+    # (#1526). Repo-scoped rows also carry ondelete="CASCADE", but deleting
+    # explicitly keeps the route correct even where FK enforcement is off.
+    db.execute(delete(GitHubItem).where(GitHubItem.repo_id == repo_id))
 
     db.delete(repo)
     db.commit()

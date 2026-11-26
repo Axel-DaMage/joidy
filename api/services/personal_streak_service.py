@@ -4,8 +4,8 @@ from datetime import date, timedelta
 from typing import cast
 
 from models.personal_streaks import PersonalStreak, StreakCheckIn
-from repositories import StreakCheckInRepository
 from services.timezone_utils import get_local_today
+from sqlalchemy import insert
 from sqlalchemy.orm import Session
 
 # Per-request cap on the auto-backfill window (#1321). Without it, a streak
@@ -31,7 +31,7 @@ def backfill_streak_history(db: Session, streak: PersonalStreak) -> None:
 
     existing_dates = {c.check_date for c in streak.checkins}
 
-    added_count = 0
+    new_dates: list[date] = []
     while current < end_date:
         if current not in existing_dates:
             should_add = False
@@ -43,16 +43,30 @@ def backfill_streak_history(db: Session, streak: PersonalStreak) -> None:
                     should_add = True
 
             if should_add:
-                ci = StreakCheckIn(streak_id=streak.id, check_date=current, note="Auto-generado (Migración)")
-                StreakCheckInRepository(db).add(ci)
-                added_count += 1
+                # current is a plain date at runtime; the Column[] part of the
+                # union comes from the legacy Column() declaration on
+                # PersonalStreak.start_date.
+                new_dates.append(cast(date, current))
 
         current += timedelta(days=1)
 
-    if added_count > 0:
+    if new_dates:
+        # One executemany INSERT for the whole backfill — the per-row
+        # repository add() used to flush()+refresh() every inserted day, ~2
+        # round trips × up to MAX_BACKFILL_DAYS rows in a single request, and
+        # even a plain add_all() can't batch because created_at defaults to a
+        # SQL expression (func.now()) (#1526). Rows are committed below and the
+        # expired streak.checkins reloads with them.
+        db.execute(
+            insert(StreakCheckIn),
+            [
+                {"streak_id": streak.id, "check_date": check_date, "note": "Auto-generado (Migración)"}
+                for check_date in new_dates
+            ],
+        )
         # Instrumented Column attribute: declared Column[int] but stores a
         # plain int at runtime.
-        streak.total_checkins = (streak.total_checkins or 0) + added_count  # type: ignore[assignment]
+        streak.total_checkins = (streak.total_checkins or 0) + len(new_dates)  # type: ignore[assignment]
         db.commit()
         db.refresh(streak)
 
