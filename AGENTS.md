@@ -237,6 +237,7 @@ on. With the flag off, `/system/power` mutation routes are not registered and
 ## Workflow
 
 - Base branch for pull requests is `development`. Always create feature branches from `development` and open PRs against `development`, not `main`.
+- **DCO sign-off is enforced by CI** (`.github/workflows/dco.yml`): every commit in a PR needs a `Signed-off-by: inop1a <axel.d4mage@gmail.com>` trailer matching the author or committer. Commit with `git commit -s` (or `git rebase --signoff origin/development` to fix an unsigned branch) — otherwise the `Signed-off-by check` fails.
 - `main` is reserved for releases and should only be updated from `development` via release or hotfix PRs.
 
 ## Docker Rebuild After Pull (STRICT)
