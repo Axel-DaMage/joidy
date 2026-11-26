@@ -1,5 +1,5 @@
 <script lang="ts">
-  import DynamicIcon from './DynamicIcon.svelte';
+  import { Minus, Plus } from 'lucide-svelte';
   import { accentColors, MAX_COLORS } from '$lib/stores/settings';
 
   function onColorPicker(i: number, e: Event) {
@@ -128,7 +128,7 @@
           title="Quitar"
           aria-label="Quitar"
         >
-          <DynamicIcon name="Minus" size={10} />
+          <Minus size={10} />
         </button>
       {/if}
     </div>
@@ -137,7 +137,7 @@
 
 {#if $accentColors.length < MAX_COLORS}
   <button class="add-color-btn mono" onclick={() => accentColors.addColor()}>
-    <DynamicIcon name="Plus" size={10} /> agregar color
+    <Plus size={10} /> agregar color
   </button>
 {/if}
 

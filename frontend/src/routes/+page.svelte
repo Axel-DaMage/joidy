@@ -3,7 +3,7 @@
   import { goto } from '$app/navigation';
   import { dev } from '$app/env';
   import { fly } from 'svelte/transition';
-  import DynamicIcon from '$lib/components/DynamicIcon.svelte';
+  import { ChevronLeft, ChevronRight } from 'lucide-svelte';
   import Plant from '$lib/components/Plant.svelte';
   import GalaxyModule from '$lib/components/GalaxyModule.svelte';
   import MountainModule from '$lib/components/MountainModule.svelte';
@@ -424,7 +424,7 @@
           class="nav-arrow"
           onclick={prevModule}
           title={$t('common.previous')}
-          aria-label={$t('common.previous')}><DynamicIcon name="ChevronLeft" size={14} /></button
+          aria-label={$t('common.previous')}><ChevronLeft size={14} /></button
         >
         <span class="module-label mono"
           >{$t(`home.modules.${MODULES[moduleIdx].label}`).toUpperCase()}</span
@@ -433,7 +433,7 @@
           class="nav-arrow"
           onclick={nextModule}
           title={$t('common.next')}
-          aria-label={$t('common.next')}><DynamicIcon name="ChevronRight" size={14} /></button
+          aria-label={$t('common.next')}><ChevronRight size={14} /></button
         >
       </div>
       <div class="module-viewport">

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import DynamicIcon from './DynamicIcon.svelte';
+  import { LoaderCircle, Moon, Power, Sun, TriangleAlert } from 'lucide-svelte';
   import { api } from '$lib/api';
   import { showNotification } from '$lib/stores/notifications';
 
@@ -100,7 +100,7 @@
 <!-- Servicios (Power Management) -->
 <section class="section">
   <div class="section-title" style="color: var(--xp, var(--accent));">
-    <DynamicIcon name="Power" size={12} /> Servicios
+    <Power size={12} /> Servicios
   </div>
 
   {#if powerLoading}
@@ -151,9 +151,9 @@
           disabled={powerActionLoading !== null}
         >
           {#if powerActionLoading === 'wake'}
-            <DynamicIcon name="LoaderCircle" size={12} /> Despertando…
+            <LoaderCircle size={12} /> Despertando…
           {:else}
-            <DynamicIcon name="Sun" size={12} /> Despertar
+            <Sun size={12} /> Despertar
           {/if}
         </button>
       {:else}
@@ -164,9 +164,9 @@
           title="Detiene AI Service y Worker para ahorrar recursos"
         >
           {#if powerActionLoading === 'sleep'}
-            <DynamicIcon name="LoaderCircle" size={12} /> Hibernando…
+            <LoaderCircle size={12} /> Hibernando…
           {:else}
-            <DynamicIcon name="Moon" size={12} /> Hibernar
+            <Moon size={12} /> Hibernar
           {/if}
         </button>
       {/if}
@@ -178,7 +178,7 @@
           disabled={powerActionLoading !== null}
           title="Detiene todos los servicios excepto la API y la base de datos"
         >
-          <DynamicIcon name="Power" size={12} /> Apagar
+          <Power size={12} /> Apagar
         </button>
       {:else}
         <button
@@ -187,9 +187,9 @@
           disabled={powerActionLoading !== null}
         >
           {#if powerActionLoading === 'shutdown'}
-            <DynamicIcon name="LoaderCircle" size={12} /> Apagando…
+            <LoaderCircle size={12} /> Apagando…
           {:else}
-            <DynamicIcon name="TriangleAlert" size={12} /> Confirmar apagado
+            <TriangleAlert size={12} /> Confirmar apagado
           {/if}
         </button>
         <button

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import DynamicIcon from './DynamicIcon.svelte';
+  import { Database, FolderRoot } from 'lucide-svelte';
   import { writeInObsidian } from '$lib/stores/settings';
   import type { SystemConfig } from '$lib/utils/settingsTypes';
 
@@ -14,7 +14,7 @@
 <!-- Vault -->
 <section class="section">
   <div class="section-title" style="color: var(--xp, var(--accent));">
-    <DynamicIcon name="Database" size={12} /> Obsidian Vault
+    <Database size={12} /> Obsidian Vault
   </div>
   <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
     <div class="row-label">
@@ -64,7 +64,7 @@
   </div>
   <div class="row">
     <div class="row-label">
-      <DynamicIcon name="FolderRoot" size={13} />
+      <FolderRoot size={13} />
       <span>Escribir en Vault nativo</span>
     </div>
     <button

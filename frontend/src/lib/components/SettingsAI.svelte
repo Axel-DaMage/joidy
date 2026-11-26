@@ -1,5 +1,5 @@
 <script lang="ts">
-  import DynamicIcon from './DynamicIcon.svelte';
+  import { Zap } from 'lucide-svelte';
   import { devMode } from '$lib/stores/settings';
   import type { SystemConfig } from '$lib/utils/settingsTypes';
 
@@ -15,7 +15,7 @@
   <!-- IA -->
   <section class="section">
     <div class="section-title" style="color: var(--xp, var(--accent));">
-      <DynamicIcon name="Zap" size={12} /> IA
+      <Zap size={12} /> IA
     </div>
     <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
       <div class="row-label">

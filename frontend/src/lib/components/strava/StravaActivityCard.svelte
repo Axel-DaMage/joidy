@@ -1,5 +1,6 @@
 <script lang="ts">
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
+  import { Flame, Gauge, Route, Timer, TrendingUp } from 'lucide-svelte';
   import {
     formatActivityDate,
     formatDistance,
@@ -71,22 +72,22 @@
     <div class="card-sport caption">{sportLabel}</div>
     <div class="card-metrics">
       <span class="metric" title={$t('strava.metrics.distance')}>
-        <DynamicIcon name="Route" size={12} /> {distanceLabel}
+        <Route size={12} /> {distanceLabel}
       </span>
       <span class="metric" title={$t('strava.metrics.time')}>
-        <DynamicIcon name="Timer" size={12} /> {timeLabel}
+        <Timer size={12} /> {timeLabel}
       </span>
       <span class="metric" title={$t('strava.metrics.pace')}>
-        <DynamicIcon name="Gauge" size={12} /> {paceLabel}
+        <Gauge size={12} /> {paceLabel}
       </span>
       {#if elevationLabel}
         <span class="metric" title={$t('strava.metrics.elevation')}>
-          <DynamicIcon name="TrendingUp" size={12} /> {elevationLabel}
+          <TrendingUp size={12} /> {elevationLabel}
         </span>
       {/if}
       {#if caloriesLabel}
         <span class="metric" title={$t('strava.metrics.calories')}>
-          <DynamicIcon name="Flame" size={12} /> {caloriesLabel}
+          <Flame size={12} /> {caloriesLabel}
         </span>
       {/if}
     </div>

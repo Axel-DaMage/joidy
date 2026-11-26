@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { browser } from '$app/env';
-  import DynamicIcon from '$lib/components/DynamicIcon.svelte';
+  import { CircleCheckBig, Save, TriangleAlert, X } from 'lucide-svelte';
   import SettingsAppearance from './SettingsAppearance.svelte';
   import SettingsAdvanced from './SettingsAdvanced.svelte';
   import SettingsVault from './SettingsVault.svelte';
@@ -202,7 +202,7 @@
           >{$t('settings.title')}</span
         >
         <button class="close-btn" onclick={close} aria-label={$t('common.close')}
-          ><DynamicIcon name="X" size={14} /></button
+          ><X size={14} /></button
         >
       </div>
 
@@ -244,9 +244,9 @@
           {#if configSaving}
             {$t('common.saving')}
           {:else if configSaved}
-            <DynamicIcon name="CircleCheckBig" size={12} /> {$t('common.saved')}
+            <CircleCheckBig size={12} /> {$t('common.saved')}
           {:else}
-            <DynamicIcon name="Save" size={12} /> {$t('common.save')}
+            <Save size={12} /> {$t('common.save')}
           {/if}
         </button>
         {#if configMessage}
@@ -255,7 +255,7 @@
       </div>
       {#if configRestartNotice}
         <div class="restart-notice">
-          <DynamicIcon name="TriangleAlert" size={14} />
+          <TriangleAlert size={14} />
           <span>{configRestartNotice}</span>
         </div>
       {/if}

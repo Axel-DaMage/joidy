@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { api } from '$lib/api';
-  import DynamicIcon from '$lib/components/DynamicIcon.svelte';
+  import { Activity, Brain } from 'lucide-svelte';
   import BetaBanner from '$lib/components/BetaBanner.svelte';
   import AiDisclosure from '$lib/components/AiDisclosure.svelte';
   import { aiStatusFromUsage } from '$lib/utils/aiStatus';
@@ -78,7 +78,7 @@
 <div class="ai-page">
   <BetaBanner />
   <div class="ai-header">
-    <h2><DynamicIcon name="Brain" /> {$t('ai.title')}</h2>
+    <h2><Brain size={18} /> {$t('ai.title')}</h2>
     <div class="ai-status">
       {#if loadingUsage}
         <span class="status-pill muted">{$t('ai.checking')}</span>
@@ -126,7 +126,7 @@
     <summary>{$t('ai.devSection')}</summary>
     <div class="dev-grid">
       <div class="dev-card">
-        <h3><DynamicIcon name="Activity" /> {$t('ai.serviceStatus')}</h3>
+        <h3><Activity size={18} /> {$t('ai.serviceStatus')}</h3>
         {#if usage}
           <p class="stat">
             <span class="stat-label">{$t('ai.apiKeyConfigured')}</span>

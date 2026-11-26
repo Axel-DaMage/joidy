@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
+  import { Activity, RefreshCw, TriangleAlert, Unlink, UserRound } from 'lucide-svelte';
   import EmptyState from '$lib/components/EmptyState.svelte';
   import ModalDialog from '$lib/components/ModalDialog.svelte';
   import StravaActivityCard from '$lib/components/strava/StravaActivityCard.svelte';
@@ -275,7 +276,7 @@
     {#if connected}
       <div class="header-actions">
         <button class="action-btn" class:syncing onclick={runSync} disabled={syncing}>
-          <DynamicIcon name="RefreshCw" size={13} />
+          <RefreshCw size={13} />
           {syncing ? $t('strava.sync.syncing') : $t('strava.sync.button')}
         </button>
         <button class="action-btn ghost" onclick={disconnect}>
@@ -290,7 +291,7 @@
   {:else if !configured}
     <div class="state-wrap">
       <EmptyState title={$t('strava.notConfigured.title')} message={$t('strava.notConfigured.hint')}>
-        {#snippet icon()}<DynamicIcon name="Unlink" size={44} />{/snippet}
+        {#snippet icon()}<Unlink size={44} />{/snippet}
       </EmptyState>
     </div>
   {:else if !connected}
@@ -301,7 +302,7 @@
         actionLabel={connecting ? '' : $t('strava.connect.button')}
         onAction={connecting ? null : startConnect}
       >
-        {#snippet icon()}<DynamicIcon name="Activity" size={44} />{/snippet}
+        {#snippet icon()}<Activity size={44} />{/snippet}
       </EmptyState>
       {#if connectError}
         <p class="connect-error">{connectError}</p>
@@ -314,7 +315,7 @@
         {#if athlete?.profile}
           <img src={athlete.profile} alt={athleteName} loading="lazy" />
         {:else}
-          <DynamicIcon name="UserRound" size={26} />
+          <UserRound size={26} />
         {/if}
       </div>
       <div class="athlete-info">
@@ -325,7 +326,7 @@
         </div>
       </div>
       <div class="athlete-badge caption">
-        <DynamicIcon name="Activity" size={12} />
+        <Activity size={12} />
         {$t('strava.connectedBadge')}
       </div>
     </div>
@@ -383,7 +384,7 @@
       {:else if activitiesError}
         <div class="state-wrap">
           <EmptyState title={$t('strava.activities.loadFailed')} message={activitiesError}>
-            {#snippet icon()}<DynamicIcon name="TriangleAlert" size={44} />{/snippet}
+            {#snippet icon()}<TriangleAlert size={44} />{/snippet}
             <button
               class="action-btn"
               onclick={() => {
@@ -399,7 +400,7 @@
             title={sportFilter === 'all' ? $t('strava.activities.empty') : $t('strava.activities.emptyFilter')}
             message={$t('strava.activities.syncHint')}
           >
-            {#snippet icon()}<DynamicIcon name="Activity" size={44} />{/snippet}
+            {#snippet icon()}<Activity size={44} />{/snippet}
           </EmptyState>
         </div>
       {:else}

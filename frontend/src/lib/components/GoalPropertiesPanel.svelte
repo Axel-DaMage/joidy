@@ -7,6 +7,7 @@
   import { api, type Goal, type Note, type Tag } from '$lib/api';
   import { t } from 'svelte-i18n';
   import { logger } from '$lib/utils/logger';
+  import { getLocale } from '$lib/stores/locale';
   import { goalEditor } from '$lib/stores/goalEditor.svelte';
   import NoteLinkPicker from './NoteLinkPicker.svelte';
 
@@ -96,7 +97,7 @@
   function formatDate(iso: string | null | undefined): string {
     if (!iso) return '—';
     try {
-      return new Date(iso).toLocaleDateString();
+      return new Date(iso).toLocaleDateString(getLocale());
     } catch {
       return iso;
     }

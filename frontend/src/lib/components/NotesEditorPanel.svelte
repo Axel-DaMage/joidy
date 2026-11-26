@@ -2,10 +2,16 @@
   import Search from 'lucide-svelte/icons/search';
   import FilePen from 'lucide-svelte/icons/file-pen';
   import Plus from 'lucide-svelte/icons/plus';
+  import Box from 'lucide-svelte/icons/box';
+  import Calculator from 'lucide-svelte/icons/calculator';
+  import Calendar from 'lucide-svelte/icons/calendar';
+  import History from 'lucide-svelte/icons/history';
+  import PenTool from 'lucide-svelte/icons/pen-tool';
   import DynamicIcon from './DynamicIcon.svelte';
   import QuickCaptureWidget from './QuickCaptureWidget.svelte';
   import ScientificCalculator from './ScientificCalculator.svelte';
   import { notes } from '$lib/stores/notes';
+  import { locale } from '$lib/stores/locale';
   import { autoScrollTitle } from '$lib/actions/autoScrollTitle';
   import {
     openNote,
@@ -68,7 +74,7 @@
     {/key}
   {:else}
     <div class="empty-dashboard">
-      <DynamicIcon name="Box" size={32} color="var(--border)" />
+      <Box size={32} color="var(--border)" />
 
       <div class="dash-search-container">
         <div class="dash-search">
@@ -90,7 +96,7 @@
         <!-- Quick Note Area -->
         <div class="dash-widget quick-note-widget">
           <div class="dash-widget-title">
-            <DynamicIcon name="PenTool" size={13} /> Acciones Rápidas
+            <PenTool size={13} /> Acciones Rápidas
           </div>
           <div class="dash-action-buttons">
             <button class="dash-btn primary-dash-btn" onclick={() => openNew()}>
@@ -101,7 +107,7 @@
               onclick={openDaily}
             >
               <span class="daily-note-main">
-                <DynamicIcon name="Calendar" size={16} /> Nota Diaria
+                <Calendar size={16} /> Nota Diaria
               </span>
               <span class="daily-note-hint">{$t('notesPage.configureDailyNote')}</span>
             </button>
@@ -111,7 +117,7 @@
           </div>
 
           <div class="dash-divider"></div>
-          <div class="dash-widget-title"><DynamicIcon name="History" size={13} /> Recientes</div>
+          <div class="dash-widget-title"><History size={13} /> Recientes</div>
           <div class="recent-list">
             {#each $notes.slice(0, 3) as note}
               {@const vis = getNoteVisual(note)}
@@ -125,7 +131,7 @@
                 <span class="recent-name" use:autoScrollTitle={note.title}>
                   <span class="recent-name-text">{note.title}</span>
                 </span>
-                <span class="recent-time">{new Date(note.updated_at).toLocaleDateString()}</span>
+                <span class="recent-time">{new Date(note.updated_at).toLocaleDateString($locale)}</span>
               </button>
             {/each}
           </div>
@@ -133,7 +139,7 @@
 
         <div class="dash-widget">
           <div class="dash-widget-title" style="margin-bottom: 5px;">
-            <DynamicIcon name="Calculator" size={13} /> Calculadora
+            <Calculator size={13} /> Calculadora
           </div>
           <ScientificCalculator />
         </div>

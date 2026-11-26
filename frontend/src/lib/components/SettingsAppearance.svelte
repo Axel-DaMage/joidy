@@ -1,5 +1,5 @@
 <script lang="ts">
-  import DynamicIcon from './DynamicIcon.svelte';
+  import { Clock, Clock3, Languages, Moon, Sparkles, Sun } from 'lucide-svelte';
   import SettingsAccentColors from './SettingsAccentColors.svelte';
   import {
     activeIconPack,
@@ -41,7 +41,7 @@
   </div>
   <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
     <div class="row-label">
-      <DynamicIcon name="Sparkles" size={13} />
+      <Sparkles size={13} />
       <span>{$t('settings.theme')}</span>
     </div>
     <div class="theme-mode-options">
@@ -53,7 +53,7 @@
           checked={$themeMode === 'light'}
           onchange={() => themeMode.set('light')}
         />
-        <DynamicIcon name="Sun" size={14} />
+        <Sun size={14} />
         <span>{$t('settings.themeLight')}</span>
       </label>
       <label class="theme-mode-option" class:active={$themeMode === 'dark'}>
@@ -64,7 +64,7 @@
           checked={$themeMode === 'dark'}
           onchange={() => themeMode.set('dark')}
         />
-        <DynamicIcon name="Moon" size={14} />
+        <Moon size={14} />
         <span>{$t('settings.themeDark')}</span>
       </label>
     </div>
@@ -72,7 +72,7 @@
 
   <div class="row">
     <div class="row-label">
-      <DynamicIcon name="Clock3" size={13} />
+      <Clock3 size={13} />
       <span>{$t('settings.timeFormat')}</span>
     </div>
     <button
@@ -91,7 +91,7 @@
   <!-- Clock style selector (#707) -->
   <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
     <div class="row-label">
-      <DynamicIcon name="Clock" size={13} />
+      <Clock size={13} />
       <span id="sa-clock-style-label">{$t('settings.clockStyle')}</span>
     </div>
     <select class="setting-input mono" aria-labelledby="sa-clock-style-label" bind:value={$clockStyle}>
@@ -105,7 +105,7 @@
   <!-- Language selector (#370) -->
   <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
     <div class="row-label">
-      <DynamicIcon name="Languages" size={13} />
+      <Languages size={13} />
       <span id="sa-language-label">{$t('settings.language')}</span>
     </div>
     <select class="setting-input mono" aria-labelledby="sa-language-label" value={currentLocale} onchange={onLocaleChange}>

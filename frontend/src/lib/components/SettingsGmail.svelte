@@ -1,6 +1,7 @@
 <script lang="ts">
   import { api, type GmailStatus, type GmailWatchState } from '$lib/api';
   import { showNotification } from '$lib/stores/notifications';
+  import { locale } from '$lib/stores/locale';
   import { logger } from '$lib/utils/logger';
   import { t } from 'svelte-i18n';
 
@@ -114,7 +115,7 @@
         {#if watchState?.expiration}
           <span class="hint">
             {$t('gmail.settings.watchActive', {
-              values: { date: new Date(watchState.expiration).toLocaleString() },
+              values: { date: new Date(watchState.expiration).toLocaleString($locale) },
             })}
           </span>
         {:else}

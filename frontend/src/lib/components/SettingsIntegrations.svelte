@@ -1,5 +1,5 @@
 <script lang="ts">
-  import DynamicIcon from './DynamicIcon.svelte';
+  import { GitBranch } from 'lucide-svelte';
   import SettingsGithub from './SettingsGithub.svelte';
   import SettingsGoogle from './SettingsGoogle.svelte';
   import SettingsStrava from './SettingsStrava.svelte';
@@ -21,7 +21,7 @@
 <!-- Integraciones -->
 <section class="section">
   <div class="section-title" style="color: var(--xp, var(--accent));">
-    <DynamicIcon name="GitBranch" size={12} /> Integraciones
+    <GitBranch size={12} /> Integraciones
   </div>
   <SettingsGithub bind:systemConfig {isConfigured} />
   <SettingsGoogle bind:systemConfig {isConfigured} />
