@@ -167,6 +167,120 @@ class TestPersistentEventLog(unittest.TestCase):
             assert log2.fingerprints() == {}
             log2.close()
 
+    def test_wal_mode_and_normal_synchronous(self):
+        """The event log uses WAL + synchronous=NORMAL so commits append a
+        WAL frame without a per-event fsync (#1536)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            log = PersistentEventLog(Path(tmp) / "events.db")
+            mode = log._conn.execute("PRAGMA journal_mode").fetchone()[0]
+            synchronous = log._conn.execute("PRAGMA synchronous").fetchone()[0]
+            log.close()
+            assert mode == "wal"
+            assert synchronous == 1  # NORMAL (0=OFF, 2=FULL, 3=EXTRA)
+
+    def test_remove_is_staged_until_commit(self):
+        """remove() no longer commits per event — a second connection sees
+        the rows until commit() flushes the staged deletes (#1536)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "events.db"
+            log = PersistentEventLog(log_path)
+            log.add("/vault/a.md", Change.added)
+            log.add("/vault/b.md", Change.deleted)
+            log.remove("/vault/a.md")
+
+            # Uncommitted on conn1: still visible to a fresh connection.
+            check = PersistentEventLog(log_path)
+            assert {p for p, _ in check.pending()} == {"/vault/a.md", "/vault/b.md"}
+
+            log.commit()
+            assert check.pending() == [("/vault/b.md", Change.deleted)]
+
+            check.close()
+            log.close()
+
+    def test_staged_removes_survive_reopen_after_commit(self):
+        """Batched removals are durable once commit() ran (#1536)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "events.db"
+            log = PersistentEventLog(log_path)
+            log.add("/vault/a.md", Change.added)
+            log.remove("/vault/a.md")
+            log.commit()
+            log.close()
+
+            log2 = PersistentEventLog(log_path)
+            assert log2.pending() == []
+            log2.close()
+
+    class _RecordingConn:
+        """sqlite3.Connection delegate that records PRAGMA synchronous
+        statements, used to prove which commits run at FULL (#1536)."""
+
+        def __init__(self, conn):
+            self._conn = conn
+            self.sync_pragmas: list[str] = []
+
+        def execute(self, sql, parameters=()):
+            if sql.strip().upper().startswith("PRAGMA SYNCHRONOUS"):
+                self.sync_pragmas.append(sql)
+            return self._conn.execute(sql, parameters)
+
+        def commit(self):
+            return self._conn.commit()
+
+        def __getattr__(self, name):
+            return getattr(self._conn, name)
+
+    def test_add_commit_toggles_full_synchronous(self):
+        """add() commits at synchronous=FULL — a lost ADD event for a
+        deleted file is unrecoverable (the file no longer exists, so
+        initial_scan cannot rediscover it) — then restores NORMAL (#1536)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            log = PersistentEventLog(Path(tmp) / "events.db")
+            rec = self._RecordingConn(log._conn)
+            log._conn = rec
+
+            log.add("/vault/x.md", Change.deleted)
+
+            assert rec.sync_pragmas == ["PRAGMA synchronous=FULL", "PRAGMA synchronous=NORMAL"]
+            # Resting mode back to NORMAL and the row actually persisted.
+            assert rec.execute("PRAGMA synchronous").fetchone()[0] == 1
+            assert log.pending() == [("/vault/x.md", Change.deleted)]
+            log._conn = rec._conn
+            log.close()
+
+    def test_set_fingerprint_commit_is_durable(self):
+        """set_fingerprint() uses the same durable commit — fingerprints
+        record unprocessed-work state that must survive an OS crash (#1536)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            log = PersistentEventLog(Path(tmp) / "events.db")
+            rec = self._RecordingConn(log._conn)
+            log._conn = rec
+
+            log.set_fingerprint("/vault/x.md", "deadbeef")
+
+            assert rec.sync_pragmas == ["PRAGMA synchronous=FULL", "PRAGMA synchronous=NORMAL"]
+            assert log.fingerprints() == {"/vault/x.md": "deadbeef"}
+            log._conn = rec._conn
+            log.close()
+
+    def test_removal_flush_stays_normal_synchronous(self):
+        """Staged removals of already-processed events flush at NORMAL —
+        losing one only replays idempotent work, so no FULL toggle (#1536)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            log = PersistentEventLog(Path(tmp) / "events.db")
+            log.add("/vault/x.md", Change.added)
+
+            rec = self._RecordingConn(log._conn)
+            log._conn = rec
+            log.remove("/vault/x.md")
+            log.commit()
+
+            assert rec.sync_pragmas == []
+            assert rec.execute("PRAGMA synchronous").fetchone()[0] == 1
+            log._conn = rec._conn
+            log.close()
+
 
 class TestVaultSync(unittest.IsolatedAsyncioTestCase):
     def _client(self, responses):
@@ -562,3 +676,81 @@ class TestInitialScanShortCircuit(unittest.IsolatedAsyncioTestCase):
                 if "json" in c.kwargs
             }
             assert synced == {str(md_a), str(md_b)}
+
+
+class TestProcessBatch(unittest.IsolatedAsyncioTestCase):
+    """_process_batch must bound concurrent API calls (#1536): a mass-change
+    event used to fire hundreds of parallel syncs and exhaust the httpx
+    pool. The same Semaphore limit as initial_scan now applies."""
+
+    async def test_process_batch_bounds_concurrency(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            pending = {}
+            # Added/modified events on real files.
+            for i in range(12):
+                p = vault / f"note{i}.md"
+                p.write_text(f"content {i}", encoding="utf-8")
+                pending[str(p)] = Change.added
+            # Delete events on paths already gone.
+            for i in range(6):
+                pending[str(vault / f"gone{i}.md")] = Change.deleted
+            # A rename pair: deleted old path whose fingerprint matches the
+            # content of the added file.
+            renamed = vault / "renamed.md"
+            renamed.write_text("moved content", encoding="utf-8")
+            old_path = str(vault / "old.md")
+            vault_watcher._fingerprints[old_path] = _fingerprint("moved content")
+            pending[old_path] = Change.deleted
+            pending[str(renamed)] = Change.added
+
+            running = 0
+            peak = 0
+            calls = {"import": 0, "delete": 0, "rename": 0}
+
+            async def tracked(kind):
+                nonlocal running, peak
+                running += 1
+                peak = max(peak, running)
+                calls[kind] += 1
+                await asyncio.sleep(0.01)
+                running -= 1
+                return True
+
+            async def fake_import(filepath, client, token, **kwargs):
+                return await tracked("import")
+
+            async def fake_delete(path, client, token):
+                return await tracked("delete")
+
+            async def fake_rename(old, new, client, token):
+                return await tracked("rename")
+
+            log_path = vault / "events.db"
+            log = PersistentEventLog(log_path)
+            for path, ct in pending.items():
+                log.add(path, ct)
+
+            try:
+                with (
+                    patch.object(vault_watcher.settings, "vault_path", str(vault)),
+                    patch.object(vault_watcher, "import_or_update_note", new=fake_import),
+                    patch.object(vault_watcher, "delete_note_by_path", new=fake_delete),
+                    patch.object(vault_watcher, "rename_note_path", new=fake_rename),
+                ):
+                    await vault_watcher._process_batch(dict(pending), AsyncMock(), "token", log)
+
+                # 20 events, semaphore of BATCH_CONCURRENCY: real parallelism
+                # but never more than the cap.
+                assert peak <= vault_watcher.BATCH_CONCURRENCY
+                assert peak > 1
+                assert calls == {"import": 12, "delete": 6, "rename": 1}
+
+                # The batch flushed staged event-log removals — a fresh
+                # connection sees the log fully drained.
+                check = PersistentEventLog(log_path)
+                assert check.pending() == []
+                check.close()
+            finally:
+                log.close()
+                vault_watcher._fingerprints.pop(old_path, None)

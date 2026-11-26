@@ -29,6 +29,11 @@ JOIDY_DIR = "_joidy"
 DEBOUNCE_SECONDS = 2.0
 QUEUE_FLUSH_INTERVAL = 0.5
 SHUTDOWN_TIMEOUT = 15.0  # seconds to let in-flight writes finish on shutdown
+# Max parallel note syncs against the API — used by initial_scan and by
+# _process_batch so a mass-change event (git pull, Obsidian sync, folder
+# move) cannot fire hundreds of concurrent requests and exhaust the httpx
+# pool (#1536).
+BATCH_CONCURRENCY = 4
 
 
 @dataclass(frozen=True)
@@ -83,9 +88,31 @@ class PersistentEventLog:
     def __init__(self, path: str):
         self._path = path
         self._conn: sqlite3.Connection | None
+        # True when the DB accepted WAL mode; controls whether commits must
+        # explicitly re-raise synchronous (see _commit_durable).
+        self._wal = False
         try:
             Path(path).parent.mkdir(parents=True, exist_ok=True)
             self._conn = sqlite3.connect(path, check_same_thread=False)
+            # WAL + synchronous=NORMAL (#1536): commits append a WAL frame
+            # without an fsync, collapsing the per-event fsync cost that
+            # used to serialize every add()/remove() on slow bind-mounted
+            # volumes. Durability trade-off: every commit still survives a
+            # worker/application crash — only an OS crash or power loss can
+            # drop the last transaction, and even then the database stays
+            # consistent, never corrupt. That residual window is acceptable
+            # for the cheap per-batch flush of staged removals (a lost
+            # removal only replays already-processed idempotent events) but
+            # NOT for add()/set_fingerprint() — those record unprocessed
+            # work whose loss can be unrecoverable, so they go through
+            # _write_durable() which temporarily raises synchronous=FULL.
+            journal_mode = self._conn.execute("PRAGMA journal_mode=WAL").fetchone()
+            self._wal = bool(journal_mode and str(journal_mode[0]).lower() == "wal")
+            if self._wal:
+                self._conn.execute("PRAGMA synchronous=NORMAL")
+            # If the filesystem refuses WAL (some network mounts), the
+            # connection keeps the default rollback journal with FULL
+            # synchronous — i.e. the previous, fully durable behavior.
             self._conn.execute(
                 "CREATE TABLE IF NOT EXISTS pending_events (path TEXT PRIMARY KEY, change_type TEXT NOT NULL)"
             )
@@ -98,26 +125,74 @@ class PersistentEventLog:
             logger.warning("[vault] Persistent event log unavailable (%s); crash recovery disabled", type(exc).__name__)
             self._conn = None
 
+    def _write_durable(self, sql: str, params: tuple) -> None:
+        """Execute ``sql`` and commit it at synchronous=FULL, restoring
+        NORMAL afterwards (#1536).
+
+        Under WAL + synchronous=NORMAL an OS crash or power loss can drop the
+        last committed transaction even though ``commit()`` returned. For
+        ``add()``/``set_fingerprint()`` — records of *unprocessed* work — that
+        gap is fatal in one direction: a lost ``deleted`` event describes a
+        file that no longer exists in the vault, so initial_scan can never
+        rediscover it and the note stays orphaned in the DB forever. Staged
+        removals of already-processed idempotent events stay cheap at NORMAL
+        since losing them only replays work that is safe to redo.
+
+        PRAGMA synchronous cannot be raised inside an open transaction, so
+        any transaction staged removals left open is flushed first (a plain
+        commit — identical durability to the per-batch flush), FULL is
+        applied, and the write's own commit fsyncs the WAL frame before
+        NORMAL is restored.
+        """
+        if self._wal:
+            self._conn.commit()  # flush any staged removals; no-op when none
+            self._conn.execute("PRAGMA synchronous=FULL")
+        # Non-WAL (rollback-journal fallback) never lowered synchronous — the
+        # default FULL already applies; nothing to toggle.
+        try:
+            self._conn.execute(sql, params)
+            self._conn.commit()
+        finally:
+            if self._wal:
+                self._conn.execute("PRAGMA synchronous=NORMAL")
+
     def add(self, path: str, change_type: Change) -> None:
         if self._conn is None:
             return
         try:
-            self._conn.execute(
+            self._write_durable(
                 "INSERT OR REPLACE INTO pending_events (path, change_type) VALUES (?, ?)",
                 (path, change_type.name),
             )
-            self._conn.commit()
         except Exception as exc:
             logger.warning("[vault] Failed to persist event %s: %s", _log_name(path), type(exc).__name__)
 
     def remove(self, path: str) -> None:
+        """Stage deletion of a processed event without committing (#1536).
+
+        Committing per event used to pay a full fsync per removal; removals
+        are now staged and flushed once per batch via ``commit()`` — called
+        by ``_process_batch`` after its gather, by ``_replay_pending_events``
+        after dropping refused rows, and by ``close()``. If the worker dies
+        before the flush, the already-processed events simply replay once on
+        the next startup — replay is idempotent by design (#1534), so the
+        durability of unprocessed work is unchanged.
+        """
         if self._conn is None:
             return
         try:
             self._conn.execute("DELETE FROM pending_events WHERE path = ?", (path,))
-            self._conn.commit()
         except Exception as exc:
             logger.warning("[vault] Failed to remove event %s: %s", _log_name(path), type(exc).__name__)
+
+    def commit(self) -> None:
+        """Flush staged removals (and any other pending writes) to disk."""
+        if self._conn is None:
+            return
+        try:
+            self._conn.commit()
+        except Exception as exc:
+            logger.warning("[vault] Failed to flush event log: %s", type(exc).__name__)
 
     def pending(self) -> list[tuple[str, Change]]:
         if self._conn is None:
@@ -142,11 +217,10 @@ class PersistentEventLog:
         if self._conn is None:
             return
         try:
-            self._conn.execute(
+            self._write_durable(
                 "INSERT OR REPLACE INTO fingerprints (path, fingerprint) VALUES (?, ?)",
                 (path, fingerprint),
             )
-            self._conn.commit()
         except Exception as exc:
             logger.warning("[vault] Failed to persist fingerprint for %s: %s", _log_name(path), type(exc).__name__)
 
@@ -172,6 +246,10 @@ class PersistentEventLog:
 
     def close(self) -> None:
         if self._conn is not None:
+            try:
+                self._conn.commit()
+            except Exception:  # noqa: S110 — flush may fail on a dead volume; the handle is being discarded anyway
+                pass
             try:
                 self._conn.close()
             except Exception:  # noqa: S110 — close must never raise; the log handle is being discarded anyway
@@ -785,7 +863,7 @@ async def initial_scan(vault_path: Path, client: httpx.AsyncClient, token: str):
         skipped,
     )
 
-    semaphore = asyncio.Semaphore(4)
+    semaphore = asyncio.Semaphore(BATCH_CONCURRENCY)
 
     async def process_file(filepath: Path):
         async with semaphore:
@@ -863,91 +941,100 @@ async def _process_batch(
         if path not in consumed_adds:
             remaining[path] = ct
 
+    # Bound concurrent API calls per batch (#1536): a mass-change event
+    # (git pull, Obsidian sync, folder move) can queue hundreds of events
+    # whose unbounded ensure_future+gather would fire hundreds of parallel
+    # requests at the API and exhaust the httpx pool. Same limit
+    # initial_scan uses for the same reason.
+    semaphore = asyncio.Semaphore(BATCH_CONCURRENCY)
+
     async def process(path: str, change_type: Change):
-        # Re-validate queued paths: the awatch producer filters events
-        # before enqueue, but persisted replays and direct queue
-        # injection must not reach a vault read unvalidated (#1293).
-        if not _is_valid_vault_path(path, change_type, _vault_root()):
-            logger.warning("[vault] Skipping invalid queued path %s", _log_name(path))
-            event_log.remove(path)
-            return
-        lock = await _get_file_lock(path)
-        async with lock:
-            try:
-                if change_type == Change.deleted and Path(path).exists():
-                    # The file reappeared after the delete event fired —
-                    # recreated inside the debounce window or while the
-                    # worker was down. Resync instead of deleting so the
-                    # note keeps its id/history (#1302).
-                    change_type = Change.modified
-                # Shield the critical write so a shutdown cancellation
-                # does not interrupt a mid-flight API call (#371).
-                if change_type == Change.deleted:
-                    ok = await asyncio.shield(delete_note_by_path(path, client, token))
-                else:
-                    ok = await asyncio.shield(import_or_update_note(Path(path), client, token))
-                if ok:
-                    event_log.remove(path)
+        async with semaphore:
+            # Re-validate queued paths: the awatch producer filters events
+            # before enqueue, but persisted replays and direct queue
+            # injection must not reach a vault read unvalidated (#1293).
+            if not _is_valid_vault_path(path, change_type, _vault_root()):
+                logger.warning("[vault] Skipping invalid queued path %s", _log_name(path))
+                event_log.remove(path)
+                return
+            lock = await _get_file_lock(path)
+            async with lock:
+                try:
+                    if change_type == Change.deleted and Path(path).exists():
+                        # The file reappeared after the delete event fired —
+                        # recreated inside the debounce window or while the
+                        # worker was down. Resync instead of deleting so the
+                        # note keeps its id/history (#1302).
+                        change_type = Change.modified
+                    # Shield the critical write so a shutdown cancellation
+                    # does not interrupt a mid-flight API call (#371).
                     if change_type == Change.deleted:
-                        # The note is gone from the API — the stored content
-                        # fingerprint no longer describes synced state, and
-                        # keeping it would let initial_scan skip a file that
-                        # was recreated with identical content (#1535). Safe
-                        # for rename detection: delete+add pairs are matched
-                        # before deletes are processed (see _process_batch).
-                        _drop_fingerprint(path)
-                else:
-                    # Sync failed after retries — keep the event so it is
-                    # retried on the next startup instead of dropped (#1534).
-                    logger.warning(
-                        "[vault] %s %s failed — event kept for next startup",
-                        change_type.name,
+                        ok = await asyncio.shield(delete_note_by_path(path, client, token))
+                    else:
+                        ok = await asyncio.shield(import_or_update_note(Path(path), client, token))
+                    if ok:
+                        event_log.remove(path)
+                        if change_type == Change.deleted:
+                            # The note is gone from the API — the stored content
+                            # fingerprint no longer describes synced state, and
+                            # keeping it would let initial_scan skip a file that
+                            # was recreated with identical content (#1535). Safe
+                            # for rename detection: delete+add pairs are matched
+                            # before deletes are processed (see _process_batch).
+                            _drop_fingerprint(path)
+                    else:
+                        # Sync failed after retries — keep the event so it is
+                        # retried on the next startup instead of dropped (#1534).
+                        logger.warning(
+                            "[vault] %s %s failed — event kept for next startup",
+                            change_type.name,
+                            _log_name(path),
+                        )
+                except asyncio.CancelledError:
+                    # Propagate cancellation but keep the event logged so
+                    # it is retried on the next startup.
+                    raise
+                except Exception as exc:
+                    # Exception type only — tracebacks/str(exc) can embed
+                    # vault paths and request URLs (#1299, #1301).
+                    logger.error(
+                        "[vault] Failed to process %s (%s): %s",
                         _log_name(path),
+                        change_type.name,
+                        type(exc).__name__,
                     )
-            except asyncio.CancelledError:
-                # Propagate cancellation but keep the event logged so
-                # it is retried on the next startup.
-                raise
-            except Exception as exc:
-                # Exception type only — tracebacks/str(exc) can embed
-                # vault paths and request URLs (#1299, #1301).
-                logger.error(
-                    "[vault] Failed to process %s (%s): %s",
-                    _log_name(path),
-                    change_type.name,
-                    type(exc).__name__,
-                )
 
     async def process_rename(old_path: str, new_path: str):
-        if not _is_valid_vault_path(new_path, Change.added, _vault_root()):
-            logger.warning("[vault] Skipping invalid rename target %s", _log_name(new_path))
-            event_log.remove(old_path)
-            event_log.remove(new_path)
-            return
-        lock = await _get_file_lock(old_path)
-        async with lock:
-            try:
-                ok = await asyncio.shield(rename_note_path(old_path, Path(new_path), client, token))
-                if ok:
-                    event_log.remove(old_path)
-                    event_log.remove(new_path)
-                else:
-                    # Rename failed after retries — keep both events so the
-                    # pair is retried on the next startup (#1534).
-                    logger.warning(
-                        "[vault] Rename %s -> %s failed — events kept for next startup",
+        async with semaphore:
+            if not _is_valid_vault_path(new_path, Change.added, _vault_root()):
+                logger.warning("[vault] Skipping invalid rename target %s", _log_name(new_path))
+                event_log.remove(old_path)
+                event_log.remove(new_path)
+                return
+            lock = await _get_file_lock(old_path)
+            async with lock:
+                try:
+                    ok = await asyncio.shield(rename_note_path(old_path, Path(new_path), client, token))
+                    if ok:
+                        event_log.remove(old_path)
+                        event_log.remove(new_path)
+                    else:
+                        # Rename failed after retries — keep both events so the
+                        # pair is retried on the next startup (#1534).
+                        logger.warning(
+                            "[vault] Rename %s -> %s failed — events kept for next startup",
+                            _log_name(old_path),
+                            _log_name(new_path),
+                        )
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    logger.error(
+                        "[vault] Failed to rename %s -> %s: %s",
                         _log_name(old_path),
                         _log_name(new_path),
+                        type(exc).__name__,
                     )
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:
-                logger.error(
-                    "[vault] Failed to rename %s -> %s: %s",
-                    _log_name(old_path),
-                    _log_name(new_path),
-                    type(exc).__name__,
-                )
 
     batch_tasks: list[asyncio.Task] = []
     for old_path, new_path in renames:
@@ -958,6 +1045,10 @@ async def _process_batch(
     if in_flight is not None:
         in_flight.update(batch_tasks)
     await asyncio.gather(*batch_tasks, return_exceptions=True)
+    # One commit for the whole batch of event-log removals — the per-task
+    # remove() calls above only stage deletes (#1536). A crash before this
+    # flush merely replays already-processed (idempotent) events.
+    event_log.commit()
     if in_flight is not None:
         in_flight.difference_update(batch_tasks)
 
@@ -1029,6 +1120,10 @@ def _replay_pending_events(
             event_log.remove(path)
             continue
         accepted[path] = change_type
+    # Flush staged removals of refused rows — when ``accepted`` is empty no
+    # _process_batch runs, and without this the deletes would linger
+    # uncommitted until the next batch or close() (#1536).
+    event_log.commit()
     return accepted
 
 
