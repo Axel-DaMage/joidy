@@ -2,7 +2,7 @@ from database import get_db
 from fastapi import APIRouter, Depends
 from models.note import Tag
 from models.skill import Skill
-from services.response_cache import clear_api_caches, register_cache_clearer, ttl_cache
+from services.response_cache import invalidate_cache_groups, register_cache_clearer, ttl_cache
 from services.skill_tree import get_skill_tree, sync_skills
 from sqlalchemy.orm import Session
 
@@ -27,7 +27,7 @@ def _cached_list_skills(db: Session):
     ]
 
 
-register_cache_clearer(_cached_list_skills.cache_clear)
+register_cache_clearer(_cached_list_skills.cache_clear, groups={"skills", "notes", "tags"})
 
 
 @router.get("/")
@@ -40,7 +40,7 @@ def _cached_skill_tree(db: Session):
     return get_skill_tree(db)
 
 
-register_cache_clearer(_cached_skill_tree.cache_clear)
+register_cache_clearer(_cached_skill_tree.cache_clear, groups={"skills", "notes", "tags"})
 
 
 @router.get("/tree")
@@ -51,5 +51,5 @@ def skill_tree(db: Session = Depends(get_db)):
 @router.post("/sync")
 def sync(db: Session = Depends(get_db)):
     updated = sync_skills(db)
-    clear_api_caches()
+    invalidate_cache_groups("skills")
     return {"synced": len(updated), "updates": updated}

@@ -106,7 +106,7 @@ class _TTLCache:
         return wrap
 
 
-_cache = _TTLCache(ttl_seconds=5.0, max_entries=256)
+_cache = _TTLCache(ttl_seconds=60.0, max_entries=256)
 
 
 def ttl_cache(*, ignore_params: set[str] | None = None):
@@ -114,15 +114,36 @@ def ttl_cache(*, ignore_params: set[str] | None = None):
 
 
 def clear_api_caches() -> None:
-    for func in _REGISTERED_CLEARERS:
-        func()
+    for clearer, _groups in _REGISTERED_CLEARERS:
+        clearer()
 
 
-_REGISTERED_CLEARERS: list[Callable[[], None]] = []
+def invalidate_cache_groups(*groups: str) -> None:
+    """Clear only the caches registered under any of the given groups.
+
+    Cached functions declare the write domains that invalidate them via
+    ``register_cache_clearer(..., groups={...})`` (conventional groups:
+    "notes", "tags", "skills", "planning", "gamification"). Mutation code
+    then calls e.g. ``invalidate_cache_groups("notes")`` so a note write
+    evicts the tag graph / tag counts / skills caches without also nuking
+    unrelated entries (planning assignments, gamification stats) — the old
+    blanket ``clear_api_caches()`` on every write made the caches useless
+    for actively-editing users (#1522).
+    """
+    wanted = frozenset(groups)
+    for clearer, registered in _REGISTERED_CLEARERS:
+        if registered & wanted:
+            clearer()
 
 
-def register_cache_clearer(clearer: Callable[[], None]) -> None:
-    _REGISTERED_CLEARERS.append(clearer)
+_REGISTERED_CLEARERS: list[tuple[Callable[[], None], frozenset[str]]] = []
+
+
+def register_cache_clearer(clearer: Callable[[], None], *, groups: set[str] | None = None) -> None:
+    """Register ``clearer`` for ``clear_api_caches()``; ``groups`` optionally
+    scopes it to ``invalidate_cache_groups()`` calls. No groups = cleared
+    only by a full ``clear_api_caches()``."""
+    _REGISTERED_CLEARERS.append((clearer, frozenset(groups or ())))
 
 
 def get_cache_stats() -> dict[str, Any]:

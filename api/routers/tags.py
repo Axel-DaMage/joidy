@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from models.note import Note, NoteLink, NoteTag, Tag, TagCooccurrence
 from pydantic import BaseModel, Field, field_validator
 from services.gamification_engine import process_event
-from services.response_cache import clear_api_caches, register_cache_clearer, ttl_cache
+from services.response_cache import invalidate_cache_groups, register_cache_clearer, ttl_cache
 from services.sanitizer import MAX_TAG_LENGTH, sanitize_tag
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -35,7 +35,7 @@ def _tags_with_note_counts(db: Session):
     )
 
 
-register_cache_clearer(_tags_with_note_counts.cache_clear)
+register_cache_clearer(_tags_with_note_counts.cache_clear, groups={"tags", "notes"})
 
 
 @router.get("/")
@@ -66,7 +66,7 @@ def create_tag(data: TagCreate, db: Session = Depends(get_db)):
     db.add(tag)
     db.commit()
     db.refresh(tag)
-    clear_api_caches()
+    invalidate_cache_groups("tags")
     if data.parent_id is not None:
         # #1320 — topic_connected is awarded once per (child, parent) pair.
         process_event(
@@ -102,7 +102,7 @@ def set_parent(tag_id: int, parent_id: int | None, db: Session = Depends(get_db)
     old_parent_id = tag.parent_id
     tag.parent_id = parent_id
     db.commit()
-    clear_api_caches()
+    invalidate_cache_groups("tags")
     if parent_id is not None and parent_id != old_parent_id:
         # #1320 — re-parent toggling must not farm XP: each distinct
         # (child, parent) connection awards once, ever.
@@ -236,7 +236,7 @@ def _cached_tag_graph(db: Session):
     return {"nodes": nodes, "edges": edges}
 
 
-register_cache_clearer(_cached_tag_graph.cache_clear)
+register_cache_clearer(_cached_tag_graph.cache_clear, groups={"tags", "notes"})
 
 
 @router.get("/graph")

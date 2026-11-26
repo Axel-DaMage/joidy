@@ -17,7 +17,7 @@ from time import monotonic
 from config import settings
 from models.gamification import StreakRecord, UserStats, XPEvent
 from repositories import ConfigRepository, StreakRecordRepository, UserStatsRepository, XPEventRepository
-from services.response_cache import clear_api_caches
+from services.response_cache import invalidate_cache_groups
 from services.timezone_utils import get_local_today
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -365,7 +365,10 @@ def process_event(
 
     db.commit()
     db.refresh(stats)
-    clear_api_caches()
+    # XP events only affect gamification-derived caches; scoping this keeps
+    # note writes (which call process_event) from nuking the tag graph and
+    # other read caches on every keystroke (#1522).
+    invalidate_cache_groups("gamification")
 
     # Centralized WebSocket broadcasts for gamification
     try:

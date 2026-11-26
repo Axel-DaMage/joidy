@@ -6,7 +6,7 @@ from models.calendar_task import CalendarTask
 from models.goal import Goal
 from models.planning import PlanningAssignment
 from pydantic import BaseModel
-from services.response_cache import clear_api_caches, register_cache_clearer, ttl_cache
+from services.response_cache import invalidate_cache_groups, register_cache_clearer, ttl_cache
 from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/planning", tags=["planning"])
@@ -38,7 +38,7 @@ def _cached_assignments(date: str | None = None, db: Session = Depends(get_db)):
     return {"date": date, "goal_ids": [r.goal_id for r in rows]}
 
 
-register_cache_clearer(_cached_assignments.cache_clear)
+register_cache_clearer(_cached_assignments.cache_clear, groups={"planning"})
 
 
 def _mirror_new_assignments_to_tasks(db: Session, date_obj: date, new_goal_ids: list[int]) -> None:
@@ -86,5 +86,5 @@ def set_assignments(data: AssignmentsIn, db: Session = Depends(get_db)):
     if data.create_calendar_task:
         _mirror_new_assignments_to_tasks(db, date_obj, [gid for gid in data.goal_ids if gid not in previous_ids])
     db.commit()
-    clear_api_caches()
+    invalidate_cache_groups("planning")
     return {"date": data.date, "goal_ids": data.goal_ids}
