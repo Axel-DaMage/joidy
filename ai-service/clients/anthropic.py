@@ -18,6 +18,10 @@ class AnthropicClient(BaseLLMClient):
         self._client = anthropic.AsyncAnthropic(
             api_key=api_key,
             timeout=timeout,
+            # The SDK's own retry layer (default max_retries=2) stays off —
+            # call_with_retry below is authoritative, otherwise every outer
+            # attempt would multiply into up to 3 provider calls (#1620).
+            max_retries=0,
             # trust_env=False so ambient HTTP(S)_PROXY vars are ignored unless
             # PROVIDER_PROXY_URL is explicitly configured (#1330). NOTE: a
             # plain httpx2.AsyncClient is used on purpose — the SDK's

@@ -20,6 +20,7 @@ the same policy to ollama/openrouter:
 import asyncio
 import logging
 import random
+import re
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -32,8 +33,13 @@ logger = logging.getLogger(__name__)
 # google-genai ``APIError.code``.
 _STATUS_ATTRS = ("status_code", "status", "code")
 
-# Last-resort substring markers for errors that expose no typed status —
-# e.g. the generic ``Exception`` raised by the aiohttp-based clients.
+# The aiohttp-based clients (ollama/openrouter) raise untyped ``Exception``s
+# but embed the status as ``(HTTP NNN)`` in the message — parseable so a
+# permanent 4xx never reaches the substring fallback below (#1620).
+_HTTP_STATUS_RE = re.compile(r"HTTP (\d{3})")
+
+# Last-resort substring markers for errors that expose no typed or parseable
+# status — e.g. provider SDKs that only raise a plain message.
 _TRANSIENT_MARKERS = (
     "429",
     "rate limit",
@@ -70,12 +76,18 @@ def is_transient_error(exc: Exception) -> bool:
     ``TimeoutError``/``ConnectionError``, ``asyncio.TimeoutError`` (the same
     builtin on Python 3.11+), and aiohttp's ``ClientOSError``/
     ``ClientConnectorError``. A typed status, when present, takes precedence
-    over message matching so a 4xx can't be retried by accident. Providers
-    extend this with their own transient markers where needed.
+    over message matching so a 4xx can't be retried by accident; an
+    ``HTTP NNN`` status embedded in the message is classified the same way
+    before the substring fallback runs. Providers extend this with their own
+    transient markers where needed.
     """
     if isinstance(exc, OSError):
         return True
     status = http_status(exc)
+    if status is None:
+        match = _HTTP_STATUS_RE.search(str(exc))
+        if match:
+            status = int(match.group(1))
     if status is not None:
         return status == 429 or status >= 500
     msg = str(exc).lower()
@@ -100,8 +112,11 @@ async def call_with_retry(
 
     - ``is_retryable``: predicate deciding whether a failure is retried.
     - ``timeout``: optional per-attempt ``asyncio.wait_for`` budget. A
-      timed-out call is itself retryable (the request is idempotent) and
-      surfaces as a descriptive ``TimeoutError`` once attempts are exhausted.
+      timed-out call is itself retryable and surfaces as a descriptive
+      ``TimeoutError`` once attempts are exhausted. NOTE: a timed-out
+      generation request may already have been billed by the provider —
+      retrying it anyway is an intentional reliability trade-off;
+      ``ai_retry_max_attempts`` caps the amplification (#1620).
     - ``provider``: label used in logs and the timeout message.
 
     Returns ``Any``: provider SDK response types flow opaquely through the

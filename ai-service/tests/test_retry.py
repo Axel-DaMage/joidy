@@ -86,6 +86,39 @@ class TestIsTransientError(unittest.TestCase):
         exc.code = 429
         self.assertTrue(is_transient_error(exc))
 
+    def test_http_status_in_message_is_classified(self):
+        """Untyped ollama/openrouter errors embed `(HTTP NNN)` — the numeric
+        status is classified like a typed one, so a permanent 4xx never
+        retries (#1620)."""
+        from clients.retry import is_transient_error
+
+        for msg in (
+            "Ollama embedding failed (HTTP 429): rate limited",
+            "Ollama generate failed (HTTP 503): overloaded",
+            "OpenRouter failed (HTTP 500): upstream error",
+        ):
+            self.assertTrue(is_transient_error(Exception(msg)), f"msg={msg!r}")
+        for msg in (
+            "Ollama generate failed (HTTP 404): model not found",
+            "OpenRouter failed (HTTP 401): invalid key",
+            "Ollama embedding failed (HTTP 400): bad input",
+        ):
+            self.assertFalse(is_transient_error(Exception(msg)), f"msg={msg!r}")
+
+    def test_parsed_status_beats_substring_markers(self):
+        """A parsed 4xx is permanent even when the message smells transient."""
+        from clients.retry import is_transient_error
+
+        self.assertFalse(is_transient_error(Exception("failed (HTTP 400): connection reset by peer")))
+
+    def test_typed_status_beats_parsed_message(self):
+        """A typed attribute still wins over an `HTTP NNN` in the message."""
+        from clients.retry import is_transient_error
+
+        exc = Exception("request failed (HTTP 400)")
+        exc.status_code = 503
+        self.assertTrue(is_transient_error(exc))
+
     def test_message_markers(self):
         from clients.retry import is_transient_error
 

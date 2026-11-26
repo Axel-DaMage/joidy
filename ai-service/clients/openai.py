@@ -30,6 +30,10 @@ class OpenAIClient(BaseLLMClient, EmbeddingClient):
             api_key=api_key,
             base_url=base_url or None,
             timeout=timeout,
+            # The SDK's own retry layer (default max_retries=2) stays off —
+            # call_with_retry below is authoritative, otherwise every outer
+            # attempt would multiply into up to 3 provider calls (#1620).
+            max_retries=0,
             # trust_env=False so ambient HTTP(S)_PROXY vars are ignored unless
             # PROVIDER_PROXY_URL is explicitly configured (#1330).
             http_client=build_async_http_client(DefaultAsyncHttpx2Client, timeout),
