@@ -263,6 +263,22 @@ class WriteObjectivesTest(VaultWriterTestBase):
         with self.Session() as db:
             self.assertFalse(write_objectives(db))
 
+    def test_persists_source_path_via_commit(self) -> None:
+        """#1597 — write_objectives assigns ``source_path`` in-memory inside
+        ``_write_goal_file``; only its trailing ``db.commit()`` (#1583)
+        persists the update. Verify through a second session so pending,
+        never-committed state on the caller's session cannot satisfy the
+        check — the test fails if that commit is removed."""
+        with self.Session() as db:
+            db.add(Goal(id=1, title="First Goal", description="Desc 1"))
+            db.commit()
+            self.assertTrue(write_objectives(db))
+
+        with self.Session() as verify:
+            goal = verify.get(Goal, 1)
+            self.assertIsNotNone(goal)
+            self.assertEqual(goal.source_path, "Objetivos/1_first-goal.md")
+
 
 class WriteDailyTest(VaultWriterTestBase):
     def test_writes_daily_journal(self) -> None:
