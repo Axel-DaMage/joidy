@@ -2,7 +2,7 @@ import os
 import re
 
 from config import settings
-from models.note import Note, NoteLink, NoteTag, Tag
+from models.note import EmbeddingFailure, Note, NoteEmbedding, NoteLink, NoteTag, Tag
 from services.gamification_engine import (
     GamificationResult,
     process_event,
@@ -17,6 +17,7 @@ from services.tag_graph import (
     sync_tag_cooccurrences_for_tags,
 )
 from services.vault_paths import normalize_source_path, resolve_confined_source_path
+from sqlalchemy import insert
 from sqlalchemy.orm import Session, selectinload
 
 
@@ -316,6 +317,170 @@ def delete_note(db: Session, note_id: int) -> bool:
     sync_skills_for_tags(db, touched_tag_ids)
     clear_api_caches()
     return True
+
+
+def _deduped_tag_names(tag_names: list[str]) -> list[str]:
+    """Sanitize + dedupe (order-preserving) — the bulk-path counterpart of
+    ``get_or_create_tag``'s sanitization chokepoint (#1322)."""
+    seen: set[str] = set()
+    names: list[str] = []
+    for name in tag_names:
+        cleaned = sanitize_tag(name)
+        if cleaned and cleaned not in seen:
+            seen.add(cleaned)
+            names.append(cleaned)
+    return names
+
+
+def _get_or_create_tags_bulk(db: Session, tag_names: list[str]) -> dict[str, Tag]:
+    """Fetch all named tags in one ``IN`` query and batch-create the missing
+    ones, instead of one SELECT (and possible INSERT) per tag (#1520)."""
+    names = _deduped_tag_names(tag_names)
+    if not names:
+        return {}
+    tags_by_name = {t.name: t for t in db.query(Tag).filter(Tag.name.in_(names)).all()}
+    missing = [Tag(name=n) for n in names if n not in tags_by_name]
+    if missing:
+        db.add_all(missing)
+        db.flush()
+        tags_by_name.update({t.name: t for t in missing})
+    return tags_by_name
+
+
+def bulk_tag_notes(db: Session, note_ids: list[int], tag_names: list[str]) -> int:
+    """Attach ``tag_names`` to every existing note in ``note_ids`` (#1520).
+
+    Batched equivalent of the old per-note loop: one ``IN`` fetch with
+    ``selectinload`` for the notes and their current associations, one
+    ``IN`` fetch + batched insert for the tags, and one executemany
+    ``note_tags`` insert — a constant number of statements and a single
+    commit instead of ~2 round trips per note×tag pair. Missing note ids are
+    skipped, existing associations are not duplicated, and duplicate note
+    ids in the request cannot produce a duplicate-PK insert. Returns the
+    number of new note/tag associations.
+    """
+    if not note_ids or not tag_names:
+        return 0
+    notes = db.query(Note).options(selectinload(Note.tags)).filter(Note.id.in_(note_ids)).all()
+    if not notes:
+        return 0
+    tags_by_name = _get_or_create_tags_bulk(db, tag_names)
+
+    touched_tag_ids: set[int] = set()
+    rows: list[dict[str, int]] = []
+    for note in notes:
+        existing = {nt.tag_id for nt in note.tags}
+        for tag in tags_by_name.values():
+            if tag.id in existing:
+                continue
+            existing.add(tag.id)
+            touched_tag_ids.add(tag.id)
+            rows.append({"note_id": note.id, "tag_id": tag.id})
+    if rows:
+        # Column defaults (confidence=1.0, source="manual") apply — identical
+        # to the per-note ``db.add(NoteTag(...))`` path.
+        db.execute(insert(NoteTag), rows)
+
+    if touched_tag_ids:
+        sync_tag_cooccurrences_for_tags(db, touched_tag_ids)
+        sync_skills_for_tags(db, touched_tag_ids)
+    db.commit()
+    return len(rows)
+
+
+def bulk_untag_notes(db: Session, note_ids: list[int], tag_names: list[str]) -> int:
+    """Detach ``tag_names`` from every note in ``note_ids`` (#1520).
+
+    One tag ``IN`` lookup, one distinct ``note_tags`` probe for the actually
+    touched tags, and a single set-level ``DELETE`` — instead of a Tag +
+    NoteTag lookup per note×tag pair. Unknown tag names and notes without
+    the association are skipped exactly like the per-item loop. Returns the
+    number of associations removed.
+    """
+    names = _deduped_tag_names(tag_names)
+    if not note_ids or not names:
+        return 0
+    tag_ids = [t.id for t in db.query(Tag).filter(Tag.name.in_(names)).all()]
+    if not tag_ids:
+        return 0
+
+    assoc_filter = (
+        NoteTag.note_id.in_(note_ids),
+        NoteTag.tag_id.in_(tag_ids),
+    )
+    # Only tags that actually lost an association are "touched" — resyncing
+    # an untouched tag would match the per-item loop's skip behavior.
+    touched_tag_ids = {row[0] for row in db.query(NoteTag.tag_id).filter(*assoc_filter).distinct().all()}
+    removed = db.query(NoteTag).filter(*assoc_filter).delete(synchronize_session=False)
+
+    if touched_tag_ids:
+        sync_tag_cooccurrences_for_tags(db, touched_tag_ids)
+        sync_skills_for_tags(db, touched_tag_ids)
+    db.commit()
+    return removed
+
+
+def bulk_delete_notes(db: Session, note_ids: list[int]) -> int:
+    """Batched ``delete_note`` for the bulk endpoint (#1520).
+
+    One ``IN`` fetch with ``selectinload(Note.tags)``, set-level deletes for
+    every table referencing ``notes.id`` (so nothing depends on DB-level FK
+    cascades, matching the ORM cascade behaviour on every backend), a single
+    aggregated XP revert, one co-occurrence resync over the union of touched
+    tags, and one commit — instead of a note/tags/UserStats/config fetch and
+    a commit per note. Returns the number of notes actually deleted.
+    """
+    if not note_ids:
+        return 0
+    notes = db.query(Note).options(selectinload(Note.tags)).filter(Note.id.in_(note_ids)).all()
+    if not notes:
+        return 0
+    deleted_ids = [n.id for n in notes]
+    touched_tag_ids = {nt.tag_id for n in notes for nt in n.tags}
+
+    # Revert XP awarded for note creation to prevent XP farming — one
+    # UserStats read, one ``note_deleted`` XPEvent row per deleted note, and
+    # a single clamped subtraction (equivalent to the sequential per-note
+    # ``max(0, total - xp)`` updates).
+    from models.gamification import UserStats, XPEvent
+
+    stats = db.query(UserStats).filter(UserStats.id == 1).first()
+    if stats:
+        xp_to_revert = xp_for("note_created", db, 10)
+        stats.total_xp = max(0, stats.total_xp - xp_to_revert * len(deleted_ids))
+        db.add_all(
+            XPEvent(event_type="note_deleted", xp=-xp_to_revert, metadata_json=f'{{"note_id": {nid}}}')
+            for nid in deleted_ids
+        )
+
+    from models.github import GitHubItem
+    from models.goal import Goal
+    from models.sync_state import SyncState
+
+    db.query(NoteLink).filter(
+        NoteLink.source_note_id.in_(deleted_ids) | NoteLink.target_note_id.in_(deleted_ids)
+    ).delete(synchronize_session=False)
+    db.query(NoteTag).filter(NoteTag.note_id.in_(deleted_ids)).delete(synchronize_session=False)
+    db.query(SyncState).filter(SyncState.note_id.in_(deleted_ids)).delete(synchronize_session=False)
+    db.query(NoteEmbedding).filter(NoteEmbedding.note_id.in_(deleted_ids)).delete(synchronize_session=False)
+    db.query(EmbeddingFailure).filter(EmbeddingFailure.note_id.in_(deleted_ids)).delete(synchronize_session=False)
+    # ``ondelete="SET NULL"`` columns — nulled explicitly so the result holds
+    # even where FK cascades are not enforced (e.g. the SQLite test harness).
+    db.query(Goal).filter(Goal.note_id.in_(deleted_ids)).update({Goal.note_id: None}, synchronize_session=False)
+    db.query(GitHubItem).filter(GitHubItem.note_id.in_(deleted_ids)).update(
+        {GitHubItem.note_id: None}, synchronize_session=False
+    )
+    db.query(Note).filter(Note.id.in_(deleted_ids)).delete(synchronize_session=False)
+    # The co-occurrence resync reads note_tags via raw SQL — flush the bulk
+    # deletes first so it never recomputes from pre-delete rows (prod
+    # sessions run with autoflush=False).
+    db.flush()
+
+    sync_tag_cooccurrences_for_tags(db, touched_tag_ids)
+    db.commit()
+    sync_skills_for_tags(db, touched_tag_ids)
+    clear_api_caches()
+    return len(deleted_ids)
 
 
 def accept_ai_tag(db: Session, note_id: int, tag_name: str):

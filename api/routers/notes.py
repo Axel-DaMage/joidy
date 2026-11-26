@@ -19,17 +19,25 @@ from services.note_service import (
     accept_ai_tag as accept_ai_tag_service,
 )
 from services.note_service import (
+    bulk_delete_notes as bulk_delete_notes_service,
+)
+from services.note_service import (
+    bulk_tag_notes as bulk_tag_notes_service,
+)
+from services.note_service import (
+    bulk_untag_notes as bulk_untag_notes_service,
+)
+from services.note_service import (
     create_note as create_note_service,
 )
 from services.note_service import (
     delete_note as delete_note_service,
 )
 from services.note_service import (
-    get_or_create_tag,
-    note_to_response,
+    list_backlinks as list_backlinks_service,
 )
 from services.note_service import (
-    list_backlinks as list_backlinks_service,
+    note_to_response,
 )
 from services.note_service import (
     rebuild_derived_data as rebuild_note_derived_data,
@@ -39,8 +47,6 @@ from services.note_service import (
 )
 from services.pagination import add_pagination_headers
 from services.sanitizer import MAX_TAG_LENGTH, sanitize_content, sanitize_tag, sanitize_title
-from services.skill_tree import sync_skills_for_tags
-from services.tag_graph import sync_tag_cooccurrences_for_tags
 from services.vault_paths import normalize_source_path, resolve_confined_source_path
 from sqlalchemy import text
 from sqlalchemy.orm import Session, defer, selectinload
@@ -449,54 +455,21 @@ def rebuild_derived(db: Session = Depends(get_db)):
 
 @router.post("/bulk-delete", status_code=200)
 def bulk_delete(data: BulkIds, db: Session = Depends(get_db)):
-    deleted = 0
-    for nid in data.ids:
-        if delete_note_service(db, nid):
-            deleted += 1
+    # Batched in note_service: one IN fetch + set-level deletes + one commit
+    # instead of a per-note query/commit loop (#1520).
+    deleted = bulk_delete_notes_service(db, data.ids)
     return {"deleted": deleted, "total": len(data.ids)}
 
 
 @router.post("/bulk-tag", status_code=200)
 def bulk_tag(data: BulkTagRequest, db: Session = Depends(get_db)):
-    touched_tags: set[int] = set()
-    added = 0
-    for nid in data.ids:
-        note = db.query(Note).filter(Note.id == nid).first()
-        if not note:
-            continue
-        existing = {nt.tag_id for nt in note.tags}
-        for tag_name in data.tags:
-            tag = get_or_create_tag(db, tag_name)
-            if tag.id not in existing:
-                db.add(NoteTag(note_id=nid, tag_id=tag.id))
-                touched_tags.add(tag.id)
-                added += 1
-    if touched_tags:
-        sync_tag_cooccurrences_for_tags(db, touched_tags)
-        sync_skills_for_tags(db, touched_tags)
-    db.commit()
+    added = bulk_tag_notes_service(db, data.ids, data.tags)
     return {"added": added, "notes": len(data.ids), "tags": data.tags}
 
 
 @router.post("/bulk-untag", status_code=200)
 def bulk_untag(data: BulkTagRequest, db: Session = Depends(get_db)):
-    removed = 0
-    touched_tags: set[int] = set()
-    for nid in data.ids:
-        for tag_name in data.tags:
-            # data.tags is already sanitized/normalized by BulkTagRequest.validate_tags
-            tag = db.query(Tag).filter(Tag.name == tag_name).first()
-            if not tag:
-                continue
-            nt = db.query(NoteTag).filter(NoteTag.note_id == nid, NoteTag.tag_id == tag.id).first()
-            if nt:
-                db.delete(nt)
-                touched_tags.add(tag.id)
-                removed += 1
-    if touched_tags:
-        sync_tag_cooccurrences_for_tags(db, touched_tags)
-        sync_skills_for_tags(db, touched_tags)
-    db.commit()
+    removed = bulk_untag_notes_service(db, data.ids, data.tags)
     return {"removed": removed, "notes": len(data.ids), "tags": data.tags}
 
 
