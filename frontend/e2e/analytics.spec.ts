@@ -20,7 +20,8 @@ test.describe('Analytics — dedicated page', () => {
     expect(count).toBeGreaterThanOrEqual(5);
     for (let i = 0; i < count; i++) {
       await tabs.nth(i).click();
-      await page.waitForTimeout(500);
+      // Wait for the slide switch to settle before measuring overflow.
+      await expect(tabs.nth(i)).toHaveAttribute('aria-selected', 'true');
       const overflow = await page.evaluate(() => {
         const bad: string[] = [];
         document.querySelectorAll('.ad-root *').forEach((el) => {

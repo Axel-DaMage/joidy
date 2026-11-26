@@ -1,0 +1,10 @@
+# CI-only compose override (frontend-e2e job): bind-mount the runner's
+# node_modules into the frontend container instead of the anonymous volume.
+# The e2e job runs `npm ci` on the host before boot anyway — reusing it
+# skips the image->volume copy AND lets `vite optimize` pre-warm
+# node_modules/.vite so the dev server is ready in seconds.
+services:
+  frontend:
+    volumes:
+      - ./frontend:/app
+      - ./frontend/node_modules:/app/node_modules

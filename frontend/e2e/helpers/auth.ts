@@ -101,19 +101,23 @@ export async function dismissConflictModal(page: Page): Promise<void> {
  */
 export async function authGoto(page: Page, path: string): Promise<void> {
   await page.goto(path);
-  // Wait for DOM to be ready, then try networkidle with a short timeout
-  // (networkidle may never fire due to WebSocket connections)
+  // Wait for DOM to be ready. No networkidle: the app keeps a WebSocket
+  // open (/ws notifications), so networkidle never resolves and this call
+  // would burn its full timeout on EVERY navigation (~165 per suite).
   await page.waitForLoadState('domcontentloaded');
-  await page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => {});
   // Wait for the app shell: the layout renders a `.boot-screen`
   // ("Cargando Joidy…") until the setup-status request resolves, and on
   // cold boot that latency can exceed the per-spec locator timeouts,
   // flaking tests like the GitHub widget check (#1599). Absorbing boot
   // time here keeps each spec's timeout scoped to the element under test;
   // a failure waiting on this locator means the app never booted, which
-  // stays distinguishable in the output from a missing widget.
+  // stays distinguishable in the output from a missing widget. The
+  // assertion-level locators that follow carry their own auto-wait.
   await page.locator('main.app-main').waitFor({ state: 'visible', timeout: 30_000 });
-  await page.waitForTimeout(500);
+  // Short settle for the async sync-conflict modal check below — the
+  // modal only exists when the API reports a conflict (never in CI), but
+  // on dev databases it can mount a tick after the shell.
+  await page.waitForTimeout(250);
   await dismissConflictModal(page);
 }
 
