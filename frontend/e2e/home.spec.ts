@@ -138,6 +138,10 @@ test.describe('Home — clock', () => {
 
 test.describe('Home — GitHub widget', () => {
   test('GitHub widget section is visible', async ({ page }) => {
+    // authGoto waits for the app shell (main.app-main), so cold-boot
+    // latency is already absorbed before this assertion runs — a timeout
+    // here means the widget is genuinely missing, not that the app was
+    // still booting (#1599).
     await authGoto(page, '/');
     // The activity widget always renders a section header: the "GitHub" tab
     // when an account is linked, or the "Notas recientes" heading when it
