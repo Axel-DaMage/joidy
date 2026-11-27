@@ -9,11 +9,9 @@ it in ``_PROVIDERS`` — no schema or call-site changes.
 
 from services.email_providers.base import EmailProvider, NormalizedEmail, ProviderCapabilityError
 from services.email_providers.gmail import GmailProvider
-from services.email_providers.n8n import N8nProvider
 
 _PROVIDERS: dict[str, EmailProvider] = {
     GmailProvider.provider: GmailProvider(),
-    N8nProvider.provider: N8nProvider(),
 }
 
 

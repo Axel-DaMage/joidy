@@ -497,42 +497,10 @@ export interface AchievementUnlockResult extends AchievementRecord {
   already_unlocked: boolean;
 }
 
-export interface EmailSummary {
-  id: number;
-  account: string;
-  /** FK to the owning email_accounts row (#1659); null for legacy/unlinked. */
-  account_id: number | null;
-  gmail_id: string;
-  thread_id: string | null;
-  subject: string | null;
-  sender: string | null;
-  snippet: string | null;
-  received_at: string | null;
-  unread: boolean;
-  important: boolean;
-  importance_reason: string | null;
-  labels: string[];
-  created_at: string | null;
-  updated_at: string | null;
-}
-
-export interface EmailAccountStats {
-  /** Mailbox label (n8n payload account string / email address). */
-  account: string;
-  /** Owning email_accounts row id when the label maps to an account (#1659). */
-  account_id: number | null;
-  provider: string | null;
-  display_name: string | null;
-  is_active: boolean | null;
-  total: number;
-  unread: number;
-  important: number;
-}
-
 /** Serialized email_accounts row — credentials stay server-side (#1659). */
 export interface EmailAccount {
   id: number;
-  provider: 'gmail' | 'outlook' | 'imap' | 'n8n' | string;
+  provider: 'gmail' | 'outlook' | 'imap' | string;
   email_address: string;
   display_name: string | null;
   is_active: boolean;
@@ -545,19 +513,9 @@ export interface EmailAccount {
   watch?: { configured: boolean; state: GmailWatchState | null } | null;
 }
 
-export interface GmailAccountSyncResult {
-  mode: string;
-  synced: number;
-  deleted: number;
-  history_pages: number;
-  account_id: number;
-  cursor: string | null;
-}
-
 // ── Gmail API (#42) ──────────────────────────────────────────────────────────
-// Native Gmail client surface served by /integrations/gmail/* (JWT-protected).
-// Distinct from the n8n-synced /emails inbox above: these are live Gmail API
-// resources keyed by Gmail message ids, not local EmailMessage rows.
+// Native Gmail client surface served by /integrations/gmail/* (JWT-protected):
+// live Gmail API resources keyed by Gmail message ids.
 
 export interface GmailWatchState {
   topic_name: string | null;
@@ -734,11 +692,6 @@ export interface PlanSuggestResponse {
   reason?: string;
   provider?: string;
   status?: string;
-}
-
-export interface EmailInbox {
-  items: EmailSummary[];
-  total: number;
 }
 
 export interface UsageSummary {
@@ -1432,36 +1385,7 @@ export const api = {
     stats: () => req<MoodStats>('GET', '/mood/stats'),
   },
 
-  emails: {
-    list: (
-      filters: {
-        unread?: boolean;
-        important?: boolean;
-        account?: string;
-        /** Scope to one email_accounts row (#1659); preferred over `account`. */
-        accountId?: number;
-        q?: string;
-        limit?: number;
-        skip?: number;
-      } = {}
-    ) => {
-      const params = new URLSearchParams();
-      if (filters.unread !== undefined) params.set('unread', String(filters.unread));
-      if (filters.important !== undefined) params.set('important', String(filters.important));
-      if (filters.account) params.set('account', filters.account);
-      if (filters.accountId !== undefined) params.set('account_id', String(filters.accountId));
-      if (filters.q) params.set('q', filters.q);
-      params.set('limit', String(filters.limit ?? 200));
-      params.set('skip', String(filters.skip ?? 0));
-      return req<EmailInbox>('GET', `/emails/?${params.toString()}`);
-    },
-    accounts: () => req<EmailAccountStats[]>('GET', '/emails/accounts'),
-    patch: (id: number, data: { unread?: boolean; important?: boolean }) =>
-      req<EmailSummary>('PATCH', `/emails/${id}`, data),
-    remove: (id: number) => req<void>('DELETE', `/emails/${id}`),
-  },
-
-  // ── Gmail API (#42) — native Gmail client; complements the n8n /emails inbox.
+  // ── Gmail API (#42) — native Gmail client.
   // Errors: 401/403 → Google reconnect (scope bump), 404, 429, 413 attachment.
   // `accountId` scopes any call to one connected mailbox's credentials (#1659);
   // omitting it keeps the legacy shared-Google-connection behavior.
@@ -1479,8 +1403,6 @@ export const api = {
         req<EmailAccount>('PATCH', `/integrations/gmail/accounts/${accountId}`, data),
       disconnect: (accountId: number) =>
         req<void>('DELETE', `/integrations/gmail/accounts/${accountId}`),
-      sync: (accountId: number) =>
-        req<GmailAccountSyncResult>('POST', `/integrations/gmail/accounts/${accountId}/sync`),
     },
     list: (
       params: {

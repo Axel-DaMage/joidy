@@ -1,12 +1,11 @@
 """Email provider abstraction (#1659).
 
-The contract every mailbox provider implements so the unified inbox, the
-native mail clients and the sync paths stay provider-agnostic. Gmail ships
-first (``gmail.py``); ``n8n`` is an ingestion-only provider whose messages
-arrive by push; Outlook (Microsoft Graph) and generic IMAP slot in by
-subclassing ``EmailProvider`` and registering in ``__init__.py`` — no schema
-change, because ``email_accounts.credentials``/``sync_cursor``/
-``watch_state`` are opaque per-provider payloads.
+The contract every mailbox provider implements so the native mail clients
+stay provider-agnostic. Gmail ships first (``gmail.py``); Outlook (Microsoft
+Graph) and generic IMAP slot in by subclassing ``EmailProvider`` and
+registering in ``__init__.py`` — no schema change, because
+``email_accounts.credentials``/``sync_cursor``/``watch_state`` are opaque
+per-provider payloads.
 
 Adding a provider
 -----------------
@@ -17,11 +16,12 @@ Adding a provider
 3. Define the shape of the account's ``credentials`` JSON blob and the
    meaning of its ``sync_cursor`` (e.g. Gmail historyId, IMAP UID, Graph
    deltaToken) — both are opaque to everything outside the provider.
-4. ``normalize()`` must return a ``NormalizedEmail`` so any provider feeds
-   the same ``email_messages`` rows.
+4. ``normalize()`` must return a ``NormalizedEmail`` so any provider yields
+   the same provider-agnostic message shape.
 
-Push-only providers (like n8n) raise ``ProviderCapabilityError`` from the
-poll/watch methods — ingestion happens through ``POST /emails`` instead.
+Providers without a changes feed or push support raise
+``ProviderCapabilityError`` from those methods; callers then fall back to a
+bounded ``list_messages`` poll.
 """
 
 from abc import ABC, abstractmethod
@@ -34,10 +34,10 @@ class ProviderCapabilityError(RuntimeError):
 
 
 class NormalizedEmail(TypedDict, total=False):
-    """Provider-agnostic shape fed to ``email_service.upsert_email``.
+    """Provider-agnostic normalized message shape.
 
-    ``remote_id`` is the provider's stable message id (stored in the
-    ``gmail_id`` column, which keeps its historical name).
+    ``remote_id`` is the provider's stable message id (the Gmail message id
+    for ``provider="gmail"``).
     """
 
     remote_id: str

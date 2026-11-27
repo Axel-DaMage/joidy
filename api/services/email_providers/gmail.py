@@ -63,7 +63,12 @@ class GmailProvider(EmailProvider):
     async def get_message(self, credentials: dict[str, Any], message_id: str) -> dict[str, Any]:
         return await gms.get_message(self._token(credentials), message_id)
 
-    async def watch(self, credentials: dict[str, Any], label_ids: list[str] | None = None, **kwargs: Any) -> dict[str, Any]:
+    async def watch(
+        self,
+        credentials: dict[str, Any],
+        label_ids: list[str] | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
         """users.watch — callers persist the returned dict on
         ``account.watch_state`` (topic/historyId/expiration)."""
         return await gms.request_watch(self._token(credentials), label_ids=label_ids)

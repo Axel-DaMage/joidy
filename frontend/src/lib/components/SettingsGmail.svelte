@@ -107,21 +107,6 @@
     }
   }
 
-  async function syncAccount(account: EmailAccount): Promise<void> {
-    if (busyAccountId !== null) return;
-    busyAccountId = account.id;
-    try {
-      const result = await api.gmail.accounts.sync(account.id);
-      showNotification($t('gmail.accounts.syncOk', { values: { count: result.synced } }), 'success');
-      await load();
-    } catch (e) {
-      logger.error(e);
-      showNotification($t('gmail.accounts.syncError'), 'error');
-    } finally {
-      busyAccountId = null;
-    }
-  }
-
   function accountLabel(account: EmailAccount): string {
     const address = account.email_address === '__pending__' ? '' : account.email_address;
     return account.display_name || address || $t('gmail.accounts.pending');
@@ -212,11 +197,8 @@
           <div class="account-row">
             <span class="account-name" class:inactive={!account.is_active}>{accountLabel(account)}</span>
             <span class="account-actions">
-              <button class="link-btn ghost" onclick={() => void syncAccount(account)} disabled={busyAccountId !== null}>
-                {busyAccountId === account.id ? $t('gmail.accounts.syncing') : $t('gmail.accounts.sync')}
-              </button>
               <button class="link-btn ghost" onclick={() => void disconnectAccount(account)} disabled={busyAccountId !== null}>
-                {$t('gmail.accounts.disconnect')}
+                {busyAccountId === account.id ? $t('gmail.accounts.disconnecting') : $t('gmail.accounts.disconnect')}
               </button>
             </span>
           </div>

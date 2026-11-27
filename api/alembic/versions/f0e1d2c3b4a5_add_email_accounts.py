@@ -1,7 +1,7 @@
-"""add email_accounts + email_messages.account_id (multi-account mail, #1659)
+"""add email_accounts (multi-account mail, #1659)
 
 Revision ID: f0e1d2c3b4a5
-Revises: c6d7e8f9a0b1
+Revises: e7f8a9b0c1d2
 Create Date: 2026-12-02 00:00:00.000000
 
 Introduces the provider-agnostic ``email_accounts`` table — one row per
@@ -10,22 +10,16 @@ opaque ``sync_cursor`` (Gmail historyId today; UIDVALIDITY/deltaToken later)
 and a per-account ``watch_state`` JSON that replaces the single global
 ``gmail_watch_state`` system_config key for account-scoped mailboxes.
 
-``email_messages`` gains ``account_id`` FK → email_accounts.id
-(ON DELETE SET NULL — disconnecting an account keeps the synced mail).
-
 Data migration, transparent for existing installs:
 
-1. Every DISTINCT ``email_messages.account`` string gets an ``n8n`` provider
-   account row and the messages are backfilled onto it — n8n stays a
-   first-class ingestion provider.
-2. The single ``google_tokens`` row (if present) is copied into a ``gmail``
+1. The single ``google_tokens`` row (if present) is copied into a ``gmail``
    account whose ``credentials`` blob re-encrypts the same access/refresh
    tokens. The shared ``google_tokens`` row is left untouched: calendar and
    contacts still use it, and the gmail account now owns an independent
    refresh token. Its real ``email_address`` is unknown inside a migration
    (no network), so the row starts as ``__pending__`` and is resolved via
    ``users.getProfile`` on first use at runtime.
-3. The legacy ``gmail_watch_state`` system_config value is moved onto that
+2. The legacy ``gmail_watch_state`` system_config value is moved onto that
    account's ``watch_state``/``sync_cursor`` so the per-account history
    cursor survives.
 """
@@ -42,7 +36,7 @@ from cryptography.fernet import Fernet, InvalidToken
 
 # revision identifiers, used by Alembic.
 revision: str = "f0e1d2c3b4a5"
-down_revision: str | None = "c6d7e8f9a0b1"
+down_revision: str | None = "e7f8a9b0c1d2"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -78,39 +72,6 @@ def _maybe_decrypt(fernet: Fernet, value: str | None) -> str | None:
         return fernet.decrypt(value.encode()).decode()
     except InvalidToken:
         return value
-
-
-def _migrate_n8n_accounts(conn) -> None:
-    """One n8n email_accounts row per distinct pushed ``account`` string, then
-    backfill email_messages.account_id."""
-    accounts = conn.execute(
-        sa.text("SELECT DISTINCT user_id, account FROM email_messages ORDER BY user_id, account")
-    ).all()
-    for user_id, account in accounts:
-        address = (account or "")[:320]
-        if not address:
-            continue
-        conn.execute(
-            sa.text(
-                "INSERT INTO email_accounts "
-                "(user_id, provider, email_address, display_name, is_active) "
-                "VALUES (:uid, 'n8n', :addr, :name, true)"
-            ),
-            {"uid": user_id, "addr": address, "name": address},
-        )
-        row_id = conn.execute(
-            sa.text(
-                "SELECT id FROM email_accounts WHERE user_id = :uid AND provider = 'n8n' AND email_address = :addr"
-            ),
-            {"uid": user_id, "addr": address},
-        ).scalar()
-        conn.execute(
-            sa.text(
-                "UPDATE email_messages SET account_id = :aid "
-                "WHERE user_id = :uid AND account = :addr AND account_id IS NULL"
-            ),
-            {"aid": row_id, "uid": user_id, "addr": account},
-        )
 
 
 def _migrate_google_token(conn, fernet: Fernet) -> None:
@@ -195,19 +156,7 @@ def upgrade() -> None:
     op.create_index("ix_email_accounts_id", "email_accounts", ["id"], unique=False)
     op.create_index("ix_email_accounts_user_id", "email_accounts", ["user_id"], unique=False)
 
-    op.add_column("email_messages", sa.Column("account_id", sa.Integer(), nullable=True))
-    op.create_index("ix_email_messages_account_id", "email_messages", ["account_id"], unique=False)
-    op.create_foreign_key(
-        "fk_email_messages_account_id",
-        "email_messages",
-        "email_accounts",
-        ["account_id"],
-        ["id"],
-        ondelete="SET NULL",
-    )
-
     conn = op.get_bind()
-    _migrate_n8n_accounts(conn)
     # No swallow: if the credential copy fails (e.g. missing SECRET_KEY), the
     # alembic transaction rolls back cleanly instead of leaving a gmail
     # account row without credentials that could never work.
@@ -215,11 +164,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # email_messages keeps its ``account`` label — no mail data is lost when
-    # the accounts table goes away.
-    op.drop_constraint("fk_email_messages_account_id", "email_messages", type_="foreignkey")
-    op.drop_index("ix_email_messages_account_id", table_name="email_messages")
-    op.drop_column("email_messages", "account_id")
     op.drop_index("ix_email_accounts_user_id", table_name="email_accounts")
     op.drop_index("ix_email_accounts_id", table_name="email_accounts")
     op.drop_table("email_accounts")

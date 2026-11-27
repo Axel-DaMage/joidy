@@ -18,11 +18,10 @@ from sqlalchemy.orm import Mapped, mapped_column
 # ``EmailProvider`` contract in ``services/email_providers/`` — the schema is
 # intentionally provider-agnostic so no migration is needed to add one.
 PROVIDER_GMAIL = "gmail"
-PROVIDER_N8N = "n8n"
 PROVIDER_OUTLOOK = "outlook"
 PROVIDER_IMAP = "imap"
 
-KNOWN_PROVIDERS = frozenset({PROVIDER_GMAIL, PROVIDER_N8N, PROVIDER_OUTLOOK, PROVIDER_IMAP})
+KNOWN_PROVIDERS = frozenset({PROVIDER_GMAIL, PROVIDER_OUTLOOK, PROVIDER_IMAP})
 
 # Sentinel ``email_address`` for the Gmail account created by the migration
 # from the legacy single ``google_tokens`` row — the real address is resolved
@@ -32,7 +31,7 @@ PLACEHOLDER_EMAIL = "__pending__"
 
 
 class EmailAccount(Base):
-    """A connected mailbox/provider account feeding the unified inbox.
+    """A connected mailbox/provider account.
 
     One row per (user, provider, email_address). ``credentials`` is an
     encrypted JSON blob whose shape is defined by the provider:
@@ -40,9 +39,6 @@ class EmailAccount(Base):
     - ``gmail``: ``{access_token, refresh_token, expires_at, scope, token_type}``
       (per-account OAuth grant; refresh tokens are provider-issued and
       independent, so several Gmail mailboxes coexist).
-    - ``n8n``: empty — n8n is a push ingestion channel, not a credentialled
-      provider; its rows exist so ``email_messages.account_id`` always has a
-      referent and pushed mail shows up as a first-class account.
     - ``outlook``/``imap``: reserved — OAuth blob / host+login settings land
       here with no schema change.
 

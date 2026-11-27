@@ -21,10 +21,8 @@ from typing import Any
 from models.email_account import (
     PLACEHOLDER_EMAIL,
     PROVIDER_GMAIL,
-    PROVIDER_N8N,
     EmailAccount,
 )
-from models.email_message import EmailMessage
 from services import gmail_service as gms
 from services import google_service as gs
 from services import google_token_service as gts
@@ -98,21 +96,6 @@ def get_or_create_account(
     return account
 
 
-def resolve_message_account(db: Session, user_id: int, account_str: str) -> EmailAccount:
-    """Pick the ``email_accounts`` row an ingested message belongs to.
-
-    A pushed ``account`` string matching a credentialled mailbox (e.g. the
-    gmail account for ``me@gmail.com``) links the message to that account so
-    n8n-pushed and API-synced mail for one mailbox share a single chip.
-    Otherwise an ``n8n`` provider row is get-or-created — ingestion keeps
-    working with zero account setup.
-    """
-    for account in list_accounts(db, user_id):
-        if account.provider != PROVIDER_N8N and account.email_address == account_str:
-            return account
-    return get_or_create_account(db, user_id, PROVIDER_N8N, account_str, display_name=account_str)
-
-
 def update_account(
     db: Session,
     account: EmailAccount,
@@ -130,8 +113,7 @@ def update_account(
 
 
 def delete_account(db: Session, account: EmailAccount) -> None:
-    """Disconnect: drops the row (and its credentials) — synced messages keep
-    their ``account`` label with ``account_id`` SET NULL."""
+    """Disconnect: drops the row and its credentials."""
     db.delete(account)
     db.commit()
 
@@ -271,8 +253,7 @@ async def resolve_pending_profile(db: Session, account: EmailAccount) -> bool:
 
     The alembic migration cannot call Google, so the migrated gmail row
     carries the placeholder until its first use. On success the address is
-    written, ``sync_cursor`` is seeded from the profile historyId, and mail
-    previously pushed under that address (n8n) is re-linked onto this row.
+    written and ``sync_cursor`` is seeded from the profile historyId.
     """
     if account.provider != PROVIDER_GMAIL or account.email_address != PLACEHOLDER_EMAIL:
         return True
@@ -308,26 +289,6 @@ async def resolve_pending_profile(db: Session, account: EmailAccount) -> bool:
     if history_id is not None and not account.sync_cursor:
         account.sync_cursor = str(history_id)
     db.commit()
-
-    # Re-link mail pushed for this address onto the gmail account, then drop
-    # the now-orphaned n8n placeholder row when it holds no messages.
-    n8n_row = get_account_by_address(db, account.user_id, PROVIDER_N8N, address)
-    if n8n_row is not None:
-        moved = (
-            db.query(EmailMessage)
-            .filter(EmailMessage.user_id == account.user_id, EmailMessage.account_id == n8n_row.id)
-            .update({EmailMessage.account_id: account.id}, synchronize_session=False)
-        )
-        if moved:
-            logger.info("[email-accounts] re-linked %s messages to gmail account %s", moved, account.id)
-        remaining = (
-            db.query(EmailMessage)
-            .filter(EmailMessage.user_id == account.user_id, EmailMessage.account_id == n8n_row.id)
-            .count()
-        )
-        if remaining == 0:
-            db.delete(n8n_row)
-        db.commit()
     return True
 
 

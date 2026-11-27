@@ -48,13 +48,13 @@ def _seed_notes(db_session: Session, count: int) -> list[Note]:
     return notes
 
 
-def _attach_tag(db_session: Session, note_id: int, name: str, source: str = "manual") -> Tag:
+def _attach_tag(db_session: Session, note_id: int, name: str) -> Tag:
     tag = db_session.query(Tag).filter(Tag.name == name).first()
     if tag is None:
         tag = Tag(name=name)
         db_session.add(tag)
         db_session.flush()
-    db_session.add(NoteTag(note_id=note_id, tag_id=tag.id, source=source))
+    db_session.add(NoteTag(note_id=note_id, tag_id=tag.id))
     db_session.flush()
     return tag
 
@@ -156,7 +156,7 @@ def test_bulk_untag_query_count_bounded(client: TestClient, db_session: Session,
     tag_objs = [Tag(name=t) for t in tags]
     db_session.add_all(tag_objs)
     db_session.flush()
-    db_session.add_all(NoteTag(note_id=note.id, tag_id=tag.id, source="manual") for note in notes for tag in tag_objs)
+    db_session.add_all(NoteTag(note_id=note.id, tag_id=tag.id) for note in notes for tag in tag_objs)
     db_session.flush()
     with _count_statements(_db_engine) as statements:
         res = client.post("/notes/bulk-untag", json={"ids": [n.id for n in notes], "tags": tags})

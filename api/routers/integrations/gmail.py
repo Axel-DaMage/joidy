@@ -2,9 +2,9 @@
 
 Dedicated Gmail API surface over the shared Google OAuth connection managed
 by ``routers/integrations/google.py`` — every call proxies to
-gmail.googleapis.com with the stored (auto-refreshed) access token. This
-complements, not replaces, the n8n → ``/emails`` sync path (different
-architecture, untouched).
+gmail.googleapis.com with the stored (auto-refreshed) access token. This is
+the only mail ingest path: the former push-based ``/emails`` inbox fed by
+the external automation hub was removed (#1508).
 
 Reads need ``gmail.readonly``; label mutations (archive/trash/unread) need
 ``gmail.modify``; sending needs ``gmail.send``/``gmail.modify``. Tokens
@@ -18,7 +18,6 @@ param, where credentials would leak into logs (same hardening as
 ``X-Spotify-Token``/``X-Strava-Token``, #1372).
 """
 
-import html as html_module
 import logging
 
 import httpx
@@ -28,11 +27,10 @@ from fastapi.responses import HTMLResponse
 from models.email_account import PLACEHOLDER_EMAIL, PROVIDER_GMAIL, EmailAccount
 from pydantic import BaseModel, Field
 from services import email_account_service as eas
-from services import email_sync_service as ess
 from services import gmail_service as gms
 from services import google_service as gs
 from services import google_token_service as gts
-from services import oauth_state
+from services import oauth_flow, oauth_state
 from services.auth_service import get_current_user
 from sqlalchemy.orm import Session
 
@@ -196,15 +194,6 @@ class GmailAuthUrl(BaseModel):
     url: str
 
 
-class GmailAccountSyncOut(BaseModel):
-    mode: str
-    synced: int
-    deleted: int = 0
-    history_pages: int = 0
-    account_id: int
-    cursor: str | None = None
-
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -239,24 +228,34 @@ async def _account_token(db: Session, account: EmailAccount, capability: str) ->
     return token
 
 
+def _require_capability(capability: str) -> oauth_flow.CapabilityCheck:
+    """Build the stored-token gate that 403s when the Google grant lacks
+    ``capability`` — the client can then prompt a reconnect."""
+
+    def check(db: Session) -> None:
+        try:
+            gms.require_capability(db, capability)
+        except gms.GmailReconsentRequired as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+    return check
+
+
 async def _read_token(token: str | None, db: Session, account: EmailAccount | None = None) -> str:
     """Resolve the access token for read calls: an explicit ``X-Google-Token``
     header wins, else the account's credentials (#1659), else the
     stored/auto-refreshed shared Google token (same semantics as google.py).
     The override arrives by header only — credentials never travel in the
     query string (#1461)."""
-    if token:
-        return token
-    if account is not None:
+    if account is not None and token is None:
         return await _account_token(db, account, "read")
-    stored = await gts.get_valid_access_token(db)
-    if not stored:
-        raise HTTPException(status_code=401, detail="Google no está conectado")
-    try:
-        gms.require_capability(db, "read")
-    except gms.GmailReconsentRequired as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
-    return stored
+    return await oauth_flow.resolve_access_token(
+        db,
+        header_token=token,
+        get_stored=gts.get_valid_access_token,
+        not_connected_detail="Google no está conectado",
+        check_capability=_require_capability("read"),
+    )
 
 
 async def _scoped_token(db: Session, capability: str, account: EmailAccount | None = None) -> str:
@@ -265,14 +264,13 @@ async def _scoped_token(db: Session, capability: str, account: EmailAccount | No
     under-scoped grants fail before hitting Google."""
     if account is not None:
         return await _account_token(db, account, capability)
-    stored = await gts.get_valid_access_token(db)
-    if not stored:
-        raise HTTPException(status_code=401, detail="Google no está conectado")
-    try:
-        gms.require_capability(db, capability)
-    except gms.GmailReconsentRequired as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
-    return stored
+    return await oauth_flow.resolve_access_token(
+        db,
+        header_token=None,
+        get_stored=gts.get_valid_access_token,
+        not_connected_detail="Google no está conectado",
+        check_capability=_require_capability(capability),
+    )
 
 
 def _parse_label_ids(value: str | None) -> list[str] | None:
@@ -430,18 +428,18 @@ async def handle_gmail_connect_callback(code: str, error: str, state: str, db: S
     shared ``google_tokens`` row.
     """
     if error:
-        return _account_callback_page(ok=False, message="Error de autorización con Google")
+        return oauth_flow.callback_page(ok=False, message="Error de autorización con Google")
     if not code:
-        return _account_callback_page(ok=False, message="Falta el código de autorización")
+        return oauth_flow.callback_page(ok=False, message="Falta el código de autorización")
     if not oauth_state.verify_state(state, "gmail"):
-        return _account_callback_page(ok=False, message="Estado OAuth inválido o expirado", status_code=403)
+        return oauth_flow.callback_page(ok=False, message="Estado OAuth inválido o expirado", status_code=403)
 
     try:
         tokens = await gs.exchange_code(code)
     except httpx.HTTPStatusError:
-        return _account_callback_page(ok=False, message="Intercambio de token con Google falló")
+        return oauth_flow.callback_page(ok=False, message="Intercambio de token con Google falló")
     except RuntimeError:
-        return _account_callback_page(ok=False, message="Google OAuth no está configurado")
+        return oauth_flow.callback_page(ok=False, message="Google OAuth no está configurado")
 
     access_token = tokens.get("access_token", "")
     address = PLACEHOLDER_EMAIL
@@ -454,24 +452,7 @@ async def handle_gmail_connect_callback(code: str, error: str, state: str, db: S
             profile = None
 
     await eas.store_gmail_tokens(db, 1, address, tokens, profile=profile)
-    return _account_callback_page(ok=True, message="Cuenta de Gmail conectada")
-
-
-def _account_callback_page(ok: bool, message: str, status_code: int = 200) -> HTMLResponse:
-    """Self-closing popup page — same pattern as the google OAuth callback."""
-    icon = "OK" if ok else "ERROR"
-    color = "#2e9e4f" if ok else "#c0392b"
-    safe = html_module.escape(message or "", quote=True)
-    page = f"""<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>Joidy</title></head>
-<body style="font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
-<div style="text-align:center">
-<p style="font-size:15px;color:{color};font-weight:600">{icon} — {safe}</p>
-<p style="font-size:12px;color:#777">Puedes cerrar esta ventana.</p>
-</div>
-<script>setTimeout(function(){{ window.close(); }}, 1200);</script>
-</body></html>"""
-    return HTMLResponse(content=page, status_code=status_code)
+    return oauth_flow.callback_page(ok=True, message="Cuenta de Gmail conectada")
 
 
 @router.patch("/accounts/{account_id}", response_model=EmailAccountOut)
@@ -511,28 +492,6 @@ async def disconnect_gmail_account(
         except Exception as exc:  # noqa: BLE001 — disconnect must not fail on a dead watch
             logger.warning("[gmail] users.stop failed while disconnecting account %s: %s", account_id, exc)
     eas.delete_account(db, account)
-
-
-@router.post("/accounts/{account_id}/sync", response_model=GmailAccountSyncOut)
-async def sync_gmail_account(
-    account_id: int,
-    db: Session = Depends(get_db),
-    user: int | None = Depends(get_current_user),
-):
-    """Pull this mailbox's mail into the unified ``/emails`` inbox — historyId
-    incremental when a cursor exists, bounded backfill otherwise (#1659)."""
-    uid = user or 1
-    account = await _resolve_account(db, uid, account_id)
-    try:
-        return await ess.sync_account(db, uid, account)
-    except ess.AccountNotConnected as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
-    except ess.ProviderNotSyncable as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except gms.GmailReconsentRequired as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
-    except httpx.HTTPStatusError as exc:
-        raise _google_http_error(exc) from exc
 
 
 @router.get("/messages", response_model=GmailMessageListOut)

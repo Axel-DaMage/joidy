@@ -7,7 +7,6 @@
     "ai": "AI",
     "goals": "Goals",
     "streaks": "Streaks",
-    "emails": "Mail",
     "gmail": "Gmail",
     "calendar": "Calendar",
     "analytics": "Analytics",
@@ -120,26 +119,6 @@
     "loadError": "Could not load the calendar",
     "loadErrorHint": "Check your connection and try again."
   },
-  "emails": {
-    "title": "Mail",
-    "subtitle": "Unified inbox (synced via n8n)",
-    "searchPlaceholder": "Search by subject, sender or text...",
-    "importantOnly": "Important",
-    "unreadOnly": "Unread",
-    "allAccounts": "All accounts",
-    "markRead": "Mark read",
-    "markUnread": "Mark unread",
-    "toggleImportant": "Toggle importance",
-    "deleted": "Email removed from the view",
-    "emptyImportant": "No important emails pending",
-    "emptyUnread": "Inbox zero: no unread mail",
-    "emptyAll": "No synced emails yet",
-    "emptyNew": "When n8n pushes its first message it will appear here",
-    "noResults": "No results for that search",
-    "runFailed": "Could not load emails",
-    "unreadBadge": "unread",
-    "syncHint": "Emails arrive automatically with the n8n workflow"
-  },
   "gmail": {
     "title": "Gmail",
     "subtitle": "Native Gmail inbox (Google API)",
@@ -230,12 +209,9 @@
       "connect": "Connect account",
       "add": "Add account",
       "disconnect": "Disconnect",
+      "disconnecting": "Disconnecting…",
       "disconnected": "Account disconnected",
       "disconnectError": "Could not disconnect the account",
-      "sync": "Sync to inbox",
-      "syncing": "Syncing…",
-      "syncOk": "Synced {count} messages to the inbox",
-      "syncError": "Could not sync the account",
       "pending": "Pending mailbox"
     }
   },
