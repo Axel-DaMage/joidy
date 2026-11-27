@@ -1,11 +1,15 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { goto } from '$app/navigation';
   import {
     api,
     type CalendarEvent,
     type CalendarTask,
     type CalendarTaskPriority,
     type CalendarTaskRecurrence,
+    type Goal,
+    type Note,
+    type PersonalStreak,
     type PlanSuggestion,
   } from '$lib/api';
   import { logger } from '$lib/utils/logger';
@@ -17,10 +21,32 @@
     fireTaskNotification,
     requestNotificationPermission,
   } from '$lib/utils/taskReminders';
+  import PlanningCalendar, {
+    type CalendarDayBadge,
+    type CalendarDayChip,
+  } from '$lib/components/calendar/PlanningCalendar.svelte';
+  import CalendarLayerToggles from '$lib/components/calendar/CalendarLayerToggles.svelte';
+  import {
+    CHIP_DENSITY_LIMITS,
+    agendaDaysFor,
+    assignedIdsForDate,
+    calendarLayers,
+    chipDensity,
+    goPlanningToday,
+    loadAssignmentsForRange,
+    monthCellsFor,
+    planningAssignments,
+    planningCursor,
+    planningSelectedDay,
+    planningView,
+    selectPlanningDay,
+    setPlanningView,
+    shiftPlanningPeriod,
+    weekDaysFor,
+  } from '$lib/stores/planningCalendar';
   import ChevronLeft from 'lucide-svelte/icons/chevron-left';
   import ChevronRight from 'lucide-svelte/icons/chevron-right';
   import ChevronDown from 'lucide-svelte/icons/chevron-down';
-  import CalendarDays from 'lucide-svelte/icons/calendar-days';
   import Inbox from 'lucide-svelte/icons/inbox';
   import RefreshCw from 'lucide-svelte/icons/refresh-cw';
   import Settings from 'lucide-svelte/icons/settings';
@@ -32,6 +58,7 @@
   import Check from 'lucide-svelte/icons/check';
   import Repeat from 'lucide-svelte/icons/repeat';
   import Sparkles from 'lucide-svelte/icons/sparkles';
+  import Target from 'lucide-svelte/icons/target';
   import EmptyState from '$lib/components/EmptyState.svelte';
   import { t } from 'svelte-i18n';
 
@@ -77,24 +104,10 @@
   let loadError = $state(false);
   let syncing = $state(false);
 
-  type CalendarView = 'month' | 'week' | 'agenda';
-  let currentView = $state<CalendarView>(
-    (typeof localStorage !== 'undefined' &&
-      (localStorage.getItem('joidy-calendar-view') as CalendarView)) ||
-      'month'
-  );
-  let weekOffset = $state(0);
-
-  function setView(view: CalendarView): void {
-    currentView = view;
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('joidy-calendar-view', view);
-    }
-  }
-
-  let viewYear = $state(new Date().getFullYear());
-  let viewMonth = $state(new Date().getMonth()); // 0-based
-  let selectedDay = $state<string | null>(null);
+  // View mode, cursor and day selection live in the shared planning-calendar
+  // store (#1660) — Goals → Planificación reads/writes the same state, and
+  // view/layer/density prefs persist under `calendarUi` in user settings.
+  let selectedDay = $derived($planningSelectedDay);
 
   // Quick-add state
   let quickAddTitle = $state('');
@@ -158,26 +171,9 @@
     if (next === todayKey) return false;
     const prev = todayKey;
     todayKey = next;
-    if (selectedDay === prev) selectedDay = next;
+    if ($planningSelectedDay === prev) selectPlanningDay(next);
     return true;
   }
-
-  // Grid cells (Monday-first): 6 weeks × 7 days, with in-month flags.
-  let gridCells = $derived.by(() => {
-    const first = new Date(viewYear, viewMonth, 1);
-    const offset = (first.getDay() + 6) % 7; // Monday = 0
-    const cells: { day: number; inMonth: boolean; key: string }[] = [];
-    const start = new Date(viewYear, viewMonth, 1 - offset);
-    for (let i = 0; i < 42; i++) {
-      const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
-      cells.push({
-        day: d.getDate(),
-        inMonth: d.getMonth() === viewMonth,
-        key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
-      });
-    }
-    return cells;
-  });
 
   let monthEvents = $derived.by(() => {
     const byDay = new Map<string, CalendarEvent[]>();
@@ -212,48 +208,46 @@
     return byDay;
   });
 
-  let monthItems = $derived.by(() => {
-    const byDay = new Map<string, DayItem[]>();
-    // A task mirrored to Google (google_event_id) renders as the editable
-    // task chip only — skip its cached read-only Google copy so it doesn't
-    // appear twice on the same day.
-    const mirroredGoogleIds = new Set(
-      tasks.map((t) => t.google_event_id).filter((id): id is string => id !== null)
-    );
-    for (const [key, evts] of monthEvents) {
-      const visible = evts.filter((ev) => !mirroredGoogleIds.has(ev.google_id));
-      if (visible.length === 0) continue;
-      byDay.set(
-        key,
-        visible.map((ev) => ({
-          kind: 'google' as const,
+  // A task mirrored to Google (google_event_id) renders as the editable
+  // task chip only — skip its cached read-only Google copy so it doesn't
+  // appear twice on the same day.
+  let mirroredGoogleIds = $derived(
+    new Set(tasks.map((t) => t.google_event_id).filter((id): id is string => id !== null))
+  );
+
+  // Per-day items (Google events + calendar_tasks), honoring the layer
+  // toggles — feeds the day-detail panel; chipsForDay() projects the same
+  // data plus planning goals and AI suggestions into the shared grid (#1660).
+  function dayItems(iso: string): DayItem[] {
+    const items: DayItem[] = [];
+    if ($calendarLayers.google) {
+      for (const ev of monthEvents.get(iso) ?? []) {
+        if (mirroredGoogleIds.has(ev.google_id)) continue;
+        items.push({
+          kind: 'google',
           id: ev.google_id,
           time: ev.all_day ? null : dtFormatter.format(new Date(ev.start_at)),
           label: ev.summary || '—',
           location: ev.location,
           allDay: ev.all_day,
-        }))
-      );
+        });
+      }
     }
-    for (const [key, dayTasks] of monthTasks) {
-      const list = byDay.get(key) ?? [];
-      for (const task of dayTasks) {
-        list.push({
-          kind: 'task' as const,
+    if ($calendarLayers.tasks) {
+      for (const task of monthTasks.get(iso) ?? []) {
+        items.push({
+          kind: 'task',
           time: task.start_time ? task.start_time.slice(0, 5) : null,
           label: task.title,
           task,
         });
       }
-      byDay.set(key, list);
     }
-    for (const list of byDay.values()) {
-      list.sort((a, b) => (a.time ?? '99:99').localeCompare(b.time ?? '99:99'));
-    }
-    return byDay;
-  });
+    items.sort((a, b) => (a.time ?? '99:99').localeCompare(b.time ?? '99:99'));
+    return items;
+  }
 
-  let selectedDayItems = $derived(selectedDay ? (monthItems.get(selectedDay) ?? []) : []);
+  let selectedDayItems = $derived(selectedDay ? dayItems(selectedDay) : []);
 
   // Unscheduled queue ("sin planificar", #1234): tasks with no date.
   let unscheduledTasks = $derived(
@@ -273,119 +267,261 @@
     }
   }
 
-  // Week view: 7 days based on current weekOffset. Anchored to `todayKey`
-  // (not `new Date()`) so the derived recomputes on midnight rollover.
-  let weekDays = $derived.by(() => {
-    const today = parseLocalDate(todayKey);
-    const dayOfWeek = (today.getDay() + 6) % 7; // Monday = 0
-    const monday = new Date(
-      today.getFullYear(),
-      today.getMonth(),
-      today.getDate() - dayOfWeek + weekOffset * 7
-    );
-    const days: { day: number; key: string; weekdayIndex: number; monthName: string }[] = [];
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      days.push({
-        day: d.getDate(),
-        key,
-        weekdayIndex: i,
-        monthName: $t(`calendar.months.${d.getMonth()}`),
-      });
-    }
-    return days;
+  // Every day currently reachable by the shared grid (month + week + agenda
+  // windows around the cursor) — bounds the events/tasks fetch and the
+  // assignment prefetch. ISO keys sort lexicographically.
+  let visibleDays = $derived.by(() => {
+    const days = new Set<string>();
+    for (const c of monthCellsFor($planningCursor)) days.add(c.iso);
+    for (const d of weekDaysFor($planningCursor)) days.add(d);
+    for (const d of agendaDaysFor($planningCursor)) days.add(d);
+    return [...days].sort();
   });
 
-  let weekLabel = $derived.by(() => {
-    if (weekDays.length === 0) return '';
-    const first = weekDays[0];
-    const last = weekDays[6];
-    // Year comes from the week itself: `viewYear` tracks month navigation,
-    // which week navigation (weekOffset) never touches.
-    const firstYear = first.key.slice(0, 4);
-    const lastYear = last.key.slice(0, 4);
-    if (first.monthName === last.monthName) {
-      return `${first.day} - ${last.day} ${first.monthName} ${firstYear}`;
-    }
-    const firstPart =
-      firstYear !== lastYear
-        ? `${first.day} ${first.monthName} ${firstYear}`
-        : `${first.day} ${first.monthName}`;
-    return `${firstPart} - ${last.day} ${last.monthName} ${lastYear}`;
+  let fetchRange = $derived({
+    start: visibleDays[0],
+    end: visibleDays[visibleDays.length - 1],
   });
 
-  // Agenda view: Next 14 days starting from today (or selectedDay if set)
-  let agendaDays = $derived.by(() => {
-    const start = parseLocalDate(todayKey);
-    const days: { date: Date; key: string; items: DayItem[] }[] = [];
-    for (let i = 0; i < 14; i++) {
-      const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      const items = monthItems.get(key) ?? [];
-      days.push({ date: d, key, items });
+  // Toolbar period label, matching the three view modes.
+  let periodLabel = $derived.by(() => {
+    if ($planningView === 'month') {
+      const d = parseLocalDate($planningCursor);
+      return `${$t(`calendar.months.${d.getMonth()}`)} ${d.getFullYear()}`;
     }
-    return days;
-  });
-
-  // Union of every view's visible day range — bounds the cached-events and
-  // task fetches so we never pull the whole table. Keys are YYYY-MM-DD
-  // strings, so lexicographic compare orders them.
-  let fetchRange = $derived.by(() => {
-    const firsts = [gridCells[0]?.key, weekDays[0]?.key, agendaDays[0]?.key].filter(
-      (k): k is string => k !== undefined
-    );
-    const lasts = [
-      gridCells[gridCells.length - 1]?.key,
-      weekDays[weekDays.length - 1]?.key,
-      agendaDays[agendaDays.length - 1]?.key,
-    ].filter((k): k is string => k !== undefined);
-    return {
-      start: firsts.reduce((a, b) => (b < a ? b : a)),
-      end: lasts.reduce((a, b) => (b > a ? b : a)),
-    };
+    if ($planningView === 'week') {
+      const days = weekDaysFor($planningCursor);
+      const first = parseLocalDate(days[0]);
+      const last = parseLocalDate(days[6]);
+      const firstMonth = $t(`calendar.months.${first.getMonth()}`);
+      const lastMonth = $t(`calendar.months.${last.getMonth()}`);
+      const firstYear = days[0].slice(0, 4);
+      const lastYear = days[6].slice(0, 4);
+      if (firstMonth === lastMonth) {
+        return `${first.getDate()} - ${last.getDate()} ${firstMonth} ${firstYear}`;
+      }
+      const firstPart =
+        firstYear !== lastYear
+          ? `${first.getDate()} ${firstMonth} ${firstYear}`
+          : `${first.getDate()} ${firstMonth}`;
+      return `${firstPart} - ${last.getDate()} ${lastMonth} ${lastYear}`;
+    }
+    return `${$t('calendar.views.agenda')} (14 ${$t('calendar.agendaDays')})`;
   });
 
   function prevRange(): void {
-    if (currentView === 'week') {
-      weekOffset -= 1;
-    } else {
-      if (viewMonth === 0) {
-        viewYear -= 1;
-        viewMonth = 11;
-      } else {
-        viewMonth -= 1;
-      }
-    }
+    shiftPlanningPeriod(-1);
     void refresh();
   }
 
   function nextRange(): void {
-    if (currentView === 'week') {
-      weekOffset += 1;
-    } else {
-      if (viewMonth === 11) {
-        viewYear += 1;
-        viewMonth = 0;
-      } else {
-        viewMonth += 1;
-      }
-    }
+    shiftPlanningPeriod(1);
     void refresh();
   }
 
   function goToday(): void {
-    viewYear = new Date().getFullYear();
-    viewMonth = new Date().getMonth();
-    weekOffset = 0;
+    goPlanningToday();
     todayKey = currentDayKey();
-    selectedDay = todayKey;
     void refresh();
   }
 
-  function eventTime(ev: CalendarEvent): string {
-    if (ev.all_day) return $t('calendar.allDay');
-    return dtFormatter.format(new Date(ev.start_at));
+  // ── Shared-grid projection (#1660) ───────────────────────────────────────
+  // Flatten every data source into CalendarDayChip/CalendarDayBadge — the
+  // component owns layout, density overflow ("+N more") and drag plumbing.
+
+  let goals = $state<Goal[]>([]);
+  let goalsFetched = $state(false);
+  let goalsById = $derived(new Map(goals.map((g) => [g.id, g])));
+
+  // Planning layer: goal list is fetched lazily the first time the layer is
+  // on — goal chips need titles/colors the assignment cache doesn't carry.
+  $effect(() => {
+    if (!$calendarLayers.planning || goalsFetched) return;
+    goalsFetched = true;
+    api.goals
+      .list(0, 500)
+      .then((list) => (goals = list))
+      .catch((e) => {
+        goalsFetched = false;
+        logger.error('[calendar] goals fetch failed:', e);
+      });
+  });
+
+  $effect(() => {
+    if (!$calendarLayers.planning) return;
+    loadAssignmentsForRange(visibleDays).catch(logger.error);
+  });
+
+  // Streaks layer: check-in state as day-cell badges, lazily fetched.
+  let streaks = $state<PersonalStreak[]>([]);
+  let streaksFetched = $state(false);
+  $effect(() => {
+    if (!$calendarLayers.streaks || streaksFetched) return;
+    streaksFetched = true;
+    api.personalStreaks
+      .list()
+      .then((list) => (streaks = list))
+      .catch((e) => {
+        streaksFetched = false;
+        logger.error('[calendar] streaks fetch failed:', e);
+      });
+  });
+
+  // Notes layer: count badge per day, lazily fetched.
+  let calendarNotes = $state<Note[]>([]);
+  let notesFetched = $state(false);
+  $effect(() => {
+    if (!$calendarLayers.notes || notesFetched) return;
+    notesFetched = true;
+    api.notes
+      .list()
+      .then((list) => (calendarNotes = list))
+      .catch((e) => {
+        notesFetched = false;
+        logger.error('[calendar] notes fetch failed:', e);
+      });
+  });
+
+  let notesCountByDay = $derived.by(() => {
+    const byDay = new Map<string, number>();
+    for (const note of calendarNotes) {
+      const key = note.created_at.slice(0, 10);
+      byDay.set(key, (byDay.get(key) ?? 0) + 1);
+    }
+    return byDay;
+  });
+
+  function chipsForDay(iso: string): CalendarDayChip[] {
+    const layers = $calendarLayers;
+    const assigned = layers.planning
+      ? assignedIdsForDate($planningAssignments, iso)
+      : [];
+    const assignedSet = new Set(assigned);
+    const chips: CalendarDayChip[] = [];
+
+    // AI ghost proposals render first so the density overflow can never
+    // hide them behind "+N more" (#1237).
+    for (const sugg of planByDay.get(iso) ?? []) {
+      chips.push({
+        key: `sg-${sugg.task_id}-${sugg.date}`,
+        kind: 'suggestion',
+        label: planTaskTitle(sugg.task_id),
+        time: sugg.start_time.slice(0, 5),
+        ghost: true,
+        title: sugg.rationale || $t('calendar.planAcceptHint'),
+        payload: sugg,
+      });
+    }
+
+    for (const item of dayItems(iso)) {
+      if (item.kind === 'google') {
+        chips.push({
+          key: `g-${item.id}`,
+          kind: 'google',
+          label: item.label,
+          time: item.time,
+          allDay: item.allDay,
+          locked: true,
+          title: item.location ? `${item.label} · ${item.location}` : item.label,
+          payload: item,
+        });
+      } else {
+        // A task mirrored from a planning assignment (goal_id assigned to a
+        // bucket this date belongs to) renders as the goal chip only (#1234).
+        if (
+          layers.planning &&
+          item.task.goal_id != null &&
+          assignedSet.has(item.task.goal_id)
+        ) {
+          continue;
+        }
+        chips.push({
+          key: `t-${item.task.id}`,
+          kind: 'task',
+          label: item.label,
+          time: item.time,
+          priority: item.task.priority,
+          done: item.task.done,
+          recurring: item.task.recurrence !== 'NONE',
+          draggable: true,
+          title: item.task.title,
+          payload: item.task,
+        });
+      }
+    }
+
+    for (const id of assigned) {
+      const goal = goalsById.get(id);
+      if (!goal) continue;
+      chips.push({
+        key: `goal-${id}-${iso}`,
+        kind: 'goal',
+        label: goal.title,
+        color: goal.color ?? 'var(--accent)',
+        title: goal.title,
+        payload: goal,
+      });
+    }
+    return chips;
+  }
+
+  function badgesForDay(iso: string): CalendarDayBadge[] {
+    const layers = $calendarLayers;
+    const badges: CalendarDayBadge[] = [];
+    if (layers.streaks) {
+      for (const streak of streaks) {
+        if (streak.is_archived) continue;
+        const entry = streak.history?.find((h) => h.date === iso);
+        badges.push({
+          key: `s-${streak.id}`,
+          kind: 'streak',
+          icon: streak.icon || streak.emoji,
+          color: streak.color || 'var(--xp)',
+          checked: entry?.checked ?? false,
+          title: streak.name,
+        });
+      }
+    }
+    if (layers.notes) {
+      const count = notesCountByDay.get(iso) ?? 0;
+      if (count > 0) {
+        badges.push({
+          key: 'notes',
+          kind: 'note',
+          count,
+          title: $t('calendar.layer.notes'),
+        });
+      }
+    }
+    return badges;
+  }
+
+  function onSelectDay(iso: string): void {
+    selectPlanningDay($planningSelectedDay === iso ? null : iso);
+  }
+
+  function onChipClick(chip: CalendarDayChip, iso: string): void {
+    if (chip.kind === 'suggestion' && chip.payload) {
+      void acceptSuggestion(chip.payload as PlanSuggestion);
+      return;
+    }
+    // Task/google/goal chips behave like a cell click — select the day and
+    // let the detail panel show the actionable list.
+    onSelectDay(iso);
+  }
+
+  // Goals assigned to the selected day (planning layer detail).
+  let selectedDayGoals = $derived.by(() => {
+    if (!selectedDay || !$calendarLayers.planning) return [];
+    return assignedIdsForDate($planningAssignments, selectedDay)
+      .map((id) => goalsById.get(id))
+      .filter((g): g is Goal => Boolean(g));
+  });
+
+  // Deep-jump into Goals → Planificación; the shared store carries the
+  // selection across navigation (#1660).
+  function openInGoals(): void {
+    void goto('/goals?tab=planning');
   }
 
   async function refresh(): Promise<void> {
@@ -647,10 +783,15 @@
   let draggedTask = $state<CalendarTask | null>(null);
   let dropTargetKey = $state<string | null>(null);
 
-  function onChipDragStart(event: DragEvent, task: CalendarTask): void {
+  function startTaskDrag(event: DragEvent, task: CalendarTask): void {
     draggedTask = task;
     event.dataTransfer?.setData('text/plain', String(task.id));
     if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+  }
+
+  function onChipDragStart(event: DragEvent, chip: CalendarDayChip): void {
+    if (chip.kind !== 'task' || !chip.payload) return;
+    startTaskDrag(event, chip.payload as CalendarTask);
   }
 
   function onChipDragEnd(): void {
@@ -665,7 +806,7 @@
     dropTargetKey = cellKey;
   }
 
-  function onCellDragLeave(cellKey: string): void {
+  function onCellDragLeave(_event: DragEvent, cellKey: string): void {
     if (dropTargetKey === cellKey) dropTargetKey = null;
   }
 
@@ -934,29 +1075,29 @@
           <div class="view-switcher">
             <button
               class="btn btn-ghost view-btn"
-              class:active={currentView === 'month'}
-              aria-pressed={currentView === 'month'}
-              onclick={() => setView('month')}>{$t('calendar.views.month')}</button
+              class:active={$planningView === 'month'}
+              aria-pressed={$planningView === 'month'}
+              onclick={() => setPlanningView('month')}>{$t('calendar.views.month')}</button
             >
             <button
               class="btn btn-ghost view-btn"
-              class:active={currentView === 'week'}
-              aria-pressed={currentView === 'week'}
-              onclick={() => setView('week')}>{$t('calendar.views.week')}</button
+              class:active={$planningView === 'week'}
+              aria-pressed={$planningView === 'week'}
+              onclick={() => setPlanningView('week')}>{$t('calendar.views.week')}</button
             >
             <button
               class="btn btn-ghost view-btn"
-              class:active={currentView === 'agenda'}
-              aria-pressed={currentView === 'agenda'}
-              onclick={() => setView('agenda')}>{$t('calendar.views.agenda')}</button
+              class:active={$planningView === 'agenda'}
+              aria-pressed={$planningView === 'agenda'}
+              onclick={() => setPlanningView('agenda')}>{$t('calendar.views.agenda')}</button
             >
           </div>
 
-          {#if currentView !== 'agenda'}
+          {#if $planningView !== 'agenda'}
             <button
               class="btn btn-ghost nav-btn"
               onclick={prevRange}
-              aria-label={currentView === 'week'
+              aria-label={$planningView === 'week'
                 ? $t('calendar.prevWeek')
                 : $t('calendar.prevMonth')}
             >
@@ -964,29 +1105,23 @@
             </button>
           {/if}
 
-          <span class="month-label">
-            {#if currentView === 'month'}
-              {$t(`calendar.months.${viewMonth}`)} {viewYear}
-            {:else if currentView === 'week'}
-              {weekLabel}
-            {:else}
-              {$t('calendar.views.agenda')} (14 {$t('calendar.agendaDays')})
-            {/if}
-          </span>
+          <span class="month-label">{periodLabel}</span>
 
           <button class="btn btn-ghost nav-btn" onclick={goToday}>{$t('calendar.today')}</button>
 
-          {#if currentView !== 'agenda'}
+          {#if $planningView !== 'agenda'}
             <button
               class="btn btn-ghost nav-btn"
               onclick={nextRange}
-              aria-label={currentView === 'week'
+              aria-label={$planningView === 'week'
                 ? $t('calendar.nextWeek')
                 : $t('calendar.nextMonth')}
             >
               <ChevronRight size={16} />
             </button>
           {/if}
+
+          <CalendarLayerToggles />
 
           <button
             class="btn btn-ghost nav-btn plan-btn"
@@ -1002,221 +1137,25 @@
           </button>
         </div>
 
-        {#if currentView === 'month'}
-          <div class="weekday-row">
-            {#each Array(7) as _, i}
-              <span class="weekday caption">{$t(`calendar.weekDays.${i}`)}</span>
-            {/each}
-          </div>
+        <PlanningCalendar
+          view={$planningView}
+          cursor={$planningCursor}
+          todayIso={todayKey}
+          selectedDay={$planningSelectedDay}
+          chipsForDay={chipsForDay}
+          badgesForDay={badgesForDay}
+          maxChips={CHIP_DENSITY_LIMITS[$chipDensity]}
+          dropTargetKey={dropTargetKey}
+          draggingChipKey={draggedTask ? `t-${draggedTask.id}` : null}
+          onselectday={onSelectDay}
+          onchipclick={onChipClick}
+          oncelldragover={onCellDragOver}
+          oncelldragleave={onCellDragLeave}
+          oncelldrop={onCellDrop}
+          onchipdragstart={onChipDragStart}
+          onchipdragend={onChipDragEnd}
+        />
 
-          <div class="day-grid">
-            {#each gridCells as cell (cell.key)}
-              {@const items = monthItems.get(cell.key) ?? []}
-              <button
-                class="day-cell"
-                class:out={!cell.inMonth}
-                class:today={cell.key === todayKey}
-                class:selected={selectedDay === cell.key}
-                class:drop-target={dropTargetKey === cell.key}
-                draggable={items.some((i) => i.kind === 'task')}
-                ondragover={(e) => onCellDragOver(e, cell.key)}
-                ondragleave={() => onCellDragLeave(cell.key)}
-                ondrop={(e) => onCellDrop(e, cell.key)}
-                onclick={() => (selectedDay = selectedDay === cell.key ? null : cell.key)}
-              >
-                <span class="day-num">{cell.day}</span>
-                <span class="cell-items">
-                  {#each items.slice(0, 2) as item}
-                    {#if item.kind === 'google'}
-                      <span class="chip chip-google"><Lock size={8} />{item.label}</span>
-                    {:else}
-                      <span
-                        class="chip {priorityClass(item.task.priority)}"
-                        class:done={item.task.done}
-                        class:dragging={draggedTask?.id === item.task.id}
-                        role="button"
-                        tabindex="-1"
-                        draggable="true"
-                        ondragstart={(e) => onChipDragStart(e, item.task)}
-                        ondragend={onChipDragEnd}
-                        >{#if item.task.recurrence !== 'NONE'}<Repeat
-                            size={8}
-                            class="recur-icon"
-                          />{/if}{item.label}</span
-                      >
-                    {/if}
-                  {/each}
-                  {#if items.length > 2}
-                    <span class="chip chip-more">+{items.length - 2}</span>
-                  {/if}
-                  {#each planByDay.get(cell.key) ?? [] as sugg (sugg.task_id)}
-                    <span
-                      class="chip chip-ghost"
-                      role="button"
-                      tabindex="-1"
-                      title={sugg.rationale || $t('calendar.planAcceptHint')}
-                      onclick={(e) => {
-                        e.stopPropagation();
-                        acceptSuggestion(sugg);
-                      }}
-                      onkeydown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.stopPropagation();
-                          acceptSuggestion(sugg);
-                        }
-                      }}><Sparkles size={7} />{sugg.start_time} {planTaskTitle(sugg.task_id)}</span
-                    >
-                  {/each}
-                </span>
-              </button>
-            {/each}
-          </div>
-        {:else if currentView === 'week'}
-          <div class="weekday-row">
-            {#each weekDays as day}
-              <span class="weekday caption" class:bold={day.key === todayKey}>
-                {$t(`calendar.weekDays.${day.weekdayIndex}`)}
-                {day.day}
-              </span>
-            {/each}
-          </div>
-
-          <div class="week-grid">
-            {#each weekDays as day (day.key)}
-              {@const items = monthItems.get(day.key) ?? []}
-              <div
-                class="week-col"
-                class:today={day.key === todayKey}
-                class:selected={selectedDay === day.key}
-                class:drop-target={dropTargetKey === day.key}
-                role="region"
-                aria-label={day.key}
-                ondragover={(e) => onCellDragOver(e, day.key)}
-                ondragleave={() => onCellDragLeave(day.key)}
-                ondrop={(e) => onCellDrop(e, day.key)}
-              >
-                <button
-                  class="week-col-header"
-                  onclick={() => (selectedDay = selectedDay === day.key ? null : day.key)}
-                >
-                  <span class="day-num">{day.day}</span>
-                  <span class="caption">{items.length}</span>
-                </button>
-                <div class="week-col-items">
-                  {#each items as item}
-                    {#if item.kind === 'google'}
-                      <div class="chip chip-google">
-                        <Lock size={8} />
-                        <span class="chip-time">{item.time || ''}</span>
-                        <span class="chip-label">{item.label}</span>
-                      </div>
-                    {:else}
-                      <div
-                        class="chip {priorityClass(item.task.priority)}"
-                        class:done={item.task.done}
-                        class:dragging={draggedTask?.id === item.task.id}
-                        role="button"
-                        tabindex="-1"
-                        draggable="true"
-                        ondragstart={(e) => onChipDragStart(e, item.task)}
-                        ondragend={onChipDragEnd}
-                      >
-                        {#if item.time}<span class="chip-time">{item.time}</span>{/if}
-                        {#if item.task.recurrence !== 'NONE'}<Repeat
-                            size={8}
-                            class="recur-icon"
-                          />{/if}
-                        <span class="chip-label">{item.label}</span>
-                      </div>
-                    {/if}
-                  {/each}
-                  {#each planByDay.get(day.key) ?? [] as sugg (sugg.task_id)}
-                    <button
-                      class="chip chip-ghost"
-                      title={sugg.rationale || $t('calendar.planAcceptHint')}
-                      onclick={() => acceptSuggestion(sugg)}
-                    >
-                      <Sparkles size={7} />
-                      <span class="chip-time">{sugg.start_time}</span>
-                      <span class="chip-label">{planTaskTitle(sugg.task_id)}</span>
-                    </button>
-                  {/each}
-                </div>
-              </div>
-            {/each}
-          </div>
-        {:else if currentView === 'agenda'}
-          <div class="agenda-view">
-            {#each agendaDays as day (day.key)}
-              <div
-                class="agenda-day-row"
-                class:today={day.key === todayKey}
-                class:selected={selectedDay === day.key}
-                role="button"
-                tabindex="0"
-                onclick={() => (selectedDay = selectedDay === day.key ? null : day.key)}
-                onkeydown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    selectedDay = selectedDay === day.key ? null : day.key;
-                  }
-                }}
-              >
-                <div class="agenda-date-badge">
-                  <span class="day-num">{day.date.getDate()}</span>
-                  <span class="caption"
-                    >{day.date.toLocaleDateString($locale, {
-                      weekday: 'short',
-                      month: 'short',
-                    })}</span
-                  >
-                </div>
-                <div class="agenda-day-items">
-                  {#if day.items.length === 0}
-                    <span class="caption empty-agenda-day">{$t('calendar.noEventsDay')}</span>
-                  {:else}
-                    {#each day.items as item}
-                      <div
-                        class="agenda-item-pill"
-                        class:done={item.kind === 'task' && item.task.done}
-                      >
-                        {#if item.kind === 'google'}
-                          <Lock size={9} class="lock-icon" />
-                          <span class="chip-time caption"
-                            >{item.allDay ? $t('calendar.allDay') : item.time}</span
-                          >
-                          <span class="pill-title">{item.label}</span>
-                        {:else}
-                          <span class="priority-dot {priorityClass(item.task.priority)}"></span>
-                          {#if item.time}<span class="chip-time caption">{item.time}</span>{/if}
-                          {#if item.task.recurrence !== 'NONE'}<Repeat
-                              size={9}
-                              class="recur-icon"
-                            />{/if}
-                          <span class="pill-title">{item.label}</span>
-                        {/if}
-                      </div>
-                    {/each}
-                  {/if}
-                  {#each planByDay.get(day.key) ?? [] as sugg (sugg.task_id)}
-                    <button
-                      class="agenda-item-pill chip-ghost"
-                      title={sugg.rationale || $t('calendar.planAcceptHint')}
-                      onclick={(e) => {
-                        e.stopPropagation();
-                        acceptSuggestion(sugg);
-                      }}
-                    >
-                      <Sparkles size={9} class="lock-icon" />
-                      <span class="chip-time caption">{sugg.start_time}</span>
-                      <span class="pill-title">{planTaskTitle(sugg.task_id)}</span>
-                    </button>
-                  {/each}
-                </div>
-              </div>
-            {/each}
-          </div>
-        {/if}
       </div>
 
       <div class="day-detail">
@@ -1365,6 +1304,25 @@
             </div>
           {/if}
 
+          {#if selectedDayGoals.length > 0}
+            <div class="planning-assigned">
+              <span class="caption planning-assigned-title"
+                ><Target size={11} />{$t('calendar.assignedGoals')}</span
+              >
+              {#each selectedDayGoals as goal (goal.id)}
+                <div
+                  class="planning-goal"
+                  style="border-left: 3px solid {goal.color ?? 'var(--accent)'}"
+                >
+                  <span class="planning-goal-title">{goal.title}</span>
+                </div>
+              {/each}
+              <button class="btn btn-ghost planning-link" onclick={openInGoals}
+                >{$t('calendar.openInGoals')}</button
+              >
+            </div>
+          {/if}
+
           <form
             class="quick-add"
             onsubmit={(e) => {
@@ -1506,7 +1464,7 @@
                 role="button"
                 tabindex="-1"
                 draggable="true"
-                ondragstart={(e) => onChipDragStart(e, task)}
+                ondragstart={(e) => startTaskDrag(e, task)}
                 ondragend={onChipDragEnd}
               >
                 <button
@@ -1617,196 +1575,6 @@
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
   }
 
-  .weekday.bold {
-    font-weight: 700;
-    color: var(--xp);
-  }
-
-  /* Week Grid */
-  .week-grid {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    grid-template-rows: 1fr;
-    gap: 6px;
-    flex: 1;
-    min-height: 0;
-    overflow: hidden;
-  }
-
-  .week-col {
-    display: flex;
-    flex-direction: column;
-    border: 1px solid var(--border);
-    border-radius: calc(var(--r) * 0.7);
-    background: var(--surface-2, rgba(255, 255, 255, 0.02));
-    min-height: 0;
-    overflow: hidden;
-    transition: border-color 0.15s ease;
-  }
-
-  .week-col.today {
-    border-color: var(--xp);
-    background: color-mix(in srgb, var(--xp) 8%, transparent);
-  }
-
-  .week-col.selected {
-    border-color: var(--xp);
-    box-shadow: 0 0 0 1px var(--xp);
-  }
-
-  .week-col.drop-target {
-    border-color: var(--xp);
-    background: color-mix(in srgb, var(--xp) 18%, transparent);
-  }
-
-  .week-col-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 4px 6px;
-    border: none;
-    border-bottom: 1px solid var(--border);
-    background: transparent;
-    cursor: pointer;
-    color: inherit;
-    width: 100%;
-  }
-
-  .week-col-header:hover {
-    background: var(--hover);
-  }
-
-  .week-col-items {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    padding: 6px;
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
-  }
-
-  .week-col-items .chip {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    width: 100%;
-    box-sizing: border-box;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .chip-time {
-    font-size: 9px;
-    opacity: 0.75;
-    flex-shrink: 0;
-  }
-
-  .chip-label {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    flex: 1;
-  }
-
-  /* Agenda View */
-  .agenda-view {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
-    padding-right: 4px;
-  }
-
-  .agenda-day-row {
-    display: flex;
-    align-items: flex-start;
-    gap: 12px;
-    padding: 8px 10px;
-    border: 1px solid var(--border);
-    border-radius: var(--r);
-    background: var(--surface-2, rgba(255, 255, 255, 0.02));
-    cursor: pointer;
-    transition: all 0.15s ease;
-  }
-
-  .agenda-day-row:hover {
-    background: var(--hover);
-  }
-
-  .agenda-day-row.today {
-    border-color: var(--xp);
-    background: color-mix(in srgb, var(--xp) 10%, transparent);
-  }
-
-  .agenda-day-row.selected {
-    border-color: var(--xp);
-    box-shadow: 0 0 0 1px var(--xp);
-  }
-
-  .agenda-date-badge {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    min-width: 48px;
-    padding: 4px;
-    border-radius: calc(var(--r) * 0.6);
-    background: var(--surface);
-    border: 1px solid var(--border);
-    flex-shrink: 0;
-  }
-
-  .agenda-date-badge .day-num {
-    font-size: 15px;
-    font-weight: 700;
-    line-height: 1;
-  }
-
-  .agenda-date-badge .caption {
-    font-size: 10px;
-    text-transform: capitalize;
-  }
-
-  .agenda-day-items {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    align-items: center;
-    flex: 1;
-    min-height: 28px;
-  }
-
-  .empty-agenda-day {
-    font-style: italic;
-    opacity: 0.5;
-  }
-
-  .agenda-item-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    padding: 3px 8px;
-    border-radius: 999px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    font-size: 11px;
-    max-width: 260px;
-  }
-
-  .agenda-item-pill.done {
-    opacity: 0.55;
-    text-decoration: line-through;
-  }
-
-  .pill-title {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
 
   .priority-dot {
     width: 6px;
@@ -1830,6 +1598,7 @@
   .calendar-toolbar {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 8px;
     margin-bottom: var(--s2);
     flex-shrink: 0;
@@ -1839,141 +1608,11 @@
     flex: 1;
     text-align: center;
     font-weight: 600;
+    min-width: 140px;
   }
 
   .nav-btn {
     padding: 4px 8px;
-  }
-
-  .weekday-row {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    gap: 4px;
-    margin-bottom: 4px;
-    flex-shrink: 0;
-  }
-
-  .weekday {
-    text-align: center;
-    font-size: 11px;
-  }
-
-  .day-grid {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    grid-template-rows: repeat(6, 1fr);
-    gap: 4px;
-    flex: 1;
-    min-height: 0;
-  }
-
-  .day-cell {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    justify-content: flex-start;
-    gap: 2px;
-    padding: 3px 4px;
-    border: 1px solid transparent;
-    border-radius: calc(var(--r) * 0.6);
-    background: transparent;
-    cursor: pointer;
-    color: var(--text-primary);
-    font-size: 11px;
-    min-height: 0;
-    overflow: hidden;
-    text-align: left;
-  }
-
-  .day-cell:hover {
-    background: var(--hover);
-  }
-
-  .day-cell.out {
-    color: var(--text-muted);
-    opacity: 0.5;
-  }
-
-  .day-cell.today {
-    border-color: var(--xp);
-    background: color-mix(in srgb, var(--xp) 12%, transparent);
-  }
-
-  .day-cell.today .day-num {
-    color: var(--xp);
-    font-weight: 700;
-  }
-
-  .day-cell.selected {
-    background: var(--xp);
-    color: var(--bg);
-  }
-
-  .day-cell.selected .day-num {
-    color: var(--bg);
-    font-weight: 700;
-  }
-
-  .day-cell.selected .chip {
-    background: rgba(0, 0, 0, 0.15);
-    color: var(--bg);
-  }
-
-  .day-cell.selected:hover {
-    background: var(--xp-2);
-  }
-
-  .day-num {
-    font-size: 12px;
-    width: 100%;
-    text-align: left;
-  }
-
-  .cell-items {
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-    width: 100%;
-    min-width: 0;
-  }
-
-  .chip {
-    display: flex;
-    align-items: center;
-    gap: 3px;
-    font-size: 9px;
-    line-height: 1.2;
-    padding: 0 3px;
-    border-radius: 3px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 100%;
-    background: color-mix(in srgb, var(--text-muted) 15%, transparent);
-  }
-
-  .chip-google {
-    color: var(--text-muted);
-  }
-
-  .chip.done {
-    text-decoration: line-through;
-    opacity: 0.55;
-  }
-
-  .chip.dragging {
-    opacity: 0.35;
-  }
-
-  .day-cell.drop-target {
-    border-color: var(--xp);
-    background: color-mix(in srgb, var(--xp) 18%, transparent);
-  }
-
-  .chip-more {
-    color: var(--text-muted);
-    background: transparent;
   }
 
   .prio-low {
@@ -2369,17 +2008,42 @@
     font-size: 11px;
   }
 
-  .chip-ghost {
-    border: 1px dashed var(--accent);
-    background: color-mix(in srgb, var(--accent) 12%, transparent);
-    color: var(--accent);
-    opacity: 0.8;
-    cursor: pointer;
+  /* Planning-assigned goals inside the day detail (#1660) */
+  .planning-assigned {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-top: var(--s2);
+    border-top: 1px solid var(--border);
   }
 
-  .chip-ghost:hover {
-    opacity: 1;
-    background: color-mix(in srgb, var(--accent) 22%, transparent);
+  .planning-assigned-title {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .planning-goal {
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    font-size: 12px;
+    min-width: 0;
+  }
+
+  .planning-goal-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .planning-link {
+    align-self: flex-start;
+    font-size: 11px;
+    padding: 3px 8px;
   }
 
   .plan-bar {

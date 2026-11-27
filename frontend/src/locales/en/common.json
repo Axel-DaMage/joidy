@@ -118,7 +118,31 @@
     "startTime": "Start time",
     "endTime": "End time",
     "loadError": "Could not load the calendar",
-    "loadErrorHint": "Check your connection and try again."
+    "loadErrorHint": "Check your connection and try again.",
+    "layers": "Calendar layers",
+    "layer": {
+      "planning": "Planning",
+      "tasks": "Tasks",
+      "google": "Google",
+      "streaks": "Streaks",
+      "notes": "Notes"
+    },
+    "layerHint": {
+      "planning": "Goal planning assignments",
+      "tasks": "Scheduled tasks",
+      "google": "Google Calendar events",
+      "streaks": "Streak check-ins as day badges",
+      "notes": "Notes created each day"
+    },
+    "density": "Chip density",
+    "densityHint": "How many chips a day cell shows before \"+N more\"",
+    "densityLevels": {
+      "compact": "Compact",
+      "comfortable": "Comfort",
+      "full": "Full"
+    },
+    "assignedGoals": "Assigned goals",
+    "openInGoals": "Open in Goals → Planning"
   },
   "emails": {
     "title": "Mail",

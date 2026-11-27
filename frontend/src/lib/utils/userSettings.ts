@@ -57,6 +57,20 @@ export interface UserSettings {
     /** Whether the "how it's calculated" note is expanded. */
     methodOpen?: boolean;
   };
+  calendarUi?: {
+    /** Shared calendar view mode (#1660): month grid, week board or agenda. */
+    view?: 'month' | 'week' | 'agenda';
+    /** Per-layer visibility toggles for the unified calendar (#1660). */
+    layers?: {
+      planning?: boolean;
+      tasks?: boolean;
+      google?: boolean;
+      streaks?: boolean;
+      notes?: boolean;
+    };
+    /** Day-cell chip density: compact (2 chips), comfortable (5), full (all). */
+    density?: 'compact' | 'comfortable' | 'full';
+  };
 }
 
 const KEY = 'joidy-user-settings-v1';
@@ -116,6 +130,11 @@ export function patchUserSettings(patch: Partial<UserSettings>): void {
     statusBarUi: { ...current.statusBarUi, ...patch.statusBarUi },
     executionUi: { ...current.executionUi, ...patch.executionUi },
     analyticsUi: { ...current.analyticsUi, ...patch.analyticsUi },
+    calendarUi: {
+      ...current.calendarUi,
+      ...patch.calendarUi,
+      layers: { ...current.calendarUi?.layers, ...patch.calendarUi?.layers },
+    },
   };
   localStorage.setItem(KEY, JSON.stringify(next));
 }
