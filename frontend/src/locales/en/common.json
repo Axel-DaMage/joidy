@@ -81,7 +81,9 @@
     "views": {
       "month": "Month",
       "week": "Week",
-      "agenda": "Agenda"
+      "agenda": "Agenda",
+      "day": "Day",
+      "year": "Year"
     },
     "prevWeek": "Previous week",
     "nextWeek": "Next week",
@@ -118,7 +120,69 @@
     "startTime": "Start time",
     "endTime": "End time",
     "loadError": "Could not load the calendar",
-    "loadErrorHint": "Check your connection and try again."
+    "loadErrorHint": "Check your connection and try again.",
+    "viewsLabel": "Calendar views",
+    "prevRange": "Previous",
+    "nextRange": "Next",
+    "searchPlaceholder": "Search events…",
+    "heatmap": "Productivity heatmap",
+    "heatmapHint": "Toggle productivity density overlay",
+    "metricsToggle": "Day metrics",
+    "metricsToggleHint": "Show or hide per-day intelligence badges",
+    "myCalendars": "My calendars",
+    "joidyTasks": "Joidy tasks",
+    "miniMonthLabel": "Month navigator",
+    "weekDaysMin": [
+      "M",
+      "T",
+      "W",
+      "T",
+      "F",
+      "S",
+      "S"
+    ],
+    "priorities": {
+      "LOW": "Low",
+      "MEDIUM": "Medium",
+      "HIGH": "High",
+      "URGENT": "Urgent"
+    },
+    "metrics": {
+      "focus": "Focus time",
+      "notes": "Notes created",
+      "xp": "XP earned",
+      "goals": "Goals completed",
+      "mood": "Mood",
+      "streak": "Streak day",
+      "tooltip": "Focus {focus} · {xp} XP · {notes} notes",
+      "detail": "Focus {focus}m ({pomodoros} 🍅) · {xp} XP · {notes} notes · {goals} goals"
+    },
+    "editor": {
+      "newEvent": "New event",
+      "editEvent": "Edit event",
+      "editGoogle": "Google event",
+      "titlePlaceholder": "Title",
+      "date": "Date",
+      "location": "Location",
+      "locationPlaceholder": "Add a location",
+      "description": "Description",
+      "descriptionPlaceholder": "Notes, agenda, links…",
+      "attendees": "Attendees",
+      "attendeesPlaceholder": "email@example.com, …",
+      "goal": "Linked goal",
+      "noGoal": "No goal",
+      "color": "Color",
+      "duplicate": "Duplicate",
+      "duplicated": "Event duplicated",
+      "createNote": "Create note",
+      "createNoteHint": "Quick-capture a vault note from this event",
+      "openNote": "Open note",
+      "openInGoogle": "Open in Google",
+      "noteCreated": "Note created and linked",
+      "noteError": "Could not create the note",
+      "saving": "Saving…",
+      "openFull": "Full editor"
+    }
   },
   "gmail": {
     "title": "Gmail",

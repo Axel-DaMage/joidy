@@ -11,6 +11,7 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    Text,
     Time,
     func,
 )
@@ -78,10 +79,18 @@ class CalendarTask(Base):
     )
     # Minutes before start_time to remind at; NULL = no reminder (frontend fires it).
     reminder_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Full event-editor fields (#1658): free-form description and location,
+    # comma-separated attendee e-mails (mirrored to Google on publish), and
+    # an optional vault note created from the event (quick-capture backlink).
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    location: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    attendees: Mapped[str | None] = mapped_column(Text, nullable=True)
+    note_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("notes.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
     goal = relationship("Goal")
+    note = relationship("Note")
 
     __table_args__ = (
         Index("ix_calendar_tasks_goal_id", "goal_id"),

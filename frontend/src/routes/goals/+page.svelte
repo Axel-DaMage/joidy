@@ -914,7 +914,10 @@
   }
 
   let poolFilter = $state<'recent' | 'active' | 'completed' | 'failed'>('recent');
-  // When on, assigning a goal to a day also creates a calendar_task (#1234).
+  // Vestigial pref target (#1234): assignments now always mirror into the
+  // calendar (setAssignments passes create_calendar_task=true), so the
+  // toggle UI is gone — but the #1673 loadPref/savePref calls below still
+  // round-trip this key, so it must remain declared.
   let mirrorToCalendar = $state(false);
 
   let filteredUnassignedGoals = $derived.by(() => {

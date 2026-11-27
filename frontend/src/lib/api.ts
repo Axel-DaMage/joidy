@@ -652,6 +652,13 @@ export interface CalendarTask {
   recurrence: CalendarTaskRecurrence;
   /** Minutes before start_time to remind at; null = no reminder. */
   reminder_minutes: number | null;
+  /** Event-editor fields (#1658). */
+  description: string | null;
+  location: string | null;
+  /** Comma-separated attendee e-mails (passed through to Google on publish). */
+  attendees: string | null;
+  /** Vault note created from this event (quick-capture backlink). */
+  note_id: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -666,6 +673,9 @@ export interface CalendarTaskCreateInput {
   color?: string | null;
   recurrence?: CalendarTaskRecurrence;
   reminder_minutes?: number | null;
+  description?: string | null;
+  location?: string | null;
+  attendees?: string | null;
 }
 
 export interface CalendarTaskUpdateInput {
@@ -680,6 +690,23 @@ export interface CalendarTaskUpdateInput {
   google_event_id?: string | null;
   recurrence?: CalendarTaskRecurrence;
   reminder_minutes?: number | null;
+  description?: string | null;
+  location?: string | null;
+  attendees?: string | null;
+  note_id?: number | null;
+}
+
+/** Per-day intelligence metrics powering the calendar badges (#1658). */
+export interface CalendarDayMetrics {
+  date: string;
+  xp: number;
+  xp_events: number;
+  pomodoros: number;
+  focus_minutes: number;
+  notes: number;
+  goals_completed: number;
+  mood_score: number | null;
+  streak_day: boolean;
 }
 
 // AI plan suggestions (#1237): ghost slots proposed by the ai-service.
@@ -1752,6 +1779,9 @@ export const api = {
       start: { dateTime?: string; date?: string; timeZone?: string };
       end: { dateTime?: string; date?: string; timeZone?: string };
       description?: string;
+      location?: string;
+      attendees?: string[];
+      color_id?: string;
       calendar_id?: string;
     }) =>
       req<{ google_id: string; calendar_id: string; summary: string | null }>(
@@ -1766,6 +1796,9 @@ export const api = {
         start?: { dateTime?: string; date?: string; timeZone?: string };
         end?: { dateTime?: string; date?: string; timeZone?: string };
         description?: string;
+        location?: string;
+        attendees?: string[];
+        color_id?: string;
       },
       calendarId?: string
     ) => {
@@ -1878,6 +1911,13 @@ export const api = {
       req<CalendarTask>('PATCH', `/calendar/tasks/${id}`, input),
     remove: (id: number) => req<void>('DELETE', `/calendar/tasks/${id}`),
     toggleDone: (id: number) => req<CalendarTask>('POST', `/calendar/tasks/${id}/done`),
+    duplicate: (id: number, overrides?: { date?: string; title?: string }) =>
+      req<CalendarTask>('POST', `/calendar/tasks/${id}/duplicate`, overrides ?? {}),
+    dayMetrics: (params: { start: string; end: string }) =>
+      req<CalendarDayMetrics[]>(
+        'GET',
+        `/calendar/day-metrics?start=${params.start}&end=${params.end}`
+      ),
   },
 
   config: {
