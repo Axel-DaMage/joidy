@@ -1557,6 +1557,10 @@
       "snooze": "Posponer",
       "dismiss": "Descartar",
       "snoozed": "Pospuesto {minutes} min"
+    },
+    "statusbar": {
+      "open": "Abrir Reloj",
+      "moreActive": "{count} activos"
     }
   },
   "a11y": {

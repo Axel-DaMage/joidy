@@ -1557,6 +1557,10 @@
       "snooze": "Snooze",
       "dismiss": "Dismiss",
       "snoozed": "Snoozed for {minutes} min"
+    },
+    "statusbar": {
+      "open": "Open Clock",
+      "moreActive": "{count} active"
     }
   },
   "a11y": {
