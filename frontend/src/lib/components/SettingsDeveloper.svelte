@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { Code, Wrench } from 'lucide-svelte';
+  import { Wrench } from 'lucide-svelte';
   import { devMode } from '$lib/stores/settings';
 </script>
 
-<!-- Repositorio -->
-<section class="section">
+<!-- Desarrollador — el marco (título/descripción/borde) lo aporta SettingsSection (#1671). -->
+<div class="section-content">
   <div class="row">
     <div class="row-label"><span>Repositorio</span></div>
     <a
@@ -15,13 +15,7 @@
       style="font-size:11px; color: var(--text-secondary);">github.com/Axel-DaMage/joidy</a
     >
   </div>
-</section>
 
-<!-- Desarrollador -->
-<section class="section">
-  <div class="section-title" style="color: var(--xp, var(--accent));">
-    <Code size={12} /> Desarrollador
-  </div>
   <div class="row">
     <div class="row-label">
       <Wrench size={13} />
@@ -34,26 +28,9 @@
     </button>
   </div>
   <p class="hint">Activa para mostrar contenido avanzado e integraciones experimentales.</p>
-</section>
+</div>
 
 <style>
-  .section {
-    padding: 16px 20px;
-    border-bottom: 1px solid var(--border-light);
-  }
-
-  .section-title {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 10px;
-    font-family: var(--font-mono);
-    color: var(--text-muted);
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    margin-bottom: 12px;
-  }
-
   .row {
     display: flex;
     align-items: center;

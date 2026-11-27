@@ -2,7 +2,8 @@
   import '../app.css';
   import { browser } from '$app/env';
   import { page } from '$app/state';
-  import { afterNavigate } from '$app/navigation';
+  import { afterNavigate, goto } from '$app/navigation';
+  import { resolve } from '$app/paths';
   import { onMount } from 'svelte';
   import { fade } from 'svelte/transition';
   import { isOnline, wasOffline } from '$lib/stores/connection';
@@ -145,27 +146,6 @@
       trackPageView(nav.to.url.pathname);
     }
   });
-
-  let settingsOpen = false;
-
-  // Lazy-load the settings panel (~19 components across 9 sections) so it
-  // splits out of the layout chunk and only downloads on first open —
-  // mirrors the GoalEditor lazy pattern (#1544). A failed chunk import is
-  // re-thrown so the chunk-error recovery owns the reload (#1459).
-  let SettingsPanelComp: typeof import('$lib/components/SettingsPanel.svelte').default | null =
-    null;
-  let settingsChunkLoading = false;
-  function ensureSettingsPanel() {
-    if (SettingsPanelComp || settingsChunkLoading) return;
-    settingsChunkLoading = true;
-    import('$lib/components/SettingsPanel.svelte')
-      .then((m) => (SettingsPanelComp = m.default))
-      .catch((err) => {
-        settingsOpen = false;
-        throw err;
-      })
-      .finally(() => (settingsChunkLoading = false));
-  }
 
   let now = new Date();
   let pendingTasks = 0;
@@ -583,9 +563,11 @@
       loadFooterStats().catch((e) => logger.error('[layout] footer stats refresh failed:', e));
     };
 
+    // Settings lives on the /settings route now (#1671) — every existing
+    // joidy:open-settings dispatcher (header gear, command palette, pages)
+    // keeps working via a plain navigation.
     const handleOpenSettings = () => {
-      ensureSettingsPanel();
-      settingsOpen = true;
+      void goto(resolve('/settings'));
     };
 
     const handleWindowFocus = () => {
@@ -1034,17 +1016,6 @@
     </footer>
   </div>
 
-  {#if SettingsPanelComp}
-    <svelte:component
-      this={SettingsPanelComp}
-      bind:open={settingsOpen}
-      onClose={() => {
-        settingsOpen = false;
-        // Broadcast so mounted pages (e.g. notes) can refetch config after edits
-        window.dispatchEvent(new CustomEvent('joidy:settings-closed'));
-      }}
-    />
-  {/if}
   <CommandPalette />
   <FocusMode />
   <Toast />

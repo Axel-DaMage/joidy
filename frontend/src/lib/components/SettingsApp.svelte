@@ -1,14 +1,11 @@
 <script lang="ts">
-  import { CloudDownload, Download } from 'lucide-svelte';
+  import { Download } from 'lucide-svelte';
   import { deferredPrompt, isAppInstalled, showInstallBanner } from '$lib/stores/pwa';
 </script>
 
-<!-- Aplicación (PWA) -->
+<!-- Aplicación (PWA) — el marco (título/descripción/borde) lo aporta SettingsSection (#1671). -->
 {#if $deferredPrompt && !$isAppInstalled}
-  <section class="section">
-    <div class="section-title" style="color: var(--xp, var(--accent));">
-      <CloudDownload size={12} /> Aplicación
-    </div>
+  <div class="section-content">
     <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
       <p class="hint" style="margin-top: 0;">
         Instala Joidy en tu dispositivo para acceso rápido y sin conexión.
@@ -28,7 +25,7 @@
         <Download size={12} /> Instalar Joidy
       </button>
     </div>
-  </section>
+  </div>
 {/if}
 
 <style>
@@ -39,23 +36,6 @@
     color: var(--text-muted);
     line-height: 1.6;
     margin-top: 8px;
-  }
-
-  .section {
-    padding: 16px 20px;
-    border-bottom: 1px solid var(--border-light);
-  }
-
-  .section-title {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 10px;
-    font-family: var(--font-mono);
-    color: var(--text-muted);
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    margin-bottom: 12px;
   }
 
   .row {

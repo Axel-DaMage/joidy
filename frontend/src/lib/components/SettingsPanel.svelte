@@ -1,7 +1,9 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { browser } from '$app/env';
-  import { CircleCheckBig, Save, TriangleAlert, X } from 'lucide-svelte';
+  import { ArrowLeft, CircleCheckBig, Save, TriangleAlert } from 'lucide-svelte';
+  import DynamicIcon from './DynamicIcon.svelte';
+  import SettingsSection from './SettingsSection.svelte';
   import SettingsAppearance from './SettingsAppearance.svelte';
   import SettingsAdvanced from './SettingsAdvanced.svelte';
   import SettingsVault from './SettingsVault.svelte';
@@ -13,16 +15,50 @@
   import SettingsDeveloper from './SettingsDeveloper.svelte';
   import { focusTrap } from '$lib/actions/focusTrap';
   import { api } from '$lib/api';
+  import { devMode } from '$lib/stores/settings';
+  import { deferredPrompt, isAppInstalled } from '$lib/stores/pwa';
   import { logger } from '$lib/utils/logger';
   import { t } from 'svelte-i18n';
   import type { SystemConfig } from '$lib/utils/settingsTypes';
 
   interface Props {
-    open?: boolean;
+    /** Active section slug; bound so the /settings route can sync it with the URL hash. */
+    section?: string;
+    /** Escape/back — the route owns navigation (history.back / goto). */
     onClose?: () => void;
   }
 
-  let { open = $bindable(false), onClose }: Props = $props();
+  let { section = $bindable('appearance'), onClose }: Props = $props();
+
+  // Section order mirrors the old drawer stack (#1671). `devOnly`/`installOnly`
+  // sections only exist when their child would render content (SettingsAI is
+  // devMode-gated, SettingsApp only while a PWA install prompt is available).
+  const SECTIONS: { id: string; icon: string; devOnly?: boolean; installOnly?: boolean }[] = [
+    { id: 'appearance', icon: 'Palette' },
+    { id: 'advanced', icon: 'Settings' },
+    { id: 'vault', icon: 'Database' },
+    { id: 'integrations', icon: 'GitBranch' },
+    { id: 'ai', icon: 'Zap', devOnly: true },
+    { id: 'app', icon: 'CloudDownload', installOnly: true },
+    { id: 'session', icon: 'UserRound' },
+    { id: 'services', icon: 'Power' },
+    { id: 'developer', icon: 'Code' },
+  ];
+
+  const installable = $derived(!!$deferredPrompt && !$isAppInstalled);
+  const visibleSections = $derived(
+    SECTIONS.filter(
+      (s) => (!s.devOnly || $devMode) && (!s.installOnly || installable)
+    )
+  );
+
+  // If the active section's gate closes while open (e.g. dev mode toggled off
+  // on the Desarrollador tab), fall back to the first section.
+  $effect(() => {
+    if (!visibleSections.some((s) => s.id === section)) {
+      section = visibleSections[0]?.id ?? 'appearance';
+    }
+  });
 
   let configLoaded = $state(false);
   let configSaving = $state(false);
@@ -57,31 +93,22 @@
   // Google» no aparecía aunque el backend ya reportara las creds (#1134).
   let configuredKeys: string[] = $state([]);
 
-  onMount(async () => {
-    if (open) {
-      await loadConfig();
-    }
-  });
-
-  $effect(() => {
-    if (open && !configLoaded) {
-      loadConfig();
-    }
-  });
-
   function handleKeydown(e: KeyboardEvent) {
-    // The panel is always mounted (+layout) so the window listener is live even
-    // while closed: without this guard, pressing Ctrl+S anywhere (e.g. saving a
-    // note) fires saveConfig() and posts systemConfig — whose secret fields are
-    // always '' because GET /config never returns them — wiping .env (#1304).
-    if (!open || !configLoaded) return;
+    // The guard only requires a finished initial load now: this component is
+    // mounted exclusively by the /settings route, so a "closed but mounted"
+    // panel (the original #1304 hazard) can no longer receive Ctrl+S — the
+    // window listener dies with the page. Keep guarding on configLoaded so a
+    // Ctrl+S fired before GET /config resolves can't post secret fields that
+    // are always '' client-side.
+    if (!configLoaded) return;
     if ((e.ctrlKey || e.metaKey) && e.key === 's') {
       e.preventDefault();
       saveConfig();
     }
   }
 
-  onMount(() => {
+  onMount(async () => {
+    await loadConfig();
     if (browser) {
       window.addEventListener('keydown', handleKeydown);
     }
@@ -90,6 +117,8 @@
   onDestroy(() => {
     if (browser) {
       window.removeEventListener('keydown', handleKeydown);
+      // Broadcast so mounted pages (e.g. notes) can refetch config after edits.
+      window.dispatchEvent(new CustomEvent('joidy:settings-closed'));
     }
     if (savedTimer) {
       clearTimeout(savedTimer);
@@ -179,196 +208,258 @@
   function close() {
     onClose?.();
   }
-
-  function onBackdropClick(e: MouseEvent) {
-    if (e.target === e.currentTarget) close();
-  }
 </script>
 
-{#if open}
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="backdrop" role="presentation" onclick={onBackdropClick}>
-    <div
-      class="panel"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="settings-panel-title"
-      tabindex="-1"
-      use:focusTrap={{ onEscape: close }}
-    >
-      <div class="panel-header">
-        <span id="settings-panel-title" class="mono" style="font-size:12px; letter-spacing:0.08em;"
-          >{$t('settings.title')}</span
+<div class="settings-view" use:focusTrap={{ onEscape: close }}>
+  <!-- Section rail -->
+  <nav class="settings-nav" aria-label={$t('settings.title')}>
+    <button class="settings-back" onclick={close}>
+      <ArrowLeft size={13} />
+      <span>{$t('common.back')}</span>
+    </button>
+    <div class="settings-nav-title mono">{$t('settings.title')}</div>
+    {#each visibleSections as s (s.id)}
+      <button
+        class="settings-nav-item"
+        class:active={section === s.id}
+        aria-current={section === s.id ? 'true' : undefined}
+        onclick={() => (section = s.id)}
+      >
+        <DynamicIcon name={s.icon} size={14} />
+        <span>{$t(`settings.nav.${s.id}`)}</span>
+      </button>
+    {/each}
+  </nav>
+
+  <!-- Content pane -->
+  <div class="settings-main">
+    <div class="settings-content">
+      {#if section === 'appearance'}
+        <SettingsSection
+          id="appearance"
+          title={$t('settings.nav.appearance')}
+          description={$t('settings.descriptions.appearance')}
+          icon="Palette"
         >
-        <button class="close-btn" onclick={close} aria-label={$t('common.close')}
-          ><X size={14} /></button
+          <SettingsAppearance />
+        </SettingsSection>
+      {:else if section === 'advanced'}
+        <SettingsSection
+          id="advanced"
+          title={$t('settings.nav.advanced')}
+          description={$t('settings.descriptions.advanced')}
+          icon="Settings"
         >
-      </div>
-
-      <div class="panel-body">
-        <!-- Apariencia -->
-        <SettingsAppearance />
-
-        <!-- Avanzado -->
-        <SettingsAdvanced />
-
-        <!-- Vault -->
-        <SettingsVault bind:systemConfig {isConfigured} />
-
-        <!-- Integraciones -->
-        <SettingsIntegrations bind:systemConfig {isConfigured} />
-
-        <!-- IA -->
-        <SettingsAI bind:systemConfig {isConfigured} />
-
-        <!-- Aplicación (PWA) -->
-        <SettingsApp />
-
-        <!-- Sesión -->
-        <SettingsSession />
-
-        <!-- Servicios (Power Management) -->
-        <SettingsServices />
-        <!-- Repositorio + Desarrollador -->
-        <SettingsDeveloper />
-      </div>
-
-      <div class="panel-footer">
-        <button
-          class="save-config-btn fixed-save"
-          class:saved={configSaved}
-          onclick={saveConfig}
-          disabled={configSaving}
+          <SettingsAdvanced />
+        </SettingsSection>
+      {:else if section === 'vault'}
+        <SettingsSection
+          id="vault"
+          title={$t('settings.nav.vault')}
+          description={$t('settings.descriptions.vault')}
+          icon="Database"
         >
-          {#if configSaving}
-            {$t('common.saving')}
-          {:else if configSaved}
-            <CircleCheckBig size={12} /> {$t('common.saved')}
-          {:else}
-            <Save size={12} /> {$t('common.save')}
-          {/if}
-        </button>
-        {#if configMessage}
-          <span class="config-message-footer error">{configMessage}</span>
-        {/if}
-      </div>
-      {#if configRestartNotice}
-        <div class="restart-notice">
-          <TriangleAlert size={14} />
-          <span>{configRestartNotice}</span>
-        </div>
+          <SettingsVault bind:systemConfig {isConfigured} />
+        </SettingsSection>
+      {:else if section === 'integrations'}
+        <SettingsSection
+          id="integrations"
+          title={$t('settings.nav.integrations')}
+          description={$t('settings.descriptions.integrations')}
+          icon="GitBranch"
+        >
+          <SettingsIntegrations bind:systemConfig {isConfigured} />
+        </SettingsSection>
+      {:else if section === 'ai'}
+        <SettingsSection
+          id="ai"
+          title={$t('settings.nav.ai')}
+          description={$t('settings.descriptions.ai')}
+          icon="Zap"
+        >
+          <SettingsAI bind:systemConfig {isConfigured} />
+        </SettingsSection>
+      {:else if section === 'app'}
+        <SettingsSection
+          id="app"
+          title={$t('settings.nav.app')}
+          description={$t('settings.descriptions.app')}
+          icon="CloudDownload"
+        >
+          <SettingsApp />
+        </SettingsSection>
+      {:else if section === 'session'}
+        <SettingsSection
+          id="session"
+          title={$t('settings.nav.session')}
+          description={$t('settings.descriptions.session')}
+          icon="UserRound"
+        >
+          <SettingsSession />
+        </SettingsSection>
+      {:else if section === 'services'}
+        <SettingsSection
+          id="services"
+          title={$t('settings.nav.services')}
+          description={$t('settings.descriptions.services')}
+          icon="Power"
+        >
+          <SettingsServices />
+        </SettingsSection>
+      {:else if section === 'developer'}
+        <SettingsSection
+          id="developer"
+          title={$t('settings.nav.developer')}
+          description={$t('settings.descriptions.developer')}
+          icon="Code"
+        >
+          <SettingsDeveloper />
+        </SettingsSection>
       {/if}
     </div>
+
+    {#if configRestartNotice}
+      <div class="restart-notice">
+        <TriangleAlert size={14} />
+        <span>{configRestartNotice}</span>
+      </div>
+    {/if}
+
+    <div class="settings-footer">
+      <p class="settings-save-hint">{$t('settings.saveHint')}</p>
+      {#if configMessage}
+        <span class="config-message-footer error">{configMessage}</span>
+      {/if}
+      <button
+        class="save-config-btn"
+        class:saved={configSaved}
+        onclick={saveConfig}
+        disabled={configSaving}
+      >
+        {#if configSaving}
+          {$t('common.saving')}
+        {:else if configSaved}
+          <CircleCheckBig size={12} /> {$t('common.saved')}
+        {:else}
+          <Save size={12} /> {$t('common.save')}
+        {/if}
+      </button>
+    </div>
   </div>
-{/if}
+</div>
 
 <style>
-  /* Restaurada: el split #1067 borró esta regla por accidente y el panel
-     quedaba position:static al final del documento (invisible, a ~2000px de
-     profundidad) — "no se puede entrar a Ajustes". */
-  .backdrop {
-    position: fixed;
-    inset: 0;
-    background: color-mix(in srgb, var(--bg) 60%, transparent);
-    z-index: var(--z-dropdown);
+  /* Full-window settings view (#1671): left section rail + content pane.
+     View body spacing standard: padding: var(--s3) and nothing else. */
+  .settings-view {
     display: flex;
-    align-items: flex-start;
-    justify-content: flex-end;
+    gap: var(--s3);
+    height: 100%;
+    min-height: 0;
+    padding: var(--s3);
+    box-sizing: border-box;
+    outline: none;
   }
 
-  .panel {
-    width: 480px;
-    max-width: 100%;
-    height: 100%;
-    background: var(--surface);
-    border-left: 1px solid var(--border);
+  /* ── Section rail ── */
+  .settings-nav {
     display: flex;
     flex-direction: column;
-    animation: slideIn 150ms ease-out;
-    position: relative;
+    gap: 2px;
+    width: 200px;
+    flex-shrink: 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: var(--s3);
+    overflow-y: auto;
+    min-height: 0;
   }
 
-  @keyframes slideIn {
-    from {
-      transform: translateX(100%);
-      opacity: 0;
-    }
-    to {
-      transform: translateX(0);
-      opacity: 1;
-    }
-  }
-
-  .panel-header {
+  .settings-back {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: 14px 20px;
-    border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
-  }
-
-  .close-btn {
+    gap: 6px;
+    padding: 6px 8px;
+    margin-bottom: var(--s2);
     background: none;
     border: none;
+    border-radius: var(--r);
     color: var(--text-muted);
+    font-size: 11px;
+    font-family: var(--font-mono);
     cursor: pointer;
-    padding: 4px;
+    transition:
+      color var(--t-fast),
+      background var(--t-fast);
+  }
+  .settings-back:hover {
+    color: var(--text-primary);
+    background: var(--elevated);
+  }
+
+  .settings-nav-title {
+    padding: 0 8px var(--s2);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+  }
+
+  .settings-nav-item {
     display: flex;
     align-items: center;
+    gap: 8px;
+    padding: 7px 8px;
+    background: none;
+    border: none;
     border-radius: var(--r);
-    transition: color var(--t-fast);
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-family: var(--font-sans);
+    text-align: left;
+    cursor: pointer;
+    transition:
+      color var(--t-fast),
+      background var(--t-fast);
   }
-  .close-btn:hover {
+  .settings-nav-item:hover {
+    background: var(--elevated);
     color: var(--text-primary);
   }
-
-  .panel-body {
-    flex: 1;
-    overflow-y: auto;
-    padding: 8px 0;
-    padding-bottom: 60px;
+  .settings-nav-item.active {
+    background: var(--elevated);
+    color: var(--text-primary);
+    box-shadow: inset 2px 0 0 var(--xp, var(--accent));
   }
 
-  .panel-footer {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    padding: 12px 20px;
-    background: var(--surface);
-    border-top: 1px solid var(--border);
+  /* ── Content pane ── */
+  .settings-main {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
+    flex-direction: column;
+    gap: var(--s3);
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
   }
 
-  .save-config-btn.fixed-save {
-    width: 100%;
-    padding: 10px 16px;
-  }
-
-  .config-message-footer {
-    font-size: 11px;
-    color: var(--text-secondary);
-    white-space: nowrap;
-  }
-  .config-message-footer.error {
-    color: var(--error, #ef4444);
+  .settings-content {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
   }
 
   .restart-notice {
     display: flex;
     align-items: flex-start;
     gap: 8px;
-    padding: 10px 20px;
+    padding: 10px var(--s4);
     background: color-mix(in srgb, var(--warning, #f59e0b) 12%, var(--elevated, #1a1a1a));
-    border-top: 1px solid color-mix(in srgb, var(--warning, #f59e0b) 30%, transparent);
+    border: 1px solid color-mix(in srgb, var(--warning, #f59e0b) 30%, transparent);
+    border-radius: var(--r);
     color: var(--text-secondary);
     font-size: 12px;
     line-height: 1.5;
+    flex-shrink: 0;
   }
   .restart-notice :global(svg) {
     color: var(--warning, #f59e0b);
@@ -376,13 +467,44 @@
     margin-top: 1px;
   }
 
+  /* Global save semantics (#1671): one save posts the whole system config —
+     sections share the same SystemConfig store, so there is no per-section
+     save. Empty secrets are dropped before POST so they never wipe configured
+     values (#1304). */
+  .settings-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--s3);
+    padding: var(--s3) var(--s4);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    flex-shrink: 0;
+  }
+
+  .settings-save-hint {
+    margin: 0;
+    margin-right: auto;
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+
+  .config-message-footer {
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+  .config-message-footer.error {
+    color: var(--error, #ef4444);
+  }
+
   .save-config-btn {
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 6px;
-    width: 100%;
-    padding: 10px 16px;
+    padding: 8px 20px;
     background: var(--accent, var(--xp));
     border: none;
     border-radius: var(--r);
@@ -390,6 +512,7 @@
     font-size: 12px;
     font-family: var(--font-mono);
     cursor: pointer;
+    white-space: nowrap;
     transition: opacity var(--t-fast);
   }
   .save-config-btn:hover:not(:disabled) {
@@ -403,17 +526,39 @@
     background: var(--success, #22c55e);
   }
 
-  @media (max-width: 520px) {
-    .panel {
+  /* Narrow viewports: the rail collapses to a horizontal strip on top. */
+  @media (max-width: 700px) {
+    .settings-view {
+      flex-direction: column;
+    }
+    .settings-nav {
       width: 100%;
+      flex-direction: row;
+      align-items: center;
+      gap: 4px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      flex-shrink: 0;
     }
-    .panel-header,
-    .panel-footer {
-      padding-left: var(--s3);
-      padding-right: var(--s3);
+    .settings-back {
+      margin-bottom: 0;
+      flex-shrink: 0;
     }
-    .config-message-footer {
-      white-space: normal;
+    .settings-nav-title {
+      display: none;
+    }
+    .settings-nav-item {
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+    .settings-nav-item.active {
+      box-shadow: inset 0 -2px 0 var(--xp, var(--accent));
+    }
+    .settings-footer {
+      flex-wrap: wrap;
+    }
+    .settings-save-hint {
+      flex-basis: 100%;
     }
   }
 </style>

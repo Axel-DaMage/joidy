@@ -281,6 +281,7 @@
     "delete": "Delete",
     "search": "Search",
     "close": "Close",
+    "back": "Back",
     "settings": "Settings",
     "install": "Install",
     "skip": "Skip",
@@ -344,6 +345,29 @@
   },
   "settings": {
     "title": "SETTINGS",
+    "nav": {
+      "appearance": "Appearance",
+      "advanced": "Advanced",
+      "vault": "Vault",
+      "integrations": "Integrations",
+      "ai": "AI",
+      "app": "App",
+      "session": "Session",
+      "services": "Services",
+      "developer": "Developer"
+    },
+    "descriptions": {
+      "appearance": "Theme, time format, language, accent colors and icons.",
+      "advanced": "Metadata, hidden folders, trash and the tags line.",
+      "vault": "Obsidian vault location and write mode.",
+      "integrations": "Connections to GitHub, Google, Strava, contacts and Spotify.",
+      "ai": "AI keys and models (Gemini, OpenAI-compatible, embeddings).",
+      "app": "Install Joidy as an app on your device.",
+      "session": "Current user and sign out.",
+      "services": "Status and control of Joidy services.",
+      "developer": "Repository and development mode."
+    },
+    "saveHint": "Save applies all configuration changes. Empty secret fields never overwrite existing values.",
     "appearance": "Appearance",
     "theme": "Theme",
     "dark": "dark",
