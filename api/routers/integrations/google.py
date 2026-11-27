@@ -321,6 +321,10 @@ class GoogleEventWriteIn(BaseModel):
     start: dict
     end: dict
     description: str | None = None
+    location: str | None = Field(default=None, max_length=500)
+    # Attendee e-mails + Google colorId — event-editor parity fields (#1658).
+    attendees: list[str] | None = Field(default=None, max_length=50)
+    color_id: str | None = Field(default=None, max_length=8)
     calendar_id: str = "primary"
 
 
@@ -329,6 +333,9 @@ class GoogleEventPatchIn(BaseModel):
     start: dict | None = None
     end: dict | None = None
     description: str | None = None
+    location: str | None = Field(default=None, max_length=500)
+    attendees: list[str] | None = Field(default=None, max_length=50)
+    color_id: str | None = Field(default=None, max_length=8)
 
 
 @router.post("/calendar/events")
@@ -341,7 +348,16 @@ async def google_calendar_create_event(
     token = await _access_token(None, db)
     try:
         created = await gcs.create_google_event(
-            db, token, body.calendar_id, body.summary, body.start, body.end, body.description
+            db,
+            token,
+            body.calendar_id,
+            body.summary,
+            body.start,
+            body.end,
+            body.description,
+            location=body.location,
+            attendees=body.attendees,
+            color_id=body.color_id,
         )
     except gcs.GoogleReconsentRequired as exc:
         raise HTTPException(status_code=403, detail=str(exc))
@@ -367,6 +383,11 @@ async def google_calendar_update_event(
     """Patch a Google Calendar event from joidy (write-back, #1233)."""
     token = await _access_token(None, db)
     patch = body.model_dump(exclude_unset=True, exclude_none=True)
+    # Translate joidy field names to Google's payload keys (#1658).
+    if "color_id" in patch:
+        patch["colorId"] = patch.pop("color_id")
+    if "attendees" in patch:
+        patch["attendees"] = gcs._google_attendees(patch["attendees"])
     try:
         updated = await gcs.update_google_event(db, token, calendar_id, google_event_id, patch)
     except gcs.GoogleReconsentRequired as exc:

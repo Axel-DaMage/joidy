@@ -577,7 +577,7 @@
   <!-- role=list: child <Widget> elements expose role=listitem (#1309) -->
   <section class="plant-section" role="list">
     {#each $dashboardLayout.left as wid, i (wid)}
-      <Widget id={wid}>
+      <Widget id={wid} index={i}>
         {@render renderWidget(wid)}
       </Widget>
     {/each}
@@ -591,7 +591,7 @@
     {#each $dashboardLayout.right as wid, i (wid)}
       <!-- spotify-now-playing is dev-gated like the /spotify nav item (#1492) -->
       {#if wid !== 'spotify-now-playing' || $devMode}
-        <Widget id={wid}>
+        <Widget id={wid} index={i}>
           {@render renderWidget(wid)}
         </Widget>
       {/if}

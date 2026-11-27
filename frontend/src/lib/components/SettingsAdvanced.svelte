@@ -1,14 +1,10 @@
 <script lang="ts">
-  import { Code, EyeOff, Settings, Tag, Trash2 } from 'lucide-svelte';
+  import { Code, EyeOff, Tag, Trash2 } from 'lucide-svelte';
   import { showFrontmatter, showTrash, showHiddenFiles, hideTagsLine } from '$lib/stores/settings';
 </script>
 
-<!-- Avanzado -->
-<section class="section">
-  <div class="section-title" style="color: var(--xp, var(--accent));">
-    <Settings size={12} /> Avanzado
-  </div>
-
+<!-- Avanzado — el marco (título/descripción/borde) lo aporta SettingsSection (#1671). -->
+<div class="section-content">
   <div class="row">
     <div class="row-label">
       <Code size={13} />
@@ -56,26 +52,9 @@
       <span class:active={!$hideTagsLine}>visible</span>
     </button>
   </div>
-</section>
+</div>
 
 <style>
-  .section {
-    padding: 16px 20px;
-    border-bottom: 1px solid var(--border-light);
-  }
-
-  .section-title {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 10px;
-    font-family: var(--font-mono);
-    color: var(--text-muted);
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    margin-bottom: 12px;
-  }
-
   .row {
     display: flex;
     align-items: center;

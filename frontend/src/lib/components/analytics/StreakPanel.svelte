@@ -4,7 +4,7 @@
   import CalendarCheck from 'lucide-svelte/icons/calendar-check';
   import Target from 'lucide-svelte/icons/target';
   import ChartCard from './ChartCard.svelte';
-  import CountUp from './CountUp.svelte';
+  import CountUp from '$lib/components/CountUp.svelte';
   import type { AnalyticsOverview } from '$lib/api';
   import { t } from 'svelte-i18n';
 

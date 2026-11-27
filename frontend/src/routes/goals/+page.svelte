@@ -26,6 +26,11 @@
   import PinOff from 'lucide-svelte/icons/pin-off';
   import Zap from 'lucide-svelte/icons/zap';
   import List from 'lucide-svelte/icons/list';
+  import HistoryIcon from 'lucide-svelte/icons/history';
+  import Ban from 'lucide-svelte/icons/ban';
+  import Flame from 'lucide-svelte/icons/flame';
+  import SlidersHorizontal from 'lucide-svelte/icons/sliders-horizontal';
+  import Percent from 'lucide-svelte/icons/percent';
   import Lock from 'lucide-svelte/icons/lock';
   import Target from 'lucide-svelte/icons/target';
   import {
@@ -76,6 +81,14 @@
   import GoalUpcoming from '$lib/components/GoalUpcoming.svelte';
   import { inboxCount } from '$lib/utils/goalTriage';
   import { localDayKey } from '$lib/utils/date';
+  import {
+    buildHistoryEvents,
+    computeHistoryStats,
+    daysBeforeKey,
+    groupHistoryEvents,
+    type HistoryEvent,
+    type HistoryEventKind,
+  } from '$lib/utils/goalsHistory';
   import { applyGamificationResult, showXPGain } from '$lib/stores/gamification';
   import {
     getCachedData,
@@ -453,20 +466,97 @@
     historyData = Array.from(dataMap.values());
   });
 
-  // ── History tab state ──
+  // ── History tab state (#1669) ──
+  // Timeline/agenda model: each goal contributes at most one feed entry from
+  // its terminal state. The feed groups entries by local day (newest first)
+  // and the heatmap acts as a navigator that scrolls the feed to the day.
+  // Feed/stats logic lives in $lib/utils/goalsHistory.ts.
   let selectedHistoryDate = $state<string | null>(localDayKey(new Date()));
 
-  let goalsForDate = $derived.by(() => {
-    if (!selectedHistoryDate) return { completed: [], failed: [] };
-    const completed = goals.filter(
-      (g) =>
-        (g.state === 'COMPLETED' || g.is_completed) &&
-        g.completed_at?.startsWith(selectedHistoryDate!)
-    );
-    const failed = goals.filter(
-      (g) => g.state === 'FAILED' && g.updated_at?.startsWith(selectedHistoryDate!)
-    );
-    return { completed, failed };
+  const historyEvents: HistoryEvent[] = $derived(buildHistoryEvents(goals));
+
+  // Filters — persisted in goalsUi next to the editor prefs.
+  type HistoryStateFilter = 'ALL' | HistoryEventKind;
+  const HISTORY_STATE_FILTERS: HistoryStateFilter[] = ['ALL', 'COMPLETED', 'FAILED', 'CANCELLED'];
+  const HISTORY_STATE_LABEL_KEYS: Record<HistoryStateFilter, string> = {
+    ALL: 'goalsPage.history.stateAll',
+    COMPLETED: 'goalsPage.history.stateCompleted',
+    FAILED: 'goalsPage.history.stateFailed',
+    CANCELLED: 'goalsPage.history.stateCancelled',
+  };
+  // 0 = all time; mirrors analyticsUi.rangeDays preset style (#1499).
+  const HISTORY_RANGE_OPTIONS = [7, 30, 90, 365, 0] as const;
+  const HISTORY_RANGE_LABEL_KEYS: Record<number, string> = {
+    7: 'goalsPage.history.range7d',
+    30: 'goalsPage.history.range30d',
+    90: 'goalsPage.history.range90d',
+    365: 'goalsPage.history.range365d',
+    0: 'goalsPage.history.rangeAll',
+  };
+  const HISTORY_DEFAULT_RANGE = 90;
+
+  let historyStateFilter = $state<HistoryStateFilter>('ALL');
+  let historyGoalFilter = $state<number | null>(null);
+  let historyRangeDays = $state<number>(HISTORY_DEFAULT_RANGE);
+
+  const historyRangeStart = $derived.by(() =>
+    historyRangeDays <= 0 ? null : daysBeforeKey(todayIso, historyRangeDays)
+  );
+
+  // Events scoped by period + goal — the summary strip ignores the state
+  // filter so it always describes the whole selected period.
+  const historyScopedEvents = $derived(
+    historyEvents.filter(
+      (e) =>
+        (historyGoalFilter === null || e.goal.id === historyGoalFilter) &&
+        (!historyRangeStart || e.date >= historyRangeStart)
+    )
+  );
+
+  const filteredHistoryEvents = $derived(
+    historyScopedEvents.filter(
+      (e) => historyStateFilter === 'ALL' || e.kind === historyStateFilter
+    )
+  );
+
+  // Chronological agenda groups for the feed column.
+  const historyGroups = $derived(groupHistoryEvents(filteredHistoryEvents));
+
+  // Goal filter only lists goals that actually produced history entries.
+  const historyGoalOptions = $derived(
+    [...new Map(historyEvents.map((e) => [e.goal.id, e.goal])).values()].sort((a, b) =>
+      a.title.localeCompare(b.title)
+    )
+  );
+
+  // Summary strip: per-period KPIs in the analytics card language.
+  const historyStats = $derived(computeHistoryStats(historyScopedEvents));
+
+  const historyFiltersActive = $derived(
+    historyStateFilter !== 'ALL' ||
+      historyGoalFilter !== null ||
+      historyRangeDays !== HISTORY_DEFAULT_RANGE
+  );
+
+  function clearHistoryFilters() {
+    historyStateFilter = 'ALL';
+    historyGoalFilter = null;
+    historyRangeDays = HISTORY_DEFAULT_RANGE;
+  }
+
+  let historyFeedEl = $state<HTMLElement | null>(null);
+
+  // Heatmap → feed navigation: picking a day scrolls its agenda group into
+  // view and marks it selected. Honors prefers-reduced-motion (#1657).
+  $effect(() => {
+    const el = historyFeedEl;
+    const date = selectedHistoryDate;
+    const groups = historyGroups;
+    if (!el || !date || currentTab !== 'history' || groups.length === 0) return;
+    const group = el.querySelector(`[data-hist-date="${date}"]`);
+    if (!(group instanceof HTMLElement)) return;
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    group.scrollIntoView({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' });
   });
 
   function formatHistoryDate(iso: string | null): string {
@@ -600,6 +690,23 @@
           isValid: (v) => v === null || v === 'ANY' || v === 'MORNING' || v === 'NIGHT',
         }
       );
+      // History tab filters (#1669).
+      const savedHistState = saved?.historyState;
+      if (
+        savedHistState &&
+        (HISTORY_STATE_FILTERS as readonly string[]).includes(savedHistState)
+      ) {
+        historyStateFilter = savedHistState;
+      }
+      if (typeof saved?.historyGoalId === 'number') {
+        historyGoalFilter = saved.historyGoalId;
+      }
+      if (
+        typeof saved?.historyRangeDays === 'number' &&
+        (HISTORY_RANGE_OPTIONS as readonly number[]).includes(saved.historyRangeDays)
+      ) {
+        historyRangeDays = saved.historyRangeDays;
+      }
     } catch {
       // ignore storage errors
     }
@@ -794,6 +901,11 @@
   let assignmentEventSources = $derived($planningEventSources);
 
   let poolFilter = $state<'recent' | 'active' | 'completed' | 'failed'>('recent');
+  // Vestigial pref target (#1234): assignments now always mirror into the
+  // calendar (setAssignments passes create_calendar_task=true), so the
+  // toggle UI is gone — but the #1673 loadPref/savePref calls below still
+  // round-trip this key, so it must remain declared.
+  let mirrorToCalendar = $state(false);
 
   let filteredUnassignedGoals = $derived.by(() => {
     let unassigned = goals.filter((g) => isListGoal(g) && !isAssigned(g.id, selDay));
@@ -865,6 +977,17 @@
   $effect(() => {
     savePref('goals', 'editorFilter', goalFilterState);
     savePref('goals', 'editorContextFilter', goalContextFilter);
+  });
+
+  // persist history tab filters in userSettings (#1669)
+  $effect(() => {
+    patchUserSettings({
+      goalsUi: {
+        historyState: historyStateFilter,
+        historyGoalId: historyGoalFilter,
+        historyRangeDays,
+      },
+    });
   });
 
   // Planning pool + cursor prefs (#1673).
@@ -1731,155 +1854,246 @@
 
     {#if currentTab === 'history'}
       <div class="tab-content fade-in history-layout">
-        <!-- Left: Annual Calendar -->
-        <div class="history-calendar-col">
-          <div class="history-cal-header">
-            <span class="section-title" style="margin:0;">{$t('goalsPage.yearMap')}</span>
-            <span class="history-hint">{$t('goalsPage.selectDayHint')}</span>
+        <!-- Navigator column: annual heatmap + filters -->
+        <div class="history-nav-col">
+          <div class="hist-card hist-map-card">
+            <div class="hist-card-header">
+              <span class="hist-card-title">
+                <Calendar size={11} />
+                {$t('goalsPage.yearMap')}
+              </span>
+              <span class="hist-card-hint">{$t('goalsPage.selectDayHint')}</span>
+            </div>
+            {#if historyData.length === 0}
+              <div class="empty-state">{$t('goalsPage.noActivityYet')}</div>
+            {:else}
+              <div class="history-heatmap-wrap">
+                {#if StreakHeatmap}
+                  <StreakHeatmap
+                    history={historyData}
+                    color="var(--success)"
+                    selectedDate={selectedHistoryDate}
+                    onselect={(date) => (selectedHistoryDate = date)}
+                  />
+                {:else if heatmapChunkError}
+                  <div class="heatmap-chunk-error caption">
+                    <span>{$t('common.loadFailed')}</span>
+                    <button class="btn btn-ghost" onclick={loadStreakHeatmap}
+                      >{$t('common.retry')}</button
+                    >
+                  </div>
+                {/if}
+              </div>
+            {/if}
           </div>
-          {#if historyData.length === 0}
-            <div class="empty-state">{$t('goalsPage.noActivityYet')}</div>
-          {:else}
-            <div class="history-heatmap-wrap">
-              {#if StreakHeatmap}
-                <StreakHeatmap
-                  history={historyData}
-                  color="var(--success)"
-                  selectedDate={selectedHistoryDate}
-                  onselect={(date) => (selectedHistoryDate = date)}
-                />
-              {:else if heatmapChunkError}
-                <div class="heatmap-chunk-error caption">
-                  <span>{$t('common.loadFailed')}</span>
-                  <button class="btn btn-ghost" onclick={loadStreakHeatmap}
-                    >{$t('common.retry')}</button
-                  >
-                </div>
+
+          <div class="hist-card">
+            <div class="hist-card-header">
+              <span class="hist-card-title">
+                <SlidersHorizontal size={11} />
+                {$t('goalsPage.history.filters')}
+              </span>
+              {#if historyFiltersActive}
+                <button class="hist-clear-btn" onclick={clearHistoryFilters}>
+                  {$t('goalsPage.history.clear')}
+                </button>
               {/if}
             </div>
-          {/if}
+
+            <div
+              class="hist-filter-group"
+              role="group"
+              aria-label={$t('goalsPage.history.stateLabel')}
+            >
+              {#each HISTORY_STATE_FILTERS as s (s)}
+                <button
+                  class="hist-chip"
+                  class:active={historyStateFilter === s}
+                  aria-pressed={historyStateFilter === s}
+                  onclick={() => (historyStateFilter = s)}
+                >
+                  {$t(HISTORY_STATE_LABEL_KEYS[s])}
+                </button>
+              {/each}
+            </div>
+
+            <label class="hist-field">
+              <span class="hist-field-label">{$t('goalsPage.history.goalLabel')}</span>
+              <select class="input" bind:value={historyGoalFilter}>
+                <option value={null}>{$t('goalsPage.history.allGoals')}</option>
+                {#each historyGoalOptions as g (g.id)}
+                  <option value={g.id}>{g.title}</option>
+                {/each}
+              </select>
+            </label>
+
+            <div
+              class="hist-filter-group"
+              role="group"
+              aria-label={$t('goalsPage.history.rangeLabel')}
+            >
+              {#each HISTORY_RANGE_OPTIONS as r (r)}
+                <button
+                  class="hist-chip"
+                  class:active={historyRangeDays === r}
+                  aria-pressed={historyRangeDays === r}
+                  onclick={() => (historyRangeDays = r)}
+                >
+                  {$t(HISTORY_RANGE_LABEL_KEYS[r])}
+                </button>
+              {/each}
+            </div>
+          </div>
         </div>
 
-        <!-- Right: Detail Panel -->
-        <div class="history-detail-col">
-          {#if !selectedHistoryDate}
-            <div class="history-detail-empty">
-              <div class="history-detail-icon"><Calendar size={40} strokeWidth={1} /></div>
-              <span class="history-detail-msg">{$t('goalsPage.selectDayCalendarHint')}</span>
+        <!-- Main column: summary strip + chronological agenda feed -->
+        <div class="history-main-col">
+          <div class="hist-stats" aria-label={$t('goalsPage.history.statsLabel')}>
+            <div class="hist-stat success">
+              <span class="hist-stat-icon"><Check size={13} /></span>
+              <span class="hist-stat-val">{historyStats.completed}</span>
+              <span class="hist-stat-label">{$t('goalsPage.history.statCompleted')}</span>
             </div>
-          {:else}
-            <div class="history-detail-header">
-              <div class="history-detail-date" style="text-transform:none;">
-                {formatHistoryDate(selectedHistoryDate)}
-              </div>
+            <div class="hist-stat failed">
+              <span class="hist-stat-icon"><X size={13} /></span>
+              <span class="hist-stat-val">{historyStats.failed}</span>
+              <span class="hist-stat-label">{$t('goalsPage.history.statFailed')}</span>
             </div>
+            <div class="hist-stat cancelled">
+              <span class="hist-stat-icon"><Ban size={13} /></span>
+              <span class="hist-stat-val">{historyStats.cancelled}</span>
+              <span class="hist-stat-label">{$t('goalsPage.history.statCancelled')}</span>
+            </div>
+            <div class="hist-stat rate">
+              <span class="hist-stat-icon"><Percent size={13} /></span>
+              <span class="hist-stat-val"
+                >{historyStats.effectiveness === null
+                  ? '—'
+                  : `${historyStats.effectiveness}%`}</span
+              >
+              <span class="hist-stat-label">{$t('goalsPage.history.statRate')}</span>
+            </div>
+            <div class="hist-stat streak">
+              <span class="hist-stat-icon"><Flame size={13} /></span>
+              <span class="hist-stat-val"
+                >{$t('goalsPage.history.streakDays', {
+                  values: { count: historyStats.bestStreak },
+                })}</span
+              >
+              <span class="hist-stat-label">{$t('goalsPage.history.statStreak')}</span>
+            </div>
+          </div>
 
-            {#if goalsForDate.completed.length === 0 && goalsForDate.failed.length === 0}
-              <div class="history-no-activity">
-                <span>{$t('goalsPage.noActivityForDay')}</span>
-              </div>
-            {/if}
-
-            {#if goalsForDate.completed.length > 0}
-              <div class="history-section-label success">
-                <Check size={12} />
-                {$t('goalsPage.completedLabel')} ({goalsForDate.completed.length})
-              </div>
-              <div class="history-goal-list">
-                {#each goalsForDate.completed as g (g.id)}
-                  <div
-                    class="goal-card completed"
-                    style="border-left: 3px solid {getGoalColor(g)}; width: 100%;"
+          <div class="hist-card hist-feed-card">
+            <div class="hist-card-header">
+              <span class="hist-card-title">
+                <HistoryIcon size={11} />
+                {$t('goalsPage.history.timeline')}
+              </span>
+              <span class="hist-feed-count"
+                >{$t('goalsPage.history.events', {
+                  values: { count: filteredHistoryEvents.length },
+                })}</span
+              >
+            </div>
+            <div class="hist-feed" bind:this={historyFeedEl}>
+              {#each historyGroups as group (group.date)}
+                {@const doneCount = group.items.filter((e) => e.kind === 'COMPLETED').length}
+                {@const failedCount = group.items.filter((e) => e.kind === 'FAILED').length}
+                {@const cancelledCount = group.items.filter(
+                  (e) => e.kind === 'CANCELLED'
+                ).length}
+                <div
+                  class="hist-day"
+                  data-hist-date={group.date}
+                  class:selected={group.date === selectedHistoryDate}
+                  class:today={group.date === todayIso}
+                >
+                  <button
+                    class="hist-day-head"
+                    onclick={() => (selectedHistoryDate = group.date)}
+                    aria-current={group.date === selectedHistoryDate ? 'date' : undefined}
                   >
-                    <div class="goal-main">
-                      <div class="goal-title">
-                        {#if g.fail_emoji}
-                          <span
-                            class="emoji-badge"
-                            style="display:flex; align-items:center; margin-right:8px;"
-                          >
-                            <StreakIcon name={g.fail_emoji} size={16} color={getGoalColor(g)} />
+                    <span class="hist-day-date">{formatHistoryDate(group.date)}</span>
+                    <span class="hist-day-badges">
+                      {#if doneCount > 0}
+                        <span class="hist-mini success"><Check size={9} />{doneCount}</span>
+                      {/if}
+                      {#if failedCount > 0}
+                        <span class="hist-mini failed"><X size={9} />{failedCount}</span>
+                      {/if}
+                      {#if cancelledCount > 0}
+                        <span class="hist-mini cancelled"><Ban size={9} />{cancelledCount}</span>
+                      {/if}
+                    </span>
+                  </button>
+                  <div class="hist-day-items">
+                    {#each group.items as ev (`${ev.goal.id}-${ev.kind}`)}
+                      <div
+                        class="hist-event"
+                        class:completed={ev.kind === 'COMPLETED'}
+                        class:failed={ev.kind === 'FAILED'}
+                        class:cancelled={ev.kind === 'CANCELLED'}
+                      >
+                        <span class="hist-ev-icon">
+                          {#if ev.kind === 'COMPLETED'}
+                            <Check size={13} />
+                          {:else if ev.kind === 'FAILED'}
+                            <X size={13} />
+                          {:else}
+                            <Ban size={13} />
+                          {/if}
+                        </span>
+                        {#if ev.goal.fail_emoji}
+                          <span class="hist-ev-emoji">
+                            <StreakIcon
+                              name={ev.goal.fail_emoji}
+                              size={14}
+                              color={getGoalColor(ev.goal)}
+                            />
                           </span>
                         {/if}
-                        {g.title}
-                      </div>
-                      <div class="goal-meta">
-                        <span
-                          class="tag-chip"
-                          style="background: color-mix(in srgb, {getGoalColor(
-                            g
-                          )} 12%, transparent); border: 1px solid {getGoalColor(
-                            g
-                          )}; color: {getGoalColor(g)};"
-                          >{TEMPORALITY_LABELS[g.temporality] || g.temporality}</span
+                        <button
+                          class="hist-ev-title"
+                          onclick={() => openGoalEditor(ev.goal)}
+                          title={ev.goal.title}
                         >
+                          {ev.goal.title}
+                        </button>
+                        <span class="hist-ev-temp" style="color: {getGoalColor(ev.goal)}"
+                          >{TEMPORALITY_LABELS[ev.goal.temporality] ||
+                            ev.goal.temporality}</span
+                        >
+                        {#if ev.time}<span class="hist-ev-time">{ev.time}</span>{/if}
+                        <span
+                          class="status-badge"
+                          class:success={ev.kind === 'COMPLETED'}
+                          class:error={ev.kind === 'FAILED'}
+                          class:warning={ev.kind === 'CANCELLED'}
+                        >
+                          {ev.kind === 'COMPLETED'
+                            ? $t('goalsPage.completed')
+                            : ev.kind === 'FAILED'
+                              ? $t('goalsPage.failed')
+                              : $t('goalsPage.history.cancelled')}
+                        </span>
                       </div>
-                    </div>
-                    <div class="goal-progress" style="width: 100px;">
-                      <div class="progress-meta">
-                        <span class="mono caption"></span>
-                        <span class="caption" style="color: {getGoalColor(g)};">100%</span>
-                      </div>
-                      <div class="progress-track" style="height: 4px;">
-                        <div
-                          class="progress-fill"
-                          style="width: 100%; background: {getGoalColor(g)};"
-                        ></div>
-                      </div>
-                    </div>
+                    {/each}
                   </div>
-                {/each}
-              </div>
-            {/if}
-
-            {#if goalsForDate.failed.length > 0}
-              <div class="history-section-label failed">
-                <X size={12} />
-                {$t('goalsPage.failedLabel')} ({goalsForDate.failed.length})
-              </div>
-              <div class="history-goal-list">
-                {#each goalsForDate.failed as g (g.id)}
-                  <div
-                    class="goal-card failed"
-                    style="border-left: 3px solid var(--error); width: 100%;"
+                </div>
+              {:else}
+                <div class="history-detail-empty">
+                  <div class="history-detail-icon">
+                    <HistoryIcon size={40} strokeWidth={1} />
+                  </div>
+                  <span class="history-detail-msg">{$t('goalsPage.history.empty')}</span>
+                  <span class="history-detail-msg hist-empty-hint"
+                    >{$t('goalsPage.history.emptyHint')}</span
                   >
-                    <div class="goal-main">
-                      <div class="goal-title">
-                        {#if g.fail_emoji}
-                          <span
-                            class="emoji-badge"
-                            style="display:flex; align-items:center; margin-right:8px;"
-                          >
-                            <StreakIcon name={g.fail_emoji} size={16} color="var(--error)" />
-                          </span>
-                        {/if}
-                        {g.title}
-                      </div>
-                      <div class="goal-meta">
-                        <span
-                          class="tag-chip"
-                          style="background: color-mix(in srgb, var(--error) 12%, transparent); border: 1px solid var(--error); color: var(--error);"
-                          >{TEMPORALITY_LABELS[g.temporality] || g.temporality}</span
-                        >
-                      </div>
-                    </div>
-                    <div class="goal-progress" style="width: 100px;">
-                      <div class="progress-meta">
-                        <span class="mono caption"></span>
-                        <span class="caption" style="color: var(--error);">{g.progress_pct}%</span>
-                      </div>
-                      <div class="progress-track" style="height: 4px;">
-                        <div
-                          class="progress-fill"
-                          style="width: {g.progress_pct}%; background: var(--error);"
-                        ></div>
-                      </div>
-                    </div>
-                  </div>
-                {/each}
-              </div>
-            {/if}
-          {/if}
+                </div>
+              {/each}
+            </div>
+          </div>
         </div>
       </div>
     {/if}
@@ -3140,12 +3354,12 @@
     color: var(--error);
     border: 1px solid color-mix(in srgb, var(--error) 20%, transparent);
   }
-
-  .history-heatmap-wrap {
-    width: 100%;
-    display: flex;
-    justify-content: center;
+  .status-badge.warning {
+    background: color-mix(in srgb, var(--warning) 10%, transparent);
+    color: var(--warning);
+    border: 1px solid color-mix(in srgb, var(--warning) 20%, transparent);
   }
+
   .heatmap-chunk-error {
     display: flex;
     flex-direction: column;
@@ -3714,12 +3928,6 @@
     background: var(--elevated);
   }
 
-  .section-title {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text-secondary);
-    margin-bottom: var(--s3);
-  }
   .goal-card {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -3730,14 +3938,6 @@
     gap: var(--s4);
     margin-bottom: var(--s2);
     transition: all 0.2s ease;
-  }
-  .goal-card.completed {
-    opacity: 0.6;
-    border-color: var(--success);
-  }
-  .goal-card.failed {
-    border-color: var(--error);
-    background: color-mix(in srgb, var(--error) 2%, transparent);
   }
   .goal-main {
     flex: 1;
@@ -3753,12 +3953,6 @@
   }
   .emoji-badge {
     font-size: 16px;
-  }
-  .goal-meta {
-    display: flex;
-    gap: 8px;
-    margin-top: 6px;
-    align-items: center;
   }
   .goal-progress {
     width: 140px;
@@ -3778,12 +3972,6 @@
     height: 100%;
     background: var(--xp);
     transition: width 0.3s ease;
-  }
-  .goal-card.completed .progress-fill {
-    background: var(--success);
-  }
-  .goal-card.failed .progress-fill {
-    background: var(--error);
   }
   .empty-state {
     padding: 32px;
@@ -3868,48 +4056,93 @@
     background: color-mix(in srgb, var(--error) 10%, transparent);
   }
 
-  /* ── History Tab ── */
+  /* ── History Tab (#1669): navigator rail + summary strip + agenda feed ── */
   .history-layout {
     display: grid;
-    grid-template-columns: 1fr 440px;
-    gap: var(--s4);
+    grid-template-columns: minmax(320px, 380px) 1fr;
+    gap: var(--s3);
     align-items: stretch;
     flex: 1;
     min-height: 0;
     height: 100%;
   }
 
-  @media (max-width: 900px) {
-    .history-layout {
-      grid-template-columns: 1fr;
-    }
+  .history-nav-col {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s3);
+    min-height: 0;
+    overflow-y: auto;
   }
 
-  .history-calendar-col {
+  /* Card shell in the analytics .ac-card visual language. */
+  .hist-card {
     display: flex;
     flex-direction: column;
     gap: var(--s3);
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--r);
-    padding: var(--s4);
+    padding: var(--s3) var(--s4);
     min-height: 0;
-    height: 100%;
+    transition:
+      border-color var(--t-normal),
+      background var(--t-normal);
   }
-
-  .history-cal-header {
+  .hist-card:hover {
+    border-color: var(--primary);
+  }
+  .hist-card-header {
     display: flex;
-    flex-direction: column;
-    gap: 2px;
+    align-items: center;
+    gap: var(--s2);
+    min-width: 0;
+    flex-shrink: 0;
   }
-
-  .history-hint {
-    font-size: 11px;
+  .hist-card-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
     color: var(--text-muted);
     font-family: var(--font-mono);
-    letter-spacing: 0.03em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+  }
+  .hist-card-hint {
+    margin-left: auto;
+    font-size: 10px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .hist-clear-btn {
+    margin-left: auto;
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--link);
+    font-size: 10px;
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+  }
+  .hist-clear-btn:hover {
+    text-decoration: underline;
   }
 
+  .hist-map-card {
+    flex: 1;
+  }
   .history-heatmap-wrap {
     flex: 1;
     display: flex;
@@ -3917,17 +4150,328 @@
     min-height: 0;
   }
 
-  .history-detail-col {
+  /* Filters */
+  .hist-filter-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .hist-chip {
+    padding: 4px 10px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    cursor: pointer;
+    transition:
+      border-color var(--t-fast),
+      color var(--t-fast),
+      background var(--t-fast);
+  }
+  .hist-chip:hover {
+    border-color: var(--text-muted);
+    color: var(--text-primary);
+  }
+  .hist-chip.active {
+    color: var(--text-primary);
+    border-color: color-mix(in srgb, var(--xp) 45%, var(--border));
+    background: color-mix(in srgb, var(--xp) 8%, transparent);
+  }
+  .hist-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+  .hist-field-label {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+  }
+  .hist-field .input {
+    width: 100%;
+  }
+
+  /* Main column */
+  .history-main-col {
     display: flex;
     flex-direction: column;
     gap: var(--s3);
+    min-height: 0;
+  }
+
+  /* Summary strip */
+  .hist-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+    gap: var(--s3);
+    flex-shrink: 0;
+  }
+  .hist-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    padding: var(--s3);
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--r);
-    padding: var(--s4);
+    transition:
+      border-color var(--t-normal),
+      background var(--t-normal);
+    animation: hist-in 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+  .hist-stat:hover {
+    border-color: var(--primary);
+    background: var(--surface-hover);
+  }
+  @keyframes hist-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  .hist-stat-icon {
+    display: flex;
+    color: var(--text-muted);
+  }
+  .hist-stat.success .hist-stat-icon {
+    color: var(--success);
+  }
+  .hist-stat.failed .hist-stat-icon {
+    color: var(--error);
+  }
+  .hist-stat.cancelled .hist-stat-icon {
+    color: var(--warning);
+  }
+  .hist-stat.rate .hist-stat-icon {
+    color: var(--xp);
+  }
+  .hist-stat.streak .hist-stat-icon {
+    color: var(--today);
+  }
+  .hist-stat-val {
+    font-size: 20px;
+    font-weight: 700;
+    font-family: var(--font-mono);
+    line-height: 1.1;
+    color: var(--text-primary);
+    white-space: nowrap;
+  }
+  .hist-stat-label {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+
+  /* Agenda feed */
+  .hist-feed-card {
+    flex: 1;
+    overflow: hidden;
+  }
+  .hist-feed-count {
+    margin-left: auto;
+    flex-shrink: 0;
+    font-size: 10px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    white-space: nowrap;
+  }
+  .hist-feed {
+    flex: 1;
     min-height: 0;
-    height: 100%;
     overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--s3);
+  }
+  .hist-day {
+    flex-shrink: 0;
+    border: 1px solid var(--border-light);
+    border-radius: var(--r);
+    overflow: hidden;
+    transition: outline-color var(--t-fast);
+  }
+  .hist-day.selected {
+    outline: 2px solid var(--link);
+    outline-offset: -1px;
+  }
+  .hist-day-head {
+    display: flex;
+    align-items: center;
+    gap: var(--s2);
+    width: 100%;
+    padding: 8px 12px;
+    background: color-mix(in srgb, var(--text-primary) 2%, transparent);
+    border: none;
+    border-bottom: 1px solid var(--border-light);
+    cursor: pointer;
+    color: var(--text-primary);
+    transition: background var(--t-fast);
+  }
+  .hist-day-head:hover {
+    background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  }
+  .hist-day-date {
+    font-size: 12px;
+    font-weight: 600;
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+  }
+  .hist-day.today .hist-day-date {
+    color: var(--xp);
+  }
+  .hist-day-badges {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .hist-mini {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 10px;
+    font-family: var(--font-mono);
+  }
+  .hist-mini.success {
+    color: var(--success);
+  }
+  .hist-mini.failed {
+    color: var(--error);
+  }
+  .hist-mini.cancelled {
+    color: var(--warning);
+  }
+  .hist-day-items {
+    display: flex;
+    flex-direction: column;
+  }
+  .hist-event {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 12px;
+    font-size: 12px;
+    border-left: 3px solid transparent;
+  }
+  .hist-event + .hist-event {
+    border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  }
+  .hist-event.completed {
+    border-left-color: var(--success);
+  }
+  .hist-event.failed {
+    border-left-color: var(--error);
+  }
+  .hist-event.cancelled {
+    border-left-color: var(--warning);
+  }
+  .hist-ev-icon {
+    display: flex;
+    flex-shrink: 0;
+    color: var(--text-muted);
+  }
+  .hist-event.completed .hist-ev-icon {
+    color: var(--success);
+  }
+  .hist-event.failed .hist-ev-icon {
+    color: var(--error);
+  }
+  .hist-event.cancelled .hist-ev-icon {
+    color: var(--warning);
+  }
+  .hist-ev-emoji {
+    display: flex;
+    flex-shrink: 0;
+  }
+  .hist-ev-title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--text-primary);
+    font-size: 12px;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+  }
+  .hist-ev-title:hover {
+    color: var(--link);
+  }
+  .hist-ev-temp {
+    flex-shrink: 0;
+    font-size: 10px;
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .hist-ev-time {
+    flex-shrink: 0;
+    font-size: 10px;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+  }
+  .hist-event .status-badge {
+    margin-left: 0;
+    flex-shrink: 0;
+  }
+  .hist-empty-hint {
+    max-width: none;
+    font-size: 11px;
+  }
+
+  @media (max-width: 1100px) {
+    .history-layout {
+      grid-template-columns: minmax(280px, 330px) 1fr;
+    }
+  }
+
+  @media (max-width: 900px) {
+    .history-layout {
+      grid-template-columns: 1fr;
+      overflow-y: auto;
+    }
+    .history-nav-col {
+      overflow: visible;
+    }
+    .hist-map-card {
+      flex: none;
+    }
+    .hist-feed-card {
+      min-height: 320px;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .hist-stat {
+      animation: none;
+    }
   }
 
   .history-detail-empty {
@@ -3971,36 +4515,6 @@
     font-weight: 600;
     color: var(--text-primary);
     text-align: center;
-  }
-
-  .history-no-activity {
-    font-size: 12px;
-    color: var(--text-muted);
-    padding: var(--s3);
-    text-align: center;
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .history-section-label {
-    font-size: 11px;
-    font-family: var(--font-mono);
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    padding: 4px 0;
-    display: flex;
-    align-items: center;
-    gap: 5px;
-  }
-
-  .history-section-label.success {
-    color: var(--success);
-  }
-  .history-section-label.failed {
-    color: var(--error);
   }
 
   .history-goal-list {

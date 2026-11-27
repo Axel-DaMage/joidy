@@ -433,6 +433,11 @@ def _reconsent_if_needed(exc: httpx.HTTPStatusError) -> None:
     raise exc
 
 
+def _google_attendees(attendees: list[str] | None) -> list[dict[str, str]]:
+    """Translate raw e-mail strings into Google ``attendees`` objects (#1658)."""
+    return [{"email": email.strip()} for email in attendees or [] if email.strip()]
+
+
 async def create_google_event(
     db: Session,
     token: str,
@@ -441,11 +446,21 @@ async def create_google_event(
     start: dict[str, Any],
     end: dict[str, Any],
     description: str | None = None,
+    location: str | None = None,
+    attendees: list[str] | None = None,
+    color_id: str | None = None,
 ) -> dict[str, Any]:
     """Create an event in Google and upsert it into the local cache."""
     event: dict[str, Any] = {"summary": summary, "start": start, "end": end}
     if description:
         event["description"] = description
+    if location:
+        event["location"] = location
+    guest_list = _google_attendees(attendees)
+    if guest_list:
+        event["attendees"] = guest_list
+    if color_id:
+        event["colorId"] = color_id
     try:
         created = await gs.create_event(token, calendar_id, event)
     except httpx.HTTPStatusError as exc:

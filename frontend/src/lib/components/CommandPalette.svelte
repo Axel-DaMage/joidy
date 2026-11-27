@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { goto } from '$app/navigation';
-  import { fade, fly } from 'svelte/transition';
+  import { backdropIn, enter } from '$lib/utils/motion';
   import Search from 'lucide-svelte/icons/search';
   import CornerDownLeft from 'lucide-svelte/icons/corner-down-left';
   import DynamicIcon from './DynamicIcon.svelte';
@@ -293,11 +293,11 @@
     aria-label={$t('commandPalette.label')}
     tabindex="-1"
     onclick={handleBackdropClick}
-    transition:fade={{ duration: 100 }}
+    transition:backdropIn={{ duration: 100 }}
   >
     <div
       class="cp-modal"
-      transition:fly={{ y: -20, duration: 150 }}
+      transition:enter={{ y: -20, duration: 150 }}
       use:focusTrap
     >
       <div class="cp-header">

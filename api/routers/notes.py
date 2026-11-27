@@ -55,7 +55,8 @@ from sqlalchemy.orm import Session, defer, selectinload
 router = APIRouter(prefix="/notes", tags=["notes"])
 
 
-ALLOWED_SOURCES = {"joidy", "obsidian", "api", "import"}
+# "calendar" (#1658): vault notes quick-captured from a calendar event.
+ALLOWED_SOURCES = {"joidy", "obsidian", "api", "import", "calendar"}
 # Provenance only the internal service token may claim (#1332): a regular
 # client asserting "obsidian" would trigger the vault_synced broadcast and
 # the note_imported_obsidian XP event meant for real watcher traffic.

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Database, FolderRoot } from 'lucide-svelte';
+  import { FolderRoot } from 'lucide-svelte';
   import { writeInObsidian } from '$lib/stores/settings';
   import type { SystemConfig } from '$lib/utils/settingsTypes';
 
@@ -11,11 +11,8 @@
   let { systemConfig = $bindable(), isConfigured }: Props = $props();
 </script>
 
-<!-- Vault -->
-<section class="section">
-  <div class="section-title" style="color: var(--xp, var(--accent));">
-    <Database size={12} /> Obsidian Vault
-  </div>
+<!-- Vault — el marco (título/descripción/borde) lo aporta SettingsSection (#1671). -->
+<div class="section-content">
   <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
     <div class="row-label">
       <span id="sv-vault-dir-label">Directorio del Vault</span>
@@ -86,26 +83,9 @@
       Joidy creará las notas directamente en la raíz de tu Vault.
     {/if}
   </p>
-</section>
+</div>
 
 <style>
-  .section {
-    padding: 16px 20px;
-    border-bottom: 1px solid var(--border-light);
-  }
-
-  .section-title {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 10px;
-    font-family: var(--font-mono);
-    color: var(--text-muted);
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    margin-bottom: 12px;
-  }
-
   .row {
     display: flex;
     align-items: center;

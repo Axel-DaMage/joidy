@@ -1,5 +1,12 @@
-"""CRUD for internal joidy calendar tasks (#1230)."""
+"""CRUD for internal joidy calendar tasks (#1230).
 
+Planning suite (#1658): tasks gained full event-editor fields
+(description/location/attendees/note_id), a duplicate endpoint, and a
+``/calendar/day-metrics`` aggregation feeding the per-day intelligence
+badges (focus minutes, notes, XP, goals, mood, streak).
+"""
+
+import json
 from calendar import monthrange
 from datetime import UTC, datetime, time, timedelta
 from datetime import date as date_type
@@ -13,13 +20,16 @@ from models.calendar_task import (
     CalendarTaskRecurrence,
     CalendarTaskSource,
 )
-from models.gamification import XPEvent
+from models.gamification import StreakRecord, XPEvent
 from models.goal import Goal, GoalMeasurement
+from models.mood_entry import MoodEntry
+from models.note import Note
 from pydantic import BaseModel, Field
 from services import task_google_sync
+from services.auth_service import get_current_user
 from services.gamification_engine import process_event
 from services.timezone_utils import get_local_today
-from sqlalchemy import case
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session, joinedload
 
 router = APIRouter(prefix="/calendar", tags=["calendar"])
@@ -140,7 +150,10 @@ def _spawn_next_occurrence(db: Session, task: CalendarTask) -> None:
 
     The spawned row is a fresh joidy task: ``google_event_id`` is cleared
     (it is NOT auto-published to Google — write-back stays out of scope)
-    and the reminder offset is carried over so the series keeps firing.
+    and the reminder offset plus the event-editor fields (#1658) are carried
+    over so the series keeps firing with its details intact. The vault-note
+    backlink (``note_id``) is NOT copied — it points at the specific
+    occurrence's note, not the whole series'.
 
     Idempotency: re-toggling a task undone → done must not mint duplicates,
     so the spawn is skipped when a same-title, same-source task already
@@ -174,6 +187,9 @@ def _spawn_next_occurrence(db: Session, task: CalendarTask) -> None:
             color=task.color,
             recurrence=task.recurrence,
             reminder_minutes=task.reminder_minutes,
+            description=task.description,
+            location=task.location,
+            attendees=task.attendees,
         )
     )
 
@@ -201,6 +217,11 @@ class CalendarTaskCreate(BaseModel):
     recurrence: CalendarTaskRecurrence = CalendarTaskRecurrence.NONE
     # Minutes before start_time; NULL = no reminder. Capped at one day.
     reminder_minutes: int | None = Field(default=None, ge=0, le=1440)
+    # Event-editor fields (#1658).
+    description: str | None = Field(default=None, max_length=5000)
+    location: str | None = Field(default=None, max_length=500)
+    # Comma-separated attendee e-mails; passed through to Google on publish.
+    attendees: str | None = Field(default=None, max_length=2000)
 
 
 class CalendarTaskUpdate(BaseModel):
@@ -217,6 +238,12 @@ class CalendarTaskUpdate(BaseModel):
     # Write-back mirror (#1233): set by the frontend after creating the
     # Google event, so later edits/deletes can propagate to Google.
     google_event_id: str | None = Field(default=None, max_length=255)
+    # Event-editor fields (#1658).
+    description: str | None = Field(default=None, max_length=5000)
+    location: str | None = Field(default=None, max_length=500)
+    attendees: str | None = Field(default=None, max_length=2000)
+    # Vault-note backlink — set by the frontend after quick-capture (#1658).
+    note_id: int | None = None
 
 
 class CalendarTaskOut(BaseModel):
@@ -237,6 +264,10 @@ class CalendarTaskOut(BaseModel):
     color: str | None
     recurrence: CalendarTaskRecurrence
     reminder_minutes: int | None
+    description: str | None
+    location: str | None
+    attendees: str | None
+    note_id: int | None
     created_at: datetime
     updated_at: datetime
 
@@ -272,6 +303,10 @@ def _task_out(task: CalendarTask) -> CalendarTaskOut:
         color=task.color,
         recurrence=task.recurrence,
         reminder_minutes=task.reminder_minutes,
+        description=task.description,
+        location=task.location,
+        attendees=task.attendees,
+        note_id=task.note_id,
         created_at=task.created_at,
         updated_at=task.updated_at,
     )
@@ -348,6 +383,9 @@ def create_task(body: CalendarTaskCreate, db: Session = Depends(get_db)):
         color=body.color,
         recurrence=body.recurrence,
         reminder_minutes=body.reminder_minutes,
+        description=body.description,
+        location=body.location,
+        attendees=body.attendees,
     )
     db.add(task)
     db.commit()
@@ -376,6 +414,11 @@ def update_task(task_id: int, body: CalendarTaskUpdate, db: Session = Depends(ge
         if goal_id is not None and not db.get(Goal, goal_id):
             raise HTTPException(status_code=404, detail="Goal not found")
         task.goal_id = goal_id
+    if "note_id" in data:
+        note_id = data.pop("note_id")
+        if note_id is not None and not db.get(Note, note_id):
+            raise HTTPException(status_code=404, detail="Note not found")
+        task.note_id = note_id
     for field in (
         "title",
         "date",
@@ -386,6 +429,9 @@ def update_task(task_id: int, body: CalendarTaskUpdate, db: Session = Depends(ge
         "google_event_id",
         "recurrence",
         "reminder_minutes",
+        "description",
+        "location",
+        "attendees",
     ):
         if field in data:
             setattr(task, field, data[field])
@@ -418,3 +464,187 @@ def toggle_done(task_id: int, db: Session = Depends(get_db)):
     if task.date is not None or task.google_event_id:
         task_google_sync.sync_task(db, task)
     return _task_out(task)
+
+
+class CalendarTaskDuplicateIn(BaseModel):
+    """Optional overrides applied on top of the copied fields (#1658)."""
+
+    date: date_type | None = None
+    title: str | None = Field(default=None, min_length=1, max_length=500)
+
+
+@router.post("/tasks/{task_id}/duplicate", response_model=CalendarTaskOut, status_code=201)
+def duplicate_task(task_id: int, body: CalendarTaskDuplicateIn | None = None, db: Session = Depends(get_db)):
+    """Clone a task into a fresh JOIDY row (#1658).
+
+    The copy is always a plain joidy task: it never carries ``google_event_id``
+    (publishing the duplicate is a separate explicit action) and starts
+    ``done=False`` so a completed source does not mint a pre-completed clone.
+    ``date`` defaults to the source's; pass a different day to clone across
+    days, or omit the body entirely.
+    """
+    task = _get_or_404(db, task_id)
+    clone = CalendarTask(
+        title=(body.title if body and body.title else task.title),
+        date=(body.date if body and body.date is not None else task.date),
+        start_time=task.start_time,
+        end_time=task.end_time,
+        priority=task.priority,
+        done=False,
+        goal_id=task.goal_id,
+        source=CalendarTaskSource.JOIDY,
+        google_event_id=None,
+        color=task.color,
+        recurrence=task.recurrence,
+        reminder_minutes=task.reminder_minutes,
+        description=task.description,
+        location=task.location,
+        attendees=task.attendees,
+        note_id=task.note_id,
+    )
+    db.add(clone)
+    db.commit()
+    db.refresh(clone)
+    return _task_out(clone)
+
+
+class DayMetrics(BaseModel):
+    """Per-day intelligence badges for the planning suite (#1658).
+
+    ``focus_minutes`` sums the pomodoro durations recorded in
+    ``pomodoro_completed`` XP-event metadata; ``streak_day`` marks days that
+    count toward the activity streak (a streak_records row exists).
+    """
+
+    date: date_type
+    xp: int = 0
+    xp_events: int = 0
+    pomodoros: int = 0
+    focus_minutes: int = 0
+    notes: int = 0
+    goals_completed: int = 0
+    mood_score: int | None = None
+    streak_day: bool = False
+
+
+def _pomodoro_focus_minutes(db: Session, start: date_type, end: date_type) -> dict[str, int]:
+    """Sum pomodoro durations per UTC day from XP-event metadata.
+
+    ``duration_minutes`` lives inside ``metadata_json`` (JSON text), which has
+    no portable SQL extraction across SQLite/Postgres, so rows are parsed in
+    Python — the window is capped at 370 days and the events per day are few.
+    """
+    start_dt = datetime.combine(start, time.min, tzinfo=UTC)
+    end_dt = datetime.combine(end, time.max, tzinfo=UTC)
+    rows = (
+        db.query(func.date(XPEvent.created_at).label("d"), XPEvent.metadata_json)
+        .filter(
+            XPEvent.event_type == "pomodoro_completed",
+            XPEvent.created_at >= start_dt,
+            XPEvent.created_at <= end_dt,
+        )
+        .all()
+    )
+    minutes: dict[str, int] = {}
+    for row in rows:
+        try:
+            meta = json.loads(row.metadata_json or "{}")
+            duration = int(meta.get("duration_minutes") or 0)
+        except (ValueError, TypeError):
+            duration = 0
+        day = str(row.d)[:10]
+        minutes[day] = minutes.get(day, 0) + duration
+    return minutes
+
+
+@router.get("/day-metrics", response_model=list[DayMetrics])
+def day_metrics(
+    start: str,
+    end: str,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user),
+):
+    """Aggregate per-day Joidy metrics over ``[start, end]`` (#1658).
+
+    Sources: ``xp_events`` (XP + goals + pomodoro count), ``notes`` (created),
+    ``mood_entries`` (score), ``streak_records`` (active-day flag). Dates are
+    grouped on the stored day (UTC for timestamps — same convention as the
+    analytics service); the window is capped at 370 days — the year view is
+    the largest legitimate consumer (a full year of density dots).
+    """
+    start_day = _parse_date(start)
+    end_day = _parse_date(end)
+    if end_day < start_day:
+        raise HTTPException(status_code=400, detail="end must be on or after start")
+    if (end_day - start_day).days > 370:
+        raise HTTPException(status_code=400, detail="Range too large (max 370 days)")
+
+    start_dt = datetime.combine(start_day, time.min, tzinfo=UTC)
+    end_dt = datetime.combine(end_day, time.max, tzinfo=UTC)
+
+    xp_rows = (
+        db.query(
+            func.date(XPEvent.created_at).label("d"),
+            func.coalesce(func.sum(XPEvent.xp), 0).label("xp"),
+            func.count(XPEvent.id).label("events"),
+            func.coalesce(func.sum(case((XPEvent.event_type == "pomodoro_completed", 1), else_=0)), 0).label(
+                "pomodoros"
+            ),
+            func.coalesce(func.sum(case((XPEvent.event_type == "goal_completed", 1), else_=0)), 0).label(
+                "goals_completed"
+            ),
+        )
+        .filter(XPEvent.created_at >= start_dt, XPEvent.created_at <= end_dt)
+        .group_by(func.date(XPEvent.created_at))
+        .all()
+    )
+    xp_by_day = {str(r.d)[:10]: r for r in xp_rows}
+
+    notes_rows = (
+        db.query(func.date(Note.created_at).label("d"), func.count(Note.id).label("c"))
+        .filter(Note.created_at >= start_dt, Note.created_at <= end_dt)
+        .group_by(func.date(Note.created_at))
+        .all()
+    )
+    notes_by_day = {str(r.d)[:10]: int(r.c) for r in notes_rows}
+
+    mood_rows = (
+        db.query(MoodEntry.entry_date, MoodEntry.score)
+        .filter(
+            MoodEntry.user_id == user_id,
+            MoodEntry.entry_date >= start_day,
+            MoodEntry.entry_date <= end_day,
+        )
+        .all()
+    )
+    mood_by_day = {r.entry_date.isoformat(): r.score for r in mood_rows}
+
+    streak_rows = (
+        db.query(StreakRecord.activity_date)
+        .filter(StreakRecord.activity_date >= start_day, StreakRecord.activity_date <= end_day)
+        .all()
+    )
+    streak_days = {r.activity_date.isoformat() for r in streak_rows}
+
+    focus_by_day = _pomodoro_focus_minutes(db, start_day, end_day)
+
+    metrics: list[DayMetrics] = []
+    cursor = start_day
+    while cursor <= end_day:
+        key = cursor.isoformat()
+        xp_row = xp_by_day.get(key)
+        metrics.append(
+            DayMetrics(
+                date=cursor,
+                xp=int(xp_row.xp) if xp_row else 0,
+                xp_events=int(xp_row.events) if xp_row else 0,
+                pomodoros=int(xp_row.pomodoros) if xp_row else 0,
+                focus_minutes=focus_by_day.get(key, 0),
+                notes=notes_by_day.get(key, 0),
+                goals_completed=int(xp_row.goals_completed) if xp_row else 0,
+                mood_score=mood_by_day.get(key),
+                streak_day=key in streak_days,
+            )
+        )
+        cursor += timedelta(days=1)
+    return metrics

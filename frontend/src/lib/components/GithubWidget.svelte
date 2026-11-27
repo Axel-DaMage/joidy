@@ -226,9 +226,10 @@
       {#if githubLoading && githubIssues.length === 0 && githubPRs.length === 0}
         <div class="github-skeleton">
           {#each Array(skeletonRows) as _, idx}
+            <!-- Shared `m-skeleton` shimmer (motion system, #1657). -->
             <div class="skeleton-row" style="animation-delay: {idx * 80}ms">
-              <span class="skeleton-icon"></span>
-              <span class="skeleton-line long"></span>
+              <span class="skeleton-icon m-skeleton"></span>
+              <span class="skeleton-line long m-skeleton"></span>
             </div>
           {/each}
         </div>
@@ -645,26 +646,17 @@
     animation: skeletonFade 1.2s ease-in-out infinite;
   }
 
+  /* Gradient sweep + border-radius come from the shared `m-skeleton`
+     utility (app.css); these classes only keep the geometry. */
   .skeleton-icon {
-    width: 18px; height: 18px; border-radius: var(--r); flex-shrink: 0;
-    background: linear-gradient(90deg, rgba(125, 125, 125, 0.2) 0%, rgba(125, 125, 125, 0.35) 50%, rgba(125, 125, 125, 0.2) 100%);
-    background-size: 200% 100%;
-    animation: skeletonShimmer 1.4s ease-in-out infinite;
+    width: 18px; height: 18px; flex-shrink: 0;
   }
 
   .skeleton-line {
-    height: 10px; border-radius: var(--r-lg); flex: 1 1 auto;
-    background: linear-gradient(90deg, rgba(125, 125, 125, 0.18) 0%, rgba(125, 125, 125, 0.32) 50%, rgba(125, 125, 125, 0.18) 100%);
-    background-size: 200% 100%;
-    animation: skeletonShimmer 1.4s ease-in-out infinite;
+    height: 10px; flex: 1 1 auto;
   }
 
   .skeleton-line.long { max-width: 75%; }
-
-  @keyframes skeletonShimmer {
-    0% { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
-  }
 
   @keyframes skeletonFade {
     0% { opacity: 0.65; }
