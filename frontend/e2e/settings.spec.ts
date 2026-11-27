@@ -91,7 +91,9 @@ test.describe('Settings — Integraciones', () => {
   test('GitHub and Google integrations are visible', async ({ page }) => {
     await openSettings(page, '#integrations');
     const section = page.locator('#settings-integrations');
-    await expect(section.locator('text=/github/i')).toBeVisible({ timeout: 5000 });
+    // .first(): the SettingsSection description ("Conexiones con GitHub, Google…")
+    // matches the regex too — strict mode fails on the 2-node resolution.
+    await expect(section.locator('text=/github/i').first()).toBeVisible({ timeout: 5000 });
     await expect(section.locator('text=/google/i').first()).toBeVisible({ timeout: 5000 });
   });
 });
