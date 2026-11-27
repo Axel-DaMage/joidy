@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  import { untrack } from 'svelte';
+  import { fade, scale } from 'svelte/transition';
   import { X } from 'lucide-svelte';
   import { t } from 'svelte-i18n';
   import { focusTrap } from '$lib/actions/focusTrap';
@@ -7,24 +8,32 @@
   import { ALARM_SOUNDS, type AlarmSoundId } from '$lib/utils/clockAlerts';
   import { use24HourClock } from '$lib/stores/settings';
 
-  export let alarm: Alarm | null = null; // null = create new
-
-  const dispatch = createEventDispatcher<{
-    save: Omit<Alarm, 'id'> & { id?: string };
-    close: void;
-  }>();
+  let {
+    alarm = null,
+    onsave,
+    onclose,
+  }: {
+    alarm?: Alarm | null;
+    onsave: (payload: Omit<Alarm, 'id'> & { id?: string }) => void;
+    onclose: () => void;
+  } = $props();
 
   // Monday-first order matching mobile clock apps.
   const DOW_ORDER = [1, 2, 3, 4, 5, 6, 0];
   const DOW_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
   const SNOOZE_OPTIONS = [5, 10, 15];
 
-  let hour = alarm?.hour ?? 7;
-  let minute = alarm?.minute ?? 0;
-  let label = alarm?.label ?? '';
-  let days: number[] = alarm ? [...alarm.days] : [];
-  let snoozeMinutes = alarm?.snoozeMinutes ?? 10;
-  let sound: AlarmSoundId = alarm?.sound ?? 'beep';
+  // The page remounts this modal per edit session ({#if editorOpen}), so the
+  // form seeds from a one-time snapshot of the prop — live reactivity is
+  // neither needed nor wanted here.
+  const seed = untrack(() => alarm);
+
+  let hour = $state(seed?.hour ?? 7);
+  let minute = $state(seed?.minute ?? 0);
+  let label = $state(seed?.label ?? '');
+  let days = $state<number[]>(seed ? [...seed.days] : []);
+  let snoozeMinutes = $state(seed?.snoozeMinutes ?? 10);
+  let sound = $state<AlarmSoundId>(seed?.sound ?? 'beep');
 
   function toggleDay(d: number) {
     days = days.includes(d) ? days.filter((x) => x !== d) : [...days, d].sort();
@@ -50,7 +59,7 @@
   function submit() {
     clampHour();
     clampMinute();
-    dispatch('save', {
+    onsave({
       id: alarm?.id,
       hour,
       minute,
@@ -70,25 +79,21 @@
   }
 </script>
 
-<div class="modal-backdrop" role="presentation" onclick={() => dispatch('close')}>
+<div class="modal-backdrop" role="presentation" transition:fade={{ duration: 120 }} onclick={onclose}>
   <div
     class="alarm-modal card"
     role="dialog"
     aria-modal="true"
     tabindex="-1"
     aria-label={$t('timers.alarm.editorTitle')}
-    use:focusTrap={{ onEscape: () => dispatch('close') }}
+    transition:scale={{ duration: 160, start: 0.95 }}
+    use:focusTrap={{ onEscape: onclose }}
     onclick={(e) => e.stopPropagation()}
     onkeydown={onKeydown}
   >
     <div class="modal-head">
       <h3>{alarm ? $t('timers.alarm.edit') : $t('timers.alarm.new')}</h3>
-      <button
-        type="button"
-        class="btn-icon"
-        aria-label={$t('common.close')}
-        onclick={() => dispatch('close')}
-      >
+      <button type="button" class="btn-icon" aria-label={$t('common.close')} onclick={onclose}>
         <X size={16} />
       </button>
     </div>
@@ -129,7 +134,7 @@
     <div class="field">
       <span class="label">{$t('timers.alarm.repeat')}</span>
       <div class="dow-row" role="group" aria-label={$t('timers.alarm.repeat')}>
-        {#each DOW_ORDER as d}
+        {#each DOW_ORDER as d (d)}
           <button
             type="button"
             class="dow-chip"
@@ -159,7 +164,7 @@
       <label class="field">
         <span class="label">{$t('timers.alarm.snooze')}</span>
         <select class="input" bind:value={snoozeMinutes}>
-          {#each SNOOZE_OPTIONS as m}
+          {#each SNOOZE_OPTIONS as m (m)}
             <option value={m}>{$t('timers.alarm.snoozeMins', { values: { minutes: m } })}</option>
           {/each}
         </select>
@@ -167,7 +172,7 @@
       <label class="field">
         <span class="label">{$t('timers.alarm.sound')}</span>
         <select class="input" bind:value={sound}>
-          {#each ALARM_SOUNDS as s}
+          {#each ALARM_SOUNDS as s (s)}
             <option value={s}>{$t(`timers.sounds.${s}`)}</option>
           {/each}
         </select>
@@ -175,7 +180,7 @@
     </div>
 
     <div class="modal-actions">
-      <button type="button" class="btn btn-ghost" onclick={() => dispatch('close')}
+      <button type="button" class="btn btn-ghost" onclick={onclose}
         >{$t('common.cancel')}</button
       >
       <button type="button" class="btn btn-primary" onclick={submit}>{$t('common.save')}</button>
@@ -191,16 +196,16 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 100;
-    padding: 16px;
+    z-index: var(--z-modal);
+    padding: var(--s4);
   }
   .alarm-modal {
     width: 100%;
     max-width: 380px;
-    padding: 18px;
+    padding: var(--s4);
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: var(--s3);
   }
   .modal-head {
     display: flex;
@@ -215,22 +220,22 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: var(--s2);
   }
   .time-input {
     width: 88px;
     text-align: center;
     font-size: 40px;
     font-weight: 600;
-    background: var(--surface-2, var(--surface));
+    background: var(--elevated);
     border: 1px solid var(--border);
-    border-radius: 10px;
+    border-radius: var(--r);
     color: var(--text-primary);
-    padding: 8px 4px;
+    padding: var(--s2) var(--s1);
   }
   .time-input:focus {
     outline: none;
-    border-color: var(--accent);
+    border-color: var(--xp-2);
   }
   .time-sep {
     font-size: 36px;
@@ -240,16 +245,16 @@
   .field {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: var(--s1_5);
   }
   .field-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 10px;
+    gap: var(--s2_5);
   }
   .dow-row {
     display: flex;
-    gap: 6px;
+    gap: var(--s1_5);
     flex-wrap: wrap;
   }
   .dow-chip {
@@ -261,26 +266,34 @@
     color: var(--text-muted);
     font-size: 11px;
     cursor: pointer;
-    transition: all 0.15s;
+    transition:
+      background var(--t-fast),
+      border-color var(--t-fast),
+      color var(--t-fast);
   }
   .dow-chip.on {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: var(--accent-contrast-text, #fff);
+    background: var(--xp);
+    border-color: var(--xp);
+    color: var(--xp-contrast-text, var(--bg));
     font-weight: 600;
   }
   .preset-row {
     display: flex;
-    gap: 4px;
+    gap: var(--s1);
     flex-wrap: wrap;
   }
   .preset {
     font-size: 11px;
-    padding: 4px 10px;
+    padding: var(--s1) var(--s2_5);
   }
   .modal-actions {
     display: flex;
     justify-content: flex-end;
-    gap: 8px;
+    gap: var(--s2);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .dow-chip {
+      transition: none;
+    }
   }
 </style>

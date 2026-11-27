@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { AtSign, LogOut, UserRound } from 'lucide-svelte';
+  import { AtSign, LogOut } from 'lucide-svelte';
   import { session } from '$lib/stores/session';
   import { showNotification } from '$lib/stores/notifications';
   import { t } from 'svelte-i18n';
@@ -13,12 +13,8 @@
   }
 </script>
 
-<!-- Sesión -->
-<section class="section">
-  <div class="section-title" style="color: var(--xp, var(--accent));">
-    <UserRound size={12} />
-    {$t('settings.session.title')}
-  </div>
+<!-- Sesión — el marco (título/descripción/borde) lo aporta SettingsSection (#1671). -->
+<div class="section-content">
   <div class="row">
     <div class="row-label">
       <AtSign size={13} />
@@ -30,7 +26,7 @@
     </button>
   </div>
   <p class="hint">{$t('settings.session.hint')}</p>
-</section>
+</div>
 
 <style>
   /* Restaurada: se perdió en el split #1067; el markup usaba la clase
@@ -40,23 +36,6 @@
     color: var(--text-muted);
     line-height: 1.6;
     margin-top: 8px;
-  }
-
-  .section {
-    padding: 16px 20px;
-    border-bottom: 1px solid var(--border-light);
-  }
-
-  .section-title {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 10px;
-    font-family: var(--font-mono);
-    color: var(--text-muted);
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    margin-bottom: 12px;
   }
 
   .row {

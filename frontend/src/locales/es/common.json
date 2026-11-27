@@ -325,6 +325,7 @@
     "delete": "Eliminar",
     "search": "Buscar",
     "close": "Cerrar",
+    "back": "Volver",
     "settings": "Ajustes",
     "install": "Instalar",
     "skip": "Saltar",
@@ -389,6 +390,31 @@
   },
   "settings": {
     "title": "AJUSTES",
+    "nav": {
+      "appearance": "Apariencia",
+      "advanced": "Avanzado",
+      "editor": "Editor",
+      "vault": "Vault",
+      "integrations": "Integraciones",
+      "ai": "IA",
+      "app": "Aplicación",
+      "session": "Sesión",
+      "services": "Servicios",
+      "developer": "Desarrollador"
+    },
+    "descriptions": {
+      "appearance": "Tema, formato de hora, idioma, colores de acento e iconos.",
+      "advanced": "Metadatos, carpetas ocultas, papelera y línea de etiquetas.",
+      "editor": "Modo vim del editor markdown.",
+      "vault": "Ubicación del vault de Obsidian y modo de escritura.",
+      "integrations": "Conexiones con GitHub, Google, Strava, contactos y Spotify.",
+      "ai": "Claves y modelos de IA (Gemini, OpenAI-compatible, embeddings).",
+      "app": "Instala Joidy como aplicación en tu dispositivo.",
+      "session": "Usuario actual y cierre de sesión.",
+      "services": "Estado y control de los servicios de Joidy.",
+      "developer": "Repositorio y modo desarrollo."
+    },
+    "saveHint": "Guardar aplica todos los cambios de configuración. Los campos secretos vacíos no sobrescriben los valores existentes.",
     "appearance": "Apariencia",
     "theme": "Tema",
     "dark": "oscuro",
@@ -639,6 +665,35 @@
       "pendingToday": "{count} pendientes hoy",
       "upcoming": "Próximos 7 días",
       "nothingAhead": "Nada asignado esta semana"
+    },
+    "history": {
+      "filters": "Filtros",
+      "clear": "Limpiar",
+      "stateLabel": "Estado",
+      "stateAll": "Todos",
+      "stateCompleted": "Completados",
+      "stateFailed": "Fallidos",
+      "stateCancelled": "Cancelados",
+      "goalLabel": "Objetivo",
+      "allGoals": "Todos los objetivos",
+      "rangeLabel": "Periodo",
+      "range7d": "7d",
+      "range30d": "30d",
+      "range90d": "90d",
+      "range365d": "1a",
+      "rangeAll": "Todo",
+      "timeline": "Actividad",
+      "events": "{count} eventos",
+      "statsLabel": "Resumen del periodo",
+      "statCompleted": "Completados",
+      "statFailed": "Fallidos",
+      "statCancelled": "Cancelados",
+      "statRate": "Efectividad",
+      "statStreak": "Mejor racha",
+      "streakDays": "{count}d",
+      "cancelled": "Cancelado",
+      "empty": "Sin eventos en este periodo.",
+      "emptyHint": "Ajusta los filtros o completa objetivos para poblar el historial."
     }
   },
   "analyticsPage": {
@@ -1566,6 +1621,21 @@
       "timers": "Temporizadores",
       "stopwatch": "Cronómetro"
     },
+    "sections": {
+      "alarms": "Alarmas",
+      "timers": "Temporizadores",
+      "stopwatch": "Cronómetro"
+    },
+    "hero": {
+      "nextAlarm": "Próxima alarma",
+      "nextTimer": "Temporizador por finalizar",
+      "stopwatchRunning": "Cronómetro en marcha",
+      "clock": "Reloj",
+      "nothingHint": "Nada programado — inicia un temporizador de enfoque o crea una alarma abajo.",
+      "in": "en {time}",
+      "quickPomodoro": "Pomodoro 25",
+      "quickBreak": "Descanso 5"
+    },
     "dow": {
       "sun": "Dom",
       "mon": "Lun",
@@ -1599,7 +1669,10 @@
       "sound": "Sonido",
       "toggle": "Activar o desactivar alarma",
       "hour": "Hora",
-      "minute": "Minuto"
+      "minute": "Minuto",
+      "upcoming": "Próximas",
+      "inactive": "Inactivas",
+      "nextIn": "en {time}"
     },
     "timer": {
       "empty": "Sin temporizadores activos. Inicia uno arriba.",
@@ -1616,7 +1689,24 @@
       "seconds": "Segundos",
       "hoursShort": "h",
       "minutesShort": "m",
-      "secondsShort": "s"
+      "secondsShort": "s",
+      "presets": "Preajustes",
+      "pomodoro": "Pomodoro",
+      "shortBreak": "Descanso",
+      "longBreak": "Descanso largo",
+      "color": "Color",
+      "colorDefault": "Color por defecto",
+      "linkGoal": "Vincular meta",
+      "noGoal": "Sin meta",
+      "linkNote": "Vincular nota",
+      "notePlaceholder": "Buscar notas…",
+      "awardXp": "Otorgar XP",
+      "awardXpHint": "Otorga XP de sesión de enfoque al finalizar (≥20 min)",
+      "repeat": "Reinicio automático",
+      "repeatHint": "Se reinicia automáticamente cada vez que suena",
+      "restart": "Reiniciar",
+      "running": "En marcha",
+      "paused": "En pausa"
     },
     "stopwatch": {
       "start": "Iniciar",
@@ -1627,7 +1717,11 @@
       "lapTime": "Tiempo vuelta",
       "total": "Total",
       "fastest": "Más rápida",
-      "slowest": "Más lenta"
+      "slowest": "Más lenta",
+      "delta": "Dif.",
+      "copy": "Copiar vueltas",
+      "copied": "Vueltas copiadas al portapapeles",
+      "currentLap": "Actual"
     },
     "alert": {
       "alarmTitle": "Alarma",
@@ -1635,7 +1729,8 @@
       "timerDone": "Tiempo cumplido",
       "snooze": "Posponer",
       "dismiss": "Descartar",
-      "snoozed": "Pospuesto {minutes} min"
+      "snoozed": "Pospuesto {minutes} min",
+      "restart": "Reiniciar"
     },
     "statusbar": {
       "open": "Abrir Reloj",
