@@ -40,6 +40,12 @@ export interface UserSettings {
     editorFilter?: string | null;
     editorContextFilter?: string | null;
     editorSearch?: string;
+    /** History-tab state filter (#1669). */
+    historyState?: 'ALL' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+    /** History-tab single-goal filter; null = all goals. */
+    historyGoalId?: number | null;
+    /** History-tab window in days (7|30|90|365); 0 = all time. */
+    historyRangeDays?: number;
   };
   statusBarUi?: {
     showAssignedIssues?: boolean;
