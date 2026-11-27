@@ -51,6 +51,33 @@
   --success: #10b981; /* Completions — emerald (matches streaks) */
   --error: #ef4444; /* Failures — matches streaks red */
 
+  /* ── Derived accent layer (#1655) ──────────────────────────────────────
+     Text-safe variants are JS-overridden by derivePalette() with WCAG
+     ≥4.5:1 vs --bg; the static fallback simply mirrors the base accent.
+     Tints/borders are color-mix() over the live --bg/--surface/--border,
+     so they adapt to dark vs. light themes automatically. */
+  --xp-text: var(--xp);
+  --xp-2-text: var(--xp-2);
+  --xp-3-text: var(--xp-3);
+  --xp-tint: color-mix(in srgb, var(--xp) 12%, var(--surface));
+  --xp-tint-strong: color-mix(in srgb, var(--xp) 22%, var(--surface));
+  --xp-2-tint: color-mix(in srgb, var(--xp-2) 12%, var(--surface));
+  --xp-3-tint: color-mix(in srgb, var(--xp-3) 12%, var(--surface));
+  --accent-tint: var(--xp-tint);
+  --accent-border: color-mix(in srgb, var(--xp) 45%, var(--border));
+  --accent-2-border: color-mix(in srgb, var(--xp-2) 45%, var(--border));
+  --focus-ring: color-mix(in srgb, var(--xp) 60%, transparent);
+  --surface-accent: color-mix(in srgb, var(--xp) 4%, var(--surface));
+
+  /* Chart/series palette — JS-overridden with hues rotated off the user's
+     accent trio, each floored at ≥3:1 contrast vs --surface (#1655). */
+  --chart-1: var(--xp);
+  --chart-2: var(--xp-2);
+  --chart-3: var(--xp-3);
+  --chart-4: var(--accent-contrast);
+  --chart-5: var(--link);
+  --chart-6: var(--today);
+
   /* Layout */
   --sidebar-w: 48px;
   --header-h: 48px;
@@ -349,11 +376,11 @@ body.zen-mode-active .app-shell {
 }
 
 .nav-item.active {
-  background: color-mix(in srgb, var(--xp) 14%, transparent);
-  color: var(--xp);
+  background: var(--xp-tint);
+  color: var(--xp-text);
   border-color: var(--xp);
   border-radius: 999px;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--xp) 28%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--xp-2) 35%, transparent);
 }
 
 .nav-item .tooltip {
@@ -444,7 +471,9 @@ body.zen-mode-active .app-shell {
 }
 
 .btn-primary {
-  background: var(--xp);
+  /* Full accent trio: the gradient is the user's whole palette, not just
+     the primary (#1655). Solid --xp when only one color is picked. */
+  background: var(--accent-gradient);
   color: var(--xp-contrast-text, var(--bg));
   border-color: var(--xp);
 }
@@ -505,6 +534,7 @@ a.btn {
 
 .input:focus {
   border-color: var(--xp-2);
+  box-shadow: 0 0 0 1px var(--focus-ring);
 }
 
 .input::placeholder {
@@ -542,9 +572,9 @@ textarea.input {
 }
 
 .tag-chip.ai {
-  border-color: var(--xp-2);
-  color: var(--xp);
-  background: color-mix(in srgb, var(--xp-2) 12%, transparent);
+  border-color: var(--accent-2-border);
+  color: var(--xp-2-text);
+  background: var(--xp-2-tint);
 }
 
 .tag-chip button {
@@ -635,7 +665,7 @@ textarea.input {
   border-radius: 2px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
+  background: var(--xp-3);
 }
 
 /* ── XP Float Animation ──────────────────────────────────────────────────────── */
@@ -660,7 +690,7 @@ textarea.input {
   position: fixed;
   font-family: var(--font-mono);
   font-size: 12px;
-  color: var(--xp);
+  color: var(--xp-text);
   pointer-events: none;
   animation: xp-float 2s ease-out forwards;
   z-index: var(--z-tooltip);
@@ -771,7 +801,7 @@ textarea.input {
   margin-top: var(--s4);
 }
 .text-xp {
-  color: var(--xp);
+  color: var(--xp-text);
   font-family: var(--font-mono);
 }
 .text-success {

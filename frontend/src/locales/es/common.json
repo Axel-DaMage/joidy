@@ -351,7 +351,8 @@
       "noUser": "Sin sesión",
       "loggedOut": "Sesión cerrada",
       "hint": "Cierra la sesión para volver a la pantalla de inicio de sesión."
-    }
+    },
+    "accentContrastWarn": "Contraste bajo en modo {theme}"
   },
   "quickCapture": {
     "placeholder": "Captura una idea rápida...",
