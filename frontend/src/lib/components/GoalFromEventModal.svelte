@@ -102,14 +102,6 @@
       {$t('goalFromEvent.confirm', { values: { title: event.title, date: eventDayLabel } })}
     </p>
     <p class="gfe-hint caption">{$t('goalFromEvent.confirmHint')}</p>
-    {#snippet footer()}
-      <button type="button" class="btn btn-ghost" onclick={onClose}>
-        {$t('goalFromEvent.cancel')}
-      </button>
-      <button type="button" class="btn btn-primary" onclick={() => (step = 'form')}>
-        <Target size={14} /> {$t('goalFromEvent.action')}
-      </button>
-    {/snippet}
   {:else}
     <div class="gfe-form">
       <label class="gfe-field">
@@ -150,7 +142,16 @@
         <p class="gfe-error caption">{$t('goalFromEvent.error')}</p>
       {/if}
     </div>
-    {#snippet footer()}
+  {/if}
+  {#snippet footer()}
+    {#if step === 'confirm'}
+      <button type="button" class="btn btn-ghost" onclick={onClose}>
+        {$t('goalFromEvent.cancel')}
+      </button>
+      <button type="button" class="btn btn-primary" onclick={() => (step = 'form')}>
+        <Target size={14} /> {$t('goalFromEvent.action')}
+      </button>
+    {:else}
       <button type="button" class="btn btn-ghost" onclick={() => (step = 'confirm')}>
         {$t('goalFromEvent.back')}
       </button>
@@ -162,8 +163,8 @@
       >
         <Target size={14} /> {$t('goalFromEvent.create')}
       </button>
-    {/snippet}
-  {/if}
+    {/if}
+  {/snippet}
 </ModalDialog>
 
 <style>

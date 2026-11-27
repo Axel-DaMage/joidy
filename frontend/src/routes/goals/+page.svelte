@@ -1172,6 +1172,7 @@
     return new Date(ev.start_at).toLocaleTimeString($locale, {
       hour: '2-digit',
       minute: '2-digit',
+      hourCycle: 'h23',
     });
   }
 
@@ -1442,9 +1443,11 @@
                         <span class="pln-mq-text pln-mq-dup" aria-hidden="true">{goal.title}</span>
                       </span>
                     </span>
-                    <span class="pln-item-temp" style="color: {getGoalColor(goal)}"
-                      >{TEMPORALITY_LABELS[goal.temporality] || goal.temporality}</span
-                    >
+                    {#if goal.temporality !== 'ONEOFF'}
+                      <span class="pln-item-temp" style="color: {getGoalColor(goal)}"
+                        >{TEMPORALITY_LABELS[goal.temporality] || goal.temporality}</span
+                      >
+                    {/if}
                   </button>
                 {:else}
                   <div class="pln-pool-empty caption">{$t('goalsPage.unassignedEmpty')}</div>
@@ -1515,8 +1518,8 @@
             </div>
 
           {:else}
-            <!-- Horizontal agenda-week: one row per day so item titles get
-                 real width instead of being crushed inside 7 narrow columns. -->
+            <!-- Full-height agenda rows: one stretched row per day, items
+                 wrap so titles get real width instead of 7 narrow columns. -->
             <div class="pln-week">
               {#each weekDays as iso (iso)}
                 {@const cellItems = planningCellItems(iso)}
@@ -1564,9 +1567,11 @@
                               </span>
                             </span>
                           </button>
-                          <span class="pln-item-temp" style="color: {getGoalColor(g)}"
-                            >{TEMPORALITY_LABELS[g.temporality] || g.temporality}</span
-                          >
+                          {#if g.temporality !== 'ONEOFF'}
+                            <span class="pln-item-temp" style="color: {getGoalColor(g)}"
+                              >{TEMPORALITY_LABELS[g.temporality] || g.temporality}</span
+                            >
+                          {/if}
                         </div>
                       {:else}
                         <button
@@ -3068,9 +3073,9 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    flex-shrink: 0;
-    max-width: 320px;
-    padding: 5px 9px;
+    flex: 1 1 200px;
+    min-width: 0;
+    padding: 6px 10px;
     border: 1px solid var(--border);
     border-left: 3px solid var(--text-muted);
     border-radius: var(--r);
@@ -3093,6 +3098,7 @@
     font-variant-numeric: tabular-nums;
   }
   .pln-day-agenda-label {
+    flex: 1;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -3169,8 +3175,8 @@
     word-break: break-word;
   }
 
-  /* Week board — horizontal agenda layout: one row per day, items as chips
-     in a horizontal scroller so titles get real width (#goal-planning-week). */
+  /* Week board — full-height agenda rows: one stretched row per day, items
+     wrap into as many lines as they need so titles keep real width. */
   .pln-week {
     flex: 1;
     min-width: 0;
@@ -3179,15 +3185,16 @@
     flex-direction: column;
     gap: 6px;
     overflow-y: auto;
+    overflow-x: hidden;
   }
   .pln-day {
     display: flex;
     align-items: stretch;
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: var(--r);
     background: var(--surface);
-    min-height: 44px;
-    flex-shrink: 0;
+    flex: 1;
+    min-height: 96px;
     overflow: hidden;
     transition:
       border-color var(--t-fast),
@@ -3206,30 +3213,31 @@
   .pln-day-head {
     position: relative;
     display: flex;
-    flex-direction: row;
-    align-items: baseline;
+    flex-direction: column;
+    align-items: center;
     justify-content: center;
-    gap: 6px;
-    width: 92px;
+    gap: 2px;
+    width: 58px;
     flex-shrink: 0;
-    padding: 8px 10px;
-    background: transparent;
+    padding: 8px 6px;
+    background: color-mix(in srgb, var(--text-primary) 3%, transparent);
     border: none;
     border-right: 1px solid var(--border-light);
     cursor: pointer;
     color: var(--text-primary);
   }
   .pln-day-dow {
-    font-size: 10px;
+    font-size: 9px;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.08em;
     color: var(--text-muted);
     font-family: var(--font-mono);
   }
   .pln-day-num {
-    font-size: 15px;
+    font-size: 18px;
     font-weight: 700;
     font-family: var(--font-mono);
+    line-height: 1;
   }
   .pln-day.today .pln-day-num {
     color: var(--xp);
@@ -3245,12 +3253,13 @@
   .pln-day-list {
     flex: 1;
     min-width: 0;
-    overflow-x: auto;
-    overflow-y: hidden;
-    padding: 6px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 8px;
     display: flex;
-    flex-direction: row;
-    align-items: center;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    align-items: flex-start;
     gap: 6px;
     scrollbar-width: thin;
   }
@@ -3258,12 +3267,12 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 6px 9px;
+    padding: 6px 10px;
     border: 1px solid var(--border);
     border-radius: var(--r);
     font-size: 12px;
-    flex-shrink: 0;
-    max-width: 340px;
+    flex: 1 1 200px;
+    min-width: 0;
     background: var(--surface);
   }
   .pln-day-unassign {
@@ -3279,10 +3288,8 @@
     color: var(--error);
   }
   .pln-day-name {
-    flex: 0 1 auto;
+    flex: 1;
     min-width: 0;
-    max-width: 260px;
-    overflow: hidden;
     background: none;
     border: none;
     color: var(--text-primary);
@@ -3298,6 +3305,7 @@
     color: var(--link);
   }
   .pln-day-empty {
+    align-self: center;
     color: var(--text-muted);
     font-size: 10px;
     padding: 0 8px;
