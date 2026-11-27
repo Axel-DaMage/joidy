@@ -16,6 +16,7 @@ import { derived, get, writable } from 'svelte/store';
 import { t } from 'svelte-i18n';
 import { api } from '$lib/api';
 import { logger } from '$lib/utils/logger';
+import { applyStats, showXPGain } from './gamification';
 import { showNotification } from './notifications';
 import {
   fireClockAlert,
@@ -51,6 +52,25 @@ export interface TimerItem {
   /** Remaining ms while paused; kept at 0 once done. */
   remainingMs: number;
   status: TimerStatus;
+  /** Optional accent color (css color string) for the card ring (#1663). */
+  color?: string;
+  /** Linked Joidy goal id — metadata shown on the timer card (#1663). */
+  goalId?: number;
+  /** Linked Joidy note id — metadata shown on the timer card (#1663). */
+  noteId?: number;
+  /** Award focus-session XP via `/gamification/pomodoro` on completion (#1663). */
+  awardXp?: boolean;
+  /** Re-arm automatically after firing — interval-timer behaviour (#1663). */
+  repeat?: boolean;
+}
+
+/** Optional metadata accepted by `addTimer` (#1663). */
+export interface AddTimerOptions {
+  color?: string;
+  goalId?: number | null;
+  noteId?: number | null;
+  awardXp?: boolean;
+  repeat?: boolean;
 }
 
 export interface Lap {
@@ -106,6 +126,44 @@ export const stopwatchElapsed = derived([stopwatch, now], ([$sw, $now]) =>
   $sw.running && $sw.startedAt !== null ? $sw.baseMs + ($now - $sw.startedAt) : $sw.baseMs
 );
 
+/** Soonest enabled alarm + its next fire timestamp, or null (#1663 hero card). */
+export const nextAlarm = derived([alarms, now], ([$alarms, $now]) => {
+  let best: { alarm: Alarm; at: number } | null = null;
+  for (const a of $alarms) {
+    const at = nextAlarmFireAt(a, $now);
+    if (at !== null && (best === null || at < best.at)) best = { alarm: a, at };
+  }
+  return best;
+});
+
+/** Alarms split into upcoming (enabled/snoozed, sorted by next fire) and
+ *  inactive (disabled — includes consumed one-shot alarms) (#1663). */
+export const alarmGroups = derived([alarms, now], ([$alarms, $now]) => {
+  const upcoming: { alarm: Alarm; at: number }[] = [];
+  const inactive: Alarm[] = [];
+  for (const a of $alarms) {
+    const at = nextAlarmFireAt(a, $now);
+    if (at !== null) upcoming.push({ alarm: a, at });
+    else inactive.push(a);
+  }
+  upcoming.sort((x, y) => x.at - y.at);
+  inactive.sort(
+    (x, y) => x.hour * 60 + x.minute - (y.hour * 60 + y.minute)
+  );
+  return { upcoming, inactive };
+});
+
+/** Running countdown timer that finishes first, or null (#1663 hero card). */
+export const nextTimer = derived([timers, now], ([$timers, $now]) => {
+  let best: { timer: TimerItem; remainingMs: number } | null = null;
+  for (const tm of $timers) {
+    if (tm.status !== 'running' || tm.endsAt === null) continue;
+    const remainingMs = Math.max(0, tm.endsAt - $now);
+    if (best === null || remainingMs < best.remainingMs) best = { timer: tm, remainingMs };
+  }
+  return best;
+});
+
 // ── Constants & helpers ─────────────────────────────────────────────────────
 
 const ALARMS_CACHE_KEY = 'joidy-alarms-cache-v1';
@@ -141,6 +199,28 @@ function clampInt(v: unknown, min: number, max: number, fallback: number): numbe
 }
 
 const VALID_SOUNDS: AlarmSoundId[] = ['beep', 'chime', 'pulse'];
+
+/**
+ * Next absolute fire timestamp for an alarm, or null when it will never ring.
+ * A pending snooze wins over the regular schedule (it fires even if the alarm
+ * was disabled meanwhile — mirrors `checkAlarms`). For `days === []` (one-shot)
+ * the next occurrence of `hour:minute` is used; for recurring alarms the first
+ * matching weekday within the next 8 days.
+ */
+export function nextAlarmFireAt(a: Alarm, from: number): number | null {
+  if (a.snoozedUntil && a.snoozedUntil > from) return a.snoozedUntil;
+  if (!a.enabled) return null;
+  for (let offset = 0; offset <= 7; offset++) {
+    const d = new Date(from);
+    d.setDate(d.getDate() + offset);
+    d.setHours(a.hour, a.minute, 0, 0);
+    const at = d.getTime();
+    if (at <= from) continue;
+    if (a.days.length === 0) return at;
+    if (a.days.includes(d.getDay())) return at;
+  }
+  return null;
+}
 
 function sanitizeAlarm(raw: unknown): Alarm | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -250,7 +330,7 @@ function restoreTimersSession() {
       if (!t || typeof t !== 'object') continue;
       const totalMs = clampInt(t.totalMs, 1, 24 * 60 * 60 * 1000, 0);
       if (!totalMs) continue;
-      restored.push({
+      const restoredTimer: TimerItem = {
         id: typeof t.id === 'string' && t.id ? t.id : newId('tm'),
         label: typeof t.label === 'string' ? t.label.slice(0, 80) : '',
         totalMs,
@@ -260,7 +340,16 @@ function restoreTimersSession() {
           t.status === 'running' || t.status === 'paused' || t.status === 'done'
             ? t.status
             : 'paused',
-      });
+      };
+      // #1663 optional metadata — preserved across session restore.
+      if (typeof t.color === 'string' && t.color) {
+        restoredTimer.color = t.color.slice(0, 32);
+      }
+      if (Number.isInteger(t.goalId)) restoredTimer.goalId = t.goalId;
+      if (Number.isInteger(t.noteId)) restoredTimer.noteId = t.noteId;
+      if (t.awardXp === true) restoredTimer.awardXp = true;
+      if (t.repeat === true) restoredTimer.repeat = true;
+      restored.push(restoredTimer);
     }
     timers.set(restored.slice(0, 50));
   } catch {
@@ -332,9 +421,13 @@ function checkTimers(tickNow: number) {
   const next = list.map((tm) => {
     if (tm.status === 'running' && tm.endsAt !== null && tm.endsAt <= tickNow) {
       changed = true;
-      const done = { ...tm, status: 'done' as TimerStatus, endsAt: null, remainingMs: 0 };
-      finished.push(done);
-      return done;
+      finished.push(tm);
+      if (tm.repeat) {
+        // Interval timer (#1663): fire the alert and immediately re-arm from
+        // now so a missed boundary never cascades into repeat fires.
+        return { ...tm, endsAt: tickNow + tm.totalMs, remainingMs: tm.totalMs };
+      }
+      return { ...tm, status: 'done' as TimerStatus, endsAt: null, remainingMs: 0 };
     }
     return tm;
   });
@@ -342,6 +435,34 @@ function checkTimers(tickNow: number) {
   timers.set(next);
   for (const tm of finished) {
     alertTimerFinished(tm);
+    if (tm.awardXp) awardTimerXp(tm);
+  }
+}
+
+/**
+ * Feed a completed focus timer into the gamification engine (#1663). Reuses
+ * the `/gamification/pomodoro` event — the backend dedupes on `pomodoro_id`
+ * and refuses sessions under its minimum duration, so arbitrary short timers
+ * are a safe no-op.
+ */
+function awardTimerXp(tm: TimerItem) {
+  const minutes = Math.round(tm.totalMs / 60_000);
+  if (minutes < 1) return;
+  try {
+    void api.gamification
+      .pomodoro({ duration_minutes: minutes, pomodoro_id: `clock-${tm.id}-${Date.now()}` })
+      .then((res) => {
+        if (res && res.xp_awarded > 0) {
+          applyStats(res);
+          showXPGain(res.xp_awarded);
+        }
+      })
+      .catch((e: unknown) => {
+        logger.warn('[timers] XP award request failed:', e);
+      });
+  } catch (e) {
+    // Gamification client unavailable (e.g. bare test mocks) — non-fatal.
+    logger.warn('[timers] XP award unavailable:', e);
   }
 }
 
@@ -498,21 +619,28 @@ export function snoozeAlert() {
 
 // ── Timer actions ───────────────────────────────────────────────────────────
 
-export function addTimer(label: string, durationMs: number): string | null {
+export function addTimer(
+  label: string,
+  durationMs: number,
+  opts: AddTimerOptions = {}
+): string | null {
   const totalMs = clampInt(durationMs, 1000, 24 * 60 * 60 * 1000, 0);
   if (!totalMs) return null;
   const id = newId('tm');
-  timers.update((list) => [
-    ...list,
-    {
-      id,
-      label: label.slice(0, 80),
-      totalMs,
-      endsAt: Date.now() + totalMs,
-      remainingMs: totalMs,
-      status: 'running',
-    },
-  ]);
+  const item: TimerItem = {
+    id,
+    label: label.slice(0, 80),
+    totalMs,
+    endsAt: Date.now() + totalMs,
+    remainingMs: totalMs,
+    status: 'running',
+  };
+  if (opts.color) item.color = opts.color.slice(0, 32);
+  if (Number.isInteger(opts.goalId)) item.goalId = opts.goalId as number;
+  if (Number.isInteger(opts.noteId)) item.noteId = opts.noteId as number;
+  if (opts.awardXp === true) item.awardXp = true;
+  if (opts.repeat === true) item.repeat = true;
+  timers.update((list) => [...list, item]);
   return id;
 }
 
@@ -544,6 +672,23 @@ export function resetTimer(id: string) {
       tm.id === id ? { ...tm, status: 'paused', endsAt: null, remainingMs: tm.totalMs } : tm
     )
   );
+}
+
+/** Re-arm a timer to run `totalMs` again from now — used by the "restart"
+ *  quick action on done timers and the alert overlay (#1663). */
+export function restartTimer(id: string) {
+  timers.update((list) =>
+    list.map((tm) =>
+      tm.id === id
+        ? { ...tm, status: 'running', endsAt: Date.now() + tm.totalMs, remainingMs: tm.totalMs }
+        : tm
+    )
+  );
+  const alert = get(activeAlert);
+  if (alert?.kind === 'timer' && alert.id === id) {
+    activeAlert.set(null);
+    stopTitleFlash();
+  }
 }
 
 export function addMinuteToTimer(id: string) {
@@ -623,4 +768,27 @@ export function formatStopwatch(ms: number): string {
   const s = totalSec % 60;
   const mm = h > 0 ? `${h}:${String(m).padStart(2, '0')}` : String(m).padStart(2, '0');
   return `${mm}:${String(s).padStart(2, '0')}.${String(cs).padStart(2, '0')}`;
+}
+
+/** Compact relative duration — `7h 23m`, `45m`, `12s` — for "next fire"
+ *  labels on alarms and the hero countdown (#1663). Sub-minute rounds up so a
+ *  due-in-500ms alarm never displays `0s`. */
+export function formatDurationShort(ms: number): string {
+  const totalSec = Math.max(1, Math.ceil(ms / 1000));
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) return m > 0 ? `${h}h ${m}m` : `${h}h`;
+  if (m > 0) return `${m}m`;
+  return `${s}s`;
+}
+
+/** Signed lap-delta — `+2.4s`, `-0.8s`, `±0.0s` — for the stopwatch lap
+ *  table's diff column (#1663). */
+export function formatSignedDelta(ms: number): string {
+  const sec = ms / 1000;
+  const abs = Math.abs(sec).toFixed(1);
+  if (sec > 0.04) return `+${abs}s`;
+  if (sec < -0.04) return `-${abs}s`;
+  return `±${abs}s`;
 }

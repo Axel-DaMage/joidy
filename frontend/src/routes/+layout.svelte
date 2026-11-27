@@ -90,6 +90,7 @@
   import { toggle as toggleCommandPalette } from '$lib/stores/commandPalette';
   import ConflictResolutionModal from '$lib/components/ConflictResolutionModal.svelte';
   import OfflineIndicator from '$lib/components/OfflineIndicator.svelte';
+  import AlertOverlay from '$lib/components/timers/AlertOverlay.svelte';
   import { initOfflineSync } from '$lib/stores/offlineSync';
   import ShareAchievementModal from '$lib/components/ShareAchievementModal.svelte';
   import {
@@ -1098,6 +1099,9 @@
   <CommandPalette />
   <FocusMode />
   <Toast />
+  <!-- Full-screen clock alert (#1663): the engine is session-global, so the
+       overlay must render from any route, not only /timers. -->
+  <AlertOverlay />
   <OnboardingTour />
   <ConflictResolutionModal />
   <OfflineIndicator />

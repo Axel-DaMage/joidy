@@ -1566,6 +1566,21 @@
       "timers": "Timers",
       "stopwatch": "Stopwatch"
     },
+    "sections": {
+      "alarms": "Alarms",
+      "timers": "Timers",
+      "stopwatch": "Stopwatch"
+    },
+    "hero": {
+      "nextAlarm": "Next alarm",
+      "nextTimer": "Timer finishing",
+      "stopwatchRunning": "Stopwatch running",
+      "clock": "Clock",
+      "nothingHint": "Nothing scheduled — start a focus timer or set an alarm below.",
+      "in": "in {time}",
+      "quickPomodoro": "Pomodoro 25",
+      "quickBreak": "Break 5"
+    },
     "dow": {
       "sun": "Sun",
       "mon": "Mon",
@@ -1599,7 +1614,10 @@
       "sound": "Sound",
       "toggle": "Enable or disable alarm",
       "hour": "Hour",
-      "minute": "Minute"
+      "minute": "Minute",
+      "upcoming": "Upcoming",
+      "inactive": "Inactive",
+      "nextIn": "in {time}"
     },
     "timer": {
       "empty": "No timers running. Start one above.",
@@ -1616,7 +1634,24 @@
       "seconds": "Seconds",
       "hoursShort": "h",
       "minutesShort": "m",
-      "secondsShort": "s"
+      "secondsShort": "s",
+      "presets": "Presets",
+      "pomodoro": "Pomodoro",
+      "shortBreak": "Break",
+      "longBreak": "Long break",
+      "color": "Color",
+      "colorDefault": "Default color",
+      "linkGoal": "Link goal",
+      "noGoal": "No goal",
+      "linkNote": "Link note",
+      "notePlaceholder": "Search notes…",
+      "awardXp": "Award XP",
+      "awardXpHint": "Award focus-session XP when it finishes (≥20 min)",
+      "repeat": "Auto-restart",
+      "repeatHint": "Restart automatically each time it fires",
+      "restart": "Restart",
+      "running": "Running",
+      "paused": "Paused"
     },
     "stopwatch": {
       "start": "Start",
@@ -1627,7 +1662,11 @@
       "lapTime": "Lap time",
       "total": "Total",
       "fastest": "Fastest",
-      "slowest": "Slowest"
+      "slowest": "Slowest",
+      "delta": "Diff",
+      "copy": "Copy laps",
+      "copied": "Laps copied to clipboard",
+      "currentLap": "Now"
     },
     "alert": {
       "alarmTitle": "Alarm",
@@ -1635,7 +1674,8 @@
       "timerDone": "Time is up",
       "snooze": "Snooze",
       "dismiss": "Dismiss",
-      "snoozed": "Snoozed for {minutes} min"
+      "snoozed": "Snoozed for {minutes} min",
+      "restart": "Restart"
     },
     "statusbar": {
       "open": "Open Clock",
