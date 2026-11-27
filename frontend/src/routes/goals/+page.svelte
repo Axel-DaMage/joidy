@@ -25,6 +25,7 @@
   import Zap from 'lucide-svelte/icons/zap';
   import List from 'lucide-svelte/icons/list';
   import Lock from 'lucide-svelte/icons/lock';
+  import Repeat from 'lucide-svelte/icons/repeat';
   import Target from 'lucide-svelte/icons/target';
   import {
     api,
@@ -863,7 +864,7 @@
       // create_calendar_task defaults to true — planning assignments always
       // mirror into the real calendar (#goal-planning-calendar).
       await api.planning.setAssignments(normDate, assignments[normDate]);
-      void loadDayAgenda(selectedPlanningDate);
+      void loadRangeAgenda();
     } catch (e) {
       logger.error('Error saving assignment:', e);
     }
@@ -883,7 +884,7 @@
     };
     try {
       await api.planning.setAssignments(normDate, assignments[normDate]);
-      void loadDayAgenda(selectedPlanningDate);
+      void loadRangeAgenda();
     } catch (e) {
       logger.error('Error saving assignment removal:', e);
     }
@@ -989,16 +990,22 @@
     loadAssignmentsForRange(dates).catch(logger.error);
   });
 
-  // ── Real-calendar agenda for the selected planning day (read-only) ──
-  // Shows the day's Google events + joidy calendar tasks inside "Asignados"
-  // so planning sits next to the real schedule. Nothing here mutates —
-  // clicks open a detail modal; editing stays in /calendar.
-  let dayTasks = $state<CalendarTask[]>([]);
-  let dayEvents = $state<CalendarEvent[]>([]);
+  // ── Real-calendar agenda for the visible planning range (read-only) ──
+  // Events + tasks are fetched once for the whole visible month/week and
+  // bucketed per day, so every day cell can show real titles and colors.
+  // Nothing here mutates — clicks open a detail modal; editing stays in
+  // /calendar.
+  let rangeTasks = $state<CalendarTask[]>([]);
+  let rangeEvents = $state<CalendarEvent[]>([]);
   let agendaLoading = $state(false);
   let agendaDetail = $state<
     { kind: 'event'; event: CalendarEvent } | { kind: 'task'; task: CalendarTask } | null
   >(null);
+
+  type PlanningAgendaEntry =
+    | { kind: 'event'; sort: string; event: CalendarEvent }
+    | { kind: 'task'; sort: string; task: CalendarTask };
+  type PlanningCellItem = { kind: 'goal'; goal: Goal; sort: string } | PlanningAgendaEntry;
 
   const AGENDA_PRIORITY_COLORS: Record<string, string> = {
     LOW: 'var(--text-muted)',
@@ -1047,74 +1054,116 @@
     return key ? $t(key) : `${minutes} min`;
   }
 
-  async function loadDayAgenda(date: string): Promise<void> {
-    if (!date) return;
+  async function loadRangeAgenda(): Promise<void> {
+    const dates = planningView === 'month' ? monthCells.map((c) => c.iso) : weekDays;
+    if (dates.length === 0) return;
     agendaLoading = true;
-    // Pad the lower bound one day so all-day events cached at UTC midnight
-    // in negative-offset zones are still returned; the exact day is filtered
-    // client-side by eventDayKey (same approach as /calendar).
-    const start = new Date(`${date}T00:00:00`);
+    const first = dates[0];
+    const last = dates[dates.length - 1];
+    // Pad both bounds a day: all-day events are cached at UTC midnight,
+    // which lands on the adjacent local day in offset zones — the exact
+    // day is filtered client-side by eventDayKey (same rule as /calendar).
+    const start = new Date(`${first}T00:00:00`);
     start.setDate(start.getDate() - 1);
+    const end = new Date(`${last}T23:59:59.999`);
+    end.setDate(end.getDate() + 1);
     try {
       const [evts, taskRows] = await Promise.all([
         api.google.calendarEvents({
           start: start.toISOString(),
-          end: new Date(`${date}T23:59:59.999`).toISOString(),
+          end: end.toISOString(),
         }),
-        api.calendarTasks.list({ date }),
+        api.calendarTasks.list({ start: first, end: last }),
       ]);
-      dayEvents = evts;
-      dayTasks = taskRows;
+      rangeEvents = evts;
+      rangeTasks = taskRows;
     } catch (e) {
-      logger.error('Error loading day agenda:', e);
+      logger.error('Error loading planning agenda:', e);
     } finally {
       agendaLoading = false;
     }
   }
 
-  // Merged, time-sorted read-only agenda for the selected day. Tasks that
-  // mirror a Google event (google_event_id) suppress the cached Google copy
-  // so each item appears once — same dedup rule as /calendar.
-  let dayAgendaItems = $derived.by(() => {
+  // Merged, time-sorted read-only agenda bucketed by day. Tasks that mirror
+  // a Google event (google_event_id) suppress the cached Google copy so each
+  // item appears once — same dedup rule as /calendar.
+  let agendaByDay = $derived.by(() => {
+    const byDay = new Map<string, PlanningAgendaEntry[]>();
     const mirroredGoogleIds = new Set(
-      dayTasks.map((t) => t.google_event_id).filter((id): id is string => id !== null)
+      rangeTasks.map((t) => t.google_event_id).filter((id): id is string => id !== null)
     );
-    type AgendaItem =
-      | { kind: 'event'; sort: string; event: CalendarEvent }
-      | { kind: 'task'; sort: string; task: CalendarTask };
-    const items: AgendaItem[] = [];
-    for (const ev of dayEvents) {
-      if (eventDayKey(ev) !== selectedPlanningDate || mirroredGoogleIds.has(ev.google_id)) continue;
-      items.push({
+    const push = (key: string, item: PlanningAgendaEntry) => {
+      const list = byDay.get(key) ?? [];
+      list.push(item);
+      byDay.set(key, list);
+    };
+    for (const ev of rangeEvents) {
+      if (mirroredGoogleIds.has(ev.google_id)) continue;
+      push(eventDayKey(ev), {
         kind: 'event',
         sort: ev.all_day ? '00:00' : ev.start_at.slice(11, 16),
         event: ev,
       });
     }
-    for (const task of dayTasks) {
-      // dayTasks is server-filtered by date, but keeps the previous day's
-      // rows until the fetch resolves — guard against stale entries.
-      if (task.date !== selectedPlanningDate) continue;
-      items.push({ kind: 'task', sort: task.start_time?.slice(0, 5) ?? '99:99', task });
+    for (const task of rangeTasks) {
+      if (!task.date) continue;
+      push(task.date, { kind: 'task', sort: task.start_time?.slice(0, 5) ?? '99:99', task });
     }
-    items.sort((a, b) => {
-      if (a.sort !== b.sort) return a.sort.localeCompare(b.sort);
-      const al = a.kind === 'event' ? (a.event.summary ?? '') : a.task.title;
-      const bl = b.kind === 'event' ? (b.event.summary ?? '') : b.task.title;
-      return al.localeCompare(bl);
-    });
-    return items;
+    for (const list of byDay.values()) {
+      list.sort((a, b) => {
+        if (a.sort !== b.sort) return a.sort.localeCompare(b.sort);
+        const al = a.kind === 'event' ? (a.event.summary ?? '') : a.task.title;
+        const bl = b.kind === 'event' ? (b.event.summary ?? '') : b.task.title;
+        return al.localeCompare(bl);
+      });
+    }
+    return byDay;
   });
 
-  function openAgendaDetail(item: (typeof dayAgendaItems)[number]): void {
+  // Everything a day cell should show: assigned goals first (timeless plan
+  // items, like all-day events in Google Calendar), then the real agenda.
+  function planningCellItems(iso: string): PlanningCellItem[] {
+    const items: PlanningCellItem[] = assignedIdsForDate(iso)
+      .map((id) => goals.find((x) => x.id === id))
+      .filter((g): g is Goal => Boolean(g))
+      .map((goal) => ({ kind: 'goal' as const, goal, sort: '99:99' }));
+    items.push(...(agendaByDay.get(iso) ?? []));
+    return items;
+  }
+
+  let dayAgendaItems = $derived.by(() => agendaByDay.get(selectedPlanningDate) ?? []);
+
+  function agendaEntryColor(item: PlanningAgendaEntry): string {
+    if (item.kind === 'event') return item.event.color ?? 'var(--text-muted)';
+    return item.task.color ?? AGENDA_PRIORITY_COLORS[item.task.priority] ?? 'var(--text-muted)';
+  }
+
+  function agendaEntryTitle(item: PlanningAgendaEntry): string {
+    return item.kind === 'event' ? item.event.summary || '—' : item.task.title;
+  }
+
+  function agendaEntryTime(item: PlanningAgendaEntry): string {
+    return item.kind === 'event' ? eventTimeLabel(item.event) : taskTimeLabel(item.task);
+  }
+
+  // Translucent wash + solid left bar in the item's real color — works for
+  // hex (Google/task colors) and var() (goal/priority colors) alike.
+  function tintedStyle(color: string): string {
+    return `background:color-mix(in srgb, ${color} 20%, transparent);box-shadow:inset 2px 0 0 ${color};`;
+  }
+
+  function openAgendaDetail(item: PlanningAgendaEntry): void {
     agendaDetail =
       item.kind === 'event' ? { kind: 'event', event: item.event } : { kind: 'task', task: item.task };
   }
 
   $effect(() => {
-    if (currentTab === 'planning' && selectedPlanningDate) {
-      loadDayAgenda(selectedPlanningDate).catch(logger.error);
-    }
+    if (currentTab !== 'planning') return;
+    // Anchor read keeps this effect subscribed to the visible range
+    // (view switch, month/week navigation) so the agenda refetches.
+    const anchor = planningView === 'month' ? monthCells[0]?.iso : weekDays[0];
+    if (!anchor) return;
+    loadRangeAgenda().catch(logger.error);
   });
 
   $effect(() => {
@@ -1382,7 +1431,7 @@
                   <span class="pln-dow">{wd}</span>
                 {/each}
                 {#each monthCells as cell (cell.iso)}
-                  {@const ids = assignedIdsForDate(cell.iso)}
+                  {@const cellItems = planningCellItems(cell.iso)}
                   <button
                     class="pln-cell"
                     class:other-month={!cell.inMonth}
@@ -1393,13 +1442,42 @@
                     ondrop={(e) => onCellDrop(e, cell.iso)}
                   >
                     <span class="pln-cell-num">{cell.day}</span>
-                    {#if ids.length > 0}
-                      <span class="pln-cell-dots">
-                        {#each ids.slice(0, 4) as id (id)}
-                          {@const g = goals.find((x) => x.id === id)}
-                          {#if g}<i style="background: {getGoalColor(g)}"></i>{/if}
+                    {#if cellItems.length > 0}
+                      <span class="pln-cell-items">
+                        {#each cellItems.slice(0, 3) as item (item.kind === 'goal' ? `g-${item.goal.id}` : item.kind === 'event' ? `e-${item.event.google_id}` : `t-${item.task.id}`)}
+                          {#if item.kind === 'goal'}
+                            <span
+                              class="pln-chip"
+                              style={tintedStyle(getGoalColor(item.goal))}
+                              title={item.goal.title}
+                              ><span class="pln-chip-label">{item.goal.title}</span></span
+                            >
+                          {:else if item.kind === 'event'}
+                            <span
+                              class="pln-chip pln-chip-google"
+                              style={tintedStyle(agendaEntryColor(item))}
+                              title={agendaEntryTitle(item)}
+                              ><Lock size={8} /><span class="pln-chip-label"
+                                >{agendaEntryTitle(item)}</span
+                              ></span
+                            >
+                          {:else}
+                            <span
+                              class="pln-chip"
+                              style={tintedStyle(agendaEntryColor(item))}
+                              title={agendaEntryTitle(item)}
+                              >{#if item.task.recurrence !== 'NONE'}<Repeat
+                                  size={8}
+                                  class="recur-icon"
+                                />{/if}<span class="pln-chip-label"
+                                >{agendaEntryTitle(item)}</span
+                              ></span
+                            >
+                          {/if}
                         {/each}
-                        {#if ids.length > 4}<em>+{ids.length - 4}</em>{/if}
+                        {#if cellItems.length > 3}
+                          <span class="pln-chip-more">+{cellItems.length - 3}</span>
+                        {/if}
                       </span>
                     {/if}
                   </button>
@@ -1410,7 +1488,7 @@
           {:else}
             <div class="pln-week">
               {#each weekDays as iso (iso)}
-                {@const ids = assignedIdsForDate(iso)}
+                {@const cellItems = planningCellItems(iso)}
                 <!-- svelte-ignore a11y_no_static_element_interactions -->
                 <div
                   class="pln-day"
@@ -1426,37 +1504,62 @@
                       })}</span
                     >
                     <span class="pln-day-num">{Number(iso.slice(8))}</span>
-                    {#if ids.length > 0}<span class="pln-day-count">{ids.length}</span>{/if}
+                    {#if cellItems.length > 0}<span class="pln-day-count">{cellItems.length}</span>{/if}
                   </button>
                   <div class="pln-day-list">
-                    {#each ids .map((id) => goals.find((x) => x.id === id)) .filter((g): g is Goal => Boolean(g)) as g (g.id)}
-                      {@const status = getGoalStatusOnDate(g, iso)}
-                      <div
-                        class="pln-day-item"
-                        style="border-left: 3px solid {status === 'FAILED'
-                          ? 'var(--error)'
-                          : status === 'COMPLETED'
-                            ? 'var(--success)'
-                            : getGoalColor(g)}"
-                      >
-                        <button
-                          class="pln-day-unassign"
-                          onclick={() => unassignGoalFromDate(g.id, iso)}
-                          title={$t('goalsPage.remove')}
-                          aria-label={$t('goalsPage.remove')}><X size={12} /></button
+                    {#each cellItems as item (item.kind === 'goal' ? `g-${item.goal.id}` : item.kind === 'event' ? `e-${item.event.google_id}` : `t-${item.task.id}`)}
+                      {#if item.kind === 'goal'}
+                        {@const g = item.goal}
+                        {@const status = getGoalStatusOnDate(g, iso)}
+                        <div
+                          class="pln-day-item"
+                          style="border-left: 3px solid {status === 'FAILED'
+                            ? 'var(--error)'
+                            : status === 'COMPLETED'
+                              ? 'var(--success)'
+                              : getGoalColor(g)}"
                         >
-                        <button class="pln-day-name" onclick={() => openGoalEditor(g)}>
-                          <span class="pln-mq" use:marquee>
-                            <span class="pln-mq-track">
-                              <span class="pln-mq-text">{g.title}</span>
-                              <span class="pln-mq-text pln-mq-dup" aria-hidden="true">{g.title}</span>
+                          <button
+                            class="pln-day-unassign"
+                            onclick={() => unassignGoalFromDate(g.id, iso)}
+                            title={$t('goalsPage.remove')}
+                            aria-label={$t('goalsPage.remove')}><X size={12} /></button
+                          >
+                          <button class="pln-day-name" onclick={() => openGoalEditor(g)}>
+                            <span class="pln-mq" use:marquee>
+                              <span class="pln-mq-track">
+                                <span class="pln-mq-text">{g.title}</span>
+                                <span class="pln-mq-text pln-mq-dup" aria-hidden="true">{g.title}</span>
+                              </span>
                             </span>
-                          </span>
-                        </button>
-                        <span class="pln-item-temp" style="color: {getGoalColor(g)}"
-                          >{TEMPORALITY_LABELS[g.temporality] || g.temporality}</span
+                          </button>
+                          <span class="pln-item-temp" style="color: {getGoalColor(g)}"
+                            >{TEMPORALITY_LABELS[g.temporality] || g.temporality}</span
+                          >
+                        </div>
+                      {:else}
+                        <button
+                          class="pln-day-agenda"
+                          style="border-left: 3px solid {agendaEntryColor(item)}"
+                          onclick={() => openAgendaDetail(item)}
+                          title={agendaEntryTitle(item)}
                         >
-                      </div>
+                          {#if item.kind === 'event'}
+                            <Lock size={10} class="pln-day-agenda-icon" />
+                          {:else if item.task.done}
+                            <Check size={10} class="pln-day-agenda-icon" />
+                          {:else}
+                            <span
+                              class="pln-agenda-dot"
+                              style="background: {agendaEntryColor(item)}"
+                            ></span>
+                          {/if}
+                          <span class="pln-day-agenda-time"
+                            >{agendaEntryTime(item)}</span
+                          >
+                          <span class="pln-day-agenda-label">{agendaEntryTitle(item)}</span>
+                        </button>
+                      {/if}
                     {:else}
                       <span class="pln-day-empty">—</span>
                     {/each}
@@ -1571,7 +1674,11 @@
                 <div class="pln-agenda-empty caption">{$t('goalsPage.noCalendarItems')}</div>
               {:else}
                 {#each dayAgendaItems as item (item.kind === 'event' ? `e-${item.event.google_id}` : `t-${item.task.id}`)}
-                  <button class="pln-agenda-item" onclick={() => openAgendaDetail(item)}>
+                  <button
+                    class="pln-agenda-item"
+                    style="border-left: 3px solid {agendaEntryColor(item)}"
+                    onclick={() => openAgendaDetail(item)}
+                  >
                     {#if item.kind === 'event'}
                       <span class="pln-agenda-icon"><Lock size={11} /></span>
                     {:else if item.task.done}
@@ -1579,16 +1686,12 @@
                     {:else}
                       <span
                         class="pln-agenda-dot"
-                        style="background: {AGENDA_PRIORITY_COLORS[item.task.priority] ?? 'var(--text-muted)'}"
+                        style="background: {agendaEntryColor(item)}"
                       ></span>
                     {/if}
-                    <span class="pln-agenda-time caption"
-                      >{item.kind === 'event' ? eventTimeLabel(item.event) : taskTimeLabel(item.task)}</span
-                    >
+                    <span class="pln-agenda-time caption">{agendaEntryTime(item)}</span>
                     <span class="pln-agenda-body">
-                      <span class="pln-agenda-label"
-                        >{item.kind === 'event' ? item.event.summary || '—' : item.task.title}</span
-                      >
+                      <span class="pln-agenda-label">{agendaEntryTitle(item)}</span>
                       {#if item.kind === 'task' && item.task.goal_title}
                         <span class="pln-agenda-goal"><Target size={9} />{item.task.goal_title}</span>
                       {:else if item.kind === 'event' && item.event.location}
@@ -2229,6 +2332,9 @@
 
   {#if agendaDetail}
     {@const detail = agendaDetail}
+    {@const detailColor = detail.kind === 'event'
+      ? (detail.event.color ?? 'var(--text-muted)')
+      : (detail.task.color ?? AGENDA_PRIORITY_COLORS[detail.task.priority] ?? 'var(--text-muted)')}
     <ModalDialog
       open={true}
       title={detail.kind === 'event'
@@ -2237,7 +2343,10 @@
       size="sm"
       onClose={() => (agendaDetail = null)}
     >
-      <p class="agenda-detail-hint caption">{$t('goalsPage.agendaReadOnly')}</p>
+      <p class="agenda-detail-hint caption">
+        <span class="agenda-detail-swatch" style="background: {detailColor}"></span
+        >{$t('goalsPage.agendaReadOnly')}
+      </p>
       <dl class="agenda-detail-list">
         {#if detail.kind === 'event'}
           {@const ev = detail.event}
@@ -2786,23 +2895,42 @@
     font-weight: 700;
     font-family: var(--font-mono);
   }
-  .pln-cell-dots {
+  .pln-cell-items {
     display: flex;
-    align-items: center;
-    gap: 3px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+    width: 100%;
+    min-width: 0;
     margin-top: auto;
   }
-  .pln-cell-dots i {
-    width: 7px;
-    height: 7px;
-    border-radius: 999px;
-    display: block;
+  .pln-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    max-width: 100%;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 9px;
+    line-height: 1.3;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
   }
-  .pln-cell-dots em {
-    font-style: normal;
+  .pln-chip-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+  .pln-chip-google {
+    color: var(--text-primary);
+  }
+  .pln-chip-more {
     font-size: 9px;
     color: var(--text-muted);
     font-family: var(--font-mono);
+    padding-left: 2px;
   }
 
   /* Detail panel (selected day, grouped by temporality) */
@@ -2875,6 +3003,39 @@
     border-radius: 50%;
     flex-shrink: 0;
   }
+  .pln-day-agenda {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 5px 8px;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--text-muted);
+    border-radius: var(--r);
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+    color: var(--text-primary);
+    font-size: 11px;
+  }
+  .pln-day-agenda:hover {
+    background: var(--hover);
+    border-color: var(--text-muted);
+  }
+  .pln-day-agenda-time {
+    flex-shrink: 0;
+    min-width: 38px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 10px;
+  }
+  .pln-day-agenda-label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .pln-agenda-time {
     flex-shrink: 0;
     min-width: 44px;
@@ -2910,6 +3071,16 @@
   }
   .agenda-detail-hint {
     margin: 0 0 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .agenda-detail-swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    flex-shrink: 0;
+    border: 1px solid var(--border);
   }
   .agenda-detail-list {
     margin: 0;

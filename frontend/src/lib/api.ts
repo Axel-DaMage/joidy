@@ -623,6 +623,9 @@ export interface CalendarEvent {
   start_at: string;
   end_at: string | null;
   html_link: string | null;
+  /** Effective display color (#rrggbb): event colorId palette entry, else the
+   * calendar's backgroundColor. Null when the calendar color is unknown. */
+  color: string | null;
 }
 
 /** Item of `GET /integrations/google/calendars` (live Google calendarList). */

@@ -51,6 +51,7 @@
         label: string;
         location?: string | null;
         allDay: boolean;
+        color: string | null;
       }
     | { kind: 'task'; time: string | null; label: string; task: CalendarTask };
 
@@ -233,6 +234,7 @@
           label: ev.summary || '—',
           location: ev.location,
           allDay: ev.all_day,
+          color: ev.color,
         }))
       );
     }
@@ -758,6 +760,14 @@
     return `prio prio-${priority.toLowerCase()}`;
   }
 
+  // Google/joidy color accent for chips and pills: a translucent wash of the
+  // real calendar color plus a solid left bar — reads on light and dark
+  // surfaces without hardcoding a palette.
+  function colorChipStyle(color: string | null | undefined): string {
+    if (!color) return '';
+    return `background:${color}26;box-shadow:inset 2px 0 0 ${color};`;
+  }
+
   function openSettings(): void {
     window.dispatchEvent(new CustomEvent('joidy:open-settings'));
   }
@@ -1035,12 +1045,15 @@
                 <span class="cell-items">
                   {#each items.slice(0, 2) as item}
                     {#if item.kind === 'google'}
-                      <span class="chip chip-google"><Lock size={8} />{item.label}</span>
+                      <span class="chip chip-google" style={colorChipStyle(item.color)}
+                        ><Lock size={8} />{item.label}</span
+                      >
                     {:else}
                       <span
                         class="chip {priorityClass(item.task.priority)}"
                         class:done={item.task.done}
                         class:dragging={draggedTask?.id === item.task.id}
+                        style={colorChipStyle(item.task.color)}
                         role="button"
                         tabindex="-1"
                         title={taskChipTitle(item.task)}
@@ -1113,7 +1126,7 @@
                 <div class="week-col-items">
                   {#each items as item}
                     {#if item.kind === 'google'}
-                      <div class="chip chip-google">
+                      <div class="chip chip-google" style={colorChipStyle(item.color)}>
                         <Lock size={8} />
                         <span class="chip-time">{item.time || ''}</span>
                         <span class="chip-label">{item.label}</span>
@@ -1123,6 +1136,7 @@
                         class="chip {priorityClass(item.task.priority)}"
                         class:done={item.task.done}
                         class:dragging={draggedTask?.id === item.task.id}
+                        style={colorChipStyle(item.task.color)}
                         role="button"
                         tabindex="-1"
                         title={taskChipTitle(item.task)}
@@ -1188,6 +1202,7 @@
                       <div
                         class="agenda-item-pill"
                         class:done={item.kind === 'task' && item.task.done}
+                        style={colorChipStyle(item.kind === 'google' ? item.color : item.task.color)}
                         title={item.kind === 'task' ? taskChipTitle(item.task) : item.label}
                       >
                         {#if item.kind === 'google'}
@@ -1197,7 +1212,10 @@
                           >
                           <span class="pill-title">{item.label}</span>
                         {:else}
-                          <span class="priority-dot {priorityClass(item.task.priority)}"></span>
+                          <span
+                            class="priority-dot {priorityClass(item.task.priority)}"
+                            style={item.task.color ? `background:${item.task.color}` : ''}
+                          ></span>
                           {#if item.time}<span class="chip-time caption">{item.time}</span>{/if}
                           {#if item.task.recurrence !== 'NONE'}<Repeat
                               size={9}
@@ -1265,7 +1283,7 @@
             <div class="event-list">
               {#each selectedDayItems as item (item.kind === 'google' ? `g-${item.id}` : `t-${item.task.id}`)}
                 {#if item.kind === 'google'}
-                  <div class="event-item">
+                  <div class="event-item" style={colorChipStyle(item.color)}>
                     <span class="event-time caption"
                       >{item.allDay ? $t('calendar.allDay') : item.time}</span
                     >
@@ -1277,7 +1295,11 @@
                     {/if}
                   </div>
                 {:else}
-                  <div class="event-item task-item" class:done={item.task.done}>
+                  <div
+                    class="event-item task-item"
+                    class:done={item.task.done}
+                    style={editingTaskId === item.task.id ? '' : colorChipStyle(item.task.color)}
+                  >
                     {#if editingTaskId === item.task.id}
                       <div class="edit-form">
                         <input

@@ -28,6 +28,23 @@ SYNC_WINDOW_DAYS = 30
 # Safety net so a lost sync_token never resyncs unbounded history.
 INITIAL_MAX_RESULTS = 2500
 
+# Google's event color palette (colors.get). Stable for years — an event's
+# colorId resolves to one of these; events without colorId inherit their
+# calendar's backgroundColor instead.
+GCAL_EVENT_COLORS: dict[str, dict[str, str]] = {
+    "1": {"background": "#a4bdfc", "foreground": "#1d1d1d"},  # Lavender
+    "2": {"background": "#7ae7bf", "foreground": "#1d1d1d"},  # Sage
+    "3": {"background": "#dbadff", "foreground": "#1d1d1d"},  # Grape
+    "4": {"background": "#ff887c", "foreground": "#1d1d1d"},  # Flamingo
+    "5": {"background": "#fbd75b", "foreground": "#1d1d1d"},  # Banana
+    "6": {"background": "#ffb878", "foreground": "#1d1d1d"},  # Tangerine
+    "7": {"background": "#46d6db", "foreground": "#1d1d1d"},  # Peacock
+    "8": {"background": "#e1e1e1", "foreground": "#1d1d1d"},  # Graphite
+    "9": {"background": "#5484ed", "foreground": "#ffffff"},  # Blueberry
+    "10": {"background": "#51b749", "foreground": "#ffffff"},  # Basil
+    "11": {"background": "#dc2127", "foreground": "#ffffff"},  # Tomato
+}
+
 
 def _parse_gcal_datetime(value: dict[str, Any] | None) -> tuple[datetime | None, bool]:
     """Parse a Google Calendar ``start``/``end`` object.
@@ -121,6 +138,7 @@ def _upsert_event(
     row.description = item.get("description")
     row.location = item.get("location")
     row.status = item.get("status", "confirmed")
+    row.color_id = item.get("colorId")
     row.all_day = all_day
     row.start_at = start_at
     row.end_at = end_at
@@ -150,8 +168,17 @@ async def _list_all_pages(
     return items, sync_token
 
 
-async def sync_calendar(db: Session, token: str, calendar_id: str) -> dict[str, Any]:
-    """Sync one calendar incrementally; falls back to a full sync on 410 GONE."""
+async def sync_calendar(
+    db: Session,
+    token: str,
+    calendar_id: str,
+    calendar_color: str | None = None,
+) -> dict[str, Any]:
+    """Sync one calendar incrementally; falls back to a full sync on 410 GONE.
+
+    ``calendar_color`` is the calendarList ``backgroundColor`` — stored on the
+    sync state so events without their own ``colorId`` can inherit it.
+    """
     state = (
         db.query(GoogleCalendarSyncState)
         .filter(GoogleCalendarSyncState.user_id == 1, GoogleCalendarSyncState.calendar_id == calendar_id)
@@ -201,6 +228,8 @@ async def sync_calendar(db: Session, token: str, calendar_id: str) -> dict[str, 
     state.sync_token = sync_token
     state.last_synced_at = datetime.now(UTC)
     state.last_error = None
+    if calendar_color:
+        state.background_color = calendar_color
 
     # A complete full sync replaces the calendar's cache: drop events that
     # Google no longer returns (fell out of the window or removed remotely).
@@ -252,7 +281,7 @@ async def sync_all(db: Session) -> dict[str, Any]:
     for cal in selected:
         calendar_id = cal["id"]
         try:
-            result = await sync_calendar(db, token, calendar_id)
+            result = await sync_calendar(db, token, calendar_id, cal.get("backgroundColor"))
             result["summary"] = cal.get("summary")
             results.append(result)
         except httpx.HTTPStatusError as exc:
@@ -305,6 +334,32 @@ def get_cached_events(
         query = query.filter(GoogleCalendarEvent.start_at <= end)
     events: list[GoogleCalendarEvent] = query.order_by(GoogleCalendarEvent.start_at).all()
     return events
+
+
+def effective_colors(db: Session, events: list[GoogleCalendarEvent]) -> dict[int, str | None]:
+    """Resolve each event's display color (#rrggbb) the way Google Calendar does:
+    the event's own ``colorId`` palette entry wins; otherwise the calendar's
+    ``backgroundColor`` from the sync state is used. ``None`` when neither is
+    known (calendar never synced with color support).
+    """
+    calendar_ids = {e.calendar_id for e in events}
+    bg_colors: dict[str, str | None] = {}
+    if calendar_ids:
+        rows = (
+            db.query(GoogleCalendarSyncState)
+            .filter(
+                GoogleCalendarSyncState.user_id == 1,
+                GoogleCalendarSyncState.calendar_id.in_(calendar_ids),
+            )
+            .all()
+        )
+        bg_colors = {s.calendar_id: s.background_color for s in rows}
+
+    colors: dict[int, str | None] = {}
+    for e in events:
+        palette = GCAL_EVENT_COLORS.get(e.color_id or "")
+        colors[e.id] = (palette["background"] if palette else None) or bg_colors.get(e.calendar_id)
+    return colors
 
 
 def get_sync_status(db: Session) -> dict[str, Any]:

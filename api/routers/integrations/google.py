@@ -254,6 +254,9 @@ class GoogleCalendarEventOut(BaseModel):
     start_at: datetime
     end_at: datetime | None = None
     html_link: str | None = None
+    # Effective display color (#rrggbb): event colorId palette entry, else the
+    # calendar's backgroundColor. None when the calendar color is unknown.
+    color: str | None = None
 
 
 class GoogleCalendarSyncResult(BaseModel):
@@ -296,6 +299,7 @@ def google_calendar_events(
 ):
     """Read cached calendar events. Served locally — no Google API call."""
     events: list[GoogleCalendarEvent] = gcs.get_cached_events(db, start, end, calendar_id)
+    colors = gcs.effective_colors(db, events)
     return [
         GoogleCalendarEventOut(
             google_id=e.google_id,
@@ -308,6 +312,7 @@ def google_calendar_events(
             start_at=e.start_at,
             end_at=e.end_at,
             html_link=e.html_link,
+            color=colors.get(e.id),
         )
         for e in events
     ]
