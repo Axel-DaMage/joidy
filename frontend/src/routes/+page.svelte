@@ -716,11 +716,14 @@
     background: var(--border);
   }
 
-  /* ── Right panel — identical to original ── */
+  /* ── Right panel — view-body spacing per the Panel Border Standard:
+       boxed widget panels get --s3 breathing room and a uniform gap (#1670) ── */
   .activity-section {
     display: flex;
     flex-direction: column;
     overflow-y: auto;
+    padding: var(--s3);
+    gap: var(--s3);
   }
 
   /* #1095 — el widget de GitHub estira su contenedor para que el cuerpo
@@ -736,6 +739,12 @@
     flex-direction: column;
     flex: 1 1 auto;
     min-height: 0;
+  }
+  /* #1670 — while the widget's filter popover is open it must escape the
+     .widget clip (Widget.svelte sets overflow: hidden), otherwise short
+     panels cut the menu off. */
+  .activity-section :global(.widget:has(.gh-filter-menu)) {
+    overflow: visible;
   }
 
   /* ── Responsive ── */
