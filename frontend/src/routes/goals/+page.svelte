@@ -905,7 +905,7 @@
       goalsUi: {
         historyState: historyStateFilter,
         historyGoalId: historyGoalFilter,
-        historyRangeDays: historyRangeDays,
+        historyRangeDays,
       },
     });
   });

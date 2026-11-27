@@ -81,11 +81,12 @@ export function buildHistoryEvents(goals: Goal[]): HistoryEvent[] {
       });
     }
   }
+  // Order by the raw ISO source timestamp — `date`/`time` are display-only:
+  // the locale-formatted time (e.g. "08:00 PM") does not sort chronologically.
+  const sourceTs = (e: HistoryEvent): string =>
+    (e.kind === 'COMPLETED' ? e.goal.completed_at : e.goal.updated_at) ?? '';
   events.sort(
-    (a, b) =>
-      b.date.localeCompare(a.date) ||
-      (b.time ?? '').localeCompare(a.time ?? '') ||
-      b.goal.id - a.goal.id
+    (a, b) => sourceTs(b).localeCompare(sourceTs(a)) || b.goal.id - a.goal.id
   );
   return events;
 }
