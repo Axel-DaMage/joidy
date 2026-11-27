@@ -43,10 +43,7 @@ def backfill_streak_history(db: Session, streak: PersonalStreak) -> None:
                     should_add = True
 
             if should_add:
-                # current is a plain date at runtime; the Column[] part of the
-                # union comes from the legacy Column() declaration on
-                # PersonalStreak.start_date.
-                new_dates.append(cast(date, current))
+                new_dates.append(current)  # type: ignore[arg-type]
 
         current += timedelta(days=1)
 
