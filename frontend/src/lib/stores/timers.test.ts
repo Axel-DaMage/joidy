@@ -1,11 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { get } from 'svelte/store';
 
-const { apiMock, alertsMock, notifMock } = vi.hoisted(() => ({
+const { apiMock, alertsMock, notifMock, gamificationMock } = vi.hoisted(() => ({
   apiMock: {
     userSettings: {
       get: vi.fn(),
       set: vi.fn(),
+    },
+    gamification: {
+      pomodoro: vi.fn(),
     },
   },
   alertsMock: {
@@ -14,6 +17,7 @@ const { apiMock, alertsMock, notifMock } = vi.hoisted(() => ({
     stopTitleFlash: vi.fn(),
   },
   notifMock: { showNotification: vi.fn() },
+  gamificationMock: { applyStats: vi.fn(), showXPGain: vi.fn() },
 }));
 
 // Mock $app/env so `browser` is true (jsdom provides the storage APIs).
@@ -21,6 +25,7 @@ vi.mock('$app/env', () => ({ browser: true, dev: false }));
 vi.mock('$lib/api', () => ({ api: apiMock }));
 vi.mock('$lib/utils/clockAlerts', () => alertsMock);
 vi.mock('./notifications', () => notifMock);
+vi.mock('./gamification', () => gamificationMock);
 vi.mock('$lib/utils/logger', () => ({
   logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), log: vi.fn(), debug: vi.fn() },
 }));
@@ -29,19 +34,26 @@ import {
   activeAlert,
   addMinuteToTimer,
   addTimer,
+  alarmGroups,
   alarms,
   deleteAlarm,
   dismissAlert,
+  formatDurationShort,
   formatHMS,
+  formatSignedDelta,
   formatStopwatch,
   initTimersEngine,
   lapStopwatch,
+  nextAlarm,
+  nextAlarmFireAt,
+  nextTimer,
   onTick,
   pauseStopwatch,
   pauseTimer,
   removeTimer,
   resetStopwatch,
   resetTimer,
+  restartTimer,
   resumeTimer,
   saveAlarm,
   snoozeAlert,
@@ -184,6 +196,79 @@ describe('timers store (#969)', () => {
     expect(get(timersRemaining).get(id)!).toBeLessThanOrEqual(41_000);
   });
 
+  // ── Timer metadata & lifecycle (#1663) ───────────────────────────────
+
+  it('stores creation metadata: color, links, XP and repeat flags', () => {
+    const id = addTimer('Focus', 25 * 60_000, {
+      color: '#ff8800',
+      goalId: 3,
+      noteId: 7,
+      awardXp: true,
+      repeat: true,
+    });
+    const tm = get(timers).find((x) => x.id === id)!;
+    expect(tm.color).toBe('#ff8800');
+    expect(tm.goalId).toBe(3);
+    expect(tm.noteId).toBe(7);
+    expect(tm.awardXp).toBe(true);
+    expect(tm.repeat).toBe(true);
+  });
+
+  it('restarts a finished timer with its full duration', () => {
+    const id = addTimer('Tea', 1_000)!;
+    vi.advanceTimersByTime(1_500);
+    onTick(Date.now());
+    expect(get(timers)[0].status).toBe('done');
+    dismissAlert();
+
+    restartTimer(id);
+    const tm = get(timers)[0];
+    expect(tm.status).toBe('running');
+    expect(tm.remainingMs).toBe(tm.totalMs);
+    expect(tm.endsAt).toBeGreaterThan(Date.now());
+  });
+
+  it('re-arms a repeating timer instead of marking it done', () => {
+    addTimer('Interval', 1_000, { repeat: true });
+    vi.advanceTimersByTime(1_500);
+    onTick(Date.now());
+
+    const tm = get(timers)[0];
+    expect(tm.status).toBe('running');
+    expect(tm.endsAt).toBeGreaterThan(Date.now());
+    // The cycle alert still fires every round.
+    expect(get(activeAlert)?.kind).toBe('timer');
+  });
+
+  it('requests XP via the pomodoro event for completed focus timers', () => {
+    apiMock.gamification.pomodoro.mockResolvedValue({ xp_awarded: 15 });
+    addTimer('Focus', 25 * 60_000, { awardXp: true });
+    vi.advanceTimersByTime(25 * 60_000 + 500);
+    onTick(Date.now());
+
+    expect(apiMock.gamification.pomodoro).toHaveBeenCalledWith(
+      expect.objectContaining({ duration_minutes: 25 })
+    );
+  });
+
+  it('does not request XP when the flag is off', () => {
+    addTimer('Tea', 1_000);
+    vi.advanceTimersByTime(1_500);
+    onTick(Date.now());
+    expect(apiMock.gamification.pomodoro).not.toHaveBeenCalled();
+  });
+
+  it('exposes the soonest-finishing running timer', () => {
+    addTimer('long', 120_000);
+    const shortId = addTimer('short', 60_000)!;
+    onTick(Date.now());
+    expect(get(nextTimer)?.timer.id).toBe(shortId);
+
+    pauseTimer(shortId);
+    onTick(Date.now());
+    expect(get(nextTimer)?.timer.label).toBe('long');
+  });
+
   // ── Alarms ───────────────────────────────────────────────────────────
 
   it('creates, toggles and deletes alarms', () => {
@@ -273,6 +358,64 @@ describe('timers store (#969)', () => {
     expect(get(alarms)[0].snoozedUntil).toBeUndefined();
   });
 
+  // ── Next-fire scheduling (#1663) ─────────────────────────────────────
+
+  it('computes nextAlarmFireAt for a one-shot alarm later today', () => {
+    const from = Date.now();
+    const target = new Date(from + 2 * 3600_000);
+    const a = { ...makeAlarm(target), id: 'al-x' };
+    const at = nextAlarmFireAt(a, from);
+    expect(at).toBeGreaterThan(from);
+    expect(at).toBeLessThanOrEqual(from + 2 * 3600_000 + 60_000);
+    expect(new Date(at!).getHours()).toBe(target.getHours());
+    expect(new Date(at!).getMinutes()).toBe(target.getMinutes());
+  });
+
+  it('rolls a past one-shot alarm over to tomorrow', () => {
+    const from = Date.now();
+    const past = new Date(from - 60_000);
+    const a = { ...makeAlarm(past), id: 'al-x' };
+    const at = nextAlarmFireAt(a, from)!;
+    expect(at).toBeGreaterThan(from);
+    // Next occurrence is within the next 24h.
+    expect(at).toBeLessThanOrEqual(from + 24 * 3600_000);
+  });
+
+  it('returns null for a disabled alarm and honors snoozedUntil', () => {
+    const from = Date.now();
+    const target = new Date(from + 3600_000);
+    const disabled = { ...makeAlarm(target, { enabled: false }), id: 'al-x' };
+    expect(nextAlarmFireAt(disabled, from)).toBeNull();
+
+    const snoozed = { ...disabled, snoozedUntil: from + 10 * 60_000 };
+    expect(nextAlarmFireAt(snoozed, from)).toBe(from + 10 * 60_000);
+  });
+
+  it('picks the first matching weekday for recurring alarms', () => {
+    const from = Date.now();
+    const target = new Date(from + 2 * 3600_000);
+    const otherDay = (target.getDay() + 3) % 7;
+    const a = { ...makeAlarm(target, { days: [otherDay] }), id: 'al-x' };
+    const at = nextAlarmFireAt(a, from)!;
+    expect(at).toBeGreaterThan(from);
+    expect(new Date(at).getDay()).toBe(otherDay);
+  });
+
+  it('groups alarms into upcoming (by next fire) and inactive', () => {
+    const soon = makeAlarm(nextMinute(), { label: 'soon' });
+    const later = makeAlarm(new Date(Date.now() + 2 * 60_000), { label: 'later' });
+    const off = makeAlarm(nextMinute(), { label: 'off', enabled: false });
+    saveAlarm(later);
+    saveAlarm(soon);
+    saveAlarm(off);
+    onTick(Date.now());
+
+    const groups = get(alarmGroups);
+    expect(groups.upcoming.map((e) => e.alarm.label)).toEqual(['soon', 'later']);
+    expect(groups.inactive.map((a) => a.label)).toEqual(['off']);
+    expect(get(nextAlarm)?.alarm.label).toBe('soon');
+  });
+
   // ── Stopwatch ────────────────────────────────────────────────────────
 
   it('counts elapsed time and records laps', () => {
@@ -329,5 +472,19 @@ describe('timers store (#969)', () => {
     expect(formatStopwatch(0)).toBe('00:00.00');
     expect(formatStopwatch(61_230)).toBe('01:01.23');
     expect(formatStopwatch(3_661_000)).toBe('1:01:01.00');
+  });
+
+  it('formats relative durations compactly', () => {
+    expect(formatDurationShort(45_000)).toBe('45s');
+    expect(formatDurationShort(45 * 60_000)).toBe('45m');
+    expect(formatDurationShort((7 * 60 + 23) * 60_000)).toBe('7h 23m');
+    expect(formatDurationShort(2 * 3600_000)).toBe('2h');
+    expect(formatDurationShort(0)).toBe('1s');
+  });
+
+  it('formats signed lap deltas', () => {
+    expect(formatSignedDelta(2400)).toBe('+2.4s');
+    expect(formatSignedDelta(-800)).toBe('-0.8s');
+    expect(formatSignedDelta(10)).toBe('±0.0s');
   });
 });

@@ -48,6 +48,8 @@
   .hoverable:hover {
     border-color: var(--accent);
     box-shadow: 0 0 0 1px var(--accent);
+    /* Shared hover-lift beat (motion system, #1657). */
+    transform: translateY(-2px);
   }
 
   .clickable {

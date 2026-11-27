@@ -43,7 +43,7 @@
   import PeriodCompare from './PeriodCompare.svelte';
   import WeeklyRhythm from './WeeklyRhythm.svelte';
   import GoalStates from './GoalStates.svelte';
-  import CountUp from './CountUp.svelte';
+  import CountUp from '$lib/components/CountUp.svelte';
   import Sparkline from './Sparkline.svelte';
 
   // Holistic analytics page (#1499): page header (title, section tabs, window

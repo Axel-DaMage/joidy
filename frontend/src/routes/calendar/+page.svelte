@@ -71,6 +71,7 @@
   import MapPin from 'lucide-svelte/icons/map-pin';
   import Target from 'lucide-svelte/icons/target';
   import EmptyState from '$lib/components/EmptyState.svelte';
+  import { popIn, staggerDelay } from '$lib/utils/motion';
   import GoalFromEventModal, { type GoalEventSeed } from '$lib/components/GoalFromEventModal.svelte';
   import { t } from 'svelte-i18n';
 

@@ -31,7 +31,33 @@ vi.mock('svelte-i18n', () => ({
   },
 }));
 
+// Stores que gobiernan la visibilidad de secciones en el rail (#1671):
+// devMode true para que la sección IA sea navegable; sin install prompt.
+vi.mock('$lib/stores/settings', () => ({
+  devMode: {
+    subscribe: (fn: (v: boolean) => void) => {
+      fn(true);
+      return { unsubscribe() {} };
+    },
+  },
+}));
+vi.mock('$lib/stores/pwa', () => ({
+  deferredPrompt: {
+    subscribe: (fn: (v: null) => void) => {
+      fn(null);
+      return { unsubscribe() {} };
+    },
+  },
+  isAppInstalled: {
+    subscribe: (fn: (v: boolean) => void) => {
+      fn(false);
+      return { unsubscribe() {} };
+    },
+  },
+}));
+
 // Hijos pesados sin lógica bajo test → stubs nulos.
+vi.mock('./DynamicIcon.svelte', () => ({ default: () => null }));
 vi.mock('./SettingsAppearance.svelte', () => ({ default: () => null }));
 vi.mock('./SettingsAdvanced.svelte', () => ({ default: () => null }));
 vi.mock('./SettingsVault.svelte', () => ({ default: () => null }));
@@ -41,10 +67,14 @@ vi.mock('./SettingsSession.svelte', () => ({ default: () => null }));
 vi.mock('./SettingsServices.svelte', () => ({ default: () => null }));
 vi.mock('./SettingsDeveloper.svelte', () => ({ default: () => null }));
 
+// Marco de sección → stub passthrough (solo renderiza children).
+vi.mock('./SettingsSection.svelte', () => ({ default: SettingsSectionStub }));
+
 // Hijos que consumen isConfigured, reemplazados por stubs runes.
 vi.mock('./SettingsIntegrations.svelte', () => ({ default: SettingsIntegrationsStub }));
 vi.mock('./SettingsAI.svelte', () => ({ default: SettingsAIStub }));
 
+import SettingsSectionStub from './__stubs__/SettingsSectionStub.svelte';
 import SettingsIntegrationsStub from './__stubs__/SettingsIntegrationsStub.svelte';
 import SettingsAIStub from './__stubs__/SettingsAIStub.svelte';
 import SettingsPanel from './SettingsPanel.svelte';
@@ -67,7 +97,7 @@ describe('SettingsPanel — reactividad de configuredKeys', () => {
     });
 
     const { getByText, getByTestId } = render(SettingsPanel, {
-      open: true,
+      section: 'integrations',
       onClose: vi.fn(),
     });
 
@@ -85,7 +115,7 @@ describe('SettingsPanel — reactividad de configuredKeys', () => {
     });
 
     const { getByTestId } = render(SettingsPanel, {
-      open: true,
+      section: 'integrations',
       onClose: vi.fn(),
     });
 
@@ -101,7 +131,7 @@ describe('SettingsPanel — reactividad de configuredKeys', () => {
     });
 
     const { getByTestId } = render(SettingsPanel, {
-      open: true,
+      section: 'ai',
       onClose: vi.fn(),
     });
 
@@ -109,10 +139,13 @@ describe('SettingsPanel — reactividad de configuredKeys', () => {
   });
 });
 
-// #1304 — el listener global de Ctrl+S no comprobaba `open`: el panel vive
+// #1304 — el listener global de Ctrl+S no comprobaba `open`: el panel vivía
 // montado en +layout, así que Ctrl+S en cualquier página disparaba saveConfig()
 // y posteaba systemConfig con los secretos en '' (GET /config no los devuelve),
 // borrando GEMINI_API_KEY, OBSIDIAN_VAULT_PATH y la config de Telegram en .env.
+// Con la ruta /settings (#1671) el componente solo existe montado en esa página,
+// pero el guard sobre configLoaded sigue siendo necesario: un Ctrl+S antes de
+// que resuelva GET /config no debe postear nada.
 describe('SettingsPanel — guard de Ctrl+S (#1304)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -120,18 +153,19 @@ describe('SettingsPanel — guard de Ctrl+S (#1304)', () => {
     apiMock.config.update.mockResolvedValue({ status: 'ok' });
   });
 
-  it('ignora Ctrl+S con el panel cerrado aunque esté montado', async () => {
-    render(SettingsPanel, { open: false, onClose: vi.fn() });
+  it('ignora Ctrl+S mientras la config no ha terminado de cargar', async () => {
+    // config.get nunca resuelve → configLoaded queda en false.
+    apiMock.config.get.mockReturnValue(new Promise(() => {}));
+    render(SettingsPanel, { onClose: vi.fn() });
 
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true }));
     // Give a hypothetical unguarded handler a tick to run.
     await new Promise((r) => setTimeout(r, 20));
 
     expect(apiMock.config.update).not.toHaveBeenCalled();
-    expect(apiMock.config.get).not.toHaveBeenCalled();
   });
 
-  it('Ctrl+S sí guarda con el panel abierto y la config cargada', async () => {
+  it('Ctrl+S sí guarda con la config cargada', async () => {
     apiMock.config.get.mockResolvedValue({
       configured_keys: ['obsidian_vault_path'],
       obsidian_vault_path: '/vault',
@@ -141,11 +175,11 @@ describe('SettingsPanel — guard de Ctrl+S (#1304)', () => {
       openai_base_url: '',
     });
 
-    render(SettingsPanel, { open: true, onClose: vi.fn() });
+    render(SettingsPanel, { onClose: vi.fn() });
     await waitFor(() => expect(apiMock.config.get).toHaveBeenCalled());
 
     // Re-dispatch until loadConfig() flips configLoaded — the guard requires
-    // both `open` and a finished initial load before honouring Ctrl+S.
+    // a finished initial load before honouring Ctrl+S.
     await waitFor(() => {
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true }));
       expect(apiMock.config.update).toHaveBeenCalled();

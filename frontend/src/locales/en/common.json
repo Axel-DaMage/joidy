@@ -389,6 +389,7 @@
     "delete": "Delete",
     "search": "Search",
     "close": "Close",
+    "back": "Back",
     "settings": "Settings",
     "install": "Install",
     "skip": "Skip",
@@ -453,6 +454,31 @@
   },
   "settings": {
     "title": "SETTINGS",
+    "nav": {
+      "appearance": "Appearance",
+      "advanced": "Advanced",
+      "editor": "Editor",
+      "vault": "Vault",
+      "integrations": "Integrations",
+      "ai": "AI",
+      "app": "App",
+      "session": "Session",
+      "services": "Services",
+      "developer": "Developer"
+    },
+    "descriptions": {
+      "appearance": "Theme, time format, language, accent colors and icons.",
+      "advanced": "Metadata, hidden folders, trash and the tags line.",
+      "editor": "Vim mode for the markdown editor.",
+      "vault": "Obsidian vault location and write mode.",
+      "integrations": "Connections to GitHub, Google, Strava, contacts and Spotify.",
+      "ai": "AI keys and models (Gemini, OpenAI-compatible, embeddings).",
+      "app": "Install Joidy as an app on your device.",
+      "session": "Current user and sign out.",
+      "services": "Status and control of Joidy services.",
+      "developer": "Repository and development mode."
+    },
+    "saveHint": "Save applies all configuration changes. Empty secret fields never overwrite existing values.",
     "appearance": "Appearance",
     "theme": "Theme",
     "dark": "dark",
@@ -703,6 +729,35 @@
       "pendingToday": "{count} pending today",
       "upcoming": "Next 7 days",
       "nothingAhead": "Nothing assigned this week"
+    },
+    "history": {
+      "filters": "Filters",
+      "clear": "Clear",
+      "stateLabel": "State",
+      "stateAll": "All",
+      "stateCompleted": "Completed",
+      "stateFailed": "Failed",
+      "stateCancelled": "Cancelled",
+      "goalLabel": "Goal",
+      "allGoals": "All goals",
+      "rangeLabel": "Period",
+      "range7d": "7d",
+      "range30d": "30d",
+      "range90d": "90d",
+      "range365d": "1y",
+      "rangeAll": "All",
+      "timeline": "Activity",
+      "events": "{count} events",
+      "statsLabel": "Period summary",
+      "statCompleted": "Completed",
+      "statFailed": "Failed",
+      "statCancelled": "Cancelled",
+      "statRate": "Effectiveness",
+      "statStreak": "Best streak",
+      "streakDays": "{count}d",
+      "cancelled": "Cancelled",
+      "empty": "No events in this period.",
+      "emptyHint": "Adjust the filters or complete goals to populate the history."
     }
   },
   "analyticsPage": {
@@ -1630,6 +1685,21 @@
       "timers": "Timers",
       "stopwatch": "Stopwatch"
     },
+    "sections": {
+      "alarms": "Alarms",
+      "timers": "Timers",
+      "stopwatch": "Stopwatch"
+    },
+    "hero": {
+      "nextAlarm": "Next alarm",
+      "nextTimer": "Timer finishing",
+      "stopwatchRunning": "Stopwatch running",
+      "clock": "Clock",
+      "nothingHint": "Nothing scheduled — start a focus timer or set an alarm below.",
+      "in": "in {time}",
+      "quickPomodoro": "Pomodoro 25",
+      "quickBreak": "Break 5"
+    },
     "dow": {
       "sun": "Sun",
       "mon": "Mon",
@@ -1663,7 +1733,10 @@
       "sound": "Sound",
       "toggle": "Enable or disable alarm",
       "hour": "Hour",
-      "minute": "Minute"
+      "minute": "Minute",
+      "upcoming": "Upcoming",
+      "inactive": "Inactive",
+      "nextIn": "in {time}"
     },
     "timer": {
       "empty": "No timers running. Start one above.",
@@ -1680,7 +1753,24 @@
       "seconds": "Seconds",
       "hoursShort": "h",
       "minutesShort": "m",
-      "secondsShort": "s"
+      "secondsShort": "s",
+      "presets": "Presets",
+      "pomodoro": "Pomodoro",
+      "shortBreak": "Break",
+      "longBreak": "Long break",
+      "color": "Color",
+      "colorDefault": "Default color",
+      "linkGoal": "Link goal",
+      "noGoal": "No goal",
+      "linkNote": "Link note",
+      "notePlaceholder": "Search notes…",
+      "awardXp": "Award XP",
+      "awardXpHint": "Award focus-session XP when it finishes (≥20 min)",
+      "repeat": "Auto-restart",
+      "repeatHint": "Restart automatically each time it fires",
+      "restart": "Restart",
+      "running": "Running",
+      "paused": "Paused"
     },
     "stopwatch": {
       "start": "Start",
@@ -1691,7 +1781,11 @@
       "lapTime": "Lap time",
       "total": "Total",
       "fastest": "Fastest",
-      "slowest": "Slowest"
+      "slowest": "Slowest",
+      "delta": "Diff",
+      "copy": "Copy laps",
+      "copied": "Laps copied to clipboard",
+      "currentLap": "Now"
     },
     "alert": {
       "alarmTitle": "Alarm",
@@ -1699,7 +1793,8 @@
       "timerDone": "Time is up",
       "snooze": "Snooze",
       "dismiss": "Dismiss",
-      "snoozed": "Snoozed for {minutes} min"
+      "snoozed": "Snoozed for {minutes} min",
+      "restart": "Restart"
     },
     "statusbar": {
       "open": "Open Clock",

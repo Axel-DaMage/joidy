@@ -12,6 +12,7 @@
   import Repeat from 'lucide-svelte/icons/repeat';
   import Sparkles from 'lucide-svelte/icons/sparkles';
   import { t } from 'svelte-i18n';
+  import { popIn, staggerDelay } from '$lib/utils/motion';
 
   let {
     cells,
@@ -79,11 +80,12 @@
 </div>
 
 <div class="day-grid">
-  {#each cells as cell (cell.key)}
+  {#each cells as cell, i (cell.key)}
     {@const items = itemsByDay.get(cell.key) ?? []}
     {@const metrics = metricsByDay.get(cell.key)}
     <button
       class="day-cell"
+      in:popIn={{ delay: staggerDelay(i, { step: 8, max: 340 }), duration: 300 }}
       class:out={!cell.inMonth}
       class:today={cell.key === todayKey}
       class:selected={selectedDay === cell.key}

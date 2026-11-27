@@ -34,11 +34,8 @@
   }
 </script>
 
-<!-- Apariencia -->
-<section class="section">
-  <div class="section-title" style="color: var(--xp, var(--accent));">
-    {$t('settings.appearance')}
-  </div>
+<!-- Apariencia — el marco (título/descripción/borde) lo aporta SettingsSection (#1671). -->
+<div class="section-content">
   <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px;">
     <div class="row-label">
       <Sparkles size={13} />
@@ -131,26 +128,9 @@
     </select>
     <p class="hint" style="margin-top: 2px;">Los iconos cambiarán en los conectores y notas.</p>
   </div>
-</section>
+</div>
 
 <style>
-  .section {
-    padding: 16px 20px;
-    border-bottom: 1px solid var(--border-light);
-  }
-
-  .section-title {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 10px;
-    font-family: var(--font-mono);
-    color: var(--text-muted);
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    margin-bottom: 12px;
-  }
-
   .row {
     display: flex;
     align-items: center;

@@ -97,12 +97,8 @@
   }
 </script>
 
-<!-- Servicios (Power Management) -->
-<section class="section">
-  <div class="section-title" style="color: var(--xp, var(--accent));">
-    <Power size={12} /> Servicios
-  </div>
-
+<!-- Servicios (Power Management) — el marco lo aporta SettingsSection (#1671). -->
+<div class="section-content">
   {#if powerLoading}
     <p class="hint">Cargando estado de servicios…</p>
   {:else if !powerStatus || !powerStatus.docker_available}
@@ -208,7 +204,7 @@
       <span class="mono">joidy up</span> para reiniciar.
     </p>
   {/if}
-</section>
+</div>
 
 <style>
   /* Restaurada: se perdió en el split #1067; el markup usaba la clase
@@ -218,23 +214,6 @@
     color: var(--text-muted);
     line-height: 1.6;
     margin-top: 8px;
-  }
-
-  .section {
-    padding: 16px 20px;
-    border-bottom: 1px solid var(--border-light);
-  }
-
-  .section-title {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 10px;
-    font-family: var(--font-mono);
-    color: var(--text-muted);
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    margin-bottom: 12px;
   }
 
   /* ── Power management ──────────────────────────────────────────────────── */
