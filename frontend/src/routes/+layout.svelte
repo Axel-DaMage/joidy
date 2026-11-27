@@ -123,7 +123,6 @@
     { href: '/ai', label: $t('nav.ai'), icon: 'Brain', status: 'dev' },
     { href: '/streaks', label: $t('nav.streaks'), icon: 'Flame', status: 'ready' },
     { href: '/goals', label: $t('nav.goals'), icon: 'Target', status: 'ready' },
-    { href: '/analytics', label: $t('nav.analytics'), icon: 'ChartColumn', status: 'ready' },
     { href: '/gmail', label: $t('nav.gmail'), icon: 'Send', status: 'ready' },
     { href: '/contactos', label: $t('nav.contacts'), icon: 'Users', status: 'dev' },
     { href: '/calendar', label: $t('nav.calendar'), icon: 'Calendar', status: 'ready' },
@@ -132,7 +131,10 @@
     { href: '/strava', label: $t('nav.strava'), icon: 'Activity', status: 'dev' },
     // #45 — Spotify integration (backend merged via #1448).
     { href: '/spotify', label: $t('nav.spotify'), icon: 'Music', status: 'dev' },
-  ] as { href: string; label: string; icon: string; status: NavItemStatus }[];
+    // #1665 — analytics is pinned to the bottom of the rail, separated from
+    // the primary nav group by a hairline divider (.nav-separator).
+    { href: '/analytics', label: $t('nav.analytics'), icon: 'ChartColumn', status: 'ready', pinned: true },
+  ] as { href: string; label: string; icon: string; status: NavItemStatus; pinned?: boolean }[];
 
   // Clock engine (#969): alarms must keep ticking wherever the user is in the
   // app. Only starts once authenticated — it pulls persisted alarms from the
@@ -949,7 +951,10 @@
 
     <!-- Sidebar -->
     <nav class="app-sidebar">
-      {#each navItems as { href, label, icon, status }}
+      {#each navItems as { href, label, icon, status, pinned }}
+        {#if pinned && (status === 'ready' || $devMode)}
+          <div class="nav-separator" aria-hidden="true"></div>
+        {/if}
         {#if status === 'ready' || $devMode}
           {@const active =
             page.url.pathname === href || (page.url.pathname.startsWith(href) && href !== '/')}
