@@ -97,7 +97,7 @@
     class="grow-main"
     onclick={() => ctx.onClick(goal)}
     aria-label={$t('goalCard.openGoal', { values: { title: goal.title } })}
-    title={goal.description ? `${goal.title}\n${goal.description}` : goal.title}
+    title={goal.title}
   >
     <span class="grow-icon" aria-hidden="true">
       {#if goal.fail_emoji}
