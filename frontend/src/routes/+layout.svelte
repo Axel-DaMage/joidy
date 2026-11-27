@@ -11,6 +11,7 @@
   import FocusMode from '$lib/components/FocusMode.svelte';
   import Toast from '$lib/components/Toast.svelte';
   import StatusBarGitHub from '$lib/components/StatusBarGitHub.svelte';
+  import StatusBarTimers from '$lib/components/StatusBarTimers.svelte';
   import Login from '$lib/components/Login.svelte';
   import SetupWizard from '$lib/components/SetupWizard.svelte';
   import { api, apiWsUrl, refreshAccessToken, type Goal, type PersonalStreak } from '$lib/api';
@@ -1020,6 +1021,9 @@
         >
         <span class="p-dot" class:beat={$running}></span>
       </div>
+
+      <!-- Live timers/stopwatch/alarm widget (#1661) -->
+      <StatusBarTimers />
 
       <!-- Focus Mode trigger -->
       <button
