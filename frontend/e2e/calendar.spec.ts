@@ -76,7 +76,7 @@ test.describe('Calendar — Google-free path', () => {
     await expect(page.locator('.calendar-page')).toBeVisible();
     await expect(page.locator('.empty-state-title')).toHaveText('Google no está conectado');
     // The calendar body must not render in this path.
-    await expect(page.locator('.day-grid')).toHaveCount(0);
+    await expect(page.locator('.pcal-grid')).toHaveCount(0);
   });
 });
 
@@ -90,13 +90,13 @@ test.describe('Calendar — month grid', () => {
     await expect(page.locator('.calendar-page')).toBeVisible();
     await expect(page.locator('.view-switcher')).toBeVisible();
     // 7 weekday labels (Lun..Dom in es locale)
-    await expect(page.locator('.weekday-row .weekday')).toHaveCount(7);
+    await expect(page.locator('.pcal-weekdays .pcal-dow')).toHaveCount(7);
     // A month grid always renders at least 28 day cells
-    const cells = page.locator('.day-grid .day-cell');
+    const cells = page.locator('.pcal-grid .pcal-cell');
     await expect(cells.first()).toBeVisible();
     expect(await cells.count()).toBeGreaterThanOrEqual(28);
     // Today is highlighted
-    await expect(page.locator('.day-cell.today')).toBeVisible();
+    await expect(page.locator('.pcal-cell.today')).toBeVisible();
   });
 
   test('day detail prompts to pick a day and shows detail on click', async ({
@@ -104,8 +104,8 @@ test.describe('Calendar — month grid', () => {
   }) => {
     await authGoto(page, '/calendar');
     await expect(page.locator('.day-detail h4')).toHaveText('Selecciona un día');
-    await page.locator('.day-cell.today').click();
-    await expect(page.locator('.day-cell.today')).toHaveClass(/selected/);
+    await page.locator('.pcal-cell.today').click();
+    await expect(page.locator('.pcal-cell.today')).toHaveClass(/selected/);
     // Quick-add form appears once a day is selected
     await expect(page.locator('.quick-add')).toBeVisible();
     await expect(
@@ -125,8 +125,8 @@ test.describe('Calendar — views', () => {
 
   test('switches to week view', async ({ page }) => {
     await page.locator('.view-switcher button:has-text("Semana")').click();
-    await expect(page.locator('.week-grid')).toBeVisible();
-    await expect(page.locator('.week-col')).toHaveCount(7);
+    await expect(page.locator('.pcal-week')).toBeVisible();
+    await expect(page.locator('.pcal-col')).toHaveCount(7);
     await expect(
       page.locator('.view-switcher button:has-text("Semana")')
     ).toHaveAttribute('aria-pressed', 'true');
@@ -134,16 +134,16 @@ test.describe('Calendar — views', () => {
 
   test('switches to agenda view', async ({ page }) => {
     await page.locator('.view-switcher button:has-text("Agenda")').click();
-    await expect(page.locator('.agenda-view')).toBeVisible();
-    expect(await page.locator('.agenda-day-row').count()).toBeGreaterThan(0);
-    await expect(page.locator('.agenda-date-badge').first()).toBeVisible();
+    await expect(page.locator('.pcal-agenda')).toBeVisible();
+    expect(await page.locator('.pcal-agenda-row').count()).toBeGreaterThan(0);
+    await expect(page.locator('.pcal-agenda-badge').first()).toBeVisible();
   });
 
   test('switches back to month view', async ({ page }) => {
     await page.locator('.view-switcher button:has-text("Semana")').click();
-    await expect(page.locator('.week-grid')).toBeVisible();
+    await expect(page.locator('.pcal-week')).toBeVisible();
     await page.locator('.view-switcher button:has-text("Mes")').click();
-    await expect(page.locator('.day-grid')).toBeVisible();
+    await expect(page.locator('.pcal-grid')).toBeVisible();
     await expect(
       page.locator('.view-switcher button:has-text("Mes")')
     ).toHaveAttribute('aria-pressed', 'true');
@@ -155,7 +155,7 @@ test.describe('Calendar — day panel tasks', () => {
     await stubGoogleConnected(page);
     await page.addInitScript(() => localStorage.setItem('joidy-calendar-view', 'month'));
     await authGoto(page, '/calendar');
-    await page.locator('.day-cell.today').click();
+    await page.locator('.pcal-cell.today').click();
     await expect(page.locator('.quick-add')).toBeVisible();
   });
 
@@ -229,18 +229,18 @@ test.describe('Calendar — drag & drop', () => {
     await seedTask(page, title, localDayKey(src));
     await authGoto(page, '/calendar');
 
-    const srcCell = page.locator('.day-cell', {
-      has: page.locator('.chip', { hasText: title }),
+    const srcCell = page.locator('.pcal-cell', {
+      has: page.locator('.pcal-chip', { hasText: title }),
     });
-    const chip = srcCell.locator('.chip', { hasText: title });
+    const chip = srcCell.locator('.pcal-chip', { hasText: title });
     await expect(srcCell).toHaveCount(1);
     await expect(chip).toBeVisible();
     // Drop on an empty in-month day cell (no chips of any kind). Pin the
     // element handle now — after the drop the cell holds the chip, so a
     // hasNot-filtered locator would re-resolve to a different cell.
     const target = page
-      .locator('.day-cell:not(.out):not(.today)')
-      .filter({ hasNot: page.locator('.chip') })
+      .locator('.pcal-cell:not(.other-month):not(.today)')
+      .filter({ hasNot: page.locator('.pcal-chip') })
       .first();
     await expect(target).toBeVisible();
     const targetEl = await target.elementHandle();
@@ -254,9 +254,9 @@ test.describe('Calendar — drag & drop', () => {
     await targetEl.dispatchEvent('drop', { dataTransfer });
 
     // The chip now lives in the target cell — and only there.
-    await targetEl.waitForSelector(`.chip:has-text("${title}")`, { timeout: 5000 });
+    await targetEl.waitForSelector(`.pcal-chip:has-text("${title}")`, { timeout: 5000 });
     await expect(
-      page.locator('.day-cell', { has: page.locator('.chip', { hasText: title }) })
+      page.locator('.pcal-cell', { has: page.locator('.pcal-chip', { hasText: title }) })
     ).toHaveCount(1);
   });
 
@@ -272,12 +272,12 @@ test.describe('Calendar — drag & drop', () => {
 
     const dataTransfer = await page.evaluateHandle(() => new DataTransfer());
     await trayTask.dispatchEvent('dragstart', { dataTransfer });
-    await page.locator('.day-cell.today').dispatchEvent('drop', { dataTransfer });
+    await page.locator('.pcal-cell.today').dispatchEvent('drop', { dataTransfer });
 
     // Left the tray and now shows in today's day-detail (the month cell only
     // renders the first 2 items, so assert via the day panel).
     await expect(trayTask).toHaveCount(0);
-    await page.locator('.day-cell.today').click();
+    await page.locator('.pcal-cell.today').click();
     await expect(
       page.locator('.day-detail .event-item .event-summary', { hasText: title })
     ).toBeVisible();
@@ -308,7 +308,7 @@ test.describe('Calendar — AI disabled', () => {
       route.fulfill({ json: { suggestions: [], available: false, reason: 'disabled' } })
     );
     await authGoto(page, '/calendar');
-    await expect(page.locator('.day-grid')).toBeVisible();
+    await expect(page.locator('.pcal-grid')).toBeVisible();
     await page.locator('button.plan-btn').click();
     await expect(
       page.locator('.toast', {
@@ -316,7 +316,7 @@ test.describe('Calendar — AI disabled', () => {
       })
     ).toBeVisible({ timeout: 8000 });
     // Page remains fully functional afterwards
-    await page.locator('.day-cell.today').click();
+    await page.locator('.pcal-cell.today').click();
     await expect(page.locator('.quick-add')).toBeVisible();
   });
 });
