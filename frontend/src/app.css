@@ -86,6 +86,10 @@
   --t-normal: 80ms ease-out;
   --t-slow: 120ms ease-out;
 
+  /* Marquee dwell between loop cycles — fixed pause with the title start
+     in view before scrolling resumes (use:marquee). */
+  --mq-dwell: 1s;
+
   /* Border radius */
   --r: 4px;
   --r-sm: 2px;
