@@ -4,6 +4,7 @@
   import { CircleCheckBig, Save, TriangleAlert, X } from 'lucide-svelte';
   import SettingsAppearance from './SettingsAppearance.svelte';
   import SettingsAdvanced from './SettingsAdvanced.svelte';
+  import SettingsEditor from './SettingsEditor.svelte';
   import SettingsVault from './SettingsVault.svelte';
   import SettingsIntegrations from './SettingsIntegrations.svelte';
   import SettingsAI from './SettingsAI.svelte';
@@ -212,6 +213,9 @@
 
         <!-- Avanzado -->
         <SettingsAdvanced />
+
+        <!-- Editor -->
+        <SettingsEditor />
 
         <!-- Vault -->
         <SettingsVault bind:systemConfig {isConfigured} />

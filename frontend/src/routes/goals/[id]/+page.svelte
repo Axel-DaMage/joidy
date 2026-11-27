@@ -12,6 +12,7 @@
   import { page } from '$app/state';
   import { api, type Goal, type GoalContext, type Tag as TagType, type Note } from '$lib/api';
   import { logger } from '$lib/utils/logger';
+  import { savePref } from '$lib/utils/persistedState';
   import { suggestEmoji, suggestIcon, suggestIconKey } from '$lib/utils/iconSuggest';
   import LazyIconPicker from '$lib/components/LazyIconPicker.svelte';
   import NoteLinkPicker from '$lib/components/NoteLinkPicker.svelte';
@@ -94,6 +95,9 @@
     const parsed = parseInt(rawId || '0');
     if (parsed > 0) {
       goalId = parsed;
+      // Persist the open goal so the /goals editor list re-highlights it on
+      // the next visit (#1673).
+      savePref('goals', 'editorGoalId', parsed);
     } else {
       // Invalid id (NaN/0/negative) never triggered loadGoal, leaving the
       // page stuck on the loading spinner forever — fail loudly instead.

@@ -71,9 +71,25 @@ export function loadCalendarPrefs(): CalendarPrefs {
   if (typeof localStorage === 'undefined') return fallback;
   try {
     const raw = localStorage.getItem(PREFS_KEY);
-    // Migrate the legacy single-key view preference (#1235 → #1658).
-    const legacyView = localStorage.getItem('joidy-calendar-view');
-    const legacyTray = localStorage.getItem('joidy-calendar-tray-collapsed') === '1';
+    // Migrate the legacy single-key view preference (#1235 → #1658) plus the
+    // namespaced #1673 keys (`joidy.calendar.*`, JSON-encoded) written by the
+    // pre-suite page so upgrading users keep their view/tray prefs.
+    const jsonPref = (key: string): unknown => {
+      const v = localStorage.getItem(key);
+      if (v === null) return null;
+      try {
+        return JSON.parse(v) as unknown;
+      } catch {
+        return null;
+      }
+    };
+    const namespacedView = jsonPref('joidy.calendar.view');
+    const legacyView =
+      (typeof namespacedView === 'string' ? namespacedView : null) ??
+      localStorage.getItem('joidy-calendar-view');
+    const namespacedTray = jsonPref('joidy.calendar.trayCollapsed');
+    const legacyTray =
+      namespacedTray === true || localStorage.getItem('joidy-calendar-tray-collapsed') === '1';
     const parsed = raw ? (JSON.parse(raw) as Partial<CalendarPrefs>) : {};
     return {
       view:

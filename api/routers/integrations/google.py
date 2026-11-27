@@ -72,6 +72,15 @@ async def google_oauth_callback(
     returns a minimal HTML page that closes the popup the Settings panel opened,
     which then flips to "connected" via the status polling loop.
     """
+    # Multi-account gmail connect (#1659) reuses this registered redirect URI —
+    # the state's provider segment routes the grant: a "gmail"-purpose state
+    # means the tokens belong to a new email_accounts row, not the shared
+    # google_tokens row. Deferred import: gmail already imports google_service,
+    # and main.py imports both routers — keep module-level imports acyclic.
+    if state.partition(".")[0] == "gmail":
+        from routers.integrations.gmail import handle_gmail_connect_callback
+
+        return await handle_gmail_connect_callback(code=code, error=error, state=state, db=db)
     return await oauth_flow.run_callback(
         provider="google",
         provider_label="Google",
@@ -231,6 +240,9 @@ class GoogleCalendarEventOut(BaseModel):
     start_at: datetime
     end_at: datetime | None = None
     html_link: str | None = None
+    # Effective display color (#rrggbb): event colorId palette entry, else the
+    # calendar's backgroundColor. None when the calendar color is unknown.
+    color: str | None = None
 
 
 class GoogleCalendarSyncResult(BaseModel):
@@ -273,6 +285,7 @@ def google_calendar_events(
 ):
     """Read cached calendar events. Served locally — no Google API call."""
     events: list[GoogleCalendarEvent] = gcs.get_cached_events(db, start, end, calendar_id)
+    colors = gcs.effective_colors(db, events)
     return [
         GoogleCalendarEventOut(
             google_id=e.google_id,
@@ -285,6 +298,7 @@ def google_calendar_events(
             start_at=e.start_at,
             end_at=e.end_at,
             html_link=e.html_link,
+            color=colors.get(e.id),
         )
         for e in events
     ]

@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { goto } from '$app/navigation';
+  import { page } from '$app/state';
+  import { goto, replaceState } from '$app/navigation';
+  import { resolve } from '$app/paths';
   import {
     api,
     type CalendarDayMetrics,
@@ -13,6 +15,7 @@
     type PlanSuggestion,
   } from '$lib/api';
   import { logger } from '$lib/utils/logger';
+  import { loadPref, savePref } from '$lib/utils/persistedState';
   import { locale } from '$lib/stores/locale';
   import { parseLocalDate } from '$lib/utils/date';
   import { showNotification } from '$lib/stores/notifications';
@@ -66,7 +69,9 @@
   import EyeOff from 'lucide-svelte/icons/eye-off';
   import NotebookPen from 'lucide-svelte/icons/notebook-pen';
   import MapPin from 'lucide-svelte/icons/map-pin';
+  import Target from 'lucide-svelte/icons/target';
   import EmptyState from '$lib/components/EmptyState.svelte';
+  import GoalFromEventModal, { type GoalEventSeed } from '$lib/components/GoalFromEventModal.svelte';
   import { t } from 'svelte-i18n';
 
   interface CalendarStatus {
@@ -114,14 +119,24 @@
   let showJoidyTasks = $state(true);
   let searchQuery = $state('');
 
+  const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
   // Single navigation anchor: every view derives its range from this day.
+  // Persisted across sessions as `joidy.calendar.cursor` (#1673).
   let anchorKey = $state(
-    (() => {
-      const d = new Date();
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    })()
+    loadPref<string | null>('calendar', 'cursor', null, {
+      isValid: (v) => v === null || (typeof v === 'string' && ISO_DAY.test(v)),
+    }) ??
+      (() => {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      })()
   );
-  let selectedDay = $state<string | null>(null);
+  let selectedDay = $state<string | null>(
+    loadPref<string | null>('calendar', 'selectedDay', null, {
+      isValid: (v) => v === null || (typeof v === 'string' && ISO_DAY.test(v)),
+    })
+  );
 
   // Quick-add state (day panel)
   let quickAddTitle = $state('');
@@ -251,9 +266,22 @@
   );
   let selectedDayMetrics = $derived(selectedDay ? metricsMap.get(selectedDay) : undefined);
 
+  // Google event → quick goal creation (#goal-from-event)
+  let goalFromEventSeed = $state<GoalEventSeed | null>(null);
+
+  // Unscheduled queue ("sin planificar", #1234): tasks with no date.
   let unscheduledTasks = $derived(
     tasks.filter((t) => t.date === null).sort((a, b) => a.created_at.localeCompare(b.created_at))
   );
+
+  // Persist the navigation anchor + selected day across sessions (#1673);
+  // view/heatmap/metrics/tray prefs persist via persistPrefs() (#1658).
+  $effect(() => {
+    savePref('calendar', 'cursor', anchorKey);
+  });
+  $effect(() => {
+    savePref('calendar', 'selectedDay', selectedDay);
+  });
 
   // Union of every view's visible day range — bounds the cached-events and
   // task fetches so we never pull the whole table. The year bounds only join
@@ -354,6 +382,12 @@
     const d = dayKey ? parseLocalDate(dayKey) : new Date(viewYear, month, 1);
     anchorKey = localDayKey(new Date(d.getFullYear(), month, d.getDate()));
     setView('month');
+  }
+
+  // Tooltip for task chips: surfaces the linked goal so the
+  // goals → planning → calendar chain is visible (#goal-planning-calendar).
+  function taskChipTitle(task: CalendarTask): string {
+    return task.goal_title ? `${task.title} · ${task.goal_title}` : task.title;
   }
 
   // ── Data ───────────────────────────────────────────────────────────────────
@@ -520,14 +554,7 @@
 
   async function removeTask(task: CalendarTask): Promise<void> {
     try {
-      if (task.google_event_id && status?.connected) {
-        try {
-          await api.google.calendarDeleteEvent(task.google_event_id);
-        } catch (e) {
-          logger.warn('Google delete failed', e);
-          showNotification($t('calendar.googlePublishError'), 'error');
-        }
-      }
+      // The backend removes the mirrored Google event on delete.
       await api.calendarTasks.remove(task.id);
       tasks = tasks.filter((t) => t.id !== task.id);
     } catch (e) {
@@ -820,18 +847,7 @@
       showNotification($t('calendar.taskUpdateError'), 'error');
       return;
     }
-    // Write-back parity: drag&drop moves the mirrored Google event too.
-    // A Google failure is non-blocking — the local reschedule stands.
-    if (task.google_event_id && status?.connected) {
-      try {
-        const { start, end } = googleWindow(newDate, task.start_time, task.end_time);
-        await api.google.calendarUpdateEvent(task.google_event_id, { start, end });
-        await refresh();
-      } catch (e) {
-        logger.warn('Google reschedule failed', e);
-        showNotification($t('calendar.googlePublishError'), 'error');
-      }
-    }
+    // The backend re-syncs the mirrored Google event on the PATCH.
   }
 
   // ── Unscheduled tray drop target (#1234) ─────────────────────────────────
@@ -874,6 +890,14 @@
 
   function priorityClass(priority: CalendarTaskPriority): string {
     return `prio prio-${priority.toLowerCase()}`;
+  }
+
+  // Google/joidy color accent for chips and pills: a translucent wash of the
+  // real calendar color plus a solid left bar — reads on light and dark
+  // surfaces without hardcoding a palette.
+  function colorChipStyle(color: string | null | undefined): string {
+    if (!color) return '';
+    return `background:${color}26;box-shadow:inset 2px 0 0 ${color};`;
   }
 
   function openSettings(): void {
@@ -977,6 +1001,33 @@
     else if (e.key === '4') setView('agenda');
     else if (e.key === '5') setView('year');
   }
+
+  // Quick-nav to Goals → Planificación on the selected day (#1668). The date
+  // is carried in the query param; the goals page consumes it on mount.
+  function openInPlanning(): void {
+    void goto(resolve(`/goals?tab=planning&date=${selectedDay ?? todayKey}`));
+  }
+
+  // Deep-link support: /calendar?date=YYYY-MM-DD (from Goals → Planificación,
+  // #1668). The param is consumed once so manual navigation isn't overridden.
+  // Every view derives its range from `anchorKey`, so anchoring on the day is
+  // enough to bring it on screen.
+  function focusDay(key: string): void {
+    anchorKey = key;
+    selectedDay = key;
+    void refresh();
+  }
+
+  $effect(() => {
+    const dateParam = page.url.searchParams.get('date');
+    if (dateParam && ISO_DAY.test(dateParam)) {
+      focusDay(dateParam);
+      const clean = new URL(page.url.href);
+      clean.searchParams.delete('date');
+      // eslint-disable-next-line svelte/no-navigation-without-resolve -- page.url.pathname already includes the base path; resolve() would prepend it twice
+      replaceState(`${clean.pathname}${clean.search}${clean.hash}`, page.state);
+    }
+  });
 
   onMount(() => {
     void (async () => {
@@ -1274,6 +1325,15 @@
           >
             <Sparkles size={14} class={planLoading ? 'spin' : ''} />
           </button>
+
+          <button
+            class="btn btn-ghost nav-btn"
+            onclick={openInPlanning}
+            title={$t('calendar.openInPlanning')}
+            aria-label={$t('calendar.openInPlanning')}
+          >
+            <Target size={14} />
+          </button>
         </div>
 
         {#if currentView === 'month'}
@@ -1424,7 +1484,19 @@
             <div class="event-list">
               {#each selectedDayItems as item (item.kind === 'google' ? `g-${item.id}` : `t-${item.task.id}`)}
                 {#if item.kind === 'google'}
-                  <button class="event-item" onclick={() => openItem(item)}>
+                  <div
+                    class="event-item"
+                    style={colorChipStyle(item.color)}
+                    role="button"
+                    tabindex="0"
+                    onclick={() => openItem(item)}
+                    onkeydown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        openItem(item);
+                      }
+                    }}
+                  >
                     <span class="event-time caption"
                       >{item.allDay ? $t('calendar.allDay') : item.time}</span
                     >
@@ -1434,9 +1506,34 @@
                     {#if item.location}
                       <span class="event-location caption"><MapPin size={9} /> {item.location}</span>
                     {/if}
-                  </button>
+                    {#if selectedDay}
+                      <button
+                        type="button"
+                        class="event-goal-btn"
+                        title={$t('goalFromEvent.action')}
+                        aria-label={$t('goalFromEvent.action')}
+                        onclick={(e) => {
+                          e.stopPropagation();
+                          goalFromEventSeed = {
+                            title: item.label,
+                            description: item.description ?? null,
+                            location: item.location ?? null,
+                            color: item.color,
+                            day: selectedDay!,
+                            eventId: item.id,
+                          };
+                        }}
+                      >
+                        <Target size={11} />
+                      </button>
+                    {/if}
+                  </div>
                 {:else}
-                  <div class="event-item task-item" class:done={item.task.done}>
+                  <div
+                    class="event-item task-item"
+                    class:done={item.task.done}
+                    style={colorChipStyle(item.task.color)}
+                  >
                     <button
                       class="done-btn"
                       class:checked={item.task.done}
@@ -1454,11 +1551,20 @@
                     >
                       {item.task.priority.slice(0, 1)}
                     </button>
-                    <button class="event-summary event-open" onclick={() => openItem(item)}>
+                    <button
+                      class="event-summary event-open"
+                      title={taskChipTitle(item.task)}
+                      onclick={() => openItem(item)}
+                    >
                       {#if item.task.recurrence !== 'NONE'}<Repeat size={10} class="recur-icon" />{/if}
                       {item.task.title}
                       {#if item.task.note_id}<NotebookPen size={10} class="lock-icon" />{/if}
                     </button>
+                    {#if item.task.goal_title}
+                      <span class="goal-tag" title={item.task.goal_title}
+                        ><Target size={9} />{item.task.goal_title}</span
+                      >
+                    {/if}
                     <span class="task-actions">
                       <button
                         class="btn btn-ghost icon-btn"
@@ -1575,6 +1681,13 @@
     />
   {/if}
 </div>
+
+{#if goalFromEventSeed}
+  <GoalFromEventModal
+    event={goalFromEventSeed}
+    onClose={() => (goalFromEventSeed = null)}
+  />
+{/if}
 
 <style>
   .calendar-page {
@@ -1951,6 +2064,24 @@
     text-decoration: line-through;
   }
 
+  .event-goal-btn {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    padding: 3px;
+    border: none;
+    border-radius: var(--r);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .event-goal-btn:hover {
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+
   .event-time {
     min-width: 44px;
     font-variant-numeric: tabular-nums;
@@ -1976,6 +2107,21 @@
     font-size: inherit;
     text-align: left;
     flex: 1;
+  }
+
+  .goal-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    flex-shrink: 1;
+    min-width: 0;
+    max-width: 40%;
+    color: var(--link);
+    font-size: 11px;
+    font-weight: 400;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .event-open:hover {

@@ -12,18 +12,19 @@
 
   let { byType = [] }: { byType?: XpType[] } = $props();
 
-  // Theme-aware palette — cycles if there are more types than colors.
+  // Theme-aware palette — derived from the user's accent trio (#1655) and
+  // cycles if there are more types than colors.
   const PALETTE = [
-    'var(--xp)',
-    'var(--success)',
-    'var(--link)',
-    'var(--today)',
-    'var(--xp-2)',
-    'var(--error)',
-    'var(--xp-3)',
-    'color-mix(in srgb, var(--xp) 55%, var(--link))',
-    'color-mix(in srgb, var(--success) 55%, var(--link))',
-    'color-mix(in srgb, var(--today) 55%, var(--error))',
+    'var(--chart-1)',
+    'var(--chart-2)',
+    'var(--chart-3)',
+    'var(--chart-4)',
+    'var(--chart-5)',
+    'var(--chart-6)',
+    'color-mix(in srgb, var(--chart-1) 55%, var(--chart-4))',
+    'color-mix(in srgb, var(--chart-2) 55%, var(--chart-5))',
+    'color-mix(in srgb, var(--chart-3) 55%, var(--chart-6))',
+    'color-mix(in srgb, var(--chart-1) 40%, var(--chart-2))',
   ];
 
   const EXACT_KEYS: Record<string, string> = {
