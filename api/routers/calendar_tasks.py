@@ -16,10 +16,11 @@ from models.calendar_task import (
 from models.gamification import XPEvent
 from models.goal import Goal, GoalMeasurement
 from pydantic import BaseModel, Field
+from services import task_google_sync
 from services.gamification_engine import process_event
 from services.timezone_utils import get_local_today
 from sqlalchemy import case
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 router = APIRouter(prefix="/calendar", tags=["calendar"])
 
@@ -228,6 +229,9 @@ class CalendarTaskOut(BaseModel):
     done: bool
     done_at: datetime | None
     goal_id: int | None
+    # Title of the linked goal, when set — lets UIs show the planning link
+    # without a second fetch (#goal-planning-calendar).
+    goal_title: str | None = None
     source: CalendarTaskSource
     google_event_id: str | None
     color: str | None
@@ -262,6 +266,7 @@ def _task_out(task: CalendarTask) -> CalendarTaskOut:
         done=task.done,
         done_at=task.done_at,
         goal_id=task.goal_id,
+        goal_title=task.goal.title if task.goal is not None else None,
         source=task.source,
         google_event_id=task.google_event_id,
         color=task.color,
@@ -300,7 +305,9 @@ def list_tasks(
     if end:
         query = query.filter(CalendarTask.date <= _parse_date(end))
     query = query.order_by(CalendarTask.date.asc(), CalendarTask.start_time.asc().nullslast(), CalendarTask.id.asc())
-    return [_task_out(t) for t in query.all()]
+    # joinedload: _task_out reads task.goal.title for goal_title — avoids an
+    # N+1 on range listings (#goal-planning-calendar).
+    return [_task_out(t) for t in query.options(joinedload(CalendarTask.goal)).all()]
 
 
 @router.get("/tasks/execution-queue", response_model=list[CalendarTaskOut])
@@ -320,6 +327,7 @@ def execution_queue(date: str | None = None, db: Session = Depends(get_db)):
             CalendarTask.start_time.asc().nullslast(),
             CalendarTask.created_at.asc(),
         )
+        .options(joinedload(CalendarTask.goal))
         .all()
     )
     return [_task_out(t) for t in tasks]
@@ -344,7 +352,13 @@ def create_task(body: CalendarTaskCreate, db: Session = Depends(get_db)):
     db.add(task)
     db.commit()
     db.refresh(task)
+    if task.date is not None:
+        task_google_sync.sync_task(db, task)
     return _task_out(task)
+
+
+# Task fields whose change should re-sync the mirrored Google event.
+_GOOGLE_SYNCED_FIELDS = {"title", "date", "start_time", "end_time", "color", "priority", "google_event_id"}
 
 
 @router.patch("/tasks/{task_id}", response_model=CalendarTaskOut)
@@ -352,6 +366,8 @@ def update_task(task_id: int, body: CalendarTaskUpdate, db: Session = Depends(ge
     task = _get_or_404(db, task_id)
     data = body.model_dump(exclude_unset=True)
     was_done = task.done
+    # Fields that feed the Google mirror payload (done handled separately).
+    should_sync_google = bool(set(data) & _GOOGLE_SYNCED_FIELDS)
     if "done" in data:
         task.done = data.pop("done")
         task.done_at = datetime.now(UTC) if task.done else None
@@ -377,12 +393,15 @@ def update_task(task_id: int, body: CalendarTaskUpdate, db: Session = Depends(ge
     db.commit()
     db.refresh(task)
     _apply_done_transition(db, task, was_done)
+    if should_sync_google or was_done != task.done:
+        task_google_sync.sync_task(db, task)
     return _task_out(task)
 
 
 @router.delete("/tasks/{task_id}", status_code=204)
 def delete_task(task_id: int, db: Session = Depends(get_db)):
     task = _get_or_404(db, task_id)
+    task_google_sync.unpublish_task(db, task)
     db.delete(task)
     db.commit()
 
@@ -396,4 +415,6 @@ def toggle_done(task_id: int, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(task)
     _apply_done_transition(db, task, was_done)
+    if task.date is not None or task.google_event_id:
+        task_google_sync.sync_task(db, task)
     return _task_out(task)

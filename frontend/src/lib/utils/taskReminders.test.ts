@@ -13,6 +13,7 @@ function task(overrides: Partial<CalendarTask>): CalendarTask {
     done: false,
     done_at: null,
     goal_id: null,
+    goal_title: null,
     source: 'JOIDY',
     google_event_id: null,
     color: null,

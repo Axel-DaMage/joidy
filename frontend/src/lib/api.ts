@@ -598,6 +598,9 @@ export interface CalendarEvent {
   start_at: string;
   end_at: string | null;
   html_link: string | null;
+  /** Effective display color (#rrggbb): event colorId palette entry, else the
+   * calendar's backgroundColor. Null when the calendar color is unknown. */
+  color: string | null;
 }
 
 /** Item of `GET /integrations/google/calendars` (live Google calendarList). */
@@ -623,6 +626,8 @@ export interface CalendarTask {
   done: boolean;
   done_at: string | null;
   goal_id: number | null;
+  /** Title of the linked goal when `goal_id` is set (backend-resolved). */
+  goal_title: string | null;
   source: 'JOIDY' | 'GOOGLE';
   google_event_id: string | null;
   color: string | null;
@@ -1288,16 +1293,30 @@ export const api = {
 
   planning: {
     getAssignments: (date: string) =>
-      req<{ date: string; goal_ids: number[] }>(
-        'GET',
-        `/planning/assignments?date=${encodeURIComponent(date)}`
+      req<{
+        date: string;
+        goal_ids: number[];
+        goal_event_ids?: Record<string, string>;
+      }>('GET', `/planning/assignments?date=${encodeURIComponent(date)}`),
+    // Assignments mirror into calendar_tasks by default so the real calendar
+    // reflects planned goals; pass false to opt out. goal_event_ids links
+    // event-sourced assignments back to their Google event for dedup.
+    setAssignments: (
+      date: string,
+      goal_ids: number[],
+      create_calendar_task = true,
+      goal_event_ids?: Record<number, string>
+    ) =>
+      req<{ date: string; goal_ids: number[]; goal_event_ids?: Record<string, string> }>(
+        'POST',
+        '/planning/assignments',
+        {
+          date,
+          goal_ids,
+          create_calendar_task,
+          ...(goal_event_ids ? { goal_event_ids } : {}),
+        }
       ),
-    setAssignments: (date: string, goal_ids: number[], create_calendar_task = false) =>
-      req<{ date: string; goal_ids: number[] }>('POST', '/planning/assignments', {
-        date,
-        goal_ids,
-        create_calendar_task,
-      }),
   },
 
   personalStreaks: {
