@@ -64,14 +64,14 @@ class CallbackPageTest(OAuthFlowTestBase):
         resp = oauth_flow.callback_page(ok=True, message="Google conectado")
         self.assertEqual(resp.status_code, 200)
         self.assertIn("text/html", resp.headers["content-type"])
-        body = resp.body.decode()
+        body = bytes(resp.body).decode()
         self.assertIn("OK", body)
         self.assertIn("Google conectado", body)
 
     def test_error_page_escapes_html_and_quotes(self) -> None:
         resp = oauth_flow.callback_page(ok=False, message='<script>"x"</script>', status_code=403)
         self.assertEqual(resp.status_code, 403)
-        body = resp.body.decode()
+        body = bytes(resp.body).decode()
         self.assertNotIn('<script>"x"</script>', body)
         self.assertIn("&lt;script&gt;", body)
         self.assertIn("ERROR", body)
@@ -173,7 +173,7 @@ class RunCallbackTest(OAuthFlowTestBase):
                 persist=persist,
             )
         )
-        body = resp.body.decode()
+        body = bytes(resp.body).decode()
         self.assertEqual(resp.status_code, 200)
         self.assertIn("Google conectado", body)
         self.assertNotIn("ACCESS", body)
