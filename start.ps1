@@ -254,7 +254,7 @@ if ([string]::IsNullOrEmpty($grafanaPassword) -or $grafanaPassword -match '^0+$'
 }
 
 # Check/Generate INTERNAL_API_TOKEN — dedicated service credential for
-# worker/n8n → API auth, never AUTH_PASSWORD (#1275)
+# worker → API auth, never AUTH_PASSWORD (#1275)
 $internalApiToken = $envVars["INTERNAL_API_TOKEN"]
 if ([string]::IsNullOrEmpty($internalApiToken)) {
     $bytes = New-Object byte[] 32

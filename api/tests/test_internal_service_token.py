@@ -2,7 +2,7 @@
 
 The pass-the-hash shortcut let anyone holding the stored bcrypt
 AUTH_PASSWORD authenticate as if they knew the plaintext. Services
-(worker, n8n) now authenticate with a dedicated INTERNAL_API_TOKEN through
+(worker) now authenticate with a dedicated INTERNAL_API_TOKEN through
 ``get_current_user_or_internal``, and the stored hash is just a hash —
 ``POST /auth/login`` rejects it.
 """

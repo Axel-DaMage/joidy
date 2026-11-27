@@ -19,7 +19,7 @@
 * feat(github): filtros de tipo y estado en el widget de GitHub del dashboard (#1094) by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1151
 * feat(frontend): duplicar densidad vertical del widget de GitHub (#1095) by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1139
 * feat(goals,streaks): sugerir icono/emoji automáticamente según el título (#1092) by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1138
-* feat(integrations): bandeja unificada de Gmail vía n8n (#1140) by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1140
+* feat(integrations): bandeja unificada de Gmail (#1140) by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1140
 * feat(goals): enlazar objetivo con nota real y escribir el contenido en ella (#1146) by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1146
 * feat(integrations): Google OAuth one-click en Settings + provider IA OpenAI-compatible (#1147) by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1147
 * feat(goals): recordarse del filtro y la búsqueda del editor entre visitas (#1096) by @Axel-DaMage in https://github.com/Axel-DaMage/joidy/pull/1098

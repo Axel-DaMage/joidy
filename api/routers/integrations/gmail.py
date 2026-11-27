@@ -2,9 +2,9 @@
 
 Dedicated Gmail API surface over the shared Google OAuth connection managed
 by ``routers/integrations/google.py`` — every call proxies to
-gmail.googleapis.com with the stored (auto-refreshed) access token. This
-complements, not replaces, the n8n → ``/emails`` sync path (different
-architecture, untouched).
+gmail.googleapis.com with the stored (auto-refreshed) access token. This is
+the only mail ingest path: the former push-based ``/emails`` inbox fed by
+the external automation hub was removed (#1508).
 
 Reads need ``gmail.readonly``; label mutations (archive/trash/unread) need
 ``gmail.modify``; sending needs ``gmail.send``/``gmail.modify``. Tokens

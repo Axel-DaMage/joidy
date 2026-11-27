@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     worker_url: str = "http://worker:8001"
     secret_key: str = ""
     internal_secret: str = ""  # Shared secret for API → ai-service auth
-    internal_api_token: str = ""  # Dedicated service token for worker/n8n → API auth (#1275)
+    internal_api_token: str = ""  # Dedicated service token for worker → API auth (#1275)
     app_env: str = "development"
     cors_allowed_origins: str = (
         ""  # Comma-separated origins for production (e.g. "https://joidy.app,https://www.joidy.app")
