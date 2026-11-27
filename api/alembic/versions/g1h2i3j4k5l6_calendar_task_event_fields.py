@@ -1,7 +1,7 @@
 """calendar_tasks: event-editor fields (description/location/attendees/note_id)
 
 Revision ID: g1h2i3j4k5l6
-Revises: c6d7e8f9a0b1
+Revises: e7f8a9b0c1d2
 Create Date: 2026-11-25 00:00:00.000000
 
 Planning suite (#1658): the calendar event editor covers Google-parity
@@ -18,7 +18,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "g1h2i3j4k5l6"
-down_revision: str | None = "c6d7e8f9a0b1"
+down_revision: str | None = "e7f8a9b0c1d2"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
