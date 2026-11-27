@@ -23,11 +23,20 @@ class AssignmentsIn(BaseModel):
     # Planning assignments mirror into calendar_tasks by default so the real
     # calendar reflects them (#goal-planning-calendar). Pass false to opt out.
     create_calendar_task: bool = True
+    # Optional goal_id → Google event id map for assignments created from a
+    # calendar event. Stored on the row so planning can hide the raw event
+    # chip — the goal chip already represents it.
+    goal_event_ids: dict[int, str] | None = None
 
 
 class AssignmentsOut(BaseModel):
     date: str
     goal_ids: list[int]
+    goal_event_ids: dict[int, str] = {}
+
+
+def _event_sources(rows: list[PlanningAssignment]) -> dict[int, str]:
+    return {r.goal_id: r.source_event_id for r in rows if r.source_event_id}
 
 
 @ttl_cache(ignore_params={"db"})
@@ -40,7 +49,11 @@ def _cached_assignments(date: str | None = None, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
 
     rows = db.query(PlanningAssignment).filter(PlanningAssignment.date == date_obj).all()
-    return {"date": date, "goal_ids": [r.goal_id for r in rows]}
+    return {
+        "date": date,
+        "goal_ids": [r.goal_id for r in rows],
+        "goal_event_ids": _event_sources(rows),
+    }
 
 
 register_cache_clearer(_cached_assignments.cache_clear, groups={"planning"})
@@ -135,8 +148,14 @@ def set_assignments(data: AssignmentsIn, db: Session = Depends(get_db)):
     # Delete existing
     db.query(PlanningAssignment).filter(PlanningAssignment.date == date_obj).delete()
     # Insert new
+    event_ids = data.goal_event_ids or {}
     for gid in data.goal_ids:
-        pa = PlanningAssignment(date=date_obj, goal_id=gid, created_at=datetime.now(UTC))
+        pa = PlanningAssignment(
+            date=date_obj,
+            goal_id=gid,
+            created_at=datetime.now(UTC),
+            source_event_id=event_ids.get(gid),
+        )
         db.add(pa)
     mirrored: list[CalendarTask] = []
     if data.create_calendar_task:
@@ -151,4 +170,8 @@ def set_assignments(data: AssignmentsIn, db: Session = Depends(get_db)):
     # each new mirror (best-effort, never breaks the assignment).
     for task in mirrored:
         task_google_sync.sync_task(db, task)
-    return {"date": data.date, "goal_ids": data.goal_ids}
+    return {
+        "date": data.date,
+        "goal_ids": data.goal_ids,
+        "goal_event_ids": {str(gid): event_ids[gid] for gid in data.goal_ids if gid in event_ids},
+    }

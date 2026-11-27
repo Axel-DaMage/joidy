@@ -1223,6 +1223,7 @@
                             location: item.location ?? null,
                             color: item.color,
                             day: selectedDay!,
+                            eventId: item.id,
                           })}
                       >
                         <Target size={11} />

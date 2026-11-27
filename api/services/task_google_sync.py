@@ -51,6 +51,8 @@ def task_color_id(task: CalendarTask) -> str:
 
 def _event_payload(task: CalendarTask) -> dict[str, Any]:
     """All-day event resource for ``task`` (Google end date is exclusive)."""
+    if task.date is None:
+        raise ValueError("cannot build event payload for an undated task")
     event: dict[str, Any] = {
         "summary": task.title,
         "start": {"date": task.date.isoformat()},

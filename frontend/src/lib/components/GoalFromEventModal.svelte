@@ -19,6 +19,9 @@
     color?: string | null;
     /** YYYY-MM-DD — Planning assignment anchor. */
     day: string;
+    /** Google event id — stored on the assignment so planning hides the raw
+        event chip (the goal chip already represents it). */
+    eventId?: string | null;
   }
 
   let {
@@ -64,6 +67,21 @@
     fColor = event.color ?? DEFAULT_GOAL_COLOR;
   });
 
+  // Planning anchors recurring goals on their period start (Monday / 1st /
+  // Jan 1) — same rule as assignGoalToDate in the goals page.
+  function normalizeAssignmentDate(date: string, temporality: Goal['temporality']): string {
+    const d = new Date(`${date}T12:00:00`);
+    if (temporality === 'WEEKLY') {
+      const day = d.getDay();
+      d.setDate(d.getDate() - day + (day === 0 ? -6 : 1));
+    } else if (temporality === 'MONTHLY') {
+      return `${date.slice(0, 7)}-01`;
+    } else if (temporality === 'ANNUAL') {
+      return `${date.slice(0, 4)}-01-01`;
+    }
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
   async function submit(): Promise<void> {
     if (!fTitle.trim() || saving) return;
     saving = true;
@@ -77,9 +95,20 @@
         target_value: fTarget,
         color: fColor || undefined,
       });
-      // Link the goal to the event's day in Planning. create_calendar_task
-      // stays false: the Google event is already the calendar entry.
-      await api.planning.setAssignments(event.day, [goal.id], false);
+      // Link the goal to the event's day in Planning. Merge with whatever is
+      // already assigned on the anchor date — setAssignments replaces the
+      // whole list. create_calendar_task stays false: the Google event is
+      // already the calendar entry, a mirror would duplicate it upstream.
+      const anchor = normalizeAssignmentDate(event.day, fTemporality);
+      const current = await api.planning.getAssignments(anchor).catch(() => null);
+      const goalIds = [...new Set([...(current?.goal_ids ?? []), goal.id])];
+      const sources: Record<number, string> = {};
+      for (const [gid, eid] of Object.entries(current?.goal_event_ids ?? {})) {
+        const id = Number(gid);
+        if (goalIds.includes(id) && eid) sources[id] = eid;
+      }
+      if (event.eventId) sources[goal.id] = event.eventId;
+      await api.planning.setAssignments(anchor, goalIds, false, sources);
       showNotification($t('goalFromEvent.created'), 'success');
       onCreated?.(goal);
       onClose();

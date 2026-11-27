@@ -1323,18 +1323,30 @@ export const api = {
 
   planning: {
     getAssignments: (date: string) =>
-      req<{ date: string; goal_ids: number[] }>(
-        'GET',
-        `/planning/assignments?date=${encodeURIComponent(date)}`
-      ),
+      req<{
+        date: string;
+        goal_ids: number[];
+        goal_event_ids?: Record<string, string>;
+      }>('GET', `/planning/assignments?date=${encodeURIComponent(date)}`),
     // Assignments mirror into calendar_tasks by default so the real calendar
-    // reflects planned goals; pass false to opt out.
-    setAssignments: (date: string, goal_ids: number[], create_calendar_task = true) =>
-      req<{ date: string; goal_ids: number[] }>('POST', '/planning/assignments', {
-        date,
-        goal_ids,
-        create_calendar_task,
-      }),
+    // reflects planned goals; pass false to opt out. goal_event_ids links
+    // event-sourced assignments back to their Google event for dedup.
+    setAssignments: (
+      date: string,
+      goal_ids: number[],
+      create_calendar_task = true,
+      goal_event_ids?: Record<number, string>
+    ) =>
+      req<{ date: string; goal_ids: number[]; goal_event_ids?: Record<string, string> }>(
+        'POST',
+        '/planning/assignments',
+        {
+          date,
+          goal_ids,
+          create_calendar_task,
+          ...(goal_event_ids ? { goal_event_ids } : {}),
+        }
+      ),
   },
 
   personalStreaks: {

@@ -138,6 +138,7 @@
     border-top: 1px solid var(--border);
     display: flex;
     justify-content: flex-end;
+    flex-wrap: wrap;
     gap: 12px;
     flex-shrink: 0;
   }

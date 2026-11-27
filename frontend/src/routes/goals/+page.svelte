@@ -713,6 +713,29 @@
 
   let selectedPlanningDate = $state(localDayKey(new Date()));
   let assignments = $state<Record<string, number[]>>({});
+  // date → goal_id → Google event id for assignments created from a calendar
+  // event. The goal chip represents that event, so the raw event chip is
+  // hidden from the planning agenda to avoid rendering it twice.
+  let assignmentEventSources = $state<Record<string, Record<number, string>>>({});
+
+  function parseEventSources(raw: Record<string, string> | undefined): Record<number, string> {
+    const out: Record<number, string> = {};
+    for (const [k, v] of Object.entries(raw ?? {})) {
+      const id = Number(k);
+      if (Number.isFinite(id) && v) out[id] = v;
+    }
+    return out;
+  }
+
+  // goal_event_ids to repost with setAssignments: keep sources only for
+  // goals that remain assigned on that date.
+  function sourcesForDate(date: string, goalIds: number[]): Record<number, string> | undefined {
+    const map = assignmentEventSources[date];
+    if (!map) return undefined;
+    const out: Record<number, string> = {};
+    for (const gid of goalIds) if (map[gid]) out[gid] = map[gid];
+    return Object.keys(out).length ? out : undefined;
+  }
 
   function getNormalizedDate(date: string, temporality: Goal['temporality']): string {
     if (!date) return date;
@@ -839,9 +862,9 @@
       uniqueDates.map(async (d) => {
         try {
           const res = await api.planning.getAssignments(d);
-          return { date: d, ids: res.goal_ids };
+          return { date: d, ids: res.goal_ids, sources: parseEventSources(res.goal_event_ids) };
         } catch (e) {
-          return { date: d, ids: [] };
+          return { date: d, ids: [], sources: {} };
         }
       })
     );
@@ -849,6 +872,10 @@
     assignments = {
       ...assignments,
       ...Object.fromEntries(fetchedResults.map((r) => [r.date, r.ids])),
+    };
+    assignmentEventSources = {
+      ...assignmentEventSources,
+      ...Object.fromEntries(fetchedResults.map((r) => [r.date, r.sources])),
     };
   }
 
@@ -864,8 +891,14 @@
 
     try {
       // create_calendar_task defaults to true — planning assignments always
-      // mirror into the real calendar (#goal-planning-calendar).
-      await api.planning.setAssignments(normDate, assignments[normDate]);
+      // mirror into the real calendar (#goal-planning-calendar). Event
+      // sources of sibling assignments must be reposted or they are lost.
+      await api.planning.setAssignments(
+        normDate,
+        assignments[normDate],
+        true,
+        sourcesForDate(normDate, assignments[normDate])
+      );
       void loadRangeAgenda();
     } catch (e) {
       logger.error('Error saving assignment:', e);
@@ -880,12 +913,16 @@
     const normDate = getNormalizedDate(date, goal.temporality);
     if (!assignments[normDate]) return;
 
+    const remaining = assignments[normDate].filter((id) => id !== goalId);
     assignments = {
       ...assignments,
-      [normDate]: assignments[normDate].filter((id) => id !== goalId),
+      [normDate]: remaining,
     };
+    const sources = { ...(assignmentEventSources[normDate] ?? {}) };
+    delete sources[goalId];
+    assignmentEventSources = { ...assignmentEventSources, [normDate]: sources };
     try {
-      await api.planning.setAssignments(normDate, assignments[normDate]);
+      await api.planning.setAssignments(normDate, remaining, true, sourcesForDate(normDate, remaining));
       void loadRangeAgenda();
     } catch (e) {
       logger.error('Error saving assignment removal:', e);
@@ -972,19 +1009,27 @@
     for (const date of dates) {
       for (const temp of PLAN_TEMPS) keys.add(getNormalizedDate(date, temp));
     }
-    const missing = [...keys].filter((k) => !(k in assignments));
+    const missing = [...keys].filter((k) => !(k in assignments) || !(k in assignmentEventSources));
     if (missing.length === 0) return;
     const results = await Promise.all(
       missing.map(async (d) => {
         try {
           const res = await api.planning.getAssignments(d);
-          return { date: d, ids: res.goal_ids };
+          return {
+            date: d,
+            ids: res.goal_ids,
+            sources: parseEventSources(res.goal_event_ids),
+          };
         } catch {
-          return { date: d, ids: [] };
+          return { date: d, ids: [], sources: {} };
         }
       })
     );
     assignments = { ...assignments, ...Object.fromEntries(results.map((r) => [r.date, r.ids])) };
+    assignmentEventSources = {
+      ...assignmentEventSources,
+      ...Object.fromEntries(results.map((r) => [r.date, r.sources])),
+    };
   }
 
   $effect(() => {
@@ -1102,11 +1147,15 @@
 
   // Merged, time-sorted read-only agenda bucketed by day. Tasks that mirror
   // a Google event (google_event_id) suppress the cached Google copy so each
-  // item appears once — same dedup rule as /calendar.
+  // item appears once — same dedup rule as /calendar. Events that seeded a
+  // goal-from-event assignment are likewise represented by the goal chip.
   let agendaByDay = $derived.by(() => {
     const byDay = new Map<string, PlanningAgendaEntry[]>();
     const mirroredGoogleIds = new Set(
       rangeTasks.map((t) => t.google_event_id).filter((id): id is string => id !== null)
+    );
+    const sourcedEventIds = new Set(
+      Object.values(assignmentEventSources).flatMap((m) => Object.values(m))
     );
     const push = (key: string, item: PlanningAgendaEntry) => {
       const list = byDay.get(key) ?? [];
@@ -1115,6 +1164,7 @@
     };
     for (const ev of rangeEvents) {
       if (mirroredGoogleIds.has(ev.google_id)) continue;
+      if (sourcedEventIds.has(ev.google_id)) continue;
       push(eventDayKey(ev), {
         kind: 'event',
         sort: ev.all_day ? '00:00' : ev.start_at.slice(11, 16),
@@ -2495,6 +2545,7 @@
                 location: ev.location,
                 color: ev.color,
                 day: eventDayKey(ev),
+                eventId: ev.google_id,
               };
             }}
           >

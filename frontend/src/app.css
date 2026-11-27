@@ -447,6 +447,11 @@ body.zen-mode-active .app-shell {
   border-color: var(--border);
 }
 
+/* Anchors styled as buttons keep button chrome, not link styling. */
+a.btn {
+  text-decoration: none;
+}
+
 .btn-icon {
   width: 32px;
   height: 32px;

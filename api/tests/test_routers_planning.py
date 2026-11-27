@@ -161,6 +161,47 @@ def test_set_assignments_no_mirror_when_disabled(client: TestClient, db_session)
     assert tasks == []
 
 
+def test_goal_event_ids_roundtrip(client: TestClient, db_session):
+    """Event-sourced assignments keep their Google event link across saves."""
+    g1 = _make_goal(db_session, "From event")
+    g2 = _make_goal(db_session, "Plain")
+    target_date = "2099-11-20"
+
+    response = client.post(
+        "/planning/assignments",
+        json={
+            "date": target_date,
+            "goal_ids": [g1, g2],
+            "create_calendar_task": False,
+            "goal_event_ids": {str(g1): "gcal_evt_123"},
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["goal_event_ids"] == {str(g1): "gcal_evt_123"}
+
+    got = client.get(f"/planning/assignments?date={target_date}")
+    assert got.status_code == 200
+    assert got.json()["goal_event_ids"] == {str(g1): "gcal_evt_123"}
+
+    row = (
+        db_session.query(PlanningAssignment)
+        .filter(
+            PlanningAssignment.date == dt.date(2099, 11, 20),
+            PlanningAssignment.goal_id == g1,
+        )
+        .one()
+    )
+    assert row.source_event_id == "gcal_evt_123"
+
+    # Re-saving without the map clears the link (replace semantics).
+    client.post(
+        "/planning/assignments",
+        json={"date": target_date, "goal_ids": [g1, g2], "create_calendar_task": False},
+    )
+    got = client.get(f"/planning/assignments?date={target_date}")
+    assert got.json()["goal_event_ids"] == {}
+
+
 def test_unassign_removes_pristine_mirror_task(client: TestClient, db_session):
     """Unassigning a goal deletes the untouched mirror task it created."""
     g1 = _make_goal(db_session, "Mirror me")
