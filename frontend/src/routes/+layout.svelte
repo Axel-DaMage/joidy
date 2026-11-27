@@ -1000,9 +1000,10 @@
         {/if}
       </div>
 
-      {#if !$appHeaderTabs}
-        <div style="flex:1;"></div>
-      {/if}
+      <!-- Spacer: keeps the right cluster (GitHub widget, pomodoro, focus)
+           pinned to the right edge regardless of $appHeaderTabs — the header
+           tabs render in <header>, never inside the statusbar (#1656) -->
+      <div style="flex:1;"></div>
 
       <!-- Assigned GitHub PRs / Issues (#792) -->
       <StatusBarGitHub />
