@@ -140,9 +140,10 @@ def set_assignments(data: AssignmentsIn, db: Session = Depends(get_db)):
         db.add(pa)
     mirrored: list[CalendarTask] = []
     if data.create_calendar_task:
-        mirrored = _mirror_new_assignments_to_tasks(
-            db, date_obj, [gid for gid in data.goal_ids if gid not in previous_ids]
-        ) or []
+        mirrored = (
+            _mirror_new_assignments_to_tasks(db, date_obj, [gid for gid in data.goal_ids if gid not in previous_ids])
+            or []
+        )
     _remove_pristine_mirrors(db, date_obj, removed_ids)
     db.commit()
     invalidate_cache_groups("planning")
