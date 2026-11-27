@@ -1,7 +1,6 @@
 """Personal Streaks Service — extracted from routers for better separation of concerns."""
 
 from datetime import date, timedelta
-from typing import cast
 
 from models.personal_streaks import PersonalStreak, StreakCheckIn
 from repositories import StreakCheckInRepository
@@ -143,18 +142,3 @@ def compute_streak(
                 run = 1
 
         return current, longest
-
-
-def calculate_streak_stats(streak: PersonalStreak) -> dict:
-    """Calculate derived stats for a streak."""
-    checkin_dates = [c.check_date for c in streak.checkins]
-    current, longest = compute_streak(
-        checkin_dates,
-        cast(str, streak.frequency or "daily"),
-        cast(int, streak.frequency_days or 1),
-        snowball_mode=bool(getattr(streak, "snowball_mode", False)),
-    )
-    return {
-        "current_streak": current,
-        "longest_streak": longest,
-    }

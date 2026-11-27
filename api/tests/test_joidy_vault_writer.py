@@ -43,7 +43,6 @@ from services.joidy_vault_writer import (
     update_goal_file,
     write_daily,
     write_objectives,
-    write_readme,
     write_skills,
 )
 
@@ -346,26 +345,6 @@ class WriteSkillsTest(VaultWriterTestBase):
         settings.obsidian_vault_path = ""
         with self.Session() as db:
             self.assertFalse(write_skills(db))
-
-
-class WriteReadmeTest(VaultWriterTestBase):
-    def test_writes_readme_if_not_exists(self) -> None:
-        vault = Path(settings.obsidian_vault_path)
-        write_readme(vault)
-        readme = vault / JOIDY_DIR / "README.md"
-        self.assertTrue(readme.exists())
-        content = readme.read_text(encoding="utf-8")
-        self.assertIn("Carpeta administrada por Joidy", content)
-
-    def test_does_not_overwrite_existing_readme(self) -> None:
-        vault = Path(settings.obsidian_vault_path)
-        joidy_dir = vault / JOIDY_DIR
-        joidy_dir.mkdir(parents=True, exist_ok=True)
-        readme = joidy_dir / "README.md"
-        readme.write_text("custom content", encoding="utf-8")
-
-        write_readme(vault)
-        self.assertEqual(readme.read_text(encoding="utf-8"), "custom content")
 
 
 class RestoreGoalsFromVaultTest(VaultWriterTestBase):
