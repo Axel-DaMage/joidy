@@ -1,7 +1,7 @@
 """google_calendar: event colorId + calendar background color
 
 Revision ID: d3e4f5a6b7c8
-Revises: c6d7e8f9a0b1
+Revises: e7f8a9b0c1d2
 Create Date: 2026-11-26 00:00:00.000000
 
 Surface real Google Calendar colors in the UI: events carry their own
@@ -18,7 +18,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "d3e4f5a6b7c8"
-down_revision: str | None = "c6d7e8f9a0b1"
+down_revision: str | None = "e7f8a9b0c1d2"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
