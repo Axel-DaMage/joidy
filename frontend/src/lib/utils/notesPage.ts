@@ -16,6 +16,7 @@ import {
 import { showNotification } from '$lib/stores/notifications';
 import { updateFolderMeta } from '$lib/stores/settings';
 import { patchUserSettings, loadUserSettings } from '$lib/utils/userSettings';
+import { savePref } from '$lib/utils/persistedState';
 import { captureSnapshot } from '$lib/stores/pageSnapshots';
 import {
   notes,
@@ -425,6 +426,9 @@ export function handleCreateFolder() {
 // ── Preferences persistence ──
 // itemCount/currentScroll are provided by the caller (the sidebar owns the
 // list's scroll position). Mirrors the original page-local persistNotesPrefs.
+// Pure view prefs live under `joidy.notes.*` (device-level, survives logout,
+// #1673); user-scoped state (search text, selected note, vault folder paths,
+// scroll offsets) stays in userSettings, which logout purges (#1325).
 export function persistNotesPrefs(itemCount: number, currentScroll: number) {
   const treeTop = get(ui.__treeScrollTop);
   const listTop = get(ui.__listScrollTop);
@@ -434,12 +438,13 @@ export function persistNotesPrefs(itemCount: number, currentScroll: number) {
   ui.__treeScrollTop.set(nextTreeScrollTop);
   ui.__listScrollTop.set(nextListScrollTop);
 
+  savePref('notes', 'panelWidth', get(ui.panelWidth));
+  savePref('notes', 'sortMode', get(ui.sortMode));
+  savePref('notes', 'viewMode', vm);
+  savePref('notes', 'allCollapsed', get(ui.allCollapsed));
+
   patchUserSettings({
     notesUi: {
-      panelWidth: get(ui.panelWidth),
-      sortMode: get(ui.sortMode),
-      viewMode: vm,
-      allCollapsed: get(ui.allCollapsed),
       collapsedPaths: Array.from(get(ui.collapsed)),
       search: get(ui.search),
       selectedNoteId: get(ui.selectedNote)?.id ?? null,

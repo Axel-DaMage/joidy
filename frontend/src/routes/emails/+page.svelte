@@ -3,6 +3,7 @@
   import { api, type EmailSummary, type EmailAccountStats } from '$lib/api';
   import { showNotification } from '$lib/stores/notifications';
   import { logger } from '$lib/utils/logger';
+  import { loadPref, savePref } from '$lib/utils/persistedState';
   import Search from 'lucide-svelte/icons/search';
   import Inbox from 'lucide-svelte/icons/inbox';
   import Star from 'lucide-svelte/icons/star';
@@ -18,10 +19,30 @@
 
   let absoluteTotal = $derived(accounts.reduce((sum, a) => sum + a.total, 0));
 
+  // Filter prefs persist across sessions under `joidy.emails.*` (#1673); the
+  // free-text search stays ephemeral.
   let searchQuery = $state('');
-  let accountFilter = $state<string | null>(null);
-  let onlyUnread = $state(true);
-  let onlyImportant = $state(false);
+  let accountFilter = $state<string | null>(
+    loadPref<string | null>('emails', 'accountFilter', null, {
+      isValid: (v) => v === null || typeof v === 'string',
+    })
+  );
+  let onlyUnread = $state(
+    loadPref<boolean>('emails', 'onlyUnread', true, {
+      isValid: (v) => typeof v === 'boolean',
+    })
+  );
+  let onlyImportant = $state(
+    loadPref<boolean>('emails', 'onlyImportant', false, {
+      isValid: (v) => typeof v === 'boolean',
+    })
+  );
+
+  $effect(() => {
+    savePref('emails', 'accountFilter', accountFilter);
+    savePref('emails', 'onlyUnread', onlyUnread);
+    savePref('emails', 'onlyImportant', onlyImportant);
+  });
 
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -144,6 +165,11 @@
       [accounts] = await Promise.all([api.emails.accounts()]);
     } catch (e) {
       logger.error(e);
+    }
+    // Drop a stale account filter that no longer matches a connected account
+    // (e.g. a different user on this browser profile, #1673).
+    if (accountFilter && !accounts.some((a) => a.account === accountFilter)) {
+      accountFilter = null;
     }
     await refresh();
   });

@@ -17,6 +17,7 @@
   import { notes, loadNotes } from '$lib/stores/notes';
   import { api } from '$lib/api';
   import { loadUserSettings } from '$lib/utils/userSettings';
+  import { loadPref } from '$lib/utils/persistedState';
   import { getSnapshot } from '$lib/stores/pageSnapshots';
   import {
     search,
@@ -132,24 +133,36 @@
     syncFromUrl(page.url);
 
     // Load prefs from localStorage FIRST (synchronous) — before any async
-    // operation so we know the target scroll position ASAP.
+    // operation so we know the target scroll position ASAP. View prefs live
+    // under `joidy.notes.*` (#1673); the legacy notesUi blob is the fallback.
     const saved = loadUserSettings().notesUi;
-    if (saved?.panelWidth !== undefined) {
-      $panelWidth = Math.max(MIN_W, Math.min(MAX_W, Number(saved.panelWidth)));
+    const savedPanelWidth = loadPref<number | undefined>('notes', 'panelWidth', saved?.panelWidth, {
+      isValid: (v) => Number.isFinite(Number(v)),
+    });
+    if (savedPanelWidth !== undefined) {
+      $panelWidth = Math.max(MIN_W, Math.min(MAX_W, Number(savedPanelWidth)));
     }
-    if (isSortMode(saved?.sortMode)) {
-      $sortMode = saved.sortMode;
+    const savedSortMode = loadPref<unknown>('notes', 'sortMode', saved?.sortMode, {
+      isValid: isSortMode,
+    });
+    if (isSortMode(savedSortMode)) {
+      $sortMode = savedSortMode;
     }
-    if (saved?.viewMode === 'tree' || saved?.viewMode === 'list') {
-      $viewMode = saved.viewMode;
+    const savedViewMode = loadPref<unknown>('notes', 'viewMode', saved?.viewMode, {
+      isValid: (v) => v === 'tree' || v === 'list',
+    });
+    if (savedViewMode === 'tree' || savedViewMode === 'list') {
+      $viewMode = savedViewMode;
     }
+    $allCollapsed = loadPref<boolean>('notes', 'allCollapsed', Boolean(saved?.allCollapsed), {
+      isValid: (v) => typeof v === 'boolean',
+    });
     if (typeof saved?.search === 'string') {
       $search = saved.search;
     }
     if (Array.isArray(saved?.collapsedPaths)) {
       $collapsed = new Set(saved.collapsedPaths.filter((p) => typeof p === 'string'));
     }
-    $allCollapsed = Boolean(saved?.allCollapsed);
     if (Number.isFinite(Number(saved?.treeScrollTop))) {
       __treeScrollTop.set(Number(saved?.treeScrollTop));
     }

@@ -13,6 +13,9 @@
     filter: string | null;
     contextFilter?: GoalContext | null;
     pinned: Set<number>;
+    /** Last-opened goal — highlighted so the editor selection survives a
+     *  reload (#1673). */
+    selectedId?: number | null;
     tags: TagType[];
     notes: Note[];
     getGoalColor: (goal: Goal) => string;
@@ -35,6 +38,7 @@
     filter,
     contextFilter = null,
     pinned,
+    selectedId = null,
     tags,
     notes,
     getGoalColor,
@@ -131,7 +135,7 @@
     {/if}
   {:else}
     {#each visibleGoals as goal (goal.id)}
-      <GoalRow {goal} pinned={pinned.has(goal.id)} />
+      <GoalRow {goal} pinned={pinned.has(goal.id)} selected={goal.id === selectedId} />
     {/each}
   {/if}
 </div>

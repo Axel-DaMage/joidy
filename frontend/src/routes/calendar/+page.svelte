@@ -9,6 +9,7 @@
     type PlanSuggestion,
   } from '$lib/api';
   import { logger } from '$lib/utils/logger';
+  import { loadPref, savePref } from '$lib/utils/persistedState';
   import { locale } from '$lib/stores/locale';
   import { parseLocalDate } from '$lib/utils/date';
   import { showNotification } from '$lib/stores/notifications';
@@ -78,23 +79,48 @@
   let syncing = $state(false);
 
   type CalendarView = 'month' | 'week' | 'agenda';
+  const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+  // View prefs (#1673): `joidy.calendar.*` — device-level, survives logout.
+  // The legacy `joidy-calendar-*` keys migrate on first read.
   let currentView = $state<CalendarView>(
-    (typeof localStorage !== 'undefined' &&
-      (localStorage.getItem('joidy-calendar-view') as CalendarView)) ||
-      'month'
+    loadPref<CalendarView>('calendar', 'view', 'month', {
+      legacyKey: 'joidy-calendar-view',
+      isValid: (v) => v === 'month' || v === 'week' || v === 'agenda',
+    })
   );
-  let weekOffset = $state(0);
+
+  // Persisted cursor: for month view the first of the visible month, for
+  // week view the visible week's Monday (#1673).
+  const savedCursor = loadPref<string | null>('calendar', 'cursor', null, {
+    isValid: (v) => v === null || (typeof v === 'string' && ISO_DAY.test(v)),
+  });
+  const cursorDate = savedCursor ? parseLocalDate(savedCursor) : null;
+
+  function initialWeekOffset(): number {
+    if (!cursorDate) return 0;
+    const today = new Date();
+    const mondayOf = (d: Date) => {
+      const dow = (d.getDay() + 6) % 7; // Monday = 0
+      return new Date(d.getFullYear(), d.getMonth(), d.getDate() - dow);
+    };
+    return Math.round(
+      (mondayOf(cursorDate).getTime() - mondayOf(today).getTime()) / (7 * 86400000)
+    );
+  }
+  let weekOffset = $state(initialWeekOffset());
 
   function setView(view: CalendarView): void {
     currentView = view;
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('joidy-calendar-view', view);
-    }
   }
 
-  let viewYear = $state(new Date().getFullYear());
-  let viewMonth = $state(new Date().getMonth()); // 0-based
-  let selectedDay = $state<string | null>(null);
+  let viewYear = $state(cursorDate?.getFullYear() ?? new Date().getFullYear());
+  let viewMonth = $state(cursorDate?.getMonth() ?? new Date().getMonth()); // 0-based
+  let selectedDay = $state<string | null>(
+    loadPref<string | null>('calendar', 'selectedDay', null, {
+      isValid: (v) => v === null || (typeof v === 'string' && ISO_DAY.test(v)),
+    })
+  );
 
   // Quick-add state
   let quickAddTitle = $state('');
@@ -260,17 +286,17 @@
     tasks.filter((t) => t.date === null).sort((a, b) => a.created_at.localeCompare(b.created_at))
   );
   let trayCollapsed = $state(
-    typeof localStorage !== 'undefined' &&
-      localStorage.getItem('joidy-calendar-tray-collapsed') === '1'
+    loadPref<boolean>('calendar', 'trayCollapsed', false, {
+      legacyKey: 'joidy-calendar-tray-collapsed',
+      legacyFrom: (raw) => raw === '1',
+      isValid: (v) => typeof v === 'boolean',
+    })
   );
   let trayAddTitle = $state('');
   let trayAdding = $state(false);
 
   function toggleTray(): void {
     trayCollapsed = !trayCollapsed;
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('joidy-calendar-tray-collapsed', trayCollapsed ? '1' : '0');
-    }
   }
 
   // Week view: 7 days based on current weekOffset. Anchored to `todayKey`
@@ -326,6 +352,28 @@
       days.push({ date: d, key, items });
     }
     return days;
+  });
+
+  // Persist every calendar view pref on change (#1673). The cursor encodes
+  // the visible period: the week's Monday in week view, the first of the
+  // visible month otherwise — one key restores either view.
+  $effect(() => {
+    savePref('calendar', 'view', currentView);
+  });
+  $effect(() => {
+    savePref('calendar', 'trayCollapsed', trayCollapsed);
+  });
+  $effect(() => {
+    savePref('calendar', 'selectedDay', selectedDay);
+  });
+  $effect(() => {
+    savePref(
+      'calendar',
+      'cursor',
+      currentView === 'week'
+        ? (weekDays[0]?.key ?? null)
+        : `${viewYear}-${pad2(viewMonth + 1)}-01`
+    );
   });
 
   // Union of every view's visible day range — bounds the cached-events and
