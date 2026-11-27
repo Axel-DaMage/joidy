@@ -2428,6 +2428,7 @@
         : detail.task.title}
       size="md"
       footerAlign="center"
+      titleAlign="center"
       onClose={() => (agendaDetail = null)}
     >
       <p class="agenda-detail-hint caption">
@@ -3193,7 +3194,9 @@
     margin: 0 0 12px;
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 6px;
+    text-align: center;
   }
   .agenda-detail-swatch {
     width: 10px;
@@ -3210,6 +3213,7 @@
   }
   .agenda-detail-row {
     display: flex;
+    justify-content: center;
     gap: 12px;
     font-size: 13px;
   }

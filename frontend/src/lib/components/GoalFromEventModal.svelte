@@ -124,6 +124,8 @@
   open={true}
   title={step === 'confirm' ? $t('goalFromEvent.confirmTitle') : $t('goalFromEvent.title')}
   size={step === 'form' ? 'md' : 'sm'}
+  titleAlign={step === 'confirm' ? 'center' : 'left'}
+  footerAlign={step === 'confirm' ? 'center' : 'end'}
   onClose={onClose}
 >
   {#if step === 'confirm'}
@@ -200,10 +202,12 @@
   .gfe-confirm {
     margin: 0 0 var(--s2);
     font-size: var(--fs-sm);
+    text-align: center;
   }
   .gfe-hint {
     margin: 0;
     color: var(--text-muted);
+    text-align: center;
   }
   .gfe-form {
     display: flex;

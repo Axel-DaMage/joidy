@@ -9,6 +9,7 @@
     title = '',
     size = 'md',
     footerAlign = 'end',
+    titleAlign = 'left',
     onClose,
     children,
     footer,
@@ -17,6 +18,7 @@
     title?: string;
     size?: 'sm' | 'md' | 'lg';
     footerAlign?: 'start' | 'center' | 'end';
+    titleAlign?: 'left' | 'center';
     onClose?: () => void;
     children?: import('svelte').Snippet;
     footer?: import('svelte').Snippet;
@@ -45,7 +47,7 @@
       use:focusTrap={{ onEscape: () => onClose?.() }}
     >
       <div class="modal-header">
-        <h3 id={titleId} class="modal-title">{title}</h3>
+        <h3 id={titleId} class="modal-title" style:text-align={titleAlign}>{title}</h3>
         <button class="modal-close" onclick={() => onClose?.()} aria-label={$t('modalDialog.close')}>
           <X size={18} />
         </button>
