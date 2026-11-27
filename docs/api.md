@@ -438,7 +438,6 @@ class Note(Base):
     content: str (Text)
     source: str ("joidy" | "obsidian" | "api" | "import")
     source_path: str | None (max 1000)
-    is_embedded: bool
     created_at: datetime
     updated_at: datetime
     tags: list[NoteTag]
