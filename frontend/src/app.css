@@ -378,6 +378,18 @@ body.zen-mode-active .app-shell {
   transform: translateX(0);
 }
 
+/* Bottom-pinned nav entries (#1665): the separator absorbs the rail's free
+   space (margin-top: auto), anchoring the pinned item to the bottom edge
+   with a hairline divider above it. Hidden in the mobile bottom bar where
+   it would shift the evenly-spaced items. */
+.nav-separator {
+  margin-top: auto;
+  width: 20px;
+  height: 1px;
+  background: var(--border);
+  flex-shrink: 0;
+}
+
 /* Hover/focus keeps the icon anchored as a fixed bordered circle in the
    rail while the label slides out to its right as plain text — only the
    text extends past the rail edge (#1505). Scoped to real hover so touch
@@ -820,6 +832,12 @@ textarea.input {
     height: 40px;
   }
 
+  /* The rail becomes an evenly-spaced bottom bar — no bottom pinning or
+     divider, the pinned entry simply stays last in the row (#1665). */
+  .nav-separator {
+    display: none;
+  }
+
   .nav-item .tooltip {
     display: none;
   }
@@ -921,6 +939,10 @@ textarea.input {
   .app-sidebar {
     flex-direction: column;
     border-top: none;
+  }
+  /* Landscape phones keep the left rail, so bottom pinning applies (#1665). */
+  .nav-separator {
+    display: block;
   }
   .app-statusbar {
     display: none;
