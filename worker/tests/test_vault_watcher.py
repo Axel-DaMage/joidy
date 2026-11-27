@@ -4,6 +4,7 @@ import asyncio
 import os
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
@@ -15,6 +16,7 @@ from watchers import vault_watcher
 from watchers.vault_watcher import (
     PersistentEventLog,
     _extract_tags_from_content,
+    _Fingerprint,
     _fingerprint,
     _is_joidy_file,
     _is_safe_vault_file,
@@ -154,18 +156,43 @@ class TestPersistentEventLog(unittest.TestCase):
             log2.close()
 
     def test_fingerprints_survive_reopen(self):
-        """Rename fingerprints persist across restarts (#1302)."""
+        """Rename fingerprints persist across restarts (#1302), including the
+        recorded file size used to gate rename candidates (#1537)."""
         with tempfile.TemporaryDirectory() as tmp:
             log_path = Path(tmp) / "events.db"
             log = PersistentEventLog(log_path)
-            log.set_fingerprint("/vault/a.md", "deadbeef")
+            log.set_fingerprint("/vault/a.md", "deadbeef", 1234)
             log.close()
 
             log2 = PersistentEventLog(log_path)
-            assert log2.fingerprints() == {"/vault/a.md": "deadbeef"}
+            assert log2.fingerprints() == {"/vault/a.md": _Fingerprint("deadbeef", 1234)}
             log2.remove_fingerprint("/vault/a.md")
             assert log2.fingerprints() == {}
             log2.close()
+
+    def test_fingerprints_table_migrates_size_column(self):
+        """Databases written before the size column existed (#1537) are
+        migrated in place: their rows keep size=NULL and still match renames
+        on hash alone."""
+        import sqlite3
+
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "events.db"
+            # Simulate a pre-#1537 database: fingerprints table without size.
+            conn = sqlite3.connect(log_path)
+            conn.execute("CREATE TABLE fingerprints (path TEXT PRIMARY KEY, fingerprint TEXT NOT NULL)")
+            conn.execute("INSERT INTO fingerprints (path, fingerprint) VALUES ('/vault/legacy.md', 'cafef00d')")
+            conn.commit()
+            conn.close()
+
+            log = PersistentEventLog(log_path)
+            columns = {row[1] for row in log._conn.execute("PRAGMA table_info(fingerprints)")}
+            assert "size" in columns
+            assert log.fingerprints() == {"/vault/legacy.md": _Fingerprint("cafef00d", None)}
+            # And the migrated table accepts sized writes.
+            log.set_fingerprint("/vault/new.md", "hash", 42)
+            assert log.fingerprints()["/vault/new.md"] == _Fingerprint("hash", 42)
+            log.close()
 
     def test_wal_mode_and_normal_synchronous(self):
         """The event log uses WAL + synchronous=NORMAL so commits append a
@@ -260,7 +287,7 @@ class TestPersistentEventLog(unittest.TestCase):
             log.set_fingerprint("/vault/x.md", "deadbeef")
 
             assert rec.sync_pragmas == ["PRAGMA synchronous=FULL", "PRAGMA synchronous=NORMAL"]
-            assert log.fingerprints() == {"/vault/x.md": "deadbeef"}
+            assert log.fingerprints() == {"/vault/x.md": _Fingerprint("deadbeef")}
             log._conn = rec._conn
             log.close()
 
@@ -489,8 +516,8 @@ class TestInitialScanShortCircuit(unittest.IsolatedAsyncioTestCase):
 
             # Simulate fingerprints recorded by the previous run's syncs —
             # and the API still holding both source_paths.
-            vault_watcher._fingerprints[str(md_a)] = _fingerprint(content_a)
-            vault_watcher._fingerprints[str(md_b)] = _fingerprint(content_b)
+            vault_watcher._fingerprints[str(md_a)] = _Fingerprint(_fingerprint(content_a))
+            vault_watcher._fingerprints[str(md_b)] = _Fingerprint(_fingerprint(content_b))
 
             client = self._client([], source_paths=[str(md_a), str(md_b)])
             with patch.object(vault_watcher.settings, "vault_path", vault):
@@ -518,8 +545,8 @@ class TestInitialScanShortCircuit(unittest.IsolatedAsyncioTestCase):
             self._write(changed, "edited content")
             self._write(new, "brand new")
 
-            vault_watcher._fingerprints[str(unchanged)] = _fingerprint(same_content)
-            vault_watcher._fingerprints[str(changed)] = _fingerprint("stale content")
+            vault_watcher._fingerprints[str(unchanged)] = _Fingerprint(_fingerprint(same_content))
+            vault_watcher._fingerprints[str(changed)] = _Fingerprint(_fingerprint("stale content"))
 
             # The API holds both fingerprinted paths — but a matching
             # fingerprint only skips when the content still matches.
@@ -553,7 +580,7 @@ class TestInitialScanShortCircuit(unittest.IsolatedAsyncioTestCase):
             content = self._write(md, "content")
 
             log = PersistentEventLog(root / "events.db")
-            log.set_fingerprint(str(md), _fingerprint(content))
+            log.set_fingerprint(str(md), _fingerprint(content), len(content.encode("utf-8")))
             log.add(str(md), Change.modified)
             vault_watcher._bind_event_log(log)
             try:
@@ -584,7 +611,7 @@ class TestInitialScanShortCircuit(unittest.IsolatedAsyncioTestCase):
             root = Path(vault)
             md = root / "phoenix.md"
             content = "same body"
-            vault_watcher._fingerprints[str(md)] = _fingerprint(content)
+            vault_watcher._fingerprints[str(md)] = _Fingerprint(_fingerprint(content))
 
             # Delete event processed while the file is absent.
             log = PersistentEventLog(root / "events.db")
@@ -623,7 +650,7 @@ class TestInitialScanShortCircuit(unittest.IsolatedAsyncioTestCase):
             md = root / "ghost.md"
             content = self._write(md, "survived the reset")
 
-            vault_watcher._fingerprints[str(md)] = _fingerprint(content)
+            vault_watcher._fingerprints[str(md)] = _Fingerprint(_fingerprint(content))
 
             # API holds no source_paths (wiped DB) — the matching fingerprint
             # is stale state, not proof of sync.
@@ -650,8 +677,8 @@ class TestInitialScanShortCircuit(unittest.IsolatedAsyncioTestCase):
             root = Path(vault)
             md_a = root / "a.md"
             md_b = root / "b.md"
-            vault_watcher._fingerprints[str(md_a)] = _fingerprint(self._write(md_a, "content A"))
-            vault_watcher._fingerprints[str(md_b)] = _fingerprint(self._write(md_b, "content B"))
+            vault_watcher._fingerprints[str(md_a)] = _Fingerprint(_fingerprint(self._write(md_a, "content A")))
+            vault_watcher._fingerprints[str(md_b)] = _Fingerprint(_fingerprint(self._write(md_b, "content B")))
 
             # Every source-paths attempt answers 500 → lookup returns None.
             client = self._client(
@@ -700,7 +727,7 @@ class TestProcessBatch(unittest.IsolatedAsyncioTestCase):
             renamed = vault / "renamed.md"
             renamed.write_text("moved content", encoding="utf-8")
             old_path = str(vault / "old.md")
-            vault_watcher._fingerprints[old_path] = _fingerprint("moved content")
+            vault_watcher._fingerprints[old_path] = _Fingerprint(_fingerprint("moved content"), len(b"moved content"))
             pending[old_path] = Change.deleted
             pending[str(renamed)] = Change.added
 
@@ -754,3 +781,135 @@ class TestProcessBatch(unittest.IsolatedAsyncioTestCase):
             finally:
                 log.close()
                 vault_watcher._fingerprints.pop(old_path, None)
+
+
+class TestAsyncReadsAndRenameSizeGate(unittest.IsolatedAsyncioTestCase):
+    """#1537: vault file reads run off the event loop, and rename detection
+    gates candidates on st_size before paying a full read."""
+
+    def tearDown(self):
+        # Module-global fingerprint/event-log state must not leak between tests.
+        vault_watcher._unbind_event_log()
+        vault_watcher._fingerprints.clear()
+
+    @staticmethod
+    def _read_spy(record: list):
+        """Wrap the real _read_vault_file, recording the calling thread id
+        and the path of every file actually read."""
+        real_read = vault_watcher._read_vault_file
+
+        def spy(path):
+            record.append((threading.get_ident(), path))
+            return real_read(path)
+
+        return spy
+
+    @patch("watchers.vault_watcher.get_auth_token", new=AsyncMock(return_value="token"))
+    async def test_import_reads_file_off_the_event_loop(self):
+        """_read_vault_file used to slurp up to 5 MiB on the event loop —
+        it must now run in a worker thread via asyncio.to_thread (#1537)."""
+        main_tid = threading.get_ident()
+        reads: list = []
+        with tempfile.TemporaryDirectory() as tmp:
+            md = Path(tmp) / "note.md"
+            md.write_text("content", encoding="utf-8")
+            client = AsyncMock()
+            client.get.return_value = FakeResponse(200, [])
+            client.post.return_value = FakeResponse(201)
+
+            with (
+                patch.object(vault_watcher.settings, "vault_path", tmp),
+                patch.object(vault_watcher, "_read_vault_file", self._read_spy(reads)),
+            ):
+                await import_or_update_note(md, client, "token")
+
+            assert len(reads) == 1
+            assert reads[0][1] == md
+            assert reads[0][0] != main_tid
+            assert client.post.call_count == 1
+
+    @patch("watchers.vault_watcher.get_auth_token", new=AsyncMock(return_value="token"))
+    async def test_size_mismatched_rename_candidates_are_not_read(self):
+        """A delete × adds batch used to fully read every added file to
+        compare hashes — O(D×A) full reads (#1537). A candidate whose byte
+        size differs from the deleted file's recorded size can never match;
+        it must be skipped on stat() alone."""
+        main_tid = threading.get_ident()
+        reads: list = []
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            decoy = vault / "decoy.md"  # different size — must never be read
+            decoy.write_text("entirely different, much longer content", encoding="utf-8")
+            moved = vault / "moved.md"
+            content = "the moved note body"
+            moved.write_text(content, encoding="utf-8")
+            old_path = str(vault / "old.md")
+
+            vault_watcher._fingerprints[old_path] = _Fingerprint(_fingerprint(content), len(content.encode("utf-8")))
+
+            renames: list = []
+
+            async def fake_rename(old, new, client, token):
+                renames.append((old, str(new)))
+                return True
+
+            log = PersistentEventLog(vault / "events.db")
+            pending = {
+                old_path: Change.deleted,
+                str(decoy): Change.added,
+                str(moved): Change.added,
+            }
+            for path, ct in pending.items():
+                log.add(path, ct)
+            try:
+                with (
+                    patch.object(vault_watcher.settings, "vault_path", str(vault)),
+                    patch.object(vault_watcher, "_read_vault_file", self._read_spy(reads)),
+                    patch.object(vault_watcher, "rename_note_path", new=fake_rename),
+                    patch.object(vault_watcher, "import_or_update_note", new=AsyncMock(return_value=True)),
+                    patch.object(vault_watcher, "delete_note_by_path", new=AsyncMock(return_value=True)),
+                ):
+                    await vault_watcher._process_batch(dict(pending), AsyncMock(), "token", log)
+            finally:
+                log.close()
+
+            # The decoy was rejected by the stat() gate before any read; only
+            # the size-matching candidate was read — off the event loop.
+            assert [path for _tid, path in reads] == [moved]
+            assert all(tid != main_tid for tid, _path in reads)
+            assert renames == [(old_path, str(moved))]
+
+    @patch("watchers.vault_watcher.get_auth_token", new=AsyncMock(return_value="token"))
+    async def test_fingerprint_without_size_still_detects_rename(self):
+        """Fingerprints persisted before the size column existed carry no
+        size — they must still pair delete+add on hash alone (#1537)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            moved = vault / "moved.md"
+            content = "legacy fingerprinted body"
+            moved.write_text(content, encoding="utf-8")
+            old_path = str(vault / "old.md")
+
+            # Legacy entry: hash only, no size (pre-#1537 persisted row).
+            vault_watcher._fingerprints[old_path] = _Fingerprint(_fingerprint(content))
+
+            renames: list = []
+
+            async def fake_rename(old, new, client, token):
+                renames.append((old, str(new)))
+                return True
+
+            log = PersistentEventLog(vault / "events.db")
+            pending = {old_path: Change.deleted, str(moved): Change.added}
+            for path, ct in pending.items():
+                log.add(path, ct)
+            try:
+                with (
+                    patch.object(vault_watcher.settings, "vault_path", str(vault)),
+                    patch.object(vault_watcher, "rename_note_path", new=fake_rename),
+                ):
+                    await vault_watcher._process_batch(dict(pending), AsyncMock(), "token", log)
+
+                assert renames == [(old_path, str(moved))]
+            finally:
+                log.close()
