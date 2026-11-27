@@ -32,7 +32,6 @@
   import SlidersHorizontal from 'lucide-svelte/icons/sliders-horizontal';
   import Percent from 'lucide-svelte/icons/percent';
   import Lock from 'lucide-svelte/icons/lock';
-  import Repeat from 'lucide-svelte/icons/repeat';
   import Target from 'lucide-svelte/icons/target';
   import {
     api,
@@ -42,7 +41,39 @@
     type GoalContext,
     type Tag as TagType,
     type Note,
+    type PersonalStreak,
   } from '$lib/api';
+  import PlanningCalendar, {
+    type CalendarDayBadge,
+    type CalendarDayChip,
+  } from '$lib/components/calendar/PlanningCalendar.svelte';
+  import CalendarLayerToggles from '$lib/components/calendar/CalendarLayerToggles.svelte';
+  import {
+    CHIP_DENSITY_LIMITS,
+    PLAN_TEMPS,
+    agendaDaysFor,
+    assignGoal,
+    assignedIdsForDate,
+    calendarLayers,
+    chipDensity,
+    getNormalizedDate,
+    jumpToPlanningDay,
+    loadAssignmentsForDate,
+    loadAssignmentsForRange,
+    monthCellsFor,
+    planningAssignments,
+    planningCursor,
+    planningEventSources,
+    planningSelectedDay,
+    planningView,
+    refreshAssignmentsForDate,
+    selectPlanningDay,
+    goPlanningToday,
+    setPlanningView,
+    shiftPlanningPeriod,
+    unassignGoal,
+    weekDaysFor,
+  } from '$lib/stores/planningCalendar';
   import GoalFilters from '$lib/components/GoalFilters.svelte';
   import GoalInbox from '$lib/components/GoalInbox.svelte';
   import GoalList from '$lib/components/GoalList.svelte';
@@ -585,19 +616,9 @@
       } else if (savedTab && (VALID_TABS as readonly string[]).includes(savedTab)) {
         currentTab = savedTab as typeof currentTab;
       }
-      const savedDate = loadPref<string | null>('goals', 'planningDate', null, {
-        legacyKey: 'goals.selectedPlanningDate',
-        isValid: (v) => typeof v === 'string' && ISO_DAY.test(v),
-      });
-      if (savedDate) selectedPlanningDate = savedDate;
-      planningView = loadPref<PlanningView>('goals', 'planningView', planningView, {
-        legacyKey: 'goals.planningView',
-        isValid: (v) => v === 'month' || v === 'week',
-      });
-      const savedCursor = loadPref<string | null>('goals', 'planningCursor', null, {
-        isValid: (v) => typeof v === 'string' && ISO_DAY.test(v),
-      });
-      if (savedCursor) planningCursor = savedCursor;
+      // Planning selection, view and cursor restore through the shared
+      // planning-calendar store (#1660) — it hydrates `joidy.calendar.*`
+      // with `joidy.goals.*`/legacy-key migration (#1673).
       const savedHistoryDate = loadPref<string | null>('goals', 'historyDate', null, {
         legacyKey: 'goals.selectedHistoryDate',
         isValid: (v) => typeof v === 'string' && ISO_DAY.test(v),
@@ -609,15 +630,12 @@
       poolOpen = loadPref<boolean>('goals', 'poolOpen', poolOpen, {
         isValid: (v) => typeof v === 'boolean',
       });
-      mirrorToCalendar = loadPref<boolean>('goals', 'mirrorToCalendar', mirrorToCalendar, {
-        isValid: (v) => typeof v === 'boolean',
-      });
       lastEditedGoalId = loadPref<number | null>('goals', 'editorGoalId', null, {
         isValid: (v) => v === null || typeof v === 'number',
       });
       // if we are on planning, pre-load assignments for the selected date
-      if (currentTab === 'planning' && selectedPlanningDate) {
-        loadAssignmentsForDate(selectedPlanningDate).catch(logger.error);
+      if (currentTab === 'planning') {
+        loadAssignmentsForDate(selDay).catch(logger.error);
       }
     } catch (e) {
       // ignore storage errors
@@ -869,49 +887,18 @@
     todayIso = next;
     // Selections pinned to "today" follow the rollover; explicit picks stay.
     if (selectedHistoryDate === prev) selectedHistoryDate = next;
-    if (selectedPlanningDate === prev) selectedPlanningDate = next;
+    if ($planningSelectedDay === prev) selectPlanningDay(next);
   }
 
-  let selectedPlanningDate = $state(localDayKey(new Date()));
-  let assignments = $state<Record<string, number[]>>({});
-  // date → goal_id → Google event id for assignments created from a calendar
-  // event. The goal chip represents that event, so the raw event chip is
-  // hidden from the planning agenda to avoid rendering it twice.
-  let assignmentEventSources = $state<Record<string, Record<number, string>>>({});
-
-  function parseEventSources(raw: Record<string, string> | undefined): Record<number, string> {
-    const out: Record<number, string> = {};
-    for (const [k, v] of Object.entries(raw ?? {})) {
-      const id = Number(k);
-      if (Number.isFinite(id) && v) out[id] = v;
-    }
-    return out;
-  }
-
-  // goal_event_ids to repost with setAssignments: keep sources only for
-  // goals that remain assigned on that date.
-  function sourcesForDate(date: string, goalIds: number[]): Record<number, string> | undefined {
-    const map = assignmentEventSources[date];
-    if (!map) return undefined;
-    const out: Record<number, string> = {};
-    for (const gid of goalIds) if (map[gid]) out[gid] = map[gid];
-    return Object.keys(out).length ? out : undefined;
-  }
-
-  function getNormalizedDate(date: string, temporality: Goal['temporality']): string {
-    if (!date) return date;
-    const d = new Date(date + 'T12:00:00');
-    if (temporality === 'DAILY') return date;
-    if (temporality === 'WEEKLY') {
-      const day = d.getDay();
-      const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-      const monday = new Date(d.setDate(diff));
-      return localDayKey(monday);
-    }
-    if (temporality === 'MONTHLY') return date.substring(0, 7) + '-01';
-    if (temporality === 'ANNUAL') return date.substring(0, 4) + '-01-01';
-    return date;
-  }
+  // Planning selection + assignments live in the shared planning-calendar
+  // store (#1660). `selDay` resolves a concrete day for this surface (the
+  // shared selection is nullable — /calendar unselects on re-click).
+  let selDay = $derived($planningSelectedDay ?? todayIso);
+  // Read aliases for the agenda rail / day detail; writes go through the
+  // store actions (assignGoal/unassignGoal/refreshAssignmentsForDate), which
+  // also repost goal_event_ids so event-source links survive (#1645).
+  let assignments = $derived($planningAssignments);
+  let assignmentEventSources = $derived($planningEventSources);
 
   let poolFilter = $state<'recent' | 'active' | 'completed' | 'failed'>('recent');
   // Vestigial pref target (#1234): assignments now always mirror into the
@@ -921,9 +908,7 @@
   let mirrorToCalendar = $state(false);
 
   let filteredUnassignedGoals = $derived.by(() => {
-    let unassigned = goals.filter(
-      (g) => isListGoal(g) && !isAssigned(g.id, selectedPlanningDate)
-    );
+    let unassigned = goals.filter((g) => isListGoal(g) && !isAssigned(g.id, selDay));
     if (poolFilter === 'active') {
       unassigned = unassigned.filter((g) => g.state === 'ACTIVE');
     } else if (poolFilter === 'completed') {
@@ -955,7 +940,9 @@
     const goal = goals.find((g) => g.id === goalId);
     if (!goal) return false;
     const normDate = getNormalizedDate(date, goal.temporality);
-    return assignments[normDate] && assignments[normDate].includes(goalId);
+    return (
+      $planningAssignments[normDate] && $planningAssignments[normDate].includes(goalId)
+    );
   }
 
   // persist current tab and selected planning date in localStorage
@@ -964,9 +951,10 @@
   });
 
   $effect(() => {
-    if (selectedPlanningDate) {
-      savePref('goals', 'planningDate', selectedPlanningDate);
-      loadAssignmentsForDate(selectedPlanningDate);
+    // The store already persists the selection to `joidy.calendar.selectedDay`
+    // (#1660/#1673) — this page just keeps the assignment buckets warm.
+    if ($planningSelectedDay) {
+      loadAssignmentsForDate($planningSelectedDay);
     }
     // Preload upcoming assignments for dashboard
     const today = new Date();
@@ -1009,12 +997,9 @@
   $effect(() => {
     savePref('goals', 'poolOpen', poolOpen);
   });
-  $effect(() => {
-    savePref('goals', 'mirrorToCalendar', mirrorToCalendar);
-  });
-  $effect(() => {
-    savePref('goals', 'planningCursor', planningCursor);
-  });
+  // planningCursor/view/selectedDay persist through the shared store
+  // (`joidy.calendar.*`, #1660/#1673); assignments always mirror to the
+  // calendar so there is no mirrorToCalendar pref anymore.
 
   // Deep-link support: /goals?tab=inbox (used by Quick Capture toasts, #1200)
   // and /goals?tab=planning&date=YYYY-MM-DD (used by the /calendar quick-nav,
@@ -1052,204 +1037,71 @@
     return () => clearTimeout(timer);
   });
 
-  async function loadAssignmentsForDate(date: string) {
-    if (!date) return;
-    const datesToLoad = [
-      date,
-      getNormalizedDate(date, 'WEEKLY'),
-      getNormalizedDate(date, 'MONTHLY'),
-      getNormalizedDate(date, 'ANNUAL'),
-    ];
-    const uniqueDates = Array.from(new Set(datesToLoad));
-
-    const fetchedResults = await Promise.all(
-      uniqueDates.map(async (d) => {
-        try {
-          const res = await api.planning.getAssignments(d);
-          return { date: d, ids: res.goal_ids, sources: parseEventSources(res.goal_event_ids) };
-        } catch (e) {
-          return { date: d, ids: [], sources: {} };
-        }
-      })
-    );
-
-    assignments = {
-      ...assignments,
-      ...Object.fromEntries(fetchedResults.map((r) => [r.date, r.ids])),
-    };
-    assignmentEventSources = {
-      ...assignmentEventSources,
-      ...Object.fromEntries(fetchedResults.map((r) => [r.date, r.sources])),
-    };
-  }
-
   async function assignGoalToDate(goalId: number, date: string) {
     if (!date) return;
     const goal = goals.find((g) => g.id === goalId);
     if (!goal) return;
-
-    const normDate = getNormalizedDate(date, goal.temporality);
-    assignments = { ...assignments };
-    if (!assignments[normDate]) assignments[normDate] = [];
-    if (!assignments[normDate].includes(goalId)) assignments[normDate].push(goalId);
-
-    try {
-      // create_calendar_task defaults to true — planning assignments always
-      // mirror into the real calendar (#goal-planning-calendar). Event
-      // sources of sibling assignments must be reposted or they are lost.
-      await api.planning.setAssignments(
-        normDate,
-        assignments[normDate],
-        true,
-        sourcesForDate(normDate, assignments[normDate])
-      );
-      void loadRangeAgenda();
-    } catch (e) {
-      logger.error('Error saving assignment:', e);
-    }
+    // The store mirrors into calendar_tasks by default and reposts sibling
+    // goal_event_ids (#goal-planning-calendar/#1645); refresh the agenda
+    // rail so the mirrored task shows up.
+    await assignGoal(goal, date);
+    void loadRangeAgenda();
   }
 
   async function unassignGoalFromDate(goalId: number, date: string) {
     if (!date) return;
     const goal = goals.find((g) => g.id === goalId);
     if (!goal) return;
-
-    const normDate = getNormalizedDate(date, goal.temporality);
-    if (!assignments[normDate]) return;
-
-    const remaining = assignments[normDate].filter((id) => id !== goalId);
-    assignments = {
-      ...assignments,
-      [normDate]: remaining,
-    };
-    const sources = { ...(assignmentEventSources[normDate] ?? {}) };
-    delete sources[goalId];
-    assignmentEventSources = { ...assignmentEventSources, [normDate]: sources };
-    try {
-      await api.planning.setAssignments(normDate, remaining, true, sourcesForDate(normDate, remaining));
-      void loadRangeAgenda();
-    } catch (e) {
-      logger.error('Error saving assignment removal:', e);
-    }
+    await unassignGoal(goal, date);
+    void loadRangeAgenda();
   }
 
-  // ── Planning v2 — month calendar + week board ──
-  type PlanningView = 'month' | 'week';
-  let planningView = $state<PlanningView>('month');
-  // Cursor date inside the visible month/week; selecting a day moves it.
-  let planningCursor = $state(localDayKey(new Date()));
+  // ── Planning v2 — shared calendar component + store (#1660) ──
+  // The grid lives in lib/components/calendar/PlanningCalendar.svelte; the
+  // goals surface keeps its own toolbar, goal pool and day-detail aside.
   let poolOpen = $state(true);
   let dragGoalId = $state<number | null>(null);
 
-  const PLAN_TEMPS = ['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL', 'ONEOFF'] as const;
-  // 2024-01-01 was a Monday — locale-aware Mon→Sun weekday labels.
-  const WEEKDAYS_SHORT = Array.from({ length: 7 }, (_, i) =>
-    new Date(2024, 0, 1 + i).toLocaleDateString($locale, { weekday: 'short' })
-  );
-
-  // Union of goal ids assigned to any period a date belongs to (its day,
-  // week, month and year) — deduplicated.
-  function assignedIdsForDate(date: string): number[] {
-    const ids = new Set<number>();
-    for (const temp of PLAN_TEMPS) {
-      for (const id of assignments[getNormalizedDate(date, temp)] || []) ids.add(id);
-    }
-    return [...ids];
-  }
-
-  let monthCells = $derived.by(() => {
-    const d = new Date(planningCursor + 'T12:00:00');
-    const y = d.getFullYear();
-    const m = d.getMonth();
-    const offset = (new Date(y, m, 1).getDay() + 6) % 7; // Monday start
-    const start = new Date(y, m, 1 - offset);
-    return Array.from({ length: 42 }, (_, i) => {
-      const cell = new Date(start);
-      cell.setDate(start.getDate() + i);
-      return { iso: localDayKey(cell), day: cell.getDate(), inMonth: cell.getMonth() === m };
-    });
-  });
-
-  let weekDays = $derived.by(() => {
-    const monday = new Date(getNormalizedDate(planningCursor, 'WEEKLY') + 'T12:00:00');
-    return Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(monday);
-      d.setDate(monday.getDate() + i);
-      return localDayKey(d);
-    });
-  });
+  // 'agenda' is a /calendar-only view — coerce back to the month grid here.
+  let plnView = $derived<'month' | 'week'>($planningView === 'agenda' ? 'month' : $planningView);
 
   let planningPeriodLabel = $derived.by(() => {
-    if (planningView === 'month') {
-      const d = new Date(planningCursor + 'T12:00:00');
+    if (plnView === 'month') {
+      const d = new Date($planningCursor + 'T12:00:00');
       const label = d.toLocaleDateString($locale, { month: 'long', year: 'numeric' });
       return label.charAt(0).toUpperCase() + label.slice(1);
     }
-    const first = new Date(weekDays[0] + 'T12:00:00');
-    const last = new Date(weekDays[6] + 'T12:00:00');
+    const days = weekDaysFor($planningCursor);
+    const first = new Date(days[0] + 'T12:00:00');
+    const last = new Date(days[6] + 'T12:00:00');
     return `${first.toLocaleDateString($locale, { day: 'numeric', month: 'short' })} – ${last.toLocaleDateString($locale, { day: 'numeric', month: 'short', year: 'numeric' })}`;
   });
 
-  function shiftPlanningPeriod(dir: 1 | -1) {
-    const d = new Date(planningCursor + 'T12:00:00');
-    if (planningView === 'month') d.setMonth(d.getMonth() + dir);
-    else d.setDate(d.getDate() + 7 * dir);
-    planningCursor = localDayKey(d);
-  }
-
-  function selectPlanningDay(iso: string) {
-    selectedPlanningDate = iso;
-    planningCursor = iso;
-  }
-
-  function goPlanningToday() {
-    selectPlanningDay(todayIso);
-  }
-
-  // Quick-nav to /calendar on the selected planning day (#1668). The date is
-  // carried in the query param; the calendar consumes it on mount.
-  function openPlanningInCalendar() {
-    void goto(resolve(`/calendar?date=${selectedPlanningDate || todayIso}`));
-  }
-
-  // Bulk-prefetch every normalized key visible in the current calendar view
-  // so per-day assignment dots render without waiting for a selection.
-  async function loadAssignmentsForRange(dates: string[]) {
-    const keys = new Set<string>();
-    for (const date of dates) {
-      for (const temp of PLAN_TEMPS) keys.add(getNormalizedDate(date, temp));
+  // Union of every day iso currently visible across the three grid modes —
+  // bounds the assignment prefetch and the tasks-layer fetch.
+  let planningVisibleDays = $derived.by(() => {
+    const days = new Set<string>();
+    for (const c of monthCellsFor($planningCursor)) days.add(c.iso);
+    for (const d of weekDaysFor($planningCursor)) days.add(d);
+    for (const d of agendaDaysFor($planningCursor)) days.add(d);
+    // Preload the upcoming week so the editor rail agenda never waits.
+    const today = new Date();
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(today);
+      d.setDate(today.getDate() + i);
+      days.add(localDayKey(d));
     }
-    const missing = [...keys].filter((k) => !(k in assignments) || !(k in assignmentEventSources));
-    if (missing.length === 0) return;
-    const results = await Promise.all(
-      missing.map(async (d) => {
-        try {
-          const res = await api.planning.getAssignments(d);
-          return {
-            date: d,
-            ids: res.goal_ids,
-            sources: parseEventSources(res.goal_event_ids),
-          };
-        } catch {
-          return { date: d, ids: [], sources: {} };
-        }
-      })
-    );
-    assignments = { ...assignments, ...Object.fromEntries(results.map((r) => [r.date, r.ids])) };
-    assignmentEventSources = {
-      ...assignmentEventSources,
-      ...Object.fromEntries(results.map((r) => [r.date, r.sources])),
-    };
-  }
+    return [...days].sort();
+  });
 
   $effect(() => {
-    const dates = planningView === 'month' ? monthCells.map((c) => c.iso) : weekDays;
-    loadAssignmentsForRange(dates).catch(logger.error);
+    if (currentTab !== 'planning') return;
+    loadAssignmentsForRange(planningVisibleDays).catch(logger.error);
   });
 
   // ── Real-calendar agenda for the visible planning range (read-only) ──
-  // Events + tasks are fetched once for the whole visible month/week and
-  // bucketed per day, so every day cell can show real titles and colors.
+  // Events + tasks are fetched once for the whole visible range and bucketed
+  // per day, so every day cell can show real titles and colors (#1645/#1668).
   // Nothing here mutates — clicks open a detail modal; editing stays in
   // /calendar.
   let rangeTasks = $state<CalendarTask[]>([]);
@@ -1264,7 +1116,6 @@
   type PlanningAgendaEntry =
     | { kind: 'event'; sort: string; event: CalendarEvent }
     | { kind: 'task'; sort: string; task: CalendarTask };
-  type PlanningCellItem = { kind: 'goal'; goal: Goal; sort: string } | PlanningAgendaEntry;
 
   const AGENDA_PRIORITY_COLORS: Record<string, string> = {
     LOW: 'var(--text-muted)',
@@ -1314,7 +1165,7 @@
   }
 
   async function loadRangeAgenda(): Promise<void> {
-    const dates = planningView === 'month' ? monthCells.map((c) => c.iso) : weekDays;
+    const dates = planningVisibleDays;
     if (dates.length === 0) return;
     agendaLoading = true;
     const first = dates[0];
@@ -1397,18 +1248,8 @@
     return byDay;
   });
 
-  // Everything a day cell should show: assigned goals first (timeless plan
-  // items, like all-day events in Google Calendar), then the real agenda.
-  function planningCellItems(iso: string): PlanningCellItem[] {
-    const items: PlanningCellItem[] = assignedIdsForDate(iso)
-      .map((id) => goals.find((x) => x.id === id))
-      .filter((g): g is Goal => Boolean(g))
-      .map((goal) => ({ kind: 'goal' as const, goal, sort: '99:99' }));
-    items.push(...(agendaByDay.get(iso) ?? []));
-    return items;
-  }
-
-  let dayAgendaItems = $derived.by(() => agendaByDay.get(selectedPlanningDate) ?? []);
+  // Selected-day agenda for the detail rail.
+  let dayAgendaItems = $derived.by(() => agendaByDay.get(selDay) ?? []);
 
   function agendaEntryColor(item: PlanningAgendaEntry): string {
     if (item.kind === 'event') return item.event.color ?? 'var(--text-muted)';
@@ -1423,25 +1264,6 @@
     return item.kind === 'event' ? eventTimeLabel(item.event) : taskTimeLabel(item.task);
   }
 
-  // Compact chip label for the week board: start time only (no end/range),
-  // '·' for all-day/timeless items — the full label lives in the detail rail.
-  function agendaEntryTimeShort(item: PlanningAgendaEntry): string {
-    if (item.kind === 'task') return item.task.start_time?.slice(0, 5) ?? '·';
-    const ev = item.event;
-    if (ev.all_day || !ev.start_at) return '·';
-    return new Date(ev.start_at).toLocaleTimeString($locale, {
-      hour: '2-digit',
-      minute: '2-digit',
-      hourCycle: 'h23',
-    });
-  }
-
-  // Translucent wash + solid left bar in the item's real color — works for
-  // hex (Google/task colors) and var() (goal/priority colors) alike.
-  function tintedStyle(color: string): string {
-    return `background:color-mix(in srgb, ${color} 20%, transparent);box-shadow:inset 2px 0 0 ${color};`;
-  }
-
   function openAgendaDetail(item: PlanningAgendaEntry): void {
     agendaDetail =
       item.kind === 'event' ? { kind: 'event', event: item.event } : { kind: 'task', task: item.task };
@@ -1451,14 +1273,144 @@
     if (currentTab !== 'planning') return;
     // Anchor read keeps this effect subscribed to the visible range
     // (view switch, month/week navigation) so the agenda refetches.
-    const anchor = planningView === 'month' ? monthCells[0]?.iso : weekDays[0];
+    const anchor = planningVisibleDays[0];
     if (!anchor) return;
     loadRangeAgenda().catch(logger.error);
   });
 
+  // Quick-nav to /calendar on the selected planning day (#1668). The date is
+  // carried in the query param; the calendar consumes it on mount.
+  function openPlanningInCalendar() {
+    void goto(resolve(`/calendar?date=${selDay}`));
+  }
+
+  // Streaks layer: lazy — personal streaks only load when the layer is on.
+  let planningStreaks = $state<PersonalStreak[]>([]);
+  let streaksFetched = $state(false);
   $effect(() => {
-    savePref('goals', 'planningView', planningView);
+    if (currentTab !== 'planning' || !$calendarLayers.streaks || streaksFetched) return;
+    streaksFetched = true;
+    api.personalStreaks
+      .list()
+      .then((list) => (planningStreaks = list))
+      .catch((e) => {
+        streaksFetched = false;
+        logger.error('[goals] streaks fetch failed:', e);
+      });
   });
+
+  // Notes layer: badge counting notes created on each day — the notes list is
+  // already loaded for the linked-note controls, no extra fetch needed.
+  let notesCountByDay = $derived.by(() => {
+    const byDay = new Map<string, number>();
+    for (const note of notes) {
+      const key = note.created_at.slice(0, 10);
+      byDay.set(key, (byDay.get(key) ?? 0) + 1);
+    }
+    return byDay;
+  });
+
+  // Unified day chips: planning-assignment goal chips + real-agenda chips
+  // (Google events, calendar tasks). agendaByDay already dedupes: a task
+  // mirrored from an assignment and an event that seeded a goal render as
+  // the goal chip only (#1234, #1645, #1660). Layer toggles gate events
+  // (google) and tasks independently.
+  function planningChipsForDay(iso: string): CalendarDayChip[] {
+    const layers = $calendarLayers;
+    const assigned = layers.planning ? assignedIdsForDate($planningAssignments, iso) : [];
+    const chips: CalendarDayChip[] = [];
+
+    for (const item of agendaByDay.get(iso) ?? []) {
+      if (item.kind === 'event') {
+        if (!layers.google) continue;
+        chips.push({
+          key: `ev-${item.event.google_id}`,
+          kind: 'google',
+          label: item.event.summary || '—',
+          time: item.event.all_day ? null : item.event.start_at.slice(11, 16),
+          allDay: item.event.all_day,
+          locked: true,
+          color: item.event.color ?? undefined,
+          title: item.event.location
+            ? `${item.event.summary} · ${item.event.location}`
+            : item.event.summary || '—',
+          payload: item,
+        });
+      } else {
+        if (!layers.tasks) continue;
+        chips.push({
+          key: `ct-${item.task.id}`,
+          kind: 'task',
+          label: item.task.title,
+          time: item.task.start_time ? item.task.start_time.slice(0, 5) : null,
+          priority: item.task.priority,
+          done: item.task.done,
+          recurring: item.task.recurrence !== 'NONE',
+          color: item.task.color ?? undefined,
+          title: item.task.goal_title
+            ? `${item.task.title} · ${item.task.goal_title}`
+            : item.task.title,
+          payload: item,
+        });
+      }
+    }
+
+    for (const id of assigned) {
+      const g = goals.find((x) => x.id === id);
+      if (!g) continue;
+      const status = getGoalStatusOnDate(g, iso);
+      chips.push({
+        key: `g-${id}-${iso}`,
+        kind: 'goal',
+        label: g.title,
+        color:
+          status === 'FAILED'
+            ? 'var(--error)'
+            : status === 'COMPLETED'
+              ? 'var(--success)'
+              : getGoalColor(g),
+        done: status === 'COMPLETED',
+        removable: true,
+        meta: TEMPORALITY_LABELS[g.temporality] || g.temporality,
+        title: g.title,
+        payload: g,
+      });
+    }
+
+    chips.sort((a, b) => (a.time ?? '99:99').localeCompare(b.time ?? '99:99'));
+    return chips;
+  }
+
+  function planningBadgesForDay(iso: string): CalendarDayBadge[] {
+    const layers = $calendarLayers;
+    const badges: CalendarDayBadge[] = [];
+    if (layers.streaks) {
+      for (const streak of planningStreaks) {
+        if (streak.is_archived) continue;
+        const entry = streak.history?.find((h) => h.date === iso);
+        badges.push({
+          key: `s-${streak.id}`,
+          kind: 'streak',
+          icon: streak.icon || streak.emoji,
+          color: streak.color || 'var(--xp)',
+          checked: entry?.checked ?? false,
+          title: streak.name,
+        });
+      }
+    }
+    if (layers.notes) {
+      const count = notesCountByDay.get(iso) ?? 0;
+      if (count > 0) {
+        badges.push({
+          key: 'notes',
+          kind: 'note',
+          count,
+          title: $t('calendar.layer.notes'),
+        });
+      }
+    }
+    return badges;
+  }
 
   function onPoolDragStart(e: DragEvent, goalId: number) {
     dragGoalId = goalId;
@@ -1471,6 +1423,21 @@
     const id = Number(e.dataTransfer?.getData('text/plain')) || dragGoalId;
     if (id) assignGoalToDate(id, iso);
     dragGoalId = null;
+  }
+
+  function onPlanningChipClick(chip: CalendarDayChip) {
+    if (chip.kind === 'goal' && chip.payload) {
+      openGoalEditor(chip.payload as Goal);
+    } else if ((chip.kind === 'google' || chip.kind === 'task') && chip.payload) {
+      // Real-calendar entries open the read-only agenda detail (#1645).
+      openAgendaDetail(chip.payload as PlanningAgendaEntry);
+    }
+  }
+
+  function onPlanningChipRemove(chip: CalendarDayChip, iso: string) {
+    if (chip.kind === 'goal' && chip.payload) {
+      unassignGoalFromDate((chip.payload as Goal).id, iso);
+    }
   }
 
   // ── Modal de Consistencia (pending removal resolver) ──
@@ -1532,7 +1499,7 @@
       const d = new Date(todayIso + 'T12:00:00');
       d.setDate(d.getDate() + i);
       const iso = localDayKey(d);
-      const entries = assignedIdsForDate(iso)
+      const entries = assignedIdsForDate($planningAssignments, iso)
         .map((id) => managed.find((g) => g.id === id))
         .filter((g): g is Goal => Boolean(g))
         .map((goal) => ({ goal, status: getGoalStatusOnDate(goal, iso) }));
@@ -1540,8 +1507,8 @@
     });
   });
 
-  function jumpToPlanningDay(iso: string) {
-    selectPlanningDay(iso);
+  function jumpToPlanning(iso: string) {
+    jumpToPlanningDay(iso);
     currentTab = 'planning';
   }
 
@@ -1643,16 +1610,18 @@
           </div>
 
           <div class="pln-right">
+            <CalendarLayerToggles layers={['planning', 'google', 'tasks', 'streaks', 'notes']} />
+
             <div class="pln-view-toggle" role="group" aria-label={$t('goalsPage.calendar')}>
               <button
-                class:active={planningView === 'month'}
-                aria-pressed={planningView === 'month'}
-                onclick={() => (planningView = 'month')}>{$t('goalsPage.viewMonth')}</button
+                class:active={plnView === 'month'}
+                aria-pressed={plnView === 'month'}
+                onclick={() => setPlanningView('month')}>{$t('goalsPage.viewMonth')}</button
               >
               <button
-                class:active={planningView === 'week'}
-                aria-pressed={planningView === 'week'}
-                onclick={() => (planningView = 'week')}>{$t('goalsPage.viewWeek')}</button
+                class:active={plnView === 'week'}
+                aria-pressed={plnView === 'week'}
+                onclick={() => setPlanningView('week')}>{$t('goalsPage.viewWeek')}</button
               >
             </div>
 
@@ -1701,7 +1670,7 @@
                     style="border-left: 3px solid {getGoalColor(goal)}"
                     draggable="true"
                     ondragstart={(e) => onPoolDragStart(e, goal.id)}
-                    onclick={() => assignGoalToDate(goal.id, selectedPlanningDate)}
+                    onclick={() => assignGoalToDate(goal.id, selDay)}
                     title={$t('goalsPage.assignToDay')}
                   >
                     {#if goal.fail_emoji}
@@ -1728,161 +1697,29 @@
             </aside>
           {/if}
 
-          {#if planningView === 'month'}
-            <div class="pln-cal-wrap">
-              <div class="pln-cal">
-                {#each WEEKDAYS_SHORT as wd (wd)}
-                  <span class="pln-dow">{wd}</span>
-                {/each}
-                {#each monthCells as cell (cell.iso)}
-                  {@const cellItems = planningCellItems(cell.iso)}
-                  <button
-                    class="pln-cell"
-                    class:other-month={!cell.inMonth}
-                    class:today={cell.iso === todayIso}
-                    class:selected={cell.iso === selectedPlanningDate}
-                    onclick={() => selectPlanningDay(cell.iso)}
-                    ondragover={(e) => e.preventDefault()}
-                    ondrop={(e) => onCellDrop(e, cell.iso)}
-                  >
-                    <span class="pln-cell-num">{cell.day}</span>
-                    {#if cellItems.length > 0}
-                      <span class="pln-cell-items">
-                        {#each cellItems.slice(0, 3) as item (item.kind === 'goal' ? `g-${item.goal.id}` : item.kind === 'event' ? `e-${item.event.google_id}` : `t-${item.task.id}`)}
-                          {#if item.kind === 'goal'}
-                            <span
-                              class="pln-chip"
-                              style={tintedStyle(getGoalColor(item.goal))}
-                              title={item.goal.title}
-                              ><span class="pln-chip-label">{item.goal.title}</span></span
-                            >
-                          {:else if item.kind === 'event'}
-                            <span
-                              class="pln-chip pln-chip-google"
-                              style={tintedStyle(agendaEntryColor(item))}
-                              title={agendaEntryTitle(item)}
-                              ><Lock size={8} /><span class="pln-chip-label"
-                                >{agendaEntryTitle(item)}</span
-                              ></span
-                            >
-                          {:else}
-                            <span
-                              class="pln-chip"
-                              style={tintedStyle(agendaEntryColor(item))}
-                              title={agendaEntryTitle(item)}
-                              >{#if item.task.recurrence !== 'NONE'}<Repeat
-                                  size={8}
-                                  class="recur-icon"
-                                />{/if}<span class="pln-chip-label"
-                                >{agendaEntryTitle(item)}</span
-                              ></span
-                            >
-                          {/if}
-                        {/each}
-                        {#if cellItems.length > 3}
-                          <span class="pln-chip-more">+{cellItems.length - 3}</span>
-                        {/if}
-                      </span>
-                    {/if}
-                  </button>
-                {/each}
-              </div>
-            </div>
-
-          {:else}
-            <!-- Full-height agenda rows: one stretched row per day, items
-                 wrap so titles get real width instead of 7 narrow columns. -->
-            <div class="pln-week">
-              {#each weekDays as iso (iso)}
-                {@const cellItems = planningCellItems(iso)}
-                <!-- svelte-ignore a11y_no_static_element_interactions -->
-                <div
-                  class="pln-day"
-                  class:today={iso === todayIso}
-                  class:selected={iso === selectedPlanningDate}
-                  ondragover={(e) => e.preventDefault()}
-                  ondrop={(e) => onCellDrop(e, iso)}
-                >
-                  <button class="pln-day-head" onclick={() => selectPlanningDay(iso)}>
-                    <span class="pln-day-dow"
-                      >{new Date(iso + 'T12:00:00').toLocaleDateString($locale, {
-                        weekday: 'short',
-                      })}</span
-                    >
-                    <span class="pln-day-num">{Number(iso.slice(8))}</span>
-                    {#if cellItems.length > 0}<span class="pln-day-count">{cellItems.length}</span>{/if}
-                  </button>
-                  <div class="pln-day-list">
-                    {#each cellItems as item (item.kind === 'goal' ? `g-${item.goal.id}` : item.kind === 'event' ? `e-${item.event.google_id}` : `t-${item.task.id}`)}
-                      {#if item.kind === 'goal'}
-                        {@const g = item.goal}
-                        {@const status = getGoalStatusOnDate(g, iso)}
-                        <div
-                          class="pln-day-item"
-                          style="border-left: 3px solid {status === 'FAILED'
-                            ? 'var(--error)'
-                            : status === 'COMPLETED'
-                              ? 'var(--success)'
-                              : getGoalColor(g)}"
-                        >
-                          <button
-                            class="pln-day-unassign"
-                            onclick={() => unassignGoalFromDate(g.id, iso)}
-                            title={$t('goalsPage.remove')}
-                            aria-label={$t('goalsPage.remove')}><X size={11} /></button
-                          >
-                          <button class="pln-day-name" onclick={() => openGoalEditor(g)}>
-                            <span class="pln-mq" use:marquee>
-                              <span class="pln-mq-track">
-                                <span class="pln-mq-text">{g.title}</span>
-                                <span class="pln-mq-text pln-mq-dup" aria-hidden="true">{g.title}</span>
-                              </span>
-                            </span>
-                          </button>
-                          {#if g.temporality !== 'ONEOFF'}
-                            <span class="pln-item-temp" style="color: {getGoalColor(g)}"
-                              >{TEMPORALITY_LABELS[g.temporality] || g.temporality}</span
-                            >
-                          {/if}
-                        </div>
-                      {:else}
-                        <button
-                          class="pln-day-agenda"
-                          style="border-left: 3px solid {agendaEntryColor(item)}"
-                          onclick={() => openAgendaDetail(item)}
-                          title={agendaEntryTitle(item)}
-                        >
-                          {#if item.kind === 'event'}
-                            <Lock size={10} class="pln-day-agenda-icon" />
-                          {:else if item.task.done}
-                            <Check size={10} class="pln-day-agenda-icon pln-agenda-done" />
-                          {:else}
-                            <span
-                              class="pln-agenda-dot"
-                              style="background: {agendaEntryColor(item)}"
-                            ></span>
-                          {/if}
-                          <span class="pln-day-agenda-time"
-                            >{agendaEntryTimeShort(item)}</span
-                          >
-                          <span class="pln-day-agenda-label">{agendaEntryTitle(item)}</span>
-                        </button>
-                      {/if}
-                    {:else}
-                      <span class="pln-day-empty">—</span>
-                    {/each}
-                  </div>
-                </div>
-              {/each}
-            </div>
-          {/if}
+          <div class="pln-cal-wrap">
+            <PlanningCalendar
+              view={plnView}
+              cursor={$planningCursor}
+              {todayIso}
+              selectedDay={$planningSelectedDay}
+              chipsForDay={planningChipsForDay}
+              badgesForDay={planningBadgesForDay}
+              maxChips={CHIP_DENSITY_LIMITS[$chipDensity]}
+              onselectday={(iso) => jumpToPlanningDay(iso)}
+              onchipclick={onPlanningChipClick}
+              onchipremove={onPlanningChipRemove}
+              oncelldragover={(e) => e.preventDefault()}
+              oncelldrop={onCellDrop}
+            />
+          </div>
 
           <aside class="pln-detail">
             <div class="history-detail-header">
               <div class="history-detail-date" style="text-transform:none;">
                 {$t('goalsPage.assignedOn', {
                   values: {
-                    date: new Date(selectedPlanningDate + 'T12:00:00').toLocaleDateString(
+                    date: new Date(selDay + 'T12:00:00').toLocaleDateString(
                       undefined,
                       { day: 'numeric' }
                     ),
@@ -1893,7 +1730,7 @@
 
             <div class="history-goal-list" style="width:100%">
               {#each PLAN_TEMPS as temp (temp)}
-                {@const normDate = getNormalizedDate(selectedPlanningDate, temp)}
+                {@const normDate = getNormalizedDate(selDay, temp)}
                 {@const assignedIds = Array.from(new Set(assignments[normDate] || []))}
                 {@const filteredGoals = assignedIds
                   .map((id) => goals.find((g) => g.id === id))
@@ -1912,7 +1749,7 @@
                             : 'Único'}
                   </div>
                   {#each filteredGoals as g (g.id)}
-                    {@const status = getGoalStatusOnDate(g, selectedPlanningDate)}
+                    {@const status = getGoalStatusOnDate(g, selDay)}
                     {@const rowColor =
                       status === 'FAILED'
                         ? 'var(--error)'
@@ -1922,7 +1759,7 @@
                     <div class="pln-detail-item" style="border-left: 3px solid {rowColor}">
                       <button
                         class="pln-day-unassign"
-                        onclick={() => unassignGoalFromDate(g.id, selectedPlanningDate)}
+                        onclick={() => unassignGoalFromDate(g.id, selDay)}
                         title={$t('goalsPage.remove')}
                         aria-label={$t('goalsPage.remove')}><X size={12} /></button
                       >
@@ -1960,7 +1797,7 @@
                 {/if}
               {/each}
 
-              {#if !PLAN_TEMPS.some( (temp) => (assignments[getNormalizedDate(selectedPlanningDate, temp)] || []).some((id) => goals.find((g) => g.id === id)?.temporality === temp) )}
+              {#if !PLAN_TEMPS.some( (temp) => (assignments[getNormalizedDate(selDay, temp)] || []).some((id) => goals.find((g) => g.id === id)?.temporality === temp) )}
                 <div
                   class="history-detail-empty"
                   style="padding: 2rem; border: 1px dashed var(--border); border-radius: var(--r); margin: 1rem;"
@@ -2287,7 +2124,7 @@
               days={upcomingWeek}
               {todayIso}
               {getGoalColor}
-              onSelectDay={jumpToPlanningDay}
+              onSelectDay={jumpToPlanning}
             />
           </div>
           <GoalList
@@ -2878,7 +2715,10 @@
       onClose={() => (goalFromEventSeed = null)}
       onCreated={(goal) => {
         goals = [goal, ...goals];
-        void loadAssignmentsForDate(goalFromEventSeed?.day ?? '');
+        // The modal wrote the assignment (with its goal_event_ids link)
+        // directly — force a refetch so the shared cache picks it up.
+        void refreshAssignmentsForDate(goalFromEventSeed?.day ?? '');
+        void loadRangeAgenda();
       }}
     />
   {/if}
@@ -3274,101 +3114,6 @@
     display: flex;
     min-height: 0;
   }
-  .pln-cal {
-    flex: 1;
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    grid-template-rows: auto repeat(6, minmax(0, 1fr));
-    gap: 4px;
-    min-height: 0;
-  }
-  .pln-dow {
-    text-align: center;
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--text-muted);
-    font-family: var(--font-mono);
-    padding-bottom: 2px;
-  }
-  .pln-cell {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 4px;
-    padding: 6px 8px;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    background: var(--surface);
-    color: var(--text-primary);
-    cursor: pointer;
-    min-height: 0;
-    overflow: hidden;
-    transition:
-      border-color var(--t-fast),
-      background var(--t-fast);
-  }
-  .pln-cell:hover {
-    border-color: var(--text-muted);
-    background: var(--surface-hover);
-  }
-  .pln-cell.other-month {
-    opacity: 0.38;
-  }
-  .pln-cell.today {
-    border-color: color-mix(in srgb, var(--xp) 45%, var(--border));
-  }
-  .pln-cell.today .pln-cell-num {
-    color: var(--xp);
-  }
-  .pln-cell.selected {
-    outline: 2px solid var(--link);
-    outline-offset: -1px;
-  }
-  .pln-cell-num {
-    font-size: 12px;
-    font-weight: 700;
-    font-family: var(--font-mono);
-  }
-  .pln-cell-items {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 2px;
-    width: 100%;
-    min-width: 0;
-    margin-top: auto;
-  }
-  .pln-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
-    max-width: 100%;
-    padding: 1px 5px;
-    border-radius: 4px;
-    font-size: 9px;
-    line-height: 1.3;
-    color: var(--text-primary);
-    white-space: nowrap;
-    overflow: hidden;
-  }
-  .pln-chip-label {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    min-width: 0;
-  }
-  .pln-chip-google {
-    color: var(--text-primary);
-  }
-  .pln-chip-more {
-    font-size: 9px;
-    color: var(--text-muted);
-    font-family: var(--font-mono);
-    padding-left: 2px;
-  }
-
   /* Detail panel (selected day, grouped by temporality) */
   .pln-detail {
     width: 370px;
@@ -3438,41 +3183,6 @@
     height: 8px;
     border-radius: 50%;
     flex-shrink: 0;
-  }
-  .pln-day-agenda {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    flex: 1 1 200px;
-    min-width: 0;
-    padding: 6px 10px;
-    border: 1px solid var(--border);
-    border-left: 3px solid var(--text-muted);
-    border-radius: var(--r);
-    background: var(--surface);
-    cursor: pointer;
-    text-align: left;
-    color: var(--text-primary);
-    font-size: 11px;
-  }
-  .pln-day-agenda:hover {
-    background: var(--hover);
-    border-color: var(--text-muted);
-  }
-  .pln-day-agenda-time {
-    flex-shrink: 0;
-    min-width: 32px;
-    color: var(--text-muted);
-    font-family: var(--font-mono);
-    font-size: 10px;
-    font-variant-numeric: tabular-nums;
-  }
-  .pln-day-agenda-label {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
   .pln-agenda-time {
     flex-shrink: 0;
@@ -3548,106 +3258,8 @@
     word-break: break-word;
   }
 
-  /* Week board — full-height agenda rows: one stretched row per day, items
-     wrap into as many lines as they need so titles keep real width. */
-  .pln-week {
-    flex: 1;
-    min-width: 0;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    overflow-y: auto;
-    overflow-x: hidden;
-  }
-  .pln-day {
-    display: flex;
-    align-items: stretch;
-    border: 1px solid var(--border);
-    border-radius: var(--r);
-    background: var(--surface);
-    flex: 1;
-    min-height: 96px;
-    overflow: hidden;
-    transition:
-      border-color var(--t-fast),
-      background var(--t-fast);
-  }
-  .pln-day:hover {
-    border-color: var(--text-muted);
-  }
-  .pln-day.today {
-    border-color: color-mix(in srgb, var(--xp) 45%, var(--border));
-  }
-  .pln-day.selected {
-    outline: 2px solid var(--link);
-    outline-offset: -1px;
-  }
-  .pln-day-head {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 2px;
-    width: 58px;
-    flex-shrink: 0;
-    padding: 8px 6px;
-    background: color-mix(in srgb, var(--text-primary) 3%, transparent);
-    border: none;
-    border-right: 1px solid var(--border-light);
-    cursor: pointer;
-    color: var(--text-primary);
-  }
-  .pln-day-dow {
-    font-size: 9px;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--text-muted);
-    font-family: var(--font-mono);
-  }
-  .pln-day-num {
-    font-size: 18px;
-    font-weight: 700;
-    font-family: var(--font-mono);
-    line-height: 1;
-  }
-  .pln-day.today .pln-day-num {
-    color: var(--xp);
-  }
-  .pln-day-count {
-    font-size: 9px;
-    padding: 0 5px;
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--link) 15%, transparent);
-    color: var(--link);
-    font-family: var(--font-mono);
-  }
-  .pln-day-list {
-    flex: 1;
-    min-width: 0;
-    overflow-y: auto;
-    overflow-x: hidden;
-    padding: 8px;
-    display: flex;
-    flex-wrap: wrap;
-    align-content: flex-start;
-    align-items: flex-start;
-    gap: 6px;
-    scrollbar-width: thin;
-  }
-  .pln-day-item {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 10px;
-    border: 1px solid var(--border);
-    border-radius: var(--r);
-    font-size: 12px;
-    flex: 1 1 200px;
-    min-width: 0;
-    background: var(--surface);
-  }
+
+  /* Goal rows inside the detail panel */
   .pln-day-unassign {
     display: flex;
     padding: 2px;
@@ -3676,13 +3288,6 @@
   }
   .pln-day-name:hover {
     color: var(--link);
-  }
-  .pln-day-empty {
-    align-self: center;
-    color: var(--text-muted);
-    font-size: 10px;
-    padding: 0 8px;
-    flex-shrink: 0;
   }
 
   @media (max-width: 1100px) {
@@ -3716,9 +3321,6 @@
     }
     .pln-cal-wrap {
       min-height: 380px;
-    }
-    .pln-week {
-      min-height: 0;
     }
   }
 

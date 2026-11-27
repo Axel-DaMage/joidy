@@ -121,6 +121,30 @@
     "endTime": "Hora de fin",
     "loadError": "No se pudo cargar el calendario",
     "loadErrorHint": "Comprueba tu conexión e inténtalo de nuevo.",
+    "layers": "Capas del calendario",
+    "layer": {
+      "planning": "Planificación",
+      "tasks": "Tareas",
+      "google": "Google",
+      "streaks": "Rachas",
+      "notes": "Notas"
+    },
+    "layerHint": {
+      "planning": "Asignaciones de planificación de metas",
+      "tasks": "Tareas programadas",
+      "google": "Eventos de Google Calendar",
+      "streaks": "Check-ins de rachas como insignias",
+      "notes": "Notas creadas cada día"
+    },
+    "density": "Densidad",
+    "densityHint": "Cuántos chips muestra cada celda antes de \"+N más\"",
+    "densityLevels": {
+      "compact": "Compacta",
+      "comfortable": "Cómoda",
+      "full": "Completa"
+    },
+    "assignedGoals": "Metas asignadas",
+    "openInGoals": "Abrir en Metas → Planificación",
     "viewsLabel": "Vistas del calendario",
     "prevRange": "Anterior",
     "nextRange": "Siguiente",
