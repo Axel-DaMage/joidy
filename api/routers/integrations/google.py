@@ -72,6 +72,15 @@ async def google_oauth_callback(
     returns a minimal HTML page that closes the popup the Settings panel opened,
     which then flips to "connected" via the status polling loop.
     """
+    # Multi-account gmail connect (#1659) reuses this registered redirect URI —
+    # the state's provider segment routes the grant: a "gmail"-purpose state
+    # means the tokens belong to a new email_accounts row, not the shared
+    # google_tokens row. Deferred import: gmail already imports google_service,
+    # and main.py imports both routers — keep module-level imports acyclic.
+    if state.partition(".")[0] == "gmail":
+        from routers.integrations.gmail import handle_gmail_connect_callback
+
+        return await handle_gmail_connect_callback(code=code, error=error, state=state, db=db)
     return await oauth_flow.run_callback(
         provider="google",
         provider_label="Google",

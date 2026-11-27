@@ -18,17 +18,32 @@ param, where credentials would leak into logs (same hardening as
 ``X-Spotify-Token``/``X-Strava-Token``, #1372).
 """
 
+import logging
+
 import httpx
 from database import get_db
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi.responses import HTMLResponse
+from models.email_account import PLACEHOLDER_EMAIL, PROVIDER_GMAIL, EmailAccount
 from pydantic import BaseModel, Field
+from services import email_account_service as eas
 from services import gmail_service as gms
+from services import google_service as gs
 from services import google_token_service as gts
-from services import oauth_flow
+from services import oauth_flow, oauth_state
 from services.auth_service import get_current_user
 from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/integrations/gmail", tags=["integrations"])
+
+# Public sub-router mounted WITHOUT the router-level JWT dependency
+# (``app.include_router(gmail.callback_router)`` — same pattern as
+# ``github.webhook_router``): the OAuth ``/accounts/callback`` is a browser
+# redirect and cannot carry an Authorization header. Its CSRF protection is
+# the HMAC-signed ``state`` parameter verified inside the handler (#1280).
+callback_router = APIRouter(prefix="/integrations/gmail", tags=["integrations"])
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -150,11 +165,67 @@ class GmailStatusOut(BaseModel):
     gmail_modify: bool | None = None
     gmail_send: bool | None = None
     watch: GmailWatchStatusOut
+    # Connected per-account mailboxes (#1659) — serialized email_accounts rows.
+    accounts: list[dict] = Field(default_factory=list)
+
+
+class EmailAccountOut(BaseModel):
+    """Serialized ``email_accounts`` row — credentials never leave the API."""
+
+    id: int
+    provider: str
+    email_address: str
+    display_name: str | None = None
+    is_active: bool
+    has_credentials: bool
+    last_sync_at: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+    capabilities: dict | None = None
+    watch: dict | None = None
+
+
+class EmailAccountPatchIn(BaseModel):
+    display_name: str | None = Field(default=None, max_length=255)
+    is_active: bool | None = None
+
+
+class GmailAuthUrl(BaseModel):
+    url: str
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+async def _resolve_account(db: Session, user_id: int, account_id: int | None) -> EmailAccount | None:
+    """Load and validate an account_id → gmail ``email_accounts`` row.
+
+    ``__pending__`` addresses left by the migration are resolved through
+    users.getProfile on first use (best-effort inside this call)."""
+    if account_id is None:
+        return None
+    account = eas.get_account(db, user_id, account_id)
+    if account is None or account.provider != PROVIDER_GMAIL or not account.is_active:
+        raise HTTPException(status_code=404, detail="Cuenta de correo no encontrada")
+    await eas.resolve_pending_profile(db, account)
+    return account
+
+
+async def _account_token(db: Session, account: EmailAccount, capability: str) -> str:
+    """Access token from the account's own credentials (+ scope gate)."""
+    token = await eas.get_account_access_token(db, account)
+    if not token:
+        raise HTTPException(
+            status_code=401,
+            detail="La cuenta no está conectada — reconéctala en Ajustes",
+        )
+    try:
+        eas.require_account_capability(account, capability)
+    except gms.GmailReconsentRequired as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    return token
 
 
 def _require_capability(capability: str) -> oauth_flow.CapabilityCheck:
@@ -170,11 +241,14 @@ def _require_capability(capability: str) -> oauth_flow.CapabilityCheck:
     return check
 
 
-async def _read_token(token: str | None, db: Session) -> str:
+async def _read_token(token: str | None, db: Session, account: EmailAccount | None = None) -> str:
     """Resolve the access token for read calls: an explicit ``X-Google-Token``
-    header wins, else the stored/auto-refreshed Google token (same semantics
-    as google.py). The override arrives by header only — credentials never
-    travel in the query string (#1461)."""
+    header wins, else the account's credentials (#1659), else the
+    stored/auto-refreshed shared Google token (same semantics as google.py).
+    The override arrives by header only — credentials never travel in the
+    query string (#1461)."""
+    if account is not None and token is None:
+        return await _account_token(db, account, "read")
     return await oauth_flow.resolve_access_token(
         db,
         header_token=token,
@@ -184,9 +258,12 @@ async def _read_token(token: str | None, db: Session) -> str:
     )
 
 
-async def _scoped_token(db: Session, capability: str) -> str:
-    """Resolve the token for mutating calls — stored token only, plus a
-    proactive scope check so under-scoped grants fail before hitting Google."""
+async def _scoped_token(db: Session, capability: str, account: EmailAccount | None = None) -> str:
+    """Resolve the token for mutating calls — account credentials when scoped
+    (#1659), else the shared stored token — plus a proactive scope check so
+    under-scoped grants fail before hitting Google."""
+    if account is not None:
+        return await _account_token(db, account, capability)
     return await oauth_flow.resolve_access_token(
         db,
         header_token=None,
@@ -242,12 +319,35 @@ def _google_http_error(exc: httpx.HTTPStatusError) -> HTTPException:
 # ---------------------------------------------------------------------------
 
 
+def _gmail_accounts_payload(db: Session, user_id: int) -> list[dict]:
+    """Serialized gmail email_accounts for status/account listings."""
+    return [eas.serialize_account(a) for a in eas.list_accounts(db, user_id, provider=PROVIDER_GMAIL)]
+
+
 @router.get("/status", response_model=GmailStatusOut)
-def gmail_status(
+async def gmail_status(
+    account_id: int | None = Query(default=None, ge=1),
     db: Session = Depends(get_db),
-    user: dict = Depends(get_current_user),
+    user: int | None = Depends(get_current_user),
 ):
-    """Connection state, per-capability scope flags and watch registration."""
+    """Connection state, per-capability scope flags and watch registration.
+
+    With ``account_id`` the flags describe that account's own OAuth grant
+    (#1659); otherwise they describe the shared Google connection. The
+    ``accounts`` list always carries every connected gmail mailbox.
+    """
+    uid = user or 1
+    account = await _resolve_account(db, uid, account_id)
+    if account is not None:
+        caps = eas.account_capabilities(account)
+        return {
+            "connected": bool(account.credentials),
+            "gmail_read": caps["read"],
+            "gmail_modify": caps["modify"],
+            "gmail_send": caps["send"],
+            "watch": {"configured": gms.watch_configured(), "state": gms.get_watch_state(db, account)},
+            "accounts": _gmail_accounts_payload(db, uid),
+        }
     caps = gms.gmail_capabilities(db)
     return {
         "connected": gts.is_connected(db),
@@ -255,7 +355,143 @@ def gmail_status(
         "gmail_modify": caps["modify"],
         "gmail_send": caps["send"],
         "watch": {"configured": gms.watch_configured(), "state": gms.get_watch_state(db)},
+        "accounts": _gmail_accounts_payload(db, uid),
     }
+
+
+# ---------------------------------------------------------------------------
+# Email accounts (#1659) — connect, list, patch, disconnect, sync
+# ---------------------------------------------------------------------------
+
+
+@router.get("/accounts", response_model=list[EmailAccountOut])
+async def list_gmail_accounts(
+    db: Session = Depends(get_db),
+    user: int | None = Depends(get_current_user),
+):
+    """Connected gmail mailboxes — each carries its own credentials, sync
+    cursor and watch state. Credentials are never serialized."""
+    accounts = eas.list_accounts(db, user or 1, provider=PROVIDER_GMAIL)
+    for account in accounts:
+        await eas.resolve_pending_profile(db, account)
+    return [eas.serialize_account(a) for a in accounts]
+
+
+@router.get("/accounts/auth", response_model=GmailAuthUrl, dependencies=[Depends(get_current_user)])
+def gmail_account_auth_url():
+    """OAuth consent URL for connecting an ADDITIONAL gmail mailbox.
+
+    Same Google consent screen and same registered ``google_redirect_uri``
+    as the shared integration — the ``gmail`` state purpose is what routes
+    the grant: ``/integrations/google/callback`` dispatches gmail-purpose
+    states to ``handle_gmail_connect_callback``, where the tokens land on a
+    new ``email_accounts`` row instead of the shared ``google_tokens`` row
+    (#1659)."""
+    try:
+        state = oauth_state.generate_state("gmail")
+        url = gs.get_auth_url(state=state)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"url": url}
+
+
+@callback_router.get("/accounts/callback")
+async def gmail_account_callback(
+    code: str = "",
+    error: str = "",
+    state: str = "",
+    db: Session = Depends(get_db),
+):
+    """Browser-redirect OAuth callback for an additional gmail mailbox —
+    mounted on ``callback_router`` (no JWT): the redirect carries no
+    Authorization header, protection is the signed ``state`` (#1280).
+
+    In standard deployments the configured ``google_redirect_uri`` points at
+    ``/integrations/google/callback`` and that handler dispatches here via
+    ``handle_gmail_connect_callback``; this route covers deployments that
+    also register this path as an extra redirect URI.
+    """
+    return await handle_gmail_connect_callback(code=code, error=error, state=state, db=db)
+
+
+async def handle_gmail_connect_callback(code: str, error: str, state: str, db: Session) -> HTMLResponse:
+    """Complete the additional-gmail-mailbox OAuth flow (#1659).
+
+    Verifies the ``gmail``-purpose state, exchanges the code, resolves the
+    mailbox address via users.getProfile and upserts the ``email_accounts``
+    row with its own credential blob — re-consent on an existing address
+    refreshes that row's grant. Called by ``/accounts/callback`` and by the
+    shared ``/integrations/google/callback`` dispatch.
+
+    The callback is unauthenticated (browser redirect); the account binds to
+    the single-user id — same convention as the google callback storing the
+    shared ``google_tokens`` row.
+    """
+    if error:
+        return oauth_flow.callback_page(ok=False, message="Error de autorización con Google")
+    if not code:
+        return oauth_flow.callback_page(ok=False, message="Falta el código de autorización")
+    if not oauth_state.verify_state(state, "gmail"):
+        return oauth_flow.callback_page(ok=False, message="Estado OAuth inválido o expirado", status_code=403)
+
+    try:
+        tokens = await gs.exchange_code(code)
+    except httpx.HTTPStatusError:
+        return oauth_flow.callback_page(ok=False, message="Intercambio de token con Google falló")
+    except RuntimeError:
+        return oauth_flow.callback_page(ok=False, message="Google OAuth no está configurado")
+
+    access_token = tokens.get("access_token", "")
+    address = PLACEHOLDER_EMAIL
+    profile: dict | None = None
+    if access_token:
+        try:
+            profile = await gs.get_gmail_profile(access_token)
+            address = str(profile.get("emailAddress") or "").strip() or PLACEHOLDER_EMAIL
+        except Exception:  # noqa: BLE001 — placeholder resolves lazily later
+            profile = None
+
+    await eas.store_gmail_tokens(db, 1, address, tokens, profile=profile)
+    return oauth_flow.callback_page(ok=True, message="Cuenta de Gmail conectada")
+
+
+@router.patch("/accounts/{account_id}", response_model=EmailAccountOut)
+def patch_gmail_account(
+    account_id: int,
+    body: EmailAccountPatchIn,
+    db: Session = Depends(get_db),
+    user: int | None = Depends(get_current_user),
+):
+    """Rename or activate/deactivate a connected mailbox."""
+    account = eas.get_account(db, user or 1, account_id)
+    if account is None or account.provider != PROVIDER_GMAIL:
+        raise HTTPException(status_code=404, detail="Cuenta de correo no encontrada")
+    return eas.serialize_account(
+        eas.update_account(db, account, display_name=body.display_name, is_active=body.is_active)
+    )
+
+
+@router.delete("/accounts/{account_id}", status_code=204)
+async def disconnect_gmail_account(
+    account_id: int,
+    db: Session = Depends(get_db),
+    user: int | None = Depends(get_current_user),
+):
+    """Disconnect one mailbox: drops the account row and its credentials.
+
+    Synced messages keep their ``account`` label (account_id → NULL). An
+    active users.watch registration is stopped best-effort first."""
+    account = eas.get_account(db, user or 1, account_id)
+    if account is None or account.provider != PROVIDER_GMAIL:
+        raise HTTPException(status_code=404, detail="Cuenta de correo no encontrada")
+    if account.watch_state:
+        try:
+            token = await eas.get_account_access_token(db, account)
+            if token:
+                await gms.request_stop_watch(token)
+        except Exception as exc:  # noqa: BLE001 — disconnect must not fail on a dead watch
+            logger.warning("[gmail] users.stop failed while disconnecting account %s: %s", account_id, exc)
+    eas.delete_account(db, account)
 
 
 @router.get("/messages", response_model=GmailMessageListOut)
@@ -265,13 +501,16 @@ async def list_gmail_messages(
     label_ids: str | None = Query(default=None, max_length=1024, description="Comma-separated label ids"),
     max_results: int = Query(default=50, ge=1, le=500),
     page_token: str | None = Query(default=None, max_length=2048),
+    account_id: int | None = Query(default=None, ge=1, description="email_accounts id (#1659)"),
     google_token: str | None = Header(default=None, alias="X-Google-Token"),
     db: Session = Depends(get_db),
-    user: dict = Depends(get_current_user),
+    user: int | None = Depends(get_current_user),
 ):
     """List message summaries. ``q`` accepts Gmail search operators; ``since``
-    is the polling-friendly incremental filter (maps to ``after:<epoch>``)."""
-    access_token = await _read_token(google_token, db)
+    is the polling-friendly incremental filter (maps to ``after:<epoch>``).
+    ``account_id`` scopes the call to one connected mailbox's credentials."""
+    account = await _resolve_account(db, user or 1, account_id)
+    access_token = await _read_token(google_token, db, account)
     try:
         return await gms.list_messages(
             access_token,
@@ -294,12 +533,15 @@ async def list_gmail_messages(
 @router.post("/messages/send", response_model=GmailSendOut)
 async def send_gmail_message(
     body: GmailSendIn,
+    account_id: int | None = Query(default=None, ge=1),
     db: Session = Depends(get_db),
-    user: dict = Depends(get_current_user),
+    user: int | None = Depends(get_current_user),
 ):
     """Compose and send an email (RFC822 built server-side; optional
-    base64 attachments up to the configured caps)."""
-    access_token = await _scoped_token(db, "send")
+    base64 attachments up to the configured caps). ``account_id`` sends
+    from that mailbox's own grant (#1659)."""
+    account = await _resolve_account(db, user or 1, account_id)
+    access_token = await _scoped_token(db, "send", account)
     try:
         return await gms.send_message(access_token, body.model_dump())
     except gms.GmailReconsentRequired as exc:
@@ -313,12 +555,14 @@ async def send_gmail_message(
 @router.get("/messages/{message_id}", response_model=GmailMessageOut)
 async def get_gmail_message(
     message_id: str,
+    account_id: int | None = Query(default=None, ge=1),
     google_token: str | None = Header(default=None, alias="X-Google-Token"),
     db: Session = Depends(get_db),
-    user: dict = Depends(get_current_user),
+    user: int | None = Depends(get_current_user),
 ):
     """Full message detail: headers, text/html bodies, attachment metadata."""
-    access_token = await _read_token(google_token, db)
+    account = await _resolve_account(db, user or 1, account_id)
+    access_token = await _read_token(google_token, db, account)
     try:
         return await gms.get_message(access_token, message_id)
     except gms.GmailReconsentRequired as exc:
@@ -333,13 +577,15 @@ async def get_gmail_message(
 async def get_gmail_attachment(
     message_id: str,
     attachment_id: str,
+    account_id: int | None = Query(default=None, ge=1),
     google_token: str | None = Header(default=None, alias="X-Google-Token"),
     db: Session = Depends(get_db),
-    user: dict = Depends(get_current_user),
+    user: int | None = Depends(get_current_user),
 ):
     """Download one attachment as standard base64 (JSON). Pair ``attachment_id``
     with the message's ``attachments[]`` metadata for filename/mime type."""
-    access_token = await _read_token(google_token, db)
+    account = await _resolve_account(db, user or 1, account_id)
+    access_token = await _read_token(google_token, db, account)
     try:
         return await gms.get_attachment(access_token, message_id, attachment_id)
     except gms.GmailReconsentRequired as exc:
@@ -352,9 +598,17 @@ async def get_gmail_attachment(
         raise _google_http_error(exc) from exc
 
 
-async def _modify_labels(db: Session, message_id: str, add: list[str], remove: list[str]):
+async def _modify_labels(
+    db: Session,
+    message_id: str,
+    add: list[str],
+    remove: list[str],
+    account_id: int | None = None,
+    user_id: int | None = None,
+):
     """Shared label-mutation path for archive/trash/untrash/read/unread."""
-    access_token = await _scoped_token(db, "modify")
+    account = await _resolve_account(db, user_id or 1, account_id)
+    access_token = await _scoped_token(db, "modify", account)
     try:
         return await gms.modify_labels(access_token, message_id, add=add, remove=remove)
     except gms.GmailReconsentRequired as exc:
@@ -368,51 +622,60 @@ async def _modify_labels(db: Session, message_id: str, add: list[str], remove: l
 @router.post("/messages/{message_id}/archive", response_model=GmailMessageActionOut)
 async def archive_gmail_message(
     message_id: str,
+    account_id: int | None = Query(default=None, ge=1),
     db: Session = Depends(get_db),
-    user: dict = Depends(get_current_user),
+    user: int | None = Depends(get_current_user),
 ):
     """Archive: remove the INBOX label."""
-    return await _modify_labels(db, message_id, add=[], remove=[gms.LABEL_INBOX])
+    return await _modify_labels(db, message_id, add=[], remove=[gms.LABEL_INBOX], account_id=account_id, user_id=user)
 
 
 @router.post("/messages/{message_id}/trash", response_model=GmailMessageActionOut)
 async def trash_gmail_message(
     message_id: str,
+    account_id: int | None = Query(default=None, ge=1),
     db: Session = Depends(get_db),
-    user: dict = Depends(get_current_user),
+    user: int | None = Depends(get_current_user),
 ):
     """Move to trash: add TRASH, drop INBOX."""
-    return await _modify_labels(db, message_id, add=[gms.LABEL_TRASH], remove=[gms.LABEL_INBOX])
+    return await _modify_labels(
+        db, message_id, add=[gms.LABEL_TRASH], remove=[gms.LABEL_INBOX], account_id=account_id, user_id=user
+    )
 
 
 @router.post("/messages/{message_id}/untrash", response_model=GmailMessageActionOut)
 async def untrash_gmail_message(
     message_id: str,
+    account_id: int | None = Query(default=None, ge=1),
     db: Session = Depends(get_db),
-    user: dict = Depends(get_current_user),
+    user: int | None = Depends(get_current_user),
 ):
     """Restore from trash: remove TRASH, re-add INBOX."""
-    return await _modify_labels(db, message_id, add=[gms.LABEL_INBOX], remove=[gms.LABEL_TRASH])
+    return await _modify_labels(
+        db, message_id, add=[gms.LABEL_INBOX], remove=[gms.LABEL_TRASH], account_id=account_id, user_id=user
+    )
 
 
 @router.post("/messages/{message_id}/read", response_model=GmailMessageActionOut)
 async def mark_gmail_message_read(
     message_id: str,
+    account_id: int | None = Query(default=None, ge=1),
     db: Session = Depends(get_db),
-    user: dict = Depends(get_current_user),
+    user: int | None = Depends(get_current_user),
 ):
     """Mark as read: remove the UNREAD label."""
-    return await _modify_labels(db, message_id, add=[], remove=[gms.LABEL_UNREAD])
+    return await _modify_labels(db, message_id, add=[], remove=[gms.LABEL_UNREAD], account_id=account_id, user_id=user)
 
 
 @router.post("/messages/{message_id}/unread", response_model=GmailMessageActionOut)
 async def mark_gmail_message_unread(
     message_id: str,
+    account_id: int | None = Query(default=None, ge=1),
     db: Session = Depends(get_db),
-    user: dict = Depends(get_current_user),
+    user: int | None = Depends(get_current_user),
 ):
     """Mark as unread: add the UNREAD label."""
-    return await _modify_labels(db, message_id, add=[gms.LABEL_UNREAD], remove=[])
+    return await _modify_labels(db, message_id, add=[gms.LABEL_UNREAD], remove=[], account_id=account_id, user_id=user)
 
 
 # ---------------------------------------------------------------------------
@@ -423,16 +686,20 @@ async def mark_gmail_message_unread(
 @router.post("/watch", response_model=GmailWatchOut)
 async def register_gmail_watch(
     label_ids: str | None = Query(default=None, max_length=1024, description="Comma-separated label filter"),
+    account_id: int | None = Query(default=None, ge=1),
     db: Session = Depends(get_db),
-    user: dict = Depends(get_current_user),
+    user: int | None = Depends(get_current_user),
 ):
-    """Register Gmail push notifications on the configured Pub/Sub topic.
+    """Register Gmail push notifications on the configured Pub/Sub topic —
+    per account when ``account_id`` is given (#1659): the registration and
+    its historyId cursor land on that row's ``watch_state``/``sync_cursor``.
 
     503 when ``GOOGLE_GMAIL_PUBSUB_TOPIC`` is unset — the polling paths
     (``GET /messages?since=`` and ``GET /history``) remain available."""
-    access_token = await _scoped_token(db, "read")
+    account = await _resolve_account(db, user or 1, account_id)
+    access_token = await _scoped_token(db, "read", account)
     try:
-        return await gms.register_watch(db, access_token, label_ids=_parse_label_ids(label_ids))
+        return await gms.register_watch(db, access_token, label_ids=_parse_label_ids(label_ids), account=account)
     except gms.GmailWatchNotConfigured as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except gms.GmailReconsentRequired as exc:
@@ -444,23 +711,27 @@ async def register_gmail_watch(
 
 
 @router.get("/watch", response_model=GmailWatchStatusOut)
-def gmail_watch_status(
+async def gmail_watch_status(
+    account_id: int | None = Query(default=None, ge=1),
     db: Session = Depends(get_db),
-    user: dict = Depends(get_current_user),
+    user: int | None = Depends(get_current_user),
 ):
     """Whether push is configured plus the last watch registration (if any)."""
-    return {"configured": gms.watch_configured(), "state": gms.get_watch_state(db)}
+    account = await _resolve_account(db, user or 1, account_id)
+    return {"configured": gms.watch_configured(), "state": gms.get_watch_state(db, account)}
 
 
 @router.delete("/watch")
 async def stop_gmail_watch(
+    account_id: int | None = Query(default=None, ge=1),
     db: Session = Depends(get_db),
-    user: dict = Depends(get_current_user),
+    user: int | None = Depends(get_current_user),
 ):
     """Stop push notifications (users.stop) and clear the stored state."""
-    access_token = await _scoped_token(db, "read")
+    account = await _resolve_account(db, user or 1, account_id)
+    access_token = await _scoped_token(db, "read", account)
     try:
-        return await gms.stop_watch(db, access_token)
+        return await gms.stop_watch(db, access_token, account=account)
     except gms.GmailReconsentRequired as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except httpx.HTTPStatusError as exc:
@@ -473,13 +744,15 @@ async def gmail_history(
     page_token: str | None = Query(default=None, max_length=2048),
     max_results: int = Query(default=100, ge=1, le=500),
     label_id: str | None = Query(default=None, max_length=128),
+    account_id: int | None = Query(default=None, ge=1),
     google_token: str | None = Header(default=None, alias="X-Google-Token"),
     db: Session = Depends(get_db),
-    user: dict = Depends(get_current_user),
+    user: int | None = Depends(get_current_user),
 ):
     """Incremental mailbox changes since ``start_history_id`` — the polling
     counterpart of users.watch for detecting new mail."""
-    access_token = await _read_token(google_token, db)
+    account = await _resolve_account(db, user or 1, account_id)
+    access_token = await _read_token(google_token, db, account)
     try:
         return await gms.get_history(
             access_token,

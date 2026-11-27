@@ -203,6 +203,17 @@
       "watchOk": "Watch registered",
       "watchStopped": "Watch stopped",
       "watchError": "Could not update the watch"
+    },
+    "accounts": {
+      "title": "Connected mailboxes",
+      "none": "No mailboxes connected yet",
+      "connect": "Connect account",
+      "add": "Add account",
+      "disconnect": "Disconnect",
+      "disconnecting": "Disconnecting…",
+      "disconnected": "Account disconnected",
+      "disconnectError": "Could not disconnect the account",
+      "pending": "Pending mailbox"
     }
   },
   "executionPage": {
