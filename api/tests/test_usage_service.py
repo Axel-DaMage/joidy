@@ -229,7 +229,12 @@ class GetUsageSummaryTest(UsageServiceTestBase):
     def test_summary_aggregates_large_synthetic_set(self):
         """Aggregation correctness on a larger event volume (#1523)."""
         db = self.Session()
-        now = self._now()
+        # Pin to the most recent UTC noon: the 50min lookback below must not
+        # cross midnight or active_days flakes to 2 (#1653), and the events
+        # must stay inside the 30-day summary window.
+        now = datetime.now(UTC).replace(hour=12, minute=0, second=0, microsecond=0)
+        if now > datetime.now(UTC):
+            now -= timedelta(days=1)
         # 250 page views across 5 paths + 5 ten-minute session pairs.
         for i in range(250):
             db.add(
