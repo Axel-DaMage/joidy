@@ -2426,7 +2426,8 @@
       title={detail.kind === 'event'
         ? detail.event.summary || '—'
         : detail.task.title}
-      size="sm"
+      size="md"
+      footerAlign="center"
       onClose={() => (agendaDetail = null)}
     >
       <p class="agenda-detail-hint caption">

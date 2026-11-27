@@ -8,6 +8,7 @@
     open = false,
     title = '',
     size = 'md',
+    footerAlign = 'end',
     onClose,
     children,
     footer,
@@ -15,6 +16,7 @@
     open?: boolean;
     title?: string;
     size?: 'sm' | 'md' | 'lg';
+    footerAlign?: 'start' | 'center' | 'end';
     onClose?: () => void;
     children?: import('svelte').Snippet;
     footer?: import('svelte').Snippet;
@@ -52,7 +54,7 @@
         {@render children?.()}
       </div>
       {#if footer}
-        <div class="modal-footer">
+        <div class="modal-footer" class:modal-footer-center={footerAlign === 'center'} class:modal-footer-start={footerAlign === 'start'}>
           {@render footer()}
         </div>
       {/if}
@@ -141,6 +143,16 @@
     flex-wrap: wrap;
     gap: 12px;
     flex-shrink: 0;
+  }
+
+  /* class:-directive classes are dynamic — Svelte prunes their selectors
+     unless marked :global, so these must opt out of scoping. */
+  .modal-footer:global(.modal-footer-center) {
+    justify-content: center;
+  }
+
+  .modal-footer:global(.modal-footer-start) {
+    justify-content: flex-start;
   }
 
   @media (max-width: 480px) {
