@@ -34,6 +34,7 @@
   import Sparkles from 'lucide-svelte/icons/sparkles';
   import Target from 'lucide-svelte/icons/target';
   import EmptyState from '$lib/components/EmptyState.svelte';
+  import GoalFromEventModal, { type GoalEventSeed } from '$lib/components/GoalFromEventModal.svelte';
   import { t } from 'svelte-i18n';
 
   interface CalendarStatus {
@@ -50,6 +51,7 @@
         time: string | null;
         label: string;
         location?: string | null;
+        description?: string | null;
         allDay: boolean;
         color: string | null;
       }
@@ -232,6 +234,7 @@
           time: ev.all_day ? null : dtFormatter.format(new Date(ev.start_at)),
           label: ev.summary || '—',
           location: ev.location,
+          description: ev.description,
           allDay: ev.all_day,
           color: ev.color,
         }))
@@ -256,6 +259,9 @@
   });
 
   let selectedDayItems = $derived(selectedDay ? (monthItems.get(selectedDay) ?? []) : []);
+
+  // Google event → quick goal creation (#goal-from-event)
+  let goalFromEventSeed = $state<GoalEventSeed | null>(null);
 
   // Unscheduled queue ("sin planificar", #1234): tasks with no date.
   let unscheduledTasks = $derived(
@@ -1204,6 +1210,24 @@
                     {#if item.location}
                       <span class="event-location caption">{item.location}</span>
                     {/if}
+                    {#if selectedDay}
+                      <button
+                        type="button"
+                        class="event-goal-btn"
+                        title={$t('goalFromEvent.action')}
+                        aria-label={$t('goalFromEvent.action')}
+                        onclick={() =>
+                          (goalFromEventSeed = {
+                            title: item.label,
+                            description: item.description ?? null,
+                            location: item.location ?? null,
+                            color: item.color,
+                            day: selectedDay!,
+                          })}
+                      >
+                        <Target size={11} />
+                      </button>
+                    {/if}
                   </div>
                 {:else}
                   <div
@@ -1476,6 +1500,13 @@
     </div>
   {/if}
 </div>
+
+{#if goalFromEventSeed}
+  <GoalFromEventModal
+    event={goalFromEventSeed}
+    onClose={() => (goalFromEventSeed = null)}
+  />
+{/if}
 
 <style>
   .calendar-page {
@@ -1981,6 +2012,24 @@
 
   .event-item.done .event-summary {
     text-decoration: line-through;
+  }
+
+  .event-goal-btn {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    padding: 3px;
+    border: none;
+    border-radius: var(--r);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .event-goal-btn:hover {
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
   }
 
   .event-time {

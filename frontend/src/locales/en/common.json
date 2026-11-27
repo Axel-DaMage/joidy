@@ -1870,5 +1870,35 @@
     "moodStart": "Log mood with this track",
     "moodAttached": "Track added to your mood today",
     "moodError": "Could not save the mood"
+  },
+  "goalFromEvent": {
+    "action": "Create goal",
+    "confirmTitle": "Create goal",
+    "title": "Goal from event",
+    "confirm": "Create a goal from \"{title}\"? — {date}",
+    "confirmHint": "The goal will be created and assigned to this date in Planning.",
+    "cancel": "Cancel",
+    "back": "Back",
+    "create": "Create goal",
+    "created": "Goal created and assigned",
+    "error": "Could not create the goal. Please try again.",
+    "goalTitle": "Goal title",
+    "description": "Description",
+    "temporalityLabel": "Temporalidad",
+    "measurementLabel": "Medición",
+    "targetValue": "Target value",
+    "color": "Color",
+    "temporality": {
+      "ONEOFF": "One-off",
+      "DAILY": "Daily",
+      "WEEKLY": "Weekly",
+      "MONTHLY": "Monthly",
+      "ANNUAL": "Annual"
+    },
+    "measurement": {
+      "BOOLEAN": "Done / Not done",
+      "COUNT": "Numeric count",
+      "PERCENT": "Percentage"
+    }
   }
 }

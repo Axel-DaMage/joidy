@@ -64,6 +64,7 @@
   import StreakIcon from '$lib/components/StreakIcon.svelte';
   import LazyIconPicker from '$lib/components/LazyIconPicker.svelte';
   import ModalDialog from '$lib/components/ModalDialog.svelte';
+  import GoalFromEventModal, { type GoalEventSeed } from '$lib/components/GoalFromEventModal.svelte';
   import NoteLinkPicker from '$lib/components/NoteLinkPicker.svelte';
   import { focusTrap } from '$lib/actions/focusTrap';
   import { marquee } from '$lib/actions/marquee';
@@ -1001,6 +1002,8 @@
   let agendaDetail = $state<
     { kind: 'event'; event: CalendarEvent } | { kind: 'task'; task: CalendarTask } | null
   >(null);
+  // Google event → quick goal creation (#goal-from-event)
+  let goalFromEventSeed = $state<GoalEventSeed | null>(null);
 
   type PlanningAgendaEntry =
     | { kind: 'event'; sort: string; event: CalendarEvent }
@@ -2428,6 +2431,25 @@
         {/if}
       </dl>
       {#snippet footer()}
+        {#if detail.kind === 'event'}
+          <button
+            type="button"
+            class="btn btn-primary"
+            onclick={() => {
+              const ev = detail.event;
+              agendaDetail = null;
+              goalFromEventSeed = {
+                title: ev.summary || '—',
+                description: ev.description,
+                location: ev.location,
+                color: ev.color,
+                day: eventDayKey(ev),
+              };
+            }}
+          >
+            <Target size={14} /> {$t('goalFromEvent.action')}
+          </button>
+        {/if}
         {#if detail.kind === 'event' && detail.event.html_link}
           <a
             class="btn btn-ghost"
@@ -2461,6 +2483,17 @@
         </button>
       {/snippet}
     </ModalDialog>
+  {/if}
+
+  {#if goalFromEventSeed}
+    <GoalFromEventModal
+      event={goalFromEventSeed}
+      onClose={() => (goalFromEventSeed = null)}
+      onCreated={(goal) => {
+        goals = [goal, ...goals];
+        void loadAssignmentsForDate(goalFromEventSeed?.day ?? '');
+      }}
+    />
   {/if}
 </div>
 

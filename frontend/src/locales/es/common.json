@@ -1870,5 +1870,35 @@
     "moodStart": "Registrar ánimo con este tema",
     "moodAttached": "Tema añadido a tu ánimo de hoy",
     "moodError": "No se pudo guardar el ánimo"
+  },
+  "goalFromEvent": {
+    "action": "Crear objetivo",
+    "confirmTitle": "Crear objetivo",
+    "title": "Objetivo desde evento",
+    "confirm": "¿Crear un objetivo a partir de «{title}»? — {date}",
+    "confirmHint": "Se creará el objetivo y se asignará a esta fecha en Planificación.",
+    "cancel": "Cancelar",
+    "back": "Atrás",
+    "create": "Crear objetivo",
+    "created": "Objetivo creado y asignado",
+    "error": "No se pudo crear el objetivo. Inténtalo de nuevo.",
+    "goalTitle": "Título del objetivo",
+    "description": "Descripción",
+    "temporalityLabel": "Temporalidad",
+    "measurementLabel": "Medición",
+    "targetValue": "Valor objetivo",
+    "color": "Color",
+    "temporality": {
+      "ONEOFF": "Puntual",
+      "DAILY": "Diario",
+      "WEEKLY": "Semanal",
+      "MONTHLY": "Mensual",
+      "ANNUAL": "Anual"
+    },
+    "measurement": {
+      "BOOLEAN": "Hecho / No hecho",
+      "COUNT": "Cuenta numérica",
+      "PERCENT": "Porcentaje"
+    }
   }
 }
