@@ -112,6 +112,9 @@
   --t-fast: 50ms ease-out;
   --t-normal: 80ms ease-out;
   --t-slow: 120ms ease-out;
+  /* Entrance easing — the analytics cubic-bezier, shared by the m-*
+     utilities below and lib/utils/motion.ts (#1657). */
+  --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
 
   /* Marquee dwell between loop cycles — fixed pause with the title start
      in view before scrolling resumes (use:marquee). */
@@ -735,6 +738,121 @@ textarea.input {
 
 .fade-in {
   animation: fadeIn var(--t-slow) ease-out forwards;
+}
+
+/* ── Motion system (#1657) ──────────────────────────────────────────────────────
+   Shared animation language extracted from `lib/components/analytics`
+   (ChartCard entrances, heatmap pop-in, bar grows, skeleton shimmer). All
+   entrances use `--ease-out`; per-item stagger comes from the `--m-i`
+   custom property (`style="--m-i:3"`) or an inline `animation-delay`
+   emitted by `staggerStyle()` in `lib/utils/motion.ts`, which also holds
+   the matching Svelte transitions (enter/rise/popIn/growX/drawerIn/
+   backdropIn/dialogIn) and `tweenNumber` count-ups.
+   Reduced motion needs no per-class opt-out: the global
+   `@media (prefers-reduced-motion: reduce)` block above collapses every
+   animation/transition to ~0ms. */
+@keyframes m-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes m-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes m-fade {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes m-grow-x {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes m-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* Staggered card/row entrance — the `ac-in` beat. */
+.m-rise {
+  animation: m-rise 0.45s var(--ease-out) both;
+}
+
+/* Dense-cell pop-in — the heatmap `hm-pop` beat. */
+.m-pop {
+  animation: m-pop 0.45s var(--ease-out) both;
+}
+
+/* Quiet fade — the `ad-fade` KPI beat. */
+.m-fade {
+  animation: m-fade 0.4s ease both;
+}
+
+/* Horizontal bar grow (GPU-only scaleX). */
+.m-grow-x {
+  animation: m-grow-x 0.7s var(--ease-out) both;
+  transform-origin: left center;
+}
+
+.m-rise,
+.m-pop,
+.m-fade,
+.m-grow-x {
+  animation-delay: min(calc(var(--m-i, 0) * 60ms), 360ms);
+}
+
+/* Hover lift for interactive cards. */
+.m-lift {
+  transition:
+    transform var(--t-normal),
+    border-color var(--t-normal),
+    background var(--t-normal),
+    box-shadow var(--t-normal);
+}
+.m-lift:hover {
+  transform: translateY(-2px);
+}
+
+/* Loading shimmer — mirrors the analytics `.sk` gradient sweep. */
+.m-skeleton {
+  background: linear-gradient(
+    100deg,
+    color-mix(in srgb, var(--text-primary) 5%, transparent) 40%,
+    color-mix(in srgb, var(--text-primary) 10%, transparent) 50%,
+    color-mix(in srgb, var(--text-primary) 5%, transparent) 60%
+  );
+  background-size: 200% 100%;
+  animation: m-shimmer 1.4s infinite linear;
+  border-radius: var(--r);
 }
 
 /* ── Utility ─────────────────────────────────────────────────────────────────── */

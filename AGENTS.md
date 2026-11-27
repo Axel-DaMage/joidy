@@ -137,6 +137,15 @@ Two concurrent asyncio tasks: `watch_vault()` (watches `/vault/*.md`, 2s debounc
 - **Streak icons**: Use `<StreakIcon name={streak.icon} />` — optimized for streak items with emoji fallback.
 - Never use `<DynamicIcon name="StaticName" />` with a hardcoded string — import the icon directly instead.
 
+#### Motion System (#1657)
+- Shared animation language extracted from `lib/components/analytics/`. Two layers, both in `lib/utils/motion.ts` (Svelte transitions + JS helpers) and `app.css` (CSS utilities, section "Motion system").
+- **Svelte transitions** (import from `$lib/utils/motion`): `enter`/`rise` (fade + translateY, card/row/page entrances), `popIn` (scale pop, heatmap-style cells), `dialogIn` (modal pop), `drawerIn` (edge slide, e.g. SettingsPanel), `growX` (bar grow, scaleX), `backdropIn` (overlay scrim fade). `tweenNumber` is the imperative count-up twin of `lib/components/CountUp.svelte`.
+- **CSS utilities**: `.m-rise` / `.m-pop` / `.m-fade` / `.m-grow-x` entrance keyframes with per-item stagger via the `--m-i` custom property (`style="--m-i:3"` or `staggerStyle(i)`); `.m-lift` hover lift; `.m-skeleton` loading shimmer.
+- **Stagger**: `staggerDelay(i, { step, max })` — default 60ms step, 360ms ceiling so long lists never stall the entrance.
+- **Timing/easing**: micro-interactions stay on `--t-fast`/`--t-normal`/`--t-slow`; entrances use `--ease-out` (`cubic-bezier(0.2, 0.7, 0.2, 1)`), the analytics curve. Don't invent ad-hoc durations/easings for new motion.
+- **Reduced motion**: honored globally — the `@media (prefers-reduced-motion: reduce)` block in `app.css` collapses CSS animations/transitions, and every helper returns `duration: 0` when `prefersReducedMotion()` is true. No per-component opt-out needed.
+- Entrances only: prefer `in:` (not `transition:`) on list items keyed by index, and skip entrances inside `VirtualList` rows (they remount on scroll).
+
 ### Gamification
 `api/services/gamification_engine.py`: XP events (note_created +10, note_edited +5, daily_activity +15, goal_completed +50), streaks (7/30/100/365d → +100 XP), plant stages (0→semilla, 300→brote, 1200→planton, 4000→joven, 10000→madura, 25000→floreciendo, 60000→arbol). Grace period: 1 missed day/week.
 

@@ -15,6 +15,7 @@
   import SettingsServices from './SettingsServices.svelte';
   import SettingsDeveloper from './SettingsDeveloper.svelte';
   import { focusTrap } from '$lib/actions/focusTrap';
+  import { enter } from '$lib/utils/motion';
   import { api } from '$lib/api';
   import { devMode } from '$lib/stores/settings';
   import { deferredPrompt, isAppInstalled } from '$lib/stores/pwa';
@@ -212,7 +213,7 @@
   }
 </script>
 
-<div class="settings-view" use:focusTrap={{ onEscape: close }}>
+<div class="settings-view" in:enter use:focusTrap={{ onEscape: close }}>
   <!-- Section rail -->
   <nav class="settings-nav" aria-label={$t('settings.title')}>
     <button class="settings-back" onclick={close}>

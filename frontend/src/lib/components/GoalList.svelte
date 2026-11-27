@@ -5,6 +5,7 @@
   import type { Goal, GoalContext, Note } from '$lib/api';
   import type { Tag as TagType } from '$lib/api';
   import { setGoalContext } from '$lib/stores/goalContext';
+  import { rise, staggerDelay } from '$lib/utils/motion';
   import { t } from 'svelte-i18n';
 
   interface Props {
@@ -134,8 +135,15 @@
       <EmptyState message={$t('goalsPage.editorNoMatches')} />
     {/if}
   {:else}
-    {#each visibleGoals as goal (goal.id)}
-      <GoalRow {goal} pinned={pinned.has(goal.id)} selected={goal.id === selectedId} />
+    {#each visibleGoals as goal, i (goal.id)}
+      <!-- Staggered rise entrance (shared motion system, #1657). The wrapper
+           keeps flex-shrink:0 — GoalRow only carries it as a direct child. -->
+      <div
+        class="goal-item"
+        in:rise={{ delay: staggerDelay(i, { step: 30 }), duration: 300 }}
+      >
+        <GoalRow {goal} pinned={pinned.has(goal.id)} selected={goal.id === selectedId} />
+      </div>
     {/each}
   {/if}
 </div>
@@ -149,6 +157,13 @@
     flex-direction: column;
     gap: var(--s2);
     padding: var(--s1);
+  }
+  /* Rows are direct flex children of .goal-list — without flex-shrink:0 they
+     would squash instead of overflowing into scroll (mirrors .grow in
+     GoalRow). */
+  .goal-item {
+    flex-shrink: 0;
+    min-width: 0;
   }
   .goal-list > :global(.empty-state) {
     margin: auto;

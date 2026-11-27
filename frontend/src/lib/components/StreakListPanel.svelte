@@ -5,6 +5,7 @@
   import Flame from 'lucide-svelte/icons/flame';
   import StreakListItem from './StreakListItem.svelte';
   import EmptyState from './EmptyState.svelte';
+  import { rise, staggerDelay } from '$lib/utils/motion';
   import type { PersonalStreak } from '$lib/api';
   import { t } from 'svelte-i18n';
 
@@ -98,18 +99,24 @@
         {#snippet icon()}<Flame size={24} />{/snippet}
       </EmptyState>
     {:else}
-      {#each filteredStreaks as streak (streak.id)}
-        <StreakListItem
-          {streak}
-          selected={selectedId === streak.id}
-          {streakLabel}
-          {freqLabel}
-          {isStreakCompleted}
-          {getDaysForCompletion}
-          on:select={(e) => onSelect(e.detail)}
-          on:edit={(e) => onEdit(e.detail)}
-          on:delete={(e) => onDelete(e.detail)}
-        />
+      {#each filteredStreaks as streak, i (streak.id)}
+        <!-- Staggered rise entrance (shared motion system, #1657). -->
+        <div
+          class="streak-slot"
+          in:rise={{ delay: staggerDelay(i, { step: 25 }), duration: 260 }}
+        >
+          <StreakListItem
+            {streak}
+            selected={selectedId === streak.id}
+            {streakLabel}
+            {freqLabel}
+            {isStreakCompleted}
+            {getDaysForCompletion}
+            on:select={(e) => onSelect(e.detail)}
+            on:edit={(e) => onEdit(e.detail)}
+            on:delete={(e) => onDelete(e.detail)}
+          />
+        </div>
       {/each}
     {/if}
   </div>
@@ -184,5 +191,10 @@
   .list-body {
     flex: 1; overflow: hidden; padding: 8px;
     display: flex; flex-direction: column; gap: 4px;
+  }
+  /* Entrance wrapper — keeps rows full-size inside the flex column. */
+  .streak-slot {
+    flex-shrink: 0;
+    min-width: 0;
   }
 </style>
