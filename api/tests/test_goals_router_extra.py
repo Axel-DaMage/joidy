@@ -453,10 +453,10 @@ def test_create_goal_vault_unwritable_still_creates(client, db_session, monkeypa
 
 
 def test_create_goal_file_write_failure_still_creates(client, db_session, monkeypatch, tmp_path):
-    """#1478 — the same guard covers a failure inside ``_write_goal_file``
+    """#1478 — the same guard covers a failure inside ``write_goal_file``
     (e.g. ``Objetivos/`` exists but is read-only, so mkdir succeeds and
     ``write_text`` raises)."""
-    monkeypatch.setattr("routers.goals._write_goal_file", _raise_permission)
+    monkeypatch.setattr("routers.goals.write_goal_file", _raise_permission)
 
     resp = client.post("/goals/", json=_goal_payload(title="half-writable"))
     assert resp.status_code == 201, resp.text
