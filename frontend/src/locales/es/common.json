@@ -32,6 +32,7 @@
     "notConnected": "Google no está conectado",
     "notConnectedHint": "Conecta tu cuenta de Google en Ajustes → Integraciones",
     "goToSettings": "Ir a Ajustes",
+    "openInPlanning": "Abrir en Planificación de objetivos",
     "allDay": "Todo el día",
     "noEventsDay": "Sin eventos este día",
     "weekDays": [
@@ -440,6 +441,7 @@
     "assign": "Asignar",
     "mirrorToCalendar": "Duplicar en calendario",
     "calendar": "Calendario",
+    "openInCalendar": "Abrir en Calendario",
     "viewMonth": "Mes",
     "viewWeek": "Semana",
     "todayBtn": "Hoy",

@@ -3,10 +3,12 @@
   import { appHeaderTabs } from '$lib/stores/appHeader';
   import { page } from '$app/state';
   import { goto, replaceState } from '$app/navigation';
+  import { resolve } from '$app/paths';
   import Plus from 'lucide-svelte/icons/plus';
   import Check from 'lucide-svelte/icons/check';
   import ChevronDown from 'lucide-svelte/icons/chevron-down';
   import Calendar from 'lucide-svelte/icons/calendar';
+  import CalendarDays from 'lucide-svelte/icons/calendar-days';
   import Clock from 'lucide-svelte/icons/clock';
   import Pencil from 'lucide-svelte/icons/pencil';
   import X from 'lucide-svelte/icons/x';
@@ -792,16 +794,30 @@
     });
   });
 
-  // Deep-link support: /goals?tab=inbox (used by Quick Capture toasts, #1200).
-  // The param is consumed once so manual tab navigation isn't overridden.
+  // Deep-link support: /goals?tab=inbox (used by Quick Capture toasts, #1200)
+  // and /goals?tab=planning&date=YYYY-MM-DD (used by the /calendar quick-nav,
+  // #1668). The params are consumed once so manual navigation isn't overridden.
   $effect(() => {
     const tabParam = page.url.searchParams.get('tab');
+    const dateParam = page.url.searchParams.get('date');
     if (tabParam === 'analytics') {
-      void goto('/analytics', { replaceState: true });
-    } else if (tabParam && (VALID_TABS as readonly string[]).includes(tabParam)) {
+      void goto(resolve('/analytics'), { replaceState: true });
+      return;
+    }
+    let handled = false;
+    if (tabParam && (VALID_TABS as readonly string[]).includes(tabParam)) {
       currentTab = tabParam as typeof currentTab;
+      handled = true;
+    }
+    if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+      selectPlanningDay(dateParam);
+      handled = true;
+    }
+    if (handled) {
       const clean = new URL(page.url.href);
       clean.searchParams.delete('tab');
+      clean.searchParams.delete('date');
+      // eslint-disable-next-line svelte/no-navigation-without-resolve -- page.url.pathname already includes the base path; resolve() would prepend it twice
       replaceState(`${clean.pathname}${clean.search}${clean.hash}`, page.state);
     }
   });
@@ -948,6 +964,12 @@
 
   function goPlanningToday() {
     selectPlanningDay(todayIso);
+  }
+
+  // Quick-nav to /calendar on the selected planning day (#1668). The date is
+  // carried in the query param; the calendar consumes it on mount.
+  function openPlanningInCalendar() {
+    void goto(resolve(`/calendar?date=${selectedPlanningDate || todayIso}`));
   }
 
   // Bulk-prefetch every normalized key visible in the current calendar view
@@ -1178,6 +1200,15 @@
                 onclick={() => (planningView = 'week')}>{$t('goalsPage.viewWeek')}</button
               >
             </div>
+
+            <button
+              class="pln-nav-btn"
+              onclick={openPlanningInCalendar}
+              title={$t('goalsPage.openInCalendar')}
+              aria-label={$t('goalsPage.openInCalendar')}
+            >
+              <CalendarDays size={15} />
+            </button>
           </div>
         </div>
 

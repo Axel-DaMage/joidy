@@ -1,5 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { page } from '$app/state';
+  import { goto, replaceState } from '$app/navigation';
+  import { resolve } from '$app/paths';
   import {
     api,
     type CalendarEvent,
@@ -32,6 +35,7 @@
   import Check from 'lucide-svelte/icons/check';
   import Repeat from 'lucide-svelte/icons/repeat';
   import Sparkles from 'lucide-svelte/icons/sparkles';
+  import Target from 'lucide-svelte/icons/target';
   import EmptyState from '$lib/components/EmptyState.svelte';
   import { t } from 'svelte-i18n';
 
@@ -849,6 +853,44 @@
     }
   }
 
+  // Quick-nav to Goals → Planificación on the selected day (#1668). The date
+  // is carried in the query param; the goals page consumes it on mount.
+  function openInPlanning(): void {
+    void goto(resolve(`/goals?tab=planning&date=${selectedDay ?? todayKey}`));
+  }
+
+  // Deep-link support: /calendar?date=YYYY-MM-DD (from Goals → Planificación,
+  // #1668). The param is consumed once so manual navigation isn't overridden.
+  function mondayOf(key: string): Date {
+    const d = parseLocalDate(key);
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    return d;
+  }
+
+  function focusDay(key: string): void {
+    const d = parseLocalDate(key);
+    viewYear = d.getFullYear();
+    viewMonth = d.getMonth();
+    // Week view anchors on today's Monday + weekOffset — re-anchor so the
+    // requested day is inside the visible week.
+    weekOffset = Math.round(
+      (mondayOf(key).getTime() - mondayOf(todayKey).getTime()) / (7 * 86_400_000)
+    );
+    selectedDay = key;
+    void refresh();
+  }
+
+  $effect(() => {
+    const dateParam = page.url.searchParams.get('date');
+    if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+      focusDay(dateParam);
+      const clean = new URL(page.url.href);
+      clean.searchParams.delete('date');
+      // eslint-disable-next-line svelte/no-navigation-without-resolve -- page.url.pathname already includes the base path; resolve() would prepend it twice
+      replaceState(`${clean.pathname}${clean.search}${clean.hash}`, page.state);
+    }
+  });
+
   onMount(() => {
     void (async () => {
       await refresh();
@@ -999,6 +1041,15 @@
             <span class="plan-btn-label"
               >{planLoading ? $t('calendar.planWorking') : $t('calendar.planSuggest')}</span
             >
+          </button>
+
+          <button
+            class="btn btn-ghost nav-btn"
+            onclick={openInPlanning}
+            title={$t('calendar.openInPlanning')}
+            aria-label={$t('calendar.openInPlanning')}
+          >
+            <Target size={14} />
           </button>
         </div>
 
