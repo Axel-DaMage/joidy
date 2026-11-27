@@ -7,7 +7,6 @@
     "ai": "IA",
     "goals": "Objetivos",
     "streaks": "Rachas",
-    "emails": "Correos",
     "gmail": "Gmail",
     "calendar": "Calendario",
     "analytics": "Analítica",
@@ -32,6 +31,7 @@
     "notConnected": "Google no está conectado",
     "notConnectedHint": "Conecta tu cuenta de Google en Ajustes → Integraciones",
     "goToSettings": "Ir a Ajustes",
+    "openInPlanning": "Abrir en Planificación de objetivos",
     "allDay": "Todo el día",
     "noEventsDay": "Sin eventos este día",
     "weekDays": [
@@ -120,26 +120,6 @@
     "loadError": "No se pudo cargar el calendario",
     "loadErrorHint": "Comprueba tu conexión e inténtalo de nuevo."
   },
-  "emails": {
-    "title": "Correos",
-    "subtitle": "Bandeja unificada (sincronizada vía n8n)",
-    "searchPlaceholder": "Buscar por asunto, remitente o texto...",
-    "importantOnly": "Importantes",
-    "unreadOnly": "No leídos",
-    "allAccounts": "Todas las cuentas",
-    "markRead": "Marcar leído",
-    "markUnread": "Marcar no leído",
-    "toggleImportant": "Cambiar importancia",
-    "deleted": "Correo eliminado de la vista",
-    "emptyImportant": "Sin correos importantes pendientes",
-    "emptyUnread": "Bandeja al día: cero no leídos",
-    "emptyAll": "Aún no hay correos sincronizados",
-    "emptyNew": "Cuando n8n empuje su primer mensaje aparecerá aquí",
-    "noResults": "Sin resultados para esa búsqueda",
-    "runFailed": "No se pudieron cargar los correos",
-    "unreadBadge": "no leídos",
-    "syncHint": "Los correos llegan automáticamente con el workflow de n8n"
-  },
   "gmail": {
     "title": "Gmail",
     "subtitle": "Bandeja nativa de Gmail (API de Google)",
@@ -223,6 +203,17 @@
       "watchOk": "Watch registrado",
       "watchStopped": "Watch detenido",
       "watchError": "No se pudo actualizar el watch"
+    },
+    "accounts": {
+      "title": "Buzones conectados",
+      "none": "Aún no hay buzones conectados",
+      "connect": "Conectar cuenta",
+      "add": "Añadir cuenta",
+      "disconnect": "Desconectar",
+      "disconnecting": "Desconectando…",
+      "disconnected": "Cuenta desconectada",
+      "disconnectError": "No se pudo desconectar la cuenta",
+      "pending": "Buzón pendiente"
     }
   },
   "executionPage": {
@@ -268,6 +259,59 @@
     "notConnected": "Google no está conectado",
     "notConnectedHint": "Conecta Google en Ajustes para ver tu calendario sagrado.",
     "goToSettings": "Ir a Ajustes",
+    "optionsTitle": "Opciones de ejecución",
+    "timerTitle": "Pomodoro",
+    "phase": {
+      "work": "Trabajo",
+      "break": "Descanso",
+      "longBreak": "Descanso largo"
+    },
+    "minutesShort": "min trabajo",
+    "breakShort": "min descanso",
+    "focusTitle": "Modo enfoque",
+    "focusStart": "Iniciar enfoque",
+    "focusStop": "Detener enfoque",
+    "focusOf": "de {minutes} min",
+    "focusXpHint": "XP estimada al detener: +{xp}",
+    "focusCfgWork": "Enfoque (min)",
+    "focusCfgBreak": "Descanso (min)",
+    "focusCfgCycles": "Ciclos",
+    "focusCfgHint": "Configuración del modo enfoque — se aplica al iniciar una nueva sesión.",
+    "optPomodoro": "Pomodoro",
+    "optPomodoroHint": "Minutos de trabajo y descanso — se guardan igual que en Inicio.",
+    "optFocus": "Modo enfoque",
+    "optView": "Vista",
+    "optShowQueue": "Mostrar cola de ejecución",
+    "optShowCalendar": "Mostrar calendario sagrado",
+    "optShowNotes": "Mostrar notas del objetivo",
+    "optOn": "Sí",
+    "optOff": "No",
+    "notesTitle": "Notas del objetivo",
+    "notesLoading": "Cargando nota…",
+    "notesLoadError": "No se pudo cargar la nota vinculada",
+    "notesEmptyHint": "Las notas de seguimiento quedan vinculadas a este objetivo y cuentan para su progreso.",
+    "noteCreate": "Crear nota de seguimiento",
+    "noteCreating": "Creando…",
+    "noteCreated": "Nota vinculada al objetivo",
+    "noteCreateError": "No se pudo crear la nota",
+    "noteSaveError": "No se pudo guardar la nota",
+    "noteDeleted": "Nota eliminada",
+    "noteDeleteError": "No se pudo eliminar la nota",
+    "notesCollapse": "Contraer nota",
+    "notesExpand": "Expandir nota",
+    "openInNotes": "Abrir en Notas",
+    "measurement": {
+      "COUNT": "Conteo",
+      "BOOLEAN": "Sí/No",
+      "PERCENT": "Porcentaje"
+    },
+    "taskDetails": "Detalles de la tarea",
+    "taskDate": "Fecha",
+    "taskTime": "Horario",
+    "taskPriority": "Prioridad",
+    "taskReminder": "Recordatorio",
+    "taskReminderMin": "{minutes} min antes",
+    "taskSource": "Origen",
     "prio": {
       "urgent": "Urgente",
       "high": "Alta",
@@ -300,7 +344,8 @@
     "offline": "Sin conexión",
     "online": "Conectado",
     "pendingStreaks": "Rachas pendientes",
-    "requiresDevMode": "Requiere Dev Mode"
+    "requiresDevMode": "Requiere Dev Mode",
+    "streakDays": "Racha: {days} días"
   },
   "pwa": {
     "installPrompt": "Instala Joidy para acceso rápido",
@@ -364,13 +409,22 @@
     },
     "language": "Idioma",
     "languageHint": "El idioma de la interfaz",
+    "editor": {
+      "title": "Editor",
+      "vimMode": "Modo Vim",
+      "vimModeHint": "Edición modal NORMAL/INSERT en el editor markdown (hjkl, dd, yy, p, i, Esc).",
+      "vimModeTouchHint": "No disponible en dispositivos solo táctiles.",
+      "on": "activado",
+      "off": "desactivado"
+    },
     "session": {
       "title": "Sesión",
       "logout": "Cerrar sesión",
       "noUser": "Sin sesión",
       "loggedOut": "Sesión cerrada",
       "hint": "Cierra la sesión para volver a la pantalla de inicio de sesión."
-    }
+    },
+    "accentContrastWarn": "Contraste bajo en modo {theme}"
   },
   "quickCapture": {
     "placeholder": "Captura una idea rápida...",
@@ -438,8 +492,8 @@
     "assignToDay": "Asignar al día seleccionado",
     "paused": "Pausado",
     "assign": "Asignar",
-    "mirrorToCalendar": "Duplicar en calendario",
     "calendar": "Calendario",
+    "openInCalendar": "Abrir en Calendario",
     "viewMonth": "Mes",
     "viewWeek": "Semana",
     "todayBtn": "Hoy",
@@ -451,6 +505,21 @@
     "assignedOn": "Asignados · {date}",
     "remove": "Quitar",
     "noGoalsForPeriod": "No hay objetivos asignados para este periodo.",
+    "realCalendar": "Calendario real",
+    "agendaLoading": "Cargando agenda…",
+    "noCalendarItems": "Sin eventos ni tareas este día.",
+    "agendaReadOnly": "Solo lectura — la edición se hace desde Calendario.",
+    "openInGoogle": "Abrir en Google Calendar",
+    "openCalendar": "Abrir Calendario",
+    "viewGoal": "Ver objetivo",
+    "linkedGoal": "Objetivo vinculado",
+    "fieldDate": "Fecha",
+    "fieldSchedule": "Horario",
+    "fieldLocation": "Ubicación",
+    "fieldStatus": "Estado",
+    "fieldDescription": "Descripción",
+    "statusDone": "Hecha",
+    "statusPending": "Pendiente",
     "yearMap": "Mapa Anual",
     "selectDayHint": "Selecciona un día para ver sus objetivos",
     "noActivityYet": "Aún no hay actividad registrada.",
@@ -1126,7 +1195,8 @@
     "tagsLabel": "Etiquetas",
     "linkUrlPrompt": "URL del enlace",
     "linkUrlTitle": "Insertar enlace",
-    "linkUrlInsert": "Insertar"
+    "linkUrlInsert": "Insertar",
+    "vimModeBadge": "Modo Vim — modo de edición actual"
   },
   "goalEditor": {
     "previewPlaceholder": "Escribe algo para ver el preview...",
@@ -1324,6 +1394,10 @@
     "ghStateClosed": "Cerradas",
     "ghStateMerged": "Mergeados",
     "ghSearch": "Buscar…",
+    "ghFilters": "Filtros",
+    "ghGroupType": "Tipo",
+    "ghGroupScope": "Origen",
+    "ghGroupState": "Estado",
     "ghNoResults": "Sin resultados con estos filtros",
     "ghConnect": "Conecta GitHub",
     "ghNoPending": "✓ Sin pendientes",
@@ -1331,7 +1405,8 @@
     "tabRecentNotes": "Notas recientes",
     "recentNotesEmpty": "Sin notas recientes",
     "viewAllNotes": "Ver todas →",
-    "pomodorosDone": "{done} de {total} pomodoros completados"
+    "pomodorosDone": "{done} de {total} pomodoros completados",
+    "ghViewAll": "Ver todo en el panel"
   },
   "graph": {
     "searchPlaceholder": "Buscar en grafo...",
@@ -1367,7 +1442,11 @@
     "globalTimer": "Temporizador global",
     "skipToContent": "Saltar al contenido principal",
     "loading": "Cargando Joidy…",
-    "setupCheckFailed": "No se pudo conectar con el servidor. Comprueba tu conexión e inténtalo de nuevo."
+    "setupCheckFailed": "No se pudo conectar con el servidor. Comprueba tu conexión e inténtalo de nuevo.",
+    "openTimers": "Abrir temporizadores",
+    "openCalendar": "Abrir calendario",
+    "openTasks": "Abrir tareas actuales",
+    "openStreaks": "Abrir rachas"
   },
   "ai": {
     "title": "Inteligencia Artificial",
@@ -1597,6 +1676,10 @@
       "dismiss": "Descartar",
       "snoozed": "Pospuesto {minutes} min",
       "restart": "Reiniciar"
+    },
+    "statusbar": {
+      "open": "Abrir Reloj",
+      "moreActive": "{count} activos"
     }
   },
   "a11y": {
@@ -1896,5 +1979,35 @@
     "moodStart": "Registrar ánimo con este tema",
     "moodAttached": "Tema añadido a tu ánimo de hoy",
     "moodError": "No se pudo guardar el ánimo"
+  },
+  "goalFromEvent": {
+    "action": "Crear objetivo",
+    "confirmTitle": "Crear objetivo",
+    "title": "Objetivo desde evento",
+    "confirm": "¿Crear un objetivo a partir de «{title}»? — {date}",
+    "confirmHint": "Se creará el objetivo y se asignará a esta fecha en Planificación.",
+    "cancel": "Cancelar",
+    "back": "Atrás",
+    "create": "Crear objetivo",
+    "created": "Objetivo creado y asignado",
+    "error": "No se pudo crear el objetivo. Inténtalo de nuevo.",
+    "goalTitle": "Título del objetivo",
+    "description": "Descripción",
+    "temporalityLabel": "Temporalidad",
+    "measurementLabel": "Medición",
+    "targetValue": "Valor objetivo",
+    "color": "Color",
+    "temporality": {
+      "ONEOFF": "Puntual",
+      "DAILY": "Diario",
+      "WEEKLY": "Semanal",
+      "MONTHLY": "Mensual",
+      "ANNUAL": "Anual"
+    },
+    "measurement": {
+      "BOOLEAN": "Hecho / No hecho",
+      "COUNT": "Cuenta numérica",
+      "PERCENT": "Porcentaje"
+    }
   }
 }

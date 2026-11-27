@@ -4,7 +4,7 @@ Verifies the shared ``encryption`` module and that every ``EncryptedText``
 column writes Fernet ciphertext to the DB while the ORM transparently
 returns plaintext — plus the lazy-migration passthrough for rows written
 before encryption landed. Security-critical: a regression here silently
-stores OAuth tokens, mail bodies or webhook secrets in cleartext.
+stores OAuth tokens or webhook secrets in cleartext.
 """
 
 import sys
@@ -24,13 +24,11 @@ if "sqlite_vec" not in sys.modules:
 from config import settings
 from database import Base
 from encryption import decrypt_str, decrypt_str_or_plaintext, encrypt_str
-from models.email_message import EmailMessage
 from models.github import GitHubRepo
 from models.google_calendar_event import GoogleCalendarEvent
 from models.google_calendar_sync import GoogleCalendarSyncState
 from models.google_token import GoogleToken
 from models.push_subscription import PushSubscription
-from services.email_service import list_emails, upsert_email
 from services.google_token_service import store_tokens
 
 
@@ -111,61 +109,6 @@ class GoogleTokenEncryptionTest(FieldEncryptionTestBase):
             db.commit()
             row = db.query(GoogleToken).filter(GoogleToken.user_id == 1).one()
             self.assertEqual(row.access_token, "ya29.pre-encryption-token")
-
-
-class EmailMessageEncryptionTest(FieldEncryptionTestBase):
-    def test_body_text_is_ciphertext_at_rest(self) -> None:
-        with self.Session() as db:
-            upsert_email(
-                db,
-                1,
-                account="a@b.c",
-                gmail_id="g1",
-                subject="Hola",
-                sender="x@y.z",
-                snippet="preview",
-                body_text="full email body contents",
-            )
-            self._assert_ciphertext(
-                self._raw(
-                    db,
-                    "SELECT body_text FROM email_messages WHERE gmail_id = 'g1'",
-                ),
-                "full email body contents",
-            )
-
-    def test_body_text_decrypts_on_read_and_search_stays_working(self) -> None:
-        with self.Session() as db:
-            email, _ = upsert_email(
-                db,
-                1,
-                account="a@b.c",
-                gmail_id="g1",
-                subject="Quarterly report",
-                sender="x@y.z",
-                body_text="confidential body",
-            )
-            self.assertEqual(email.body_text, "confidential body")
-            # Searchable columns stay plaintext on purpose — the `q` filter
-            # must keep working against subject/sender/snippet.
-            hits = list_emails(db, 1, q="Quarterly")
-            self.assertEqual([e.gmail_id for e in hits], ["g1"])
-            db.expire_all()
-            self.assertEqual(
-                db.query(EmailMessage).one().body_text,
-                "confidential body",
-            )
-
-    def test_legacy_plaintext_body_still_reads(self) -> None:
-        with self.Session() as db:
-            db.execute(
-                text(
-                    "INSERT INTO email_messages (user_id, account, gmail_id, body_text, unread, important) "
-                    "VALUES (1, 'a@b.c', 'legacy', 'old plaintext body', 1, 0)"
-                )
-            )
-            db.commit()
-            self.assertEqual(db.query(EmailMessage).one().body_text, "old plaintext body")
 
 
 class GitHubWebhookSecretEncryptionTest(FieldEncryptionTestBase):

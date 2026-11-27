@@ -43,6 +43,8 @@
     formatMarkdown: (type: string) => void;
     insertAtCursor: (text: string) => void;
     handleSave: () => void;
+    /** Active vim editing mode (#1666); null when vim mode is off/hidden. */
+    vimMode: 'normal' | 'insert' | null;
     onPrev: () => void;
     onNext: () => void;
     onDelete: () => void;
@@ -66,6 +68,7 @@
     formatMarkdown,
     insertAtCursor,
     handleSave,
+    vimMode,
     onPrev,
     onNext,
     onDelete,
@@ -277,6 +280,14 @@
     <input bind:this={fileInputEl} type="file" style="display:none" onchange={handleFileUpload} />
 
     <div class="toolbar-right">
+      {#if vimMode}
+        <span
+          class="vim-badge"
+          class:insert={vimMode === 'insert'}
+          title={$t('noteEditor.vimModeBadge')}
+          aria-live="polite">-- {vimMode === 'insert' ? 'INSERT' : 'NORMAL'} --</span
+        >
+      {/if}
       <span class="stat">{wordCount} palabras</span>
       <span class="stat">{charCount} caracteres</span>
 
@@ -416,6 +427,21 @@
     font-family: var(--font-mono);
     color: var(--text-muted);
     white-space: nowrap;
+  }
+
+  .vim-badge {
+    font-size: 10px;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: 2px 6px;
+    white-space: nowrap;
+    letter-spacing: 0.04em;
+  }
+  .vim-badge.insert {
+    color: var(--xp, var(--accent));
+    border-color: var(--xp, var(--accent));
   }
 
   .toolbar-btn {

@@ -56,7 +56,6 @@ CREATE TABLE notes (
     content TEXT DEFAULT '',
     source VARCHAR(50) DEFAULT 'joidy',
     source_path VARCHAR(1000),
-    is_embedded BOOLEAN DEFAULT FALSE,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -70,7 +69,6 @@ CREATE INDEX idx_notes_source_path ON notes(source_path);
 | content | TEXT | - | Contenido markdown |
 | source | VARCHAR(50) | joidy, obsidian | Origen de la nota |
 | source_path | VARCHAR(1000) | - | Ruta en Obsidian (nullable) |
-| is_embedded | BOOLEAN | - | Si es nota embebida |
 | created_at | DATETIME | - | Fecha de creación |
 | updated_at | DATETIME | - | Fecha de modificación |
 
@@ -104,8 +102,6 @@ CREATE TABLE tags (
 CREATE TABLE note_tags (
     note_id INTEGER REFERENCES notes(id) ON DELETE CASCADE,
     tag_id INTEGER REFERENCES tags(id) ON DELETE CASCADE,
-    confidence FLOAT DEFAULT 1.0,
-    source VARCHAR(20) DEFAULT 'manual',
     PRIMARY KEY (note_id, tag_id)
 );
 ```
@@ -114,8 +110,6 @@ CREATE TABLE note_tags (
 |-------|------|-------------|
 | note_id | INTEGER | FK a notes.id |
 | tag_id | INTEGER | FK a tags.id |
-| confidence | FLOAT | 1.0 = manual, <1.0 = sugerido IA |
-| source | VARCHAR(20) | manual o ai |
 
 ---
 
@@ -731,7 +725,6 @@ erDiagram
         text content
         string source
         string source_path
-        boolean is_embedded
         datetime created_at
         datetime updated_at
     }
@@ -749,8 +742,6 @@ erDiagram
     note_tags {
         integer note_id PK
         integer tag_id PK
-        float confidence
-        string source
     }
     note_links {
         integer source_note_id PK
@@ -991,7 +982,6 @@ class Note(Base):
     content: Mapped[str] = mapped_column(Text, default="")
     source: Mapped[str] = mapped_column(String(50), default="joidy")
     source_path: Mapped[str | None] = mapped_column(String(1000), nullable=True, index=True)
-    is_embedded: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 

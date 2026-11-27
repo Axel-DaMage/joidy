@@ -8,6 +8,8 @@
     open = false,
     title = '',
     size = 'md',
+    footerAlign = 'end',
+    titleAlign = 'left',
     onClose,
     children,
     footer,
@@ -15,6 +17,8 @@
     open?: boolean;
     title?: string;
     size?: 'sm' | 'md' | 'lg';
+    footerAlign?: 'start' | 'center' | 'end';
+    titleAlign?: 'left' | 'center';
     onClose?: () => void;
     children?: import('svelte').Snippet;
     footer?: import('svelte').Snippet;
@@ -43,7 +47,7 @@
       use:focusTrap={{ onEscape: () => onClose?.() }}
     >
       <div class="modal-header">
-        <h3 id={titleId} class="modal-title">{title}</h3>
+        <h3 id={titleId} class="modal-title" style:text-align={titleAlign}>{title}</h3>
         <button class="modal-close" onclick={() => onClose?.()} aria-label={$t('modalDialog.close')}>
           <X size={18} />
         </button>
@@ -52,7 +56,7 @@
         {@render children?.()}
       </div>
       {#if footer}
-        <div class="modal-footer">
+        <div class="modal-footer" class:modal-footer-center={footerAlign === 'center'} class:modal-footer-start={footerAlign === 'start'}>
           {@render footer()}
         </div>
       {/if}
@@ -138,8 +142,19 @@
     border-top: 1px solid var(--border);
     display: flex;
     justify-content: flex-end;
+    flex-wrap: wrap;
     gap: 12px;
     flex-shrink: 0;
+  }
+
+  /* class:-directive classes are dynamic — Svelte prunes their selectors
+     unless marked :global, so these must opt out of scoping. */
+  .modal-footer:global(.modal-footer-center) {
+    justify-content: center;
+  }
+
+  .modal-footer:global(.modal-footer-start) {
+    justify-content: flex-start;
   }
 
   @media (max-width: 480px) {

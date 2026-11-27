@@ -11,27 +11,33 @@ that rotate refresh tokens (Strava does on every refresh) must return the
 new ``refresh_token`` from their refresher; it is persisted, replacing the
 old one. A failed refresh returns ``None`` — callers map that to a
 "reconnect required" error, never to a leaked/stale credential.
+
+The crypto/expiry primitives are shared with ``google_token_service``
+through ``services.oauth_tokens`` (#1530); this module keeps only the
+``IntegrationToken``-specific lifecycle.
 """
 
 import logging
 from collections.abc import Awaitable, Callable
-from datetime import UTC, datetime, timedelta
+from datetime import datetime
 from typing import Any
 
-from encryption import decrypt_str, encrypt_str
 from models.integration_token import IntegrationToken
+from services.oauth_tokens import (
+    access_token_fresh,
+    decrypt_token,
+    encrypt_token,
+    has_usable_refresh_token,
+    resolve_expiry,
+)
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
-# Refresh when the access token expires within this window — covers clock
-# skew and in-flight requests that would otherwise 401 mid-call.
-REFRESH_BUFFER_SECONDS = 60
-
 # Well-known provider keys. The table is provider-agnostic; these constants
 # keep call sites typo-proof.
 PROVIDER_STRAVA = "strava"
-PROVIDER_SPOTIFY = "spotify"  # reserved for #45
+PROVIDER_SPOTIFY = "spotify"
 
 # A refresher takes the decrypted refresh token and returns a normalized
 # token payload::
@@ -45,24 +51,6 @@ PROVIDER_SPOTIFY = "spotify"  # reserved for #45
 #         "account_id": str | None,     # provider-side user id, if known
 #     }
 Refresher = Callable[[str], Awaitable[dict[str, Any]]]
-
-
-def encrypt_token(token: str) -> str:
-    return encrypt_str(token)
-
-
-def decrypt_token(encrypted: str) -> str | None:
-    return decrypt_str(encrypted)
-
-
-def _resolve_expiry(expires_in: int | None, expires_at: datetime | None) -> datetime | None:
-    if expires_at is not None:
-        if expires_at.tzinfo is None:
-            expires_at = expires_at.replace(tzinfo=UTC)
-        return expires_at
-    if expires_in is not None:
-        return datetime.now(UTC) + timedelta(seconds=expires_in)
-    return None
 
 
 def store_tokens(
@@ -87,7 +75,7 @@ def store_tokens(
     if refresh_token:
         row.refresh_token_encrypted = encrypt_token(refresh_token)
     row.token_type = token_type
-    row.expires_at = _resolve_expiry(expires_in, expires_at)
+    row.expires_at = resolve_expiry(expires_in, expires_at)
     if scope is not None:
         row.scope = scope
     if account_id is not None:
@@ -103,10 +91,7 @@ def get_stored_token(db: Session, provider: str) -> IntegrationToken | None:
 
 def is_connected(db: Session, provider: str) -> bool:
     """True when a usable refresh token exists for ``provider``."""
-    row = get_stored_token(db, provider)
-    if not row or not row.refresh_token_encrypted:
-        return False
-    return decrypt_token(row.refresh_token_encrypted) is not None
+    return has_usable_refresh_token(get_stored_token(db, provider))
 
 
 def clear_tokens(db: Session, provider: str) -> None:
@@ -129,13 +114,8 @@ async def get_valid_access_token(db: Session, provider: str, refresher: Refreshe
         return None
 
     # Still-valid access token (with buffer) — no refresh needed.
-    if row.access_token and row.expires_at:
-        now = datetime.now(UTC)
-        expires_at = row.expires_at
-        if expires_at.tzinfo is None:
-            expires_at = expires_at.replace(tzinfo=UTC)
-        if now < expires_at - timedelta(seconds=REFRESH_BUFFER_SECONDS):
-            return row.access_token
+    if access_token_fresh(row.access_token, row.expires_at):
+        return row.access_token
 
     refresh_token = decrypt_token(row.refresh_token_encrypted)
     if not refresh_token:
@@ -157,7 +137,7 @@ async def get_valid_access_token(db: Session, provider: str, refresher: Refreshe
     row.access_token = new_access
     if data.get("refresh_token"):
         row.refresh_token_encrypted = encrypt_token(str(data["refresh_token"]))
-    row.expires_at = _resolve_expiry(
+    row.expires_at = resolve_expiry(
         data.get("expires_in") if isinstance(data.get("expires_in"), int) else None,
         data.get("expires_at") if isinstance(data.get("expires_at"), datetime) else None,
     )

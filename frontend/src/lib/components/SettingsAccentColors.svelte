@@ -1,6 +1,20 @@
 <script lang="ts">
-  import { Minus, Plus } from 'lucide-svelte';
-  import { accentColors, MAX_COLORS } from '$lib/stores/settings';
+  import { AlertTriangle, Minus, Plus } from 'lucide-svelte';
+  import { t } from 'svelte-i18n';
+  import {
+    accentColors,
+    getAccentWarnings,
+    themeMode,
+    MAX_COLORS,
+  } from '$lib/stores/settings';
+
+  // Non-blocking WCAG check (#1655): flag picks whose contrast vs the active
+  // theme background falls below the 3:1 UI floor. The applied palette is
+  // still auto-corrected — this only tells the user their raw pick is dim.
+  $: warnings = new Set(getAccentWarnings($accentColors, $themeMode).map((w) => w.index));
+  $: warningLabel = $t('settings.accentContrastWarn', {
+    values: { theme: $t(`settings.${$themeMode}`) },
+  });
 
   function onColorPicker(i: number, e: Event) {
     accentColors.setColor(i, (e.target as HTMLInputElement).value);
@@ -121,6 +135,16 @@
         placeholder="#c8a96e"
         aria-label="Color {i + 1} hex"
       />
+      {#if warnings.has(i)}
+        <span
+          class="contrast-warn"
+          role="img"
+          title={warningLabel}
+          aria-label={warningLabel}
+        >
+          <AlertTriangle size={12} />
+        </span>
+      {/if}
       {#if $accentColors.length > 1}
         <button
           class="color-rm"
@@ -134,6 +158,13 @@
     </div>
   {/each}
 </div>
+
+{#if warnings.size > 0}
+  <p class="accent-warn-note mono">
+    <AlertTriangle size={10} />
+    {warningLabel}
+  </p>
+{/if}
 
 {#if $accentColors.length < MAX_COLORS}
   <button class="add-color-btn mono" onclick={() => accentColors.addColor()}>
@@ -247,6 +278,24 @@
   .color-rm:hover {
     color: var(--error);
     border-color: var(--error);
+  }
+
+  /* Low-contrast indicator (#1655) — warning only, never blocks the pick. */
+  .contrast-warn {
+    display: flex;
+    align-items: center;
+    color: var(--warning);
+    flex-shrink: 0;
+  }
+
+  .accent-warn-note {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin: 8px 0 0;
+    font-size: 10px;
+    color: var(--warning);
+    letter-spacing: 0.04em;
   }
 
   .add-color-btn {

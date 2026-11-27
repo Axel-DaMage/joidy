@@ -210,18 +210,3 @@ def _top_event_values_python(
 
     ranked = sorted(counts.items(), key=lambda kv: kv[1], reverse=True)[:limit]
     return [{data_key: k, "count": v} for k, v in ranked]
-
-
-def get_feature_usage(db: Session, user_id: int, days: int = 30) -> list[dict]:
-    """Return which features are used most over the last ``days`` days.
-
-    Each entry is ``{feature, count}`` sorted by count descending. This is a
-    thin wrapper over the ``top_features`` aggregation exposed separately for
-    callers that only care about feature usage.
-    """
-    if days < 1:
-        days = 1
-    if days > 366:
-        days = 366
-    since = datetime.now(UTC) - timedelta(days=days)
-    return _top_event_values(db, user_id, since, EVENT_FEATURE_USE, "feature", 50)

@@ -23,6 +23,7 @@ from watchers.vault_watcher import (
     PersistentEventLog,
     VaultEvent,
     _consume_vault_events,
+    _Fingerprint,
     _fingerprint,
 )
 from watchfiles import Change
@@ -273,7 +274,9 @@ class TestVaultWatcherIntegration(unittest.IsolatedAsyncioTestCase):
             content = _write_md(old_path, "Renamed", "Same content #move")
 
             # Seed the fingerprint for the old path so the consumer can match.
-            vault_watcher._fingerprints[str(old_path)] = _fingerprint(content)
+            vault_watcher._fingerprints[str(old_path)] = _Fingerprint(
+                _fingerprint(content), len(content.encode("utf-8"))
+            )
 
             # Simulate the rename: old file deleted, new file created with same content.
             old_path.unlink()
@@ -524,7 +527,7 @@ class TestSyncRaces(unittest.IsolatedAsyncioTestCase):
             # Worker "v1" synced old_name.md (fingerprint persisted), then
             # recorded the delete+add events and crashed before processing.
             log = PersistentEventLog(db_path)
-            log.set_fingerprint(str(old_path), _fingerprint(content))
+            log.set_fingerprint(str(old_path), _fingerprint(content), len(content.encode("utf-8")))
             log.add(str(old_path), Change.deleted)
             log.add(str(new_path), Change.added)
             log.close()
@@ -640,16 +643,18 @@ class TestSyncRaces(unittest.IsolatedAsyncioTestCase):
             log = PersistentEventLog(db_path)
             vault_watcher._bind_event_log(log)
             try:
-                vault_watcher._record_fingerprint("/vault/x.md", "f00d")
+                vault_watcher._record_fingerprint("/vault/x.md", "f00d", 123)
             finally:
                 log.close()
 
-            # "Restart": a new log instance sees the persisted fingerprint.
+            # "Restart": a new log instance sees the persisted fingerprint —
+            # size is recorded alongside the hash for the rename-detection
+            # size gate (#1537).
             log2 = PersistentEventLog(db_path)
-            assert log2.fingerprints() == {"/vault/x.md": "f00d"}
+            assert log2.fingerprints() == {"/vault/x.md": _Fingerprint("f00d", 123)}
             vault_watcher._bind_event_log(log2)
             try:
-                assert vault_watcher._fingerprints["/vault/x.md"] == "f00d"
+                assert vault_watcher._fingerprints["/vault/x.md"].hash == "f00d"
                 vault_watcher._drop_fingerprint("/vault/x.md")
                 assert log2.fingerprints() == {}
             finally:
@@ -715,7 +720,9 @@ class TestSyncRaces(unittest.IsolatedAsyncioTestCase):
             content = _write_md(new_path, "Renamed", "same body #move")
 
             # Seed the rename fingerprint so the batch pairs delete+add.
-            vault_watcher._fingerprints[str(old_path)] = _fingerprint(content)
+            vault_watcher._fingerprints[str(old_path)] = _Fingerprint(
+                _fingerprint(content), len(content.encode("utf-8"))
+            )
 
             log = PersistentEventLog(root / "events.db")
             try:

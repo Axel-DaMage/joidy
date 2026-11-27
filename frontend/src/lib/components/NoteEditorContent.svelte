@@ -1,8 +1,10 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte';
+  import { onDestroy, tick } from 'svelte';
   import WysiwygEditor from './WysiwygEditor.svelte';
   import NoteEditorPreview from './NoteEditorPreview.svelte';
   import { showFrontmatter, hideTagsLine } from '$lib/stores/settings';
+  import { vimModeEnabled, vimEditorMode, isTouchDevice } from '$lib/stores/vim';
+  import { VimEngine } from '$lib/utils/vimEngine';
   import { extractTagsFromContent, recomposeHiddenSlices } from '$lib/utils/noteContent';
   import { highlightMarkdown } from '$lib/utils/markdownHighlight';
   import { t } from 'svelte-i18n';
@@ -24,6 +26,8 @@
     scheduleSnapshot: () => void;
     onContentChange: () => void;
     handleSave: () => void;
+    onUndo: () => void;
+    onRedo: () => void;
   }
 
   let {
@@ -42,10 +46,13 @@
     scheduleSnapshot,
     onContentChange,
     handleSave,
+    onUndo,
+    onRedo,
   }: Props = $props();
 
   let backdropEl = $state<HTMLElement | undefined>();
   let lineGutterEl = $state<HTMLElement | undefined>();
+  let vimCaretEl = $state<HTMLElement | undefined>();
 
   function syncScroll() {
     if (backdropEl && textareaEl) {
@@ -54,6 +61,10 @@
     }
     if (lineGutterEl && textareaEl) {
       lineGutterEl.scrollTop = textareaEl.scrollTop;
+    }
+    if (vimCaretEl && textareaEl) {
+      vimCaretEl.scrollTop = textareaEl.scrollTop;
+      vimCaretEl.scrollLeft = textareaEl.scrollLeft;
     }
   }
 
@@ -121,8 +132,7 @@
     }
   }
 
-  function updateVisibleContent(e: Event) {
-    const val = (e.currentTarget as HTMLTextAreaElement).value;
+  function applyVisibleValue(val: string) {
     scheduleSnapshot();
     content = recomposeHiddenSlices(val, {
       tagsLine: $hideTagsLine && tags.length > 0 ? currentTagsLine : '',
@@ -132,6 +142,103 @@
     scheduleTagSync();
     onContentChange();
   }
+
+  function updateVisibleContent(e: Event) {
+    const el = e.currentTarget as HTMLTextAreaElement;
+    applyVisibleValue(el.value);
+    vimCaret = el.selectionStart;
+  }
+
+  // ── Vim mode (#1666) ──────────────────────────────────────────────────────
+  // The engine is a pure state machine (lib/utils/vimEngine): it never touches
+  // the DOM, works on the *visible* buffer, and hands back caret moves, edits
+  // (recomposed with the hidden frontmatter/tags slices via applyVisibleValue)
+  // or undo/redo actions mapped to the editor's existing UndoHistory.
+  const vim = new VimEngine();
+  let vimCaret = $state(0);
+  // Touch-only devices never get modal editing — it would trap the virtual
+  // keyboard in NORMAL mode. Touch laptops (fine+coarse pointer) keep it.
+  let vimActive = $derived($vimModeEnabled && !isTouchDevice());
+
+  // Fresh engine every time vim mode kicks in so a stale pending operator or
+  // insert session never leaks across toggles/notes.
+  $effect(() => {
+    if (vimActive) {
+      vim.reset();
+      vimEditorMode.set('normal');
+    }
+  });
+
+  function syncVimCaret() {
+    if (textareaEl) vimCaret = textareaEl.selectionStart;
+  }
+
+  function handleVimKeydown(e: KeyboardEvent) {
+    if (!vimActive || !textareaEl) return;
+    // 229 = IME processing keyCode on some browsers; e.isComposing covers the
+    // rest. Composition (accents, CJK) must flow through untouched.
+    if (e.isComposing || e.keyCode === 229) return;
+    const res = vim.handleKey(e, {
+      text: textareaEl.value,
+      start: textareaEl.selectionStart,
+      end: textareaEl.selectionEnd,
+    });
+    if (!res.handled) return;
+    // Consumed keys must not reach the window-level shortcuts (a vim 'p' would
+    // otherwise also trigger Ctrl+P preview if a modifier leaked through).
+    e.preventDefault();
+    e.stopPropagation();
+    if (res.mode) {
+      // The engine reports transitions — the host applies them to both the
+      // engine itself (handleKey branches on it) and the badge store.
+      vim.mode = res.mode;
+      vimEditorMode.set(res.mode);
+    }
+    if (res.action === 'undo') {
+      onUndo();
+      return;
+    }
+    if (res.action === 'redo') {
+      onRedo();
+      return;
+    }
+    if (res.edit) {
+      const caret = res.edit.caret;
+      applyVisibleValue(res.edit.text);
+      tick().then(() => {
+        textareaEl?.setSelectionRange(caret, caret);
+        vimCaret = caret;
+      });
+    } else if (res.caret !== undefined) {
+      textareaEl.setSelectionRange(res.caret, res.caret);
+      vimCaret = res.caret;
+    } else {
+      syncVimCaret();
+    }
+  }
+
+  function escapeHtml(s: string): string {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  // Block-caret overlay for NORMAL mode: a transparent mirror of the text with
+  // a highlighted span at the caret offset. It renders in a layer stacked
+  // between the syntax backdrop and the (transparent-text) textarea, sharing
+  // their exact box model so the block lands on the character under the caret.
+  let vimCaretHtml = $derived(
+    (() => {
+      const text = visibleEditorContent;
+      const pos = Math.min(Math.max(0, vimCaret), text.length);
+      const at = text[pos];
+      // Normal char → the span *is* that char (layout identical). Newline or
+      // EOF → a space-shaped block that doesn't consume the line break.
+      const consume = at !== undefined && at !== '\n';
+      const marked = `<span class="vim-block">${consume ? escapeHtml(at as string) : ' '}</span>`;
+      let html = escapeHtml(text.slice(0, pos)) + marked + escapeHtml(text.slice(consume ? pos + 1 : pos));
+      if (html.endsWith('\n')) html += '<br/>';
+      return html;
+    })()
+  );
 
   // The WYSIWYG editor never receives the frontmatter block: marked parses
   // `---` as setext/`<hr>` and turndown can't emit YAML back, so a round-trip
@@ -213,11 +320,20 @@
       <div class="backdrop" bind:this={backdropEl} aria-hidden="true">
         <div class="highlights">{@html editorHighlightedHtml}</div>
       </div>
+      {#if vimActive && $vimEditorMode === 'normal'}
+        <div class="vim-caret-layer" bind:this={vimCaretEl} aria-hidden="true">
+          <div class="vim-caret-text">{@html vimCaretHtml}</div>
+        </div>
+      {/if}
       <textarea
         class="content-textarea"
+        class:vim-normal={vimActive && $vimEditorMode === 'normal'}
         bind:this={textareaEl}
         value={visibleEditorContent}
         oninput={updateVisibleContent}
+        onkeydown={handleVimKeydown}
+        onclick={syncVimCaret}
+        onkeyup={syncVimCaret}
         onscroll={syncScroll}
         placeholder="Escribe en markdown... (Ctrl+S para guardar, Ctrl+P para preview)"
         aria-label={$t('noteEditor.contentLabel')}
@@ -313,6 +429,58 @@
   }
   .content-textarea::placeholder {
     color: var(--text-muted);
+  }
+
+  /* Vim NORMAL mode: the native line caret is hidden and replaced by the
+     .vim-block span painted in .vim-caret-layer below. */
+  .content-textarea.vim-normal {
+    caret-color: transparent;
+  }
+
+  /* Same box model as .backdrop/.highlights so the block lands exactly on the
+     character under the caret. Text is transparent — only .vim-block shows. */
+  .vim-caret-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    pointer-events: none;
+  }
+
+  .vim-caret-text {
+    padding: 24px 24px 24px 60px;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    color: transparent;
+    tab-size: 2;
+  }
+
+  .vim-caret-layer :global(.vim-block) {
+    background: var(--xp, var(--accent));
+    color: var(--bg);
+    border-radius: 1px;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .vim-caret-layer :global(.vim-block) {
+      animation: vim-caret-blink 1.1s steps(1) infinite;
+    }
+  }
+
+  @keyframes vim-caret-blink {
+    0%,
+    55% {
+      opacity: 1;
+    }
+    56%,
+    100% {
+      opacity: 0;
+    }
   }
 
   /* Style selection to be visible over transparent text */

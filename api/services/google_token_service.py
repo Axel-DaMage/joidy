@@ -5,6 +5,10 @@ shared ``encryption`` module: the refresh token through explicit
 ``encrypt_token`` calls, and the access token transparently through the
 ``EncryptedText`` column on ``GoogleToken`` (#1286). Provides helpers to get
 a valid access token (auto-refreshing when expired).
+
+The crypto/expiry primitives are shared with ``integration_token_service``
+through ``services.oauth_tokens`` (#1530); this module keeps only the
+``GoogleToken``-specific lifecycle.
 """
 
 import logging
@@ -12,22 +16,23 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from config import settings
-from encryption import decrypt_str, encrypt_str
 from models.google_token import GoogleToken
 from services.http_client import http_client
+from services.oauth_tokens import (
+    access_token_fresh,
+    decrypt_token,
+    encrypt_token,
+    has_usable_refresh_token,
+    resolve_expiry,
+)
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"  # noqa: S105 — OAuth endpoint URL, not a password
 
-
-def encrypt_token(token: str) -> str:
-    return encrypt_str(token)
-
-
-def decrypt_token(encrypted: str) -> str | None:
-    return decrypt_str(encrypted)
+# ``encrypt_token``/``decrypt_token`` are re-exported from
+# ``services.oauth_tokens`` so existing imports (and tests) keep working.
 
 
 def store_tokens(
@@ -49,7 +54,7 @@ def store_tokens(
     if refresh_token:
         row.refresh_token_encrypted = encrypt_token(refresh_token)
     row.token_type = token_type
-    row.expires_at = datetime.now(UTC) + timedelta(seconds=expires_in)
+    row.expires_at = resolve_expiry(expires_in, None)
     row.scope = scope
     db.commit()
     db.refresh(row)
@@ -61,12 +66,7 @@ def get_stored_token(db: Session) -> GoogleToken | None:
 
 
 def is_connected(db: Session) -> bool:
-    row = get_stored_token(db)
-    if not row:
-        return False
-    if not row.refresh_token_encrypted:
-        return False
-    return decrypt_token(row.refresh_token_encrypted) is not None
+    return has_usable_refresh_token(get_stored_token(db))
 
 
 def clear_tokens(db: Session) -> None:
@@ -76,29 +76,13 @@ def clear_tokens(db: Session) -> None:
         db.commit()
 
 
-async def get_valid_access_token(db: Session) -> str | None:
-    """Return a valid access token, refreshing if necessary.
+async def refresh_access_token(refresh_token: str) -> dict[str, Any] | None:
+    """Exchange a Google OAuth refresh token for a fresh access token.
 
-    Returns None if not connected or refresh fails.
+    Returns the provider JSON (``access_token``, ``expires_in``, …) or None
+    on failure. Shared by the single ``google_tokens`` row and per-account
+    Gmail credentials on ``email_accounts`` (#1659).
     """
-    row = get_stored_token(db)
-    if not row or not row.refresh_token_encrypted:
-        return None
-
-    # If access token is still valid (with 60s buffer), use it
-    if row.access_token and row.expires_at:
-        now = datetime.now(UTC)
-        expires_at = row.expires_at
-        if expires_at.tzinfo is None:
-            expires_at = expires_at.replace(tzinfo=UTC)
-        if now < expires_at - timedelta(seconds=60):
-            return row.access_token
-
-    # Need to refresh
-    refresh_token = decrypt_token(row.refresh_token_encrypted)
-    if not refresh_token:
-        return None
-
     if not settings.google_client_id or not settings.google_client_secret:
         logger.warning("[google] Cannot refresh: client credentials not configured")
         return None
@@ -114,9 +98,32 @@ async def get_valid_access_token(db: Session) -> str | None:
         async with http_client(timeout=30.0) as client:
             r = await client.post(GOOGLE_TOKEN_URL, data=payload)
             r.raise_for_status()
-            data: dict[str, Any] = r.json()
+            return r.json()
     except Exception as e:
         logger.error("[google] Token refresh failed: %s", e)
+        return None
+
+
+async def get_valid_access_token(db: Session) -> str | None:
+    """Return a valid access token, refreshing if necessary.
+
+    Returns None if not connected or refresh fails.
+    """
+    row = get_stored_token(db)
+    if not row or not row.refresh_token_encrypted:
+        return None
+
+    # If access token is still valid (with 60s buffer), use it
+    if access_token_fresh(row.access_token, row.expires_at):
+        return row.access_token
+
+    # Need to refresh
+    refresh_token = decrypt_token(row.refresh_token_encrypted)
+    if not refresh_token:
+        return None
+
+    data = await refresh_access_token(refresh_token)
+    if not data:
         return None
 
     new_access: str = data.get("access_token", "")
