@@ -219,7 +219,7 @@ Campos cifrados actualmente:
 | Tabla | Columnas |
 |-------|----------|
 | `google_tokens` | `access_token`, `refresh_token_encrypted` |
-| `email_messages` | `body_text` |
+| `email_messages` (dormant since #1508) | `body_text` |
 | `github_repos` | `webhook_secret` |
 | `push_subscriptions` | `endpoint`, `p256dh`, `auth` |
 | `google_calendar_events` | `summary`, `description`, `location` |
@@ -228,7 +228,8 @@ Campos cifrados actualmente:
 **Permanecen en texto plano a propósito** (Fernet no es determinista — el
 ciphertext nunca coincide con filtros de igualdad ni `ILIKE`):
 
-- `email_messages.subject/sender/snippet` — los busca el filtro `q` del inbox.
+- `email_messages.subject/sender/snippet` — tabla dormida desde #1508 (los
+  buscaba el filtro `q` del inbox, ya eliminado).
 - Contenido de notas, `google_calendar_events.html_link` y metadatos en
   general (títulos, etiquetas, timestamps).
 
