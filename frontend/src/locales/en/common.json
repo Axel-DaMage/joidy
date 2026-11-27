@@ -370,7 +370,8 @@
       "noUser": "No session",
       "loggedOut": "Signed out",
       "hint": "Log out to go back to the login screen."
-    }
+    },
+    "accentContrastWarn": "Low contrast in {theme} mode"
   },
   "quickCapture": {
     "placeholder": "Capture a quick idea...",
