@@ -76,6 +76,34 @@ def clear_tokens(db: Session) -> None:
         db.commit()
 
 
+async def refresh_access_token(refresh_token: str) -> dict[str, Any] | None:
+    """Exchange a Google OAuth refresh token for a fresh access token.
+
+    Returns the provider JSON (``access_token``, ``expires_in``, …) or None
+    on failure. Shared by the single ``google_tokens`` row and per-account
+    Gmail credentials on ``email_accounts`` (#1659).
+    """
+    if not settings.google_client_id or not settings.google_client_secret:
+        logger.warning("[google] Cannot refresh: client credentials not configured")
+        return None
+
+    payload = {
+        "client_id": settings.google_client_id,
+        "client_secret": settings.google_client_secret,
+        "refresh_token": refresh_token,
+        "grant_type": "refresh_token",
+    }
+
+    try:
+        async with http_client(timeout=30.0) as client:
+            r = await client.post(GOOGLE_TOKEN_URL, data=payload)
+            r.raise_for_status()
+            return r.json()
+    except Exception as e:
+        logger.error("[google] Token refresh failed: %s", e)
+        return None
+
+
 async def get_valid_access_token(db: Session) -> str | None:
     """Return a valid access token, refreshing if necessary.
 
@@ -99,24 +127,8 @@ async def get_valid_access_token(db: Session) -> str | None:
     if not refresh_token:
         return None
 
-    if not settings.google_client_id or not settings.google_client_secret:
-        logger.warning("[google] Cannot refresh: client credentials not configured")
-        return None
-
-    payload = {
-        "client_id": settings.google_client_id,
-        "client_secret": settings.google_client_secret,
-        "refresh_token": refresh_token,
-        "grant_type": "refresh_token",
-    }
-
-    try:
-        async with http_client(timeout=30.0) as client:
-            r = await client.post(GOOGLE_TOKEN_URL, data=payload)
-            r.raise_for_status()
-            data: dict[str, Any] = r.json()
-    except Exception as e:
-        logger.error("[google] Token refresh failed: %s", e)
+    data = await refresh_access_token(refresh_token)
+    if not data:
         return None
 
     new_access: str = data.get("access_token", "")

@@ -1,4 +1,5 @@
 from fastapi.testclient import TestClient
+from models.email_account import PROVIDER_N8N
 
 
 def _payload(gmail_id: str = "abc123", account: str = "me@gmail.com", **overrides) -> dict:
@@ -133,3 +134,85 @@ def test_invalid_payload_rejected(client: TestClient):
 
 def test_push_needs_auth(client_no_auth: TestClient):
     assert client_no_auth.post("/emails/", json=_payload()).status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Multi-account ingestion (#1659) — email_accounts linkage on push + filters
+# ---------------------------------------------------------------------------
+
+
+def test_push_links_message_to_n8n_account(client: TestClient, db_session):
+    """An n8n push get-or-creates an ``email_accounts`` row (provider n8n) and
+    stamps ``account_id`` on the message — ingestion works with zero setup."""
+    from models.email_account import PROVIDER_N8N, EmailAccount
+
+    res = client.post("/emails/", json=_payload())
+    assert res.status_code == 201
+    account_id = res.json()["account_id"]
+    assert account_id is not None
+
+    row = db_session.query(EmailAccount).filter(EmailAccount.id == account_id).one()
+    assert row.provider == PROVIDER_N8N
+    assert row.email_address == "me@gmail.com"
+
+    # A second push to the same address reuses the account row.
+    res2 = client.post("/emails/", json=_payload(gmail_id="other1"))
+    assert res2.json()["account_id"] == account_id
+
+
+def test_push_links_to_matching_gmail_account(client: TestClient, db_session):
+    """A push whose ``account`` label matches a credentialled gmail mailbox
+    links to that row instead of duplicating it as n8n (#1659)."""
+    from models.email_account import PROVIDER_GMAIL, EmailAccount
+
+    gmail_row = EmailAccount(
+        user_id=1,
+        provider=PROVIDER_GMAIL,
+        email_address="me@gmail.com",
+        display_name="me@gmail.com",
+        is_active=True,
+    )
+    db_session.add(gmail_row)
+    db_session.commit()
+
+    res = client.post("/emails/", json=_payload("g1", account="me@gmail.com"))
+    assert res.json()["account_id"] == gmail_row.id
+
+
+def test_account_id_filter(client: TestClient):
+    first = client.post("/emails/", json=_payload("f1", account="me@gmail.com")).json()
+    client.post("/emails/", json=_payload("f2", account="work@gmail.com"))
+
+    scoped = client.get("/emails/", params={"account_id": first["account_id"]})
+    assert scoped.status_code == 200
+    assert [m["gmail_id"] for m in scoped.json()["items"]] == ["f1"]
+    assert scoped.json()["total"] == 1
+
+
+def test_accounts_view_includes_account_metadata(client: TestClient, db_session):
+    """The accounts view merges ``email_accounts`` rows: pushed mail shows its
+    account id/provider, and a connected mailbox with zero synced mail still
+    appears for the UI switcher (#1659)."""
+    from models.email_account import PROVIDER_GMAIL, EmailAccount
+
+    db_session.add(
+        EmailAccount(
+            user_id=1,
+            provider=PROVIDER_GMAIL,
+            email_address="other@gmail.com",
+            display_name="Other",
+            is_active=True,
+        )
+    )
+    db_session.commit()
+    client.post("/emails/", json=_payload("a1", account="me@gmail.com"))
+
+    accounts = client.get("/emails/accounts")
+    assert accounts.status_code == 200
+    by_name = {a["account"]: a for a in accounts.json()}
+    assert by_name["me@gmail.com"]["provider"] == PROVIDER_N8N
+    assert by_name["me@gmail.com"]["account_id"] is not None
+    assert by_name["me@gmail.com"]["total"] == 1
+    assert by_name["other@gmail.com"]["provider"] == PROVIDER_GMAIL
+    assert by_name["other@gmail.com"]["display_name"] == "Other"
+    assert by_name["other@gmail.com"]["total"] == 0

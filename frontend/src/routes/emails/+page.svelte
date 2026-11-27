@@ -19,7 +19,10 @@
   let absoluteTotal = $derived(accounts.reduce((sum, a) => sum + a.total, 0));
 
   let searchQuery = $state('');
-  let accountFilter = $state<string | null>(null);
+  // Selected mailbox (#1659): account_id when the chip maps to an
+  // email_accounts row, else the raw account label for unlinked rows.
+  let accountFilterId = $state<number | null>(null);
+  let accountFilterLabel = $state<string | null>(null);
   let onlyUnread = $state(true);
   let onlyImportant = $state(false);
 
@@ -64,7 +67,8 @@
       const inbox = await api.emails.list({
         unread: onlyUnread ? true : undefined,
         important: onlyImportant ? true : undefined,
-        account: accountFilter ?? undefined,
+        accountId: accountFilterId ?? undefined,
+        account: accountFilterId === null ? (accountFilterLabel ?? undefined) : undefined,
         q: searchQuery.trim() || undefined,
         limit: 200,
       });
@@ -124,9 +128,31 @@
     }
   }
 
-  function pickAccount(account: string | null): void {
-    accountFilter = accountFilter === account ? null : account;
+  function pickAccount(account: EmailAccountStats | null): void {
+    if (account === null) {
+      accountFilterId = null;
+      accountFilterLabel = null;
+    } else if (accountFilterId !== null && accountFilterId === account.account_id) {
+      accountFilterId = null;
+      accountFilterLabel = null;
+    } else if (accountFilterId === null && account.account_id === null && accountFilterLabel === account.account) {
+      accountFilterId = null;
+      accountFilterLabel = null;
+    } else {
+      accountFilterId = account.account_id;
+      accountFilterLabel = account.account_id === null ? account.account : null;
+    }
     refresh();
+  }
+
+  function isPicked(account: EmailAccountStats): boolean {
+    if (account.account_id !== null) return accountFilterId === account.account_id;
+    return accountFilterId === null && accountFilterLabel === account.account;
+  }
+
+  /** Chip label: friendly name when the backend provides one. */
+  function accountLabel(account: EmailAccountStats): string {
+    return account.display_name || account.account;
   }
 
   function toggleUnreadFilter(): void {
@@ -179,12 +205,13 @@
 
   {#if accounts.length > 0}
     <div class="account-chips">
-      <button class="filter-chip" class:active={accountFilter === null} onclick={() => pickAccount(null)}>
+      <button class="filter-chip" class:active={accountFilterId === null && accountFilterLabel === null} onclick={() => pickAccount(null)}>
         {$t('emails.allAccounts')}
       </button>
-      {#each accounts as account (account.account)}
-        <button class="filter-chip" class:active={accountFilter === account.account} onclick={() => pickAccount(account.account)}>
-          {account.account}
+      {#each accounts as account (account.account_id ?? account.account)}
+        <button class="filter-chip" class:active={isPicked(account)} onclick={() => pickAccount(account)}>
+          {#if account.provider && account.provider !== 'n8n'}<span class="provider-tag">{account.provider}</span>{/if}
+          {accountLabel(account)}
           {#if account.unread > 0}<span class="unread-count">{account.unread}</span>{/if}
         </button>
       {/each}
@@ -348,6 +375,19 @@
     font-size: 10px;
     font-weight: 700;
     padding: 0 6px;
+  }
+
+  .provider-tag {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+  }
+
+  .filter-chip.active .provider-tag {
+    color: inherit;
+    opacity: 0.75;
   }
 
   .search-wrap {

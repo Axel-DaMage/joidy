@@ -223,6 +223,20 @@
       "watchOk": "Watch registrado",
       "watchStopped": "Watch detenido",
       "watchError": "No se pudo actualizar el watch"
+    },
+    "accounts": {
+      "title": "Buzones conectados",
+      "none": "Aún no hay buzones conectados",
+      "connect": "Conectar cuenta",
+      "add": "Añadir cuenta",
+      "disconnect": "Desconectar",
+      "disconnected": "Cuenta desconectada",
+      "disconnectError": "No se pudo desconectar la cuenta",
+      "sync": "Sincronizar a la bandeja",
+      "syncing": "Sincronizando…",
+      "syncOk": "{count} mensajes sincronizados a la bandeja",
+      "syncError": "No se pudo sincronizar la cuenta",
+      "pending": "Buzón pendiente"
     }
   },
   "executionPage": {

@@ -6,6 +6,7 @@ from sqlalchemy import (
     JSON,
     Boolean,
     DateTime,
+    ForeignKey,
     Index,
     Integer,
     String,
@@ -27,6 +28,13 @@ class EmailMessage(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    # ``account`` stays the denormalized mailbox label (the n8n payload field
+    # and the UI display string); ``account_id`` links to the email_accounts
+    # row that owns the message — SET NULL on disconnect keeps the synced
+    # mail instead of cascading it away (#1659).
+    account_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("email_accounts.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     account: Mapped[str] = mapped_column(String(255), nullable=False)
     gmail_id: Mapped[str] = mapped_column(String(64), nullable=False)
     thread_id: Mapped[str | None] = mapped_column(String(64), nullable=True)

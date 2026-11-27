@@ -62,6 +62,7 @@ def _serialize_email(email: EmailMessage) -> dict:
     return {
         "id": email.id,
         "account": email.account,
+        "account_id": email.account_id,
         "gmail_id": email.gmail_id,
         "thread_id": email.thread_id,
         "subject": email.subject,
@@ -82,15 +83,30 @@ def list_inbox(
     unread: bool | None = Query(default=None),
     important: bool | None = Query(default=None),
     account: str | None = Query(default=None),
+    account_id: int | None = Query(default=None, ge=1),
     q: str | None = Query(default=None, max_length=200),
     limit: int = Query(default=100, ge=1, le=500),
     skip: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     user_id: int = Depends(get_current_user),
 ):
-    """Unified inbox: all accounts merged, newest first."""
-    emails = list_emails(db, user_id, unread=unread, important=important, account=account, q=q, limit=limit, skip=skip)
-    total = count_emails(db, user_id, unread=unread, important=important, account=account, q=q)
+    """Unified inbox: all accounts merged, newest first.
+
+    ``account_id`` scopes the listing to one ``email_accounts`` row (#1659);
+    ``account`` remains for label-based filtering of unlinked rows.
+    """
+    emails = list_emails(
+        db,
+        user_id,
+        unread=unread,
+        important=important,
+        account=account,
+        account_id=account_id,
+        q=q,
+        limit=limit,
+        skip=skip,
+    )
+    total = count_emails(db, user_id, unread=unread, important=important, account=account, account_id=account_id, q=q)
     return {"items": [_serialize_email(e) for e in emails], "total": total}
 
 

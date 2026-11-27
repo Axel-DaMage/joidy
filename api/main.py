@@ -353,7 +353,10 @@ app.include_router(github.router, dependencies=[Depends(get_current_user)])
 # browser redirect; token/status/data routes declare their own deps).
 app.include_router(google.router)
 # Gmail (#42): dedicated Gmail API surface over the shared Google OAuth
-# token — all routes are JWT-protected, no public endpoints.
+# token — JWT-protected except the /accounts/callback OAuth browser redirect
+# (#1659), mounted public like github.webhook_router; its CSRF gate is the
+# HMAC-signed state param verified inside the handler.
+app.include_router(gmail.callback_router)
 app.include_router(gmail.router, dependencies=[Depends(get_current_user)])
 # Google Contacts (#43): all routes are JWT-protected; the router proxies the
 # shared Google OAuth token to the People API — no public endpoints.

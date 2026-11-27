@@ -77,6 +77,15 @@ async def google_oauth_callback(
         return _callback_page(ok=False, message="Error de autorización con Google")
     if not code:
         return _callback_page(ok=False, message="Falta el código de autorización")
+    # Multi-account gmail connect (#1659) reuses this registered redirect URI —
+    # the state's provider segment routes the grant: a "gmail"-purpose state
+    # means the tokens belong to a new email_accounts row, not the shared
+    # google_tokens row. Deferred import: gmail already imports google_service,
+    # and main.py imports both routers — keep module-level imports acyclic.
+    if state.partition(".")[0] == "gmail":
+        from routers.integrations.gmail import handle_gmail_connect_callback
+
+        return await handle_gmail_connect_callback(code=code, error=error, state=state, db=db)
     # CSRF gate (#1280): the state must be one this instance signed in /auth.
     # Verified before any token exchange so a forged callback cannot bind an
     # attacker's Google account here.

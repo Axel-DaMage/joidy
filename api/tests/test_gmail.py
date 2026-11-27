@@ -1014,3 +1014,193 @@ def test_json_roundtrip_no_secrets():
     out = json.dumps(gms.normalize_message(FULL_MESSAGE))
     assert "ACCESS_TOKEN" not in out
     assert "REFRESH_TOKEN" not in out
+
+
+# ---------------------------------------------------------------------------
+# Multi-account mailboxes (#1659) — email_accounts CRUD, scoped calls, sync
+# ---------------------------------------------------------------------------
+
+
+def _connect_account(db_session, monkeypatch, address: str = "me@x.com", scope: str = GMAIL_MODIFY_SCOPE):
+    """Store a gmail ``email_accounts`` row with its own credential blob.
+
+    Uses ``store_gmail_tokens`` so the EncryptedText column is exercised for
+    real (same SECRET_KEY monkeypatch as the shared-token helper)."""
+    import asyncio
+
+    from services import email_account_service as eas
+
+    monkeypatch.setattr("config.settings.secret_key", "test-secret")
+    return asyncio.run(
+        eas.store_gmail_tokens(
+            db_session,
+            1,
+            address,
+            {
+                "access_token": "ACCOUNT_TOKEN",
+                "refresh_token": "ACCOUNT_REFRESH",
+                "expires_in": 3600,
+                "token_type": "Bearer",
+                "scope": scope,
+            },
+        )
+    )
+
+
+def test_accounts_list_empty(client):
+    resp = client.get("/integrations/gmail/accounts")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+def test_accounts_crud(client, db_session, monkeypatch):
+    account = _connect_account(db_session, monkeypatch)
+
+    listed = client.get("/integrations/gmail/accounts")
+    assert listed.status_code == 200
+    rows = listed.json()
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["id"] == account.id
+    assert row["provider"] == "gmail"
+    assert row["email_address"] == "me@x.com"
+    assert row["is_active"] is True
+    assert row["has_credentials"] is True
+    # The credential blob never leaves the API.
+    assert "credentials" not in row
+    assert "ACCOUNT_TOKEN" not in json.dumps(row)
+    assert "ACCOUNT_REFRESH" not in json.dumps(row)
+
+    renamed = client.patch(f"/integrations/gmail/accounts/{account.id}", json={"display_name": "Work"})
+    assert renamed.status_code == 200
+    assert renamed.json()["display_name"] == "Work"
+
+    deactivated = client.patch(f"/integrations/gmail/accounts/{account.id}", json={"is_active": False})
+    assert deactivated.status_code == 200
+    assert deactivated.json()["is_active"] is False
+
+    # An inactive account is rejected by account-scoped routes.
+    assert client.get("/integrations/gmail/messages", params={"account_id": account.id}).status_code == 404
+    assert client.patch("/integrations/gmail/accounts/999999", json={"is_active": True}).status_code == 404
+    assert client.delete("/integrations/gmail/accounts/999999").status_code == 404
+
+    assert client.delete(f"/integrations/gmail/accounts/{account.id}").status_code == 204
+    assert client.get("/integrations/gmail/accounts").json() == []
+
+
+def test_accounts_auth_url_gmail_purpose_state(client, monkeypatch):
+    """The connect-account URL carries a ``gmail``-purpose signed state — the
+    shared /integrations/google/callback dispatches on it (#1659)."""
+    monkeypatch.setattr("config.settings.google_client_id", "test-client-id")
+    monkeypatch.setattr("config.settings.google_redirect_uri", "http://localhost:8000/integrations/google/callback")
+    monkeypatch.setattr("config.settings.secret_key", "test-secret")
+
+    resp = client.get("/integrations/gmail/accounts/auth")
+    assert resp.status_code == 200
+    url = resp.json()["url"]
+    assert url.startswith("https://accounts.google.com/o/oauth2/v2/auth")
+    assert "state=gmail." in url
+
+
+def test_status_account_scoped(client, db_session, monkeypatch):
+    """``status?account_id=`` reports that mailbox's own grant flags and the
+    serialized account list — independent of the shared connection (#1659)."""
+    account = _connect_account(db_session, monkeypatch, scope=GMAIL_READONLY_SCOPE)
+    resp = client.get(f"/integrations/gmail/status?account_id={account.id}")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["connected"] is True
+    assert data["gmail_read"] is True
+    assert data["gmail_modify"] is False
+    assert data["gmail_send"] is False
+    assert [a["email_address"] for a in data["accounts"]] == ["me@x.com"]
+
+
+def test_status_unknown_account_404(client):
+    assert client.get("/integrations/gmail/status?account_id=999999").status_code == 404
+
+
+def test_list_messages_account_scoped_uses_own_token(client, db_session, monkeypatch):
+    """``account_id`` routes the call through the mailbox's own credential
+    blob — no shared ``google_tokens`` row exists here (#1659)."""
+    account = _connect_account(db_session, monkeypatch)
+    with patch("httpx.AsyncClient.get", new=AsyncMock(return_value=_fake_response({"messages": []}))) as mock_get:
+        resp = client.get(f"/integrations/gmail/messages?account_id={account.id}")
+    assert resp.status_code == 200
+    assert mock_get.call_args_list[0].kwargs["headers"]["Authorization"] == "Bearer ACCOUNT_TOKEN"
+
+
+def test_sync_account_backfill(client, db_session, monkeypatch):
+    """POST /accounts/{id}/sync without a cursor backfills one bounded page
+    into email_messages and seeds the account's historyId cursor (#1659)."""
+    from models.email_account import EmailAccount
+
+    account = _connect_account(db_session, monkeypatch)
+    list_payload = {"messages": [{"id": "m1", "threadId": "t1"}]}
+    profile_payload = {"emailAddress": "me@x.com", "historyId": "4242"}
+
+    def fake_get(url, **kwargs):
+        if url.endswith("/profile"):
+            return _fake_response(profile_payload)
+        if url.endswith("/messages"):
+            return _fake_response(list_payload)
+        return _fake_response(FULL_MESSAGE)
+
+    with patch("httpx.AsyncClient.get", new=AsyncMock(side_effect=fake_get)):
+        resp = client.post(f"/integrations/gmail/accounts/{account.id}/sync")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["mode"] == "backfill"
+    assert data["synced"] == 1
+    assert data["account_id"] == account.id
+
+    row = db_session.query(EmailAccount).filter(EmailAccount.id == account.id).one()
+    assert row.sync_cursor == "4242"
+    assert row.last_sync_at is not None
+
+    # The synced message is linked to this account in the unified inbox.
+    inbox = client.get("/emails/", params={"account_id": account.id})
+    assert inbox.status_code == 200
+    assert [m["gmail_id"] for m in inbox.json()["items"]] == ["msg1"]
+
+
+def test_sync_account_incremental(client, db_session, monkeypatch):
+    """With a stored cursor the sync walks users.history.list and applies
+    messagesAdded/messagesDeleted to this account's rows only (#1659)."""
+    from models.email_account import EmailAccount
+    from models.email_message import EmailMessage
+
+    account = _connect_account(db_session, monkeypatch)
+    db_session.add(
+        EmailMessage(
+            user_id=1,
+            account=account.email_address,
+            account_id=account.id,
+            gmail_id="m8",
+            unread=False,
+        )
+    )
+    account.sync_cursor = "800"
+    db_session.commit()
+
+    def fake_get(url, **kwargs):
+        if "/history" in url:
+            return _fake_response(HISTORY_RESPONSE)
+        return _fake_response(FULL_MESSAGE)
+
+    with patch("httpx.AsyncClient.get", new=AsyncMock(side_effect=fake_get)) as mock_get:
+        resp = client.post(f"/integrations/gmail/accounts/{account.id}/sync")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["mode"] == "incremental"
+    assert data["deleted"] == 1
+    # The history call starts from the account's own cursor.
+    history_calls = [c for c in mock_get.call_args_list if "/history" in str(c.args[0])]
+    assert history_calls[0].kwargs["params"]["startHistoryId"] == "800"
+
+    row = db_session.query(EmailAccount).filter(EmailAccount.id == account.id).one()
+    assert row.sync_cursor == "900"
+    gone = db_session.query(EmailMessage).filter(EmailMessage.gmail_id == "m8").first()
+    assert gone is None

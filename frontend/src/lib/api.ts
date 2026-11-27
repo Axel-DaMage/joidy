@@ -500,6 +500,8 @@ export interface AchievementUnlockResult extends AchievementRecord {
 export interface EmailSummary {
   id: number;
   account: string;
+  /** FK to the owning email_accounts row (#1659); null for legacy/unlinked. */
+  account_id: number | null;
   gmail_id: string;
   thread_id: string | null;
   subject: string | null;
@@ -515,10 +517,41 @@ export interface EmailSummary {
 }
 
 export interface EmailAccountStats {
+  /** Mailbox label (n8n payload account string / email address). */
   account: string;
+  /** Owning email_accounts row id when the label maps to an account (#1659). */
+  account_id: number | null;
+  provider: string | null;
+  display_name: string | null;
+  is_active: boolean | null;
   total: number;
   unread: number;
   important: number;
+}
+
+/** Serialized email_accounts row — credentials stay server-side (#1659). */
+export interface EmailAccount {
+  id: number;
+  provider: 'gmail' | 'outlook' | 'imap' | 'n8n' | string;
+  email_address: string;
+  display_name: string | null;
+  is_active: boolean;
+  has_credentials: boolean;
+  last_sync_at: string | null;
+  created_at: string | null;
+  /** Bumps on every row write — usable as a re-auth change signal. */
+  updated_at: string | null;
+  capabilities?: { read: boolean | null; modify: boolean | null; send: boolean | null } | null;
+  watch?: { configured: boolean; state: GmailWatchState | null } | null;
+}
+
+export interface GmailAccountSyncResult {
+  mode: string;
+  synced: number;
+  deleted: number;
+  history_pages: number;
+  account_id: number;
+  cursor: string | null;
 }
 
 // ── Gmail API (#42) ──────────────────────────────────────────────────────────
@@ -540,6 +573,8 @@ export interface GmailStatus {
   gmail_modify: boolean | null;
   gmail_send: boolean | null;
   watch: { configured: boolean; state: GmailWatchState | null };
+  /** Connected gmail mailboxes with per-account credentials (#1659). */
+  accounts: EmailAccount[];
 }
 
 export interface GmailMessageSummary {
@@ -1403,6 +1438,8 @@ export const api = {
         unread?: boolean;
         important?: boolean;
         account?: string;
+        /** Scope to one email_accounts row (#1659); preferred over `account`. */
+        accountId?: number;
         q?: string;
         limit?: number;
         skip?: number;
@@ -1412,6 +1449,7 @@ export const api = {
       if (filters.unread !== undefined) params.set('unread', String(filters.unread));
       if (filters.important !== undefined) params.set('important', String(filters.important));
       if (filters.account) params.set('account', filters.account);
+      if (filters.accountId !== undefined) params.set('account_id', String(filters.accountId));
       if (filters.q) params.set('q', filters.q);
       params.set('limit', String(filters.limit ?? 200));
       params.set('skip', String(filters.skip ?? 0));
@@ -1425,8 +1463,25 @@ export const api = {
 
   // ── Gmail API (#42) — native Gmail client; complements the n8n /emails inbox.
   // Errors: 401/403 → Google reconnect (scope bump), 404, 429, 413 attachment.
+  // `accountId` scopes any call to one connected mailbox's credentials (#1659);
+  // omitting it keeps the legacy shared-Google-connection behavior.
   gmail: {
-    status: () => req<GmailStatus>('GET', '/integrations/gmail/status'),
+    status: (accountId?: number) =>
+      req<GmailStatus>(
+        'GET',
+        `/integrations/gmail/status${accountId ? `?account_id=${accountId}` : ''}`
+      ),
+    accounts: {
+      list: () => req<EmailAccount[]>('GET', '/integrations/gmail/accounts'),
+      /** OAuth URL to connect an ADDITIONAL mailbox (popup + poll list). */
+      authUrl: () => req<{ url: string }>('GET', '/integrations/gmail/accounts/auth'),
+      patch: (accountId: number, data: { display_name?: string; is_active?: boolean }) =>
+        req<EmailAccount>('PATCH', `/integrations/gmail/accounts/${accountId}`, data),
+      disconnect: (accountId: number) =>
+        req<void>('DELETE', `/integrations/gmail/accounts/${accountId}`),
+      sync: (accountId: number) =>
+        req<GmailAccountSyncResult>('POST', `/integrations/gmail/accounts/${accountId}/sync`),
+    },
     list: (
       params: {
         /** Gmail search syntax (from:, subject:, is:unread, …). */
@@ -1437,6 +1492,7 @@ export const api = {
         labelIds?: string[];
         maxResults?: number;
         pageToken?: string | null;
+        accountId?: number;
       } = {}
     ) => {
       const qs = new URLSearchParams();
@@ -1445,43 +1501,67 @@ export const api = {
       if (params.labelIds?.length) qs.set('label_ids', params.labelIds.join(','));
       qs.set('max_results', String(params.maxResults ?? 50));
       if (params.pageToken) qs.set('page_token', params.pageToken);
+      if (params.accountId) qs.set('account_id', String(params.accountId));
       return req<GmailMessageList>('GET', `/integrations/gmail/messages?${qs.toString()}`);
     },
-    get: (id: string) =>
-      req<GmailMessage>('GET', `/integrations/gmail/messages/${encodeURIComponent(id)}`),
-    attachment: (messageId: string, attachmentId: string) =>
+    get: (id: string, accountId?: number) =>
+      req<GmailMessage>(
+        'GET',
+        `/integrations/gmail/messages/${encodeURIComponent(id)}${accountId ? `?account_id=${accountId}` : ''}`
+      ),
+    attachment: (messageId: string, attachmentId: string, accountId?: number) =>
       req<GmailAttachmentDownload>(
         'GET',
-        `/integrations/gmail/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}`
+        `/integrations/gmail/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}${accountId ? `?account_id=${accountId}` : ''}`
       ),
-    send: (input: GmailSendInput) =>
-      req<GmailSendResult>('POST', '/integrations/gmail/messages/send', input),
-    archive: (id: string) =>
+    send: (input: GmailSendInput, accountId?: number) =>
+      req<GmailSendResult>(
+        'POST',
+        `/integrations/gmail/messages/send${accountId ? `?account_id=${accountId}` : ''}`,
+        input
+      ),
+    archive: (id: string, accountId?: number) =>
       req<GmailMessageActionResult>(
         'POST',
-        `/integrations/gmail/messages/${encodeURIComponent(id)}/archive`
+        `/integrations/gmail/messages/${encodeURIComponent(id)}/archive${accountId ? `?account_id=${accountId}` : ''}`
       ),
-    trash: (id: string) =>
-      req<GmailMessageActionResult>('POST', `/integrations/gmail/messages/${encodeURIComponent(id)}/trash`),
-    untrash: (id: string) =>
+    trash: (id: string, accountId?: number) =>
       req<GmailMessageActionResult>(
         'POST',
-        `/integrations/gmail/messages/${encodeURIComponent(id)}/untrash`
+        `/integrations/gmail/messages/${encodeURIComponent(id)}/trash${accountId ? `?account_id=${accountId}` : ''}`
       ),
-    read: (id: string) =>
-      req<GmailMessageActionResult>('POST', `/integrations/gmail/messages/${encodeURIComponent(id)}/read`),
-    unread: (id: string) =>
+    untrash: (id: string, accountId?: number) =>
       req<GmailMessageActionResult>(
         'POST',
-        `/integrations/gmail/messages/${encodeURIComponent(id)}/unread`
+        `/integrations/gmail/messages/${encodeURIComponent(id)}/untrash${accountId ? `?account_id=${accountId}` : ''}`
       ),
-    watchStatus: () =>
-      req<{ configured: boolean; state: GmailWatchState | null }>('GET', '/integrations/gmail/watch'),
-    watchRegister: (labelIds?: string[]) => {
-      const qs = labelIds?.length ? `?label_ids=${encodeURIComponent(labelIds.join(','))}` : '';
-      return req<GmailWatchState>('POST', `/integrations/gmail/watch${qs}`);
+    read: (id: string, accountId?: number) =>
+      req<GmailMessageActionResult>(
+        'POST',
+        `/integrations/gmail/messages/${encodeURIComponent(id)}/read${accountId ? `?account_id=${accountId}` : ''}`
+      ),
+    unread: (id: string, accountId?: number) =>
+      req<GmailMessageActionResult>(
+        'POST',
+        `/integrations/gmail/messages/${encodeURIComponent(id)}/unread${accountId ? `?account_id=${accountId}` : ''}`
+      ),
+    watchStatus: (accountId?: number) =>
+      req<{ configured: boolean; state: GmailWatchState | null }>(
+        'GET',
+        `/integrations/gmail/watch${accountId ? `?account_id=${accountId}` : ''}`
+      ),
+    watchRegister: (labelIds?: string[], accountId?: number) => {
+      const qs = new URLSearchParams();
+      if (labelIds?.length) qs.set('label_ids', labelIds.join(','));
+      if (accountId) qs.set('account_id', String(accountId));
+      const suffix = qs.toString() ? `?${qs.toString()}` : '';
+      return req<GmailWatchState>('POST', `/integrations/gmail/watch${suffix}`);
     },
-    watchStop: () => req<{ status: string }>('DELETE', '/integrations/gmail/watch'),
+    watchStop: (accountId?: number) =>
+      req<{ status: string }>(
+        'DELETE',
+        `/integrations/gmail/watch${accountId ? `?account_id=${accountId}` : ''}`
+      ),
   },
 
   ai: {

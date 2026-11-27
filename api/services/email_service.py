@@ -38,6 +38,7 @@ def upsert_email(
     important: bool = False,
     importance_reason: str | None = None,
     labels: list | None = None,
+    account_id: int | None = None,
 ) -> tuple[EmailMessage, bool]:
     """Create or update an inbox entry for (user_id, account, gmail_id).
 
@@ -47,6 +48,11 @@ def upsert_email(
     ``unread`` keeps the value set from the UI (a pushed ``unread=True`` is
     only honored on creation) and ``important`` may be upgraded to True but
     never downgraded by the sync.
+
+    ``account_id`` links the row to its ``email_accounts`` owner (#1659);
+    when omitted the service resolves the account from the ``account``
+    string (an existing credentialled mailbox wins, else an n8n ingestion
+    row is get-or-created).
     """
     email = (
         db.query(EmailMessage)
@@ -58,9 +64,18 @@ def upsert_email(
         .first()
     )
     created = email is None
+    if account_id is None:
+        # Local import — email_account_service imports email_service lazily
+        # through sync helpers, and circulars must be avoided at module load.
+        from services import email_account_service as eas
+
+        account_id = eas.resolve_message_account(db, user_id, account).id
     if created:
-        email = EmailMessage(user_id=user_id, account=account, gmail_id=gmail_id)
+        email = EmailMessage(user_id=user_id, account=account, gmail_id=gmail_id, account_id=account_id)
         db.add(email)
+    elif email.account_id != account_id:
+        # Re-home a legacy/unlinked row onto its resolved account.
+        email.account_id = account_id
 
     email.thread_id = thread_id
     email.subject = subject
@@ -106,6 +121,7 @@ def _filtered_query(
     unread: bool | None = None,
     important: bool | None = None,
     account: str | None = None,
+    account_id: int | None = None,
     q: str | None = None,
 ) -> Any:
     query = db.query(EmailMessage).filter(EmailMessage.user_id == user_id)
@@ -115,6 +131,8 @@ def _filtered_query(
         query = query.filter(EmailMessage.important == important)
     if account:
         query = query.filter(EmailMessage.account == account)
+    if account_id is not None:
+        query = query.filter(EmailMessage.account_id == account_id)
     if q:
         like = f"%{_escape_like(q)}%"
         query = query.filter(
@@ -132,12 +150,15 @@ def list_emails(
     unread: bool | None = None,
     important: bool | None = None,
     account: str | None = None,
+    account_id: int | None = None,
     q: str | None = None,
     limit: int = 100,
     skip: int = 0,
 ) -> list[EmailMessage]:
     """Unified inbox: merged accounts, newest first."""
-    query = _filtered_query(db, user_id, unread=unread, important=important, account=account, q=q)
+    query = _filtered_query(
+        db, user_id, unread=unread, important=important, account=account, account_id=account_id, q=q
+    )
     return (
         query.order_by(EmailMessage.received_at.desc().nullslast(), EmailMessage.id.desc())
         .offset(max(skip, 0))
@@ -153,14 +174,22 @@ def count_emails(
     unread: bool | None = None,
     important: bool | None = None,
     account: str | None = None,
+    account_id: int | None = None,
     q: str | None = None,
 ) -> int:
     """Total matching the same filters as ``list_emails`` (so ``total`` stays consistent)."""
-    return _filtered_query(db, user_id, unread=unread, important=important, account=account, q=q).count()
+    return _filtered_query(
+        db, user_id, unread=unread, important=important, account=account, account_id=account_id, q=q
+    ).count()
 
 
 def list_accounts(db: Session, user_id: int) -> list[dict]:
-    """Distinct mailboxes with per-account counters (SQL aggregation)."""
+    """Mailboxes with per-account counters, merged with ``email_accounts``.
+
+    Stats aggregate on the ``account`` label (n8n payload field); every
+    ``email_accounts`` row — including credentialled mailboxes with zero
+    synced mail — appears so the UI switcher can list connected accounts.
+    """
     case = sa_case((EmailMessage.unread.is_(True), 1))
     rows = (
         db.query(
@@ -174,9 +203,52 @@ def list_accounts(db: Session, user_id: int) -> list[dict]:
         .order_by(EmailMessage.account)
         .all()
     )
-    return [
-        {"account": row.account, "total": row.total, "unread": row.unread, "important": row.important} for row in rows
-    ]
+
+    from models.email_account import PROVIDER_N8N, EmailAccount
+
+    account_rows = db.query(EmailAccount).filter(EmailAccount.user_id == user_id).all()
+    # Prefer the credentialled (non-n8n) row when several accounts share the
+    # same address — that is the mailbox the label actually refers to.
+    by_address: dict[str, EmailAccount] = {}
+    for account_row in sorted(account_rows, key=lambda a: a.provider == PROVIDER_N8N):
+        by_address[account_row.email_address] = account_row
+
+    merged: list[dict] = []
+    seen_ids: set[int] = set()
+    for row in rows:
+        account_row = by_address.get(row.account)
+        entry = {
+            "account": row.account,
+            "account_id": account_row.id if account_row else None,
+            "provider": account_row.provider if account_row else None,
+            "display_name": account_row.display_name if account_row else None,
+            "is_active": account_row.is_active if account_row else None,
+            "total": row.total,
+            "unread": row.unread,
+            "important": row.important,
+        }
+        if account_row:
+            seen_ids.add(account_row.id)
+        merged.append(entry)
+
+    # Connected accounts with no synced mail yet still show in the switcher.
+    for account_row in account_rows:
+        if account_row.id in seen_ids:
+            continue
+        merged.append(
+            {
+                "account": account_row.email_address,
+                "account_id": account_row.id,
+                "provider": account_row.provider,
+                "display_name": account_row.display_name,
+                "is_active": account_row.is_active,
+                "total": 0,
+                "unread": 0,
+                "important": 0,
+            }
+        )
+    merged.sort(key=lambda e: e["account"])
+    return merged
 
 
 def update_email_state(
