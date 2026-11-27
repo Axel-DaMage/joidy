@@ -57,6 +57,10 @@ export interface UserSettings {
     /** Whether the "how it's calculated" note is expanded. */
     methodOpen?: boolean;
   };
+  editorUi?: {
+    /** Vim-style modal editing in the note editor (#1666); default off. */
+    vimMode?: boolean;
+  };
 }
 
 const KEY = 'joidy-user-settings-v1';
@@ -116,6 +120,7 @@ export function patchUserSettings(patch: Partial<UserSettings>): void {
     statusBarUi: { ...current.statusBarUi, ...patch.statusBarUi },
     executionUi: { ...current.executionUi, ...patch.executionUi },
     analyticsUi: { ...current.analyticsUi, ...patch.analyticsUi },
+    editorUi: { ...current.editorUi, ...patch.editorUi },
   };
   localStorage.setItem(KEY, JSON.stringify(next));
 }

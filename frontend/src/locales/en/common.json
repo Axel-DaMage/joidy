@@ -345,6 +345,14 @@
     },
     "language": "Language",
     "languageHint": "The interface language",
+    "editor": {
+      "title": "Editor",
+      "vimMode": "Vim mode",
+      "vimModeHint": "Modal NORMAL/INSERT editing in the markdown editor (hjkl, dd, yy, p, i, Esc).",
+      "vimModeTouchHint": "Not available on touch-only devices.",
+      "on": "on",
+      "off": "off"
+    },
     "session": {
       "title": "Session",
       "logout": "Log out",
@@ -1123,7 +1131,8 @@
     "tagsLabel": "Tags",
     "linkUrlPrompt": "Link URL",
     "linkUrlTitle": "Insert link",
-    "linkUrlInsert": "Insert"
+    "linkUrlInsert": "Insert",
+    "vimModeBadge": "Vim mode — current editing mode"
   },
   "goalEditor": {
     "previewPlaceholder": "Write something to see the preview...",
