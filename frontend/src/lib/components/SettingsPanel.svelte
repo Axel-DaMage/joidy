@@ -6,6 +6,7 @@
   import SettingsSection from './SettingsSection.svelte';
   import SettingsAppearance from './SettingsAppearance.svelte';
   import SettingsAdvanced from './SettingsAdvanced.svelte';
+  import SettingsEditor from './SettingsEditor.svelte';
   import SettingsVault from './SettingsVault.svelte';
   import SettingsIntegrations from './SettingsIntegrations.svelte';
   import SettingsAI from './SettingsAI.svelte';
@@ -36,6 +37,7 @@
   const SECTIONS: { id: string; icon: string; devOnly?: boolean; installOnly?: boolean }[] = [
     { id: 'appearance', icon: 'Palette' },
     { id: 'advanced', icon: 'Settings' },
+    { id: 'editor', icon: 'PencilLine' },
     { id: 'vault', icon: 'Database' },
     { id: 'integrations', icon: 'GitBranch' },
     { id: 'ai', icon: 'Zap', devOnly: true },
@@ -251,6 +253,15 @@
           icon="Settings"
         >
           <SettingsAdvanced />
+        </SettingsSection>
+      {:else if section === 'editor'}
+        <SettingsSection
+          id="editor"
+          title={$t('settings.nav.editor')}
+          description={$t('settings.descriptions.editor')}
+          icon="PencilLine"
+        >
+          <SettingsEditor />
         </SettingsSection>
       {:else if section === 'vault'}
         <SettingsSection

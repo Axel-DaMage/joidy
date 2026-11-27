@@ -3,10 +3,12 @@
   import { appHeaderTabs } from '$lib/stores/appHeader';
   import { page } from '$app/state';
   import { goto, replaceState } from '$app/navigation';
+  import { resolve } from '$app/paths';
   import Plus from 'lucide-svelte/icons/plus';
   import Check from 'lucide-svelte/icons/check';
   import ChevronDown from 'lucide-svelte/icons/chevron-down';
   import Calendar from 'lucide-svelte/icons/calendar';
+  import CalendarDays from 'lucide-svelte/icons/calendar-days';
   import Clock from 'lucide-svelte/icons/clock';
   import Pencil from 'lucide-svelte/icons/pencil';
   import X from 'lucide-svelte/icons/x';
@@ -24,7 +26,18 @@
   import PinOff from 'lucide-svelte/icons/pin-off';
   import Zap from 'lucide-svelte/icons/zap';
   import List from 'lucide-svelte/icons/list';
-  import { api, type Goal, type GoalContext, type Tag as TagType, type Note } from '$lib/api';
+  import Lock from 'lucide-svelte/icons/lock';
+  import Repeat from 'lucide-svelte/icons/repeat';
+  import Target from 'lucide-svelte/icons/target';
+  import {
+    api,
+    type CalendarEvent,
+    type CalendarTask,
+    type Goal,
+    type GoalContext,
+    type Tag as TagType,
+    type Note,
+  } from '$lib/api';
   import GoalFilters from '$lib/components/GoalFilters.svelte';
   import GoalInbox from '$lib/components/GoalInbox.svelte';
   import GoalList from '$lib/components/GoalList.svelte';
@@ -39,6 +52,7 @@
     loadUserSettings,
     patchUserSettings,
   } from '$lib/utils/userSettings';
+  import { loadPref, savePref, removePref } from '$lib/utils/persistedState';
   import { logger } from '$lib/utils/logger';
   import {
     GOALS_SPECIFIC_COLOR_PRESETS,
@@ -53,10 +67,12 @@
   import StreakIcon from '$lib/components/StreakIcon.svelte';
   import LazyIconPicker from '$lib/components/LazyIconPicker.svelte';
   import ModalDialog from '$lib/components/ModalDialog.svelte';
+  import GoalFromEventModal, { type GoalEventSeed } from '$lib/components/GoalFromEventModal.svelte';
   import NoteLinkPicker from '$lib/components/NoteLinkPicker.svelte';
   import { focusTrap } from '$lib/actions/focusTrap';
   import { marquee } from '$lib/actions/marquee';
   import { t } from 'svelte-i18n';
+  import { locale } from '$lib/stores/locale';
 
   // Lazy-load the heavy StreakHeatmap (561 lines) so it is split into a
   // separate chunk and only downloaded when the history tab is active — the
@@ -124,8 +140,13 @@
   let goalContextFilter = $state<GoalContext | null>(null);
   // Matches the states rendered by GoalFilters.svelte (null = "Todos")
   const VALID_EDITOR_FILTERS = ['PINNED', 'ACTIVE', 'COMPLETED', 'CANCELLED', 'FAILED', 'INBOX'] as const;
+  const VALID_POOL_FILTERS = ['recent', 'active', 'completed', 'failed'] as const;
+  const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
   let inboxBadgeCount = $derived(inboxCount(goals));
   let pinnedGoals = $state<Set<number>>(new Set());
+  // Last goal opened in the goal editor (/goals/[id]) — persisted so the
+  // editor list can highlight it across sessions (#1673).
+  let lastEditedGoalId = $state<number | null>(null);
   let deleteConfirm = $state<number | null>(null);
 
   function togglePinned(goalId: number) {
@@ -460,22 +481,50 @@
     document.addEventListener('visibilitychange', onVisible);
 
     void (async () => {
-    // restore UI state immediately to prevent flash
+    // Restore UI state immediately to prevent flash. All view prefs live
+    // under the `joidy.goals.*` namespace (device-level, survives logout);
+    // the legacy `goals.*` keys are migrated on first read (#1673).
     try {
-      const savedTab = localStorage.getItem('goals.currentTab');
+      const savedTab = loadPref<string | null>('goals', 'tab', null, {
+        legacyKey: 'goals.currentTab',
+      });
       // Analytics moved to its own page (#1499) — migrate the legacy tab.
       if (savedTab === 'analytics') {
-        localStorage.removeItem('goals.currentTab');
+        removePref('goals', 'tab');
         void goto('/analytics', { replaceState: true });
       } else if (savedTab && (VALID_TABS as readonly string[]).includes(savedTab)) {
         currentTab = savedTab as typeof currentTab;
       }
-      const savedDate = localStorage.getItem('goals.selectedPlanningDate');
+      const savedDate = loadPref<string | null>('goals', 'planningDate', null, {
+        legacyKey: 'goals.selectedPlanningDate',
+        isValid: (v) => typeof v === 'string' && ISO_DAY.test(v),
+      });
       if (savedDate) selectedPlanningDate = savedDate;
-      const savedView = localStorage.getItem('goals.planningView');
-      if (savedView === 'month' || savedView === 'week') planningView = savedView;
-      const savedHistoryDate = localStorage.getItem('goals.selectedHistoryDate');
+      planningView = loadPref<PlanningView>('goals', 'planningView', planningView, {
+        legacyKey: 'goals.planningView',
+        isValid: (v) => v === 'month' || v === 'week',
+      });
+      const savedCursor = loadPref<string | null>('goals', 'planningCursor', null, {
+        isValid: (v) => typeof v === 'string' && ISO_DAY.test(v),
+      });
+      if (savedCursor) planningCursor = savedCursor;
+      const savedHistoryDate = loadPref<string | null>('goals', 'historyDate', null, {
+        legacyKey: 'goals.selectedHistoryDate',
+        isValid: (v) => typeof v === 'string' && ISO_DAY.test(v),
+      });
       if (savedHistoryDate) selectedHistoryDate = savedHistoryDate;
+      poolFilter = loadPref<(typeof VALID_POOL_FILTERS)[number]>('goals', 'poolFilter', poolFilter, {
+        isValid: (v) => (VALID_POOL_FILTERS as readonly string[]).includes(v as string),
+      });
+      poolOpen = loadPref<boolean>('goals', 'poolOpen', poolOpen, {
+        isValid: (v) => typeof v === 'boolean',
+      });
+      mirrorToCalendar = loadPref<boolean>('goals', 'mirrorToCalendar', mirrorToCalendar, {
+        isValid: (v) => typeof v === 'boolean',
+      });
+      lastEditedGoalId = loadPref<number | null>('goals', 'editorGoalId', null, {
+        isValid: (v) => v === null || typeof v === 'number',
+      });
       // if we are on planning, pre-load assignments for the selected date
       if (currentTab === 'planning' && selectedPlanningDate) {
         loadAssignmentsForDate(selectedPlanningDate).catch(logger.error);
@@ -495,26 +544,44 @@
       if (saved?.pinnedGoalIds && Array.isArray(saved.pinnedGoalIds)) {
         pinnedGoals = new Set(saved.pinnedGoalIds);
       }
-      const savedFilter = saved?.editorFilter;
-      if (
-        savedFilter === null ||
-        (typeof savedFilter === 'string' &&
-          (VALID_EDITOR_FILTERS as readonly string[]).includes(savedFilter))
-      ) {
-        goalFilterState = savedFilter;
-      }
+      // Editor filters are device-level view prefs (#1673) — the legacy
+      // goalsUi blob value is the fallback while the pref is unmigrated.
+      const legacyFilter =
+        saved &&
+        (saved.editorFilter === null ||
+          (typeof saved.editorFilter === 'string' &&
+            (VALID_EDITOR_FILTERS as readonly string[]).includes(saved.editorFilter)))
+          ? saved.editorFilter
+          : undefined;
+      goalFilterState = loadPref<string | null>(
+        'goals',
+        'editorFilter',
+        legacyFilter ?? goalFilterState,
+        {
+          isValid: (v) =>
+            v === null ||
+            (typeof v === 'string' && (VALID_EDITOR_FILTERS as readonly string[]).includes(v)),
+        }
+      );
       if (typeof saved?.editorSearch === 'string') {
         goalSearchQuery = saved.editorSearch;
       }
-      const savedContext = saved?.editorContextFilter;
-      if (
-        savedContext === null ||
-        savedContext === 'ANY' ||
-        savedContext === 'MORNING' ||
-        savedContext === 'NIGHT'
-      ) {
-        goalContextFilter = savedContext;
-      }
+      const legacyContext =
+        saved &&
+        (saved.editorContextFilter === null ||
+          saved.editorContextFilter === 'ANY' ||
+          saved.editorContextFilter === 'MORNING' ||
+          saved.editorContextFilter === 'NIGHT')
+          ? saved.editorContextFilter
+          : undefined;
+      goalContextFilter = loadPref<GoalContext | null>(
+        'goals',
+        'editorContextFilter',
+        legacyContext ?? goalContextFilter,
+        {
+          isValid: (v) => v === null || v === 'ANY' || v === 'MORNING' || v === 'NIGHT',
+        }
+      );
     } catch {
       // ignore storage errors
     }
@@ -700,6 +767,29 @@
 
   let selectedPlanningDate = $state(localDayKey(new Date()));
   let assignments = $state<Record<string, number[]>>({});
+  // date → goal_id → Google event id for assignments created from a calendar
+  // event. The goal chip represents that event, so the raw event chip is
+  // hidden from the planning agenda to avoid rendering it twice.
+  let assignmentEventSources = $state<Record<string, Record<number, string>>>({});
+
+  function parseEventSources(raw: Record<string, string> | undefined): Record<number, string> {
+    const out: Record<number, string> = {};
+    for (const [k, v] of Object.entries(raw ?? {})) {
+      const id = Number(k);
+      if (Number.isFinite(id) && v) out[id] = v;
+    }
+    return out;
+  }
+
+  // goal_event_ids to repost with setAssignments: keep sources only for
+  // goals that remain assigned on that date.
+  function sourcesForDate(date: string, goalIds: number[]): Record<number, string> | undefined {
+    const map = assignmentEventSources[date];
+    if (!map) return undefined;
+    const out: Record<number, string> = {};
+    for (const gid of goalIds) if (map[gid]) out[gid] = map[gid];
+    return Object.keys(out).length ? out : undefined;
+  }
 
   function getNormalizedDate(date: string, temporality: Goal['temporality']): string {
     if (!date) return date;
@@ -717,8 +807,6 @@
   }
 
   let poolFilter = $state<'recent' | 'active' | 'completed' | 'failed'>('recent');
-  // When on, assigning a goal to a day also creates a calendar_task (#1234).
-  let mirrorToCalendar = $state(false);
 
   let filteredUnassignedGoals = $derived.by(() => {
     let unassigned = goals.filter(
@@ -760,13 +848,12 @@
 
   // persist current tab and selected planning date in localStorage
   $effect(() => {
-    if (typeof localStorage !== 'undefined') localStorage.setItem('goals.currentTab', currentTab);
+    savePref('goals', 'tab', currentTab);
   });
 
   $effect(() => {
     if (selectedPlanningDate) {
-      if (typeof localStorage !== 'undefined')
-        localStorage.setItem('goals.selectedPlanningDate', selectedPlanningDate);
+      savePref('goals', 'planningDate', selectedPlanningDate);
       loadAssignmentsForDate(selectedPlanningDate);
     }
     // Preload upcoming assignments for dashboard
@@ -779,29 +866,57 @@
   });
 
   $effect(() => {
-    if (selectedHistoryDate && typeof localStorage !== 'undefined') {
-      localStorage.setItem('goals.selectedHistoryDate', selectedHistoryDate);
+    if (selectedHistoryDate) {
+      savePref('goals', 'historyDate', selectedHistoryDate);
     }
   });
 
-  // persist editor filter and search in userSettings (#1096);
-  // the search is debounced to avoid a localStorage write per keystroke
+  // Editor filters are device-level view prefs (#1673); the search text is
+  // user-scoped and stays in userSettings (debounced below — a localStorage
+  // write per keystroke otherwise).
   $effect(() => {
-    patchUserSettings({
-      goalsUi: { editorFilter: goalFilterState, editorContextFilter: goalContextFilter },
-    });
+    savePref('goals', 'editorFilter', goalFilterState);
+    savePref('goals', 'editorContextFilter', goalContextFilter);
   });
 
-  // Deep-link support: /goals?tab=inbox (used by Quick Capture toasts, #1200).
-  // The param is consumed once so manual tab navigation isn't overridden.
+  // Planning pool + cursor prefs (#1673).
+  $effect(() => {
+    savePref('goals', 'poolFilter', poolFilter);
+  });
+  $effect(() => {
+    savePref('goals', 'poolOpen', poolOpen);
+  });
+  $effect(() => {
+    savePref('goals', 'mirrorToCalendar', mirrorToCalendar);
+  });
+  $effect(() => {
+    savePref('goals', 'planningCursor', planningCursor);
+  });
+
+  // Deep-link support: /goals?tab=inbox (used by Quick Capture toasts, #1200)
+  // and /goals?tab=planning&date=YYYY-MM-DD (used by the /calendar quick-nav,
+  // #1668). The params are consumed once so manual navigation isn't overridden.
   $effect(() => {
     const tabParam = page.url.searchParams.get('tab');
+    const dateParam = page.url.searchParams.get('date');
     if (tabParam === 'analytics') {
-      void goto('/analytics', { replaceState: true });
-    } else if (tabParam && (VALID_TABS as readonly string[]).includes(tabParam)) {
+      void goto(resolve('/analytics'), { replaceState: true });
+      return;
+    }
+    let handled = false;
+    if (tabParam && (VALID_TABS as readonly string[]).includes(tabParam)) {
       currentTab = tabParam as typeof currentTab;
+      handled = true;
+    }
+    if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+      selectPlanningDay(dateParam);
+      handled = true;
+    }
+    if (handled) {
       const clean = new URL(page.url.href);
       clean.searchParams.delete('tab');
+      clean.searchParams.delete('date');
+      // eslint-disable-next-line svelte/no-navigation-without-resolve -- page.url.pathname already includes the base path; resolve() would prepend it twice
       replaceState(`${clean.pathname}${clean.search}${clean.hash}`, page.state);
     }
   });
@@ -828,9 +943,9 @@
       uniqueDates.map(async (d) => {
         try {
           const res = await api.planning.getAssignments(d);
-          return { date: d, ids: res.goal_ids };
+          return { date: d, ids: res.goal_ids, sources: parseEventSources(res.goal_event_ids) };
         } catch (e) {
-          return { date: d, ids: [] };
+          return { date: d, ids: [], sources: {} };
         }
       })
     );
@@ -838,6 +953,10 @@
     assignments = {
       ...assignments,
       ...Object.fromEntries(fetchedResults.map((r) => [r.date, r.ids])),
+    };
+    assignmentEventSources = {
+      ...assignmentEventSources,
+      ...Object.fromEntries(fetchedResults.map((r) => [r.date, r.sources])),
     };
   }
 
@@ -852,7 +971,16 @@
     if (!assignments[normDate].includes(goalId)) assignments[normDate].push(goalId);
 
     try {
-      await api.planning.setAssignments(normDate, assignments[normDate], mirrorToCalendar);
+      // create_calendar_task defaults to true — planning assignments always
+      // mirror into the real calendar (#goal-planning-calendar). Event
+      // sources of sibling assignments must be reposted or they are lost.
+      await api.planning.setAssignments(
+        normDate,
+        assignments[normDate],
+        true,
+        sourcesForDate(normDate, assignments[normDate])
+      );
+      void loadRangeAgenda();
     } catch (e) {
       logger.error('Error saving assignment:', e);
     }
@@ -866,12 +994,17 @@
     const normDate = getNormalizedDate(date, goal.temporality);
     if (!assignments[normDate]) return;
 
+    const remaining = assignments[normDate].filter((id) => id !== goalId);
     assignments = {
       ...assignments,
-      [normDate]: assignments[normDate].filter((id) => id !== goalId),
+      [normDate]: remaining,
     };
+    const sources = { ...(assignmentEventSources[normDate] ?? {}) };
+    delete sources[goalId];
+    assignmentEventSources = { ...assignmentEventSources, [normDate]: sources };
     try {
-      await api.planning.setAssignments(normDate, assignments[normDate], mirrorToCalendar);
+      await api.planning.setAssignments(normDate, remaining, true, sourcesForDate(normDate, remaining));
+      void loadRangeAgenda();
     } catch (e) {
       logger.error('Error saving assignment removal:', e);
     }
@@ -888,7 +1021,7 @@
   const PLAN_TEMPS = ['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL', 'ONEOFF'] as const;
   // 2024-01-01 was a Monday — locale-aware Mon→Sun weekday labels.
   const WEEKDAYS_SHORT = Array.from({ length: 7 }, (_, i) =>
-    new Date(2024, 0, 1 + i).toLocaleDateString(undefined, { weekday: 'short' })
+    new Date(2024, 0, 1 + i).toLocaleDateString($locale, { weekday: 'short' })
   );
 
   // Union of goal ids assigned to any period a date belongs to (its day,
@@ -926,12 +1059,12 @@
   let planningPeriodLabel = $derived.by(() => {
     if (planningView === 'month') {
       const d = new Date(planningCursor + 'T12:00:00');
-      const label = d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+      const label = d.toLocaleDateString($locale, { month: 'long', year: 'numeric' });
       return label.charAt(0).toUpperCase() + label.slice(1);
     }
     const first = new Date(weekDays[0] + 'T12:00:00');
     const last = new Date(weekDays[6] + 'T12:00:00');
-    return `${first.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} – ${last.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`;
+    return `${first.toLocaleDateString($locale, { day: 'numeric', month: 'short' })} – ${last.toLocaleDateString($locale, { day: 'numeric', month: 'short', year: 'numeric' })}`;
   });
 
   function shiftPlanningPeriod(dir: 1 | -1) {
@@ -950,6 +1083,12 @@
     selectPlanningDay(todayIso);
   }
 
+  // Quick-nav to /calendar on the selected planning day (#1668). The date is
+  // carried in the query param; the calendar consumes it on mount.
+  function openPlanningInCalendar() {
+    void goto(resolve(`/calendar?date=${selectedPlanningDate || todayIso}`));
+  }
+
   // Bulk-prefetch every normalized key visible in the current calendar view
   // so per-day assignment dots render without waiting for a selection.
   async function loadAssignmentsForRange(dates: string[]) {
@@ -957,19 +1096,27 @@
     for (const date of dates) {
       for (const temp of PLAN_TEMPS) keys.add(getNormalizedDate(date, temp));
     }
-    const missing = [...keys].filter((k) => !(k in assignments));
+    const missing = [...keys].filter((k) => !(k in assignments) || !(k in assignmentEventSources));
     if (missing.length === 0) return;
     const results = await Promise.all(
       missing.map(async (d) => {
         try {
           const res = await api.planning.getAssignments(d);
-          return { date: d, ids: res.goal_ids };
+          return {
+            date: d,
+            ids: res.goal_ids,
+            sources: parseEventSources(res.goal_event_ids),
+          };
         } catch {
-          return { date: d, ids: [] };
+          return { date: d, ids: [], sources: {} };
         }
       })
     );
     assignments = { ...assignments, ...Object.fromEntries(results.map((r) => [r.date, r.ids])) };
+    assignmentEventSources = {
+      ...assignmentEventSources,
+      ...Object.fromEntries(results.map((r) => [r.date, r.sources])),
+    };
   }
 
   $effect(() => {
@@ -977,9 +1124,217 @@
     loadAssignmentsForRange(dates).catch(logger.error);
   });
 
+  // ── Real-calendar agenda for the visible planning range (read-only) ──
+  // Events + tasks are fetched once for the whole visible month/week and
+  // bucketed per day, so every day cell can show real titles and colors.
+  // Nothing here mutates — clicks open a detail modal; editing stays in
+  // /calendar.
+  let rangeTasks = $state<CalendarTask[]>([]);
+  let rangeEvents = $state<CalendarEvent[]>([]);
+  let agendaLoading = $state(false);
+  let agendaDetail = $state<
+    { kind: 'event'; event: CalendarEvent } | { kind: 'task'; task: CalendarTask } | null
+  >(null);
+  // Google event → quick goal creation (#goal-from-event)
+  let goalFromEventSeed = $state<GoalEventSeed | null>(null);
+
+  type PlanningAgendaEntry =
+    | { kind: 'event'; sort: string; event: CalendarEvent }
+    | { kind: 'task'; sort: string; task: CalendarTask };
+  type PlanningCellItem = { kind: 'goal'; goal: Goal; sort: string } | PlanningAgendaEntry;
+
+  const AGENDA_PRIORITY_COLORS: Record<string, string> = {
+    LOW: 'var(--text-muted)',
+    MEDIUM: 'var(--link)',
+    HIGH: 'var(--warning, #d9a13b)',
+    URGENT: 'var(--error)',
+  };
+  const RECURRENCE_LABEL_KEYS: Record<string, string> = {
+    NONE: 'calendar.recurrenceNone',
+    DAILY: 'calendar.recurrenceDaily',
+    WEEKLY: 'calendar.recurrenceWeekly',
+    MONTHLY: 'calendar.recurrenceMonthly',
+  };
+  const REMINDER_LABEL_KEYS: Record<number, string> = {
+    5: 'calendar.reminderMin5',
+    15: 'calendar.reminderMin15',
+    30: 'calendar.reminderMin30',
+    60: 'calendar.reminderMin60',
+  };
+
+  function eventDayKey(ev: CalendarEvent): string {
+    // All-day events are cached as UTC midnight — bucket by the raw date
+    // prefix so they don't shift to the previous local day (same rule as
+    // the /calendar page).
+    if (ev.all_day) return ev.start_at.slice(0, 10);
+    return localDayKey(new Date(ev.start_at));
+  }
+
+  function eventTimeLabel(ev: CalendarEvent): string {
+    if (ev.all_day) return $t('calendar.allDay');
+    const start = new Date(ev.start_at);
+    if (!ev.end_at) return start.toLocaleTimeString($locale, { hour: '2-digit', minute: '2-digit' });
+    const end = new Date(ev.end_at);
+    return `${start.toLocaleTimeString($locale, { hour: '2-digit', minute: '2-digit' })} – ${end.toLocaleTimeString($locale, { hour: '2-digit', minute: '2-digit' })}`;
+  }
+
+  function taskTimeLabel(task: CalendarTask): string {
+    if (!task.start_time) return '·';
+    const start = task.start_time.slice(0, 5);
+    return task.end_time ? `${start} – ${task.end_time.slice(0, 5)}` : start;
+  }
+
+  function reminderLabel(minutes: number | null): string {
+    if (minutes === null) return '—';
+    const key = REMINDER_LABEL_KEYS[minutes];
+    return key ? $t(key) : `${minutes} min`;
+  }
+
+  async function loadRangeAgenda(): Promise<void> {
+    const dates = planningView === 'month' ? monthCells.map((c) => c.iso) : weekDays;
+    if (dates.length === 0) return;
+    agendaLoading = true;
+    const first = dates[0];
+    const last = dates[dates.length - 1];
+    // Pad both bounds a day: all-day events are cached at UTC midnight,
+    // which lands on the adjacent local day in offset zones — the exact
+    // day is filtered client-side by eventDayKey (same rule as /calendar).
+    const start = new Date(`${first}T00:00:00`);
+    start.setDate(start.getDate() - 1);
+    const end = new Date(`${last}T23:59:59.999`);
+    end.setDate(end.getDate() + 1);
+    try {
+      const [evts, taskRows] = await Promise.all([
+        api.google.calendarEvents({
+          start: start.toISOString(),
+          end: end.toISOString(),
+        }),
+        api.calendarTasks.list({ start: first, end: last }),
+      ]);
+      rangeEvents = evts;
+      rangeTasks = taskRows;
+    } catch (e) {
+      logger.error('Error loading planning agenda:', e);
+    } finally {
+      agendaLoading = false;
+    }
+  }
+
+  // True when `task` is the auto-created calendar mirror of a goal assigned
+  // on its own anchor date — the goal chip already represents it, so the
+  // agenda must not render the same item twice. A mirror the user moved to
+  // a non-anchor date keeps showing as a regular task.
+  function isMirrorOfAssignedGoal(task: CalendarTask): boolean {
+    if (task.goal_id === null || !task.date) return false;
+    return PLAN_TEMPS.some((temp) => {
+      const anchor = getNormalizedDate(task.date as string, temp);
+      return anchor === task.date && (assignments[anchor] || []).includes(task.goal_id as number);
+    });
+  }
+
+  // Merged, time-sorted read-only agenda bucketed by day. Tasks that mirror
+  // a Google event (google_event_id) suppress the cached Google copy so each
+  // item appears once — same dedup rule as /calendar. Events that seeded a
+  // goal-from-event assignment are likewise represented by the goal chip.
+  let agendaByDay = $derived.by(() => {
+    const byDay = new Map<string, PlanningAgendaEntry[]>();
+    const mirroredGoogleIds = new Set(
+      rangeTasks.map((t) => t.google_event_id).filter((id): id is string => id !== null)
+    );
+    const sourcedEventIds = new Set(
+      Object.values(assignmentEventSources).flatMap((m) => Object.values(m))
+    );
+    const push = (key: string, item: PlanningAgendaEntry) => {
+      const list = byDay.get(key) ?? [];
+      list.push(item);
+      byDay.set(key, list);
+    };
+    for (const ev of rangeEvents) {
+      if (mirroredGoogleIds.has(ev.google_id)) continue;
+      if (sourcedEventIds.has(ev.google_id)) continue;
+      push(eventDayKey(ev), {
+        kind: 'event',
+        sort: ev.all_day ? '00:00' : ev.start_at.slice(11, 16),
+        event: ev,
+      });
+    }
+    for (const task of rangeTasks) {
+      if (!task.date) continue;
+      if (isMirrorOfAssignedGoal(task)) continue;
+      push(task.date, { kind: 'task', sort: task.start_time?.slice(0, 5) ?? '99:99', task });
+    }
+    for (const list of byDay.values()) {
+      list.sort((a, b) => {
+        if (a.sort !== b.sort) return a.sort.localeCompare(b.sort);
+        const al = a.kind === 'event' ? (a.event.summary ?? '') : a.task.title;
+        const bl = b.kind === 'event' ? (b.event.summary ?? '') : b.task.title;
+        return al.localeCompare(bl);
+      });
+    }
+    return byDay;
+  });
+
+  // Everything a day cell should show: assigned goals first (timeless plan
+  // items, like all-day events in Google Calendar), then the real agenda.
+  function planningCellItems(iso: string): PlanningCellItem[] {
+    const items: PlanningCellItem[] = assignedIdsForDate(iso)
+      .map((id) => goals.find((x) => x.id === id))
+      .filter((g): g is Goal => Boolean(g))
+      .map((goal) => ({ kind: 'goal' as const, goal, sort: '99:99' }));
+    items.push(...(agendaByDay.get(iso) ?? []));
+    return items;
+  }
+
+  let dayAgendaItems = $derived.by(() => agendaByDay.get(selectedPlanningDate) ?? []);
+
+  function agendaEntryColor(item: PlanningAgendaEntry): string {
+    if (item.kind === 'event') return item.event.color ?? 'var(--text-muted)';
+    return item.task.color ?? AGENDA_PRIORITY_COLORS[item.task.priority] ?? 'var(--text-muted)';
+  }
+
+  function agendaEntryTitle(item: PlanningAgendaEntry): string {
+    return item.kind === 'event' ? item.event.summary || '—' : item.task.title;
+  }
+
+  function agendaEntryTime(item: PlanningAgendaEntry): string {
+    return item.kind === 'event' ? eventTimeLabel(item.event) : taskTimeLabel(item.task);
+  }
+
+  // Compact chip label for the week board: start time only (no end/range),
+  // '·' for all-day/timeless items — the full label lives in the detail rail.
+  function agendaEntryTimeShort(item: PlanningAgendaEntry): string {
+    if (item.kind === 'task') return item.task.start_time?.slice(0, 5) ?? '·';
+    const ev = item.event;
+    if (ev.all_day || !ev.start_at) return '·';
+    return new Date(ev.start_at).toLocaleTimeString($locale, {
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    });
+  }
+
+  // Translucent wash + solid left bar in the item's real color — works for
+  // hex (Google/task colors) and var() (goal/priority colors) alike.
+  function tintedStyle(color: string): string {
+    return `background:color-mix(in srgb, ${color} 20%, transparent);box-shadow:inset 2px 0 0 ${color};`;
+  }
+
+  function openAgendaDetail(item: PlanningAgendaEntry): void {
+    agendaDetail =
+      item.kind === 'event' ? { kind: 'event', event: item.event } : { kind: 'task', task: item.task };
+  }
+
   $effect(() => {
-    if (typeof localStorage !== 'undefined')
-      localStorage.setItem('goals.planningView', planningView);
+    if (currentTab !== 'planning') return;
+    // Anchor read keeps this effect subscribed to the visible range
+    // (view switch, month/week navigation) so the agenda refetches.
+    const anchor = planningView === 'month' ? monthCells[0]?.iso : weekDays[0];
+    if (!anchor) return;
+    loadRangeAgenda().catch(logger.error);
+  });
+
+  $effect(() => {
+    savePref('goals', 'planningView', planningView);
   });
 
   function onPoolDragStart(e: DragEvent, goalId: number) {
@@ -1010,6 +1365,10 @@
   }
 
   function openGoalEditor(goal: Goal) {
+    // Track the selection so the editor list can re-highlight it after a
+    // reload (#1673). The [id] page also records it for direct URL loads.
+    lastEditedGoalId = goal.id;
+    savePref('goals', 'editorGoalId', goal.id);
     goto(`/goals/${goal.id}`);
   }
 
@@ -1161,11 +1520,6 @@
           </div>
 
           <div class="pln-right">
-            <label class="mirror-to-calendar" title={$t('goalsPage.assignToDay')}>
-              <input type="checkbox" bind:checked={mirrorToCalendar} />
-              <span>{$t('goalsPage.mirrorToCalendar')}</span>
-            </label>
-
             <div class="pln-view-toggle" role="group" aria-label={$t('goalsPage.calendar')}>
               <button
                 class:active={planningView === 'month'}
@@ -1178,6 +1532,15 @@
                 onclick={() => (planningView = 'week')}>{$t('goalsPage.viewWeek')}</button
               >
             </div>
+
+            <button
+              class="pln-nav-btn"
+              onclick={openPlanningInCalendar}
+              title={$t('goalsPage.openInCalendar')}
+              aria-label={$t('goalsPage.openInCalendar')}
+            >
+              <CalendarDays size={15} />
+            </button>
           </div>
         </div>
 
@@ -1229,9 +1592,11 @@
                         <span class="pln-mq-text pln-mq-dup" aria-hidden="true">{goal.title}</span>
                       </span>
                     </span>
-                    <span class="pln-item-temp" style="color: {getGoalColor(goal)}"
-                      >{TEMPORALITY_LABELS[goal.temporality] || goal.temporality}</span
-                    >
+                    {#if goal.temporality !== 'ONEOFF'}
+                      <span class="pln-item-temp" style="color: {getGoalColor(goal)}"
+                        >{TEMPORALITY_LABELS[goal.temporality] || goal.temporality}</span
+                      >
+                    {/if}
                   </button>
                 {:else}
                   <div class="pln-pool-empty caption">{$t('goalsPage.unassignedEmpty')}</div>
@@ -1247,7 +1612,7 @@
                   <span class="pln-dow">{wd}</span>
                 {/each}
                 {#each monthCells as cell (cell.iso)}
-                  {@const ids = assignedIdsForDate(cell.iso)}
+                  {@const cellItems = planningCellItems(cell.iso)}
                   <button
                     class="pln-cell"
                     class:other-month={!cell.inMonth}
@@ -1258,13 +1623,42 @@
                     ondrop={(e) => onCellDrop(e, cell.iso)}
                   >
                     <span class="pln-cell-num">{cell.day}</span>
-                    {#if ids.length > 0}
-                      <span class="pln-cell-dots">
-                        {#each ids.slice(0, 4) as id (id)}
-                          {@const g = goals.find((x) => x.id === id)}
-                          {#if g}<i style="background: {getGoalColor(g)}"></i>{/if}
+                    {#if cellItems.length > 0}
+                      <span class="pln-cell-items">
+                        {#each cellItems.slice(0, 3) as item (item.kind === 'goal' ? `g-${item.goal.id}` : item.kind === 'event' ? `e-${item.event.google_id}` : `t-${item.task.id}`)}
+                          {#if item.kind === 'goal'}
+                            <span
+                              class="pln-chip"
+                              style={tintedStyle(getGoalColor(item.goal))}
+                              title={item.goal.title}
+                              ><span class="pln-chip-label">{item.goal.title}</span></span
+                            >
+                          {:else if item.kind === 'event'}
+                            <span
+                              class="pln-chip pln-chip-google"
+                              style={tintedStyle(agendaEntryColor(item))}
+                              title={agendaEntryTitle(item)}
+                              ><Lock size={8} /><span class="pln-chip-label"
+                                >{agendaEntryTitle(item)}</span
+                              ></span
+                            >
+                          {:else}
+                            <span
+                              class="pln-chip"
+                              style={tintedStyle(agendaEntryColor(item))}
+                              title={agendaEntryTitle(item)}
+                              >{#if item.task.recurrence !== 'NONE'}<Repeat
+                                  size={8}
+                                  class="recur-icon"
+                                />{/if}<span class="pln-chip-label"
+                                >{agendaEntryTitle(item)}</span
+                              ></span
+                            >
+                          {/if}
                         {/each}
-                        {#if ids.length > 4}<em>+{ids.length - 4}</em>{/if}
+                        {#if cellItems.length > 3}
+                          <span class="pln-chip-more">+{cellItems.length - 3}</span>
+                        {/if}
                       </span>
                     {/if}
                   </button>
@@ -1272,107 +1666,12 @@
               </div>
             </div>
 
-            <aside class="pln-detail">
-              <div class="history-detail-header">
-                <div class="history-detail-date" style="text-transform:none;">
-                  {$t('goalsPage.assignedOn', {
-                    values: {
-                      date: new Date(selectedPlanningDate + 'T12:00:00').toLocaleDateString(
-                        undefined,
-                        { day: 'numeric' }
-                      ),
-                    },
-                  })}
-                </div>
-              </div>
-
-              <div class="history-goal-list" style="width:100%">
-                {#each PLAN_TEMPS as temp (temp)}
-                  {@const normDate = getNormalizedDate(selectedPlanningDate, temp)}
-                  {@const assignedIds = Array.from(new Set(assignments[normDate] || []))}
-                  {@const filteredGoals = assignedIds
-                    .map((id) => goals.find((g) => g.id === id))
-                    .filter((g): g is Goal => g !== undefined && Boolean(g) && g.temporality === temp)}
-
-                  {#if filteredGoals.length > 0}
-                    <div class="planning-section-header">
-                      {temp === 'DAILY'
-                        ? 'Día'
-                        : temp === 'WEEKLY'
-                          ? 'Semana'
-                          : temp === 'MONTHLY'
-                            ? 'Mes'
-                            : temp === 'ANNUAL'
-                              ? 'Año'
-                              : 'Único'}
-                    </div>
-                    {#each filteredGoals as g (g.id)}
-                      {@const status = getGoalStatusOnDate(g, selectedPlanningDate)}
-                      {@const rowColor =
-                        status === 'FAILED'
-                          ? 'var(--error)'
-                          : status === 'COMPLETED'
-                            ? 'var(--success)'
-                            : getGoalColor(g)}
-                      <div class="pln-detail-item" style="border-left: 3px solid {rowColor}">
-                        <button
-                          class="pln-day-unassign"
-                          onclick={() => unassignGoalFromDate(g.id, selectedPlanningDate)}
-                          title={$t('goalsPage.remove')}
-                          aria-label={$t('goalsPage.remove')}><X size={12} /></button
-                        >
-                        {#if g.fail_emoji}
-                          <span class="pln-item-icon">
-                            <StreakIcon name={g.fail_emoji} size={13} color={rowColor} />
-                          </span>
-                        {/if}
-                        <button
-                          class="pln-day-name"
-                          class:line-through={status === 'COMPLETED'}
-                          onclick={() => openGoalEditor(g)}
-                        >
-                          <span class="pln-mq" use:marquee>
-                            <span class="pln-mq-track">
-                              <span class="pln-mq-text">{g.title}</span>
-                              <span class="pln-mq-text pln-mq-dup" aria-hidden="true">{g.title}</span>
-                            </span>
-                          </span>
-                        </button>
-                        {#if status === 'COMPLETED'}
-                          <span class="status-badge success">{$t('goalsPage.completed')}</span>
-                        {:else if status === 'FAILED'}
-                          <span class="status-badge error">{$t('goalsPage.failed')}</span>
-                        {/if}
-                        {#if g.max_assignment_days}
-                          <span class="pln-item-temp" style="color: var(--text-muted)"
-                            >{$t('goalsPage.limit', {
-                              values: { days: g.max_assignment_days },
-                            })}</span
-                          >
-                        {/if}
-                      </div>
-                    {/each}
-                  {/if}
-                {/each}
-
-                {#if !PLAN_TEMPS.some( (temp) => (assignments[getNormalizedDate(selectedPlanningDate, temp)] || []).some((id) => goals.find((g) => g.id === id)?.temporality === temp) )}
-                  <div
-                    class="history-detail-empty"
-                    style="padding: 2rem; border: 1px dashed var(--border); border-radius: var(--r); margin: 1rem;"
-                  >
-                    <span
-                      class="history-detail-msg"
-                      style="font-size: 12px; text-align: center; display: block;"
-                      >{$t('goalsPage.noGoalsForPeriod')}</span
-                    >
-                  </div>
-                {/if}
-              </div>
-            </aside>
           {:else}
+            <!-- Full-height agenda rows: one stretched row per day, items
+                 wrap so titles get real width instead of 7 narrow columns. -->
             <div class="pln-week">
               {#each weekDays as iso (iso)}
-                {@const ids = assignedIdsForDate(iso)}
+                {@const cellItems = planningCellItems(iso)}
                 <!-- svelte-ignore a11y_no_static_element_interactions -->
                 <div
                   class="pln-day"
@@ -1383,42 +1682,69 @@
                 >
                   <button class="pln-day-head" onclick={() => selectPlanningDay(iso)}>
                     <span class="pln-day-dow"
-                      >{new Date(iso + 'T12:00:00').toLocaleDateString(undefined, {
+                      >{new Date(iso + 'T12:00:00').toLocaleDateString($locale, {
                         weekday: 'short',
                       })}</span
                     >
                     <span class="pln-day-num">{Number(iso.slice(8))}</span>
-                    {#if ids.length > 0}<span class="pln-day-count">{ids.length}</span>{/if}
+                    {#if cellItems.length > 0}<span class="pln-day-count">{cellItems.length}</span>{/if}
                   </button>
                   <div class="pln-day-list">
-                    {#each ids .map((id) => goals.find((x) => x.id === id)) .filter((g): g is Goal => Boolean(g)) as g (g.id)}
-                      {@const status = getGoalStatusOnDate(g, iso)}
-                      <div
-                        class="pln-day-item"
-                        style="border-left: 3px solid {status === 'FAILED'
-                          ? 'var(--error)'
-                          : status === 'COMPLETED'
-                            ? 'var(--success)'
-                            : getGoalColor(g)}"
-                      >
-                        <button
-                          class="pln-day-unassign"
-                          onclick={() => unassignGoalFromDate(g.id, iso)}
-                          title={$t('goalsPage.remove')}
-                          aria-label={$t('goalsPage.remove')}><X size={12} /></button
+                    {#each cellItems as item (item.kind === 'goal' ? `g-${item.goal.id}` : item.kind === 'event' ? `e-${item.event.google_id}` : `t-${item.task.id}`)}
+                      {#if item.kind === 'goal'}
+                        {@const g = item.goal}
+                        {@const status = getGoalStatusOnDate(g, iso)}
+                        <div
+                          class="pln-day-item"
+                          style="border-left: 3px solid {status === 'FAILED'
+                            ? 'var(--error)'
+                            : status === 'COMPLETED'
+                              ? 'var(--success)'
+                              : getGoalColor(g)}"
                         >
-                        <button class="pln-day-name" onclick={() => openGoalEditor(g)}>
-                          <span class="pln-mq" use:marquee>
-                            <span class="pln-mq-track">
-                              <span class="pln-mq-text">{g.title}</span>
-                              <span class="pln-mq-text pln-mq-dup" aria-hidden="true">{g.title}</span>
+                          <button
+                            class="pln-day-unassign"
+                            onclick={() => unassignGoalFromDate(g.id, iso)}
+                            title={$t('goalsPage.remove')}
+                            aria-label={$t('goalsPage.remove')}><X size={11} /></button
+                          >
+                          <button class="pln-day-name" onclick={() => openGoalEditor(g)}>
+                            <span class="pln-mq" use:marquee>
+                              <span class="pln-mq-track">
+                                <span class="pln-mq-text">{g.title}</span>
+                                <span class="pln-mq-text pln-mq-dup" aria-hidden="true">{g.title}</span>
+                              </span>
                             </span>
-                          </span>
-                        </button>
-                        <span class="pln-item-temp" style="color: {getGoalColor(g)}"
-                          >{TEMPORALITY_LABELS[g.temporality] || g.temporality}</span
+                          </button>
+                          {#if g.temporality !== 'ONEOFF'}
+                            <span class="pln-item-temp" style="color: {getGoalColor(g)}"
+                              >{TEMPORALITY_LABELS[g.temporality] || g.temporality}</span
+                            >
+                          {/if}
+                        </div>
+                      {:else}
+                        <button
+                          class="pln-day-agenda"
+                          style="border-left: 3px solid {agendaEntryColor(item)}"
+                          onclick={() => openAgendaDetail(item)}
+                          title={agendaEntryTitle(item)}
                         >
-                      </div>
+                          {#if item.kind === 'event'}
+                            <Lock size={10} class="pln-day-agenda-icon" />
+                          {:else if item.task.done}
+                            <Check size={10} class="pln-day-agenda-icon pln-agenda-done" />
+                          {:else}
+                            <span
+                              class="pln-agenda-dot"
+                              style="background: {agendaEntryColor(item)}"
+                            ></span>
+                          {/if}
+                          <span class="pln-day-agenda-time"
+                            >{agendaEntryTimeShort(item)}</span
+                          >
+                          <span class="pln-day-agenda-label">{agendaEntryTitle(item)}</span>
+                        </button>
+                      {/if}
                     {:else}
                       <span class="pln-day-empty">—</span>
                     {/each}
@@ -1427,6 +1753,141 @@
               {/each}
             </div>
           {/if}
+
+          <aside class="pln-detail">
+            <div class="history-detail-header">
+              <div class="history-detail-date" style="text-transform:none;">
+                {$t('goalsPage.assignedOn', {
+                  values: {
+                    date: new Date(selectedPlanningDate + 'T12:00:00').toLocaleDateString(
+                      undefined,
+                      { day: 'numeric' }
+                    ),
+                  },
+                })}
+              </div>
+            </div>
+
+            <div class="history-goal-list" style="width:100%">
+              {#each PLAN_TEMPS as temp (temp)}
+                {@const normDate = getNormalizedDate(selectedPlanningDate, temp)}
+                {@const assignedIds = Array.from(new Set(assignments[normDate] || []))}
+                {@const filteredGoals = assignedIds
+                  .map((id) => goals.find((g) => g.id === id))
+                  .filter((g): g is Goal => g !== undefined && Boolean(g) && g.temporality === temp)}
+
+                {#if filteredGoals.length > 0}
+                  <div class="planning-section-header">
+                    {temp === 'DAILY'
+                      ? 'Día'
+                      : temp === 'WEEKLY'
+                        ? 'Semana'
+                        : temp === 'MONTHLY'
+                          ? 'Mes'
+                          : temp === 'ANNUAL'
+                            ? 'Año'
+                            : 'Único'}
+                  </div>
+                  {#each filteredGoals as g (g.id)}
+                    {@const status = getGoalStatusOnDate(g, selectedPlanningDate)}
+                    {@const rowColor =
+                      status === 'FAILED'
+                        ? 'var(--error)'
+                        : status === 'COMPLETED'
+                          ? 'var(--success)'
+                          : getGoalColor(g)}
+                    <div class="pln-detail-item" style="border-left: 3px solid {rowColor}">
+                      <button
+                        class="pln-day-unassign"
+                        onclick={() => unassignGoalFromDate(g.id, selectedPlanningDate)}
+                        title={$t('goalsPage.remove')}
+                        aria-label={$t('goalsPage.remove')}><X size={12} /></button
+                      >
+                      {#if g.fail_emoji}
+                        <span class="pln-item-icon">
+                          <StreakIcon name={g.fail_emoji} size={13} color={rowColor} />
+                        </span>
+                      {/if}
+                      <button
+                        class="pln-day-name"
+                        class:line-through={status === 'COMPLETED'}
+                        onclick={() => openGoalEditor(g)}
+                      >
+                        <span class="pln-mq" use:marquee>
+                          <span class="pln-mq-track">
+                            <span class="pln-mq-text">{g.title}</span>
+                            <span class="pln-mq-text pln-mq-dup" aria-hidden="true">{g.title}</span>
+                          </span>
+                        </span>
+                      </button>
+                      {#if status === 'COMPLETED'}
+                        <span class="status-badge success">{$t('goalsPage.completed')}</span>
+                      {:else if status === 'FAILED'}
+                        <span class="status-badge error">{$t('goalsPage.failed')}</span>
+                      {/if}
+                      {#if g.max_assignment_days}
+                        <span class="pln-item-temp" style="color: var(--text-muted)"
+                          >{$t('goalsPage.limit', {
+                            values: { days: g.max_assignment_days },
+                          })}</span
+                        >
+                      {/if}
+                    </div>
+                  {/each}
+                {/if}
+              {/each}
+
+              {#if !PLAN_TEMPS.some( (temp) => (assignments[getNormalizedDate(selectedPlanningDate, temp)] || []).some((id) => goals.find((g) => g.id === id)?.temporality === temp) )}
+                <div
+                  class="history-detail-empty"
+                  style="padding: 2rem; border: 1px dashed var(--border); border-radius: var(--r); margin: 1rem;"
+                >
+                  <span
+                    class="history-detail-msg"
+                    style="font-size: 12px; text-align: center; display: block;"
+                    >{$t('goalsPage.noGoalsForPeriod')}</span
+                  >
+                </div>
+              {/if}
+
+              <!-- Real-calendar agenda: Google events + joidy tasks for the
+                   selected day. Read-only — clicks open a detail modal. -->
+              <div class="planning-section-header">{$t('goalsPage.realCalendar')}</div>
+              {#if agendaLoading}
+                <div class="pln-agenda-empty caption">{$t('goalsPage.agendaLoading')}</div>
+              {:else if dayAgendaItems.length === 0}
+                <div class="pln-agenda-empty caption">{$t('goalsPage.noCalendarItems')}</div>
+              {:else}
+                {#each dayAgendaItems as item (item.kind === 'event' ? `e-${item.event.google_id}` : `t-${item.task.id}`)}
+                  <button
+                    class="pln-agenda-item"
+                    style="border-left: 3px solid {agendaEntryColor(item)}"
+                    onclick={() => openAgendaDetail(item)}
+                  >
+                    {#if item.kind === 'event'}
+                      <span class="pln-agenda-icon"><Lock size={11} /></span>
+                    {:else if item.task.done}
+                      <span class="pln-agenda-icon pln-agenda-done"><Check size={11} /></span>
+                    {:else}
+                      <span
+                        class="pln-agenda-dot"
+                        style="background: {agendaEntryColor(item)}"
+                      ></span>
+                    {/if}
+                    <span class="pln-agenda-time caption">{agendaEntryTime(item)}</span>
+                    <span class="pln-agenda-body">
+                      <span class="pln-agenda-label">{agendaEntryTitle(item)}</span>
+                      {#if item.kind === 'task' && item.task.goal_title}
+                        <span class="pln-agenda-goal"><Target size={9} />{item.task.goal_title}</span>
+                      {:else if item.kind === 'event' && item.event.location}
+                        <span class="pln-agenda-sub caption">{item.event.location}</span>
+                      {/if}
+                    </span>
+                  </button>
+                {/each}
+              {/if}
+            </div>
+          </aside>
         </div>
       </div>
     {/if}
@@ -1621,6 +2082,7 @@
             filter={goalFilterState}
             contextFilter={goalContextFilter}
             pinned={pinnedGoals}
+            selectedId={lastEditedGoalId}
             {tags}
             {notes}
             {getGoalColor}
@@ -2053,6 +2515,159 @@
       {/snippet}
     </ModalDialog>
   {/if}
+
+  {#if agendaDetail}
+    {@const detail = agendaDetail}
+    {@const detailColor = detail.kind === 'event'
+      ? (detail.event.color ?? 'var(--text-muted)')
+      : (detail.task.color ?? AGENDA_PRIORITY_COLORS[detail.task.priority] ?? 'var(--text-muted)')}
+    <ModalDialog
+      open={true}
+      title={detail.kind === 'event'
+        ? detail.event.summary || '—'
+        : detail.task.title}
+      size="md"
+      footerAlign="center"
+      titleAlign="center"
+      onClose={() => (agendaDetail = null)}
+    >
+      <p class="agenda-detail-hint caption">
+        <span class="agenda-detail-swatch" style="background: {detailColor}"></span
+        >{$t('goalsPage.agendaReadOnly')}
+      </p>
+      <dl class="agenda-detail-list">
+        {#if detail.kind === 'event'}
+          {@const ev = detail.event}
+          <div class="agenda-detail-row">
+            <dt>{$t('goalsPage.fieldDate')}</dt>
+            <dd>{new Date(`${eventDayKey(ev)}T12:00:00`).toLocaleDateString($locale, { weekday: 'long', day: 'numeric', month: 'long' })}</dd>
+          </div>
+          <div class="agenda-detail-row">
+            <dt>{$t('goalsPage.fieldSchedule')}</dt>
+            <dd>{eventTimeLabel(ev)}</dd>
+          </div>
+          {#if ev.location}
+            <div class="agenda-detail-row">
+              <dt>{$t('goalsPage.fieldLocation')}</dt>
+              <dd>{ev.location}</dd>
+            </div>
+          {/if}
+          {#if ev.description}
+            <div class="agenda-detail-row">
+              <dt>{$t('goalsPage.fieldDescription')}</dt>
+              <dd class="agenda-detail-desc">{ev.description}</dd>
+            </div>
+          {/if}
+        {:else}
+          {@const task = detail.task}
+          <div class="agenda-detail-row">
+            <dt>{$t('goalsPage.fieldDate')}</dt>
+            <dd>{task.date
+              ? new Date(`${task.date}T12:00:00`).toLocaleDateString($locale, {
+                  weekday: 'long',
+                  day: 'numeric',
+                  month: 'long',
+                })
+              : '—'}</dd>
+          </div>
+          <div class="agenda-detail-row">
+            <dt>{$t('goalsPage.fieldSchedule')}</dt>
+            <dd>{taskTimeLabel(task)}</dd>
+          </div>
+          <div class="agenda-detail-row">
+            <dt>{$t('calendar.priority')}</dt>
+            <dd>{task.priority}</dd>
+          </div>
+          <div class="agenda-detail-row">
+            <dt>{$t('goalsPage.fieldStatus')}</dt>
+            <dd>{task.done ? $t('goalsPage.statusDone') : $t('goalsPage.statusPending')}</dd>
+          </div>
+          {#if task.recurrence !== 'NONE'}
+            <div class="agenda-detail-row">
+              <dt>{$t('calendar.recurrence')}</dt>
+              <dd>{$t(RECURRENCE_LABEL_KEYS[task.recurrence] ?? 'calendar.recurrenceNone')}</dd>
+            </div>
+          {/if}
+          {#if task.reminder_minutes !== null}
+            <div class="agenda-detail-row">
+              <dt>{$t('calendar.reminder')}</dt>
+              <dd>{reminderLabel(task.reminder_minutes)}</dd>
+            </div>
+          {/if}
+          {#if task.goal_title}
+            <div class="agenda-detail-row">
+              <dt>{$t('goalsPage.linkedGoal')}</dt>
+              <dd>{task.goal_title}</dd>
+            </div>
+          {/if}
+        {/if}
+      </dl>
+      {#snippet footer()}
+        {#if detail.kind === 'event' && detail.event.html_link}
+          <a
+            class="btn btn-ghost"
+            href={detail.event.html_link}
+            target="_blank"
+            rel="noopener noreferrer">{$t('goalsPage.openInGoogle')}</a
+          >
+        {/if}
+        {#if detail.kind === 'task' && detail.task.goal_id}
+          <button
+            type="button"
+            class="btn btn-ghost"
+            onclick={() => {
+              const gid = detail.task.goal_id;
+              agendaDetail = null;
+              if (gid) goto(`/goals/${gid}`);
+            }}
+          >
+            {$t('goalsPage.viewGoal')}
+          </button>
+        {/if}
+        <button
+          type="button"
+          class="btn btn-ghost"
+          onclick={() => {
+            agendaDetail = null;
+            goto('/calendar');
+          }}
+        >
+          {$t('goalsPage.openCalendar')}
+        </button>
+        {#if detail.kind === 'event'}
+          <button
+            type="button"
+            class="btn btn-primary"
+            onclick={() => {
+              const ev = detail.event;
+              agendaDetail = null;
+              goalFromEventSeed = {
+                title: ev.summary || '—',
+                description: ev.description,
+                location: ev.location,
+                color: ev.color,
+                day: eventDayKey(ev),
+                eventId: ev.google_id,
+              };
+            }}
+          >
+            <Target size={14} /> {$t('goalFromEvent.action')}
+          </button>
+        {/if}
+      {/snippet}
+    </ModalDialog>
+  {/if}
+
+  {#if goalFromEventSeed}
+    <GoalFromEventModal
+      event={goalFromEventSeed}
+      onClose={() => (goalFromEventSeed = null)}
+      onCreated={(goal) => {
+        goals = [goal, ...goals];
+        void loadAssignmentsForDate(goalFromEventSeed?.day ?? '');
+      }}
+    />
+  {/if}
 </div>
 
 <style>
@@ -2376,7 +2991,10 @@
   /* Infinite horizontal auto-scroll for overflowing goal titles. The track
      holds two copies; translating -50% loops seamlessly because the copy's
      trailing padding is the loop gap. Activated only when the text overflows
-     (marquee action toggles the class). */
+     (marquee action toggles the class). The action drives the loop via the
+     Web Animations API so each cycle dwells --mq-dwell (default 1s) with the
+     title start in view; the pln-marquee CSS animation below is a scroll-only
+     fallback for engines without WAAPI. */
   .pln-mq {
     display: block;
     flex: 1;
@@ -2499,23 +3117,42 @@
     font-weight: 700;
     font-family: var(--font-mono);
   }
-  .pln-cell-dots {
+  .pln-cell-items {
     display: flex;
-    align-items: center;
-    gap: 3px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+    width: 100%;
+    min-width: 0;
     margin-top: auto;
   }
-  .pln-cell-dots i {
-    width: 7px;
-    height: 7px;
-    border-radius: 999px;
-    display: block;
+  .pln-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    max-width: 100%;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 9px;
+    line-height: 1.3;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
   }
-  .pln-cell-dots em {
-    font-style: normal;
+  .pln-chip-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+  .pln-chip-google {
+    color: var(--text-primary);
+  }
+  .pln-chip-more {
     font-size: 9px;
     color: var(--text-muted);
     font-family: var(--font-mono);
+    padding-left: 2px;
   }
 
   /* Detail panel (selected day, grouped by temporality) */
@@ -2555,22 +3192,168 @@
     flex-shrink: 0;
   }
 
-  /* Week board */
+  /* Real-calendar agenda (read-only): Google events + joidy tasks */
+  .pln-agenda-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 12px;
+    margin-bottom: 6px;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+    color: var(--text-primary);
+    font-size: 13px;
+  }
+  .pln-agenda-item:hover {
+    background: var(--hover);
+    border-color: var(--text-muted);
+  }
+  .pln-agenda-icon {
+    flex-shrink: 0;
+    color: var(--text-muted);
+  }
+  .pln-agenda-done {
+    color: var(--success);
+  }
+  .pln-agenda-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .pln-day-agenda {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1 1 200px;
+    min-width: 0;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--text-muted);
+    border-radius: var(--r);
+    background: var(--surface);
+    cursor: pointer;
+    text-align: left;
+    color: var(--text-primary);
+    font-size: 11px;
+  }
+  .pln-day-agenda:hover {
+    background: var(--hover);
+    border-color: var(--text-muted);
+  }
+  .pln-day-agenda-time {
+    flex-shrink: 0;
+    min-width: 32px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+  }
+  .pln-day-agenda-label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .pln-agenda-time {
+    flex-shrink: 0;
+    min-width: 44px;
+    color: var(--text-muted);
+  }
+  .pln-agenda-body {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+  }
+  .pln-agenda-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .pln-agenda-goal {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    color: var(--link);
+    font-size: 11px;
+  }
+  .pln-agenda-sub {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-muted);
+  }
+  .pln-agenda-empty {
+    padding: 8px 12px;
+    color: var(--text-muted);
+  }
+  .agenda-detail-hint {
+    margin: 0 0 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    text-align: center;
+  }
+  .agenda-detail-swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    flex-shrink: 0;
+    border: 1px solid var(--border);
+  }
+  .agenda-detail-list {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .agenda-detail-row {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    font-size: 13px;
+  }
+  .agenda-detail-row dt {
+    color: var(--text-muted);
+    min-width: 90px;
+    flex-shrink: 0;
+  }
+  .agenda-detail-row dd {
+    margin: 0;
+    color: var(--text-primary);
+  }
+  .agenda-detail-desc {
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  /* Week board — full-height agenda rows: one stretched row per day, items
+     wrap into as many lines as they need so titles keep real width. */
   .pln-week {
     flex: 1;
     min-width: 0;
     min-height: 0;
-    display: grid;
-    grid-template-columns: repeat(7, minmax(0, 1fr));
+    display: flex;
+    flex-direction: column;
     gap: 6px;
+    overflow-y: auto;
+    overflow-x: hidden;
   }
   .pln-day {
     display: flex;
-    flex-direction: column;
+    align-items: stretch;
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: var(--r);
     background: var(--surface);
-    min-height: 0;
+    flex: 1;
+    min-height: 96px;
     overflow: hidden;
     transition:
       border-color var(--t-fast),
@@ -2591,11 +3374,14 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 1px;
-    padding: 8px 4px;
-    background: transparent;
+    justify-content: center;
+    gap: 2px;
+    width: 58px;
+    flex-shrink: 0;
+    padding: 8px 6px;
+    background: color-mix(in srgb, var(--text-primary) 3%, transparent);
     border: none;
-    border-bottom: 1px solid var(--border-light);
+    border-right: 1px solid var(--border-light);
     cursor: pointer;
     color: var(--text-primary);
   }
@@ -2607,17 +3393,15 @@
     font-family: var(--font-mono);
   }
   .pln-day-num {
-    font-size: 15px;
+    font-size: 18px;
     font-weight: 700;
     font-family: var(--font-mono);
+    line-height: 1;
   }
   .pln-day.today .pln-day-num {
     color: var(--xp);
   }
   .pln-day-count {
-    position: absolute;
-    top: 6px;
-    right: 6px;
     font-size: 9px;
     padding: 0 5px;
     border-radius: 999px;
@@ -2627,21 +3411,28 @@
   }
   .pln-day-list {
     flex: 1;
+    min-width: 0;
     overflow-y: auto;
-    padding: 6px;
+    overflow-x: hidden;
+    padding: 8px;
     display: flex;
-    flex-direction: column;
-    gap: 5px;
-    min-height: 0;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    align-items: flex-start;
+    gap: 6px;
+    scrollbar-width: thin;
   }
   .pln-day-item {
-    display: flex;
+    display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 8px 9px;
+    padding: 6px 10px;
     border: 1px solid var(--border);
     border-radius: var(--r);
     font-size: 12px;
+    flex: 1 1 200px;
+    min-width: 0;
+    background: var(--surface);
   }
   .pln-day-unassign {
     display: flex;
@@ -2658,9 +3449,6 @@
   .pln-day-name {
     flex: 1;
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
     background: none;
     border: none;
     color: var(--text-primary);
@@ -2676,10 +3464,11 @@
     color: var(--link);
   }
   .pln-day-empty {
-    text-align: center;
+    align-self: center;
     color: var(--text-muted);
     font-size: 10px;
-    padding: 6px 0;
+    padding: 0 8px;
+    flex-shrink: 0;
   }
 
   @media (max-width: 1100px) {
@@ -2715,8 +3504,7 @@
       min-height: 380px;
     }
     .pln-week {
-      grid-template-columns: repeat(7, minmax(120px, 1fr));
-      overflow-x: auto;
+      min-height: 0;
     }
   }
 
@@ -2793,15 +3581,6 @@
     white-space: nowrap;
   }
 
-  .mirror-to-calendar {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 11px;
-    color: var(--text-muted);
-    cursor: pointer;
-    user-select: none;
-  }
   /* Editor tab — slim toolbar + KPI rail + dense goal rows (metrics-view
      layout). The tab keeps its framed container; the body splits into a
      fixed rail and a scrolling list. */

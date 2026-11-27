@@ -248,6 +248,7 @@ def test_add_repo_to_db_duplicate_and_bad_format(client, db_session, monkeypatch
 def test_list_and_remove_repos_in_db(client, db_session):
     repo = _repo(db_session, "octocat/Listed")
     item = _item(db_session, repo.id, external_id=9)
+    repo_id, item_id = repo.id, item.id
     db_session.commit()
 
     resp = client.get(f"{GH}/repos/db")
@@ -258,12 +259,31 @@ def test_list_and_remove_repos_in_db(client, db_session):
     # Missing repo → 404
     assert client.delete(f"{GH}/repos/db/999999").status_code == 404
 
-    # Existing repo → cascades items manually then deletes
-    resp = client.delete(f"{GH}/repos/db/{repo.id}")
+    # Existing repo → items are bulk-deleted, then the repo row itself.
+    resp = client.delete(f"{GH}/repos/db/{repo_id}")
     assert resp.status_code == 200
-    assert resp.json() == {"status": "deleted", "repo_id": repo.id}
-    assert db_session.get(GitHubRepo, repo.id) is None
-    assert db_session.get(GitHubItem, item.id) is None
+    assert resp.json() == {"status": "deleted", "repo_id": repo_id}
+    assert db_session.get(GitHubRepo, repo_id) is None
+    # The bulk delete marks the instance deleted in-session — assert via a
+    # plain SELECT, not an identity-map get() on the expired instance (#1526).
+    assert db_session.query(GitHubItem).filter(GitHubItem.id == item_id).first() is None
+
+
+def test_remove_repo_from_db_leaves_other_repos_untouched(client, db_session):
+    """The bulk item delete must stay scoped to the removed repo (#1526)."""
+    repo_a = _repo(db_session, "octocat/Repo-A")
+    repo_b = _repo(db_session, "octocat/Repo-B")
+    item_a = _item(db_session, repo_a.id, external_id=1)
+    item_b = _item(db_session, repo_b.id, external_id=2)
+    repo_a_id, repo_b_id, item_a_id, item_b_id = repo_a.id, repo_b.id, item_a.id, item_b.id
+    db_session.commit()
+
+    resp = client.delete(f"{GH}/repos/db/{repo_a_id}")
+    assert resp.status_code == 200
+    assert db_session.get(GitHubRepo, repo_a_id) is None
+    assert db_session.query(GitHubItem).filter(GitHubItem.id == item_a_id).first() is None
+    assert db_session.get(GitHubRepo, repo_b_id) is not None
+    assert db_session.get(GitHubItem, item_b_id) is not None
 
 
 # ─── aggregated issues / pulls (Search API, #1512) ────────────────────────────

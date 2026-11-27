@@ -9,6 +9,7 @@
   import PromptDialog from './PromptDialog.svelte';
   import { fetchAISuggestions } from '$lib/stores/notes';
   import { showFrontmatter, hideTagsLine } from '$lib/stores/settings';
+  import { vimModeEnabled, vimEditorMode, isTouchDevice } from '$lib/stores/vim';
   import { api, type Note } from '$lib/api';
   import { extractTagsFromContent, recomposeHiddenSlices } from '$lib/utils/noteContent';
   import { computeFormatEdit, applyWysiwygFormat, insertTextAt } from '$lib/utils/markdownFormat';
@@ -252,6 +253,12 @@
     });
   }
 
+  // Vim badge in the toolbar (#1666): only meaningful while the raw textarea
+  // is actually on screen — hidden in preview/WYSIWYG and on touch devices.
+  let vimBadgeMode = $derived(
+    $vimModeEnabled && !isTouchDevice() && !previewMode && !wysiwygMode ? $vimEditorMode : null
+  );
+
   let zenMode = $state(false);
 
   // Sync zen mode with a body class so the layout (nav, header, footer, sidebar)
@@ -356,6 +363,7 @@
     {formatMarkdown}
     {insertAtCursor}
     {handleSave}
+    vimMode={vimBadgeMode}
     onPrev={() => dispatch('prev')}
     onNext={() => dispatch('next')}
     onDelete={() => dispatch('delete')}
@@ -386,6 +394,8 @@
     {scheduleSnapshot}
     {onContentChange}
     {handleSave}
+    onUndo={handleUndo}
+    onRedo={handleRedo}
   />
 
   <PromptDialog

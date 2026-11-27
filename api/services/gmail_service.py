@@ -28,6 +28,7 @@ from typing import Any, NoReturn
 
 import httpx
 from config import settings
+from models.email_account import EmailAccount
 from models.google_token import GoogleToken
 from repositories import ConfigRepository
 from services import google_service as gs
@@ -121,16 +122,23 @@ def _granted_scopes(row: GoogleToken | None) -> set[str] | None:
     return set(row.scope.split())
 
 
-def gmail_capabilities(db: Session) -> dict[str, bool | None]:
-    """``{read, modify, send}`` capability flags; None entries mean 'unknown'."""
-    scopes = _granted_scopes(get_stored_token(db))
-    if scopes is None:
+def capabilities_for_scope(scope: str | None) -> dict[str, bool | None]:
+    """``{read, modify, send}`` capability flags from a space-separated OAuth
+    scope string; None entries mean 'unknown' (no scope recorded)."""
+    if not scope:
         return {"read": None, "modify": None, "send": None}
+    scopes = set(scope.split())
     return {
         "read": bool(scopes & _READ_SCOPES),
         "modify": bool(scopes & _MODIFY_SCOPES),
         "send": bool(scopes & _SEND_SCOPES),
     }
+
+
+def gmail_capabilities(db: Session) -> dict[str, bool | None]:
+    """``{read, modify, send}`` capability flags; None entries mean 'unknown'."""
+    row = get_stored_token(db)
+    return capabilities_for_scope(row.scope if row else None)
 
 
 _CAPABILITY_LABELS = {
@@ -140,16 +148,23 @@ _CAPABILITY_LABELS = {
 }
 
 
-def require_capability(db: Session, capability: str) -> None:
-    """Raise GmailReconsentRequired when the stored grant provably lacks the
+def require_scope_capability(scope: str | None, capability: str) -> None:
+    """Raise GmailReconsentRequired when a scope string provably lacks the
     capability. Unknown scopes are left to Google's 403 mapping."""
-    allowed = gmail_capabilities(db).get(capability)
+    allowed = capabilities_for_scope(scope).get(capability)
     if allowed is False:
         label = _CAPABILITY_LABELS.get(capability, capability)
         raise GmailReconsentRequired(
             f"El token de Google no tiene permiso de {label} en Gmail. "
             "Reconecta tu cuenta en Ajustes para habilitar esta función."
         )
+
+
+def require_capability(db: Session, capability: str) -> None:
+    """Raise GmailReconsentRequired when the stored grant provably lacks the
+    capability. Unknown scopes are left to Google's 403 mapping."""
+    row = get_stored_token(db)
+    require_scope_capability(row.scope if row else None, capability)
 
 
 def _reconsent_if_needed(exc: httpx.HTTPStatusError) -> NoReturn:
@@ -768,8 +783,15 @@ def watch_configured() -> bool:
     return bool(_pubsub_topic())
 
 
-def get_watch_state(db: Session) -> dict[str, Any] | None:
-    """Last successful users.watch registration, or None."""
+def get_watch_state(db: Session | None, account: EmailAccount | None = None) -> dict[str, Any] | None:
+    """Last successful users.watch registration, or None.
+
+    Account-scoped registrations live on ``email_accounts.watch_state``
+    (#1659); the global ``gmail_watch_state`` config key remains the storage
+    for the legacy single-connection flow."""
+    if account is not None:
+        state = account.watch_state
+        return state if isinstance(state, dict) and state else None
     raw = ConfigRepository(db).get(_WATCH_STATE_KEY)
     if not raw:
         return None
@@ -790,9 +812,10 @@ def _clear_watch_state(db: Session) -> None:
     db.commit()
 
 
-async def register_watch(db: Session, token: str, label_ids: list[str] | None = None) -> dict[str, Any]:
-    """Register users.watch against the configured Pub/Sub topic and persist
-    the returned historyId/expiration so clients can poll /history from it."""
+async def request_watch(token: str, label_ids: list[str] | None = None) -> dict[str, Any]:
+    """Register users.watch against the configured Pub/Sub topic — API call
+    only; the caller persists the returned state (per-account watch_state or
+    the legacy config key)."""
     topic = _pubsub_topic()
     if not topic:
         raise GmailWatchNotConfigured(
@@ -804,21 +827,51 @@ async def register_watch(db: Session, token: str, label_ids: list[str] | None = 
         data = await gs.watch_gmail_mailbox(token, topic, labels or None)
     except httpx.HTTPStatusError as exc:
         _reconsent_if_needed(exc)
-    state = {
+    return {
         "topic_name": topic,
         "history_id": data.get("historyId"),
         "expiration": _ms_to_iso(data.get("expiration")),
         "registered_at": datetime.now(UTC).isoformat(),
     }
-    _save_watch_state(db, state)
-    return state
 
 
-async def stop_watch(db: Session, token: str) -> dict[str, Any]:
-    """users.stop — halt push notifications and clear the stored state."""
+async def request_stop_watch(token: str) -> dict[str, Any]:
+    """users.stop — API call only; the caller clears persisted state."""
     try:
         await gs.stop_gmail_watch(token)
     except httpx.HTTPStatusError as exc:
         _reconsent_if_needed(exc)
-    _clear_watch_state(db)
     return {"status": "stopped"}
+
+
+async def register_watch(
+    db: Session,
+    token: str,
+    label_ids: list[str] | None = None,
+    account: EmailAccount | None = None,
+) -> dict[str, Any]:
+    """Register users.watch and persist historyId/expiration so clients can
+    poll /history from it — per account when ``account`` is given (#1659)."""
+    state = await request_watch(token, label_ids=label_ids)
+    if account is not None:
+        account.watch_state = state
+        history_id = state.get("history_id")
+        if history_id is not None:
+            # The watch response carries the mailbox's current historyId —
+            # it doubles as the incremental sync cursor.
+            account.sync_cursor = str(history_id)
+        db.commit()
+    else:
+        _save_watch_state(db, state)
+    return state
+
+
+async def stop_watch(db: Session, token: str, account: EmailAccount | None = None) -> dict[str, Any]:
+    """users.stop — halt push notifications and clear the stored state."""
+    result = await request_stop_watch(token)
+    if account is not None:
+        account.watch_state = None
+        db.commit()
+    else:
+        _clear_watch_state(db)
+    return result

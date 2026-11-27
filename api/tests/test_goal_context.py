@@ -171,7 +171,7 @@ def test_vault_restore_preserves_context_and_defaults_legacy(db_session: Session
                 context=GoalContext.NIGHT,
                 state=GoalState.ACTIVE,
             )
-            joidy_vault_writer._write_goal_file(db_session, goal_with_ctx, obj_dir)
+            joidy_vault_writer.write_goal_file(db_session, goal_with_ctx, obj_dir)
 
             legacy_file = obj_dir / "999102_legacy.md"
             legacy_file.write_text(

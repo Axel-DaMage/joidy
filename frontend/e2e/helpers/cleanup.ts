@@ -2,7 +2,7 @@
  * Global teardown for E2E tests — cleans up test data left in the database (#565).
  *
  * This runs after all Playwright tests complete. It deletes any notes, goals,
- * personal streaks, calendar tasks and emails whose names match known E2E test
+ * personal streaks and calendar tasks whose names match known E2E test
  * patterns. This prevents test artifacts from accumulating in the dev database
  * across multiple test runs.
  *
@@ -147,32 +147,6 @@ async function cleanupCalendarTasks(token: string): Promise<number> {
   return deleted;
 }
 
-async function cleanupEmails(token: string): Promise<number> {
-  let deleted = 0;
-  try {
-    // No unread/important filter so every seeded message is listed.
-    // limit is capped at 500 by the API (le=500) — do not raise.
-    const res = await fetch(`${API_BASE}/emails/?limit=500`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) return 0;
-    const inbox = await res.json();
-    for (const email of inbox.items ?? []) {
-      const haystack = `${email.subject ?? ''} ${email.sender ?? ''} ${email.account ?? ''}`;
-      if (matchesPattern(haystack)) {
-        const delRes = await fetch(`${API_BASE}/emails/${email.id}`, {
-          method: 'DELETE',
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (delRes.ok) deleted++;
-      }
-    }
-  } catch (e) {
-    console.error('[cleanup] Emails cleanup error:', e);
-  }
-  return deleted;
-}
-
 export default async function globalTeardown() {
   console.log('[cleanup] Starting E2E test data cleanup (#565)...');
   const token = await getAuthToken();
@@ -185,10 +159,9 @@ export default async function globalTeardown() {
   const goalsDeleted = await cleanupGoals(token);
   const streaksDeleted = await cleanupStreaks(token);
   const calTasksDeleted = await cleanupCalendarTasks(token);
-  const emailsDeleted = await cleanupEmails(token);
 
   console.log(
     `[cleanup] Done: ${notesDeleted} notes, ${goalsDeleted} goals, ${streaksDeleted} streaks, ` +
-      `${calTasksDeleted} calendar tasks, ${emailsDeleted} emails deleted.`
+      `${calTasksDeleted} calendar tasks deleted.`
   );
 }

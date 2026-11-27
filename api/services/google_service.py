@@ -165,6 +165,14 @@ async def list_gmail_messages(token: str, max_results: int = 10) -> list[dict[st
     return data.get("messages", [])
 
 
+async def get_gmail_profile(token: str) -> dict[str, Any]:
+    """users.getProfile — ``{emailAddress, historyId, messagesTotal, …}``.
+
+    Used to resolve the real mailbox address after OAuth connect and to seed
+    the initial historyId sync cursor for an email account (#1659)."""
+    return await _request(token, f"{GOOGLE_GMAIL_API}/users/me/profile")
+
+
 async def list_contacts(token: str, page_size: int = 50) -> list[dict[str, Any]]:
     """List the user's Google Contacts."""
     data = await _request(

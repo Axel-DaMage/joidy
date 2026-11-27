@@ -247,7 +247,7 @@ if [ "$BOOTSTRAP_MODE" = "full" ] && [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; t
     print_ok "Generated GRAFANA_ADMIN_PASSWORD"
     CHANGED=1
   fi
-  # INTERNAL_API_TOKEN — dedicated service credential for worker/n8n (#1275)
+  # INTERNAL_API_TOKEN — dedicated service credential for worker (#1275)
   IAT=$(grep -E '^INTERNAL_API_TOKEN=' "$ENV_FILE" | cut -d'=' -f2-)
   if [ -z "$IAT" ]; then
     NEW_IAT=$(generate_secret 32)

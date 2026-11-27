@@ -23,6 +23,14 @@ import {
   getComplementaryColor,
   hexToRgb,
   getLuminance,
+  contrastRatio,
+  ensureContrast,
+  mixHex,
+  rotateHue,
+  derivePalette,
+  getAccentWarnings,
+  MIN_CONTRAST_UI,
+  MIN_CONTRAST_TEXT,
   MAX_COLORS,
 } from './settings';
 
@@ -275,6 +283,132 @@ describe('devMode store', () => {
     localStorage.setItem('joidy-dev-mode', 'true');
     devMode.init();
     expect(get(devMode)).toBe(true);
+  });
+});
+
+describe('derived palette (#1655)', () => {
+  beforeEach(() => clearStorage());
+
+  it('contrastRatio matches WCAG: black/white is 21:1', () => {
+    expect(contrastRatio('#000000', '#ffffff')).toBeCloseTo(21, 0);
+    expect(contrastRatio('#ffffff', '#ffffff')).toBeCloseTo(1, 2);
+  });
+
+  it('ensureContrast lifts a dark-on-dark color above the floor', () => {
+    const fixed = ensureContrast('#111111', '#000000', MIN_CONTRAST_UI);
+    expect(contrastRatio(fixed, '#000000')).toBeGreaterThanOrEqual(MIN_CONTRAST_UI);
+  });
+
+  it('ensureContrast darkens a light-on-light color', () => {
+    const fixed = ensureContrast('#eeeeee', '#ffffff', MIN_CONTRAST_UI);
+    expect(contrastRatio(fixed, '#ffffff')).toBeGreaterThanOrEqual(MIN_CONTRAST_UI);
+  });
+
+  it('ensureContrast keeps already-passing colors untouched', () => {
+    expect(ensureContrast('#c8a96e', '#000000', MIN_CONTRAST_UI)).toBe('#c8a96e');
+  });
+
+  it('mixHex interpolates endpoints and midpoint', () => {
+    expect(mixHex('#000000', '#ffffff', 0)).toBe('#000000');
+    expect(mixHex('#000000', '#ffffff', 1)).toBe('#ffffff');
+    expect(mixHex('#000000', '#ffffff', 0.5)).toBe('#808080');
+  });
+
+  it('rotateHue turns red by 120° into green', () => {
+    const [r, g, b] = hexToRgb(rotateHue('#ff0000', 120));
+    expect(g).toBeGreaterThan(r);
+    expect(g).toBeGreaterThan(b);
+  });
+
+  it('derivePalette emits the full token set for dark theme', () => {
+    const p = derivePalette(['#c8a96e'], 'dark');
+    for (const token of [
+      '--accent',
+      '--accent-gradient',
+      '--accent-contrast',
+      '--accent-contrast-text',
+      '--xp',
+      '--xp-2',
+      '--xp-3',
+      '--xp-dark',
+      '--xp-text',
+      '--xp-2-text',
+      '--xp-3-text',
+      '--xp-contrast-text',
+      '--success',
+      '--warning',
+      '--error',
+      '--info',
+      '--link',
+      '--today',
+      '--target',
+      '--plant',
+      '--plant-secondary',
+      '--plant-tertiary',
+      '--chart-1',
+      '--chart-2',
+      '--chart-3',
+      '--chart-4',
+      '--chart-5',
+      '--chart-6',
+    ]) {
+      expect(p[token], token).toMatch(/^#[0-9a-f]{6}$|^linear-gradient/);
+    }
+  });
+
+  it('with a single pick, secondary/tertiary are derived tints of the primary', () => {
+    const p = derivePalette(['#c8a96e'], 'dark');
+    expect(p['--xp-2']).not.toBe(p['--xp']);
+    expect(p['--xp-3']).not.toBe(p['--xp-2']);
+  });
+
+  it('every derived token meets its contrast floor vs the dark background', () => {
+    const p = derivePalette(['#111111', '#1a1a1a', '#222222'], 'dark');
+    for (const token of ['--xp', '--xp-2', '--xp-3', '--accent-contrast', '--chart-1', '--chart-4']) {
+      expect(contrastRatio(p[token], '#000000'), token).toBeGreaterThanOrEqual(MIN_CONTRAST_UI);
+    }
+    for (const token of ['--xp-text', '--xp-2-text', '--xp-3-text', '--success', '--warning', '--error']) {
+      expect(contrastRatio(p[token], '#000000'), token).toBeGreaterThanOrEqual(MIN_CONTRAST_TEXT);
+    }
+  });
+
+  it('every derived token meets its contrast floor vs the light background', () => {
+    const p = derivePalette(['#ffffff', '#eeeeee', '#f5f5f5'], 'light');
+    for (const token of ['--xp', '--xp-2', '--xp-3', '--accent-contrast', '--chart-2', '--chart-5']) {
+      expect(contrastRatio(p[token], '#ffffff'), token).toBeGreaterThanOrEqual(MIN_CONTRAST_UI);
+    }
+    for (const token of ['--xp-text', '--xp-2-text', '--xp-3-text', '--error', '--link']) {
+      expect(contrastRatio(p[token], '#ffffff'), token).toBeGreaterThanOrEqual(MIN_CONTRAST_TEXT);
+    }
+  });
+
+  it('dark and light themes derive different tokens for the same picks', () => {
+    const dark = derivePalette(['#888888'], 'dark');
+    const light = derivePalette(['#888888'], 'light');
+    // #888888 vs black = 5.3 (passes), vs white = 3.9 < 4.5 (darkened)
+    expect(dark['--xp-text']).not.toBe(light['--xp-text']);
+    expect(dark['--xp-dark']).not.toBe(light['--xp-dark']);
+  });
+
+  it('getAccentWarnings flags low-contrast picks without blocking them', () => {
+    const warnings = getAccentWarnings(['#111111', '#c8a96e', '#00ff00'], 'dark');
+    expect(warnings.map((w) => w.index)).toEqual([0]);
+    expect(warnings[0].ratio).toBeLessThan(MIN_CONTRAST_UI);
+    expect(getAccentWarnings(['#c8a96e'], 'dark')).toEqual([]);
+    expect(getAccentWarnings(['#eeeeee'], 'light').length).toBe(1);
+  });
+
+  it('applyColors re-derives when the theme flips', () => {
+    localStorage.setItem('joidy-accent-colors', JSON.stringify(['#111111']));
+    themeMode.set('dark');
+    accentColors.init();
+    const darkXp = document.documentElement.style.getPropertyValue('--xp');
+    themeMode.set('light');
+    const lightXp = document.documentElement.style.getPropertyValue('--xp');
+    expect(lightXp).not.toBe(darkXp);
+    expect(contrastRatio(darkXp, '#000000')).toBeGreaterThanOrEqual(MIN_CONTRAST_UI);
+    expect(contrastRatio(lightXp, '#ffffff')).toBeGreaterThanOrEqual(MIN_CONTRAST_UI);
+    themeMode.set('dark');
   });
 });
 

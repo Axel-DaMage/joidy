@@ -165,7 +165,7 @@ def create_note(
 
     for tag_name in tags:
         tag = get_or_create_tag(db, tag_name)
-        db.add(NoteTag(note_id=note.id, tag_id=tag.id, source="manual"))
+        db.add(NoteTag(note_id=note.id, tag_id=tag.id))
         touched_tag_ids.add(tag.id)
         process_event(db, "tag_added")
 
@@ -254,7 +254,7 @@ def update_note(
             if not clean_tag:
                 continue
             tag = get_or_create_tag(db, clean_tag)
-            db.add(NoteTag(note_id=note.id, tag_id=tag.id, source="manual"))
+            db.add(NoteTag(note_id=note.id, tag_id=tag.id))
             touched_tag_ids.add(tag.id)
 
     if gami is None:
@@ -385,8 +385,6 @@ def bulk_tag_notes(db: Session, note_ids: list[int], tag_names: list[str]) -> in
             touched_tag_ids.add(tag.id)
             rows.append({"note_id": note.id, "tag_id": tag.id})
     if rows:
-        # Column defaults (confidence=1.0, source="manual") apply — identical
-        # to the per-note ``db.add(NoteTag(...))`` path.
         db.execute(insert(NoteTag), rows)
 
     if touched_tag_ids:
@@ -506,7 +504,7 @@ def accept_ai_tag(db: Session, note_id: int, tag_name: str):
     tag = get_or_create_tag(db, tag_name)
     existing = db.query(NoteTag).filter(NoteTag.note_id == note_id, NoteTag.tag_id == tag.id).first()
     if not existing:
-        db.add(NoteTag(note_id=note.id, tag_id=tag.id, source="ai", confidence=0.9))
+        db.add(NoteTag(note_id=note.id, tag_id=tag.id))
         sync_tag_cooccurrences_for_tags(db, {tag.id})
 
     gami = process_event(db, "tag_accepted_ai", {"note_id": note_id, "tag": tag_name})

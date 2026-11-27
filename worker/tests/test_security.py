@@ -79,7 +79,11 @@ class TestFileSizeCap(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             md = Path(tmp) / "note.md"
             md.write_text("hello", encoding="utf-8")
-            assert _read_vault_file(md) == "hello"
+            read = _read_vault_file(md)
+            assert read is not None
+            content, size = read
+            assert content == "hello"
+            assert size == len(b"hello")
 
     def test_read_vault_file_refuses_oversized(self):
         with tempfile.TemporaryDirectory() as tmp:
