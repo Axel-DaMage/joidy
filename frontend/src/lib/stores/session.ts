@@ -179,11 +179,22 @@ const USER_DATA_KEYS = [
 ] as const;
 
 const USER_DATA_PREFIXES = [
+  // Legacy goals view-pref keys — new code writes `joidy.goals.*` via
+  // persistedState.ts instead (see below); the prefix stays so stale
+  // leftovers from pre-#1673 builds still purge.
   'goals.',
   // Note/goal editor draft payloads — full note text (#1325).
   'joidy-draft-',
   'joidy-goal-draft-',
 ] as const;
+
+// Keys under the `joidy.<view>.<prop>` namespace (persistedState.ts, #1673)
+// hold device-level view preferences — active tab, filters, sort, collapsed
+// panels — and intentionally SURVIVE logout: they are not listed in
+// USER_DATA_KEYS/USER_DATA_PREFIXES above. Keep user-typed content (search
+// text, note content, vault paths) out of that namespace — it belongs in
+// `joidy-user-settings-v1`, which this purge covers. A bare entity id used
+// only as selection state (e.g. `joidy.goals.editorGoalId`) is OK.
 
 /**
  * Wipes user-scoped persisted state on logout so the next session on the

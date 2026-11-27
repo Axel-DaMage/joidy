@@ -19,6 +19,7 @@
     getCachedData,
     setCachedData,
   } from '$lib/utils/userSettings';
+  import { loadPref } from '$lib/utils/persistedState';
   import { captureSnapshot, getSnapshot } from '$lib/stores/pageSnapshots';
   import { locale as localeStore } from '$lib/stores/locale';
   import { openShare } from '$lib/stores/shareAchievement';
@@ -129,9 +130,16 @@
   onMount(async () => {
     mounted = true;
 
-    const savedNotesUi = loadUserSettings().notesUi;
-    if (savedNotesUi?.panelWidth !== undefined) {
-      panelWidth = Number(savedNotesUi.panelWidth);
+    // Shared with the notes list (#1673): the pref lives under
+    // `joidy.notes.panelWidth`; the legacy notesUi blob is the fallback.
+    const savedPanelWidth = loadPref<number | undefined>(
+      'notes',
+      'panelWidth',
+      loadUserSettings().notesUi?.panelWidth,
+      { isValid: (v) => Number.isFinite(Number(v)) }
+    );
+    if (savedPanelWidth !== undefined) {
+      panelWidth = Number(savedPanelWidth);
     }
 
     // Restore the last viewed streak from durable user settings — the page

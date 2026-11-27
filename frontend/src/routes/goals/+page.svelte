@@ -52,6 +52,7 @@
     loadUserSettings,
     patchUserSettings,
   } from '$lib/utils/userSettings';
+  import { loadPref, savePref, removePref } from '$lib/utils/persistedState';
   import { logger } from '$lib/utils/logger';
   import {
     GOALS_SPECIFIC_COLOR_PRESETS,
@@ -139,8 +140,13 @@
   let goalContextFilter = $state<GoalContext | null>(null);
   // Matches the states rendered by GoalFilters.svelte (null = "Todos")
   const VALID_EDITOR_FILTERS = ['PINNED', 'ACTIVE', 'COMPLETED', 'CANCELLED', 'FAILED', 'INBOX'] as const;
+  const VALID_POOL_FILTERS = ['recent', 'active', 'completed', 'failed'] as const;
+  const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
   let inboxBadgeCount = $derived(inboxCount(goals));
   let pinnedGoals = $state<Set<number>>(new Set());
+  // Last goal opened in the goal editor (/goals/[id]) — persisted so the
+  // editor list can highlight it across sessions (#1673).
+  let lastEditedGoalId = $state<number | null>(null);
   let deleteConfirm = $state<number | null>(null);
 
   function togglePinned(goalId: number) {
@@ -475,22 +481,50 @@
     document.addEventListener('visibilitychange', onVisible);
 
     void (async () => {
-    // restore UI state immediately to prevent flash
+    // Restore UI state immediately to prevent flash. All view prefs live
+    // under the `joidy.goals.*` namespace (device-level, survives logout);
+    // the legacy `goals.*` keys are migrated on first read (#1673).
     try {
-      const savedTab = localStorage.getItem('goals.currentTab');
+      const savedTab = loadPref<string | null>('goals', 'tab', null, {
+        legacyKey: 'goals.currentTab',
+      });
       // Analytics moved to its own page (#1499) — migrate the legacy tab.
       if (savedTab === 'analytics') {
-        localStorage.removeItem('goals.currentTab');
+        removePref('goals', 'tab');
         void goto('/analytics', { replaceState: true });
       } else if (savedTab && (VALID_TABS as readonly string[]).includes(savedTab)) {
         currentTab = savedTab as typeof currentTab;
       }
-      const savedDate = localStorage.getItem('goals.selectedPlanningDate');
+      const savedDate = loadPref<string | null>('goals', 'planningDate', null, {
+        legacyKey: 'goals.selectedPlanningDate',
+        isValid: (v) => typeof v === 'string' && ISO_DAY.test(v),
+      });
       if (savedDate) selectedPlanningDate = savedDate;
-      const savedView = localStorage.getItem('goals.planningView');
-      if (savedView === 'month' || savedView === 'week') planningView = savedView;
-      const savedHistoryDate = localStorage.getItem('goals.selectedHistoryDate');
+      planningView = loadPref<PlanningView>('goals', 'planningView', planningView, {
+        legacyKey: 'goals.planningView',
+        isValid: (v) => v === 'month' || v === 'week',
+      });
+      const savedCursor = loadPref<string | null>('goals', 'planningCursor', null, {
+        isValid: (v) => typeof v === 'string' && ISO_DAY.test(v),
+      });
+      if (savedCursor) planningCursor = savedCursor;
+      const savedHistoryDate = loadPref<string | null>('goals', 'historyDate', null, {
+        legacyKey: 'goals.selectedHistoryDate',
+        isValid: (v) => typeof v === 'string' && ISO_DAY.test(v),
+      });
       if (savedHistoryDate) selectedHistoryDate = savedHistoryDate;
+      poolFilter = loadPref<(typeof VALID_POOL_FILTERS)[number]>('goals', 'poolFilter', poolFilter, {
+        isValid: (v) => (VALID_POOL_FILTERS as readonly string[]).includes(v as string),
+      });
+      poolOpen = loadPref<boolean>('goals', 'poolOpen', poolOpen, {
+        isValid: (v) => typeof v === 'boolean',
+      });
+      mirrorToCalendar = loadPref<boolean>('goals', 'mirrorToCalendar', mirrorToCalendar, {
+        isValid: (v) => typeof v === 'boolean',
+      });
+      lastEditedGoalId = loadPref<number | null>('goals', 'editorGoalId', null, {
+        isValid: (v) => v === null || typeof v === 'number',
+      });
       // if we are on planning, pre-load assignments for the selected date
       if (currentTab === 'planning' && selectedPlanningDate) {
         loadAssignmentsForDate(selectedPlanningDate).catch(logger.error);
@@ -510,26 +544,44 @@
       if (saved?.pinnedGoalIds && Array.isArray(saved.pinnedGoalIds)) {
         pinnedGoals = new Set(saved.pinnedGoalIds);
       }
-      const savedFilter = saved?.editorFilter;
-      if (
-        savedFilter === null ||
-        (typeof savedFilter === 'string' &&
-          (VALID_EDITOR_FILTERS as readonly string[]).includes(savedFilter))
-      ) {
-        goalFilterState = savedFilter;
-      }
+      // Editor filters are device-level view prefs (#1673) — the legacy
+      // goalsUi blob value is the fallback while the pref is unmigrated.
+      const legacyFilter =
+        saved &&
+        (saved.editorFilter === null ||
+          (typeof saved.editorFilter === 'string' &&
+            (VALID_EDITOR_FILTERS as readonly string[]).includes(saved.editorFilter)))
+          ? saved.editorFilter
+          : undefined;
+      goalFilterState = loadPref<string | null>(
+        'goals',
+        'editorFilter',
+        legacyFilter ?? goalFilterState,
+        {
+          isValid: (v) =>
+            v === null ||
+            (typeof v === 'string' && (VALID_EDITOR_FILTERS as readonly string[]).includes(v)),
+        }
+      );
       if (typeof saved?.editorSearch === 'string') {
         goalSearchQuery = saved.editorSearch;
       }
-      const savedContext = saved?.editorContextFilter;
-      if (
-        savedContext === null ||
-        savedContext === 'ANY' ||
-        savedContext === 'MORNING' ||
-        savedContext === 'NIGHT'
-      ) {
-        goalContextFilter = savedContext;
-      }
+      const legacyContext =
+        saved &&
+        (saved.editorContextFilter === null ||
+          saved.editorContextFilter === 'ANY' ||
+          saved.editorContextFilter === 'MORNING' ||
+          saved.editorContextFilter === 'NIGHT')
+          ? saved.editorContextFilter
+          : undefined;
+      goalContextFilter = loadPref<GoalContext | null>(
+        'goals',
+        'editorContextFilter',
+        legacyContext ?? goalContextFilter,
+        {
+          isValid: (v) => v === null || v === 'ANY' || v === 'MORNING' || v === 'NIGHT',
+        }
+      );
     } catch {
       // ignore storage errors
     }
@@ -796,13 +848,12 @@
 
   // persist current tab and selected planning date in localStorage
   $effect(() => {
-    if (typeof localStorage !== 'undefined') localStorage.setItem('goals.currentTab', currentTab);
+    savePref('goals', 'tab', currentTab);
   });
 
   $effect(() => {
     if (selectedPlanningDate) {
-      if (typeof localStorage !== 'undefined')
-        localStorage.setItem('goals.selectedPlanningDate', selectedPlanningDate);
+      savePref('goals', 'planningDate', selectedPlanningDate);
       loadAssignmentsForDate(selectedPlanningDate);
     }
     // Preload upcoming assignments for dashboard
@@ -815,17 +866,31 @@
   });
 
   $effect(() => {
-    if (selectedHistoryDate && typeof localStorage !== 'undefined') {
-      localStorage.setItem('goals.selectedHistoryDate', selectedHistoryDate);
+    if (selectedHistoryDate) {
+      savePref('goals', 'historyDate', selectedHistoryDate);
     }
   });
 
-  // persist editor filter and search in userSettings (#1096);
-  // the search is debounced to avoid a localStorage write per keystroke
+  // Editor filters are device-level view prefs (#1673); the search text is
+  // user-scoped and stays in userSettings (debounced below — a localStorage
+  // write per keystroke otherwise).
   $effect(() => {
-    patchUserSettings({
-      goalsUi: { editorFilter: goalFilterState, editorContextFilter: goalContextFilter },
-    });
+    savePref('goals', 'editorFilter', goalFilterState);
+    savePref('goals', 'editorContextFilter', goalContextFilter);
+  });
+
+  // Planning pool + cursor prefs (#1673).
+  $effect(() => {
+    savePref('goals', 'poolFilter', poolFilter);
+  });
+  $effect(() => {
+    savePref('goals', 'poolOpen', poolOpen);
+  });
+  $effect(() => {
+    savePref('goals', 'mirrorToCalendar', mirrorToCalendar);
+  });
+  $effect(() => {
+    savePref('goals', 'planningCursor', planningCursor);
   });
 
   // Deep-link support: /goals?tab=inbox (used by Quick Capture toasts, #1200)
@@ -1269,8 +1334,7 @@
   });
 
   $effect(() => {
-    if (typeof localStorage !== 'undefined')
-      localStorage.setItem('goals.planningView', planningView);
+    savePref('goals', 'planningView', planningView);
   });
 
   function onPoolDragStart(e: DragEvent, goalId: number) {
@@ -1301,6 +1365,10 @@
   }
 
   function openGoalEditor(goal: Goal) {
+    // Track the selection so the editor list can re-highlight it after a
+    // reload (#1673). The [id] page also records it for direct URL loads.
+    lastEditedGoalId = goal.id;
+    savePref('goals', 'editorGoalId', goal.id);
     goto(`/goals/${goal.id}`);
   }
 
@@ -2014,6 +2082,7 @@
             filter={goalFilterState}
             contextFilter={goalContextFilter}
             pinned={pinnedGoals}
+            selectedId={lastEditedGoalId}
             {tags}
             {notes}
             {getGoalColor}
