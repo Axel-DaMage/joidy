@@ -41,6 +41,12 @@ def sync_tag_cooccurrences_for_tags(db: Session, tag_ids: set[int]) -> None:
         params,
     )
 
+    # The pair set "{a,b}, a < b, with a or b touched" is partitioned into two
+    # disjoint branches — touched tag on the low side, or on the high side with
+    # an untouched low side. Splitting the former OR'd predicate into a UNION
+    # ALL gives the planner a plain IN-filtered index scan per branch instead
+    # of a cross-alias OR that tends to degenerate into a full note_tags scan
+    # on hot tags (#1526).
     db.execute(
         text(
             f"""
@@ -54,7 +60,19 @@ def sync_tag_cooccurrences_for_tags(db: Session, tag_ids: set[int]) -> None:
               ON nt1.note_id = nt2.note_id
              AND nt1.tag_id < nt2.tag_id
             WHERE nt1.tag_id IN ({placeholders})
-               OR nt2.tag_id IN ({placeholders})
+            GROUP BY nt1.tag_id, nt2.tag_id
+            HAVING COUNT(DISTINCT nt1.note_id) >= 2
+            UNION ALL
+            SELECT
+                nt1.tag_id AS tag_a_id,
+                nt2.tag_id AS tag_b_id,
+                COUNT(DISTINCT nt1.note_id) AS weight
+            FROM note_tags nt1
+            JOIN note_tags nt2
+              ON nt1.note_id = nt2.note_id
+             AND nt1.tag_id < nt2.tag_id
+            WHERE nt2.tag_id IN ({placeholders})
+              AND nt1.tag_id NOT IN ({placeholders})
             GROUP BY nt1.tag_id, nt2.tag_id
             HAVING COUNT(DISTINCT nt1.note_id) >= 2
             """  # noqa: S608 — only generated :tag_N placeholders are interpolated; values bind via params

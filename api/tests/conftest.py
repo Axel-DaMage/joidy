@@ -435,7 +435,7 @@ def persisted_env(_isolated_env_file):
 
 @pytest.fixture
 def worker_headers(persisted_env):
-    """Authorization header the internal services (worker, n8n) send.
+    """Authorization header the internal services (worker) send.
 
     Trust headers (``X-From-Vault``, ``X-Bulk-Import``) and vault/import
     note provenance are honored only for requests authenticated with

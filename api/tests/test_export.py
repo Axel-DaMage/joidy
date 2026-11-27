@@ -51,6 +51,28 @@ def test_export_notes_zip(client, db_session):
     assert "World" in body
 
 
+def test_export_notes_zip_spans_multiple_note_batches(client, db_session, monkeypatch):
+    """Every note must land in the ZIP even when fetching takes several
+    batches — and the archive must still be a valid streamed ZIP (#1526)."""
+    import io
+    import zipfile
+
+    for i in range(3):
+        db_session.add(Note(title=f"Note {i}", content=f"body {i}", source="joidy"))
+    db_session.commit()
+    monkeypatch.setattr("routers.export.EXPORT_BATCH_SIZE", 1)
+
+    resp = client.get("/export/notes/zip")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "application/zip"
+    zf = zipfile.ZipFile(io.BytesIO(resp.content))
+    names = zf.namelist()
+    assert len(names) == 3
+    bodies = b"".join(zf.read(n) for n in names)
+    for i in range(3):
+        assert f"# Note {i}".encode() in bodies
+
+
 def test_export_notes_html_empty(client):
     resp = client.get("/export/notes/html")
     assert resp.status_code == 404

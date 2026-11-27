@@ -2,7 +2,7 @@ from datetime import datetime
 
 from database import Base
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, backref, mapped_column, relationship
 
 
@@ -30,7 +30,6 @@ class Note(Base):
     content: Mapped[str] = mapped_column(Text, default="")
     source: Mapped[str] = mapped_column(String(50), default="joidy")  # joidy | obsidian
     source_path: Mapped[str | None] = mapped_column(String(1000), nullable=True, index=True)
-    is_embedded: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
@@ -62,8 +61,6 @@ class NoteTag(Base):
 
     note_id: Mapped[int] = mapped_column(Integer, ForeignKey("notes.id", ondelete="CASCADE"), primary_key=True)
     tag_id: Mapped[int] = mapped_column(Integer, ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True)
-    confidence: Mapped[float] = mapped_column(default=1.0)  # 1.0 = manual, <1.0 = AI suggested
-    source: Mapped[str] = mapped_column(String(20), default="manual")  # manual | ai
 
     note: Mapped["Note"] = relationship("Note", back_populates="tags")
     tag: Mapped["Tag"] = relationship("Tag", back_populates="notes")

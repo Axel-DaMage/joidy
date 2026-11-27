@@ -2,7 +2,7 @@
 streak breaking (missed days), and grace period / every_n frequency logic.
 
 Uses in-memory SQLite and the real repository layer to exercise
-compute_streak and calculate_streak_stats.
+compute_streak and backfill_streak_history.
 """
 
 import sys
@@ -22,7 +22,6 @@ from repositories import StreakCheckInRepository
 from services.personal_streak_service import (
     MAX_BACKFILL_DAYS,
     backfill_streak_history,
-    calculate_streak_stats,
     compute_streak,
 )
 from sqlalchemy import create_engine, text
@@ -143,41 +142,6 @@ class ComputeStreakEveryNTest(PersonalStreakTestBase):
         self.assertEqual(longest, 3)
 
 
-class CalculateStreakStatsTest(PersonalStreakTestBase):
-    def test_snowball_mode_streak_stats(self):
-        db = self.Session()
-        streak = self._create_streak(db, snowball_mode=True)
-        today = self._today()
-        self._add_checkin(db, streak, today - timedelta(days=10))
-        self._add_checkin(db, streak, today - timedelta(days=2))
-        db.refresh(streak)
-        stats = calculate_streak_stats(streak)
-        self.assertEqual(stats["current_streak"], 2)
-        self.assertEqual(stats["longest_streak"], 2)
-        db.close()
-
-    def test_stats_reflect_checkins(self):
-        db = self.Session()
-        streak = self._create_streak(db)
-        today = self._today()
-        for i in range(3):
-            self._add_checkin(db, streak, today - timedelta(days=i))
-
-        db.refresh(streak)
-        stats = calculate_streak_stats(streak)
-        self.assertEqual(stats["current_streak"], 3)
-        self.assertEqual(stats["longest_streak"], 3)
-        db.close()
-
-    def test_stats_with_no_checkins(self):
-        db = self.Session()
-        streak = self._create_streak(db)
-        stats = calculate_streak_stats(streak)
-        self.assertEqual(stats["current_streak"], 0)
-        self.assertEqual(stats["longest_streak"], 0)
-        db.close()
-
-
 class BackfillStreakHistoryTest(PersonalStreakTestBase):
     def test_backfill_generates_missing_checkins(self):
         db = self.Session()
@@ -235,6 +199,34 @@ class BackfillStreakHistoryTest(PersonalStreakTestBase):
         self.assertEqual(len(streak.checkins), MAX_BACKFILL_DAYS)
         self.assertEqual(min(c.check_date for c in streak.checkins), self._today() - timedelta(days=MAX_BACKFILL_DAYS))
         db.close()
+
+    def test_backfill_inserts_in_a_single_batched_flush(self):
+        """Regression guard for #1526: the whole backfill must reach the DB in
+        one batched INSERT, not a flush()+refresh() round trip per day."""
+        from sqlalchemy import event
+
+        db = self.Session()
+        start = self._today() - timedelta(days=30)
+        streak = self._create_streak(db, start_date=start)
+        streak.created_at = datetime.now(UTC)
+        db.commit()
+        db.refresh(streak)
+
+        insert_calls: list[str] = []
+
+        def _count_inserts(conn, cursor, statement, parameters, context, executemany):
+            if "streak_checkins" in statement and statement.lstrip().upper().startswith("INSERT"):
+                insert_calls.append(statement)
+
+        event.listen(self.engine, "before_cursor_execute", _count_inserts)
+        try:
+            backfill_streak_history(db, streak)
+        finally:
+            event.remove(self.engine, "before_cursor_execute", _count_inserts)
+
+        db.refresh(streak)
+        self.assertEqual(len(streak.checkins), 30)
+        self.assertEqual(len(insert_calls), 1)
 
     def test_backfill_short_history_unchanged(self):
         """start_date within the cap behaves exactly as before."""

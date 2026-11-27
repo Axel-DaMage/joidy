@@ -23,12 +23,12 @@ from services.goal_service import (
     validate_goal_parent,
 )
 from services.joidy_vault_writer import (
-    _goal_file_source_path,
-    _write_goal_file,
     delete_goal_file,
     get_objectives_dir,
+    goal_file_source_path,
     read_goal_file,
     update_goal_file,
+    write_goal_file,
 )
 from services.note_service import write_to_vault
 from services.sanitizer import sanitize_color, sanitize_content, sanitize_emoji, sanitize_theme, sanitize_title
@@ -416,8 +416,8 @@ def create_goal(data: GoalCreate, db: Session = Depends(get_db)):
     try:
         obj_dir = get_objectives_dir()
         if obj_dir:
-            _write_goal_file(db, goal, obj_dir)
-            # #1583 — ``_write_goal_file`` only assigns ``source_path``
+            write_goal_file(db, goal, obj_dir)
+            # #1583 — ``write_goal_file`` only assigns ``source_path``
             # in-memory, after the operation's last commit; persist it in
             # the same request or the value reached the response but never
             # the DB. Still inside the best-effort guard: a failure here
@@ -479,7 +479,7 @@ def update_goal(goal_id: int, data: GoalUpdate, db: Session = Depends(get_db)):
             # #1583 — persist the path of the file actually written (it may
             # have just been created if the create-time write failed).
             if written is not None:
-                goal.source_path = _goal_file_source_path(written)
+                goal.source_path = goal_file_source_path(written)
                 db.commit()
         except Exception as e:
             db.rollback()
@@ -715,7 +715,7 @@ def save_goal_content(goal_id: int, data: GoalContent, db: Session = Depends(get
             written = update_goal_file(goal_id, data.title, data.content, metadata)
             # #1583 — same in-request source_path persistence as update_goal.
             if written is not None:
-                goal.source_path = _goal_file_source_path(written)
+                goal.source_path = goal_file_source_path(written)
                 db.commit()
     except Exception as e:
         db.rollback()
@@ -782,9 +782,9 @@ def complete_goal(
     try:
         obj_dir = get_objectives_dir()
         if obj_dir:
-            _write_goal_file(db, goal, obj_dir)
+            write_goal_file(db, goal, obj_dir)
             if child:
-                _write_goal_file(db, child, obj_dir)
+                write_goal_file(db, child, obj_dir)
             # #1583 — persist the source_path assignments in-request (see
             # create_goal); the snowball child's path is committed too.
             db.commit()
@@ -813,7 +813,7 @@ def fail_goal(
     try:
         obj_dir = get_objectives_dir()
         if obj_dir:
-            _write_goal_file(db, goal, obj_dir)
+            write_goal_file(db, goal, obj_dir)
             # #1583 — persist source_path in-request (see create_goal).
             db.commit()
     except Exception as e:

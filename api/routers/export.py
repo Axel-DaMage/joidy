@@ -2,10 +2,11 @@
 Export endpoints for notes.
 """
 
-import io
+import tempfile
 import zipfile
 from collections.abc import Iterator
 from datetime import UTC, datetime
+from tempfile import SpooledTemporaryFile
 
 from database import get_db
 from fastapi import APIRouter, Depends, HTTPException
@@ -18,6 +19,10 @@ router = APIRouter(prefix="/export", tags=["export"])
 
 EXPORT_MAX_NOTES = 5000
 EXPORT_BATCH_SIZE = 100
+# ZIP exports spool to a real temp file past this size instead of holding the
+# whole archive in process memory (#1526).
+EXPORT_ZIP_SPOOL_BYTES = 16 * 1024 * 1024
+EXPORT_STREAM_CHUNK_BYTES = 64 * 1024
 
 
 def iter_notes_batched(db: Session, limit: int = EXPORT_MAX_NOTES) -> Iterator[Note]:
@@ -167,28 +172,45 @@ def export_notes_html(db: Session = Depends(get_db), user: dict = Depends(get_cu
     )
 
 
+def _iter_file_chunks(
+    fileobj: SpooledTemporaryFile[bytes], chunk_size: int = EXPORT_STREAM_CHUNK_BYTES
+) -> Iterator[bytes]:
+    """Yield a binary file in fixed-size chunks, closing it when exhausted."""
+    try:
+        while chunk := fileobj.read(chunk_size):
+            yield chunk
+    finally:
+        fileobj.close()
+
+
 @router.get("/notes/zip")
 def export_notes_zip(db: Session = Depends(get_db), user: dict = Depends(get_current_user)):
     """Export all notes as individual markdown files in a ZIP."""
     if db.query(Note).count() == 0:
         raise HTTPException(status_code=404, detail="No notes to export")
 
-    buffer = io.BytesIO()
-    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-        # Notes are fetched in batches so that not all notes (and their tag
-        # relationships) are held in memory at once. The ZIP archive itself is
-        # still assembled in a buffer, but the per-note ORM objects are released
-        # between batches.
-        for note in iter_notes_batched(db):
-            safe_title = "".join(c for c in note.title if c.isalnum() or c in " -_").strip()[:50]
-            if not safe_title:
-                safe_title = "unnamed"
-            filename = f"{note.id}_{safe_title}.md"
-            zf.writestr(filename, note_to_markdown(note).encode("utf-8"))
+    # Small archives stay in RAM; anything past EXPORT_ZIP_SPOOL_BYTES rolls
+    # over to a real temp file, so a max-size export no longer buffers the
+    # whole ZIP in process memory (#1526).
+    buffer = tempfile.SpooledTemporaryFile(max_size=EXPORT_ZIP_SPOOL_BYTES)
+    try:
+        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+            # Notes are fetched in batches so that not all notes (and their tag
+            # relationships) are held in memory at once — the per-note ORM
+            # objects are released between batches.
+            for note in iter_notes_batched(db):
+                safe_title = "".join(c for c in note.title if c.isalnum() or c in " -_").strip()[:50]
+                if not safe_title:
+                    safe_title = "unnamed"
+                filename = f"{note.id}_{safe_title}.md"
+                zf.writestr(filename, note_to_markdown(note).encode("utf-8"))
+    except Exception:
+        buffer.close()
+        raise
 
     buffer.seek(0)
     return StreamingResponse(
-        buffer,
+        _iter_file_chunks(buffer),
         media_type="application/zip",
         headers={"Content-Disposition": f"attachment; filename=joidy-notes-{datetime.now(UTC).date()}.zip"},
     )
