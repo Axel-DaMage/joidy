@@ -1084,6 +1084,18 @@
     }
   }
 
+  // True when `task` is the auto-created calendar mirror of a goal assigned
+  // on its own anchor date — the goal chip already represents it, so the
+  // agenda must not render the same item twice. A mirror the user moved to
+  // a non-anchor date keeps showing as a regular task.
+  function isMirrorOfAssignedGoal(task: CalendarTask): boolean {
+    if (task.goal_id === null || !task.date) return false;
+    return PLAN_TEMPS.some((temp) => {
+      const anchor = getNormalizedDate(task.date as string, temp);
+      return anchor === task.date && (assignments[anchor] || []).includes(task.goal_id as number);
+    });
+  }
+
   // Merged, time-sorted read-only agenda bucketed by day. Tasks that mirror
   // a Google event (google_event_id) suppress the cached Google copy so each
   // item appears once — same dedup rule as /calendar.
@@ -1107,6 +1119,7 @@
     }
     for (const task of rangeTasks) {
       if (!task.date) continue;
+      if (isMirrorOfAssignedGoal(task)) continue;
       push(task.date, { kind: 'task', sort: task.start_time?.slice(0, 5) ?? '99:99', task });
     }
     for (const list of byDay.values()) {
