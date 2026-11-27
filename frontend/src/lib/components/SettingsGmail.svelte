@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { api, type GmailStatus, type GmailWatchState } from '$lib/api';
+  import { api, type EmailAccount, type GmailStatus, type GmailWatchState } from '$lib/api';
   import { showNotification } from '$lib/stores/notifications';
   import { locale } from '$lib/stores/locale';
   import { logger } from '$lib/utils/logger';
@@ -18,6 +18,13 @@
   let loading = $state(true);
   let watchBusy = $state(false);
 
+  // ── Per-account mailboxes (#1659) ─────────────────────────────────────────
+  let accounts = $state<EmailAccount[]>([]);
+  let connectBusy = $state(false);
+  let busyAccountId = $state<number | null>(null);
+  let connectPoll: ReturnType<typeof setInterval> | null = null;
+  let connectTimeout: ReturnType<typeof setTimeout> | null = null;
+
   // Refetch on mount and whenever the parent Google connection flips — a fresh
   // connect may upgrade the granted Gmail scopes (#42).
   $effect(() => {
@@ -28,13 +35,81 @@
   async function load(): Promise<void> {
     loading = true;
     try {
-      status = await api.gmail.status();
+      const [s, list] = await Promise.all([api.gmail.status(), api.gmail.accounts.list()]);
+      status = s;
+      accounts = list;
     } catch (e) {
       logger.error(e);
       status = null;
     } finally {
       loading = false;
     }
+  }
+
+  function stopConnectPolling(): void {
+    if (connectPoll) {
+      clearInterval(connectPoll);
+      connectPoll = null;
+    }
+    if (connectTimeout) {
+      clearTimeout(connectTimeout);
+      connectTimeout = null;
+    }
+  }
+
+  /** Popup OAuth to connect an additional mailbox — polls the accounts list
+   * for a new/changed row (same popup+poll pattern as the page). */
+  async function connectAccount(): Promise<void> {
+    if (connectBusy) return;
+    connectBusy = true;
+    stopConnectPolling();
+    try {
+      const before = new Map(accounts.map((a) => [a.id, a.updated_at]));
+      const { url } = await api.gmail.accounts.authUrl();
+      window.open(url, '_blank', 'noopener,noreferrer');
+      connectPoll = setInterval(async () => {
+        try {
+          const list = await api.gmail.accounts.list();
+          const changed = list.some((a) => !before.has(a.id) || a.updated_at !== before.get(a.id));
+          if (changed) {
+            stopConnectPolling();
+            connectBusy = false;
+            accounts = list;
+            showNotification($t('gmail.connectOk'), 'success');
+          }
+        } catch {
+          /* transient poll failure — keep waiting */
+        }
+      }, 3000);
+      connectTimeout = setTimeout(() => {
+        stopConnectPolling();
+        connectBusy = false;
+      }, 300000);
+    } catch (e) {
+      logger.error(e);
+      showNotification($t('gmail.connectError'), 'error');
+      connectBusy = false;
+    }
+  }
+
+  async function disconnectAccount(account: EmailAccount): Promise<void> {
+    if (busyAccountId !== null) return;
+    busyAccountId = account.id;
+    try {
+      await api.gmail.accounts.disconnect(account.id);
+      accounts = accounts.filter((a) => a.id !== account.id);
+      showNotification($t('gmail.accounts.disconnected'), 'info');
+    } catch (e) {
+      logger.error(e);
+      showNotification($t('gmail.accounts.disconnectError'), 'error');
+    } finally {
+      busyAccountId = null;
+    }
+  }
+
+  function accountLabel(account: EmailAccount): string {
+    const address = account.email_address === '__pending__' ? '' : account.email_address;
+    return account.display_name || address || $t('gmail.accounts.pending');
   }
 
   const connected = $derived(status?.connected === true);
@@ -87,10 +162,11 @@
 
   {#if loading}
     <p class="hint">{$t('gmail.loading')}</p>
-  {:else if !connected}
+  {:else if !connected && accounts.length === 0}
     <p class="hint">{$t('gmail.settings.notConnectedHint')}</p>
   {:else}
-    <div class="cap-row">
+    {#if connected}
+      <div class="cap-row">
       <span class="cap" class:cap-ok={status?.gmail_read === true} class:cap-miss={status?.gmail_read === false}>
         {$t('gmail.settings.capRead')} · {capLabel(status?.gmail_read)}
       </span>
@@ -100,7 +176,8 @@
       <span class="cap" class:cap-ok={status?.gmail_send === true} class:cap-miss={status?.gmail_send === false}>
         {$t('gmail.settings.capSend')} · {capLabel(status?.gmail_send)}
       </span>
-    </div>
+      </div>
+    {/if}
 
     {#if missingCaps}
       <p class="hint warn">{$t('gmail.settings.missingCaps')}</p>
@@ -109,7 +186,31 @@
       {/if}
     {/if}
 
-    <div class="watch-block">
+    <!-- Connected mailboxes (#1659) — each account holds its own OAuth grant,
+         sync cursor and watch registration. -->
+    <div class="accounts-block">
+      <span class="watch-title">{$t('gmail.accounts.title')}</span>
+      {#if accounts.length === 0}
+        <span class="hint">{$t('gmail.accounts.none')}</span>
+      {:else}
+        {#each accounts as account (account.id)}
+          <div class="account-row">
+            <span class="account-name" class:inactive={!account.is_active}>{accountLabel(account)}</span>
+            <span class="account-actions">
+              <button class="link-btn ghost" onclick={() => void disconnectAccount(account)} disabled={busyAccountId !== null}>
+                {busyAccountId === account.id ? $t('gmail.accounts.disconnecting') : $t('gmail.accounts.disconnect')}
+              </button>
+            </span>
+          </div>
+        {/each}
+      {/if}
+      <button class="link-btn ghost" onclick={() => void connectAccount()} disabled={connectBusy}>
+        {connectBusy ? $t('gmail.connecting') : $t('gmail.accounts.connect')}
+      </button>
+    </div>
+
+    {#if connected}
+      <div class="watch-block">
       <span class="watch-title">{$t('gmail.settings.watchTitle')}</span>
       {#if status?.watch.configured}
         {#if watchState?.expiration}
@@ -135,7 +236,8 @@
       {:else}
         <span class="hint">{$t('gmail.settings.watchNotConfigured')}</span>
       {/if}
-    </div>
+      </div>
+    {/if}
   {/if}
 </div>
 
@@ -227,6 +329,46 @@
   .link-btn:disabled {
     opacity: 0.5;
     cursor: default;
+  }
+
+  .accounts-block {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-top: 4px;
+  }
+
+  .account-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    background: var(--surface);
+  }
+
+  .account-name {
+    font-size: 11px;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .account-name.inactive {
+    opacity: 0.5;
+  }
+
+  .account-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .accounts-block > .link-btn {
+    align-self: flex-start;
   }
 
   .watch-block {

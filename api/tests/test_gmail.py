@@ -1014,3 +1014,117 @@ def test_json_roundtrip_no_secrets():
     out = json.dumps(gms.normalize_message(FULL_MESSAGE))
     assert "ACCESS_TOKEN" not in out
     assert "REFRESH_TOKEN" not in out
+
+
+# ---------------------------------------------------------------------------
+# Multi-account mailboxes (#1659) — email_accounts CRUD, scoped calls, sync
+# ---------------------------------------------------------------------------
+
+
+def _connect_account(db_session, monkeypatch, address: str = "me@x.com", scope: str = GMAIL_MODIFY_SCOPE):
+    """Store a gmail ``email_accounts`` row with its own credential blob.
+
+    Uses ``store_gmail_tokens`` so the EncryptedText column is exercised for
+    real (same SECRET_KEY monkeypatch as the shared-token helper)."""
+    import asyncio
+
+    from services import email_account_service as eas
+
+    monkeypatch.setattr("config.settings.secret_key", "test-secret")
+    return asyncio.run(
+        eas.store_gmail_tokens(
+            db_session,
+            1,
+            address,
+            {
+                "access_token": "ACCOUNT_TOKEN",
+                "refresh_token": "ACCOUNT_REFRESH",
+                "expires_in": 3600,
+                "token_type": "Bearer",
+                "scope": scope,
+            },
+        )
+    )
+
+
+def test_accounts_list_empty(client):
+    resp = client.get("/integrations/gmail/accounts")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+def test_accounts_crud(client, db_session, monkeypatch):
+    account = _connect_account(db_session, monkeypatch)
+
+    listed = client.get("/integrations/gmail/accounts")
+    assert listed.status_code == 200
+    rows = listed.json()
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["id"] == account.id
+    assert row["provider"] == "gmail"
+    assert row["email_address"] == "me@x.com"
+    assert row["is_active"] is True
+    assert row["has_credentials"] is True
+    # The credential blob never leaves the API.
+    assert "credentials" not in row
+    assert "ACCOUNT_TOKEN" not in json.dumps(row)
+    assert "ACCOUNT_REFRESH" not in json.dumps(row)
+
+    renamed = client.patch(f"/integrations/gmail/accounts/{account.id}", json={"display_name": "Work"})
+    assert renamed.status_code == 200
+    assert renamed.json()["display_name"] == "Work"
+
+    deactivated = client.patch(f"/integrations/gmail/accounts/{account.id}", json={"is_active": False})
+    assert deactivated.status_code == 200
+    assert deactivated.json()["is_active"] is False
+
+    # An inactive account is rejected by account-scoped routes.
+    assert client.get("/integrations/gmail/messages", params={"account_id": account.id}).status_code == 404
+    assert client.patch("/integrations/gmail/accounts/999999", json={"is_active": True}).status_code == 404
+    assert client.delete("/integrations/gmail/accounts/999999").status_code == 404
+
+    assert client.delete(f"/integrations/gmail/accounts/{account.id}").status_code == 204
+    assert client.get("/integrations/gmail/accounts").json() == []
+
+
+def test_accounts_auth_url_gmail_purpose_state(client, monkeypatch):
+    """The connect-account URL carries a ``gmail``-purpose signed state — the
+    shared /integrations/google/callback dispatches on it (#1659)."""
+    monkeypatch.setattr("config.settings.google_client_id", "test-client-id")
+    monkeypatch.setattr("config.settings.google_redirect_uri", "http://localhost:8000/integrations/google/callback")
+    monkeypatch.setattr("config.settings.secret_key", "test-secret")
+
+    resp = client.get("/integrations/gmail/accounts/auth")
+    assert resp.status_code == 200
+    url = resp.json()["url"]
+    assert url.startswith("https://accounts.google.com/o/oauth2/v2/auth")
+    assert "state=gmail." in url
+
+
+def test_status_account_scoped(client, db_session, monkeypatch):
+    """``status?account_id=`` reports that mailbox's own grant flags and the
+    serialized account list — independent of the shared connection (#1659)."""
+    account = _connect_account(db_session, monkeypatch, scope=GMAIL_READONLY_SCOPE)
+    resp = client.get(f"/integrations/gmail/status?account_id={account.id}")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["connected"] is True
+    assert data["gmail_read"] is True
+    assert data["gmail_modify"] is False
+    assert data["gmail_send"] is False
+    assert [a["email_address"] for a in data["accounts"]] == ["me@x.com"]
+
+
+def test_status_unknown_account_404(client):
+    assert client.get("/integrations/gmail/status?account_id=999999").status_code == 404
+
+
+def test_list_messages_account_scoped_uses_own_token(client, db_session, monkeypatch):
+    """``account_id`` routes the call through the mailbox's own credential
+    blob — no shared ``google_tokens`` row exists here (#1659)."""
+    account = _connect_account(db_session, monkeypatch)
+    with patch("httpx.AsyncClient.get", new=AsyncMock(return_value=_fake_response({"messages": []}))) as mock_get:
+        resp = client.get(f"/integrations/gmail/messages?account_id={account.id}")
+    assert resp.status_code == 200
+    assert mock_get.call_args_list[0].kwargs["headers"]["Authorization"] == "Bearer ACCOUNT_TOKEN"

@@ -15,13 +15,18 @@
   import { inboxGoals } from '$lib/utils/goalTriage';
   import { running as pomRunning, secondsLeft, toggleTimer } from '$lib/stores/pomodoro';
   import { isActive as focusActive, startFocusMode, stopFocusMode } from '$lib/stores/focusMode';
+  import { loadUserSettings, patchUserSettings } from '$lib/utils/userSettings';
   import EmptyState from '$lib/components/EmptyState.svelte';
   import SacredCalendar from '$lib/components/SacredCalendar.svelte';
+  import ExecTimerCard from '$lib/components/execution/ExecTimerCard.svelte';
+  import ExecGoalNotes from '$lib/components/execution/ExecGoalNotes.svelte';
+  import ExecOptionsDialog from '$lib/components/execution/ExecOptionsDialog.svelte';
   import Check from 'lucide-svelte/icons/check';
   import Crosshair from 'lucide-svelte/icons/crosshair';
   import Inbox from 'lucide-svelte/icons/inbox';
   import Moon from 'lucide-svelte/icons/moon';
   import Pause from 'lucide-svelte/icons/pause';
+  import SettingsIcon from 'lucide-svelte/icons/settings';
   import Sunrise from 'lucide-svelte/icons/sunrise';
   import Target from 'lucide-svelte/icons/target';
   import Timer from 'lucide-svelte/icons/timer';
@@ -45,6 +50,18 @@
   // touching backend ordering.
   let promotedKey = $state<string | null>(null);
   let busyKey = $state<string | null>(null);
+
+  // Detail-rail visibility prefs — persisted under userSettings.executionUi
+  // (undefined in storage means "shown").
+  const execPrefs = loadUserSettings().executionUi;
+  let showQueue = $state(execPrefs?.showQueue !== false);
+  let showCalendar = $state(execPrefs?.showCalendar !== false);
+  let showNotes = $state(execPrefs?.showNotes !== false);
+  let optionsOpen = $state(false);
+
+  $effect(() => {
+    patchUserSettings({ executionUi: { showQueue, showCalendar, showNotes } });
+  });
 
   // Same rule as the backend's context=auto resolution (#1198): local hour
   // below the cutoff → MORNING, else NIGHT.
@@ -91,7 +108,10 @@
     if ($focusActive) {
       stopFocusMode();
     } else {
-      startFocusMode();
+      // Link the focus session to the hero goal's note so the overlay can
+      // show its title (startFocusMode accepts a note id, #focusSession).
+      const nid = heroItem?.kind === 'goal' ? heroItem.goal.note_id : null;
+      startFocusMode(nid != null ? String(nid) : undefined);
     }
   }
 
@@ -184,10 +204,20 @@
         {/if}
       </span>
     </div>
-    <a class="btn btn-ghost inbox-link" href="/goals?tab=inbox">
-      <Inbox size={14} />
-      {$t('executionPage.toInbox')}
-    </a>
+    <div class="exec-header-actions">
+      <button
+        class="btn btn-ghost btn-icon"
+        onclick={() => (optionsOpen = true)}
+        title={$t('executionPage.optionsTitle')}
+        aria-label={$t('executionPage.optionsTitle')}
+      >
+        <SettingsIcon size={15} />
+      </button>
+      <a class="btn btn-ghost inbox-link" href="/goals?tab=inbox">
+        <Inbox size={14} />
+        {$t('executionPage.toInbox')}
+      </a>
+    </div>
   </header>
 
   {#if loadError}
@@ -232,9 +262,9 @@
           {#snippet icon()}<Check size={44} />{/snippet}
         </EmptyState>
       {:else}
-        <!-- «Siguiente» hero card -->
+        <!-- «Siguiente» hero card — dense 2-row command strip -->
         <section class="hero card" aria-label={$t('executionPage.next')}>
-          <div class="hero-kicker">
+          <div class="hero-top">
             <span class="hero-label">{$t('executionPage.next')}</span>
             <span class="kind-chip">
               {heroItem.kind === 'goal'
@@ -248,64 +278,76 @@
             {#if heroItem.startTime}
               <span class="time-chip mono">{heroItem.startTime}</span>
             {/if}
-          </div>
 
-          <h2 class="hero-title">{heroItem.title}</h2>
-
-          {#if heroItem.kind === 'goal' && heroItem.goal.measurement_type === 'COUNT' && heroItem.goal.target_value > 1}
-            <div class="hero-progress caption">
-              {heroItem.goal.current_value} / {heroItem.goal.target_value} ·
-              {Math.round(heroItem.goal.progress_pct)}%
-            </div>
-          {/if}
-
-          <div class="hero-actions">
-            <button
-              class="btn btn-primary hero-cta"
-              disabled={busyKey === heroItem.key}
-              onclick={() => completeItem(heroItem!)}
-            >
-              <Check size={16} />
-              {$t('executionPage.complete')}
-            </button>
-            {#if heroItem.kind === 'goal'}
+            <div class="hero-actions">
               <button
-                class="btn"
+                class="btn btn-primary hero-cta"
                 disabled={busyKey === heroItem.key}
-                onclick={() => pauseItem(heroItem!)}
+                onclick={() => completeItem(heroItem!)}
               >
-                <Pause size={14} />
-                {$t('executionPage.pause')}
+                <Check size={14} />
+                {$t('executionPage.complete')}
               </button>
-            {/if}
-            <div class="hero-focus-tools">
+              {#if heroItem.kind === 'goal'}
+                <button
+                  class="btn hero-pause"
+                  disabled={busyKey === heroItem.key}
+                  onclick={() => pauseItem(heroItem!)}
+                  title={$t('executionPage.pause')}
+                  aria-label={$t('executionPage.pause')}
+                >
+                  <Pause size={13} />
+                </button>
+              {/if}
               <button
-                class="btn btn-ghost"
+                class="btn btn-ghost hero-tool"
                 class:active={$pomRunning}
                 onclick={toggleTimer}
                 title={$pomRunning
                   ? $t('executionPage.pausePomodoro')
                   : $t('executionPage.startPomodoro')}
               >
-                <Timer size={14} />
-                {$pomRunning ? pomTime : $t('executionPage.startPomodoro')}
+                <Timer size={13} />
+                <span class="mono">{$pomRunning ? pomTime : ''}</span>
               </button>
               <button
-                class="btn btn-ghost"
+                class="btn btn-ghost hero-tool"
                 class:active={$focusActive}
                 onclick={toggleFocus}
                 title={$focusActive
                   ? $t('executionPage.stopFocus')
                   : $t('executionPage.startFocus')}
+                aria-label={$focusActive
+                  ? $t('executionPage.stopFocus')
+                  : $t('executionPage.startFocus')}
               >
-                <Crosshair size={14} />
-                {$focusActive ? $t('executionPage.stopFocus') : $t('executionPage.startFocus')}
+                <Crosshair size={13} />
               </button>
+            </div>
+          </div>
+
+          <div class="hero-bottom">
+            <h2 class="hero-title">{heroItem.title}</h2>
+            <div class="hero-meta">
+              {#if heroItem.kind === 'goal' && heroItem.goal.measurement_type === 'COUNT' && heroItem.goal.target_value > 1}
+                <span class="hero-progress caption mono">
+                  {heroItem.goal.current_value}/{heroItem.goal.target_value} ·
+                  {Math.round(heroItem.goal.progress_pct)}%
+                </span>
+              {/if}
+              {#if heroItem.kind === 'goal'}
+                <span class="meta-chip">
+                  {$t(`analyticsPage.goals.temporalities.${heroItem.goal.temporality}`)}
+                </span>
+                <span class="meta-chip">
+                  {$t(`executionPage.measurement.${heroItem.goal.measurement_type}`)}
+                </span>
+              {/if}
             </div>
           </div>
         </section>
 
-        {#if restItems.length > 0}
+        {#if showQueue && restItems.length > 0}
           <section class="queue">
             <h5 class="queue-title">{$t('executionPage.queueTitle')}</h5>
             <ul class="queue-list">
@@ -340,14 +382,29 @@
       {/if}
     </div>
 
-    <SacredCalendar />
+    <aside class="exec-rail">
+      <ExecTimerCard />
+      {#if showNotes}
+        <ExecGoalNotes item={heroItem} />
+      {/if}
+      {#if showCalendar}
+        <SacredCalendar />
+      {/if}
+    </aside>
   </div>
+
+  <ExecOptionsDialog
+    bind:open={optionsOpen}
+    bind:showQueue
+    bind:showCalendar
+    bind:showNotes
+  />
 </div>
 
 <style>
   .execution-page {
     height: 100%;
-    overflow-y: auto;
+    overflow: hidden;
     padding: var(--s4) var(--s5);
     display: flex;
     flex-direction: column;
@@ -388,6 +445,21 @@
     white-space: nowrap;
   }
 
+  .exec-header-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--s1);
+  }
+
+  .exec-header-actions .btn-icon {
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
   .inbox-link {
     text-decoration: none;
   }
@@ -403,16 +475,31 @@
 
   .exec-layout {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 300px;
+    grid-template-columns: minmax(0, 1fr) 340px;
     gap: var(--s4);
-    align-items: start;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .exec-rail {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s3);
+    min-width: 0;
+    min-height: 0;
+    overflow-y: auto;
+    padding-bottom: var(--s1);
   }
 
   .exec-main {
     display: flex;
     flex-direction: column;
-    gap: var(--s4);
+    gap: var(--s3);
     min-width: 0;
+    min-height: 0;
+    overflow-y: auto;
+    padding-bottom: var(--s2);
   }
 
   .exec-loading,
@@ -425,15 +512,15 @@
   .hero {
     display: flex;
     flex-direction: column;
-    gap: var(--s3);
-    padding: var(--s5);
+    gap: var(--s2);
+    padding: var(--s3) var(--s4);
     border-color: color-mix(in srgb, var(--xp) 35%, var(--border));
     background:
       linear-gradient(135deg, color-mix(in srgb, var(--xp) 7%, transparent) 0%, transparent 45%),
       var(--surface);
   }
 
-  .hero-kicker {
+  .hero-top {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
@@ -495,13 +582,44 @@
     white-space: nowrap;
   }
 
+  .hero-bottom {
+    display: flex;
+    align-items: center;
+    gap: var(--s3);
+    min-width: 0;
+  }
+
   .hero-title {
     margin: 0;
-    font-size: 24px;
-    font-weight: 700;
-    line-height: 1.25;
+    flex: 1;
+    min-width: 0;
+    font-size: 17px;
+    font-weight: 600;
+    line-height: 1.3;
     color: var(--text-primary);
-    overflow-wrap: anywhere;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .hero-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: var(--s1);
+    flex-shrink: 0;
+  }
+
+  .meta-chip {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
   }
 
   .hero-progress {
@@ -512,21 +630,33 @@
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: var(--s2);
-    margin-top: var(--s1);
+    gap: var(--s1_5);
+    margin-left: auto;
   }
 
   .hero-cta {
-    font-size: 14px;
-    padding: var(--s2_5) var(--s5);
+    font-size: 12px;
+    padding: var(--s1_5) var(--s3);
     font-weight: 600;
   }
 
-  .hero-focus-tools {
-    display: flex;
+  .hero-pause {
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    display: inline-flex;
     align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+  }
+  .hero-pause:hover {
+    color: var(--text-primary);
+  }
+
+  .hero-tool {
+    padding: var(--s1_5) var(--s2_5);
+    font-size: 11px;
     gap: var(--s1);
-    margin-left: auto;
   }
 
   .btn.active {
@@ -678,16 +808,33 @@
   }
 
   @media (max-width: 900px) {
+    /* Single column: fall back to page-level scroll — the rail stacks
+       below the queue instead of splitting the viewport. */
+    .execution-page {
+      overflow-y: auto;
+    }
     .exec-layout {
       grid-template-columns: 1fr;
+      overflow: visible;
+    }
+    .exec-main,
+    .exec-rail {
+      overflow: visible;
     }
   }
 
   @media (max-width: 640px) {
     .hero-title {
-      font-size: 19px;
+      font-size: 15px;
+      white-space: normal;
     }
-    .hero-focus-tools {
+    .hero-bottom {
+      flex-wrap: wrap;
+    }
+    .hero-meta {
+      justify-content: flex-start;
+    }
+    .hero-actions {
       margin-left: 0;
       width: 100%;
     }

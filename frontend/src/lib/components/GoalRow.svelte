@@ -24,9 +24,12 @@
   interface Props {
     goal: Goal;
     pinned?: boolean;
+    /** Last-opened goal in the editor — persists the selection highlight
+     *  across reloads (#1673). */
+    selected?: boolean;
   }
 
-  let { goal, pinned = false }: Props = $props();
+  let { goal, pinned = false, selected = false }: Props = $props();
 
   // Shared context set once by GoalList (#351). Accessed via ctx.* so the
   // getters stay reactive; falls back to no-op defaults outside a provider.
@@ -91,13 +94,14 @@
   class:failed={goal.state === 'FAILED'}
   class:paused={goal.state === 'PAUSED'}
   class:archived={goal.state === 'CANCELLED'}
+  class:selected
   style="--goal-color: {goalColor}"
 >
   <button
     class="grow-main"
     onclick={() => ctx.onClick(goal)}
     aria-label={$t('goalCard.openGoal', { values: { title: goal.title } })}
-    title={goal.description ? `${goal.title}\n${goal.description}` : goal.title}
+    title={goal.title}
   >
     <span class="grow-icon" aria-hidden="true">
       {#if goal.fail_emoji}
@@ -280,6 +284,15 @@
     box-shadow:
       inset 0 1px 0 color-mix(in srgb, var(--goal-color) 12%, transparent),
       0 8px 24px color-mix(in srgb, var(--goal-color) 13%, transparent);
+  }
+
+  /* Last-opened goal — a quiet accent ring, weaker than :hover (#1673). */
+  .grow.selected {
+    border-color: color-mix(in srgb, var(--goal-color) 72%, var(--border));
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, var(--goal-color) 12%, transparent),
+      0 0 0 1px color-mix(in srgb, var(--goal-color) 55%, transparent),
+      0 6px 20px color-mix(in srgb, var(--goal-color) 10%, transparent);
   }
 
   .grow.completed {

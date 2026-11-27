@@ -3,6 +3,7 @@
   import { SvelteMap, SvelteSet } from 'svelte/reactivity';
   import {
     api,
+    type EmailAccount,
     type GmailStatus,
     type GmailMessageSummary,
     type GmailMessage,
@@ -51,6 +52,11 @@
   let connectTimeout: ReturnType<typeof setTimeout> | null = null;
   let destroyed = false;
 
+  // ── Connected mailboxes (#1659) ────────────────────────────────────────────
+  // selectedAccountId null = legacy shared Google connection path.
+  let accounts = $state<EmailAccount[]>([]);
+  let selectedAccountId = $state<number | null>(null);
+
   // ── Message list ───────────────────────────────────────────────────────────
   let messages = $state<GmailMessageSummary[]>([]);
   let nextPageToken = $state<string | null>(null);
@@ -88,15 +94,49 @@
   const unreadInView = $derived(messages.filter((m) => m.label_ids?.includes('UNREAD')).length);
 
   // ── Status / OAuth ─────────────────────────────────────────────────────────
+  async function loadAccounts(): Promise<void> {
+    try {
+      const list = await api.gmail.accounts.list();
+      accounts = list;
+      if (list.length === 0) {
+        selectedAccountId = null;
+      } else if (selectedAccountId === null || !list.some((a) => a.id === selectedAccountId)) {
+        selectedAccountId = list[0].id;
+      }
+    } catch (e) {
+      logger.error(e);
+    }
+  }
+
   async function loadStatus(): Promise<void> {
     try {
-      status = await api.gmail.status();
+      status = await api.gmail.status(selectedAccountId ?? undefined);
       statusLoading = false;
       if (status.connected) void refreshList();
     } catch (e) {
       logger.error(e);
       statusLoading = false;
     }
+  }
+
+  function pickAccount(accountId: number): void {
+    if (selectedAccountId === accountId) return;
+    selectedAccountId = accountId;
+    selected = null;
+    messages = [];
+    nextPageToken = null;
+    totalEstimate = null;
+    details.clear();
+    detailInflight.clear();
+    hydrateQueue.length = 0;
+    void loadStatus();
+  }
+
+  function accountChipLabel(account: EmailAccount): string {
+    if (account.email_address && account.email_address !== '__pending__') {
+      return account.display_name || account.email_address;
+    }
+    return account.display_name || $t('gmail.accounts.pending');
   }
 
   function stopConnectPolling(): void {
@@ -110,8 +150,56 @@
     }
   }
 
-  /** Inline Google OAuth connect — same popup+poll pattern as SettingsGoogle. */
+  /** Connect/re-auth a mailbox through the email_accounts OAuth flow (#1659):
+   * the grant lands on its own account row. A bumped row id or updated_at
+   * signals the callback persisted (re-auth of an existing address updates
+   * its row in place). */
+  async function connectAccount(): Promise<void> {
+    connecting = true;
+    connectError = '';
+    stopConnectPolling();
+    try {
+      const before = new Map(accounts.map((a) => [a.id, a.updated_at]));
+      const { url } = await api.gmail.accounts.authUrl();
+      window.open(url, '_blank', 'noopener,noreferrer');
+      connectPoll = setInterval(async () => {
+        if (destroyed) return;
+        try {
+          const list = await api.gmail.accounts.list();
+          const added = list.find((a) => !before.has(a.id));
+          const refreshed = list.find((a) => before.has(a.id) && a.updated_at !== before.get(a.id));
+          if (added || refreshed) {
+            accounts = list;
+            if (added) selectedAccountId = added.id;
+            else if (refreshed) selectedAccountId = refreshed.id;
+            stopConnectPolling();
+            connecting = false;
+            showNotification($t('gmail.connectOk'), 'success');
+            await loadStatus();
+          }
+        } catch {
+          /* transient poll failure — keep waiting */
+        }
+      }, 3000);
+      connectTimeout = setTimeout(() => {
+        stopConnectPolling();
+        connecting = false;
+        if (!destroyed) connectError = $t('gmail.connectTimeout');
+      }, 300000);
+    } catch (e) {
+      logger.error(e);
+      connectError = $t('gmail.connectError');
+      connecting = false;
+    }
+  }
+
+  /** Inline Google OAuth connect — same popup+poll pattern as SettingsGoogle.
+   * Legacy first-connect path when no email_accounts row exists yet. */
   async function connectGoogle(): Promise<void> {
+    if (accounts.length > 0) {
+      // Account-scoped world: route every connect through the mailbox flow.
+      return connectAccount();
+    }
     connecting = true;
     connectError = '';
     stopConnectPolling();
@@ -127,6 +215,7 @@
             stopConnectPolling();
             connecting = false;
             showNotification($t('gmail.connectOk'), 'success');
+            await loadAccounts();
             await refreshList();
           }
         } catch {
@@ -163,6 +252,7 @@
         labelIds: labelFilter ? [labelFilter] : undefined,
         maxResults: PAGE_SIZE,
         pageToken: append ? nextPageToken : undefined,
+        accountId: selectedAccountId ?? undefined,
       });
       messages = append ? [...messages, ...page.messages] : page.messages;
       nextPageToken = page.next_page_token;
@@ -215,7 +305,7 @@
       detailInflight.add(id);
       activeHydration++;
       api
-        .gmail.get(id)
+        .gmail.get(id, selectedAccountId ?? undefined)
         .then((msg) => {
           details.set(id, msg);
         })
@@ -242,7 +332,7 @@
     }
     detailLoading = true;
     try {
-      const msg = await api.gmail.get(message.id);
+      const msg = await api.gmail.get(message.id, selectedAccountId ?? undefined);
       details.set(message.id, msg);
       selected = msg;
       // Gmail marks opened mail as read — mirror that when we may modify.
@@ -264,7 +354,7 @@
 
   async function markReadSilent(id: string): Promise<void> {
     try {
-      const res = await api.gmail.read(id);
+      const res = await api.gmail.read(id, selectedAccountId ?? undefined);
       applyLabels(id, res.label_ids ?? []);
       if (selected?.id === id) {
         selected = { ...selected, label_ids: res.label_ids ?? [] };
@@ -288,7 +378,7 @@
     const id = message.id;
     if (!id || !canModify) return;
     try {
-      const res = await api.gmail[action](id);
+      const res = await api.gmail[action](id, selectedAccountId ?? undefined);
       applyLabels(id, res.label_ids ?? []);
       if (selected?.id === id) {
         selected = { ...selected, label_ids: res.label_ids ?? [] };
@@ -327,7 +417,7 @@
     if (sending) return;
     sending = true;
     try {
-      await api.gmail.send(payload);
+      await api.gmail.send(payload, selectedAccountId ?? undefined);
       showNotification($t('gmail.sendOk'), 'success');
       composeOpen = false;
       composePrefill = null;
@@ -342,7 +432,9 @@
   }
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
-  onMount(() => {
+  onMount(async () => {
+    // Accounts first — they decide which credential path status/list use.
+    await loadAccounts();
     void loadStatus();
   });
 
@@ -392,8 +484,25 @@
       <div class="reconnect-banner" role="alert">
         <TriangleAlert size={15} />
         <span>{$t('gmail.scopeWarning')}</span>
-        <button class="filter-chip" onclick={() => void connectGoogle()} disabled={connecting}>
+        <button class="filter-chip" onclick={() => void connectAccount()} disabled={connecting}>
           {connecting ? $t('gmail.connecting') : $t('gmail.reconnect')}
+        </button>
+      </div>
+    {/if}
+
+    {#if accounts.length > 0}
+      <div class="account-chips">
+        {#each accounts as account (account.id)}
+          <button
+            class="filter-chip"
+            class:active={selectedAccountId === account.id}
+            onclick={() => pickAccount(account.id)}
+          >
+            {accountChipLabel(account)}
+          </button>
+        {/each}
+        <button class="filter-chip add-account" onclick={() => void connectAccount()} disabled={connecting}>
+          + {$t('gmail.accounts.add')}
         </button>
       </div>
     {/if}
@@ -586,6 +695,16 @@
     font-size: 10px;
     font-weight: 700;
     padding: 0 6px;
+  }
+
+  .account-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .add-account {
+    border-style: dashed;
   }
 
   .gmail-filters {

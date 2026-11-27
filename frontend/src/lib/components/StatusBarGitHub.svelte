@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { resolve } from '$app/paths';
   import { t } from 'svelte-i18n';
   import { fade, slide } from 'svelte/transition';
   import { api } from '$lib/api';
@@ -177,6 +178,13 @@
             {/each}
           </ul>
         {/if}
+        <!-- #1662 — land on the in-app open-issues view (dashboard GitHub
+             widget pre-filtered to assigned + open). -->
+        <a
+          class="sb-gh-viewall"
+          href="{resolve('/')}?activity=github&ghType=issues&ghFilter=assigned&ghState=open"
+          onclick={() => (showIssues = false)}>{$t('widgets.ghViewAll')}</a
+        >
       </div>
     {/if}
 
@@ -233,6 +241,13 @@
             {/each}
           </ul>
         {/if}
+        <!-- #1662 — land on the in-app open-PRs view (dashboard GitHub
+             widget pre-filtered to assigned + open). -->
+        <a
+          class="sb-gh-viewall"
+          href="{resolve('/')}?activity=github&ghType=prs&ghFilter=assigned&ghState=open"
+          onclick={() => (showPRs = false)}>{$t('widgets.ghViewAll')}</a
+        >
       </div>
     {/if}
   </div>
@@ -338,6 +353,25 @@
   .sb-gh-item-title {
     font-size: 11px;
     line-height: 1.4;
+  }
+  .sb-gh-viewall {
+    display: block;
+    padding: 8px 12px;
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--accent);
+    text-decoration: none;
+    text-align: center;
+    flex-shrink: 0;
+    transition: background var(--t-fast, 0.12s);
+  }
+  .sb-gh-viewall:hover {
+    background: var(--surface-hover);
+  }
+  .sb-gh-viewall:focus-visible {
+    outline: 1px solid var(--xp);
+    outline-offset: -1px;
   }
   .sb-gh-empty {
     padding: 16px 12px;

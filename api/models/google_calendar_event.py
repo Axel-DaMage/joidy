@@ -36,6 +36,8 @@ class GoogleCalendarEvent(Base):
     description: Mapped[str | None] = mapped_column(EncryptedText, nullable=True)
     location: Mapped[str | None] = mapped_column(EncryptedText, nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="confirmed")
+    # Google's event-level colorId ("1".."11"); NULL = inherit the calendar color.
+    color_id: Mapped[str | None] = mapped_column(String(8), nullable=True)
     all_day: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     end_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
