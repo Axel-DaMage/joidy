@@ -2,6 +2,7 @@
   import '../app.css';
   import { browser } from '$app/env';
   import { page } from '$app/state';
+  import { resolve } from '$app/paths';
   import { afterNavigate } from '$app/navigation';
   import { onMount } from 'svelte';
   import { fade } from 'svelte/transition';
@@ -45,6 +46,7 @@
     globalLevel,
     nextStageXP,
     showNotification,
+    currentStreak,
   } from '$lib/stores/gamification';
   import { running, secondsLeft, phase } from '$lib/stores/pomodoro';
   import { initPomodoroSettings } from '$lib/stores/pomodoro';
@@ -58,6 +60,11 @@
     themeMode,
   } from '$lib/stores/settings';
   import { getCachedData, setCachedData } from '$lib/utils/userSettings';
+  import {
+    pickTopStreak,
+    streakTierFor,
+    streakTierIcon,
+  } from '$lib/utils/streakTier';
   import { createVaultSyncBurst } from '$lib/utils/vaultSyncBurst';
   import { initKeyboardNavigation } from '$lib/utils/keyboardNavigation';
   import { initPushNotifications } from '$lib/push';
@@ -173,6 +180,17 @@
   let streaksNotified = false;
   let lastFooterStatsFetch = 0;
   let lastStatsLoad = 0;
+
+  // #1662 — the status-bar streak pill is persistent (not only when a
+  // check-in is pending) and evolves through milestone tiers. It binds to
+  // whichever streak is ahead: the daily-activity streak from gamification
+  // or the longest-running active personal streak.
+  let topStreak: PersonalStreak | null = null;
+
+  $: displayStreak = Math.max($currentStreak, topStreak?.current_streak ?? 0);
+  $: streakTier = streakTierFor(displayStreak);
+  // Legendary gets a distinct glyph (#257: dynamic name → DynamicIcon).
+  $: streakPillIcon = streakTierIcon(streakTier);
 
   $: currentTime = now.toLocaleTimeString($localeStore, {
     hour: $use24HourClock ? '2-digit' : 'numeric',
@@ -483,6 +501,7 @@
         pendingStreaks = cachedStreaks.filter(
           (streak: PersonalStreak) => !streak.today_checked && !streak.is_archived
         ).length;
+        topStreak = pickTopStreak(cachedStreaks);
       }
 
       footerStatsInflight = Promise.all([
@@ -502,6 +521,7 @@
               (streak) => !streak.today_checked && !streak.is_archived
             ).length;
             pendingStreaks = newPendingStreaks;
+            topStreak = pickTopStreak(streaks);
             setCachedData('streaks', streaks);
 
             if (newPendingStreaks > 0 && !streaksNotified) {
@@ -976,28 +996,47 @@
         }}>joidy v{__APP_VERSION__}{#if $devMode && __GIT_SHA__}&nbsp;<span class="mono">({__GIT_SHA__})</span>{/if}</button
       >
 
-      <div class="status-live" title={$t('layout.currentStatus')}>
-        <span class="status-pill status-time mono">{currentTime}</span>
-        <span class="status-pill status-date">{currentDate}</span>
-        <span
-          class="status-pill status-tasks"
-          class:has-pending={pendingTasks > 0}
-          class:is-completed={pendingTasks === 0}>{pendingTasks} {$t('common.tasks')}</span
+      <!-- #1662 — every status-bar pill is a real link: nothing in the
+           footer stays dead. Each lands on its canonical view. -->
+      <div class="status-live" role="group" aria-label={$t('layout.currentStatus')}>
+        <a
+          href={resolve('/timers')}
+          class="status-pill status-time mono status-nav"
+          title={$t('layout.openTimers')}
+          aria-label="{currentTime} — {$t('layout.openTimers')}">{currentTime}</a
         >
-        {#if pendingStreaks > 0}
-          <span
-            class="status-pill status-streak-alert has-pending"
-            title={$t('status.pendingStreaks')}
-            role="status"
-          >
-            <DynamicIcon
-              name="Flame"
-              size={12}
-              color="var(--accent-contrast, var(--warning, #f59e0b))"
-            />
-            <span>{pendingStreaks}</span>
-          </span>
-        {/if}
+        <a
+          href={resolve('/calendar')}
+          class="status-pill status-date status-nav"
+          title={$t('layout.openCalendar')}
+          aria-label="{currentDate} — {$t('layout.openCalendar')}">{currentDate}</a
+        >
+        <a
+          href={resolve('/goals/ejecucion')}
+          class="status-pill status-tasks status-nav"
+          class:has-pending={pendingTasks > 0}
+          class:is-completed={pendingTasks === 0}
+          title={$t('layout.openTasks')}
+          aria-label="{pendingTasks} {$t('common.tasks')} — {$t('layout.openTasks')}"
+          >{pendingTasks} {$t('common.tasks')}</a
+        >
+        <a
+          href="{resolve('/streaks')}{topStreak ? `?streak=${topStreak.id}` : ''}"
+          class="status-pill status-streak status-nav tier-{streakTier}"
+          class:has-pending={pendingStreaks > 0}
+          title={$t('layout.openStreaks')}
+          aria-label="{$t('status.streakDays', {
+            values: { days: displayStreak },
+          })}{pendingStreaks > 0
+            ? ` — ${$t('status.pendingStreaks')}: ${pendingStreaks}`
+            : ''} — {$t('layout.openStreaks')}"
+        >
+          <DynamicIcon name={streakPillIcon} size={12} />
+          <span class="streak-days">{displayStreak}</span>
+          {#if pendingStreaks > 0}
+            <span class="streak-pending-badge">{pendingStreaks}</span>
+          {/if}
+        </a>
       </div>
 
       <!-- Spacer: keeps the right cluster (GitHub widget, pomodoro, focus)
@@ -1008,12 +1047,14 @@
       <!-- Assigned GitHub PRs / Issues (#792) -->
       <StatusBarGitHub />
 
-      <!-- Mini global Pomodoro -->
-      <div
+      <!-- Mini global Pomodoro — links to the timers view (#1662) -->
+      <a
+        href={resolve('/timers')}
         class="mini-pomo"
         class:is-running={$running}
         class:is-break={$phase !== 'work'}
         title={$t('layout.globalTimer')}
+        aria-label="{$t('layout.globalTimer')} — {$t('layout.openTimers')}"
       >
         <span class="mono p-timer"
           >{String(Math.floor($secondsLeft / 60)).padStart(2, '0')}:{String(
@@ -1021,7 +1062,7 @@
           ).padStart(2, '0')}</span
         >
         <span class="p-dot" class:beat={$running}></span>
-      </div>
+      </a>
 
       <!-- Live timers/stopwatch/alarm widget (#1661) -->
       <StatusBarTimers />
@@ -1342,7 +1383,17 @@
     border-radius: var(--r);
     background: var(--elevated);
     color: var(--text-muted);
+    text-decoration: none;
+    cursor: pointer;
     transition: all var(--t-normal);
+  }
+  .mini-pomo:hover {
+    color: var(--xp);
+    border-color: var(--xp);
+  }
+  .mini-pomo:focus-visible {
+    outline: 1px solid var(--xp);
+    outline-offset: 1px;
   }
   .mini-pomo.is-running {
     color: var(--xp);
@@ -1395,6 +1446,22 @@
     padding: 3px 7px;
     border-radius: 999px;
     white-space: nowrap;
+    transition: all var(--t-normal);
+  }
+
+  /* #1662 — status pills are real links now: pointer, hover lift and a
+     visible focus ring for keyboard users. */
+  .status-nav {
+    cursor: pointer;
+    text-decoration: none;
+  }
+  .status-nav:hover {
+    border-color: currentColor;
+    filter: brightness(1.12);
+  }
+  .status-nav:focus-visible {
+    outline: 1px solid var(--xp);
+    outline-offset: 1px;
   }
 
   .status-time {
@@ -1414,15 +1481,80 @@
     text-transform: capitalize;
   }
 
-  .status-streak-alert {
-    border-color: color-mix(in srgb, var(--accent-contrast, var(--xp)) 65%, var(--border));
-    background: color-mix(in srgb, var(--accent-contrast, var(--xp)) 18%, transparent);
-    color: var(--accent-contrast, var(--xp));
+  /* #1662 — persistent streak pill. The tier classes evolve the pill's
+     color and shape with the streak length (milestones 7/30/100/365). */
+  .status-streak {
+    gap: 5px;
+  }
+  .status-streak .streak-days {
     font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .streak-pending-badge {
+    min-width: 14px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: var(--accent-contrast, var(--warning, #f59e0b));
+    color: var(--bg);
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 14px;
+    text-align: center;
+  }
+
+  /* seed (0–6d): dim flame, neutral */
+  .status-streak.tier-seed {
+    color: var(--text-muted);
+    border-color: var(--border);
+    background: var(--surface);
+  }
+  /* sprout (7–29d): accent color */
+  .status-streak.tier-sprout {
+    color: var(--accent);
+    border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+  }
+  /* grown (30–99d): brighter accent + subtle glow */
+  .status-streak.tier-grown {
+    color: var(--xp);
+    border-color: color-mix(in srgb, var(--xp) 55%, var(--border));
+    background: color-mix(in srgb, var(--xp) 14%, transparent);
+    box-shadow: 0 0 8px color-mix(in srgb, var(--xp) 30%, transparent);
+  }
+  /* established (100–364d): pulsing glow */
+  .status-streak.tier-established {
+    color: var(--xp);
+    border-color: color-mix(in srgb, var(--xp) 65%, var(--border));
+    background: color-mix(in srgb, var(--xp) 16%, transparent);
+    animation: streak-tier-pulse 2.4s ease-in-out infinite;
+  }
+  /* legendary (365d+): distinct filled badge shape + trophy glyph */
+  .status-streak.tier-legendary {
+    color: var(--xp-contrast-text, var(--bg));
+    background: var(--accent-gradient, var(--xp));
+    border-color: transparent;
+    border-radius: var(--r);
+    font-weight: 700;
+    box-shadow: 0 0 10px color-mix(in srgb, var(--xp) 45%, transparent);
+  }
+  @keyframes streak-tier-pulse {
+    0%,
+    100% {
+      box-shadow: 0 0 4px color-mix(in srgb, var(--xp) 20%, transparent);
+    }
+    50% {
+      box-shadow: 0 0 14px color-mix(in srgb, var(--xp) 55%, transparent);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .status-streak.tier-established {
+      animation: none;
+      box-shadow: 0 0 8px color-mix(in srgb, var(--xp) 40%, transparent);
+    }
   }
 
   .status-tasks.has-pending,
-  .status-streak-alert.has-pending {
+  .status-streak.has-pending {
     color: var(--accent-contrast, var(--warning, #f59e0b));
     border-color: color-mix(
       in srgb,

@@ -280,7 +280,8 @@
     "offline": "Sin conexión",
     "online": "Conectado",
     "pendingStreaks": "Rachas pendientes",
-    "requiresDevMode": "Requiere Dev Mode"
+    "requiresDevMode": "Requiere Dev Mode",
+    "streakDays": "Racha: {days} días"
   },
   "pwa": {
     "installPrompt": "Instala Joidy para acceso rápido",
@@ -1330,7 +1331,8 @@
     "tabRecentNotes": "Notas recientes",
     "recentNotesEmpty": "Sin notas recientes",
     "viewAllNotes": "Ver todas →",
-    "pomodorosDone": "{done} de {total} pomodoros completados"
+    "pomodorosDone": "{done} de {total} pomodoros completados",
+    "ghViewAll": "Ver todo en el panel"
   },
   "graph": {
     "searchPlaceholder": "Buscar en grafo...",
@@ -1366,7 +1368,11 @@
     "globalTimer": "Temporizador global",
     "skipToContent": "Saltar al contenido principal",
     "loading": "Cargando Joidy…",
-    "setupCheckFailed": "No se pudo conectar con el servidor. Comprueba tu conexión e inténtalo de nuevo."
+    "setupCheckFailed": "No se pudo conectar con el servidor. Comprueba tu conexión e inténtalo de nuevo.",
+    "openTimers": "Abrir temporizadores",
+    "openCalendar": "Abrir calendario",
+    "openTasks": "Abrir tareas actuales",
+    "openStreaks": "Abrir rachas"
   },
   "ai": {
     "title": "Inteligencia Artificial",
