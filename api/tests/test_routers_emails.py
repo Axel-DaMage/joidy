@@ -1,4 +1,6 @@
 from fastapi.testclient import TestClient
+from sqlalchemy import event
+from sqlalchemy.orm import Session
 
 
 def _payload(gmail_id: str = "abc123", account: str = "me@gmail.com", **overrides) -> dict:
@@ -104,6 +106,76 @@ def test_delete_email(client: TestClient):
     assert client.delete(f"/emails/{email_id}").status_code == 204
     assert client.get("/emails/").json()["total"] == 0
     assert client.delete(f"/emails/{email_id}").status_code == 404
+
+
+def test_list_payload_never_includes_body_text(client: TestClient):
+    """Regression (#1664): body_text is EncryptedText and large — it must
+    never cross the wire in the list response, neither as a key nor as
+    (decrypted) content anywhere in the payload."""
+    client.post("/emails/", json=_payload(body_text="super secret body contents"))
+
+    listing = client.get("/emails/")
+    assert listing.status_code == 200
+    item = listing.json()["items"][0]
+    assert "body_text" not in item
+    assert "super secret body contents" not in listing.text
+
+
+def test_list_total_counts_full_filtered_set_across_pages(client: TestClient):
+    """total must reflect the whole filtered set (window COUNT(*)), not just
+    the returned page — and stay correct on later pages (#1664)."""
+    for i in range(7):
+        client.post("/emails/", json=_payload(f"m{i}"))
+
+    page1 = client.get("/emails/", params={"limit": 3, "skip": 0}).json()
+    assert len(page1["items"]) == 3
+    assert page1["total"] == 7
+
+    page2 = client.get("/emails/", params={"limit": 3, "skip": 3}).json()
+    assert len(page2["items"]) == 3
+    assert page2["total"] == 7
+
+    tail = client.get("/emails/", params={"limit": 3, "skip": 6}).json()
+    assert len(tail["items"]) == 1
+    assert tail["total"] == 7
+
+    empty = client.get("/emails/", params={"unread": "false"}).json()
+    assert empty["items"] == []
+    assert empty["total"] == 0
+
+
+def test_list_emails_page_is_a_single_query(db_session: Session):
+    """Regression (#1664): the inbox list used to run list_emails +
+    count_emails — two scans. list_emails_page must fetch the page and the
+    filtered total in ONE statement."""
+    from services.email_service import list_emails_page, upsert_email
+
+    for i in range(5):
+        upsert_email(
+            db_session,
+            1,
+            account="me@gmail.com",
+            gmail_id=f"s{i}",
+            body_text="x" * 1000,
+        )
+
+    statements: list[str] = []
+    bind = db_session.get_bind()
+
+    def _count(_conn, _cursor, statement, _params, _context, _executemany):
+        statements.append(statement)
+
+    event.listen(bind, "before_cursor_execute", _count)
+    try:
+        emails, total = list_emails_page(db_session, 1, limit=3, skip=0)
+        # Serializing a deferred-free payload must not lazy-load body_text.
+        _ = [e.gmail_id for e in emails]
+    finally:
+        event.remove(bind, "before_cursor_execute", _count)
+
+    assert total == 5
+    assert len(emails) == 3
+    assert len(statements) == 1
 
 
 def test_accounts_view(client: TestClient):

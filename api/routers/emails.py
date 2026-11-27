@@ -6,13 +6,13 @@ from models.email_message import EmailMessage
 from pydantic import BaseModel, Field, field_validator
 from services.auth_service import get_current_user
 from services.email_service import (
-    count_emails,
     delete_email,
     list_accounts,
-    list_emails,
+    list_emails_page,
     update_email_state,
     upsert_email,
 )
+from services.response_cache import invalidate_cache_groups, register_cache_clearer, ttl_cache
 from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/emails", tags=["emails"])
@@ -88,10 +88,29 @@ def list_inbox(
     db: Session = Depends(get_db),
     user_id: int = Depends(get_current_user),
 ):
-    """Unified inbox: all accounts merged, newest first."""
-    emails = list_emails(db, user_id, unread=unread, important=important, account=account, q=q, limit=limit, skip=skip)
-    total = count_emails(db, user_id, unread=unread, important=important, account=account, q=q)
+    """Unified inbox: all accounts merged, newest first.
+
+    ``list_emails_page`` returns the page + filtered total in one round-trip
+    (window ``COUNT(*) OVER()``); ``body_text`` is deferred and never
+    serialized here (#1664).
+    """
+    emails, total = list_emails_page(
+        db, user_id, unread=unread, important=important, account=account, q=q, limit=limit, skip=skip
+    )
     return {"items": [_serialize_email(e) for e in emails], "total": total}
+
+
+@ttl_cache(ignore_params={"db"})
+def _cached_accounts(db: Session, user_id: int) -> list[dict]:
+    """Per-user TTL cache for the ``GROUP BY`` mailbox rollup (#1664).
+
+    Keyed on ``user_id`` (``db`` ignored); invalidated through the
+    ``"emails"`` group on every inbox mutation below.
+    """
+    return list_accounts(db, user_id)
+
+
+register_cache_clearer(_cached_accounts.cache_clear, groups={"emails"})
 
 
 @router.get("/accounts")
@@ -100,7 +119,7 @@ def list_inbox_accounts(
     user_id: int = Depends(get_current_user),
 ):
     """Linked mailboxes with per-account unread/important counters."""
-    return list_accounts(db, user_id)
+    return _cached_accounts(db, user_id)
 
 
 @router.post("/", status_code=201)
@@ -127,6 +146,7 @@ def push_email(
         importance_reason=data.importance_reason,
         labels=data.labels,
     )
+    invalidate_cache_groups("emails")
     serialized = _serialize_email(email)
     serialized["created"] = created
     return serialized
@@ -150,6 +170,7 @@ def patch_email(
     )
     if email is None:
         raise HTTPException(status_code=404, detail="Email not found")
+    invalidate_cache_groups("emails")
     return _serialize_email(email)
 
 
@@ -162,3 +183,4 @@ def remove_email(
     """Archive (remove from the local inbox view only — the mailbox is untouched)."""
     if not delete_email(db, user_id, email_id):
         raise HTTPException(status_code=404, detail="Email not found")
+    invalidate_cache_groups("emails")

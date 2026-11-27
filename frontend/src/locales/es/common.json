@@ -137,6 +137,7 @@
     "emptyNew": "Cuando n8n empuje su primer mensaje aparecerá aquí",
     "noResults": "Sin resultados para esa búsqueda",
     "runFailed": "No se pudieron cargar los correos",
+    "loading": "Cargando correo…",
     "unreadBadge": "no leídos",
     "syncHint": "Los correos llegan automáticamente con el workflow de n8n"
   },

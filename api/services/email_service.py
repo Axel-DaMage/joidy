@@ -7,7 +7,7 @@ from models.email_message import EmailMessage
 from sqlalchemy import case as sa_case
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer
 
 MAX_BODY_TEXT = 50_000
 MAX_SNIPPET = 2_000
@@ -136,14 +136,51 @@ def list_emails(
     limit: int = 100,
     skip: int = 0,
 ) -> list[EmailMessage]:
-    """Unified inbox: merged accounts, newest first."""
+    """Unified inbox: merged accounts, newest first.
+
+    ``body_text`` (EncryptedText — up to MAX_BODY_TEXT ciphertext per row)
+    is deferred: the list serializer never reads it, so it must not be
+    fetched for up to 500 rows at a time (#1664).
+    """
     query = _filtered_query(db, user_id, unread=unread, important=important, account=account, q=q)
     return (
-        query.order_by(EmailMessage.received_at.desc().nullslast(), EmailMessage.id.desc())
+        query.options(defer(EmailMessage.body_text))
+        .order_by(EmailMessage.received_at.desc().nullslast(), EmailMessage.id.desc())
         .offset(max(skip, 0))
         .limit(min(max(limit, 1), 500))
         .all()
     )
+
+
+def list_emails_page(
+    db: Session,
+    user_id: int,
+    *,
+    unread: bool | None = None,
+    important: bool | None = None,
+    account: str | None = None,
+    q: str | None = None,
+    limit: int = 100,
+    skip: int = 0,
+) -> tuple[list[EmailMessage], int]:
+    """Page of inbox rows + filtered total in a SINGLE round-trip (#1664).
+
+    ``COUNT(*) OVER()`` counts the whole filtered result set before
+    OFFSET/LIMIT, collapsing the old ``list_emails`` + ``count_emails``
+    pair (two scans — the count re-scanned without the LIMIT) into one
+    query. Like ``list_emails``, ``body_text`` stays deferred.
+    """
+    query = _filtered_query(db, user_id, unread=unread, important=important, account=account, q=q)
+    rows = (
+        query.options(defer(EmailMessage.body_text))
+        .add_column(func.count().over().label("total_count"))
+        .order_by(EmailMessage.received_at.desc().nullslast(), EmailMessage.id.desc())
+        .offset(max(skip, 0))
+        .limit(min(max(limit, 1), 500))
+        .all()
+    )
+    total = int(rows[0][1]) if rows else 0
+    return [row[0] for row in rows], total
 
 
 def count_emails(

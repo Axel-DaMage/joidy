@@ -50,6 +50,18 @@ class EmailMessage(Base):
         Index("ix_email_messages_user_unread", "user_id", "unread"),
         Index("ix_email_messages_user_important", "user_id", "important"),
         Index("ix_email_messages_received_at", "received_at"),
+        # Inbox ordering is ``received_at DESC NULLS LAST, id DESC`` filtered
+        # by user_id — a plain ASC btree would return NULLs FIRST on the
+        # backward scan, so the PG index must declare the NULLS placement
+        # explicitly (#1664). postgresql_ops is ignored by other dialects
+        # (SQLite tests get a plain ASC composite, still usable).
+        Index(
+            "ix_email_messages_user_received_at",
+            "user_id",
+            "received_at",
+            "id",
+            postgresql_ops={"received_at": "DESC NULLS LAST", "id": "DESC"},
+        ),
     )
 
     def __repr__(self) -> str:  # pragma: no cover

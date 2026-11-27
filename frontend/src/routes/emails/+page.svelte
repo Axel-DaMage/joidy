@@ -10,13 +10,24 @@
   import EmptyState from '$lib/components/EmptyState.svelte';
   import { t } from 'svelte-i18n';
 
+  const PAGE_SIZE = 50;
+
   let emails: EmailSummary[] = $state([]);
   let total = $state(0);
   let accounts: EmailAccountStats[] = $state([]);
   let loading = $state(true);
+  let refreshing = $state(false);
+  let loadingMore = $state(false);
   let loadError = $state(false);
 
   let absoluteTotal = $derived(accounts.reduce((sum, a) => sum + a.total, 0));
+
+  const SKELETON_ROWS = [0, 1, 2, 3, 4, 5];
+  const SKELETON_TAIL = [0, 1];
+
+  function hasMore(): boolean {
+    return emails.length < total;
+  }
 
   let searchQuery = $state('');
   let accountFilter = $state<string | null>(null);
@@ -24,6 +35,11 @@
   let onlyImportant = $state(false);
 
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+  // Stale-response guard: only the latest refresh/loadMore writes state, so
+  // a slow earlier request can't clobber newer results (#1664).
+  let requestSeq = 0;
+  let sentinel: HTMLElement | undefined = $state();
+  let observer = $state<IntersectionObserver | undefined>(undefined);
 
   const dtFormatter = new Intl.DateTimeFormat(undefined, {
     day: '2-digit',
@@ -59,19 +75,28 @@
       : dtFormatter.format(date);
   }
 
+  function currentFilters() {
+    return {
+      unread: onlyUnread ? true : undefined,
+      important: onlyImportant ? true : undefined,
+      account: accountFilter ?? undefined,
+      q: searchQuery.trim() || undefined,
+    };
+  }
+
   async function refresh(): Promise<void> {
+    const seq = ++requestSeq;
+    // Stale-while-revalidate: previous items stay on screen while the
+    // refetch is in flight — the list only dims via .refreshing (#1664).
+    refreshing = true;
     try {
-      const inbox = await api.emails.list({
-        unread: onlyUnread ? true : undefined,
-        important: onlyImportant ? true : undefined,
-        account: accountFilter ?? undefined,
-        q: searchQuery.trim() || undefined,
-        limit: 200,
-      });
+      const inbox = await api.emails.list({ ...currentFilters(), limit: PAGE_SIZE });
+      if (seq !== requestSeq) return;
       emails = inbox.items;
       total = inbox.total;
       loadError = false;
     } catch (e) {
+      if (seq !== requestSeq) return;
       logger.error(e);
       // Surface the failure — the old log-only path rendered the empty
       // state, indistinguishable from "no emails". With stale results on
@@ -82,13 +107,47 @@
         showNotification($t('emails.runFailed'), 'error');
       }
     } finally {
-      loading = false;
+      if (seq === requestSeq) {
+        refreshing = false;
+        loading = false;
+      }
     }
   }
 
-  function onSearchInput(): void {
+  async function loadMore(): Promise<void> {
+    if (loading || refreshing || loadingMore || !hasMore()) return;
+    const seq = requestSeq;
+    loadingMore = true;
+    try {
+      const inbox = await api.emails.list({
+        ...currentFilters(),
+        limit: PAGE_SIZE,
+        skip: emails.length,
+      });
+      if (seq !== requestSeq) return; // a filter change superseded this page
+      const seen = new Set(emails.map((e) => e.id));
+      emails = [...emails, ...inbox.items.filter((e) => !seen.has(e.id))];
+      total = inbox.total;
+    } catch (e) {
+      if (seq === requestSeq) {
+        logger.error(e);
+        showNotification($t('emails.runFailed'), 'error');
+      }
+    } finally {
+      // Always released — a superseded call must not leave the flag latched.
+      loadingMore = false;
+    }
+  }
+
+  // Filter/search changes go through a debounce so rapid toggles or typing
+  // collapse into a single request instead of one refetch per keystroke.
+  function scheduleRefresh(delay = 200): void {
     clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(refresh, 300);
+    debounceTimer = setTimeout(refresh, delay);
+  }
+
+  function onSearchInput(): void {
+    scheduleRefresh(300);
   }
 
   async function toggleRead(email: EmailSummary): Promise<void> {
@@ -126,32 +185,49 @@
 
   function pickAccount(account: string | null): void {
     accountFilter = accountFilter === account ? null : account;
-    refresh();
+    scheduleRefresh();
   }
 
   function toggleUnreadFilter(): void {
     onlyUnread = !onlyUnread;
-    refresh();
+    scheduleRefresh();
   }
 
   function toggleImportantFilter(): void {
     onlyImportant = !onlyImportant;
-    refresh();
+    scheduleRefresh();
   }
 
-  onMount(async () => {
-    try {
-      [accounts] = await Promise.all([api.emails.accounts()]);
-    } catch (e) {
-      logger.error(e);
-    }
-    await refresh();
+  // (Re)observe the infinite-scroll sentinel whenever it mounts; the list
+  // is behind a conditional block so the element can come and go.
+  $effect(() => {
+    const el = sentinel;
+    if (!el || !observer) return;
+    observer.observe(el);
+    return () => observer?.unobserve(el);
+  });
+
+  onMount(() => {
+    // Accounts rollup + first page run in parallel — no waterfall (#1664).
+    api.emails
+      .accounts()
+      .then((stats) => (accounts = stats))
+      .catch((e) => logger.error(e));
+    void refresh();
+
+    observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) void loadMore();
+      },
+      { rootMargin: '240px' }
+    );
   });
 
   // Cancel a pending search debounce so it can't fire state writes after
   // the page has unmounted (#1305).
   onDestroy(() => {
     clearTimeout(debounceTimer);
+    observer?.disconnect();
   });
 </script>
 
@@ -171,7 +247,7 @@
       <!-- Native Gmail client (#42) — separate live-API surface from this
            n8n-synced inbox; plain <a> keeps it working without JS. -->
       <a class="filter-chip gmail-link" href="/gmail">{$t('nav.gmail')}</a>
-      <button class="filter-chip refresh" onclick={refresh} aria-label="refresh">
+      <button class="filter-chip refresh" onclick={refresh} aria-label={$t('common.reload')} class:spinning={refreshing}>
         <RefreshCw size={13} />
       </button>
     </div>
@@ -206,7 +282,22 @@
   </div>
 
   {#if loading}
-    <div class="loading-state caption">...</div>
+    <!-- Skeleton rows: first paint shows the list shape instead of a
+         blank/"..." state (#1664). -->
+    <div class="emails-list" aria-busy="true" aria-label={$t('emails.loading')}>
+      {#each SKELETON_ROWS as i (i)}
+        <div class="email-item skeleton-item">
+          <div class="email-main">
+            <div class="email-top">
+              <span class="skeleton-line" style="width: 35%"></span>
+              <span class="skeleton-line" style="width: 48px"></span>
+            </div>
+            <span class="skeleton-line" style="width: 70%"></span>
+            <span class="skeleton-line" style="width: 55%"></span>
+          </div>
+        </div>
+      {/each}
+    </div>
   {:else if loadError}
     <div class="empty-wrap">
       <EmptyState
@@ -220,7 +311,11 @@
         {#snippet icon()}<Inbox size={44} />{/snippet}
       </EmptyState>
     </div>
-  {:else if absoluteTotal === 0}
+  {:else if absoluteTotal === 0 && total === 0 && emails.length === 0}
+    <!-- Both the accounts rollup and the filtered total report nothing —
+         genuinely no synced mail. If the accounts request failed but the
+         inbox returned rows, we still render the list below instead of a
+         false "empty" state (#1664). -->
     <div class="empty-wrap">
       <EmptyState
         title={$t('emails.emptyAll')}
@@ -241,7 +336,7 @@
   {:else if emails.length === 0}
     <div class="loading-state caption">{$t('emails.noResults')}</div>
   {:else}
-    <div class="emails-list">
+    <div class="emails-list" class:refreshing aria-busy={refreshing}>
       {#each emails as email (email.id)}
         <div class="email-item" class:unread={email.unread}>
           <div class="email-main">
@@ -271,9 +366,25 @@
           </div>
         </div>
       {/each}
+      {#if loadingMore}
+        {#each SKELETON_TAIL as i (i)}
+          <div class="email-item skeleton-item">
+            <div class="email-main">
+              <div class="email-top">
+                <span class="skeleton-line" style="width: 35%"></span>
+                <span class="skeleton-line" style="width: 48px"></span>
+              </div>
+              <span class="skeleton-line" style="width: 70%"></span>
+              <span class="skeleton-line" style="width: 55%"></span>
+            </div>
+          </div>
+        {/each}
+      {/if}
     </div>
-    {#if total > emails.length}
-      <div class="caption more-hint">+{total - emails.length} · limit 200</div>
+    {#if hasMore()}
+      <!-- Infinite-scroll sentinel: IntersectionObserver fetches the next
+           PAGE_SIZE rows before the user reaches the bottom (#1664). -->
+      <div class="sentinel" bind:this={sentinel}></div>
     {/if}
   {/if}
 </div>
@@ -382,6 +493,58 @@
     border-radius: 12px;
     overflow: hidden;
     background: var(--surface);
+    transition: opacity var(--t-fast);
+  }
+
+  /* Stale-while-revalidate: the previous page stays interactive but dims
+     while the refetch is in flight (#1664). */
+  .emails-list.refreshing {
+    opacity: 0.55;
+  }
+
+  .filter-chip.spinning :global(svg) {
+    animation: spin 0.9s linear infinite;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .sentinel {
+    height: 1px;
+  }
+
+  .skeleton-item {
+    pointer-events: none;
+  }
+
+  .skeleton-line {
+    display: block;
+    height: 10px;
+    border-radius: var(--r-sm);
+    background: var(--border);
+    animation: skeleton-pulse 0.9s ease-in-out infinite alternate;
+  }
+
+  @keyframes skeleton-pulse {
+    from {
+      opacity: 0.35;
+    }
+    to {
+      opacity: 0.9;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .skeleton-line,
+    .filter-chip.spinning :global(svg) {
+      animation: none;
+    }
+    .emails-list {
+      transition: none;
+    }
   }
 
   .email-item {
@@ -523,8 +686,4 @@
     padding: 24px 0;
   }
 
-  .more-hint {
-    text-align: center;
-    color: var(--text-muted);
-  }
 </style>

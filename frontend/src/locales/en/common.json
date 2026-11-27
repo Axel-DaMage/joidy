@@ -137,6 +137,7 @@
     "emptyNew": "When n8n pushes its first message it will appear here",
     "noResults": "No results for that search",
     "runFailed": "Could not load emails",
+    "loading": "Loading mail…",
     "unreadBadge": "unread",
     "syncHint": "Emails arrive automatically with the n8n workflow"
   },
