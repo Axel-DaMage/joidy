@@ -80,7 +80,7 @@ class TestNoteToResponse(NoteServiceTestBase):
             db.add(note)
             db.flush()
             tag = get_or_create_tag(db, "test-tag")
-            db.add(NoteTag(note_id=note.id, tag_id=tag.id, source="manual"))
+            db.add(NoteTag(note_id=note.id, tag_id=tag.id))
             db.commit()
             db.refresh(note)
 

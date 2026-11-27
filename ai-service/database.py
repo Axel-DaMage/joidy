@@ -50,7 +50,6 @@ def store_embedding(note_id: int, embedding: list[float]):
             """),
             {"note_id": note_id, "embedding": _vector_literal(embedding)},
         )
-        conn.execute(text("UPDATE notes SET is_embedded = true WHERE id = :note_id"), {"note_id": note_id})
         conn.commit()
 
 

@@ -340,13 +340,13 @@ def _process_goal_failure(db: Session, goal: Goal, now: datetime, progress: floa
         db.flush()
 
     try:
-        from services.joidy_vault_writer import _write_goal_file, get_objectives_dir
+        from services.joidy_vault_writer import get_objectives_dir, write_goal_file
 
         obj_dir = get_objectives_dir()
         if obj_dir:
-            _write_goal_file(db, goal, obj_dir)
+            write_goal_file(db, goal, obj_dir)
             if new_goal:
-                _write_goal_file(db, new_goal, obj_dir)
+                write_goal_file(db, new_goal, obj_dir)
     except Exception as e:
         import logging
 

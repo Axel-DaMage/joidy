@@ -19,7 +19,7 @@ test.describe('Smoke — app shell', () => {
     // helper enables Dev Mode (joidy-dev-mode localStorage key).
     const expectedHrefs = [
       '/', '/notes', '/graph', '/skills', '/ai',
-      '/streaks', '/goals', '/analytics', '/emails', '/calendar', '/timers',
+      '/streaks', '/goals', '/analytics', '/gmail', '/calendar', '/timers',
     ];
     for (const href of expectedHrefs) {
       const link = nav.locator(`a[href="${href}"]`);
@@ -65,7 +65,7 @@ test.describe('Smoke — navigation between pages', () => {
     { path: '/ai', title: 'AI' },
     { path: '/streaks', title: 'Streaks' },
     { path: '/goals', title: 'Goals' },
-    { path: '/emails', title: 'Emails' },
+    { path: '/gmail', title: 'Gmail' },
     { path: '/calendar', title: 'Calendar' },
     { path: '/timers', title: 'Timers' },
   ];

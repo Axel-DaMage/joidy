@@ -28,12 +28,10 @@ from database import get_db
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 from services import integration_token_service as its
-from services import oauth_state
+from services import oauth_flow, oauth_state
 from services import spotify_service as ss
 from services.auth_service import get_current_user
 from sqlalchemy.orm import Session
-
-from routers.integrations import google as google_router
 
 logger = logging.getLogger(__name__)
 
@@ -85,15 +83,17 @@ def _configured() -> bool:
 async def _spotify_token(db: Session, header_token: str | None) -> str:
     """Resolve the Spotify access token: explicit ``X-Spotify-Token`` header
     wins (legacy contract), else the stored token with transparent refresh."""
-    if header_token:
-        return header_token
-    token = await its.get_valid_access_token(db, PROVIDER, ss.refresh_tokens)
-    if not token:
-        raise HTTPException(
-            status_code=401,
-            detail="Spotify no está conectado o la sesión expiró — vuelve a conectar la integración",
-        )
-    return token
+    return await oauth_flow.resolve_access_token(
+        db,
+        header_token=header_token,
+        get_stored=_stored_token,
+        not_connected_detail="Spotify no está conectado o la sesión expiró — vuelve a conectar la integración",
+    )
+
+
+async def _stored_token(db: Session) -> str | None:
+    """Stored Spotify access token with transparent refresh."""
+    return await its.get_valid_access_token(db, PROVIDER, ss.refresh_tokens)
 
 
 def _map_spotify_error(exc: httpx.HTTPStatusError) -> HTTPException:
@@ -163,24 +163,22 @@ async def spotify_oauth_callback(
     persisted encrypted server-side; the response is a self-closing popup
     page, never the tokens themselves (#45).
     """
-    if error:
-        return _callback_page(ok=False, message="Error de autorización con Spotify")
-    if not code:
-        return _callback_page(ok=False, message="Falta el código de autorización")
-    # CSRF gate (#1328): the state must be one this instance signed in /auth.
-    # Verified before any token exchange so a forged callback cannot bind an
-    # attacker's Spotify account here.
-    if not oauth_state.verify_state(state, "spotify"):
-        return _callback_page(ok=False, message="Estado OAuth inválido o expirado", status_code=403)
+    return await oauth_flow.run_callback(
+        provider="spotify",
+        provider_label="Spotify",
+        code=code,
+        error=error,
+        state=state,
+        db=db,
+        exchange=ss.exchange_code,
+        persist=_persist_tokens,
+    )
 
-    try:
-        tokens = await ss.exchange_code(code)
-    except httpx.HTTPStatusError:
-        # No surface raw provider/HTTP details to the browser (CodeQL py/stack-trace-exposure)
-        return _callback_page(ok=False, message="Intercambio de token con Spotify falló")
-    except RuntimeError:
-        return _callback_page(ok=False, message="Spotify OAuth no está configurado")
 
+async def _persist_tokens(db: Session, tokens: dict[str, Any]) -> None:
+    """Persist the exchanged Spotify tokens (encrypted) — a best-effort
+    ``/me`` fetch stores the user id as ``account_id`` (cosmetic, never
+    blocks the connect); extracted for the shared OAuth flow (#1530)."""
     access_token = tokens.get("access_token", "")
     # Best-effort profile fetch: stores the Spotify user id as ``account_id``
     # (status display/debugging). Never blocks the connect on failure.
@@ -202,16 +200,6 @@ async def spotify_oauth_callback(
         scope=tokens.get("scope"),
         account_id=account_id,
     )
-    return _callback_page(ok=True, message="Spotify conectado")
-
-
-def _callback_page(ok: bool, message: str, status_code: int = 200):
-    """Minimal self-closing page for the popup opened by the settings panel.
-
-    Delegates to the Google router's helper — identical UX, single
-    implementation (#42).
-    """
-    return google_router._callback_page(ok=ok, message=message, status_code=status_code)
 
 
 # ---------------------------------------------------------------------------

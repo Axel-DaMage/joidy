@@ -11,20 +11,19 @@ param, where credentials would leak into logs (same hardening as
 ``X-Spotify-Token``/``X-Strava-Token``, #1372).
 """
 
-import html as html_module
 from datetime import datetime
+from typing import Any
 
 import httpx
 from database import get_db
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
-from fastapi.responses import HTMLResponse
 from models.google_calendar_event import GoogleCalendarEvent
 from pydantic import BaseModel, Field
 from services import gmail_service as gms
 from services import google_calendar_service as gcs
 from services import google_service as gs
 from services import google_token_service as gts
-from services import oauth_state
+from services import oauth_flow, oauth_state
 from services.auth_service import get_current_user, get_current_user_or_internal
 from sqlalchemy.orm import Session
 
@@ -73,24 +72,21 @@ async def google_oauth_callback(
     returns a minimal HTML page that closes the popup the Settings panel opened,
     which then flips to "connected" via the status polling loop.
     """
-    if error:
-        return _callback_page(ok=False, message="Error de autorización con Google")
-    if not code:
-        return _callback_page(ok=False, message="Falta el código de autorización")
-    # CSRF gate (#1280): the state must be one this instance signed in /auth.
-    # Verified before any token exchange so a forged callback cannot bind an
-    # attacker's Google account here.
-    if not oauth_state.verify_state(state, "google"):
-        return _callback_page(ok=False, message="Estado OAuth inválido o expirado", status_code=403)
+    return await oauth_flow.run_callback(
+        provider="google",
+        provider_label="Google",
+        code=code,
+        error=error,
+        state=state,
+        db=db,
+        exchange=gs.exchange_code,
+        persist=_persist_tokens,
+    )
 
-    try:
-        tokens = await gs.exchange_code(code)
-    except httpx.HTTPStatusError:
-        # No surface raw provider/HTTP details to the browser (CodeQL py/stack-trace-exposure)
-        return _callback_page(ok=False, message="Intercambio de token con Google falló")
-    except RuntimeError:
-        return _callback_page(ok=False, message="Google OAuth no está configurado")
 
+async def _persist_tokens(db: Session, tokens: dict[str, Any]) -> None:
+    """Persist the exchanged Google tokens (refresh token encrypted) —
+    extracted from the callback for the shared OAuth flow (#1530)."""
     gts.store_tokens(
         db,
         access_token=tokens.get("access_token", ""),
@@ -99,25 +95,6 @@ async def google_oauth_callback(
         token_type=tokens.get("token_type", "Bearer"),
         scope=tokens.get("scope"),
     )
-    return _callback_page(ok=True, message="Google conectado")
-
-
-def _callback_page(ok: bool, message: str, status_code: int = 200) -> HTMLResponse:
-    """Minimal self-closing page for the popup opened by the settings panel."""
-    icon = "OK" if ok else "ERROR"
-    color = "#2e9e4f" if ok else "#c0392b"
-    # Standard-library escaping (incl. quotes) for the text-node interpolation.
-    safe = html_module.escape(message or "", quote=True)
-    page = f"""<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>Joidy</title></head>
-<body style="font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
-<div style="text-align:center">
-<p style="font-size:15px;color:{color};font-weight:600">{icon} — {safe}</p>
-<p style="font-size:12px;color:#777">Puedes cerrar esta ventana.</p>
-</div>
-<script>setTimeout(function(){{ window.close(); }}, 1200);</script>
-</body></html>"""
-    return HTMLResponse(content=page, status_code=status_code)
 
 
 @router.post("/connect")
@@ -322,12 +299,12 @@ async def _access_token(token: str | None, db: Session) -> str:
     """Resolve the access token: an explicit ``X-Google-Token`` header wins,
     else the stored/auto-refreshed token. The override arrives by header
     only — credentials never travel in the query string (#1461)."""
-    if token:
-        return token
-    stored = await gts.get_valid_access_token(db)
-    if not stored:
-        raise HTTPException(status_code=401, detail="Google no está conectado")
-    return stored
+    return await oauth_flow.resolve_access_token(
+        db,
+        header_token=token,
+        get_stored=gts.get_valid_access_token,
+        not_connected_detail="Google no está conectado",
+    )
 
 
 class GoogleEventWriteIn(BaseModel):

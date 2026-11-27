@@ -269,7 +269,6 @@ _KEY_VALIDATORS: dict[str, Callable[[str, str], str]] = {
     "SPOTIFY_REDIRECT_URI": _validate_url_value,
     "GITHUB_OAUTH_WEB_URL": _validate_url_value,
     "GITHUB_WEBHOOK_URL": _validate_url_value,
-    "N8N_WEBHOOK_URL": _validate_url_value,
     # Secrets & API tokens (AUTH_PASSWORD stores a bcrypt hash: "$2b$12$…")
     "GEMINI_API_KEY": _regex_validator(_TOKEN_RE, _TOKEN_DESC),
     "OPENAI_API_KEY": _regex_validator(_TOKEN_RE, _TOKEN_DESC),
@@ -292,7 +291,6 @@ _KEY_VALIDATORS: dict[str, Callable[[str, str], str]] = {
     "POSTGRES_PASSWORD": _regex_validator(_TOKEN_RE, _TOKEN_DESC),
     "GRAFANA_ADMIN_PASSWORD": _regex_validator(_TOKEN_RE, _TOKEN_DESC),
     "OBSIDIAN_WEBHOOK_SECRET": _regex_validator(_TOKEN_RE, _TOKEN_DESC),
-    "N8N_ENCRYPTION_KEY": _regex_validator(_TOKEN_RE, _TOKEN_DESC),
     "VAPID_PUBLIC_KEY": _regex_validator(_TOKEN_RE, _TOKEN_DESC),
     "VAPID_PRIVATE_KEY": _regex_validator(_TOKEN_RE, _TOKEN_DESC),
     # Names & identifiers
@@ -319,7 +317,6 @@ _KEY_VALIDATORS: dict[str, Callable[[str, str], str]] = {
     "API_PORT": _validate_port_value,
     "AI_SERVICE_PORT": _validate_port_value,
     "WORKER_PORT": _validate_port_value,
-    "N8N_PORT": _validate_port_value,
     "AI_SERVICE_ENABLED": _regex_validator(_BOOL_RE, "true/false"),
     "BACKUP_ENABLED": _regex_validator(_BOOL_RE, "true/false"),
     "BACKUP_ON_START": _regex_validator(_BOOL_RE, "true/false"),
