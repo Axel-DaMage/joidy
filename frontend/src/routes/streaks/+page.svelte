@@ -1,5 +1,8 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
+  import { page } from '$app/state';
+  import { resolve } from '$app/paths';
+  import { replaceState } from '$app/navigation';
   import { scale } from 'svelte/transition';
   import X from 'lucide-svelte/icons/x';
   import Snowflake from 'lucide-svelte/icons/snowflake';
@@ -175,6 +178,22 @@
 
     window.addEventListener('beforeunload', handleBeforeUnload);
   });
+
+  // Deep-link support: /streaks?streak=<id> — status-bar streak pill (#1662).
+  // The param is consumed once so manual selection isn't overridden, and the
+  // `mounted` guard keeps replaceState off the SSR path.
+  $: if (mounted) {
+    const streakParam = page.url.searchParams.get('streak');
+    if (streakParam) {
+      // /streaks consumes no other params — a bare resolve() URL is enough.
+      replaceState(resolve('/streaks'), page.state);
+      const id = Number(streakParam);
+      if (Number.isInteger(id) && id > 0) {
+        selectedId = id;
+        ensureStreakHeatmap();
+      }
+    }
+  }
 
   // Persist the viewed streak so re-entering the page restores it (#1504).
   $: if (mounted) {

@@ -300,7 +300,8 @@
     "offline": "Offline",
     "online": "Online",
     "pendingStreaks": "Pending streaks",
-    "requiresDevMode": "Requires Dev Mode"
+    "requiresDevMode": "Requires Dev Mode",
+    "streakDays": "Streak: {days} days"
   },
   "pwa": {
     "installPrompt": "Install Joidy for quick access",
@@ -1331,7 +1332,8 @@
     "tabRecentNotes": "Recent notes",
     "recentNotesEmpty": "No recent notes",
     "viewAllNotes": "View all →",
-    "pomodorosDone": "{done} of {total} pomodoros completed"
+    "pomodorosDone": "{done} of {total} pomodoros completed",
+    "ghViewAll": "View all in dashboard"
   },
   "graph": {
     "searchPlaceholder": "Search graph...",
@@ -1367,7 +1369,11 @@
     "globalTimer": "Global timer",
     "skipToContent": "Skip to main content",
     "loading": "Loading Joidy…",
-    "setupCheckFailed": "Could not reach the server. Check your connection and try again."
+    "setupCheckFailed": "Could not reach the server. Check your connection and try again.",
+    "openTimers": "Open timers",
+    "openCalendar": "Open calendar",
+    "openTasks": "Open current tasks",
+    "openStreaks": "Open streaks"
   },
   "ai": {
     "title": "Artificial Intelligence",
