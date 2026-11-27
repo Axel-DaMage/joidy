@@ -497,3 +497,105 @@ def test_create_task_rejects_bad_recurrence(client: TestClient):
         json={"title": "x", "date": FUTURE_DATE, "recurrence": "YEARLY"},
     )
     assert response.status_code == 422
+
+
+# ── Event-editor fields + duplicate (#1658) ──────────────────────────────────
+
+
+def test_create_task_with_event_fields(client: TestClient):
+    response = client.post(
+        "/calendar/tasks",
+        json={
+            "title": "Team sync",
+            "date": FUTURE_DATE,
+            "description": "Weekly catch-up",
+            "location": "Room 42",
+            "attendees": "a@example.com, b@example.com",
+        },
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert data["description"] == "Weekly catch-up"
+    assert data["location"] == "Room 42"
+    assert data["attendees"] == "a@example.com, b@example.com"
+    assert data["note_id"] is None
+
+
+def test_patch_task_event_fields(client: TestClient, db_session):
+    task = _make_task(db_session, title="Old")
+    response = client.patch(
+        f"/calendar/tasks/{task.id}",
+        json={"description": "new desc", "location": "HQ", "attendees": "c@example.com"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["description"] == "new desc"
+    assert data["location"] == "HQ"
+    assert data["attendees"] == "c@example.com"
+    # Explicit null clears them again.
+    response = client.patch(
+        f"/calendar/tasks/{task.id}",
+        json={"description": None, "location": None, "attendees": None},
+    )
+    assert response.status_code == 200
+    assert response.json()["description"] is None
+    assert response.json()["location"] is None
+
+
+def test_patch_task_note_id_validates_note(client: TestClient, db_session):
+    from models.note import Note
+
+    task = _make_task(db_session, title="With note")
+    assert client.patch(f"/calendar/tasks/{task.id}", json={"note_id": 999}).status_code == 404
+    note = Note(title="Vault note")
+    db_session.add(note)
+    db_session.commit()
+    response = client.patch(f"/calendar/tasks/{task.id}", json={"note_id": note.id})
+    assert response.status_code == 200
+    assert response.json()["note_id"] == note.id
+
+
+def test_duplicate_task_copies_fields(client: TestClient, db_session):
+    task = _make_task(
+        db_session,
+        title="Source",
+        description="desc",
+        location="loc",
+        attendees="a@x.com",
+        color="#abc",
+        recurrence="WEEKLY",
+        reminder_minutes=15,
+        done=True,
+        google_event_id="g-123",
+    )
+    response = client.post(f"/calendar/tasks/{task.id}/duplicate")
+    assert response.status_code == 201
+    data = response.json()
+    assert data["id"] != task.id
+    assert data["title"] == "Source"
+    assert data["description"] == "desc"
+    assert data["location"] == "loc"
+    assert data["attendees"] == "a@x.com"
+    assert data["color"] == "#abc"
+    assert data["recurrence"] == "WEEKLY"
+    assert data["reminder_minutes"] == 15
+    # Clone always starts open and detached from Google.
+    assert data["done"] is False
+    assert data["google_event_id"] is None
+    assert data["source"] == "JOIDY"
+
+
+def test_duplicate_task_with_overrides(client: TestClient, db_session):
+    task = _make_task(db_session, title="Move me", date=dt.date(2099, 7, 20))
+    response = client.post(
+        f"/calendar/tasks/{task.id}/duplicate",
+        json={"date": "2099-07-25", "title": "Moved"},
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert data["title"] == "Moved"
+    assert data["date"] == "2099-07-25"
+
+
+def test_duplicate_task_404(client: TestClient):
+    assert client.post("/calendar/tasks/999/duplicate").status_code == 404

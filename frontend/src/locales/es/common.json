@@ -81,7 +81,9 @@
     "views": {
       "month": "Mes",
       "week": "Semana",
-      "agenda": "Agenda"
+      "agenda": "Agenda",
+      "day": "Día",
+      "year": "Año"
     },
     "prevWeek": "Semana anterior",
     "nextWeek": "Semana siguiente",
@@ -118,7 +120,69 @@
     "startTime": "Hora de inicio",
     "endTime": "Hora de fin",
     "loadError": "No se pudo cargar el calendario",
-    "loadErrorHint": "Comprueba tu conexión e inténtalo de nuevo."
+    "loadErrorHint": "Comprueba tu conexión e inténtalo de nuevo.",
+    "viewsLabel": "Vistas del calendario",
+    "prevRange": "Anterior",
+    "nextRange": "Siguiente",
+    "searchPlaceholder": "Buscar eventos…",
+    "heatmap": "Mapa de productividad",
+    "heatmapHint": "Alternar capa de densidad de productividad",
+    "metricsToggle": "Métricas del día",
+    "metricsToggleHint": "Mostrar u ocultar insignias de inteligencia por día",
+    "myCalendars": "Mis calendarios",
+    "joidyTasks": "Tareas de Joidy",
+    "miniMonthLabel": "Navegador de mes",
+    "weekDaysMin": [
+      "L",
+      "M",
+      "X",
+      "J",
+      "V",
+      "S",
+      "D"
+    ],
+    "priorities": {
+      "LOW": "Baja",
+      "MEDIUM": "Media",
+      "HIGH": "Alta",
+      "URGENT": "Urgente"
+    },
+    "metrics": {
+      "focus": "Tiempo de enfoque",
+      "notes": "Notas creadas",
+      "xp": "XP ganado",
+      "goals": "Metas completadas",
+      "mood": "Ánimo",
+      "streak": "Día de racha",
+      "tooltip": "Enfoque {focus} · {xp} XP · {notes} notas",
+      "detail": "Enfoque {focus}m ({pomodoros} 🍅) · {xp} XP · {notes} notas · {goals} metas"
+    },
+    "editor": {
+      "newEvent": "Nuevo evento",
+      "editEvent": "Editar evento",
+      "editGoogle": "Evento de Google",
+      "titlePlaceholder": "Título",
+      "date": "Fecha",
+      "location": "Ubicación",
+      "locationPlaceholder": "Añadir una ubicación",
+      "description": "Descripción",
+      "descriptionPlaceholder": "Notas, agenda, enlaces…",
+      "attendees": "Asistentes",
+      "attendeesPlaceholder": "email@ejemplo.com, …",
+      "goal": "Meta vinculada",
+      "noGoal": "Sin meta",
+      "color": "Color",
+      "duplicate": "Duplicar",
+      "duplicated": "Evento duplicado",
+      "createNote": "Crear nota",
+      "createNoteHint": "Capturar una nota del vault desde este evento",
+      "openNote": "Abrir nota",
+      "openInGoogle": "Abrir en Google",
+      "noteCreated": "Nota creada y vinculada",
+      "noteError": "No se pudo crear la nota",
+      "saving": "Guardando…",
+      "openFull": "Editor completo"
+    }
   },
   "emails": {
     "title": "Correos",
