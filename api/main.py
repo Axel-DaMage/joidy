@@ -22,7 +22,6 @@ from routers import (
     auth,
     calendar_tasks,
     config,
-    emails,
     export,
     folders,
     gamification,
@@ -296,7 +295,6 @@ app = FastAPI(
         {"name": "ai", "description": "AI classification and RAG endpoints"},
         {"name": "personal_streaks", "description": "Personal streak tracking and analytics"},
         {"name": "mood", "description": "Daily mood tracking and analytics"},
-        {"name": "emails", "description": "Unified mail inbox imported via external sync (n8n → Gmail)"},
     ],
 )
 
@@ -336,7 +334,6 @@ app.include_router(notes.router, dependencies=[Depends(get_current_user_or_inter
 app.include_router(config.router)
 app.include_router(metrics.router, dependencies=[Depends(get_current_user)])
 app.include_router(mood.router, dependencies=[Depends(get_current_user)])
-app.include_router(emails.router, dependencies=[Depends(get_current_user_or_internal)])
 app.include_router(tags.router, dependencies=[Depends(get_current_user)])
 app.include_router(skills.router, dependencies=[Depends(get_current_user)])
 app.include_router(goals.router, dependencies=[Depends(get_current_user)])

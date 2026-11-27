@@ -2,7 +2,6 @@ from .achievement import *
 from .calendar_task import *
 from .chat_session import *
 from .config import *
-from .email_message import *
 from .gamification import *
 from .github import *
 from .goal import *
