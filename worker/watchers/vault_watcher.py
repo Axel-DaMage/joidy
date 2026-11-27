@@ -309,18 +309,17 @@ def _unbind_event_log() -> None:
     _event_log = None
 
 
-def _record_fingerprint(path: str, fingerprint: str) -> None:
+def _record_fingerprint(path: str, fingerprint: str, size: int | None) -> None:
     """Store a content fingerprint in memory AND in the bound event log.
 
     The file's ``st_size`` is recorded alongside (#1537) so rename detection
     can reject candidates on a cheap ``stat()`` instead of a full read.
-    ``None`` when the stat fails — the fingerprint still matches on hash,
-    just without the size pre-filter.
+    Callers pass the size captured at content-read time — re-stat()ing here
+    would pair the hash of one file version with the size of another when a
+    write lands between read and record (TOCTOU). ``None`` (legacy rows,
+    pre-read failures) still matches on hash, just without the size
+    pre-filter.
     """
-    try:
-        size = Path(path).stat().st_size
-    except OSError:
-        size = None
     _fingerprints[path] = _Fingerprint(fingerprint, size)
     if _event_log is not None:
         _event_log.set_fingerprint(path, fingerprint, size)
@@ -363,13 +362,19 @@ def _log_name(path: str | Path) -> str:
 _oversized_warned: set[str] = set()
 
 
-def _read_vault_file(path: Path) -> str | None:
+def _read_vault_file(path: Path) -> tuple[str, int] | None:
     """Read a vault markdown file behind a ``stat().st_size`` gate (#1298).
 
     ``read_text()`` slurps the whole file, so a multi-GB ``.md`` would OOM the
     512M-limited worker and produce a giant JSON payload against the API.
     Files over ``settings.max_note_file_size`` are refused with a single
     warning; ``None`` (oversized or unreadable) tells callers to skip it.
+
+    Returns ``(content, size)`` where ``size`` is the ``st_size`` measured
+    just before the read — callers must store THAT size alongside the content
+    hash so the fingerprint describes one consistent file version (#1537).
+    A write landing between the stat and the read can still mix versions;
+    that residual window is unavoidable and accepted.
     """
     if not _is_safe_vault_file(path, confined=False):
         return None
@@ -388,7 +393,7 @@ def _read_vault_file(path: Path) -> str | None:
                 settings.max_note_file_size,
             )
         return None
-    return path.read_text(encoding="utf-8", errors="replace")
+    return path.read_text(encoding="utf-8", errors="replace"), size
 
 
 def _is_valid_vault_path(path: str, change_type: Change, vault_root: Path) -> bool:
@@ -602,9 +607,10 @@ async def rename_note_path(old_path: str, new_path: Path, client: httpx.AsyncCli
             return True
         # Offloaded read (#1537): files up to max_note_file_size (5 MiB) must
         # not be slurped on the event loop.
-        content = await asyncio.to_thread(_read_vault_file, new_path)
-        if content is None:
+        read = await asyncio.to_thread(_read_vault_file, new_path)
+        if read is None:
             return True
+        content, size = read
         frontmatter, body = _parse_frontmatter(content)
         title = frontmatter.get("title") or new_path.stem.replace("-", " ").replace("_", " ").title()
         tags = _extract_tags_from_content(content, frontmatter)
@@ -671,7 +677,9 @@ async def rename_note_path(old_path: str, new_path: Path, client: httpx.AsyncCli
                 await asyncio.sleep(2**attempt)
                 continue
             res.raise_for_status()
-            _record_fingerprint(str(new_path), _fingerprint(content))
+            # Size captured at read time keeps hash+size consistent — the
+            # file may have been rewritten during the API sync (#1537 review).
+            _record_fingerprint(str(new_path), _fingerprint(content), size)
             _drop_fingerprint(old_path)
             logger.info("[vault] Renamed: %s -> %s", _log_name(old_path), _log_name(new_path))
             return True
@@ -707,9 +715,10 @@ async def import_or_update_note(
             return True
         # Offloaded read (#1537): files up to max_note_file_size (5 MiB) must
         # not be slurped on the event loop.
-        content = await asyncio.to_thread(_read_vault_file, filepath)
-        if content is None:
+        read = await asyncio.to_thread(_read_vault_file, filepath)
+        if read is None:
             return True
+        content, size = read
         frontmatter, body = _parse_frontmatter(content)
         title = frontmatter.get("title") or filepath.stem.replace("-", " ").replace("_", " ").title()
         tags = _extract_tags_from_content(content, frontmatter)
@@ -812,7 +821,9 @@ async def import_or_update_note(
             )
             return False
 
-        _record_fingerprint(str(filepath), _fingerprint(content))
+        # Size captured at read time keeps hash+size consistent — the file
+        # may have been rewritten during the API sync (#1537 review).
+        _record_fingerprint(str(filepath), _fingerprint(content), size)
         logger.info("[vault] Synced: %s", _log_name(filepath))
         return True
 
@@ -897,8 +908,8 @@ async def initial_scan(vault_path: Path, client: httpx.AsyncClient, token: str):
             and str(filepath) not in pending_paths
         ):
             # Offloaded read (#1537) — see import_or_update_note.
-            content = await asyncio.to_thread(_read_vault_file, filepath)
-            if content is not None and _fingerprint(content) == stored.hash:
+            read = await asyncio.to_thread(_read_vault_file, filepath)
+            if read is not None and _fingerprint(read[0]) == stored.hash:
                 skipped += 1
                 continue
         to_sync.append(filepath)
@@ -981,8 +992,8 @@ async def _process_batch(
                 if not _is_valid_vault_path(new_path, Change.added, _vault_root()):
                     continue
                 # Offloaded read (#1537) — see import_or_update_note.
-                content = await asyncio.to_thread(_read_vault_file, candidate)
-                if content is not None and _fingerprint(content) == old_fp.hash:
+                read = await asyncio.to_thread(_read_vault_file, candidate)
+                if read is not None and _fingerprint(read[0]) == old_fp.hash:
                     renames.append((old_path, new_path))
                     consumed_adds.add(new_path)
                     break

@@ -643,15 +643,15 @@ class TestSyncRaces(unittest.IsolatedAsyncioTestCase):
             log = PersistentEventLog(db_path)
             vault_watcher._bind_event_log(log)
             try:
-                vault_watcher._record_fingerprint("/vault/x.md", "f00d")
+                vault_watcher._record_fingerprint("/vault/x.md", "f00d", 123)
             finally:
                 log.close()
 
             # "Restart": a new log instance sees the persisted fingerprint —
-            # size is NULL for a path that does not exist, which is fine:
-            # matching still works on hash alone (#1537).
+            # size is recorded alongside the hash for the rename-detection
+            # size gate (#1537).
             log2 = PersistentEventLog(db_path)
-            assert log2.fingerprints() == {"/vault/x.md": _Fingerprint("f00d")}
+            assert log2.fingerprints() == {"/vault/x.md": _Fingerprint("f00d", 123)}
             vault_watcher._bind_event_log(log2)
             try:
                 assert vault_watcher._fingerprints["/vault/x.md"].hash == "f00d"
