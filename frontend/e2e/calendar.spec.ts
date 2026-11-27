@@ -88,7 +88,7 @@ test.describe('Calendar — month grid', () => {
   test('month grid renders with weekday headers and day cells', async ({ page }) => {
     await authGoto(page, '/calendar');
     await expect(page.locator('.calendar-page')).toBeVisible();
-    await expect(page.locator('.view-switcher')).toBeVisible();
+    await expect(page.locator('.header-tabs')).toBeVisible();
     // 7 weekday labels (Lun..Dom in es locale)
     await expect(page.locator('.weekday-row .weekday')).toHaveCount(7);
     // A month grid always renders at least 28 day cells
@@ -124,29 +124,29 @@ test.describe('Calendar — views', () => {
   });
 
   test('switches to week view', async ({ page }) => {
-    await page.locator('.view-switcher button:has-text("Semana")').click();
+    await page.locator('.header-tabs button:has-text("Semana")').click();
     await expect(page.locator('.week-grid')).toBeVisible();
     await expect(page.locator('.week-col')).toHaveCount(7);
     await expect(
-      page.locator('.view-switcher button:has-text("Semana")')
-    ).toHaveAttribute('aria-pressed', 'true');
+      page.locator('.header-tabs button:has-text("Semana")')
+    ).toHaveAttribute('aria-selected', 'true');
   });
 
   test('switches to agenda view', async ({ page }) => {
-    await page.locator('.view-switcher button:has-text("Agenda")').click();
+    await page.locator('.header-tabs button:has-text("Agenda")').click();
     await expect(page.locator('.agenda-view')).toBeVisible();
     expect(await page.locator('.agenda-day-row').count()).toBeGreaterThan(0);
     await expect(page.locator('.agenda-date-badge').first()).toBeVisible();
   });
 
   test('switches back to month view', async ({ page }) => {
-    await page.locator('.view-switcher button:has-text("Semana")').click();
+    await page.locator('.header-tabs button:has-text("Semana")').click();
     await expect(page.locator('.week-grid')).toBeVisible();
-    await page.locator('.view-switcher button:has-text("Mes")').click();
+    await page.locator('.header-tabs button:has-text("Mes")').click();
     await expect(page.locator('.day-grid')).toBeVisible();
     await expect(
-      page.locator('.view-switcher button:has-text("Mes")')
-    ).toHaveAttribute('aria-pressed', 'true');
+      page.locator('.header-tabs button:has-text("Mes")')
+    ).toHaveAttribute('aria-selected', 'true');
   });
 });
 
@@ -182,8 +182,8 @@ test.describe('Calendar — day panel tasks', () => {
     const item = page.locator('.day-detail .event-item', { hasText: title });
     await expect(item).toBeVisible();
     await item.locator('button[aria-label="Editar"]').click();
-    await page.locator('.edit-form input[aria-label="Título de la tarea"]').fill(renamed);
-    await page.locator('.edit-form button[aria-label="Guardar"]').click();
+    await page.locator('.editor-form input[aria-label="Título de la tarea"]').fill(renamed);
+    await page.locator('.editor-form button.editor-save').click();
     await expect(
       page.locator('.day-detail .event-item .event-summary', { hasText: renamed })
     ).toBeVisible();
