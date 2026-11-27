@@ -1487,6 +1487,21 @@
       "timers": "Temporizadores",
       "stopwatch": "Cronómetro"
     },
+    "sections": {
+      "alarms": "Alarmas",
+      "timers": "Temporizadores",
+      "stopwatch": "Cronómetro"
+    },
+    "hero": {
+      "nextAlarm": "Próxima alarma",
+      "nextTimer": "Temporizador por finalizar",
+      "stopwatchRunning": "Cronómetro en marcha",
+      "clock": "Reloj",
+      "nothingHint": "Nada programado — inicia un temporizador de enfoque o crea una alarma abajo.",
+      "in": "en {time}",
+      "quickPomodoro": "Pomodoro 25",
+      "quickBreak": "Descanso 5"
+    },
     "dow": {
       "sun": "Dom",
       "mon": "Lun",
@@ -1520,7 +1535,10 @@
       "sound": "Sonido",
       "toggle": "Activar o desactivar alarma",
       "hour": "Hora",
-      "minute": "Minuto"
+      "minute": "Minuto",
+      "upcoming": "Próximas",
+      "inactive": "Inactivas",
+      "nextIn": "en {time}"
     },
     "timer": {
       "empty": "Sin temporizadores activos. Inicia uno arriba.",
@@ -1537,7 +1555,24 @@
       "seconds": "Segundos",
       "hoursShort": "h",
       "minutesShort": "m",
-      "secondsShort": "s"
+      "secondsShort": "s",
+      "presets": "Preajustes",
+      "pomodoro": "Pomodoro",
+      "shortBreak": "Descanso",
+      "longBreak": "Descanso largo",
+      "color": "Color",
+      "colorDefault": "Color por defecto",
+      "linkGoal": "Vincular meta",
+      "noGoal": "Sin meta",
+      "linkNote": "Vincular nota",
+      "notePlaceholder": "Buscar notas…",
+      "awardXp": "Otorgar XP",
+      "awardXpHint": "Otorga XP de sesión de enfoque al finalizar (≥20 min)",
+      "repeat": "Reinicio automático",
+      "repeatHint": "Se reinicia automáticamente cada vez que suena",
+      "restart": "Reiniciar",
+      "running": "En marcha",
+      "paused": "En pausa"
     },
     "stopwatch": {
       "start": "Iniciar",
@@ -1548,7 +1583,11 @@
       "lapTime": "Tiempo vuelta",
       "total": "Total",
       "fastest": "Más rápida",
-      "slowest": "Más lenta"
+      "slowest": "Más lenta",
+      "delta": "Dif.",
+      "copy": "Copiar vueltas",
+      "copied": "Vueltas copiadas al portapapeles",
+      "currentLap": "Actual"
     },
     "alert": {
       "alarmTitle": "Alarma",
@@ -1556,7 +1595,8 @@
       "timerDone": "Tiempo cumplido",
       "snooze": "Posponer",
       "dismiss": "Descartar",
-      "snoozed": "Pospuesto {minutes} min"
+      "snoozed": "Pospuesto {minutes} min",
+      "restart": "Reiniciar"
     }
   },
   "a11y": {
