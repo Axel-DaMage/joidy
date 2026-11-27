@@ -2891,7 +2891,10 @@
   /* Infinite horizontal auto-scroll for overflowing goal titles. The track
      holds two copies; translating -50% loops seamlessly because the copy's
      trailing padding is the loop gap. Activated only when the text overflows
-     (marquee action toggles the class). */
+     (marquee action toggles the class). The action drives the loop via the
+     Web Animations API so each cycle dwells --mq-dwell (default 1s) with the
+     title start in view; the pln-marquee CSS animation below is a scroll-only
+     fallback for engines without WAAPI. */
   .pln-mq {
     display: block;
     flex: 1;
