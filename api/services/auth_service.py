@@ -351,7 +351,7 @@ def get_current_user_or_internal(
 ) -> int | None:
     """Dedicated dependency for routes also reachable by internal services.
 
-    Accepts ``Authorization: Bearer <INTERNAL_API_TOKEN>`` (worker, n8n) in
+    Accepts ``Authorization: Bearer <INTERNAL_API_TOKEN>`` (worker) in
     addition to a user JWT. The service token is validated here and never
     goes through ``/auth/login`` or ``verify_password`` — it is unrelated to
     ``AUTH_PASSWORD`` (#1275).

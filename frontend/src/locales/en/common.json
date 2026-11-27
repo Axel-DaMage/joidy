@@ -7,7 +7,6 @@
     "ai": "AI",
     "goals": "Goals",
     "streaks": "Streaks",
-    "emails": "Mail",
     "gmail": "Gmail",
     "calendar": "Calendar",
     "analytics": "Analytics",
@@ -32,6 +31,7 @@
     "notConnected": "Google is not connected",
     "notConnectedHint": "Connect your Google account in Settings → Integrations",
     "goToSettings": "Go to Settings",
+    "openInPlanning": "Open in Goals planning",
     "allDay": "All day",
     "noEventsDay": "No events on this day",
     "weekDays": [
@@ -144,26 +144,6 @@
     "assignedGoals": "Assigned goals",
     "openInGoals": "Open in Goals → Planning"
   },
-  "emails": {
-    "title": "Mail",
-    "subtitle": "Unified inbox (synced via n8n)",
-    "searchPlaceholder": "Search by subject, sender or text...",
-    "importantOnly": "Important",
-    "unreadOnly": "Unread",
-    "allAccounts": "All accounts",
-    "markRead": "Mark read",
-    "markUnread": "Mark unread",
-    "toggleImportant": "Toggle importance",
-    "deleted": "Email removed from the view",
-    "emptyImportant": "No important emails pending",
-    "emptyUnread": "Inbox zero: no unread mail",
-    "emptyAll": "No synced emails yet",
-    "emptyNew": "When n8n pushes its first message it will appear here",
-    "noResults": "No results for that search",
-    "runFailed": "Could not load emails",
-    "unreadBadge": "unread",
-    "syncHint": "Emails arrive automatically with the n8n workflow"
-  },
   "gmail": {
     "title": "Gmail",
     "subtitle": "Native Gmail inbox (Google API)",
@@ -247,6 +227,17 @@
       "watchOk": "Watch registered",
       "watchStopped": "Watch stopped",
       "watchError": "Could not update the watch"
+    },
+    "accounts": {
+      "title": "Connected mailboxes",
+      "none": "No mailboxes connected yet",
+      "connect": "Connect account",
+      "add": "Add account",
+      "disconnect": "Disconnect",
+      "disconnecting": "Disconnecting…",
+      "disconnected": "Account disconnected",
+      "disconnectError": "Could not disconnect the account",
+      "pending": "Pending mailbox"
     }
   },
   "executionPage": {
@@ -292,6 +283,59 @@
     "notConnected": "Google is not connected",
     "notConnectedHint": "Connect Google in Settings to see your sacred calendar.",
     "goToSettings": "Go to Settings",
+    "optionsTitle": "Execution options",
+    "timerTitle": "Pomodoro",
+    "phase": {
+      "work": "Work",
+      "break": "Break",
+      "longBreak": "Long break"
+    },
+    "minutesShort": "work min",
+    "breakShort": "break min",
+    "focusTitle": "Focus mode",
+    "focusStart": "Start focus",
+    "focusStop": "Stop focus",
+    "focusOf": "of {minutes} min",
+    "focusXpHint": "Estimated XP on stop: +{xp}",
+    "focusCfgWork": "Focus (min)",
+    "focusCfgBreak": "Break (min)",
+    "focusCfgCycles": "Cycles",
+    "focusCfgHint": "Focus-mode settings — applied when a new session starts.",
+    "optPomodoro": "Pomodoro",
+    "optPomodoroHint": "Work and break minutes — saved the same way as on Home.",
+    "optFocus": "Focus mode",
+    "optView": "View",
+    "optShowQueue": "Show execution queue",
+    "optShowCalendar": "Show sacred calendar",
+    "optShowNotes": "Show goal notes",
+    "optOn": "On",
+    "optOff": "Off",
+    "notesTitle": "Goal notes",
+    "notesLoading": "Loading note…",
+    "notesLoadError": "Could not load the linked note",
+    "notesEmptyHint": "Follow-up notes stay linked to this goal and count toward its progress.",
+    "noteCreate": "Create follow-up note",
+    "noteCreating": "Creating…",
+    "noteCreated": "Note linked to the goal",
+    "noteCreateError": "Could not create the note",
+    "noteSaveError": "Could not save the note",
+    "noteDeleted": "Note deleted",
+    "noteDeleteError": "Could not delete the note",
+    "notesCollapse": "Collapse note",
+    "notesExpand": "Expand note",
+    "openInNotes": "Open in Notes",
+    "measurement": {
+      "COUNT": "Count",
+      "BOOLEAN": "Yes/No",
+      "PERCENT": "Percentage"
+    },
+    "taskDetails": "Task details",
+    "taskDate": "Date",
+    "taskTime": "Time",
+    "taskPriority": "Priority",
+    "taskReminder": "Reminder",
+    "taskReminderMin": "{minutes} min before",
+    "taskSource": "Source",
     "prio": {
       "urgent": "Urgent",
       "high": "High",
@@ -324,7 +368,8 @@
     "offline": "Offline",
     "online": "Online",
     "pendingStreaks": "Pending streaks",
-    "requiresDevMode": "Requires Dev Mode"
+    "requiresDevMode": "Requires Dev Mode",
+    "streakDays": "Streak: {days} days"
   },
   "pwa": {
     "installPrompt": "Install Joidy for quick access",
@@ -388,13 +433,22 @@
     },
     "language": "Language",
     "languageHint": "The interface language",
+    "editor": {
+      "title": "Editor",
+      "vimMode": "Vim mode",
+      "vimModeHint": "Modal NORMAL/INSERT editing in the markdown editor (hjkl, dd, yy, p, i, Esc).",
+      "vimModeTouchHint": "Not available on touch-only devices.",
+      "on": "on",
+      "off": "off"
+    },
     "session": {
       "title": "Session",
       "logout": "Log out",
       "noUser": "No session",
       "loggedOut": "Signed out",
       "hint": "Log out to go back to the login screen."
-    }
+    },
+    "accentContrastWarn": "Low contrast in {theme} mode"
   },
   "quickCapture": {
     "placeholder": "Capture a quick idea...",
@@ -462,8 +516,8 @@
     "assignToDay": "Assign to selected day",
     "paused": "Paused",
     "assign": "Assign",
-    "mirrorToCalendar": "Mirror to calendar",
     "calendar": "Calendar",
+    "openInCalendar": "Open in Calendar",
     "viewMonth": "Month",
     "viewWeek": "Week",
     "todayBtn": "Today",
@@ -475,6 +529,21 @@
     "assignedOn": "Assigned · {date}",
     "remove": "Remove",
     "noGoalsForPeriod": "No goals assigned for this period.",
+    "realCalendar": "Real calendar",
+    "agendaLoading": "Loading agenda…",
+    "noCalendarItems": "No events or tasks this day.",
+    "agendaReadOnly": "Read-only — edit it from the Calendar.",
+    "openInGoogle": "Open in Google Calendar",
+    "openCalendar": "Open Calendar",
+    "viewGoal": "View goal",
+    "linkedGoal": "Linked goal",
+    "fieldDate": "Date",
+    "fieldSchedule": "Schedule",
+    "fieldLocation": "Location",
+    "fieldStatus": "Status",
+    "fieldDescription": "Description",
+    "statusDone": "Done",
+    "statusPending": "Pending",
     "yearMap": "Year Map",
     "selectDayHint": "Select a day to see its goals",
     "noActivityYet": "No activity recorded yet.",
@@ -1150,7 +1219,8 @@
     "tagsLabel": "Tags",
     "linkUrlPrompt": "Link URL",
     "linkUrlTitle": "Insert link",
-    "linkUrlInsert": "Insert"
+    "linkUrlInsert": "Insert",
+    "vimModeBadge": "Vim mode — current editing mode"
   },
   "goalEditor": {
     "previewPlaceholder": "Write something to see the preview...",
@@ -1348,6 +1418,10 @@
     "ghStateClosed": "Closed",
     "ghStateMerged": "Merged",
     "ghSearch": "Search…",
+    "ghFilters": "Filters",
+    "ghGroupType": "Type",
+    "ghGroupScope": "Scope",
+    "ghGroupState": "State",
     "ghNoResults": "No results with these filters",
     "ghConnect": "Connect GitHub",
     "ghNoPending": "✓ No pending",
@@ -1355,7 +1429,8 @@
     "tabRecentNotes": "Recent notes",
     "recentNotesEmpty": "No recent notes",
     "viewAllNotes": "View all →",
-    "pomodorosDone": "{done} of {total} pomodoros completed"
+    "pomodorosDone": "{done} of {total} pomodoros completed",
+    "ghViewAll": "View all in dashboard"
   },
   "graph": {
     "searchPlaceholder": "Search graph...",
@@ -1391,7 +1466,11 @@
     "globalTimer": "Global timer",
     "skipToContent": "Skip to main content",
     "loading": "Loading Joidy…",
-    "setupCheckFailed": "Could not reach the server. Check your connection and try again."
+    "setupCheckFailed": "Could not reach the server. Check your connection and try again.",
+    "openTimers": "Open timers",
+    "openCalendar": "Open calendar",
+    "openTasks": "Open current tasks",
+    "openStreaks": "Open streaks"
   },
   "ai": {
     "title": "Artificial Intelligence",
@@ -1581,6 +1660,10 @@
       "snooze": "Snooze",
       "dismiss": "Dismiss",
       "snoozed": "Snoozed for {minutes} min"
+    },
+    "statusbar": {
+      "open": "Open Clock",
+      "moreActive": "{count} active"
     }
   },
   "a11y": {
@@ -1880,5 +1963,35 @@
     "moodStart": "Log mood with this track",
     "moodAttached": "Track added to your mood today",
     "moodError": "Could not save the mood"
+  },
+  "goalFromEvent": {
+    "action": "Create goal",
+    "confirmTitle": "Create goal",
+    "title": "Goal from event",
+    "confirm": "Create a goal from \"{title}\"? — {date}",
+    "confirmHint": "The goal will be created and assigned to this date in Planning.",
+    "cancel": "Cancel",
+    "back": "Back",
+    "create": "Create goal",
+    "created": "Goal created and assigned",
+    "error": "Could not create the goal. Please try again.",
+    "goalTitle": "Goal title",
+    "description": "Description",
+    "temporalityLabel": "Temporalidad",
+    "measurementLabel": "Medición",
+    "targetValue": "Target value",
+    "color": "Color",
+    "temporality": {
+      "ONEOFF": "One-off",
+      "DAILY": "Daily",
+      "WEEKLY": "Weekly",
+      "MONTHLY": "Monthly",
+      "ANNUAL": "Annual"
+    },
+    "measurement": {
+      "BOOLEAN": "Done / Not done",
+      "COUNT": "Numeric count",
+      "PERCENT": "Percentage"
+    }
   }
 }

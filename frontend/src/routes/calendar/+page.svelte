@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { goto } from '$app/navigation';
+  import { page } from '$app/state';
+  import { goto, replaceState } from '$app/navigation';
+  import { resolve } from '$app/paths';
   import {
     api,
     type CalendarEvent,
@@ -13,6 +15,7 @@
     type PlanSuggestion,
   } from '$lib/api';
   import { logger } from '$lib/utils/logger';
+  import { loadPref, savePref } from '$lib/utils/persistedState';
   import { locale } from '$lib/stores/locale';
   import { parseLocalDate } from '$lib/utils/date';
   import { showNotification } from '$lib/stores/notifications';
@@ -33,6 +36,7 @@
     calendarLayers,
     chipDensity,
     goPlanningToday,
+    jumpToPlanningDay,
     loadAssignmentsForRange,
     monthCellsFor,
     planningAssignments,
@@ -60,6 +64,7 @@
   import Sparkles from 'lucide-svelte/icons/sparkles';
   import Target from 'lucide-svelte/icons/target';
   import EmptyState from '$lib/components/EmptyState.svelte';
+  import GoalFromEventModal, { type GoalEventSeed } from '$lib/components/GoalFromEventModal.svelte';
   import { t } from 'svelte-i18n';
 
   interface CalendarStatus {
@@ -76,7 +81,9 @@
         time: string | null;
         label: string;
         location?: string | null;
+        description?: string | null;
         allDay: boolean;
+        color: string | null;
       }
     | { kind: 'task'; time: string | null; label: string; task: CalendarTask };
 
@@ -105,8 +112,10 @@
   let syncing = $state(false);
 
   // View mode, cursor and day selection live in the shared planning-calendar
-  // store (#1660) — Goals → Planificación reads/writes the same state, and
-  // view/layer/density prefs persist under `calendarUi` in user settings.
+  // store (#1660) — Goals → Planificación reads/writes the same state. View
+  // persists under `calendarUi` in user settings AND the device-level
+  // `joidy.calendar.*` view prefs; cursor and selected day restore from
+  // those keys too (#1673), all hydrated by the store.
   let selectedDay = $derived($planningSelectedDay);
 
   // Quick-add state
@@ -115,7 +124,6 @@
   let quickAddPriority = $state<CalendarTaskPriority>('MEDIUM');
   let quickAddRecurrence = $state<CalendarTaskRecurrence>('NONE');
   let quickAddReminder = $state<number | null>(null);
-  let publishToGoogle = $state(false);
   let addingTask = $state(false);
 
   // Inline edit state
@@ -229,7 +237,9 @@
           time: ev.all_day ? null : dtFormatter.format(new Date(ev.start_at)),
           label: ev.summary || '—',
           location: ev.location,
+          description: ev.description,
           allDay: ev.all_day,
+          color: ev.color,
         });
       }
     }
@@ -249,22 +259,25 @@
 
   let selectedDayItems = $derived(selectedDay ? dayItems(selectedDay) : []);
 
+  // Google event → quick goal creation (#goal-from-event)
+  let goalFromEventSeed = $state<GoalEventSeed | null>(null);
+
   // Unscheduled queue ("sin planificar", #1234): tasks with no date.
   let unscheduledTasks = $derived(
     tasks.filter((t) => t.date === null).sort((a, b) => a.created_at.localeCompare(b.created_at))
   );
   let trayCollapsed = $state(
-    typeof localStorage !== 'undefined' &&
-      localStorage.getItem('joidy-calendar-tray-collapsed') === '1'
+    loadPref<boolean>('calendar', 'trayCollapsed', false, {
+      legacyKey: 'joidy-calendar-tray-collapsed',
+      legacyFrom: (raw) => raw === '1',
+      isValid: (v) => typeof v === 'boolean',
+    })
   );
   let trayAddTitle = $state('');
   let trayAdding = $state(false);
 
   function toggleTray(): void {
     trayCollapsed = !trayCollapsed;
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('joidy-calendar-tray-collapsed', trayCollapsed ? '1' : '0');
-    }
   }
 
   // Every day currently reachable by the shared grid (month + week + agenda
@@ -307,6 +320,13 @@
       return `${firstPart} - ${last.getDate()} ${lastMonth} ${lastYear}`;
     }
     return `${$t('calendar.views.agenda')} (14 ${$t('calendar.agendaDays')})`;
+  });
+
+  // The unscheduled tray is page-local chrome — its collapse pref lives in
+  // the `joidy.calendar.*` device-level namespace (#1673); view, cursor and
+  // selected day persist through the shared store.
+  $effect(() => {
+    savePref('calendar', 'trayCollapsed', trayCollapsed);
   });
 
   function prevRange(): void {
@@ -422,6 +442,7 @@
           time: item.time,
           allDay: item.allDay,
           locked: true,
+          color: item.color ?? undefined,
           title: item.location ? `${item.label} · ${item.location}` : item.label,
           payload: item,
         });
@@ -444,7 +465,8 @@
           done: item.task.done,
           recurring: item.task.recurrence !== 'NONE',
           draggable: true,
-          title: item.task.title,
+          color: item.task.color ?? undefined,
+          title: taskChipTitle(item.task),
           payload: item.task,
         });
       }
@@ -524,6 +546,12 @@
     void goto('/goals?tab=planning');
   }
 
+  // Tooltip for task chips: surfaces the linked goal so the
+  // goals → planning → calendar chain is visible (#goal-planning-calendar).
+  function taskChipTitle(task: CalendarTask): string {
+    return task.goal_title ? `${task.title} · ${task.goal_title}` : task.title;
+  }
+
   async function refresh(): Promise<void> {
     try {
       syncToday();
@@ -598,25 +626,7 @@
         reminder_minutes: quickAddReminder,
       });
       if (quickAddReminder !== null) void requestNotificationPermission();
-      if (publishToGoogle && status?.connected) {
-        try {
-          const created = await api.google.calendarCreateEvent({
-            summary: title,
-            ...googleWindow(selectedDay, quickAddTime || null, null),
-          });
-          const mirrored = await api.calendarTasks.update(task.id, {
-            google_event_id: created.google_id,
-          });
-          tasks = [...tasks, mirrored];
-          await refresh();
-        } catch (e) {
-          logger.warn('Google publish failed', e);
-          showNotification($t('calendar.googlePublishError'), 'error');
-          tasks = [...tasks, task];
-        }
-      } else {
-        tasks = [...tasks, task];
-      }
+      tasks = [...tasks, task];
       quickAddTitle = '';
       quickAddTime = '';
       quickAddPriority = 'MEDIUM';
@@ -654,40 +664,6 @@
     return localDayKey(d);
   }
 
-  // `hhmm` on `day` plus one real hour, returned as `YYYY-MM-DDTHH:mm:ss`.
-  // Date-based so 23:30 rolls into the next day — the old string math
-  // wrapped to 00:30 on the same day, producing end < start which Google
-  // rejects.
-  function addHour(day: string, hhmm: string): string {
-    const start = new Date(`${day}T${hhmm.slice(0, 5)}:00`);
-    const end = new Date(start.getTime() + 3600e3);
-    return `${localDayKey(end)}T${pad2(end.getHours())}:${pad2(end.getMinutes())}:00`;
-  }
-
-  // Build the Google EventDateTime pair for a task's window. All-day tasks
-  // publish `{date}`; Google's end.date is EXCLUSIVE, so it must be the day
-  // after — same-day start+end is a zero-length event Google rejects.
-  // Timed tasks publish `dateTime` + `timeZone` so naive local times are
-  // anchored to the browser zone.
-  function googleWindow(
-    day: string,
-    startTime: string | null,
-    endTime: string | null
-  ): {
-    start: { dateTime?: string; date?: string; timeZone?: string };
-    end: { dateTime?: string; date?: string; timeZone?: string };
-  } {
-    if (!startTime) {
-      return { start: { date: day }, end: { date: addDays(day, 1) } };
-    }
-    const hhmm = startTime.slice(0, 5);
-    const end = endTime ? `${day}T${endTime.slice(0, 5)}:00` : addHour(day, hhmm);
-    return {
-      start: { dateTime: `${day}T${hhmm}:00`, timeZone: localTimeZone },
-      end: { dateTime: end, timeZone: localTimeZone },
-    };
-  }
-
   function cyclePriority(task: CalendarTask): void {
     const idx = PRIORITIES.indexOf(task.priority);
     const next = PRIORITIES[(idx + 1) % PRIORITIES.length];
@@ -716,14 +692,7 @@
 
   async function removeTask(task: CalendarTask): Promise<void> {
     try {
-      if (task.google_event_id && status?.connected) {
-        try {
-          await api.google.calendarDeleteEvent(task.google_event_id);
-        } catch (e) {
-          logger.warn('Google delete failed', e);
-          showNotification($t('calendar.googlePublishError'), 'error');
-        }
-      }
+      // The backend removes the mirrored Google event on delete.
       await api.calendarTasks.remove(task.id);
       tasks = tasks.filter((t) => t.id !== task.id);
     } catch (e) {
@@ -758,24 +727,6 @@
       recurrence: editRecurrence,
       reminder_minutes: editReminder,
     });
-    if (task.google_event_id && status?.connected) {
-      try {
-        const day = task.date;
-        // The edit form only lives in the day panel — unscheduled tasks
-        // (date === null) never reach this path.
-        if (!day) return;
-        const { start, end } = googleWindow(day, editTime || null, editEndTime || null);
-        await api.google.calendarUpdateEvent(task.google_event_id, {
-          summary: title,
-          start,
-          end,
-        });
-        await refresh();
-      } catch (e) {
-        logger.warn('Google update failed', e);
-        showNotification($t('calendar.googlePublishError'), 'error');
-      }
-    }
     editingTaskId = null;
   }
 
@@ -834,18 +785,7 @@
       showNotification($t('calendar.taskUpdateError'), 'error');
       return;
     }
-    // Write-back parity: drag&drop moves the mirrored Google event too.
-    // A Google failure is non-blocking — the local reschedule stands.
-    if (task.google_event_id && status?.connected) {
-      try {
-        const { start, end } = googleWindow(newDate, task.start_time, task.end_time);
-        await api.google.calendarUpdateEvent(task.google_event_id, { start, end });
-        await refresh();
-      } catch (e) {
-        logger.warn('Google reschedule failed', e);
-        showNotification($t('calendar.googlePublishError'), 'error');
-      }
-    }
+    // The backend re-syncs the mirrored Google event on the PATCH.
   }
 
   // ── Unscheduled tray drop target (#1234) ─────────────────────────────────
@@ -890,6 +830,14 @@
 
   function priorityClass(priority: CalendarTaskPriority): string {
     return `prio prio-${priority.toLowerCase()}`;
+  }
+
+  // Google/joidy color accent for chips and pills: a translucent wash of the
+  // real calendar color plus a solid left bar — reads on light and dark
+  // surfaces without hardcoding a palette.
+  function colorChipStyle(color: string | null | undefined): string {
+    if (!color) return '';
+    return `background:${color}26;box-shadow:inset 2px 0 0 ${color};`;
   }
 
   function openSettings(): void {
@@ -989,6 +937,32 @@
       planApplying = false;
     }
   }
+
+  // Quick-nav to Goals → Planificación on the selected day (#1668). The date
+  // is carried in the query param; the goals page consumes it on mount.
+  function openInPlanning(): void {
+    void goto(resolve(`/goals?tab=planning&date=${selectedDay ?? todayKey}`));
+  }
+
+  // Deep-link support: /calendar?date=YYYY-MM-DD (from Goals → Planificación,
+  // #1668). The param is consumed once so manual navigation isn't overridden.
+  // Cursor + selection live in the shared store — a jump re-anchors every
+  // view (month, week, agenda) so the requested day is in the window.
+  function focusDay(key: string): void {
+    jumpToPlanningDay(key);
+    void refresh();
+  }
+
+  $effect(() => {
+    const dateParam = page.url.searchParams.get('date');
+    if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+      focusDay(dateParam);
+      const clean = new URL(page.url.href);
+      clean.searchParams.delete('date');
+      // eslint-disable-next-line svelte/no-navigation-without-resolve -- page.url.pathname already includes the base path; resolve() would prepend it twice
+      replaceState(`${clean.pathname}${clean.search}${clean.hash}`, page.state);
+    }
+  });
 
   onMount(() => {
     void (async () => {
@@ -1135,6 +1109,15 @@
               >{planLoading ? $t('calendar.planWorking') : $t('calendar.planSuggest')}</span
             >
           </button>
+
+          <button
+            class="btn btn-ghost nav-btn"
+            onclick={openInPlanning}
+            title={$t('calendar.openInPlanning')}
+            aria-label={$t('calendar.openInPlanning')}
+          >
+            <Target size={14} />
+          </button>
         </div>
 
         <PlanningCalendar
@@ -1194,7 +1177,7 @@
             <div class="event-list">
               {#each selectedDayItems as item (item.kind === 'google' ? `g-${item.id}` : `t-${item.task.id}`)}
                 {#if item.kind === 'google'}
-                  <div class="event-item">
+                  <div class="event-item" style={colorChipStyle(item.color)}>
                     <span class="event-time caption"
                       >{item.allDay ? $t('calendar.allDay') : item.time}</span
                     >
@@ -1204,9 +1187,32 @@
                     {#if item.location}
                       <span class="event-location caption">{item.location}</span>
                     {/if}
+                    {#if selectedDay}
+                      <button
+                        type="button"
+                        class="event-goal-btn"
+                        title={$t('goalFromEvent.action')}
+                        aria-label={$t('goalFromEvent.action')}
+                        onclick={() =>
+                          (goalFromEventSeed = {
+                            title: item.label,
+                            description: item.description ?? null,
+                            location: item.location ?? null,
+                            color: item.color,
+                            day: selectedDay!,
+                            eventId: item.id,
+                          })}
+                      >
+                        <Target size={11} />
+                      </button>
+                    {/if}
                   </div>
                 {:else}
-                  <div class="event-item task-item" class:done={item.task.done}>
+                  <div
+                    class="event-item task-item"
+                    class:done={item.task.done}
+                    style={editingTaskId === item.task.id ? '' : colorChipStyle(item.task.color)}
+                  >
                     {#if editingTaskId === item.task.id}
                       <div class="edit-form">
                         <input
@@ -1281,6 +1287,11 @@
                             class="recur-icon"
                           />{/if}{item.task.title}</span
                       >
+                      {#if item.task.goal_title}
+                        <span class="goal-tag" title={item.task.goal_title}
+                          ><Target size={9} />{item.task.goal_title}</span
+                        >
+                      {/if}
                       <span class="task-actions">
                         <button
                           class="btn btn-ghost icon-btn"
@@ -1378,13 +1389,6 @@
                 <option value={opt.minutes}>{$t(`calendar.${opt.labelKey}`)}</option>
               {/each}
             </select>
-            {#if status?.connected}
-              <label class="publish-toggle" title={$t('calendar.publishToGoogleHint')}>
-                <input type="checkbox" bind:checked={publishToGoogle} disabled={addingTask} />
-                <span class="publish-label"><Lock size={10} />{$t('calendar.publishToGoogle')}</span
-                >
-              </label>
-            {/if}
             <button
               type="submit"
               class="btn btn-icon quick-submit"
@@ -1493,6 +1497,13 @@
     </div>
   {/if}
 </div>
+
+{#if goalFromEventSeed}
+  <GoalFromEventModal
+    event={goalFromEventSeed}
+    onClose={() => (goalFromEventSeed = null)}
+  />
+{/if}
 
 <style>
   .calendar-page {
@@ -1681,6 +1692,24 @@
     text-decoration: line-through;
   }
 
+  .event-goal-btn {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    padding: 3px;
+    border: none;
+    border-radius: var(--r);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .event-goal-btn:hover {
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+
   .event-time {
     min-width: 44px;
     font-variant-numeric: tabular-nums;
@@ -1692,6 +1721,21 @@
     align-items: center;
     gap: 4px;
     min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .goal-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    flex-shrink: 1;
+    min-width: 0;
+    max-width: 40%;
+    color: var(--link);
+    font-size: 11px;
+    font-weight: 400;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1806,50 +1850,6 @@
   .quick-submit:disabled {
     opacity: 0.4;
     cursor: not-allowed;
-  }
-
-  .publish-toggle {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    cursor: pointer;
-    flex-shrink: 0;
-    font-size: 10px;
-    color: var(--text-muted);
-    user-select: none;
-    position: relative;
-  }
-
-  /* Visually hidden but focusable: display:none would remove the checkbox
-     from the tab order entirely (#1268). */
-  .publish-toggle input {
-    position: absolute;
-    opacity: 0;
-    width: 1px;
-    height: 1px;
-    margin: 0;
-    pointer-events: none;
-  }
-
-  .publish-toggle input:focus-visible + .publish-label {
-    outline: 2px solid var(--xp);
-    outline-offset: 2px;
-  }
-
-  .publish-label {
-    display: flex;
-    align-items: center;
-    gap: 3px;
-    padding: 2px 6px;
-    border: 1px solid var(--border);
-    border-radius: 99px;
-    transition: all 0.15s;
-  }
-
-  .publish-toggle input:checked + .publish-label {
-    border-color: var(--accent);
-    color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 10%, transparent);
   }
 
   .edit-form {

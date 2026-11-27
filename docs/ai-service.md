@@ -111,7 +111,7 @@ ai-service/
 3. Enviar a Gemini con prompt de clasificación
 4. Parsear respuesta y extraer tags
 5. Calcular confianza basada en posición en respuesta
-6. Guardar sugerencias en DB (confidence < 1.0)
+6. Devolver sugerencias al API (no se persisten en DB; el API solo guarda el tag si el usuario la acepta)
 
 ---
 

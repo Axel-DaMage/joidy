@@ -1,5 +1,8 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
+  import { page } from '$app/state';
+  import { resolve } from '$app/paths';
+  import { replaceState } from '$app/navigation';
   import { scale } from 'svelte/transition';
   import X from 'lucide-svelte/icons/x';
   import Snowflake from 'lucide-svelte/icons/snowflake';
@@ -16,6 +19,7 @@
     getCachedData,
     setCachedData,
   } from '$lib/utils/userSettings';
+  import { loadPref } from '$lib/utils/persistedState';
   import { captureSnapshot, getSnapshot } from '$lib/stores/pageSnapshots';
   import { locale as localeStore } from '$lib/stores/locale';
   import { openShare } from '$lib/stores/shareAchievement';
@@ -126,9 +130,16 @@
   onMount(async () => {
     mounted = true;
 
-    const savedNotesUi = loadUserSettings().notesUi;
-    if (savedNotesUi?.panelWidth !== undefined) {
-      panelWidth = Number(savedNotesUi.panelWidth);
+    // Shared with the notes list (#1673): the pref lives under
+    // `joidy.notes.panelWidth`; the legacy notesUi blob is the fallback.
+    const savedPanelWidth = loadPref<number | undefined>(
+      'notes',
+      'panelWidth',
+      loadUserSettings().notesUi?.panelWidth,
+      { isValid: (v) => Number.isFinite(Number(v)) }
+    );
+    if (savedPanelWidth !== undefined) {
+      panelWidth = Number(savedPanelWidth);
     }
 
     // Restore the last viewed streak from durable user settings — the page
@@ -175,6 +186,22 @@
 
     window.addEventListener('beforeunload', handleBeforeUnload);
   });
+
+  // Deep-link support: /streaks?streak=<id> — status-bar streak pill (#1662).
+  // The param is consumed once so manual selection isn't overridden, and the
+  // `mounted` guard keeps replaceState off the SSR path.
+  $: if (mounted) {
+    const streakParam = page.url.searchParams.get('streak');
+    if (streakParam) {
+      // /streaks consumes no other params — a bare resolve() URL is enough.
+      replaceState(resolve('/streaks'), page.state);
+      const id = Number(streakParam);
+      if (Number.isInteger(id) && id > 0) {
+        selectedId = id;
+        ensureStreakHeatmap();
+      }
+    }
+  }
 
   // Persist the viewed streak so re-entering the page restores it (#1504).
   $: if (mounted) {

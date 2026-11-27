@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
 from models.google_calendar_event import GoogleCalendarEvent
+from models.google_calendar_sync import GoogleCalendarSyncState
 
 
 def test_calendar_status_empty(client):
@@ -95,6 +96,39 @@ def test_calendar_events_filters_by_range(client, db_session):
     )
     assert resp.status_code == 200
     assert [e["google_id"] for e in resp.json()] == ["soon"]
+
+
+def test_calendar_events_resolves_color(client, db_session):
+    now = datetime.now(UTC)
+    db_session.add(GoogleCalendarSyncState(user_id=1, calendar_id="primary", background_color="#123456"))
+    db_session.add(
+        GoogleCalendarEvent(
+            user_id=1,
+            calendar_id="primary",
+            google_id="ev-cal",
+            status="confirmed",
+            start_at=now + timedelta(days=1),
+        )
+    )
+    db_session.add(
+        GoogleCalendarEvent(
+            user_id=1,
+            calendar_id="primary",
+            google_id="ev-own",
+            status="confirmed",
+            start_at=now + timedelta(days=1),
+            color_id="9",
+        )
+    )
+    db_session.commit()
+
+    resp = client.get("/integrations/google/calendar/events")
+    assert resp.status_code == 200
+    by_gid = {e["google_id"]: e for e in resp.json()}
+    # No event colorId → inherits the calendar backgroundColor.
+    assert by_gid["ev-cal"]["color"] == "#123456"
+    # Event colorId wins over the calendar color (Blueberry palette entry).
+    assert by_gid["ev-own"]["color"] == "#5484ed"
 
 
 def test_calendar_events_requires_auth(client_no_auth):

@@ -85,12 +85,14 @@ def _event_item(google_id: str, summary: str = "Event", status: str = "confirmed
 
 
 class SyncCalendarTest(CalendarTestBase):
-    def _run_sync(self, db, token="tok", calendar_id="primary", items=None, sync_token="SYNC1"):
+    def _run_sync(self, db, token="tok", calendar_id="primary", items=None, sync_token="SYNC1", calendar_color=None):
         items = items if items is not None else [_event_item("ev-1")]
         with patch.object(
             gcs.gs, "list_events_raw", new=AsyncMock(return_value={"items": items, "nextSyncToken": sync_token})
         ):
-            return asyncio.new_event_loop().run_until_complete(gcs.sync_calendar(db, token, calendar_id))
+            return asyncio.new_event_loop().run_until_complete(
+                gcs.sync_calendar(db, token, calendar_id, calendar_color)
+            )
 
     def test_initial_sync_upserts_and_stores_token(self) -> None:
         with self.Session() as db:
@@ -183,6 +185,78 @@ class SyncCalendarTest(CalendarTestBase):
             result = self._run_sync(db, items=[item])
             self.assertEqual(result["synced"], 0)
             self.assertEqual(db.query(GoogleCalendarEvent).count(), 0)
+
+    def test_sync_stores_event_color_id(self) -> None:
+        with self.Session() as db:
+            colored = _event_item("ev-color")
+            colored["colorId"] = "5"
+            plain = _event_item("ev-plain")
+            self._run_sync(db, items=[colored, plain])
+
+            by_id = {e.google_id: e for e in db.query(GoogleCalendarEvent).all()}
+            self.assertEqual(by_id["ev-color"].color_id, "5")
+            self.assertIsNone(by_id["ev-plain"].color_id)
+
+    def test_sync_stores_calendar_background_color(self) -> None:
+        with self.Session() as db:
+            self._run_sync(db, calendar_color="#4285f4")
+            state = db.query(GoogleCalendarSyncState).one()
+            self.assertEqual(state.background_color, "#4285f4")
+
+
+class EffectiveColorsTest(CalendarTestBase):
+    """Google's color model: event colorId palette entry wins, else the
+    calendar's backgroundColor; None when neither is known."""
+
+    def _add(self, db, google_id, calendar_id="primary", color_id=None):
+        event = GoogleCalendarEvent(
+            user_id=1,
+            calendar_id=calendar_id,
+            google_id=google_id,
+            status="confirmed",
+            start_at=datetime.now(UTC),
+            color_id=color_id,
+        )
+        db.add(event)
+        db.flush()
+        return event
+
+    def test_event_color_id_resolves_to_palette(self) -> None:
+        with self.Session() as db:
+            event = self._add(db, "e1", color_id="5")
+            colors = gcs.effective_colors(db, [event])
+            self.assertEqual(colors[event.id], "#fbd75b")  # Banana
+
+    def test_falls_back_to_calendar_background_color(self) -> None:
+        with self.Session() as db:
+            db.add(GoogleCalendarSyncState(user_id=1, calendar_id="primary", background_color="#123456"))
+            event = self._add(db, "e1")
+            db.commit()
+            colors = gcs.effective_colors(db, [event])
+            self.assertEqual(colors[event.id], "#123456")
+
+    def test_event_color_id_beats_calendar_color(self) -> None:
+        with self.Session() as db:
+            db.add(GoogleCalendarSyncState(user_id=1, calendar_id="primary", background_color="#123456"))
+            event = self._add(db, "e1", color_id="9")
+            db.commit()
+            colors = gcs.effective_colors(db, [event])
+            self.assertEqual(colors[event.id], "#5484ed")  # Blueberry
+
+    def test_unknown_color_id_falls_back_to_calendar(self) -> None:
+        with self.Session() as db:
+            db.add(GoogleCalendarSyncState(user_id=1, calendar_id="primary", background_color="#123456"))
+            event = self._add(db, "e1", color_id="99")
+            db.commit()
+            colors = gcs.effective_colors(db, [event])
+            self.assertEqual(colors[event.id], "#123456")
+
+    def test_no_color_anywhere_returns_none(self) -> None:
+        with self.Session() as db:
+            event = self._add(db, "e1")
+            db.commit()
+            colors = gcs.effective_colors(db, [event])
+            self.assertIsNone(colors[event.id])
 
 
 class BatchUpsertTest(CalendarTestBase):
@@ -371,7 +445,7 @@ class SyncAllTest(CalendarTestBase):
                 {"id": "hidden", "selected": False},
             ]
 
-            async def fake_sync(db_, token, calendar_id):
+            async def fake_sync(db_, token, calendar_id, calendar_color=None):
                 db_.add(GoogleCalendarSyncState(user_id=1, calendar_id=calendar_id))
                 db_.commit()
                 return {"calendar_id": calendar_id, "synced": 1, "deleted": 0, "incremental": False}
@@ -399,7 +473,7 @@ class SyncAllTest(CalendarTestBase):
         with self.Session() as db:
             calendars = [{"id": "bad"}, {"id": "good", "selected": True}]
 
-            async def fake_sync(db_, token, calendar_id):
+            async def fake_sync(db_, token, calendar_id, calendar_color=None):
                 if calendar_id == "bad":
                     raise _mk_http_status_error(403)
                 return {"calendar_id": calendar_id, "synced": 1, "deleted": 0, "incremental": False}
@@ -414,6 +488,24 @@ class SyncAllTest(CalendarTestBase):
             by_id = {c["calendar_id"]: c for c in result["calendars"]}
             self.assertIn("error", by_id["bad"])
             self.assertEqual(by_id["good"]["synced"], 1)
+
+    def test_sync_all_passes_calendar_background_color(self) -> None:
+        with self.Session() as db:
+            calendars = [{"id": "primary", "primary": True, "backgroundColor": "#4285f4"}]
+            seen: list[str | None] = []
+
+            async def fake_sync(db_, token, calendar_id, calendar_color=None):
+                seen.append(calendar_color)
+                return {"calendar_id": calendar_id, "synced": 0, "deleted": 0, "incremental": False}
+
+            with (
+                patch.object(gcs.gs, "list_calendars", new=AsyncMock(return_value=calendars)),
+                patch.object(gcs, "get_valid_access_token", new=AsyncMock(return_value="tok")),
+                patch.object(gcs, "sync_calendar", new=fake_sync),
+            ):
+                asyncio.new_event_loop().run_until_complete(gcs.sync_all(db))
+
+            self.assertEqual(seen, ["#4285f4"])
 
 
 class CachedEventsTest(CalendarTestBase):

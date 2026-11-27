@@ -187,7 +187,8 @@ describe('assignment data path', () => {
     const goal = { id: 9, temporality: 'WEEKLY' as const };
     await assignGoal(goal, '2024-06-12', true);
     expect(get(planningAssignments)['2024-06-10']).toEqual([9]);
-    expect(apiMock.planning.setAssignments).toHaveBeenCalledWith('2024-06-10', [9], true);
+    // No event sources cached for this bucket — undefined is forwarded.
+    expect(apiMock.planning.setAssignments).toHaveBeenCalledWith('2024-06-10', [9], true, undefined);
   });
 
   it('unassignGoal removes the id from the normalized bucket', async () => {
@@ -195,6 +196,7 @@ describe('assignment data path', () => {
     await assignGoal(goal, '2024-06-12');
     await unassignGoal(goal, '2024-06-12');
     expect(get(planningAssignments)['2024-06-12']).toEqual([]);
-    expect(apiMock.planning.setAssignments).toHaveBeenLastCalledWith('2024-06-12', [], false);
+    // Assignments mirror into calendar_tasks by default now.
+    expect(apiMock.planning.setAssignments).toHaveBeenLastCalledWith('2024-06-12', [], true, undefined);
   });
 });

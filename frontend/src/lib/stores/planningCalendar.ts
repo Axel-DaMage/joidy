@@ -5,14 +5,17 @@
 // fetch/render state.
 //
 // Persistence: view mode, layer visibility and chip density are stored under
-// `calendarUi` in the shared user-settings blob (`joidy-user-settings-v1`).
-// Hydration falls back to the legacy per-page keys (`joidy-calendar-view`,
-// `goals.planningView`) so previously saved view prefs keep working.
+// `calendarUi` in the shared user-settings blob (`joidy-user-settings-v1`);
+// view, cursor and selected day are also mirrored to the device-level
+// `joidy.calendar.*` view-pref keys (#1673) so they survive logout. Hydration
+// falls back to every previously used key (`joidy.goals.*`, `joidy-calendar-*`,
+// `goals.*`) so saved prefs keep working across refactors.
 
 import { get, writable } from 'svelte/store';
 import { browser } from '$app/env';
 import { api, type Goal } from '$lib/api';
 import { localDayKey, parseLocalDate } from '$lib/utils/date';
+import { loadPref, savePref } from '$lib/utils/persistedState';
 import { loadUserSettings, patchUserSettings } from '$lib/utils/userSettings';
 import { logger } from '$lib/utils/logger';
 
@@ -169,20 +172,50 @@ export const calendarLayers = writable<CalendarLayerVisibility>({
 
 export const chipDensity = writable<ChipDensity>('comfortable');
 
+/** Normalized date → goal_id → Google event id, for assignments created
+ * from a calendar event (#1645). The goal chip represents that event, so
+ * surfaces hide the raw event chip to avoid rendering it twice — and the
+ * map is reposted on setAssignments or the backend drops the links. */
+export const planningEventSources = writable<Record<string, Record<number, string>>>(
+  {}
+);
+
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+const isIsoDay = (v: unknown): boolean =>
+  v === null || (typeof v === 'string' && ISO_DAY.test(v));
+const isView = (v: unknown): boolean =>
+  v === 'month' || v === 'week' || v === 'agenda';
+
 // Hydrate persisted prefs once (browser only — SSR/tests get defaults).
 if (browser) {
   try {
     const ui = loadUserSettings().calendarUi;
-    if (ui?.view === 'month' || ui?.view === 'week' || ui?.view === 'agenda') {
-      planningView.set(ui.view);
-    } else {
-      const legacy =
-        localStorage.getItem('joidy-calendar-view') ??
-        localStorage.getItem('goals.planningView');
-      if (legacy === 'month' || legacy === 'week' || legacy === 'agenda') {
-        planningView.set(legacy);
-      }
-    }
+    // View: device-level pref wins over the user-settings blob; every older
+    // key namespace is a migration source (#1673, #1660).
+    const savedView = loadPref<PlanningCalendarView | null>('calendar', 'view', null, {
+      legacyKey: 'joidy-calendar-view',
+      isValid: isView,
+    });
+    const goalsView = loadPref<PlanningCalendarView | null>(
+      'goals',
+      'planningView',
+      null,
+      { legacyKey: 'goals.planningView', isValid: isView }
+    );
+    const hydratedView = savedView ?? ui?.view ?? goalsView;
+    if (isView(hydratedView)) planningView.set(hydratedView as PlanningCalendarView);
+    // Cursor (period anchor) and selected day.
+    const savedCursor =
+      loadPref<string | null>('calendar', 'cursor', null, { isValid: isIsoDay }) ??
+      loadPref<string | null>('goals', 'planningCursor', null, { isValid: isIsoDay });
+    if (savedCursor) planningCursor.set(savedCursor);
+    const savedDay =
+      loadPref<string | null>('calendar', 'selectedDay', null, { isValid: isIsoDay }) ??
+      loadPref<string | null>('goals', 'planningDate', null, {
+        legacyKey: 'goals.selectedPlanningDate',
+        isValid: isIsoDay,
+      });
+    if (savedDay) planningSelectedDay.set(savedDay);
     if (ui?.layers) {
       calendarLayers.set({ ...DEFAULT_CALENDAR_LAYERS, ...ui.layers });
     }
@@ -193,6 +226,11 @@ if (browser) {
     ) {
       chipDensity.set(ui.density);
     }
+    // Mirror the shared state back to the device-level keys (#1673). The
+    // subscriptions fire once with the hydrated value — a no-op rewrite.
+    planningView.subscribe((v) => savePref('calendar', 'view', v));
+    planningCursor.subscribe((v) => savePref('calendar', 'cursor', v));
+    planningSelectedDay.subscribe((v) => savePref('calendar', 'selectedDay', v));
   } catch {
     // Storage errors fall back to defaults.
   }
@@ -254,73 +292,119 @@ export function setChipDensity(next: ChipDensity): void {
 
 // ── Assignment data path ────────────────────────────────────────────────────
 
-/** Fetch the assignments of one date (all its normalized buckets) into the
- * shared cache. Missing/failed keys land as empty lists so failed reads
- * don't wedge the cache in a permanent "not loaded" state. */
-export async function loadAssignmentsForDate(date: string): Promise<void> {
-  if (!date) return;
-  const map = get(planningAssignments);
-  const keys = normalizedKeysForDate(date).filter((k) => !(k in map));
-  if (keys.length === 0) return;
-  const results = await Promise.all(
+function parseEventSources(
+  raw: Record<string, string> | undefined
+): Record<number, string> {
+  const out: Record<number, string> = {};
+  for (const [k, v] of Object.entries(raw ?? {})) {
+    const id = Number(k);
+    if (Number.isFinite(id) && v) out[id] = v;
+  }
+  return out;
+}
+
+/** goal_event_ids to repost with setAssignments: keep only the sources of
+ * goals that remain assigned on that date (#1645). */
+function sourcesForDate(
+  date: string,
+  goalIds: number[]
+): Record<number, string> | undefined {
+  const map = get(planningEventSources)[date];
+  if (!map) return undefined;
+  const out: Record<number, string> = {};
+  for (const gid of goalIds) if (map[gid]) out[gid] = map[gid];
+  return Object.keys(out).length ? out : undefined;
+}
+
+async function fetchAssignmentKeys(
+  keys: string[]
+): Promise<{ date: string; ids: number[]; sources: Record<number, string> }[]> {
+  return Promise.all(
     keys.map(async (d) => {
       try {
         const res = await api.planning.getAssignments(d);
-        return { date: d, ids: res.goal_ids };
+        return {
+          date: d,
+          ids: res.goal_ids,
+          sources: parseEventSources(res.goal_event_ids),
+        };
       } catch {
-        return { date: d, ids: [] as number[] };
+        return { date: d, ids: [] as number[], sources: {} as Record<number, string> };
       }
     })
   );
+}
+
+function storeAssignmentResults(
+  results: { date: string; ids: number[]; sources: Record<number, string> }[]
+): void {
   planningAssignments.update((m) => ({
     ...m,
     ...Object.fromEntries(results.map((r) => [r.date, r.ids])),
   }));
+  planningEventSources.update((m) => ({
+    ...m,
+    ...Object.fromEntries(results.map((r) => [r.date, r.sources])),
+  }));
+}
+
+/** Fetch the assignments of one date (all its normalized buckets) into the
+ * shared cache. Missing/failed keys land as empty lists so failed reads
+ * don't wedge the cache in a permanent "not loaded" state. A key cached in
+ * one map but not the other is refetched so both stay in lockstep. */
+export async function loadAssignmentsForDate(date: string): Promise<void> {
+  if (!date) return;
+  const map = get(planningAssignments);
+  const sources = get(planningEventSources);
+  const keys = normalizedKeysForDate(date).filter(
+    (k) => !(k in map) || !(k in sources)
+  );
+  if (keys.length === 0) return;
+  storeAssignmentResults(await fetchAssignmentKeys(keys));
+}
+
+/** Force-refetch a date's normalized keys — used after writes that bypassed
+ * this store (e.g. GoalFromEventModal) so the cache reflects server truth. */
+export async function refreshAssignmentsForDate(date: string): Promise<void> {
+  if (!date) return;
+  storeAssignmentResults(await fetchAssignmentKeys(normalizedKeysForDate(date)));
 }
 
 /** Bulk-prefetch every normalized key the given dates touch — used to cover
  * the whole visible grid in one pass so day cells render without waiting. */
 export async function loadAssignmentsForRange(dates: string[]): Promise<void> {
   const map = get(planningAssignments);
+  const sources = get(planningEventSources);
   const keys = new Set<string>();
   for (const date of dates) {
     if (!date) continue;
     for (const k of normalizedKeysForDate(date)) keys.add(k);
   }
-  const missing = [...keys].filter((k) => !(k in map));
+  const missing = [...keys].filter((k) => !(k in map) || !(k in sources));
   if (missing.length === 0) return;
-  const results = await Promise.all(
-    missing.map(async (d) => {
-      try {
-        const res = await api.planning.getAssignments(d);
-        return { date: d, ids: res.goal_ids };
-      } catch {
-        return { date: d, ids: [] as number[] };
-      }
-    })
-  );
-  planningAssignments.update((m) => ({
-    ...m,
-    ...Object.fromEntries(results.map((r) => [r.date, r.ids])),
-  }));
+  storeAssignmentResults(await fetchAssignmentKeys(missing));
 }
 
 /** Drop the cached assignments — callers re-run their range prefetch so the
  * next paint reflects the server truth. */
 export function invalidatePlanningAssignments(): void {
   planningAssignments.set({});
+  planningEventSources.set({});
 }
 
 type AssignableGoal = Pick<Goal, 'id' | 'temporality'>;
 
 /** Optimistically assign `goal` to `date` (normalized by its temporality)
- * and persist through the planning API. `mirrorToCalendar` forwards the
- * `create_calendar_task` flag — the PlanningAssignment ↔ calendar_tasks
- * mirror is unchanged (#1234). */
+ * and persist through the planning API. Assignments mirror into
+ * calendar_tasks by default so the real calendar reflects planned goals
+ * (#goal-planning-calendar); `mirrorToCalendar` forwards the
+ * `create_calendar_task` flag for the rare opt-out. Sibling event sources
+ * are reposted — the backend replaces the whole goal_event_ids map on
+ * every setAssignments call (#1645). */
 export async function assignGoal(
   goal: AssignableGoal,
   date: string,
-  mirrorToCalendar = false
+  mirrorToCalendar = true
 ): Promise<void> {
   if (!date) return;
   const normDate = getNormalizedDate(date, goal.temporality);
@@ -332,10 +416,12 @@ export async function assignGoal(
     return next;
   });
   try {
+    const ids = get(planningAssignments)[normDate] ?? [];
     await api.planning.setAssignments(
       normDate,
-      get(planningAssignments)[normDate],
-      mirrorToCalendar
+      ids,
+      mirrorToCalendar,
+      sourcesForDate(normDate, ids)
     );
   } catch (e) {
     logger.error('Error saving assignment:', e);
@@ -345,7 +431,7 @@ export async function assignGoal(
 export async function unassignGoal(
   goal: AssignableGoal,
   date: string,
-  mirrorToCalendar = false
+  mirrorToCalendar = true
 ): Promise<void> {
   if (!date) return;
   const normDate = getNormalizedDate(date, goal.temporality);
@@ -353,11 +439,20 @@ export async function unassignGoal(
     if (!m[normDate]) return m;
     return { ...m, [normDate]: m[normDate].filter((id) => id !== goal.id) };
   });
+  // The goal's own event source leaves with it; sibling sources repost.
+  planningEventSources.update((m) => {
+    if (!m[normDate]?.[goal.id]) return m;
+    const sources = { ...m[normDate] };
+    delete sources[goal.id];
+    return { ...m, [normDate]: sources };
+  });
   try {
+    const remaining = get(planningAssignments)[normDate] ?? [];
     await api.planning.setAssignments(
       normDate,
-      get(planningAssignments)[normDate] ?? [],
-      mirrorToCalendar
+      remaining,
+      mirrorToCalendar,
+      sourcesForDate(normDate, remaining)
     );
   } catch (e) {
     logger.error('Error saving assignment removal:', e);

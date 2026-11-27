@@ -48,6 +48,12 @@ export interface UserSettings {
   executionUi?: {
     /** Sacred-calendar picker selection (#1201); null = all calendars. */
     calendarId?: string | null;
+    /** Visibility toggles for the execution-mode detail rail (undefined = on). */
+    showQueue?: boolean;
+    showCalendar?: boolean;
+    showNotes?: boolean;
+    /** Whether the linked-note editor body is expanded (undefined = open). */
+    notesExpanded?: boolean;
   };
   analyticsUi?: {
     /** Active slide of the analytics page carousel (#1499). */
@@ -70,6 +76,10 @@ export interface UserSettings {
     };
     /** Day-cell chip density: compact (2 chips), comfortable (5), full (all). */
     density?: 'compact' | 'comfortable' | 'full';
+  };
+  editorUi?: {
+    /** Vim-style modal editing in the note editor (#1666); default off. */
+    vimMode?: boolean;
   };
 }
 
@@ -135,6 +145,7 @@ export function patchUserSettings(patch: Partial<UserSettings>): void {
       ...patch.calendarUi,
       layers: { ...current.calendarUi?.layers, ...patch.calendarUi?.layers },
     },
+    editorUi: { ...current.editorUi, ...patch.editorUi },
   };
   localStorage.setItem(KEY, JSON.stringify(next));
 }
