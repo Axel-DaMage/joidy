@@ -69,6 +69,7 @@
   import { focusTrap } from '$lib/actions/focusTrap';
   import { marquee } from '$lib/actions/marquee';
   import { t } from 'svelte-i18n';
+  import { locale } from '$lib/stores/locale';
 
   // Lazy-load the heavy StreakHeatmap (561 lines) so it is split into a
   // separate chunk and only downloaded when the history tab is active — the
@@ -902,7 +903,7 @@
   const PLAN_TEMPS = ['DAILY', 'WEEKLY', 'MONTHLY', 'ANNUAL', 'ONEOFF'] as const;
   // 2024-01-01 was a Monday — locale-aware Mon→Sun weekday labels.
   const WEEKDAYS_SHORT = Array.from({ length: 7 }, (_, i) =>
-    new Date(2024, 0, 1 + i).toLocaleDateString(undefined, { weekday: 'short' })
+    new Date(2024, 0, 1 + i).toLocaleDateString($locale, { weekday: 'short' })
   );
 
   // Union of goal ids assigned to any period a date belongs to (its day,
@@ -940,12 +941,12 @@
   let planningPeriodLabel = $derived.by(() => {
     if (planningView === 'month') {
       const d = new Date(planningCursor + 'T12:00:00');
-      const label = d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+      const label = d.toLocaleDateString($locale, { month: 'long', year: 'numeric' });
       return label.charAt(0).toUpperCase() + label.slice(1);
     }
     const first = new Date(weekDays[0] + 'T12:00:00');
     const last = new Date(weekDays[6] + 'T12:00:00');
-    return `${first.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} – ${last.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`;
+    return `${first.toLocaleDateString($locale, { day: 'numeric', month: 'short' })} – ${last.toLocaleDateString($locale, { day: 'numeric', month: 'short', year: 'numeric' })}`;
   });
 
   function shiftPlanningPeriod(dir: 1 | -1) {
@@ -1040,9 +1041,9 @@
   function eventTimeLabel(ev: CalendarEvent): string {
     if (ev.all_day) return $t('calendar.allDay');
     const start = new Date(ev.start_at);
-    if (!ev.end_at) return start.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    if (!ev.end_at) return start.toLocaleTimeString($locale, { hour: '2-digit', minute: '2-digit' });
     const end = new Date(ev.end_at);
-    return `${start.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })} – ${end.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`;
+    return `${start.toLocaleTimeString($locale, { hour: '2-digit', minute: '2-digit' })} – ${end.toLocaleTimeString($locale, { hour: '2-digit', minute: '2-digit' })}`;
   }
 
   function taskTimeLabel(task: CalendarTask): string {
@@ -1160,6 +1161,18 @@
 
   function agendaEntryTime(item: PlanningAgendaEntry): string {
     return item.kind === 'event' ? eventTimeLabel(item.event) : taskTimeLabel(item.task);
+  }
+
+  // Compact chip label for the week board: start time only (no end/range),
+  // '·' for all-day/timeless items — the full label lives in the detail rail.
+  function agendaEntryTimeShort(item: PlanningAgendaEntry): string {
+    if (item.kind === 'task') return item.task.start_time?.slice(0, 5) ?? '·';
+    const ev = item.event;
+    if (ev.all_day || !ev.start_at) return '·';
+    return new Date(ev.start_at).toLocaleTimeString($locale, {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
   }
 
   // Translucent wash + solid left bar in the item's real color — works for
@@ -1502,6 +1515,8 @@
             </div>
 
           {:else}
+            <!-- Horizontal agenda-week: one row per day so item titles get
+                 real width instead of being crushed inside 7 narrow columns. -->
             <div class="pln-week">
               {#each weekDays as iso (iso)}
                 {@const cellItems = planningCellItems(iso)}
@@ -1515,7 +1530,7 @@
                 >
                   <button class="pln-day-head" onclick={() => selectPlanningDay(iso)}>
                     <span class="pln-day-dow"
-                      >{new Date(iso + 'T12:00:00').toLocaleDateString(undefined, {
+                      >{new Date(iso + 'T12:00:00').toLocaleDateString($locale, {
                         weekday: 'short',
                       })}</span
                     >
@@ -1539,7 +1554,7 @@
                             class="pln-day-unassign"
                             onclick={() => unassignGoalFromDate(g.id, iso)}
                             title={$t('goalsPage.remove')}
-                            aria-label={$t('goalsPage.remove')}><X size={12} /></button
+                            aria-label={$t('goalsPage.remove')}><X size={11} /></button
                           >
                           <button class="pln-day-name" onclick={() => openGoalEditor(g)}>
                             <span class="pln-mq" use:marquee>
@@ -1563,7 +1578,7 @@
                           {#if item.kind === 'event'}
                             <Lock size={10} class="pln-day-agenda-icon" />
                           {:else if item.task.done}
-                            <Check size={10} class="pln-day-agenda-icon" />
+                            <Check size={10} class="pln-day-agenda-icon pln-agenda-done" />
                           {:else}
                             <span
                               class="pln-agenda-dot"
@@ -1571,7 +1586,7 @@
                             ></span>
                           {/if}
                           <span class="pln-day-agenda-time"
-                            >{agendaEntryTime(item)}</span
+                            >{agendaEntryTimeShort(item)}</span
                           >
                           <span class="pln-day-agenda-label">{agendaEntryTitle(item)}</span>
                         </button>
@@ -2368,7 +2383,7 @@
           {@const ev = detail.event}
           <div class="agenda-detail-row">
             <dt>{$t('goalsPage.fieldDate')}</dt>
-            <dd>{new Date(`${eventDayKey(ev)}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}</dd>
+            <dd>{new Date(`${eventDayKey(ev)}T12:00:00`).toLocaleDateString($locale, { weekday: 'long', day: 'numeric', month: 'long' })}</dd>
           </div>
           <div class="agenda-detail-row">
             <dt>{$t('goalsPage.fieldSchedule')}</dt>
@@ -2391,7 +2406,7 @@
           <div class="agenda-detail-row">
             <dt>{$t('goalsPage.fieldDate')}</dt>
             <dd>{task.date
-              ? new Date(`${task.date}T12:00:00`).toLocaleDateString(undefined, {
+              ? new Date(`${task.date}T12:00:00`).toLocaleDateString($locale, {
                   weekday: 'long',
                   day: 'numeric',
                   month: 'long',
@@ -2431,25 +2446,6 @@
         {/if}
       </dl>
       {#snippet footer()}
-        {#if detail.kind === 'event'}
-          <button
-            type="button"
-            class="btn btn-primary"
-            onclick={() => {
-              const ev = detail.event;
-              agendaDetail = null;
-              goalFromEventSeed = {
-                title: ev.summary || '—',
-                description: ev.description,
-                location: ev.location,
-                color: ev.color,
-                day: eventDayKey(ev),
-              };
-            }}
-          >
-            <Target size={14} /> {$t('goalFromEvent.action')}
-          </button>
-        {/if}
         {#if detail.kind === 'event' && detail.event.html_link}
           <a
             class="btn btn-ghost"
@@ -2481,6 +2477,25 @@
         >
           {$t('goalsPage.openCalendar')}
         </button>
+        {#if detail.kind === 'event'}
+          <button
+            type="button"
+            class="btn btn-primary"
+            onclick={() => {
+              const ev = detail.event;
+              agendaDetail = null;
+              goalFromEventSeed = {
+                title: ev.summary || '—',
+                description: ev.description,
+                location: ev.location,
+                color: ev.color,
+                day: eventDayKey(ev),
+              };
+            }}
+          >
+            <Target size={14} /> {$t('goalFromEvent.action')}
+          </button>
+        {/if}
       {/snippet}
     </ModalDialog>
   {/if}
@@ -3050,15 +3065,16 @@
     flex-shrink: 0;
   }
   .pln-day-agenda {
-    display: flex;
+    display: inline-flex;
     align-items: center;
     gap: 6px;
-    width: 100%;
-    padding: 5px 8px;
+    flex-shrink: 0;
+    max-width: 320px;
+    padding: 5px 9px;
     border: 1px solid var(--border);
     border-left: 3px solid var(--text-muted);
     border-radius: var(--r);
-    background: transparent;
+    background: var(--surface);
     cursor: pointer;
     text-align: left;
     color: var(--text-primary);
@@ -3070,13 +3086,13 @@
   }
   .pln-day-agenda-time {
     flex-shrink: 0;
-    min-width: 38px;
+    min-width: 32px;
     color: var(--text-muted);
     font-family: var(--font-mono);
     font-size: 10px;
+    font-variant-numeric: tabular-nums;
   }
   .pln-day-agenda-label {
-    flex: 1;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -3153,22 +3169,25 @@
     word-break: break-word;
   }
 
-  /* Week board */
+  /* Week board — horizontal agenda layout: one row per day, items as chips
+     in a horizontal scroller so titles get real width (#goal-planning-week). */
   .pln-week {
     flex: 1;
     min-width: 0;
     min-height: 0;
-    display: grid;
-    grid-template-columns: repeat(7, minmax(0, 1fr));
+    display: flex;
+    flex-direction: column;
     gap: 6px;
+    overflow-y: auto;
   }
   .pln-day {
     display: flex;
-    flex-direction: column;
+    align-items: stretch;
     border: 1px solid var(--border);
     border-radius: 8px;
     background: var(--surface);
-    min-height: 0;
+    min-height: 44px;
+    flex-shrink: 0;
     overflow: hidden;
     transition:
       border-color var(--t-fast),
@@ -3187,20 +3206,23 @@
   .pln-day-head {
     position: relative;
     display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 1px;
-    padding: 8px 4px;
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: center;
+    gap: 6px;
+    width: 92px;
+    flex-shrink: 0;
+    padding: 8px 10px;
     background: transparent;
     border: none;
-    border-bottom: 1px solid var(--border-light);
+    border-right: 1px solid var(--border-light);
     cursor: pointer;
     color: var(--text-primary);
   }
   .pln-day-dow {
-    font-size: 9px;
+    font-size: 10px;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.06em;
     color: var(--text-muted);
     font-family: var(--font-mono);
   }
@@ -3213,9 +3235,6 @@
     color: var(--xp);
   }
   .pln-day-count {
-    position: absolute;
-    top: 6px;
-    right: 6px;
     font-size: 9px;
     padding: 0 5px;
     border-radius: 999px;
@@ -3225,21 +3244,27 @@
   }
   .pln-day-list {
     flex: 1;
-    overflow-y: auto;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
     padding: 6px;
     display: flex;
-    flex-direction: column;
-    gap: 5px;
-    min-height: 0;
-  }
-  .pln-day-item {
-    display: flex;
+    flex-direction: row;
     align-items: center;
     gap: 6px;
-    padding: 8px 9px;
+    scrollbar-width: thin;
+  }
+  .pln-day-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 9px;
     border: 1px solid var(--border);
     border-radius: var(--r);
     font-size: 12px;
+    flex-shrink: 0;
+    max-width: 340px;
+    background: var(--surface);
   }
   .pln-day-unassign {
     display: flex;
@@ -3254,11 +3279,10 @@
     color: var(--error);
   }
   .pln-day-name {
-    flex: 1;
+    flex: 0 1 auto;
     min-width: 0;
+    max-width: 260px;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
     background: none;
     border: none;
     color: var(--text-primary);
@@ -3274,10 +3298,10 @@
     color: var(--link);
   }
   .pln-day-empty {
-    text-align: center;
     color: var(--text-muted);
     font-size: 10px;
-    padding: 6px 0;
+    padding: 0 8px;
+    flex-shrink: 0;
   }
 
   @media (max-width: 1100px) {
@@ -3313,8 +3337,7 @@
       min-height: 380px;
     }
     .pln-week {
-      grid-template-columns: repeat(7, minmax(120px, 1fr));
-      overflow-x: auto;
+      min-height: 0;
     }
   }
 

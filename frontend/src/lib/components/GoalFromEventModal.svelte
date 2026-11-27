@@ -8,6 +8,7 @@
   import ModalDialog from '$lib/components/ModalDialog.svelte';
   import { api, type Goal } from '$lib/api';
   import { showNotification } from '$lib/stores/notifications';
+  import { locale } from '$lib/stores/locale';
   import { DEFAULT_GOAL_COLOR } from '$lib/utils/goalColors';
 
   export interface GoalEventSeed {
@@ -46,7 +47,7 @@
   const MEASUREMENTS: Goal['measurement_type'][] = ['BOOLEAN', 'COUNT', 'PERCENT'];
 
   const eventDayLabel = $derived(
-    new Date(`${event.day}T12:00:00`).toLocaleDateString(undefined, {
+    new Date(`${event.day}T12:00:00`).toLocaleDateString($locale, {
       weekday: 'long',
       day: 'numeric',
       month: 'long',
@@ -93,7 +94,7 @@
 <ModalDialog
   open={true}
   title={step === 'confirm' ? $t('goalFromEvent.confirmTitle') : $t('goalFromEvent.title')}
-  size="sm"
+  size={step === 'form' ? 'md' : 'sm'}
   onClose={onClose}
 >
   {#if step === 'confirm'}
@@ -186,14 +187,15 @@
   }
   .gfe-row {
     display: flex;
+    flex-wrap: wrap;
     gap: var(--s2);
   }
   .gfe-row .gfe-field {
-    flex: 1;
+    flex: 1 1 140px;
+    min-width: 0;
   }
   .gfe-target {
-    max-width: 90px;
-    flex: 0 0 auto;
+    flex: 0 0 90px;
   }
   .gfe-color {
     height: 36px;
