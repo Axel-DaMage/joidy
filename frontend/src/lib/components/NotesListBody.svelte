@@ -6,6 +6,7 @@
   import DynamicIcon from './DynamicIcon.svelte';
   import NoteCard from './NoteCard.svelte';
   import VirtualList from './VirtualList.svelte';
+  import { rise, staggerDelay } from '$lib/utils/motion';
   import {
     notes,
     notesLoading,
@@ -288,16 +289,21 @@
         />
       </VirtualList>
     {:else}
-      {#each $filtered as note}
-        <NoteCard
-          {note}
-          active={$selectedNote?.id === note.id}
-          selected={$selectedNoteIds.has(note.id)}
-          bulkMode={$bulkMode}
-          on:select={(e) => openNote(e.detail)}
-          on:toggleSelect={(e) => toggleNoteSelection(e.detail)}
-          on:customize={(e) => openFolderCustomizer(e.detail)}
-        />
+      {#each $filtered as note, i}
+        <!-- Staggered rise entrance (shared motion system, #1657). Only the
+             non-virtualized branch animates — VirtualList mounts rows on
+             scroll, where an entrance would replay endlessly. -->
+        <div in:rise={{ delay: staggerDelay(i, { step: 20 }), duration: 260 }}>
+          <NoteCard
+            {note}
+            active={$selectedNote?.id === note.id}
+            selected={$selectedNoteIds.has(note.id)}
+            bulkMode={$bulkMode}
+            on:select={(e) => openNote(e.detail)}
+            on:toggleSelect={(e) => toggleNoteSelection(e.detail)}
+            on:customize={(e) => openFolderCustomizer(e.detail)}
+          />
+        </div>
       {/each}
     {/if}
   {/if}

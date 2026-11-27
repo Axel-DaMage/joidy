@@ -12,6 +12,7 @@
   import SettingsServices from './SettingsServices.svelte';
   import SettingsDeveloper from './SettingsDeveloper.svelte';
   import { focusTrap } from '$lib/actions/focusTrap';
+  import { backdropIn, drawerIn } from '$lib/utils/motion';
   import { api } from '$lib/api';
   import { logger } from '$lib/utils/logger';
   import { t } from 'svelte-i18n';
@@ -188,13 +189,14 @@
 {#if open}
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="backdrop" role="presentation" onclick={onBackdropClick}>
+  <div class="backdrop" role="presentation" onclick={onBackdropClick} transition:backdropIn>
     <div
       class="panel"
       role="dialog"
       aria-modal="true"
       aria-labelledby="settings-panel-title"
       tabindex="-1"
+      transition:drawerIn={{ duration: 150 }}
       use:focusTrap={{ onEscape: close }}
     >
       <div class="panel-header">
@@ -285,19 +287,9 @@
     border-left: 1px solid var(--border);
     display: flex;
     flex-direction: column;
-    animation: slideIn 150ms ease-out;
+    /* Entrance/exit live in the `drawerIn` transition on the element above
+       (shared motion system, #1657). */
     position: relative;
-  }
-
-  @keyframes slideIn {
-    from {
-      transform: translateX(100%);
-      opacity: 0;
-    }
-    to {
-      transform: translateX(0);
-      opacity: 1;
-    }
   }
 
   .panel-header {

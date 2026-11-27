@@ -131,7 +131,8 @@
   {#if loading}
     <div class="tc-skeleton">
       {#each Array(6) as _}
-        <div class="tc-skel-row"></div>
+        <!-- Shared `m-skeleton` shimmer (motion system, #1657). -->
+        <div class="tc-skel-row m-skeleton"></div>
       {/each}
     </div>
   {:else if errorStatus === 401}
@@ -263,17 +264,10 @@
     gap: 8px;
   }
 
+  /* Gradient sweep + border-radius come from the shared `m-skeleton`
+     utility (app.css); this class only keeps the geometry. */
   .tc-skel-row {
     height: 40px;
-    border-radius: var(--r, 8px);
-    background: var(--elevated);
-    animation: tc-pulse 1.2s ease-in-out infinite;
-  }
-
-  @keyframes tc-pulse {
-    50% {
-      opacity: 0.5;
-    }
   }
 
   .tc-error,

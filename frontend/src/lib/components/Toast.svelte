@@ -1,6 +1,6 @@
 <script lang="ts">
   import { notifications, dismissNotification, type Notification } from '$lib/stores/notifications';
-  import { fly } from 'svelte/transition';
+  import { enter } from '$lib/utils/motion';
   import DynamicIcon from './DynamicIcon.svelte';
 
   // Map each notification type to its icon name and accent color. Passing the
@@ -30,7 +30,7 @@
     <a
       class="toast toast-{notif.type}"
       href={notif.href}
-      transition:fly={{ y: -20, duration: 200 }}
+      transition:enter={{ y: -20, duration: 200 }}
       onclick={() => dismissNotification(notif.id)}
     >
       <DynamicIcon name={cfg.icon} size={16} color={cfg.color} />
@@ -39,7 +39,7 @@
   {:else}
     <button
       class="toast toast-{notif.type}"
-      transition:fly={{ y: -20, duration: 200 }}
+      transition:enter={{ y: -20, duration: 200 }}
       onclick={() => dismissNotification(notif.id)}
     >
       <DynamicIcon name={cfg.icon} size={16} color={cfg.color} />

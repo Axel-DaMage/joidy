@@ -33,6 +33,7 @@
   import Repeat from 'lucide-svelte/icons/repeat';
   import Sparkles from 'lucide-svelte/icons/sparkles';
   import EmptyState from '$lib/components/EmptyState.svelte';
+  import { popIn, staggerDelay } from '$lib/utils/motion';
   import { t } from 'svelte-i18n';
 
   interface CalendarStatus {
@@ -1010,10 +1011,13 @@
           </div>
 
           <div class="day-grid">
-            {#each gridCells as cell (cell.key)}
+            {#each gridCells as cell, i (cell.key)}
               {@const items = monthItems.get(cell.key) ?? []}
+              <!-- Heatmap-style cell pop-in on grid (re)mount — the shared
+                   `popIn` beat (shared motion system, #1657). -->
               <button
                 class="day-cell"
+                in:popIn={{ delay: staggerDelay(i, { step: 8, max: 340 }), duration: 300 }}
                 class:out={!cell.inMonth}
                 class:today={cell.key === todayKey}
                 class:selected={selectedDay === cell.key}

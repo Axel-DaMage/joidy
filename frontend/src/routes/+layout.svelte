@@ -5,6 +5,7 @@
   import { afterNavigate } from '$app/navigation';
   import { onMount } from 'svelte';
   import { fade } from 'svelte/transition';
+  import { rise } from '$lib/utils/motion';
   import { isOnline, wasOffline } from '$lib/stores/connection';
   import DynamicIcon from '$lib/components/DynamicIcon.svelte';
   import CommandPalette from '$lib/components/CommandPalette.svelte';
@@ -954,11 +955,20 @@
       {/each}
     </nav>
 
-    <!-- Main content -->
-    <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-    <main class="app-main" id="main-content" tabindex="-1">
-      <slot />
-    </main>
+    <!-- Main content — keyed on the pathname so every route change replays
+         the shared page-entrance beat (intro only; exits stay instant
+         so two pages never overlap in the layout). -->
+    {#key page.url.pathname}
+      <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+      <main
+        class="app-main"
+        id="main-content"
+        tabindex="-1"
+        in:rise={{ duration: 240, y: 6 }}
+      >
+        <slot />
+      </main>
+    {/key}
 
     <!-- Status bar -->
     <footer class="app-statusbar">

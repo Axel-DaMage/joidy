@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { fade, scale } from 'svelte/transition';
+  import { backdropIn, dialogIn } from '$lib/utils/motion';
   import X from 'lucide-svelte/icons/x';
   import { focusTrap } from '$lib/actions/focusTrap';
   import { t } from 'svelte-i18n';
@@ -30,7 +30,7 @@
   <div
     class="modal-overlay"
     role="presentation"
-    transition:fade={{ duration: 150 }}
+    transition:backdropIn={{ duration: 150 }}
     onclick={(e) => e.target === e.currentTarget && onClose?.()}
   >
     <div
@@ -39,7 +39,7 @@
       aria-modal="true"
       aria-labelledby={titleId}
       tabindex="-1"
-      transition:scale={{ duration: 200, start: 0.95 }}
+      transition:dialogIn={{ duration: 200 }}
       use:focusTrap={{ onEscape: () => onClose?.() }}
     >
       <div class="modal-header">
