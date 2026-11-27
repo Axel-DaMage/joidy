@@ -137,12 +137,12 @@ def _parse_goal_content(content: str) -> dict:
     }
 
 
-def _goal_file_source_path(filepath: Path) -> str:
+def goal_file_source_path(filepath: Path) -> str:
     """Vault-relative ``source_path`` for a goal file under ``Objetivos/`` (#1583).
 
     ``filepath.parents[0]`` is ``Objetivos/`` and ``parents[1]`` the vault
     root, so the stored domain is ``Objetivos/<id>_<slug>.md``. Shared by
-    ``_write_goal_file``, ``restore_goals_from_vault`` and routers persisting
+    ``write_goal_file``, ``restore_goals_from_vault`` and routers persisting
     the path of a file written via ``update_goal_file``.
     """
     return str(filepath.relative_to(filepath.parents[1]))
@@ -261,7 +261,7 @@ def restore_goals_from_vault(db: Session) -> dict:
                     completed_at=datetime.fromisoformat(parsed["completed_at"])
                     if parsed.get("completed_at") and parsed["completed_at"] != "None"
                     else None,
-                    source_path=_goal_file_source_path(f),
+                    source_path=goal_file_source_path(f),
                 )
                 db.add(goal)
                 db.flush()
@@ -372,15 +372,15 @@ def write_objectives(db: Session) -> bool:
 
     goals = db.query(Goal).order_by(Goal.created_at.desc()).all()
     for goal in goals:
-        _write_goal_file(db, goal, obj_dir)
-    # #1583 — ``_write_goal_file`` only assigns ``source_path`` in-memory;
+        write_goal_file(db, goal, obj_dir)
+    # #1583 — ``write_goal_file`` only assigns ``source_path`` in-memory;
     # without this commit the /vault/write-objectives pass wrote the files
     # but its ``source_path`` updates were discarded at session close.
     db.commit()
     return True
 
 
-def _write_goal_file(db: Session, goal: Goal, obj_dir: Path) -> Path | None:
+def write_goal_file(db: Session, goal: Goal, obj_dir: Path) -> Path | None:
     s = slugify(goal.title)
     filepath = obj_dir / f"{goal.id}_{s}.md"
 
@@ -419,7 +419,7 @@ def _write_goal_file(db: Session, goal: Goal, obj_dir: Path) -> Path | None:
 
     filepath.write_text("\n".join(content_lines), encoding="utf-8")
 
-    goal.source_path = _goal_file_source_path(filepath)
+    goal.source_path = goal_file_source_path(filepath)
     return filepath
 
 
@@ -465,23 +465,6 @@ def write_skills(db: Session) -> bool:
 
     filepath.write_text(content, encoding="utf-8")
     return True
-
-
-def write_readme(vault_path: Path) -> None:
-    """Write the warning note in _joidy/ for Obsidian users."""
-    joidy_dir = vault_path / JOIDY_DIR
-    joidy_dir.mkdir(parents=True, exist_ok=True)
-    readme = joidy_dir / "README.md"
-    if not readme.exists():
-        readme.write_text(
-            "# ⚠️ Carpeta administrada por Joidy\n\n"
-            "No edites estos archivos manualmente — Joidy los sobreescribirá.\n\n"
-            "Puedes **leer** estos archivos y enlazarlos desde tus notas con:\n"
-            "- `[[_joidy/objectives]]`\n"
-            "- `[[_joidy/skills]]`\n"
-            "- `[[_joidy/daily/2026-03-22]]`\n",
-            encoding="utf-8",
-        )
 
 
 def _get_notes_created_today(db: Session, today: date) -> list:

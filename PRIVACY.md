@@ -33,7 +33,7 @@ Joidy stores the following user data, all of it inside your own deployment:
 | Goals, streaks, mood, gamification state | `goals`, `personal_streaks`, `streak_checkins`, `mood_entries`, `xp_events`, `streak_records`, `user_stats`, `achievements` tables |
 | Google OAuth tokens | `google_tokens` table — the refresh token is encrypted at rest with Fernet, keyed by your `SECRET_KEY` |
 | Google Calendar data (cached copy) | `google_calendar_events`, `google_calendar_sync_state`, `calendar_tasks` tables |
-| Gmail messages (imported via your own n8n workflow) | `email_messages` table (subject, sender, snippet, body text, labels) |
+| Gmail messages | read live via the Gmail API (`integrations/gmail`) — not stored locally; the legacy `email_messages` table (subject, sender, snippet, body text, labels) is dormant since #1508 and no longer written |
 | GitHub synced items | `github_repos`, `github_items`, `github_events` tables |
 | Telegram bot activity | `telegram_events` table (command, sender, status, response) |
 | AI chat history | `chat_sessions` table |
@@ -96,12 +96,6 @@ Configured via `SPOTIFY_CLIENT_ID/SECRET` and `STRAVA_CLIENT_ID/SECRET`.
 Scopes: Spotify `user-read-recently-played`, `user-read-playback-state`,
 `user-top-read`, `playlist-read-private`; Strava `read`, `activity:read`.
 Read-only access to your listening/activity data when you connect them.
-
-### n8n (optional, self-hosted)
-
-If you run the included n8n workflows, your own n8n instance pushes Gmail
-messages into Joidy's `/emails` API. n8n runs under your control; no data is
-shared with n8n's vendor unless you configure it to.
 
 ## 3. Data sharing
 
