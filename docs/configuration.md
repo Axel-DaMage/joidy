@@ -243,7 +243,7 @@ marcador la API no emite JWT y marca la autenticación como deshabilitada
 |----------|---------|-------------|
 | FRONTEND_PORT | 3000 | Puerto del frontend |
 | API_PORT | 8000 | Puerto de la API |
-| BIND_ADDR | 127.0.0.1 | Dirección de enlace de los puertos publicados (frontend, api, n8n). `0.0.0.0` expone Joidy en la LAN |
+| BIND_ADDR | 127.0.0.1 | Dirección de enlace de los puertos publicados (frontend, api). `0.0.0.0` expone Joidy en la LAN |
 
 Desde #1277, ai-service (8002) y worker (8001) no publican puerto al host —
 solo son accesibles en la red interna de Docker Compose. Las llamadas de la

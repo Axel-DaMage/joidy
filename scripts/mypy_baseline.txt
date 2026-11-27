@@ -12,7 +12,6 @@ repositories
 routers.integrations.github
 routers.personal_streaks
 routers.system
-services.email_service
 services.github_service
 services.google_service
 tests.test_google_token_service
