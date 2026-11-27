@@ -509,3 +509,58 @@ def test_create_task_rejects_bad_recurrence(client: TestClient):
         json={"title": "x", "date": FUTURE_DATE, "recurrence": "YEARLY"},
     )
     assert response.status_code == 422
+
+
+# ── Google Calendar auto-mirror (#task-google-sync) ─────────────────────
+
+
+def test_create_task_with_date_syncs_google(client: TestClient, monkeypatch):
+    calls = []
+    monkeypatch.setattr("services.task_google_sync.sync_task", lambda db, t: calls.append(t.id))
+    response = client.post("/calendar/tasks", json={"title": "Publish me", "date": FUTURE_DATE})
+    assert response.status_code == 201
+    assert len(calls) == 1
+
+
+def test_create_unscheduled_task_skips_google(client: TestClient, monkeypatch):
+    calls = []
+    monkeypatch.setattr("services.task_google_sync.sync_task", lambda db, t: calls.append(t.id))
+    response = client.post("/calendar/tasks", json={"title": "Inbox"})
+    assert response.status_code == 201
+    assert calls == []
+
+
+def test_reschedule_syncs_google(client: TestClient, db_session, monkeypatch):
+    task = _make_task(db_session, title="Move me")
+    calls = []
+    monkeypatch.setattr("services.task_google_sync.sync_task", lambda db, t: calls.append(t.id))
+    response = client.patch(f"/calendar/tasks/{task.id}", json={"date": "2099-07-21"})
+    assert response.status_code == 200
+    assert calls == [task.id]
+
+
+def test_unrelated_update_skips_google(client: TestClient, db_session, monkeypatch):
+    task = _make_task(db_session, title="Reminder only")
+    calls = []
+    monkeypatch.setattr("services.task_google_sync.sync_task", lambda db, t: calls.append(t.id))
+    response = client.patch(f"/calendar/tasks/{task.id}", json={"reminder_minutes": 30})
+    assert response.status_code == 200
+    assert calls == []
+
+
+def test_done_toggle_syncs_google(client: TestClient, db_session, monkeypatch):
+    task = _make_task(db_session, title="Toggle me")
+    calls = []
+    monkeypatch.setattr("services.task_google_sync.sync_task", lambda db, t: calls.append(t.id))
+    response = client.post(f"/calendar/tasks/{task.id}/done")
+    assert response.status_code == 200
+    assert calls == [task.id]
+
+
+def test_delete_task_unpublishes_google(client: TestClient, db_session, monkeypatch):
+    task = _make_task(db_session, title="Delete me")
+    calls = []
+    monkeypatch.setattr("services.task_google_sync.unpublish_task", lambda db, t: calls.append(t.id))
+    response = client.delete(f"/calendar/tasks/{task.id}")
+    assert response.status_code == 204
+    assert calls == [task.id]

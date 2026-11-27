@@ -16,6 +16,7 @@ from models.calendar_task import (
 from models.gamification import XPEvent
 from models.goal import Goal, GoalMeasurement
 from pydantic import BaseModel, Field
+from services import task_google_sync
 from services.gamification_engine import process_event
 from services.timezone_utils import get_local_today
 from sqlalchemy import case
@@ -351,7 +352,13 @@ def create_task(body: CalendarTaskCreate, db: Session = Depends(get_db)):
     db.add(task)
     db.commit()
     db.refresh(task)
+    if task.date is not None:
+        task_google_sync.sync_task(db, task)
     return _task_out(task)
+
+
+# Task fields whose change should re-sync the mirrored Google event.
+_GOOGLE_SYNCED_FIELDS = {"title", "date", "start_time", "end_time", "color", "priority", "google_event_id"}
 
 
 @router.patch("/tasks/{task_id}", response_model=CalendarTaskOut)
@@ -359,6 +366,8 @@ def update_task(task_id: int, body: CalendarTaskUpdate, db: Session = Depends(ge
     task = _get_or_404(db, task_id)
     data = body.model_dump(exclude_unset=True)
     was_done = task.done
+    # Fields that feed the Google mirror payload (done handled separately).
+    should_sync_google = bool(set(data) & _GOOGLE_SYNCED_FIELDS)
     if "done" in data:
         task.done = data.pop("done")
         task.done_at = datetime.now(UTC) if task.done else None
@@ -384,12 +393,15 @@ def update_task(task_id: int, body: CalendarTaskUpdate, db: Session = Depends(ge
     db.commit()
     db.refresh(task)
     _apply_done_transition(db, task, was_done)
+    if should_sync_google or was_done != task.done:
+        task_google_sync.sync_task(db, task)
     return _task_out(task)
 
 
 @router.delete("/tasks/{task_id}", status_code=204)
 def delete_task(task_id: int, db: Session = Depends(get_db)):
     task = _get_or_404(db, task_id)
+    task_google_sync.unpublish_task(db, task)
     db.delete(task)
     db.commit()
 
@@ -403,4 +415,6 @@ def toggle_done(task_id: int, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(task)
     _apply_done_transition(db, task, was_done)
+    if task.date is not None or task.google_event_id:
+        task_google_sync.sync_task(db, task)
     return _task_out(task)

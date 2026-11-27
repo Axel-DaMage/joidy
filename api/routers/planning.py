@@ -10,6 +10,7 @@ from models.calendar_task import (
 from models.goal import Goal
 from models.planning import PlanningAssignment
 from pydantic import BaseModel
+from services import task_google_sync
 from services.response_cache import invalidate_cache_groups, register_cache_clearer, ttl_cache
 from sqlalchemy.orm import Session
 
@@ -45,14 +46,15 @@ def _cached_assignments(date: str | None = None, db: Session = Depends(get_db)):
 register_cache_clearer(_cached_assignments.cache_clear, groups={"planning"})
 
 
-def _mirror_new_assignments_to_tasks(db: Session, date_obj: date, new_goal_ids: list[int]) -> None:
+def _mirror_new_assignments_to_tasks(db: Session, date_obj: date, new_goal_ids: list[int]) -> list[CalendarTask]:
     """Create a calendar_task per newly assigned goal (#1234).
 
     Skips goals that already have a task on that date so re-saving the same
-    assignments does not duplicate tasks.
+    assignments does not duplicate tasks. Returns the created tasks so the
+    caller can publish them to Google Calendar.
     """
     if not new_goal_ids:
-        return
+        return []
     goals_by_id = {g.id: g for g in db.query(Goal).filter(Goal.id.in_(new_goal_ids)).all()}
     already = {
         t.goal_id
@@ -60,19 +62,25 @@ def _mirror_new_assignments_to_tasks(db: Session, date_obj: date, new_goal_ids: 
         .filter(CalendarTask.date == date_obj, CalendarTask.goal_id.in_(new_goal_ids))
         .all()
     }
+    created: list[CalendarTask] = []
     for gid in dict.fromkeys(new_goal_ids):
         goal = goals_by_id.get(gid)
         if goal is None or gid in already:
             continue
-        db.add(CalendarTask(title=goal.title, date=date_obj, goal_id=goal.id))
+        task = CalendarTask(title=goal.title, date=date_obj, goal_id=goal.id)
+        db.add(task)
+        created.append(task)
+    return created
 
 
 def _is_pristine_mirror(task: CalendarTask, goal_title: str) -> bool:
     """True when ``task`` still looks exactly like an auto-created mirror.
 
     Any user customization (time, priority, recurrence, reminder, color,
-    Google publish, completion) detaches it from the mirror so unassigning
-    the goal never destroys work the user did in the calendar.
+    completion) detaches it from the mirror so unassigning the goal never
+    destroys work the user did in the calendar. ``google_event_id`` is NOT
+    checked: scheduled tasks auto-publish to Google, so every mirror owns a
+    remote event by default — unpublish handles its cleanup on removal.
     """
     return (
         task.title == goal_title
@@ -81,7 +89,6 @@ def _is_pristine_mirror(task: CalendarTask, goal_title: str) -> bool:
         and task.priority == CalendarTaskPriority.MEDIUM
         and task.recurrence == CalendarTaskRecurrence.NONE
         and task.reminder_minutes is None
-        and task.google_event_id is None
         and task.color is None
         and not task.done
     )
@@ -103,6 +110,9 @@ def _remove_pristine_mirrors(db: Session, date_obj: date, removed_goal_ids: list
     for task in tasks:
         goal = goals_by_id.get(task.goal_id) if task.goal_id is not None else None
         if goal is not None and _is_pristine_mirror(task, goal.title):
+            # Auto-published mirrors own a Google event — remove it too so
+            # unassigning the goal does not orphan an all-day event upstream.
+            task_google_sync.unpublish_task(db, task)
             db.delete(task)
 
 
@@ -128,9 +138,16 @@ def set_assignments(data: AssignmentsIn, db: Session = Depends(get_db)):
     for gid in data.goal_ids:
         pa = PlanningAssignment(date=date_obj, goal_id=gid, created_at=datetime.now(UTC))
         db.add(pa)
+    mirrored: list[CalendarTask] = []
     if data.create_calendar_task:
-        _mirror_new_assignments_to_tasks(db, date_obj, [gid for gid in data.goal_ids if gid not in previous_ids])
+        mirrored = _mirror_new_assignments_to_tasks(
+            db, date_obj, [gid for gid in data.goal_ids if gid not in previous_ids]
+        ) or []
     _remove_pristine_mirrors(db, date_obj, removed_ids)
     db.commit()
     invalidate_cache_groups("planning")
+    # Scheduled tasks mirror to Google Calendar as all-day events — publish
+    # each new mirror (best-effort, never breaks the assignment).
+    for task in mirrored:
+        task_google_sync.sync_task(db, task)
     return {"date": data.date, "goal_ids": data.goal_ids}

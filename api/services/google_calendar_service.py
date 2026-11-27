@@ -46,6 +46,31 @@ GCAL_EVENT_COLORS: dict[str, dict[str, str]] = {
 }
 
 
+def nearest_color_id(hex_color: str) -> str | None:
+    """Closest ``GCAL_EVENT_COLORS`` key ("1".."11") to a ``#rgb``/``#rrggbb``
+    color by RGB distance. Returns None for unparseable input — callers fall
+    back to a default.
+    """
+    raw = hex_color.strip().lstrip("#")
+    if len(raw) == 3:
+        raw = "".join(c * 2 for c in raw)
+    if len(raw) != 6:
+        return None
+    try:
+        r, g, b = (int(raw[i : i + 2], 16) for i in (0, 2, 4))
+    except ValueError:
+        return None
+    best_id: str | None = None
+    best_dist = float("inf")
+    for cid, entry in GCAL_EVENT_COLORS.items():
+        bg = entry["background"].lstrip("#")
+        pr, pg, pb = (int(bg[i : i + 2], 16) for i in (0, 2, 4))
+        dist = (r - pr) ** 2 + (g - pg) ** 2 + (b - pb) ** 2
+        if dist < best_dist:
+            best_dist, best_id = dist, cid
+    return best_id
+
+
 def _parse_gcal_datetime(value: dict[str, Any] | None) -> tuple[datetime | None, bool]:
     """Parse a Google Calendar ``start``/``end`` object.
 

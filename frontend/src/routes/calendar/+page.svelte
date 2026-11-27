@@ -104,7 +104,6 @@
   let quickAddPriority = $state<CalendarTaskPriority>('MEDIUM');
   let quickAddRecurrence = $state<CalendarTaskRecurrence>('NONE');
   let quickAddReminder = $state<number | null>(null);
-  let publishToGoogle = $state(false);
   let addingTask = $state(false);
 
   // Inline edit state
@@ -471,25 +470,7 @@
         reminder_minutes: quickAddReminder,
       });
       if (quickAddReminder !== null) void requestNotificationPermission();
-      if (publishToGoogle && status?.connected) {
-        try {
-          const created = await api.google.calendarCreateEvent({
-            summary: title,
-            ...googleWindow(selectedDay, quickAddTime || null, null),
-          });
-          const mirrored = await api.calendarTasks.update(task.id, {
-            google_event_id: created.google_id,
-          });
-          tasks = [...tasks, mirrored];
-          await refresh();
-        } catch (e) {
-          logger.warn('Google publish failed', e);
-          showNotification($t('calendar.googlePublishError'), 'error');
-          tasks = [...tasks, task];
-        }
-      } else {
-        tasks = [...tasks, task];
-      }
+      tasks = [...tasks, task];
       quickAddTitle = '';
       quickAddTime = '';
       quickAddPriority = 'MEDIUM';
@@ -527,40 +508,6 @@
     return localDayKey(d);
   }
 
-  // `hhmm` on `day` plus one real hour, returned as `YYYY-MM-DDTHH:mm:ss`.
-  // Date-based so 23:30 rolls into the next day — the old string math
-  // wrapped to 00:30 on the same day, producing end < start which Google
-  // rejects.
-  function addHour(day: string, hhmm: string): string {
-    const start = new Date(`${day}T${hhmm.slice(0, 5)}:00`);
-    const end = new Date(start.getTime() + 3600e3);
-    return `${localDayKey(end)}T${pad2(end.getHours())}:${pad2(end.getMinutes())}:00`;
-  }
-
-  // Build the Google EventDateTime pair for a task's window. All-day tasks
-  // publish `{date}`; Google's end.date is EXCLUSIVE, so it must be the day
-  // after — same-day start+end is a zero-length event Google rejects.
-  // Timed tasks publish `dateTime` + `timeZone` so naive local times are
-  // anchored to the browser zone.
-  function googleWindow(
-    day: string,
-    startTime: string | null,
-    endTime: string | null
-  ): {
-    start: { dateTime?: string; date?: string; timeZone?: string };
-    end: { dateTime?: string; date?: string; timeZone?: string };
-  } {
-    if (!startTime) {
-      return { start: { date: day }, end: { date: addDays(day, 1) } };
-    }
-    const hhmm = startTime.slice(0, 5);
-    const end = endTime ? `${day}T${endTime.slice(0, 5)}:00` : addHour(day, hhmm);
-    return {
-      start: { dateTime: `${day}T${hhmm}:00`, timeZone: localTimeZone },
-      end: { dateTime: end, timeZone: localTimeZone },
-    };
-  }
-
   function cyclePriority(task: CalendarTask): void {
     const idx = PRIORITIES.indexOf(task.priority);
     const next = PRIORITIES[(idx + 1) % PRIORITIES.length];
@@ -589,14 +536,7 @@
 
   async function removeTask(task: CalendarTask): Promise<void> {
     try {
-      if (task.google_event_id && status?.connected) {
-        try {
-          await api.google.calendarDeleteEvent(task.google_event_id);
-        } catch (e) {
-          logger.warn('Google delete failed', e);
-          showNotification($t('calendar.googlePublishError'), 'error');
-        }
-      }
+      // The backend removes the mirrored Google event on delete.
       await api.calendarTasks.remove(task.id);
       tasks = tasks.filter((t) => t.id !== task.id);
     } catch (e) {
@@ -631,24 +571,6 @@
       recurrence: editRecurrence,
       reminder_minutes: editReminder,
     });
-    if (task.google_event_id && status?.connected) {
-      try {
-        const day = task.date;
-        // The edit form only lives in the day panel — unscheduled tasks
-        // (date === null) never reach this path.
-        if (!day) return;
-        const { start, end } = googleWindow(day, editTime || null, editEndTime || null);
-        await api.google.calendarUpdateEvent(task.google_event_id, {
-          summary: title,
-          start,
-          end,
-        });
-        await refresh();
-      } catch (e) {
-        logger.warn('Google update failed', e);
-        showNotification($t('calendar.googlePublishError'), 'error');
-      }
-    }
     editingTaskId = null;
   }
 
@@ -702,18 +624,7 @@
       showNotification($t('calendar.taskUpdateError'), 'error');
       return;
     }
-    // Write-back parity: drag&drop moves the mirrored Google event too.
-    // A Google failure is non-blocking — the local reschedule stands.
-    if (task.google_event_id && status?.connected) {
-      try {
-        const { start, end } = googleWindow(newDate, task.start_time, task.end_time);
-        await api.google.calendarUpdateEvent(task.google_event_id, { start, end });
-        await refresh();
-      } catch (e) {
-        logger.warn('Google reschedule failed', e);
-        showNotification($t('calendar.googlePublishError'), 'error');
-      }
-    }
+    // The backend re-syncs the mirrored Google event on the PATCH.
   }
 
   // ── Unscheduled tray drop target (#1234) ─────────────────────────────────
@@ -1457,13 +1368,6 @@
                 <option value={opt.minutes}>{$t(`calendar.${opt.labelKey}`)}</option>
               {/each}
             </select>
-            {#if status?.connected}
-              <label class="publish-toggle" title={$t('calendar.publishToGoogleHint')}>
-                <input type="checkbox" bind:checked={publishToGoogle} disabled={addingTask} />
-                <span class="publish-label"><Lock size={10} />{$t('calendar.publishToGoogle')}</span
-                >
-              </label>
-            {/if}
             <button
               type="submit"
               class="btn btn-icon quick-submit"
@@ -2219,50 +2123,6 @@
   .quick-submit:disabled {
     opacity: 0.4;
     cursor: not-allowed;
-  }
-
-  .publish-toggle {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    cursor: pointer;
-    flex-shrink: 0;
-    font-size: 10px;
-    color: var(--text-muted);
-    user-select: none;
-    position: relative;
-  }
-
-  /* Visually hidden but focusable: display:none would remove the checkbox
-     from the tab order entirely (#1268). */
-  .publish-toggle input {
-    position: absolute;
-    opacity: 0;
-    width: 1px;
-    height: 1px;
-    margin: 0;
-    pointer-events: none;
-  }
-
-  .publish-toggle input:focus-visible + .publish-label {
-    outline: 2px solid var(--xp);
-    outline-offset: 2px;
-  }
-
-  .publish-label {
-    display: flex;
-    align-items: center;
-    gap: 3px;
-    padding: 2px 6px;
-    border: 1px solid var(--border);
-    border-radius: 99px;
-    transition: all 0.15s;
-  }
-
-  .publish-toggle input:checked + .publish-label {
-    border-color: var(--accent);
-    color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 10%, transparent);
   }
 
   .edit-form {
