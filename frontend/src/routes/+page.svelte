@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { goto } from '$app/navigation';
+  import { page } from '$app/state';
   import { dev } from '$app/env';
   import { fly } from 'svelte/transition';
   import { ChevronLeft, ChevronRight } from 'lucide-svelte';
@@ -298,6 +299,34 @@
     if (savedDash?.githubSearch !== undefined) ghSearch = savedDash.githubSearch;
     modulePrefsReady = true;
 
+    // #1662 — deep-link from the status-bar GitHub pills:
+    // /?activity=github&ghType=issues|prs&ghFilter=assigned&ghState=open.
+    // Params win over persisted dashboard prefs and are consumed once.
+    const ghParams = page.url.searchParams;
+    if (ghParams.get('activity') === 'github') {
+      activityTab = 'github';
+    }
+    const qpType = ghParams.get('ghType');
+    if (qpType === 'issues' || qpType === 'prs' || qpType === 'all') ghType = qpType;
+    const qpFilter = ghParams.get('ghFilter');
+    if (qpFilter === 'assigned' || qpFilter === 'created') ghFilter = qpFilter;
+    // A fresh cache was fetched with the OLD filter — if the URL overrides
+    // it, the cached payload is for the wrong assignment scope and must be
+    // refetched below instead of skipped.
+    const ghFilterOverride =
+      (qpFilter === 'assigned' || qpFilter === 'created') && qpFilter !== cached?.filter;
+    const qpState = ghParams.get('ghState');
+    if (qpState === 'open' || qpState === 'closed' || qpState === 'merged' || qpState === 'all') {
+      ghState = qpState;
+    }
+    if (ghParams.get('activity') || qpType || qpFilter || qpState) {
+      const clean = new URL(page.url.href);
+      for (const key of ['activity', 'ghType', 'ghFilter', 'ghState']) {
+        clean.searchParams.delete(key);
+      }
+      window.history.replaceState(window.history.state, '', clean);
+    }
+
     if (!$notesLoadedOnce) {
       loadNotes();
     }
@@ -312,7 +341,9 @@
         if (githubConnected) {
           const [reposRes] = await Promise.all([
             api.github.repos({ silent: true }),
-            !cached || !isGithubCacheFresh(cached) ? loadGitHubData(ghFilter) : Promise.resolve(),
+            !cached || !isGithubCacheFresh(cached) || ghFilterOverride
+              ? loadGitHubData(ghFilter)
+              : Promise.resolve(),
           ]);
           repoColors = Object.fromEntries(
             (reposRes.repos || []).map((r: any) => [r.full_name, r.color || 'var(--accent)'])
@@ -716,11 +747,14 @@
     background: var(--border);
   }
 
-  /* ── Right panel — identical to original ── */
+  /* ── Right panel — view-body spacing per the Panel Border Standard:
+       boxed widget panels get --s3 breathing room and a uniform gap (#1670) ── */
   .activity-section {
     display: flex;
     flex-direction: column;
     overflow-y: auto;
+    padding: var(--s3);
+    gap: var(--s3);
   }
 
   /* #1095 — el widget de GitHub estira su contenedor para que el cuerpo
@@ -736,6 +770,12 @@
     flex-direction: column;
     flex: 1 1 auto;
     min-height: 0;
+  }
+  /* #1670 — while the widget's filter popover is open it must escape the
+     .widget clip (Widget.svelte sets overflow: hidden), otherwise short
+     panels cut the menu off. */
+  .activity-section :global(.widget:has(.gh-filter-menu)) {
+    overflow: visible;
   }
 
   /* ── Responsive ── */

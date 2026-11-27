@@ -44,7 +44,7 @@ def _eval_guards(monkeypatch) -> list[str]:
       regression that re-adds ``from services.goal_service import
       evaluate_active_goals`` to the router — the name is bound at import
       time, so the service-level spy alone would miss it.
-    - ``services.joidy_vault_writer._write_goal_file`` guards the heaviest
+    - ``services.joidy_vault_writer.write_goal_file`` guards the heaviest
       side effect directly (vault file writes).
     """
     calls: list[str] = []
@@ -57,8 +57,8 @@ def _eval_guards(monkeypatch) -> list[str]:
 
     monkeypatch.setattr("services.goal_service.evaluate_active_goals", _eval_spy)
     monkeypatch.setattr("routers.goals.evaluate_active_goals", _eval_spy, raising=False)
-    monkeypatch.setattr("services.joidy_vault_writer._write_goal_file", _write_spy)
-    monkeypatch.setattr("routers.goals._write_goal_file", _write_spy)
+    monkeypatch.setattr("services.joidy_vault_writer.write_goal_file", _write_spy)
+    monkeypatch.setattr("routers.goals.write_goal_file", _write_spy)
     return calls
 
 

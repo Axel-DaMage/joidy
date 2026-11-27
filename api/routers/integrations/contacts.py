@@ -22,6 +22,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 from services import google_contacts_service as gccs
 from services import google_token_service as gts
+from services import oauth_flow
 from services.auth_service import get_current_user
 from sqlalchemy.orm import Session
 
@@ -217,25 +218,33 @@ async def _read_token(token: str | None, db: Session) -> str:
     header wins, else the stored/auto-refreshed Google token (same semantics
     as google.py). The override arrives by header only — credentials never
     travel in the query string (#1461)."""
-    if token:
-        return token
-    stored = await gts.get_valid_access_token(db)
-    if not stored:
-        raise HTTPException(status_code=401, detail="Google no está conectado")
-    return stored
+    return await oauth_flow.resolve_access_token(
+        db,
+        header_token=token,
+        get_stored=gts.get_valid_access_token,
+        not_connected_detail="Google no está conectado",
+    )
+
+
+def _require_write_scope(db: Session) -> None:
+    """403 when the stored Google grant is contacts-readonly — the client can
+    then prompt a reconnect."""
+    try:
+        gccs.require_write_scope(db)
+    except gccs.ContactsReconsentRequired as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
 
 
 async def _write_token(db: Session) -> str:
     """Resolve the token for write calls — stored token only, plus a
     proactive scope check so readonly grants fail before hitting Google."""
-    stored = await gts.get_valid_access_token(db)
-    if not stored:
-        raise HTTPException(status_code=401, detail="Google no está conectado")
-    try:
-        gccs.require_write_scope(db)
-    except gccs.ContactsReconsentRequired as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
-    return stored
+    return await oauth_flow.resolve_access_token(
+        db,
+        header_token=None,
+        get_stored=gts.get_valid_access_token,
+        not_connected_detail="Google no está conectado",
+        check_capability=_require_write_scope,
+    )
 
 
 def _google_error_reasons(exc: httpx.HTTPStatusError) -> set:

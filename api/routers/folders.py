@@ -2,10 +2,14 @@ import os
 import re
 import shutil
 
-from config import settings
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from services.auth_service import get_current_user
+from services.vault_paths import (
+    JOIDY_VAULT_DIR,
+    get_effective_vault_path,
+    resolve_confined_source_path,
+)
 
 router = APIRouter(prefix="/folders", tags=["folders"])
 
@@ -23,32 +27,35 @@ def _is_hidden_or_internal(name: str) -> bool:
     Single source of truth shared by _list_vault_folders (traversal pruning)
     and _get_safe_path (create/delete denylist, #1313): any hidden directory
     (".obsidian", ".git", ".trash", …) plus the internal "_joidy/" state dir,
-    at any depth.
+    at any depth. ``JOIDY_VAULT_DIR`` is the canonical name from
+    ``services.vault_paths``.
     """
-    return name.startswith(".") or name == "_joidy"
+    return name.startswith(".") or name == JOIDY_VAULT_DIR
 
 
 def _get_safe_path(vault: str, requested: str) -> str:
     """Resolve a vault-relative path and make sure it stays inside the vault.
 
-    Beyond containment (commonpath), targets that must never be mutated
-    through this API are rejected (#1313):
+    Confinement is delegated to ``resolve_confined_source_path`` — the same
+    canonical realpath+commonpath boundary the notes router uses (#1287) —
+    so the vault root can never resolve two different ways (#1532). On
+    rejection the reason is mapped back onto the #1313 API contract:
     - the vault root itself: "." or traversal ("a/..", "%2e%2e" segments
-      decoded by the router) resolve to ``vault``, which the commonpath check
-      alone accepts — and DELETE would rmtree the whole vault;
+      decoded by the router) resolve to ``vault`` — and DELETE would rmtree
+      the whole vault;
     - any hidden/internal segment, mirroring _list_vault_folders pruning, so
       directories the API hides (".obsidian", ".git", ".trash", "_joidy", …)
-      cannot be created or deleted either.
+      cannot be created or deleted either;
+    - anything else (traversal, prefix confusion, symlink escape).
     """
-    full_path = os.path.realpath(os.path.join(vault, requested))
-    vault_path = os.path.realpath(vault)
-    if os.path.commonpath([full_path, vault_path]) != vault_path:
-        raise HTTPException(status_code=400, detail="Invalid path")
-    if full_path == vault_path:
+    resolved = resolve_confined_source_path(os.path.join(vault, requested), require_markdown=False)
+    if resolved is not None:
+        return resolved
+    if os.path.realpath(os.path.join(vault, requested)) == os.path.realpath(vault):
         raise HTTPException(status_code=400, detail="Cannot target the vault root")
     if any(_is_hidden_or_internal(part) for part in requested.split("/")):
         raise HTTPException(status_code=400, detail="Folder is hidden or internal")
-    return full_path
+    raise HTTPException(status_code=400, detail="Invalid path")
 
 
 def _validate_folder_name(path: str) -> None:
@@ -82,7 +89,7 @@ def _list_vault_folders(vault: str) -> list[str]:
 
 @router.get("/")
 def list_folders(user: dict = Depends(get_current_user)):
-    vault = settings.obsidian_vault_path
+    vault = get_effective_vault_path()
     if not vault:
         raise HTTPException(status_code=400, detail="OBSIDIAN_VAULT_PATH not set")
 
@@ -98,7 +105,7 @@ def create_folder(
     folder: FolderCreate,
     user: dict = Depends(get_current_user),
 ):
-    vault = settings.obsidian_vault_path
+    vault = get_effective_vault_path()
     if not vault:
         raise HTTPException(status_code=400, detail="OBSIDIAN_VAULT_PATH not set")
 
@@ -119,7 +126,7 @@ def delete_folder(
     path: str,
     user: dict = Depends(get_current_user),
 ):
-    vault = settings.obsidian_vault_path
+    vault = get_effective_vault_path()
     if not vault:
         raise HTTPException(status_code=400, detail="OBSIDIAN_VAULT_PATH not set")
 

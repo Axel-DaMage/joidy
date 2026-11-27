@@ -43,7 +43,6 @@ from services.joidy_vault_writer import (
     update_goal_file,
     write_daily,
     write_objectives,
-    write_readme,
     write_skills,
 )
 
@@ -265,7 +264,7 @@ class WriteObjectivesTest(VaultWriterTestBase):
 
     def test_persists_source_path_via_commit(self) -> None:
         """#1597 — write_objectives assigns ``source_path`` in-memory inside
-        ``_write_goal_file``; only its trailing ``db.commit()`` (#1583)
+        ``write_goal_file``; only its trailing ``db.commit()`` (#1583)
         persists the update. Verify through a second session so pending,
         never-committed state on the caller's session cannot satisfy the
         check — the test fails if that commit is removed."""
@@ -346,26 +345,6 @@ class WriteSkillsTest(VaultWriterTestBase):
         settings.obsidian_vault_path = ""
         with self.Session() as db:
             self.assertFalse(write_skills(db))
-
-
-class WriteReadmeTest(VaultWriterTestBase):
-    def test_writes_readme_if_not_exists(self) -> None:
-        vault = Path(settings.obsidian_vault_path)
-        write_readme(vault)
-        readme = vault / JOIDY_DIR / "README.md"
-        self.assertTrue(readme.exists())
-        content = readme.read_text(encoding="utf-8")
-        self.assertIn("Carpeta administrada por Joidy", content)
-
-    def test_does_not_overwrite_existing_readme(self) -> None:
-        vault = Path(settings.obsidian_vault_path)
-        joidy_dir = vault / JOIDY_DIR
-        joidy_dir.mkdir(parents=True, exist_ok=True)
-        readme = joidy_dir / "README.md"
-        readme.write_text("custom content", encoding="utf-8")
-
-        write_readme(vault)
-        self.assertEqual(readme.read_text(encoding="utf-8"), "custom content")
 
 
 class RestoreGoalsFromVaultTest(VaultWriterTestBase):

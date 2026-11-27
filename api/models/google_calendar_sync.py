@@ -23,6 +23,9 @@ class GoogleCalendarSyncState(Base):
     sync_token: Mapped[str | None] = mapped_column(EncryptedText, nullable=True)
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_error: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # CalendarList backgroundColor (#rrggbb) — events without their own
+    # colorId render with this color.
+    background_color: Mapped[str | None] = mapped_column(String(9), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

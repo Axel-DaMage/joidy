@@ -2,6 +2,7 @@
   import StreakIcon from './StreakIcon.svelte';
   import type { StreakDay } from '$lib/api';
   import { getLocale } from '$lib/stores/locale';
+  import { loadPref, savePref } from '$lib/utils/persistedState';
   import { t } from 'svelte-i18n';
 
   let {
@@ -30,18 +31,18 @@
   type ViewMode = 'week' | 'month' | 'year';
 
   function getInitialView(): ViewMode {
-    if (typeof localStorage === 'undefined') return 'year';
-    const saved = localStorage.getItem('goals.historyView');
-    if (saved === 'week' || saved === 'month' || saved === 'year') return saved;
-    return 'year';
+    // Device-level view pref (#1673); migrates the legacy `goals.historyView`
+    // raw-string key on first read.
+    return loadPref<ViewMode>('goals', 'historyView', 'year', {
+      legacyKey: 'goals.historyView',
+      isValid: (v) => v === 'week' || v === 'month' || v === 'year',
+    });
   }
 
   let view: ViewMode = $state(getInitialView());
 
   $effect(() => {
-    if (typeof localStorage !== 'undefined' && view) {
-      localStorage.setItem('goals.historyView', view);
-    }
+    if (view) savePref('goals', 'historyView', view);
   });
 
   const today = new Date();

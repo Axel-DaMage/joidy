@@ -103,6 +103,14 @@ function hslToRgb(h: number, s: number, l: number): [number, number, number] {
   return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
 }
 
+function rgbToHex(rgb: [number, number, number]): string {
+  const toHex = (n: number) =>
+    Math.max(0, Math.min(255, Math.round(n)))
+      .toString(16)
+      .padStart(2, '0');
+  return `#${toHex(rgb[0])}${toHex(rgb[1])}${toHex(rgb[2])}`;
+}
+
 function getComplementaryColor(hex: string): string {
   if (!isValidHex(hex)) return '#f59e0b';
   const [r, g, b] = hexToRgb(hex);
@@ -114,12 +122,199 @@ function getComplementaryColor(hex: string): string {
   const compS = s < 30 ? 80 : Math.min(95, Math.max(65, s));
   const compL = Math.min(72, Math.max(52, l));
 
-  const [cr, cg, cb] = hslToRgb(compH, compS, compL);
-  const toHex = (n: number) => n.toString(16).padStart(2, '0');
-  return `#${toHex(cr)}${toHex(cg)}${toHex(cb)}`;
+  return rgbToHex(hslToRgb(compH, compS, compL));
+}
+
+// ── Derived accent palette (#1655) ──────────────────────────────────────────
+// The 3 picked colors are the raw input; everything the UI consumes is a
+// derived token computed against the active theme background so blends,
+// tints and semantic colors stay coherent — and contrast-safe — in both
+// dark and light mode.
+export type PaletteTheme = 'light' | 'dark';
+
+// WCAG contrast floors: 4.5:1 for text-adjacent tokens, 3:1 for large/UI
+// elements (fills, strokes, borders, chart series).
+export const MIN_CONTRAST_TEXT = 4.5;
+export const MIN_CONTRAST_UI = 3;
+
+const THEME_SURFACES: Record<PaletteTheme, { bg: string; surface: string; text: string }> = {
+  dark: { bg: '#000000', surface: '#000000', text: '#ffffff' },
+  light: { bg: '#ffffff', surface: '#ffffff', text: '#000000' },
+};
+
+/** WCAG 2.x contrast ratio between two hex colors (1–21). */
+function contrastRatio(hexA: string, hexB: string): number {
+  const [r1, g1, b1] = hexToRgb(hexA);
+  const [r2, g2, b2] = hexToRgb(hexB);
+  const l1 = getLuminance(r1, g1, b1);
+  const l2 = getLuminance(r2, g2, b2);
+  const [hi, lo] = l1 >= l2 ? [l1, l2] : [l2, l1];
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/**
+ * Nudge a color's lightness until it reaches `minRatio` against `bgHex`.
+ * Lightens on dark backgrounds, darkens on light ones; hue and saturation
+ * are preserved so the derived color keeps the user's pick recognizable.
+ */
+function ensureContrast(hex: string, bgHex: string, minRatio: number): string {
+  if (!isValidHex(hex) || !isValidHex(bgHex)) return hex;
+  if (contrastRatio(hex, bgHex) >= minRatio) return hex;
+  const [r, g, b] = hexToRgb(hex);
+  const [h, s, startL] = rgbToHsl(r, g, b);
+  const bgLum = getLuminance(...hexToRgb(bgHex));
+  const dir = bgLum < 0.18 ? 1 : -1;
+  for (let i = 0; i < 50; i++) {
+    const l = Math.max(0, Math.min(100, startL + dir * i * 2));
+    const candidate = rgbToHex(hslToRgb(h, s, l));
+    if (contrastRatio(candidate, bgHex) >= minRatio) return candidate;
+    if (l === 0 || l === 100) break;
+  }
+  return dir > 0 ? '#ffffff' : '#000000';
+}
+
+/** Linear RGB interpolation between two hex colors. `t=0` → a, `t=1` → b. */
+function mixHex(a: string, b: string, t: number): string {
+  const [r1, g1, b1] = hexToRgb(a);
+  const [r2, g2, b2] = hexToRgb(b);
+  return rgbToHex([r1 + (r2 - r1) * t, g1 + (g2 - g1) * t, b1 + (b2 - b1) * t]);
+}
+
+/** Rotate a color's hue by `deg` degrees, keeping saturation/lightness. */
+function rotateHue(hex: string, deg: number): string {
+  const [r, g, b] = hexToRgb(hex);
+  const [h, s, l] = rgbToHsl(r, g, b);
+  return rgbToHex(hslToRgb(h + deg, s, l));
+}
+
+/** Move `from` toward `to` along the shortest hue arc by `t` (0–1). */
+function lerpHue(from: number, to: number, t: number): number {
+  const d = ((to - from + 540) % 360) - 180;
+  return (((from + d * t) % 360) + 360) % 360;
+}
+
+/** Circular mean of a set of hues (degrees). */
+function meanHue(hues: number[]): number {
+  if (hues.length === 0) return 0;
+  let x = 0;
+  let y = 0;
+  for (const h of hues) {
+    x += Math.cos((h * Math.PI) / 180);
+    y += Math.sin((h * Math.PI) / 180);
+  }
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+}
+
+// Canonical semantic hues stay recognizable (green = success, red = error…)
+// but are harmonized toward the accent trio's hue/saturation center, then
+// contrast-floored — so semantics read as "from the same palette" (#1655).
+const SEMANTIC_BASES: Record<string, string> = {
+  '--success': '#10b981',
+  '--warning': '#f59e0b',
+  '--error': '#ef4444',
+  '--info': '#06b6d4',
+  '--link': '#3b82f6',
+  '--today': '#fbbf24',
+  '--target': '#10b981',
+};
+
+/**
+ * Compute every derived accent token for `theme` from the user's base colors.
+ * Returns a `--token → value` map for `documentElement.style`. Pure function —
+ * DOM access lives in applyColors().
+ */
+export function derivePalette(colors: string[], theme: PaletteTheme = 'dark'): Record<string, string> {
+  const { bg, surface, text } = THEME_SURFACES[theme];
+  const primary = colors[0] ?? DEFAULT_COLORS[0];
+  // Fewer than 3 picks: derive the missing voices as tints/shades of the
+  // primary mixed toward the theme text color (≈ previous color-mix fallback).
+  const secondary = colors[1] ?? mixHex(primary, text, 0.3);
+  const tertiary = colors[2] ?? mixHex(secondary, text, 0.3);
+  const trio = [primary, secondary, tertiary];
+
+  // Base trio floored at UI-element contrast so accents never vanish.
+  const xp = ensureContrast(primary, surface, MIN_CONTRAST_UI);
+  const xp2 = ensureContrast(secondary, surface, MIN_CONTRAST_UI);
+  const xp3 = ensureContrast(tertiary, surface, MIN_CONTRAST_UI);
+
+  // Text-adjacent variants floored at WCAG AA text contrast.
+  const xpText = ensureContrast(primary, bg, MIN_CONTRAST_TEXT);
+  const xp2Text = ensureContrast(secondary, bg, MIN_CONTRAST_TEXT);
+  const xp3Text = ensureContrast(tertiary, bg, MIN_CONTRAST_TEXT);
+
+  const contrastText = getContrastColor(xp);
+
+  // Hue/saturation center of the trio — the harmonization target for
+  // semantic colors so they feel derived, not hardcoded.
+  const hsls = trio.map((c) => rgbToHsl(...hexToRgb(c)));
+  const trioHue = meanHue(hsls.map(([h]) => h));
+  const trioSat = hsls.reduce((acc, [, s]) => acc + s, 0) / hsls.length;
+
+  const harmonized = (canonical: string): string => {
+    const [h, s, l] = rgbToHsl(...hexToRgb(canonical));
+    const hue = lerpHue(h, trioHue, 0.2);
+    const sat = s + (trioSat - s) * 0.3;
+    return ensureContrast(rgbToHex(hslToRgb(hue, sat, l)), surface, MIN_CONTRAST_TEXT);
+  };
+
+  const palette: Record<string, string> = {
+    '--accent': xp,
+    '--accent-gradient': computeGradient([xp, xp2, xp3]),
+    '--accent-contrast': ensureContrast(getComplementaryColor(primary), bg, MIN_CONTRAST_UI),
+    '--accent-contrast-text': contrastText,
+    '--xp': xp,
+    '--xp-2': xp2,
+    '--xp-3': xp3,
+    // Dark shade of the primary — used for gradient ends / deep accents.
+    '--xp-dark': mixHex(xp, bg, 0.4),
+    '--xp-text': xpText,
+    '--xp-2-text': xp2Text,
+    '--xp-3-text': xp3Text,
+    '--xp-contrast-text': contrastText,
+    '--plant': xp,
+    '--plant-secondary': xp2,
+    '--plant-tertiary': xp3,
+    '--plant-glow': xp2,
+    '--plant-2': xp2,
+    '--plant-3': xp3,
+  };
+
+  for (const [token, canonical] of Object.entries(SEMANTIC_BASES)) {
+    palette[token] = harmonized(canonical);
+  }
+
+  // Chart/series palette: the trio plus a hue-rotated counterpart of each —
+  // six distinguishable series all sourced from the user's picks.
+  for (let i = 0; i < 6; i++) {
+    const base = trio[i % 3];
+    const src = i < 3 ? base : rotateHue(base, 140);
+    palette[`--chart-${i + 1}`] = ensureContrast(src, surface, MIN_CONTRAST_UI);
+  }
+
+  return palette;
+}
+
+/**
+ * Indices of picked colors whose contrast against the active theme background
+ * falls below the UI-element floor. Used by Settings to warn — never block.
+ */
+export function getAccentWarnings(
+  colors: string[],
+  theme: PaletteTheme
+): { index: number; ratio: number }[] {
+  const { bg } = THEME_SURFACES[theme];
+  return colors
+    .map((c, i) => ({ index: i, ratio: contrastRatio(c, bg) }))
+    .filter((w) => w.ratio < MIN_CONTRAST_UI);
+}
+
+function activePaletteTheme(): PaletteTheme {
+  if (!browser) return 'dark';
+  return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
 }
 
 export { getContrastColor, getComplementaryColor, hexToRgb, getLuminance, rgbToHsl, hslToRgb };
+export { contrastRatio, ensureContrast, mixHex, rotateHue };
 
 function computeGradient(colors: string[]): string {
   if (colors.length === 1) return colors[0];
@@ -154,39 +349,17 @@ function persist(colors: string[]) {
   }
 }
 
+// Last applied picks — kept so the palette can be re-derived when the theme
+// flips without re-reading the store (module-level subscription below).
+let lastAppliedColors: string[] | null = null;
+
 function applyColors(colors: string[]) {
   if (!browser) return;
-  const primary = colors[0];
-  const secondary =
-    colors.length > 1 ? colors[1] : `color-mix(in srgb, ${primary} 70%, var(--text-primary))`;
-  const tertiary =
-    colors.length > 2 ? colors[2] : `color-mix(in srgb, ${secondary} 70%, var(--text-primary))`;
-
-  const secondaryPlain = colors[1] ?? primary;
-  const tertiaryPlain = colors[2] ?? secondaryPlain;
-  const gradient = computeGradient(colors);
-
-  document.documentElement.style.setProperty('--accent', primary);
-  document.documentElement.style.setProperty('--accent-gradient', gradient);
-
-  const contrastText = getContrastColor(primary);
-  document.documentElement.style.setProperty('--accent-contrast-text', contrastText);
-  document.documentElement.style.setProperty('--xp-contrast-text', contrastText);
-
-  const dynamicContrast = getComplementaryColor(primary);
-  document.documentElement.style.setProperty('--accent-contrast', dynamicContrast);
-
-  document.documentElement.style.setProperty('--xp', primary);
-  document.documentElement.style.setProperty('--xp-2', secondaryPlain);
-  document.documentElement.style.setProperty('--xp-3', tertiaryPlain);
-  document.documentElement.style.setProperty('--xp-dark', secondaryPlain);
-
-  document.documentElement.style.setProperty('--plant', primary);
-  document.documentElement.style.setProperty('--plant-secondary', secondaryPlain);
-  document.documentElement.style.setProperty('--plant-tertiary', tertiaryPlain);
-  document.documentElement.style.setProperty('--plant-glow', secondaryPlain);
-  document.documentElement.style.setProperty('--plant-2', secondaryPlain);
-  document.documentElement.style.setProperty('--plant-3', tertiaryPlain);
+  lastAppliedColors = [...colors];
+  const palette = derivePalette(colors, activePaletteTheme());
+  for (const [token, value] of Object.entries(palette)) {
+    document.documentElement.style.setProperty(token, value);
+  }
 }
 
 function createAccentStore() {
@@ -410,6 +583,14 @@ function createThemeModeStore() {
 }
 
 export const themeMode = createThemeModeStore();
+
+// Re-derive the accent palette whenever the theme flips so contrast-floored
+// and harmonized tokens stay correct against the new background (#1655).
+if (browser) {
+  themeMode.subscribe(() => {
+    if (lastAppliedColors) applyColors(lastAppliedColors);
+  });
+}
 
 export function initTheme(): (() => void) | void {
   // Return the unsubscribe function so the caller can clean it up.

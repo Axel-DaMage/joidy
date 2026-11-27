@@ -39,7 +39,6 @@
     { type: 'Navegación', title: 'Ir a Skills', icon: 'Zap', action: () => goto('/skills') },
     { type: 'Navegación', title: 'Ir a Rachas', icon: 'Flame', action: () => goto('/streaks') },
     { type: 'Navegación', title: 'Ir a IA', icon: 'Brain', action: () => goto('/ai') },
-    { type: 'Navegación', title: 'Ir a Correos', icon: 'Mail', action: () => goto('/emails') },
     {
       type: 'Navegación',
       title: 'Ir a Calendario',
