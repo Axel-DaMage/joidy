@@ -166,7 +166,8 @@ frontend/
   // Sidebar con navegación
   // Main content
   // Footer con estado (tiempo, tareas, pomodoro)
-  // SettingsPanel (modal)
+  // Settings vive en la ruta /settings (#1671): el botón ⚙️ y el evento
+  // joidy:open-settings navegan a ella.
 </script>
 
 <div class="app-shell">
@@ -187,8 +188,6 @@ frontend/
   <footer>
     <!-- Status bar -->
   </footer>
-
-  <SettingsPanel bind:open />
 </div>
 ```
 
@@ -277,7 +276,8 @@ frontend/
 
 | Componente | Archivo | Descripción |
 |------------|---------|-------------|
-| SettingsPanel | components/SettingsPanel.svelte | Panel de ajustes e integraciones |
+| SettingsPanel | components/SettingsPanel.svelte | Vista de ajustes (ruta `/settings`): rail de secciones + panel de contenido, deep-link `/settings#seccion` |
+| SettingsSection | components/SettingsSection.svelte | Marco uniforme de cada sección de ajustes (título, descripción, borde) |
 | CommandPalette | components/CommandPalette.svelte | Comandos rápidos (palette) |
 | Login | components/Login.svelte | Autenticación de usuario |
 | SetupWizard | components/SetupWizard.svelte | Asistente de configuración inicial (onboarding) |
